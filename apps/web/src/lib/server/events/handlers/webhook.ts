@@ -52,9 +52,9 @@ export const webhookHook: HookHandler = {
     // Delivery-time re-validation (mirrors the app-webhook hook): the
     // enqueue-time snapshot — including the queued target URL — is superseded
     // by the live row, so a webhook disabled, soft-deleted, or re-pointed
-    // between enqueue and delivery (or during BullMQ retries) is honored.
+    // between enqueue and delivery (or during retries) is honored.
     // The signing secret also never travels in the job payload (it would
-    // otherwise sit in plaintext in Redis for the job's lifetime) — it's
+    // otherwise sit in plaintext in the job row for the job's lifetime) — it's
     // loaded and decrypted here, right before it's needed.
     let secret: string
     let url: string

@@ -32,6 +32,6 @@ export const SSO_TEST_POSTMESSAGE_SOURCE = 'quackback-sso-test' as const
  * the provider's own production callback (`<prefix><registrationId>`) so
  * admins register exactly one redirect URI per provider. The auth catch-all
  * intercepts all paths under this prefix before handing off to Better-Auth
- * — a Redis miss for the OAuth `state` still falls through cleanly.
+ * — a KV miss for the OAuth `state` still falls through cleanly.
  */
 export const SSO_OAUTH_CALLBACK_PREFIX = '/api/auth/oauth2/callback/' as const

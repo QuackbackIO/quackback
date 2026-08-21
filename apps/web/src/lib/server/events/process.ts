@@ -126,7 +126,7 @@ export async function enqueueHookJobsWithIds(
 /**
  * Nothing to close: the queue is a table, and the tier that consumes it is
  * stopped by `stopJobTier()`. Kept so the shutdown path and any test cleanup
- * that still calls it keep compiling while the last Redis call sites go.
+ * that still calls it keep compiling.
  */
 export async function closeQueue(): Promise<void> {}
 

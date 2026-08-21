@@ -1,8 +1,8 @@
 /**
  * Rate-limit helpers for sign-in endpoints. Built on the shared
- * `redis-rate-bucket` primitive so the limiter tests focus on policy
+ * `utils/rate-bucket` primitive so the limiter tests focus on policy
  * (thresholds, namespacing, dispatch) rather than re-asserting the
- * Redis plumbing (which has its own tests on the primitive).
+ * store plumbing (which has its own tests on the primitive).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 

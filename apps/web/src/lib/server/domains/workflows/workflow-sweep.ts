@@ -3,7 +3,7 @@
  * is durable only at wait boundaries, which leaves two stranding modes with
  * no recovery path otherwise: a process crash mid-run leaves a row stuck in
  * state 'running' forever, holding the customer_facing exclusive lock on its
- * conversation; and if Redis was down when a wait was scheduled, or its job
+ * conversation; and if the queue was down when a wait was scheduled, or its job
  * was lost, a 'waiting' row has no timer and never resumes. This module scans
  * for both and reconciles them, plus a third pass (abandoned-journey
  * auto-close) below; workflow-sweep-queue runs it on a repeating timer.

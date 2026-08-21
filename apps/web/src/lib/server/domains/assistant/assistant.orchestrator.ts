@@ -202,11 +202,11 @@ export async function runAssistantTurnForConversation(
   // reply.
   let previewSilent = false
   // Coalesce delta publishes: each carries the FULL answer so far, so publishing
-  // on every fragment is O(N^2) bytes + one Redis publish per token. Throttle to
+  // on every fragment is O(N^2) bytes + one realtime publish per token. Throttle to
   // a smooth cadence — a dropped tail is harmless since the persisted reply is the
   // ground truth that replaces the buffer moments later.
   let lastDeltaAt = 0
-  // Mirrored into Redis on every publish (and cleared when the turn ends, in
+  // Mirrored into the KV cache on every publish (and cleared when the turn ends, in
   // the finally below) so a subscriber that connects mid-turn can replay the
   // current state instead of missing it — see assistant-activity-snapshot.ts.
   const publishActivity = (status: 'thinking' | 'searching_kb' | 'reviewing_conversation') => {

@@ -70,8 +70,8 @@ export async function requireSettings(): Promise<SettingsRecord> {
 }
 
 /**
- * The raw settings row for READ-ONLY paths, served through the Redis-cached
- * tenant-settings blob (a single Redis GET when warm; the miss path is the
+ * The raw settings row for READ-ONLY paths, served through the KV-cached
+ * tenant-settings blob (a single cache GET when warm; the miss path is the
  * same DB read as {@link requireSettings}). Every settings mutation calls
  * invalidateSettingsCache(), so reads here are effectively fresh.
  *

@@ -32,7 +32,7 @@ vi.mock('@/lib/server/config', () => ({
   getBaseUrl: () => 'http://localhost:3000',
 }))
 
-// Neutralize the Redis-backed realtime fan-out on BOTH channels (the ticket
+// Neutralize the Postgres-backed realtime fan-out on BOTH channels (the ticket
 // channel the redirect dual-publishes on, and the conversation channel the
 // delegates publish on).
 const realtime = vi.hoisted(() => ({

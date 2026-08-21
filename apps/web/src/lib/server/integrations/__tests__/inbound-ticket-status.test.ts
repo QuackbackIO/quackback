@@ -50,7 +50,7 @@ vi.mock('@/lib/server/domains/tickets/ticket.webhooks', () => ({
   emitTicketExternalStatusChanged: vi.fn().mockResolvedValue(undefined),
 }))
 
-// Neutralize the real Redis-backed realtime publish.
+// Neutralize the real Postgres-backed realtime publish.
 vi.mock('@/lib/server/realtime/conversation-channels', () => ({ publishTicketEvent: vi.fn() }))
 
 import { handleInboundWebhook } from '../inbound-webhook-handler'

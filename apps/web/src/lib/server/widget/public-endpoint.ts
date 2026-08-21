@@ -28,7 +28,7 @@ export function widgetJsonError(
 }
 
 export interface PerIpLimitSpec {
-  /** Redis key prefix; the bucket key is `<keyPrefix>:ip:<ip>`. */
+  /** Bucket key prefix; the bucket key is `<keyPrefix>:ip:<ip>`. */
   keyPrefix: string
   /** Requests allowed per window. */
   limit: number
@@ -39,7 +39,7 @@ export interface PerIpLimitSpec {
 
 /**
  * Enforce a fixed-window per-IP limit. Returns the 429 response (with
- * Retry-After) when over the limit, or null to proceed. Redis errors fail
+ * Retry-After) when over the limit, or null to proceed. Store errors fail
  * open (null count) so an outage doesn't take the endpoint down.
  */
 export async function enforcePerIpLimit(

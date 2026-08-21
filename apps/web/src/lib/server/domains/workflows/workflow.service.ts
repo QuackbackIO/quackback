@@ -219,7 +219,7 @@ export async function listLiveWorkflowsForTrigger(triggerType: string): Promise<
 
 // --- Any-live-workflow gate (support platform §4.6 hardening) ---
 //
-// events/process.ts pays a Redis enqueue for the durable workflow-dispatch
+// events/process.ts pays a job-queue enqueue for the durable workflow-dispatch
 // queue on every message/status event, even in a workspace with zero
 // configured workflows. hasAnyLiveWorkflow() is the cheap "is there anything
 // to enqueue for at all" pre-check that gate uses: cached briefly (like

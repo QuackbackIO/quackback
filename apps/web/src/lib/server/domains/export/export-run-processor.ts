@@ -2,8 +2,8 @@
  * Async workspace export job.
  *
  * Owns an export run's running -> completed|failed transition. Kept separate
- * from the BullMQ wrapper (`export-queue.ts`) so the orchestration itself is
- * unit-testable without Redis: the worker's job handler is a thin call into
+ * from the queue wrapper (`export-queue.ts`) so the orchestration itself is
+ * unit-testable without the job queue: the queue's job handler is a thin call into
  * `runWorkspaceExportJob`.
  */
 import type { ExportRunId } from '@quackback/ids'

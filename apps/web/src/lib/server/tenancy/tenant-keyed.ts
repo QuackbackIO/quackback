@@ -10,8 +10,8 @@
  * The fix is always the same shape, so it lives here once: prefix the key with
  * the active tenant. Two helpers, and the choice between them is not stylistic.
  *
- * - {@link tenantKey} is for keys that leave the process — Redis keys, channel
- *   names, lock names. Those must be *namespaced*, and the namespace has to be
+ * - {@link tenantKey} is for keys that leave the process — shared-store keys,
+ *   channel names, lock names. Those must be *namespaced*, and the namespace has to be
  *   stable and greppable because it also has to be reasoned about during an
  *   incident.
  * - {@link TenantKeyedCache} is for in-heap maps. It also bounds itself, which
@@ -45,11 +45,11 @@ export function currentTenantNamespace(): string {
 }
 
 /**
- * Namespace an external key (Redis, a channel, a lock name) by tenant.
+ * Namespace an external key (a shared store, a channel, a lock name) by tenant.
  *
  * `tenantKey('settings:tenant')` → `t:<tenantId>:settings:tenant`.
  *
- * The `t:` marker is deliberate: a key in a shared Redis has to be readable by
+ * The `t:` marker is deliberate: a key in a shared store has to be readable by
  * a human during an incident, and "which tenant is this" must not require
  * knowing the id format.
  */

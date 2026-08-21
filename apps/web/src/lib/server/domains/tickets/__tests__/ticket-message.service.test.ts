@@ -48,7 +48,7 @@ import {
   listTicketMessagesForAgent,
 } from '../ticket-message.service'
 
-// Realtime publish (unified inbox §3.2, M3): neutralize the real Redis-backed
+// Realtime publish (unified inbox §3.2, M3): neutralize the real Postgres-backed
 // publish so these DB-fixture tests stay deterministic, and assert the
 // shared insertTicketMessage write path wires it.
 const realtime = vi.hoisted(() => ({ publishTicketEvent: vi.fn() }))

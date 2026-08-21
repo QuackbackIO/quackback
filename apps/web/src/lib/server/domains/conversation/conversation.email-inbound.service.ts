@@ -381,7 +381,7 @@ export async function ingestParsedEmail(parsed: ParsedInboundEmail): Promise<Ing
   // Same per-visitor throttle the widget send path enforces — the inbound email
   // channel must not be an unbounded back door for the offline-notification
   // fanout (a visitor mail-looping replies, or a client retrying with fresh
-  // Message-IDs). Fails open on Redis errors. Ack (200) so the provider stops.
+  // Message-IDs). Fails open on store errors. Ack (200) so the provider stops.
   try {
     await assertConversationSendRate(visitorPrincipalId)
   } catch (err) {
@@ -618,7 +618,7 @@ async function ingestTicketReply(
   // Same per-principal throttle the conversation reply path enforces — the
   // inbound email channel must not be an unbounded back door for the ticket
   // watcher/agent fan-out (a mail loop or a client retrying with fresh
-  // Message-IDs). Fails open on Redis errors.
+  // Message-IDs). Fails open on store errors.
   try {
     await assertConversationSendRate(requesterPrincipalId)
   } catch (err) {

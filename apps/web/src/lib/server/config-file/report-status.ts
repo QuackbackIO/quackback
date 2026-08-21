@@ -17,7 +17,7 @@ const log = logger.child({ component: 'config-report-status' })
  * rejecting an out-of-order POST, which is benign.
  *
  * Lives outside deps.ts so unit tests can drive it without dragging the
- * db / redis import graph in.
+ * db / cache import graph in.
  */
 export function makeReportStatus(): NonNullable<ReconcileDeps['reportStatus']> {
   return async (status) => {

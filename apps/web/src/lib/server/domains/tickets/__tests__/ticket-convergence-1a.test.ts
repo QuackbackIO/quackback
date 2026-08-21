@@ -20,7 +20,7 @@
  *  - markTicketUnreadFromMessage's conversation-sourced anchor fallback.
  *
  * The two webhook bridges and realtime/notify are fully mocked (spy bags), so
- * no event pipeline, Redis, or email runs; the auto-reopen hook is exercised
+ * no event pipeline, pub/sub, or email runs; the auto-reopen hook is exercised
  * directly with constructed events (the same pattern sla.event-hooks.test.ts
  * uses). SLA FRT/NRT settlement off `message.created` itself is covered by
  * sla.event-hooks.test.ts — here we assert the redirect EMITS the event on the
@@ -49,7 +49,7 @@ vi.mock('@/lib/server/config', () => ({
   getBaseUrl: () => 'http://localhost:3000',
 }))
 
-// Neutralize the Redis-backed realtime fan-out on BOTH channels (the ticket
+// Neutralize the Postgres-backed realtime fan-out on BOTH channels (the ticket
 // channel the redirect dual-publishes on, and the conversation channel the
 // delegates publish on).
 const realtime = vi.hoisted(() => ({

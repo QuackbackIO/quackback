@@ -1,6 +1,6 @@
 /**
  * Conversation domain service for the support inbox (channel-agnostic). Postgres is the source of truth; after each write
- * commits we publish a real-time event over Redis pub/sub (offline in-app /
+ * commits we publish a real-time event over Postgres pub/sub (offline in-app /
  * email notifications are dispatched separately by the events pipeline).
  *
  * Two send paths, deliberately separate so sender side is decided server-side
@@ -454,7 +454,7 @@ export async function sendVisitorMessage(
   })
 
   // A brand-new conversation: try auto-routing it to an active agent. Best-
-  // effort (never blocks the send), and runs outside the transaction so a Redis
+  // effort (never blocks the send), and runs outside the transaction so a store
   // hiccup can't roll back the visitor's message.
   if (created && txResult.conversation.assignedAgentPrincipalId === null) {
     await assignRoutedConversation(txResult.conversation)

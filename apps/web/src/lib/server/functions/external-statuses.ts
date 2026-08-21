@@ -16,7 +16,7 @@ import { logger } from '@/lib/server/logger'
 const log = logger.child({ component: 'external-statuses' })
 
 // NOTE: the registry is imported DYNAMICALLY inside the handler — a top-level
-// import pulls the whole provider graph (db/redis/bullmq) into the client
+// import pulls the whole provider graph (db/kv/jobs) into the client
 // bundle via the createServerFn stub, which import-protection rejects. The
 // status-source provider set is derived from the registry in the coverage
 // test, so nothing outside the handler references it here.

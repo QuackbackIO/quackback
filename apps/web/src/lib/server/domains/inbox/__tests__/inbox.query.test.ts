@@ -13,7 +13,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 }))
 
 // Neutralize the ticket domain's fire-and-forget webhook bridge (it would
-// otherwise resolve hook targets against Redis/db mid-rollback).
+// otherwise resolve hook targets against the cache/db mid-rollback).
 vi.mock('@/lib/server/domains/tickets/ticket.webhooks', () => ({
   emitTicketCreated: vi.fn().mockResolvedValue(undefined),
   emitTicketStatusChanged: vi.fn().mockResolvedValue(undefined),
@@ -29,7 +29,7 @@ vi.mock('@/lib/server/config', () => ({
 }))
 // Neutralize the ticket domain's realtime publish (unified inbox §3.2, M3):
 // createTicket/setTicketStatus now fire it too, and it would otherwise touch
-// the real (unconfigured-in-tests) Redis client mid-rollback.
+// the real (unconfigured-in-tests) pub/sub connection mid-rollback.
 vi.mock('@/lib/server/realtime/conversation-channels', () => ({ publishTicketEvent: vi.fn() }))
 // Neutralize the ticket activity log: this suite's write actors are unbacked
 // principal ids, and a real insert's FK failure would abort the fixture's

@@ -171,7 +171,7 @@ export async function handleKbAsk({ request }: { request: Request }): Promise<Re
     )
   }
 
-  // Configuration is a sync check: refuse before spending a Redis round-trip
+  // Configuration is a sync check: refuse before spending a store round-trip
   // on rate limiting requests that could never be answered.
   if (!isAskAiConfigured()) {
     return widgetJsonError(503, 'AI_NOT_CONFIGURED', 'AI answers are not configured')

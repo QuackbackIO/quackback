@@ -41,7 +41,7 @@ type ConsumeResult = { ok: true; redirectUrl: string } | { ok: false; error: str
  * 5 attempts per 5 minutes per (ip, email). Both success and failure
  * count toward the cap, matching GitHub / Linear practice. Combined
  * with the 60-bit recovery-code entropy this makes blind brute-force
- * impractical. Fail-open on Redis errors via the shared bucket
+ * impractical. Fail-open on store errors via the shared bucket
  * primitive.
  */
 const RECOVERY_ATTEMPT_LIMIT = 5

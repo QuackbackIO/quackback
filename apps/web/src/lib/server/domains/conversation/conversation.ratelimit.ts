@@ -1,6 +1,6 @@
 /**
  * Per-principal rate limiting for visitor conversation actions. Backed by the shared
- * Redis fixed-window primitive, which fails open on Redis errors so an outage
+ * Postgres fixed-window primitive, which fails open on store errors so an outage
  * never blocks legitimate messaging. Agent (team) actions are not throttled here.
  */
 import type { PrincipalId } from '@quackback/ids'
@@ -29,7 +29,7 @@ export class ConversationRateLimitError extends Error {
 export async function assertConversationSendRate(principalId: PrincipalId): Promise<void> {
   const spec = { key: `conversation:send:${principalId}`, windowSeconds: SEND_WINDOW_SECONDS }
   const { count } = await incrementBucket(spec)
-  // count === null means Redis errored — fail open.
+  // count === null means the store errored — fail open.
   if (count !== null && count > SEND_MAX) {
     throw new ConversationRateLimitError(await bucketRetryAfter(spec))
   }
@@ -75,7 +75,7 @@ const BURST_MAX = 3
 
 /**
  * Whether this sender is opening conversations in a burst. Fails open on
- * Redis errors (count === null) — a throttle outage never files a real
+ * store errors (count === null) — a throttle outage never files a real
  * customer's thread as spam.
  */
 export async function isColdInboundBurst(senderEmail: string): Promise<boolean> {

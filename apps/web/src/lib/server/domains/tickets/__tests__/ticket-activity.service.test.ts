@@ -31,7 +31,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
 }))
 
-// Neutralize the fire-and-forget webhook bridge and the Redis-backed realtime
+// Neutralize the fire-and-forget webhook bridge and the Postgres-backed realtime
 // publish (same convention as ticket.service.test.ts).
 const webhooks = vi.hoisted(() => ({
   emitTicketCreated: vi.fn().mockResolvedValue(undefined),

@@ -150,9 +150,9 @@ function faviconCacheKey(rawFaviconUrl: string): string {
 }
 
 /**
- * Proxy a favicon, memoized by its source URL in Redis so every page of a site
- * reuses the first page's proxied favicon instead of re-fetching + re-uploading.
- * Caching is best-effort: a Redis miss/error just falls through to proxyFavicon.
+ * Proxy a favicon, memoized by its source URL in the KV cache so every page of a
+ * site reuses the first page's proxied favicon instead of re-fetching + re-uploading.
+ * Caching is best-effort: a cache miss/error just falls through to proxyFavicon.
  */
 async function proxyFaviconCached(rawFaviconUrl: string): Promise<string | null> {
   const key = faviconCacheKey(rawFaviconUrl)

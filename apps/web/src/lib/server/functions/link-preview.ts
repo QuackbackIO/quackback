@@ -7,7 +7,7 @@
  * 3. `supportInbox` feature flag must be on (link previews ride the conversations product)
  * 4. Internal Quackback URLs are excluded (handled by quackbackEmbed)
  * 5. Per-principal rate limit: 30 requests / 60 s
- * 6. Redis cache (24h positives, 10min negatives)
+ * 6. KV cache (24h positives, 10min negatives)
  * 7. All outbound fetches via safeFetch (see unfurl.ts)
  */
 
@@ -34,7 +34,7 @@ const RATE_LIMIT_MAX = 30
 // it rotates anonymous principals, so the endpoint can't be a fetch-proxy/amp.
 const RATE_LIMIT_IP_MAX = 60
 
-/** Sentinel stored in Redis when a URL yields no preview (negative cache). */
+/** Sentinel stored in the cache when a URL yields no preview (negative cache). */
 interface NoneCache {
   __none: true
 }

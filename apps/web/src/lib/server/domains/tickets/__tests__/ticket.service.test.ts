@@ -43,7 +43,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 }))
 
 // Neutralize the fire-and-forget webhook bridge (it would otherwise resolve
-// hook targets against Redis/db mid-rollback) and assert the service wires it.
+// hook targets against the cache/db mid-rollback) and assert the service wires it.
 const webhooks = vi.hoisted(() => ({
   emitTicketCreated: vi.fn().mockResolvedValue(undefined),
   emitTicketStatusChanged: vi.fn().mockResolvedValue(undefined),
@@ -54,7 +54,7 @@ const webhooks = vi.hoisted(() => ({
 }))
 vi.mock('../ticket.webhooks', () => webhooks)
 
-// Realtime publish (unified inbox §3.2, M3): neutralize the real Redis-backed
+// Realtime publish (unified inbox §3.2, M3): neutralize the real Postgres-backed
 // publish so these DB-fixture tests stay deterministic, and assert the
 // service wires it — mirrors the webhooks mock above and conversation.service's
 // own test convention.

@@ -21,7 +21,7 @@
  *
  * The conversation domain's mark-unread runs for real (dynamic import — the
  * same delegation the ticket-unread service uses); realtime is mocked so no
- * Redis fan-out runs, and the publishes are assertable.
+ * pub/sub fan-out runs, and the publishes are assertable.
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest'
 import {
@@ -46,7 +46,7 @@ vi.mock('@/lib/server/config', () => ({
   getBaseUrl: () => 'http://localhost:3000',
 }))
 
-// Neutralize the Redis-backed realtime fan-out on BOTH channels (the ticket
+// Neutralize the Postgres-backed realtime fan-out on BOTH channels (the ticket
 // channel the legacy path publishes on, the conversation channels the pair
 // delegates publish on).
 const realtime = vi.hoisted(() => ({

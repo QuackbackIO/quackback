@@ -8,7 +8,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { PrincipalId, WebhookId } from '@quackback/ids'
 
-// --- Redis cache mocks ---
+// --- Cache mocks ---
 const mockCacheDel = vi.fn()
 
 vi.mock('@/lib/server/cache', () => ({

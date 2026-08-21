@@ -1,6 +1,6 @@
 /**
  * Conversation send rate limiting: enforces the per-principal window, surfaces a retry
- * hint, and fails open when Redis is unavailable.
+ * hint, and fails open when the store is unavailable.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PrincipalId } from '@quackback/ids'

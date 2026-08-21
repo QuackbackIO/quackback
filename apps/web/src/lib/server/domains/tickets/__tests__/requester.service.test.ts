@@ -27,7 +27,7 @@ vi.mock('@/lib/server/config', () => ({
   getBaseUrl: () => 'http://localhost:3000',
 }))
 
-// Neutralize the real Redis-backed realtime publish: the ingest core fires it
+// Neutralize the real Postgres-backed realtime publish: the ingest core fires it
 // via insertTicketMessage, and this suite isn't exercising the transport.
 const realtime = vi.hoisted(() => ({
   publishTicketEvent: vi.fn(),

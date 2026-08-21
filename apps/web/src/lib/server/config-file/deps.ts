@@ -10,7 +10,7 @@ import { mergeSetupState } from './reconciler'
 
 /** Production wiring of `ReconcileDeps`. The reconciler is db-agnostic
  *  to keep its tests fast; this is the only place that touches Drizzle
- *  + Redis. */
+ *  + the cache. */
 export function makeReconcileDeps(): ReconcileDeps {
   return {
     readSettings: async () => {
@@ -32,7 +32,7 @@ export function makeReconcileDeps(): ReconcileDeps {
       // Bump auth_config_version atomically with the settings write so
       // other pods drop their stale Better-Auth instance on next
       // request. invalidateSettingsCache (called by the reconciler
-      // after this returns) handles the Redis cross-pod broadcast.
+      // after this returns) drops the shared cache rows every pod reads.
       if (setupWorkspace) {
         await mutateSetupStateAtomic(async (current, lockedRow, tx) => {
           await tx.update(settings).set(columnUpdate).where(eq(settings.id, lockedRow.id))

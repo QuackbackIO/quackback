@@ -86,7 +86,7 @@ export const notificationHook: HookHandler = {
     // Anti-spam gate for the new-message team bell (WO-3 slice 5), moved
     // here from notifyVisitorMessage's request-time check: only ping the
     // team on the first message of a conversation, or when nobody is around
-    // to see it live. isAnyAgentOnline is a single GLOBAL Redis check, not
+    // to see it live. isAnyAgentOnline is a single GLOBAL presence check, not
     // per-recipient, so it's evaluated once for the whole target. This is a
     // deliberate skew from notifyVisitorMessage's own (still request-time)
     // presence check for the offline email — the two are never unified.

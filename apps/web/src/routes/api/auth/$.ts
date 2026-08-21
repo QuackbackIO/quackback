@@ -38,7 +38,7 @@ export const Route = createFileRoute('/api/auth/$')({
       GET: async ({ request }) => {
         const url = new URL(request.url)
         // Intercept any genericOAuth callback before Better-Auth: a hit on
-        // `sso-test:<state>` in Redis means this is an admin test sign-in;
+        // `sso-test:<state>` in the KV store means this is an admin test sign-in;
         // a miss returns null and falls through to the real OAuth handler.
         if (url.pathname.startsWith(SSO_OAUTH_CALLBACK_PREFIX)) {
           const { handleSsoTestCallback, renderSsoTestCallbackHtml } =

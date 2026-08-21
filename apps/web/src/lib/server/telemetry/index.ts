@@ -1,8 +1,8 @@
 // Telemetry module -- anonymous, privacy-respecting phone-home pings.
 //
 // - Lives under server/telemetry/ (infrastructure, not a business domain)
-// - Uses setInterval (not BullMQ) to avoid a Redis dependency for an optional
-//   feature; cross-instance dedupe (once per deployment, not once per
+// - Uses setInterval (not the job queue) to keep an optional
+//   feature self-contained; cross-instance dedupe (once per deployment, not once per
 //   replica) is handled by the Postgres-backed sweep lock instead
 // - Entire module is dynamically imported from bootstrap.ts so it has zero cost when disabled
 // - Silent failure throughout -- telemetry must never affect application functionality

@@ -39,7 +39,7 @@ vi.mock('../conversation.webhooks', async (orig) => ({
   emitConversationCreated: vi.fn().mockResolvedValue(undefined),
   emitMessageCreated: vi.fn().mockResolvedValue(undefined),
 }))
-// The cold-inbound throttle is a real Redis bucket keyed on the sender address,
+// The cold-inbound throttle is a real rate bucket keyed on the sender address,
 // which this file's fixture hardcodes. Left live, the cases below would burn a
 // shared 10-per-hour budget and start failing as 'rate_limited' on repeated
 // local runs — a red suite that points nowhere near its cause. Count the calls
