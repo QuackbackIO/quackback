@@ -2,7 +2,7 @@
  * Schema versions, and the compatibility floor a pooled fleet gates on.
  *
  * Under pooled compute one code version serves tenants on two schema versions
- * for the duration of every rollout (SAAS-HOSTING-STACK.md §10). Expand-only is
+ * for the duration of every rollout. Expand-only is
  * necessary but **not sufficient**, and the reason is specific: Drizzle emits
  * explicit column lists, so a build that postdates an additive migration issues
  * `select "id", …, "cloud", … from "settings"` and `findFirst()` *throws* on a
@@ -12,7 +12,7 @@
  * So the rule is an ordering rule: additive change must be applied **before**
  * the code that reads it. `MIN_SCHEMA_VERSION` is where a build states the
  * oldest schema it tolerates, and the tenant middleware refuses a tenant below
- * it — 503 for that tenant only, never for the fleet (§10.5).
+ * it — 503 for that tenant only, never for the fleet.
  *
  * ## Why the floor is a prefix check and not a high-water mark
  *
@@ -25,7 +25,7 @@
  * {@link evaluateSchemaFloor} therefore asks the only question that is
  * actually load-bearing: *is every bundled migration at or below the floor
  * present in this database's ledger?* Extra rows above the floor are ignored,
- * which is deliberate and is the second half of §10.2's instruction to keep
+ * which is deliberate and is the second half of keeping
  * `getMigrationStatus()`'s semantics: **a tenant ahead of the code must keep
  * being served by the code it is ahead of**, because that is precisely what
  * happens to every not-yet-restarted replica during a rollout.

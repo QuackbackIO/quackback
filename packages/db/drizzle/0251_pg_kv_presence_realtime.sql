@@ -1,5 +1,4 @@
--- Redis's application half, moved into the tenant database
--- (SAAS-HOSTING-STACK.md §7.4).
+-- Redis's application half, moved into the tenant database.
 --
 -- Four substrates, one property. Every table here carries `tenant_id` as the
 -- leading column of its primary key, and every statement that reads one filters
@@ -14,8 +13,8 @@
 -- Under `QUACKBACK_TENANCY=pooled` these tables live in the tenant's OWN
 -- database, so cross-tenant observation is already impossible: there is no
 -- shared keyspace to collide in. `tenant_id` is the second, independent
--- statement of the same fact — the shape `0253_job_queue.sql` established, for
--- the reason §3 gives: a wrong-tenant answer passes every other check in the
+-- statement of the same fact — the shape `0250_job_queue.sql` established, for
+-- one reason: a wrong-tenant answer passes every other check in the
 -- system, so a store asserts its own boundary rather than inheriting confidence
 -- from the connection that reached it.
 --

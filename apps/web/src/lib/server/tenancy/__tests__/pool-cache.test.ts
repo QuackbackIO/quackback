@@ -256,8 +256,8 @@ describe('tenant pool cache', () => {
     // The §3 idea applied to the key. The database can be exactly the right one
     // — the fingerprint here is stubbed to `ok` — and the fleet still must not
     // serve, because the first write would seal data under a key that cannot
-    // open what is already there. `SAAS-HOSTING-STACK.md` §4.3: that damage is
-    // silent and permanent, so "refuse" is the only defensible answer.
+    // open what is already there. That damage is silent and permanent, so
+    // "refuse" is the only defensible answer.
     const cache = await loadCache()
     const fp = await import('../fingerprint')
     vi.mocked(fp.observeTenantIdentity).mockImplementation((async () => ({

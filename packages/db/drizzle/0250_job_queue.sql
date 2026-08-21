@@ -1,4 +1,4 @@
--- The Postgres job queue and its lease primitive (SAAS-HOSTING-STACK.md §7.2).
+-- The Postgres job queue and its lease primitive.
 --
 -- This table replaces Redis as the substrate the background tier runs on. It
 -- lives in the TENANT database, which is what makes the queue per-tenant: there
@@ -6,7 +6,7 @@
 -- reachable from another's connection. The `tenant_id` column is a second,
 -- independent statement of the same fact, asserted at claim time so a row that
 -- somehow arrived in the wrong database is refused loudly rather than executed
--- (§3 — a wrong-tenant answer does not throw on its own).
+-- (a wrong-tenant answer does not throw on its own).
 --
 -- ## Why a lease and not just SKIP LOCKED
 --

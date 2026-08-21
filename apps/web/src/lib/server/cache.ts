@@ -1,8 +1,8 @@
 /**
  * The application cache, on Postgres.
  *
- * Successor to `lib/server/redis.ts`'s `cacheGet`/`cacheSet`/`cacheDel`
- * (SAAS-HOSTING-STACK.md §7.4). The call sites are unchanged: same three
+ * Successor to `lib/server/redis.ts`'s `cacheGet`/`cacheSet`/`cacheDel`.
+ * The call sites are unchanged: same three
  * helpers, same key table, same "a cache failure is a cache miss" contract.
  * What changed is where a row lands — `kv_store` in the tenant's own database
  * instead of a `t:<tenantId>:` key in a shared Redis.

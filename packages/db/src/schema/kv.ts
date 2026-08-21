@@ -1,6 +1,5 @@
 /**
- * Redis's application half, as tables in the tenant database
- * (SAAS-HOSTING-STACK.md §7.4).
+ * Redis's application half, as tables in the tenant database.
  *
  * Every table here leads its primary key with `tenantId`. That column is the
  * successor of the `t:<tenantId>:` prefix `tenancy/tenant-keyed.ts` puts on

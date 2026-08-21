@@ -1,5 +1,5 @@
 /**
- * The `MIN_SCHEMA_VERSION` compatibility gate (SAAS-HOSTING-STACK.md §10.5).
+ * The `MIN_SCHEMA_VERSION` compatibility gate.
  *
  * ```
  * resolve tenant → assert fingerprint matches → assert schema >= MIN_SCHEMA_VERSION
@@ -27,9 +27,9 @@
  * image migrates a tenant that old replicas are still serving; refusing it there
  * would turn every rollout into an outage on the way *in*. So the floor is a
  * prefix check — every bundled migration up to the floor must be applied — and
- * migrations above it are not consulted. This is the same reason §10.2 says to
- * keep `getMigrationStatus()`'s bundled-⊆-applied semantics deliberately rather
- * than "fixing" them.
+ * migrations above it are not consulted. This is the same reason
+ * `getMigrationStatus()`'s bundled-⊆-applied semantics are kept deliberately
+ * rather than "fixed".
  *
  * With expand/contract discipline the gate **should essentially never fire**. It
  * is a safety net, not the normal path, which is why it is off unless
@@ -124,7 +124,7 @@ export function __resetSchemaFloorMemo(): void {
  * fingerprint alarm, and left the readiness probe green.
  *
  * Called from `startup.ts` and from the readiness probe. The probe deliberately
- * asserts nothing about *tenant* schemas under pooled tenancy (§10.5) — but
+ * asserts nothing about *tenant* schemas under pooled tenancy — but
  * this is not a tenant schema, it is this process's own configuration, and a
  * process that cannot resolve its own serving floor is not ready.
  */

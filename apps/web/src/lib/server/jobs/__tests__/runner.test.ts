@@ -162,7 +162,7 @@ describe('the schedule tick', () => {
     // The defect this pins: a module-scope `seen` map keyed on the schedule name
     // alone is shared by every tenant loop in the process, so whichever tenant
     // reached a slot first advanced a counter the rest read as "already done".
-    // Measured live on two Neon tenants before the fix: each minute's sweep
+    // Measured live on a two-tenant fleet before the fix: each minute's sweep
     // landed on exactly one tenant, never both.
     const q = queue('sched-two-tenants')
     __setJobDefinitionsForTests([

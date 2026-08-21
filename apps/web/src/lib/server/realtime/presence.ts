@@ -1,6 +1,6 @@
 /**
  * Conversation presence, backed by the tenant's Postgres database so it works
- * across replicas (SAAS-HOSTING-STACK.md §7.4).
+ * across replicas.
  *
  * Used to gate offline notifications and offline re-queue: a principal is online
  * while any of their SSE streams is live. Each stream is a row scored by its
@@ -25,7 +25,7 @@
  *
  * ## Cost
  *
- * This is §7.4's second named regression: a write per live stream every 20s,
+ * The migration's expected cost here was a write per live stream every 20s,
  * which Redis absorbed for free. It is now ONE statement per heartbeat where
  * Redis issued three commands (ZADD, EXPIRE, ZADD). The measurement is in
  * `lib/server/kv/KV.md`.

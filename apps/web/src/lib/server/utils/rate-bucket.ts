@@ -1,7 +1,7 @@
 /**
  * Postgres-backed fixed-window rate-limit primitive.
  *
- * Successor to `utils/redis-rate-bucket.ts` (SAAS-HOSTING-STACK.md §7.4). One
+ * Successor to `utils/redis-rate-bucket.ts`. One
  * `INSERT … ON CONFLICT DO UPDATE` per check, which is the honest cost of the
  * change: a database round trip where Redis served a sub-millisecond INCR, on
  * the sign-in and widget hot paths. The measurement is in `KV.md`.

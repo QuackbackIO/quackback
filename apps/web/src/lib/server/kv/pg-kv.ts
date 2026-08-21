@@ -1,6 +1,5 @@
 /**
- * The Redis primitives the application half used, as single Postgres statements
- * (SAAS-HOSTING-STACK.md §7.4).
+ * The Redis primitives the application half used, as single Postgres statements.
  *
  * GET/SET/DEL, SET NX EX, SADD + EXPIRE NX, INCR + EXPIRE NX. Nothing here is a
  * general key-value store; it is exactly the operations `redis.ts`,
@@ -15,9 +14,9 @@
  * and the CASE arms evaluate under it. Split any of these into a read followed
  * by a write and you have reintroduced the race the Redis version did not have.
  *
- * **One round trip.** That is the whole cost story of §7.4's first named
- * regression, and it is why none of these is expressed as a transaction with
- * two statements in it.
+ * **One round trip.** The round trip, not the statement, is the whole cost of
+ * moving these paths onto Postgres (measured in `KV.md`), and it is why none of
+ * these is expressed as a transaction with two statements in it.
  *
  * **The tenant is in the key.** `currentTenantNamespace()` is the same function
  * that built the `t:<tenantId>:` prefix on the Redis wire key, so the

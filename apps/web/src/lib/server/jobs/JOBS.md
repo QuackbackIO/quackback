@@ -1,11 +1,11 @@
 # The Postgres job queue
 
 Background work on Postgres, per tenant, with leases. This is the substrate that
-replaces Redis for the background tier (`SAAS-HOSTING-STACK.md` §7).
+replaced Redis for the background tier.
 
 `QUACKBACK_TENANCY=single` — the default and every self-hosted install — gets one
-loop, no tenant scope, and the same seven sweeps on the same cadences they have
-always run on. Nothing here needs a registry or a control plane.
+loop, no tenant scope, and the same sweeps on the same cadences they have always
+run on. Nothing here needs a registry or a control plane.
 
 ---
 
@@ -31,9 +31,8 @@ completeJob()    short transaction: running -> succeeded
 and `reapExpiredLeases()` adjudicates leases whose owner died.
 
 Measured, not asserted: a claimed row can be taken `FOR UPDATE NOWAIT` from
-another connection while the job is still leased (`__tests__/job-queue.test.ts`),
-and `pg_stat_activity` shows zero backends in a transaction while a job is held
-across minutes of work (`scripts/job-lease-proof.ts long-lease`).
+another connection while the job is still leased, and heartbeating a held job
+leaves no transaction open — both pinned by `__tests__/job-queue.test.ts`.
 
 ## 2. The reaper, and the thing it must never do
 
@@ -63,8 +62,9 @@ side effect is usually not in this database.
 
 ### Measured, at every kill point
 
-`scripts/job-lease-proof.ts kill-matrix` SIGKILLs a worker at each of four
-stages, then lets the reaper and a fresh worker do whatever they will.
+A one-off proof run (its harness has since been removed) SIGKILLed a worker at
+each of four stages, then let the reaper and a fresh worker do whatever they
+would:
 
 | kill point                                             | maxAttempts=1 executions | maxAttempts=3 executions |
 | ------------------------------------------------------ | ------------------------ | ------------------------ |
@@ -74,9 +74,12 @@ stages, then lets the reaper and a fresh worker do whatever they will.
 | after completion is recorded                           | 1                        | 1                        |
 
 The right-hand column is the point of the table. It is a **positive control**: it
-proves the harness can see a double execution. Without it, the left-hand column
-of ones would be equally consistent with a harness that observes nothing, and the
-run refuses to report a pass if the control does not fire.
+proves the harness could see a double execution. Without it, the left-hand column
+of ones would be equally consistent with a harness that observes nothing.
+
+The same claim/reap/complete semantics are pinned continuously by
+`__tests__/job-queue.test.ts`, which drives every branch — the requeue/terminate
+split, the spent-job refusal, concurrent claimers — against a real database.
 
 ## 3. The fencing token
 
@@ -97,9 +100,8 @@ There is no shared queue, so there is no routing decision to get wrong and no
 tenant parameter on `enqueueJob` — to enqueue for a tenant you must be in that
 tenant's scope, at which point you are writing into its database.
 
-That is a structural argument, and §3 of the plan is precisely the observation
-that a wrong-tenant answer passes every structural check without erroring. So the
-structure is not trusted on its own:
+That is a structural argument, and a wrong-tenant answer passes every structural
+check without erroring. So the structure is not trusted on its own:
 
 - every row is stamped with the tenant that enqueued it;
 - **every claim asserts that stamp against the ambient scope**, and a mismatch is
@@ -107,54 +109,36 @@ structure is not trusted on its own:
 - the assertion lives inside `claimJobs`, not in each caller, so there is no
   version of "forgot to assert".
 
-Demonstrated on a live two-tenant fleet with a database per tenant
-(`scripts/job-tenant-proof.ts run`): jobs enqueued for each tenant executed only
-against that tenant's own database (confirmed by `neon.branch_id`, not by name),
-zero cross-tenant observations in both orderings, and a row planted in one
-tenant's queue but stamped for the other was refused:
+Demonstrated once on a live two-tenant fleet with a database per tenant: jobs
+enqueued for each tenant executed only against that tenant's own database
+(confirmed by database identity, not by name), zero cross-tenant observations in
+both orderings, and a row planted in one tenant's queue but stamped for the
+other was refused:
 
 ```
 job REFUSED: row tenant does not match the tenant scope that claimed it
 last_error = tenant mismatch: row is stamped inst_…bravo, scope is inst_…alpha
 ```
 
-## 5. The wake, and the connection it needs
+`__tests__/job-queue.test.ts`'s tenant-assertion suite pins the same refusal.
 
-A trigger NOTIFYs `quackback_job_wake` on any write that leaves a row runnable
-now. A listener on a session-mode connection wakes in milliseconds instead of
-waiting out the poll interval.
+## 5. Poll-driven, deliberately
 
-**`LISTEN` does not survive a transaction-mode pooler, and the obvious health
-check lies about it.** Measured on Neon for this channel, on two tenants:
+There is no doorbell. Each loop claims on a fixed interval
+(`JOB_POLL_INTERVAL_MS`, default 5s), so a job starts within one poll interval
+of being enqueued. The claim is a single indexed `FOR UPDATE SKIP LOCKED` query,
+cheap enough that an idle tenant costs a handful of claim queries per minute.
 
-| endpoint | notify actually delivered | `pg_listening_channels()` says |
-| -------- | ------------------------- | ------------------------------ |
-| direct   | **yes**                   | no                             |
-| pooled   | **no**                    | **yes**                        |
+Two reasons this is a poll rather than a `LISTEN` wake:
 
-The catalogue view is not merely a false green here — on this measurement it is
-_inverted_, reporting the registration on the connection that never delivers and
-not on the one that does. (The mechanism is connection multiplexing:
-`postgres.js` puts `LISTEN` on its own connection, which the pooler may or may
-not share with the query asking the question.) So:
-
-- the listener is built from the tenant's **direct** DSN, never from the pool
-  cache — the same shape `events/relay-lock.ts` already uses;
-- `WakeListener.verify()` sends a real NOTIFY from a _second_ connection and
-  waits for it. Nothing here asks the catalogue whether it is registered, and
-  nothing should.
-
-**The poll interval is the correctness floor, not a fallback nobody exercises.**
-If the doorbell is lost — a dropped connection, a pooled DSN, a NOTIFY that
-raced the LISTEN — the poll still fires, so a lost wake costs latency and never
-correctness.
-
-Measured wake latency, local Postgres, `JOB_POLL_INTERVAL_MS=1000`:
-
-| doorbell             | n   | min     | p50      | p95      | max      |
-| -------------------- | --- | ------- | -------- | -------- | -------- |
-| NOTIFY               | 20  | 3 ms    | 4 ms     | 8 ms     | 33 ms    |
-| disabled (poll only) | 20  | ~900 ms | ~1000 ms | ~1000 ms | ~1000 ms |
+- **Background latency is bounded by the poll, and that bound is enough.**
+  Nothing on these queues needs sub-second start; anything that does has the
+  realtime bus.
+- **`LISTEN` does not survive a transaction-mode pooler** — the registration
+  lands on whichever backend the pooler picked and notifies are silently never
+  delivered — which is one reason the queue polls instead of listening. The one
+  consumer that genuinely needs push delivery, the realtime bus, holds its
+  LISTEN connection on a direct session-mode DSN (`realtime/pg-listener.ts`).
 
 ## 6. Scheduling
 
@@ -178,14 +162,57 @@ rather than falling back to a permissive reading. A mis-parsed cron expression
 changes a sweep's cadence with no error anywhere, which is not a failure mode a
 scheduler should be able to have.
 
+### Adopting a slot, rather than running it
+
+The first pass of a scheduler **adopts** the current slot without enqueueing it.
+That is not an optimisation — it is the behaviour the repeatable jobs had, and
+its absence was a divergence caught by running the old and new builds side by
+side: registering a repeatable job schedules its NEXT occurrence, it does not
+run the occurrence that has already passed. Without the seed, a process booting
+at 14:00 immediately runs the 03:00 daily sweep — once, because the dedupe key
+makes a slot spendable once, but at entirely the wrong time of day.
+
+The residual difference is narrow and worth stating: the repeatable job's next
+occurrence used to survive a restart in the queue store, while this seed is per
+process. A restart in the same minute as a slot skips that slot. A restart at
+any other time does not.
+
+### The cron gate
+
+A definition may carry `cronEnabled`, evaluated per tick. A false answer means
+the schedule is inert — no row is written — rather than the job being enqueued
+and the handler returning early, which would fill the table with no-ops.
+
+`deadlines.ts` supplies the standard gate. The per-minute crons
+(`sla-breach-sweep`, `snooze-sweep`) are not periodic work but **deadline**
+work: a conversation is snoozed _until_ a stated instant, an SLA clock is due
+_at_ one, and the database already knows every one of those instants. So a queue
+registers a provider answering "when is this tenant's next deadline?", and
+`dueWithin(queue, windowMs)` shuts the schedule when nothing falls due inside
+the slot. The window is the schedule's own slot length, so the gate can only
+ever suppress a tick that had nothing to do — nothing is noticed later than it
+would be ungated. The fail-safe direction is towards running: no provider, or a
+provider that throws, reads as "due now", because a wrong "now" costs a tick
+that finds nothing and a wrong "never" is work that never runs.
+
+**A gated-off tick still spends its slot.** A shut gate means the slot had
+nothing to do, which is the same as having done it; recording it is what makes
+the _next_ slot new when the gate opens. Without that the gate was silently
+self-defeating: a schedule that never ticks has no slot memory, a pass with no
+memory is a first pass, and a first pass adopts rather than runs — so a gate
+that opened was always a first pass and the work never ran. Measured against a
+real tenant, a snooze due in ninety seconds was never swept at all.
+`__tests__/deadlines.test.ts` and `runner.test.ts`'s gating suite pin both
+halves.
+
 ### The scheduler's memory is per tenant, and that is structural
 
 `ScheduleState` is created by each tenant loop and **passed in**. It was a
 module-scope `Map` keyed on the schedule name, and that is a cross-tenant defect:
 one process runs one loop per tenant, so whichever tenant reached a slot first
 advanced a counter every other tenant then read as "already done". Measured live
-on two Neon tenants, each minute's sweep landed on exactly one of them. It
-affected all seven sweeps, and only `page-view-partitions` had a backstop.
+on a two-tenant fleet, each minute's sweep landed on exactly one of them. It
+affected every cron sweep, and only `page-view-partitions` had a backstop.
 
 Keying the map by tenant would have fixed the instance. Making the state a
 parameter fixes the class — there is no shared object left to key wrongly, and
@@ -237,22 +264,24 @@ the next day's run restores it.
 
 ## 7. Shape of the tier
 
-`tier.ts` runs **one loop per tenant**, each with its own listener.
-`tenancy/fleet.ts` already answers "iterate all tenants per tick", and that is the
-right answer for a periodic sweep and the wrong one for a queue: the latency of an
-on-demand job would become the tick interval times the tenant count, and the whole
-point of the doorbell is that a job enqueued now starts now.
+`tier.ts` runs **one loop per tenant**. `tenancy/fleet.ts` already answers
+"iterate all tenants per tick", and that is the right answer for a periodic
+sweep and the wrong one for a queue: one pass across N tenants serialises every
+tenant's claim behind every other tenant's, so one slow tenant delays them all.
+Each loop owns its own schedule state and its own bounded pool, and the fleet
+iteration is reduced to _discovering_ tenants (the list is re-read every minute)
+rather than driving work.
 
-The cost is one session-mode connection per tenant, permanently. That is the tier
-§7.3 describes — always warm, direct connections, physically separate from the
-pooled web tier — and it carries §6's corollary: **this tier holds connections
-open by design, so it must never share a compute with tenants you expect to
-suspend.** Sizing it for a large fleet belongs with the relay-tier work.
+A tenant is **proved servable before it is polled**: the loop opens an empty
+scope first, and a refusal lands in `tenancy/quarantine`'s backoff instead of
+being retried at the poll interval forever. A changed registry record nudges a
+quarantined loop awake, so an operator's repair is acted on without waiting out
+the backoff.
 
-A tenant whose database has not yet run migration `0253` is **skipped with a
-warning**, not crash-looped. §5's ordering rule is that expand lands before the
-code that reads it; a queue tier that died on a mid-rollout fleet would turn that
-ordering into an outage.
+A tenant whose database has not yet run migration `0250` is **skipped with a
+warning**, not crash-looped. Expand lands before the code that reads it, and a
+queue tier that died on a mid-rollout fleet would turn that ordering into an
+outage.
 
 ## 8. Configuration
 
@@ -260,12 +289,14 @@ Read from `process.env` directly rather than through the zod config, matching
 `process-role.ts`: these must work in any context, including a worker process that
 has not loaded the full application config.
 
-| Variable               | Default | Meaning                                                             |
-| ---------------------- | ------- | ------------------------------------------------------------------- |
-| `JOB_POLL_INTERVAL_MS` | 1000    | Poll fallback. The correctness floor when a NOTIFY is lost          |
-| `JOB_BATCH_SIZE`       | 5       | Jobs claimed per drain pass                                         |
-| `JOB_REAP_INTERVAL_MS` | 15000   | How often expired leases are adjudicated                            |
-| `JOB_RETENTION_MS`     | 7 days  | How long terminal rows are kept. Must exceed any live cron slot key |
+| Variable                | Default                      | Meaning                                                             |
+| ----------------------- | ---------------------------- | ------------------------------------------------------------------- |
+| `JOB_POLL_INTERVAL_MS`  | 5000                         | Claim cadence. A job starts within one poll interval of enqueue     |
+| `JOB_BATCH_SIZE`        | 5                            | Ceiling on rows claimed from ONE queue in a single pass             |
+| `JOB_REAP_INTERVAL_MS`  | 60000                        | How often expired leases are adjudicated                            |
+| `JOB_PRUNE_INTERVAL_MS` | 1 hour                       | How often terminal rows past retention are deleted                  |
+| `JOB_RETENTION_MS`      | 7 days                       | How long terminal rows are kept. Must exceed any live cron slot key |
+| `JOB_MAX_CONCURRENCY`   | sum of per-queue concurrency | Ceiling on one tenant loop's in-flight jobs (see §10)               |
 
 `QUACKBACK_ROLE=web` does not start the tier, the same gate `startOutboxRelay`
 uses.
@@ -294,12 +325,13 @@ rather than asserting it:
   level under that tenant's connection.
 
   **That guarantee reaches exactly as far as the static import graph, and an
-  earlier version of this document overstated it.** Priming loads the seven
-  handler _wrapper_ modules; three of them deferred their sweep modules to call
+  earlier version of this document overstated it.** Priming loads the handler
+  _wrapper_ modules; three of them deferred their sweep modules to call
   time, which is inside the per-pass tenant scope — and `resolveHandler`'s
   warning could not see it, because it only guards the outer import. Proven on
-  the pooled fleet with a top-level probe in `sla.sweep.ts`: `(module not
-imported)` after priming, `inst_gauntlet_alpha` after the tier ran the sweep.
+  a live pooled fleet with a top-level probe in `sla.sweep.ts`: `(module not
+imported)` after priming, then the probed tenant's id after the tier ran the
+  sweep.
 
   Those imports are now static, and `__tests__/handler-imports.test.ts` scans
   every registered handler module and fails on a call-time `import(`. A source
@@ -309,9 +341,9 @@ imported)` after priming, `inst_gauntlet_alpha` after the tier ran the sweep.
   runs — because the scan proves only that the modules _can_ be primed.
 
   **The scan is one level deep, and the boundary is a cross-piece contract.** It
-  reads the seven wrapper files, not their graph. Deepening it was measured and
-  rejected: the modules those seven statically import carry 32 call-time imports
-  across 12 files (`settings.service` 24, `conversation.service` 6,
+  reads the wrapper files, not their graph. Deepening it was measured and
+  rejected: the modules those wrappers statically import carry 32 call-time
+  imports across 12 files (`settings.service` 24, `conversation.service` 6,
   `pending-actions.service` 2) — ordinary lazy loading, none of it
   queue-specific. So the guarantee is: **the wrappers and their static graph load
   before any scope opens.** Deeper than that, a call-time import runs under
@@ -319,8 +351,8 @@ imported)` after priming, `inst_gauntlet_alpha` after the tier ran the sweep.
   hazard is only that the module is then shared process-wide, and only if it
   captured scope-dependent state at its top level.
 
-  **That other half is `lib/server/policy/module-state/`**, the §4.4 scanner,
-  which owns every module-scope mutable-state site it can see under
+  **That other half is `lib/server/policy/module-state/`**, the module-state
+  scanner, which owns every module-scope mutable-state site it can see under
   `lib/server/**`, against a checked-in ledger, **with its recall limits recorded
   in that module's README**. Being a source scan, load order is irrelevant to it
   — it sees a captured singleton whether the module loaded at prime time, at call
@@ -395,12 +427,10 @@ so a running job never stands between a per-minute sweep and its slot. Three
 shapes were available and the other two were rejected for reasons worth keeping:
 
 - **Per-queue loops** multiply the poll traffic by the queue count against a
-  per-tenant database, and this tier already holds a connection per tenant open
-  by design (§7). One loop keeps one poll, one listener and one claim query per
-  pass whatever the queue count.
+  per-tenant database. One loop keeps one poll and one claim query per pass
+  whatever the queue count.
 - **A separate tier for the slow queues** splits the deployment on a property
-  ("slow") that is not stable — an AI call's duration is not a queue attribute —
-  and doubles the always-warm connection count.
+  ("slow") that is not stable — an AI call's duration is not a queue attribute.
 - **One undifferentiated pool** loses the reference's per-queue `concurrency`,
   and one of those numbers is load-bearing: `workflow-dispatch` is 1 because it
   is a global FIFO, not because it is slow. Two dispatch jobs in parallel
@@ -410,8 +440,8 @@ So the cap is **per queue**, the claim asks for exactly the free slots each
 queue has (one `LATERAL` query), and each queue's rows are leased for that
 queue's own lease rather than the batch's longest.
 
-Measured, on a fixture where one queue holds a 120 s job while a per-minute
-schedule ticks alongside it (`scripts/job-concurrency-proof.ts`):
+Measured once (the harness has since been removed) on a fixture where one queue
+holds a 120 s job while a per-minute schedule ticks alongside it:
 
 | drain shape                 | slow-queue runs | per-minute slots enqueued |
 | --------------------------- | --------------- | ------------------------- |
@@ -420,9 +450,9 @@ schedule ticks alongside it (`scripts/job-concurrency-proof.ts`):
 
 The serial column is the control: it is the shipped loop with the pool awaited
 before it comes round again — literally what `drainOnce` did — and it reproduces
-the dropped slots rather than asserting them. The run refuses to report a
-result if the control does not lose a slot, because "no slots lost" is also
-what a harness that cannot see a lost slot would print.
+the dropped slots rather than asserting them. `__tests__/runner.test.ts`'s
+bounded-pool suite pins the same property: dispatch returns while the work
+runs, per-queue caps hold, and the FIFO queue never has two in flight.
 
 `JOB_MAX_CONCURRENCY` caps one tenant loop's total in-flight jobs. It defaults
 to the **sum of every definition's `concurrency`**, which is exactly what the
@@ -456,48 +486,27 @@ tenant, and an operator sizing connections cares about the product.
 
 ### Measured against the reference
 
-Same seeded database, same script, one run each
-(`scripts/queue-parity-probe.ts`):
+Before the cutover, one driver script ran the real producers against a single
+seeded database under each consumer in turn — the BullMQ worker registry on the
+reference build, this tier on this branch — and read the rows a caller would
+poll. Import and export reached the same terminal status with the same posts
+visible and equivalent export sizes, and the `events` queue published the same
+outbox rows leaving none unpublished. The harness is gone; the like-for-like
+suites under `__tests__/` (notably `migrated-queues.test.ts`) are what hold the
+behaviour now.
 
-|                                      | reference `8310ee89d`  | this branch       |
-| ------------------------------------ | ---------------------- | ----------------- |
-| consumer                             | bullmq worker registry | postgres job tier |
-| import: terminal status              | completed              | completed         |
-| import: posts visible afterwards     | 2                      | 2                 |
-| export: terminal status              | completed              | completed         |
-| export: sizeBytes                    | 212258                 | 212198            |
-| events: outbox rows published        | 1                      | 1                 |
-| events: outbox rows left unpublished | 0                      | 0                 |
-| events: hook deliveries              | 3                      | 2                 |
-
-The byte and delivery counts differ because each run adds rows the next one
-exports and fans out; the statuses and the post count are the like-for-like
-part.
-
-**Two things stopped this being driven over HTTP, both checked rather than
-assumed.** A production build's API routes that call a server function fail
-with `Server function info not found for 552eb43…` — **reproduced identically
-on `8310ee89d`**, so pre-existing — and `vite dev` cannot start on a machine
-whose inotify watch budget is exhausted (`ENOSPC`). The probe therefore drives
-the same producers those routes call and reads the same rows their pollers
-read. `/api/health/ready` _is_ served, and is where the readiness change is
-visible.
-
-**A false alarm worth recording**, because it looked exactly like a real
-regression: the export job failed under this branch and succeeded on the
-reference, repeatably. The cause was a leftover server from an earlier step
-still attached to the same database, draining the same `job_queue` under an
-environment with no S3 keys. Postgres queues have no per-consumer namespace,
-so any process pointed at the database is a consumer — which is the same
-property that makes the queue per-tenant, seen from the other side.
+One lesson from that run outlives the harness: a Postgres queue has no
+per-consumer namespace, so **any process pointed at the database is a
+consumer** — a leftover dev server can drain the queue it is pointed at. That
+is the same property that makes the queue per-tenant, seen from the other side.
 
 ### Nothing is still Redis
 
 The queues came here; the generic cache, rate limiting, pub/sub, presence,
-visitor hashing and link previews went to `kv/` (see `kv/KV.md`). §7.4's final
+visitor hashing and link previews went to `kv/` (see `kv/KV.md`). The final
 cutover has since run: `ioredis` is no longer a dependency, `REDIS_URL` is no
-longer read, and no service provisions a Redis. `policy/no-bullmq/` keeps the
-queue package out.
+longer read, and no service provisions a Redis. An eslint restricted-import
+guard keeps the queue package out.
 
 **`email-imap` refuses to schedule under pooled tenancy** and says so at error.
 Its mailbox is process-wide configuration while the queue is per tenant, so
@@ -507,42 +516,30 @@ BullMQ worker was never started under pooled tenancy either.
 
 **The outbox relay is still not started under pooled tenancy.** It needs a
 session-mode connection for `LISTEN` and `pg_advisory_lock` per tenant, which is
-the relay-tier piece's work. Its _enqueue_ is now this queue's, so what it needs
-is a per-tenant loop of exactly the shape `tier.ts` already runs.
+future per-tenant work of its own. Its _enqueue_ is already this queue's, so
+what it needs is a per-tenant loop of exactly the shape `tier.ts` already runs.
 
-## 11. Running the evidence
+## 11. The evidence
 
-```bash
-# lease semantics, kill at every stage, with the positive control
-DATABASE_URL=... bun run scripts/job-lease-proof.ts kill-matrix
+Everything above is pinned by the vitest suites in `__tests__/`, which run
+against a real Postgres database:
 
-# a job held across minutes of work with no transaction open, then SIGKILL
-DATABASE_URL=... bun run scripts/job-lease-proof.ts long-lease --work-seconds 180
-
-# wake latency, measured through the real tier
-DATABASE_URL=... bun run scripts/job-lease-proof.ts wake-latency --samples 24
-JOB_WAKE_DISABLED=1 DATABASE_URL=... bun run scripts/job-lease-proof.ts wake-latency --samples 24
-
-# the tenant boundary and the per-tenant scheduler, on a real pooled fleet.
-# This is the only harness with a cron schedule — job-lease-proof.ts is
-# single-tenant and could not see a cross-tenant scheduler defect at all.
-env $(cat pooled.env) bun run scripts/job-tenant-proof.ts run --a <id> --b <id>
-env $(cat pooled.env) bun run scripts/job-tenant-proof.ts listen-endpoints
-
-# the eight migrated queues, on a real two-tenant fleet: real producers, the
-# real registry, both orderings, and a positive control that fails the run if
-# any queue produced no effect in either tenant
-env $(cat pooled.env) bun run scripts/job-eight-proof.ts run --a <id> --b <id>
-
-# what the serial drain cost, with the serial shape itself as the control
-DATABASE_URL=... bun run scripts/job-concurrency-proof.ts --work-seconds 130
-
-# the `events` queue's four properties: the custom retry curve, bulk dedupe,
-# cancelable delayed jobs, and webhook auto-disable — each with its control
-DATABASE_URL=... bun run scripts/job-events-proof.ts
-
-# like-for-like against the reference build. The SAME file runs on both trees
-# against ONE seeded database, driving the real producers and reading the rows
-# a caller would poll; it starts whichever consumer the tree has.
-DATABASE_URL=... bun run scripts/queue-parity-probe.ts <label>
-```
+- `job-queue.test.ts` — the lease contract end to end: attempts incremented at
+  claim, the reaper's requeue/terminate split, the fencing token, concurrent
+  claimers, the per-queue claim cap, the lease-shape `CHECK`, and the tenant
+  assertion.
+- `runner.test.ts` — the scheduler (adopt-at-boot, no backfill, per-tenant
+  state, next-slot sleeping, gating and dynamic schedules) and the bounded pool
+  (non-blocking dispatch, per-queue caps, terminal errors, the failure hook).
+- `cron.test.ts` / `cron-dst.test.ts` — five-field parsing that throws on
+  anything else, the slot search, and both daylight-saving transitions tick by
+  tick.
+- `deadlines.test.ts` — the cron gate's fail-safe direction and the slot memory
+  a gated-off schedule must keep.
+- `handler-imports.test.ts` / `priming.test.ts` — no call-time `import(` in a
+  registered handler module, and priming actually runs before any scope opens.
+- `migrated-queues.test.ts` — at-most-once stated at the enqueue sites, and the
+  `email-imap` schedule gate.
+- `registry-doc.test.ts` — the §10 queue table is generated from
+  `JOB_DEFINITIONS` and compared cell for cell, so this document cannot drift
+  from the registry.

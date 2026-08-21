@@ -91,7 +91,7 @@ export async function lookupTenantById(tenantId: string): Promise<TenantLookup> 
 /**
  * Everything between a hostname and a servable tenant, in one place.
  *
- * The order is the order in `SAAS-HOSTING-STACK.md` §6, and each step can only
+ * The order matters, and each step can only
  * narrow: registry (is this host claimed, and is the tenant active?) → pool
  * (build or reuse) → fingerprint (is this database really that tenant's?). Only
  * the last variant carries a database handle, so there is no code path from a

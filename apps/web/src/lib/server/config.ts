@@ -21,7 +21,7 @@ const log = logger.child({ component: 'config' })
  *
  * `deploy/railway-template.yml` sets `BASE_URL: https://${{RAILWAY_PUBLIC_DOMAIN}}`,
  * and the moment a wildcard custom domain is attached that variable becomes the
- * literal string `*.example.com` (SAAS-HOSTING-STACK.md §9). `new URL()` accepts
+ * literal string `*.example.com`. `new URL()` accepts
  * it, so nothing downstream complains — it just produces email links, asset URLs
  * and cookie attributes for a host that does not exist.
  */
@@ -93,7 +93,7 @@ const configSchema = z
     dbPoolMax: envInt.pipe(z.number().int().min(1).max(100)).optional(),
     dbIdleTimeout: envInt.pipe(z.number().int().min(1).max(3600)).default(20),
 
-    // Tenancy (SAAS-HOSTING-STACK.md §6)
+    // Tenancy
     //
     // `single` is byte-for-byte today's behaviour: one process, one DATABASE_URL.
     // `pooled` makes the `db` proxy resolve per request and refuse to serve
@@ -179,7 +179,7 @@ const configSchema = z
     // A wildcard is a routing pattern, never an origin. Refused in every mode:
     // there is no deployment in which `https://*.example.com` is a usable base
     // URL, and the symptom of accepting one is a dead link in a customer's
-    // inbox rather than an error anyone sees (SAAS-HOSTING-STACK.md §9).
+    // inbox rather than an error anyone sees.
     if (WILDCARD_HOST_RE.test(cfg.baseUrl)) {
       ctx.addIssue({
         code: 'custom',
@@ -355,7 +355,7 @@ export const config = {
    * `__QUACKBACK_URL__` in the widget SDK, OAuth callbacks, the MCP resource
    * metadata — as do better-auth's `trustedOrigins` and the cookie `secure`
    * flag. So a fleet-wide value means **every tenant emails links to another
-   * tenant's hostname** (SAAS-HOSTING-STACK.md §9).
+   * tenant's hostname**.
    *
    * The tenant record's `routing.baseUrl` is the answer, and it is already
    * pinned to the tenant's primary hostname and validated to carry no path,

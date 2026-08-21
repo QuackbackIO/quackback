@@ -1,21 +1,11 @@
 /**
  * The lease primitive itself, with the table it operates on as a parameter.
  *
- * `SAAS-HOSTING-STACK.md` §7.2 describes one primitive and §10.3 names its
- * second consumer explicitly: *"Claiming: `FOR UPDATE SKIP LOCKED` + lease —
- * the same primitive §7.2 already requires. Fleet migration is its second
- * consumer, not a new subsystem."* This module is what makes that literally
- * true rather than aspirationally true.
- *
- * Two consumers today:
- *
- * | Consumer | Table | Database |
- * | --- | --- | --- |
- * | `job-queue.ts` | `job_queue` | the tenant's own |
- * | `fleet/schema-state.ts` | `cp_tenant_schema_state` | the control plane's |
- *
- * They cannot share a *function*, because they run against different databases
- * with different row shapes. They can share the statements, and the statements
+ * `job-queue.ts` is the consumer today, against the tenant's own `job_queue`
+ * table. The statements live here, keyed by table, so a second queue-shaped
+ * consumer shares them rather than reimplementing them. Two consumers could
+ * never share a *function* — they would run against different databases with
+ * different row shapes. They can share the statements, and the statements
  * are where every load-bearing property lives:
  *
  * 1. **`attempts` is incremented by the CLAIM**, never by completion. A row
@@ -28,12 +18,12 @@
  *    that stalls past its lease, is reaped, then resumes and reports success
  *    updates zero rows and is told its lease was lost.
  *
- * Those three were proved on `job_queue` — 70 SIGKILLs at uniformly random
- * instants and 4 concurrent reapers against 4 concurrent drainers, zero double
- * executions, with a positive control (`maxAttempts: 3`) establishing that the
- * harness can see a double when there is one. **Because the statements now live
- * here, that proof covers this module**, and breaking anything below turns
- * `__tests__/job-queue.test.ts` and `scripts/job-lease-proof.ts kill-matrix`
+ * Those three were proved on `job_queue` in a one-off kill-matrix run — 70
+ * SIGKILLs at uniformly random instants and 4 concurrent reapers against 4
+ * concurrent drainers, zero double executions, with a positive control
+ * (`maxAttempts: 3`) establishing that the harness could see a double when
+ * there is one. **Because the statements now live here, that proof covers this
+ * module**, and breaking anything below turns `__tests__/job-queue.test.ts`
  * red. A second implementation would have inherited none of it.
  *
  * ## What a consumer must provide
@@ -60,9 +50,8 @@ export interface LeaseClaimInput {
   /** Table holding the leased rows. A module constant, never input. */
   table: string
   /**
-   * Extra predicate ANDed onto the three universal ones. The fleet migrator
-   * narrows by cohort and by whether the tenant's recorded version already
-   * matches its target.
+   * Extra predicate ANDed onto the three universal ones, for a consumer that
+   * narrows the claimable set beyond status, run_at and attempts.
    */
   where?: SQL
   limit: number

@@ -12,14 +12,14 @@
  *
  * This is a concurrency gauge, not a rate limit — it counts connections open
  * RIGHT NOW, so it lives in-process where the socket lifecycle is authoritative
- * (a Redis gauge would leak a slot on every process crash). Presence, which is
- * genuine cross-replica state, stays in Redis; this backstop is deliberately
- * per-process, matching the FD limit it guards. The client's polling fallback
+ * (a shared-store gauge would leak a slot on every process crash). Presence,
+ * which is genuine cross-replica state, lives in the database; this backstop is
+ * deliberately per-process, matching the FD limit it guards. The client's polling fallback
  * keeps low-priority surfaces working when a stream is refused here.
  *
  * ## Why the global cap stays global, and the per-IP cap does not
  *
- * SAAS-HOSTING-STACK.md §4.2 lists this as a site where "one tenant starves the
+ * This cap is a site where "one tenant starves the
  * pod". Both halves of that are true and they want opposite fixes.
  *
  * The **global** number describes the *process* — file descriptors are not

@@ -1,7 +1,7 @@
 /**
  * Running background work for every tenant.
  *
- * SAAS-HOSTING-STACK.md §5, caveat 3: roughly 25–35 files across ~15 background
+ * Roughly 25–35 files across ~15 background
  * subsystems run with no request scope at all — sweeps, queues, the relay,
  * migrations, CLI backfills, the readiness probe. Each needs a tenant scope, and
  * each needs a per-subsystem answer to one question: *iterate all tenants per

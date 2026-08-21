@@ -18,7 +18,7 @@
  *
  * ## Why this is safe to swap under the session and token signers
  *
- * `SAAS-HOSTING-STACK.md` §4.3 established that a wrong key here fails closed:
+ * A wrong key here fails closed:
  * AES-GCM's auth tag does not verify, an HMAC does not match, and a session,
  * OAuth-CSRF, CSAT or stream token minted under one key is simply rejected under
  * another. Nothing is forged and nothing is corrupted. The cost of a key change

@@ -1,7 +1,7 @@
 /**
  * Making process-lifetime caches tenant-safe.
  *
- * SAAS-HOSTING-STACK.md §4 counts ~20 module-scope caches that are correct for
+ * The server carries ~20 module-scope caches that are correct for
  * one process serving one tenant and become cross-tenant capabilities the moment
  * one process serves several: a magic-link stash keyed only by lowercased email,
  * an S3 client built from global config, HKDF keys keyed by purpose alone, a

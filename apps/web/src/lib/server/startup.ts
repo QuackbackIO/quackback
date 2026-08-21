@@ -172,7 +172,7 @@ export function logStartupBanner(): void {
  */
 function startBackgroundProcessing(): void {
   // Every background queue now drains from durable rows in the workspace's
-  // Postgres database. The tier owns its leases, schedules, wake listener and
+  // Postgres database. The tier owns its leases, schedules and
   // shutdown path.
   import('./jobs/tier')
     .then(({ startJobTier }) => startJobTier())

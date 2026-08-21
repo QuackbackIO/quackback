@@ -1,7 +1,7 @@
 /**
  * Asking a tenant database who it belongs to, and deciding whether to believe it.
  *
- * SAAS-HOSTING-STACK.md §3, stated plainly: if tenant resolution returns the
+ * Stated plainly: if tenant resolution returns the
  * wrong pool, every RBAC and permission check still passes, because that
  * database's own `settings`, `principal` and `roles` rows are entirely
  * self-consistent. It does not error. It looks correct. There is no second gate,

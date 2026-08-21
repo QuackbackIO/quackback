@@ -84,8 +84,8 @@ export function resetReadinessCache(): void {
  * the next reader to believe the case is handled.
  */
 async function checkMigrations(): Promise<void> {
-  // Fleet readiness stops asserting anything about tenant schemas under pooled
-  // tenancy, per SAAS-HOSTING-STACK.md §10.5. The memo below is actively
+  // Fleet readiness deliberately asserts nothing about tenant schemas under
+  // pooled tenancy. The memo below is actively
   // misleading there: it caches "migrations OK" forever after the first tenant
   // it happened to see, so the probe goes blind during exactly the rolling
   // migration it exists to catch. A tenant mid-migration must degrade alone —
@@ -119,7 +119,7 @@ async function checkMigrations(): Promise<void> {
  *               every request needs. Down or slow ⇒ 503.
  *   migrations  single-tenant only: the applied ledger is behind the bundled
  *               one, so this build's queries can hit columns that do not exist
- *               yet ⇒ 503 `behind`. Pooled skips it deliberately (§10.5).
+ *               yet ⇒ 503 `behind`. Pooled skips it deliberately.
  *   workers     a worker-role process that is not running the job tier ⇒ 503.
  *
  * A hung dependency still degrades rather than hangs: `runCheck` gives each one

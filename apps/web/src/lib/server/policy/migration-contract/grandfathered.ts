@@ -1,7 +1,7 @@
 /**
  * Migrations written before this linter existed, grandfathered wholesale so
  * the linter doesn't force churn on history that predates the expand/contract
- * discipline it enforces (SAAS-HOSTING-STACK.md §10.4).
+ * discipline it enforces.
  *
  * This list is FROZEN. It was derived by hand — reading every one of the 226
  * migrations in `packages/db/drizzle` at the time this scanner was added —

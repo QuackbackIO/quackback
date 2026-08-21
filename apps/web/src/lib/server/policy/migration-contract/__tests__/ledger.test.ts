@@ -61,7 +61,7 @@ describe('golden contract ledger', () => {
 })
 
 /**
- * The acceptance bar from SAAS-HOSTING-STACK.md §10.4, proven directly against
+ * The acceptance bar for the expand/contract discipline, proven directly against
  * the real scan + evaluate pipeline rather than the live filesystem: a brand
  * new destructive migration with no annotation must fail, and the identical
  * migration with a valid annotation must pass — without touching the frozen

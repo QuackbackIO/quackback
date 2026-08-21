@@ -1,17 +1,17 @@
 /**
- * The Postgres job queue (SAAS-HOSTING-STACK.md §7).
+ * The Postgres job queue.
  *
  * One table per tenant database, which is what makes the queue per-tenant
  * without a routing layer: there is no shared queue to route out of. The
  * `tenantId` column restates the same fact so a claim can assert it rather than
- * assume it — §3's observation is that a wrong-tenant answer passes every other
+ * assume it — a wrong-tenant answer passes every other
  * check in the system, so the queue asserts its own boundary rather than
  * inheriting confidence from the connection.
  *
  * The lease semantics live in `apps/web/src/lib/server/jobs/job-queue.ts`; the
  * SQL migration `0250_job_queue.sql` carries the reasoning for the columns that
- * are easy to get wrong (`attempts` incremented at claim, the fencing token,
- * the wake trigger). Read that first if you are changing this.
+ * are easy to get wrong (`attempts` incremented at claim, the fencing
+ * token). Read that first if you are changing this.
  */
 import {
   pgTable,

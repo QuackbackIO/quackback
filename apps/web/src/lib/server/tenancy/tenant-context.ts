@@ -1,7 +1,7 @@
 /**
  * The active tenant, carried on the request-scoped AsyncLocalStorage store.
  *
- * SAAS-HOSTING-STACK.md §6: tenant resolution happens once, from the Host
+ * Tenant resolution happens once, from the Host
  * header, before auth runs — auth is itself full of `db` queries, so a tenant
  * decided "once auth resolves" is decided far too late to route the database.
  *
