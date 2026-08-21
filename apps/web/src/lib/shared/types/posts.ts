@@ -9,4 +9,5 @@ export type {
   CreatePostInput,
   AdminEditPostInput,
   PublicPostListItem,
+  InboxFilterCounts,
 } from '@/lib/server/domains/posts'

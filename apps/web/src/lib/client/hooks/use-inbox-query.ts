@@ -9,10 +9,15 @@ import {
   useQuery,
   useInfiniteQuery,
   infiniteQueryOptions,
+  queryOptions,
   keepPreviousData,
   type InfiniteData,
 } from '@tanstack/react-query'
-import { fetchInboxPostsForAdmin, fetchPostWithDetails } from '@/lib/server/functions/posts'
+import {
+  fetchInboxPostsForAdmin,
+  fetchInboxFilterCounts,
+  fetchPostWithDetails,
+} from '@/lib/server/functions/posts'
 import type { InboxFilters, PostDetails } from '@/lib/shared/types'
 import type { PostListItem, InboxPostListResult } from '@/lib/shared/db-types'
 import type { BoardId, PrincipalId, PostId, PostTagId, SegmentId } from '@quackback/ids'
@@ -38,6 +43,8 @@ export const inboxKeys = {
   all: ['inbox'] as const,
   lists: () => [...inboxKeys.all, 'list'] as const,
   list: (filters: InboxFilters) => [...inboxKeys.lists(), filters] as const,
+  /** Nested under lists() so mutations that invalidate the list also refresh counts. */
+  facetCounts: (filters: InboxFilters) => [...inboxKeys.lists(), 'facet-counts', filters] as const,
   details: () => [...inboxKeys.all, 'detail'] as const,
   detail: (postId: PostId) => [...inboxKeys.details(), postId] as const,
 }
@@ -46,26 +53,39 @@ export const inboxKeys = {
 // Fetch Functions
 // ============================================================================
 
+/** Shared list/count payload. Sort, cursor, and limit are list-only. */
+function toInboxListInput(filters: InboxFilters) {
+  return {
+    boardIds: filters.board as BoardId[] | undefined,
+    statusSlugs: filters.status,
+    tagIds: filters.tags as PostTagId[] | undefined,
+    segmentIds: filters.segmentIds as SegmentId[] | undefined,
+    ownerId: (filters.owner || undefined) as PrincipalId | null | undefined,
+    search: filters.search,
+    dateFrom: filters.dateFrom,
+    dateTo: filters.dateTo,
+    minVotes: filters.minVotes,
+    minComments: filters.minComments,
+    responded: filters.responded,
+    updatedBefore: filters.updatedBefore,
+    showDeleted: filters.showDeleted,
+  }
+}
+
+/** Sort does not affect facet counts, so drop it from the counts cache key. */
+function facetCountFilters(filters: InboxFilters): InboxFilters {
+  const { sort: _sort, ...rest } = filters
+  return rest
+}
+
 async function fetchInboxPosts(
   filters: InboxFilters,
   cursor?: string
 ): Promise<InboxPostListResult> {
   return (await fetchInboxPostsForAdmin({
     data: {
-      boardIds: filters.board as BoardId[] | undefined,
-      statusSlugs: filters.status,
-      tagIds: filters.tags as PostTagId[] | undefined,
-      segmentIds: filters.segmentIds as SegmentId[] | undefined,
-      ownerId: (filters.owner || undefined) as PrincipalId | null | undefined,
-      search: filters.search,
-      dateFrom: filters.dateFrom,
-      dateTo: filters.dateTo,
-      minVotes: filters.minVotes,
-      minComments: filters.minComments,
-      responded: filters.responded,
-      updatedBefore: filters.updatedBefore,
+      ...toInboxListInput(filters),
       sort: filters.sort,
-      showDeleted: filters.showDeleted,
       cursor,
       limit: 20,
     },
@@ -124,6 +144,24 @@ export function useInboxPosts({ filters }: UseInboxPostsOptions) {
     ...inboxPostsInfiniteOptions(filters),
     placeholderData: keepPreviousData,
   })
+}
+
+/**
+ * Facet counts for the inbox filter pane. Nested under `inboxKeys.lists()` so
+ * post mutations that invalidate the list also refresh counts.
+ */
+export function inboxFacetCountsOptions(filters: InboxFilters) {
+  const countFilters = facetCountFilters(filters)
+  return queryOptions({
+    queryKey: inboxKeys.facetCounts(countFilters),
+    queryFn: () => fetchInboxFilterCounts({ data: toInboxListInput(countFilters) }),
+    placeholderData: keepPreviousData,
+    staleTime: 15_000,
+  })
+}
+
+export function useInboxFacetCounts(filters: InboxFilters) {
+  return useQuery(inboxFacetCountsOptions(filters))
 }
 
 export function usePostDetail({ postId, enabled = true }: UsePostDetailOptions) {
