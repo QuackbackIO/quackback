@@ -109,9 +109,9 @@ export function validateImportInput(
  * matches a prior import's post_external_links row are UPDATED in place
  * instead of creating a duplicate (§I2 idempotence).
  *
- * Note: This implementation is compatible with neon-http driver which does NOT
- * support interactive transactions. We pre-generate all IDs using TypeIDs (UUIDv7)
- * and build all insert data upfront before executing sequential inserts.
+ * Note: This implementation avoids interactive transactions. We pre-generate
+ * all IDs using TypeIDs (UUIDv7) and build all insert data upfront before
+ * executing sequential inserts.
  */
 export async function processBatch(
   rows: Record<string, string>[],
@@ -218,7 +218,7 @@ export async function processBatch(
     ({ row }) => row.sourceId && existingBySourceId.has(row.sourceId)
   )
 
-  // Pre-generate IDs for all new tags (neon-http compatible approach)
+  // Pre-generate IDs for all new tags, so the inserts need no transaction
   const tagsToCreateArray = Array.from(tagsToCreate)
   const newTagIds = tagsToCreateArray.map(() => createId('post_tag'))
   const newTagsWithIds = tagsToCreateArray.map((name, index) => ({

@@ -231,7 +231,7 @@ function hasScope(scopesRaw: string | null, scope: string): boolean {
  * Rotate an API key - generates a new key and invalidates the old one
  *
  * Uses atomic UPDATE with WHERE clause to prevent race conditions
- * (Neon HTTP-compatible, no interactive transactions)
+ * without needing an interactive transaction
  */
 export async function rotateApiKey(id: ApiKeyId): Promise<CreateApiKeyResult> {
   // Generate new key credentials

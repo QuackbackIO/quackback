@@ -1,6 +1,7 @@
 /**
  * Safely extract rows from db.execute() result.
- * Handles both postgres-js (array directly) and neon-http ({ rows: [...] }) formats.
+ * Handles both result shapes drizzle drivers produce: a bare array, or an
+ * object carrying `{ rows: [...] }`.
  */
 export function getExecuteRows<T>(result: unknown): T[] {
   if (
