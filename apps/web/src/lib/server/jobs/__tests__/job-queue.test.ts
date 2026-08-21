@@ -424,7 +424,11 @@ describe('retention', () => {
       UPDATE job_queue SET finished_at = now() - interval '30 days'
       WHERE queue = ${q} AND status = 'succeeded'
     `
-    await pruneTerminalJobs(7 * 24 * 60 * 60 * 1000)
+    // The count comes off the driver (the DELETE has no RETURNING), so a
+    // driver that failed to report it would read 0 here while the table
+    // assertions below still passed. >= 1 because the database is shared and
+    // other suites' expired rows land in the same sweep.
+    expect(await pruneTerminalJobs(7 * 24 * 60 * 60 * 1000)).toBeGreaterThanOrEqual(1)
 
     const rows = await rowsFor(q)
     expect(rows).toHaveLength(1)

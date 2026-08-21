@@ -142,14 +142,16 @@ export async function primeJobHandlers(): Promise<void> {
     )
     return
   }
-  for (const def of jobDefinitions()) {
-    if (handlerMemo.has(def.name)) continue
-    try {
-      handlerMemo.set(def.name, await def.handler())
-    } catch (err) {
-      log.error({ err, queue: def.name }, 'could not load job handler')
-    }
-  }
+  await Promise.all(
+    jobDefinitions().map(async (def) => {
+      if (handlerMemo.has(def.name)) return
+      try {
+        handlerMemo.set(def.name, await def.handler())
+      } catch (err) {
+        log.error({ err, queue: def.name }, 'could not load job handler')
+      }
+    })
+  )
 }
 
 /** Test/shutdown seam: drop the memo so a new definition list is picked up. */
@@ -290,9 +292,8 @@ export interface DrainResult {
  *
  * **Why a pool rather than per-queue loops.** Fifteen loops per tenant would
  * multiply the poll traffic by fifteen against a per-tenant database, and the
- * database is the scarce thing here — §6's corollary is that this tier already
- * holds a connection per tenant open by design. One loop keeps one poll, one
- * listener and one claim query per pass, whatever the queue count.
+ * database is the scarce thing here. One loop keeps one poll and one claim
+ * query per pass, whatever the queue count.
  *
  * **Why per-queue caps rather than one pool size.** The reference gave each
  * queue its own `Worker` with its own `concurrency`, and one of those numbers
@@ -435,12 +436,19 @@ export interface ScheduleTickResult {
   nextSlotAt: Date | null
 }
 
+// Bounded: patterns include user-supplied segment crons across all tenants, so
+// an uncapped memo would grow without limit. Oldest entry is evicted at the cap.
 const cronCache = new Map<string, ParsedCron>()
+const CRON_CACHE_MAX = 256
 
 function cronFor(pattern: string): ParsedCron {
   let parsed = cronCache.get(pattern)
   if (!parsed) {
     parsed = parseCron(pattern)
+    if (cronCache.size >= CRON_CACHE_MAX) {
+      const oldest = cronCache.keys().next()
+      if (!oldest.done) cronCache.delete(oldest.value)
+    }
     cronCache.set(pattern, parsed)
   }
   return parsed
@@ -454,10 +462,10 @@ function cronFor(pattern: string): ParsedCron {
  * one loop per tenant; a `Map` keyed on the schedule name alone is shared by all
  * of them, so whichever tenant's loop reached a slot first advanced a counter
  * every other tenant then read as "already done" — and the rest silently never
- * enqueued that slot. Measured live on two Neon tenants: each minute's sweep
+ * enqueued that slot. Measured live on a two-tenant fleet: each minute's sweep
  * landed on one tenant, never both. It affected all seven sweeps.
  *
- * That is the §4.1 process-global-state hazard, introduced by the piece meant to
+ * That is the classic process-global-state hazard, introduced by the piece meant to
  * remove it. Keying the map by tenant would fix the instance; making the state a
  * parameter fixes the class, because there is no longer a shared object for the
  * next scheduler to key wrongly.

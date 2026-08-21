@@ -12,8 +12,8 @@
  * On the pool-checkout path, in `pool-cache.ts`'s `verify()`, beside the §3
  * fingerprint. That placement is the design:
  *
- * - **Atomic with the DSN.** `SAAS-HOSTING-STACK.md` §4.3 asks for the secret ref
- *   to resolve "correctly **and** atomically with `databaseUrl`". Both come off
+ * - **Atomic with the DSN.** The secret ref must resolve correctly **and**
+ *   atomically with `databaseUrl`. Both come off
  *   one record, read once, and are resolved in one function against one
  *   `TenantDescriptor`. A mix-up is not expressible — not "unlikely", not
  *   "guarded against".
@@ -30,9 +30,8 @@
  * ## Two failure directions, and the reason they differ
  *
  * A failure to resolve `SECRET_KEY` **refuses the tenant**. A failure to resolve
- * storage **degrades storage only**. That is not a hedge, it is the same
- * reasoning `SAAS-HOSTING-STACK.md` §8.1 applies to entitlements-vs-RBAC, run in
- * the other direction: choose the failure whose cost is smaller.
+ * storage **degrades storage only**. That is not a hedge, it is choosing
+ * the failure whose cost is smaller.
  *
  * There is no safe degraded mode for a missing `SECRET_KEY`, because the
  * degraded mode on offer — fall back to the fleet-wide key — is exactly the
@@ -101,14 +100,17 @@ interface CacheEntry {
 /**
  * Keyed by tenant id, invalidated by `revision` as well as by TTL.
  *
- * The TTL is what makes a rotation land without an operator action; `revision`
- * is what makes a *deliberate* change land immediately, since the control
- * plane's trigger bumps it on any write to the record — including a hand-run
- * `UPDATE` during an incident, which is precisely when waiting out a TTL is
- * least acceptable.
+ * `revision` is what makes a *deliberate* change land immediately, since the
+ * control plane's trigger bumps it on any write to the record — including a
+ * hand-run `UPDATE` during an incident, which is precisely when waiting out a
+ * TTL is least acceptable. That is also why the TTL can be long: every
+ * rotation that goes through the record already invalidates instantly, so the
+ * TTL only backstops a resolver whose *external* inputs changed with no record
+ * write, and a short one just forces HKDF/AEAD re-derivation per tenant per
+ * minute for nothing.
  */
 const cache = new Map<string, CacheEntry>()
-const TTL_MS = 60_000
+const TTL_MS = 10 * 60_000
 
 export function clearTenantSecretsCache(tenantId?: string): void {
   if (tenantId) cache.delete(tenantId)

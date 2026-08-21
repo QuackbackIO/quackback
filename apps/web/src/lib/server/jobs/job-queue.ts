@@ -1,5 +1,5 @@
 /**
- * The lease primitive (SAAS-HOSTING-STACK.md §7.2).
+ * The lease primitive.
  *
  * `FOR UPDATE SKIP LOCKED` releases the instant the claiming transaction
  * commits, so it cannot on its own hold a job through a multi-minute AI call or
@@ -51,10 +51,9 @@
  *
  * ## Where the statements live
  *
- * The claim/heartbeat/complete/fail/reap statements moved to `lease.ts` so the
- * fleet migrator's claim loop is the same primitive rather than a second one
- * (SAAS-HOSTING-STACK.md §10.3: *"Fleet migration is its second consumer, not a
- * new subsystem"*). Nothing about the semantics moved with them — this file
+ * The claim/heartbeat/complete/fail/reap statements moved to `lease.ts`, keyed
+ * by table, so any second queue-shaped consumer shares the primitive rather
+ * than growing a rival one. Nothing about the semantics moved with them — this file
  * still owns the queue's shape, the tenant assertion and the enqueue path, and
  * the kill-matrix proof still runs through here, which is what keeps `lease.ts`
  * honest.
@@ -62,8 +61,8 @@
  * ## The tenant assertion
  *
  * The queue is per-tenant because the table lives in the tenant's own database —
- * there is no shared queue to route out of. That is a structural property, but
- * §3's whole point is that a wrong-tenant answer passes every other check in the
+ * there is no shared queue to route out of. That is a structural property, but a
+ * wrong-tenant answer passes every other check in the
  * system without erroring, so structure alone is not evidence. Every claimed row
  * is checked against the ambient scope and a mismatch is refused loudly and made
  * terminal, never executed. The check lives inside `claimJobs` rather than in
@@ -74,7 +73,8 @@ import { hostname } from 'node:os'
 import { sql } from 'drizzle-orm'
 import { generateId } from '@quackback/ids'
 import { db } from '@/lib/server/db'
-import { getExecuteRows } from '@/lib/server/utils/execute-rows'
+import { getExecuteCount, getExecuteRows } from '@/lib/server/utils/execute-rows'
+import { hasPgErrorCode } from '@/lib/server/utils/pg-error'
 import { logger } from '@/lib/server/logger'
 import { getCurrentTenant } from '@/lib/server/tenancy/tenant-context'
 import {
@@ -97,9 +97,9 @@ export const UNDEFINED_TABLE = '42P01'
 export class JobQueueMissingError extends Error {
   constructor() {
     super(
-      'job_queue does not exist in this database. Migration 0253 has not been applied here; ' +
-        'the queue tier skips this tenant rather than crash-looping (expand lands before the ' +
-        'code that reads it — SAAS-HOSTING-STACK.md §5, §10.5).'
+      'job_queue does not exist in this database. Migration 0250 has not been applied here; ' +
+        'the queue tier skips this tenant rather than crash-looping (the expand migration ' +
+        'lands before the code that reads it).'
     )
     this.name = 'JobQueueMissingError'
   }
@@ -107,8 +107,7 @@ export class JobQueueMissingError extends Error {
 
 /** True when an error is Postgres complaining that `job_queue` is absent. */
 export function isMissingJobQueue(err: unknown): boolean {
-  const code = (err as { code?: unknown } | null)?.code
-  return code === UNDEFINED_TABLE
+  return hasPgErrorCode(err, UNDEFINED_TABLE)
 }
 
 export interface EnqueueJobInput {
@@ -584,6 +583,8 @@ export async function pruneTerminalJobs(
       ])
     )
   )
+  // No RETURNING: the caller only needs the count, and materializing every
+  // deleted row over the wire is pure waste. The driver reports it directly.
   const result = await db.execute(sql`
     DELETE FROM job_queue
     WHERE status IN ('succeeded', 'failed')
@@ -593,9 +594,8 @@ export async function pruneTerminalJobs(
           ${olderThanMs / 1000}
         )
       )
-    RETURNING id
   `)
-  return getExecuteRows(result).length
+  return getExecuteCount(result)
 }
 
 /** Counts by status, for the readiness payload and for tests. */

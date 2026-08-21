@@ -357,11 +357,16 @@ async function refreshTenantLoops(cfg: RunnerConfig): Promise<void> {
   }
   const wanted = new Set(tenants.map((t) => t.tenantId))
 
+  // Departing tenants drain in parallel, and only after the new loops are
+  // started: `stop()` waits out the tenant's in-flight jobs, so awaiting each
+  // one serially here would let a single tenant draining a long job stall the
+  // discovery of every new tenant in this pass.
+  const stopping: Array<{ tenantId: string; done: Promise<void> }> = []
   for (const [tenantId, loop] of loops) {
     if (wanted.has(tenantId)) continue
     log.info({ tenantId }, 'tenant left the active set — stopping its job loop')
-    await loop.stop()
     loops.delete(tenantId)
+    stopping.push({ tenantId, done: loop.stop() })
   }
 
   for (const tenant of tenants) {
@@ -378,6 +383,16 @@ async function refreshTenantLoops(cfg: RunnerConfig): Promise<void> {
 
   // On the one cadence that exists whether or not anything is wrong.
   reportQuarantine()
+
+  const settled = await Promise.allSettled(stopping.map((s) => s.done))
+  settled.forEach((result, i) => {
+    if (result.status === 'rejected') {
+      log.error(
+        { err: result.reason, tenantId: stopping[i].tenantId },
+        'job loop for a departed tenant failed while stopping'
+      )
+    }
+  })
 }
 
 function scheduleTenantRefresh(cfg: RunnerConfig): void {

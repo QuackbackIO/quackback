@@ -17,7 +17,7 @@
  */
 import { sql } from 'drizzle-orm'
 import { db } from '@/lib/server/db'
-import { getExecuteRows } from '@/lib/server/utils/execute-rows'
+import { getExecuteCount } from '@/lib/server/utils/execute-rows'
 import { currentTenantNamespace } from '@/lib/server/tenancy/tenant-keyed'
 import { PRESENCE_TTL_SECONDS } from '@/lib/server/realtime/presence'
 import { logger } from '@/lib/server/logger'
@@ -32,8 +32,10 @@ export interface KvSweepResult {
   overflow: number
 }
 
+// No RETURNING on these deletes: only the count matters, and the driver
+// reports it without shipping every reclaimed row over the wire.
 function deleted(result: unknown): number {
-  return getExecuteRows<{ id: unknown }>(result).length
+  return getExecuteCount(result)
 }
 
 /**
@@ -48,18 +50,16 @@ export async function sweepExpiredKv(): Promise<KvSweepResult> {
   const t = currentTenantNamespace()
   const result: KvSweepResult = {
     kvStore: deleted(
-      await db.execute(
-        sql`DELETE FROM kv_store WHERE tenant_id = ${t} AND expires_at <= now() RETURNING key AS id`
-      )
+      await db.execute(sql`DELETE FROM kv_store WHERE tenant_id = ${t} AND expires_at <= now()`)
     ),
     rateBucket: deleted(
       await db.execute(
-        sql`DELETE FROM rate_bucket WHERE tenant_id = ${t} AND window_expires_at <= now() RETURNING key AS id`
+        sql`DELETE FROM rate_bucket WHERE tenant_id = ${t} AND window_expires_at <= now()`
       )
     ),
     setMembers: deleted(
       await db.execute(
-        sql`DELETE FROM kv_set_member WHERE tenant_id = ${t} AND expires_at <= now() RETURNING member AS id`
+        sql`DELETE FROM kv_set_member WHERE tenant_id = ${t} AND expires_at <= now()`
       )
     ),
     presence: deleted(
@@ -67,12 +67,11 @@ export async function sweepExpiredKv(): Promise<KvSweepResult> {
         DELETE FROM presence_stream
         WHERE tenant_id = ${t}
           AND heartbeat_at <= now() - make_interval(secs => ${PRESENCE_TTL_SECONDS})
-        RETURNING stream_id AS id
       `)
     ),
     overflow: deleted(
       await db.execute(
-        sql`DELETE FROM realtime_overflow WHERE tenant_id = ${t} AND expires_at <= now() RETURNING id`
+        sql`DELETE FROM realtime_overflow WHERE tenant_id = ${t} AND expires_at <= now()`
       )
     ),
   }
