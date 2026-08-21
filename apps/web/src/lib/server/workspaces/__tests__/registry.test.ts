@@ -31,7 +31,6 @@ const ROW: {
   ai_enabled: boolean
   revision: string | number
   pg_database_oid: string | number | null
-  pg_cluster_id: string | null
   hostnames: string[]
 } = {
   workspace_key: 'inst_cloud_ws_t1',
@@ -61,7 +60,6 @@ const ROW: {
   ai_enabled: false,
   revision: 2,
   pg_database_oid: 4242,
-  pg_cluster_id: 'fleet-a',
   hostnames: ['ws-t1.quackback.co.uk', 't1.localhost'],
 }
 
@@ -108,7 +106,6 @@ describe('interpretRow', () => {
     expect(result.workspace.physical).toEqual({
       catalogName: 'qb_ws_t1',
       catalogOid: '4242',
-      clusterId: 'fleet-a',
     })
   })
 

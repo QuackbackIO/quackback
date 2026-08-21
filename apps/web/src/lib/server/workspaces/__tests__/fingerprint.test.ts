@@ -22,7 +22,6 @@ const EXPECTED = {
 const PHYSICAL = {
   catalogName: 'qb_ws_t1',
   catalogOid: '4242',
-  clusterId: 'fleet-a',
 }
 
 function observation(

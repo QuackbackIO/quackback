@@ -19,7 +19,7 @@
  * so the two repos cannot drift into two readings of the same record. A reader
  * that trusts the writer is one migration away from serving the wrong workspace.
  *
- * **Catalog identity (`pg_database_oid` / `pg_cluster_id` / `db_name`) is read
+ * **Catalog identity (`pg_database_oid` / `db_name`) is read
  * here even though contract v1 does not carry it in `WorkspaceRecord`.** Those
  * columns are the anti-clone half of the fingerprint — see
  * `physical-identity.ts`. They are attached alongside the validated record
@@ -72,7 +72,6 @@ interface RegistryRow {
   ai_enabled: boolean
   revision: string | number
   pg_database_oid: string | number | null
-  pg_cluster_id: string | null
   hostnames: string[]
 }
 
@@ -208,7 +207,7 @@ const SELECT_COLUMNS = `
   r.app_secrets_ref,
   r.workspace_id, r.fingerprint_stamped_at,
   r.storage, r.email_from, r.ai_enabled, r.revision,
-  r.pg_database_oid, r.pg_cluster_id,
+  r.pg_database_oid,
   COALESCE(
     (SELECT array_agg(h2.hostname ORDER BY h2.hostname)
        FROM cp_workspace_hostnames h2
@@ -357,7 +356,6 @@ export function interpretRow(row: RegistryRow, hostname: string): WorkspaceLooku
       physical: {
         catalogName: emptyToNull(row.pg_database_oid != null ? row.db_name : null),
         catalogOid: emptyToNull(row.pg_database_oid == null ? null : String(row.pg_database_oid)),
-        clusterId: emptyToNull(row.pg_cluster_id),
       },
     },
   }

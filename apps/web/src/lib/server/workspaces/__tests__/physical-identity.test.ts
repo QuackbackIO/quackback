@@ -14,7 +14,6 @@ import { evaluatePhysicalIdentity } from '../physical-identity'
 const REAL = {
   catalogName: 'qb_acme',
   catalogOid: '4242',
-  clusterId: 'fleet-a',
 }
 
 const OBSERVED_REAL = {
@@ -54,7 +53,7 @@ describe('evaluatePhysicalIdentity', () => {
     // comparison would only produce false refusals.
     expect(
       evaluatePhysicalIdentity(
-        { catalogName: null, catalogOid: null, clusterId: null },
+        { catalogName: null, catalogOid: null },
         { currentDatabase: null, catalogOid: null }
       )
     ).toEqual({ ok: true })
@@ -63,7 +62,7 @@ describe('evaluatePhysicalIdentity', () => {
   it('still refuses when only the oid is declared', () => {
     expect(
       evaluatePhysicalIdentity(
-        { catalogName: null, catalogOid: '4242', clusterId: null },
+        { catalogName: null, catalogOid: '4242' },
         { ...OBSERVED_REAL, catalogOid: '9999' }
       )
     ).toMatchObject({ ok: false, code: 'catalog_oid_mismatch' })
@@ -72,18 +71,9 @@ describe('evaluatePhysicalIdentity', () => {
   it('still refuses when only the name is declared', () => {
     expect(
       evaluatePhysicalIdentity(
-        { catalogName: 'qb_acme', catalogOid: null, clusterId: null },
+        { catalogName: 'qb_acme', catalogOid: null },
         { ...OBSERVED_REAL, currentDatabase: 'qb_other' }
       )
     ).toMatchObject({ ok: false, code: 'catalog_name_mismatch' })
-  })
-
-  it('carries clusterId on the expectation without requiring it on the observation', () => {
-    expect(
-      evaluatePhysicalIdentity(
-        { catalogName: 'qb_acme', catalogOid: '4242', clusterId: 'fleet-a' },
-        OBSERVED_REAL
-      )
-    ).toEqual({ ok: true })
   })
 })

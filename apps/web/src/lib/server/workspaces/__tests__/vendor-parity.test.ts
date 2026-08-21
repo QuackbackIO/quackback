@@ -104,7 +104,7 @@ describe('the vendored predicate is the one that runs', () => {
     const direct = vendored.evaluateFingerprint(expected, observed)
     const throughApp = app.evaluateWorkspaceIdentity(
       expected,
-      { catalogName: null, catalogOid: null, clusterId: null },
+      { catalogName: null, catalogOid: null },
       {
         ...observed,
         physical: { currentDatabase: null, catalogOid: null },
