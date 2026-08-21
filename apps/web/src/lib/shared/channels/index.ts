@@ -17,6 +17,7 @@ export type {
 } from './types'
 export {
   channelFromVisitorTransport,
+  channelLabelMap,
   getChannelDescriptor,
   isChannel,
   listChannelDescriptors,

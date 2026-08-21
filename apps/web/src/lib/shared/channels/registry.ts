@@ -27,6 +27,14 @@ export function listChannelDescriptors(): ChannelDescriptor[] {
   return [...DESCRIPTORS.values()]
 }
 
+/** Display labels for every registered channel, keyed by id. */
+export function channelLabelMap(): Record<Channel, string> {
+  return Object.fromEntries(listChannelDescriptors().map((d) => [d.id, d.label])) as Record<
+    Channel,
+    string
+  >
+}
+
 export function isChannel(id: string): id is Channel {
   return DESCRIPTORS.has(id as Channel)
 }
