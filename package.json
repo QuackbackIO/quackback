@@ -26,6 +26,7 @@
     ]
   },
   "overrides": {
+    "@better-auth/oauth-provider": "1.6.30",
     "@noble/ciphers": "2.0.0",
     "@codemirror/state": "6.6.0",
     "@tiptap/core": "3.30.1",
