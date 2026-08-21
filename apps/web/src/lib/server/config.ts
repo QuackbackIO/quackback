@@ -103,21 +103,15 @@ const configSchema = z
     controlDatabaseUrl: z.string().min(1).optional(),
     /**
      * Connections per tenant pool. Small on purpose: a pooled instance holds N
-     * tenant pools, and the Neon pooler multiplexes anyway.
+     * tenant pools, so per-tenant socket counts multiply across the fleet.
      */
     tenantPoolMax: envInt.pipe(z.number().int().min(1).max(20)).default(3),
-    /**
-     * Seconds a tenant pool may sit idle before it is closed. Must stay below
-     * BOTH Neon's suspend timeout (300s default) and Railway's 10-minute
-     * outbound-traffic sleep window, or an idle tenant costs compute forever.
-     */
-    tenantPoolIdleSeconds: envInt.pipe(z.number().int().min(5).max(600)).default(45),
+    /** Seconds a tenant pool may sit idle before it is closed. Hygiene only. */
+    tenantPoolIdleSeconds: envInt.pipe(z.number().int().min(5).max(86_400)).default(45),
     /** LRU cap on live tenant pools per instance. */
     tenantPoolMaxEntries: envInt.pipe(z.number().int().min(1).max(500)).default(50),
     /** TTL for the in-process hostname → tenant record cache, milliseconds. */
     tenantRegistryTtlMs: envInt.pipe(z.number().int().min(0).max(600_000)).default(30_000),
-    /** Neon API key used to dereference `neon+role://` credential refs. */
-    neonApiKey: z.string().optional(),
     /**
      * The fleet root from which every tenant's `SECRET_KEY` is derived and every
      * tenant's storage credential is sealed (`tenancy/vendor/fleet-secrets.ts`).
@@ -251,7 +245,6 @@ function buildConfigFromEnv(): unknown {
     tenantPoolIdleSeconds: env('TENANT_POOL_IDLE_SECONDS'),
     tenantPoolMaxEntries: env('TENANT_POOL_MAX_ENTRIES'),
     tenantRegistryTtlMs: env('TENANT_REGISTRY_TTL_MS'),
-    neonApiKey: env('NEON_API_KEY'),
     fleetRootKey: env('QUACKBACK_FLEET_ROOT_KEY'),
 
     // Auth
@@ -413,9 +406,6 @@ export const config = {
   },
   get tenantRegistryTtlMs() {
     return loadConfig().tenantRegistryTtlMs
-  },
-  get neonApiKey() {
-    return loadConfig().neonApiKey
   },
   get fleetRootKey() {
     return loadConfig().fleetRootKey

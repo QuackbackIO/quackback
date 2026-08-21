@@ -7,18 +7,18 @@
  * self-consistent. It does not error. It looks correct. There is no second gate,
  * so this is the gate.
  *
- * Three independent facts are checked, and each covers a hole in the others:
+ * Two independent facts are checked, and each covers a hole in the other:
  *
  * | Fact | Written by | Beaten by |
  * | --- | --- | --- |
  * | `settings.id` | nobody — it is a primary key | a copy of the database |
  * | the control plane's stamp | the CP, deliberately | a copy of the database |
- * | `neon.branch_id` (GUC) | the platform, per compute | nothing we can reach |
  *
- * The verdict for the first two is `evaluateFingerprint`, vendored byte-for-byte
- * from the control plane so both sides run the same predicate rather than two
- * prose readings of it. The third is `evaluatePhysicalIdentity`, which exists
- * because branching copies data and therefore copies both of the first two.
+ * The verdict is `evaluateFingerprint`, vendored byte-for-byte from the control
+ * plane so both sides run the same predicate rather than two prose readings of
+ * it. A deliberately restored copy of a tenant database carries both facts and
+ * passes; that is an operator action, and repointing a record at a restore is
+ * the operator's call to make.
  *
  * ## Where the stamp is read from
  *
@@ -50,12 +50,6 @@ import {
   type TenantFingerprintExpectation,
   type TenantFingerprintStamp,
 } from './vendor/contract'
-import {
-  evaluatePhysicalIdentity,
-  type ObservedPhysicalIdentity,
-  type PhysicalExpectation,
-  type PhysicalFailure,
-} from './physical-identity'
 import { verifySecretKeyCanary } from './vendor/fleet-secrets'
 import { probeStoredCiphertext, type StoredCiphertextProbe } from './stored-ciphertext'
 
@@ -63,7 +57,6 @@ import { probeStoredCiphertext, type StoredCiphertextProbe } from './stored-ciph
 export type StampSource = 'column' | 'metadata' | 'none'
 
 export interface TenantIdentityObservation extends ObservedFingerprint {
-  physical: ObservedPhysicalIdentity
   stampSource: StampSource
   /** Both sources present and naming different tenants. */
   stampSourceConflict: { column: string; metadata: string } | null
@@ -86,7 +79,6 @@ export interface TenantIdentityObservation extends ObservedFingerprint {
 
 export type IdentityFailure =
   | FingerprintFailure
-  | PhysicalFailure
   | 'stamp_source_conflict'
   | 'secret_key_canary_missing'
   | 'secret_key_canary_mismatch'
@@ -117,9 +109,6 @@ const IDENTITY_FAILURE_SUBJECT = {
   stamp_missing: 'database',
   stamp_tenant_mismatch: 'database',
   workspace_id_mismatch: 'database',
-  neon_identity_unavailable: 'database',
-  neon_project_mismatch: 'database',
-  neon_branch_mismatch: 'database',
   stamp_source_conflict: 'database',
   secret_key_canary_missing: 'key',
   secret_key_canary_mismatch: 'key',
@@ -185,9 +174,6 @@ const IDENTITY_FAILURE_RETRYABILITY = {
   stamp_missing: 'terminal',
   stamp_tenant_mismatch: 'terminal',
   workspace_id_mismatch: 'terminal',
-  neon_identity_unavailable: 'terminal',
-  neon_project_mismatch: 'terminal',
-  neon_branch_mismatch: 'terminal',
   stamp_source_conflict: 'terminal',
   secret_key_canary_missing: 'terminal',
   secret_key_canary_mismatch: 'terminal',
@@ -295,14 +281,11 @@ export async function observeTenantIdentity(
 ): Promise<TenantIdentityObservation> {
   const rows = await readSettingsIdentity(sql)
 
-  const physical = await observePhysicalIdentity(sql)
-
   if (rows.length !== 1) {
     return {
       workspaceId: null,
       stamp: null,
       settingsRowCount: rows.length,
-      physical,
       stampSource: 'none',
       stampSourceConflict: null,
       secretCanary: null,
@@ -338,7 +321,6 @@ export async function observeTenantIdentity(
     workspaceId: row.id,
     stamp,
     settingsRowCount: 1,
-    physical,
     stampSource,
     stampSourceConflict: conflict,
     secretCanary: normalise(row.cloud_secret_canary),
@@ -466,39 +448,9 @@ export function evaluateSecretKeyCanary(
   }
 }
 
-/**
- * Neon's own identity GUCs. Verified present through both the direct and the
- * pooled endpoint. `current_setting(name, true)` yields NULL instead of raising
- * on a plain Postgres, which is what a self-hosted tenant looks like.
- */
-export async function observePhysicalIdentity(sql: Sql): Promise<ObservedPhysicalIdentity> {
-  const rows = (await sql`
-    SELECT current_setting('neon.project_id', true)  AS project_id,
-           current_setting('neon.branch_id', true)   AS branch_id,
-           current_setting('neon.endpoint_id', true) AS endpoint_id
-  `) as unknown as Array<{
-    project_id: string | null
-    branch_id: string | null
-    endpoint_id: string | null
-  }>
-  const row = rows[0]
-  return {
-    neonProjectId: normalise(row?.project_id ?? null),
-    neonBranchId: normalise(row?.branch_id ?? null),
-    neonEndpointId: normalise(row?.endpoint_id ?? null),
-  }
-}
-
-/**
- * The whole verdict, in the order that produces the most useful refusal.
- *
- * Content first (is this a Quackback database, and whose?), placement second
- * (is it the *copy* the registry named?). A wrong-database mix-up should not
- * report as a branch problem.
- */
+/** The whole verdict, in the order that produces the most useful refusal. */
 export function evaluateTenantIdentity(
   expected: TenantFingerprintExpectation,
-  physicalExpected: PhysicalExpectation,
   observed: TenantIdentityObservation
 ): IdentityVerdict {
   const content = evaluateFingerprint(expected, observed)
@@ -515,7 +467,7 @@ export function evaluateTenantIdentity(
     }
   }
 
-  return evaluatePhysicalIdentity(physicalExpected, observed.physical)
+  return { ok: true }
 }
 
 /** Pull the stamp out of the settings metadata bag. Never throws. */

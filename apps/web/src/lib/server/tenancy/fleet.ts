@@ -44,9 +44,8 @@ export interface FleetPassResult {
 /**
  * Run `body` once per active tenant, each inside its own tenant scope.
  *
- * Serial on purpose. These are periodic sweeps against per-tenant databases;
- * running them concurrently would wake every suspended Neon compute at once,
- * which is the exact cost the architecture exists to avoid.
+ * Serial: these are periodic sweeps, so wall time per pass is bounded by the
+ * fleet size and nothing here is latency-sensitive.
  */
 export async function runFleetPass(
   origin: TenantScopeOrigin,

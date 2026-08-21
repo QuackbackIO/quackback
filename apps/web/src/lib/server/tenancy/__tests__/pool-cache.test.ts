@@ -2,13 +2,13 @@
  * Pool-cache mechanics: eviction, LRU, revision rebuild, refusal.
  *
  * The driver and the fingerprint reader are stubbed here so the cache's own
- * decisions are what is under test — the real fingerprint behaviour is proven
- * against live Neon databases, and re-proving it here would only test the stub.
+ * decisions are what is under test — re-proving the real fingerprint here
+ * would only test the stub.
  *
  * Eviction is the piece that most deserves a test, for an unusual reason: it
- * has **no functional symptom**. A cache that never evicts serves every request
- * correctly and silently holds every tenant's Neon compute awake forever. The
- * only observable is the counter, so the counter is asserted, not just the
+ * has **no functional symptom**. A cache that never evicts serves every
+ * request correctly while pool objects and sockets accumulate. The only
+ * observable is the counter, so the counter is asserted, not just the
  * behaviour.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -91,7 +91,6 @@ function descriptor(id: string, revision = 1) {
     storage: { credentialRef: `env://${STORAGE_ENV_VAR}` },
     email: { from: '' },
     features: { aiEnabled: false },
-    physical: { neonProjectId: null, neonBranchId: null },
   } as never
 }
 
@@ -117,7 +116,6 @@ describe('tenant pool cache', () => {
       workspaceId: 'w',
       stamp: null,
       settingsRowCount: 1,
-      physical: { neonProjectId: null, neonBranchId: null, neonEndpointId: null },
       stampSource: 'none',
       stampSourceConflict: null,
       secretCanary: null,
@@ -190,9 +188,6 @@ describe('tenant pool cache', () => {
     const stats = cache.getPoolCacheStats()
     expect(stats.live).toBe(0)
     expect(stats.evictedByReason.idle).toBe(2)
-    // The metric §6 asks for: without it, "never evicts" and "evicts fine" look
-    // identical from outside.
-    expect(stats.evictionsPerHour).toBeGreaterThan(0)
     expect(ended).toHaveLength(2)
   })
 
@@ -390,9 +385,8 @@ describe('tenant pool cache', () => {
       idle_timeout?: number
     }
     expect(options.prepare).toBe(true)
-    // And the idle timeout must be well under Neon's 300s suspend window and
-    // Railway's 600s sleep window, or nothing ever goes quiet.
-    expect(options.idle_timeout).toBeLessThan(300)
+    // The default idle timeout stays finite so idle sockets are released.
+    expect(options.idle_timeout).toBeGreaterThan(0)
     await cache.closeAllTenantPools()
   })
 })

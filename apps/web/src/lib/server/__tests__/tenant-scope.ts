@@ -103,7 +103,6 @@ export function makeTenantDescriptor(
     },
     email: { from: `support@${host}` },
     features: { aiEnabled: true },
-    physical: { neonProjectId: null, neonBranchId: null },
   }
 }
 

@@ -63,6 +63,9 @@ const TERMINAL_SECRET_CODES: ReadonlySet<string> = new Set([
   'ref_purpose_mismatch',
   'root_key_missing',
   'bad_tenant',
+  // App-side (pool-cache.ts): the record's database credentialRef names a
+  // scheme this build has no database-credential resolver for.
+  'db_credential_no_resolver',
 ])
 
 /**

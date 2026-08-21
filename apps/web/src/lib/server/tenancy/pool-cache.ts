@@ -1,30 +1,14 @@
 /**
- * The tenant-keyed connection-pool cache (SAAS-HOSTING-STACK.md §6).
+ * The tenant-keyed connection-pool cache.
  *
- * One process, many tenants, one Neon database each. This is the LRU that turns
- * a resolved tenant record into a live `postgres.js` pool, and it is where the
- * §3 fingerprint assertion is enforced — once per pool, not once per request.
+ * One process, many tenants, one database each. This is the LRU that turns a
+ * resolved tenant record into a live `postgres.js` pool, and it is where the
+ * fingerprint assertion is enforced — once per pool, not once per request.
  *
- * ## Eviction is the cost model, not memory hygiene
- *
- * Neon suspends a compute when **no client is connected**. An open pool holds
- * the database awake, so eviction is the single thing that makes an idle tenant
- * cost storage only (~$0.02/month) instead of running compute indefinitely. The
- * same silence is what lets a Railway `role=web` service sleep, since Railway's
- * rule triggers on ten minutes without an *outbound* packet.
- *
- * So `tenantPoolIdleSeconds` must sit comfortably below **both** Neon's
- * `suspend_timeout_seconds` (300s by default) and Railway's 600s window. Get it
- * wrong and every tenant ever routed to an instance stays awake forever —
- * silently, with no functional signal that the cost model has stopped working.
- * That is why `poolsEvicted` is a first-class counter here rather than a debug
- * log: it is the only observable that distinguishes "working" from "quietly
- * costing money".
- *
- * Measured caveat, and it is not optional: eviction is **necessary but not
- * sufficient**. Under `QUACKBACK_ROLE=all` the outbox relay polls the tenant
- * database once per second forever, so the compute never suspends whatever this
- * cache does. Idle saving requires `QUACKBACK_ROLE=web`.
+ * Eviction here is plain hygiene: an idle tenant's pool object and sockets are
+ * bounded resources on a process serving many tenants, nothing more. The LRU
+ * cap bounds how many pools exist at once; the idle sweep drops pools nothing
+ * has touched for a while.
  *
  * ## Credential rotation
  *
@@ -47,7 +31,6 @@ import {
   observeTenantIdentity,
   TenantFingerprintRefusal,
 } from './fingerprint'
-import { readNeonRolePassword, invalidateNeonRolePassword } from './neon-credentials'
 import type { TenantDescriptor } from './registry'
 import { clearTenantSecretsCache, resolveTenantSecrets } from './tenant-secrets'
 import { parseSecretRef, redactRef } from './vendor/secret-ref'
@@ -83,7 +66,6 @@ const stats = {
   evicted: 0,
   evictedByReason: {} as Record<EvictionReason, number>,
   refusals: 0,
-  firstCreatedAt: 0,
 }
 
 export interface PoolCacheStats {
@@ -92,25 +74,15 @@ export interface PoolCacheStats {
   evicted: number
   evictedByReason: Record<string, number>
   refusals: number
-  /** The §6 metric: pools evicted per hour since the first pool was created. */
-  evictionsPerHour: number
-  uptimeSeconds: number
 }
 
 export function getPoolCacheStats(): PoolCacheStats {
-  const rawUptimeMs = stats.firstCreatedAt ? Date.now() - stats.firstCreatedAt : 0
-  // Floor the window at one second. A rate over a sub-millisecond window is
-  // either infinity or zero depending on clock granularity, and neither is a
-  // number anyone should page on.
-  const windowMs = Math.max(1_000, rawUptimeMs)
   return {
     live: pools.size,
     created: stats.created,
     evicted: stats.evicted,
     evictedByReason: { ...stats.evictedByReason },
     refusals: stats.refusals,
-    evictionsPerHour: stats.firstCreatedAt ? (stats.evicted * 3_600_000) / windowMs : 0,
-    uptimeSeconds: Math.round(rawUptimeMs / 1000),
   }
 }
 
@@ -144,7 +116,6 @@ export async function acquireTenantPool(tenant: TenantDescriptor): Promise<Acqui
     entry = createEntry(tenant)
     pools.set(tenant.tenantId, entry)
     stats.created += 1
-    if (!stats.firstCreatedAt) stats.firstCreatedAt = Date.now()
     ensureSweeper()
     await enforceCap(tenant.tenantId)
   } else {
@@ -169,17 +140,15 @@ export async function acquireTenantPool(tenant: TenantDescriptor): Promise<Acqui
 
 function createEntry(tenant: TenantDescriptor): PoolEntry {
   const sql = postgres(tenant.database.pooledUrl, {
-    // Small on purpose. One instance holds N tenant pools, and the Neon pooler
-    // multiplexes to a much smaller number of backends anyway; 10 per tenant
-    // would be N×10 sockets for no throughput.
+    // Small on purpose. One instance holds N tenant pools, so per-tenant
+    // socket counts multiply across the fleet against one server's (or one
+    // pooler's) connection budget.
     max: config.tenantPoolMax,
-    // Keep protocol-level prepared statements. Verified safe through the Neon
-    // pooler under real backend reassignment; the boundary is that Drizzle emits
-    // explicit column lists, so a hand-written `SELECT *` in a migration-adjacent
-    // path would break it.
+    // Keep protocol-level prepared statements. Through transaction-mode
+    // pgbouncer this requires `max_prepared_statements` (pgbouncer 1.21+); the
+    // escape hatch for older poolers is the `prepare` option in
+    // @quackback/db/client.
     prepare: true,
-    // Below Neon's suspend timeout AND Railway's sleep window. This is the
-    // number the cost model rests on.
     idle_timeout: config.tenantPoolIdleSeconds,
     connect_timeout: 15,
     password: () => resolvePassword(tenant),
@@ -206,25 +175,29 @@ function createEntry(tenant: TenantDescriptor): PoolEntry {
 /**
  * Dereference a tenant's database credential.
  *
- * Exported because the queue tier's `LISTEN` connections terminate at the
- * **direct** endpoint rather than at the pooled one, so they are built outside
- * this cache and still need the same credential — resolved by the same function
- * so a rotation cannot be picked up by one path and missed by the other.
+ * Exported because the realtime listener's `LISTEN` connection terminates at
+ * the **direct** endpoint rather than at the pooled one, so it is built outside
+ * this cache and still needs the same credential — resolved by the same
+ * function so a rotation cannot be picked up by one path and missed by the
+ * other.
  */
 export async function resolveTenantPassword(tenant: TenantDescriptor): Promise<string> {
   return resolvePassword(tenant)
+}
+
+/** A credential ref naming a scheme this build cannot dereference. Terminal. */
+class DbCredentialUnresolvable extends Error {
+  readonly code = 'db_credential_no_resolver'
+  constructor(message: string) {
+    super(message)
+    this.name = 'DbCredentialUnresolvable'
+  }
 }
 
 async function resolvePassword(tenant: TenantDescriptor): Promise<string> {
   const ref = tenant.database.credentialRef
   const parsed = parseSecretRef(ref)
   switch (parsed.scheme) {
-    case 'neon+role':
-      return readNeonRolePassword({
-        projectId: parsed.projectId,
-        branchId: parsed.branchId,
-        role: parsed.role,
-      })
     case 'env': {
       const value = process.env[parsed.variable]
       if (!value) {
@@ -232,12 +205,13 @@ async function resolvePassword(tenant: TenantDescriptor): Promise<string> {
       }
       return value
     }
-    case 'derived+hkdf':
-    case 'sealed+aead':
-      // Both name an APPLICATION secret. A database password is issued by a
-      // provider or a vault and is never a value this system chooses, so a
-      // derived one would be a plausible-looking string that no server accepts.
-      throw new Error(`${parsed.scheme}:// refs hold application secrets, not database credentials`)
+    default:
+      // The contract still parses other schemes, but this build has no resolver
+      // for them as DATABASE credentials. Refusing by name keeps the failure
+      // terminal (quarantine, not a reconnect loop) and honest about the cause.
+      throw new DbCredentialUnresolvable(
+        `${redactRef(ref)}: no database-credential resolver for ${parsed.scheme}:// in this build`
+      )
   }
 }
 
@@ -276,7 +250,7 @@ async function verifyTenantDatabase(
   // whether this key opens ciphertext the database is already holding, and that
   // has to be answered from a sample rather than from the minted canary alone.
   const observed = await observeTenantIdentity(sql, secrets.secretKey)
-  const verdict = evaluateTenantIdentity(tenant.fingerprint, tenant.physical, observed)
+  const verdict = evaluateTenantIdentity(tenant.fingerprint, observed)
   const keyVerdict = verdict.ok
     ? evaluateSecretKeyCanary(
         tenant.tenantId,
@@ -297,7 +271,6 @@ async function verifyTenantDatabase(
         tenantId: tenant.tenantId,
         workspaceId: observed.workspaceId,
         stampSource: observed.stampSource,
-        neonBranchId: observed.physical.neonBranchId,
         storageResolved: secrets.storage !== null,
         // Which of the four evidence states the key check cleared on. A fleet
         // where this reads `absent` everywhere is a fleet where the canary is
@@ -310,8 +283,6 @@ async function verifyTenantDatabase(
     return secrets
   }
 
-  const parsed = parseSecretRef(tenant.database.credentialRef)
-  if (parsed.scheme === 'neon+role') invalidateNeonRolePassword(parsed)
   // A refused pool must not leave a resolved bundle memoised: the commonest
   // recoverable cause is a rotation mid-flight, and the retry has to re-resolve
   // rather than re-fail on the value that was already wrong.
@@ -323,8 +294,6 @@ async function verifyTenantDatabase(
       code: keyVerdict.code,
       detail: keyVerdict.detail,
       observedWorkspaceId: observed.workspaceId,
-      observedBranchId: observed.physical.neonBranchId,
-      expectedBranchId: tenant.physical.neonBranchId,
     },
     'tenant database fingerprint REFUSED'
   )
@@ -351,24 +320,20 @@ async function enforceCap(keepTenantId: string): Promise<void> {
 /**
  * A tenant's own **direct** (session-mode) pool, outside this cache.
  *
- * The outbox relay tier needs three things this cache cannot give it: the
- * *direct* endpoint (a transaction pooler accepts a `LISTEN` and delivers
- * nothing, and a session advisory lock is worse than useless through one), a
- * connection that is never evicted by request-traffic LRU pressure, and a
- * lifetime it controls. So it opens its own — but through this module, because
- * this is the layer that builds `Database` handles and, more importantly,
- * because the §3 assertion must be the *same* assertion. A second copy of a
- * fail-closed identity check is a second copy that can drift open.
+ * A `LISTEN`-holding consumer (the realtime bus) needs three things this cache
+ * cannot give it: the *direct* endpoint (a transaction pooler accepts a
+ * `LISTEN` and delivers nothing), a connection that is never evicted by
+ * request-traffic LRU pressure, and a lifetime it controls. So it opens its
+ * own — but through this module, because this is the layer that builds
+ * `Database` handles and, more importantly, because the identity assertion
+ * must be the *same* assertion. A second copy of a fail-closed identity check
+ * is a second copy that can drift open.
  *
- * Deliberately NOT registered in `pools`: this handle is not a request pool, it
- * must not be handed to a request, and it must not be counted in the eviction
- * metric that measures whether idle tenants can suspend. §6's corollary is that
- * the tier holding it must never share a compute with tenants you expect to
- * suspend, and keeping it out of that counter is what keeps the counter honest.
+ * Deliberately NOT registered in `pools`: this handle is not a request pool
+ * and must not be handed to a request.
  *
  * Throws on refusal, exactly as `acquireTenantPool` does. The caller decides
- * what a refused tenant costs; for the relay tier it costs that tenant its relay
- * and nothing else.
+ * what a refused tenant costs.
  */
 export interface DirectTenantPool {
   sql: postgres.Sql
@@ -383,8 +348,7 @@ export async function openTenantDirectPool(
 ): Promise<DirectTenantPool> {
   const sql = postgres(tenant.database.directUrl, {
     max: opts.max ?? 1,
-    // An always-warm tier: letting the connection lapse would pay a reconnect on
-    // every wake, and the whole point of the doorbell is that work starts now.
+    // A listener that closes itself when idle is not a listener.
     idle_timeout: 0,
     connect_timeout: 15,
     prepare: true,
@@ -426,10 +390,9 @@ export async function evict(tenantId: string, reason: EvictionReason): Promise<b
 /**
  * Close pools that have been idle past the threshold.
  *
- * `postgres.js` already closes idle *sockets* after `idle_timeout`, which is
- * what actually lets Neon suspend. This sweep additionally drops the pool
- * object, which is what stops a tenant that was routed here once from holding a
- * slot in the LRU forever, and what makes the eviction counter meaningful.
+ * `postgres.js` already closes idle *sockets* after `idle_timeout`. This sweep
+ * additionally drops the pool object, which is what stops a tenant that was
+ * routed here once from holding a slot in the LRU forever.
  */
 export async function sweepIdlePools(now = Date.now()): Promise<number> {
   const thresholdMs = config.tenantPoolIdleSeconds * 1000
@@ -454,8 +417,7 @@ function ensureSweeper(): void {
       sweepIdlePools().catch((err) => log.warn({ err }, 'idle pool sweep failed'))
     )
   }, periodMs)
-  // Never hold the process open. An eviction sweeper that prevented exit would
-  // be the same class of bug as a pool that prevents suspend.
+  // Never hold the process open.
   sweeper.unref?.()
 }
 
@@ -475,5 +437,4 @@ export async function __resetPoolCacheForTests(): Promise<void> {
   stats.evicted = 0
   stats.evictedByReason = {} as Record<EvictionReason, number>
   stats.refusals = 0
-  stats.firstCreatedAt = 0
 }

@@ -18,31 +18,16 @@
  * comes from `vendor/contract.ts`, copied byte-for-byte from the control plane
  * so the two repos cannot drift into two readings of the same record. A reader
  * that trusts the writer is one migration away from serving the wrong tenant.
- *
- * **`neon_project_id` / `neon_branch_id` are read here even though contract v1
- * does not carry them in `TenantRecord`.** They are real columns on
- * `cp_tenant_registry`, and they are the only defence against a database
- * *branch* — see `physical-identity.ts`. They are attached alongside the
- * validated record rather than smuggled into it, so the vendored schema stays
- * byte-identical to the control plane's.
  */
 import postgres from 'postgres'
 import { config } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
-import type { PhysicalExpectation } from './physical-identity'
 import { validateTenantRecord, type TenantRecord, type TenantResolution } from './vendor/contract'
 
 const log = logger.child({ component: 'tenant-registry' })
 
-/**
- * A validated record plus the physical placement the contract does not model.
- *
- * Structurally a `TenantRecord`, so everything typed against the contract keeps
- * working; `physical` is additive.
- */
-export interface TenantDescriptor extends TenantRecord {
-  readonly physical: PhysicalExpectation
-}
+/** A validated registry record. The alias names the app-side reading of it. */
+export type TenantDescriptor = TenantRecord
 
 export type TenantLookup =
   | { kind: 'ok'; tenant: TenantDescriptor }
@@ -67,8 +52,6 @@ interface RegistryRow {
   email_from: string
   ai_enabled: boolean
   revision: string | number
-  neon_project_id: string | null
-  neon_branch_id: string | null
   hostnames: string[]
 }
 
@@ -113,7 +96,6 @@ const SELECT_COLUMNS = `
   r.app_secrets_ref,
   r.workspace_id, r.fingerprint_stamped_at,
   r.storage, r.email_from, r.ai_enabled, r.revision,
-  r.neon_project_id, r.neon_branch_id,
   COALESCE(
     (SELECT array_agg(h2.hostname ORDER BY h2.hostname)
        FROM cp_tenant_hostnames h2
@@ -249,22 +231,7 @@ export function interpretRow(row: RegistryRow, hostname: string): TenantLookup {
     return { kind: 'invalid', tenantId: row.tenant_id, hostname, problems: result.problems }
   }
 
-  return {
-    kind: 'ok',
-    tenant: {
-      ...result.record,
-      physical: {
-        neonProjectId: emptyToNull(row.neon_project_id),
-        neonBranchId: emptyToNull(row.neon_branch_id),
-      },
-    },
-  }
-}
-
-function emptyToNull(value: string | null): string | null {
-  if (value === null) return null
-  const trimmed = value.trim()
-  return trimmed === '' ? null : trimmed
+  return { kind: 'ok', tenant: result.record }
 }
 
 /**
