@@ -422,6 +422,18 @@ export function checkWorkspaceRecordInvariants(record: WorkspaceRecord): string[
   if (record.database.pooledUrl === record.database.directUrl) {
     problems.push('pooled and direct endpoints are identical — session-mode consumers would run through the pooler')
   }
+  const pooledParts = parseDsnParts(record.database.pooledUrl)
+  const directParts = parseDsnParts(record.database.directUrl)
+  if (
+    pooledParts &&
+    directParts &&
+    pooledParts.host === directParts.host &&
+    pooledParts.port === directParts.port
+  ) {
+    problems.push(
+      'pooled and direct endpoints share host:port — session-mode consumers would run through the pooler',
+    )
+  }
   if (record.database.directUrl.includes('-pooler.')) {
     problems.push('direct endpoint points at a pooler host — LISTEN would be silently dropped')
   }
@@ -447,20 +459,31 @@ export function checkWorkspaceRecordInvariants(record: WorkspaceRecord): string[
   return problems
 }
 
-/** `scheme://role@host[:port]/db[?params]`, password-less. */
+/** `scheme://role@host[:port]/db[?params]`, password-less. Port defaults to 5432. */
 export function parseDsnParts(
   dsn: string,
-): { role: string; host: string; database: string } | null {
+): { role: string; host: string; port: number; database: string } | null {
   if (!DSN_RE.test(dsn)) return null
   const afterScheme = dsn.slice(dsn.indexOf('://') + 3)
   const at = afterScheme.indexOf('@')
   const role = afterScheme.slice(0, at)
   const rest = afterScheme.slice(at + 1)
   const slash = rest.indexOf('/')
-  const host = rest.slice(0, slash)
+  const hostPort = rest.slice(0, slash)
   const database = rest.slice(slash + 1).split('?')[0] ?? ''
-  if (!role || !host || !database) return null
-  return { role, host, database }
+  if (!role || !hostPort || !database) return null
+  const colon = hostPort.lastIndexOf(':')
+  let host = hostPort
+  let port = 5432
+  if (colon > 0) {
+    const parsedPort = Number(hostPort.slice(colon + 1))
+    if (Number.isInteger(parsedPort) && parsedPort > 0) {
+      host = hostPort.slice(0, colon)
+      port = parsedPort
+    }
+  }
+  if (!host) return null
+  return { role, host, port, database }
 }
 
 /**
