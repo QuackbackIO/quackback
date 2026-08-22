@@ -9,8 +9,8 @@
  * cannot see, and a principal with zero viewer-visible contributions
  * resolves to null (anti-enumeration: the route 404s).
  *
- * The team-only context strip (email / company / segments) is a separate
- * query, `getProfileTeamContext`, whose server fn is people.view-gated.
+ * The team-only context strip (email / company / segments / lastSeenAt) is a
+ * separate query, `getProfileTeamContext`, whose server fn is people.view-gated.
  */
 
 import {
@@ -23,6 +23,7 @@ import {
   sql,
   principal,
   user,
+  session,
   posts,
   postComments,
   postVotes,
@@ -31,6 +32,7 @@ import {
   userSegments,
   segments,
   companies,
+  visitorDevices,
   asc,
 } from '@/lib/server/db'
 import type { PrincipalId, SegmentId } from '@quackback/ids'
@@ -80,6 +82,11 @@ export interface PublicProfileTeamContext {
   email: string | null
   company: { id: string; name: string; plan: string | null; mrrCents: number | null } | null
   segments: { id: SegmentId; name: string; color: string }[]
+  /** Freshest activity signal: session touch or device beacon; null = none. */
+  lastSeenAt: Date | null
+  emailVerified: boolean
+  /** Whether this person is currently blocked. */
+  blocked: boolean
 }
 
 const ACTIVITY_LIMIT = 100
@@ -280,9 +287,10 @@ function normalizeItem(row: {
 
 /**
  * The team-only context for a profile: sanitized email, company summary,
- * segment chips. Same principal eligibility rules as the public profile,
- * but NO activity-visibility requirement — a team viewer with people.view
- * already sees this person in the admin directory.
+ * segment chips, last-seen, verified and blocked flags. Same principal
+ * eligibility rules as the public profile, but NO activity-visibility
+ * requirement — a team viewer with people.view already sees this person
+ * in the admin directory.
  */
 export async function getProfileTeamContext(
   principalId: PrincipalId
@@ -291,7 +299,10 @@ export async function getProfileTeamContext(
     const rows = await db
       .select({
         principalId: principal.id,
+        userId: user.id,
         email: user.email,
+        emailVerified: user.emailVerified,
+        blockedAt: principal.blockedAt,
         contactEmail: principal.contactEmail,
         companyId: companies.id,
         companyName: companies.name,
@@ -313,12 +324,28 @@ export async function getProfileTeamContext(
     const row = rows[0]
     if (!row) return null
 
-    const segmentRows = await db
-      .select({ id: segments.id, name: segments.name, color: segments.color })
-      .from(userSegments)
-      .innerJoin(segments, eq(userSegments.segmentId, segments.id))
-      .where(and(eq(userSegments.principalId, principalId), isNull(segments.deletedAt)))
-      .orderBy(asc(segments.name))
+    const [segmentRows, [sessionSeen], [deviceSeen]] = await Promise.all([
+      db
+        .select({ id: segments.id, name: segments.name, color: segments.color })
+        .from(userSegments)
+        .innerJoin(segments, eq(userSegments.segmentId, segments.id))
+        .where(and(eq(userSegments.principalId, principalId), isNull(segments.deletedAt)))
+        .orderBy(asc(segments.name)),
+      db
+        .select({ v: sql<Date | null>`max(${session.updatedAt})` })
+        .from(session)
+        .where(eq(session.userId, row.userId)),
+      db
+        .select({ v: sql<Date | null>`max(${visitorDevices.lastSeenAt})` })
+        .from(visitorDevices)
+        .where(eq(visitorDevices.principalId, principalId)),
+    ])
+
+    const seenDates = [sessionSeen?.v, deviceSeen?.v]
+      .filter((d): d is Date => d != null)
+      .map((d) => new Date(d))
+    const lastSeenAt =
+      seenDates.length > 0 ? new Date(Math.max(...seenDates.map((d) => d.getTime()))) : null
 
     return {
       // Synthetic anon placeholder must never surface.
@@ -332,6 +359,9 @@ export async function getProfileTeamContext(
           }
         : null,
       segments: segmentRows.map((s) => ({ id: s.id, name: s.name, color: s.color })),
+      lastSeenAt,
+      emailVerified: Boolean(row.emailVerified),
+      blocked: row.blockedAt != null,
     }
   } catch (error) {
     log.error({ err: error }, 'failed to get profile team context')

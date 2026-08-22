@@ -36,8 +36,10 @@ interface AuthCommentsSectionProps {
   currentStatusId?: string | null
   /** Whether the current user is a team member */
   isTeamMember?: boolean
-  /** Link comment authors to their public profile (portal only). */
+  /** Link comment authors to a profile behind a hover card. */
   linkAuthors?: boolean
+  /** Destination for author links. Admin uses the enriched hover card. */
+  authorLinkTo?: 'portal' | 'admin'
   /** Hide the comment form area entirely (for readonly previews) */
   hideCommentForm?: boolean
   /** Callback when a comment is deleted */
@@ -74,6 +76,7 @@ export function AuthCommentsSection({
   currentStatusId,
   isTeamMember,
   linkAuthors = false,
+  authorLinkTo = 'portal',
   hideCommentForm,
   onDeleteComment,
   deletingCommentId,
@@ -168,6 +171,7 @@ export function AuthCommentsSection({
       currentStatusId={currentStatusId}
       isTeamMember={isTeamMember}
       linkAuthors={linkAuthors}
+      authorLinkTo={authorLinkTo}
       hideCommentForm={hideCommentForm}
       onDeleteComment={onDeleteComment}
       deletingCommentId={deletingCommentId}

@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { useQuery } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
 import {
   CalendarIcon,
   ChevronUpIcon,
@@ -30,6 +29,7 @@ import { TimeAgo } from '@/components/ui/time-ago'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AuthVoteButton } from '@/components/public/auth-vote-button'
 import { AuthorHoverCard } from '@/components/public/author-hover-card'
+import { AdminAuthorHoverCard } from '@/components/admin/admin-author-hover-card'
 import { AuthSubscriptionBell } from '@/components/public/auth-subscription-bell'
 import {
   VotersAvatarStack,
@@ -875,34 +875,32 @@ export function MetadataSidebar({
             </span>
           </div>
           {canEdit && authorPrincipalId ? (
-            <Link
-              to="/admin/users"
-              search={{ selected: authorPrincipalId }}
-              className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
-            >
-              <Avatar className="h-5 w-5">
-                {authorAvatarUrl && (
-                  <AvatarImage
-                    src={authorAvatarUrl}
-                    alt={
-                      authorName ||
-                      intl.formatMessage({
-                        id: 'portal.postDetail.metadata.authorFallback',
-                        defaultMessage: 'Anonymous',
-                      })
-                    }
-                  />
-                )}
-                <AvatarFallback className="text-xs">{getInitials(authorName)}</AvatarFallback>
-              </Avatar>
-              <span className="text-sm font-medium text-foreground underline decoration-muted-foreground/30 underline-offset-2">
-                {authorName ||
-                  intl.formatMessage({
-                    id: 'portal.postDetail.metadata.authorFallback',
-                    defaultMessage: 'Anonymous',
-                  })}
+            <AdminAuthorHoverCard principalId={authorPrincipalId} displayName={authorName}>
+              <span className="inline-flex items-center gap-1.5">
+                <Avatar className="h-5 w-5">
+                  {authorAvatarUrl && (
+                    <AvatarImage
+                      src={authorAvatarUrl}
+                      alt={
+                        authorName ||
+                        intl.formatMessage({
+                          id: 'portal.postDetail.metadata.authorFallback',
+                          defaultMessage: 'Anonymous',
+                        })
+                      }
+                    />
+                  )}
+                  <AvatarFallback className="text-xs">{getInitials(authorName)}</AvatarFallback>
+                </Avatar>
+                <span className="text-sm font-medium text-foreground underline decoration-muted-foreground/30 underline-offset-2">
+                  {authorName ||
+                    intl.formatMessage({
+                      id: 'portal.postDetail.metadata.authorFallback',
+                      defaultMessage: 'Anonymous',
+                    })}
+                </span>
               </span>
-            </Link>
+            </AdminAuthorHoverCard>
           ) : (
             (() => {
               const authorRow = (

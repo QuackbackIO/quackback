@@ -178,9 +178,10 @@ export function CommentsSection({
         statuses={statuses}
         currentStatusId={currentStatusId}
         isTeamMember={effectiveIsTeamMember}
-        // Portal (no adminUser) links comment authors to their public profile;
-        // the admin post view keeps author names inert.
-        linkAuthors={!adminUser}
+        // Portal links to the public profile; admin uses the enriched hover
+        // card and navigates to /admin/users?selected=.
+        linkAuthors
+        authorLinkTo={adminUser ? 'admin' : 'portal'}
         onDeleteComment={onDeleteComment}
         deletingCommentId={deletingCommentId}
         onRestoreComment={onRestoreComment}

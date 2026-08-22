@@ -107,6 +107,9 @@ beforeEach(() => {
     email: 'alice@acme.com',
     company: null,
     segments: [],
+    lastSeenAt: new Date('2026-04-01T12:00:00Z'),
+    emailVerified: true,
+    blocked: false,
   })
 })
 
@@ -177,6 +180,19 @@ describe('getProfileTeamContextFn', () => {
 
   it('returns the team context for a permitted caller', async () => {
     const result = await teamContextHandler({ data: { principalId: VALID_ID } })
-    expect(result).toEqual({ email: 'alice@acme.com', company: null, segments: [] })
+    expect(result).toEqual({
+      email: 'alice@acme.com',
+      company: null,
+      segments: [],
+      lastSeenAt: '2026-04-01T12:00:00.000Z',
+      emailVerified: true,
+      blocked: false,
+    })
+  })
+
+  it('returns null when the domain resolves no context', async () => {
+    hoisted.mockGetProfileTeamContext.mockResolvedValue(null)
+    const result = await teamContextHandler({ data: { principalId: VALID_ID } })
+    expect(result).toBeNull()
   })
 })
