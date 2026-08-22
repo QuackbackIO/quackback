@@ -39,7 +39,7 @@ export const Route = createFileRoute('/_portal/hc')({
     // redirect needs to live (domains/languages §1).
     const currentHost = currentRequestHost()
     const target = resolveHelpCenterDomainRedirect({
-      domainConfig: helpCenterConfig.domain,
+      domainConfig: helpCenterConfig?.domain,
       currentHost,
       pathname: location.pathname,
       // `searchStr` already includes the leading `?` when non-empty.
