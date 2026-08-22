@@ -18,6 +18,26 @@ export function isStoredAssetPath(pathname: string): boolean {
 }
 
 /**
+ * The stored object key a persist ref (or a legacy absolute `/api/storage`
+ * URL) names, or null if `src` is not one.
+ *
+ * Absolute srcs on an old hostname still name a key: the host is not the
+ * workspace boundary. `..` and undecodable escapes are refused the same way
+ * the storage route refuses them.
+ */
+export function storedAssetKeyFromSrc(src: string): string | null {
+  if (!src) return null
+  try {
+    const parsed = new URL(src, 'https://placeholder.invalid')
+    if (!isStoredAssetPath(parsed.pathname)) return null
+    const key = decodeURIComponent(parsed.pathname.slice('/api/storage/'.length))
+    return key && !key.includes('..') ? key : null
+  } catch {
+    return null
+  }
+}
+
+/**
  * Origin of the pinned system-host storage URL (`https://ws-…/api/storage`).
  * CDN-style publicUrl values are not a system host and are ignored.
  */

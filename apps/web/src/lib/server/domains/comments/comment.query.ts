@@ -14,6 +14,7 @@ import { NotFoundError } from '@/lib/shared/errors'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import type { CommentThread } from './comment.types'
 import { buildCommentTree, toStatusChange } from '@/lib/shared'
+import { contentJsonForClient } from '@/lib/server/content/storage-read-urls'
 
 /**
  * Get a comment by ID
@@ -125,7 +126,7 @@ export async function getCommentsByPost(
     principalId: comment.principalId,
     authorName: comment.author?.displayName ?? null,
     content: comment.content,
-    contentJson: comment.contentJson ?? null,
+    contentJson: contentJsonForClient(comment.contentJson ?? null),
     isTeamMember: comment.isTeamMember,
     isPrivate: comment.isPrivate,
     createdAt: comment.createdAt,

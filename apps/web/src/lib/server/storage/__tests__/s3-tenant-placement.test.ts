@@ -69,6 +69,7 @@ const {
   getStorageSigningSecret,
   isS3Configured,
   isS3Usable,
+  resignStoredAssetUrl,
   StorageUnavailableError,
   uploadObject,
 } = await import('../s3')
@@ -185,6 +186,40 @@ describe('public URLs', () => {
       new URL(url!, 'https://placeholder.invalid').searchParams.get('read')
     expect(sigOf(alpha)).toBeTruthy()
     expect(sigOf(alpha)).not.toBe(sigOf(bravo))
+  })
+
+  it('resigns an unsigned legacy private URL with the current workspace token', () => {
+    const minted = withWorkspace('workspace-alpha', () => getPublicUrlOrNull(PRIVATE_KEY), {
+      secrets: SHARED_SECRET,
+    })
+    const resigned = withWorkspace(
+      'workspace-alpha',
+      () => resignStoredAssetUrl(`https://old.example.com/api/storage/${PRIVATE_KEY}`),
+      { secrets: SHARED_SECRET }
+    )
+    expect(resigned).toBe(minted)
+    expect(resigned).toContain(`?read=`)
+  })
+
+  it('replaces a stale private token rather than keeping it', () => {
+    const resigned = withWorkspace(
+      'workspace-alpha',
+      () =>
+        resignStoredAssetUrl(`/api/storage/${PRIVATE_KEY}?read=deadbeefdeadbeefdeadbeefdeadbeef`),
+      { secrets: SHARED_SECRET }
+    )
+    expect(resigned).not.toContain('deadbeef')
+    expect(resigned).toBe(
+      withWorkspace('workspace-alpha', () => getPublicUrlOrNull(PRIVATE_KEY), {
+        secrets: SHARED_SECRET,
+      })
+    )
+  })
+
+  it('leaves a foreign src untouched', () => {
+    expect(resignStoredAssetUrl('https://cdn.example.com/brand.png')).toBe(
+      'https://cdn.example.com/brand.png'
+    )
   })
 
   it('leaves the unscoped read signature byte-identical to the historical one', () => {

@@ -77,6 +77,8 @@ vi.mock('@/lib/server/auth', () => ({
 // --- S3 mock ---
 vi.mock('@/lib/server/storage/s3', () => ({
   getPublicUrlOrNull: (key: string | null) => (key ? `https://cdn.test/${key}` : null),
+  resignStoredAssetUrl: (src: string) =>
+    src.includes('/api/storage/') && !src.includes('read=') ? `${src}?read=live` : src,
   deleteObject: vi.fn(),
 }))
 
@@ -184,6 +186,50 @@ describe('getWorkspaceSettings', () => {
 
     expect(result).toEqual(cached)
     expect(mockCacheGet).toHaveBeenCalledWith('settings:workspace')
+    expect(mockFindFirst).not.toHaveBeenCalled()
+  })
+
+  it('remints welcome-card storage srcs on a cache hit without writing them back', async () => {
+    const unsigned = '/api/storage/uploads/logo.png'
+    const cached = {
+      name: 'Cached Workspace',
+      slug: 'cached',
+      settings: makeSettingsRow({
+        name: 'Cached Workspace',
+        setupState: JSON.stringify({
+          version: 2,
+          steps: {
+            core: true,
+            workspace: true,
+            startingPoint: {
+              outcome: 'product_feedback',
+              resourceType: 'none',
+              source: 'managed',
+              resolution: 'configured',
+              completedAt: '2026-08-13T00:00:00.000Z',
+            },
+          },
+        }),
+      }),
+      publicPortalConfig: {
+        welcomeCard: {
+          enabled: true,
+          title: 'Hi',
+          body: {
+            type: 'doc',
+            content: [{ type: 'image', attrs: { src: unsigned } }],
+          },
+        },
+      },
+    }
+    mockCacheGet.mockResolvedValue(cached)
+
+    const result = await getWorkspaceSettings()
+
+    expect(result?.publicPortalConfig.welcomeCard?.body.content?.[0]?.attrs?.src).toBe(
+      `${unsigned}?read=live`
+    )
+    expect(cached.publicPortalConfig.welcomeCard.body.content[0].attrs.src).toBe(unsigned)
     expect(mockFindFirst).not.toHaveBeenCalled()
   })
 

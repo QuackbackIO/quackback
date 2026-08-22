@@ -47,13 +47,18 @@
  * traffic:
  *
  * ```
- * aws s3 mv s3://<bucket>/ s3://<bucket>/w/<settings.id>/ --recursive --exclude 'w/*'
+ * aws s3 mv s3://<bucket>/ s3://<bucket>/w/<workspace TypeID>/ --recursive --exclude 'w/*'
  * ```
+ *
+ * The prefix is `fromUuid('workspace', settings.id)` (for example
+ * `workspace_01kxddf1jaf6cr22gerxt7z9gg`). `SELECT id FROM settings` returns
+ * the UUID spelling; copying under that UUID leaves every restored object
+ * unreadable. Convert the UUID before composing `w/<prefix>/`.
  *
  * It is a server-side copy: no bytes leave the bucket, the stored keys do not
  * change, and no content is rewritten, because the namespace appears in neither
  * the database nor any URL. Every affected install holds exactly one workspace
- * per bucket, so `<settings.id>` is unambiguous — `SELECT id FROM settings`.
+ * per bucket, so that TypeID is unambiguous.
  *
  * **Note what this repository must NOT grow to make that convenient.** Listing
  * and deleting at the bucket root is correct against a bucket that holds one
@@ -77,7 +82,7 @@ import {
   currentWorkspaceNamespace,
   SINGLE_WORKSPACE_NAMESPACE,
 } from '@/lib/server/workspaces/workspace-keyed'
-import { absolutizeOffHostAssetUrl } from './asset-url'
+import { absolutizeOffHostAssetUrl, storedAssetKeyFromSrc } from './asset-url'
 import { composeNamespacedKey, workspaceNamespace } from './namespace'
 import { currentWorkspaceId } from './workspace-scope'
 
@@ -929,6 +934,20 @@ export function getPublicUrlOrNull(key: string | null | undefined): string | nul
   if (!isPublicStorageKey(key) && !isS3Usable()) return null
 
   return buildPublicUrl(getStoragePlacement(), key)
+}
+
+/**
+ * Mint a current-workspace persist ref for a stored `/api/storage` src.
+ *
+ * Private keys get a fresh `?read=` capability; public keys stay unsigned.
+ * Stale tokens, unbound K8s signatures, and unsigned legacy URLs are all
+ * replaced. Foreign srcs are returned unchanged. A workspace whose storage
+ * credentials do not resolve keeps the original src rather than a blank one.
+ */
+export function resignStoredAssetUrl(src: string): string {
+  const key = storedAssetKeyFromSrc(src)
+  if (!key) return src
+  return getPublicUrlOrNull(key) ?? src
 }
 
 /**

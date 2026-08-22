@@ -36,6 +36,7 @@ import type {
   HelpCenterLocalesConfig,
   HelpCenterLocaleChromeStrings,
   VerifiedDomain,
+  PortalWelcomeCard,
 } from './settings.types'
 import {
   DEFAULT_AUTH_CONFIG,
@@ -63,8 +64,29 @@ import {
   mergeWelcomeCard,
   publicWelcomeCard,
 } from './settings.helpers'
+import { withCurrentStorageReadTokens } from '@/lib/server/content/storage-read-urls'
 
 const log = logger.child({ component: 'settings' })
+
+/** Mint current `?read=` tokens on a public welcome card. Persist stays unsigned. */
+function liveWelcomeCard(card: PortalWelcomeCard): PortalWelcomeCard {
+  return {
+    ...card,
+    body: withCurrentStorageReadTokens(card.body) as PortalWelcomeCard['body'],
+  }
+}
+
+function liveWorkspaceSettings(settings: WorkspaceSettings): WorkspaceSettings {
+  const welcome = settings.publicPortalConfig?.welcomeCard
+  if (!welcome) return settings
+  return {
+    ...settings,
+    publicPortalConfig: {
+      ...settings.publicPortalConfig,
+      welcomeCard: liveWelcomeCard(welcome),
+    },
+  }
+}
 
 function offHostPublicUrl(key: string | null | undefined): string | null {
   const stored = getPublicUrlOrNull(key)
@@ -832,7 +854,7 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
         showPublicEditHistory: portalConfig.features.showPublicEditHistory,
       },
       ...(oidcProviders.length > 0 && { oidcProviders }),
-      ...(welcome && { welcomeCard: welcome }),
+      ...(welcome && { welcomeCard: liveWelcomeCard(welcome) }),
       portalAccess: {
         isPrivate: portalConfig.access?.visibility === 'private',
         widgetSignIn: portalConfig.access?.widgetSignIn ?? false,
@@ -864,7 +886,7 @@ export async function getWorkspaceSettings(): Promise<WorkspaceSettings | null> 
         // before that rule existed still carries feedback:false and would keep
         // the portal dark for the hour the entry has left to live.
         if (cached.featureFlags) cached.featureFlags.feedback = true
-        return cached
+        return liveWorkspaceSettings(cached)
       }
     }
 
@@ -983,7 +1005,7 @@ export async function getWorkspaceSettings(): Promise<WorkspaceSettings | null> 
     // calls invalidateSettingsCache(), so a long TTL is safe and keeps
     // the per-request cost of getWorkspaceSettings to a single Redis GET.
     await cacheSet(CACHE_KEYS.WORKSPACE_SETTINGS, result, 3600)
-    return result
+    return liveWorkspaceSettings(result)
   } catch (error) {
     log.error({ err: error }, 'get workspace settings failed')
     wrapDbError('fetch settings with all configs', error)
