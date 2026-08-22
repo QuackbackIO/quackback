@@ -318,6 +318,9 @@ function startBackgroundProcessing(): void {
       setTimeout(() => void jobs.runStatusMaintenanceSweep(), 31_000)
       setInterval(() => void jobs.runStatusMaintenanceSweep(), 5 * 60 * 1000)
 
+      setTimeout(() => void jobs.runFleetMigratorPass(), 90_000)
+      setInterval(() => void jobs.runFleetMigratorPass(), 60 * 60 * 1000)
+
       log.info({ event: 'sweeps.armed' }, 'scheduled sweeps armed')
     })
     .catch((err) => log.error({ err }, 'failed to init the scheduled sweeps'))
