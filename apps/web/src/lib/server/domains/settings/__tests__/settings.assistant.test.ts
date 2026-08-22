@@ -277,8 +277,6 @@ describe('V2 assistant configuration reads', () => {
       config: DEFAULT_ASSISTANT_CONFIG,
       revision: 23,
       workspaceName: 'Acme Support',
-      connectorsEnabled: false,
-      skillsEnabled: false,
       configFallbackReason: 'invalid_assistant_config',
     })
     expect(result.config).not.toBe(DEFAULT_ASSISTANT_CONFIG)

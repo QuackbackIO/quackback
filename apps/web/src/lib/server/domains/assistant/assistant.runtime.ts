@@ -41,7 +41,12 @@ import type {
 } from '@/lib/shared/conversation/types'
 import { resolveContentAudience } from './audience'
 import { assembleAssistantToolset } from './assistant.tools'
-import { applyBuiltInToolRules, resolveToolSpecs, makeAssistantToolContext, makeAssistantToolLedger } from './assistant.toolspec'
+import {
+  applyBuiltInToolRules,
+  resolveToolSpecs,
+  makeAssistantToolContext,
+  makeAssistantToolLedger,
+} from './assistant.toolspec'
 import { listConversationAttributes } from '@/lib/server/domains/conversation-attributes/conversation-attribute.service'
 import type {
   AssistantCitation,
@@ -129,8 +134,6 @@ export interface AssistantRuntimeConfig {
   config: AssistantConfig
   revision: number
   workspaceName: string
-  connectorsEnabled: boolean
-  skillsEnabled: boolean
   configFallbackReason?: string
 }
 
@@ -825,8 +828,6 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
       config: structuredClone(DEFAULT_ASSISTANT_CONFIG),
       revision: 1,
       workspaceName: 'this workspace',
-      connectorsEnabled: false,
-      skillsEnabled: false,
       configFallbackReason: 'database_read_failed',
     }
   }
@@ -935,12 +936,10 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
   // sandbox; actor defaults to Quinn's bounded set).
   const agentKind = roleToAgent(role)
   let skillCount = 0
-  if (runtimeConfig.skillsEnabled) {
-    try {
-      skillCount = await countAssignedSkills(agentKind, execDb)
-    } catch (error) {
-      log.warn({ err: error }, 'skill count failed; omitting use_skill this turn')
-    }
+  try {
+    skillCount = await countAssignedSkills(agentKind, execDb)
+  } catch (error) {
+    log.warn({ err: error }, 'skill count failed; omitting use_skill this turn')
   }
   const toolContext = makeAssistantToolContext({
     db: execDb,
@@ -999,18 +998,16 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     )
   )
 
-  // Connectors: when the flag is on, resolve every enabled connector assigned
-  // to this turn's agent. A policy of never is filtered before assembly.
+  // Resolve every enabled connector assigned to this turn's agent. A policy
+  // of never is filtered before assembly.
   let connectorSpecs: AssistantToolSpec[] = []
-  if (runtimeConfig.connectorsEnabled) {
-    try {
-      connectorSpecs = await listConnectorToolSpecsForAgent(agentKind, execDb)
-    } catch (error) {
-      log.warn({ err: error }, 'connector load failed; omitting connectors this turn')
-    }
+  try {
+    connectorSpecs = await listConnectorToolSpecsForAgent(agentKind, execDb)
+  } catch (error) {
+    log.warn({ err: error }, 'connector load failed; omitting connectors this turn')
   }
   let skillCatalogue: Array<{ name: string; whenToUse: string }> = []
-  if (runtimeConfig.skillsEnabled && skillCount > 0) {
+  if (skillCount > 0) {
     try {
       skillCatalogue = await compileSkillCatalogue(agentKind, execDb)
     } catch (error) {

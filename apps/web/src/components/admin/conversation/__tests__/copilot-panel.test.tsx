@@ -72,9 +72,7 @@ import { CopilotPanel } from '../copilot-panel'
 
 const CONVERSATION_ID = 'conversation_1' as ConversationId
 
-const ALL_FLAGS_ON: FeatureFlags = {
-  inboxAi: true,
-} as unknown as FeatureFlags
+const ALL_FLAGS_ON: FeatureFlags = {} as unknown as FeatureFlags
 
 function renderPanel(
   props: Partial<{

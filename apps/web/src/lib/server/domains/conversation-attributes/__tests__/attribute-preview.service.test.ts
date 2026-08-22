@@ -69,14 +69,6 @@ beforeEach(() => {
 })
 
 describe('previewAttributeDetection: gating', () => {
-  it('throws when the inboxAi flag is off', async () => {
-    mockIsFeatureEnabled.mockResolvedValue(false)
-    await expect(
-      previewAttributeDetection({ definition, sampleMessage: 'I was charged twice' })
-    ).rejects.toMatchObject({ code: 'AI_ATTRIBUTE_DETECTION_DISABLED' })
-    expect(mockChat).not.toHaveBeenCalled()
-  })
-
   it('throws when the AI client is not configured', async () => {
     mockConfig.openaiApiKey = undefined
     await expect(

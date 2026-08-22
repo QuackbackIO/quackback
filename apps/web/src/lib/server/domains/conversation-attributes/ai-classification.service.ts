@@ -27,7 +27,7 @@
  * `ensureAssistantPrincipal()` + `quinnActor`'s bounded identity, never a raw
  * service principal.
  *
- * Gated, in order: the `inboxAi` feature flag; a configured AI
+ * Gated, in order: a configured AI
  * client + `classification` chat model (the same isAiClientConfigured()/getChatModel()
  * guard the other pipeline classifiers use — sentiment, quality-gate — rather
  * than importing the much larger assistant runtime module just for its
@@ -45,7 +45,6 @@ import { isAiClientConfigured } from '@/lib/server/domains/ai/config'
 import { getChatModel } from '@/lib/server/domains/ai/models'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
-import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
 import { loadConversationThread } from '@/lib/server/domains/assistant/assistant.thread'
 import { ensureAssistantPrincipal } from '@/lib/server/domains/assistant/assistant.principal'
 import { quinnActor } from '@/lib/server/domains/assistant/assistant.actor'
@@ -68,11 +67,7 @@ const log = logger.child({ component: 'ai-attribute-classification' })
 
 /** The moments classification runs (AI-ATTRIBUTES-PARITY-SPEC.md §3). */
 export type ClassificationTrigger =
-  | 'handoff'
-  | 'assistant_closed'
-  | 'inactivity'
-  | 'teammate_close'
-  | 'live_recheck'
+  'handoff' | 'assistant_closed' | 'inactivity' | 'teammate_close' | 'live_recheck'
 
 export interface ClassifyAttributesOptions {
   trigger: ClassificationTrigger
@@ -188,8 +183,6 @@ export async function classifyConversationAttributes(
   opts: ClassifyAttributesOptions
 ): Promise<ClassificationOutcome[]> {
   try {
-    if (!(await isFeatureEnabled('inboxAi'))) return []
-
     const model = getChatModel('classification')
     if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !model) return []
 

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { createFileRoute, Navigate, useRouteContext } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { useIntl } from 'react-intl'
 import { toast } from 'sonner'
@@ -28,7 +28,6 @@ import {
 } from '@/lib/client/mutations/assistant-skills'
 import { skillInputSchema, type SkillDTO } from '@/lib/shared/assistant/skills'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
-import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { BackLink } from '@/components/ui/back-link'
 
 export const Route = createFileRoute('/admin/automation/skills')({
@@ -122,12 +121,6 @@ function SkillsPage() {
   }
 
   const skills = list.data?.skills ?? []
-  const { settings } = useRouteContext({ from: '__root__' })
-  const flags = settings?.featureFlags as FeatureFlags | undefined
-
-  if (!flags?.assistantSkills) {
-    return <Navigate to="/admin/automation/agent" />
-  }
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6">

@@ -26,7 +26,7 @@ const mocks = vi.hoisted(() => ({
   suggestTicketFieldValuesFn: vi.fn(),
   toastInfo: vi.fn(),
   routeContext: {
-    settings: { featureFlags: { inboxAi: true } },
+    settings: { featureFlags: {} },
   } as Record<string, unknown>,
 }))
 
@@ -160,7 +160,7 @@ beforeEach(() => {
   mocks.linkTicketToConversationFn.mockReset()
   mocks.suggestTicketFieldValuesFn.mockReset()
   mocks.toastInfo.mockReset()
-  mocks.routeContext = { settings: { featureFlags: { inboxAi: true } } }
+  mocks.routeContext = { settings: { featureFlags: {} } }
   mocks.listTicketTypesFn.mockReset()
   mocks.listTicketTypesFn.mockResolvedValue([bugType, refundType, taskType, outageType])
 })
@@ -282,20 +282,13 @@ describe('CreateTicketDialog — Phase 5 copilot auto-fill', () => {
     return renderDialog({ conversationId: 'conversation_1' as never })
   }
 
-  it('shows the affordance from-a-conversation with the inboxAi flag on; hides it standalone or with the flag off', async () => {
+  it('shows the affordance from-a-conversation; hides it standalone', async () => {
     renderFromConversation()
     expect(await screen.findByRole('button', { name: /Auto-fill/ })).toBeInTheDocument()
     cleanup()
 
     // Standalone (no conversation): exactly the Phase-4 dialog.
     renderDialog()
-    await screen.findByText('Bug report')
-    expect(screen.queryByRole('button', { name: /Auto-fill/ })).toBeNull()
-    cleanup()
-
-    // Flag off: the affordance never renders.
-    mocks.routeContext = { settings: { featureFlags: { inboxAi: false } } }
-    renderFromConversation()
     await screen.findByText('Bug report')
     expect(screen.queryByRole('button', { name: /Auto-fill/ })).toBeNull()
   })

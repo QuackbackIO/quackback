@@ -3,7 +3,7 @@
  * run, on-demand summaries, the insert/feedback outcomes, the cited-sources
  * leaderboard, and the propose-approve-execute actions funnel, over the last
  * 30 days. Read-only reporting; gated server-side on analytics.view like the
- * rest of the Quinn performance surface. Mounted whenever inboxAi is on (see
+ * rest of the Quinn performance surface. Mounted on the performance page (see
  * automation.performance.tsx). `showActionsFunnel` is a presentational
  * switch for the pending-actions section, not a feature-flag gate.
  *

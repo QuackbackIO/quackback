@@ -12,7 +12,6 @@ import {
   ClockIcon,
   CommandLineIcon,
   ShieldCheckIcon,
-  BeakerIcon,
   BookOpenIcon,
   TagIcon,
   MegaphoneIcon,
@@ -170,7 +169,6 @@ export function buildNavSections(
         ...(billingEnabled
           ? [{ label: 'Plan & billing', to: '/admin/settings/billing', icon: CreditCardIcon }]
           : []),
-        { label: 'Labs', to: '/admin/settings/labs', icon: BeakerIcon },
       ],
     },
     {

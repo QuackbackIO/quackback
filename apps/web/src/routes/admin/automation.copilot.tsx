@@ -18,7 +18,6 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { assistantQueries } from '@/lib/client/queries/assistant'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
-import type { FeatureFlags } from '@/lib/shared/types/settings'
 
 const COPILOT_TABS = ['knowledge', 'guidance'] as const
 type CopilotTab = (typeof COPILOT_TABS)[number]
@@ -58,11 +57,9 @@ function AssistantCopilotPage() {
 function AssistantCopilotSettings() {
   const intl = useIntl()
   const settingsQuery = useQuery(assistantQueries.settings())
-  const { settings } = Route.useRouteContext()
   const { tab: requestedTab = 'knowledge' } = Route.useSearch()
   const navigate = Route.useNavigate()
   const { dirtyTabs, hasUnsavedChanges } = useAssistantDirtyState()
-  const flags = settings?.featureFlags as FeatureFlags | undefined
   const tab: CopilotTab = requestedTab === 'actions' ? 'knowledge' : requestedTab
   const unsavedLabel = intl.formatMessage({
     id: 'automation.agent.tabs.unsaved',
@@ -140,7 +137,7 @@ function AssistantCopilotSettings() {
           </div>
         ) : (
           <>
-            <CopilotDeploymentCard available={Boolean(flags?.inboxAi)} />
+            <CopilotDeploymentCard />
 
             <Tabs value={tab} onValueChange={setTab} variant="line" className="space-y-6">
               <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">

@@ -1,6 +1,6 @@
 /**
  * Copilot auto-fill on conversion (convergence Phase 5): the suggestion
- * service's gates (inboxAi flag -> assistant model configured -> token
+ * service's gates (assistant model configured -> token
  * budget), the pair-thread grounding (union loader when a customer ticket is
  * already linked, the conversation grounding read pre-conversion), the
  * per-field-type JSON schema generation, the structured-output fallback
@@ -294,14 +294,6 @@ describe('suggestTicketFieldValues', () => {
     mockChat.mockResolvedValue({ title: '   ', steps: 'repro' })
     const result = await suggestTicketFieldValues(CONVERSATION_ID, TICKET_TYPE_ID)
     expect(result).toEqual({ suggestions: { steps: 'repro' } })
-  })
-
-  it('returns unavailable when the inboxAi flag is off, without calling the model', async () => {
-    mockIsFeatureEnabled.mockResolvedValue(false)
-    expect(await suggestTicketFieldValues(CONVERSATION_ID, TICKET_TYPE_ID)).toEqual({
-      unavailable: true,
-    })
-    expect(mockChat).not.toHaveBeenCalled()
   })
 
   it('returns unavailable when the assistant model is not configured', async () => {

@@ -136,8 +136,8 @@ export interface InboxActionContext {
   hasLinkedTicket?: boolean
   /**
    * True when the detail panel's Copilot tab exists for this viewer right now
-   * (`inboxAi` flag + `copilot.use` + the ≥xl viewport that renders
-   * the panel). Optional; when absent the `copilot` action is disabled.
+   * (`copilot.use` + the ≥xl viewport that renders the panel). Optional; when
+   * absent the `copilot` action is disabled.
    */
   copilotAvailable?: boolean
 }

@@ -1040,7 +1040,7 @@ export interface WorkspaceSettings {
   statusConfig: StatusSettings
   /** Public widget config (no secret, safe for client) */
   publicWidgetConfig: PublicWidgetConfig
-  /** Product availability and experimental feature flags */
+  /** Product availability flags */
   featureFlags: FeatureFlags
   brandingData: SettingsBrandingData
   faviconData: { url: string } | null
@@ -1063,10 +1063,10 @@ export interface WorkspaceSettings {
 // =============================================================================
 
 /**
- * Workspace product availability and experimental/in-development features.
+ * Workspace product availability.
  * Core products (Feedback & Roadmaps, Changelog) default on. Support, Help
- * Center, Status, and Inbox AI default off until an operator or onboarding
- * goal turns them on.
+ * Center, and Status default off until an operator or onboarding goal turns
+ * them on.
  */
 export interface FeatureFlags {
   /** Feedback boards, posts, voting, and roadmaps */
@@ -1080,53 +1080,22 @@ export interface FeatureFlags {
   supportInbox: boolean
   /** Support tickets: durable, trackable requests portal alongside conversations */
   supportTickets: boolean
-  /** Teammate-facing AI in the inbox: Copilot's private Q&A tab,
-   *  two-way conversation translation, and AI classification of
-   *  ai_detect-enabled conversation attributes. Each capability keeps its
-   *  own finer-grained controls (copilot.use permission, per-conversation
-   *  translation, per-attribute opt-in). */
-  inboxAi: boolean
-  /** Remote MCP connectors: a shared tool catalog mapped onto Agent and Copilot.
-   *  Off by default; gates the Connectors nav, discovery, and runtime wiring. */
-  assistantConnectors: boolean
-  /** Packaged procedures the agents pull on demand via use_skill.
-   *  Off by default; gates the Skills nav and catalogue injection. */
-  assistantSkills: boolean
   /** Status page: public/private/segment-scoped service status with incidents,
    *  maintenance windows, uptime history, and subscriber notifications. */
   statusPage: boolean
 }
 
 /**
- * Pre-consolidation flag keys that may still appear in stored
- * `settings.feature_flags` JSON. Each maps to the umbrella flag that
- * absorbed it; `resolveFeatureFlags` ORs them in at read time so workspaces
- * who enabled a feature before the consolidation keep it without a
- * migration. `linkPreviews` is absent deliberately: it folded into
- * `supportInbox` (now default off), and a stored `linkPreviews: true` must not
- * force a disabled inbox back on.
- */
-export const LEGACY_FLAG_MAP: Record<string, keyof FeatureFlags> = {
-  assistantCopilot: 'inboxAi',
-  inboxTranslation: 'inboxAi',
-  aiAttributeDetection: 'inboxAi',
-}
-
-/**
  * Resolve stored feature-flags JSON to the current FeatureFlags shape:
- * defaults for missing keys, stored values for known keys, and legacy
- * (pre-consolidation) keys coalesced into their umbrella flag — an explicit
- * stored value for the umbrella key wins over any legacy keys. Unknown keys
- * are dropped, so the first write after an upgrade persists a clean shape.
+ * defaults for missing keys, stored values for known keys. Unknown keys
+ * (including retired Inbox AI / Connectors / Skills flags) are dropped, so
+ * the first write after an upgrade persists a clean shape.
  */
 export function resolveFeatureFlags(storedJson: string | null | undefined): FeatureFlags {
   const stored: Record<string, unknown> = storedJson ? JSON.parse(storedJson) : {}
   const flags: FeatureFlags = { ...DEFAULT_FEATURE_FLAGS }
   for (const key of Object.keys(DEFAULT_FEATURE_FLAGS) as Array<keyof FeatureFlags>) {
     if (typeof stored[key] === 'boolean') flags[key] = stored[key]
-  }
-  for (const [legacyKey, umbrella] of Object.entries(LEGACY_FLAG_MAP)) {
-    if (stored[umbrella] === undefined && stored[legacyKey] === true) flags[umbrella] = true
   }
   // The public portal homepage is the feedback board, so this one is never off,
   // whatever a workspace stored while the switch could still be moved. Read-time
@@ -1140,9 +1109,8 @@ export function resolveFeatureFlags(storedJson: string | null | undefined): Feat
  * Defaults for a new workspace.
  *
  * Feedback & Roadmaps plus Changelog match the historical core product.
- * Support, Help Center, Status, and Inbox AI stay off until Settings →
- * General or an onboarding goal turns them on. Connectors and Skills stay
- * Labs opt-in.
+ * Support, Help Center, and Status stay off until Settings → General or an
+ * onboarding goal turns them on.
  *
  * Existing workspaces with an explicit `featureFlags` JSON row keep stored
  * values. A one-time SQL stamp wrote today's previous all-on object onto
@@ -1157,9 +1125,6 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   supportInbox: false,
   supportTickets: false,
   statusPage: false,
-  inboxAi: false,
-  assistantConnectors: false,
-  assistantSkills: false,
 }
 
 /** Onboarding outcomes that may turn extra products on. Kept local so this
@@ -1194,57 +1159,6 @@ export function enableFlagsForUseCase(
   }
 }
 
-/**
- * Feature flag metadata for the admin UI
- */
-export const FEATURE_FLAG_REGISTRY: Record<
-  keyof FeatureFlags,
-  { label: string; description: string }
-> = {
-  feedback: {
-    label: 'Feedback & Roadmaps',
-    description: 'Collect ideas, votes, and comments from customers and share what comes next.',
-  },
-  changelog: {
-    label: 'Changelog',
-    description: 'Publish product updates and keep customers informed about what you ship.',
-  },
-  helpCenter: {
-    label: 'Help Center',
-    description: 'Publish a searchable help center so customers can find answers on their own.',
-  },
-  supportInbox: {
-    label: 'Conversations',
-    description:
-      'Let visitors start a conversation with Messenger from the widget; messages land in a shared inbox your team works from. Includes link preview cards for external links shared in conversations.',
-  },
-  supportTickets: {
-    label: 'Support Tickets',
-    description:
-      'Give customers a Tickets portal for durable, trackable support requests alongside conversations.',
-  },
-  inboxAi: {
-    label: 'Inbox AI',
-    description:
-      'AI for your team inside the inbox: a private Copilot tab for asking questions about a conversation, two-way message translation, and automatic classification of conversation attributes you opt in. Requires an AI model to be configured; each capability has its own controls.',
-  },
-  assistantConnectors: {
-    label: 'Connectors',
-    description:
-      'Give the Agent and Copilot tools from remote MCP servers. One catalog, mapped onto each agent, with a permission dial per tool.',
-  },
-  assistantSkills: {
-    label: 'Skills',
-    description:
-      'Packaged procedures that teach the agents how to use their tools. The catalogue is always visible; the body loads on demand.',
-  },
-  statusPage: {
-    label: 'Status page',
-    description:
-      'Publish a status page on your portal with live component status, incidents, scheduled maintenance, uptime history, and subscriber notifications.',
-  },
-}
-
 export type ProductId = 'feedback' | 'support' | 'helpCenter' | 'changelog' | 'status'
 
 export interface ProductDefinition {
@@ -1257,10 +1171,9 @@ export interface ProductDefinition {
 }
 
 /**
- * Workspace products shown on Settings > General. These are not Labs
- * experiments. Support retains two persisted capability keys for
- * compatibility; the UI changes them as one product. Help Center is the
- * same kind of product as Changelog — a General toggle, never a Labs row.
+ * Workspace products shown on Settings > General. Support retains two
+ * persisted capability keys for compatibility; the UI changes them as one
+ * product.
  */
 export const PRODUCT_DEFINITIONS = [
   {
@@ -1334,45 +1247,3 @@ export function getFirstEnabledAdminProductPath(
     '/admin/analytics'
   )
 }
-
-/**
- * Generally-available capability toggles on Settings → General. Not products
- * (those have their own card) and not Labs. A coverage test pins every flag
- * to exactly one of General products, this list, or Labs.
- */
-export const GA_FEATURE_SECTIONS: Array<{
-  title: string
-  description: string
-  flags: LabSectionRow[]
-}> = [
-  {
-    title: 'AI',
-    description: 'Generally available inbox AI. Requires a configured model.',
-    flags: [{ key: 'inboxAi' }],
-  },
-]
-
-/**
- * Labs page layout: experimental flags grouped into sections, each rendered as
- * a card with a heading + high-level description. Product flags are surfaced
- * on General instead; a coverage test pins every flag to exactly one page. A
- * sub-flag renders indented beneath its parent row and is only toggleable while
- * the parent is on.
- */
-export interface LabSectionRow {
-  key: keyof FeatureFlags
-  subFlags?: Array<keyof FeatureFlags>
-}
-
-export const LAB_SECTIONS: Array<{
-  title: string
-  description: string
-  flags: LabSectionRow[]
-}> = [
-  {
-    title: 'AI',
-    description:
-      'Optional AI capabilities. Require a configured model; off by default until you opt in.',
-    flags: [{ key: 'assistantConnectors' }, { key: 'assistantSkills' }],
-  },
-]

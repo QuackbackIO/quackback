@@ -121,7 +121,7 @@ describe('CopilotDeploymentCard', () => {
     expect(screen.getByRole('button', { name: 'Turn off Copilot' })).toBeInTheDocument()
   })
 
-  it('shows Unavailable when the inbox AI gate is off', async () => {
+  it('shows Unavailable when no AI model is configured', async () => {
     renderWithProviders(<CopilotDeploymentCard available={false} />)
     expect(await screen.findByText('Unavailable')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Turn off Copilot' })).not.toBeInTheDocument()

@@ -265,29 +265,26 @@ describe('vip-concierge-lane', () => {
 
   it('ships an audience condition gating on company.attr.plan', () => {
     const audience = t().payload.triggerSettings?.audience as
-      | { field: string; op: string; value?: unknown }
-      | undefined
+      { field: string; op: string; value?: unknown } | undefined
     expect(audience).toEqual({ field: 'company.attr.plan', op: 'eq', value: 'enterprise' })
     expect(t().benefit.toLowerCase()).toContain('adjust')
   })
 })
 
 describe('templateGalleryChips', () => {
-  it('hides Quinn/Inbox AI prereqs when the workspace already has them', () => {
+  it('hides the Quinn prereq when the workspace already has it', () => {
     const front = WORKFLOW_TEMPLATES.find((t) => t.id === 'front-door-triage-bot')!
     expect(templateNeedsQuinn(front)).toBe(true)
-    const off = templateGalleryChips(front, { quinnOn: false, inboxAiOn: false })
+    const off = templateGalleryChips(front, { quinnOn: false })
     expect(off.some((c) => c.label === 'Needs Quinn on')).toBe(true)
-    const on = templateGalleryChips(front, { quinnOn: true, inboxAiOn: true })
+    const on = templateGalleryChips(front, { quinnOn: true })
     expect(on.some((c) => c.label === 'Needs Quinn on')).toBe(false)
-    expect(on.some((c) => c.label === 'Needs Inbox AI')).toBe(false)
   })
 
-  it('marks route-by-issue-type as needing Inbox AI and 2 options', () => {
+  it('marks route-by-issue-type as needing 2 options', () => {
     const t = WORKFLOW_TEMPLATES.find((tpl) => tpl.id === 'route-by-issue-type')!
     expect(templateNeedsInboxAi(t)).toBe(true)
-    const chips = templateGalleryChips(t, { quinnOn: true, inboxAiOn: false })
-    expect(chips.some((c) => c.label === 'Needs Inbox AI')).toBe(true)
+    const chips = templateGalleryChips(t, { quinnOn: true })
     expect(chips.some((c) => c.label === '2 options to pick')).toBe(true)
   })
 })

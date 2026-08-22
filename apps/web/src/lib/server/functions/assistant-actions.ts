@@ -36,7 +36,6 @@ import {
 } from '@/lib/server/domains/assistant/assistant.toolspec'
 import { resolveContentAudience } from '@/lib/server/domains/assistant/audience'
 import { getConnectorSpecByToolName } from '@/lib/server/domains/assistant/connectors/connector-tools'
-import { getAssistantRuntimeConfig } from '@/lib/server/domains/settings/settings.assistant'
 import { roleToAgent } from '@/lib/shared/assistant/config'
 import { executeApprovedPendingAction } from '@/lib/server/domains/assistant/assistant.tools'
 import { ensureAssistantPrincipal } from '@/lib/server/domains/assistant/assistant.principal'
@@ -160,21 +159,6 @@ async function decideAssistantAction(
       )
     }
     return rejected
-  }
-
-  // Connector kill switch: a proposal can outlive the flag being flipped off.
-  if (pending.toolName.startsWith('connector_')) {
-    const runtime = await getAssistantRuntimeConfig()
-    if (!runtime.connectorsEnabled) {
-      const decided = await decidePendingAction(pendingActionId, decision, approverPrincipalId)
-      if (!decided) {
-        throw new ConflictError(
-          'PENDING_ACTION_NOT_DECIDABLE',
-          'This request was already decided or has expired'
-        )
-      }
-      return (await markPendingActionFailed(pendingActionId, 'Connectors are disabled.')) ?? decided
-    }
   }
 
   // Built-in specs resolve from the static registry; a custom action

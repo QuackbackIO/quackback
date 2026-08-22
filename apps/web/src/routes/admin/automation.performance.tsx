@@ -8,7 +8,6 @@ import { QuinnPerformanceCard } from '@/components/admin/automation/quinn-perfor
 import { QuinnToolsCard } from '@/components/admin/automation/quinn-tools-card'
 import { SupportPerformanceCard } from '@/components/admin/automation/support-performance-card'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
-import type { FeatureFlags } from '@/lib/shared/types/settings'
 
 export const Route = createFileRoute('/admin/automation/performance')({
   beforeLoad: ({ context }) => {
@@ -22,8 +21,6 @@ export const Route = createFileRoute('/admin/automation/performance')({
 
 function AutomationPerformancePage() {
   const intl = useIntl()
-  const { settings } = Route.useRouteContext()
-  const flags = settings?.featureFlags as FeatureFlags | undefined
 
   return (
     <div className="max-w-5xl space-y-6">
@@ -46,7 +43,7 @@ function AutomationPerformancePage() {
       />
       <QuinnPerformanceCard />
       <QuinnToolsCard />
-      {flags?.inboxAi && <CopilotUsageCard showActionsFunnel />}
+      <CopilotUsageCard showActionsFunnel />
       <SupportPerformanceCard />
     </div>
   )

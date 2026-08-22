@@ -147,7 +147,6 @@ describe('buildNavSections', () => {
       'Access & Security',
       'Developers',
       'Integrations',
-      'Labs',
     ])
   })
 

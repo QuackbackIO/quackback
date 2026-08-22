@@ -5,8 +5,8 @@
  * - `gateCopilotAguiRequest`, for the AG-UI streaming routes (copilot.ts,
  *   transform.ts, suggest.ts): `copilot.use` permission -> AG-UI body parse
  *   (`chatParamsFromRequestBody`, with the route's own fields validated off
- *   `forwardedProps` against its zod schema) -> `assertCopilotAvailable` (the
- *   `inboxAi` flag, then the assistant being configured) -> the AI token
+ *   `forwardedProps` against its zod schema) -> `assertCopilotAvailable`
+ *   (the assistant being configured) -> the AI token
  *   budget -> item-scoped viewability (`assertConversationViewable` or
  *   `assertTicketVisible`, whichever the parsed ref carries — unified inbox
  *   §2.9), each already mapped onto the route's error envelope
@@ -32,7 +32,6 @@ import {
 // denial vocabulary in play there instead of a restated copy.
 import { isAuthDenialError } from '@/lib/server/functions/auth-errors'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
 // The barrel, not a relative import to assistant.runtime.ts directly: every
 // route test that exercises this gate mocks `isAssistantConfigured` at
 // '@/lib/server/domains/assistant' (the same seam copilot.ts and transform.ts
@@ -66,16 +65,12 @@ export class CopilotUnavailableError extends Error {
 }
 
 /**
- * The `inboxAi` flag -> assistant-configured half of the Copilot
- * gate sequence, order load-bearing (the flag is checked first). Permission
- * and item viewability differ per gate shape and stay out of this helper;
- * this covers only the two checks both shapes (`gateCopilotAguiRequest`,
+ * Assistant-configured half of the Copilot gate sequence. Permission and
+ * item viewability differ per gate shape and stay out of this helper; this
+ * covers only the check both shapes (`gateCopilotAguiRequest`,
  * `gateCopilotFn`) run verbatim.
  */
 export async function assertCopilotAvailable(): Promise<void> {
-  if (!(await isFeatureEnabled('inboxAi'))) {
-    throw new CopilotUnavailableError('NOT_FOUND', 'Copilot is not available', 404)
-  }
   if (!isAssistantConfigured()) {
     throw new CopilotUnavailableError('AI_NOT_CONFIGURED', 'The assistant is not configured', 503)
   }

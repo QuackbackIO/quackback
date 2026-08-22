@@ -44,8 +44,6 @@ export function buildAutomationNavSections(
   flags:
     | {
         supportInbox?: boolean
-        assistantConnectors?: boolean
-        assistantSkills?: boolean
       }
     | undefined,
   permissions: AutomationNavPermissions
@@ -64,28 +62,20 @@ export function buildAutomationNavSections(
           to: '/admin/automation/copilot',
           icon: UserGroupIcon,
         },
-        ...(flags?.assistantConnectors
-          ? [
-              {
-                labelId: 'automation.nav.connectors',
-                defaultLabel: 'Connectors',
-                to: '/admin/automation/connectors',
-                icon: LinkIcon,
-                badge: 'new',
-              } satisfies NavItem,
-            ]
-          : []),
-        ...(flags?.assistantSkills
-          ? [
-              {
-                labelId: 'automation.nav.skills',
-                defaultLabel: 'Skills',
-                to: '/admin/automation/skills',
-                icon: BookOpenIcon,
-                badge: 'new',
-              } satisfies NavItem,
-            ]
-          : []),
+        {
+          labelId: 'automation.nav.connectors',
+          defaultLabel: 'Connectors',
+          to: '/admin/automation/connectors',
+          icon: LinkIcon,
+          badge: 'new',
+        },
+        {
+          labelId: 'automation.nav.skills',
+          defaultLabel: 'Skills',
+          to: '/admin/automation/skills',
+          icon: BookOpenIcon,
+          badge: 'new',
+        },
       ]
     : []
 

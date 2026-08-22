@@ -14,7 +14,6 @@ import {
 } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/shared/utils'
-import type { FeatureFlags } from '@/lib/shared/types/settings'
 import {
   WORKFLOW_TEMPLATE_CATEGORIES,
   templateGalleryChips,
@@ -40,10 +39,8 @@ export function WorkflowTemplateGallery({
   const [category, setCategory] = useState<WorkflowTemplateCategory>('popular')
   const templates = workflowTemplatesByCategory(category)
   const { settings } = useRouteContext({ from: '__root__' })
-  const flags = settings?.featureFlags as FeatureFlags | undefined
   const assistant = settings?.publicWidgetConfig?.messenger?.assistant
   const quinnOn = Boolean(assistant?.enabled && assistant?.respond)
-  const inboxAiOn = Boolean(flags?.inboxAi)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -98,7 +95,7 @@ export function WorkflowTemplateGallery({
                 <TemplateCard
                   key={template.id}
                   template={template}
-                  chips={templateGalleryChips(template, { quinnOn, inboxAiOn })}
+                  chips={templateGalleryChips(template, { quinnOn })}
                   onSelect={onSelect}
                 />
               ))}

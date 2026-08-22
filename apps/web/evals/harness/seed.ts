@@ -116,14 +116,7 @@ export async function applyScenarioSettings(config: ScenarioConfig = {}): Promis
     )
   }
   const assistantConfig = buildScenarioAssistantConfig(config)
-  const featureFlags = JSON.stringify({
-    assistantConnectors: config.connectors === true,
-    assistantSkills: config.skills === true,
-  })
-  await testDb
-    .update(settings)
-    .set({ assistantConfig, featureFlags })
-    .where(eq(settings.id, row.id))
+  await testDb.update(settings).set({ assistantConfig }).where(eq(settings.id, row.id))
 }
 
 /** Find-or-create Quinn's service principal inside the transaction. */

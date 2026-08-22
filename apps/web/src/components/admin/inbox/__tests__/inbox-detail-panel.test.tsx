@@ -1,10 +1,9 @@
 // @vitest-environment happy-dom
 /**
  * <InboxDetailPanel> tab host (COPILOT-SIDEBAR-UX.md B.1; unified inbox §2.7):
- * the Copilot tab only renders when BOTH the `inboxAi` flag is on
- * AND the viewer holds `copilot.use`. With the flag off, there is no Tabs
- * wrapper at all — the panel renders the exact same Details content as
- * before Copilot existed.
+ * the Copilot tab only renders when the viewer holds `copilot.use`. Without
+ * that permission, there is no Tabs wrapper at all — the panel renders the
+ * exact same Details content as before Copilot existed.
  *
  * Heavy child controls (tags/attributes/priority/assignee/status/company)
  * are stubbed: this test is about the tab host, not those controls, and
@@ -146,26 +145,7 @@ function renderPanel(
 }
 
 describe('<InboxDetailPanel> tab host', () => {
-  it('renders no Tabs when the inboxAi flag is off — Details content directly, byte-identical', () => {
-    routeContextState.settings = {
-      featureFlags: { inboxAi: false } as unknown as FeatureFlags,
-    }
-    routeContextState.principal = { role: 'admin' }
-
-    const { container } = renderPanel()
-
-    expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
-    expect(screen.queryByText('Copilot')).not.toBeInTheDocument()
-    // Details content renders directly under <aside>, no intermediate Tabs wrapper.
-    expect(screen.getByText('Properties')).toBeInTheDocument()
-    const aside = container.querySelector('aside')
-    expect(aside?.querySelector('[data-slot="tabs"]')).toBeNull()
-  })
-
-  it('renders Tabs with a Copilot tab when the flag is on and the viewer holds copilot.use', () => {
-    routeContextState.settings = {
-      featureFlags: { inboxAi: true } as unknown as FeatureFlags,
-    }
+  it('renders Tabs with a Copilot tab when the viewer holds copilot.use', () => {
     routeContextState.principal = { role: 'admin' } // admin -> owner preset -> has copilot.use
 
     renderPanel()
@@ -175,10 +155,7 @@ describe('<InboxDetailPanel> tab host', () => {
     expect(screen.getByRole('tab', { name: /copilot/i })).toBeInTheDocument()
   })
 
-  it('renders no Copilot tab when the flag is on but the viewer lacks copilot.use', () => {
-    routeContextState.settings = {
-      featureFlags: { inboxAi: true } as unknown as FeatureFlags,
-    }
+  it('renders no Copilot tab when the viewer lacks copilot.use', () => {
     routeContextState.principal = undefined // no principal -> resolvePermission is false
 
     renderPanel()
@@ -189,9 +166,6 @@ describe('<InboxDetailPanel> tab host', () => {
   })
 
   it('keeps Details mounted (not unmounted) once the Copilot tab is switched to', () => {
-    routeContextState.settings = {
-      featureFlags: { inboxAi: true } as unknown as FeatureFlags,
-    }
     routeContextState.principal = { role: 'admin' }
 
     renderPanel()
@@ -204,9 +178,6 @@ describe('<InboxDetailPanel> tab host', () => {
   })
 
   it('keeps the Details viewport height-constrained so its ScrollArea can overflow', () => {
-    routeContextState.settings = {
-      featureFlags: { inboxAi: true } as unknown as FeatureFlags,
-    }
     routeContextState.principal = { role: 'admin' }
 
     const { container } = renderPanel()
@@ -221,9 +192,6 @@ describe('<InboxDetailPanel> tab host', () => {
 
 describe('<InboxDetailPanel> openCopilotToken ping (the Ask Copilot shortcut)', () => {
   function enableCopilot() {
-    routeContextState.settings = {
-      featureFlags: { inboxAi: true } as unknown as FeatureFlags,
-    }
     routeContextState.principal = { role: 'admin' }
   }
 
@@ -284,11 +252,8 @@ describe('<InboxDetailPanel> openCopilotToken ping (the Ask Copilot shortcut)', 
     expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('data-state', 'active')
   })
 
-  it('a token bump is a clean no-op when the Copilot tab is unavailable (flag off)', () => {
-    routeContextState.settings = {
-      featureFlags: { inboxAi: false } as unknown as FeatureFlags,
-    }
-    routeContextState.principal = { role: 'admin' }
+  it('a token bump is a clean no-op when the Copilot tab is unavailable (no copilot.use)', () => {
+    routeContextState.principal = undefined
     const { rerenderWith } = renderPanel(makeConversation(), { openCopilotToken: 0 })
 
     rerenderWith({ openCopilotToken: 1 })
