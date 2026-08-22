@@ -17,6 +17,34 @@ function responseCookies(response: Response): string[] {
   return single ? [single] : []
 }
 
+/**
+ * Internal verify Request for a browser GET that arrived from another origin.
+ *
+ * Visit workspace is a control-plane POST that 302s here. The GET keeps
+ * `Referer: https://app.quackback.io/…` and often a Cookie (CDN, prior
+ * visit). Better Auth CSRF treats Referer as Origin when Origin is
+ * absent, and refuses anything not on the workspace allowlist — so a
+ * freshly minted OTT looks expired. Verify as this workspace instead.
+ */
+export function ottVerifyRequest(ott: string, headers?: Headers): Request {
+  const requestHeaders = new Headers(headers)
+  requestHeaders.delete('content-length')
+  requestHeaders.delete('referer')
+  requestHeaders.delete('origin')
+  requestHeaders.set('content-type', 'application/json')
+
+  const host = headers?.get('host')?.trim()
+  const proto = (headers?.get('x-forwarded-proto') ?? 'https').split(',')[0]?.trim() || 'https'
+  const origin = host ? `${proto}://${host}` : 'http://auth.local'
+  requestHeaders.set('origin', origin)
+
+  return new Request(`${origin}/api/auth/one-time-token/verify`, {
+    method: 'POST',
+    headers: requestHeaders,
+    body: JSON.stringify({ token: ott }),
+  })
+}
+
 async function verifyOttCookies(
   ott: string,
   returnTo: string,
@@ -24,16 +52,7 @@ async function verifyOttCookies(
 ): Promise<OriginTransferResult> {
   try {
     const { auth } = await import('@/lib/server/auth')
-    const requestHeaders = new Headers(headers)
-    requestHeaders.delete('content-length')
-    requestHeaders.set('content-type', 'application/json')
-    const response = await auth.handler(
-      new Request('http://auth.local/api/auth/one-time-token/verify', {
-        method: 'POST',
-        headers: requestHeaders,
-        body: JSON.stringify({ token: ott }),
-      })
-    )
+    const response = await auth.handler(ottVerifyRequest(ott, headers))
     if (!response.ok) return { kind: 'error', status: 'invalid' }
     const cookies = responseCookies(response)
     if (cookies.length === 0) return { kind: 'error', status: 'error' }

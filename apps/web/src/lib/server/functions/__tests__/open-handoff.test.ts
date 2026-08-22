@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { consumeOpenHandoff } from '../origin-transfer'
+import { consumeOpenHandoff, ottVerifyRequest } from '../origin-transfer'
 
 const hoisted = vi.hoisted(() => {
   const snapshotRows: { value: string; expiresAt: Date }[][] = []
@@ -37,6 +37,25 @@ vi.mock('@/lib/server/db', () => ({
   eq: () => true,
 }))
 
+describe('ottVerifyRequest', () => {
+  it('verifies as the workspace, not the control-plane referrer', () => {
+    const request = ottVerifyRequest(
+      'token-1',
+      new Headers({
+        host: 'ws-abc.quackback.io',
+        cookie: 'cf_clearance=x',
+        referer: 'https://app.quackback.io/dashboard',
+        origin: 'https://app.quackback.io',
+        'x-forwarded-proto': 'https',
+      })
+    )
+    expect(request.url).toBe('https://ws-abc.quackback.io/api/auth/one-time-token/verify')
+    expect(request.headers.get('origin')).toBe('https://ws-abc.quackback.io')
+    expect(request.headers.get('referer')).toBeNull()
+    expect(request.headers.get('cookie')).toBe('cf_clearance=x')
+  })
+})
+
 describe('consumeOpenHandoff', () => {
   beforeEach(() => {
     hoisted.handler.mockReset()
@@ -53,13 +72,22 @@ describe('consumeOpenHandoff', () => {
         get: () => null,
       },
     })
-    const result = await consumeOpenHandoff({ ott: 'token-1' })
+    const headers = new Headers({
+      host: 'ws-abc.quackback.io',
+      cookie: 'cf_clearance=x',
+      referer: 'https://app.quackback.io/',
+    })
+    const result = await consumeOpenHandoff({ ott: 'token-1', headers })
     expect(result).toEqual({
       kind: 'redirect',
       to: '/',
       cookies: ['session=abc; Path=/; HttpOnly'],
     })
     expect(hoisted.handler).toHaveBeenCalledOnce()
+    const verifyRequest = hoisted.handler.mock.calls[0]?.[0] as Request
+    expect(verifyRequest.url).toBe('https://ws-abc.quackback.io/api/auth/one-time-token/verify')
+    expect(verifyRequest.headers.get('origin')).toBe('https://ws-abc.quackback.io')
+    expect(verifyRequest.headers.get('referer')).toBeNull()
     expect(hoisted.getSession).not.toHaveBeenCalled()
   })
 

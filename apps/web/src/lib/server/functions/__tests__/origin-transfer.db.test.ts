@@ -152,6 +152,7 @@ describe.skipIf(!fixture.available)('rename-transfer OTT consume', () => {
     const auth = betterAuth({
       baseURL: CANONICAL,
       secret: 'test-secret-not-used-for-anything-real',
+      trustedOrigins: [CANONICAL, `https://${SYSTEM_HOST}`, `https://${FRIENDLY_HOST}`],
       database: drizzleAdapter(testDb, {
         provider: 'pg',
         schema: { user, session, account, verification },
@@ -242,6 +243,22 @@ describe.skipIf(!fixture.available)('rename-transfer OTT consume', () => {
     expect(result).toEqual({ kind: 'error', status: 'invalid' })
     expect(await ottRowCount(token)).toBe(1)
     expect(hoisted.handler).not.toHaveBeenCalled()
+  })
+
+  it('redeems a Visit handoff that arrived from the control plane', async () => {
+    const { sessionToken } = await seedSessionUser()
+    const token = await seedOtt({ sessionToken, expiresAt: future() })
+    const headers = new Headers({
+      host: SYSTEM_HOST,
+      cookie: 'cf_clearance=edge',
+      referer: 'https://app.quackback.io/',
+    })
+
+    const result = await consumeOpenHandoff({ ott: token, headers })
+
+    expect(result).toMatchObject({ kind: 'redirect', to: '/' })
+    if (result.kind !== 'redirect') return
+    expect(result.cookies.some((cookie) => cookie.toLowerCase().includes('session'))).toBe(true)
   })
 
   it('lets Visit replay the Open token until it expires', async () => {
