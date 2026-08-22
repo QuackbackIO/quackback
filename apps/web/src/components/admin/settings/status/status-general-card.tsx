@@ -21,39 +21,22 @@ export function StatusGeneralCard({
   return (
     <SettingsCard
       title="General"
-      description="Turn the status page on and control where it appears."
+      description="Publish the status page. Hide or rename the portal tab in Branding → Navigation."
     >
       <div className="space-y-5">
         <div className="flex items-center justify-between gap-4 py-1">
           <div className="pr-4">
             <Label htmlFor="status-enabled" className="text-sm font-medium cursor-pointer">
-              Enable status page
+              Publish status page
             </Label>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Publishes your status page and starts recording uptime history.
+              Makes the page public and starts recording uptime history.
             </p>
           </div>
           <Switch
             id="status-enabled"
             checked={settings.enabled}
             onCheckedChange={(checked) => onChange({ enabled: checked })}
-            disabled={disabled}
-          />
-        </div>
-
-        <div className="flex items-center justify-between gap-4 py-1">
-          <div className="pr-4">
-            <Label htmlFor="status-portal-tab" className="text-sm font-medium cursor-pointer">
-              Show tab on portal
-            </Label>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Adds a Status tab to the portal navigation for viewers who can see the page.
-            </p>
-          </div>
-          <Switch
-            id="status-portal-tab"
-            checked={settings.portalTabEnabled}
-            onCheckedChange={(checked) => onChange({ portalTabEnabled: checked })}
             disabled={disabled}
           />
         </div>

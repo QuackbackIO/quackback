@@ -12,7 +12,9 @@ export type ChangelogAudience = 'public' | 'authenticated'
 export interface ChangelogSettings {
   /** Public visitors vs. signed-in portal users only. */
   audience: ChangelogAudience
-  /** Show the "Changelog" tab in the portal top nav. */
+  /**
+   * @deprecated Ignored at read time. Portal chrome is Branding → Navigation.
+   */
   portalTabEnabled: boolean
   /** Turns off comments + reactions on changelog entries (one toggle, per spec). */
   collaborationDisabled: boolean

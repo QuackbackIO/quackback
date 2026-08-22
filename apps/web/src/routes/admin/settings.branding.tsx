@@ -272,17 +272,12 @@ function BrandingPage() {
     const gates: Record<PortalBuiltInNavType, boolean> = {
       feedback: isProductEnabled(flags, 'feedback'),
       roadmap: isProductEnabled(flags, 'feedback'),
-      changelog:
-        isProductEnabled(flags, 'changelog') &&
-        (settings?.changelogConfig?.portalTabEnabled ?? true),
+      changelog: isProductEnabled(flags, 'changelog'),
       help: isProductEnabled(flags, 'helpCenter'),
       support:
         !!flags?.supportTickets ||
         (!!flags?.supportInbox && !!settings?.portalConfig?.support?.enabled),
-      status:
-        isProductEnabled(flags, 'status') &&
-        !!settings?.statusConfig?.enabled &&
-        (settings?.statusConfig?.portalTabEnabled ?? true),
+      status: isProductEnabled(flags, 'status') && !!settings?.statusConfig?.enabled,
     }
     return new Set(
       (Object.keys(gates) as PortalBuiltInNavType[]).filter((type) => !gates[type])
