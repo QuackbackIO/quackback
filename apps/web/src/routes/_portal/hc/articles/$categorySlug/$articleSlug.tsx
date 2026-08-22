@@ -19,6 +19,7 @@ import {
 import { JsonLd } from '@/components/json-ld'
 import { buildArticleJsonLd, buildBreadcrumbJsonLd } from '@/lib/shared/json-ld'
 import { stripMarkdownPreview } from '@/lib/shared/utils'
+import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 import type { JSONContent } from '@tiptap/react'
 
 const helpCenterApi = getRouteApi('/_portal/hc')
@@ -79,8 +80,10 @@ function ArticleDetailPage() {
   const { category, articles, allCategories } = categoryApi.useLoaderData()
   const { helpCenterConfig } = helpCenterApi.useLoaderData()
   const { baseUrl, settings } = Route.useRouteContext()
-  const supportEnabled =
-    !!settings?.featureFlags?.supportInbox && !!settings?.portalConfig?.support?.enabled
+  const supportEnabled = isPortalSupportSurfaceEnabled(
+    settings?.featureFlags,
+    settings?.portalConfig
+  )
 
   const breadcrumbs = buildCategoryBreadcrumbs({
     allCategories,

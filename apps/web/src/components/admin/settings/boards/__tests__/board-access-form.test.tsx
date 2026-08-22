@@ -33,17 +33,22 @@ import type { BoardId } from '@quackback/ids'
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
     to,
+    search,
     children,
     className,
   }: {
     to: string
+    search?: { tab?: string }
     children: React.ReactNode
     className?: string
-  }) => (
-    <a href={to} className={className}>
-      {children}
-    </a>
-  ),
+  }) => {
+    const qs = search?.tab ? `?tab=${search.tab}` : ''
+    return (
+      <a href={`${to}${qs}`} className={className}>
+        {children}
+      </a>
+    )
+  },
 }))
 
 const mutate = vi.fn()
@@ -354,6 +359,11 @@ describe('<BoardAccessForm> workspace ceiling', () => {
       expect(banner.textContent).toMatch(/Submit/)
       expect(banner.textContent).not.toMatch(/\bView\b/)
     })
+    const link = screen.getByRole('link', { name: /Workspace access/i })
+    expect(link).toHaveAttribute(
+      'href',
+      '/admin/settings/security/authentication?tab=portal-access'
+    )
   })
 
   it('auto-bumps Anonymous cells on all three rows when the master switch flips off', async () => {

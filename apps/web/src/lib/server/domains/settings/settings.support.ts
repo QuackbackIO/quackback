@@ -5,15 +5,28 @@
  * stay alive when either surface is on.
  */
 
+import {
+  isPortalChatStartEnabled,
+  isPortalSupportSurfaceEnabled,
+  isWidgetMessengerEnabled,
+} from '@/lib/shared/support-surfaces'
+
+export { isPortalChatStartEnabled, isPortalSupportSurfaceEnabled, isWidgetMessengerEnabled }
+
 /**
- * Whether the portal Support tab is enabled: the experimental `supportInbox`
- * feature flag AND the explicit portal toggle. Fail-closed — an absent
- * `support` section means disabled, so existing workspaces are unaffected.
+ * Whether the portal Support tab is enabled: tickets-enabled workspaces, or
+ * the `supportInbox` flag plus the explicit portal chats toggle. Fail-closed
+ * — an absent `support` section means disabled, so existing workspaces are
+ * unaffected.
  */
 export async function isPortalSupportEnabled(): Promise<boolean> {
   const { isFeatureEnabled, getPortalConfig } = await import('./settings.service')
-  const [flagOn, portal] = await Promise.all([isFeatureEnabled('supportInbox'), getPortalConfig()])
-  return Boolean(flagOn && portal.support?.enabled === true)
+  const [inboxOn, ticketsOn, portal] = await Promise.all([
+    isFeatureEnabled('supportInbox'),
+    isFeatureEnabled('supportTickets'),
+    getPortalConfig(),
+  ])
+  return isPortalSupportSurfaceEnabled({ supportInbox: inboxOn, supportTickets: ticketsOn }, portal)
 }
 
 /**

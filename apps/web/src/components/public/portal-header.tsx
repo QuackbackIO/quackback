@@ -5,6 +5,7 @@ import { resolvePortalNavItems } from './portal-header-nav'
 import { usePreviewDraft } from './preview-draft-context'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { isStatusPagePublished } from '@/lib/shared/status-settings'
+import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { cn } from '@/lib/shared/utils'
 import { isTeamMember, Role } from '@/lib/shared/roles'
@@ -69,8 +70,7 @@ export function PortalHeader({
   const flags = settings?.featureFlags
   const feedbackEnabled = isProductEnabled(flags, 'feedback')
   const helpCenterEnabled = isProductEnabled(flags, 'helpCenter')
-  const supportEnabled =
-    !!flags?.supportTickets || (!!flags?.supportInbox && !!settings?.portalConfig?.support?.enabled)
+  const supportEnabled = isPortalSupportSurfaceEnabled(flags, settings?.portalConfig)
   const changelogEnabled = isProductEnabled(flags, 'changelog')
   // Status tab: product flag + published. A non-public audience still needs
   // a signed-in viewer to bother showing the tab; the route enforces the

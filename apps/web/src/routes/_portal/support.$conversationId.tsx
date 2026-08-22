@@ -19,6 +19,7 @@ import {
   PORTAL_CONVERSATION_PRESENCE_QUERY_KEY,
   PORTAL_MY_CONVERSATIONS_QUERY_KEY,
 } from '@/lib/client/queries/portal-support'
+import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 
 export const Route = createFileRoute('/_portal/support/$conversationId')({
   component: SupportThreadPage,
@@ -42,9 +43,10 @@ function SupportThreadPage() {
   // Converged Messages: ticket pairs open here too, so a tickets-enabled
   // workspace keeps this route alive even with the messenger/portal-support
   // toggle off (email-first workspaces reply to their ticket threads here).
-  const messengerEnabled =
-    !!settings?.featureFlags?.supportInbox && !!settings?.portalConfig?.support?.enabled
-  const supportEnabled = messengerEnabled || !!settings?.featureFlags?.supportTickets
+  const supportEnabled = isPortalSupportSurfaceEnabled(
+    settings?.featureFlags,
+    settings?.portalConfig
+  )
 
   const user = session?.user
   const isLoggedIn = !!user && user.principalType !== 'anonymous'

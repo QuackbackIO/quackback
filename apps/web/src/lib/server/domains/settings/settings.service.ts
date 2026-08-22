@@ -42,13 +42,12 @@ import {
   DEFAULT_AUTH_CONFIG,
   DEFAULT_DEVELOPER_CONFIG,
   DEFAULT_WIDGET_CONFIG,
-  DEFAULT_MESSENGER_CONFIG,
   DEFAULT_FEATURE_FLAGS,
   DEFAULT_HELP_CENTER_CONFIG,
   resolveFeatureFlags,
 } from './settings.types'
 import { signupOpenFor } from '@/lib/shared/signup-open'
-import { publicHomeConfig, publicMessengerConfig } from './settings.widget'
+import { projectPublicWidgetConfig } from './settings.widget'
 import { getSetupState, isOnboardingComplete } from '@/lib/shared/db-types'
 import { resolveChangelogSettings } from './settings.changelog'
 import { resolveStatusSettings } from './settings.status'
@@ -964,36 +963,7 @@ export async function getWorkspaceSettings(): Promise<WorkspaceSettings | null> 
           },
         }
       })(),
-      publicWidgetConfig: {
-        enabled: widgetConfig.enabled,
-        defaultBoard: widgetConfig.defaultBoard,
-        position: widgetConfig.position,
-        tabs: {
-          ...widgetConfig.tabs,
-          feedback: (widgetConfig.tabs?.feedback ?? true) && featureFlags.feedback,
-          changelog: (widgetConfig.tabs?.changelog ?? false) && featureFlags.changelog,
-          help: (widgetConfig.tabs?.help ?? false) && featureFlags.helpCenter,
-          messenger: (widgetConfig.tabs?.messenger ?? false) && featureFlags.supportInbox,
-          // Fail-closed like its siblings: the Tickets tab is only ever exposed
-          // publicly when the experimental supportTickets flag is on (gate (a) of
-          // the triple gate), so no consumer can surface it with the flag off.
-          tickets: (widgetConfig.tabs?.tickets ?? false) && featureFlags.supportTickets,
-        },
-        // Identify is verified-only (backend-signed ssoToken; GH issue #300).
-        hmacRequired: true,
-        // Home customisation is client-safe (greeting, hero style, quick links);
-        // the stored hero-image key is resolved to a public URL.
-        home: publicHomeConfig(widgetConfig.home),
-        // Client-safe messenger config (routing stays agent-only). `enabled`
-        // mirrors the module flag — widget visibility is `tabs.messenger`.
-        messenger: {
-          ...publicMessengerConfig(
-            widgetConfig.messenger ?? DEFAULT_MESSENGER_CONFIG,
-            assistantIdentity
-          ),
-          enabled: featureFlags.supportInbox,
-        },
-      },
+      publicWidgetConfig: projectPublicWidgetConfig(widgetConfig, featureFlags, assistantIdentity),
       featureFlags,
       brandingData,
       faviconData: brandingData.faviconUrl ? { url: brandingData.faviconUrl } : null,

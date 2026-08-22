@@ -11,6 +11,7 @@ import {
 import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { PortalPrivacyDialog } from '@/components/admin/settings/portal-privacy-dialog'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
@@ -134,6 +135,30 @@ export function PortalAuthTab({ portalConfig, teamOpenSignup }: PortalAuthTabPro
   // writes an explicit portal answer, and the fallback stops applying.
   const [openSignup, setOpenSignup] = useState<boolean>(portalConfig.openSignup ?? teamOpenSignup)
   const [signupBusy, setSignupBusy] = useState(false)
+
+  // Workspace-wide master switch for anonymous interaction. Collapsed in
+  // migration 0084 from the legacy anonymousVoting / Commenting / Posting
+  // trio — per-board access tiers carry the finer-grained restrictions.
+  const [allowAnonymous, setAllowAnonymous] = useState<boolean>(
+    portalConfig.features?.allowAnonymous ?? true
+  )
+  const [anonBusy, setAnonBusy] = useState(false)
+
+  async function applyAllowAnonymous(next: boolean) {
+    const previous = allowAnonymous
+    setAllowAnonymous(next)
+    setAnonBusy(true)
+    try {
+      await updatePortalConfigFn({ data: { features: { allowAnonymous: next } } })
+      startTransition(() => {
+        router.invalidate()
+      })
+    } catch {
+      setAllowAnonymous(previous)
+    } finally {
+      setAnonBusy(false)
+    }
+  }
 
   async function applyOpenSignup(next: boolean) {
     const previous = openSignup
@@ -324,6 +349,24 @@ export function PortalAuthTab({ portalConfig, teamOpenSignup }: PortalAuthTabPro
             the cards below to authorize additional visitors.
           </p>
         )}
+
+        <div className="mt-4 flex items-center justify-between border-t border-border/40 pt-4">
+          <div className="pr-4">
+            <Label htmlFor="allow-anonymous" className="text-sm font-medium cursor-pointer">
+              Allow anonymous interaction
+            </Label>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              When off, all boards require sign-in for voting, commenting, and submitting posts.
+            </p>
+          </div>
+          <Switch
+            id="allow-anonymous"
+            checked={allowAnonymous}
+            onCheckedChange={(checked) => void applyAllowAnonymous(checked)}
+            disabled={anonBusy || isPending}
+            aria-label="Allow anonymous interaction"
+          />
+        </div>
       </SettingsCard>
 
       {/* Who may open an account, as opposed to who may look. Kept a peer of

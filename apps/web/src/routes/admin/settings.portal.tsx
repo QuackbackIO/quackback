@@ -61,6 +61,7 @@ import { UpgradeModal } from '@/components/admin/upgrade'
 import { describePlanUpgrade, isPlanRefusal } from '@/lib/shared/describe-upgrade'
 import { DEFAULT_PORTAL_CONFIG, isProductEnabled } from '@/lib/shared/types/settings'
 import { isStatusPagePublished } from '@/lib/shared/status-settings'
+import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 import type {
   PortalConfig,
   PortalNavItemConfig,
@@ -237,9 +238,7 @@ function PortalPage() {
       roadmap: isProductEnabled(flags, 'feedback'),
       changelog: isProductEnabled(flags, 'changelog'),
       help: isProductEnabled(flags, 'helpCenter'),
-      support:
-        !!flags?.supportTickets ||
-        (!!flags?.supportInbox && !!settings?.portalConfig?.support?.enabled),
+      support: isPortalSupportSurfaceEnabled(flags, settings?.portalConfig),
       status:
         isStatusPagePublished(flags, settings?.statusConfig) &&
         (statusAudience === 'public' || statusLoggedIn),

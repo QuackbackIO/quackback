@@ -11,6 +11,7 @@ import { usePreviewDraft } from '@/components/public/preview-draft-context'
 import { portalQueries } from '@/lib/client/queries/portal'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { isStatusPagePublished } from '@/lib/shared/status-settings'
+import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 
 const searchSchema = z.object({
   board: z.string().optional(),
@@ -63,10 +64,9 @@ export const Route = createFileRoute('/_portal/')({
 
     if (!isProductEnabled(org.featureFlags, 'feedback')) {
       if (isProductEnabled(org.featureFlags, 'support')) {
-        const supportPublished =
-          org.featureFlags.supportTickets ||
-          (org.featureFlags.supportInbox && org.portalConfig.support?.enabled === true)
-        if (supportPublished) throw redirect({ to: '/support' })
+        if (isPortalSupportSurfaceEnabled(org.featureFlags, org.portalConfig)) {
+          throw redirect({ to: '/support' })
+        }
       }
       if (isProductEnabled(org.featureFlags, 'helpCenter')) {
         throw redirect({ to: '/hc' })

@@ -4,7 +4,7 @@ import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { createFileRoute, redirect, useRouter } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { settingsQueries } from '@/lib/client/queries/settings'
-import { useUpdatePortalConfig, useUpdateModerationDefault } from '@/lib/client/mutations/settings'
+import { useUpdateModerationDefault } from '@/lib/client/mutations/settings'
 import { ShieldCheckIcon, ArrowPathIcon } from '@heroicons/react/24/solid'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
@@ -36,7 +36,6 @@ export const Route = createFileRoute('/admin/settings/moderation')({
 interface PermissionToggleProps {
   id: string
   label: string
-  description: string
   checked: boolean
   saving?: boolean
   onCheckedChange: (checked: boolean) => void
@@ -46,7 +45,6 @@ interface PermissionToggleProps {
 function PermissionToggle({
   id,
   label,
-  description,
   checked,
   saving,
   onCheckedChange,
@@ -58,7 +56,6 @@ function PermissionToggle({
         <label htmlFor={id} className="text-sm font-medium cursor-pointer">
           {label}
         </label>
-        <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
       </div>
       <div className="flex items-center gap-2">
         {saving && <ArrowPathIcon className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
@@ -68,20 +65,11 @@ function PermissionToggle({
   )
 }
 
-function ModerationPage() {
+export function ModerationPage() {
   const router = useRouter()
-  const updatePortalConfig = useUpdatePortalConfig()
   const updateModerationDefault = useUpdateModerationDefault()
   const portalConfigQuery = useSuspenseQuery(settingsQueries.portalConfig())
   const [isPending, startTransition] = useTransition()
-
-  const features = portalConfigQuery.data.features
-
-  // Workspace-wide master switch for anonymous interaction. Collapsed
-  // in migration 0084 from the legacy anonymousVoting / Commenting /
-  // Posting trio — per-board access tiers carry the finer-grained
-  // restrictions now (see BoardAccessForm).
-  const [allowAnonymous, setAllowAnonymous] = useState(features?.allowAnonymous ?? true)
 
   // Moderation toggles
   const [moderationToggles, setModerationToggles] = useState<ApprovalToggles>(() =>
@@ -95,20 +83,6 @@ function ModerationPage() {
   )
 
   const [savingField, setSavingField] = useState<string | null>(null)
-
-  async function updateFeature(key: string, value: boolean, revert: () => void) {
-    setSavingField(key)
-    try {
-      await updatePortalConfig.mutateAsync({ features: { [key]: value } })
-      startTransition(() => {
-        router.invalidate()
-      })
-    } catch {
-      revert()
-    } finally {
-      setSavingField(null)
-    }
-  }
 
   async function updateModeration(key: keyof ApprovalToggles, checked: boolean) {
     const prev = moderationToggles
@@ -154,28 +128,8 @@ function ModerationPage() {
       <PageHeader
         icon={ShieldCheckIcon}
         title="Moderation"
-        description="Anonymous access and approval rules for incoming posts."
+        description="Approval rules and content review for incoming posts and comments."
       />
-
-      <SettingsCard
-        title="Anonymous access"
-        description="Control whether visitors without an account can interact with your portal."
-      >
-        <div className="divide-y divide-border/50">
-          <PermissionToggle
-            id="allow-anonymous"
-            label="Allow anonymous interaction"
-            description="When off, all boards require sign-in for voting, commenting, and submitting posts."
-            checked={allowAnonymous}
-            saving={savingField === 'allowAnonymous'}
-            onCheckedChange={(checked) => {
-              setAllowAnonymous(checked)
-              updateFeature('allowAnonymous', checked, () => setAllowAnonymous(!checked))
-            }}
-            disabled={isBusy}
-          />
-        </div>
-      </SettingsCard>
 
       <SettingsCard
         title="Approval rules"
@@ -185,7 +139,6 @@ function ModerationPage() {
           <PermissionToggle
             id="moderate-anonymous"
             label="Require approval for anonymous posts"
-            description="Posts from visitors without an account wait for review before they appear."
             checked={moderationToggles.anonymous}
             saving={savingField === 'moderation-anonymous'}
             onCheckedChange={(checked) => updateModeration('anonymous', checked)}
@@ -194,7 +147,6 @@ function ModerationPage() {
           <PermissionToggle
             id="moderate-authenticated"
             label="Require approval for signed-in posts"
-            description="Posts from signed-in portal users wait for review before they appear."
             checked={moderationToggles.authenticated}
             saving={savingField === 'moderation-authenticated'}
             onCheckedChange={(checked) => updateModeration('authenticated', checked)}
@@ -205,13 +157,12 @@ function ModerationPage() {
 
       <SettingsCard
         title="Content review"
-        description="Hold submissions that include media or outbound links, regardless of who authored them."
+        description="Hold submissions that include media or outbound links for review."
       >
         <div className="divide-y divide-border/50">
           <PermissionToggle
             id="moderate-images"
             label="Hold posts and comments that contain images"
-            description="Submissions with an attached or embedded image wait for review before they appear."
             checked={holdImages}
             saving={savingField === 'moderation-holdImages'}
             onCheckedChange={(checked) => updateContentHold('holdImages', checked)}
@@ -220,7 +171,6 @@ function ModerationPage() {
           <PermissionToggle
             id="moderate-links"
             label="Hold posts and comments that contain links"
-            description="Submissions with an external link wait for review before they appear."
             checked={holdLinks}
             saving={savingField === 'moderation-holdLinks'}
             onCheckedChange={(checked) => updateContentHold('holdLinks', checked)}
