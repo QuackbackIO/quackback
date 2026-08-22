@@ -78,6 +78,7 @@ import postgres from 'postgres'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { runMigrations, PooledDsnRefused, type MigrationStep } from '@quackback/db/migrate'
+import { connectSessionMode, SessionModeDsnError } from './session-dsn'
 import {
   BUNDLED_MIGRATIONS,
   MIGRATIONS_DIR,
@@ -119,6 +120,7 @@ export type MigrateWorkspaceCode =
   | 'refused_replay_mutates'
   | 'refused_ledger_gap'
   | 'refused_pooled_dsn'
+  | 'invalid_dsn'
   | 'postconditions_violated'
   | 'migration_failed'
 
@@ -161,6 +163,12 @@ export interface MigrateWorkspaceOptions {
   /** Override {@link DEFAULT_MIGRATE_LOCK_TIMEOUT_MS}. */
   lockTimeoutMs?: number
   onStep?: (step: MigrationStep) => void
+  /**
+   * Session-mode DSN including the password. Provisioning uses this because
+   * the registry record (and therefore the credential ref) does not exist yet.
+   * When absent, the password is resolved from the workspace descriptor.
+   */
+  directConnectionString?: string
 }
 
 /**
@@ -444,11 +452,67 @@ export async function migrateWorkspace(
   workspace: WorkspaceDescriptor,
   options: MigrateWorkspaceOptions = {}
 ): Promise<MigrateWorkspaceResult> {
+  const dsn =
+    options.directConnectionString ??
+    withPassword(workspace.database.directUrl, await resolveWorkspacePassword(workspace))
+  return migrateDirect(workspace.workspaceKey, dsn, options)
+}
+
+/**
+ * Apply this image's lineage to one database, given the session-mode DSN.
+ *
+ * Used by provisioning (the registry row does not exist yet) and by the
+ * fleet-internal HTTP executor. {@link migrateWorkspace} is the registry-backed
+ * wrapper.
+ */
+function emptyLedger(): AppliedLedger {
+  return { count: 0, max: 0, versions: new Set() }
+}
+
+function dsnRefusal(
+  workspaceKey: string,
+  started: number,
+  code: 'refused_pooled_dsn' | 'invalid_dsn',
+  detail: string
+): MigrateWorkspaceResult {
+  return {
+    workspaceKey,
+    ok: false,
+    code,
+    detail,
+    before: emptyLedger(),
+    after: null,
+    gap: null,
+    replaySet: [],
+    replayVerdicts: [],
+    healedIndexes: [],
+    unhealableIndexes: [],
+    postconditions: null,
+    lastStep: 'preflight',
+    durationMs: Date.now() - started,
+  }
+}
+
+export async function migrateDirect(
+  workspaceKey: string,
+  dsn: string,
+  options: MigrateWorkspaceOptions = {}
+): Promise<MigrateWorkspaceResult> {
   const started = Date.now()
   let lastStep: MigrationStep | 'preflight' = 'preflight'
-  const dsn = withPassword(workspace.database.directUrl, await resolveWorkspacePassword(workspace))
 
-  const probe = postgres(dsn, { max: 1, onnotice: () => {}, connect_timeout: 20 })
+  let probe: postgres.Sql
+  try {
+    probe = connectSessionMode(dsn)
+  } catch (err) {
+    if (err instanceof SessionModeDsnError && err.reason === 'pooled') {
+      return dsnRefusal(workspaceKey, started, 'refused_pooled_dsn', 'pooled DSN refused')
+    }
+    if (err instanceof SessionModeDsnError) {
+      return dsnRefusal(workspaceKey, started, 'invalid_dsn', 'session-mode DSN is not usable')
+    }
+    throw err
+  }
   let before: AppliedLedger
   try {
     before = await readAppliedLedger(probe)
@@ -462,7 +526,7 @@ export async function migrateWorkspace(
   const mutating = replayVerdicts.filter((r) => r.verdict === 'mutates')
 
   const base = {
-    workspaceKey: workspace.workspaceKey,
+    workspaceKey: workspaceKey,
     before,
     after: null,
     gap: plan.gap,
@@ -506,7 +570,7 @@ export async function migrateWorkspace(
       }
     }
     log.warn(
-      { workspaceKey: workspace.workspaceKey, violations: early.violations.map((v) => v.detail) },
+      { workspaceKey: workspaceKey, violations: early.violations.map((v) => v.detail) },
       'ledger is complete but the database is not correct — healing'
     )
   }
@@ -519,7 +583,7 @@ export async function migrateWorkspace(
     if (!heal.ok) {
       log.error(
         {
-          workspaceKey: workspace.workspaceKey,
+          workspaceKey: workspaceKey,
           missing: plan.gap.missing,
           rewrites: plan.gap.rewrites,
         },
@@ -531,10 +595,7 @@ export async function migrateWorkspace(
 
   const gate = replayGateVerdict(before, replayVerdicts, options.allowMutatingReplay ?? false)
   if (!gate.ok) {
-    log.error(
-      { workspaceKey: workspace.workspaceKey, mutating: mutating.map((m) => m.tag) },
-      gate.detail
-    )
+    log.error({ workspaceKey: workspaceKey, mutating: mutating.map((m) => m.tag) }, gate.detail)
     return { ...base, ok: false, code: 'refused_replay_mutates', detail: gate.detail }
   }
 
@@ -543,7 +604,7 @@ export async function migrateWorkspace(
       const discarded = await withProbe(dsn, (sql) => truncateAppliedLedger(sql, plan.gap!.from))
       log.warn(
         {
-          workspaceKey: workspace.workspaceKey,
+          workspaceKey: workspaceKey,
           from: tagForVersion(plan.gap.from),
           missing: plan.gap.missing,
           discarded: discarded.length,
@@ -600,7 +661,7 @@ export async function migrateWorkspace(
         `${replaySet.length} migration(s) it was to apply (${unrecorded.join(', ')}). Drizzle ` +
         'writes a row only after executing, so this database has not been brought to the ' +
         'planned version and must not be reported as reconciled.'
-      log.error({ workspaceKey: workspace.workspaceKey, unrecorded }, detail)
+      log.error({ workspaceKey: workspaceKey, unrecorded }, detail)
       return {
         ...base,
         after,
@@ -635,11 +696,9 @@ export async function migrateWorkspace(
     }
   } catch (err) {
     const code = err instanceof PooledDsnRefused ? 'refused_pooled_dsn' : 'migration_failed'
-    const detail = err instanceof Error ? err.message : String(err)
-    log.error(
-      { workspaceKey: workspace.workspaceKey, step: lastStep, err },
-      'workspace migration failed'
-    )
+    const raw = err instanceof Error ? err.message : String(err)
+    const detail = raw.replace(/postgres(?:ql)?:\/\/\S+/gi, 'postgresql://***')
+    log.error({ workspaceKey: workspaceKey, step: lastStep, err }, 'workspace migration failed')
     return {
       ...base,
       lastStep,
@@ -657,7 +716,7 @@ export async function migrateWorkspace(
 }
 
 async function withProbe<T>(dsn: string, body: (sql: postgres.Sql) => Promise<T>): Promise<T> {
-  const sql = postgres(dsn, { max: 1, onnotice: () => {}, connect_timeout: 20 })
+  const sql = connectSessionMode(dsn)
   try {
     return await body(sql)
   } finally {

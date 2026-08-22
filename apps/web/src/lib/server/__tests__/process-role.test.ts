@@ -6,6 +6,7 @@ import {
   InvalidProcessRole,
   isMigratorRole,
   shouldRunWorkers,
+  shouldServeFleetMigrate,
 } from '../process-role'
 
 describe('getProcessRole', () => {
@@ -47,6 +48,16 @@ describe('getProcessRole', () => {
     expect(getProcessRole()).toBe('migrator')
     expect(shouldRunWorkers()).toBe(false)
     expect(isMigratorRole()).toBe(true)
+    expect(shouldServeFleetMigrate()).toBe(true)
+  })
+
+  it('serves fleet-migrate on worker and all, never on web', () => {
+    vi.stubEnv('QUACKBACK_ROLE', 'web')
+    expect(shouldServeFleetMigrate()).toBe(false)
+    vi.stubEnv('QUACKBACK_ROLE', 'worker')
+    expect(shouldServeFleetMigrate()).toBe(true)
+    vi.stubEnv('QUACKBACK_ROLE', 'all')
+    expect(shouldServeFleetMigrate()).toBe(true)
   })
 
   it('is not the migrator under any other role', () => {
@@ -72,6 +83,7 @@ describe('getProcessRole', () => {
       expect(getProcessRole()).not.toBe('worker')
       expect(shouldRunWorkers()).toBe(false)
       expect(isMigratorRole()).toBe(false)
+      expect(shouldServeFleetMigrate()).toBe(false)
     }
   )
 

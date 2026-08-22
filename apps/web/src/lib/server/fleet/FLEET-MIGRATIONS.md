@@ -781,17 +781,14 @@ drift is not.
   deliberately: the probe most people reach for is asking the catalogue whether
   a session is pooled, and catalogue answers about pooling have already produced
   one false green in this work.
-- **The control-plane side is the table and nothing else.** §10.3 assigns
-  `target_version` writing and rollout-status rendering to the CP; what shipped
-  there is migration `0049` alone, and the app's `fleet-migrator` CLI is
-  currently the only writer of intent. That is a real divergence from the
-  design, not an oversight of it: the CP is concurrently being rebuilt (its
-  Kubernetes path is being amputated), so building a rollout UI against the
-  shape that is being deleted would be work done twice. The contract the table
-  encodes — CP writes `target_version` and `cohort`, the app writes only
-  observations — is what the CP has to implement, and it is enforced by
-  `CHECK`s rather than by convention, so a CP writer cannot get it wrong
-  quietly.
+- **The control-plane side now writes intent.** §10.3 assigns `target_version`
+  writing and rollout-status rendering to the CP. Provision enrols a row,
+  `/admin` Schema and MCP `get_instance` / `fleet_health` render it, and the
+  worker HTTP executor (`/api/internal/fleet/migrate`) applies this image's
+  lineage. The `fleet-migrator` CLI still writes the same columns as
+  break-glass. The contract the table encodes — CP writes `target_version` and
+  `cohort`, the app writes only observations — is enforced by `CHECK`s rather
+  than by convention.
 - **A workspace already recorded at its target cannot be claimed, so it cannot be
   healed by a plain `run`.** The claim narrows on
   `current_version < target_version`, and a workspace with a hole was recorded at
