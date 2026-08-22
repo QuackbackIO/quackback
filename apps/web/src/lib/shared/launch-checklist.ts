@@ -206,7 +206,7 @@ export function buildLaunchTasks(
       ? `Messenger was found on ${status.widgetOriginHost ?? 'your site'}.`
       : status.hasMessengerEnabled
         ? 'Messenger is configured. Add the SDK to your website to connect it.'
-        : 'Enable Messenger and add the SDK to your website.',
+        : 'Turn on the Messages tab and add the SDK to your website.',
     completed: status.hasWidgetInstalled === true,
     canAct: permissions.settingsManage,
     unavailableReason: features.supportInbox

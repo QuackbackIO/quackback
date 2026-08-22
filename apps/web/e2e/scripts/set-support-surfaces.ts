@@ -4,7 +4,6 @@
  * "on" turns on everything the three conversation surfaces need:
  *   - featureFlags.supportInbox        (gates /admin/inbox + all conversation paths)
  *   - widgetConfig.enabled             (widget master switch)
- *   - widgetConfig.messenger.enabled   (widget messenger surface)
  *   - widgetConfig.tabs.messenger      (widget Messages tab)
  *   - portalConfig.support.enabled     (portal /support tab)
  *

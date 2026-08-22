@@ -407,11 +407,8 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
   const permissions = permissionsForLegacyRole(auth.principal.role)
   const hasBranding = Boolean(orgSettings?.logoKey)
   const hasWidgetEnabled = widgetConfig.enabled === true
-  // Messenger is "live" when the messenger surface is on and the widget is enabled
-  const hasMessengerEnabled =
-    hasWidgetEnabled &&
-    (widgetConfig.messenger?.enabled ?? false) &&
-    (widgetConfig.tabs?.messenger ?? false)
+  // Messenger is "live" when the widget is on and the Messages tab is shown.
+  const hasMessengerEnabled = hasWidgetEnabled && (widgetConfig.tabs?.messenger ?? false)
   const hasIntegration = Boolean(connectedIntegration)
   const hasInternalBoard = orgBoards.some((board) => board.access.view === 'team')
   const publicBoard = orgBoards.find((board) => board.access.view === 'anonymous')

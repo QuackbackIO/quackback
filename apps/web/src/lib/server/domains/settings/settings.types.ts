@@ -356,7 +356,7 @@ export interface PortalConfig {
 
 /**
  * Portal Support tab configuration. Gated (with the `supportInbox` feature
- * flag) by `isPortalSupportEnabled`; independent of the widget messenger toggles.
+ * flag) by `isPortalSupportEnabled`; independent of the widget Messages tab.
  */
 export interface PortalSupportConfig {
   enabled: boolean
@@ -546,7 +546,11 @@ export interface PublicAssistantConfig extends AssistantDeploymentConfig {
 }
 
 export interface MessengerConfig {
-  /** Master toggle for the messenger tab + endpoints. */
+  /**
+   * @deprecated Ignored at read time. Messenger is on when the `supportInbox`
+   * flag is on; widget visibility is `tabs.messenger`. Still written by the
+   * widget-activation path so stored JSON stays consistent with older readers.
+   */
   enabled: boolean
   /** Greeting shown when a visitor opens the messenger with no history. */
   welcomeMessage?: string

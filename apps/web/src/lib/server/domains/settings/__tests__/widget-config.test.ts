@@ -205,6 +205,50 @@ describe('getPublicWidgetConfig — launcher projection', () => {
   })
 })
 
+describe('getPublicWidgetConfig — messenger tab projection', () => {
+  it('projects tabs.messenger from the flag + tab, ignoring stored messenger.enabled', async () => {
+    settingsRow.current = fixtureRow(
+      {
+        enabled: true,
+        tabs: { messenger: true, feedback: false },
+        messenger: { enabled: false },
+      },
+      { supportInbox: true }
+    )
+    const projected = await getPublicWidgetConfig()
+    expect(projected.tabs?.messenger).toBe(true)
+    expect(projected.messenger?.enabled).toBe(true)
+  })
+
+  it('keeps the Messages tab off when the tab is off, even if stored messenger.enabled is true', async () => {
+    settingsRow.current = fixtureRow(
+      {
+        enabled: true,
+        tabs: { messenger: false, feedback: false },
+        messenger: { enabled: true },
+      },
+      { supportInbox: true }
+    )
+    const projected = await getPublicWidgetConfig()
+    expect(projected.tabs?.messenger).toBe(false)
+    expect(projected.messenger?.enabled).toBe(true)
+  })
+
+  it('projects messenger.enabled false when supportInbox is off', async () => {
+    settingsRow.current = fixtureRow(
+      {
+        enabled: true,
+        tabs: { messenger: true, feedback: false },
+        messenger: { enabled: true },
+      },
+      { supportInbox: false }
+    )
+    const projected = await getPublicWidgetConfig()
+    expect(projected.tabs?.messenger).toBe(false)
+    expect(projected.messenger?.enabled).toBe(false)
+  })
+})
+
 describe('getPublicWidgetConfig — tickets projection (converged Messages)', () => {
   it('projects tabs.tickets from the supportTickets flag alone — no per-tab toggle', async () => {
     // The flag is set explicitly, and the stored tabs deliberately carry no

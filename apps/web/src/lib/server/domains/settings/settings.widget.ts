@@ -141,6 +141,8 @@ export function publicMessengerConfig(
   identity: AssistantIdentity = DEFAULT_ASSISTANT_CONFIG.identity
 ): PublicMessengerConfig {
   return {
+    // Callers override this with the `supportInbox` flag. Stored
+    // `messenger.enabled` is ignored at the gate.
     enabled: messenger.enabled,
     welcomeMessage: messenger.welcomeMessage,
     offlineMessage: messenger.offlineMessage,
@@ -335,10 +337,7 @@ export async function getPublicWidgetConfig(): Promise<PublicWidgetConfig> {
       feedback: (config.tabs?.feedback ?? true) && flags.feedback,
       changelog: (config.tabs?.changelog ?? false) && flags.changelog,
       help: (config.tabs?.help ?? false) && flags.helpCenter && helpCenter.enabled,
-      messenger:
-        (config.tabs?.messenger ?? false) &&
-        flags.supportInbox &&
-        (config.messenger?.enabled ?? false),
+      messenger: (config.tabs?.messenger ?? false) && flags.supportInbox,
       // Converged Messages: ticket pairs surface through the messenger tab,
       // gated by the supportTickets flag alone (there is no Tickets tab).
       tickets: flags.supportTickets,
@@ -359,7 +358,12 @@ export async function getPublicWidgetConfig(): Promise<PublicWidgetConfig> {
       // the stored hero-image key is resolved to a public URL.
       home: publicHomeConfig(config.home),
       // Project only client-safe messenger fields; routing is agent-only.
-      messenger: publicMessengerConfig(config.messenger ?? DEFAULT_MESSENGER_CONFIG, identity),
+      // `enabled` mirrors the module flag — there is no separate messenger
+      // master switch; widget visibility is `tabs.messenger`.
+      messenger: {
+        ...publicMessengerConfig(config.messenger ?? DEFAULT_MESSENGER_CONFIG, identity),
+        enabled: flags.supportInbox,
+      },
       // Per-locale copy overrides — client-safe (customer-facing strings the
       // widget resolves against its own locale for the Home surface).
       translations: config.translations,
@@ -380,16 +384,18 @@ export async function getMessengerConfig(): Promise<MessengerConfig> {
 }
 
 /**
- * Whether messenger is enabled for this workspace. Gated first by the
+ * Whether the widget messenger surface is live. Gated first by the
  * experimental `supportInbox` feature flag (off by default); below it the
- * per-widget master + messenger toggles still apply. This is the single choke point the
- * widget-facing messenger paths (send, stream, visitor history) already consult, so
- * flipping the flag off fails them all closed.
+ * widget master and the Messages tab still apply. There is no separate
+ * messenger master switch — the module flag is that switch. This is the
+ * single choke point the widget-facing messenger paths (send, stream,
+ * visitor history) already consult, so flipping the flag off fails them all
+ * closed.
  */
 export async function isMessengerEnabled(): Promise<boolean> {
   const { isFeatureEnabled } = await import('./settings.service')
   const [flagOn, widget] = await Promise.all([isFeatureEnabled('supportInbox'), getWidgetConfig()])
-  return Boolean(flagOn && widget.enabled && widget.messenger?.enabled)
+  return Boolean(flagOn && widget.enabled && widget.tabs?.messenger)
 }
 
 /**
