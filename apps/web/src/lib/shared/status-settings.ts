@@ -17,7 +17,9 @@ export type StatusAudience = 'public' | 'authenticated' | 'segments'
 export interface StatusSettings {
   /** Master switch: publishes the page and starts recording uptime history. */
   enabled: boolean
-  /** Show the "Status" tab in the portal top nav. */
+  /**
+   * @deprecated Ignored at read time. Portal chrome is Branding → Navigation.
+   */
   portalTabEnabled: boolean
   audience: StatusAudience
   /** Segments allowed to view the page when audience = 'segments'. */

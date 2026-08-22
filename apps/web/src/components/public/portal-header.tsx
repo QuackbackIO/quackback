@@ -70,20 +70,16 @@ export function PortalHeader({
   const helpCenterEnabled = isProductEnabled(flags, 'helpCenter')
   const supportEnabled =
     !!flags?.supportTickets || (!!flags?.supportInbox && !!settings?.portalConfig?.support?.enabled)
-  // Default true so a workspace that never customized this setting keeps
-  // the changelog tab it had before this toggle existed.
-  const changelogEnabled =
-    isProductEnabled(flags, 'changelog') && (settings?.changelogConfig?.portalTabEnabled ?? true)
-  // Status tab: flag + product enabled + tab toggle. A non-public audience
-  // still needs a signed-in viewer to bother showing the tab; the route
-  // enforces the real per-viewer segment gate (settings here are
-  // workspace-global, not per-viewer).
+  const changelogEnabled = isProductEnabled(flags, 'changelog')
+  // Status tab: product flag + published. A non-public audience still needs
+  // a signed-in viewer to bother showing the tab; the route enforces the
+  // real per-viewer segment gate (settings here are workspace-global, not
+  // per-viewer). Hide or reorder the tab in Branding → Navigation.
   const statusAudience = settings?.statusConfig?.audience ?? 'public'
   const statusLoggedIn = !!session?.user && session.user.principalType !== 'anonymous'
   const statusEnabled =
     isProductEnabled(flags, 'status') &&
     !!settings?.statusConfig?.enabled &&
-    (settings?.statusConfig?.portalTabEnabled ?? true) &&
     (statusAudience === 'public' || statusLoggedIn)
   const onHelpPages = pathname === '/hc' || pathname.startsWith('/hc/')
   // Admin-configured help center links render beside the built-in nav on help
