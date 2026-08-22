@@ -6,9 +6,9 @@ import { test, expect } from '@playwright/test'
  * These tests cover the public-facing help center at /hc.
  * No authentication is required.
  *
- * The help center requires the `helpCenter` feature flag and `helpCenterConfig.enabled`
- * to be true for the acme workspace. Tests degrade gracefully (early return or
- * conditional assertions) when the flag is off or seed data is absent.
+ * The help center requires the `helpCenter` feature flag to be on for the acme
+ * workspace. Tests degrade gracefully (early return or conditional assertions)
+ * when the flag is off or seed data is absent.
  */
 
 test.describe('Public Help Center', () => {

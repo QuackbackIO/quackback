@@ -87,7 +87,6 @@ export const Route = createFileRoute('/admin/settings/widget')({
     const { queryClient } = context
     await Promise.all([
       queryClient.ensureQueryData(settingsQueries.widgetConfig()),
-      queryClient.ensureQueryData(settingsQueries.helpCenterConfig()),
       queryClient.ensureQueryData(adminQueries.boards()),
       queryClient.ensureQueryData(adminQueries.onboardingStatus()),
     ])
@@ -105,17 +104,14 @@ export function WidgetSettingsGate() {
 
 function WidgetSettingsPage() {
   const widgetConfigQuery = useSuspenseQuery(settingsQueries.widgetConfig())
-  const helpCenterConfigQuery = useSuspenseQuery(settingsQueries.helpCenterConfig())
   const boardsQuery = useSuspenseQuery(adminQueries.boards())
   const onboardingQuery = useSuspenseQuery(adminQueries.onboardingStatus())
   const { settings } = useRouteContext({ from: '__root__' })
 
   const flags = settings?.featureFlags as FeatureFlags | undefined
   const config = widgetConfigQuery.data
-  const helpCenterConfig = helpCenterConfigQuery.data
 
   const helpCenterFlagEnabled = flags?.helpCenter ?? false
-  const helpCenterEnabled = helpCenterConfig?.enabled ?? false
   const supportInboxFlagEnabled = flags?.supportInbox ?? false
 
   // Lifted editor state: position drives the preview's launcher chrome.
@@ -171,7 +167,6 @@ function WidgetSettingsPage() {
             launcherLabel={launcherLabel}
             onLabelChange={setLauncherLabel}
             helpCenterFlagEnabled={helpCenterFlagEnabled}
-            helpCenterEnabled={helpCenterEnabled}
             supportInboxFlagEnabled={supportInboxFlagEnabled}
           />
 
@@ -313,7 +308,6 @@ function ModulesCard({
   launcherLabel,
   onLabelChange,
   helpCenterFlagEnabled,
-  helpCenterEnabled,
   supportInboxFlagEnabled,
 }: {
   config: {
@@ -334,7 +328,6 @@ function ModulesCard({
   launcherLabel: string
   onLabelChange: (val: string) => void
   helpCenterFlagEnabled: boolean
-  helpCenterEnabled: boolean
   supportInboxFlagEnabled: boolean
 }) {
   const router = useRouter()
@@ -350,7 +343,7 @@ function ModulesCard({
     help: config.tabs?.help ?? false,
   })
 
-  const showHelpToggle = helpCenterFlagEnabled && helpCenterEnabled
+  const showHelpToggle = helpCenterFlagEnabled
 
   const isBusy = saving || isPending
 

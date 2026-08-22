@@ -889,6 +889,10 @@ export interface HelpCenterHeaderLink {
 export const HELP_CENTER_HEADER_LINKS_MAX = 3
 
 export interface HelpCenterConfig {
+  /**
+   * @deprecated Ignored at read time. Help Center is public when the
+   * `helpCenter` product flag is on; widget visibility is `tabs.help`.
+   */
   enabled: boolean
   homepageTitle: string
   homepageDescription: string

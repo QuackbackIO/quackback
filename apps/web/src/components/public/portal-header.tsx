@@ -67,8 +67,7 @@ export function PortalHeader({
 
   const flags = settings?.featureFlags
   const feedbackEnabled = isProductEnabled(flags, 'feedback')
-  const helpCenterEnabled =
-    isProductEnabled(flags, 'helpCenter') && !!settings?.helpCenterConfig?.enabled
+  const helpCenterEnabled = isProductEnabled(flags, 'helpCenter')
   const supportEnabled =
     !!flags?.supportTickets || (!!flags?.supportInbox && !!settings?.portalConfig?.support?.enabled)
   // Default true so a workspace that never customized this setting keeps

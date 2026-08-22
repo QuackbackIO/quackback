@@ -33,7 +33,6 @@ export const Route = createFileRoute('/_portal/hc')({
     if (!flags?.helpCenter) throw notFound()
 
     const helpCenterConfig = settings?.helpCenterConfig as HelpCenterConfig | undefined
-    if (!helpCenterConfig?.enabled) throw notFound()
 
     // Full-coverage 301: every /hc/* route is nested under this layout, so
     // this is the single place the default-host -> verified-custom-domain

@@ -24,9 +24,6 @@ export const Route = createFileRoute('/hc/sitemap.xml')({
         }
 
         const helpCenterConfig = await getHelpCenterConfig()
-        if (!helpCenterConfig.enabled) {
-          return new Response('Not Found', { status: 404 })
-        }
 
         // Indexing toggle (domains/languages §1): an operator that turned off
         // "allow search engines to index" doesn't want a sitemap advertised either.

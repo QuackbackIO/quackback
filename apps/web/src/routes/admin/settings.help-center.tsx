@@ -9,7 +9,6 @@ import { InlineSpinner } from '@/components/admin/settings/inline-spinner'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
-import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -27,7 +26,7 @@ import {
 
 /**
  * Split by concern, matching the Access & Security page's `?tab=` pattern:
- *  - `general`            — enable/disable + homepage chrome
+ *  - `general`            — homepage chrome
  *  - `domains-languages`  — custom domain, redirect rules, indexing (IA:
  *                           Products > Help Center > Domains & languages)
  */
@@ -65,7 +64,6 @@ function HelpCenterSettingsPage() {
   const helpCenterConfigQuery = useSuspenseQuery(settingsQueries.helpCenterConfig())
   const config = helpCenterConfigQuery.data as HelpCenterConfig
 
-  const [enabled, setEnabled] = useState(config.enabled)
   const [homepageTitle, setHomepageTitle] = useState(config.homepageTitle)
   const [homepageDescription, setHomepageDescription] = useState(config.homepageDescription)
   const [headerLinks, setHeaderLinks] = useState<HelpCenterHeaderLink[]>(config.headerLinks ?? [])
@@ -98,11 +96,6 @@ function HelpCenterSettingsPage() {
   const { queue: queueDescriptionSave } = useDebouncedSave<string>((value) => {
     saveField({ homepageDescription: value })
   }, 800)
-
-  function handleEnabledToggle(checked: boolean) {
-    setEnabled(checked)
-    saveField({ enabled: checked })
-  }
 
   function handleTitleChange(value: string) {
     setHomepageTitle(value)
@@ -175,34 +168,6 @@ function HelpCenterSettingsPage() {
         </TabsList>
 
         <TabsContent value="general" className="space-y-6">
-          {/* Enable / Disable */}
-          <SettingsCard
-            title="Help Center"
-            description="Enable or disable the help center for your users"
-          >
-            <div className="flex items-center justify-between rounded-lg border border-border/50 p-4">
-              <div>
-                <Label htmlFor="hc-enable" className="text-sm font-medium cursor-pointer">
-                  Enable Help Center
-                </Label>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  When enabled, your help center will be accessible to users
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <InlineSpinner visible={isBusy} />
-                <Switch
-                  id="hc-enable"
-                  checked={enabled}
-                  onCheckedChange={handleEnabledToggle}
-                  disabled={isBusy}
-                  aria-label="Enable Help Center"
-                />
-              </div>
-            </div>
-          </SettingsCard>
-
-          {/* Homepage */}
           <SettingsCard title="Homepage" description="Customize the help center landing page">
             <div className="space-y-4">
               <div className="space-y-1.5">

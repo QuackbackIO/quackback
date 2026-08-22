@@ -14,7 +14,6 @@ import type {
 import {
   DEFAULT_WIDGET_CONFIG,
   DEFAULT_MESSENGER_CONFIG,
-  DEFAULT_HELP_CENTER_CONFIG,
   resolveFeatureFlags,
 } from './settings.types'
 import type { AssistantConfigAuditActor } from './settings.assistant'
@@ -332,11 +331,10 @@ export async function getPublicWidgetConfig(): Promise<PublicWidgetConfig> {
       ? assistantConfig.data.identity
       : DEFAULT_ASSISTANT_CONFIG.identity
     const flags = resolveFeatureFlags(org.featureFlags)
-    const helpCenter = parseJsonConfig(org.helpCenterConfig, DEFAULT_HELP_CENTER_CONFIG)
     const tabs = {
       feedback: (config.tabs?.feedback ?? true) && flags.feedback,
       changelog: (config.tabs?.changelog ?? false) && flags.changelog,
-      help: (config.tabs?.help ?? false) && flags.helpCenter && helpCenter.enabled,
+      help: (config.tabs?.help ?? false) && flags.helpCenter,
       messenger: (config.tabs?.messenger ?? false) && flags.supportInbox,
       // Converged Messages: ticket pairs surface through the messenger tab,
       // gated by the supportTickets flag alone (there is no Tickets tab).

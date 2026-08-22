@@ -249,6 +249,26 @@ describe('getPublicWidgetConfig — messenger tab projection', () => {
   })
 })
 
+describe('getPublicWidgetConfig — help tab projection', () => {
+  it('projects tabs.help from the flag + tab, ignoring stored helpCenterConfig.enabled', async () => {
+    settingsRow.current = {
+      ...fixtureRow({ enabled: true, tabs: { help: true, feedback: false } }, { helpCenter: true }),
+      helpCenterConfig: JSON.stringify({ enabled: false }),
+    }
+    const projected = await getPublicWidgetConfig()
+    expect(projected.tabs?.help).toBe(true)
+  })
+
+  it('projects tabs.help false when the flag is off', async () => {
+    settingsRow.current = fixtureRow(
+      { enabled: true, tabs: { help: true, feedback: false } },
+      { helpCenter: false }
+    )
+    const projected = await getPublicWidgetConfig()
+    expect(projected.tabs?.help).toBe(false)
+  })
+})
+
 describe('getPublicWidgetConfig — tickets projection (converged Messages)', () => {
   it('projects tabs.tickets from the supportTickets flag alone — no per-tab toggle', async () => {
     // The flag is set explicitly, and the stored tabs deliberately carry no
