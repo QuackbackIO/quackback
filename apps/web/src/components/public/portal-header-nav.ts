@@ -127,7 +127,10 @@ export function resolvePortalNavItems(
     }
 
     seenTypes.add(item.type)
-    if (item.enabled === false || !gates[item.type]) continue
+    // Feedback is always on: a stored enabled:false is ignored. Other built-ins
+    // still honor their visibility switch (and every built-in still needs its gate).
+    const hidden = item.type !== 'feedback' && item.enabled === false
+    if (hidden || !gates[item.type]) continue
     items.push(builtInItem(item.type, item.id, item.label?.trim() || undefined))
   }
 

@@ -1,30 +1,63 @@
 import { describe, it, expect } from 'vitest'
-import { ValidationError } from '@/lib/shared/errors'
-import { mergeWelcomeCard, normalizeWelcomeCardInput, publicWelcomeCard } from '../settings.helpers'
-import { DEFAULT_PORTAL_CONFIG } from '../settings.types'
+import {
+  mergeWelcomeCard,
+  normalizeWelcomeCardInput,
+  publicWelcomeCard,
+  resolveWelcomeCard,
+} from '../settings.helpers'
+import { DEFAULT_PORTAL_CONFIG, EMPTY_WELCOME_BODY } from '../settings.types'
+
+const richBody = {
+  type: 'doc',
+  content: [
+    {
+      type: 'paragraph',
+      content: [{ type: 'text', text: 'Tell us what you think.' }],
+    },
+  ],
+}
+
+describe('resolveWelcomeCard', () => {
+  it('returns an empty body when the card is undefined', () => {
+    expect(resolveWelcomeCard(undefined)).toEqual({ body: EMPTY_WELCOME_BODY })
+  })
+
+  it('folds a legacy enabled title into a leading heading and keeps the body', () => {
+    const out = resolveWelcomeCard({
+      enabled: true,
+      title: 'Share your product feedback!',
+      body: richBody,
+    })
+    expect(out.body.content?.[0]).toEqual({
+      type: 'heading',
+      attrs: { level: 2 },
+      content: [{ type: 'text', text: 'Share your product feedback!' }],
+    })
+    expect(out.body.content?.[1]).toEqual(richBody.content[0])
+    expect(out).not.toHaveProperty('enabled')
+    expect(out).not.toHaveProperty('title')
+  })
+
+  it('does not prepend a heading when the legacy title is empty or whitespace', () => {
+    expect(resolveWelcomeCard({ enabled: true, title: '   ', body: richBody }).body).toEqual(
+      richBody
+    )
+  })
+
+  it('discards disabled drafts — even a stored body becomes empty', () => {
+    expect(resolveWelcomeCard({ enabled: false, title: 'Draft', body: richBody })).toEqual({
+      body: EMPTY_WELCOME_BODY,
+    })
+  })
+
+  it('keeps the body as stored when enabled is absent (the new write shape)', () => {
+    expect(resolveWelcomeCard({ body: richBody })).toEqual({ body: richBody })
+  })
+})
 
 describe('normalizeWelcomeCardInput', () => {
   it('returns the input unchanged when undefined', () => {
     expect(normalizeWelcomeCardInput(undefined)).toBeUndefined()
-  })
-
-  it('passes through enabled with no validation', () => {
-    const out = normalizeWelcomeCardInput({ enabled: true })
-    expect(out).toEqual({ enabled: true })
-  })
-
-  it('trims the title', () => {
-    const out = normalizeWelcomeCardInput({ title: '  Hello  ' })
-    expect(out?.title).toBe('Hello')
-  })
-
-  it('rejects a title longer than 120 chars', () => {
-    expect(() => normalizeWelcomeCardInput({ title: 'a'.repeat(121) })).toThrow(ValidationError)
-  })
-
-  it('accepts a title of exactly 120 chars', () => {
-    const out = normalizeWelcomeCardInput({ title: 'a'.repeat(120) })
-    expect(out?.title?.length).toBe(120)
   })
 
   it('strips disallowed nodes from the body', () => {
@@ -62,17 +95,8 @@ describe('mergeWelcomeCard', () => {
     expect(mergeWelcomeCard(seed, undefined)).toBe(seed)
   })
 
-  it('overrides scalar fields shallowly', () => {
-    const out = mergeWelcomeCard(seed, { enabled: true, title: 'Hi' })
-    expect(out.enabled).toBe(true)
-    expect(out.title).toBe('Hi')
-    expect(out.body).toEqual(seed.body)
-  })
-
   it('replaces the body wholesale rather than deep-merging it', () => {
     const existing = {
-      enabled: true,
-      title: 'Old',
       body: {
         type: 'doc',
         content: [
@@ -86,14 +110,11 @@ describe('mergeWelcomeCard', () => {
     const out = mergeWelcomeCard(existing, { body: { type: 'doc' } })
     expect(out.body).toEqual({ type: 'doc' })
     expect(out.body.content).toBeUndefined()
-    expect(out.title).toBe('Old')
   })
 
   it('falls back to defaults when there is no existing card', () => {
-    const out = mergeWelcomeCard(undefined, { enabled: true })
-    expect(out.enabled).toBe(true)
-    expect(out.title).toBe(seed.title)
-    expect(out.body).toEqual(seed.body)
+    const out = mergeWelcomeCard(undefined, { body: richBody })
+    expect(out.body).toEqual(richBody)
   })
 })
 
@@ -102,14 +123,27 @@ describe('publicWelcomeCard', () => {
     expect(publicWelcomeCard(undefined)).toBeUndefined()
   })
 
-  it('returns undefined when the card is disabled — never expose drafts', () => {
-    expect(
-      publicWelcomeCard({ enabled: false, title: 'draft', body: { type: 'doc' } })
-    ).toBeUndefined()
+  it('returns undefined for a legacy disabled card — never expose drafts', () => {
+    expect(publicWelcomeCard({ enabled: false, title: 'draft', body: richBody })).toBeUndefined()
   })
 
-  it('returns the card verbatim when enabled', () => {
-    const card = { enabled: true, title: 'Hi', body: { type: 'doc' } }
-    expect(publicWelcomeCard(card)).toEqual(card)
+  it('returns undefined when the resolved body is empty', () => {
+    expect(publicWelcomeCard({ body: EMPTY_WELCOME_BODY })).toBeUndefined()
+  })
+
+  it('returns the resolved card when the body has content', () => {
+    expect(publicWelcomeCard({ body: richBody })).toEqual({ body: richBody })
+  })
+
+  it('folds a legacy enabled title into the public body', () => {
+    const out = publicWelcomeCard({
+      enabled: true,
+      title: 'Hello',
+      body: richBody,
+    })
+    expect(out?.body.content?.[0]).toMatchObject({
+      type: 'heading',
+      attrs: { level: 2 },
+    })
   })
 })

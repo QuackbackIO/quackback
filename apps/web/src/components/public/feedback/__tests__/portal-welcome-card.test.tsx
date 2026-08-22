@@ -22,55 +22,25 @@ describe('<PortalWelcomeCard>', () => {
     expect(container.firstChild).toBeNull()
   })
 
-  it('renders nothing when disabled', () => {
+  it('renders nothing when the body is empty', () => {
+    const data: PortalWelcomeCardData = { body: emptyBody }
+    const { container } = render(<PortalWelcomeCard welcomeCard={data} />)
+    expect(container.firstChild).toBeNull()
+  })
+
+  it('renders nothing when the body is whitespace-only', () => {
     const data: PortalWelcomeCardData = {
-      enabled: false,
-      title: 'Share your product feedback!',
-      body: richBody,
+      body: {
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: '   ' }] }],
+      },
     }
     const { container } = render(<PortalWelcomeCard welcomeCard={data} />)
     expect(container.firstChild).toBeNull()
   })
 
-  it('renders nothing when enabled but title and body are both empty', () => {
-    const data: PortalWelcomeCardData = {
-      enabled: true,
-      title: '   ',
-      body: emptyBody,
-    }
-    const { container } = render(<PortalWelcomeCard welcomeCard={data} />)
-    expect(container.firstChild).toBeNull()
-  })
-
-  it('renders title only when body is empty', () => {
-    const data: PortalWelcomeCardData = {
-      enabled: true,
-      title: 'Share your product feedback!',
-      body: emptyBody,
-    }
-    render(<PortalWelcomeCard welcomeCard={data} />)
-    expect(screen.getByRole('heading', { name: 'Share your product feedback!' })).toBeDefined()
-  })
-
-  it('renders body only when title is empty', () => {
-    const data: PortalWelcomeCardData = {
-      enabled: true,
-      title: '',
-      body: richBody,
-    }
-    render(<PortalWelcomeCard welcomeCard={data} />)
-    expect(screen.queryByRole('heading')).toBeNull()
-    expect(screen.getByText(/Tell us what you would like to see next\./)).toBeDefined()
-  })
-
-  it('renders both title and body when both are populated', () => {
-    const data: PortalWelcomeCardData = {
-      enabled: true,
-      title: 'Share your product feedback!',
-      body: richBody,
-    }
-    render(<PortalWelcomeCard welcomeCard={data} />)
-    expect(screen.getByRole('heading', { name: 'Share your product feedback!' })).toBeDefined()
+  it('renders the body when it has visible content', () => {
+    render(<PortalWelcomeCard welcomeCard={{ body: richBody }} />)
     expect(screen.getByText(/Tell us what you would like to see next\./)).toBeDefined()
   })
 })

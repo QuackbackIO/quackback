@@ -234,12 +234,16 @@ function NavRow({
         </Button>
       )}
 
-      <Switch
-        checked={item.enabled !== false}
-        disabled={gated}
-        onCheckedChange={(checked) => onPatch({ enabled: checked ? undefined : false })}
-        aria-label={`Show ${item.label || defaultLabel} tab`}
-      />
+      {item.type === 'feedback' ? (
+        <Badge variant="outline">Always on</Badge>
+      ) : (
+        <Switch
+          checked={item.enabled !== false}
+          disabled={gated}
+          onCheckedChange={(checked) => onPatch({ enabled: checked ? undefined : false })}
+          aria-label={`Show ${item.label || defaultLabel} tab`}
+        />
+      )}
     </div>
   )
 }

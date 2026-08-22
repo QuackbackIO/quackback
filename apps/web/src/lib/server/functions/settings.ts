@@ -336,8 +336,6 @@ export const updatePortalConfigSchema = z.object({
   openSignup: z.boolean().optional(),
   welcomeCard: z
     .object({
-      enabled: z.boolean().optional(),
-      title: z.string().optional(),
       // Body is re-sanitized server-side by normalizeWelcomeCardInput;
       // tiptapContentSchema gates the shape at the boundary.
       body: tiptapContentSchema.optional(),
