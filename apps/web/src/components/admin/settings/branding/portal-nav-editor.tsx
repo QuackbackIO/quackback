@@ -216,8 +216,8 @@ function NavRow({
             </span>
           </TooltipTrigger>
           <TooltipContent side="top">
-            This tab shows once its product is enabled (Settings → Labs / product settings). Your
-            order and label are kept.
+            This tab shows once its product is enabled (Settings → General). Your order and label
+            are kept.
           </TooltipContent>
         </Tooltip>
       )}
