@@ -17,18 +17,13 @@ test.describe('Admin Moderation Settings', () => {
   test('page loads and shows moderation heading', async ({ page }) => {
     await expect(page.getByRole('heading', { name: 'Moderation' })).toBeVisible({ timeout: 10000 })
     await expect(
-      page.getByText('Anonymous access and approval rules for incoming posts.')
+      page.getByText('Approval rules and content review for incoming posts and comments.')
     ).toBeVisible({ timeout: 10000 })
   })
 
-  test('shows Anonymous access card with the master switch', async ({ page }) => {
-    // Card title is an <h2>; match by heading role so it doesn't collide with the
-    // page description ("Anonymous access and approval rules for incoming posts.").
-    await expect(page.getByRole('heading', { name: 'Anonymous access' })).toBeVisible({
-      timeout: 10000,
-    })
-    // Consolidated single master switch (replaces the old 3 per-action toggles).
-    await expect(page.getByRole('switch', { name: 'Allow anonymous interaction' })).toBeVisible()
+  test('does not show the anonymous-access card (moved to Portal access)', async ({ page }) => {
+    await expect(page.getByRole('heading', { name: 'Anonymous access' })).toHaveCount(0)
+    await expect(page.getByRole('switch', { name: 'Allow anonymous interaction' })).toHaveCount(0)
   })
 
   test('shows Approval rules card with per-axis approval switches', async ({ page }) => {
@@ -43,11 +38,24 @@ test.describe('Admin Moderation Settings', () => {
     ).toBeVisible()
   })
 
-  test('page shows the anonymous-access and approval-rules cards', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: 'Anonymous access' })).toBeVisible({
+  test('page shows the approval-rules and content-review cards', async ({ page }) => {
+    await expect(page.getByRole('heading', { name: 'Approval rules' })).toBeVisible({
       timeout: 10000,
     })
-    await expect(page.getByRole('heading', { name: 'Approval rules' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Content review' })).toBeVisible()
+  })
+})
+
+test.describe('Admin Portal access — anonymous interaction', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/admin/settings/security/authentication?tab=portal-access')
+    await page.waitForLoadState('networkidle')
+  })
+
+  test('shows the allow-anonymous master switch', async ({ page }) => {
+    await expect(page.getByRole('switch', { name: 'Allow anonymous interaction' })).toBeVisible({
+      timeout: 10000,
+    })
   })
 
   test('the allow-anonymous master switch is interactive', async ({ page }) => {

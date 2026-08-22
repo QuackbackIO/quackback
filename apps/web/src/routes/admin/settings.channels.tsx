@@ -19,6 +19,10 @@ import {
 } from '@/lib/server/functions/settings'
 import { useQuery } from '@tanstack/react-query'
 import { getChannelDescriptor } from '@/lib/shared/channels'
+import {
+  isPortalSupportSurfaceEnabled,
+  isWidgetMessengerEnabled,
+} from '@/lib/shared/support-surfaces'
 
 export const Route = createFileRoute('/admin/settings/channels')({
   loader: async ({ context }) => {
@@ -40,6 +44,8 @@ function ChannelsHubRoute() {
 }
 
 function ChannelsHubPage() {
+  const { settings } = Route.useRouteContext()
+  const flags = settings?.featureFlags as FeatureFlags | undefined
   const widget = useSuspenseQuery(settingsQueries.widgetConfig())
   const portal = useSuspenseQuery(settingsQueries.portalConfig())
   const emailStatusQuery = useQuery({
@@ -57,7 +63,9 @@ function ChannelsHubPage() {
   const enabled = routingEnabled ?? routingQuery.data?.enabled ?? false
   const messenger = getChannelDescriptor('messenger')
   const email = getChannelDescriptor('email')
-  const messengerOn = widget.data.tabs?.messenger === true || portal.data?.support?.enabled === true
+  const messengerOn =
+    isWidgetMessengerEnabled(flags, widget.data) ||
+    isPortalSupportSurfaceEnabled(flags, portal.data)
   const receiving = emailStatusQuery.data?.inboundConfigured === true
   const sendingOnly = !receiving && !!emailStatusQuery.data?.fromAddress
   const emailStatus = receiving ? 'Receiving' : sendingOnly ? 'Sending only' : 'Set up'

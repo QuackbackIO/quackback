@@ -427,7 +427,8 @@ export function BoardAccessForm({ board }: BoardAccessFormProps) {
               .
             </span>
             <Link
-              to="/admin/settings/moderation"
+              to="/admin/settings/security/authentication"
+              search={{ tab: 'portal-access' }}
               className="ml-auto whitespace-nowrap text-primary hover:underline"
             >
               Workspace access →
@@ -682,7 +683,7 @@ function MatrixRow({
         const isSegmentsCell = tier.id === 'segments'
 
         const tooltip = wsBlocked
-          ? 'Anonymous interaction is disabled workspace-wide. Manage in Workspace → Access.'
+          ? 'Anonymous interaction is disabled workspace-wide. Manage in Access & Security → Portal access.'
           : hierarchyBlocked
             ? `Can't be more open than View (${TIERS.find((x) => ACCESS_TIER_RANK[x.id] === minRank)?.label}).`
             : undefined

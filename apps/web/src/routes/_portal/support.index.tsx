@@ -10,6 +10,10 @@ import { StageChip } from '@/components/shared/ticket-stage'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { getMyConversationsFn } from '@/lib/server/functions/conversation'
 import { PORTAL_MY_CONVERSATIONS_QUERY_KEY } from '@/lib/client/queries/portal-support'
+import {
+  isPortalChatStartEnabled,
+  isPortalSupportSurfaceEnabled,
+} from '@/lib/shared/support-surfaces'
 
 export const Route = createFileRoute('/_portal/support/')({
   component: SupportListPage,
@@ -65,10 +69,11 @@ function SupportListPage() {
   const { session, settings } = useRouteContext({ from: '__root__' })
   const authPopover = useAuthPopoverSafe()
 
-  const supportTicketsEnabled = !!settings?.featureFlags?.supportTickets
-  const messengerEnabled =
-    !!settings?.featureFlags?.supportInbox && !!settings?.portalConfig?.support?.enabled
-  const surfaceEnabled = messengerEnabled || supportTicketsEnabled
+  const messengerEnabled = isPortalChatStartEnabled(settings?.featureFlags, settings?.portalConfig)
+  const surfaceEnabled = isPortalSupportSurfaceEnabled(
+    settings?.featureFlags,
+    settings?.portalConfig
+  )
 
   const user = session?.user
   const isLoggedIn = !!user && user.principalType !== 'anonymous'

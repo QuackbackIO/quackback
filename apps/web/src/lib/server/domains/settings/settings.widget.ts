@@ -23,6 +23,7 @@ import {
   DEFAULT_ASSISTANT_CONFIG,
   type AssistantIdentity,
 } from '@/lib/shared/assistant/config'
+import { isWidgetMessengerEnabled } from '@/lib/shared/support-surfaces'
 
 const log = logger.child({ component: 'settings-widget' })
 export const WIDGET_OBSERVATION_THROTTLE_MS = 15 * 60 * 1000
@@ -321,6 +322,53 @@ export async function updateWidgetAssistantDeployment(
   return result
 }
 
+/**
+ * Client-safe widget projection. Shared by `getPublicWidgetConfig` and the
+ * workspace-settings payload so the iframe and `/api/widget/config.json`
+ * cannot drift.
+ */
+export function projectPublicWidgetConfig(
+  config: WidgetConfig,
+  flags: ReturnType<typeof resolveFeatureFlags>,
+  identity: AssistantIdentity = DEFAULT_ASSISTANT_CONFIG.identity
+): PublicWidgetConfig {
+  const tabs = {
+    feedback: (config.tabs?.feedback ?? true) && flags.feedback,
+    changelog: (config.tabs?.changelog ?? false) && flags.changelog,
+    help: (config.tabs?.help ?? false) && flags.helpCenter,
+    messenger: (config.tabs?.messenger ?? false) && flags.supportInbox,
+    // Converged Messages: ticket pairs surface through the messenger tab,
+    // gated by the supportTickets flag alone (there is no stored Tickets tab).
+    tickets: flags.supportTickets,
+    home: config.tabs?.home,
+  }
+  return {
+    enabled:
+      config.enabled &&
+      [tabs.feedback, tabs.changelog, tabs.help, tabs.messenger, tabs.tickets].some(Boolean),
+    defaultBoard: config.defaultBoard,
+    position: config.position,
+    launcherGreeting: config.launcherGreeting,
+    launcherLabel: config.launcherLabel,
+    tabs,
+    // Identify is verified-only (backend-signed ssoToken; GH issue #300).
+    hmacRequired: true,
+    // Home customisation is client-safe (greeting, hero style, quick links);
+    // the stored hero-image key is resolved to a public URL.
+    home: publicHomeConfig(config.home),
+    // Project only client-safe messenger fields; routing is agent-only.
+    // `enabled` mirrors the module flag — there is no separate messenger
+    // master switch; widget visibility is `tabs.messenger`.
+    messenger: {
+      ...publicMessengerConfig(config.messenger ?? DEFAULT_MESSENGER_CONFIG, identity),
+      enabled: flags.supportInbox,
+    },
+    // Per-locale copy overrides — client-safe (customer-facing strings the
+    // widget resolves against its own locale for Home + messenger greetings).
+    translations: config.translations,
+  }
+}
+
 export async function getPublicWidgetConfig(): Promise<PublicWidgetConfig> {
   try {
     // Read-only + on public hot paths (config.json, widget SSR): cached row.
@@ -331,41 +379,7 @@ export async function getPublicWidgetConfig(): Promise<PublicWidgetConfig> {
       ? assistantConfig.data.identity
       : DEFAULT_ASSISTANT_CONFIG.identity
     const flags = resolveFeatureFlags(org.featureFlags)
-    const tabs = {
-      feedback: (config.tabs?.feedback ?? true) && flags.feedback,
-      changelog: (config.tabs?.changelog ?? false) && flags.changelog,
-      help: (config.tabs?.help ?? false) && flags.helpCenter,
-      messenger: (config.tabs?.messenger ?? false) && flags.supportInbox,
-      // Converged Messages: ticket pairs surface through the messenger tab,
-      // gated by the supportTickets flag alone (there is no Tickets tab).
-      tickets: flags.supportTickets,
-      home: config.tabs?.home,
-    }
-    return {
-      enabled:
-        config.enabled &&
-        [tabs.feedback, tabs.changelog, tabs.help, tabs.messenger, tabs.tickets].some(Boolean),
-      defaultBoard: config.defaultBoard,
-      position: config.position,
-      launcherGreeting: config.launcherGreeting,
-      launcherLabel: config.launcherLabel,
-      tabs,
-      // Identify is verified-only (backend-signed ssoToken; GH issue #300).
-      hmacRequired: true,
-      // Home customisation is client-safe (greeting, hero style, quick links);
-      // the stored hero-image key is resolved to a public URL.
-      home: publicHomeConfig(config.home),
-      // Project only client-safe messenger fields; routing is agent-only.
-      // `enabled` mirrors the module flag — there is no separate messenger
-      // master switch; widget visibility is `tabs.messenger`.
-      messenger: {
-        ...publicMessengerConfig(config.messenger ?? DEFAULT_MESSENGER_CONFIG, identity),
-        enabled: flags.supportInbox,
-      },
-      // Per-locale copy overrides — client-safe (customer-facing strings the
-      // widget resolves against its own locale for the Home surface).
-      translations: config.translations,
-    }
+    return projectPublicWidgetConfig(config, flags, identity)
   } catch (error) {
     log.error({ err: error }, 'get public widget config failed')
     wrapDbError('fetch public widget config', error)
@@ -393,7 +407,7 @@ export async function getMessengerConfig(): Promise<MessengerConfig> {
 export async function isMessengerEnabled(): Promise<boolean> {
   const { isFeatureEnabled } = await import('./settings.service')
   const [flagOn, widget] = await Promise.all([isFeatureEnabled('supportInbox'), getWidgetConfig()])
-  return Boolean(flagOn && widget.enabled && widget.tabs?.messenger)
+  return isWidgetMessengerEnabled({ supportInbox: flagOn }, widget)
 }
 
 /**

@@ -89,7 +89,7 @@ function WidgetInstallPage() {
         queryClient.invalidateQueries({ queryKey: ['settings', 'widgetConfig'] }),
         queryClient.invalidateQueries({ queryKey: ['admin', 'onboarding'] }),
       ])
-      toast.success(mode === 'messenger' ? 'Messenger enabled' : 'Feedback widget enabled')
+      toast.success(mode === 'messenger' ? 'Messages tab turned on' : 'Feedback widget enabled')
     },
     onError: (error) =>
       toast.error(error instanceof Error ? error.message : 'Couldn’t configure the widget'),
@@ -122,7 +122,7 @@ function WidgetInstallPage() {
       />
 
       <SettingsCard
-        title="1. Enable the channel"
+        title={mode === 'messenger' ? '1. Messages tab' : '1. Enable the channel'}
         description={
           mode === 'messenger'
             ? 'Turns on the widget and the Messages tab together.'
@@ -136,7 +136,7 @@ function WidgetInstallPage() {
         ) : (
           <Button onClick={() => configure.mutate()} disabled={configure.isPending}>
             {configure.isPending && <ArrowPathIcon className="h-4 w-4 animate-spin" />}
-            {mode === 'messenger' ? 'Enable Messenger' : 'Enable feedback widget'}
+            {mode === 'messenger' ? 'Turn on the Messages tab' : 'Enable feedback widget'}
           </Button>
         )}
       </SettingsCard>

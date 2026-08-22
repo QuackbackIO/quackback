@@ -73,7 +73,11 @@ import type {
   WidgetHomeConfig,
 } from '@/lib/shared/types/settings'
 import { SUPPORTED_LOCALES } from '@/lib/shared/i18n'
-import type { WidgetContentTranslation, WidgetTranslations } from '@/lib/shared/widget/translations'
+import {
+  WIDGET_LOCALE_LABELS,
+  type WidgetContentTranslation,
+  type WidgetTranslations,
+} from '@/lib/shared/widget/translations'
 import { widgetOriginVerifiedLabel } from '@/lib/shared/widget/widget-origin'
 import { DEFAULT_WIDGET_HOME_CARDS } from '@/lib/shared/types/settings'
 import { WIDGET_HERO_PATTERNS, heroBackdropStyle } from '@/lib/shared/widget/hero-style'
@@ -113,6 +117,9 @@ function WidgetSettingsPage() {
 
   const helpCenterFlagEnabled = flags?.helpCenter ?? false
   const supportInboxFlagEnabled = flags?.supportInbox ?? false
+  const feedbackFlagEnabled = flags?.feedback ?? true
+  const changelogFlagEnabled = flags?.changelog ?? true
+  const supportTicketsFlagEnabled = flags?.supportTickets ?? false
 
   // Lifted editor state: position drives the preview's launcher chrome.
   const [position, setPosition] = useState<'bottom-right' | 'bottom-left'>(
@@ -168,6 +175,9 @@ function WidgetSettingsPage() {
             onLabelChange={setLauncherLabel}
             helpCenterFlagEnabled={helpCenterFlagEnabled}
             supportInboxFlagEnabled={supportInboxFlagEnabled}
+            feedbackFlagEnabled={feedbackFlagEnabled}
+            changelogFlagEnabled={changelogFlagEnabled}
+            supportTicketsFlagEnabled={supportTicketsFlagEnabled}
           />
 
           <HomeCustomizationCard
@@ -300,7 +310,7 @@ function WidgetToggle({ initialEnabled }: { initialEnabled: boolean }) {
   )
 }
 
-function ModulesCard({
+export function ModulesCard({
   config,
   boards,
   position,
@@ -309,6 +319,9 @@ function ModulesCard({
   onLabelChange,
   helpCenterFlagEnabled,
   supportInboxFlagEnabled,
+  feedbackFlagEnabled,
+  changelogFlagEnabled,
+  supportTicketsFlagEnabled,
 }: {
   config: {
     defaultBoard?: string
@@ -329,6 +342,9 @@ function ModulesCard({
   onLabelChange: (val: string) => void
   helpCenterFlagEnabled: boolean
   supportInboxFlagEnabled: boolean
+  feedbackFlagEnabled: boolean
+  changelogFlagEnabled: boolean
+  supportTicketsFlagEnabled: boolean
 }) {
   const router = useRouter()
   const updateWidgetConfig = useUpdateWidgetConfig()
@@ -344,6 +360,22 @@ function ModulesCard({
   })
 
   const showHelpToggle = helpCenterFlagEnabled
+  const bothContentProductsOn = feedbackFlagEnabled && changelogFlagEnabled
+  const contentSectionCount = [
+    feedbackFlagEnabled && tabs.feedback,
+    changelogFlagEnabled && tabs.changelog,
+    helpCenterFlagEnabled && tabs.help,
+    supportInboxFlagEnabled && tabs.messenger,
+    supportTicketsFlagEnabled,
+  ].filter(Boolean).length
+  const lastSectionLock = contentSectionCount <= 1
+  const lockFeedbackOff =
+    tabs.feedback && (bothContentProductsOn ? !tabs.changelog : lastSectionLock)
+  const lockChangelogOff =
+    tabs.changelog && (bothContentProductsOn ? !tabs.feedback : lastSectionLock)
+  const pairLockHint = (other: string) =>
+    `At least one of Feedback or Changelog stays on — enable ${other} to turn this off.`
+  const lastSectionHint = 'The widget needs at least one section.'
 
   const isBusy = saving || isPending
 
@@ -388,31 +420,21 @@ function ModulesCard({
           onChange={(checked) => void saveTab('home', checked)}
         />
 
-        {supportInboxFlagEnabled && (
+        {feedbackFlagEnabled && (
           <TabRow
-            id="tab-messages"
-            label="Messages"
-            description="Conversations with your team and assistant"
-            checked={tabs.messenger}
-            disabled={isBusy}
+            id="tab-feedback"
+            label="Feedback"
+            description="Search, vote, and submit ideas"
+            checked={tabs.feedback}
+            disabled={isBusy || lockFeedbackOff}
+            disabledHint={bothContentProductsOn ? pairLockHint('Changelog') : lastSectionHint}
             saving={saving}
-            onChange={(checked) => void saveTab('messenger', checked)}
+            onChange={(checked) => {
+              if (!checked && lockFeedbackOff) return
+              void saveTab('feedback', checked)
+            }}
           />
         )}
-
-        <TabRow
-          id="tab-feedback"
-          label="Feedback"
-          description="Search, vote, and submit ideas"
-          checked={tabs.feedback}
-          disabled={isBusy || (tabs.feedback && !tabs.changelog)}
-          disabledHint="At least one of Feedback or Changelog stays on — enable Changelog to turn this off."
-          saving={saving}
-          onChange={(checked) => {
-            if (!checked && !tabs.changelog) return
-            void saveTab('feedback', checked)
-          }}
-        />
 
         {showHelpToggle && (
           <TabRow
@@ -420,25 +442,31 @@ function ModulesCard({
             label="Help"
             description="Browse and search help center articles"
             checked={tabs.help}
-            disabled={isBusy}
+            disabled={isBusy || (tabs.help && lastSectionLock)}
+            disabledHint={lastSectionHint}
             saving={saving}
-            onChange={(checked) => void saveTab('help', checked)}
+            onChange={(checked) => {
+              if (!checked && lastSectionLock) return
+              void saveTab('help', checked)
+            }}
           />
         )}
 
-        <TabRow
-          id="tab-changelog"
-          label="Changelog"
-          description="Show product updates and shipped features"
-          checked={tabs.changelog}
-          disabled={isBusy || (tabs.changelog && !tabs.feedback)}
-          disabledHint="At least one of Feedback or Changelog stays on — enable Feedback to turn this off."
-          saving={saving}
-          onChange={(checked) => {
-            if (!checked && !tabs.feedback) return
-            void saveTab('changelog', checked)
-          }}
-        />
+        {changelogFlagEnabled && (
+          <TabRow
+            id="tab-changelog"
+            label="Changelog"
+            description="Show product updates and shipped features"
+            checked={tabs.changelog}
+            disabled={isBusy || lockChangelogOff}
+            disabledHint={bothContentProductsOn ? pairLockHint('Feedback') : lastSectionHint}
+            saving={saving}
+            onChange={(checked) => {
+              if (!checked && lockChangelogOff) return
+              void saveTab('changelog', checked)
+            }}
+          />
+        )}
       </div>
 
       <div className="mt-5 space-y-2">
@@ -1207,19 +1235,7 @@ function SortableHomeCardShell({
 
 /** Cross-link to the AI & Automation page (assistant identity lives there). */
 const TRANSLATABLE_LOCALES = SUPPORTED_LOCALES.filter((l) => l !== 'en')
-const LOCALE_LABEL: Record<string, string> = {
-  de: 'German',
-  fr: 'French',
-  es: 'Spanish',
-  ar: 'Arabic',
-  ru: 'Russian',
-  'pt-br': 'Portuguese (Brazil)',
-  'zh-cn': 'Chinese (Simplified)',
-  'zh-tw': 'Chinese (Traditional)',
-}
 const TRANSLATION_FIELDS: { key: keyof WidgetContentTranslation; placeholder: string }[] = [
-  { key: 'welcomeMessage', placeholder: 'Welcome message' },
-  { key: 'offlineMessage', placeholder: 'Offline message' },
   { key: 'greeting', placeholder: 'Home greeting' },
   { key: 'subtitle', placeholder: 'Home subtitle' },
 ]
@@ -1253,7 +1269,7 @@ function WidgetTranslationsCard({ translations }: { translations?: WidgetTransla
         {configured.map((locale) => (
           <div key={locale} className="space-y-2 rounded-lg border border-border/50 p-3">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">{LOCALE_LABEL[locale] ?? locale}</span>
+              <span className="text-sm font-medium">{WIDGET_LOCALE_LABELS[locale] ?? locale}</span>
               <Button
                 type="button"
                 variant="ghost"
@@ -1302,7 +1318,7 @@ function WidgetTranslationsCard({ translations }: { translations?: WidgetTransla
             <SelectContent>
               {available.map((l) => (
                 <SelectItem key={l} value={l}>
-                  {LOCALE_LABEL[l] ?? l}
+                  {WIDGET_LOCALE_LABELS[l] ?? l}
                 </SelectItem>
               ))}
             </SelectContent>

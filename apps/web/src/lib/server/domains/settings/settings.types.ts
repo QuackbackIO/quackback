@@ -356,8 +356,9 @@ export interface PortalConfig {
 }
 
 /**
- * Portal Support tab configuration. Gated (with the `supportInbox` feature
- * flag) by `isPortalSupportEnabled`; independent of the widget Messages tab.
+ * Portal Support tab configuration. Gated by `isPortalSupportSurfaceEnabled`
+ * (`supportTickets` OR `supportInbox` plus this toggle); independent of the
+ * widget Messages tab.
  */
 export interface PortalSupportConfig {
   enabled: boolean
@@ -689,8 +690,6 @@ export interface WidgetConfig {
     help?: boolean
     /** Messenger (the "Messages" tab). */
     messenger?: boolean
-    /** Support tickets (the "Tickets" tab). */
-    tickets?: boolean
     /** Show the aggregated Home tab (defaults to on; only appears with 2+ sections) */
     home?: boolean
   }
@@ -707,21 +706,32 @@ export interface WidgetConfig {
  * Public subset of widget config — safe to include in WorkspaceSettings / bootstrap data
  * Does NOT include identifyVerification (admin-only concern)
  */
-export type PublicWidgetConfig = Pick<
-  WidgetConfig,
-  | 'enabled'
-  | 'defaultBoard'
-  | 'position'
-  | 'tabs'
-  | 'home'
-  | 'launcherGreeting'
-  | 'launcherLabel'
-  | 'translations'
+export type PublicWidgetConfig = Omit<
+  Pick<
+    WidgetConfig,
+    | 'enabled'
+    | 'defaultBoard'
+    | 'position'
+    | 'tabs'
+    | 'home'
+    | 'launcherGreeting'
+    | 'launcherLabel'
+    | 'translations'
+  >,
+  'tabs'
 > & {
   /** Always true: identify requires a backend-signed ssoToken (GH issue #300). */
   hmacRequired?: boolean
   /** Client-safe messenger config (no agent-only fields like routing). */
   messenger?: PublicMessengerConfig
+  tabs?: NonNullable<WidgetConfig['tabs']> & {
+    /**
+     * Computed from the `supportTickets` flag — not a stored tab. Ticket
+     * pairs surface through Messages; this bit still drives the requester's
+     * own-tickets list in the widget.
+     */
+    tickets?: boolean
+  }
 }
 
 export const DEFAULT_MESSENGER_CONFIG: MessengerConfig = {
@@ -759,7 +769,6 @@ export interface UpdateWidgetConfigInput {
     changelog?: boolean
     help?: boolean
     messenger?: boolean
-    tickets?: boolean
     home?: boolean
   }
   messenger?: Partial<MessengerConfig>

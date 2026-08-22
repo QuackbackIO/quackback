@@ -270,7 +270,7 @@ describe('getPublicWidgetConfig — help tab projection', () => {
 })
 
 describe('getPublicWidgetConfig — tickets projection (converged Messages)', () => {
-  it('projects tabs.tickets from the supportTickets flag alone — no per-tab toggle', async () => {
+  it('projects tabs.tickets from the supportTickets flag alone — no stored tab', async () => {
     // The flag is set explicitly, and the stored tabs deliberately carry no
     // `tickets` key: that is the point of the assertion. DEFAULT_FEATURE_FLAGS
     // is core-only (Feedback + Changelog) since 0268, so relying on a default
@@ -294,6 +294,25 @@ describe('getPublicWidgetConfig — tickets projection (converged Messages)', ()
     const projected = await getPublicWidgetConfig()
     expect(projected.tabs?.tickets).toBe(false)
     expect(projected.enabled).toBe(false)
+  })
+})
+
+describe('getPublicWidgetConfig — translations', () => {
+  it('projects per-locale copy so the widget iframe sees Home and messenger strings', async () => {
+    settingsRow.current = fixtureRow({
+      enabled: true,
+      translations: {
+        de: { greeting: 'Hallo', welcomeMessage: 'Willkommen' },
+      },
+      launcherGreeting: 'Need a hand?',
+      launcherLabel: 'Chat',
+    })
+    const projected = await getPublicWidgetConfig()
+    expect(projected.translations).toEqual({
+      de: { greeting: 'Hallo', welcomeMessage: 'Willkommen' },
+    })
+    expect(projected.launcherGreeting).toBe('Need a hand?')
+    expect(projected.launcherLabel).toBe('Chat')
   })
 })
 
