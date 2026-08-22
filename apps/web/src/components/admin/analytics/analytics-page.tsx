@@ -148,8 +148,7 @@ const periods: Array<{ value: AnalyticsPeriod; label: string }> = [
 export function AnalyticsPage() {
   const { settings } = useRouteContext({ from: '__root__' })
   const flags = settings?.featureFlags as FeatureFlags | undefined
-  // Product reports follow product availability; visitor reporting retains
-  // its separate privacy-sensitive Labs gate.
+  // Product reports follow product availability. Visitor reporting is always on.
   const sections = SECTION_NAV_ITEMS.filter(
     (i) =>
       (i.key !== 'feedback' || isProductEnabled(flags, 'feedback')) &&

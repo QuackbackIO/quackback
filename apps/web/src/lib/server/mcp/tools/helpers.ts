@@ -107,7 +107,7 @@ export async function requireHelpCenter(): Promise<CallToolResult | null> {
     content: [
       {
         type: 'text',
-        text: 'Error: Help center is not enabled. Enable it in Settings > Features.',
+        text: 'Error: Help center is not enabled. Enable it in Settings → General.',
       },
     ],
   }

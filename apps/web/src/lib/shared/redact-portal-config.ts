@@ -1,4 +1,5 @@
 import type { PortalConfig, PortalAccessConfig } from '@/lib/server/domains/settings/settings.types'
+import type { StatusSettings } from '@/lib/shared/status-settings'
 
 /** Redacted access shape — visibility only. */
 type RedactedAccess = Pick<PortalAccessConfig, 'visibility'>
@@ -22,6 +23,25 @@ function redactPortalConfig(portalConfig: PortalConfig): RedactedPortalConfig {
       visibility: portalConfig.access.visibility,
     },
   }
+}
+
+/** Public status-page fields. Segment ids and email kill-switch stay server-side. */
+type PublicStatusConfig = Pick<StatusSettings, 'enabled' | 'audience' | 'pageDescription'>
+
+function redactStatusConfig(statusConfig: StatusSettings): PublicStatusConfig {
+  return {
+    enabled: statusConfig.enabled,
+    audience: statusConfig.audience,
+    pageDescription: statusConfig.pageDescription,
+  }
+}
+
+function statusConfigNeedsRedaction(statusConfig: StatusSettings): boolean {
+  return (
+    'allowedSegmentIds' in statusConfig ||
+    'emailsDisabled' in statusConfig ||
+    'portalTabEnabled' in statusConfig
+  )
 }
 
 /**
@@ -60,7 +80,9 @@ function stripServerOnlyKeys<T extends object>(row: T): T {
  *   most critically `widgetSecret`);
  * - the access policy fields (allowedDomains, widgetSignIn, allowedSegmentIds)
  *   of `portalConfig`, keeping only access.visibility (already public via
- *   publicPortalConfig.portalAccess).
+ *   publicPortalConfig.portalAccess);
+ * - non-public status-page fields (`allowedSegmentIds`, `emailsDisabled`,
+ *   deprecated `portalTabEnabled`) of `statusConfig`.
  *
  * Accepts either the parsed WorkspaceSettings shape or the raw DB row. When the
  * input carries the raw row as a nested `settings` property (WorkspaceSettings
@@ -68,16 +90,22 @@ function stripServerOnlyKeys<T extends object>(row: T): T {
  * covers both levels. `portalConfig` may be a parsed object or a JSON-string
  * column. When nothing needs redaction the input is returned by reference.
  */
-export function redactSettingsForClient<T extends { portalConfig?: PortalConfig | string | null }>(
-  row: T
-): T {
+export function redactSettingsForClient<
+  T extends {
+    portalConfig?: PortalConfig | string | null
+    statusConfig?: StatusSettings | null
+  },
+>(row: T): T {
   let result = stripServerOnlyKeys(row)
 
   // WorkspaceSettings shape: the raw DB row rides along as `.settings`.
   const nested = (result as Record<string, unknown>).settings
   if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
     const redactedNested = redactSettingsForClient(
-      nested as { portalConfig?: PortalConfig | string | null }
+      nested as {
+        portalConfig?: PortalConfig | string | null
+        statusConfig?: StatusSettings | null
+      }
     )
     if (redactedNested !== nested) {
       result = result === row ? ({ ...row } as T) : result
@@ -85,28 +113,29 @@ export function redactSettingsForClient<T extends { portalConfig?: PortalConfig 
     }
   }
 
-  const { portalConfig } = result
+  const { portalConfig, statusConfig } = result
 
-  if (!portalConfig) return result
-
-  // Parsed object form (WorkspaceSettings.portalConfig)
-  if (typeof portalConfig === 'object') {
-    if (!portalConfig.access) return result
-    // Cast: the shape is identical at runtime; only the access sub-keys differ.
-    return { ...result, portalConfig: redactPortalConfig(portalConfig) } as T
+  if (portalConfig) {
+    // Parsed object form (WorkspaceSettings.portalConfig)
+    if (typeof portalConfig === 'object' && portalConfig.access) {
+      // Cast: the shape is identical at runtime; only the access sub-keys differ.
+      result = { ...result, portalConfig: redactPortalConfig(portalConfig) } as T
+    } else if (typeof portalConfig === 'string') {
+      // JSON-string form (raw DB row column)
+      try {
+        const parsed = JSON.parse(portalConfig) as Partial<PortalConfig>
+        if (parsed.access) {
+          const redacted = redactPortalConfig(parsed as PortalConfig)
+          result = { ...result, portalConfig: JSON.stringify(redacted) } as T
+        }
+      } catch {
+        // Unparseable — leave as-is; the downstream parser handles the error.
+      }
+    }
   }
 
-  // JSON-string form (raw DB row column)
-  if (typeof portalConfig === 'string') {
-    try {
-      const parsed = JSON.parse(portalConfig) as Partial<PortalConfig>
-      if (!parsed.access) return result
-      const redacted = redactPortalConfig(parsed as PortalConfig)
-      return { ...result, portalConfig: JSON.stringify(redacted) } as T
-    } catch {
-      // Unparseable — return as-is; the downstream parser handles the error.
-      return result
-    }
+  if (statusConfig && statusConfigNeedsRedaction(statusConfig)) {
+    result = { ...result, statusConfig: redactStatusConfig(statusConfig) } as T
   }
 
   return result

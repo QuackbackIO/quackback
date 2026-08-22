@@ -60,7 +60,6 @@ export function isStatusPagePublished(
 export const statusSettingsSchema = z
   .object({
     enabled: z.boolean(),
-    portalTabEnabled: z.boolean(),
     audience: z.enum(['public', 'authenticated', 'segments']),
     allowedSegmentIds: z.array(z.string()),
     emailsDisabled: z.boolean(),

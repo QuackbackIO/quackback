@@ -14,10 +14,10 @@ describe('updateHelpCenterConfigSchema', () => {
     expect(result.success).toBe(true)
   })
 
-  it('should accept enabled boolean', () => {
+  it('should ignore deprecated enabled (product flag is the write path)', () => {
     const result = updateHelpCenterConfigSchema.safeParse({ enabled: true })
     expect(result.success).toBe(true)
-    expect(result.data?.enabled).toBe(true)
+    expect(result.data).not.toHaveProperty('enabled')
   })
 
   it('should accept homepageTitle', () => {
@@ -51,7 +51,6 @@ describe('updateHelpCenterConfigSchema', () => {
 
   it('should accept all fields together', () => {
     const result = updateHelpCenterConfigSchema.safeParse({
-      enabled: true,
       homepageTitle: 'Get Help',
       homepageDescription: 'Browse our docs',
     })
@@ -75,10 +74,10 @@ describe('updateHelpCenterSeoSchema', () => {
     expect(result.success).toBe(false)
   })
 
-  it('should accept sitemapEnabled boolean', () => {
+  it('should ignore deprecated sitemapEnabled (indexable is the write path)', () => {
     const result = updateHelpCenterSeoSchema.safeParse({ sitemapEnabled: false })
     expect(result.success).toBe(true)
-    expect(result.data?.sitemapEnabled).toBe(false)
+    expect(result.data).not.toHaveProperty('sitemapEnabled')
   })
 
   it('should accept structuredDataEnabled boolean', () => {
@@ -89,7 +88,6 @@ describe('updateHelpCenterSeoSchema', () => {
   it('should accept all fields together', () => {
     const result = updateHelpCenterSeoSchema.safeParse({
       metaDescription: 'Our help center',
-      sitemapEnabled: true,
       structuredDataEnabled: false,
     })
     expect(result.success).toBe(true)

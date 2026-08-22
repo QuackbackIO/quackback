@@ -1,4 +1,4 @@
-import { createFileRoute, Link, Navigate } from '@tanstack/react-router'
+import { createFileRoute, Link, redirect } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { ChatBubbleLeftRightIcon, EnvelopeIcon } from '@heroicons/react/24/solid'
@@ -25,6 +25,11 @@ import {
 } from '@/lib/shared/support-surfaces'
 
 export const Route = createFileRoute('/admin/settings/channels')({
+  beforeLoad: ({ context }) => {
+    if (!context.settings?.featureFlags?.supportInbox) {
+      throw redirect({ to: '/admin/settings/general' })
+    }
+  },
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MANAGE)
     await Promise.all([
@@ -33,15 +38,8 @@ export const Route = createFileRoute('/admin/settings/channels')({
     ])
     return {}
   },
-  component: ChannelsHubRoute,
+  component: ChannelsHubPage,
 })
-
-function ChannelsHubRoute() {
-  const { settings } = Route.useRouteContext()
-  const flags = settings?.featureFlags as FeatureFlags | undefined
-  if (!flags?.supportInbox) return <Navigate to="/admin/settings" />
-  return <ChannelsHubPage />
-}
 
 function ChannelsHubPage() {
   const { settings } = Route.useRouteContext()

@@ -1,9 +1,9 @@
 import { z } from 'zod'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
-import { createFileRoute, useNavigate, Navigate } from '@tanstack/react-router'
+import { createFileRoute, useNavigate, redirect } from '@tanstack/react-router'
 import { CircleStackIcon } from '@heroicons/react/24/solid'
-import type { FeatureFlags } from '@/lib/shared/types/settings'
+import { isProductEnabled } from '@/lib/shared/types/settings'
 import { conversationAttributeQueries } from '@/lib/client/queries/conversation-attributes'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
@@ -18,27 +18,18 @@ type ConversationDataTab = 'attributes' | 'tags'
 
 export const Route = createFileRoute('/admin/settings/conversation-data')({
   validateSearch: searchSchema,
+  beforeLoad: ({ context }) => {
+    if (!isProductEnabled(context.settings?.featureFlags, 'support')) {
+      throw redirect({ to: '/admin/settings/general' })
+    }
+  },
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.CONVERSATION_MANAGE)
     await context.queryClient.ensureQueryData(conversationAttributeQueries.registry())
     return {}
   },
-  component: ConversationDataRoute,
+  component: ConversationDataPage,
 })
-
-/**
- * Gate the page behind the experimental `supportInbox` flag (off by default),
- * mirroring the conversations settings route. Wrapping keeps the flag check
- * above the page's hooks so they aren't conditionally called.
- */
-function ConversationDataRoute() {
-  const { settings } = Route.useRouteContext()
-  const flags = settings?.featureFlags as FeatureFlags | undefined
-  if (!flags?.supportInbox) {
-    return <Navigate to="/admin/settings" />
-  }
-  return <ConversationDataPage />
-}
 
 function ConversationDataPage() {
   const search = Route.useSearch()

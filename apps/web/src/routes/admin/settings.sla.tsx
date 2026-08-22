@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useIntl } from 'react-intl'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
-import { createFileRoute, Navigate } from '@tanstack/react-router'
+import { createFileRoute, Link, redirect } from '@tanstack/react-router'
 import {
   queryOptions,
   useMutation,
@@ -18,7 +18,7 @@ import {
   MoonIcon,
   PauseIcon,
 } from '@heroicons/react/24/outline'
-import type { FeatureFlags } from '@/lib/shared/types/settings'
+import { isProductEnabled } from '@/lib/shared/types/settings'
 import { slaTargetsSummary } from '@/lib/shared/conversation/sla'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { useUpdateDefaultSlaPolicy } from '@/lib/client/mutations/settings'
@@ -73,6 +73,11 @@ const slaOfficeHoursQuery = queryOptions({
 })
 
 export const Route = createFileRoute('/admin/settings/sla')({
+  beforeLoad: ({ context }) => {
+    if (!isProductEnabled(context.settings?.featureFlags, 'support')) {
+      throw redirect({ to: '/admin/settings/general' })
+    }
+  },
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.SLA_MANAGE)
     await Promise.all([
@@ -81,18 +86,8 @@ export const Route = createFileRoute('/admin/settings/sla')({
     ])
     return {}
   },
-  component: SlaSettingsRoute,
+  component: SlaSettingsPage,
 })
-
-/** Gate behind the same experimental flag the rest of the Support area uses. */
-function SlaSettingsRoute() {
-  const { settings } = Route.useRouteContext()
-  const flags = settings?.featureFlags as FeatureFlags | undefined
-  if (!flags?.supportInbox) {
-    return <Navigate to="/admin/settings" />
-  }
-  return <SlaSettingsPage />
-}
 
 // ── Duration targets: integer + unit, stored as seconds ─────────────────────
 
@@ -134,9 +129,7 @@ type TargetKey = (typeof TARGET_FIELDS)[number]['key']
 
 /** Which policy the editor dialog holds: a fresh one, a clone seed, or an edit. */
 type EditorState =
-  | { mode: 'create'; seed: SlaPolicyDTO | null }
-  | { mode: 'edit'; policy: SlaPolicyDTO }
-  | null
+  { mode: 'create'; seed: SlaPolicyDTO | null } | { mode: 'edit'; policy: SlaPolicyDTO } | null
 
 const DEFAULT_SLA_NONE = '__none__'
 
@@ -613,9 +606,17 @@ function PolicyEditorDialog({
           <div className="space-y-1.5">
             <Label>Business hours</Label>
             <p className="text-xs text-muted-foreground">
-              {officeHoursEnabled
-                ? 'Clocks count only time inside your workspace office hours.'
-                : 'Clocks run around the clock. Set office hours in Settings to make clocks count only open time.'}
+              {officeHoursEnabled ? (
+                'Clocks count only time inside your workspace office hours.'
+              ) : (
+                <>
+                  Clocks run around the clock.{' '}
+                  <Link to="/admin/settings/office-hours" className="font-medium text-primary">
+                    Set office hours
+                  </Link>{' '}
+                  to make clocks count only open time.
+                </>
+              )}
             </p>
           </div>
 

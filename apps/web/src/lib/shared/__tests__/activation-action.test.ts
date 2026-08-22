@@ -12,7 +12,6 @@ const base: LaunchStatus = {
   hasPublicBoard: false,
   memberCount: 1,
   hasBranding: false,
-  hasWidgetEnabled: false,
   hasWidgetInstalled: false,
   hasMessengerEnabled: false,
   hasFirstWin: false,

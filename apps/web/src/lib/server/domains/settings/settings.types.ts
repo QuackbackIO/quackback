@@ -9,7 +9,6 @@ import type { TiptapContent } from '@/lib/shared/db-types'
 import type { Role } from '@/lib/shared/roles'
 import type { OfficeHoursConfig } from '@/lib/shared/conversation/types'
 import type { WidgetTranslations } from '@/lib/shared/widget/translations'
-import type { ChangelogSettings } from '@/lib/shared/changelog-settings'
 import type { StatusSettings } from '@/lib/shared/status-settings'
 
 // =============================================================================
@@ -1046,8 +1045,6 @@ export interface WorkspaceSettings {
   publicPortalConfig: PublicPortalConfig
   /** Help center configuration */
   helpCenterConfig: HelpCenterConfig
-  /** Changelog audience/nav/collaboration/email settings */
-  changelogConfig: ChangelogSettings
   /** Status page enablement/visibility/email settings */
   statusConfig: StatusSettings
   /** Public widget config (no secret, safe for client) */

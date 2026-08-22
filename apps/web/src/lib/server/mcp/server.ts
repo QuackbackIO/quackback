@@ -144,7 +144,7 @@ function registerResources(server: McpServer, auth: McpAuthContext) {
             {
               uri: 'quackback://help-center/categories',
               mimeType: 'text/plain',
-              text: 'Help center is not enabled. Enable it in Settings > Features.',
+              text: 'Help center is not enabled. Enable it in Settings → General.',
             },
           ],
         }

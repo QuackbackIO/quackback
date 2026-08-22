@@ -1,5 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { UserGroupIcon } from '@heroicons/react/24/solid'
 import { BackLink } from '@/components/ui/back-link'
@@ -8,6 +10,7 @@ import { UserAttributesList } from '@/components/admin/settings/user-attributes/
 
 export const Route = createFileRoute('/admin/settings/people')({
   loader: async ({ context }) => {
+    assertRoutePermission(context.permissions, PERMISSIONS.USER_ATTRIBUTE_VIEW)
     const { queryClient } = context
     await queryClient.ensureQueryData(adminQueries.userAttributes())
     return {}

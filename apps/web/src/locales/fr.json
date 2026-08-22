@@ -1102,7 +1102,7 @@
   "automation.skills.editor.new": "New skill",
   "automation.skills.editor.edit": "Edit skill",
   "automation.whoRepliesFirst.title": "Who replies first",
-  "automation.agent.deployment.openLabs": "Open product settings",
+  "automation.agent.deployment.openGeneral": "Open product settings",
   "automation.workflows.title": "Workflows",
   "automation.workflows.description": "Automate routing, replies, and housekeeping on top of your conversations.",
   "automation.whoRepliesFirst.step1": "<b>Quinn answers instantly</b> whenever it's enabled, around the clock.",

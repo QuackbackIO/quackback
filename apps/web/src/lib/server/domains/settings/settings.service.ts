@@ -49,7 +49,6 @@ import {
 import { signupOpenFor } from '@/lib/shared/signup-open'
 import { projectPublicWidgetConfig } from './settings.widget'
 import { getSetupState, isOnboardingComplete } from '@/lib/shared/db-types'
-import { resolveChangelogSettings } from './settings.changelog'
 import { resolveStatusSettings } from './settings.status'
 import {
   parseJsonConfig,
@@ -904,7 +903,6 @@ export async function getWorkspaceSettings(): Promise<WorkspaceSettings | null> 
       ? assistantConfig.data.identity
       : DEFAULT_ASSISTANT_CONFIG.identity
     const helpCenterConfig = parseJsonConfig(org.helpCenterConfig, DEFAULT_HELP_CENTER_CONFIG)
-    const changelogConfig = resolveChangelogSettings(org.metadata)
     const statusConfig = resolveStatusSettings(org.metadata)
 
     const featureFlags = resolveFeatureFlags(org.featureFlags)
@@ -942,7 +940,6 @@ export async function getWorkspaceSettings(): Promise<WorkspaceSettings | null> 
       brandingConfig,
       developerConfig,
       helpCenterConfig,
-      changelogConfig,
       statusConfig,
       customCss: org.customCss ?? '',
       publicAuthConfig: {

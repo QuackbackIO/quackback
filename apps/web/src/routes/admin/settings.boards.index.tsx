@@ -30,6 +30,8 @@ import {
   useBoardSelection,
   type BoardTab,
 } from '@/components/admin/settings/boards/use-board-selection'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 
 const searchSchema = z.object({
@@ -45,6 +47,7 @@ export const Route = createFileRoute('/admin/settings/boards/')({
     }
   },
   loader: async ({ context }) => {
+    assertRoutePermission(context.permissions, PERMISSIONS.BOARD_MANAGE)
     const { queryClient } = context
     // Warm both queries the board forms read so they render with real data
     // on first paint (no flash). portalConfig backs the Moderation tab's
