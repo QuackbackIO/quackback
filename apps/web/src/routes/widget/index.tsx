@@ -113,7 +113,6 @@ export const Route = createFileRoute('/widget/')({
 
     const helpTabEnabled =
       ((settings?.featureFlags as { helpCenter?: boolean } | undefined)?.helpCenter ?? false) &&
-      (settings?.helpCenterConfig?.enabled ?? false) &&
       (settings?.publicWidgetConfig?.tabs?.help ?? false)
     const changelogTabEnabled =
       changelogProductEnabled && (settings?.publicWidgetConfig?.tabs?.changelog ?? false)
@@ -241,10 +240,7 @@ export const Route = createFileRoute('/widget/')({
       tabs: {
         feedback: feedbackProductEnabled && (settings?.publicWidgetConfig?.tabs?.feedback ?? true),
         changelog: changelogTabEnabled,
-        help:
-          ((settings?.featureFlags as { helpCenter?: boolean } | undefined)?.helpCenter ?? false) &&
-          (settings?.helpCenterConfig?.enabled ?? false) &&
-          (settings?.publicWidgetConfig?.tabs?.help ?? false),
+        help: helpTabEnabled,
         // Support Inbox flag + Messages tab on (computed above), OR
         // tickets on (the converged surface lists ticket pairs here). The
         // persisted config names the messenger surface `messenger`; the widget

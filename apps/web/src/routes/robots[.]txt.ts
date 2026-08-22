@@ -11,7 +11,7 @@ export const Route = createFileRoute('/robots.txt')({
         const baseUrl = config.baseUrl
 
         const helpCenterConfig = await getHelpCenterConfig()
-        const helpCenterEnabled = (await isFeatureEnabled('helpCenter')) && helpCenterConfig.enabled
+        const helpCenterEnabled = await isFeatureEnabled('helpCenter')
         // Indexing toggle (domains/languages §1): off means neither crawlable
         // nor advertised via a sitemap link.
         const helpCenterIndexable = helpCenterEnabled && helpCenterConfig.seo?.indexable !== false

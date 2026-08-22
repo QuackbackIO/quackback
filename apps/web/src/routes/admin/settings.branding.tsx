@@ -275,7 +275,7 @@ function BrandingPage() {
       changelog:
         isProductEnabled(flags, 'changelog') &&
         (settings?.changelogConfig?.portalTabEnabled ?? true),
-      help: isProductEnabled(flags, 'helpCenter') && !!settings?.helpCenterConfig?.enabled,
+      help: isProductEnabled(flags, 'helpCenter'),
       support:
         !!flags?.supportTickets ||
         (!!flags?.supportInbox && !!settings?.portalConfig?.support?.enabled),

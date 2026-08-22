@@ -67,7 +67,7 @@ export const Route = createFileRoute('/_portal/')({
           (org.featureFlags.supportInbox && org.portalConfig.support?.enabled === true)
         if (supportPublished) throw redirect({ to: '/support' })
       }
-      if (isProductEnabled(org.featureFlags, 'helpCenter') && org.helpCenterConfig.enabled) {
+      if (isProductEnabled(org.featureFlags, 'helpCenter')) {
         throw redirect({ to: '/hc' })
       }
       if (isProductEnabled(org.featureFlags, 'changelog')) {
