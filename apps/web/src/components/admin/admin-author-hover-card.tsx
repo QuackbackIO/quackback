@@ -19,6 +19,8 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import { useHasPermission } from '@/lib/client/use-permissions'
 import {
   getPublicUserProfileFn,
   getProfileTeamContextFn,
@@ -43,6 +45,10 @@ export function AdminAuthorHoverCard({
   className,
 }: AdminAuthorHoverCardProps) {
   const navigate = useNavigate()
+  // Render-only: the team-context fn still requireAuth(people.view). Skip the
+  // request when the caller lacks it so a vote manager without people.view
+  // does not 403, matching the voters-stack / portal-profile pattern.
+  const canViewPeople = useHasPermission(PERMISSIONS.PEOPLE_VIEW)
   const [open, setOpen] = useState(false)
   const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -56,7 +62,7 @@ export function AdminAuthorHoverCard({
   const teamQuery = useQuery({
     queryKey: ['admin', 'author-hover-card-team', principalId],
     queryFn: () => getProfileTeamContextFn({ data: { principalId } }),
-    enabled: open,
+    enabled: open && canViewPeople,
     staleTime: 60_000,
   })
 
@@ -80,7 +86,12 @@ export function AdminAuthorHoverCard({
   function goToProfile(e: { preventDefault: () => void; stopPropagation: () => void }) {
     e.preventDefault()
     e.stopPropagation()
-    void navigate({ to: '/admin/users', search: { selected: principalId } })
+    if (canViewPeople) {
+      void navigate({ to: '/admin/users', search: { selected: principalId } })
+      return
+    }
+    // Without people.view the directory 403s; fall back to the public profile.
+    void navigate({ to: '/u/$principalId', params: { principalId } })
   }
 
   const profile = profileQuery.data ?? null
@@ -151,7 +162,10 @@ export function AdminAuthorHoverCard({
               </div>
             </div>
 
-            <TeamInfoRows team={teamQuery.data ?? null} isLoading={teamQuery.isLoading} />
+            <TeamInfoRows
+              team={canViewPeople ? (teamQuery.data ?? null) : null}
+              isLoading={canViewPeople && teamQuery.isLoading}
+            />
 
             <div className="mt-3 flex items-center border-t border-border/50 pt-2.5">
               <CardStat value={profile.postCount} label="Posts" />
@@ -159,14 +173,16 @@ export function AdminAuthorHoverCard({
               <CardStat value={profile.voteCount} label="Votes" />
             </div>
 
-            <button
-              type="button"
-              onClick={goToProfile}
-              className="mt-3 flex w-full items-center justify-between border-t border-border/50 pt-2.5 text-primary"
-            >
-              <span className="text-xs font-medium">Open full profile</span>
-              <ArrowRightIcon className="size-3.5" />
-            </button>
+            {canViewPeople && (
+              <button
+                type="button"
+                onClick={goToProfile}
+                className="mt-3 flex w-full items-center justify-between border-t border-border/50 pt-2.5 text-primary"
+              >
+                <span className="text-xs font-medium">Open full profile</span>
+                <ArrowRightIcon className="size-3.5" />
+              </button>
+            )}
           </div>
         ) : null}
       </PopoverContent>

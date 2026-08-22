@@ -19,6 +19,11 @@ vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => navigate,
 }))
 
+let canViewPeople = true
+vi.mock('@/lib/client/use-permissions', () => ({
+  useHasPermission: () => canViewPeople,
+}))
+
 const getPublicUserProfileFn = vi.fn()
 const getProfileTeamContextFn = vi.fn()
 vi.mock('@/lib/server/functions/public-profile', () => ({
@@ -63,6 +68,7 @@ beforeEach(() => {
   navigate.mockReset()
   getPublicUserProfileFn.mockReset()
   getProfileTeamContextFn.mockReset()
+  canViewPeople = true
 })
 afterEach(cleanup)
 
@@ -172,6 +178,37 @@ describe('AdminAuthorHoverCard', () => {
     expect(navigate).toHaveBeenCalledWith({
       to: '/admin/users',
       search: { selected: 'principal_abc' },
+    })
+  })
+
+  it('does not fetch team context or expose email without people.view', async () => {
+    canViewPeople = false
+    getPublicUserProfileFn.mockResolvedValue(PROFILE)
+    renderCard(
+      <AdminAuthorHoverCard principalId="principal_abc" displayName="Ada Lovelace">
+        Ada Lovelace
+      </AdminAuthorHoverCard>
+    )
+
+    fireEvent.mouseEnter(screen.getByText('Ada Lovelace'))
+    const body = await screen.findByTestId('admin-author-hover-card-body')
+    expect(getProfileTeamContextFn).not.toHaveBeenCalled()
+    expect(body).not.toHaveTextContent('ada@example.com')
+    expect(body).not.toHaveTextContent('Open full profile')
+    expect(body).not.toHaveTextContent('Company')
+  })
+
+  it('falls back to the public profile when the caller lacks people.view', () => {
+    canViewPeople = false
+    renderCard(
+      <AdminAuthorHoverCard principalId="principal_abc" displayName="Ada Lovelace">
+        Ada Lovelace
+      </AdminAuthorHoverCard>
+    )
+    fireEvent.click(screen.getByText('Ada Lovelace'))
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/u/$principalId',
+      params: { principalId: 'principal_abc' },
     })
   })
 })
