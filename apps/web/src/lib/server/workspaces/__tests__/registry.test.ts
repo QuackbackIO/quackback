@@ -187,6 +187,19 @@ describe('interpretRow', () => {
     expect(result.kind).toBe('invalid')
   })
 
+  it('refuses pooled and direct URLs that only differ by application_name', () => {
+    const result = interpretRow(
+      row({
+        db_pooled_url: 'postgresql://qb_ws_t1@db.example.com/qb_ws_t1?application_name=web',
+        db_direct_url: 'postgresql://qb_ws_t1@db.example.com/qb_ws_t1?application_name=migrator',
+      }),
+      't1.localhost'
+    )
+    expect(result.kind).toBe('invalid')
+    if (result.kind !== 'invalid') return
+    expect(result.problems.join(' ')).toMatch(/host:port/)
+  })
+
   it('refuses a direct endpoint that is really a pooler', () => {
     // LISTEN registration is lost through a transaction pooler in proportion to
     // contention, so this fails silently under load rather than at deploy.
