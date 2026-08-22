@@ -35,7 +35,7 @@ const vendorDir = join(here, '..', 'vendor')
  * here too — which is the point.
  */
 const VENDORED = {
-  'contract.ts': '84b46f322c054b884838376d54b884e84b14acfdcf587ab274b0ecb077992d68',
+  'contract.ts': '59d16295b3f1d4a0379a8e0c65838f531afbbb96a600379494637fecb3b5cf13',
   // The mail slug vocabulary, which `contract.ts` imports and re-exports. It is
   // a separate module on the control plane so the edge mail Worker can apply the
   // same rule without pulling zod and the record schema into a workerd bundle;
