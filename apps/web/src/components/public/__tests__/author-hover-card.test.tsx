@@ -101,12 +101,15 @@ describe('AuthorHoverCard', () => {
     await waitFor(() => expect(getPublicUserProfileFn).toHaveBeenCalledTimes(1))
     expect(getPublicUserProfileFn).toHaveBeenCalledWith({ data: { principalId: 'principal_abc' } })
 
-    // Card body renders the fetched counts.
+    // Card body renders the fetched counts, evenly distributed.
     const body = await screen.findByTestId('author-hover-card-body')
     expect(body).toBeInTheDocument()
     expect(body).toHaveTextContent('7')
     expect(body).toHaveTextContent('12')
     expect(body).toHaveTextContent('42')
+    const statRow = body.querySelector('.flex.items-center.border-t')
+    expect(statRow?.className).not.toContain('gap-4')
+    expect(statRow?.querySelectorAll('.flex-1').length).toBe(3)
   })
 
   it('shows no card body when the payload resolves null', async () => {
