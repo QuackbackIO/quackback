@@ -963,10 +963,10 @@ export function AgentConversationThread({
   }, [queryClient, threadKey, onChanged])
 
   // P2-D.1 inbox translation: activation banner/toggle + per-message
-  // translation display, gated on the flag AND the capability. A no-op hook
-  // (everything false/undefined) whenever either is off, so a ticket's
-  // behavior is unaffected.
-  const inboxTranslationEnabled = capabilities.inboxTranslation && (flags?.inboxAi ?? false)
+  // translation display, gated on the inboxTranslation capability. A no-op
+  // hook (everything false/undefined) when the capability is off, so a
+  // ticket's behavior is unaffected.
+  const inboxTranslationEnabled = capabilities.inboxTranslation
   const inboxTranslation = useInboxTranslation({
     enabledFlag: inboxTranslationEnabled,
     conversationId: conversationId ?? INACTIVE_CONVERSATION_ID,

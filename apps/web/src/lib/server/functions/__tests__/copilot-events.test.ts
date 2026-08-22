@@ -1,7 +1,7 @@
 /**
  * `recordCopilotEventFn` (Quinn Copilot outcome loop): the panel's
  * fire-and-forget usage-event writer. Covers the gate order (copilot.use ->
- * inboxAi flag -> assistant configured -> item viewable, via the
+ * assistant configured -> item viewable, via the
  * shared `gateCopilotFn` — exercised for real over these mocked seams, not
  * mocked as a module), the shape rules (feedback requires a
  * rating and rejects a destination; every *_inserted kind requires a
@@ -91,7 +91,7 @@ function insertedRow(): Record<string, unknown> {
 }
 
 describe('recordCopilotEventFn', () => {
-  it('gates on copilot.use, then the inboxAi flag', async () => {
+  it('gates on copilot.use, then the assistant being configured', async () => {
     await recordCopilotEventFn({
       data: {
         item: { conversationId: CONVERSATION_ID },
@@ -100,21 +100,7 @@ describe('recordCopilotEventFn', () => {
       },
     })
     expect(hoisted.requireAuth).toHaveBeenCalledWith({ permission: PERMISSIONS.COPILOT_USE })
-    expect(hoisted.isFeatureEnabled).toHaveBeenCalledWith('inboxAi')
-  })
-
-  it('rejects when the inboxAi flag is off, writing nothing', async () => {
-    hoisted.isFeatureEnabled.mockResolvedValue(false)
-    await expect(
-      recordCopilotEventFn({
-        data: {
-          item: { conversationId: CONVERSATION_ID },
-          eventType: 'answer_inserted',
-          destination: 'reply',
-        },
-      })
-    ).rejects.toThrow()
-    expect(hoisted.insert).not.toHaveBeenCalled()
+    expect(hoisted.isAssistantConfigured).toHaveBeenCalled()
   })
 
   it('rejects when the assistant is not configured, writing nothing', async () => {

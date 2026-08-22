@@ -34,7 +34,7 @@ export interface TelemetryPayload {
   }
   /** Full flag map. Kept so existing raw_payload queries still work. */
   experimentalFeatures: Record<string, boolean>
-  /** First-class product modules. Stable names, not mixed with Labs. */
+  /** First-class product modules. */
   products: TelemetryProducts
   cloud: boolean
   firstWin: { reached: boolean; outcome: TelemetryOutcome | null }

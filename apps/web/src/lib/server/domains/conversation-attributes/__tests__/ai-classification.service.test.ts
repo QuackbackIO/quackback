@@ -169,14 +169,6 @@ beforeEach(() => {
 })
 
 describe('classifyConversationAttributes: gating', () => {
-  it('is a no-op when the inboxAi flag is off', async () => {
-    mockIsFeatureEnabled.mockResolvedValue(false)
-    const result = await classifyConversationAttributes(conversationId, { trigger: 'handoff' })
-    expect(result).toEqual([])
-    expect(mockListConversationAttributes).not.toHaveBeenCalled()
-    expect(mockChat).not.toHaveBeenCalled()
-  })
-
   it('is a no-op when the AI client is not configured', async () => {
     mockConfig.openaiApiKey = undefined
     const result = await classifyConversationAttributes(conversationId, { trigger: 'handoff' })

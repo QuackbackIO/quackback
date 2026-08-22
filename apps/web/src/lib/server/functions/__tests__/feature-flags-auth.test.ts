@@ -1,8 +1,7 @@
 /**
  * Regression: `updateFeatureFlagsFn` shipped with zero auth check —
- * any unauthenticated RPC call could flip `helpCenter` and `inboxAi`.
- * Flipping `helpCenter` exposes a public subdomain; flipping `inboxAi`
- * routes customer text through an LLM. Both must be admin-only.
+ * any unauthenticated RPC call could flip `helpCenter`. Flipping
+ * `helpCenter` exposes a public subdomain. Product flags must be admin-only.
  *
  * This pins the contract at the handler boundary: requireAuth({roles:
  * ['admin']}) is invoked before any write.
@@ -45,7 +44,7 @@ let updateFeatureFlagsHandler: AnyHandler
 
 beforeEach(async () => {
   vi.clearAllMocks()
-  hoisted.mockUpdateFeatureFlags.mockResolvedValue({ inboxAi: true })
+  hoisted.mockUpdateFeatureFlags.mockResolvedValue({ helpCenter: true })
   if (handlers.length === 0) await import('../feature-flags')
   updateFeatureFlagsHandler = handlers[0]
 })
@@ -54,7 +53,7 @@ describe('updateFeatureFlagsFn — admin gate', () => {
   it('requires admin auth (G12)', async () => {
     hoisted.mockRequireAuth.mockRejectedValueOnce(new Error('Authentication required'))
 
-    await expect(updateFeatureFlagsHandler({ data: { inboxAi: true } })).rejects.toThrow(/auth/i)
+    await expect(updateFeatureFlagsHandler({ data: { helpCenter: true } })).rejects.toThrow(/auth/i)
 
     expect(hoisted.mockRequireAuth).toHaveBeenCalledWith(
       expect.objectContaining({ permission: PERMISSIONS.SETTINGS_MANAGE })
@@ -76,8 +75,8 @@ describe('updateFeatureFlagsFn — admin gate', () => {
       principal: { id: 'prn_admin', role: 'admin' },
     })
 
-    await updateFeatureFlagsHandler({ data: { inboxAi: true } })
+    await updateFeatureFlagsHandler({ data: { helpCenter: true } })
 
-    expect(hoisted.mockUpdateFeatureFlags).toHaveBeenCalledWith({ inboxAi: true })
+    expect(hoisted.mockUpdateFeatureFlags).toHaveBeenCalledWith({ helpCenter: true })
   })
 })

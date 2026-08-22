@@ -26,7 +26,6 @@ import {
 import { ConflictError, ForbiddenError, InternalError, NotFoundError } from '@/lib/shared/errors'
 import { z } from 'zod'
 import { invalidateSettingsCache, requireSettings } from './settings.helpers'
-import { resolveFeatureFlags } from './settings.types'
 
 const log = logger.child({ component: 'settings-assistant' })
 
@@ -70,10 +69,6 @@ export type AssistantConfigFallbackReason = 'invalid_assistant_config'
 
 export interface AssistantRuntimeConfigState extends AssistantConfigState {
   workspaceName: string
-  /** Remote MCP connectors mapped onto this turn's agent. */
-  connectorsEnabled: boolean
-  /** Packaged procedures pulled via use_skill. */
-  skillsEnabled: boolean
   configFallbackReason?: AssistantConfigFallbackReason
 }
 
@@ -111,13 +106,10 @@ export async function getAssistantSettings(): Promise<AssistantSettingsState> {
 /** Runtime read posture: invalid behavior JSON falls back without reintroducing a V1 reader. */
 export async function getAssistantRuntimeConfig(): Promise<AssistantRuntimeConfigState> {
   const row = await requireSettings()
-  const flags = resolveFeatureFlags(row.featureFlags)
   const parsed = assistantConfigSchema.safeParse(row.assistantConfig)
   const runtimeFields = {
     revision: row.assistantConfigRevision,
     workspaceName: row.name,
-    connectorsEnabled: flags.assistantConnectors,
-    skillsEnabled: flags.assistantSkills,
   }
   if (parsed.success) return { config: parsed.data, ...runtimeFields }
 

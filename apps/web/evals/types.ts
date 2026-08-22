@@ -77,11 +77,7 @@ export interface SeedStatusIncident {
   componentName: string
   /** The component's current operational state. Default: 'major_outage'. */
   componentStatus?:
-    | 'operational'
-    | 'degraded_performance'
-    | 'partial_outage'
-    | 'major_outage'
-    | 'under_maintenance'
+    'operational' | 'degraded_performance' | 'partial_outage' | 'major_outage' | 'under_maintenance'
   /** Incident title (e.g. "Elevated API error rate"). */
   incidentTitle: string
 }
@@ -139,9 +135,9 @@ export interface ScenarioConfig {
   tone?: AssistantTone
   responseLength?: AssistantResponseLength
   additionalInstructions?: string
-  /** settings.feature_flags.assistantConnectors */
+  /** Seed assigned connectors for this scenario. */
   connectors?: boolean
-  /** settings.feature_flags.assistantSkills */
+  /** Seed assigned skills for this scenario. */
   skills?: boolean
   /**
    * Per-agent knowledge-source overrides merged onto the default config v3

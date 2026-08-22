@@ -18,7 +18,6 @@ import { config } from '@/lib/server/config'
 import { isAiClientConfigured } from '@/lib/server/domains/ai/config'
 import { getChatModel } from '@/lib/server/domains/ai/models'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
-import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
 import { ValidationError } from '@/lib/shared/errors'
 import {
   runClassificationCall,
@@ -55,12 +54,6 @@ const EPHEMERAL_PREVIEW_KEY = 'preview_attribute'
 export async function previewAttributeDetection(
   input: PreviewAttributeDetectionInput
 ): Promise<PreviewAttributeDetectionResult> {
-  if (!(await isFeatureEnabled('inboxAi'))) {
-    throw new ValidationError(
-      'AI_ATTRIBUTE_DETECTION_DISABLED',
-      'AI attribute detection is turned off'
-    )
-  }
   const model = getChatModel('classification')
   if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !model) {
     throw new ValidationError('AI_NOT_CONFIGURED', 'AI is not configured')

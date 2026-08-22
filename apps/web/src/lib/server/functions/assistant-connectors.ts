@@ -11,7 +11,6 @@ import {
   connectorCreateInputSchema,
   connectorUpdateInputSchema,
   type BuiltinConnectorDTO,
-  type ConnectorDTO,
 } from '@/lib/shared/assistant/connectors'
 import { logger } from '@/lib/server/logger'
 import { recordAuditEvent, actorFromAuth } from '@/lib/server/audit/log'
@@ -42,9 +41,6 @@ const idSchema = z.object({ id: z.string().min(1) })
 export const listConnectorsFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('list connectors')
   await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
-  const { getFeatureFlags } = await import('@/lib/server/domains/settings/settings.service')
-  const flags = await getFeatureFlags()
-  if (!flags.assistantConnectors) return { builtin: null, connectors: [] as ConnectorDTO[] }
 
   const { listConnectors, toConnectorDTO } =
     await import('@/lib/server/domains/assistant/connectors/connectors.service')

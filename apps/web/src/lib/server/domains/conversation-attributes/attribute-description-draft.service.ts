@@ -29,7 +29,6 @@ import {
 import { createUsageLoggingMiddleware } from '@/lib/server/domains/ai/usage-middleware'
 import { getChatModel } from '@/lib/server/domains/ai/models'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
-import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
 import { ValidationError } from '@/lib/shared/errors'
 
 const DRAFT_SYSTEM_PROMPT = `You help an admin write descriptions for a customer-support conversation attribute that an AI classifier will use to categorize conversations.
@@ -86,12 +85,6 @@ const DraftDescriptionsSchema = z
 export async function draftAttributeDescriptions(
   input: DraftAttributeDescriptionsInput
 ): Promise<DraftAttributeDescriptionsResult> {
-  if (!(await isFeatureEnabled('inboxAi'))) {
-    throw new ValidationError(
-      'AI_ATTRIBUTE_DETECTION_DISABLED',
-      'AI attribute detection is turned off'
-    )
-  }
   const model = getChatModel('classification')
   if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !model) {
     throw new ValidationError('AI_NOT_CONFIGURED', 'AI is not configured')

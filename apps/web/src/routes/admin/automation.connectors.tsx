@@ -1,6 +1,6 @@
 import { BuiltInToolsCard } from '@/components/admin/automation/builtin-tools-card'
 import { useState } from 'react'
-import { createFileRoute, Link, Navigate, useRouteContext } from '@tanstack/react-router'
+import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { useIntl } from 'react-intl'
 import { ChevronRightIcon, LinkIcon, PlusIcon } from '@heroicons/react/24/outline'
@@ -20,7 +20,6 @@ import {
 } from '@/lib/client/mutations/assistant-connectors'
 import { toast } from 'sonner'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
-import type { FeatureFlags } from '@/lib/shared/types/settings'
 
 export const Route = createFileRoute('/admin/automation/connectors')({
   beforeLoad: ({ context }) => {
@@ -40,18 +39,12 @@ export const Route = createFileRoute('/admin/automation/connectors')({
 
 function ConnectorsPage() {
   const intl = useIntl()
-  const { settings } = useRouteContext({ from: '__root__' })
-  const flags = settings?.featureFlags as FeatureFlags | undefined
   const list = useQuery(connectorQueries.list())
   const [addOpen, setAddOpen] = useState(false)
   const [tokenConnectorId, setTokenConnectorId] = useState<string | null>(null)
   const refresh = useRefreshConnector()
   const startOAuth = useStartConnectorOAuth()
   const connectors = list.data?.connectors ?? []
-
-  if (!flags?.assistantConnectors) {
-    return <Navigate to="/admin/automation/agent" />
-  }
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6">

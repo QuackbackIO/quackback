@@ -1015,20 +1015,17 @@ export const getConversationFn = createServerFn({ method: 'GET' })
     // language detection, so the auto-suggest banner has something to
     // compare against. Fire-and-forget (like the summarize-on-close hook,
     // events/process.ts) — this NEVER blocks opening the thread, even when
-    // the flag is on and AI is configured. The DTO below carries whatever
-    // is already stored; a detection that completes during (or after) this
-    // request simply lands on the NEXT read of this conversation.
-    const { isFeatureEnabled } = await import('@/lib/server/domains/settings/settings.service')
-    if (await isFeatureEnabled('inboxAi')) {
-      void import('@/lib/server/domains/conversation/conversation-translation.service')
-        .then((m) => m.maybeDetectCustomerLanguage(conversation))
-        .catch((err) =>
-          log.error(
-            { err, conversation_id: conversation.id },
-            'customer language detection failed to load'
-          )
+    // AI is configured. The DTO below carries whatever is already stored; a
+    // detection that completes during (or after) this request simply lands
+    // on the NEXT read of this conversation.
+    void import('@/lib/server/domains/conversation/conversation-translation.service')
+      .then((m) => m.maybeDetectCustomerLanguage(conversation))
+      .catch((err) =>
+        log.error(
+          { err, conversation_id: conversation.id },
+          'customer language detection failed to load'
         )
-    }
+      )
     const [dto, page] = await Promise.all([
       conversationToDTO(conversation, 'agent'),
       // Agents see internal notes inline. CONVERGENCE PHASE 0: a linked
@@ -1075,8 +1072,7 @@ export const sendAgentMessageFn = createServerFn({ method: 'POST' })
     // always what the customer should see. `skipTranslation` is the
     // explicit "Send untranslated" fallback a teammate picks after a
     // TRANSLATION_FAILED error — it bypasses this block entirely.
-    const { isFeatureEnabled } = await import('@/lib/server/domains/settings/settings.service')
-    if (!data.skipTranslation && (await isFeatureEnabled('inboxAi'))) {
+    if (!data.skipTranslation) {
       const { resolveOutgoingReplyTranslation } =
         await import('@/lib/server/domains/conversation/conversation-translation.service')
       // Any failure here (AI unconfigured, unparseable/empty response)
@@ -1661,8 +1657,6 @@ export const translateConversationMessagesFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
     const actor = await policyActorFromAuth(ctx)
-    const { isFeatureEnabled } = await import('@/lib/server/domains/settings/settings.service')
-    if (!(await isFeatureEnabled('inboxAi'))) return {}
 
     const { assertConversationViewable } =
       await import('@/lib/server/domains/conversation/conversation.service')

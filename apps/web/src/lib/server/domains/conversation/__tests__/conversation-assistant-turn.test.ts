@@ -678,16 +678,6 @@ describe('runAssistantTurnForConversation activity snapshot (Redis mirror)', () 
 })
 
 describe('runAssistantTurnForConversation Phase 2 live attribute re-check', () => {
-  it('never fires when the inboxAi flag is off', async () => {
-    mockIsFeatureEnabled.mockResolvedValue(false)
-    mockGetLiveWorkflowReferencedAttributeKeys.mockResolvedValue(new Set(['issue_type']))
-    assistantMock.runAssistantTurn.mockResolvedValue(answered({}))
-    await runAssistantTurnForConversation(CONV)
-    // The flag gate is checked before the referenced-keys read at all.
-    expect(mockGetLiveWorkflowReferencedAttributeKeys).not.toHaveBeenCalled()
-    expect(mockClassifyConversationAttributes).not.toHaveBeenCalled()
-  })
-
   it('never fires when no live workflow references any AI attribute', async () => {
     mockIsFeatureEnabled.mockResolvedValue(true)
     mockGetLiveWorkflowReferencedAttributeKeys.mockResolvedValue(new Set())
@@ -699,7 +689,7 @@ describe('runAssistantTurnForConversation Phase 2 live attribute re-check', () =
     expect(mockClassifyConversationAttributes).not.toHaveBeenCalled()
   })
 
-  it('fires with trigger live_recheck restricted to the referenced keys when flag on + referenced', async () => {
+  it('fires with trigger live_recheck restricted to the referenced keys when referenced', async () => {
     mockIsFeatureEnabled.mockResolvedValue(true)
     mockGetLiveWorkflowReferencedAttributeKeys.mockResolvedValue(
       new Set(['issue_type', 'sentiment'])

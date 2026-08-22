@@ -3,13 +3,13 @@
  *  - sendAgentMessageFn translates an outgoing reply before sending when
  *    translation is active (and BLOCKS the send on failure, never silently
  *    sends untranslated), honors the explicit skipTranslation fallback, and
- *    is a no-op (zero behavior change) when the flag is off.
+ *    is skipped only via the explicit skipTranslation fallback.
  *  - translateConversationMessagesFn / setInboxTranslationEnabledFn /
  *    dismissInboxTranslationSuggestionFn are gated the same way the sibling
  *    conversation fns already are.
  * The underlying translation logic itself is covered by
  * conversation-translation.service.test.ts; this file pins the orchestration
- * (flag checks, permission gates, and what gets passed to the service).
+ * (permission gates and what gets passed to the service).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
@@ -151,30 +151,17 @@ beforeEach(() => {
     translatedFromPointers: new Map(),
   })
   hoisted.enrichMessagesForAgent.mockResolvedValue([])
+  hoisted.resolveOutgoingReplyTranslation.mockImplementation(
+    async ({ content, contentJson }: { content: string; contentJson: unknown }) => ({
+      content,
+      contentJson,
+      translatedFrom: undefined,
+    })
+  )
 })
 
 describe('sendAgentMessageFn — inbox translation wiring', () => {
-  it('flag off: sends the original content untouched (zero behavior change)', async () => {
-    hoisted.isFeatureEnabled.mockResolvedValue(false)
-
-    await sendAgentMessageFn({
-      data: { conversationId: 'conversation_1', content: 'Hi there', contentJson: null },
-    })
-
-    expect(hoisted.resolveOutgoingReplyTranslation).not.toHaveBeenCalled()
-    expect(hoisted.sendAgentMessage).toHaveBeenCalledWith(
-      'conversation_1',
-      'Hi there',
-      expect.any(Object),
-      expect.any(Object),
-      undefined,
-      null,
-      undefined
-    )
-  })
-
-  it('flag on: translates the reply and attaches translatedFrom metadata', async () => {
-    hoisted.isFeatureEnabled.mockResolvedValue(true)
+  it('translates the reply and attaches translatedFrom metadata', async () => {
     hoisted.resolveOutgoingReplyTranslation.mockResolvedValue({
       content: 'Bonjour',
       contentJson: null,
@@ -272,15 +259,6 @@ describe('sendAgentMessageFn — inbox translation wiring', () => {
 })
 
 describe('translateConversationMessagesFn', () => {
-  it('returns an empty map when the flag is off (no service calls)', async () => {
-    hoisted.isFeatureEnabled.mockResolvedValue(false)
-    const result = await translateConversationMessagesFn({
-      data: { conversationId: 'conversation_1', messageIds: ['conversation_msg_1'] },
-    })
-    expect(result).toEqual({})
-    expect(hoisted.getInboxTranslationContext).not.toHaveBeenCalled()
-  })
-
   it('returns an empty map when translation is not active for the conversation', async () => {
     hoisted.isFeatureEnabled.mockResolvedValue(true)
     hoisted.assertConversationViewable.mockResolvedValue({ id: 'conversation_1' })
@@ -419,8 +397,7 @@ describe('getConversationFn — customer-language detection is fire-and-forget',
     expect(result.conversation).toEqual({ id: 'conversation_1' })
   })
 
-  it('still runs detection (fire-and-forget) when the flag is on', async () => {
-    hoisted.isFeatureEnabled.mockResolvedValue(true)
+  it('still runs detection fire-and-forget', async () => {
     hoisted.assertConversationViewable.mockResolvedValue({
       id: 'conversation_1',
       detectedCustomerLanguage: null,
@@ -437,19 +414,6 @@ describe('getConversationFn — customer-language detection is fire-and-forget',
     expect(hoisted.maybeDetectCustomerLanguage).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'conversation_1' })
     )
-  })
-
-  it('never calls detection when the flag is off', async () => {
-    hoisted.isFeatureEnabled.mockResolvedValue(false)
-    hoisted.assertConversationViewable.mockResolvedValue({
-      id: 'conversation_1',
-      detectedCustomerLanguage: null,
-    })
-
-    await getConversationFn({ data: { conversationId: 'conversation_1' } })
-    await flush()
-
-    expect(hoisted.maybeDetectCustomerLanguage).not.toHaveBeenCalled()
   })
 
   it('logs and swallows a detection failure without failing the request', async () => {

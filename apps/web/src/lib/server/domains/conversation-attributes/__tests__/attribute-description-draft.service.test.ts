@@ -57,14 +57,6 @@ beforeEach(() => {
 })
 
 describe('draftAttributeDescriptions: gating', () => {
-  it('throws when the inboxAi flag is off', async () => {
-    mockIsFeatureEnabled.mockResolvedValue(false)
-    await expect(
-      draftAttributeDescriptions({ label: 'Issue type', optionLabels: ['Billing', 'Bug'] })
-    ).rejects.toMatchObject({ code: 'AI_ATTRIBUTE_DETECTION_DISABLED' })
-    expect(mockChat).not.toHaveBeenCalled()
-  })
-
   it('throws when AI is not configured', async () => {
     mockConfig.openaiApiKey = undefined
     await expect(

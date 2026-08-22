@@ -49,7 +49,7 @@ import {
 } from '@/lib/server/domains/ai/config'
 import { getChatModel } from '@/lib/server/domains/ai/models'
 import { createUsageLoggingMiddleware } from '@/lib/server/domains/ai/usage-middleware'
-import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
+
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 import {
@@ -186,7 +186,7 @@ export function validateSuggestedValues(
 
 /**
  * Suggest field values + a title for converting `conversationId` into a
- * `ticketTypeId` ticket. Gated, in order: the `inboxAi` flag; a configured AI
+ * `ticketTypeId` ticket. Gated, in order: a configured AI
  * client + the assistant chat model (the same guard `isAssistantConfigured`
  * runs — mirrored with isAiClientConfigured()/getChatModel() rather than
  * importing the much larger runtime module, per the ai-classification.service
@@ -203,8 +203,6 @@ export async function suggestTicketFieldValues(
   conversationId: ConversationId,
   ticketTypeId: TicketTypeId
 ): Promise<TicketFieldSuggestionResult> {
-  if (!(await isFeatureEnabled('inboxAi'))) return { unavailable: true }
-
   const model = getChatModel('assistant')
   if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !model) {
     return { unavailable: true }

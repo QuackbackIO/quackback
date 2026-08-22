@@ -1024,7 +1024,7 @@
   "automation.copilot.guidanceLayers.description": "Situational guidance follows each rule’s conditions and scope when Copilot answers a teammate.",
   "automation.copilot.deployment.heading": "Copilot in the inbox",
   "automation.copilot.status.off": "Off",
-  "automation.copilot.deployment.unavailable": "Enable AI in the inbox to let teammates use Copilot.",
+  "automation.copilot.deployment.unavailable": "Configure an AI model to let teammates use Copilot.",
   "automation.copilot.deployment.onHelp": "Teammates can ask Copilot and accept its drafts.",
   "automation.copilot.deployment.offHelp": "You can keep configuring Copilot without teammates seeing it in the inbox.",
   "automation.copilot.deployment.turnOff": "Turn off Copilot",

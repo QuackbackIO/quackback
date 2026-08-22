@@ -4,9 +4,9 @@
  * Re-exported from the server domain for architectural compliance — type-only
  * imports are erased at compile time and never affect the bundle.
  *
- * Note: FEATURE_FLAG_REGISTRY and DEFAULT_PORTAL_CONFIG are runtime constants
- * also re-exported here because settings.types has no DB dependencies and the
- * constants are needed in route files and components.
+ * Note: DEFAULT_PORTAL_CONFIG is a runtime constant also re-exported here
+ * because settings.types has no DB dependencies and the constants are needed
+ * in route files and components.
  */
 
 export type {
@@ -28,10 +28,9 @@ export type {
   VerifiedDomain,
 } from '@/lib/server/domains/settings'
 
-// FeatureFlags and FEATURE_FLAG_REGISTRY live only in settings.types (not barrel-exported)
+// FeatureFlags lives only in settings.types (not barrel-exported)
 export type {
   FeatureFlags,
-  LabSectionRow,
   ProductId,
   WidgetHomeCard,
   WidgetHomeCardType,
@@ -45,9 +44,6 @@ export {
   DEFAULT_FEATURE_FLAGS,
   featureFlagsForUseCase,
   enableFlagsForUseCase,
-  FEATURE_FLAG_REGISTRY,
-  LAB_SECTIONS,
-  GA_FEATURE_SECTIONS,
   PRODUCT_DEFINITIONS,
   getFirstEnabledAdminProductPath,
   getProductFlagUpdate,

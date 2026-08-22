@@ -10,9 +10,9 @@ import { isAssistantFieldManaged, ManagedSettingHint } from './assistant-form'
 
 /**
  * Copilot's on/off master, driven by `agents.copilot.capabilities` rather than
- * a dedicated flag: Copilot is "on" when its Q&A capability is enabled. The
- * `inboxAi` flag stays the availability gate — when it is off there is nowhere
- * for Copilot to run, so the toggle is hidden entirely.
+ * a dedicated flag: Copilot is "on" when its Q&A capability is enabled.
+ * Availability is the configured AI model — without one there is nowhere for
+ * Copilot to run, so the toggle is hidden.
  */
 export function CopilotDeploymentCard({ available = true }: { available?: boolean }) {
   const intl = useIntl()
@@ -91,7 +91,7 @@ export function CopilotDeploymentCard({ available = true }: { available?: boolea
               {!available
                 ? intl.formatMessage({
                     id: 'automation.copilot.deployment.unavailable',
-                    defaultMessage: 'Enable AI in the inbox to let teammates use Copilot.',
+                    defaultMessage: 'Configure an AI model to let teammates use Copilot.',
                   })
                 : on
                   ? intl.formatMessage({

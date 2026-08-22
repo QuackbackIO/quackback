@@ -219,14 +219,6 @@ describe('POST /api/admin/assistant/copilot', () => {
     expect(res.status).toBe(400)
   })
 
-  it('404s when the inboxAi flag is off', async () => {
-    mockIsFeatureEnabled.mockResolvedValue(false)
-    const res = await handleCopilot({ request: makeRequest(validBody()) })
-    expect(res.status).toBe(404)
-    expect(mockIsAssistantConfigured).not.toHaveBeenCalled()
-    expect(mockStreamAssistantTurn).not.toHaveBeenCalled()
-  })
-
   it('404s when the qa capability is off (v3 config gate)', async () => {
     mockIsCopilotCapabilityEnabled.mockResolvedValue(false)
     const res = await handleCopilot({ request: makeRequest(validBody()) })

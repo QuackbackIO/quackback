@@ -250,15 +250,11 @@ export async function runToolsetScenario(
     simulate: conversationId === null,
     writeToolPolicy: conversationId === null ? 'simulate' : rolePolicy.writeToolPolicy,
     skills: {
-      count:
-        scenario.config?.skills === true ? await countAssignedSkills(roleToAgent(role), testDb) : 0,
+      count: await countAssignedSkills(roleToAgent(role), testDb),
       loads: 0,
     },
   })
-  const connectorSpecs =
-    scenario.config?.connectors === true
-      ? await listConnectorToolSpecsForAgent(roleToAgent(role), testDb)
-      : []
+  const connectorSpecs = await listConnectorToolSpecsForAgent(roleToAgent(role), testDb)
   const { tools } = await assembleAssistantToolset(ctx, undefined, connectorSpecs)
   const toolNames = tools.map((t) => t.name)
   const failures = gradeStructural(scenario.structural, { kind: 'toolset', toolNames })

@@ -66,25 +66,6 @@ export const connectorScenarios: Scenario[] = [
     structural: [{ type: 'toolAbsent', name: INVOICE_TOOL }],
   },
   {
-    id: '34',
-    title: 'connectors flag off hides assigned tools',
-    kind: 'toolset',
-    roles: ['customer_support'],
-    surface: 'widget',
-    config: { connectors: false },
-    fixtures: {
-      withConversation: true,
-      connectors: [
-        {
-          name: 'Acme Billing',
-          tools: [{ name: 'get_invoice', readOnly: true }],
-          assignments: AGENT_ONLY,
-        },
-      ],
-    },
-    structural: [{ type: 'toolAbsent', name: INVOICE_TOOL }],
-  },
-  {
     id: '35',
     title: 'Copilot-assigned connector is present on a copilot_qa turn',
     kind: 'toolset',

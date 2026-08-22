@@ -21,9 +21,9 @@
  * chunks, with the `TransformFinalPayload` ({ text }) on the standard
  * RUN_FINISHED.result slot. Failures end the stream with a coded RUN_ERROR.
  *
- * Same gate order as copilot.ts: `copilot.use` -> the `inboxAi` flag
- * -> AI configured -> the AI token budget -> the item-viewable check. That
- * shared sequence lives in copilot-gate.ts (`gateCopilotAguiRequest`).
+ * Same gate order as copilot.ts: `copilot.use` -> AI configured -> the AI
+ * token budget -> the item-viewable check. That shared sequence lives in
+ * copilot-gate.ts (`gateCopilotAguiRequest`).
  */
 import { createFileRoute } from '@tanstack/react-router'
 import { toServerSentEventsResponse } from '@tanstack/ai'

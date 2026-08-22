@@ -841,7 +841,7 @@ function countActionType(template: WorkflowTemplate, type: GraphAction['type']):
 
 export function templateGalleryChips(
   template: WorkflowTemplate,
-  ctx: { quinnOn: boolean; inboxAiOn: boolean }
+  ctx: { quinnOn: boolean }
 ): TemplateGalleryChip[] {
   const chips: TemplateGalleryChip[] = [
     { kind: 'trigger', label: triggerLabel(template.payload.triggerType) },
@@ -854,9 +854,6 @@ export function templateGalleryChips(
 
   if (templateNeedsQuinn(template) && !ctx.quinnOn) {
     chips.push({ kind: 'prereq', label: 'Needs Quinn on' })
-  }
-  if (templateNeedsInboxAi(template) && !ctx.inboxAiOn) {
-    chips.push({ kind: 'prereq', label: 'Needs Inbox AI' })
   }
   if (templateUsesOfficeHours(template)) {
     chips.push({ kind: 'note', label: 'Uses office hours' })

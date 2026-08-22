@@ -37,10 +37,10 @@
  * `proposedActions` on the final payload mirrors what got proposed, straight
  * off the tool context's ledger.
  *
- * Gated on `copilot.use` (the authz matrix picks this up automatically) and
- * the `inboxAi` flag. The shared gate sequence (permission -> AG-UI body parse
- * -> flag -> configured -> token budget -> item-viewable) lives in
- * copilot-gate.ts (`gateCopilotAguiRequest`), alongside transform.ts.
+ * Gated on `copilot.use` (the authz matrix picks this up automatically).
+ * The shared gate sequence (permission -> AG-UI body parse -> configured ->
+ * token budget -> item-viewable) lives in copilot-gate.ts
+ * (`gateCopilotAguiRequest`), alongside transform.ts.
  */
 import { createFileRoute } from '@tanstack/react-router'
 import { toServerSentEventsResponse } from '@tanstack/ai'
@@ -97,9 +97,9 @@ export async function handleCopilot({ request }: { request: Request }): Promise<
   if (!gate.ok) return gate.response
   const { auth, parsed, conversationId, ticketId, agui } = gate
 
-  // Copilot Q&A capability gate (v3 config). Layered past inboxAi: a 404
-  // NOT_FOUND shape, one config knob up. A workspace can keep Copilot's
-  // identity while turning its Q&A off.
+  // Copilot Q&A capability gate (v3 config). A 404 NOT_FOUND shape, one
+  // config knob up. A workspace can keep Copilot's identity while turning
+  // its Q&A off.
   if (!(await isCopilotCapabilityEnabled('qa'))) {
     return errorResponse('NOT_FOUND', 'Copilot Q&A is not available', 404)
   }

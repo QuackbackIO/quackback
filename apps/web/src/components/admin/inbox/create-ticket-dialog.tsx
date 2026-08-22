@@ -1,13 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useRouteContext } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { XMarkIcon } from '@heroicons/react/24/solid'
 import type { JSONContent } from '@tiptap/react'
 import type { ConversationId, PrincipalId, TicketId, TicketTypeId } from '@quackback/ids'
 import type { TicketType, TiptapContent } from '@/lib/shared/db-types'
 import { TICKET_TYPES } from '@/lib/shared/db-types'
-import type { FeatureFlags } from '@/lib/shared/types/settings'
 import type { TicketTypeDTO } from '@/lib/shared/tickets'
 import { useCreateTicket } from '@/lib/client/mutations/inbox'
 import { ticketQueries } from '@/lib/client/queries/inbox'
@@ -153,14 +151,6 @@ export function CreateTicketDialog({
     fieldValues: Record<string, unknown>
   } | null>(null)
 
-  // The client-visible half of the AI gate (the same route-context flag the
-  // Copilot tab reads): the flag off hides the affordance outright. The
-  // server half (assistant configured, budget, non-empty thread) surfaces as
-  // the fn's `unavailable` response, which retires the button below.
-  const { settings } = useRouteContext({ from: '/admin' }) as {
-    settings?: { featureFlags?: FeatureFlags } | null
-  }
-
   // The registry types the picker offers (live rows only) — the same set in
   // both flows. From a conversation a customer type opens the pair, while a
   // back-office or tracker type opens internal work that keeps this
@@ -191,11 +181,7 @@ export function CreateTicketDialog({
     includeInternal: true,
   })
 
-  const showAutoFill =
-    fromConversation &&
-    selectedTypeId !== null &&
-    !!settings?.featureFlags?.inboxAi &&
-    !autoFillHidden
+  const showAutoFill = fromConversation && selectedTypeId !== null && !autoFillHidden
 
   // A fresh open starts clean — prefilled from the conversation when opened
   // in that mode, with the category default type preselected. `candidates` is
