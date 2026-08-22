@@ -10,6 +10,7 @@
  */
 import type { JSONContent } from '@tiptap/core'
 import { absolutizeOffHostAssetUrl, isStoredAssetPath } from '@/lib/server/storage/asset-url'
+import { resignStoredAssetUrl } from '@/lib/server/storage/s3'
 
 const IMAGE_NODE_TYPES = new Set(['image', 'resizableImage', 'chatImage'])
 
@@ -22,7 +23,10 @@ export function withEmailProxyHint(node: JSONContent): JSONContent {
       if (isStoredAssetPath(parsed.pathname) || src.startsWith('/api/storage/')) {
         next = {
           ...node,
-          attrs: { ...node.attrs, src: absolutizeOffHostAssetUrl(src, { email: true }) },
+          attrs: {
+            ...node.attrs,
+            src: absolutizeOffHostAssetUrl(resignStoredAssetUrl(src), { email: true }),
+          },
         }
       }
     } catch {

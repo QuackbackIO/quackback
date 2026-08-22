@@ -14,6 +14,7 @@ const {
   absolutizeOffHostAssetUrl,
   getSystemAssetOrigin,
   isStoredAssetPath,
+  storedAssetKeyFromSrc,
   systemHostOriginFromPublicUrl,
 } = await import('../asset-url')
 const { withWorkspace } = await import('@/lib/server/__tests__/workspace-scope')
@@ -105,5 +106,20 @@ describe('absolutizeOffHostAssetUrl', () => {
     expect(isStoredAssetPath('/api/storage')).toBe(false)
     expect(isStoredAssetPath('/api/storage/')).toBe(false)
     expect(isStoredAssetPath(`/api/storage/${KEY}`)).toBe(true)
+  })
+})
+
+describe('storedAssetKeyFromSrc', () => {
+  it('reads the key from a relative persist ref, discarding a stale token', () => {
+    expect(storedAssetKeyFromSrc(`/api/storage/${KEY}?read=stale`)).toBe(KEY)
+  })
+
+  it('reads the key from a legacy absolute URL on any host', () => {
+    expect(storedAssetKeyFromSrc(`https://old.example.com/api/storage/${KEY}`)).toBe(KEY)
+  })
+
+  it('refuses a path that is not a stored asset', () => {
+    expect(storedAssetKeyFromSrc('https://cdn.example.com/logos/brand.png')).toBeNull()
+    expect(storedAssetKeyFromSrc('/api/storage/../secret')).toBeNull()
   })
 })
