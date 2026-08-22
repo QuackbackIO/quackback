@@ -90,6 +90,16 @@ describe('resolvePortalNavItems (configured)', () => {
     expect(paths(resolvePortalNavItems(gates(), nav))).toEqual(['/', '/changelog'])
   })
 
+  it('ignores enabled: false on the built-in feedback item', () => {
+    const nav: PortalNavConfig = {
+      items: [
+        { id: 'feedback', type: 'feedback', enabled: false },
+        { id: 'roadmap', type: 'roadmap' },
+      ],
+    }
+    expect(paths(resolvePortalNavItems(gates(), nav))).toEqual(['/', '/roadmap', '/changelog'])
+  })
+
   it('never shows a gated-off built-in even when enabled in config', () => {
     const nav: PortalNavConfig = {
       items: [

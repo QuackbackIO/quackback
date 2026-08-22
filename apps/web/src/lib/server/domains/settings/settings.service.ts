@@ -40,7 +40,6 @@ import type {
 } from './settings.types'
 import {
   DEFAULT_AUTH_CONFIG,
-  DEFAULT_PORTAL_CONFIG,
   DEFAULT_DEVELOPER_CONFIG,
   DEFAULT_WIDGET_CONFIG,
   DEFAULT_MESSENGER_CONFIG,
@@ -56,6 +55,7 @@ import { resolveStatusSettings } from './settings.status'
 import {
   parseJsonConfig,
   parseJsonOrNull,
+  parsePortalConfig,
   deepMerge,
   requireSettings,
   wrapDbError,
@@ -77,13 +77,14 @@ function liveWelcomeCard(card: PortalWelcomeCard): PortalWelcomeCard {
 }
 
 function liveWorkspaceSettings(settings: WorkspaceSettings): WorkspaceSettings {
-  const welcome = settings.publicPortalConfig?.welcomeCard
-  if (!welcome) return settings
+  const publicCfg = settings.publicPortalConfig
+  if (!publicCfg) return settings
+  const welcome = publicWelcomeCard(publicCfg.welcomeCard)
   return {
     ...settings,
     publicPortalConfig: {
-      ...settings.publicPortalConfig,
-      welcomeCard: liveWelcomeCard(welcome),
+      ...publicCfg,
+      welcomeCard: welcome ? liveWelcomeCard(welcome) : undefined,
     },
   }
 }
@@ -618,7 +619,7 @@ export async function listVerifiedDomains(): Promise<VerifiedDomain[]> {
 export async function getPortalConfig(): Promise<PortalConfig> {
   try {
     const org = await requireSettings()
-    return parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
+    return parsePortalConfig(org.portalConfig)
   } catch (error) {
     log.error({ err: error }, 'get portal config failed')
     wrapDbError('fetch portal config', error)
@@ -632,7 +633,7 @@ export async function updatePortalConfig(input: UpdatePortalConfigInput): Promis
     const inputWithoutWelcome: UpdatePortalConfigInput = { ...input }
     delete inputWithoutWelcome.welcomeCard
     const org = await requireSettings()
-    const existing = parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
+    const existing = parsePortalConfig(org.portalConfig)
     const updated = deepMerge(existing, inputWithoutWelcome as Partial<PortalConfig>)
     // welcomeCard.body must replace, not deep-merge — see mergeWelcomeCard.
     if (normalizedWelcome) {
@@ -840,7 +841,7 @@ export async function getPublicAuthConfig(): Promise<PublicAuthConfig> {
 export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
   try {
     const org = await requireSettings()
-    const portalConfig = parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
+    const portalConfig = parsePortalConfig(org.portalConfig)
 
     const oidcProviders = await getPublicOidcProviders()
     const welcome = publicWelcomeCard(portalConfig.welcomeCard)
@@ -894,7 +895,7 @@ export async function getWorkspaceSettings(): Promise<WorkspaceSettings | null> 
     if (!org) return null
 
     const authConfig = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
-    const portalConfig = parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
+    const portalConfig = parsePortalConfig(org.portalConfig)
     const brandingConfig = parseJsonOrNull<BrandingConfig>(org.brandingConfig) ?? {}
     const developerConfig = parseJsonConfig(org.developerConfig, DEFAULT_DEVELOPER_CONFIG)
 

@@ -218,8 +218,6 @@ describe('getWorkspaceSettings', () => {
       }),
       publicPortalConfig: {
         welcomeCard: {
-          enabled: true,
-          title: 'Hi',
           body: {
             type: 'doc',
             content: [{ type: 'image', attrs: { src: unsigned } }],

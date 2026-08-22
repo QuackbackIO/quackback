@@ -5,7 +5,6 @@ import {
   UsersIcon,
   UserGroupIcon,
   Squares2X2Icon,
-  PaintBrushIcon,
   PuzzlePieceIcon,
   ChatBubbleLeftRightIcon,
   ChatBubbleLeftIcon,
@@ -75,18 +74,16 @@ export function buildNavSections(
 ): NavSection[] {
   const products: NavEntry[] = []
 
-  if (isProductEnabled(flags, 'feedback')) {
-    products.push({
-      label: 'Feedback & Roadmaps',
-      icon: ChatBubbleLeftIcon,
-      kids: [
-        { label: 'Boards', to: '/admin/settings/boards', icon: Squares2X2Icon },
-        { label: 'Statuses', to: '/admin/settings/statuses', icon: Cog6ToothIcon },
-        { label: 'Tags', to: '/admin/settings/tags', icon: TagIcon },
-        { label: 'Moderation', to: '/admin/settings/moderation', icon: ShieldCheckIcon },
-      ],
-    })
-  }
+  products.push({
+    label: 'Feedback & Roadmaps',
+    icon: ChatBubbleLeftIcon,
+    kids: [
+      { label: 'Boards', to: '/admin/settings/boards', icon: Squares2X2Icon },
+      { label: 'Statuses', to: '/admin/settings/statuses', icon: Cog6ToothIcon },
+      { label: 'Tags', to: '/admin/settings/tags', icon: TagIcon },
+      { label: 'Moderation', to: '/admin/settings/moderation', icon: ShieldCheckIcon },
+    ],
+  })
 
   const supportKids: NavItem[] = [
     ...(flags?.supportInbox
@@ -118,31 +115,31 @@ export function buildNavSections(
         ]
       : []),
   ]
-  if (isProductEnabled(flags, 'support') && supportKids.length > 0) {
+  if (isProductEnabled(flags, 'support')) {
     products.push({ label: 'Support', icon: ChatBubbleLeftRightIcon, kids: supportKids })
   }
 
   if (isProductEnabled(flags, 'helpCenter')) {
     products.push({
       label: 'Help Center',
+      to: '/admin/settings/help-center',
       icon: BookOpenIcon,
-      kids: [{ label: 'Settings', to: '/admin/settings/help-center', icon: BookOpenIcon }],
     })
   }
 
   if (isProductEnabled(flags, 'changelog')) {
     products.push({
       label: 'Changelog',
+      to: '/admin/settings/changelog',
       icon: MegaphoneIcon,
-      kids: [{ label: 'Settings', to: '/admin/settings/changelog', icon: MegaphoneIcon }],
     })
   }
 
   if (isProductEnabled(flags, 'status')) {
     products.push({
       label: 'Status',
+      to: '/admin/settings/status',
       icon: SignalIcon,
-      kids: [{ label: 'Settings', to: '/admin/settings/status', icon: SignalIcon }],
     })
   }
 
@@ -156,7 +153,7 @@ export function buildNavSections(
           ? [{ label: 'Domains', to: '/admin/settings/domains', icon: GlobeAltIcon }]
           : []),
         { label: 'Notifications', to: '/admin/settings/notifications', icon: BellIcon },
-        { label: 'Branding', to: '/admin/settings/branding', icon: PaintBrushIcon },
+        { label: 'Portal', to: '/admin/settings/portal', icon: GlobeAltIcon },
         { label: 'Widget', to: '/admin/settings/widget', icon: ChatBubbleLeftRightIcon },
         { label: 'Members & Teams', to: '/admin/settings/members', icon: UsersIcon },
         {

@@ -13,7 +13,7 @@ export interface ChangelogSettings {
   /** Public visitors vs. signed-in portal users only. */
   audience: ChangelogAudience
   /**
-   * @deprecated Ignored at read time. Portal chrome is Branding → Navigation.
+   * @deprecated Ignored at read time. Portal chrome is Portal → Navigation.
    */
   portalTabEnabled: boolean
   /** Turns off comments + reactions on changelog entries (one toggle, per spec). */

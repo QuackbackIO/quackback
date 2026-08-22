@@ -86,9 +86,9 @@ interface CustomCssEditorProps {
 }
 
 /**
- * The branding page's "Advanced CSS" editor. Isolated into its own chunk
- * (loaded via React.lazy from settings.branding.tsx) because
- * @uiw/react-codemirror + @codemirror/lang-css make the branding route the
+ * The portal page's "Advanced CSS" editor. Isolated into its own chunk
+ * (loaded via React.lazy from settings.portal.tsx) because
+ * @uiw/react-codemirror + @codemirror/lang-css make the portal route the
  * largest chunk in the app, yet most visits never open this panel.
  */
 export function CustomCssEditor({ value, onChange }: CustomCssEditorProps) {

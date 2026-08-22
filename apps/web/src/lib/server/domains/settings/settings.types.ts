@@ -238,24 +238,25 @@ export interface ModerationDefault {
 }
 
 /**
- * Welcome card shown above the post list on the portal index.
- * Title is plain text (server trims + caps at 120 chars). Body is
- * sanitized TipTap JSON — same shape as post / help-center content,
- * sanitized via `sanitizeTiptapContent` on every write.
+ * Welcome message shown above the post list on the portal index.
+ * Body is sanitized TipTap JSON — same shape as post / help-center
+ * content, sanitized via `sanitizeTiptapContent` on every write.
  *
- * Default off. Renders only when `enabled` and at least one of
- * `title` / `body` has content.
+ * Default empty (hidden). Renders only when `body` has visible content.
+ * Legacy stored `{ enabled, title, body }` is repaired on read: enabled
+ * + a non-empty title folds the title into a heading node; disabled
+ * drafts resolve to an empty body.
  */
 export interface PortalWelcomeCard {
-  enabled: boolean
-  /** Plain text. Server trims and rejects > 120 chars. */
-  title: string
   /** Sanitized TipTap JSON doc. */
   body: TiptapContent
 }
 
-/** Max length of {@link PortalWelcomeCard.title} after trimming. */
-export const PORTAL_WELCOME_CARD_TITLE_MAX = 120
+/** Empty TipTap doc used as the default / hidden welcome message. */
+export const EMPTY_WELCOME_BODY: TiptapContent = {
+  type: 'doc',
+  content: [{ type: 'paragraph' }],
+}
 
 /**
  * Portal-level access control settings.
@@ -342,7 +343,7 @@ export interface PortalConfig {
    * should compare this field directly.
    */
   openSignup?: boolean
-  /** Welcome card on the portal index. Optional — absent = disabled. */
+  /** Welcome message on the portal index. Optional — absent / empty body = hidden. */
   welcomeCard?: PortalWelcomeCard
   /** Workspace-wide approval policy; applies to every board. */
   moderationDefault: ModerationDefault
@@ -373,9 +374,7 @@ export const DEFAULT_PORTAL_CONFIG: PortalConfig = {
     allowAnonymous: true,
   },
   welcomeCard: {
-    enabled: false,
-    title: '',
-    body: { type: 'doc', content: [{ type: 'paragraph' }] },
+    body: EMPTY_WELCOME_BODY,
   },
   moderationDefault: { requireApproval: 'none', holdImages: false, holdLinks: false },
   access: { visibility: 'public', allowedDomains: [], widgetSignIn: false, allowedSegmentIds: [] },
@@ -983,7 +982,7 @@ export interface PublicPortalConfig {
    * (verified domain + showButton:false) are omitted.
    */
   oidcProviders?: { id: string; name: string }[]
-  /** Welcome card on the portal index. Absent / disabled = nothing rendered. */
+  /** Welcome message on the portal index. Absent / empty body = nothing rendered. */
   welcomeCard?: PortalWelcomeCard
   /**
    * Client-safe access control indicator. `isPrivate` and `widgetSignIn`

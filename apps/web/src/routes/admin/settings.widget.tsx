@@ -994,7 +994,7 @@ function HomeCustomizationCard({
               Workspace logo
             </Label>
             <p className="text-xs text-muted-foreground">
-              Show your logo in the Home header (set it under Branding)
+              Show your logo in the Home header (set it under General)
             </p>
           </div>
           <div className="flex items-center gap-2">

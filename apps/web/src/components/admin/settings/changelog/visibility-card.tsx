@@ -19,7 +19,7 @@ export function VisibilityCard({ settings, onChange, disabled }: VisibilityCardP
   return (
     <SettingsCard
       title="Visibility"
-      description="Choose who can see your changelog. Hide or rename the portal tab in Branding → Navigation."
+      description="Choose who can see your changelog. Hide or rename the portal tab in Portal → Navigation."
     >
       <div className="flex items-center justify-between gap-4 py-1">
         <div className="pr-4">

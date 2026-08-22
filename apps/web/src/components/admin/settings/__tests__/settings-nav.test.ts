@@ -49,7 +49,7 @@ describe('buildNavSections', () => {
     expect(allLabels(sections)).not.toContain('Sandbox')
   })
 
-  it('Products contains the Feedback & Roadmaps accordion with its four pages when enabled', () => {
+  it('Products always contains the Feedback & Roadmaps accordion with its four pages', () => {
     const sections = buildNavSections()
     expect(itemLabels(sections, 'Products')).toContain('Feedback & Roadmaps')
     expect(groupKids(sections, 'Products', 'Feedback & Roadmaps').map((k) => k.label)).toEqual([
@@ -58,7 +58,7 @@ describe('buildNavSections', () => {
       'Tags',
       'Moderation',
     ])
-    expect(itemLabels(buildNavSections({ feedback: false }), 'Products')).not.toContain(
+    expect(itemLabels(buildNavSections({ feedback: false }), 'Products')).toContain(
       'Feedback & Roadmaps'
     )
   })
@@ -111,23 +111,38 @@ describe('buildNavSections', () => {
     expect(itemLabels(sections, 'Workspace')).not.toContain('Emails')
   })
 
-  it('Help Center accordion appears only with the helpCenter flag', () => {
+  it('Help Center is a flat link that appears only with the helpCenter flag', () => {
     expect(itemLabels(buildNavSections({ helpCenter: false }), 'Products')).not.toContain(
       'Help Center'
     )
     const sections = buildNavSections({ helpCenter: true })
-    expect(groupKids(sections, 'Products', 'Help Center')).toEqual([
-      { label: 'Settings', to: '/admin/settings/help-center' },
-    ])
+    expect(groupKids(sections, 'Products', 'Help Center')).toEqual([])
+    const item = sections
+      .find((s) => s.label === 'Products')!
+      .items.find((i) => i.label === 'Help Center')!
+    expect(!isNavGroup(item) && item.to).toBe('/admin/settings/help-center')
   })
 
-  it('Changelog accordion appears only when the product is enabled', () => {
+  it('Changelog is a flat link that appears only when the product is enabled', () => {
     expect(itemLabels(buildNavSections({ changelog: false }), 'Products')).not.toContain(
       'Changelog'
     )
-    expect(groupKids(buildNavSections(), 'Products', 'Changelog')).toEqual([
-      { label: 'Settings', to: '/admin/settings/changelog' },
-    ])
+    const sections = buildNavSections()
+    expect(groupKids(sections, 'Products', 'Changelog')).toEqual([])
+    const item = sections
+      .find((s) => s.label === 'Products')!
+      .items.find((i) => i.label === 'Changelog')!
+    expect(!isNavGroup(item) && item.to).toBe('/admin/settings/changelog')
+  })
+
+  it('Status is a flat link that appears only with the status flag', () => {
+    expect(itemLabels(buildNavSections(), 'Products')).not.toContain('Status')
+    const sections = buildNavSections({ statusPage: true })
+    expect(groupKids(sections, 'Products', 'Status')).toEqual([])
+    const item = sections
+      .find((s) => s.label === 'Products')!
+      .items.find((i) => i.label === 'Status')!
+    expect(!isNavGroup(item) && item.to).toBe('/admin/settings/status')
   })
 
   it('SLA policies points at the sla URL', () => {
@@ -141,7 +156,7 @@ describe('buildNavSections', () => {
     expect(itemLabels(sections, 'Workspace')).toEqual([
       'General',
       'Notifications',
-      'Branding',
+      'Portal',
       'Widget',
       'Members & Teams',
       'Access & Security',
@@ -155,6 +170,13 @@ describe('buildNavSections', () => {
     const s = sections.find((x) => x.label === 'Workspace')!
     const general = s.items.find((i) => i.label === 'General')!
     expect(!isNavGroup(general) && general.to).toBe('/admin/settings/general')
+  })
+
+  it('Portal points at the portal URL', () => {
+    const sections = buildNavSections()
+    const s = sections.find((x) => x.label === 'Workspace')!
+    const portal = s.items.find((i) => i.label === 'Portal')!
+    expect(!isNavGroup(portal) && portal.to).toBe('/admin/settings/portal')
   })
 
   it('has no standalone Audit log item (merged into Access & Security)', () => {
