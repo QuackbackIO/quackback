@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 669 surfaces
+### Server functions (`requireAuth`) — 666 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -558,14 +558,12 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/settings.ts`::updateThemeFn | settings.branding |
 | `lib/server/functions/settings.ts`::updatePortalConfigFn | settings.manage |
 | `lib/server/functions/settings.ts`::updateAuthConfigFn | auth.manage |
-| `lib/server/functions/settings.ts`::saveLogoKeyFn | settings.branding |
-| `lib/server/functions/settings.ts`::deleteLogoFn | settings.branding |
+| `lib/server/functions/settings.ts`::saveLogoKeyFn | settings.manage |
+| `lib/server/functions/settings.ts`::deleteLogoFn | settings.manage |
 | `lib/server/functions/settings.ts`::saveHeaderLogoKeyFn | settings.branding |
 | `lib/server/functions/settings.ts`::deleteHeaderLogoFn | settings.branding |
-| `lib/server/functions/settings.ts`::savePortalOgImageKeyFn | settings.branding |
-| `lib/server/functions/settings.ts`::deletePortalOgImageFn | settings.branding |
-| `lib/server/functions/settings.ts`::saveFaviconKeyFn | settings.branding |
-| `lib/server/functions/settings.ts`::deleteFaviconFn | settings.branding |
+| `lib/server/functions/settings.ts`::saveFaviconKeyFn | settings.manage |
+| `lib/server/functions/settings.ts`::deleteFaviconFn | settings.manage |
 | `lib/server/functions/settings.ts`::updateHeaderDisplayModeFn | settings.branding |
 | `lib/server/functions/settings.ts`::updateHeaderDisplayNameFn | settings.branding |
 | `lib/server/functions/settings.ts`::updateWorkspaceNameFn | settings.branding |
@@ -746,7 +744,6 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/uploads.ts`::getLogoUploadUrlFn | settings.manage |
 | `lib/server/functions/uploads.ts`::getFaviconUploadUrlFn | settings.manage |
 | `lib/server/functions/uploads.ts`::getHeaderLogoUploadUrlFn | settings.manage |
-| `lib/server/functions/uploads.ts`::getPortalOgImageUploadUrlFn | settings.manage |
 | `lib/server/functions/uploads.ts`::getWidgetHeroUploadUrlFn | settings.manage |
 | `lib/server/functions/uploads.ts`::getAvatarUploadUrlFn | END_USER (any authenticated) |
 | `lib/server/functions/uploads.ts`::getAssistantAvatarUploadUrlFn | assistant.manage |
@@ -979,7 +976,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-190 of 970 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+188 of 965 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -1061,10 +1058,8 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/public-posts.ts`::listPublicRoadmapsFn | server-fn |
 | `lib/server/functions/public-profile.ts`::getPublicUserProfileFn | server-fn |
 | `lib/server/functions/recovery-codes-consume.ts`::consumeRecoveryCodeFn | server-fn |
-| `lib/server/functions/settings-utils.ts`::fetchSettingsFaviconData | server-fn |
 | `lib/server/functions/settings-utils.ts`::fetchSettingsHeaderLogoData | server-fn |
 | `lib/server/functions/settings-utils.ts`::fetchSettingsLogoData | server-fn |
-| `lib/server/functions/settings-utils.ts`::fetchSettingsPortalOgImageData | server-fn |
 | `lib/server/functions/settings.ts`::fetchBrandingConfig | server-fn |
 | `lib/server/functions/settings.ts`::fetchCustomCssFn | server-fn |
 | `lib/server/functions/settings.ts`::fetchPublicAuthConfig | server-fn |

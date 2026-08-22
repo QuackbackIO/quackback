@@ -52,7 +52,7 @@ import { signupOpenFor } from '@/lib/shared/signup-open'
 import { publicHomeConfig, publicMessengerConfig } from './settings.widget'
 import { getSetupState, isOnboardingComplete } from '@/lib/shared/db-types'
 import { resolveChangelogSettings } from './settings.changelog'
-import { resolveStatusSettings, updateStatusSettings } from './settings.status'
+import { resolveStatusSettings } from './settings.status'
 import {
   parseJsonConfig,
   parseJsonOrNull,
@@ -1057,23 +1057,25 @@ export async function isCopilotCapabilityEnabled(
  */
 export async function updateFeatureFlags(input: Partial<FeatureFlags>): Promise<FeatureFlags> {
   const org = await requireSettings()
-  // resolveFeatureFlags drops legacy pre-consolidation keys (after coalescing
-  // them into their umbrella flag), so this write persists a clean shape.
+  // Unknown stored keys (retired Labs flags) drop here; the next write
+  // persists a clean shape.
   const current = resolveFeatureFlags(org.featureFlags)
-  const updated = { ...current, ...input }
-  // The public portal homepage is the feedback board — never persist off.
-  updated.feedback = true
+  const updated = { ...current, ...input, feedback: true }
   // General Status ON is the single publish control: clear a legacy
   // unpublished bit so the page actually goes live. OFF only flips the flag;
   // workspaces that stored statusPage:true with enabled:false stay unpublished
-  // until that toggle is flipped on.
-  if (input.statusPage === true) {
-    await updateStatusSettings({ enabled: true })
+  // until that toggle is flipped on. Written with the flags so a crash
+  // between the two cannot leave one side published and the other not.
+  const patch: { featureFlags: string; metadata?: string } = {
+    featureFlags: JSON.stringify(updated),
   }
-  await db
-    .update(settings)
-    .set({ featureFlags: JSON.stringify(updated) })
-    .where(eq(settings.id, org.id))
+  if (input.statusPage === true) {
+    const existing = resolveStatusSettings(org.metadata)
+    const meta = parseJsonOrNull<Record<string, unknown>>(org.metadata) ?? {}
+    meta.statusSettings = { ...existing, enabled: true }
+    patch.metadata = JSON.stringify(meta)
+  }
+  await db.update(settings).set(patch).where(eq(settings.id, org.id))
   await invalidateSettingsCache()
   return updated
 }
