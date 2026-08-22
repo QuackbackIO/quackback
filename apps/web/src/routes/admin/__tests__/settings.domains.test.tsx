@@ -7,7 +7,7 @@ vi.mock('@/components/admin/upgrade', () => ({
   UpgradeNotice: () => <p>Custom domains are a Growth feature. Upgrade to Growth to enable it.</p>,
 }))
 
-const { DomainsCard } = await import('../settings.domains')
+const { DomainsCard, QuackbackUrlCard } = await import('../settings.domains')
 
 const PENDING = {
   hostname: 'feedback.acme.test',
@@ -60,5 +60,45 @@ describe('domains card', () => {
     expect(screen.queryByText(/ch_/)).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Check status' }))
     expect(refresh).toHaveBeenCalledWith('feedback.acme.test')
+  })
+})
+
+describe('Quackback URL card', () => {
+  it('does not prefill a generated host into the URL field', () => {
+    render(
+      <QuackbackUrlCard
+        platformLabel=""
+        domainSuffix="quackback.co.uk"
+        currentOrigin="https://south63792f.quackback.co.uk"
+        pending={false}
+        error={null}
+        onPlatformLabelChange={vi.fn()}
+        onSubmit={vi.fn()}
+      />
+    )
+    expect(screen.getByLabelText('Quackback URL')).toHaveValue('')
+    expect(screen.queryByDisplayValue(/ws-/)).not.toBeInTheDocument()
+  })
+
+  it('shows preview, current origin, and one save action', () => {
+    const save = vi.fn()
+    render(
+      <QuackbackUrlCard
+        platformLabel="ws-generated"
+        domainSuffix="quackback.co.uk"
+        currentOrigin="https://ws-generated.quackback.co.uk"
+        pending={false}
+        error={null}
+        onPlatformLabelChange={vi.fn()}
+        onSubmit={save}
+      />
+    )
+
+    expect(screen.getByLabelText('Quackback URL')).toHaveValue('ws-generated')
+    expect(screen.getByText(/Preview:/)).toHaveTextContent('https://ws-generated.quackback.co.uk')
+    const buttons = screen.getAllByRole('button')
+    expect(buttons).toHaveLength(1)
+    fireEvent.click(buttons[0]!)
+    expect(save).toHaveBeenCalledOnce()
   })
 })

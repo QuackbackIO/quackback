@@ -10,6 +10,7 @@ import { PortalWelcomeCard } from '@/components/public/feedback/portal-welcome-c
 import { usePreviewDraft } from '@/components/public/preview-draft-context'
 import { portalQueries } from '@/lib/client/queries/portal'
 import { isProductEnabled } from '@/lib/shared/types/settings'
+import { isStatusPagePublished } from '@/lib/shared/status-settings'
 
 const searchSchema = z.object({
   board: z.string().optional(),
@@ -73,7 +74,7 @@ export const Route = createFileRoute('/_portal/')({
       if (isProductEnabled(org.featureFlags, 'changelog')) {
         throw redirect({ to: '/changelog' })
       }
-      if (isProductEnabled(org.featureFlags, 'status') && org.statusConfig.enabled) {
+      if (isStatusPagePublished(org.featureFlags, org.statusConfig)) {
         throw redirect({ to: '/status' })
       }
       throw notFound()

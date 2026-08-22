@@ -25,10 +25,3 @@ export function useSettingsHeaderLogo() {
     enabled: false, // Use SSR data, don't auto-fetch
   })
 }
-
-export function useSettingsFavicon() {
-  return useQuery({
-    ...settingsQueries.favicon(),
-    enabled: false, // Use SSR data, don't auto-fetch
-  })
-}

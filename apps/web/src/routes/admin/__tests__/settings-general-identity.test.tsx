@@ -2,39 +2,34 @@
 import '@testing-library/jest-dom/vitest'
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { CloudWorkspaceDetails, LocalWorkspaceNameCard } from '../settings.general'
+import { WorkspaceIdentityCard } from '../settings.general'
+
+vi.mock('@/components/admin/settings/logo-uploader', () => ({
+  LogoUploader: ({ workspaceName }: { workspaceName: string }) => (
+    <button type="button" aria-label="Change workspace logo">
+      {workspaceName.charAt(0).toUpperCase() || 'W'}
+    </button>
+  ),
+}))
 
 describe('General workspace identity', () => {
-  it('self-host name card has no cloud URL field', () => {
+  it('shows logo and name with no Quackback URL field', () => {
     render(
-      <LocalWorkspaceNameCard
+      <WorkspaceIdentityCard
         workspaceName="Acme"
         saving={false}
         managed={false}
         onWorkspaceNameChange={vi.fn()}
       />
     )
+    expect(screen.getByRole('heading', { name: 'Workspace' })).toBeInTheDocument()
+    expect(
+      screen.getByText('Your logo and name, shown across the portal, widget, and emails')
+    ).toBeInTheDocument()
     expect(screen.getByLabelText('Workspace Name')).toHaveValue('Acme')
+    expect(screen.getByRole('button', { name: 'Change workspace logo' })).toBeInTheDocument()
     expect(screen.queryByLabelText('Quackback URL')).not.toBeInTheDocument()
     expect(screen.queryByText(/Friendly Quackback URL/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/ws-/)).not.toBeInTheDocument()
-  })
-
-  it('cloud details do not prefill a generated host into the URL field', () => {
-    render(
-      <CloudWorkspaceDetails
-        workspaceName="Track1 Alpha"
-        platformLabel=""
-        domainSuffix="quackback.co.uk"
-        currentOrigin="https://south63792f.quackback.co.uk"
-        pending={false}
-        error={null}
-        onWorkspaceNameChange={vi.fn()}
-        onPlatformLabelChange={vi.fn()}
-        onSubmit={vi.fn()}
-      />
-    )
-    expect(screen.getByLabelText('Quackback URL')).toHaveValue('')
-    expect(screen.queryByDisplayValue(/ws-/)).not.toBeInTheDocument()
   })
 })

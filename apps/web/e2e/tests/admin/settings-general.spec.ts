@@ -14,6 +14,6 @@ test.describe('Admin General Settings', () => {
     }
 
     const productsCard = page.locator('#product-feedback').locator('xpath=ancestor::section[1]')
-    await expect(productsCard.locator('button[role="switch"]')).toHaveCount(5)
+    await expect(productsCard.locator('button[role="switch"]')).toHaveCount(4)
   })
 })

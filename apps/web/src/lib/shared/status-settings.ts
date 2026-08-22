@@ -15,10 +15,15 @@ import { z } from 'zod'
 export type StatusAudience = 'public' | 'authenticated' | 'segments'
 
 export interface StatusSettings {
-  /** Master switch: publishes the page and starts recording uptime history. */
+  /**
+   * Legacy publish bit. The General Status product toggle is the single
+   * publish control: ON writes this true (clearing a stored false); OFF
+   * only flips `featureFlags.statusPage`. Effective published state is
+   * {@link isStatusPagePublished}.
+   */
   enabled: boolean
   /**
-   * @deprecated Ignored at read time. Portal chrome is Branding → Navigation.
+   * @deprecated Ignored at read time. Portal chrome is Portal → Navigation.
    */
   portalTabEnabled: boolean
   audience: StatusAudience
@@ -26,8 +31,6 @@ export interface StatusSettings {
   allowedSegmentIds: string[]
   /** Workspace-wide kill switch for all status emails. */
   emailsDisabled: boolean
-  /** Auto-subscribe new/identified end-users to the whole page. */
-  autoSubscribe: boolean
   /** Optional blurb under the public page header. */
   pageDescription: string | null
 }
@@ -38,8 +41,20 @@ export const DEFAULT_STATUS_SETTINGS: StatusSettings = {
   audience: 'public',
   allowedSegmentIds: [],
   emailsDisabled: false,
-  autoSubscribe: false,
   pageDescription: null,
+}
+
+/**
+ * Effective status-page publish state: the General product flag AND the
+ * legacy `statusSettings.enabled` bit. `enabled !== false` keeps a
+ * workspace that stored the flag on but the page unpublished from going
+ * live on upgrade until the General toggle is flipped (which writes both).
+ */
+export function isStatusPagePublished(
+  flags: { statusPage?: boolean } | null | undefined,
+  statusSettings: { enabled?: boolean } | null | undefined
+): boolean {
+  return !!flags?.statusPage && statusSettings?.enabled !== false
 }
 
 export const statusSettingsSchema = z
@@ -49,7 +64,6 @@ export const statusSettingsSchema = z
     audience: z.enum(['public', 'authenticated', 'segments']),
     allowedSegmentIds: z.array(z.string()),
     emailsDisabled: z.boolean(),
-    autoSubscribe: z.boolean(),
     pageDescription: z.string().max(500).nullable(),
   })
   .partial()

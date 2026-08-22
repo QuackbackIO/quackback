@@ -1,8 +1,7 @@
 /**
- * Favicon server functions — the admin upload flow ends at saveFaviconKeyFn
- * (persists the storage key) and deleteFaviconFn (clears it). Both are gated
- * on the branding permission; the portal <link rel="icon"> already reads the
- * key through WorkspaceSettings.faviconData.
+ * Favicon server functions — logo upload derives a 64px favicon and
+ * persist it via saveFaviconKeyFn. deleteLogoKey clears both keys.
+ * Gated on settings.manage (the logo lives on Settings → General).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -53,10 +52,10 @@ beforeEach(() => {
 })
 
 describe('saveFaviconKeyFn', () => {
-  it('requires the branding permission and persists the key', async () => {
+  it('requires settings.manage and persists the key', async () => {
     const result = await saveFaviconKey({ data: { key: 'favicons/a.png' } })
     expect(hoisted.mockRequireAuth).toHaveBeenCalledWith({
-      permission: PERMISSIONS.SETTINGS_BRANDING,
+      permission: PERMISSIONS.SETTINGS_MANAGE,
     })
     expect(hoisted.mockSaveFaviconKey).toHaveBeenCalledWith('favicons/a.png')
     expect(result).toEqual({ success: true, key: 'favicons/a.png' })
@@ -70,10 +69,10 @@ describe('saveFaviconKeyFn', () => {
 })
 
 describe('deleteFaviconFn', () => {
-  it('requires the branding permission and clears the key', async () => {
+  it('requires settings.manage and clears the key', async () => {
     const result = await deleteFavicon()
     expect(hoisted.mockRequireAuth).toHaveBeenCalledWith({
-      permission: PERMISSIONS.SETTINGS_BRANDING,
+      permission: PERMISSIONS.SETTINGS_MANAGE,
     })
     expect(hoisted.mockDeleteFaviconKey).toHaveBeenCalled()
     expect(result).toEqual({ success: true })

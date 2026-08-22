@@ -71,12 +71,7 @@ function StatusSettingsPage() {
         description="Public status page for your services: incidents, maintenance, and uptime history."
       />
 
-      <StatusGeneralCard
-        settings={settings}
-        onChange={onChange}
-        onFlushText={textSave.flush}
-        disabled={mutation.isPending}
-      />
+      <StatusGeneralCard settings={settings} onChange={onChange} onFlushText={textSave.flush} />
       <StatusVisibilityCard settings={settings} onChange={onChange} disabled={mutation.isPending} />
       <StatusNotificationsCard
         settings={settings}

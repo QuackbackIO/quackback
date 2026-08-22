@@ -9,7 +9,6 @@ import {
   SunIcon,
   MoonIcon,
   ArrowPathIcon,
-  CameraIcon,
   PaintBrushIcon,
   ComputerDesktopIcon,
   DevicePhoneMobileIcon,
@@ -31,7 +30,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { ImageCropper } from '@/components/ui/image-cropper'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { cn } from '@/lib/shared/utils'
 import { BackLink } from '@/components/ui/back-link'
@@ -59,16 +57,7 @@ import {
   type ThemeConfig,
   type ThemeMode,
 } from '@/lib/shared/theme'
-import { useSettingsLogo, useSettingsFavicon } from '@/lib/client/hooks/use-settings-queries'
-import {
-  useUploadWorkspaceLogo,
-  useDeleteWorkspaceLogo,
-  useUploadPortalOgImage,
-  useDeletePortalOgImage,
-  useUploadFavicon,
-  useDeleteFavicon,
-  useUpdatePortalConfig,
-} from '@/lib/client/mutations/settings'
+import { useUpdatePortalConfig } from '@/lib/client/mutations/settings'
 import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
 import { UpgradeModal } from '@/components/admin/upgrade'
 import { describePlanUpgrade, isPlanRefusal } from '@/lib/shared/describe-upgrade'
@@ -77,6 +66,7 @@ import {
   PORTAL_WELCOME_CARD_TITLE_MAX,
   isProductEnabled,
 } from '@/lib/shared/types/settings'
+import { isStatusPagePublished } from '@/lib/shared/status-settings'
 import type {
   PortalConfig,
   PortalNavItemConfig,
@@ -115,8 +105,6 @@ export const Route = createFileRoute('/admin/settings/branding')({
     await Promise.all([
       context.queryClient.ensureQueryData(settingsQueries.branding()),
       context.queryClient.ensureQueryData(settingsQueries.logo()),
-      context.queryClient.ensureQueryData(settingsQueries.portalOgImage()),
-      context.queryClient.ensureQueryData(settingsQueries.favicon()),
       context.queryClient.ensureQueryData(settingsQueries.customCss()),
       context.queryClient.ensureQueryData(settingsQueries.portalConfig()),
       ensureBillingCatalogue(context.queryClient, context.billingEnabled),
@@ -127,7 +115,7 @@ export const Route = createFileRoute('/admin/settings/branding')({
 
 function BrandingPage() {
   const router = useRouter()
-  const { settings } = Route.useRouteContext()
+  const { settings, session } = Route.useRouteContext()
   const [, startTransition] = useTransition()
   // Display-only: the name is edited on Workspace > General.
   const workspaceName = settings?.name || ''
@@ -269,6 +257,8 @@ function BrandingPage() {
   // editor keeps their rows but renders them inert. Mirrors portal-header.
   const gatedTypes = useMemo(() => {
     const flags = settings?.featureFlags
+    const statusAudience = settings?.statusConfig?.audience ?? 'public'
+    const statusLoggedIn = !!session?.user && session.user.principalType !== 'anonymous'
     const gates: Record<PortalBuiltInNavType, boolean> = {
       feedback: isProductEnabled(flags, 'feedback'),
       roadmap: isProductEnabled(flags, 'feedback'),
@@ -277,12 +267,14 @@ function BrandingPage() {
       support:
         !!flags?.supportTickets ||
         (!!flags?.supportInbox && !!settings?.portalConfig?.support?.enabled),
-      status: isProductEnabled(flags, 'status') && !!settings?.statusConfig?.enabled,
+      status:
+        isStatusPagePublished(flags, settings?.statusConfig) &&
+        (statusAudience === 'public' || statusLoggedIn),
     }
     return new Set(
       (Object.keys(gates) as PortalBuiltInNavType[]).filter((type) => !gates[type])
     ) as ReadonlySet<string>
-  }, [settings])
+  }, [settings, session])
 
   // Structural drafts pushed into the preview iframe (postMessage, no reload).
   const previewDraft = useMemo<PortalPreviewDraft>(
@@ -317,23 +309,6 @@ function BrandingPage() {
       {/* Controls left, live portal preview right (sticky). */}
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(360px,460px)_minmax(0,1fr)] gap-6 items-start">
         <div className="space-y-4 min-w-0">
-          <SettingsCard
-            title="Identity"
-            description="The portal header shows your logo and workspace name; the name is edited under General settings"
-          >
-            <div className="flex flex-wrap items-start gap-6">
-              <LogoUploader workspaceName={workspaceName} onLogoChange={state.setLogoUrl} />
-              <FaviconUploader workspaceName={workspaceName} />
-            </div>
-          </SettingsCard>
-
-          <SettingsCard
-            title="Social share image"
-            description="Shown when your portal link is shared on social media or in chat apps. Falls back to your logo. Recommended 1200×630"
-          >
-            <OgImageUploader />
-          </SettingsCard>
-
           <SettingsCard title="Appearance" description="Theme mode, color palette, and typography">
             <div className="space-y-4">
               <div className="space-y-1.5">
@@ -661,349 +636,6 @@ function WelcomeBodyEditor({
       }}
       onImageUpload={uploadImage}
     />
-  )
-}
-
-// ==============================================
-// Identity uploaders
-// ==============================================
-
-const RASTER_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-
-interface LogoUploaderProps {
-  workspaceName: string
-  onLogoChange?: (url: string | null) => void
-}
-
-function LogoUploader({ workspaceName, onLogoChange }: LogoUploaderProps) {
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const [showCropper, setShowCropper] = useState(false)
-  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null)
-
-  const { data: logoData } = useSettingsLogo()
-  const uploadMutation = useUploadWorkspaceLogo()
-  const deleteMutation = useDeleteWorkspaceLogo()
-
-  const logoUrl = logoData?.url ?? null
-  const hasCustomLogo = !!logoUrl
-
-  // Sync logo changes to parent
-  useEffect(() => {
-    onLogoChange?.(logoUrl)
-  }, [logoUrl, onLogoChange])
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    if (!RASTER_IMAGE_TYPES.includes(file.type)) {
-      toast.error('Invalid file type. Allowed: JPEG, PNG, GIF, WebP')
-      return
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('File too large. Maximum size is 5MB')
-      return
-    }
-
-    setCropImageSrc(URL.createObjectURL(file))
-    setShowCropper(true)
-    if (fileInputRef.current) fileInputRef.current.value = ''
-  }
-
-  const handleCropComplete = async (croppedBlob: Blob) => {
-    if (cropImageSrc) {
-      URL.revokeObjectURL(cropImageSrc)
-      setCropImageSrc(null)
-    }
-    uploadMutation.mutate(croppedBlob, {
-      onSuccess: () => toast.success('Logo updated'),
-      onError: (error) =>
-        toast.error(error instanceof Error ? error.message : 'Failed to upload logo'),
-    })
-  }
-
-  const handleCropperClose = (open: boolean) => {
-    if (!open && cropImageSrc) {
-      URL.revokeObjectURL(cropImageSrc)
-      setCropImageSrc(null)
-    }
-    setShowCropper(open)
-  }
-
-  return (
-    <div className="flex flex-col items-center gap-1.5">
-      <button
-        type="button"
-        onClick={() => fileInputRef.current?.click()}
-        disabled={uploadMutation.isPending}
-        className="relative group cursor-pointer"
-        aria-label="Change workspace logo"
-      >
-        {logoUrl ? (
-          <img
-            src={logoUrl}
-            alt={workspaceName}
-            className="h-14 w-14 rounded-xl object-cover border border-border transition-opacity group-hover:opacity-80"
-          />
-        ) : (
-          <div className="h-14 w-14 rounded-xl bg-primary flex items-center justify-center text-primary-foreground text-xl font-semibold border border-border transition-opacity group-hover:opacity-80">
-            {workspaceName.charAt(0).toUpperCase() || 'W'}
-          </div>
-        )}
-        <UploaderOverlay busy={uploadMutation.isPending} />
-      </button>
-      <span className="text-[11px] text-muted-foreground">Logo</span>
-      {hasCustomLogo && (
-        <RemoveAssetButton
-          pending={deleteMutation.isPending}
-          onClick={() =>
-            deleteMutation.mutate(undefined, {
-              onSuccess: () => {
-                toast.success('Logo removed')
-                onLogoChange?.(null)
-              },
-              onError: (error) =>
-                toast.error(error instanceof Error ? error.message : 'Failed to remove logo'),
-            })
-          }
-        />
-      )}
-
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/jpeg,image/png,image/gif,image/webp"
-        onChange={handleFileChange}
-        className="hidden"
-      />
-
-      {cropImageSrc && (
-        <ImageCropper
-          imageSrc={cropImageSrc}
-          open={showCropper}
-          onOpenChange={handleCropperClose}
-          onCropComplete={handleCropComplete}
-          aspectRatio={1}
-          maxOutputSize={512}
-          title="Crop your logo"
-        />
-      )}
-    </div>
-  )
-}
-
-// Wide (1200×630) social share image for the portal's og:image meta tag.
-function OgImageUploader() {
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const [showCropper, setShowCropper] = useState(false)
-  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null)
-
-  const { data: ogImageData } = useSuspenseQuery(settingsQueries.portalOgImage())
-  const uploadMutation = useUploadPortalOgImage()
-  const deleteMutation = useDeletePortalOgImage()
-
-  const ogImageUrl = ogImageData?.url ?? null
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    if (!RASTER_IMAGE_TYPES.includes(file.type)) {
-      toast.error('Invalid file type. Allowed: JPEG, PNG, GIF, WebP')
-      return
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('File too large. Maximum size is 5MB')
-      return
-    }
-
-    setCropImageSrc(URL.createObjectURL(file))
-    setShowCropper(true)
-    if (fileInputRef.current) fileInputRef.current.value = ''
-  }
-
-  const handleCropComplete = async (croppedBlob: Blob) => {
-    if (cropImageSrc) {
-      URL.revokeObjectURL(cropImageSrc)
-      setCropImageSrc(null)
-    }
-    uploadMutation.mutate(croppedBlob, {
-      onSuccess: () => toast.success('Social share image updated'),
-      onError: (error) =>
-        toast.error(error instanceof Error ? error.message : 'Failed to upload social share image'),
-    })
-  }
-
-  const handleCropperClose = (open: boolean) => {
-    if (!open && cropImageSrc) {
-      URL.revokeObjectURL(cropImageSrc)
-      setCropImageSrc(null)
-    }
-    setShowCropper(open)
-  }
-
-  return (
-    <div className="flex flex-col items-start gap-1.5">
-      <button
-        type="button"
-        onClick={() => fileInputRef.current?.click()}
-        disabled={uploadMutation.isPending}
-        className="relative group cursor-pointer w-full max-w-[320px]"
-        aria-label="Change social share image"
-      >
-        {ogImageUrl ? (
-          <img
-            src={ogImageUrl}
-            alt="Social share image preview"
-            className="w-full aspect-[1200/630] rounded-xl object-cover border border-border transition-opacity group-hover:opacity-80"
-          />
-        ) : (
-          <div className="w-full aspect-[1200/630] rounded-xl border border-dashed border-border bg-muted/30 flex items-center justify-center text-xs text-muted-foreground transition-colors group-hover:border-primary/50">
-            1200 × 630
-          </div>
-        )}
-        <UploaderOverlay busy={uploadMutation.isPending} />
-      </button>
-      {ogImageUrl && (
-        <RemoveAssetButton
-          pending={deleteMutation.isPending}
-          onClick={() =>
-            deleteMutation.mutate(undefined, {
-              onSuccess: () => toast.success('Social share image removed'),
-              onError: (error) =>
-                toast.error(
-                  error instanceof Error ? error.message : 'Failed to remove social share image'
-                ),
-            })
-          }
-        />
-      )}
-
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/jpeg,image/png,image/gif,image/webp"
-        onChange={handleFileChange}
-        className="hidden"
-      />
-
-      {cropImageSrc && (
-        <ImageCropper
-          imageSrc={cropImageSrc}
-          open={showCropper}
-          onOpenChange={handleCropperClose}
-          onCropComplete={handleCropComplete}
-          aspectRatio={1200 / 630}
-          maxOutputSize={1200}
-          cropShape="rect"
-          title="Crop your social share image"
-        />
-      )}
-    </div>
-  )
-}
-
-function FaviconUploader({ workspaceName }: { workspaceName: string }) {
-  const fileInputRef = useRef<HTMLInputElement>(null)
-
-  const { data: faviconData } = useSettingsFavicon()
-  const uploadMutation = useUploadFavicon()
-  const deleteMutation = useDeleteFavicon()
-
-  const faviconUrl = faviconData?.url ?? null
-  const hasCustomFavicon = !!faviconUrl
-
-  // Favicons render at 16–32px, so no cropper — the file uploads as picked.
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    if (!RASTER_IMAGE_TYPES.includes(file.type)) {
-      toast.error('Invalid file type. Allowed: JPEG, PNG, GIF, WebP')
-      return
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('File too large. Maximum size is 5MB')
-      return
-    }
-
-    uploadMutation.mutate(file, {
-      onSuccess: () => toast.success('Favicon updated'),
-      onError: (error) =>
-        toast.error(error instanceof Error ? error.message : 'Failed to upload favicon'),
-    })
-    if (fileInputRef.current) fileInputRef.current.value = ''
-  }
-
-  return (
-    <div className="flex flex-col items-center gap-1.5">
-      <button
-        type="button"
-        onClick={() => fileInputRef.current?.click()}
-        disabled={uploadMutation.isPending}
-        className="relative group cursor-pointer"
-        aria-label="Change workspace favicon"
-      >
-        {faviconUrl ? (
-          <img
-            src={faviconUrl}
-            alt={`${workspaceName} favicon`}
-            className="h-14 w-14 rounded-xl object-contain border border-border p-2 transition-opacity group-hover:opacity-80"
-          />
-        ) : (
-          <div className="h-14 w-14 rounded-xl border border-dashed border-border flex items-center justify-center text-muted-foreground transition-opacity group-hover:opacity-80">
-            <CameraIcon className="h-5 w-5" />
-          </div>
-        )}
-        <UploaderOverlay busy={uploadMutation.isPending} />
-      </button>
-      <span className="text-[11px] text-muted-foreground">Favicon</span>
-      {hasCustomFavicon && (
-        <RemoveAssetButton
-          pending={deleteMutation.isPending}
-          onClick={() =>
-            deleteMutation.mutate(undefined, {
-              onSuccess: () => toast.success('Favicon removed'),
-              onError: (error) =>
-                toast.error(error instanceof Error ? error.message : 'Failed to remove favicon'),
-            })
-          }
-        />
-      )}
-
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/jpeg,image/png,image/gif,image/webp"
-        onChange={handleFileChange}
-        className="hidden"
-      />
-    </div>
-  )
-}
-
-function UploaderOverlay({ busy }: { busy: boolean }) {
-  return busy ? (
-    <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/50">
-      <ArrowPathIcon className="h-5 w-5 animate-spin text-white" />
-    </div>
-  ) : (
-    <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
-      <CameraIcon className="h-5 w-5 text-white" />
-    </div>
-  )
-}
-
-function RemoveAssetButton({ pending, onClick }: { pending: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={pending}
-      className="text-xs text-muted-foreground hover:text-destructive transition-colors"
-    >
-      {pending ? 'Removing…' : 'Remove'}
-    </button>
   )
 }
 

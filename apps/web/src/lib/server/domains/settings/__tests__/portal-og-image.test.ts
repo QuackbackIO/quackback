@@ -1,12 +1,8 @@
 /**
  * Portal OG image settings tests.
  *
- * Verifies:
- * - savePortalOgImageKey stores the key, removes the replaced S3 object, and
- *   invalidates the workspace settings cache
- * - deletePortalOgImageKey clears the key, removes the S3 object, and
- *   invalidates the cache
- * - getWorkspaceSettings resolves brandingData.ogImageUrl from the stored key
+ * The stored `portal_og_image_key` column is leftover and unread.
+ * Social share resolves to the workspace logo (then `/logo.png`).
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -121,7 +117,6 @@ function makeSettingsRow(overrides: Record<string, unknown> = {}) {
 
 // Import after mocks
 const { getWorkspaceSettings } = await import('../settings.service')
-const { savePortalOgImageKey, deletePortalOgImageKey } = await import('../settings.media')
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -136,56 +131,13 @@ beforeEach(() => {
   mockUpdate.mockReturnValue({ set: mockSet })
 })
 
-describe('savePortalOgImageKey', () => {
-  beforeEach(() => {
-    mockFindFirst.mockResolvedValue(makeSettingsRow())
-  })
-
-  it('stores the key and invalidates the workspace settings cache', async () => {
-    const result = await savePortalOgImageKey('portal-og/og.png')
-
-    expect(result).toEqual({ success: true, key: 'portal-og/og.png' })
-    expect(mockSet).toHaveBeenCalledWith({ portalOgImageKey: 'portal-og/og.png' })
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
-  })
-
-  it('deletes the replaced S3 object', async () => {
-    mockFindFirst.mockResolvedValue(makeSettingsRow({ portalOgImageKey: 'portal-og/old.png' }))
-
-    await savePortalOgImageKey('portal-og/new.png')
-
-    expect(mockDeleteObject).toHaveBeenCalledWith('portal-og/old.png')
-  })
-})
-
-describe('deletePortalOgImageKey', () => {
-  it('clears the key, deletes the S3 object, and invalidates the cache', async () => {
-    mockFindFirst.mockResolvedValue(makeSettingsRow({ portalOgImageKey: 'portal-og/og.png' }))
-
-    const result = await deletePortalOgImageKey()
-
-    expect(result).toEqual({ success: true })
-    expect(mockDeleteObject).toHaveBeenCalledWith('portal-og/og.png')
-    expect(mockSet).toHaveBeenCalledWith({ portalOgImageKey: null })
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
-  })
-
-  it('does not touch S3 when no image is set', async () => {
-    mockFindFirst.mockResolvedValue(makeSettingsRow())
-
-    await deletePortalOgImageKey()
-
-    expect(mockDeleteObject).not.toHaveBeenCalled()
-  })
-})
-
 describe('getWorkspaceSettings brandingData.ogImageUrl', () => {
-  it('resolves the public URL from the stored key', async () => {
+  it('does not read a leftover stored portal_og_image_key', async () => {
     mockFindFirst.mockResolvedValue(makeSettingsRow({ portalOgImageKey: 'portal-og/og.png' }))
 
     const result = await getWorkspaceSettings()
 
-    expect(result?.brandingData.ogImageUrl).toBe('https://cdn.test/portal-og/og.png')
+    expect(result?.brandingData.ogImageUrl).toBeNull()
   })
 
   it('is null when no OG image is set', async () => {

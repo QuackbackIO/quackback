@@ -7,19 +7,17 @@ import { Cog6ToothIcon, ArrowPathIcon } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
-import { Button } from '@/components/ui/button'
+import { LogoUploader } from '@/components/admin/settings/logo-uploader'
 import { updateWorkspaceNameFn } from '@/lib/server/functions/settings'
-import {
-  getCloudIdentityFn,
-  platformLabelFromHostname,
-  updateCloudIdentityFn,
-} from '@/lib/server/functions/cloud-identity'
+import { getCloudIdentityFn, updateCloudIdentityFn } from '@/lib/server/functions/cloud-identity'
 import { updateFeatureFlagsFn } from '@/lib/server/functions/feature-flags'
 import { useDebouncedSave } from '@/lib/client/hooks/use-debounced-save'
 import { isPathManagedFromBootstrap, MANAGED_PATHS } from '@/lib/client/config-file'
+import { settingsQueries } from '@/lib/client/queries/settings'
 import {
   DEFAULT_FEATURE_FLAGS,
   PRODUCT_DEFINITIONS,
@@ -34,27 +32,25 @@ import { WorkspaceDangerCard } from '@/components/admin/settings/workspace-dange
 export const Route = createFileRoute('/admin/settings/general')({
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MANAGE)
-    return { cloudIdentity: await getCloudIdentityFn() }
+    const [cloudIdentity] = await Promise.all([
+      getCloudIdentityFn(),
+      context.queryClient.ensureQueryData(settingsQueries.logo()),
+    ])
+    return { cloudIdentity }
   },
   component: GeneralSettingsPage,
 })
 
 function GeneralSettingsPage() {
   const { settings, managedFieldPaths } = Route.useRouteContext()
-  const { cloudIdentity: initialCloudIdentity } = Route.useLoaderData()
+  const { cloudIdentity } = Route.useLoaderData()
   const workspaceNameManaged = isPathManagedFromBootstrap(
     MANAGED_PATHS.WORKSPACE_NAME,
     managedFieldPaths ?? []
   )
 
-  const [cloudIdentity, setCloudIdentity] = useState(initialCloudIdentity)
   const [workspaceName, setWorkspaceName] = useState(
-    initialCloudIdentity?.displayName ?? settings?.name ?? ''
-  )
-  const [platformLabel, setPlatformLabel] = useState(
-    initialCloudIdentity?.platformHostname
-      ? platformLabelFromHostname(initialCloudIdentity.platformHostname)
-      : ''
+    cloudIdentity?.displayName ?? settings?.name ?? ''
   )
   const [isSavingName, setIsSavingName] = useState(false)
   const [localFlags, setLocalFlags] = useState<FeatureFlags>(
@@ -89,54 +85,31 @@ function GeneralSettingsPage() {
     },
   })
 
-  const identityMutation = useMutation({
-    mutationFn: () => {
-      const requestedLabel = platformLabel.trim()
-      return updateCloudIdentityFn({
-        data: {
-          displayName: workspaceName.trim(),
-          ...(requestedLabel ? { platformLabel: requestedLabel } : {}),
-        },
-      })
-    },
-    onSuccess: async (result) => {
-      setCloudIdentity(result.projection)
-      setWorkspaceName(result.projection.displayName)
-      setPlatformLabel(
-        result.projection.platformHostname
-          ? platformLabelFromHostname(result.projection.platformHostname)
-          : ''
-      )
-      if (result.transferToken) {
-        const target = new URL('/auth/origin-transfer', result.projection.canonicalOrigin)
-        target.searchParams.set('ott', result.transferToken)
-        target.searchParams.set('returnTo', '/admin/settings/general')
-        window.location.assign(target)
-        return
-      }
-      toast.success('Workspace details saved')
-      await router.invalidate()
-    },
-  })
-
   // Debounced workspace name save. `useDebouncedSave` flushes any pending
   // value on unmount, so navigating away mid-debounce no longer drops it.
   const { queue: queueNameSave } = useDebouncedSave<string>(async (value) => {
-    if (value.trim() && value !== settings?.name) {
-      setIsSavingName(true)
-      try {
-        await updateWorkspaceNameFn({ data: { name: value.trim() } })
-      } catch {
-        toast.error('Failed to update workspace name')
-      } finally {
-        setIsSavingName(false)
+    const trimmed = value.trim()
+    if (!trimmed) return
+    setIsSavingName(true)
+    try {
+      if (cloudIdentity) {
+        if (trimmed !== cloudIdentity.displayName) {
+          await updateCloudIdentityFn({ data: { displayName: trimmed } })
+          await router.invalidate()
+        }
+      } else if (trimmed !== settings?.name) {
+        await updateWorkspaceNameFn({ data: { name: trimmed } })
       }
+    } catch {
+      toast.error('Failed to update workspace name')
+    } finally {
+      setIsSavingName(false)
     }
   }, 800)
 
   const handleNameChange = (value: string) => {
     setWorkspaceName(value)
-    if (!cloudIdentity) queueNameSave(value)
+    queueNameSave(value)
   }
 
   const handleProductToggle = (productId: ProductId, enabled: boolean) => {
@@ -154,29 +127,13 @@ function GeneralSettingsPage() {
         description="Workspace identity and products"
       />
 
-      {cloudIdentity ? (
-        <CloudWorkspaceDetails
-          workspaceName={workspaceName}
-          platformLabel={platformLabel}
-          domainSuffix={new URL(cloudIdentity.canonicalOrigin).hostname
-            .split('.')
-            .slice(1)
-            .join('.')}
-          currentOrigin={cloudIdentity.canonicalOrigin}
-          pending={identityMutation.isPending}
-          error={identityMutation.error}
-          onWorkspaceNameChange={setWorkspaceName}
-          onPlatformLabelChange={setPlatformLabel}
-          onSubmit={() => identityMutation.mutate()}
-        />
-      ) : (
-        <LocalWorkspaceNameCard
-          workspaceName={workspaceName}
-          saving={isSavingName}
-          managed={workspaceNameManaged}
-          onWorkspaceNameChange={handleNameChange}
-        />
-      )}
+      <WorkspaceIdentityCard
+        workspaceName={workspaceName}
+        saving={isSavingName}
+        managed={!cloudIdentity && workspaceNameManaged}
+        onWorkspaceNameChange={handleNameChange}
+        maxLength={cloudIdentity ? 80 : undefined}
+      />
 
       <SettingsCard
         title="Products"
@@ -194,7 +151,7 @@ function GeneralSettingsPage() {
               >
                 <div className="min-w-0 space-y-0.5">
                   <Label
-                    htmlFor={`product-${product.id}`}
+                    htmlFor={alwaysOn ? undefined : `product-${product.id}`}
                     className={
                       alwaysOn ? 'text-sm font-medium' : 'cursor-pointer text-sm font-medium'
                     }
@@ -202,18 +159,19 @@ function GeneralSettingsPage() {
                     {product.label}
                   </Label>
                   <p className="text-xs text-muted-foreground">{product.description}</p>
-                  {alwaysOn && (
-                    <p className="text-xs text-muted-foreground">
-                      {product.label} is always enabled
-                    </p>
-                  )}
                 </div>
-                <Switch
-                  id={`product-${product.id}`}
-                  checked={alwaysOn || isProductEnabled(localFlags, product.id)}
-                  onCheckedChange={(checked) => handleProductToggle(product.id, checked)}
-                  disabled={alwaysOn || productMutation.isPending}
-                />
+                {alwaysOn ? (
+                  <Badge id={`product-${product.id}`} variant="outline">
+                    Always on
+                  </Badge>
+                ) : (
+                  <Switch
+                    id={`product-${product.id}`}
+                    checked={isProductEnabled(localFlags, product.id)}
+                    onCheckedChange={(checked) => handleProductToggle(product.id, checked)}
+                    disabled={productMutation.isPending}
+                  />
+                )}
               </div>
             )
           })}
@@ -225,113 +183,44 @@ function GeneralSettingsPage() {
   )
 }
 
-export function LocalWorkspaceNameCard(props: {
+export function WorkspaceIdentityCard(props: {
   workspaceName: string
   saving: boolean
   managed: boolean
   onWorkspaceNameChange: (value: string) => void
+  maxLength?: number
 }) {
-  return (
-    <SettingsCard title="Workspace" description="The name shown across the portal and emails">
-      <div className="max-w-md space-y-1.5">
-        <Label htmlFor="workspace-name" className="text-xs text-muted-foreground">
-          Workspace Name
-        </Label>
-        <div className="relative">
-          <Input
-            id="workspace-name"
-            value={props.workspaceName}
-            onChange={(e) => props.onWorkspaceNameChange(e.target.value)}
-            placeholder="My Workspace"
-            disabled={props.managed}
-          />
-          {props.saving && (
-            <ArrowPathIcon className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
-          )}
-        </div>
-        {props.managed && (
-          <p className="text-xs text-muted-foreground">
-            Managed by your administrator&apos;s config &mdash; edit there.
-          </p>
-        )}
-      </div>
-    </SettingsCard>
-  )
-}
-
-export function CloudWorkspaceDetails(props: {
-  workspaceName: string
-  platformLabel: string
-  domainSuffix: string
-  currentOrigin: string
-  pending: boolean
-  error: Error | null
-  onWorkspaceNameChange: (value: string) => void
-  onPlatformLabelChange: (value: string) => void
-  onSubmit: () => void
-}) {
-  const preview = `https://${props.platformLabel || 'workspace'}.${props.domainSuffix}`
   return (
     <SettingsCard
-      title="Workspace details"
-      description="The name and Quackback address customers use for this workspace"
+      title="Workspace"
+      description="Your logo and name, shown across the portal, widget, and emails"
     >
-      <form
-        className="max-w-xl space-y-5"
-        onSubmit={(event) => {
-          event.preventDefault()
-          props.onSubmit()
-        }}
-      >
-        <div className="space-y-1.5">
+      <div className="flex items-center gap-4">
+        <LogoUploader workspaceName={props.workspaceName} />
+        <div className="min-w-0 flex-1 max-w-md space-y-1.5">
           <Label htmlFor="workspace-name" className="text-xs text-muted-foreground">
-            Workspace name
+            Workspace Name
           </Label>
-          <Input
-            id="workspace-name"
-            value={props.workspaceName}
-            onChange={(event) => props.onWorkspaceNameChange(event.target.value)}
-            placeholder="Untitled workspace"
-            maxLength={80}
-            disabled={props.pending}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="platform-label" className="text-xs text-muted-foreground">
-            Quackback URL
-          </Label>
-          <div className="flex items-center rounded-md border bg-background focus-within:ring-2 focus-within:ring-ring">
+          <div className="relative">
             <Input
-              id="platform-label"
-              value={props.platformLabel}
-              onChange={(event) => props.onPlatformLabelChange(event.target.value)}
-              className="border-0 focus-visible:ring-0"
-              maxLength={63}
-              autoCapitalize="none"
-              autoCorrect="off"
-              disabled={props.pending}
+              id="workspace-name"
+              value={props.workspaceName}
+              onChange={(e) => props.onWorkspaceNameChange(e.target.value)}
+              placeholder="My Workspace"
+              disabled={props.managed}
+              maxLength={props.maxLength}
             />
-            <span className="shrink-0 pe-3 text-sm text-muted-foreground">
-              .{props.domainSuffix}
-            </span>
+            {props.saving && (
+              <ArrowPathIcon className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+            )}
           </div>
-          <p className="text-xs text-muted-foreground">
-            Preview: <span className="font-mono">{preview}</span>
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Current: <span className="font-mono">{props.currentOrigin}</span>
-          </p>
+          {props.managed && (
+            <p className="text-xs text-muted-foreground">
+              Managed by your administrator&apos;s config &mdash; edit there.
+            </p>
+          )}
         </div>
-        {props.error && (
-          <p role="alert" className="text-sm text-destructive">
-            {props.error.message || 'Could not save workspace details. Try again.'}
-          </p>
-        )}
-        <Button type="submit" disabled={props.pending || !props.workspaceName.trim()}>
-          {props.pending && <ArrowPathIcon className="h-4 w-4 animate-spin" />}
-          Save workspace details
-        </Button>
-      </form>
+      </div>
     </SettingsCard>
   )
 }

@@ -13,10 +13,7 @@ import {
   updateHeaderDisplayNameFn,
   saveLogoKeyFn,
   saveHeaderLogoKeyFn,
-  savePortalOgImageKeyFn,
-  deletePortalOgImageFn,
   saveFaviconKeyFn,
-  deleteFaviconFn,
   saveWidgetHeroImageKeyFn,
   deleteWidgetHeroImageFn,
   updatePortalConfigFn,
@@ -49,11 +46,11 @@ import {
 import {
   getLogoUploadUrlFn,
   getHeaderLogoUploadUrlFn,
-  getPortalOgImageUploadUrlFn,
   getWidgetHeroUploadUrlFn,
   getFaviconUploadUrlFn,
 } from '@/lib/server/functions/uploads'
 import { settingsQueries } from '@/lib/client/queries/settings'
+import { downscaleSquareImage } from '@/lib/client/downscale-square-image'
 
 // ============================================================================
 // Logo Mutation Hooks
@@ -64,30 +61,45 @@ export function useUploadWorkspaceLogo() {
 
   return useMutation({
     mutationFn: async (file: Blob) => {
-      // 1. Get presigned URL from server
-      const { uploadUrl, key } = await getLogoUploadUrlFn({
-        data: {
-          filename: (file as File).name || 'logo.png',
-          contentType: file.type,
-          fileSize: file.size,
-        },
-      })
+      const logoType = file.type || 'image/png'
+      const faviconBlob = await downscaleSquareImage(file, 64)
 
-      // 2. Upload directly to S3
-      const uploadResponse = await fetch(uploadUrl, {
-        method: 'PUT',
-        body: file,
-        headers: {
-          'Content-Type': file.type,
-        },
-      })
+      const [logoUpload, faviconUpload] = await Promise.all([
+        getLogoUploadUrlFn({
+          data: {
+            filename: (file as File).name || 'logo.png',
+            contentType: logoType,
+            fileSize: file.size,
+          },
+        }),
+        getFaviconUploadUrlFn({
+          data: {
+            filename: 'favicon.png',
+            contentType: 'image/png',
+            fileSize: faviconBlob.size,
+          },
+        }),
+      ])
 
-      if (!uploadResponse.ok) {
+      const [logoResponse, faviconResponse] = await Promise.all([
+        fetch(logoUpload.uploadUrl, {
+          method: 'PUT',
+          body: file,
+          headers: { 'Content-Type': logoType },
+        }),
+        fetch(faviconUpload.uploadUrl, {
+          method: 'PUT',
+          body: faviconBlob,
+          headers: { 'Content-Type': 'image/png' },
+        }),
+      ])
+
+      if (!logoResponse.ok || !faviconResponse.ok) {
         throw new Error('Failed to upload logo to storage')
       }
 
-      // 3. Save the S3 key to the database
-      await saveLogoKeyFn({ data: { key } })
+      await saveLogoKeyFn({ data: { key: logoUpload.key } })
+      await saveFaviconKeyFn({ data: { key: faviconUpload.key } })
     },
     onSuccess: () => {
       queryClient.refetchQueries({ queryKey: settingsQueries.logo().queryKey })
@@ -102,108 +114,6 @@ export function useDeleteWorkspaceLogo() {
     mutationFn: () => deleteLogoFn(),
     onSuccess: () => {
       queryClient.refetchQueries({ queryKey: settingsQueries.logo().queryKey })
-    },
-  })
-}
-
-// ============================================================================
-// Portal OG Image Mutation Hooks
-// ============================================================================
-
-export function useUploadPortalOgImage() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: async (file: Blob) => {
-      // 1. Get presigned URL from server
-      const { uploadUrl, key } = await getPortalOgImageUploadUrlFn({
-        data: {
-          filename: (file as File).name || 'og-image.png',
-          contentType: file.type,
-          fileSize: file.size,
-        },
-      })
-
-      // 2. Upload directly to S3
-      const uploadResponse = await fetch(uploadUrl, {
-        method: 'PUT',
-        body: file,
-        headers: {
-          'Content-Type': file.type,
-        },
-      })
-
-      if (!uploadResponse.ok) {
-        throw new Error('Failed to upload social image to storage')
-      }
-
-      // 3. Save the S3 key to the database
-      await savePortalOgImageKeyFn({ data: { key } })
-    },
-    onSuccess: () => {
-      queryClient.refetchQueries({ queryKey: settingsQueries.portalOgImage().queryKey })
-    },
-  })
-}
-
-export function useDeletePortalOgImage() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: () => deletePortalOgImageFn(),
-    onSuccess: () => {
-      queryClient.refetchQueries({ queryKey: settingsQueries.portalOgImage().queryKey })
-    },
-  })
-}
-
-// ============================================================================
-// Favicon Mutation Hooks
-// ============================================================================
-
-export function useUploadFavicon() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: async (file: Blob) => {
-      // 1. Get presigned URL from server
-      const { uploadUrl, key } = await getFaviconUploadUrlFn({
-        data: {
-          filename: (file as File).name || 'favicon.png',
-          contentType: file.type,
-          fileSize: file.size,
-        },
-      })
-
-      // 2. Upload directly to S3
-      const uploadResponse = await fetch(uploadUrl, {
-        method: 'PUT',
-        body: file,
-        headers: {
-          'Content-Type': file.type,
-        },
-      })
-
-      if (!uploadResponse.ok) {
-        throw new Error('Failed to upload favicon to storage')
-      }
-
-      // 3. Save the S3 key to the database
-      await saveFaviconKeyFn({ data: { key } })
-    },
-    onSuccess: () => {
-      queryClient.refetchQueries({ queryKey: settingsQueries.favicon().queryKey })
-    },
-  })
-}
-
-export function useDeleteFavicon() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: () => deleteFaviconFn(),
-    onSuccess: () => {
-      queryClient.refetchQueries({ queryKey: settingsQueries.favicon().queryKey })
     },
   })
 }

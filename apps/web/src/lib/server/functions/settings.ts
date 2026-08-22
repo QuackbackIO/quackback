@@ -23,8 +23,6 @@ import {
   deleteLogoKey,
   saveHeaderLogoKey,
   deleteHeaderLogoKey,
-  savePortalOgImageKey,
-  deletePortalOgImageKey,
   saveFaviconKey,
   deleteFaviconKey,
   updateHeaderDisplayMode,
@@ -609,13 +607,13 @@ export const saveLogoKeyFn = createServerFn({ method: 'POST' })
   .validator(saveLogoKeySchema)
   .handler(async ({ data }) => {
     log.info({ key: data.key }, 'save logo key')
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     return await saveLogoKey(data.key)
   })
 
 export const deleteLogoFn = createServerFn({ method: 'POST' }).handler(async () => {
   log.info('delete logo')
-  await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+  await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
   return await deleteLogoKey()
 })
 
@@ -633,31 +631,17 @@ export const deleteHeaderLogoFn = createServerFn({ method: 'POST' }).handler(asy
   return await deleteHeaderLogoKey()
 })
 
-export const savePortalOgImageKeyFn = createServerFn({ method: 'POST' })
-  .validator(saveLogoKeySchema)
-  .handler(async ({ data }) => {
-    log.info({ key: data.key }, 'save portal og image key')
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
-    return await savePortalOgImageKey(data.key)
-  })
-
-export const deletePortalOgImageFn = createServerFn({ method: 'POST' }).handler(async () => {
-  log.info('delete portal og image')
-  await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
-  return await deletePortalOgImageKey()
-})
-
 export const saveFaviconKeyFn = createServerFn({ method: 'POST' })
   .validator(saveLogoKeySchema)
   .handler(async ({ data }) => {
     log.info({ key: data.key }, 'save favicon key')
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     return await saveFaviconKey(data.key)
   })
 
 export const deleteFaviconFn = createServerFn({ method: 'POST' }).handler(async () => {
   log.info('delete favicon')
-  await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+  await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
   return await deleteFaviconKey()
 })
 
