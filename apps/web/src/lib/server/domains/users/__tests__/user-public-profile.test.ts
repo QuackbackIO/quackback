@@ -45,11 +45,13 @@ const TABLES = vi.hoisted(() => ({
     createdAt: 'principal.createdAt',
     contactEmail: 'principal.contactEmail',
     companyId: 'principal.companyId',
+    blockedAt: 'principal.blockedAt',
   },
   user: {
     id: 'user.id',
     name: 'user.name',
     email: 'user.email',
+    emailVerified: 'user.emailVerified',
     image: 'user.image',
     imageKey: 'user.imageKey',
   },
@@ -88,6 +90,14 @@ const TABLES = vi.hoisted(() => ({
     name: 'companies.name',
     plan: 'companies.plan',
     mrrCents: 'companies.mrrCents',
+  },
+  session: {
+    userId: 'session.userId',
+    updatedAt: 'session.updatedAt',
+  },
+  visitorDevices: {
+    principalId: 'visitorDevices.principalId',
+    lastSeenAt: 'visitorDevices.lastSeenAt',
   },
 }))
 
@@ -303,7 +313,10 @@ describe('getProfileTeamContext', () => {
       [
         {
           principalId: PRINCIPAL_ID,
+          userId: 'user_1',
           email: 'temp-abc123@anon.quackback.io',
+          emailVerified: false,
+          blockedAt: null,
           contactEmail: null,
           companyId: null,
           companyName: null,
@@ -311,19 +324,25 @@ describe('getProfileTeamContext', () => {
           companyMrrCents: null,
         },
       ],
-      [] // segments
+      [], // segments
+      [{ v: null }], // session last-seen
+      [{ v: null }] // device last-seen
     )
     const result = await getProfileTeamContext(PRINCIPAL_ID)
     expect(result).not.toBeNull()
     expect(result!.email).toBeNull()
   })
 
-  it('returns email, company, and segments for a full profile', async () => {
+  it('returns email, company, segments, lastSeenAt, and flags for a full profile', async () => {
+    const lastSeen = new Date('2026-04-01T12:00:00Z')
     hoisted.selectResults.push(
       [
         {
           principalId: PRINCIPAL_ID,
+          userId: 'user_1',
           email: 'alice@acme.com',
+          emailVerified: true,
+          blockedAt: null,
           contactEmail: null,
           companyId: 'company_1',
           companyName: 'Acme',
@@ -331,13 +350,18 @@ describe('getProfileTeamContext', () => {
           companyMrrCents: 129900,
         },
       ],
-      [{ id: 'segment_1', name: 'Beta users', color: '#f00' }]
+      [{ id: 'segment_1', name: 'Beta users', color: '#f00' }],
+      [{ v: lastSeen }],
+      [{ v: null }]
     )
     const result = await getProfileTeamContext(PRINCIPAL_ID)
     expect(result).toEqual({
       email: 'alice@acme.com',
       company: { id: 'company_1', name: 'Acme', plan: 'Scale', mrrCents: 129900 },
       segments: [{ id: 'segment_1', name: 'Beta users', color: '#f00' }],
+      lastSeenAt: lastSeen,
+      emailVerified: true,
+      blocked: false,
     })
   })
 })

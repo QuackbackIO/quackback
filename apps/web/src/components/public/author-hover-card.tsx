@@ -143,7 +143,7 @@ export function AuthorHoverCard({
           <CardSkeleton />
         ) : profile ? (
           <div data-testid="author-hover-card-body">
-            <div className="flex items-start gap-3">
+            <div className="flex items-center gap-3">
               <Avatar
                 src={profile.avatarUrl}
                 name={profile.displayName || displayName}
@@ -199,7 +199,7 @@ export function AuthorHoverCard({
                 </div>
               </div>
             </div>
-            <div className="mt-3 flex items-center gap-4 border-t border-border/50 pt-2.5">
+            <div className="mt-3 flex items-center border-t border-border/50 pt-2.5">
               <CardStat
                 value={profile.postCount}
                 label={intl.formatMessage({
@@ -231,9 +231,9 @@ export function AuthorHoverCard({
 
 function CardStat({ value, label }: { value: number; label: string }) {
   return (
-    <div className="text-center">
+    <div className="flex-1 text-center">
       <div className="text-sm font-semibold tabular-nums text-foreground">{value}</div>
-      <div className="text-[11px] text-muted-foreground">{label}</div>
+      <div className="text-[11px] leading-[14px] text-muted-foreground">{label}</div>
     </div>
   )
 }
@@ -241,17 +241,23 @@ function CardStat({ value, label }: { value: number; label: string }) {
 function CardSkeleton() {
   return (
     <div data-testid="author-hover-card-skeleton">
-      <div className="flex items-start gap-3">
+      <div className="flex items-center gap-3">
         <Skeleton className="size-10 shrink-0 rounded-full" />
         <div className="flex-1 space-y-2 py-1">
           <Skeleton className="h-4 w-24" />
           <Skeleton className="h-3 w-32" />
         </div>
       </div>
-      <div className="mt-3 flex items-center gap-4 border-t border-border/50 pt-2.5">
-        <Skeleton className="h-7 w-10" />
-        <Skeleton className="h-7 w-10" />
-        <Skeleton className="h-7 w-10" />
+      <div className="mt-3 flex items-center border-t border-border/50 pt-2.5">
+        <div className="flex flex-1 justify-center">
+          <Skeleton className="h-[34px] w-10" />
+        </div>
+        <div className="flex flex-1 justify-center">
+          <Skeleton className="h-[34px] w-10" />
+        </div>
+        <div className="flex flex-1 justify-center">
+          <Skeleton className="h-[34px] w-10" />
+        </div>
       </div>
     </div>
   )

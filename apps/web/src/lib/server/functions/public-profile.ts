@@ -10,9 +10,9 @@
  *    you".
  *
  *  - getProfileTeamContextFn: people.view-gated. Returns the team-only
- *    context strip (sanitized email, company, segments). Never called by
- *    the client unless the viewer holds the permission; enforced here
- *    regardless.
+ *    context strip (sanitized email, company, segments, lastSeenAt,
+ *    verified/blocked). Never called by the client unless the viewer holds
+ *    the permission; enforced here regardless.
  */
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
@@ -52,7 +52,15 @@ export interface PublicUserProfileView {
   upvotes: PublicProfileActivityItemView[]
 }
 
-export type ProfileTeamContextView = PublicProfileTeamContext
+/** Serialized team-context payload for the client (dates as ISO strings). */
+export interface ProfileTeamContextView {
+  email: PublicProfileTeamContext['email']
+  company: PublicProfileTeamContext['company']
+  segments: PublicProfileTeamContext['segments']
+  lastSeenAt: string | null
+  emailVerified: boolean
+  blocked: boolean
+}
 
 function serializeItem(item: PublicProfileActivityItem): PublicProfileActivityItemView {
   return {
@@ -110,9 +118,10 @@ export const getPublicUserProfileFn = createServerFn({ method: 'GET' })
 
 /**
  * Team-only context strip for a profile: sanitized email, company summary,
- * segment chips, for viewers holding people.view. The client only queries
- * this when `can('people.view')`; the permission is enforced server-side
- * here regardless. Returns null when the principal isn't profile-eligible.
+ * segment chips, lastSeenAt, verified/blocked flags, for viewers holding
+ * people.view. The client only queries this when `can('people.view')`; the
+ * permission is enforced server-side here regardless. Returns null when
+ * the principal isn't profile-eligible.
  */
 export const getProfileTeamContextFn = createServerFn({ method: 'GET' })
   .validator(profileParamsSchema)
@@ -122,5 +131,14 @@ export const getProfileTeamContextFn = createServerFn({ method: 'GET' })
     if (!isValidTypeId(data.principalId, 'principal')) return null
 
     const { getProfileTeamContext } = await import('@/lib/server/domains/users/user.public-profile')
-    return await getProfileTeamContext(data.principalId as PrincipalId)
+    const context = await getProfileTeamContext(data.principalId as PrincipalId)
+    if (!context) return null
+    return {
+      email: context.email,
+      company: context.company,
+      segments: context.segments,
+      lastSeenAt: context.lastSeenAt ? context.lastSeenAt.toISOString() : null,
+      emailVerified: context.emailVerified,
+      blocked: context.blocked,
+    }
   })

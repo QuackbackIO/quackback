@@ -11,6 +11,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowPathIcon, ArrowsRightLeftIcon, MagnifyingGlassIcon } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Avatar } from '@/components/ui/avatar'
 import {
@@ -33,6 +34,10 @@ interface MergeLeadControlProps {
   /** Called after a successful merge so the parent can leave the deleted lead. */
   onMerged: () => void
   className?: string
+  /** `dialog` hides the trigger so a parent menu can own it. */
+  mode?: 'button' | 'menu-item' | 'dialog'
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
 export function MergeLeadControl({
@@ -40,8 +45,13 @@ export function MergeLeadControl({
   leadName,
   onMerged,
   className,
+  mode = 'button',
+  open: openProp,
+  onOpenChange,
 }: MergeLeadControlProps) {
-  const [open, setOpen] = useState(false)
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
+  const open = openProp ?? uncontrolledOpen
+  const setOpen = onOpenChange ?? setUncontrolledOpen
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [targetId, setTargetId] = useState<PrincipalId | null>(null)
@@ -89,16 +99,23 @@ export function MergeLeadControl({
 
   return (
     <>
-      <Button
-        variant="outline"
-        size="sm"
-        className={className}
-        onClick={() => setOpen(true)}
-        title="Fold this lead's activity into an identified user"
-      >
-        <ArrowsRightLeftIcon className="h-4 w-4 mr-2" />
-        Merge into user…
-      </Button>
+      {mode === 'menu-item' ? (
+        <DropdownMenuItem onSelect={() => setOpen(true)}>
+          <ArrowsRightLeftIcon className="h-4 w-4" />
+          Merge
+        </DropdownMenuItem>
+      ) : mode === 'button' ? (
+        <Button
+          variant="outline"
+          size="sm"
+          className={className}
+          onClick={() => setOpen(true)}
+          title="Fold this lead's activity into an identified user"
+        >
+          <ArrowsRightLeftIcon className="h-4 w-4 mr-2" />
+          Merge into user…
+        </Button>
+      ) : null}
       <Dialog
         open={open}
         onOpenChange={(next) => {

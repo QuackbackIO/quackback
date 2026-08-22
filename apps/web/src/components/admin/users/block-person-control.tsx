@@ -4,6 +4,7 @@ import { NoSymbolIcon } from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
 import type { PrincipalId } from '@quackback/ids'
 import { Button } from '@/components/ui/button'
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import {
   blockPersonFn,
@@ -31,6 +32,43 @@ export function usePersonBlockStatus(principalId: PrincipalId | undefined) {
   return { blocked: query.data?.blockedAt != null, isLoading: query.isLoading }
 }
 
+/** Block / unblock mutations shared by the profile overflow menu and the button. */
+export function usePersonBlockActions(principalId: PrincipalId | undefined) {
+  const queryClient = useQueryClient()
+  const { blocked, isLoading } = usePersonBlockStatus(principalId)
+
+  const invalidate = () => {
+    if (!principalId) return Promise.resolve()
+    return queryClient.invalidateQueries({ queryKey: blockStatusKey(principalId) })
+  }
+
+  const blockMut = useMutation({
+    mutationFn: () => blockPersonFn({ data: { principalId: principalId as PrincipalId } }),
+    onSuccess: async () => {
+      await invalidate()
+      toast.success('Person blocked')
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed to block'),
+  })
+  const unblockMut = useMutation({
+    mutationFn: () => unblockPersonFn({ data: { principalId: principalId as PrincipalId } }),
+    onSuccess: async () => {
+      await invalidate()
+      toast.success('Person unblocked')
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed to unblock'),
+  })
+
+  return {
+    blocked,
+    isLoading,
+    busy: blockMut.isPending || unblockMut.isPending,
+    block: () => blockMut.mutate(),
+    unblock: () => unblockMut.mutate(),
+    blockPending: blockMut.isPending,
+  }
+}
+
 /**
  * Block / Unblock action for a person (support platform §4.6). Blocking rejects
  * their future messages and re-registration; unblocking restores them. Confirmed
@@ -42,51 +80,56 @@ export function BlockPersonControl({
   personName,
   className,
   size = 'sm',
+  mode = 'button',
+  open,
+  onOpenChange,
 }: {
   principalId: PrincipalId
   personName?: string | null
   className?: string
   size?: 'sm' | 'default'
+  /** `dialog` hides the trigger so a parent menu can own it. */
+  mode?: 'button' | 'menu-item' | 'dialog'
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }) {
-  const queryClient = useQueryClient()
-  const [confirmOpen, setConfirmOpen] = useState(false)
-  const { blocked, isLoading } = usePersonBlockStatus(principalId)
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
+  const confirmOpen = open ?? uncontrolledOpen
+  const setConfirmOpen = onOpenChange ?? setUncontrolledOpen
+  const { blocked, isLoading, busy, block, unblock, blockPending } =
+    usePersonBlockActions(principalId)
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: blockStatusKey(principalId) })
+  if (isLoading && mode !== 'dialog') return null
 
-  const blockMut = useMutation({
-    mutationFn: () => blockPersonFn({ data: { principalId } }),
-    onSuccess: async () => {
-      await invalidate()
-      toast.success('Person blocked')
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed to block'),
-  })
-  const unblockMut = useMutation({
-    mutationFn: () => unblockPersonFn({ data: { principalId } }),
-    onSuccess: async () => {
-      await invalidate()
-      toast.success('Person unblocked')
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed to unblock'),
-  })
-  const busy = blockMut.isPending || unblockMut.isPending
-
-  if (isLoading) return null
+  function trigger() {
+    if (blocked) unblock()
+    else setConfirmOpen(true)
+  }
 
   return (
     <>
-      <Button
-        type="button"
-        variant={blocked ? 'outline' : 'destructive'}
-        size={size}
-        className={className}
-        disabled={busy}
-        onClick={() => (blocked ? unblockMut.mutate() : setConfirmOpen(true))}
-      >
-        <NoSymbolIcon className="h-4 w-4" />
-        {blocked ? 'Unblock' : 'Block'}
-      </Button>
+      {mode === 'menu-item' ? (
+        <DropdownMenuItem
+          variant={blocked ? 'default' : 'destructive'}
+          disabled={busy}
+          onSelect={() => trigger()}
+        >
+          <NoSymbolIcon className="h-4 w-4" />
+          {blocked ? 'Unblock' : 'Block'}
+        </DropdownMenuItem>
+      ) : mode === 'button' ? (
+        <Button
+          type="button"
+          variant={blocked ? 'outline' : 'destructive'}
+          size={size}
+          className={className}
+          disabled={busy}
+          onClick={trigger}
+        >
+          <NoSymbolIcon className="h-4 w-4" />
+          {blocked ? 'Unblock' : 'Block'}
+        </Button>
+      ) : null}
       <ConfirmDialog
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
@@ -94,8 +137,8 @@ export function BlockPersonControl({
         description="They will not be able to send new messages or sign in again. Their existing activity stays, and you can unblock them at any time."
         confirmLabel="Block"
         variant="destructive"
-        isPending={blockMut.isPending}
-        onConfirm={() => blockMut.mutate()}
+        isPending={blockPending}
+        onConfirm={block}
       />
     </>
   )
