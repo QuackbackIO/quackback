@@ -3,7 +3,7 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { createFileRoute, useRouter, Navigate, Link } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { ChatBubbleLeftRightIcon, ArrowPathIcon } from '@heroicons/react/24/solid'
+import { ChatBubbleLeftRightIcon } from '@heroicons/react/24/solid'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { useUpdatePortalConfig, useUpdateWidgetConfig } from '@/lib/client/mutations/settings'
@@ -47,7 +47,6 @@ function MessengerChannelPage() {
   const [portalSupportEnabled, setPortalSupportEnabled] = useState(
     portalConfigQuery.data?.support?.enabled ?? false
   )
-  const [enabled, setEnabled] = useState(messengerConfig?.enabled ?? false)
   const [preventRepliesWhenClosed, setPreventRepliesWhenClosed] = useState(
     messengerConfig?.preventRepliesWhenClosed ?? false
   )
@@ -84,46 +83,12 @@ function MessengerChannelPage() {
         description="Live chat in the widget and on the portal."
       />
 
-      <SettingsCard
-        title="Enable Messenger"
-        description="Accept new conversations and show the Messages tab."
-      >
-        <div className="flex items-center justify-between py-1">
-          <div className="pr-4">
-            <Label htmlFor="messenger-enabled" className="text-sm font-medium cursor-pointer">
-              Enable Messenger
-            </Label>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Adds the Messages tab to the widget. Turning it off also hides the tab.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            {savingField === 'enabled' && (
-              <ArrowPathIcon className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-            )}
-            <Switch
-              id="messenger-enabled"
-              checked={enabled}
-              onCheckedChange={(checked) => {
-                setEnabled(checked)
-                persist(
-                  'enabled',
-                  { messenger: { enabled: checked }, tabs: { messenger: checked } },
-                  () => setEnabled(!checked)
-                )
-              }}
-              disabled={isBusy}
-            />
-          </div>
-        </div>
-      </SettingsCard>
-
       <SettingsCard title="Surfaces" description="Where customers see their conversations.">
         <div className="flex items-center justify-between py-1">
           <div className="pr-4">
             <p className="text-sm font-medium">Widget</p>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Launcher, tabs, and appearance are in Widget settings.
+              Show the Messages tab from Widget settings.
             </p>
           </div>
           <Link to="/admin/settings/widget" className="text-sm font-medium text-primary">
@@ -170,7 +135,7 @@ function MessengerChannelPage() {
               placeholder="Support"
               onChange={(e) => setTeamName(e.target.value)}
               onBlur={() => persist('teamName', { messenger: { teamName: teamName.trim() } })}
-              disabled={isBusy || !enabled}
+              disabled={isBusy}
             />
             <p className="text-xs text-muted-foreground">
               Shown in the messenger header. Falls back to the workspace name.
@@ -188,7 +153,7 @@ function MessengerChannelPage() {
               onBlur={() =>
                 persist('welcomeMessage', { messenger: { welcomeMessage: welcomeMessage.trim() } })
               }
-              disabled={isBusy || !enabled}
+              disabled={isBusy}
             />
             <p className="text-xs text-muted-foreground">
               Greets a customer opening a new conversation.{' '}
@@ -208,7 +173,7 @@ function MessengerChannelPage() {
               onBlur={() =>
                 persist('offlineMessage', { messenger: { offlineMessage: offlineMessage.trim() } })
               }
-              disabled={isBusy || !enabled}
+              disabled={isBusy}
             />
             <p className="text-xs text-muted-foreground">
               Shown outside{' '}
@@ -243,7 +208,7 @@ function MessengerChannelPage() {
                 setPreventRepliesWhenClosed(!checked)
               )
             }}
-            disabled={isBusy || !enabled}
+            disabled={isBusy}
           />
         </div>
       </SettingsCard>

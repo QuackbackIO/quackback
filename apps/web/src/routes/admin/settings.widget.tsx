@@ -117,7 +117,6 @@ function WidgetSettingsPage() {
   const helpCenterFlagEnabled = flags?.helpCenter ?? false
   const helpCenterEnabled = helpCenterConfig?.enabled ?? false
   const supportInboxFlagEnabled = flags?.supportInbox ?? false
-  const messengerEnabled = config.messenger?.enabled ?? false
 
   // Lifted editor state: position drives the preview's launcher chrome.
   const [position, setPosition] = useState<'bottom-right' | 'bottom-left'>(
@@ -174,7 +173,6 @@ function WidgetSettingsPage() {
             helpCenterFlagEnabled={helpCenterFlagEnabled}
             helpCenterEnabled={helpCenterEnabled}
             supportInboxFlagEnabled={supportInboxFlagEnabled}
-            messengerEnabled={messengerEnabled}
           />
 
           <HomeCustomizationCard
@@ -317,7 +315,6 @@ function ModulesCard({
   helpCenterFlagEnabled,
   helpCenterEnabled,
   supportInboxFlagEnabled,
-  messengerEnabled,
 }: {
   config: {
     defaultBoard?: string
@@ -339,7 +336,6 @@ function ModulesCard({
   helpCenterFlagEnabled: boolean
   helpCenterEnabled: boolean
   supportInboxFlagEnabled: boolean
-  messengerEnabled: boolean
 }) {
   const router = useRouter()
   const updateWidgetConfig = useUpdateWidgetConfig()
@@ -355,8 +351,6 @@ function ModulesCard({
   })
 
   const showHelpToggle = helpCenterFlagEnabled && helpCenterEnabled
-  const showMessagesToggle = supportInboxFlagEnabled && messengerEnabled
-  const showMessagesHint = supportInboxFlagEnabled && !messengerEnabled
 
   const isBusy = saving || isPending
 
@@ -401,7 +395,7 @@ function ModulesCard({
           onChange={(checked) => void saveTab('home', checked)}
         />
 
-        {showMessagesToggle && (
+        {supportInboxFlagEnabled && (
           <TabRow
             id="tab-messages"
             label="Messages"
@@ -411,17 +405,6 @@ function ModulesCard({
             saving={saving}
             onChange={(checked) => void saveTab('messenger', checked)}
           />
-        )}
-        {showMessagesHint && (
-          <div className="rounded-lg border border-border/50 bg-muted/30 px-3 py-2.5">
-            <p className="text-xs text-muted-foreground">
-              Enable Messenger in{' '}
-              <Link to="/admin/settings/channels/messenger" className="font-medium text-primary">
-                Messenger settings
-              </Link>{' '}
-              to add a Messages tab.
-            </p>
-          </div>
         )}
 
         <TabRow

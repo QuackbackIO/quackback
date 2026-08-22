@@ -97,12 +97,11 @@ export const Route = createFileRoute('/widget/')({
     const feedbackProductEnabled = settings?.featureFlags?.feedback ?? true
     const changelogProductEnabled = settings?.featureFlags?.changelog ?? true
 
-    // Same triple-gate as the `messages` tab below: Support Inbox flag +
-    // Messenger enabled + tab on. Hoisted so we only compute presence when
-    // Messenger shows.
+    // Support Inbox flag + Messages tab on. Messenger is on whenever the
+    // module is; the tab is the widget surface. Hoisted so we only compute
+    // presence when Messenger shows.
     const messengerTabEnabled =
       ((settings?.featureFlags as { supportInbox?: boolean } | undefined)?.supportInbox ?? false) &&
-      (settings?.publicWidgetConfig?.messenger?.enabled ?? false) &&
       (settings?.publicWidgetConfig?.tabs?.messenger ?? false)
 
     // Converged Messages surface: a tickets-enabled workspace surfaces its
@@ -246,7 +245,7 @@ export const Route = createFileRoute('/widget/')({
           ((settings?.featureFlags as { helpCenter?: boolean } | undefined)?.helpCenter ?? false) &&
           (settings?.helpCenterConfig?.enabled ?? false) &&
           (settings?.publicWidgetConfig?.tabs?.help ?? false),
-        // Support Inbox flag + Messenger enabled + tab on (computed above), OR
+        // Support Inbox flag + Messages tab on (computed above), OR
         // tickets on (the converged surface lists ticket pairs here). The
         // persisted config names the messenger surface `messenger`; the widget
         // speaks `messages`.

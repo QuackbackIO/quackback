@@ -57,7 +57,7 @@ function WidgetInstallPage() {
   const configured =
     config.enabled &&
     (mode === 'messenger'
-      ? Boolean(config.tabs?.messenger && config.messenger?.enabled)
+      ? Boolean(config.tabs?.messenger)
       : Boolean(config.tabs?.feedback && config.defaultBoard))
   const [copying, setCopying] = useState<'snippet' | 'secret' | null>(null)
   const [identifyUsers, setIdentifyUsers] = useState(true)
@@ -125,7 +125,7 @@ function WidgetInstallPage() {
         title="1. Enable the channel"
         description={
           mode === 'messenger'
-            ? 'Turns on the widget, Messenger, and the Messages tab together.'
+            ? 'Turns on the widget and the Messages tab together.'
             : 'Turns on the widget and Feedback tab with your public board selected.'
         }
       >

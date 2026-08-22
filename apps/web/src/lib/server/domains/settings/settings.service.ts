@@ -961,13 +961,15 @@ export async function getWorkspaceSettings(): Promise<WorkspaceSettings | null> 
         // Home customisation is client-safe (greeting, hero style, quick links);
         // the stored hero-image key is resolved to a public URL.
         home: publicHomeConfig(widgetConfig.home),
-        // Client-safe messenger config — the widget gates its messenger tab on
-        // messenger.enabled, so this must be projected here (routing stays
-        // agent-only).
-        messenger: publicMessengerConfig(
-          widgetConfig.messenger ?? DEFAULT_MESSENGER_CONFIG,
-          assistantIdentity
-        ),
+        // Client-safe messenger config (routing stays agent-only). `enabled`
+        // mirrors the module flag — widget visibility is `tabs.messenger`.
+        messenger: {
+          ...publicMessengerConfig(
+            widgetConfig.messenger ?? DEFAULT_MESSENGER_CONFIG,
+            assistantIdentity
+          ),
+          enabled: featureFlags.supportInbox,
+        },
       },
       featureFlags,
       brandingData,

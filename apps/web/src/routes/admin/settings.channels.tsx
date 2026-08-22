@@ -23,7 +23,10 @@ import { getChannelDescriptor } from '@/lib/shared/channels'
 export const Route = createFileRoute('/admin/settings/channels')({
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MANAGE)
-    await context.queryClient.ensureQueryData(settingsQueries.widgetConfig())
+    await Promise.all([
+      context.queryClient.ensureQueryData(settingsQueries.widgetConfig()),
+      context.queryClient.ensureQueryData(settingsQueries.portalConfig()),
+    ])
     return {}
   },
   component: ChannelsHubRoute,
@@ -38,6 +41,7 @@ function ChannelsHubRoute() {
 
 function ChannelsHubPage() {
   const widget = useSuspenseQuery(settingsQueries.widgetConfig())
+  const portal = useSuspenseQuery(settingsQueries.portalConfig())
   const emailStatusQuery = useQuery({
     queryKey: ['settings', 'email-channel-status'],
     queryFn: () => getEmailChannelStatusFn(),
@@ -53,7 +57,7 @@ function ChannelsHubPage() {
   const enabled = routingEnabled ?? routingQuery.data?.enabled ?? false
   const messenger = getChannelDescriptor('messenger')
   const email = getChannelDescriptor('email')
-  const messengerOn = widget.data.messenger?.enabled === true
+  const messengerOn = widget.data.tabs?.messenger === true || portal.data?.support?.enabled === true
   const receiving = emailStatusQuery.data?.inboundConfigured === true
   const sendingOnly = !receiving && !!emailStatusQuery.data?.fromAddress
   const emailStatus = receiving ? 'Receiving' : sendingOnly ? 'Sending only' : 'Set up'
