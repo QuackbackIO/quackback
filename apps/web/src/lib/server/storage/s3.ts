@@ -51,14 +51,14 @@
  * ```
  *
  * The prefix is `fromUuid('workspace', settings.id)` (for example
- * `workspace_01kxddf1jaf6cr22gerxt7z9gg`), not the UUID spelling of
- * `settings.id`. Object names are composed from the TypeID; copying under the
- * UUID leaves every restored object unreadable.
+ * `workspace_01kxddf1jaf6cr22gerxt7z9gg`). `SELECT id FROM settings` returns
+ * the UUID spelling; copying under that UUID leaves every restored object
+ * unreadable. Convert the UUID before composing `w/<prefix>/`.
  *
  * It is a server-side copy: no bytes leave the bucket, the stored keys do not
  * change, and no content is rewritten, because the namespace appears in neither
  * the database nor any URL. Every affected install holds exactly one workspace
- * per bucket, so that TypeID is unambiguous — `SELECT id FROM settings`.
+ * per bucket, so that TypeID is unambiguous.
  *
  * **Note what this repository must NOT grow to make that convenient.** Listing
  * and deleting at the bucket root is correct against a bucket that holds one

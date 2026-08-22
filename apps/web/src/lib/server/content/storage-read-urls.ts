@@ -25,3 +25,9 @@ export function withCurrentStorageReadTokens(node: JSONContent): JSONContent {
   if (!node.content) return next
   return { ...next, content: node.content.map(withCurrentStorageReadTokens) }
 }
+
+/** Null-preserving leave for stored `contentJson` sent to a browser. */
+export function contentJsonForClient<T extends JSONContent | null | undefined>(node: T): T {
+  if (!node) return node
+  return withCurrentStorageReadTokens(node) as T
+}

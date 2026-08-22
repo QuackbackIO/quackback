@@ -38,7 +38,7 @@ describe('withCurrentStorageReadTokens', () => {
             {
               type: 'image',
               attrs: {
-                src: `https://nexus-mods.quackback.io/api/storage/${PRIVATE}`,
+                src: `https://old.example.com/api/storage/${PRIVATE}`,
                 alt: '',
                 width: 100,
                 height: 100,
@@ -67,6 +67,28 @@ describe('withCurrentStorageReadTokens', () => {
       secrets: SHARED_SECRET,
     })
     expect(JSON.stringify(input)).toBe(before)
+  })
+
+  it('contentJsonForClient passes null through and remints a stored doc', async () => {
+    const { contentJsonForClient } = await import('../storage-read-urls')
+    expect(contentJsonForClient(null)).toBeNull()
+    const rewritten = withWorkspace(
+      'workspace-alpha',
+      () =>
+        contentJsonForClient(
+          doc([
+            {
+              type: 'image',
+              attrs: { src: `https://old.example.com/api/storage/${PRIVATE}` },
+            },
+          ])
+        ),
+      { secrets: SHARED_SECRET }
+    )
+    const minted = withWorkspace('workspace-alpha', () => getPublicUrlOrNull(PRIVATE), {
+      secrets: SHARED_SECRET,
+    })
+    expect(rewritten?.content?.[0]?.attrs?.src).toBe(minted)
   })
 
   it('leaves a foreign CDN src untouched', () => {

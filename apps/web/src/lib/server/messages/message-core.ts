@@ -10,6 +10,7 @@ import { ValidationError } from '@/lib/shared/errors'
 import { isTrustedAttachmentUrl } from '@/lib/server/storage/trusted-url'
 import { truncate } from '@/lib/shared/utils/string'
 import type { TiptapContent } from '@/lib/shared/db-types'
+import { contentJsonForClient } from '@/lib/server/content/storage-read-urls'
 import { tiptapJsonToText, hasTextLeaf } from '@/lib/server/markdown-tiptap'
 import type { PrincipalId } from '@quackback/ids'
 import {
@@ -136,7 +137,7 @@ export function toMessageDTO(
     citations: message.citations ?? [],
     isAssistant: assistantPrincipalId != null && message.principalId === assistantPrincipalId,
     isInternal: message.isInternal,
-    contentJson: message.contentJson ?? null,
+    contentJson: contentJsonForClient(message.contentJson ?? null),
     viaEmail: message.metadata?.source === 'email',
     systemEvent: message.metadata?.systemEvent ?? null,
     block: message.metadata?.block ?? null,

@@ -4,7 +4,13 @@
  * metadata.blockReply on the stored row project straight onto the DTO's
  * `block` / `blockReply` fields, defaulting to null when absent.
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+
+vi.mock('@/lib/server/storage/s3', () => ({
+  resignStoredAssetUrl: (src: string) =>
+    src.includes('/api/storage/') && !src.includes('read=') ? `${src}?read=live` : src,
+  getPublicUrlOrNull: vi.fn(),
+}))
 import type { ConversationMessage } from '@/lib/server/db'
 import { toMessageDTO } from '../message-core'
 
@@ -28,6 +34,34 @@ function message(overrides: Partial<ConversationMessage> = {}): ConversationMess
     ...overrides,
   } as ConversationMessage
 }
+
+describe('toMessageDTO — storage read tokens', () => {
+  it('mints a current read token on a private storage image in contentJson', () => {
+    const dto = toMessageDTO(
+      message({
+        contentJson: {
+          type: 'doc',
+          content: [
+            {
+              type: 'image',
+              attrs: { src: 'https://old.example.com/api/storage/chat-images/a.png' },
+            },
+          ],
+        },
+      }),
+      null
+    )
+    expect(dto.contentJson).toEqual({
+      type: 'doc',
+      content: [
+        {
+          type: 'image',
+          attrs: { src: 'https://old.example.com/api/storage/chat-images/a.png?read=live' },
+        },
+      ],
+    })
+  })
+})
 
 describe('toMessageDTO — block/blockReply projection', () => {
   it('projects metadata.block onto the DTO, null when absent', () => {

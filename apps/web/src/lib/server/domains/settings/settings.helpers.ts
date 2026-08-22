@@ -6,7 +6,6 @@ import { db, eq, settings } from '@/lib/server/db'
 import { cacheDel, CACHE_KEYS } from '@/lib/server/cache'
 import { DomainException, InternalError, NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
-import { withCurrentStorageReadTokens } from '@/lib/server/content/storage-read-urls'
 import { logger } from '@/lib/server/logger'
 import {
   DEFAULT_PORTAL_CONFIG,
@@ -155,10 +154,7 @@ export function publicWelcomeCard(
   card: PortalWelcomeCard | undefined
 ): PortalWelcomeCard | undefined {
   if (!card?.enabled) return undefined
-  return {
-    ...card,
-    body: withCurrentStorageReadTokens(card.body) as PortalWelcomeCard['body'],
-  }
+  return card
 }
 
 /**
