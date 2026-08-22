@@ -46,11 +46,33 @@ afterEach(() => {
   vi.unstubAllEnvs()
 })
 
+function postMigrate(body: unknown, init: RequestInit = {}): Request {
+  return authed('/api/internal/fleet/migrate', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+    ...init,
+  })
+}
+
 describe('role gate', () => {
   it('404s on a web replica so the public serving tier does not advertise the executor', async () => {
     vi.stubEnv('QUACKBACK_ROLE', 'web')
     const res = await handleMigrateBundle(authed('/api/internal/fleet/migrate/bundle'))
     expect(res.status).toBe(404)
+  })
+
+  it('404s POST /migrate on web before any DDL path runs', async () => {
+    vi.stubEnv('QUACKBACK_ROLE', 'web')
+    const res = await handleMigratePost(
+      postMigrate({
+        tenantId: 'inst_1',
+        databaseUrl: 'postgresql://qb_x:s3cret@postgres.railway.internal:5432/qb_x',
+      })
+    )
+    expect(res.status).toBe(404)
+    expect(migrateDirect).not.toHaveBeenCalled()
+    expect(runReconcilePass).not.toHaveBeenCalled()
   })
 
   it('answers on worker', async () => {
@@ -71,6 +93,30 @@ describe('auth', () => {
     )
     expect(res.status).toBe(401)
   })
+
+  it('401s when the fleet token is unset even if a Bearer is presented', async () => {
+    vi.stubEnv('QUACKBACK_FLEET_INTERNAL_TOKEN', '')
+    const res = await handleMigratePost(
+      postMigrate({ tenantId: 'inst_1', databaseUrl: 'postgresql://u:p@h/db' })
+    )
+    expect(res.status).toBe(401)
+    expect(migrateDirect).not.toHaveBeenCalled()
+  })
+
+  it('401s a per-workspace CP token — that credential is a different bridge', async () => {
+    const res = await handleMigratePost(
+      req('/api/internal/fleet/migrate', {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer cp-internal-token',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ tenantId: 'inst_1', databaseUrl: 'postgresql://u:p@h/db' }),
+      })
+    )
+    expect(res.status).toBe(401)
+    expect(migrateDirect).not.toHaveBeenCalled()
+  })
 })
 
 describe('GET bundle', () => {
@@ -87,14 +133,44 @@ describe('GET bundle', () => {
 
 describe('POST migrate', () => {
   it('400s without a workspace key', async () => {
+    const res = await handleMigratePost(postMigrate({}))
+    expect(res.status).toBe(400)
+  })
+
+  it('400s when the JSON value is not an object', async () => {
     const res = await handleMigratePost(
       authed('/api/internal/fleet/migrate', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({}),
+        body: 'null',
       })
     )
     expect(res.status).toBe(400)
+    expect(migrateDirect).not.toHaveBeenCalled()
+  })
+
+  it('400s a password-less DSN before connecting', async () => {
+    const res = await handleMigratePost(
+      postMigrate({
+        tenantId: 'inst_1',
+        databaseUrl: 'postgresql://qb_x@postgres.railway.internal:5432/qb_x',
+      })
+    )
+    expect(res.status).toBe(400)
+    await expect(res.json()).resolves.toEqual({ error: 'invalid_dsn' })
+    expect(migrateDirect).not.toHaveBeenCalled()
+  })
+
+  it('413s a body larger than the cap even when Content-Length is understated', async () => {
+    const res = await handleMigratePost(
+      authed('/api/internal/fleet/migrate', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'content-length': '12' },
+        body: `{"tenantId":"inst_1","pad":"${'x'.repeat(70 * 1024)}"}`,
+      })
+    )
+    expect(res.status).toBe(413)
+    expect(migrateDirect).not.toHaveBeenCalled()
   })
 
   it('uses the DSN path for provision (tenantId + databaseUrl)', async () => {
@@ -114,26 +190,22 @@ describe('POST migrate', () => {
       postconditions: null,
       lastStep: 'migrate',
     })
+    const dsn = 'postgresql://qb_x:s3cret@postgres.railway.internal:5432/qb_x'
     const res = await handleMigratePost(
-      authed('/api/internal/fleet/migrate', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          tenantId: 'inst_1',
-          databaseUrl: 'postgresql://qb_x@postgres.railway.internal:5432/qb_x',
-        }),
+      postMigrate({
+        tenantId: 'inst_1',
+        databaseUrl: dsn,
+        allowMutatingReplay: true,
       })
     )
     expect(res.status).toBe(200)
-    expect(migrateDirect).toHaveBeenCalledWith(
-      'inst_1',
-      'postgresql://qb_x@postgres.railway.internal:5432/qb_x',
-      { allowMutatingReplay: false }
-    )
+    expect(migrateDirect).toHaveBeenCalledWith('inst_1', dsn)
+    expect(migrateDirect).toHaveBeenCalledTimes(1)
     expect(runReconcilePass).not.toHaveBeenCalled()
     const body = await res.json()
     expect(body).toMatchObject({ ok: true, code: 'reconciled', workspaceKey: 'inst_1' })
     expect(JSON.stringify(body)).not.toContain('postgresql://')
+    expect(JSON.stringify(body)).not.toContain('s3cret')
   })
 
   it('reconciles via the lease when no DSN is supplied', async () => {
@@ -174,6 +246,9 @@ describe('POST migrate', () => {
     expect(res.status).toBe(200)
     expect(runReconcilePass).toHaveBeenCalledWith(
       expect.objectContaining({ workspaceKey: 'inst_1', concurrency: 1, maxWorkspaces: 1 })
+    )
+    expect(runReconcilePass).toHaveBeenCalledWith(
+      expect.not.objectContaining({ allowMutatingReplay: true })
     )
     expect(migrateDirect).not.toHaveBeenCalled()
   })

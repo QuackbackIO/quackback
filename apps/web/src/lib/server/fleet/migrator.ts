@@ -78,6 +78,7 @@ import postgres from 'postgres'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { runMigrations, PooledDsnRefused, type MigrationStep } from '@quackback/db/migrate'
+import { connectSessionMode, SessionModeDsnError } from './session-dsn'
 import {
   BUNDLED_MIGRATIONS,
   MIGRATIONS_DIR,
@@ -119,6 +120,7 @@ export type MigrateWorkspaceCode =
   | 'refused_replay_mutates'
   | 'refused_ledger_gap'
   | 'refused_pooled_dsn'
+  | 'invalid_dsn'
   | 'postconditions_violated'
   | 'migration_failed'
 
@@ -463,6 +465,34 @@ export async function migrateWorkspace(
  * fleet-internal HTTP executor. {@link migrateWorkspace} is the registry-backed
  * wrapper.
  */
+function emptyLedger(): AppliedLedger {
+  return { count: 0, max: 0, versions: new Set() }
+}
+
+function dsnRefusal(
+  workspaceKey: string,
+  started: number,
+  code: 'refused_pooled_dsn' | 'invalid_dsn',
+  detail: string
+): MigrateWorkspaceResult {
+  return {
+    workspaceKey,
+    ok: false,
+    code,
+    detail,
+    before: emptyLedger(),
+    after: null,
+    gap: null,
+    replaySet: [],
+    replayVerdicts: [],
+    healedIndexes: [],
+    unhealableIndexes: [],
+    postconditions: null,
+    lastStep: 'preflight',
+    durationMs: Date.now() - started,
+  }
+}
+
 export async function migrateDirect(
   workspaceKey: string,
   dsn: string,
@@ -471,7 +501,18 @@ export async function migrateDirect(
   const started = Date.now()
   let lastStep: MigrationStep | 'preflight' = 'preflight'
 
-  const probe = postgres(dsn, { max: 1, onnotice: () => {}, connect_timeout: 20 })
+  let probe: postgres.Sql
+  try {
+    probe = connectSessionMode(dsn)
+  } catch (err) {
+    if (err instanceof SessionModeDsnError && err.reason === 'pooled') {
+      return dsnRefusal(workspaceKey, started, 'refused_pooled_dsn', 'pooled DSN refused')
+    }
+    if (err instanceof SessionModeDsnError) {
+      return dsnRefusal(workspaceKey, started, 'invalid_dsn', 'session-mode DSN is not usable')
+    }
+    throw err
+  }
   let before: AppliedLedger
   try {
     before = await readAppliedLedger(probe)
@@ -655,7 +696,8 @@ export async function migrateDirect(
     }
   } catch (err) {
     const code = err instanceof PooledDsnRefused ? 'refused_pooled_dsn' : 'migration_failed'
-    const detail = err instanceof Error ? err.message : String(err)
+    const raw = err instanceof Error ? err.message : String(err)
+    const detail = raw.replace(/postgres(?:ql)?:\/\/\S+/gi, 'postgresql://***')
     log.error({ workspaceKey: workspaceKey, step: lastStep, err }, 'workspace migration failed')
     return {
       ...base,
@@ -674,7 +716,7 @@ export async function migrateDirect(
 }
 
 async function withProbe<T>(dsn: string, body: (sql: postgres.Sql) => Promise<T>): Promise<T> {
-  const sql = postgres(dsn, { max: 1, onnotice: () => {}, connect_timeout: 20 })
+  const sql = connectSessionMode(dsn)
   try {
     return await body(sql)
   } finally {

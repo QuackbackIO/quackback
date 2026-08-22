@@ -1,19 +1,6 @@
 /**
- * Fleet-internal HTTP executor — the app-image half of SAAS-HOSTING-STACK §10.3.
- *
- * This is a different bridge from the other `/api/internal/*` routes:
- *
- *   - identity/billing projection: CP → **web** (tenant hostname), JWT, applies
- *     a signed blob on the serving replica.
- *   - `/api/v1/internal/*` on the CP: **app** → CP, per-workspace HMAC, tenant
- *     billing/membership/lifecycle.
- *   - this: CP → **worker**, fleet-internal bearer. Session-mode DDL cannot
- *     run on the web replica, so the path is under `/api/internal/fleet/` and
- *     web returns 404.
- *
- * The control plane names a workspace (and, at provision, passes the session
- * DSN because the registry row does not exist yet). This process applies the
- * lineage it ships.
+ * Fleet-internal HTTP executor. Session-mode DDL must not run on web;
+ * provision may pass a DSN because the registry row does not exist yet.
  */
 import { hostname } from 'node:os'
 import { randomUUID } from 'node:crypto'
@@ -31,6 +18,7 @@ import {
   runReconcilePass,
   type MigrateWorkspaceResult,
 } from './migrator'
+import { parseSessionModeDsn, SessionModeDsnError } from './session-dsn'
 import { explainUnclaimed } from './schema-state'
 import { logger } from '@/lib/server/logger'
 
@@ -73,6 +61,7 @@ function summarizeOutcome(outcome: MigrateWorkspaceResult) {
 
 function statusForOutcome(outcome: MigrateWorkspaceResult): number {
   if (outcome.ok) return 200
+  if (outcome.code === 'invalid_dsn') return 400
   if (
     outcome.code === 'refused_ledger_gap' ||
     outcome.code === 'refused_replay_mutates' ||
@@ -81,6 +70,68 @@ function statusForOutcome(outcome: MigrateWorkspaceResult): number {
     return 409
   }
   return 500
+}
+
+class PayloadTooLarge extends Error {
+  constructor() {
+    super('payload_too_large')
+    this.name = 'PayloadTooLarge'
+  }
+}
+
+async function readBoundedBody(request: Request): Promise<Uint8Array> {
+  if (!request.body) return new Uint8Array()
+  const reader = request.body.getReader()
+  const chunks: Uint8Array[] = []
+  let n = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    n += value.byteLength
+    if (n > MAX_BODY_BYTES) {
+      await reader.cancel().catch(() => {})
+      throw new PayloadTooLarge()
+    }
+    chunks.push(value)
+  }
+  const out = new Uint8Array(n)
+  let offset = 0
+  for (const chunk of chunks) {
+    out.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return out
+}
+
+async function readJsonObject(
+  request: Request
+): Promise<{ ok: true; body: Record<string, unknown> } | { ok: false; response: Response }> {
+  const declared = request.headers.get('content-length')
+  if (declared !== null) {
+    const n = Number(declared)
+    if (!Number.isFinite(n) || n < 0 || n > MAX_BODY_BYTES) {
+      return { ok: false, response: Response.json({ error: 'payload_too_large' }, { status: 413 }) }
+    }
+  }
+  let bytes: Uint8Array
+  try {
+    bytes = await readBoundedBody(request)
+  } catch (err) {
+    if (err instanceof PayloadTooLarge) {
+      return { ok: false, response: Response.json({ error: 'payload_too_large' }, { status: 413 }) }
+    }
+    return { ok: false, response: Response.json({ error: 'invalid_json' }, { status: 400 }) }
+  }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(bytes)) as unknown
+  } catch {
+    return { ok: false, response: Response.json({ error: 'invalid_json' }, { status: 400 }) }
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { ok: false, response: Response.json({ error: 'invalid_json' }, { status: 400 }) }
+  }
+  return { ok: true, body: parsed as Record<string, unknown> }
 }
 
 export async function handleMigrateBundle(request: Request): Promise<Response> {
@@ -97,16 +148,9 @@ export async function handleMigrateBundle(request: Request): Promise<Response> {
 export async function handleMigratePlan(request: Request): Promise<Response> {
   const refused = gate(request)
   if (refused) return refused
-  if (Number(request.headers.get('content-length') ?? 0) > MAX_BODY_BYTES) {
-    return Response.json({ error: 'payload_too_large' }, { status: 413 })
-  }
-  let body: Record<string, unknown>
-  try {
-    body = (await request.json()) as Record<string, unknown>
-  } catch {
-    return Response.json({ error: 'invalid_json' }, { status: 400 })
-  }
-  const workspaceKey = workspaceKeyOf(body)
+  const parsed = await readJsonObject(request)
+  if (!parsed.ok) return parsed.response
+  const workspaceKey = workspaceKeyOf(parsed.body)
   if (!workspaceKey) return Response.json({ error: 'workspace_required' }, { status: 400 })
   try {
     const workspace = await requireWorkspace(workspaceKey)
@@ -141,24 +185,33 @@ export async function handleMigratePlan(request: Request): Promise<Response> {
 export async function handleMigratePost(request: Request): Promise<Response> {
   const refused = gate(request)
   if (refused) return refused
-  if (Number(request.headers.get('content-length') ?? 0) > MAX_BODY_BYTES) {
-    return Response.json({ error: 'payload_too_large' }, { status: 413 })
-  }
-  let body: Record<string, unknown>
-  try {
-    body = (await request.json()) as Record<string, unknown>
-  } catch {
-    return Response.json({ error: 'invalid_json' }, { status: 400 })
-  }
+  const parsed = await readJsonObject(request)
+  if (!parsed.ok) return parsed.response
+  const body = parsed.body
   const workspaceKey = workspaceKeyOf(body)
   if (!workspaceKey) return Response.json({ error: 'workspace_required' }, { status: 400 })
-  const allowMutatingReplay = body.allowMutatingReplay === true
   const databaseUrl = typeof body.databaseUrl === 'string' ? body.databaseUrl : null
 
   if (databaseUrl) {
+    try {
+      parseSessionModeDsn(databaseUrl)
+    } catch (err) {
+      if (err instanceof SessionModeDsnError && err.reason === 'pooled') {
+        return Response.json({ error: 'refused_pooled_dsn' }, { status: 409 })
+      }
+      return Response.json({ error: 'invalid_dsn' }, { status: 400 })
+    }
     log.info({ workspaceKey }, 'migrate.direct')
-    const outcome = await migrateDirect(workspaceKey, databaseUrl, { allowMutatingReplay })
-    return Response.json(summarizeOutcome(outcome), { status: statusForOutcome(outcome) })
+    try {
+      const outcome = await migrateDirect(workspaceKey, databaseUrl)
+      return Response.json(summarizeOutcome(outcome), { status: statusForOutcome(outcome) })
+    } catch (err) {
+      log.warn(
+        { workspaceKey, err: err instanceof Error ? err.name : 'error' },
+        'migrate.direct threw'
+      )
+      return Response.json({ error: 'migrate_failed' }, { status: 500 })
+    }
   }
 
   log.info({ workspaceKey }, 'migrate.reconcile')
@@ -168,7 +221,6 @@ export async function handleMigratePost(request: Request): Promise<Response> {
     concurrency: 1,
     maxWorkspaces: 1,
     leaseMs: 900_000,
-    allowMutatingReplay,
   })
   if (result.claimed === 0) {
     const why = await explainUnclaimed(workspaceKey)
