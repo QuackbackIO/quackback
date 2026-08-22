@@ -128,16 +128,3 @@ export function shouldRunWorkers(): boolean {
 export function isMigratorRole(): boolean {
   return getProcessRole() === 'migrator'
 }
-
-/**
- * Whether this process may serve `/api/internal/fleet/migrate*`.
- *
- * Web replicas are the public serving tier and must not open session-mode
- * migrator connections. Worker (and `all`) already hold the fleet root and
- * the control DSN. `migrator` is included so a dedicated container that still
- * listens can answer the same API.
- */
-export function shouldServeFleetMigrate(): boolean {
-  const role = getProcessRole()
-  return role === 'worker' || role === 'all' || role === 'migrator'
-}
