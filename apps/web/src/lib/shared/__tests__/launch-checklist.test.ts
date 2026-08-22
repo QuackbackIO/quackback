@@ -8,11 +8,9 @@ const base: LaunchStatus = {
   maxBoards: null,
   memberCount: 1,
   hasBranding: false,
-  hasWidgetEnabled: false,
   hasWidgetInstalled: false,
   hasMessengerEnabled: false,
   hasHelpArticle: false,
-  hasPublishedHelpArticle: false,
   hasIntegration: false,
   hasFirstWin: false,
   useCase: 'product_feedback',
@@ -31,7 +29,6 @@ describe('buildLaunchTasks V2', () => {
     const configured = buildLaunchTasks({
       ...base,
       useCase: 'customer_support',
-      hasWidgetEnabled: true,
       hasMessengerEnabled: true,
       hasWidgetInstalled: false,
     })

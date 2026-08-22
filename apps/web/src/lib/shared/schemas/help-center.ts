@@ -177,7 +177,6 @@ export const helpCenterHeaderLinkSchema = z.object({
 })
 
 export const updateHelpCenterConfigSchema = z.object({
-  enabled: z.boolean().optional(),
   homepageTitle: z.string().min(1).max(200).optional(),
   homepageDescription: z.string().max(500).optional(),
   /** Wholesale replacement — the header renders at most 3 links. */
@@ -186,7 +185,6 @@ export const updateHelpCenterConfigSchema = z.object({
 
 export const updateHelpCenterSeoSchema = z.object({
   metaDescription: z.string().max(500).optional(),
-  sitemapEnabled: z.boolean().optional(),
   structuredDataEnabled: z.boolean().optional(),
   indexable: z.boolean().optional(),
 })

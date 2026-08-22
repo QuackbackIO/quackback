@@ -244,6 +244,46 @@ describe('redactSettingsForClient — the cloud column', () => {
   })
 })
 
+describe('redactSettingsForClient — statusConfig redaction', () => {
+  const FULL_STATUS = {
+    enabled: true,
+    portalTabEnabled: true,
+    audience: 'segments' as const,
+    allowedSegmentIds: ['seg_1', 'seg_2'],
+    emailsDisabled: true,
+    pageDescription: 'All systems operational',
+  }
+
+  it('strips allowedSegmentIds and other non-public fields from statusConfig', () => {
+    const row = { portalConfig: null, statusConfig: FULL_STATUS }
+    const result = redactSettingsForClient(row)
+
+    expect(result.statusConfig).toEqual({
+      enabled: true,
+      audience: 'segments',
+      pageDescription: 'All systems operational',
+    })
+    expect(result.statusConfig).not.toHaveProperty('allowedSegmentIds')
+    expect(result.statusConfig).not.toHaveProperty('emailsDisabled')
+    expect(result.statusConfig).not.toHaveProperty('portalTabEnabled')
+  })
+
+  it('never leaks segment ids into the serialized SSR payload', () => {
+    const payload = JSON.stringify(
+      redactSettingsForClient({ portalConfig: null, statusConfig: FULL_STATUS })
+    )
+    expect(payload).not.toContain('allowedSegmentIds')
+    expect(payload).not.toContain('seg_1')
+    expect(payload).not.toContain('emailsDisabled')
+  })
+
+  it('does not mutate the input statusConfig', () => {
+    const input = { portalConfig: null, statusConfig: { ...FULL_STATUS } }
+    redactSettingsForClient(input)
+    expect(input.statusConfig.allowedSegmentIds).toEqual(['seg_1', 'seg_2'])
+  })
+})
+
 describe('redactSettingsForClient — SSR payload invariants', () => {
   it('the SSR payload string does not contain allowedDomains after redaction (object form)', () => {
     const row = { portalConfig: FULL_PORTAL_CONFIG, name: 'Acme' }

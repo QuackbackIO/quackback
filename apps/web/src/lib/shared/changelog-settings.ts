@@ -35,8 +35,6 @@ export const DEFAULT_CHANGELOG_SETTINGS: ChangelogSettings = {
 export const changelogSettingsSchema = z
   .object({
     audience: z.enum(['public', 'authenticated']),
-    portalTabEnabled: z.boolean(),
-    collaborationDisabled: z.boolean(),
     autoSubscribe: z.boolean(),
     emailsDisabled: z.boolean(),
   })

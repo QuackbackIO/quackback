@@ -349,8 +349,7 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
   const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
 
   const { getWidgetConfig } = await import('@/lib/server/domains/settings/settings.widget')
-  const { boards, helpCenterArticles, statusComponents, isNull, isNotNull, lte } =
-    await import('@/lib/server/db')
+  const { boards, helpCenterArticles, isNull } = await import('@/lib/server/db')
   const { getSetupState } = await import('@/lib/shared/db-types')
   const { permissionsForLegacyRole } = await import('@/lib/server/policy/permissions')
   const { resolveFeatureFlags } = await import('@/lib/server/domains/settings/settings.types')
@@ -363,8 +362,6 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
     widgetConfig,
     connectedIntegration,
     helpArticle,
-    publishedHelpArticle,
-    statusComponent,
     tierLimits,
   ] = await Promise.all([
     db.query.boards.findMany({
@@ -385,18 +382,6 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
     db.query.helpCenterArticles.findFirst({
       columns: { id: true },
       where: isNull(helpCenterArticles.deletedAt),
-    }),
-    db.query.helpCenterArticles.findFirst({
-      columns: { id: true },
-      where: and(
-        isNull(helpCenterArticles.deletedAt),
-        isNotNull(helpCenterArticles.publishedAt),
-        lte(helpCenterArticles.publishedAt, new Date())
-      ),
-    }),
-    db.query.statusComponents.findFirst({
-      columns: { id: true },
-      where: isNull(statusComponents.deletedAt),
     }),
     getTierLimits(),
   ])
@@ -422,7 +407,6 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
       has_widget: hasWidgetEnabled,
       has_messenger: hasMessengerEnabled,
       has_help_article: Boolean(helpArticle),
-      has_status_component: Boolean(statusComponent),
       use_case: setupState?.useCase,
     },
     'fetch onboarding status'
@@ -437,14 +421,10 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
     hasInternalBoard,
     memberCount: humanMembers.length,
     hasBranding,
-    hasWidgetEnabled,
     hasWidgetInstalled: Boolean(orgSettings?.widgetInstalledFirstSeenAt),
-    widgetLastSeenAt: orgSettings?.widgetInstalledLastSeenAt?.toISOString() ?? null,
     widgetOriginHost: orgSettings?.widgetInstalledOriginHost ?? null,
     hasMessengerEnabled,
     hasHelpArticle: Boolean(helpArticle),
-    hasPublishedHelpArticle: Boolean(publishedHelpArticle),
-    hasStatusComponent: Boolean(statusComponent),
     hasIntegration,
     hasFirstWin: firstWin.reached,
     firstWinAt: firstWin.reachedAt,

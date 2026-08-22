@@ -94,12 +94,20 @@ describe('buildNavSections', () => {
     ])
   })
 
-  it('Support shows only ticket pages when just supportTickets is on', () => {
+  it('Support shows Email, SLA, Office Hours, Macros, and ticket pages when just supportTickets is on', () => {
     const sections = buildNavSections({ supportTickets: true })
     expect(groupKids(sections, 'Products', 'Support').map((k) => k.label)).toEqual([
+      'Email',
+      'Macros',
+      'Office Hours',
+      'SLA policies',
       'Ticket types',
       'Ticket statuses & stages',
     ])
+    expect(groupKids(sections, 'Products', 'Support').map((k) => k.label)).not.toContain('Channels')
+    expect(groupKids(sections, 'Products', 'Support').map((k) => k.label)).not.toContain(
+      'Messenger'
+    )
   })
 
   it('Channels and its pages live under Support, not Workspace', () => {
@@ -203,7 +211,7 @@ describe('buildNavSections', () => {
     expect(!isNavGroup(security) && security.to).toBe('/admin/settings/security/authentication')
   })
 
-  it('Data contains People and Imports & exports (always), Conversations under supportInbox', () => {
+  it('Data contains People and Imports & exports (always), Conversations under support', () => {
     expect(itemLabels(buildNavSections(), 'Data')).toEqual([
       'People',
       'Companies',
@@ -211,6 +219,12 @@ describe('buildNavSections', () => {
     ])
     const sections = buildNavSections({ supportInbox: true })
     expect(itemLabels(sections, 'Data')).toEqual([
+      'People',
+      'Companies',
+      'Conversations',
+      'Imports & exports',
+    ])
+    expect(itemLabels(buildNavSections({ supportTickets: true }), 'Data')).toEqual([
       'People',
       'Companies',
       'Conversations',

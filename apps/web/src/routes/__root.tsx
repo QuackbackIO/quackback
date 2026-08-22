@@ -95,8 +95,9 @@ export const Route = createRootRouteWithContext<RouterContext>()({
     // Redact server-only material from the settings placed into the router
     // context — everything returned here is dehydrated into the SSR HTML.
     // redactSettingsForClient strips the widgetSecret/tier/setup columns from
-    // the raw row and the access policy fields (allowedDomains, widgetSignIn,
-    // allowedSegmentIds) from portalConfig, recursively covering both the
+    // the raw row, the access policy fields (allowedDomains, widgetSignIn,
+    // allowedSegmentIds) from portalConfig, and non-public statusConfig fields
+    // (segment ids, email kill-switch), recursively covering both the
     // parsed WorkspaceSettings shape and the raw DB row riding on `.settings`.
     // Nothing on the client legitimately reads any of it — the admin
     // Security → Portal tab fetches the full config via its own

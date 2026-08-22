@@ -98,6 +98,10 @@ export function buildNavSections(
             to: '/admin/settings/channels/messenger',
             icon: ChatBubbleLeftRightIcon,
           },
+        ]
+      : []),
+    ...(isProductEnabled(flags, 'support')
+      ? [
           { label: 'Email', to: '/admin/settings/channels/email', icon: EnvelopeIcon },
           { label: 'Macros', to: '/admin/settings/macros', icon: DocumentDuplicateIcon },
           { label: 'Office Hours', to: '/admin/settings/office-hours', icon: ClockIcon },
@@ -173,7 +177,7 @@ export function buildNavSections(
       items: [
         { label: 'People', to: '/admin/settings/people', icon: UserGroupIcon },
         { label: 'Companies', to: '/admin/settings/companies', icon: BuildingOfficeIcon },
-        ...(flags?.supportInbox
+        ...(isProductEnabled(flags, 'support')
           ? [
               {
                 label: 'Conversations',

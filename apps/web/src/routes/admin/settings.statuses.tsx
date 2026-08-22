@@ -5,6 +5,8 @@ import { Cog6ToothIcon } from '@heroicons/react/24/solid'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { StatusList } from '@/components/admin/settings/statuses/status-list'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 
 export const Route = createFileRoute('/admin/settings/statuses')({
@@ -14,7 +16,7 @@ export const Route = createFileRoute('/admin/settings/statuses')({
     }
   },
   loader: async ({ context }) => {
-    // User, member, and settings are validated in parent /admin layout
+    assertRoutePermission(context.permissions, PERMISSIONS.STATUS_MANAGE)
     const { queryClient } = context
 
     // Pre-fetch statuses using React Query

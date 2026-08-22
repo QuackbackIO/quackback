@@ -1,6 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { PuzzlePieceIcon } from '@heroicons/react/24/solid'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { adminQueries } from '@/lib/client/queries/admin'
@@ -10,6 +12,7 @@ import { describePlanUpgrade } from '@/lib/shared/describe-upgrade'
 
 export const Route = createFileRoute('/admin/settings/integrations/')({
   loader: async ({ context }) => {
+    assertRoutePermission(context.permissions, PERMISSIONS.INTEGRATION_VIEW)
     const { queryClient } = context
     const { hasTierFeatureFn } = await import('@/lib/server/functions/entitlement-status')
     const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')

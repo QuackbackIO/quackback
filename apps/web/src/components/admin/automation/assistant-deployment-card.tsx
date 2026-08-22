@@ -135,7 +135,7 @@ export function AssistantDeploymentCard({
             >
               <Link to="/admin/settings/general">
                 {intl.formatMessage({
-                  id: 'automation.agent.deployment.openLabs',
+                  id: 'automation.agent.deployment.openGeneral',
                   defaultMessage: 'Open product settings',
                 })}
               </Link>

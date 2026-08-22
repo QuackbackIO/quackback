@@ -1,10 +1,9 @@
 import { useState, useTransition } from 'react'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
-import { createFileRoute, useRouter, Navigate, Link } from '@tanstack/react-router'
+import { createFileRoute, useRouter, Link, redirect } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { ChatBubbleLeftRightIcon } from '@heroicons/react/24/solid'
-import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { useUpdatePortalConfig, useUpdateWidgetConfig } from '@/lib/client/mutations/settings'
 import { BackLink } from '@/components/ui/back-link'
@@ -19,6 +18,11 @@ import { SUPPORTED_LOCALES } from '@/lib/shared/i18n'
 import { WIDGET_LOCALE_LABELS, type WidgetTranslations } from '@/lib/shared/widget/translations'
 
 export const Route = createFileRoute('/admin/settings/channels_/messenger')({
+  beforeLoad: ({ context }) => {
+    if (!context.settings?.featureFlags?.supportInbox) {
+      throw redirect({ to: '/admin/settings/general' })
+    }
+  },
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MANAGE)
     await Promise.all([
@@ -27,15 +31,8 @@ export const Route = createFileRoute('/admin/settings/channels_/messenger')({
     ])
     return {}
   },
-  component: MessengerChannelRoute,
+  component: MessengerChannelPage,
 })
-
-function MessengerChannelRoute() {
-  const { settings } = Route.useRouteContext()
-  const flags = settings?.featureFlags as FeatureFlags | undefined
-  if (!flags?.supportInbox) return <Navigate to="/admin/settings" />
-  return <MessengerChannelPage />
-}
 
 export function MessengerChannelPage() {
   const router = useRouter()

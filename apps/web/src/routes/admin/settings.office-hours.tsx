@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
-import { createFileRoute, Navigate } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useMutation, useQueryClient, useSuspenseQuery, queryOptions } from '@tanstack/react-query'
 import { ClockIcon } from '@heroicons/react/24/solid'
 import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline'
-import type { FeatureFlags } from '@/lib/shared/types/settings'
+import { isProductEnabled } from '@/lib/shared/types/settings'
 import {
   isWithinOfficeHours,
   nextOpenAt,
@@ -46,23 +46,18 @@ const officeHoursQuery = queryOptions({
 })
 
 export const Route = createFileRoute('/admin/settings/office-hours')({
+  beforeLoad: ({ context }) => {
+    if (!isProductEnabled(context.settings?.featureFlags, 'support')) {
+      throw redirect({ to: '/admin/settings/general' })
+    }
+  },
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.OFFICE_HOURS_MANAGE)
     await context.queryClient.ensureQueryData(officeHoursQuery)
     return {}
   },
-  component: OfficeHoursRoute,
+  component: OfficeHoursPage,
 })
-
-/** Gate behind the same experimental flag the rest of the Support area uses. */
-function OfficeHoursRoute() {
-  const { settings } = Route.useRouteContext()
-  const flags = settings?.featureFlags as FeatureFlags | undefined
-  if (!flags?.supportInbox) {
-    return <Navigate to="/admin/settings" />
-  }
-  return <OfficeHoursPage />
-}
 
 /** Local timezone, used to seed a fresh schedule so times read sensibly. */
 function localTimeZone(): string {

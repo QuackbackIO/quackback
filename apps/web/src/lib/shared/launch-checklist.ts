@@ -26,14 +26,10 @@ export interface LaunchStatus {
   maxBoards?: number | null
   memberCount: number
   hasBranding: boolean
-  hasWidgetEnabled: boolean
   hasWidgetInstalled?: boolean
-  widgetLastSeenAt?: string | null
   widgetOriginHost?: string | null
   hasMessengerEnabled?: boolean
   hasHelpArticle?: boolean
-  hasPublishedHelpArticle?: boolean
-  hasStatusComponent?: boolean
   hasIntegration?: boolean
   hasFirstWin?: boolean
   firstWinAt?: string | null
@@ -51,13 +47,10 @@ export interface LaunchStatus {
 export type LaunchTaskHref =
   | '/admin/settings/boards'
   | '/admin/settings/members'
-  | '/admin/settings/branding'
-  | '/admin/settings/widget'
+  | '/admin/settings/portal'
   | '/admin/settings/widget/install'
-  | '/admin/settings/channels/messenger'
   | '/admin/settings/integrations'
   | '/admin/help-center'
-  | '/admin/status'
   | '/admin/feedback'
   | '/admin/inbox'
 
@@ -211,7 +204,7 @@ export function buildLaunchTasks(
     canAct: permissions.settingsManage,
     unavailableReason: features.supportInbox
       ? undefined
-      : 'Customer support is turned off for this workspace. Ask a workspace admin to enable it.',
+      : 'Customer support is turned off for this workspace. Ask a workspace admin to enable it in Settings → General.',
     classification: 'prerequisite',
     href: '/admin/settings/widget/install',
     actionLabel: 'Connect Messenger',
@@ -225,7 +218,7 @@ export function buildLaunchTasks(
     canAct: permissions.helpCenterManage,
     unavailableReason: features.helpCenter
       ? undefined
-      : 'Help Center is turned off for this workspace. Ask a workspace admin to enable it.',
+      : 'Help Center is turned off for this workspace. Ask a workspace admin to enable it in Settings → General.',
     classification: 'prerequisite',
     href: '/admin/help-center',
     actionLabel: 'Continue article',
@@ -249,7 +242,7 @@ export function buildLaunchTasks(
     completed: status.hasBranding,
     canAct: permissions.brandingManage,
     classification: 'polish',
-    href: '/admin/settings/branding',
+    href: '/admin/settings/portal',
     actionLabel: 'Add logo',
     completedLabel: 'Edit branding',
   }

@@ -1,31 +1,25 @@
-import { createFileRoute, Navigate } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { TicketIcon } from '@heroicons/react/24/solid'
-import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { TicketTypesManager } from '@/components/admin/settings/tickets/ticket-types-manager'
 import { ticketTypesQuery } from '@/components/admin/settings/tickets/queries'
 
 export const Route = createFileRoute('/admin/settings/ticket-types')({
+  beforeLoad: ({ context }) => {
+    if (!context.settings?.featureFlags?.supportTickets) {
+      throw redirect({ to: '/admin/settings/general' })
+    }
+  },
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.TICKET_MANAGE_TYPES)
     await context.queryClient.ensureQueryData(ticketTypesQuery)
     return {}
   },
-  component: TicketTypesRoute,
+  component: TicketTypesPage,
 })
-
-/** Gate behind the experimental `supportTickets` flag (off by default). */
-function TicketTypesRoute() {
-  const { settings } = Route.useRouteContext()
-  const flags = settings?.featureFlags as FeatureFlags | undefined
-  if (!flags?.supportTickets) {
-    return <Navigate to="/admin/settings" />
-  }
-  return <TicketTypesPage />
-}
 
 function TicketTypesPage() {
   return (

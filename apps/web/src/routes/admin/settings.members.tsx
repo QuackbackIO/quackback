@@ -2,6 +2,8 @@ import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { UsersIcon } from '@heroicons/react/24/solid'
 import type { UserId, PrincipalId } from '@quackback/ids'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
@@ -20,6 +22,7 @@ const searchSchema = z.object({
 export const Route = createFileRoute('/admin/settings/members')({
   validateSearch: searchSchema,
   loader: async ({ context }) => {
+    assertRoutePermission(context.permissions, PERMISSIONS.MEMBER_VIEW)
     const { settings, queryClient, principal } = context
     await Promise.all([
       queryClient.ensureQueryData(settingsQueries.teamMembersAndInvitations()),
