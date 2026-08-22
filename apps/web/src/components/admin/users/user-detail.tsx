@@ -1,15 +1,13 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query'
 import { Link, useRouteContext } from '@tanstack/react-router'
 import {
   ArrowLeftIcon,
+  ArrowTopRightOnSquareIcon,
   CheckCircleIcon,
-  DocumentTextIcon,
   ChatBubbleLeftIcon,
   HandThumbUpIcon,
   ArrowPathIcon,
-  CalendarIcon,
-  UserIcon,
   TrashIcon,
   ChevronUpIcon,
   ChevronDownIcon,
@@ -18,6 +16,9 @@ import {
   PencilIcon,
   XMarkIcon,
   CheckIcon,
+  EllipsisHorizontalIcon,
+  NoSymbolIcon,
+  ArrowsRightLeftIcon,
 } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -26,12 +27,16 @@ import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatusBadge } from '@/components/ui/status-badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { contentPreview } from '@/lib/shared/utils/string'
 import { cn } from '@/lib/shared/utils'
+import { countryName } from '@/lib/shared/country'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { ChannelBadge } from '@/components/admin/conversation/channel-badge'
@@ -47,7 +52,7 @@ import { UserTagControl } from '@/components/admin/users/user-tag-control'
 import { UserCompanyControl } from '@/components/admin/users/user-company-control'
 import {
   BlockPersonControl,
-  usePersonBlockStatus,
+  usePersonBlockActions,
 } from '@/components/admin/users/block-person-control'
 import { ChangelogSubscriptionControl } from '@/components/admin/users/changelog-subscription-control'
 import { DuplicateUsersWarning } from '@/components/admin/users/duplicate-users-warning'
@@ -55,6 +60,24 @@ import { MergeLeadControl } from '@/components/admin/users/merge-lead-control'
 import { useUpdatePortalUser } from '@/lib/client/mutations'
 import { listConversationsForUserFn, getConversationFn } from '@/lib/server/functions/conversation'
 import type { PrincipalId } from '@quackback/ids'
+
+const EXTERNAL_ID_KEY = '_externalUserId'
+const EM_DASH = '—'
+
+function parseUserMetadata(metadata: string | null): {
+  attributes: [string, unknown][]
+  externalId: string | null
+} {
+  if (!metadata) return { attributes: [], externalId: null }
+  try {
+    const parsed = JSON.parse(metadata) as Record<string, unknown>
+    const externalId = typeof parsed[EXTERNAL_ID_KEY] === 'string' ? parsed[EXTERNAL_ID_KEY] : null
+    const attributes = Object.entries(parsed).filter(([key]) => !key.startsWith('_'))
+    return { attributes, externalId }
+  } catch {
+    return { attributes: [], externalId: null }
+  }
+}
 
 interface UserDetailProps {
   user: PortalUserDetail | null
@@ -77,31 +100,46 @@ function formatDate(date: Date | string): string {
 
 function DetailSkeleton() {
   return (
-    <div className="p-4 space-y-6">
-      {/* Profile Header */}
+    <div className="px-6 pb-6 space-y-5">
       <div className="flex items-start gap-4">
         <Skeleton className="h-16 w-16 rounded-full" />
         <div className="flex-1">
-          <Skeleton className="h-6 w-40 mb-2" />
-          <Skeleton className="h-4 w-48 mb-2" />
-          <Skeleton className="h-5 w-20 rounded-md" />
+          <Skeleton className="mb-2 h-6 w-40" />
+          <Skeleton className="h-4 w-48" />
         </div>
       </div>
-
-      {/* Activity Stats (3-column grid) */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-20 w-full rounded-lg" />
-        ))}
+      <Skeleton className="h-[52px] w-full rounded-lg" />
+      <div className="flex flex-col gap-6 lg:flex-row">
+        <div className="min-w-0 flex-1 space-y-3">
+          <Skeleton className="h-9 w-56 rounded-lg" />
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-16 w-full" />
+          ))}
+        </div>
+        <div className="w-full space-y-3 lg:w-[300px] lg:shrink-0">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-24 w-full rounded-lg" />
+          ))}
+        </div>
       </div>
+    </div>
+  )
+}
 
-      {/* Activity section */}
-      <div className="space-y-3">
-        <Skeleton className="h-4 w-16" />
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-16 w-full" />
-        ))}
-      </div>
+function RailCard({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="rounded-lg border border-border/50 p-3.5">
+      <h3 className="mb-2 text-[13px] font-medium leading-[18px]">{title}</h3>
+      {children}
+    </div>
+  )
+}
+
+function KvRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-2 py-[3px] text-xs leading-4">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="min-w-0 truncate text-right">{children}</span>
     </div>
   )
 }
@@ -237,7 +275,13 @@ function ConversationPreview({ conversationId }: { conversationId: ConversationD
 }
 
 /** A user's support conversation history: filterable, paginated, with inline preview. */
-function UserConversations({ principalId }: { principalId: PrincipalId }) {
+function UserConversations({
+  principalId,
+  embedded = false,
+}: {
+  principalId: PrincipalId
+  embedded?: boolean
+}) {
   const { settings } = useRouteContext({ from: '__root__' })
   // Gated by the experimental supportInbox flag — when off, skip the fetch and
   // render nothing, so the profile shows no support history for a disabled feature.
@@ -266,9 +310,9 @@ function UserConversations({ principalId }: { principalId: PrincipalId }) {
   const conversations: ConversationDTO[] = query.data?.pages.flatMap((p) => p.conversations) ?? []
 
   return (
-    <div className="border-t border-border/50 pt-4">
+    <div className={cn(!embedded && 'border-t border-border/50 pt-4')}>
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-medium">Support conversations</h3>
+        {embedded ? <span /> : <h3 className="text-sm font-medium">Support conversations</h3>}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
@@ -429,6 +473,8 @@ export function UserDetail({
   // and reads here as "no address" rather than as something writable.
   const displayEmail = user?.email ?? user?.contactEmail ?? null
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false)
+  const [blockConfirmOpen, setBlockConfirmOpen] = useState(false)
+  const [mergeOpen, setMergeOpen] = useState(false)
   const [composeOpen, setComposeOpen] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [editName, setEditName] = useState('')
@@ -439,7 +485,21 @@ export function UserDetail({
     (settings?.featureFlags as FeatureFlags | undefined)?.supportInbox ?? false
   // Check if current user can manage portal users
   const canManageUsers = currentMemberRole === 'admin'
-  const { blocked } = usePersonBlockStatus(user?.principalId as PrincipalId | undefined)
+  const { blocked, unblock } = usePersonBlockActions(user?.principalId as PrincipalId | undefined)
+  const conversationsQuery = useInfiniteQuery({
+    queryKey: ['admin', 'user-conversations', user?.principalId, 'all'],
+    enabled: supportInboxEnabled && !!user?.principalId,
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) =>
+      listConversationsForUserFn({
+        data: {
+          principalId: user!.principalId as PrincipalId,
+          before: pageParam,
+        },
+      }),
+    getNextPageParam: (last) => (last.hasMore ? (last.nextCursor ?? undefined) : undefined),
+  })
+  const conversationCount = conversationsQuery.data?.pages.flatMap((p) => p.conversations).length
 
   const startEditing = () => {
     if (!user) return
@@ -509,14 +569,16 @@ export function UserDetail({
     return null
   }
 
+  const { attributes, externalId } = parseUserMetadata(user.metadata)
+  const noEmailTooltip = 'This user has no email address to deliver a message to'
+
   return (
     <div className="max-w-5xl w-full">
       {backHeader}
-      <div className="p-4 space-y-6">
-        {/* Profile Header */}
-        <div className="flex items-start gap-4">
-          <Avatar src={user.image} name={user.name} className="h-16 w-16" />
-          <div className="flex-1 min-w-0">
+      <div className="px-6 pb-6">
+        <div className="flex flex-wrap items-start gap-4">
+          <Avatar src={user.image} name={user.name} className="h-16 w-16 shrink-0" />
+          <div className="min-w-0 flex-1">
             {isEditing ? (
               <div className="space-y-2">
                 <Input
@@ -554,18 +616,26 @@ export function UserDetail({
               </div>
             ) : (
               <>
-                <div className="flex items-center gap-2">
-                  <h2 className="font-semibold text-lg truncate">{user.name || 'Unnamed User'}</h2>
+                <div className="flex min-w-0 items-center gap-2">
+                  <h2 className="min-w-0 truncate text-lg font-semibold leading-7">
+                    {user.name || 'Unnamed user'}
+                  </h2>
                   {user.emailVerified && (
-                    <CheckCircleIcon className="h-4 w-4 text-primary shrink-0" />
+                    <CheckCircleIcon className="h-4 w-4 shrink-0 text-primary" />
                   )}
-                  {/* For a lead the form edits the captured contact email,
-                      never the placeholder account address. */}
+                  <Badge variant="secondary" className="shrink-0">
+                    {user.isLead ? 'Lead' : 'User'}
+                  </Badge>
+                  {blocked && (
+                    <Badge variant="destructive" className="shrink-0">
+                      Blocked
+                    </Badge>
+                  )}
                   {canManageUsers && (
                     <button
                       type="button"
                       onClick={startEditing}
-                      className="text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                      className="text-muted-foreground/50 transition-colors hover:text-muted-foreground"
                       title="Edit user details"
                     >
                       <PencilIcon className="h-3.5 w-3.5" />
@@ -573,40 +643,88 @@ export function UserDetail({
                   )}
                 </div>
                 {displayEmail ? (
-                  <p className="text-sm text-muted-foreground truncate">{displayEmail}</p>
+                  <p className="mt-0.5 truncate text-sm text-muted-foreground">{displayEmail}</p>
                 ) : (
-                  <p className="text-sm text-muted-foreground/50 italic">
+                  <p className="mt-0.5 text-sm italic text-muted-foreground/50">
                     No email &middot; cannot receive notifications
                   </p>
                 )}
-                <div className="mt-2 flex items-center gap-1.5">
-                  <Badge variant="secondary" className="text-xs">
-                    {user.isLead ? 'Lead' : 'User'}
-                  </Badge>
-                  {blocked && (
-                    <Badge variant="destructive" className="text-xs">
-                      Blocked
-                    </Badge>
-                  )}
-                </div>
               </>
             )}
           </div>
-          {supportInboxEnabled && !isEditing && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setComposeOpen(true)}
-              disabled={!displayEmail}
-              title={
-                displayEmail ? undefined : 'This user has no email address to deliver a message to'
-              }
-            >
-              <ChatBubbleLeftIcon className="me-1.5 h-4 w-4" />
-              Send message
-            </Button>
+          {!isEditing && (
+            <div className="flex shrink-0 items-center gap-2">
+              {supportInboxEnabled && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        shape="default"
+                        onClick={() => setComposeOpen(true)}
+                        disabled={!displayEmail}
+                      >
+                        <ChatBubbleLeftIcon className="h-4 w-4" />
+                        Send message
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {!displayEmail && <TooltipContent>{noEmailTooltip}</TooltipContent>}
+                </Tooltip>
+              )}
+              <Button size="sm" variant="outline" shape="default" asChild>
+                <Link to="/u/$principalId" params={{ principalId: user.principalId }}>
+                  <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
+                  View public profile
+                </Link>
+              </Button>
+              {canManageUsers && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      size="icon-sm"
+                      variant="ghost"
+                      shape="default"
+                      aria-label="More actions"
+                    >
+                      <EllipsisHorizontalIcon className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      variant={blocked ? 'default' : 'destructive'}
+                      onSelect={() => (blocked ? unblock() : setBlockConfirmOpen(true))}
+                    >
+                      <NoSymbolIcon className="h-4 w-4" />
+                      {blocked ? 'Unblock' : 'Block'}
+                    </DropdownMenuItem>
+                    {user.isLead && (
+                      <DropdownMenuItem onSelect={() => setMergeOpen(true)}>
+                        <ArrowsRightLeftIcon className="h-4 w-4" />
+                        Merge
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      variant="destructive"
+                      disabled={isRemovePending}
+                      onSelect={() => setRemoveDialogOpen(true)}
+                    >
+                      {isRemovePending ? (
+                        <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <TrashIcon className="h-4 w-4" />
+                      )}
+                      Remove from portal
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
           )}
         </div>
+
         {supportInboxEnabled && (
           <NewConversationDialog
             open={composeOpen}
@@ -619,180 +737,25 @@ export function UserDetail({
             }}
           />
         )}
-
-        {/* Possible duplicates — renders nothing when the lookup is clean. */}
-        {!isEditing && (
-          <DuplicateUsersWarning
-            principalId={user.principalId as PrincipalId}
-            currentName={user.name}
-            canManage={canManageUsers}
-          />
-        )}
-
-        {/* Activity Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="text-center p-3 bg-muted/30 rounded-lg">
-            <div className="flex items-center justify-center gap-1.5 text-muted-foreground mb-1">
-              <DocumentTextIcon className="h-4 w-4" />
-            </div>
-            <div className="text-2xl font-semibold">{user.postCount}</div>
-            <div className="text-xs text-muted-foreground">Posts</div>
-          </div>
-          <div className="text-center p-3 bg-muted/30 rounded-lg">
-            <div className="flex items-center justify-center gap-1.5 text-muted-foreground mb-1">
-              <ChatBubbleLeftIcon className="h-4 w-4" />
-            </div>
-            <div className="text-2xl font-semibold">{user.commentCount}</div>
-            <div className="text-xs text-muted-foreground">Comments</div>
-          </div>
-          <div className="text-center p-3 bg-muted/30 rounded-lg">
-            <div className="flex items-center justify-center gap-1.5 text-muted-foreground mb-1">
-              <HandThumbUpIcon className="h-4 w-4" />
-            </div>
-            <div className="text-2xl font-semibold">{user.voteCount}</div>
-            <div className="text-xs text-muted-foreground">Votes</div>
-          </div>
-        </div>
-
-        {/* User Attributes */}
-        {user.metadata &&
-          (() => {
-            try {
-              const attrs = JSON.parse(user.metadata as string) as Record<string, unknown>
-              const entries = Object.entries(attrs).filter(([key]) => !key.startsWith('_'))
-              if (entries.length === 0) return null
-              return (
-                <div className="border-t border-border/50 pt-4">
-                  <h3 className="text-sm font-medium mb-3">Attributes</h3>
-                  <div className="space-y-1.5">
-                    {entries.map(([key, value]) => (
-                      <div key={key} className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">{key}</span>
-                        <span className="font-mono text-xs truncate max-w-[60%] text-right">
-                          {value === null ? (
-                            <span className="text-muted-foreground/50 italic">null</span>
-                          ) : (
-                            String(value)
-                          )}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )
-            } catch {
-              return null
-            }
-          })()}
-
-        {/* Segments */}
-        {(user.segments.length > 0 || canManageUsers) && (
-          <div className="border-t border-border/50 pt-4">
-            <h3 className="text-sm font-medium mb-3">Segments</h3>
-            <UserSegmentBadges
-              principalId={user.principalId as PrincipalId}
-              segments={user.segments}
-              canManage={canManageUsers}
-            />
-          </div>
-        )}
-
-        {/* Tags */}
-        <div className="border-t border-border/50 pt-4">
-          <h3 className="text-sm font-medium mb-3">Tags</h3>
-          <UserTagControl
-            principalId={user.principalId as PrincipalId}
-            canManage={canManageUsers}
-          />
-        </div>
-
-        {/* Company */}
-        <div className="border-t border-border/50 pt-4">
-          <h3 className="text-sm font-medium mb-3">Company</h3>
-          <UserCompanyControl
-            principalId={user.principalId as PrincipalId}
-            canManage={canManageUsers}
-          />
-        </div>
-
-        {/* Changelog emails */}
         {canManageUsers && (
-          <div className="border-t border-border/50 pt-4">
-            <h3 className="text-sm font-medium mb-3">Notifications</h3>
-            <ChangelogSubscriptionControl principalId={user.principalId as PrincipalId} />
-          </div>
-        )}
-
-        {/* Support conversations */}
-        <UserConversations principalId={user.principalId as PrincipalId} />
-
-        {/* Engaged Posts */}
-        <div>
-          <h3 className="text-sm font-medium mb-3">Activity</h3>
-          {user.engagedPosts.length === 0 ? (
-            <EmptyMessage message="No activity yet" />
-          ) : (
-            <div className="border border-border/50 rounded-lg overflow-hidden">
-              {user.engagedPosts.map((post) => (
-                <EngagedPostCard key={post.id} post={post} />
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Account Info */}
-        <div className="border-t border-border/50 pt-4">
-          <h3 className="text-sm font-medium mb-3">Account</h3>
-          <div className="space-y-2 text-sm">
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <CalendarIcon className="h-4 w-4" />
-              <span>Joined portal {formatDate(user.joinedAt)}</span>
-            </div>
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <UserIcon className="h-4 w-4" />
-              <span>Account created {formatDate(user.createdAt)}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Actions */}
-        {canManageUsers && (
-          <div className="border-t border-border/50 pt-4 space-y-3">
-            <h3 className="text-sm font-medium">Actions</h3>
-
-            {/* Block / Unblock — rejects future messages and re-registration. */}
+          <>
             <BlockPersonControl
+              mode="dialog"
               principalId={user.principalId as PrincipalId}
               personName={user.name}
-              className="w-full"
+              open={blockConfirmOpen}
+              onOpenChange={setBlockConfirmOpen}
             />
-
-            {/* Merge — leads only: fold the lead's activity into an identified
-                user and retire the anonymous identity. */}
             {user.isLead && (
               <MergeLeadControl
+                mode="dialog"
                 principalId={user.principalId as PrincipalId}
                 leadName={user.name}
                 onMerged={onClose}
-                className="w-full"
+                open={mergeOpen}
+                onOpenChange={setMergeOpen}
               />
             )}
-
-            {/* Remove User */}
-            <Button
-              variant="destructive"
-              size="sm"
-              className="w-full"
-              disabled={isRemovePending}
-              onClick={() => setRemoveDialogOpen(true)}
-            >
-              {isRemovePending ? (
-                <ArrowPathIcon className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <TrashIcon className="h-4 w-4 mr-2" />
-              )}
-              Remove from portal
-            </Button>
             <ConfirmDialog
               open={removeDialogOpen}
               onOpenChange={setRemoveDialogOpen}
@@ -803,9 +766,144 @@ export function UserDetail({
               isPending={isRemovePending}
               onConfirm={onRemoveUser}
             />
-          </div>
+          </>
         )}
+
+        {!isEditing && (
+          <DuplicateUsersWarning
+            principalId={user.principalId as PrincipalId}
+            currentName={user.name}
+            canManage={canManageUsers}
+          />
+        )}
+
+        <div className="mt-4 flex overflow-hidden rounded-lg border border-border/50">
+          <FactCell value={user.postCount} label="Posts" numeric />
+          <FactCell value={user.commentCount} label="Comments" numeric />
+          <FactCell value={user.voteCount} label="Votes" numeric />
+          <FactCell
+            value={user.lastSeenAt ? <TimeAgo date={user.lastSeenAt} /> : EM_DASH}
+            label="Last seen"
+            muted={!user.lastSeenAt}
+          />
+          <FactCell value={formatDate(user.joinedAt)} label="Joined" />
+          <FactCell
+            value={user.country ? countryName(user.country) : EM_DASH}
+            label="Country"
+            muted={!user.country}
+          />
+        </div>
+
+        <div className="mt-5 flex flex-col items-start gap-6 lg:flex-row">
+          <div className="min-w-0 w-full flex-1">
+            <Tabs defaultValue="activity">
+              <TabsList>
+                <TabsTrigger value="activity">Activity</TabsTrigger>
+                {supportInboxEnabled && (
+                  <TabsTrigger value="conversations">
+                    {conversationCount != null
+                      ? `Conversations (${conversationCount})`
+                      : 'Conversations'}
+                  </TabsTrigger>
+                )}
+              </TabsList>
+              <TabsContent value="activity" className="mt-3">
+                {user.engagedPosts.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-border/60 px-4 py-6 text-center text-[13px] text-muted-foreground">
+                    No activity yet
+                  </div>
+                ) : (
+                  <div className="overflow-hidden rounded-lg border border-border/50">
+                    {user.engagedPosts.map((post) => (
+                      <EngagedPostCard key={post.id} post={post} />
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+              {supportInboxEnabled && (
+                <TabsContent value="conversations" className="mt-3">
+                  <UserConversations principalId={user.principalId as PrincipalId} embedded />
+                </TabsContent>
+              )}
+            </Tabs>
+          </div>
+
+          <div className="flex w-full shrink-0 flex-col gap-3 lg:w-[300px]">
+            <RailCard title="Company">
+              <UserCompanyControl
+                principalId={user.principalId as PrincipalId}
+                canManage={canManageUsers}
+              />
+            </RailCard>
+            <RailCard title="Segments">
+              <UserSegmentBadges
+                principalId={user.principalId as PrincipalId}
+                segments={user.segments}
+                canManage={canManageUsers}
+              />
+            </RailCard>
+            <RailCard title="Tags">
+              <UserTagControl
+                principalId={user.principalId as PrincipalId}
+                canManage={canManageUsers}
+              />
+            </RailCard>
+            <RailCard title="Attributes">
+              {attributes.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No attributes</p>
+              ) : (
+                attributes.map(([key, value]) => (
+                  <KvRow key={key} label={key}>
+                    <span className="font-mono text-[11px]">
+                      {value === null ? (
+                        <span className="italic text-muted-foreground/50">null</span>
+                      ) : (
+                        String(value)
+                      )}
+                    </span>
+                  </KvRow>
+                ))
+              )}
+            </RailCard>
+            <RailCard title="Account">
+              <KvRow label="Account created">{formatDate(user.createdAt)}</KvRow>
+              <KvRow label="External ID">
+                {externalId ? <span className="font-mono text-[11px]">{externalId}</span> : EM_DASH}
+              </KvRow>
+              {canManageUsers && (
+                <ChangelogSubscriptionControl principalId={user.principalId as PrincipalId} />
+              )}
+            </RailCard>
+          </div>
+        </div>
       </div>
+    </div>
+  )
+}
+
+function FactCell({
+  value,
+  label,
+  numeric = false,
+  muted = false,
+}: {
+  value: ReactNode
+  label: string
+  numeric?: boolean
+  muted?: boolean
+}) {
+  return (
+    <div className="flex-1 border-border/50 px-2 py-2.5 text-center not-last:border-r">
+      <div
+        className={cn(
+          'leading-[22px]',
+          numeric ? 'text-base font-semibold tabular-nums' : 'text-sm font-medium',
+          muted && 'text-muted-foreground'
+        )}
+      >
+        {value}
+      </div>
+      <div className="text-[11px] leading-[15px] text-muted-foreground">{label}</div>
     </div>
   )
 }
