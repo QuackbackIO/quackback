@@ -3,10 +3,12 @@
  * written by the app (SAAS-HOSTING-STACK.md §10.3).
  *
  * The direction of the arrows is the whole design: **the control plane records
- * intent; the app reconciles toward it.** The CP writes `target_version` and
- * `cohort` and never touches anything else; the migrator claims a row, does the
- * work, and writes back only what it *observed*. Neither side writes the
- * other's columns, so "what should happen" and "what did happen" cannot be
+ * intent; the app reconciles toward it.** The CP now owns product writes of
+ * `target_version` / `cohort` / `blocked` (provision enrol, `/admin`, MCP).
+ * This module still exposes `setTargetVersion` / `ensureSchemaStateRow` /
+ * `blockWorkspace` for the `fleet-migrator` CLI. The migrator claims a row,
+ * does the work, and writes back only what it *observed*. Neither side writes
+ * the other's columns, so "what should happen" and "what did happen" cannot be
  * confused for one another during an incident.
  *
  * ## Why claiming is not a new mechanism
