@@ -52,7 +52,7 @@ import { signupOpenFor } from '@/lib/shared/signup-open'
 import { publicHomeConfig, publicMessengerConfig } from './settings.widget'
 import { getSetupState, isOnboardingComplete } from '@/lib/shared/db-types'
 import { resolveChangelogSettings } from './settings.changelog'
-import { resolveStatusSettings } from './settings.status'
+import { resolveStatusSettings, updateStatusSettings } from './settings.status'
 import {
   parseJsonConfig,
   parseJsonOrNull,
@@ -928,7 +928,7 @@ export async function getWorkspaceSettings(): Promise<WorkspaceSettings | null> 
       logoUrl: offHostPublicUrl(org.logoKey),
       faviconUrl: getPublicUrlOrNull(org.faviconKey),
       headerLogoUrl: getPublicUrlOrNull(org.headerLogoKey),
-      ogImageUrl: offHostPublicUrl(org.portalOgImageKey),
+      ogImageUrl: null,
       headerDisplayMode: org.headerDisplayMode,
       headerDisplayName: org.headerDisplayName,
     }
@@ -1061,6 +1061,15 @@ export async function updateFeatureFlags(input: Partial<FeatureFlags>): Promise<
   // them into their umbrella flag), so this write persists a clean shape.
   const current = resolveFeatureFlags(org.featureFlags)
   const updated = { ...current, ...input }
+  // The public portal homepage is the feedback board — never persist off.
+  updated.feedback = true
+  // General Status ON is the single publish control: clear a legacy
+  // unpublished bit so the page actually goes live. OFF only flips the flag;
+  // workspaces that stored statusPage:true with enabled:false stay unpublished
+  // until that toggle is flipped on.
+  if (input.statusPage === true) {
+    await updateStatusSettings({ enabled: true })
+  }
   await db
     .update(settings)
     .set({ featureFlags: JSON.stringify(updated) })

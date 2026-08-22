@@ -1002,7 +1002,11 @@ export interface SettingsBrandingData {
   logoUrl: string | null
   faviconUrl: string | null
   headerLogoUrl: string | null
-  /** Custom portal social share (OG) image; null falls back to the logo. */
+  /**
+   * @deprecated Unread. Social share resolves to the workspace logo
+   * (`resolvePortalOgImageUrl`); the stored `portal_og_image_key` column is
+   * left in place but no longer populated or read.
+   */
   ogImageUrl: string | null
   headerDisplayMode: string | null
   headerDisplayName: string | null
@@ -1207,7 +1211,8 @@ export const PRODUCT_DEFINITIONS = [
   {
     id: 'status',
     label: 'Status',
-    description: 'Share live service status, incidents, maintenance, and uptime history.',
+    description:
+      'Publish a status page with live service status, incidents, maintenance, and uptime history.',
     featureFlags: ['statusPage'],
     adminPath: '/admin/status',
   },

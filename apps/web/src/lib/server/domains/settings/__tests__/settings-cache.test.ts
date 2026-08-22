@@ -123,8 +123,13 @@ function makeSettingsRow(overrides: Record<string, unknown> = {}) {
 }
 
 // Import after mocks
-const { getWorkspaceSettings, updateAuthConfig, updatePortalConfig, updateDeveloperConfig } =
-  await import('../settings.service')
+const {
+  getWorkspaceSettings,
+  updateAuthConfig,
+  updatePortalConfig,
+  updateDeveloperConfig,
+  updateFeatureFlags,
+} = await import('../settings.service')
 const { invalidateSettingsCache } = await import('../settings.helpers')
 const {
   updateBrandingConfig,
@@ -367,6 +372,14 @@ describe('settings write functions invalidate cache', () => {
     expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
   })
 
+  it('deleteLogoKey clears the derived favicon too', async () => {
+    mockFindFirst.mockResolvedValue(
+      makeSettingsRow({ logoKey: 'logos/a.png', faviconKey: 'favicons/a.png' })
+    )
+    await deleteLogoKey()
+    expect(mockSet).toHaveBeenCalledWith({ logoKey: null, faviconKey: null })
+  })
+
   it('saveFaviconKey invalidates cache', async () => {
     await saveFaviconKey('favicons/new.ico')
     expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
@@ -390,5 +403,70 @@ describe('settings write functions invalidate cache', () => {
   it('regenerateWidgetSecret invalidates cache', async () => {
     await regenerateWidgetSecret()
     expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
+  })
+})
+
+describe('updateFeatureFlags', () => {
+  beforeEach(() => {
+    mockFindFirst.mockResolvedValue(
+      makeSettingsRow({
+        featureFlags: JSON.stringify({
+          feedback: true,
+          changelog: true,
+          helpCenter: false,
+          supportInbox: false,
+          supportTickets: false,
+          statusPage: false,
+        }),
+        metadata: null,
+      })
+    )
+  })
+
+  it('refuses to persist feedback: false', async () => {
+    const result = await updateFeatureFlags({ feedback: false })
+    expect(result.feedback).toBe(true)
+    expect(mockSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        featureFlags: expect.stringMatching(/"feedback":true/),
+      })
+    )
+    const written = JSON.parse(
+      (
+        mockSet.mock.calls.find((call) => call[0] && 'featureFlags' in call[0]) as
+          [{ featureFlags: string }] | undefined
+      )?.[0].featureFlags ?? '{}'
+    ) as { feedback?: boolean }
+    expect(written.feedback).toBe(true)
+  })
+
+  it('writes statusSettings.enabled true when turning Status on', async () => {
+    await updateFeatureFlags({ statusPage: true })
+    const metadataCall = mockSet.mock.calls.find((call) => call[0] && 'metadata' in call[0]) as
+      [{ metadata: string }] | undefined
+    expect(metadataCall).toBeTruthy()
+    const meta = JSON.parse(metadataCall![0].metadata) as {
+      statusSettings?: { enabled?: boolean }
+    }
+    expect(meta.statusSettings?.enabled).toBe(true)
+  })
+
+  it('does not write statusSettings.enabled when turning Status off', async () => {
+    mockFindFirst.mockResolvedValue(
+      makeSettingsRow({
+        featureFlags: JSON.stringify({
+          feedback: true,
+          changelog: true,
+          helpCenter: false,
+          supportInbox: false,
+          supportTickets: false,
+          statusPage: true,
+        }),
+        metadata: JSON.stringify({ statusSettings: { enabled: true } }),
+      })
+    )
+    await updateFeatureFlags({ statusPage: false })
+    const metadataCall = mockSet.mock.calls.find((call) => call[0] && 'metadata' in call[0])
+    expect(metadataCall).toBeUndefined()
   })
 })

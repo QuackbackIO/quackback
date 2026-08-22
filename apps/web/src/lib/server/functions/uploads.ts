@@ -218,16 +218,6 @@ export const getHeaderLogoUploadUrlFn = createServerFn({ method: 'POST' })
   })
 
 /**
- * Get a presigned URL for uploading the portal social share (OG) image.
- */
-export const getPortalOgImageUploadUrlFn = createServerFn({ method: 'POST' })
-  .validator(imageUploadSchema)
-  .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
-    return presignedImageUpload(data, { label: 'portal og image', prefix: 'portal-og' })
-  })
-
-/**
  * Get a presigned URL for uploading the widget Home hero image.
  */
 export const getWidgetHeroUploadUrlFn = createServerFn({ method: 'POST' })

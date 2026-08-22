@@ -30,6 +30,9 @@ describe('feature flag settings layout', () => {
     expect(isProductEnabled(DEFAULT_FEATURE_FLAGS, 'support')).toBe(false)
     expect(isProductEnabled(DEFAULT_FEATURE_FLAGS, 'helpCenter')).toBe(false)
     expect(isProductEnabled(DEFAULT_FEATURE_FLAGS, 'status')).toBe(false)
+    expect(PRODUCT_DEFINITIONS.find((product) => product.id === 'status')?.description).toBe(
+      'Publish a status page with live service status, incidents, maintenance, and uptime history.'
+    )
   })
 
   it('updates both Support capabilities from its single product toggle', () => {
@@ -85,6 +88,11 @@ describe('resolveFeatureFlags', () => {
   it('does not resurrect a disabled inbox from a stored linkPreviews value', () => {
     const flags = resolveFeatureFlags(JSON.stringify({ supportInbox: false, linkPreviews: true }))
     expect(flags.supportInbox).toBe(false)
+  })
+
+  it('forces feedback true even when stored false', () => {
+    const flags = resolveFeatureFlags(JSON.stringify({ feedback: false }))
+    expect(flags.feedback).toBe(true)
   })
 })
 

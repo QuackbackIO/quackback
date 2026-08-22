@@ -4,6 +4,7 @@ import { useTheme } from 'next-themes'
 import { resolvePortalNavItems } from './portal-header-nav'
 import { usePreviewDraft } from './preview-draft-context'
 import { isProductEnabled } from '@/lib/shared/types/settings'
+import { isStatusPagePublished } from '@/lib/shared/status-settings'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { cn } from '@/lib/shared/utils'
 import { isTeamMember, Role } from '@/lib/shared/roles'
@@ -74,12 +75,11 @@ export function PortalHeader({
   // Status tab: product flag + published. A non-public audience still needs
   // a signed-in viewer to bother showing the tab; the route enforces the
   // real per-viewer segment gate (settings here are workspace-global, not
-  // per-viewer). Hide or reorder the tab in Branding → Navigation.
+  // per-viewer). Hide or reorder the tab in Portal → Navigation.
   const statusAudience = settings?.statusConfig?.audience ?? 'public'
   const statusLoggedIn = !!session?.user && session.user.principalType !== 'anonymous'
   const statusEnabled =
-    isProductEnabled(flags, 'status') &&
-    !!settings?.statusConfig?.enabled &&
+    isStatusPagePublished(flags, settings?.statusConfig) &&
     (statusAudience === 'public' || statusLoggedIn)
   const onHelpPages = pathname === '/hc' || pathname.startsWith('/hc/')
   // Admin-configured help center links render beside the built-in nav on help

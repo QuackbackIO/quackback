@@ -1,7 +1,8 @@
 /**
  * Status page settings family (Status Product Spec §3): enablement, the
  * page visibility ladder (public / authenticated / segments), and the
- * email switches. Portal chrome lives in Branding → Navigation.
+ * email switches. Portal chrome lives in Portal → Navigation. The page
+ * publishes from the Status toggle on Settings → General.
  *
  * Storage: like changelog and office-hours settings, these ride in the
  * generic `settings.metadata` JSON bag (no dedicated column, no migration).

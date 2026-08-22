@@ -1,32 +1,32 @@
 // @vitest-environment happy-dom
 import '@testing-library/jest-dom/vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { CloudWorkspaceDetails } from '../settings.general'
+import { WorkspaceIdentityCard } from '../settings.general'
 
-describe('cloud workspace details', () => {
-  it('shows one primary action with name and Quackback URL controls', () => {
-    const save = vi.fn()
+vi.mock('@/components/admin/settings/logo-uploader', () => ({
+  LogoUploader: () => (
+    <button type="button" aria-label="Change workspace logo">
+      W
+    </button>
+  ),
+}))
+
+describe('cloud workspace identity on General', () => {
+  it('keeps only name and logo — no URL controls or save button', () => {
     render(
-      <CloudWorkspaceDetails
+      <WorkspaceIdentityCard
         workspaceName="Untitled workspace"
-        platformLabel="ws-generated"
-        domainSuffix="quackback.co.uk"
-        currentOrigin="https://ws-generated.quackback.co.uk"
-        pending={false}
-        error={null}
+        saving={false}
+        managed={false}
         onWorkspaceNameChange={vi.fn()}
-        onPlatformLabelChange={vi.fn()}
-        onSubmit={save}
+        maxLength={80}
       />
     )
 
-    expect(screen.getByLabelText('Workspace name')).toBeInTheDocument()
-    expect(screen.getByLabelText('Quackback URL')).toBeInTheDocument()
-    expect(screen.getByText(/Preview:/)).toHaveTextContent('https://ws-generated.quackback.co.uk')
-    const buttons = screen.getAllByRole('button')
-    expect(buttons).toHaveLength(1)
-    fireEvent.click(buttons[0]!)
-    expect(save).toHaveBeenCalledOnce()
+    expect(screen.getByLabelText('Workspace Name')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Quackback URL')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Preview:/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /save/i })).not.toBeInTheDocument()
   })
 })

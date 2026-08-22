@@ -23,13 +23,13 @@ export const Route = createFileRoute('/status/feed')({
         const siteName = branding?.name || 'Status'
 
         // `listStatusHistoryFn` independently composes every status-page
-        // gate (portal access, `statusSettings.enabled`, the `statusPage`
-        // feature flag, and the audience ladder — see
-        // `resolveStatusPageGate` in `lib/server/functions/status.ts`) and
-        // returns an empty result rather than throwing when denied. A
-        // private/disabled/gated-out status page therefore still yields a
-        // valid, empty RSS document here — same contract as the changelog
-        // feed and sitemap.xml, never a data leak.
+        // gate (portal access, `isStatusPagePublished`, and the audience
+        // ladder — see `resolveStatusPageGate` in
+        // `lib/server/functions/status.ts`) and returns an empty result
+        // rather than throwing when denied. A private/disabled/gated-out
+        // status page therefore still yields a valid, empty RSS document
+        // here — same contract as the changelog feed and sitemap.xml,
+        // never a data leak.
         const history = await listStatusHistoryFn({ data: { limit: 50 } })
 
         // Same per-caller-portal-access reasoning as the changelog feed:

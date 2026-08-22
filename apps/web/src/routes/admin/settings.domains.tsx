@@ -3,7 +3,7 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { useMutation } from '@tanstack/react-query'
 import { createFileRoute, useRouteContext, useRouter } from '@tanstack/react-router'
-import { GlobeAltIcon } from '@heroicons/react/24/solid'
+import { ArrowPathIcon, GlobeAltIcon } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -15,8 +15,11 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
   getCloudCustomDomainsFn,
+  getCloudIdentityFn,
   hasCustomDomainEntitlementFn,
   mutateCloudCustomDomainFn,
+  platformLabelFromHostname,
+  updateCloudIdentityFn,
 } from '@/lib/server/functions/cloud-identity'
 import type { CustomDomainInstruction } from '@/lib/server/control-plane/client'
 
@@ -25,24 +28,67 @@ export const Route = createFileRoute('/admin/settings/domains')({
     assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_CUSTOM_DOMAIN)
     const { cloudEnabled } = context
     if (!cloudEnabled)
-      return { allowed: false, entitled: false, domains: [] as CustomDomainInstruction[] }
+      return {
+        allowed: false,
+        entitled: false,
+        domains: [] as CustomDomainInstruction[],
+        cloudIdentity: null,
+      }
     const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
-    const [entitled, domains] = await Promise.all([
+    const [entitled, domains, cloudIdentity] = await Promise.all([
       hasCustomDomainEntitlementFn(),
       getCloudCustomDomainsFn().catch(() => [] as CustomDomainInstruction[]),
+      getCloudIdentityFn().catch(() => null),
       ensureBillingCatalogue(context.queryClient, context.billingEnabled),
     ])
-    return { allowed: true, entitled, domains }
+    return { allowed: true, entitled, domains, cloudIdentity }
   },
   component: DomainsSettingsPage,
 })
 
 function DomainsSettingsPage() {
   const { cloudEnabled } = useRouteContext({ from: '__root__' })
-  const { allowed, entitled, domains: initialDomains } = Route.useLoaderData()
+  const {
+    allowed,
+    entitled,
+    domains: initialDomains,
+    cloudIdentity: initialCloudIdentity,
+  } = Route.useLoaderData()
   const [domains, setDomains] = useState(initialDomains)
   const [hostname, setHostname] = useState('')
+  const [cloudIdentity, setCloudIdentity] = useState(initialCloudIdentity)
+  const [platformLabel, setPlatformLabel] = useState(
+    initialCloudIdentity?.platformHostname
+      ? platformLabelFromHostname(initialCloudIdentity.platformHostname)
+      : ''
+  )
   const router = useRouter()
+
+  const identityMutation = useMutation({
+    mutationFn: () => {
+      const requestedLabel = platformLabel.trim()
+      return updateCloudIdentityFn({
+        data: requestedLabel ? { platformLabel: requestedLabel } : {},
+      })
+    },
+    onSuccess: async (result) => {
+      setCloudIdentity(result.projection)
+      setPlatformLabel(
+        result.projection.platformHostname
+          ? platformLabelFromHostname(result.projection.platformHostname)
+          : ''
+      )
+      if (result.transferToken) {
+        const target = new URL('/auth/origin-transfer', result.projection.canonicalOrigin)
+        target.searchParams.set('ott', result.transferToken)
+        target.searchParams.set('returnTo', '/admin/settings/domains')
+        window.location.assign(target)
+        return
+      }
+      toast.success('Quackback URL saved')
+      await router.invalidate()
+    },
+  })
 
   const mutation = useMutation({
     mutationFn: (input: {
@@ -83,20 +129,95 @@ function DomainsSettingsPage() {
           Custom domains are available only in a Quackback Cloud workspace.
         </p>
       ) : (
-        <DomainsCard
-          entitled={entitled}
-          domains={domains}
-          hostname={hostname}
-          pending={mutation.isPending}
-          error={mutation.error}
-          onHostnameChange={setHostname}
-          onAdd={() => mutation.mutate({ action: 'add', hostname })}
-          onRefresh={(value) => mutation.mutate({ action: 'refresh', hostname: value })}
-          onMakePrimary={(value) => mutation.mutate({ action: 'makePrimary', hostname: value })}
-          onRemove={(value) => mutation.mutate({ action: 'remove', hostname: value })}
-        />
+        <>
+          {cloudIdentity && (
+            <QuackbackUrlCard
+              platformLabel={platformLabel}
+              domainSuffix={new URL(cloudIdentity.canonicalOrigin).hostname
+                .split('.')
+                .slice(1)
+                .join('.')}
+              currentOrigin={cloudIdentity.canonicalOrigin}
+              pending={identityMutation.isPending}
+              error={identityMutation.error}
+              onPlatformLabelChange={setPlatformLabel}
+              onSubmit={() => identityMutation.mutate()}
+            />
+          )}
+          <DomainsCard
+            entitled={entitled}
+            domains={domains}
+            hostname={hostname}
+            pending={mutation.isPending}
+            error={mutation.error}
+            onHostnameChange={setHostname}
+            onAdd={() => mutation.mutate({ action: 'add', hostname })}
+            onRefresh={(value) => mutation.mutate({ action: 'refresh', hostname: value })}
+            onMakePrimary={(value) => mutation.mutate({ action: 'makePrimary', hostname: value })}
+            onRemove={(value) => mutation.mutate({ action: 'remove', hostname: value })}
+          />
+        </>
       )}
     </div>
+  )
+}
+
+export function QuackbackUrlCard(props: {
+  platformLabel: string
+  domainSuffix: string
+  currentOrigin: string
+  pending: boolean
+  error: Error | null
+  onPlatformLabelChange: (value: string) => void
+  onSubmit: () => void
+}) {
+  const preview = `https://${props.platformLabel || 'workspace'}.${props.domainSuffix}`
+  return (
+    <SettingsCard title="Quackback URL" description="The address customers use for this workspace">
+      <form
+        className="max-w-xl space-y-5"
+        onSubmit={(event) => {
+          event.preventDefault()
+          props.onSubmit()
+        }}
+      >
+        <div className="space-y-1.5">
+          <Label htmlFor="platform-label" className="text-xs text-muted-foreground">
+            Quackback URL
+          </Label>
+          <div className="flex items-center rounded-md border bg-background focus-within:ring-2 focus-within:ring-ring">
+            <Input
+              id="platform-label"
+              value={props.platformLabel}
+              onChange={(event) => props.onPlatformLabelChange(event.target.value)}
+              className="border-0 focus-visible:ring-0"
+              maxLength={63}
+              autoCapitalize="none"
+              autoCorrect="off"
+              disabled={props.pending}
+            />
+            <span className="shrink-0 pe-3 text-sm text-muted-foreground">
+              .{props.domainSuffix}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Preview: <span className="font-mono">{preview}</span>
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Current: <span className="font-mono">{props.currentOrigin}</span>
+          </p>
+        </div>
+        {props.error && (
+          <p role="alert" className="text-sm text-destructive">
+            {props.error.message || 'Could not save Quackback URL. Try again.'}
+          </p>
+        )}
+        <Button type="submit" disabled={props.pending || !props.platformLabel.trim()}>
+          {props.pending && <ArrowPathIcon className="h-4 w-4 animate-spin" />}
+          Save
+        </Button>
+      </form>
+    </SettingsCard>
   )
 }
 
