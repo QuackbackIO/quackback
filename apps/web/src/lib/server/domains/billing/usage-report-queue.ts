@@ -1,7 +1,9 @@
 /**
  * Push a monthly usage snapshot to hosted billing.
  *
- * Self-host with no hosted URL: successful no-op, not a retry.
+ * Self-host with no hosted URL: successful no-op, not a retry. Hourly cron
+ * slots coalesce onto a per-month key; the handler reports previousUtcMonth()
+ * of now (UTC) rather than the local scheduledFor wall time.
  */
 import { isNull, sql } from 'drizzle-orm'
 import { db, posts, boards } from '@/lib/server/db'
@@ -12,7 +14,7 @@ import { countSeatUsage } from '@/lib/server/domains/principals/seat-usage'
 import { logger } from '@/lib/server/logger'
 import type { ClaimedJob } from '@/lib/server/jobs/job-queue'
 import { TerminalJobError } from '@/lib/server/jobs/definitions'
-import { previousUtcMonth } from './usage-report'
+import { enqueueUsageReport, previousUtcMonth, usageReportDedupeKey } from './usage-report'
 
 const log = logger.child({ component: 'usage-report' })
 
@@ -23,15 +25,10 @@ export function isHostedBillingConfigured(): boolean {
 
 const MONTH_RE = /^\d{4}-\d{2}$/
 
-export function monthFromJob(job: ClaimedJob): string {
+export function monthFromJob(job: ClaimedJob, now = new Date()): string {
   const raw = job.payload?.month
   if (typeof raw === 'string' && MONTH_RE.test(raw)) return raw
-  const scheduledFor = job.payload?.scheduledFor
-  if (typeof scheduledFor === 'string') {
-    const at = new Date(scheduledFor)
-    if (!Number.isNaN(at.getTime())) return previousUtcMonth(at)
-  }
-  return previousUtcMonth()
+  return previousUtcMonth(now)
 }
 
 export function dateForUtcMonth(month: string): Date {
@@ -47,6 +44,11 @@ export async function runUsageReport(job: ClaimedJob): Promise<void> {
   const month = monthFromJob(job)
   if (!MONTH_RE.test(month)) {
     throw new TerminalJobError(`invalid usage-report month: ${month}`)
+  }
+  const monthKey = usageReportDedupeKey(month)
+  if (job.dedupeKey !== monthKey) {
+    await enqueueUsageReport({ month })
+    return
   }
   const at = dateForUtcMonth(month)
   const [aiTokens, emailsSent, seats, postRow, boardRow] = await Promise.all([

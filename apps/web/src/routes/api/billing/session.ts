@@ -82,7 +82,7 @@ export const Route = createFileRoute('/api/billing/session')({
             parsed.data.action === 'checkout'
               ? {
                   ...parsed.data,
-                  quantity: parsed.data.quantity ?? (await defaultCheckoutQuantity()),
+                  quantity: await checkoutQuantity(parsed.data.quantity),
                 }
               : parsed.data
           const session = await createHostedBillingSession(payload)
@@ -99,8 +99,9 @@ export const Route = createFileRoute('/api/billing/session')({
   },
 })
 
-async function defaultCheckoutQuantity(): Promise<number> {
+/** Floor checkout seats at live usage so a stale form cannot under-seat. */
+async function checkoutQuantity(requested?: number): Promise<number> {
   const { countSeatUsage } = await import('@/lib/server/domains/principals/seat-usage')
   const seats = await countSeatUsage()
-  return Math.max(seats.used, 1)
+  return Math.max(requested ?? seats.used, seats.used, 1)
 }

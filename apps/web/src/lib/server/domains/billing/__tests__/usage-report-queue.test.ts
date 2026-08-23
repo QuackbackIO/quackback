@@ -5,6 +5,8 @@ const hoisted = vi.hoisted(() => ({
   countSeatUsage: vi.fn(async () => ({ members: 3, pendingInvites: 1, used: 4 })),
   aiTokensInUtcMonth: vi.fn(async () => 1_200_000),
   emailsSentInUtcMonth: vi.fn(async () => 42),
+  enqueueJob: vi.fn(async () => ({ inserted: true, jobId: 'job_x' })),
+  cancelJob: vi.fn(async () => 0),
   postCount: 8,
   boardCount: 2,
 }))
@@ -41,16 +43,21 @@ vi.mock('@/lib/server/email/email-budget', () => ({
   emailsSentInUtcMonth: () => hoisted.emailsSentInUtcMonth(),
 }))
 
+vi.mock('@/lib/server/jobs/job-queue', () => ({
+  enqueueJob: (...args: unknown[]) => hoisted.enqueueJob(...args),
+  cancelJob: (...args: unknown[]) => hoisted.cancelJob(...args),
+}))
+
 import { isHostedBillingConfigured, monthFromJob, runUsageReport } from '../usage-report-queue'
 import { previousUtcMonth, usageReportDedupeKey } from '../usage-report'
 import type { ClaimedJob } from '@/lib/server/jobs/job-queue'
 
-function job(payload: Record<string, unknown>): ClaimedJob {
+function job(payload: Record<string, unknown>, dedupeKey = 'usage-report:2026-07'): ClaimedJob {
   return {
     id: '1',
     jobId: 'job_1',
     queue: 'usage-report',
-    dedupeKey: 'usage-report:2026-07',
+    dedupeKey,
     payload,
     workspaceKey: null,
     attempts: 1,
@@ -65,6 +72,9 @@ describe('usage-report job', () => {
 
   afterEach(() => {
     hoisted.reportWorkspaceUsage.mockClear()
+    hoisted.enqueueJob.mockClear()
+    hoisted.cancelJob.mockClear()
+    vi.useRealTimers()
     if (previous === undefined) delete process.env.QUACKBACK_CONTROL_PLANE_URL
     else process.env.QUACKBACK_CONTROL_PLANE_URL = previous
   })
@@ -90,9 +100,48 @@ describe('usage-report job', () => {
     })
   })
 
-  it('derives last month from a scheduled close when payload.month is absent', () => {
-    expect(monthFromJob(job({ scheduledFor: '2026-08-01T00:10:00.000Z' }))).toBe('2026-07')
-    expect(monthFromJob(job({ month: '2026-04' }))).toBe('2026-04')
+  it('uses the previous UTC month of now when payload.month is absent', () => {
+    const now = new Date('2026-08-01T00:10:00.000Z')
+    expect(monthFromJob(job({ scheduledFor: '2026-08-01T00:10:00+09:00' }), now)).toBe('2026-07')
+    expect(monthFromJob(job({}), now)).toBe('2026-07')
+    expect(monthFromJob(job({ month: '2026-04' }), now)).toBe('2026-04')
+  })
+
+  it('posts the previous UTC month of now when payload.month is absent', async () => {
+    process.env.QUACKBACK_CONTROL_PLANE_URL = 'https://billing.example.com'
+    vi.useFakeTimers({ now: new Date('2026-08-01T00:10:00.000Z') })
+    await runUsageReport(job({ scheduledFor: '2026-02-01T00:10:00.000Z' }, 'usage-report:2026-07'))
+    expect(hoisted.reportWorkspaceUsage).toHaveBeenCalledWith(
+      expect.objectContaining({ month: '2026-07' })
+    )
+    expect(hoisted.enqueueJob).not.toHaveBeenCalled()
+  })
+
+  it('enqueues the previous UTC month from an hourly slot without posting it', async () => {
+    process.env.QUACKBACK_CONTROL_PLANE_URL = 'https://billing.example.com'
+    vi.useFakeTimers({ now: new Date('2026-08-01T00:10:00.000Z') })
+    await runUsageReport(
+      job({ scheduledFor: '2026-08-01T00:10:00.000Z' }, 'usage-report:2026-08-01T00:10:00.000Z')
+    )
+    expect(hoisted.enqueueJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queue: 'usage-report',
+        payload: { month: '2026-07' },
+        dedupeKey: 'usage-report:2026-07',
+      })
+    )
+    expect(hoisted.reportWorkspaceUsage).not.toHaveBeenCalled()
+    expect(hoisted.cancelJob).not.toHaveBeenCalled()
+  })
+
+  it('skips the post when the month is already recorded', async () => {
+    process.env.QUACKBACK_CONTROL_PLANE_URL = 'https://billing.example.com'
+    vi.useFakeTimers({ now: new Date('2026-08-01T01:10:00.000Z') })
+    hoisted.enqueueJob.mockResolvedValueOnce({ inserted: false, jobId: 'job_x' })
+    await runUsageReport(
+      job({ scheduledFor: '2026-08-01T01:10:00.000Z' }, 'usage-report:2026-08-01T01:10:00.000Z')
+    )
+    expect(hoisted.reportWorkspaceUsage).not.toHaveBeenCalled()
   })
 
   it('is keyed per month so a second close of the same month coalesces', () => {
