@@ -43,7 +43,7 @@ export function AddSeatsDialog(props: { open: boolean; onOpenChange: (open: bool
           <DialogTitle>Add seats</DialogTitle>
           {plan ? (
             <DialogDescription>
-              Your {plan.name} plan is {formatUsd(perSeatMonth, 0)}/seat/mo, billed annually.
+              Your {plan.name} plan is {formatUsd(perSeatMonth, 0)}/seat/mo.
             </DialogDescription>
           ) : (
             <DialogDescription>Add seats to this workspace.</DialogDescription>

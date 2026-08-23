@@ -412,8 +412,8 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
   },
   {
     // Monthly usage snapshot for hosted billing. Self-host without a hosted
-    // URL is a successful no-op. On-demand enqueues (after a top-up) use a
-    // per-month dedupe key; this cron is the month-close backstop.
+    // URL is a successful no-op. The cron is the month-close writer; on-demand
+    // enqueues use a per-month dedupe key.
     name: 'usage-report',
     cron: '10 0 1 * *',
     concurrency: 1,

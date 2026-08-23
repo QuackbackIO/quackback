@@ -114,7 +114,7 @@ function buildAvatarUrl(p: { avatarKey: string | null; avatarUrl: string | null 
 export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).handler(
   async () => {
     log.debug('fetch team members and invitations')
-    await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
+    const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
 
     // Subquery: latest session timestamp per user. Left-joined so
     // a team member with no sessions still appears (lastSignInAt
@@ -243,6 +243,7 @@ export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).
     const addSeatAvailable =
       cloud.enabled &&
       cloud.canManageBilling &&
+      auth.permissions.includes(PERMISSIONS.BILLING_MANAGE) &&
       cloud.plan != null &&
       cloud.plan !== 'free' &&
       !cloud.trialActive &&

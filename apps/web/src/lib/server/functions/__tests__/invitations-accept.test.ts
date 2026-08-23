@@ -68,7 +68,17 @@ const hoisted = vi.hoisted(() => {
     invitation: { findFirst: vi.fn() },
     principal: { findFirst: vi.fn() },
   }
-  const tx = { update: makeUpdate('tx'), query: mockTxQuery }
+  const tx = {
+    update: makeUpdate('tx'),
+    query: mockTxQuery,
+    select: () => ({
+      from: () => ({
+        limit: () => ({
+          for: async () => [{ id: 'workspace_1' }],
+        }),
+      }),
+    }),
+  }
   const mockTransaction = vi.fn()
   return {
     updates,
@@ -491,7 +501,7 @@ describe('acceptInvitationFn — seat cap', () => {
     await expect(acceptHandler({ data: { invitationId: 'invite_1' } })).rejects.toThrow(
       /team seats/i
     )
-    expect(hoisted.mockTransaction).not.toHaveBeenCalled()
+    expect(hoisted.mockTransaction).toHaveBeenCalledOnce()
     expect(hoisted.mockCreatePrincipal).not.toHaveBeenCalled()
     expect(statusWrites('accepted')).toHaveLength(0)
   })
@@ -508,7 +518,7 @@ describe('acceptInvitationFn — seat cap', () => {
     expect(statusWrites('accepted')).toHaveLength(1)
   })
 
-  it('checks the cap when a portal user would become a teammate', async () => {
+  it('checks the cap inside the claim transaction when a portal user would become a teammate', async () => {
     hoisted.mockDbQuery.principal.findFirst.mockResolvedValue({
       id: 'principal_1',
       role: 'user',
@@ -516,6 +526,9 @@ describe('acceptInvitationFn — seat cap', () => {
 
     await acceptHandler({ data: { invitationId: 'invite_1' } })
 
-    expect(hoisted.mockEnforceSeatLimit).toHaveBeenCalledWith({ convertingInvite: true })
+    expect(hoisted.mockEnforceSeatLimit).toHaveBeenCalledWith({
+      convertingInvite: true,
+      executor: hoisted.tx,
+    })
   })
 })

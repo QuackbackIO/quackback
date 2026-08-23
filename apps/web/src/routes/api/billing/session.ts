@@ -76,11 +76,6 @@ export const Route = createFileRoute('/api/billing/session')({
                 }
               : parsed.data
           const session = await createHostedBillingSession(payload)
-          if (parsed.data.action === 'topup') {
-            const { enqueueUsageReport, currentUtcMonth } =
-              await import('@/lib/server/domains/billing/usage-report')
-            await enqueueUsageReport({ month: currentUtcMonth() }).catch(() => undefined)
-          }
           const location =
             typeof session.url === 'string' && session.url.startsWith('https://')
               ? session.url

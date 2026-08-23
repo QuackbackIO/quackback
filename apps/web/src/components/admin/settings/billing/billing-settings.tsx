@@ -181,7 +181,7 @@ function CurrentPlanCard(props: {
   else if (overview.renewalAt) renewalBits.push(`Renews ${formatDate(overview.renewalAt)}`)
   if (showSeats && plan && plan.billedPer === 'seat') {
     renewalBits.push(
-      `${purchased} seats × ${formatUsd(perSeatMonth, 0)}/seat/mo, billed annually · ${formatUsd(purchased * plan.priceYearlyCents, 0)}/yr`
+      `${purchased} seats × ${formatUsd(perSeatMonth, 0)}/seat/mo · ${formatUsd(purchased * plan.priceYearlyCents, 0)}/yr`
     )
   }
 
@@ -275,7 +275,7 @@ function UsageCard(props: {
   const api = props.usage.find((line) => line.key === 'apiRequestsPerMonth')
   const ai = props.overview.ai
   const canTopUp = props.overview.canManageBilling
-  const hasAi = ai != null && ai.includedCents > 0
+  const hasAi = ai != null && (ai.includedCents > 0 || ai.extraCents > 0)
   const hasEmails = emails != null && emails.limit != null
   const hasApi = api != null && api.limit != null
   if (!hasAi && !hasEmails && !hasApi) return null

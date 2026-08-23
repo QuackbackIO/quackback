@@ -1,6 +1,7 @@
+import { db, settings } from '@/lib/server/db'
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
-import { countSeatUsage } from './seat-usage'
+import { countSeatUsage, type SeatExecutor } from './seat-usage'
 
 /**
  * Throws TierLimitError when the workspace has hit its seat cap. No-op in
@@ -9,13 +10,23 @@ import { countSeatUsage } from './seat-usage'
  * Send-time counts members plus pending team invites (an invite holds a
  * seat). Accept-time passes `convertingInvite` so the invite being claimed
  * is not double-counted: the backstop is whether members already fill the
- * purchased quantity.
+ * purchased quantity. Pass `executor` so accept can count under the same
+ * transaction as the principal insert.
  */
-export async function enforceSeatLimit(opts?: { convertingInvite?: boolean }): Promise<void> {
+export async function enforceSeatLimit(opts?: {
+  convertingInvite?: boolean
+  executor?: SeatExecutor
+}): Promise<void> {
   const limits = await getTierLimits()
   if (limits.maxTeamSeats === null) return
 
-  const usage = await countSeatUsage()
+  const executor = opts?.executor
+  if (opts?.convertingInvite && executor) {
+    const [row] = await executor.select({ id: settings.id }).from(settings).limit(1).for('update')
+    if (!row) throw new Error('Workspace is not set up yet')
+  }
+
+  const usage = await countSeatUsage(executor ?? db)
   const current = opts?.convertingInvite ? usage.members : usage.used
   if (current < limits.maxTeamSeats) return
 

@@ -2,8 +2,7 @@
  * Enqueue a usage snapshot for hosted billing.
  *
  * One stable dedupe key per calendar month. In-flight rows coalesce; a spent
- * row is cancelled first so a later push (for example after a top-up) is not
- * swallowed.
+ * row is cancelled first so a later push of the same month is not swallowed.
  */
 import { cancelJob, enqueueJob, type JobSqlExecutor } from '@/lib/server/jobs/job-queue'
 

@@ -121,6 +121,7 @@ describe('BillingPlansView', () => {
     expect(screen.getByText('Active')).toBeInTheDocument()
     expect(screen.getByText(/Renews/)).toBeInTheDocument()
     expect(screen.getByText(/10 seats × \$24\/seat\/mo/)).toBeInTheDocument()
+    expect(screen.queryByText(/billed annually/)).not.toBeInTheDocument()
     expect(screen.getByText(/7 of 10 used/)).toBeInTheDocument()
     expect(screen.getByText(/6 members · 1 pending invite · 3 seats available/)).toBeInTheDocument()
     expect(screen.getByText('Each member or pending invite uses a seat.')).toBeInTheDocument()
@@ -168,6 +169,25 @@ describe('BillingPlansView', () => {
     expect(screen.queryByText(/of \d+ used/)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Add seats' })).not.toBeInTheDocument()
     expect(screen.getByText(/Switching plans moves you onto per-seat pricing/)).toBeInTheDocument()
+  })
+
+  it('shows leftover AI extra credit on Free', () => {
+    renderView({
+      overview: {
+        ...paidOverview,
+        plan: 'free',
+        planName: 'Free',
+        status: null,
+        canUpgrade: true,
+        canManageBilling: true,
+        renewalAt: null,
+        seats: { used: 1, pending: 0, members: 1, purchased: null },
+        ai: { includedCents: 0, usedCents: 0, extraCents: 1000 },
+      },
+    })
+    expect(screen.getByText('AI usage')).toBeInTheDocument()
+    expect(screen.getByText('$0.00 of $0.00')).toBeInTheDocument()
+    expect(screen.getByText(/\$10\.00 extra credit/)).toBeInTheDocument()
   })
 
   it('hides the seat meter on Free and offers trials', () => {
