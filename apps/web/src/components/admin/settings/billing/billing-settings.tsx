@@ -10,6 +10,8 @@ import { Progress } from '@/components/ui/progress'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { cn } from '@/lib/shared/utils'
 import { formatUsd } from '@/lib/shared/format-usd'
+import { seatUnitCents } from './seat-price'
+import { hasTopUpPackPrice } from './topup-price'
 import {
   billingPlanAction,
   catalogueTrialDays,
@@ -174,15 +176,13 @@ function CurrentPlanCard(props: {
     : overview.status
       ? (STATUS_LABELS[overview.status] ?? overview.status)
       : null
-  const perSeatMonth = plan ? Math.round(plan.priceYearlyCents / 12) : 0
+  const perSeat = plan ? seatUnitCents(plan, null) : 0
   const renewalBits: string[] = []
   if (overview.cancellationAt)
     renewalBits.push(`Access ends ${formatDate(overview.cancellationAt)}`)
   else if (overview.renewalAt) renewalBits.push(`Renews ${formatDate(overview.renewalAt)}`)
   if (showSeats && plan && plan.billedPer === 'seat') {
-    renewalBits.push(
-      `${purchased} seats × ${formatUsd(perSeatMonth, 0)}/seat/mo · ${formatUsd(purchased * plan.priceYearlyCents, 0)}/yr`
-    )
+    renewalBits.push(`${purchased} seats × ${formatUsd(perSeat, 0)}/seat`)
   }
 
   return (
@@ -303,7 +303,7 @@ function UsageCard(props: {
               </>
             }
             action={
-              canTopUp ? (
+              canTopUp && hasTopUpPackPrice(props.catalogue?.aiTopUpPackCents) ? (
                 <Button
                   type="button"
                   size="sm"
@@ -323,7 +323,9 @@ function UsageCard(props: {
             used={emails.used}
             limit={emails.limit}
             action={
-              canTopUp && props.catalogue?.emailTopUpPackCents ? (
+              canTopUp &&
+              emails.limit != null &&
+              hasTopUpPackPrice(props.catalogue?.emailTopUpPackCents) ? (
                 <Button
                   type="button"
                   size="sm"

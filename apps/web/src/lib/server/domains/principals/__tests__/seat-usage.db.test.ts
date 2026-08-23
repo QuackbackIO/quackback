@@ -6,7 +6,7 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createId, type PrincipalId, type UserId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { eq, invitation, principal, settings, user } from '@/lib/server/db'
+import { eq, invitation, principal, settings, sql, user } from '@/lib/server/db'
 import { storedCloud } from '@/lib/server/domains/settings/cloud/__tests__/cloud-fixture'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 
@@ -167,6 +167,59 @@ describe.skipIf(!fixture.available)('countSeatUsage', () => {
     await expect(enforceSeatLimit({ convertingInvite: true })).rejects.toBeInstanceOf(
       TierLimitError
     )
+  })
+
+  it('locks the settings row when counting under a transaction executor', async () => {
+    const before = await countSeatUsage()
+    await projectMaxTeamSeats(before.used + 5)
+    await testDb.transaction(async (tx) => {
+      await enforceSeatLimit({ executor: tx })
+      const held = await tx.execute(sql`
+        SELECT l.mode
+        FROM pg_locks l
+        JOIN pg_class c ON c.oid = l.relation
+        WHERE l.pid = pg_backend_pid()
+          AND c.relname = 'settings'
+          AND l.mode = 'RowShareLock'
+      `)
+      expect([...(held as unknown as { mode: string }[])].length).toBeGreaterThan(0)
+    })
+  })
+
+  it('serializes a send-time count with the pending-invite insert', async () => {
+    const inviterId = await seedHuman('member')
+    const before = await countSeatUsage()
+    await projectMaxTeamSeats(before.used + 1)
+
+    await testDb.transaction(async (tx) => {
+      await enforceSeatLimit({ executor: tx })
+      await tx.insert(invitation).values({
+        id: createId('invite'),
+        email: `held-${suffix()}@acme.test`,
+        status: 'pending',
+        kind: 'team',
+        role: 'member',
+        expiresAt: new Date(Date.now() + 86_400_000),
+        createdAt: new Date(),
+        inviterId,
+      })
+    })
+
+    await expect(
+      testDb.transaction(async (tx) => {
+        await enforceSeatLimit({ executor: tx })
+        await tx.insert(invitation).values({
+          id: createId('invite'),
+          email: `race-${suffix()}@acme.test`,
+          status: 'pending',
+          kind: 'team',
+          role: 'member',
+          expiresAt: new Date(Date.now() + 86_400_000),
+          createdAt: new Date(),
+          inviterId,
+        })
+      })
+    ).rejects.toBeInstanceOf(TierLimitError)
   })
 
   it('does not let portal invites consume a purchased seat', async () => {

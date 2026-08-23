@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { billingQueries } from '@/lib/client/queries/billing'
 import { formatUsd } from '@/lib/shared/format-usd'
 import { QuantityStepper } from './quantity-stepper'
+import { seatUnitCents } from './seat-price'
 
 export function AddSeatsDialog(props: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const [addCount, setAddCount] = useState(1)
@@ -21,9 +22,7 @@ export function AddSeatsDialog(props: { open: boolean; onOpenChange: (open: bool
   const purchased = seats?.purchased ?? 0
   const nextQuantity = purchased + addCount
   const plan = catalogue.data?.plans.find((entry) => entry.id === overview.data?.plan)
-  const perSeatMonth = plan != null ? Math.round(plan.priceYearlyCents / 12) : 0
-  const addedYearly = plan != null ? addCount * plan.priceYearlyCents : 0
-  const newYearly = plan != null ? nextQuantity * plan.priceYearlyCents : 0
+  const perSeat = plan != null ? seatUnitCents(plan, null) : 0
   const preview = useQuery({
     ...billingQueries.seatsPreview(nextQuantity),
     enabled: props.open && nextQuantity > purchased,
@@ -43,7 +42,7 @@ export function AddSeatsDialog(props: { open: boolean; onOpenChange: (open: bool
           <DialogTitle>Add seats</DialogTitle>
           {plan ? (
             <DialogDescription>
-              Your {plan.name} plan is {formatUsd(perSeatMonth, 0)}/seat/mo.
+              Your {plan.name} plan is {formatUsd(perSeat, 0)}/seat.
             </DialogDescription>
           ) : (
             <DialogDescription>Add seats to this workspace.</DialogDescription>
@@ -63,10 +62,8 @@ export function AddSeatsDialog(props: { open: boolean; onOpenChange: (open: bool
           <div className="flex flex-col gap-2 rounded-[10px] border border-border/50 bg-muted/30 px-4 py-3">
             <div className="flex items-baseline justify-between gap-3 text-[13px]">
               <span className="text-muted-foreground">
-                {addCount} {addCount === 1 ? 'seat' : 'seats'} × {formatUsd(perSeatMonth, 0)}
-                /seat/mo
+                {addCount} {addCount === 1 ? 'seat' : 'seats'} × {formatUsd(perSeat, 0)}/seat
               </span>
-              <span className="tabular-nums">{formatUsd(addedYearly, 2)}/yr</span>
             </div>
             {preview.data?.amountDueCents != null ? (
               <div className="flex items-baseline justify-between gap-3 text-[13px]">
@@ -81,7 +78,6 @@ export function AddSeatsDialog(props: { open: boolean; onOpenChange: (open: bool
             ) : null}
             <div className="mt-0.5 flex items-baseline justify-between gap-3 border-t border-border/50 pt-2.5 text-[13px] font-medium">
               <span>New total · {nextQuantity} seats</span>
-              <span className="tabular-nums">{formatUsd(newYearly, 2)}/yr</span>
             </div>
           </div>
         ) : null}

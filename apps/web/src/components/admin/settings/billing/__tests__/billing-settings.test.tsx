@@ -120,7 +120,8 @@ describe('BillingPlansView', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'Pro' })).toBeInTheDocument()
     expect(screen.getByText('Active')).toBeInTheDocument()
     expect(screen.getByText(/Renews/)).toBeInTheDocument()
-    expect(screen.getByText(/10 seats × \$24\/seat\/mo/)).toBeInTheDocument()
+    expect(screen.getByText(/10 seats × \$30\/seat/)).toBeInTheDocument()
+    expect(screen.queryByText(/\$24\/seat/)).not.toBeInTheDocument()
     expect(screen.queryByText(/billed annually/)).not.toBeInTheDocument()
     expect(screen.getByText(/7 of 10 used/)).toBeInTheDocument()
     expect(screen.getByText(/6 members · 1 pending invite · 3 seats available/)).toBeInTheDocument()
@@ -230,5 +231,22 @@ describe('BillingPlansView', () => {
     expect(screen.getByText('$24')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('radio', { name: 'Monthly' }))
     expect(screen.getByText('$30')).toBeInTheDocument()
+  })
+
+  it('hides Top up when pack prices are missing', () => {
+    const { aiTopUpPackCents: _ai, emailTopUpPackCents: _email, ...rest } = catalogue
+    renderView({
+      catalogue: rest,
+      usage: [{ key: 'emailsPerMonth', label: 'emails', used: 1840, limit: 10_000 }],
+    })
+    expect(screen.queryByRole('button', { name: 'Top up' })).not.toBeInTheDocument()
+  })
+
+  it('hides email Top up when emails are unlimited', () => {
+    renderView({
+      usage: [{ key: 'emailsPerMonth', label: 'emails', used: 1840, limit: null }],
+    })
+    expect(screen.queryByText('Emails')).not.toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Top up' })).toHaveLength(1)
   })
 })

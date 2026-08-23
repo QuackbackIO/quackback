@@ -8,6 +8,9 @@ export function billingSessionErrorResponse(error: unknown): Response {
   if (message === 'already_on_plan') {
     return Response.json({ error: 'already_on_plan' }, { status: 409 })
   }
+  if (message === 'seats_below_usage') {
+    return Response.json({ error: 'seats_below_usage' }, { status: 400 })
+  }
   if (message === 'Authentication required') {
     return Response.json({ error: 'unauthorized' }, { status: 401 })
   }
@@ -66,6 +69,13 @@ export const Route = createFileRoute('/api/billing/session')({
               : cloud.canUpgrade || cloud.canManageBilling
           if (!cloud.enabled || !actionAllowed) {
             return Response.json({ error: 'billing_action_unavailable' }, { status: 403 })
+          }
+          if (parsed.data.action === 'seats') {
+            const { countSeatUsage } = await import('@/lib/server/domains/principals/seat-usage')
+            const seats = await countSeatUsage()
+            if (parsed.data.quantity < seats.used) {
+              throw new Error('seats_below_usage')
+            }
           }
           const { createHostedBillingSession } = await import('@/lib/server/control-plane/client')
           const payload =

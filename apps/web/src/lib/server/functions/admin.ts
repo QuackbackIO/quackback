@@ -1048,10 +1048,6 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
     log.info({ role: data.role }, 'send invitation')
     const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_MANAGE })
 
-    // Tier-limit gate (no-op in OSS).
-    const { enforceSeatLimit } = await import('@/lib/server/domains/principals/seat-limit')
-    await enforceSeatLimit()
-
     const email = data.email.toLowerCase()
 
     // Parallelize invitation and user validation queries
@@ -1107,18 +1103,24 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
     const minted = await generateInvitationMagicLink(email, callbackURL, portalUrl)
     const { url: inviteLink, token: magicLinkToken } = minted
 
-    await db.insert(invitation).values({
-      id: invitationId,
-      email,
-      name: data.name || null,
-      role: data.role,
-      roleId: (data.roleId as RoleId | undefined) ?? null,
-      status: 'pending',
-      expiresAt,
-      lastSentAt: now,
-      inviterId: auth.user.id,
-      createdAt: now,
-      magicLinkTokens: [magicLinkToken],
+    // Seat count and the pending-invite insert share one transaction and a
+    // settings-row lock so two concurrent invites cannot both take the last seat.
+    await db.transaction(async (tx) => {
+      const { enforceSeatLimit } = await import('@/lib/server/domains/principals/seat-limit')
+      await enforceSeatLimit({ executor: tx })
+      await tx.insert(invitation).values({
+        id: invitationId,
+        email,
+        name: data.name || null,
+        role: data.role,
+        roleId: (data.roleId as RoleId | undefined) ?? null,
+        status: 'pending',
+        expiresAt,
+        lastSentAt: now,
+        inviterId: auth.user.id,
+        createdAt: now,
+        magicLinkTokens: [magicLinkToken],
+      })
     })
 
     const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')

@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { billingQueries } from '@/lib/client/queries/billing'
 import { formatUsd } from '@/lib/shared/format-usd'
 import { QuantityStepper } from './quantity-stepper'
+import { hasTopUpPackPrice } from './topup-price'
 
 export function TopUpDialog(props: {
   open: boolean
@@ -23,8 +24,8 @@ export function TopUpDialog(props: {
   const packCents =
     props.meter === 'email' ? catalogue.data?.emailTopUpPackCents : catalogue.data?.aiTopUpPackCents
   const packUnits = props.meter === 'email' ? catalogue.data?.emailTopUpPackUnits : null
-  const cents = typeof packCents === 'number' ? packCents : 1000
-  const total = cents * packs
+  const priced = hasTopUpPackPrice(packCents)
+  const total = priced ? packCents * packs : null
   const title = props.meter === 'email' ? 'Top up emails' : 'Top up AI usage'
   const unitHint =
     props.meter === 'email' && packUnits
@@ -37,7 +38,8 @@ export function TopUpDialog(props: {
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
-            {formatUsd(cents, 0)} per pack. {unitHint}
+            {priced ? `${formatUsd(packCents, 0)} per pack. ` : null}
+            {unitHint}
           </DialogDescription>
         </DialogHeader>
         <div className="flex items-center justify-between gap-3">
@@ -50,12 +52,14 @@ export function TopUpDialog(props: {
             increaseLabel="More packs"
           />
         </div>
-        <div className="flex items-baseline justify-between gap-3 rounded-[10px] border border-border/50 bg-muted/30 px-4 py-3 text-[13px]">
-          <span className="text-muted-foreground">
-            {packs} × {formatUsd(cents, 0)}
-          </span>
-          <span className="font-medium tabular-nums">{formatUsd(total, 2)}</span>
-        </div>
+        {priced && total != null ? (
+          <div className="flex items-baseline justify-between gap-3 rounded-[10px] border border-border/50 bg-muted/30 px-4 py-3 text-[13px]">
+            <span className="text-muted-foreground">
+              {packs} × {formatUsd(packCents, 0)}
+            </span>
+            <span className="font-medium tabular-nums">{formatUsd(total, 2)}</span>
+          </div>
+        ) : null}
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={() => props.onOpenChange(false)}>
             Cancel
@@ -64,7 +68,7 @@ export function TopUpDialog(props: {
             <input type="hidden" name="action" value="topup" />
             <input type="hidden" name="meter" value={props.meter ?? 'ai'} />
             <input type="hidden" name="packs" value={String(packs)} />
-            <Button type="submit" disabled={!props.meter}>
+            <Button type="submit" disabled={!props.meter || !priced}>
               Continue to checkout
             </Button>
           </form>

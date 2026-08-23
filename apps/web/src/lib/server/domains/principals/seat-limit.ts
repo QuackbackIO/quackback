@@ -8,10 +8,10 @@ import { countSeatUsage, type SeatExecutor } from './seat-usage'
  * OSS (maxTeamSeats is null).
  *
  * Send-time counts members plus pending team invites (an invite holds a
- * seat). Accept-time passes `convertingInvite` so the invite being claimed
- * is not double-counted: the backstop is whether members already fill the
- * purchased quantity. Pass `executor` so accept can count under the same
- * transaction as the principal insert.
+ * seat) and must run on the same transaction as the pending-invite insert.
+ * Accept-time passes `convertingInvite` so the invite being claimed is not
+ * double-counted: the backstop is whether members already fill the purchased
+ * quantity. Pass `executor` to lock the settings row and count on that handle.
  */
 export async function enforceSeatLimit(opts?: {
   convertingInvite?: boolean
@@ -21,7 +21,7 @@ export async function enforceSeatLimit(opts?: {
   if (limits.maxTeamSeats === null) return
 
   const executor = opts?.executor
-  if (opts?.convertingInvite && executor) {
+  if (executor) {
     const [row] = await executor.select({ id: settings.id }).from(settings).limit(1).for('update')
     if (!row) throw new Error('Workspace is not set up yet')
   }
