@@ -3,6 +3,10 @@ import { expect, test } from '@playwright/test'
 // Admin project uses stored auth state (e2e/.auth/admin.json) — no manual login needed.
 
 test.describe('Launch plan (Getting Started)', () => {
+  // Goal change and skip write the singleton seeded workspace. Parallel
+  // workers would see Help Center or a skipped essential mid-file.
+  test.describe.configure({ mode: 'serial' })
+
   test.beforeEach(async ({ page }) => {
     await page.goto('/admin/getting-started')
     await page.waitForLoadState('networkidle')
@@ -100,23 +104,33 @@ test.describe('Launch plan (Getting Started)', () => {
       return
     }
 
-    const previous =
-      (await page.locator('#activation-goal + h2').textContent()) ?? 'Product feedback'
+    const seededGoal = 'Product feedback'
+    const goalHeading = page.locator('#activation-goal + h2')
 
-    await changeGoal.click()
-    await page.getByRole('radio', { name: /Help Center/i }).click()
-    await page.getByRole('button', { name: 'Use this goal' }).click()
-    await expect(page.locator('#activation-goal + h2')).toHaveText('Help Center')
-    await expect(page.getByRole('link', { name: 'Help Center' }).first()).toBeVisible()
-    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute(
-      'aria-valuemax',
-      /[1-9]\d*/
-    )
+    async function selectGoal(label: string): Promise<void> {
+      const current = (await goalHeading.textContent())?.trim()
+      if (current === label) return
+      await page.getByRole('button', { name: 'Change goal' }).click()
+      await page.getByRole('radio', { name: label }).click()
+      await page.getByRole('button', { name: 'Use this goal' }).click()
+      await expect(goalHeading).toHaveText(label)
+    }
 
-    await changeGoal.click()
-    await page.getByRole('radio', { name: new RegExp(previous.trim(), 'i') }).click()
-    await page.getByRole('button', { name: 'Use this goal' }).click()
-    await expect(page.locator('#activation-goal + h2')).toHaveText(previous.trim())
+    try {
+      await selectGoal('Help Center')
+      await expect(page.getByRole('link', { name: 'Help Center' }).first()).toBeVisible()
+      await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute(
+        'aria-valuemax',
+        /[1-9]\d*/
+      )
+    } finally {
+      await page.goto('/admin/getting-started')
+      await page.waitForLoadState('networkidle')
+      const restore = page.getByRole('button', { name: 'Change goal' })
+      if ((await restore.count()) > 0 && (await restore.isEnabled())) {
+        await selectGoal(seededGoal)
+      }
+    }
   })
 
   test('is accessible from the admin sidebar through the launch plan link', async ({ page }) => {
