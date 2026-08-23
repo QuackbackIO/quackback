@@ -185,7 +185,7 @@ function buildInitialCss(initialCustomCss: string, initialThemeConfig: ThemeConf
   // has the inactive side in cssText for saveTheme to parse. Preview
   // locking uses initialThemeConfig.themeMode separately.
   const generated = generateReadableCSS(lightMinimal, darkMinimal, 'user')
-  const remainder = advancedCssRemainder(initialCustomCss)
+  const remainder = advancedCssRemainder(initialCustomCss, generated)
   if (!remainder) return generated
   return `${generated.trimEnd()}\n\n${remainder}`
 }
@@ -317,11 +317,12 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
       // customCss is remainder-only so leftover :root/.dark theme vars cannot
       // override the saved colours. Extra rules that changed still persist
       // through the Pro gate; unchanged extras are rewritten without it.
-      const remainder = advancedCssRemainder(cssText)
+      const generated = generateReadableCSS(lightMinimal, darkMinimal, 'user')
+      const remainder = advancedCssRemainder(cssText, generated)
       const customCssWrite =
         isGeneratedThemeCss(cssText, lightMinimal, darkMinimal) || !remainder
           ? 'clear'
-          : remainder === advancedCssRemainder(initialCustomCss)
+          : remainder === advancedCssRemainder(initialCustomCss, generated)
             ? 'rewrite'
             : 'persist'
 

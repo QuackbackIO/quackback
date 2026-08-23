@@ -98,10 +98,25 @@ export function isGeneratedThemeCss(
   )
 }
 
-const GENERATED_THEME_VAR_NAMES = new Set(
-  Object.entries(variableMap)
-    .filter(([key]) => !SHADOW_KEYS.has(key))
-    .map(([, cssVar]) => cssVar)
+const MINIMAL_THEME_CSS_VARS = new Set(
+  (
+    [
+      'primary',
+      'background',
+      'foreground',
+      'card',
+      'muted',
+      'mutedForeground',
+      'border',
+      'destructive',
+      'success',
+      'ring',
+      'secondary',
+      'accent',
+      'fontSans',
+      'radius',
+    ] as const
+  ).map((key) => variableMap[key])
 )
 
 function stripLeadingCssComments(decl: string): string {
@@ -114,11 +129,26 @@ function stripLeadingCssComments(decl: string): string {
   return s
 }
 
-function isGeneratedThemeDeclaration(decl: string): boolean {
+function normalizeCssValue(value: string): string {
+  return value.trim().replace(/\s+/g, ' ')
+}
+
+function parsePropertyValue(decl: string): { property: string; value: string } | null {
   const stripped = stripLeadingCssComments(decl)
-  if (/^font-family\s*:/i.test(stripped)) return true
-  const name = /^(--[\w-]+)\s*:/.exec(stripped)?.[1]
-  return name != null && GENERATED_THEME_VAR_NAMES.has(name)
+  const match = /^((?:--[\w-]+)|font-family)\s*:\s*(.*)$/i.exec(stripped)
+  if (!match) return null
+  const property = match[1].toLowerCase() === 'font-family' ? 'font-family' : match[1]
+  return { property, value: match[2].replace(/;?\s*$/, '').trim() }
+}
+
+function isGeneratedThemeDeclaration(decl: string, generated: Map<string, string>): boolean {
+  const parsed = parsePropertyValue(decl)
+  if (!parsed) return false
+  const emitted = generated.get(parsed.property)
+  if (emitted === undefined) return false
+  // Minimal keys live in brandingConfig; stale copies must not override.
+  if (parsed.property !== 'font-family' && MINIMAL_THEME_CSS_VARS.has(parsed.property)) return true
+  return normalizeCssValue(parsed.value) === normalizeCssValue(emitted)
 }
 
 interface CssScan {
@@ -188,13 +218,22 @@ function splitCssDeclarations(body: string): string[] {
   return decls
 }
 
-function keepNonGeneratedDeclarations(body: string): string {
+function keepNonGeneratedDeclarations(body: string, generated: Map<string, string>): string {
   const kept: string[] = []
   for (const decl of splitCssDeclarations(body)) {
-    if (isGeneratedThemeDeclaration(decl)) continue
+    if (isGeneratedThemeDeclaration(decl, generated)) continue
     kept.push(`  ${decl};`)
   }
   return kept.join('\n')
+}
+
+function declMapFromBlock(body: string): Map<string, string> {
+  const map = new Map<string, string>()
+  for (const decl of splitCssDeclarations(body)) {
+    const parsed = parsePropertyValue(decl)
+    if (parsed) map.set(parsed.property, parsed.value)
+  }
+  return map
 }
 
 function matchThemeSelector(
@@ -237,13 +276,11 @@ function findMatchingBrace(source: string, openIndex: number): number {
   return source.length
 }
 
-/**
- * CSS left after removing generated theme declarations.
- * Drops `:root` / `.dark` variables (and the generated `font-family` rule)
- * that `generateReadableCSS` emits, keeps unknown inner declarations, and
- * leaves every other rule as-is. Generated-only CSS yields ''.
- */
-export function advancedCssRemainder(cssText: string): string {
+function walkThemeBlocks(
+  cssText: string,
+  onThemeBlock: (selector: ':root' | '.dark', body: string) => string | void,
+  copyOther = false
+): string {
   let out = ''
   let i = 0
   const scan: CssScan = { quote: null, comment: false, paren: 0 }
@@ -254,8 +291,8 @@ export function advancedCssRemainder(cssText: string): string {
       if (theme) {
         const close = findMatchingBrace(cssText, theme.openBrace)
         const body = cssText.slice(theme.openBrace + 1, close)
-        const kept = keepNonGeneratedDeclarations(body)
-        if (kept) out += `${theme.selector} {\n${kept}\n}`
+        const replacement = onThemeBlock(theme.selector, body)
+        if (copyOther && replacement) out += replacement
         i = close < cssText.length ? close + 1 : cssText.length
         scan.quote = null
         scan.comment = false
@@ -265,11 +302,54 @@ export function advancedCssRemainder(cssText: string): string {
     }
 
     const n = advanceCssScan(scan, cssText, i)
-    out += cssText.slice(i, i + n)
+    if (copyOther) out += cssText.slice(i, i + n)
     i += n
   }
 
-  return out.replace(/(?:\n[ \t]*){3,}/g, '\n\n').trim()
+  return out
+}
+
+function generatedDeclMaps(generatedCss: string): Record<':root' | '.dark', Map<string, string>> {
+  const maps: Record<':root' | '.dark', Map<string, string>> = {
+    ':root': new Map(),
+    '.dark': new Map(),
+  }
+  walkThemeBlocks(generatedCss, (selector, body) => {
+    maps[selector] = declMapFromBlock(body)
+  })
+  return maps
+}
+
+function inferGeneratedCss(cssText: string): string {
+  const light: Record<string, string> = {}
+  const dark: Record<string, string> = {}
+  walkThemeBlocks(cssText, (selector, body) => {
+    const target = selector === ':root' ? light : dark
+    for (const [property, value] of declMapFromBlock(body)) {
+      if (property.startsWith('--')) target[property] = value
+    }
+  })
+  return generateReadableCSS(parseCssToMinimal(light), parseCssToMinimal(dark), 'user')
+}
+
+/**
+ * CSS left after removing generated theme declarations.
+ * Drops `:root` / `.dark` declarations that `generateReadableCSS` emits
+ * (minimal keys always; derived keys and `font-family` only when the value
+ * matches). Unknown inner declarations stay. Generated-only CSS yields ''.
+ */
+export function advancedCssRemainder(cssText: string, generatedCss?: string): string {
+  const maps = generatedDeclMaps(generatedCss ?? inferGeneratedCss(cssText))
+  const result = walkThemeBlocks(
+    cssText,
+    (selector, body) => {
+      const kept = keepNonGeneratedDeclarations(body, maps[selector])
+      if (!kept) return ''
+      return `${selector} {\n${kept}\n}`
+    },
+    true
+  )
+  return result.replace(/(?:\n[ \t]*){3,}/g, '\n\n').trim()
 }
 
 function formatCssBlock(selector: string, vars: ThemeVariables): string {

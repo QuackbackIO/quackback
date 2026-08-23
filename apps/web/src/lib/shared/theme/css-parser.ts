@@ -58,7 +58,7 @@ export function extractCssVariables(css: string): ParsedCssVariables {
 function parseVariables(block: string, target: Record<string, string>) {
   // Match --variable-name: value; with support for multi-line values
   // Uses a more robust regex that handles values containing parentheses, spaces, etc.
-  const varMatches = block.matchAll(/--([\w-]+)\s*:\s*([^;]+);/g)
+  const varMatches = block.matchAll(/--([\w-]+)\s*:\s*([^;]+);?/g)
   for (const match of varMatches) {
     const name = `--${match[1].trim()}`
     const value = match[2].trim()

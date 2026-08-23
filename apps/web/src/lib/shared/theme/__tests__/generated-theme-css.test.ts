@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { extractCssVariables } from '../css-parser'
 import { extractMinimal } from '../expand'
 import { advancedCssRemainder, generateReadableCSS, isGeneratedThemeCss } from '../generator'
 import { themePresets } from '../presets'
@@ -75,5 +76,36 @@ describe('advancedCssRemainder', () => {
   it('treats a generated var with a leading comment as generated', () => {
     const css = ':root { /* primary */ --primary: oklch(0.5 0.2 250); }\n'
     expect(advancedCssRemainder(css)).toBe('')
+  })
+
+  it('keeps a derived var whose value differs from expandTheme output', () => {
+    const light = { primary: 'oklch(0.5 0.2 250)' }
+    const generated = generateReadableCSS(light, {}, 'user')
+    const customFg = 'oklch(0.1 0 0)'
+    const css = `:root { --primary: oklch(0.5 0.2 250); --primary-foreground: ${customFg}; }\n`
+    const remainder = advancedCssRemainder(css, generated)
+    expect(remainder).toContain(`--primary-foreground: ${customFg}`)
+    expect(remainder).not.toMatch(/--primary:/)
+  })
+
+  it('keeps a font-family that differs from the generated stack', () => {
+    const generated = generateReadableCSS(lightMinimal, darkMinimal, 'user')
+    const css = ':root { --primary: oklch(0.5 0.2 250); font-family: "My Brand"; }\n'
+    const remainder = advancedCssRemainder(css, generated)
+    expect(remainder).toContain('font-family: "My Brand"')
+  })
+
+  it('imports a last declaration without a trailing semicolon', () => {
+    const css = ':root { --primary: oklch(0.5 0.2 250); color-scheme: dark }\n'
+    const remainder = advancedCssRemainder(css)
+    expect(remainder).toMatch(/color-scheme:\s*dark/)
+    expect(remainder).not.toContain('--primary')
+  })
+})
+
+describe('extractCssVariables', () => {
+  it('reads a last custom property without a trailing semicolon', () => {
+    const vars = extractCssVariables(':root { --primary: oklch(0.5 0.2 250) }')
+    expect(vars.light['--primary']).toBe('oklch(0.5 0.2 250)')
   })
 })
