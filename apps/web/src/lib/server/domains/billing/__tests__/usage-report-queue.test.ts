@@ -5,8 +5,8 @@ const hoisted = vi.hoisted(() => ({
   countSeatUsage: vi.fn(async () => ({ members: 3, pendingInvites: 1, used: 4 })),
   aiTokensInUtcMonth: vi.fn(async () => 1_200_000),
   emailsSentInUtcMonth: vi.fn(async () => 42),
-  enqueueJob: vi.fn(async () => ({ inserted: true, jobId: 'job_x' })),
-  cancelJob: vi.fn(async () => 0),
+  enqueueJob: vi.fn(async (_opts?: unknown) => ({ inserted: true, jobId: 'job_x' })),
+  cancelJob: vi.fn(async (_opts?: unknown) => 0),
   postCount: 8,
   boardCount: 2,
 }))
