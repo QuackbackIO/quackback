@@ -79,9 +79,9 @@ describe('settings config mutations cache invalidation', () => {
     expect(result).toBeInstanceOf(Promise)
   })
 
-  it('useSaveBrandingTheme skips the customCss write unless persistCustomCss is set', async () => {
+  it('useSaveBrandingTheme clears stored customCss unless persistCustomCss is set', async () => {
     const { useSaveBrandingTheme } = await import('../settings')
-    const mutation = useSaveBrandingTheme() as {
+    const mutation = useSaveBrandingTheme() as unknown as {
       mutationFn: (input: {
         brandingConfig: Record<string, unknown>
         customCss: string
@@ -95,14 +95,16 @@ describe('settings config mutations cache invalidation', () => {
       persistCustomCss: false,
     })
     expect(updateThemeFn).toHaveBeenCalledOnce()
-    expect(updateCustomCssFn).not.toHaveBeenCalled()
+    expect(updateCustomCssFn).toHaveBeenCalledWith({ data: { customCss: '' } })
 
     await mutation.mutationFn({
       brandingConfig: { preset: 'default' },
       customCss: '.brand { color: red; }',
       persistCustomCss: true,
     })
-    expect(updateCustomCssFn).toHaveBeenCalledOnce()
+    expect(updateCustomCssFn).toHaveBeenCalledWith({
+      data: { customCss: '.brand { color: red; }' },
+    })
   })
 
   it('useSaveBrandingTheme.onSuccess awaits invalidation of branding and customCss queries', async () => {

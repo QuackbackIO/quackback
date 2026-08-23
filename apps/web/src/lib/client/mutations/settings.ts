@@ -475,8 +475,11 @@ export function useSaveBrandingTheme() {
       const { throwIfServerFnFailed } = await import('@/lib/shared/describe-upgrade')
       const theme = await updateThemeFn({ data: { brandingConfig: input.brandingConfig } })
       throwIfServerFnFailed(theme)
-      if (!input.persistCustomCss) return [theme, null] as const
-      const css = await updateCustomCssFn({ data: { customCss: input.customCss } })
+      // Empty customCss is ungated and clears a leftover Advanced CSS row so
+      // it cannot override the generated theme on the portal.
+      const css = await updateCustomCssFn({
+        data: { customCss: input.persistCustomCss ? input.customCss : '' },
+      })
       throwIfServerFnFailed(css)
       return [theme, css] as const
     },
