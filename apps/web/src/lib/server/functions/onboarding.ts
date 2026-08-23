@@ -28,6 +28,7 @@ import { DEFAULT_AUTH_CONFIG, DEFAULT_PORTAL_CONFIG } from '@/lib/server/domains
 import {
   enableFlagsForUseCase,
   featureFlagsForUseCase,
+  newlyEnabledProductLabels,
   resolveFeatureFlags,
 } from '@/lib/server/domains/settings/settings.types'
 import { isPathManaged } from '@/lib/server/config-file/managed-paths'
@@ -350,16 +351,22 @@ export const saveCloudOnboardingGoalFn = createServerFn({ method: 'POST' })
     })
     if (!caller || !isAdmin(caller.role)) throw new Error('Only admin can change setup')
 
-    const { state } = await mutateSetupStateAtomic((current, row) => {
+    const { state, value } = await mutateSetupStateAtomic(async (current, row, tx) => {
       if (!parseIdentityProjection(row.cloudIdentity)) {
         throw new Error('Cloud workspace identity is not enabled')
       }
       if (!current.workspaceDetailsSeenAt) {
         throw new Error('Set your workspace name and URL first')
       }
+      const currentFlags = resolveFeatureFlags(row.featureFlags)
+      const nextFlags = enableFlagsForUseCase(currentFlags, data.useCase)
+      await tx
+        .update(settings)
+        .set({ featureFlags: JSON.stringify(nextFlags) })
+        .where(eq(settings.id, row.id))
       return {
         state: applyDeferredLaunchStartingPoint(current, data.useCase),
-        value: undefined,
+        value: { enabledModules: newlyEnabledProductLabels(currentFlags, nextFlags) },
       }
     })
 
@@ -373,7 +380,7 @@ export const saveCloudOnboardingGoalFn = createServerFn({ method: 'POST' })
         }))
       )
     }
-    return { useCase: state.useCase! }
+    return { useCase: state.useCase!, enabledModules: value.enabledModules }
   })
 
 /**

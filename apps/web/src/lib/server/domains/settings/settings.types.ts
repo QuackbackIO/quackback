@@ -1223,6 +1223,13 @@ export const PRODUCT_DEFINITIONS = [
   },
 ] as const satisfies readonly ProductDefinition[]
 
+/** Product labels that this flag change newly turned on. Additive diffs only. */
+export function newlyEnabledProductLabels(before: FeatureFlags, after: FeatureFlags): string[] {
+  return PRODUCT_DEFINITIONS.filter((product) =>
+    product.featureFlags.some((flag) => before[flag] !== true && after[flag] === true)
+  ).map((product) => product.label)
+}
+
 function getProductDefinition(productId: ProductId): ProductDefinition {
   return PRODUCT_DEFINITIONS.find((product) => product.id === productId)!
 }

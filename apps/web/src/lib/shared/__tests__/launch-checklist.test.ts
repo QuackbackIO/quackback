@@ -36,12 +36,35 @@ describe('buildLaunchTasks V2', () => {
     expect(configured.filter((task) => task.classification === 'prerequisite')).toHaveLength(1)
   })
 
-  it('blocks an unavailable board without adding it to the readiness denominator', () => {
+  it('counts a blocked board step in the readiness denominator', () => {
     const status = { ...base, boardCount: 1, maxBoards: 1 }
     const board = buildLaunchTasks(status).find((task) => task.id === 'create-board')
     expect(board?.availability).toBe('blocked')
+    expect(board?.blocked?.kind).toBe('plan-limit')
     expect(board?.blockedReason).toMatch(/board limit/i)
-    expect(launchChecklistSummary(status).denominator).toBe(0)
+    const summary = launchChecklistSummary(status)
+    expect(summary.denominator).toBeGreaterThan(0)
+    expect(summary.doneCount).toBe(0)
+  })
+
+  it('counts a blocked Help Center step as 0/1, never 0/0', () => {
+    const summary = launchChecklistSummary({
+      ...base,
+      useCase: 'help_center',
+      features: {
+        supportInbox: false,
+        helpCenter: false,
+        statusPage: false,
+        integrations: true,
+      },
+    })
+    const article = summary.tasks.find((task) => task.id === 'help-article')
+    expect(article?.availability).toBe('blocked')
+    expect(article?.blocked).toEqual({ kind: 'module-off', productId: 'helpCenter' })
+    expect(summary.denominator).toBe(1)
+    expect(summary.doneCount).toBe(0)
+    expect(summary.blockedCount).toBe(1)
+    expect(summary.remaining).toBe(1)
   })
 
   it('removes action links when the caller lacks the responsible permission', () => {

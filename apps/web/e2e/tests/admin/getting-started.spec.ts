@@ -55,13 +55,50 @@ test.describe('Launch plan (Getting Started)', () => {
       .getByRole('heading', { name: 'Set up the essentials' })
       .locator('xpath=ancestor::section[1]')
     const actionableLinks = essentials.locator('ul a')
+    const nextStep = page.getByRole('heading', { name: 'Next step' })
 
-    if ((await actionableLinks.count()) === 0) {
+    if ((await actionableLinks.count()) === 0 && (await nextStep.count()) === 0) {
       test.skip(true, 'The seeded workspace has no available setup steps')
       return
     }
 
+    if ((await nextStep.count()) > 0) {
+      await expect(
+        page
+          .getByRole('link')
+          .filter({ hasText: /board|article|Messenger|teammate/i })
+          .first()
+      ).toBeVisible()
+      return
+    }
+
     await expect(actionableLinks.first()).toBeVisible()
+  })
+
+  test('changing the goal to Help Center turns the product on', async ({ page }) => {
+    const changeGoal = page.getByRole('button', { name: 'Change goal' })
+    if ((await changeGoal.count()) === 0 || (await changeGoal.isDisabled())) {
+      test.skip(true, 'This workspace does not let the admin change the goal')
+      return
+    }
+
+    const previous =
+      (await page.locator('#activation-goal + h2').textContent()) ?? 'Product feedback'
+
+    await changeGoal.click()
+    await page.getByRole('radio', { name: /Help Center/i }).click()
+    await page.getByRole('button', { name: 'Use this goal' }).click()
+    await expect(page.locator('#activation-goal + h2')).toHaveText('Help Center')
+    await expect(page.getByRole('link', { name: 'Help Center' }).first()).toBeVisible()
+    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute(
+      'aria-valuemax',
+      /[1-9]\d*/
+    )
+
+    await changeGoal.click()
+    await page.getByRole('radio', { name: new RegExp(previous.trim(), 'i') }).click()
+    await page.getByRole('button', { name: 'Use this goal' }).click()
+    await expect(page.locator('#activation-goal + h2')).toHaveText(previous.trim())
   })
 
   test('is accessible from the admin sidebar through the launch plan link', async ({ page }) => {

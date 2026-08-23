@@ -24,6 +24,7 @@ const hoisted = vi.hoisted(() => ({
   setPrincipalRole: vi.fn(),
   settingsInsert: vi.fn(),
   invalidateSettingsCache: vi.fn(),
+  flagWrites: [] as Record<string, unknown>[],
   /** What `settings.cloud_workspace_key` holds — null on an install, a key on a
    *  workspace a control plane created. Read by the tx `execute` double below. */
   stamp: { value: null as string | null },
@@ -74,11 +75,14 @@ vi.mock('@/lib/server/setup-state', async (importOriginal) => ({
       const row = await hoisted.getSettings()
       const tx = {
         update: vi.fn(() => ({
-          set: vi.fn((values: Record<string, unknown>) => ({
-            where: vi.fn(() => ({
-              returning: vi.fn(async () => [{ ...row, ...values }]),
-            })),
-          })),
+          set: vi.fn((values: Record<string, unknown>) => {
+            hoisted.flagWrites.push(values)
+            return {
+              where: vi.fn(() => ({
+                returning: vi.fn(async () => [{ ...row, ...values }]),
+              })),
+            }
+          }),
         })),
       }
       return mutate(JSON.parse(row.setupState), row, tx)
@@ -123,11 +127,14 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
   }
 })
 
-const { saveWorkspaceAndGoalFn } = await import('../onboarding')
+const { saveWorkspaceAndGoalFn, saveCloudOnboardingGoalFn } = await import('../onboarding')
+const { DEFAULT_FEATURE_FLAGS, resolveFeatureFlags } =
+  await import('@/lib/server/domains/settings/settings.types')
 const { bootstrapAdminLock } = await import('@/lib/server/domains/principals/bootstrap-admin')
 
 beforeEach(() => {
   vi.clearAllMocks()
+  hoisted.flagWrites = []
   hoisted.getSession.mockResolvedValue({ user: { id: 'user_caller' } })
   hoisted.postStatusesFindFirst.mockResolvedValue({ id: 'status_existing' })
   hoisted.stamp.value = null
@@ -350,5 +357,66 @@ describe('saveWorkspaceAndGoalFn bootstrap authorization', () => {
     hoisted.principalFindFirst.mockResolvedValue({ id: 'principal_1', role: 'admin' })
 
     await expect(saveWorkspaceAndGoalFn({ data: example.data })).rejects.toThrow(example.message)
+  })
+})
+
+const CLOUD_IDENTITY = {
+  version: 4,
+  displayName: 'Acme',
+  canonicalOrigin: 'https://acme.example.com',
+  platformHostname: 'acme.example.com',
+  customDomains: [],
+  updatedAt: '2026-08-14T12:00:00.000Z',
+}
+
+describe('saveCloudOnboardingGoalFn enables the goal modules', () => {
+  function cloudRow(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 'workspace_1',
+      name: 'Acme',
+      slug: 'acme',
+      managedFieldPaths: [],
+      cloudIdentity: CLOUD_IDENTITY,
+      featureFlags: JSON.stringify(DEFAULT_FEATURE_FLAGS),
+      setupState: JSON.stringify({
+        version: 2,
+        steps: { core: true, workspace: true, startingPoint: null },
+        useCase: null,
+        workspaceDetailsSeenAt: '2026-08-14T11:00:00.000Z',
+      }),
+      ...overrides,
+    }
+  }
+
+  it('turns Help Center on when a cloud workspace picks that goal', async () => {
+    hoisted.getSettings.mockResolvedValue(cloudRow())
+    hoisted.principalFindFirst.mockResolvedValue({ id: 'principal_1', role: 'admin' })
+
+    const result = await saveCloudOnboardingGoalFn({ data: { useCase: 'help_center' } })
+
+    expect(result).toEqual({ useCase: 'help_center', enabledModules: ['Help Center'] })
+    const written = hoisted.flagWrites.find((values) => typeof values.featureFlags === 'string')
+    expect(written).toBeDefined()
+    const flags = resolveFeatureFlags(written!.featureFlags as string)
+    expect(flags.helpCenter).toBe(true)
+    expect(flags.supportInbox).toBe(false)
+  })
+
+  it('turns Support on for customer support without turning Help Center off', async () => {
+    hoisted.getSettings.mockResolvedValue(
+      cloudRow({
+        featureFlags: JSON.stringify({ ...DEFAULT_FEATURE_FLAGS, helpCenter: true }),
+      })
+    )
+    hoisted.principalFindFirst.mockResolvedValue({ id: 'principal_1', role: 'admin' })
+
+    const result = await saveCloudOnboardingGoalFn({ data: { useCase: 'customer_support' } })
+
+    expect(result.enabledModules).toEqual(['Support'])
+    const written = hoisted.flagWrites.find((values) => typeof values.featureFlags === 'string')
+    const flags = resolveFeatureFlags(written!.featureFlags as string)
+    expect(flags.supportInbox).toBe(true)
+    expect(flags.supportTickets).toBe(true)
+    expect(flags.helpCenter).toBe(true)
   })
 })

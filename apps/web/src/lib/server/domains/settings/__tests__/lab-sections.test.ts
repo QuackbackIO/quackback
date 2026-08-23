@@ -3,6 +3,7 @@ import {
   DEFAULT_FEATURE_FLAGS,
   PRODUCT_DEFINITIONS,
   enableFlagsForUseCase,
+  newlyEnabledProductLabels,
   featureFlagsForUseCase,
   getFirstEnabledAdminProductPath,
   getProductFlagUpdate,
@@ -127,5 +128,20 @@ describe('featureFlagsForUseCase', () => {
     const merged = enableFlagsForUseCase(current, 'customer_support')
     expect(isProductEnabled(merged, 'helpCenter')).toBe(true)
     expect(isProductEnabled(merged, 'support')).toBe(true)
+  })
+
+  it('names only the products that this goal change newly turned on', () => {
+    expect(
+      newlyEnabledProductLabels(DEFAULT_FEATURE_FLAGS, featureFlagsForUseCase('help_center'))
+    ).toEqual(['Help Center'])
+    expect(
+      newlyEnabledProductLabels(DEFAULT_FEATURE_FLAGS, featureFlagsForUseCase('customer_support'))
+    ).toEqual(['Support'])
+    expect(
+      newlyEnabledProductLabels(
+        featureFlagsForUseCase('help_center'),
+        enableFlagsForUseCase(featureFlagsForUseCase('help_center'), 'help_center')
+      )
+    ).toEqual([])
   })
 })
