@@ -27,6 +27,10 @@ const actionSchema = z.discriminatedUnion('action', [
     planId: z.enum(['growth', 'pro', 'scale']),
     billingPeriod: z.enum(['monthly', 'annual']),
   }),
+  z.object({
+    action: z.literal('downgrade'),
+    planId: z.literal('free'),
+  }),
 ])
 
 export const Route = createFileRoute('/api/billing/session')({
@@ -54,8 +58,12 @@ export const Route = createFileRoute('/api/billing/session')({
             return Response.json({ error: 'billing_action_unavailable' }, { status: 403 })
           }
           const { createHostedBillingSession } = await import('@/lib/server/control-plane/client')
-          const url = await createHostedBillingSession(parsed.data)
-          return new Response(null, { status: 303, headers: { location: url } })
+          const session = await createHostedBillingSession(parsed.data)
+          const location =
+            typeof session.url === 'string' && session.url.startsWith('https://')
+              ? session.url
+              : '/admin/settings/billing'
+          return new Response(null, { status: 303, headers: { location } })
         } catch (error) {
           return billingSessionErrorResponse(error)
         }

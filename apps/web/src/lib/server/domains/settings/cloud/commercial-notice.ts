@@ -12,7 +12,7 @@ export function trialNotice(config: CloudConfig): PlanNotice | null {
   if (!config.enabled || !config.trialActive || !config.trialExpiresAt) return null
   const actionUrl = plansActionUrl(config)
   return {
-    label: `${PLAN_CATALOGUE.pro.name} trial`,
+    label: `${config.plan ? PLAN_CATALOGUE[config.plan].name : PLAN_CATALOGUE.pro.name} trial`,
     message: 'Your workspace moves to the Free plan when this ends. Nothing is deleted.',
     expiresAt: config.trialExpiresAt,
     ...(actionUrl ? { actionUrl, actionLabel: 'See plans' } : {}),

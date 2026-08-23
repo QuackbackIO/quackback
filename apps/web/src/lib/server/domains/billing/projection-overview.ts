@@ -5,6 +5,7 @@ export interface BillingProjectionOverview {
   plan: PlanId
   planName: string
   status: string | null
+  trialActive: boolean
   trialExpiresAt: string | null
   renewalAt: string | null
   cancellationAt: string | null
@@ -20,6 +21,7 @@ export async function getBillingProjectionOverview(): Promise<BillingProjectionO
     plan: cloud.plan,
     planName: PLAN_CATALOGUE[cloud.plan].name,
     status: cloud.subscriptionStatus,
+    trialActive: cloud.trialActive,
     trialExpiresAt: cloud.trialExpiresAt,
     renewalAt: cloud.renewalAt,
     cancellationAt: cloud.cancellationAt,

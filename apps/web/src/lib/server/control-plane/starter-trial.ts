@@ -31,7 +31,7 @@ export function starterTrialEvidence(state: SetupState): StarterTrialEvidence | 
 /**
  * Re-report stamped starter evidence when Cloud is on and no trial has landed
  * locally. A control-plane outage at wizard completion must not permanently
- * skip the one immutable Pro trial.
+ * skip the starter Pro trial.
  */
 export async function reportStarterTrialIfDue(identity?: {
   principalId: string

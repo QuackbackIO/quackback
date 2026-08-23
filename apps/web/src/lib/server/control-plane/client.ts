@@ -161,6 +161,8 @@ export type BillingCatalogue = {
     highlights: string[]
     recommended: boolean
   }>
+  trialDays?: number
+  trialedPlanIds?: Array<'growth' | 'pro' | 'scale'>
 }
 
 export type CustomerInvoice = {
@@ -181,15 +183,35 @@ export async function createHostedBillingSession(
         planId: 'growth' | 'pro' | 'scale'
         billingPeriod: 'monthly' | 'annual'
       }
-): Promise<string> {
-  const result = await callWorkspaceControlPlane<{ url?: unknown }>(
+    | { action: 'downgrade'; planId: 'free' }
+): Promise<{ url?: string; status?: 'downgraded' | 'scheduled' }> {
+  const result = await callWorkspaceControlPlane<{ url?: unknown; status?: unknown }>(
     '/api/v1/internal/billing/session',
     input
   )
+  if (input.action === 'downgrade') {
+    if (result.status === 'downgraded' || result.status === 'scheduled') {
+      return { status: result.status }
+    }
+    throw new ControlPlaneUnavailableError()
+  }
   if (typeof result.url !== 'string' || !result.url.startsWith('https://')) {
     throw new ControlPlaneUnavailableError()
   }
-  return result.url
+  return { url: result.url }
+}
+
+export async function startWorkspaceTrial(
+  planId: 'growth' | 'pro' | 'scale'
+): Promise<'started' | 'already_started'> {
+  const result = await callWorkspaceControlPlane<{ status?: unknown }>(
+    '/api/v1/internal/billing/start-trial',
+    { planId }
+  )
+  if (result.status !== 'started' && result.status !== 'already_started') {
+    throw new ControlPlaneUnavailableError()
+  }
+  return result.status
 }
 
 export async function reportTrialActivation(input: {
