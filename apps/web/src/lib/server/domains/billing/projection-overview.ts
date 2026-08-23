@@ -52,6 +52,32 @@ export function catalogueAiIncludedCents(
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
+/**
+ * Purchased seats are the billed projection quantity, not the operator
+ * tier_limits overlay that getTierLimits() applies for enforcement.
+ * Free, trial, workspace-billed, and missing billedPer (grandfathered /
+ * catalogue unavailable) stay null so Add seats cannot target an overlay.
+ */
+export function purchasedSeatsFromProjection(input: {
+  billedPer: 'seat' | 'workspace' | undefined
+  plan: PlanId
+  trialActive: boolean
+  planLimitsMaxTeamSeats: number | null
+}): number | null {
+  if (input.billedPer !== 'seat' || input.plan === 'free' || input.trialActive) {
+    return null
+  }
+  return input.planLimitsMaxTeamSeats
+}
+
+async function projectedPlanLimitsMaxTeamSeats(): Promise<number | null> {
+  const { db, settings } = await import('@/lib/server/db')
+  const { parseBillingProjection } =
+    await import('@/lib/server/domains/settings/cloud/billing-projection')
+  const [row] = await db.select({ cloud: settings.cloud }).from(settings).limit(1)
+  return parseBillingProjection(row?.cloud?.projection)?.planLimits.maxTeamSeats ?? null
+}
+
 export async function getBillingProjectionOverview(): Promise<BillingProjectionOverview | null> {
   const cloud = await getCloudConfig()
   if (!cloud.enabled || !cloud.plan) return null
@@ -60,20 +86,21 @@ export async function getBillingProjectionOverview(): Promise<BillingProjectionO
   const { countSeatUsage } = await import('@/lib/server/domains/principals/seat-usage')
   const { aiTokensThisMonth } = await import('@/lib/server/domains/ai/usage-counter')
 
-  const [limits, seats, usedTokens, catalogue] = await Promise.all([
+  const [limits, seats, usedTokens, catalogue, planLimitsMaxTeamSeats] = await Promise.all([
     getTierLimits(),
     countSeatUsage(),
     aiTokensThisMonth(),
     loadCatalogue(),
+    projectedPlanLimitsMaxTeamSeats(),
   ])
 
   const billedPer = catalogue?.plans.find((plan) => plan.id === cloud.plan)?.billedPer
-  const purchased =
-    billedPer === 'workspace' || cloud.plan === 'free' || cloud.trialActive
-      ? null
-      : billedPer === 'seat' || limits.maxTeamSeats != null
-        ? limits.maxTeamSeats
-        : null
+  const purchased = purchasedSeatsFromProjection({
+    billedPer,
+    plan: cloud.plan,
+    trialActive: cloud.trialActive,
+    planLimitsMaxTeamSeats,
+  })
   const includedCents = catalogueAiIncludedCents(catalogue, cloud.plan)
   const blended = catalogue?.aiBlendedCentsPerMTok
   const ai =

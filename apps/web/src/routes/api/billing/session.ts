@@ -70,22 +70,18 @@ export const Route = createFileRoute('/api/billing/session')({
           if (!cloud.enabled || !actionAllowed) {
             return Response.json({ error: 'billing_action_unavailable' }, { status: 403 })
           }
-          if (parsed.data.action === 'seats') {
-            const { countSeatUsage } = await import('@/lib/server/domains/principals/seat-usage')
-            const seats = await countSeatUsage()
-            if (parsed.data.quantity < seats.used) {
-              throw new Error('seats_below_usage')
-            }
-          }
           const { createHostedBillingSession } = await import('@/lib/server/control-plane/client')
-          const payload =
-            parsed.data.action === 'checkout'
-              ? {
-                  ...parsed.data,
-                  quantity: await checkoutQuantity(parsed.data.quantity),
-                }
-              : parsed.data
-          const session = await createHostedBillingSession(payload)
+          const session =
+            parsed.data.action === 'seats'
+              ? await createSeatChangeSession(parsed.data.quantity)
+              : await createHostedBillingSession(
+                  parsed.data.action === 'checkout'
+                    ? {
+                        ...parsed.data,
+                        quantity: await checkoutQuantity(parsed.data.quantity),
+                      }
+                    : parsed.data
+                )
           const location =
             typeof session.url === 'string' && session.url.startsWith('https://')
               ? session.url
@@ -98,6 +94,26 @@ export const Route = createFileRoute('/api/billing/session')({
     },
   },
 })
+
+/**
+ * Recount under the same settings-row lock invites use, and hold it until the
+ * hosted session returns so a concurrent invite cannot sneak in a fifth seat
+ * after we approved a cut to four.
+ */
+async function createSeatChangeSession(quantity: number) {
+  const { db, settings } = await import('@/lib/server/db')
+  const { countSeatUsage } = await import('@/lib/server/domains/principals/seat-usage')
+  const { createHostedBillingSession } = await import('@/lib/server/control-plane/client')
+  return db.transaction(async (tx) => {
+    const [row] = await tx.select({ id: settings.id }).from(settings).limit(1).for('update')
+    if (!row) throw new Error('Workspace is not set up yet')
+    const seats = await countSeatUsage(tx)
+    if (quantity < seats.used) {
+      throw new Error('seats_below_usage')
+    }
+    return createHostedBillingSession({ action: 'seats', quantity })
+  })
+}
 
 /** Floor checkout seats at live usage so a stale form cannot under-seat. */
 async function checkoutQuantity(requested?: number): Promise<number> {

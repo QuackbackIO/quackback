@@ -2,6 +2,7 @@ import {
   and,
   db,
   eq,
+  gt,
   inArray,
   invitation,
   principal,
@@ -31,7 +32,15 @@ export async function countSeatUsage(executor: SeatExecutor = db): Promise<SeatU
     executor
       .select({ count: sql<number>`count(*)::int` })
       .from(invitation)
-      .where(and(eq(invitation.kind, 'team'), eq(invitation.status, 'pending'))),
+      .where(
+        and(
+          eq(invitation.kind, 'team'),
+          eq(invitation.status, 'pending'),
+          // Accept treats expiresAt < now as expired immediately; do not wait
+          // for the daily sweep to flip status.
+          gt(invitation.expiresAt, sql`now()`)
+        )
+      ),
   ])
   const members = memberRow[0]?.count ?? 0
   const pendingInvites = inviteRow[0]?.count ?? 0

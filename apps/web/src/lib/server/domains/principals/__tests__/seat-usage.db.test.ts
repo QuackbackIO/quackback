@@ -74,14 +74,18 @@ async function seedServiceAdmin(): Promise<void> {
   })
 }
 
-async function seedInvite(kind: 'team' | 'portal', inviterId: UserId): Promise<void> {
+async function seedInvite(
+  kind: 'team' | 'portal',
+  inviterId: UserId,
+  expiresAt = new Date(Date.now() + 86_400_000)
+): Promise<void> {
   await testDb.insert(invitation).values({
     id: createId('invite'),
     email: `${kind}-${suffix()}@acme.test`,
     status: 'pending',
     kind,
     role: kind === 'portal' ? 'user' : 'member',
-    expiresAt: new Date(Date.now() + 86_400_000),
+    expiresAt,
     createdAt: new Date(),
     inviterId,
   })
@@ -220,6 +224,16 @@ describe.skipIf(!fixture.available)('countSeatUsage', () => {
         })
       })
     ).rejects.toBeInstanceOf(TierLimitError)
+  })
+
+  it('does not let an expired pending team invite hold a seat', async () => {
+    const before = await countSeatUsage()
+    const inviterId = await seedUserOnly()
+    await seedInvite('team', inviterId, new Date(Date.now() - 60_000))
+
+    const after = await countSeatUsage()
+    expect(after.pendingInvites).toBe(before.pendingInvites)
+    expect(after.used).toBe(before.used)
   })
 
   it('does not let portal invites consume a purchased seat', async () => {
