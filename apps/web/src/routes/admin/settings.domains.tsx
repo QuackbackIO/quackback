@@ -22,6 +22,7 @@ import {
   updateCloudIdentityFn,
 } from '@/lib/server/functions/cloud-identity'
 import type { CustomDomainInstruction } from '@/lib/server/control-plane/client'
+import { platformUrlSuffix } from '@/lib/shared/platform-label'
 
 export const Route = createFileRoute('/admin/settings/domains')({
   loader: async ({ context }) => {
@@ -133,11 +134,7 @@ function DomainsSettingsPage() {
           {cloudIdentity && (
             <QuackbackUrlCard
               platformLabel={platformLabel}
-              domainSuffix={new URL(cloudIdentity.canonicalOrigin).hostname
-                .split('.')
-                .slice(1)
-                .join('.')}
-              currentOrigin={cloudIdentity.canonicalOrigin}
+              domainSuffix={platformUrlSuffix(cloudIdentity)}
               pending={identityMutation.isPending}
               error={identityMutation.error}
               onPlatformLabelChange={setPlatformLabel}
@@ -165,13 +162,11 @@ function DomainsSettingsPage() {
 export function QuackbackUrlCard(props: {
   platformLabel: string
   domainSuffix: string
-  currentOrigin: string
   pending: boolean
   error: Error | null
   onPlatformLabelChange: (value: string) => void
   onSubmit: () => void
 }) {
-  const preview = `https://${props.platformLabel || 'workspace'}.${props.domainSuffix}`
   return (
     <SettingsCard title="Quackback URL" description="The address customers use for this workspace">
       <form
@@ -185,12 +180,12 @@ export function QuackbackUrlCard(props: {
           <Label htmlFor="platform-label" className="text-xs text-muted-foreground">
             Quackback URL
           </Label>
-          <div className="flex items-center rounded-md border bg-background focus-within:ring-2 focus-within:ring-ring">
+          <div className="flex h-9 items-center border border-input bg-transparent shadow-xs transition-[color,box-shadow] outline-none focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-[3px] dark:bg-input/30 [border-radius:calc(var(--radius)*0.8)]">
             <Input
               id="platform-label"
               value={props.platformLabel}
               onChange={(event) => props.onPlatformLabelChange(event.target.value)}
-              className="border-0 focus-visible:ring-0"
+              className="h-full rounded-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
               maxLength={63}
               autoCapitalize="none"
               autoCorrect="off"
@@ -200,12 +195,6 @@ export function QuackbackUrlCard(props: {
               .{props.domainSuffix}
             </span>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Preview: <span className="font-mono">{preview}</span>
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Current: <span className="font-mono">{props.currentOrigin}</span>
-          </p>
         </div>
         {props.error && (
           <p role="alert" className="text-sm text-destructive">

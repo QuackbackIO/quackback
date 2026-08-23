@@ -69,7 +69,6 @@ describe('Quackback URL card', () => {
       <QuackbackUrlCard
         platformLabel=""
         domainSuffix="quackback.co.uk"
-        currentOrigin="https://south63792f.quackback.co.uk"
         pending={false}
         error={null}
         onPlatformLabelChange={vi.fn()}
@@ -80,13 +79,12 @@ describe('Quackback URL card', () => {
     expect(screen.queryByDisplayValue(/ws-/)).not.toBeInTheDocument()
   })
 
-  it('shows preview, current origin, and one save action', () => {
+  it('shows the suffix in the field and one save action, not preview or current lines', () => {
     const save = vi.fn()
     render(
       <QuackbackUrlCard
         platformLabel="ws-generated"
         domainSuffix="quackback.co.uk"
-        currentOrigin="https://ws-generated.quackback.co.uk"
         pending={false}
         error={null}
         onPlatformLabelChange={vi.fn()}
@@ -95,7 +93,9 @@ describe('Quackback URL card', () => {
     )
 
     expect(screen.getByLabelText('Quackback URL')).toHaveValue('ws-generated')
-    expect(screen.getByText(/Preview:/)).toHaveTextContent('https://ws-generated.quackback.co.uk')
+    expect(screen.getByText('.quackback.co.uk')).toBeInTheDocument()
+    expect(screen.queryByText(/Preview:/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Current:/)).not.toBeInTheDocument()
     const buttons = screen.getAllByRole('button')
     expect(buttons).toHaveLength(1)
     fireEvent.click(buttons[0]!)
