@@ -470,18 +470,18 @@ export function useSaveBrandingTheme() {
       brandingConfig: Record<string, unknown>
       customCss: string
       /**
-       * persist: Advanced CSS changed — write cssText (Pro-gated).
-       * clear: generated theme CSS — write empty so leftover CSS cannot override.
-       * skip: leftover Advanced CSS unchanged — do not touch the stored row.
+       * persist: Advanced CSS changed — write remainder (Pro-gated).
+       * clear: generated-only theme CSS — write empty so leftover CSS cannot override.
+       * rewrite: extra rules unchanged — write remainder-only so stale :root/.dark
+       *   theme vars cannot override the saved structured colours.
        */
-      customCssWrite: 'persist' | 'clear' | 'skip'
+      customCssWrite: 'persist' | 'clear' | 'rewrite'
     }) => {
       const { throwIfServerFnFailed } = await import('@/lib/shared/describe-upgrade')
       const theme = await updateThemeFn({ data: { brandingConfig: input.brandingConfig } })
       throwIfServerFnFailed(theme)
-      if (input.customCssWrite === 'skip') return [theme, null] as const
       const css = await updateCustomCssFn({
-        data: { customCss: input.customCssWrite === 'persist' ? input.customCss : '' },
+        data: { customCss: input.customCssWrite === 'clear' ? '' : input.customCss },
       })
       throwIfServerFnFailed(css)
       return [theme, css] as const

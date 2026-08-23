@@ -3,7 +3,13 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
 
 const { saveBrandingTheme } = vi.hoisted(() => ({
-  saveBrandingTheme: vi.fn(async () => undefined),
+  saveBrandingTheme: vi.fn(
+    async (_input: {
+      brandingConfig: Record<string, unknown>
+      customCss: string
+      customCssWrite: 'persist' | 'clear' | 'rewrite'
+    }) => undefined
+  ),
 }))
 
 vi.mock('@/lib/client/mutations/settings', () => ({
@@ -55,7 +61,7 @@ describe('useBrandingState setThemeMode', () => {
     expect(result.current.cssText).toBe(custom)
   })
 
-  it('skips the customCss write when leftover Advanced CSS is unchanged', async () => {
+  it('rewrites leftover Advanced CSS as remainder-only when extras are unchanged', async () => {
     const leftover = ':root { --primary: oklch(0.5 0.2 250); }\n.brand { color: red; }\n'
     const { result } = renderHook(() =>
       useBrandingState({
@@ -73,11 +79,15 @@ describe('useBrandingState setThemeMode', () => {
     })
 
     expect(saveBrandingTheme).toHaveBeenCalledWith(
-      expect.objectContaining({ customCssWrite: 'skip' })
+      expect.objectContaining({
+        customCssWrite: 'rewrite',
+        customCss: expect.stringContaining('.brand { color: red; }'),
+      })
     )
+    expect(saveBrandingTheme.mock.calls[0]?.[0].customCss).not.toContain('--primary')
   })
 
-  it('skips the customCss write when leftover extra rules are unchanged after a var edit', async () => {
+  it('rewrites remainder-only CSS after a colour/var edit that leaves extras unchanged', async () => {
     const leftover = [
       ':root { --primary: oklch(0.5 0.2 250); --radius: 0.625rem; }',
       '.dark { --primary: oklch(0.7 0.2 250); --radius: 0.625rem; }',
@@ -102,8 +112,13 @@ describe('useBrandingState setThemeMode', () => {
     expect(result.current.cssText).toContain('1.25rem')
     expect(result.current.cssText).toContain('.brand { color: red; }')
     expect(saveBrandingTheme).toHaveBeenCalledWith(
-      expect.objectContaining({ customCssWrite: 'skip' })
+      expect.objectContaining({
+        customCssWrite: 'rewrite',
+        customCss: expect.stringContaining('.brand { color: red; }'),
+      })
     )
+    expect(saveBrandingTheme.mock.calls[0]?.[0].customCss).not.toContain('--primary')
+    expect(saveBrandingTheme.mock.calls[0]?.[0].customCss).not.toContain('--radius')
   })
 
   it('clears stored customCss when cssText is generated theme CSS', async () => {
@@ -142,8 +157,12 @@ describe('useBrandingState setThemeMode', () => {
     })
 
     expect(saveBrandingTheme).toHaveBeenCalledWith(
-      expect.objectContaining({ customCssWrite: 'persist' })
+      expect.objectContaining({
+        customCssWrite: 'persist',
+        customCss: expect.stringContaining('.hero { color: blue; }'),
+      })
     )
+    expect(saveBrandingTheme.mock.calls[0]?.[0].customCss).not.toContain('--primary')
   })
 })
 

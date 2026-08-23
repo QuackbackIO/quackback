@@ -98,15 +98,44 @@ export function isGeneratedThemeCss(
   )
 }
 
+const GENERATED_THEME_VAR_NAMES = new Set(
+  Object.entries(variableMap)
+    .filter(([key]) => !SHADOW_KEYS.has(key))
+    .map(([, cssVar]) => cssVar)
+)
+
+function isGeneratedThemeDeclaration(decl: string): boolean {
+  if (/^font-family\s*:/i.test(decl)) return true
+  const name = /^(--[\w-]+)\s*:/.exec(decl)?.[1]
+  return name != null && GENERATED_THEME_VAR_NAMES.has(name)
+}
+
+function keepNonGeneratedDeclarations(body: string): string {
+  const kept: string[] = []
+  for (const raw of body.split(';')) {
+    const decl = raw.trim()
+    if (!decl || isGeneratedThemeDeclaration(decl)) continue
+    kept.push(`  ${decl};`)
+  }
+  return kept.join('\n')
+}
+
 /**
- * CSS left after removing generated `:root` / `.dark` theme blocks.
- * Extra rules (Advanced CSS) remain; generated-only CSS yields ''.
+ * CSS left after removing generated theme declarations.
+ * Drops `:root` / `.dark` variables (and the generated `font-family` rule)
+ * that `generateReadableCSS` emits, keeps unknown inner declarations, and
+ * leaves every other rule as-is. Generated-only CSS yields ''.
  */
 export function advancedCssRemainder(cssText: string): string {
-  return cssText
-    .replace(/:root\s*\{[\s\S]*?\}/g, '')
-    .replace(/\.dark\s*\{[\s\S]*?\}/g, '')
-    .trim()
+  const result = cssText.replace(
+    /(?<![\w-])(:root|\.dark)\s*\{([\s\S]*?)\}/g,
+    (_match, selector: string, body: string) => {
+      const kept = keepNonGeneratedDeclarations(body)
+      if (!kept) return ''
+      return `${selector} {\n${kept}\n}`
+    }
+  )
+  return result.replace(/(?:\n[ \t]*){3,}/g, '\n\n').trim()
 }
 
 function formatCssBlock(selector: string, vars: ThemeVariables): string {

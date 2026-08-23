@@ -42,4 +42,11 @@ describe('advancedCssRemainder', () => {
     const css = generateReadableCSS(lightMinimal, darkMinimal, 'user')
     expect(advancedCssRemainder(`${css}\n.brand { color: red; }\n`)).toBe('.brand { color: red; }')
   })
+
+  it('keeps unknown declarations inside :root after stripping generated vars', () => {
+    const css = ':root { --primary: oklch(0.5 0.2 250); color-scheme: dark; }\n'
+    const remainder = advancedCssRemainder(css)
+    expect(remainder).toMatch(/:root\s*\{[^}]*color-scheme:\s*dark/)
+    expect(remainder).not.toContain('--primary')
+  })
 })

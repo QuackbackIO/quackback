@@ -305,22 +305,24 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
         dark: { ...darkMinimal, fontSans: font, radius: `${radius}rem` },
       }
 
-      // Generated theme CSS is reconstructed from brandingConfig, so posting
-      // it as customCss would hit the Pro-only gate. Leftover extra rules
-      // that the user did not edit must not be rewritten either — colour,
-      // font, and radius edits live in :root/.dark and still skip the write.
-      const customCssWrite = isGeneratedThemeCss(cssText, lightMinimal, darkMinimal)
-        ? 'clear'
-        : advancedCssRemainder(cssText) === advancedCssRemainder(initialCustomCss)
-          ? 'skip'
-          : 'persist'
+      // Generated theme CSS is reconstructed from brandingConfig. Stored
+      // customCss is remainder-only so leftover :root/.dark theme vars cannot
+      // override the saved colours. Extra rules that changed still persist
+      // through the Pro gate; unchanged extras are rewritten without it.
+      const remainder = advancedCssRemainder(cssText)
+      const customCssWrite =
+        isGeneratedThemeCss(cssText, lightMinimal, darkMinimal) || !remainder
+          ? 'clear'
+          : remainder === advancedCssRemainder(initialCustomCss)
+            ? 'rewrite'
+            : 'persist'
 
       // The mutation hook invalidates the branding + customCss queries on success,
       // so the next visit reflects the save instead of re-seeding the editor from
       // the stale pre-save cache.
       await saveBrandingTheme({
         brandingConfig: themeConfig as unknown as Record<string, unknown>,
-        customCss: cssText,
+        customCss: remainder,
         customCssWrite,
       })
 

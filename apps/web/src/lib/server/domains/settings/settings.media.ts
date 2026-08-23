@@ -1,6 +1,7 @@
 import { db, eq, settings } from '@/lib/server/db'
 import { deleteObject } from '@/lib/server/storage/s3'
 import { ValidationError } from '@/lib/shared/errors'
+import { advancedCssRemainder } from '@/lib/shared/theme/generator'
 import { assertNotManaged } from '@/lib/server/config-file/managed-guard'
 import { logger } from '@/lib/server/logger'
 import type { BrandingConfig } from './settings.types'
@@ -75,15 +76,17 @@ export async function updateCustomCss(css: string): Promise<string> {
     if (css.includes('<')) {
       throw new ValidationError('INVALID_CUSTOM_CSS', 'Custom CSS cannot contain the "<" character')
     }
-    // Clearing CSS (empty string) is always allowed so a workspace whose
-    // tier just stopped including custom CSS can wipe it without being
-    // blocked. Anything non-empty hits the feature gate.
-    if (css.trim().length > 0) {
+    const org = await requireSettings()
+    const trimmed = css.trim()
+    // Empty is always allowed so a workspace whose tier just stopped including
+    // custom CSS can wipe it. Stripping generated theme declarations from CSS
+    // already stored is also ungated — that rewrite cannot introduce extra
+    // rules. Any other non-empty write hits the feature gate.
+    if (trimmed.length > 0 && trimmed !== advancedCssRemainder(org.customCss ?? '')) {
       const { assertTierFeature } = await import('./tier-enforce')
       await assertTierFeature('customCss', 'Custom CSS')
     }
 
-    const org = await requireSettings()
     await db.update(settings).set({ customCss: css }).where(eq(settings.id, org.id))
     await invalidateSettingsCache()
     return css

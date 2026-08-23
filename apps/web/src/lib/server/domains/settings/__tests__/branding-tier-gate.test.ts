@@ -93,4 +93,28 @@ describe('updateCustomCss — customCss gate', () => {
     })
     await expect(updateCustomCss('')).resolves.toBe('')
   })
+
+  it('allows stripping generated theme declarations from stored CSS when the feature is off', async () => {
+    vi.mocked(getTierLimits).mockResolvedValue({
+      ...OSS_TIER_LIMITS,
+      features: { ...OSS_TIER_LIMITS.features, customCss: false },
+    })
+    const stored = ':root { --primary: oklch(0.5 0.2 250); }\n.brand { color: red; }\n'
+    hoisted.mockRequireSettings.mockResolvedValue({ id: 'org_x', customCss: stored })
+    await expect(updateCustomCss('.brand { color: red; }')).resolves.toBe('.brand { color: red; }')
+  })
+
+  it('rejects adding extra rules when the feature is off', async () => {
+    vi.mocked(getTierLimits).mockResolvedValue({
+      ...OSS_TIER_LIMITS,
+      features: { ...OSS_TIER_LIMITS.features, customCss: false },
+    })
+    hoisted.mockRequireSettings.mockResolvedValue({
+      id: 'org_x',
+      customCss: ':root { --primary: oklch(0.5 0.2 250); }\n.brand { color: red; }\n',
+    })
+    await expect(
+      updateCustomCss('.brand { color: red; }\n.hero { color: blue; }')
+    ).rejects.toBeInstanceOf(TierLimitError)
+  })
 })
