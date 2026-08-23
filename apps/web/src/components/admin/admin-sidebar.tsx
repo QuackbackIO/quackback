@@ -42,7 +42,11 @@ import {
   openOwnerWorkspaceFn,
 } from '@/lib/server/functions/owner-workspaces'
 import { friendlySiblingAddress, WorkspaceSwitcher } from '@/components/admin/workspace-switcher'
-import { launchChecklistSummary, type LaunchStatus } from '@/lib/shared/launch-checklist'
+import {
+  isLaunchPlanActive,
+  launchChecklistSummary,
+  type LaunchStatus,
+} from '@/lib/shared/launch-checklist'
 import { useIntl } from 'react-intl'
 import { usePermission } from '@/lib/client/hooks/use-permission'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -171,28 +175,29 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
   const canManageAssistant = usePermission(PERMISSIONS.ASSISTANT_MANAGE)
   const canManageWorkflows = usePermission(PERMISSIONS.WORKFLOW_MANAGE)
   const canOpenAutomation = canManageAssistant || canManageWorkflows
-  // Launch-plan progress for the shell badge (admins only). The query stays
-  // enabled and polls until the first-win milestone so a quiet dot can clear
-  // when the win happens off this page; skip and complete actions also
+  // Launch-plan progress for the shell badge (admins only). Stay visible and
+  // polling until essentials resolve *and* the first win lands — a first win
+  // can arrive while invite-team is still open. Skip/complete actions also
   // invalidate ['admin', 'onboarding'] explicitly.
   const queryClient = useQueryClient()
   const onboardingQueryOptions = adminQueries.onboardingStatus()
   const cachedOnboardingStatus = queryClient.getQueryData<LaunchStatus>(
     onboardingQueryOptions.queryKey
   )
-  const cachedFirstWin = cachedOnboardingStatus
-    ? launchChecklistSummary(cachedOnboardingStatus).firstWinComplete
+  const cachedLaunchSettled = cachedOnboardingStatus
+    ? !isLaunchPlanActive(launchChecklistSummary(cachedOnboardingStatus))
     : false
   const onboardingQuery = useQuery({
     ...onboardingQueryOptions,
-    enabled: isAdmin && !cachedFirstWin,
+    enabled: isAdmin && !cachedLaunchSettled,
     refetchInterval: (query) => {
       const data = query.state.data
-      return data && launchChecklistSummary(data).firstWinComplete ? false : 15_000
+      if (!data) return 15_000
+      return isLaunchPlanActive(launchChecklistSummary(data)) ? 15_000 : false
     },
   })
   const launchSummary = onboardingQuery.data ? launchChecklistSummary(onboardingQuery.data) : null
-  const showLaunchNav = isAdmin && (!launchSummary || !launchSummary.firstWinComplete)
+  const showLaunchNav = isAdmin && (!launchSummary || isLaunchPlanActive(launchSummary))
   const launchRemaining =
     launchSummary && !launchSummary.resolved && launchSummary.remaining > 0
       ? launchSummary.remaining

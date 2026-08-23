@@ -384,3 +384,11 @@ export function launchChecklistSummary(
           : `${remaining} step${remaining === 1 ? '' : 's'} to your first ${winNoun}`,
   }
 }
+
+/** Sidebar still shows Getting Started until essentials resolve and the first win lands. */
+export function isLaunchPlanActive(summary: {
+  resolved: boolean
+  firstWinComplete: boolean
+}): boolean {
+  return !summary.resolved || !summary.firstWinComplete
+}

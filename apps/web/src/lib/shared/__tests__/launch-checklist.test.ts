@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { buildLaunchTasks, launchChecklistSummary, normalizeOutcome } from '../launch-checklist'
+import {
+  buildLaunchTasks,
+  isLaunchPlanActive,
+  launchChecklistSummary,
+  normalizeOutcome,
+} from '../launch-checklist'
 import type { LaunchStatus } from '../launch-checklist'
 
 const base: LaunchStatus = {
@@ -151,6 +156,13 @@ describe('buildLaunchTasks V2', () => {
     expect(summary.allComplete).toBe(true)
     expect(summary.firstWinComplete).toBe(false)
     expect(summary.resolved).toBe(true)
+  })
+
+  it('keeps the launch-plan nav until essentials resolve, even if the first win arrived early', () => {
+    expect(isLaunchPlanActive({ resolved: false, firstWinComplete: true })).toBe(true)
+    expect(isLaunchPlanActive({ resolved: true, firstWinComplete: false })).toBe(true)
+    expect(isLaunchPlanActive({ resolved: false, firstWinComplete: false })).toBe(true)
+    expect(isLaunchPlanActive({ resolved: true, firstWinComplete: true })).toBe(false)
   })
 
   it('resolves an all-skipped essentials list and hides it from the count', () => {

@@ -145,21 +145,23 @@ type OpenHandoffAttempt =
 
 async function consumeOpenHandoffOnce(ott: string, headers?: Headers): Promise<OpenHandoffAttempt> {
   const snapshot = await snapshotOpenHandoffOtt(ott)
+  if (!snapshot) {
+    const existing = await continueIfAlreadySignedIn('/', headers)
+    if (existing.kind === 'redirect') return existing
+    return { kind: 'error', status: 'invalid', missedSnapshot: true }
+  }
   const first = await consumeOrContinueExistingSession(ott, '/', headers)
   if (first.kind === 'redirect') {
-    if (snapshot) await restoreOpenHandoffOtt(snapshot)
+    await restoreOpenHandoffOtt(snapshot)
     return first
   }
-  if (snapshot) {
+  await restoreOpenHandoffOtt(snapshot)
+  const retry = await verifyOttCookies(ott, '/', headers)
+  if (retry.kind === 'redirect') {
     await restoreOpenHandoffOtt(snapshot)
-    const retry = await verifyOttCookies(ott, '/', headers)
-    if (retry.kind === 'redirect') {
-      await restoreOpenHandoffOtt(snapshot)
-      return retry
-    }
-    return { ...first, missedSnapshot: false }
+    return retry
   }
-  return { ...first, missedSnapshot: true }
+  return { ...first, missedSnapshot: false }
 }
 
 /**
