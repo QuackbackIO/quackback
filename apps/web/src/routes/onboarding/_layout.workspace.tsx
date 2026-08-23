@@ -162,7 +162,7 @@ export function CloudWorkspaceDetailsForm(props: {
 
       <div className="space-y-2">
         <label htmlFor="cloud-platform-label" className="text-sm font-medium">
-          Friendly Quackback URL
+          Workspace URL
         </label>
         <div className="flex items-center rounded-md border bg-background focus-within:ring-2 focus-within:ring-ring">
           <Input

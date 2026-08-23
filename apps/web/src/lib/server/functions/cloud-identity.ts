@@ -38,7 +38,7 @@ export const markCloudWorkspaceDetailsSeenFn = createServerFn({ method: 'POST' }
     const identity = await currentCloudIdentity()
     if (!identity) throw new Error('Cloud workspace identity is not enabled')
     if (!friendlyPlatformLabel(identity.platformHostname)) {
-      throw new Error('Choose a Quackback URL before continuing')
+      throw new Error('Choose a Workspace URL before continuing')
     }
     const { state } = await mutateSetupStateAtomic((current) => ({
       state: current.workspaceDetailsSeenAt

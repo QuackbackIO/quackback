@@ -25,7 +25,7 @@ describe('cloud workspace identity on General', () => {
     )
 
     expect(screen.getByLabelText('Workspace Name')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Quackback URL')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Workspace URL')).not.toBeInTheDocument()
     expect(screen.queryByText(/Preview:/)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /save/i })).not.toBeInTheDocument()
   })

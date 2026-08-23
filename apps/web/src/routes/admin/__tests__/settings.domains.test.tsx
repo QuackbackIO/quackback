@@ -63,7 +63,7 @@ describe('domains card', () => {
   })
 })
 
-describe('Quackback URL card', () => {
+describe('Workspace URL card', () => {
   it('does not prefill a generated host into the URL field', () => {
     render(
       <QuackbackUrlCard
@@ -75,7 +75,7 @@ describe('Quackback URL card', () => {
         onSubmit={vi.fn()}
       />
     )
-    expect(screen.getByLabelText('Quackback URL')).toHaveValue('')
+    expect(screen.getByLabelText('Workspace URL')).toHaveValue('')
     expect(screen.queryByDisplayValue(/ws-/)).not.toBeInTheDocument()
   })
 
@@ -92,7 +92,7 @@ describe('Quackback URL card', () => {
       />
     )
 
-    expect(screen.getByLabelText('Quackback URL')).toHaveValue('ws-generated')
+    expect(screen.getByLabelText('Workspace URL')).toHaveValue('ws-generated')
     expect(screen.getByText('.quackback.co.uk')).toBeInTheDocument()
     expect(screen.queryByText(/Preview:/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Current:/)).not.toBeInTheDocument()
