@@ -5,6 +5,7 @@ import {
   extractMinimal,
   extractCssVariables,
   generateReadableCSS,
+  isGeneratedThemeCss,
   parseCssToMinimal,
   replaceCssVar,
   normalizeFontSans,
@@ -194,19 +195,44 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
     initialMode === 'dark' ? 'dark' : 'light'
   )
   const [themeMode, setThemeModeRaw] = useState<ThemeMode>(() => initialMode)
-
-  // When theme mode changes, auto-switch preview to match and regenerate CSS
-  const setThemeMode = useCallback((mode: ThemeMode) => {
-    setThemeModeRaw(mode)
-    if (mode === 'dark') setPreviewMode('dark')
-    else if (mode === 'light') setPreviewMode('light')
-  }, [])
   const [cssText, setCssText] = useState(() =>
     buildInitialCss(initialCustomCss, initialThemeConfig)
   )
 
   const [isSaving, setIsSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
+
+  const defaultPreset = themePresets.default
+  const defaultLightMinimal = useMemo(() => extractMinimal(defaultPreset.light), [defaultPreset])
+  const defaultDarkMinimal = useMemo(() => extractMinimal(defaultPreset.dark), [defaultPreset])
+
+  // When theme mode changes, auto-switch preview to match and regenerate CSS
+  // if the editor is still showing generated theme CSS (not Advanced CSS).
+  const setThemeMode = useCallback(
+    (mode: ThemeMode) => {
+      const previousMode = themeMode
+      setThemeModeRaw(mode)
+      if (mode === 'dark') setPreviewMode('dark')
+      else if (mode === 'light') setPreviewMode('light')
+
+      setCssText((prev) => {
+        if (previousMode === mode) return prev
+        const parsed = extractCssVariables(prev)
+        const lightMinimal: Partial<MinimalThemeVariables> = {
+          ...defaultLightMinimal,
+          ...parseCssToMinimal(parsed.light),
+        }
+        const darkMinimal: Partial<MinimalThemeVariables> = {
+          ...defaultDarkMinimal,
+          ...parseCssToMinimal(parsed.dark),
+        }
+        const previousGenerated = generateReadableCSS(lightMinimal, darkMinimal, previousMode)
+        if (prev.trim() !== previousGenerated.trim()) return prev
+        return generateReadableCSS(lightMinimal, darkMinimal, mode)
+      })
+    },
+    [themeMode, defaultLightMinimal, defaultDarkMinimal]
+  )
 
   // ============================================
   // Parsed CSS variables (derived synchronously — regex is <1ms)
@@ -218,10 +244,6 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
   // ============================================
   const previewModeDisabled: 'light' | 'dark' | null =
     themeMode === 'dark' ? 'light' : themeMode === 'light' ? 'dark' : null
-
-  const defaultPreset = themePresets.default
-  const defaultLightMinimal = useMemo(() => extractMinimal(defaultPreset.light), [defaultPreset])
-  const defaultDarkMinimal = useMemo(() => extractMinimal(defaultPreset.dark), [defaultPreset])
 
   const font = useMemo(
     () => parsedCssVariables.light['--font-sans'] || DEFAULT_FONT,
@@ -299,11 +321,12 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
         dark: { ...darkMinimal, fontSans: font, radius: `${radius}rem` },
       }
 
-      const generatedCss = generateReadableCSS(lightMinimal, darkMinimal, themeMode)
       // The Advanced CSS panel writes extra rules into cssText. Generated
       // theme CSS is reconstructed from brandingConfig on the portal, so
       // posting it as customCss would hit the Pro-only customCss gate.
-      const persistCustomCss = cssText.trim() !== generatedCss.trim()
+      // Classify against every theme mode: a mode switch that left cssText
+      // as the previous mode's generated blocks is not Advanced CSS.
+      const persistCustomCss = !isGeneratedThemeCss(cssText, lightMinimal, darkMinimal)
 
       // The mutation hook invalidates the branding + customCss queries on success,
       // so the next visit reflects the save instead of re-seeding the editor from

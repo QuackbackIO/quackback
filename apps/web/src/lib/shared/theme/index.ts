@@ -95,6 +95,7 @@ export { hexToOklch, oklchToHex, isValidHex, isValidOklch } from './colors'
 export {
   generateThemeCSS,
   generateReadableCSS,
+  isGeneratedThemeCss,
   parseCssToMinimal,
   replaceCssVar,
   parseThemeConfig,

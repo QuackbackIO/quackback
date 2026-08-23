@@ -80,6 +80,24 @@ export function generateReadableCSS(
   return parts.join('\n\n') + '\n'
 }
 
+const THEME_MODES = ['user', 'light', 'dark'] as const satisfies readonly ThemeMode[]
+
+/**
+ * True when `cssText` is the output of `generateReadableCSS` for any theme
+ * mode. Extra rules (Advanced CSS) fail this check.
+ */
+export function isGeneratedThemeCss(
+  cssText: string,
+  lightMinimal: Partial<MinimalThemeVariables>,
+  darkMinimal: Partial<MinimalThemeVariables>
+): boolean {
+  const trimmed = cssText.trim()
+  if (!trimmed) return false
+  return THEME_MODES.some(
+    (mode) => generateReadableCSS(lightMinimal, darkMinimal, mode).trim() === trimmed
+  )
+}
+
 function formatCssBlock(selector: string, vars: ThemeVariables): string {
   const lines: string[] = [`${selector} {`]
 
