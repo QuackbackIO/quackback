@@ -39,7 +39,7 @@ function BillingPage() {
       <PageHeader
         icon={CreditCardIcon}
         title="Plans & billing"
-        description="Manage your plan and billing history here."
+        description="Manage your plan, seats, and billing history here."
       />
       {billingEnabled ? (
         <BillingSettings />

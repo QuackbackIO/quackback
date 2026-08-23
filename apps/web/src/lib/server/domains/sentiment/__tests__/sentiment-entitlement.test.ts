@@ -87,7 +87,7 @@ describe('analyzeSentiment — no cloud config', () => {
 
 describe('analyzeSentiment — plan gate', () => {
   it('refuses on a plan without the entitlement and names the plan that has it', async () => {
-    withCloud(storedCloud('growth'))
+    withCloud(storedCloud('free'))
 
     const refusal = await analyzeSentiment('Title', 'Great feature!').catch(
       (error: unknown) => error
@@ -96,10 +96,10 @@ describe('analyzeSentiment — plan gate', () => {
     expect(refusal).toBeInstanceOf(EntitlementRequiredError)
     const error = refusal as EntitlementRequiredError
     expect(error.entitlement).toBe('aiInsights')
-    expect(error.requiredPlanName).toBe('Pro')
+    expect(error.requiredPlanName).toBe('Growth')
     expect(error.statusCode).toBe(402)
     expect(error.message).toBe(
-      'AI insights are a Pro feature. Your workspace is on Growth. Upgrade to Pro to enable it.'
+      'AI insights are a Growth feature. Your workspace is on Free. Upgrade to Growth to enable it.'
     )
     // No model call, no spend.
     expect(hoisted.mockChat).not.toHaveBeenCalled()
@@ -107,7 +107,7 @@ describe('analyzeSentiment — plan gate', () => {
   })
 
   it('classifies the post on a plan that includes it', async () => {
-    withCloud(storedCloud('pro'))
+    withCloud(storedCloud('growth'))
     await expect(analyzeSentiment('Title', 'Great feature!')).resolves.toMatchObject({
       sentiment: 'positive',
     })

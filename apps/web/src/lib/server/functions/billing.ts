@@ -33,51 +33,52 @@ export const fetchBillingInvoicesFn = createServerFn({ method: 'GET' }).handler(
   return fetchBillingInvoices()
 })
 
+export const fetchSeatsPreviewFn = createServerFn({ method: 'GET' })
+  .validator((data: { quantity: number }) => data)
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.BILLING_MANAGE })
+    const { fetchSeatsPreview } = await import('@/lib/server/control-plane/client')
+    try {
+      return await fetchSeatsPreview(data.quantity)
+    } catch {
+      return { amountDueCents: null }
+    }
+  })
+
 export const fetchPlanUsageFn = createServerFn({ method: 'GET' }).handler(async () => {
   await requireAuth({ permission: PERMISSIONS.BILLING_MANAGE })
   const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
   const { aiTokensThisMonth } = await import('@/lib/server/domains/ai/usage-counter')
   const { finiteUsageLines } = await import('@/lib/server/domains/billing/plan-usage')
-  const {
-    db,
-    and,
-    eq,
-    inArray,
-    isNull,
-    sql,
-    posts,
-    boards,
-    principal,
-    roles,
-    statusComponents,
-    emailSendingDomains,
-  } = await import('@/lib/server/db')
+  const { db, eq, isNull, sql, posts, boards, roles, statusComponents, emailSendingDomains } =
+    await import('@/lib/server/db')
 
   const limits = await getTierLimits()
-  const [boardRow, postRow, seatRow, statusRow, roleRow, domainRow, aiTokens] = await Promise.all([
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(boards)
-      .where(isNull(boards.deletedAt)),
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(posts)
-      .where(isNull(posts.deletedAt)),
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(principal)
-      .where(and(inArray(principal.role, ['admin', 'member']), eq(principal.type, 'user'))),
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(statusComponents)
-      .where(isNull(statusComponents.deletedAt)),
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(roles)
-      .where(eq(roles.isSystem, false)),
-    db.select({ count: sql<number>`count(*)::int` }).from(emailSendingDomains),
-    aiTokensThisMonth(),
-  ])
+  const { countSeatUsage } = await import('@/lib/server/domains/principals/seat-usage')
+  const { emailsSentThisMonth } = await import('@/lib/server/email/email-budget')
+  const [boardRow, postRow, seats, statusRow, roleRow, domainRow, aiTokens, emailsSent] =
+    await Promise.all([
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(boards)
+        .where(isNull(boards.deletedAt)),
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(posts)
+        .where(isNull(posts.deletedAt)),
+      countSeatUsage(),
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(statusComponents)
+        .where(isNull(statusComponents.deletedAt)),
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(roles)
+        .where(eq(roles.isSystem, false)),
+      db.select({ count: sql<number>`count(*)::int` }).from(emailSendingDomains),
+      aiTokensThisMonth(),
+      emailsSentThisMonth(),
+    ])
 
   return finiteUsageLines([
     { key: 'maxBoards', label: 'boards', used: boardRow[0]?.count ?? 0, limit: limits.maxBoards },
@@ -85,7 +86,7 @@ export const fetchPlanUsageFn = createServerFn({ method: 'GET' }).handler(async 
     {
       key: 'maxTeamSeats',
       label: 'seats',
-      used: seatRow[0]?.count ?? 0,
+      used: seats.used,
       limit: limits.maxTeamSeats,
     },
     {
@@ -111,6 +112,12 @@ export const fetchPlanUsageFn = createServerFn({ method: 'GET' }).handler(async 
       label: 'AI tokens this month',
       used: aiTokens,
       limit: limits.aiTokensPerMonth,
+    },
+    {
+      key: 'emailsPerMonth',
+      label: 'emails',
+      used: emailsSent,
+      limit: limits.emailsPerMonth,
     },
   ])
 })

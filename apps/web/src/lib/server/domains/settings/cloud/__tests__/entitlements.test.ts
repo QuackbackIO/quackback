@@ -224,8 +224,9 @@ describe('requireEntitlement against a configured workspace', () => {
     })
     const { requireEntitlement } = await import('../entitlements')
     await expect(requireEntitlement('mcpServer')).resolves.toBeUndefined()
-    await expect(requireEntitlement('aiInsights')).rejects.toThrow(
-      /AI insights are a Pro feature. Your workspace is on Growth./
+    await expect(requireEntitlement('aiInsights')).resolves.toBeUndefined()
+    await expect(requireEntitlement('workflows')).rejects.toThrow(
+      /Workflows are a Pro feature. Your workspace is on Growth./
     )
   })
 
@@ -239,7 +240,7 @@ describe('requireEntitlement against a configured workspace', () => {
       sso: false,
       aiAssistant: true,
       aiDrafts: true,
-      aiInsights: false,
+      aiInsights: true,
       workflows: false,
       apiAccess: true,
       mcpServer: true,

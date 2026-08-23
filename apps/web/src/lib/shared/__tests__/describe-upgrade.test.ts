@@ -30,6 +30,7 @@ describe('describeEntitlementUpgrade', () => {
     expect(describeEntitlementUpgrade('workflows').requiredPlan).toBe('pro')
     expect(describeEntitlementUpgrade('mcpServer').requiredPlan).toBe('growth')
     expect(describeEntitlementUpgrade('aiDrafts').requiredPlan).toBe('growth')
+    expect(describeEntitlementUpgrade('aiInsights').requiredPlan).toBe('growth')
   })
 })
 
