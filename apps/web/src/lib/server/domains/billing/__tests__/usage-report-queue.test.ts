@@ -44,8 +44,8 @@ vi.mock('@/lib/server/email/email-budget', () => ({
 }))
 
 vi.mock('@/lib/server/jobs/job-queue', () => ({
-  enqueueJob: (...args: unknown[]) => hoisted.enqueueJob(...args),
-  cancelJob: (...args: unknown[]) => hoisted.cancelJob(...args),
+  enqueueJob: (opts: unknown) => hoisted.enqueueJob(opts),
+  cancelJob: (opts: unknown) => hoisted.cancelJob(opts),
 }))
 
 import { isHostedBillingConfigured, monthFromJob, runUsageReport } from '../usage-report-queue'
