@@ -469,16 +469,19 @@ export function useSaveBrandingTheme() {
     mutationFn: async (input: {
       brandingConfig: Record<string, unknown>
       customCss: string
-      /** Advanced CSS only. Generated theme CSS is reconstructed from brandingConfig. */
-      persistCustomCss: boolean
+      /**
+       * persist: Advanced CSS changed — write cssText (Pro-gated).
+       * clear: generated theme CSS — write empty so leftover CSS cannot override.
+       * skip: leftover Advanced CSS unchanged — do not touch the stored row.
+       */
+      customCssWrite: 'persist' | 'clear' | 'skip'
     }) => {
       const { throwIfServerFnFailed } = await import('@/lib/shared/describe-upgrade')
       const theme = await updateThemeFn({ data: { brandingConfig: input.brandingConfig } })
       throwIfServerFnFailed(theme)
-      // Empty customCss is ungated and clears a leftover Advanced CSS row so
-      // it cannot override the generated theme on the portal.
+      if (input.customCssWrite === 'skip') return [theme, null] as const
       const css = await updateCustomCssFn({
-        data: { customCss: input.persistCustomCss ? input.customCss : '' },
+        data: { customCss: input.customCssWrite === 'persist' ? input.customCss : '' },
       })
       throwIfServerFnFailed(css)
       return [theme, css] as const

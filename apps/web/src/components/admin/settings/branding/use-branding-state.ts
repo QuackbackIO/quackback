@@ -304,12 +304,15 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
         dark: { ...darkMinimal, fontSans: font, radius: `${radius}rem` },
       }
 
-      // The Advanced CSS panel writes extra rules into cssText. Generated
-      // theme CSS is reconstructed from brandingConfig on the portal, so
-      // posting it as customCss would hit the Pro-only customCss gate.
-      // Classify against every theme mode: a mode switch that left cssText
-      // as the previous mode's generated blocks is not Advanced CSS.
-      const persistCustomCss = !isGeneratedThemeCss(cssText, lightMinimal, darkMinimal)
+      // Generated theme CSS is reconstructed from brandingConfig, so posting
+      // it as customCss would hit the Pro-only gate. Leftover Advanced CSS
+      // that the user did not edit must not be rewritten either — a theme-mode
+      // switch keeps cssText as-is, and that save is still a structured write.
+      const customCssWrite = isGeneratedThemeCss(cssText, lightMinimal, darkMinimal)
+        ? 'clear'
+        : cssText.trim() === initialCustomCss.trim()
+          ? 'skip'
+          : 'persist'
 
       // The mutation hook invalidates the branding + customCss queries on success,
       // so the next visit reflects the save instead of re-seeding the editor from
@@ -317,7 +320,7 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
       await saveBrandingTheme({
         brandingConfig: themeConfig as unknown as Record<string, unknown>,
         customCss: cssText,
-        persistCustomCss,
+        customCssWrite,
       })
 
       setSaveSuccess(true)
@@ -325,7 +328,16 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
     } finally {
       setIsSaving(false)
     }
-  }, [cssText, themeMode, font, radius, defaultLightMinimal, defaultDarkMinimal, saveBrandingTheme])
+  }, [
+    cssText,
+    themeMode,
+    font,
+    radius,
+    defaultLightMinimal,
+    defaultDarkMinimal,
+    saveBrandingTheme,
+    initialCustomCss,
+  ])
 
   return {
     logoUrl,
