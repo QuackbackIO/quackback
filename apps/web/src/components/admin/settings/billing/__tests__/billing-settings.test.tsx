@@ -282,6 +282,26 @@ describe('BillingPlansView', () => {
     expect(screen.queryByRole('button', { name: /Continue with/ })).not.toBeInTheDocument()
   })
 
+  it('does not offer Continue when the catalogue did not load', () => {
+    renderView({
+      catalogue: null,
+      overview: {
+        ...paidOverview,
+        plan: 'growth',
+        planName: 'Growth',
+        status: null,
+        trialActive: true,
+        trialPlanId: 'growth',
+        trialPlanName: 'Growth',
+        trialExpiresAt: '2026-09-01T00:00:00.000Z',
+        canUpgrade: true,
+        canManageBilling: false,
+        seats: { used: 4, pending: 1, members: 3, purchased: null },
+      },
+    })
+    expect(screen.queryByRole('button', { name: /Continue with/ })).not.toBeInTheDocument()
+  })
+
   it('does not offer Continue with a historical trial on a paid plan', () => {
     renderView({
       overview: {

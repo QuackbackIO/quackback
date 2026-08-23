@@ -196,7 +196,10 @@ function CurrentPlanCard(props: {
     overview.trialPlanName && overview.trialPlanName !== 'Free' ? overview.trialPlanName : null
   const subscribePlanId = overview.trialPlanId ?? (overview.plan !== 'free' ? overview.plan : null)
   const canSubscribe = Boolean(
-    overview.canUpgrade && subscribePlanId && (overview.trialActive || overview.trialEnded)
+    overview.canUpgrade &&
+    subscribePlanId &&
+    (overview.trialActive || overview.trialEnded) &&
+    catalogue?.plans.some((entry) => entry.id === subscribePlanId)
   )
   const daysLeft =
     overview.trialActive && overview.trialExpiresAt ? daysUntil(overview.trialExpiresAt) : null
