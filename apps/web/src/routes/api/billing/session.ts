@@ -26,10 +26,20 @@ const actionSchema = z.discriminatedUnion('action', [
     action: z.literal('checkout'),
     planId: z.enum(['growth', 'pro', 'scale']),
     billingPeriod: z.enum(['monthly', 'annual']),
+    quantity: z.coerce.number().int().positive().optional(),
   }),
   z.object({
     action: z.literal('downgrade'),
     planId: z.literal('free'),
+  }),
+  z.object({
+    action: z.literal('seats'),
+    quantity: z.coerce.number().int().positive(),
+  }),
+  z.object({
+    action: z.literal('topup'),
+    meter: z.enum(['ai', 'email']),
+    packs: z.coerce.number().int().positive(),
   }),
 ])
 
@@ -58,7 +68,19 @@ export const Route = createFileRoute('/api/billing/session')({
             return Response.json({ error: 'billing_action_unavailable' }, { status: 403 })
           }
           const { createHostedBillingSession } = await import('@/lib/server/control-plane/client')
-          const session = await createHostedBillingSession(parsed.data)
+          const payload =
+            parsed.data.action === 'checkout'
+              ? {
+                  ...parsed.data,
+                  quantity: parsed.data.quantity ?? (await defaultCheckoutQuantity()),
+                }
+              : parsed.data
+          const session = await createHostedBillingSession(payload)
+          if (parsed.data.action === 'topup') {
+            const { enqueueUsageReport, currentUtcMonth } =
+              await import('@/lib/server/domains/billing/usage-report')
+            await enqueueUsageReport({ month: currentUtcMonth() }).catch(() => undefined)
+          }
           const location =
             typeof session.url === 'string' && session.url.startsWith('https://')
               ? session.url
@@ -71,3 +93,9 @@ export const Route = createFileRoute('/api/billing/session')({
     },
   },
 })
+
+async function defaultCheckoutQuantity(): Promise<number> {
+  const { countSeatUsage } = await import('@/lib/server/domains/principals/seat-usage')
+  const seats = await countSeatUsage()
+  return Math.max(seats.used, 1)
+}
