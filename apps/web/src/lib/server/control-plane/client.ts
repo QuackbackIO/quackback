@@ -137,21 +137,31 @@ export async function fetchBillingInvoices(): Promise<CustomerInvoice[]> {
   return Array.isArray(result.invoices) ? result.invoices : []
 }
 
+export type CataloguePlanId = 'free' | 'growth' | 'pro' | 'scale'
+
 export type BillingCatalogue = {
   version: 1
   currency: 'usd'
   annualDiscountMonths: number
   recommendedPlanId: 'growth' | 'pro' | 'scale'
-  aiOutcomePriceCents: number
-  copilot: {
+  /** @deprecated unread; older catalogues may still send this. */
+  aiOutcomePriceCents?: number
+  /** @deprecated unread; older catalogues may still send this. */
+  copilot?: {
     freeConversationsPerSeat: number
     addonMonthlyCents: number
     addonAnnualCents: number
   }
   brandingRemoval: { monthlyCents: number; annualCents: number }
-  liteSeatsIncluded: Record<'free' | 'growth' | 'pro' | 'scale', number | null>
+  /** @deprecated unread; older catalogues may still send this. */
+  liteSeatsIncluded?: Record<CataloguePlanId, number | null>
+  aiIncludedCentsPerMonth?: Partial<Record<CataloguePlanId, number>>
+  aiTopUpPackCents?: number
+  aiBlendedCentsPerMTok?: number
+  emailTopUpPackCents?: number
+  emailTopUpPackUnits?: number
   plans: Array<{
-    id: 'free' | 'growth' | 'pro' | 'scale'
+    id: CataloguePlanId
     name: string
     rank: number
     priceMonthlyCents: number
@@ -175,30 +185,83 @@ export type CustomerInvoice = {
   hostedUrl: string | null
 }
 
+export type HostedBillingSessionInput =
+  | { action: 'portal' }
+  | {
+      action: 'checkout'
+      planId: 'growth' | 'pro' | 'scale'
+      billingPeriod: 'monthly' | 'annual'
+      quantity?: number
+    }
+  | { action: 'downgrade'; planId: 'free' }
+  | { action: 'seats'; quantity: number }
+  | { action: 'topup'; meter: 'ai' | 'email'; packs: number }
+
+export type HostedBillingSessionResult = {
+  url?: string
+  status?: 'downgraded' | 'scheduled' | 'updated'
+}
+
 export async function createHostedBillingSession(
-  input:
-    | { action: 'portal' }
-    | {
-        action: 'checkout'
-        planId: 'growth' | 'pro' | 'scale'
-        billingPeriod: 'monthly' | 'annual'
-      }
-    | { action: 'downgrade'; planId: 'free' }
-): Promise<{ url?: string; status?: 'downgraded' | 'scheduled' }> {
+  input: HostedBillingSessionInput
+): Promise<HostedBillingSessionResult> {
   const result = await callWorkspaceControlPlane<{ url?: unknown; status?: unknown }>(
     '/api/v1/internal/billing/session',
     input
   )
+  if (typeof result.url === 'string' && result.url.startsWith('https://')) {
+    return { url: result.url }
+  }
   if (input.action === 'downgrade') {
     if (result.status === 'downgraded' || result.status === 'scheduled') {
       return { status: result.status }
     }
     throw new ControlPlaneUnavailableError()
   }
-  if (typeof result.url !== 'string' || !result.url.startsWith('https://')) {
+  if (input.action === 'seats') {
+    if (result.status === 'updated' || result.status === 'scheduled') {
+      return { status: result.status }
+    }
     throw new ControlPlaneUnavailableError()
   }
-  return { url: result.url }
+  throw new ControlPlaneUnavailableError()
+}
+
+export type SeatsPreview = {
+  amountDueCents: number | null
+  currency?: 'usd'
+  periodEnd?: string
+}
+
+export async function fetchSeatsPreview(quantity: number): Promise<SeatsPreview> {
+  const result = await getWorkspaceControlPlane<{
+    amountDueCents?: unknown
+    currency?: unknown
+    periodEnd?: unknown
+  }>(`/api/v1/internal/billing/seats-preview?quantity=${encodeURIComponent(String(quantity))}`)
+  if (result.amountDueCents === null) return { amountDueCents: null }
+  if (typeof result.amountDueCents !== 'number' || !Number.isFinite(result.amountDueCents)) {
+    return { amountDueCents: null }
+  }
+  return {
+    amountDueCents: result.amountDueCents,
+    currency: result.currency === 'usd' ? 'usd' : undefined,
+    periodEnd: typeof result.periodEnd === 'string' ? result.periodEnd : undefined,
+  }
+}
+
+export type WorkspaceUsageReport = {
+  month: string
+  aiTokens: number
+  emailsSent: number
+  teamSeatCount: number
+  pendingInviteCount: number
+  postCount: number
+  boardCount: number
+}
+
+export async function reportWorkspaceUsage(report: WorkspaceUsageReport): Promise<void> {
+  await callWorkspaceControlPlane('/api/v1/internal/usage/report', report)
 }
 
 export async function startWorkspaceTrial(

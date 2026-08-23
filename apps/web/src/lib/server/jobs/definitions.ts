@@ -410,6 +410,29 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
         (m) => m.runMembershipSync
       ),
   },
+  {
+    // Monthly usage snapshot for hosted billing. Self-host without a hosted
+    // URL is a successful no-op. Hourly cron is the catch-up writer: the
+    // handler reports previousUtcMonth() of now (UTC), and a per-month dedupe
+    // key means the snapshot POSTs at most once. The first tick after a UTC
+    // month boundary, or after downtime, lands the missed close.
+    name: 'usage-report',
+    cron: '10 * * * *',
+    concurrency: 1,
+    maxAttempts: 10,
+    retryBackoffMs: 15 * 60_000,
+    // Hourly catch-up reuses `usage-report:<month>` for the whole previous
+    // month. Keep the succeeded row past that window so prune cannot reopen
+    // the month and POST the snapshot again.
+    retentionMs: 45 * DAY_MS,
+    failedRetentionMs: 45 * DAY_MS,
+    cronEnabled: () =>
+      import('@/lib/server/domains/billing/usage-report-queue').then((m) =>
+        m.isHostedBillingConfigured()
+      ),
+    handler: () =>
+      import('@/lib/server/domains/billing/usage-report-queue').then((m) => m.runUsageReport),
+  },
 ]
 
 let overrides: readonly JobDefinition[] | null = null

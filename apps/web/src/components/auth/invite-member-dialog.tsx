@@ -14,8 +14,11 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { Progress } from '@/components/ui/progress'
 import { FormError } from '@/components/shared/form-error'
 import { useCopyToClipboard } from '@/lib/client/hooks/use-copy-to-clipboard'
+import { seatInviteBlocked } from '@/components/admin/settings/team/seat-usage'
+import { SeatGatePanel } from '@/components/admin/settings/team/seat-gate-panel'
 import {
   SelectGroup,
   SelectLabel,
@@ -85,9 +88,15 @@ interface InviteMemberDialogProps {
   open: boolean
   onClose: () => void
   onSuccess?: () => void
+  onAddSeat?: () => void
 }
 
-export function InviteMemberDialog({ open, onClose, onSuccess }: InviteMemberDialogProps) {
+export function InviteMemberDialog({
+  open,
+  onClose,
+  onSuccess,
+  onAddSeat,
+}: InviteMemberDialogProps) {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
   const [inviteLink, setInviteLink] = useState<string | null>(null)
@@ -108,6 +117,7 @@ export function InviteMemberDialog({ open, onClose, onSuccess }: InviteMemberDia
   const customRoles = (rolesData?.roles ?? []).filter((r) => !r.isSystem)
   const { data: teamData } = useQuery(settingsQueries.teamMembersAndInvitations())
   const seatUsage = teamData?.seatUsage
+  const inviteBlocked = seatInviteBlocked(seatUsage)
 
   async function onSubmit(data: InviteInput) {
     setError('')
@@ -256,19 +266,28 @@ export function InviteMemberDialog({ open, onClose, onSuccess }: InviteMemberDia
                 )}
               />
 
-              {seatUsage && (
-                <div className="flex items-center gap-3 rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                  <span className="shrink-0 font-medium text-foreground/80">Team seats</span>
+              {seatUsage && inviteBlocked ? (
+                <SeatGatePanel
+                  usage={seatUsage}
+                  onAddSeat={
+                    onAddSeat
+                      ? () => {
+                          onClose()
+                          onAddSeat()
+                        }
+                      : undefined
+                  }
+                />
+              ) : seatUsage ? (
+                <div className="flex items-center gap-3 rounded-lg border border-border/50 bg-muted/30 px-3 py-2 text-[12px] text-muted-foreground">
+                  <span className="shrink-0">Team seats</span>
                   {seatUsage.limit != null ? (
                     <>
-                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-                        <div
-                          className="h-full rounded-full bg-primary/70"
-                          style={{
-                            width: `${Math.min(100, (seatUsage.used / Math.max(1, seatUsage.limit)) * 100)}%`,
-                          }}
-                        />
-                      </div>
+                      <Progress
+                        value={seatUsage.used}
+                        max={seatUsage.limit}
+                        className="h-1.5 flex-1"
+                      />
                       <span className="shrink-0 font-mono tabular-nums">
                         {seatUsage.used} / {seatUsage.limit}
                       </span>
@@ -277,13 +296,13 @@ export function InviteMemberDialog({ open, onClose, onSuccess }: InviteMemberDia
                     <span className="ml-auto font-mono tabular-nums">{seatUsage.used} used</span>
                   )}
                 </div>
-              )}
+              ) : null}
 
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={onClose}>
                   Cancel
                 </Button>
-                <Button type="submit" disabled={form.formState.isSubmitting}>
+                <Button type="submit" disabled={form.formState.isSubmitting || inviteBlocked}>
                   {form.formState.isSubmitting ? 'Sending...' : 'Send Invitation'}
                 </Button>
               </DialogFooter>

@@ -209,7 +209,15 @@ export const PLAN_CATALOGUE: Record<PlanId, PlanDefinition> = {
     article: 'a',
     name: 'Growth',
     rank: 1,
-    grants: ['customDomain', 'aiAssistant', 'aiDrafts', 'apiAccess', 'mcpServer', 'webhooks'],
+    grants: [
+      'customDomain',
+      'aiAssistant',
+      'aiDrafts',
+      'aiInsights',
+      'apiAccess',
+      'mcpServer',
+      'webhooks',
+    ],
   },
   pro: {
     id: 'pro',

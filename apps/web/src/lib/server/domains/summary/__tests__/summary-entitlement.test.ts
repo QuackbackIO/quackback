@@ -100,17 +100,17 @@ describe('generateAndSavePostSummary — no cloud config', () => {
 
 describe('generateAndSavePostSummary — plan gate', () => {
   it('refuses on a plan without the entitlement and names the plan that has it', async () => {
-    withCloud(storedCloud('growth'))
+    withCloud(storedCloud('free'))
 
     const refusal = await generateAndSavePostSummary(POST_ID).catch((error: unknown) => error)
 
     expect(refusal).toBeInstanceOf(EntitlementRequiredError)
     const error = refusal as EntitlementRequiredError
     expect(error.entitlement).toBe('aiInsights')
-    expect(error.requiredPlanName).toBe('Pro')
+    expect(error.requiredPlanName).toBe('Growth')
     expect(error.statusCode).toBe(402)
     expect(error.message).toBe(
-      'AI insights are a Pro feature. Your workspace is on Growth. Upgrade to Pro to enable it.'
+      'AI insights are a Growth feature. Your workspace is on Free. Upgrade to Growth to enable it.'
     )
     // No model call, no spend, nothing written.
     expect(hoisted.mockChat).not.toHaveBeenCalled()
@@ -121,7 +121,7 @@ describe('generateAndSavePostSummary — plan gate', () => {
   })
 
   it('summarises the post on a plan that includes it', async () => {
-    withCloud(storedCloud('pro'))
+    withCloud(storedCloud('growth'))
     await expect(generateAndSavePostSummary(POST_ID)).resolves.toBeUndefined()
     expect(hoisted.mockChat).toHaveBeenCalledOnce()
     expect(hoisted.mockUpdate).toHaveBeenCalledOnce()

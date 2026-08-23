@@ -6,8 +6,14 @@ interface ProgressProps extends React.HTMLAttributes<HTMLDivElement> {
   max?: number
 }
 
+export function progressFillClass(percent: number): string {
+  if (percent >= 100) return 'bg-destructive'
+  if (percent >= 80) return 'bg-amber-500'
+  return 'bg-primary'
+}
+
 function Progress({ className, value = 0, max = 100, ...props }: ProgressProps) {
-  const percentage = Math.min(100, Math.max(0, (value / max) * 100))
+  const percentage = max <= 0 ? 0 : Math.min(100, Math.max(0, (value / max) * 100))
 
   return (
     <div
@@ -19,7 +25,7 @@ function Progress({ className, value = 0, max = 100, ...props }: ProgressProps) 
       {...props}
     >
       <div
-        className="h-full bg-primary transition-all duration-300 ease-out"
+        className={cn('h-full transition-all duration-300 ease-out', progressFillClass(percentage))}
         style={{ width: `${percentage}%` }}
       />
     </div>

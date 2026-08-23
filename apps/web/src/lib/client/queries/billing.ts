@@ -4,6 +4,7 @@ import {
   fetchBillingInvoicesFn,
   fetchBillingOverviewFn,
   fetchPlanUsageFn,
+  fetchSeatsPreviewFn,
 } from '@/lib/server/functions/billing'
 
 /** Billing state and catalogue from the control plane. */
@@ -32,6 +33,12 @@ export const billingQueries = {
       queryKey: ['billing', 'usage'] as const,
       queryFn: () => fetchPlanUsageFn(),
       staleTime: 30_000,
+    }),
+  seatsPreview: (quantity: number) =>
+    queryOptions({
+      queryKey: ['billing', 'seats-preview', quantity] as const,
+      queryFn: () => fetchSeatsPreviewFn({ data: { quantity } }),
+      staleTime: 10_000,
     }),
 }
 

@@ -6,10 +6,12 @@ import type { BillingCatalogue, CustomerInvoice } from '@/lib/server/control-pla
 import { billingQueries } from '@/lib/client/queries/billing'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Progress } from '@/components/ui/progress'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { cn } from '@/lib/shared/utils'
 import { formatUsd } from '@/lib/shared/format-usd'
-import { formatUsageLine } from '@/lib/shared/billing/plan-usage'
+import { seatUnitCents } from './seat-price'
+import { hasTopUpPackPrice } from './topup-price'
 import {
   billingPlanAction,
   catalogueTrialDays,
@@ -17,6 +19,10 @@ import {
   type BillingPlanAction,
   type PaidPlanId,
 } from '@/lib/shared/billing/plan-action'
+import { AddSeatsDialog } from './add-seats-dialog'
+import { RemoveSeatsDialog } from './remove-seats-dialog'
+import { TopUpDialog } from './topup-dialog'
+import { UsageMeter } from './usage-meter'
 
 /** Workspace-local presentation of the control-plane billing projection. */
 export function BillingSettings() {
@@ -54,24 +60,32 @@ export function BillingPlansView(props: {
   usage?: Array<{ key: string; label: string; used: number; limit: number | null }>
 }) {
   const [period, setPeriod] = useState<'monthly' | 'annual'>('annual')
+  const [addSeatsOpen, setAddSeatsOpen] = useState(false)
+  const [removeSeatsOpen, setRemoveSeatsOpen] = useState(false)
+  const [topupMeter, setTopupMeter] = useState<'ai' | 'email' | null>(null)
   const { overview, catalogue } = props
   const trialDays = catalogueTrialDays(catalogue)
   const trialedPlanIds = catalogueTrialedPlanIds(catalogue)
-  const usageLines = (props.usage ?? []).map(formatUsageLine)
+  const checkoutQuantity = Math.max(overview.seats?.used ?? 1, 1)
+  const currentCataloguePlan = catalogue?.plans.find((plan) => plan.id === overview.plan)
+  const grandfatheredFlat =
+    currentCataloguePlan?.billedPer === 'workspace' && overview.plan !== 'free'
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 space-y-1">
-          <StatusLine overview={overview} />
-          {usageLines.length > 0 ? (
-            <p className="font-mono text-[12px] text-muted-foreground tabular-nums">
-              {usageLines.join(' · ')}
-            </p>
-          ) : null}
-        </div>
-        {overview.canManageBilling ? <PortalButton label="Manage billing" /> : null}
-      </div>
+    <div className="space-y-6">
+      <CurrentPlanCard
+        overview={overview}
+        catalogue={catalogue}
+        onAddSeats={() => setAddSeatsOpen(true)}
+        onRemoveSeats={() => setRemoveSeatsOpen(true)}
+      />
+
+      <UsageCard
+        overview={overview}
+        catalogue={catalogue}
+        usage={props.usage ?? []}
+        onTopUp={setTopupMeter}
+      />
 
       <section className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -80,6 +94,7 @@ export function BillingPlansView(props: {
             <p className="mt-1 text-xs text-muted-foreground">
               Upgrades apply immediately (pro-rata). Downgrades take effect at the end of the
               current billing period. A {trialDays}-day trial is available once per paid plan.
+              {grandfatheredFlat ? ' Switching plans moves you onto per-seat pricing.' : null}
             </p>
           </div>
           <PeriodToggle
@@ -106,11 +121,14 @@ export function BillingPlansView(props: {
                 action={billingPlanAction(plan.id, overview, trialedPlanIds)}
                 trialActive={overview.trialActive && overview.plan === plan.id}
                 index={index}
+                checkoutQuantity={checkoutQuantity}
               />
             ))}
           </div>
         )}
       </section>
+
+      <AddOnsCard catalogue={catalogue} />
 
       <section className="space-y-3">
         <h2 className="text-base font-semibold">Previous invoices</h2>
@@ -127,21 +145,241 @@ export function BillingPlansView(props: {
           <InvoiceList invoices={props.invoices} />
         )}
       </section>
+
+      {addSeatsOpen ? <AddSeatsDialog open onOpenChange={setAddSeatsOpen} /> : null}
+      {removeSeatsOpen ? <RemoveSeatsDialog open onOpenChange={setRemoveSeatsOpen} /> : null}
+      {topupMeter ? (
+        <TopUpDialog
+          open
+          meter={topupMeter}
+          onOpenChange={(open) => {
+            if (!open) setTopupMeter(null)
+          }}
+        />
+      ) : null}
     </div>
   )
 }
 
-function StatusLine({ overview }: { overview: BillingProjectionOverview }) {
-  const bits: string[] = []
-  if (overview.trialActive && overview.trialExpiresAt) {
-    bits.push(`${overview.planName} trial · ends ${formatDate(overview.trialExpiresAt)}`)
-  } else if (overview.status) {
-    bits.push(STATUS_LABELS[overview.status] ?? overview.status)
+function CurrentPlanCard(props: {
+  overview: BillingProjectionOverview
+  catalogue: BillingCatalogue | null
+  onAddSeats: () => void
+  onRemoveSeats: () => void
+}) {
+  const { overview, catalogue } = props
+  const plan = catalogue?.plans.find((entry) => entry.id === overview.plan)
+  const purchased = overview.seats?.purchased ?? null
+  const showSeats = purchased != null
+  const statusLabel = overview.trialActive
+    ? 'Trial'
+    : overview.status
+      ? (STATUS_LABELS[overview.status] ?? overview.status)
+      : null
+  const perSeat = plan ? seatUnitCents(plan, null) : 0
+  const renewalBits: string[] = []
+  if (overview.cancellationAt)
+    renewalBits.push(`Access ends ${formatDate(overview.cancellationAt)}`)
+  else if (overview.renewalAt) renewalBits.push(`Renews ${formatDate(overview.renewalAt)}`)
+  if (showSeats && plan && plan.billedPer === 'seat') {
+    renewalBits.push(`${purchased} seats × ${formatUsd(perSeat, 0)}/seat`)
   }
-  if (overview.cancellationAt) bits.push(`Access ends ${formatDate(overview.cancellationAt)}`)
-  else if (overview.renewalAt) bits.push(`Renews ${formatDate(overview.renewalAt)}`)
-  if (bits.length === 0) return null
-  return <p className="text-[13px] text-muted-foreground">{bits.join(' · ')}</p>
+
+  return (
+    <section className="overflow-hidden rounded-xl border border-border/50 bg-card">
+      <div className="flex items-start justify-between gap-3 px-6 py-5">
+        <div className="min-w-0 space-y-1">
+          <div className="flex items-center gap-2">
+            <h2 className="text-base font-semibold">{overview.planName}</h2>
+            {statusLabel ? (
+              <Badge size="sm" shape="pill" variant="secondary">
+                {statusLabel}
+              </Badge>
+            ) : null}
+          </div>
+          {renewalBits.length > 0 ? (
+            <p className="text-[13px] text-muted-foreground">{renewalBits.join(' · ')}</p>
+          ) : null}
+        </div>
+        {overview.canManageBilling ? <PortalButton label="Manage billing" /> : null}
+      </div>
+      {showSeats ? (
+        <SeatsBlock
+          overview={overview}
+          purchased={purchased}
+          onAddSeats={props.onAddSeats}
+          onRemoveSeats={props.onRemoveSeats}
+        />
+      ) : null}
+    </section>
+  )
+}
+
+function SeatsBlock(props: {
+  overview: BillingProjectionOverview
+  purchased: number
+  onAddSeats: () => void
+  onRemoveSeats: () => void
+}) {
+  const seats = props.overview.seats
+  const used = seats?.used ?? 0
+  const members = seats?.members ?? used
+  const pending = seats?.pending ?? 0
+  const available = Math.max(0, props.purchased - used)
+  return (
+    <div className="flex flex-col gap-2.5 border-t border-border/50 px-6 py-5">
+      <div className="flex items-baseline justify-between gap-3">
+        <div className="text-[13px] font-medium">Seats</div>
+        <div className="font-mono text-[12px] text-muted-foreground tabular-nums">
+          {used} of {props.purchased} used
+        </div>
+      </div>
+      <Progress value={used} max={Math.max(props.purchased, 1)} />
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-[12px] text-muted-foreground">
+          {members} {members === 1 ? 'member' : 'members'} · {pending} pending{' '}
+          {pending === 1 ? 'invite' : 'invites'} · {available} {available === 1 ? 'seat' : 'seats'}{' '}
+          available
+        </div>
+        {props.overview.canManageBilling ? (
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={props.purchased <= used}
+              onClick={props.onRemoveSeats}
+            >
+              Remove seats
+            </Button>
+            <Button type="button" size="sm" onClick={props.onAddSeats}>
+              Add seats
+            </Button>
+          </div>
+        ) : null}
+      </div>
+      <p className="text-[12px] text-muted-foreground">
+        Each member or pending invite uses a seat.
+      </p>
+    </div>
+  )
+}
+
+function UsageCard(props: {
+  overview: BillingProjectionOverview
+  catalogue: BillingCatalogue | null
+  usage: Array<{ key: string; label: string; used: number; limit: number | null }>
+  onTopUp: (meter: 'ai' | 'email') => void
+}) {
+  const emails = props.usage.find((line) => line.key === 'emailsPerMonth')
+  const api = props.usage.find((line) => line.key === 'apiRequestsPerMonth')
+  const ai = props.overview.ai
+  const canTopUp = props.overview.canManageBilling
+  const hasAi = ai != null && (ai.includedCents > 0 || ai.extraCents > 0)
+  const hasEmails = emails != null && emails.limit != null
+  const hasApi = api != null && api.limit != null
+  if (!hasAi && !hasEmails && !hasApi) return null
+
+  const reset = nextMonthResetLabel()
+  const meterUsed = ai ? Math.min(ai.usedCents, ai.includedCents) : 0
+
+  return (
+    <section className="overflow-hidden rounded-xl border border-border/50 bg-card">
+      <div className="flex items-center justify-between border-b border-border/50 px-6 py-4">
+        <h2 className="text-base font-semibold">Usage</h2>
+        <div className="text-[12px] text-muted-foreground">Monthly meters reset {reset}</div>
+      </div>
+      <div className="grid grid-cols-1 gap-x-8 gap-y-5 p-6 sm:grid-cols-2">
+        {hasAi && ai ? (
+          <UsageMeter
+            label="AI usage"
+            valueText={`${formatUsd(meterUsed, 2)} of ${formatUsd(ai.includedCents, 2)}`}
+            used={meterUsed}
+            limit={ai.includedCents}
+            footer={
+              <>
+                {formatUsd(ai.includedCents, 0)}/mo included, used first
+                {ai.extraCents > 0 ? ` · ${formatUsd(ai.extraCents, 2)} extra credit` : ''}
+              </>
+            }
+            action={
+              canTopUp && hasTopUpPackPrice(props.catalogue?.aiTopUpPackCents) ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => props.onTopUp('ai')}
+                >
+                  Top up
+                </Button>
+              ) : null
+            }
+          />
+        ) : null}
+        {hasEmails && emails && emails.limit != null ? (
+          <UsageMeter
+            label="Emails"
+            valueText={`${emails.used.toLocaleString()} of ${emails.limit.toLocaleString()}`}
+            used={emails.used}
+            limit={emails.limit}
+            action={
+              canTopUp &&
+              emails.limit != null &&
+              hasTopUpPackPrice(props.catalogue?.emailTopUpPackCents) ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => props.onTopUp('email')}
+                >
+                  Top up
+                </Button>
+              ) : null
+            }
+          />
+        ) : null}
+        {hasApi && api && api.limit != null ? (
+          <UsageMeter
+            label="API requests"
+            valueText={`${api.used.toLocaleString()} of ${api.limit.toLocaleString()}`}
+            used={api.used}
+            limit={api.limit}
+          />
+        ) : null}
+      </div>
+    </section>
+  )
+}
+
+function AddOnsCard({ catalogue }: { catalogue: BillingCatalogue | null }) {
+  const branding = catalogue?.brandingRemoval
+  if (!branding) return null
+  return (
+    <section className="space-y-3">
+      <h2 className="text-base font-semibold">Add-ons</h2>
+      <div className="overflow-hidden rounded-xl border border-border/50 bg-card">
+        <div className="flex items-center justify-between gap-3 px-4 py-3">
+          <div className="min-w-0">
+            <div className="text-[13px] font-medium">Remove Quackback branding</div>
+            <div className="text-[12px] text-muted-foreground">
+              Hide &quot;Powered by Quackback&quot; on the portal, widget, and emails.{' '}
+              {formatUsd(branding.monthlyCents, 0)}/mo.
+            </div>
+          </div>
+          <Button type="button" size="sm" variant="outline" disabled>
+            Add
+          </Button>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function nextMonthResetLabel(): string {
+  const date = new Date()
+  date.setUTCDate(1)
+  date.setUTCMonth(date.getUTCMonth() + 1)
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
 function PlanCard(props: {
@@ -151,6 +389,7 @@ function PlanCard(props: {
   action: BillingPlanAction
   trialActive: boolean
   index: number
+  checkoutQuantity: number
 }) {
   const { plan, period, action } = props
   const isAnnual = period === 'annual'
@@ -207,6 +446,7 @@ function PlanCard(props: {
           planName={plan.name}
           trialDays={props.trialDays}
           period={period}
+          checkoutQuantity={props.checkoutQuantity}
         />
       </div>
     </article>
@@ -218,6 +458,7 @@ function PlanActionButton(props: {
   planName: string
   trialDays: number
   period: 'monthly' | 'annual'
+  checkoutQuantity: number
 }) {
   const { action } = props
   if (action.kind === 'current') {
@@ -248,6 +489,7 @@ function PlanActionButton(props: {
       <input type="hidden" name="action" value="checkout" />
       <input type="hidden" name="planId" value={action.planId} />
       <input type="hidden" name="billingPeriod" value={props.period} />
+      <input type="hidden" name="quantity" value={String(props.checkoutQuantity)} />
       <Button size="sm" type="submit" className="w-full" variant="outline">
         {label}
       </Button>

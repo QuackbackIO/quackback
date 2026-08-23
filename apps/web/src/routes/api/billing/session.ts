@@ -8,6 +8,9 @@ export function billingSessionErrorResponse(error: unknown): Response {
   if (message === 'already_on_plan') {
     return Response.json({ error: 'already_on_plan' }, { status: 409 })
   }
+  if (message === 'seats_below_usage') {
+    return Response.json({ error: 'seats_below_usage' }, { status: 400 })
+  }
   if (message === 'Authentication required') {
     return Response.json({ error: 'unauthorized' }, { status: 401 })
   }
@@ -26,10 +29,20 @@ const actionSchema = z.discriminatedUnion('action', [
     action: z.literal('checkout'),
     planId: z.enum(['growth', 'pro', 'scale']),
     billingPeriod: z.enum(['monthly', 'annual']),
+    quantity: z.coerce.number().int().positive().optional(),
   }),
   z.object({
     action: z.literal('downgrade'),
     planId: z.literal('free'),
+  }),
+  z.object({
+    action: z.literal('seats'),
+    quantity: z.coerce.number().int().positive(),
+  }),
+  z.object({
+    action: z.literal('topup'),
+    meter: z.enum(['ai', 'email']),
+    packs: z.coerce.number().int().positive(),
   }),
 ])
 
@@ -58,7 +71,12 @@ export const Route = createFileRoute('/api/billing/session')({
             return Response.json({ error: 'billing_action_unavailable' }, { status: 403 })
           }
           const { createHostedBillingSession } = await import('@/lib/server/control-plane/client')
-          const session = await createHostedBillingSession(parsed.data)
+          const session =
+            parsed.data.action === 'seats'
+              ? await createSeatChangeSession(parsed.data.quantity)
+              : parsed.data.action === 'checkout'
+                ? await createCheckoutSession(parsed.data)
+                : await createHostedBillingSession(parsed.data)
           const location =
             typeof session.url === 'string' && session.url.startsWith('https://')
               ? session.url
@@ -71,3 +89,49 @@ export const Route = createFileRoute('/api/billing/session')({
     },
   },
 })
+
+/**
+ * Same settings-row lock invites take. Hold it across the hosted call so a
+ * concurrent invite cannot change the roster after we sampled it.
+ */
+async function withSettingsLock<T>(
+  fn: (tx: import('@/lib/server/db').Transaction) => Promise<T>
+): Promise<T> {
+  const { db, settings } = await import('@/lib/server/db')
+  return db.transaction(async (tx) => {
+    const [row] = await tx.select({ id: settings.id }).from(settings).limit(1).for('update')
+    if (!row) throw new Error('Workspace is not set up yet')
+    return fn(tx)
+  })
+}
+
+async function createSeatChangeSession(quantity: number) {
+  const { countSeatUsage } = await import('@/lib/server/domains/principals/seat-usage')
+  const { createHostedBillingSession } = await import('@/lib/server/control-plane/client')
+  return withSettingsLock(async (tx) => {
+    const seats = await countSeatUsage(tx)
+    if (quantity < seats.used) {
+      throw new Error('seats_below_usage')
+    }
+    return createHostedBillingSession({ action: 'seats', quantity })
+  })
+}
+
+/** Floor checkout seats at live usage so a stale form cannot under-seat. */
+async function createCheckoutSession(input: {
+  planId: 'growth' | 'pro' | 'scale'
+  billingPeriod: 'monthly' | 'annual'
+  quantity?: number
+}) {
+  const { countSeatUsage } = await import('@/lib/server/domains/principals/seat-usage')
+  const { createHostedBillingSession } = await import('@/lib/server/control-plane/client')
+  return withSettingsLock(async (tx) => {
+    const seats = await countSeatUsage(tx)
+    return createHostedBillingSession({
+      action: 'checkout',
+      planId: input.planId,
+      billingPeriod: input.billingPeriod,
+      quantity: Math.max(input.quantity ?? seats.used, seats.used, 1),
+    })
+  })
+}

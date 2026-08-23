@@ -388,6 +388,7 @@ went stale the moment a queue moved.
 | `import`                 | —              | 2           | 1           | 60s   |
 | `export`                 | —              | 1           | 1           | 60s   |
 | `membership-sync`        | `*/15 * * * *` | 1           | 10          | 60s   |
+| `usage-report`           | `10 * * * *`   | 1           | 10          | 60s   |
 
 <!-- QUEUE-TABLE:END -->
 

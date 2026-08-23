@@ -195,29 +195,28 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
       )
     }
 
-    // A seat is the principal row, not the invite. Cap on send can be
-    // raced by N pending invites; the accept that would create a new
-    // admin/member is the one that must refuse. Someone already seated
-    // is already counted.
     const existingBeforeClaim = await db.query.principal.findFirst({
       where: eq(principal.userId, userId),
     })
     const alreadySeated =
       existingBeforeClaim != null &&
       (existingBeforeClaim.role === 'admin' || existingBeforeClaim.role === 'member')
-    if (!alreadySeated) {
-      const { enforceSeatLimit } = await import('@/lib/server/domains/principals/seat-limit')
-      await enforceSeatLimit()
-    }
 
     const role = (inv.role || 'member') as Role
     const displayName = name?.trim() || undefined
 
     // Claim the invite and apply the membership side effects atomically:
     // a partial failure rolls the claim back, so a claimed invite can never
-    // be left without its principal/user writes.
+    // be left without its principal/user writes. The seat backstop runs
+    // inside this transaction (settings row lock + member count) so two
+    // racing accepts cannot both create a seat.
     const cacheKeysToBust: string[] = []
     const claimed = await db.transaction(async (tx) => {
+      if (!alreadySeated) {
+        const { enforceSeatLimit } = await import('@/lib/server/domains/principals/seat-limit')
+        await enforceSeatLimit({ convertingInvite: true, executor: tx })
+      }
+
       // Conditional update prevents double-accept races (double-click,
       // network retry): zero rows means someone else changed it first.
       const [row] = await tx

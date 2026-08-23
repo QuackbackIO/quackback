@@ -1,7 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
-import { db, posts, boards, principal } from '@/lib/server/db'
+import { isNull, sql } from 'drizzle-orm'
+import { db, posts, boards } from '@/lib/server/db'
 import { aiTokensThisMonth } from '@/lib/server/domains/ai/usage-counter'
+import { countSeatUsage } from '@/lib/server/domains/principals/seat-usage'
 import { authenticateAdminToken } from '@/lib/server/domains/api-keys/admin-token-auth'
 
 /**
@@ -19,7 +20,7 @@ export const Route = createFileRoute('/api/v1/admin/usage')({
         const auth = await authenticateAdminToken(request)
         if (auth) return auth
 
-        const [aiTokens, postRow, boardRow, seatRow] = await Promise.all([
+        const [aiTokens, postRow, boardRow, seats] = await Promise.all([
           aiTokensThisMonth(),
           db
             .select({ count: sql<number>`count(*)::int` })
@@ -29,12 +30,7 @@ export const Route = createFileRoute('/api/v1/admin/usage')({
             .select({ count: sql<number>`count(*)::int` })
             .from(boards)
             .where(isNull(boards.deletedAt)),
-          db
-            .select({ count: sql<number>`count(*)::int` })
-            .from(principal)
-            // Mirror enforceSeatLimit's predicate — humans only,
-            // service principals (API keys / integrations) don't count.
-            .where(and(inArray(principal.role, ['admin', 'member']), eq(principal.type, 'user'))),
+          countSeatUsage(),
         ])
 
         return new Response(
@@ -42,7 +38,8 @@ export const Route = createFileRoute('/api/v1/admin/usage')({
             aiTokensThisMonth: aiTokens,
             postCount: postRow[0]?.count ?? 0,
             boardCount: boardRow[0]?.count ?? 0,
-            teamSeatCount: seatRow[0]?.count ?? 0,
+            teamSeatCount: seats.members,
+            pendingInviteCount: seats.pendingInvites,
           }),
           { status: 200, headers: { 'content-type': 'application/json' } }
         )

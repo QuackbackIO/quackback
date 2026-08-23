@@ -28,6 +28,12 @@ describe('billingSessionErrorResponse', () => {
     await expect(res.json()).resolves.toEqual({ error: 'forbidden' })
   })
 
+  it('names a seat cut below live usage as 400', async () => {
+    const res = billingSessionErrorResponse(new Error('seats_below_usage'))
+    expect(res.status).toBe(400)
+    await expect(res.json()).resolves.toEqual({ error: 'seats_below_usage' })
+  })
+
   it('keeps unknown failures as 503', async () => {
     const res = billingSessionErrorResponse(new Error('stripe down'))
     expect(res.status).toBe(503)

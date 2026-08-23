@@ -54,7 +54,7 @@ const INCLUDED_FROM: Record<EntitlementKey, PlanId> = {
   apiAccess: 'growth',
   mcpServer: 'growth',
   webhooks: 'growth',
-  aiInsights: 'pro',
+  aiInsights: 'growth',
   workflows: 'pro',
   auditLog: 'scale',
   sso: 'scale',
@@ -134,9 +134,9 @@ describe('the levels the price list moved', () => {
     expect(isEntitled(on('growth'), 'mcpServer')).toBe(true)
   })
 
-  it('starts AI insights at Pro, not at Growth', () => {
-    expect(isEntitled(on('growth'), 'aiInsights')).toBe(false)
-    expect(isEntitled(on('pro'), 'aiInsights')).toBe(true)
+  it('includes AI insights from Growth, the cheapest paid plan', () => {
+    expect(isEntitled(on('free'), 'aiInsights')).toBe(false)
+    expect(isEntitled(on('growth'), 'aiInsights')).toBe(true)
   })
 
   it('starts workflows at Pro, not at Growth', () => {
@@ -149,12 +149,9 @@ describe('the levels the price list moved', () => {
     expect(isEntitled(on('scale'), 'auditLog')).toBe(true)
   })
 
-  it('separates AI drafts from AI insights, one tier apart', () => {
-    // The split these two keys exist for: drafting and macros in the inbox
-    // come with Growth, while post summaries and sentiment start at Pro. A
-    // single key could only have held one of those levels.
+  it('includes drafting and insights together on every paid plan', () => {
     expect(isEntitled(on('growth'), 'aiDrafts')).toBe(true)
-    expect(isEntitled(on('growth'), 'aiInsights')).toBe(false)
+    expect(isEntitled(on('growth'), 'aiInsights')).toBe(true)
     expect(isEntitled(on('pro'), 'aiDrafts')).toBe(true)
     expect(isEntitled(on('pro'), 'aiInsights')).toBe(true)
   })
