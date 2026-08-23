@@ -208,4 +208,18 @@ describe('useBrandingState initial cssText', () => {
     expect(result.current.cssText).toContain('.brand { color: red; }')
     expect(result.current.cssText).not.toBe('.brand { color: red; }')
   })
+
+  it('keeps a CSS-only palette when brandingConfig is empty', () => {
+    const cssPrimary = 'oklch(0.55 0.2 250)'
+    const { result } = renderHook(() =>
+      useBrandingState({
+        initialLogoUrl: null,
+        initialThemeConfig: { themeMode: 'user' },
+        initialCustomCss: `:root { --primary: ${cssPrimary}; }\n.brand { color: red; }\n`,
+      })
+    )
+
+    expect(result.current.parsedCssVariables.light['--primary']).toBe(cssPrimary)
+    expect(result.current.cssText).toContain('.brand { color: red; }')
+  })
 })

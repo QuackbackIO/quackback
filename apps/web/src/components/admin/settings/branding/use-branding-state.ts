@@ -167,14 +167,19 @@ export interface BrandingState {
 
 function buildInitialCss(initialCustomCss: string, initialThemeConfig: ThemeConfig): string {
   const defaultPreset = themePresets.default
-  const lightMinimal = extractMinimal({
-    ...defaultPreset.light,
+  const parsed = extractCssVariables(initialCustomCss)
+  // Structured brandingConfig wins; CSS-parsed values fill gaps so a
+  // CSS-only palette (empty/partial config) is not replaced by defaults.
+  const lightMinimal: Partial<MinimalThemeVariables> = {
+    ...extractMinimal(defaultPreset.light),
+    ...parseCssToMinimal(parsed.light),
     ...(initialThemeConfig.light ?? {}),
-  })
-  const darkMinimal = extractMinimal({
-    ...defaultPreset.dark,
+  }
+  const darkMinimal: Partial<MinimalThemeVariables> = {
+    ...extractMinimal(defaultPreset.dark),
+    ...parseCssToMinimal(parsed.dark),
     ...(initialThemeConfig.dark ?? {}),
-  })
+  }
 
   const generated = generateReadableCSS(lightMinimal, darkMinimal, initialThemeConfig.themeMode)
   const remainder = advancedCssRemainder(initialCustomCss)

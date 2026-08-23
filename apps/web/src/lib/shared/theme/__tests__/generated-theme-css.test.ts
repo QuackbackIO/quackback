@@ -56,4 +56,11 @@ describe('advancedCssRemainder', () => {
     expect(remainder).toContain('--logo: url(data:image/png;base64,abc)')
     expect(remainder).not.toContain('--primary')
   })
+
+  it('does not end a :root block on a quoted brace', () => {
+    const css = ':root { --token: "}"; color-scheme: dark; }\n'
+    const remainder = advancedCssRemainder(css)
+    expect(remainder).toContain('--token: "}"')
+    expect(remainder).toMatch(/color-scheme:\s*dark/)
+  })
 })

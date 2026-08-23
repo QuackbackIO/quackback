@@ -110,57 +110,68 @@ function isGeneratedThemeDeclaration(decl: string): boolean {
   return name != null && GENERATED_THEME_VAR_NAMES.has(name)
 }
 
+interface CssScan {
+  quote: '"' | "'" | null
+  comment: boolean
+  paren: number
+}
+
+function isCssCode(scan: CssScan): boolean {
+  return !scan.comment && scan.quote === null
+}
+
+/** Consume one token of CSS context (quotes, comments, `url()` / paren depth). Returns chars consumed. */
+function advanceCssScan(scan: CssScan, source: string, i: number): number {
+  const c = source[i]
+  const next = source[i + 1]
+  if (scan.comment) {
+    if (c === '*' && next === '/') {
+      scan.comment = false
+      return 2
+    }
+    return 1
+  }
+  if (scan.quote) {
+    if (c === '\\' && next !== undefined) return 2
+    if (c === scan.quote) scan.quote = null
+    return 1
+  }
+  if (c === '/' && next === '*') {
+    scan.comment = true
+    return 2
+  }
+  if (c === '"' || c === "'") {
+    scan.quote = c
+    return 1
+  }
+  if (c === '(') {
+    scan.paren++
+    return 1
+  }
+  if (c === ')' && scan.paren > 0) {
+    scan.paren--
+    return 1
+  }
+  return 1
+}
+
 /** Split a declaration block on `;` while ignoring those inside quotes, comments, or parentheses (including `url(...)`). */
 function splitCssDeclarations(body: string): string[] {
   const decls: string[] = []
+  const scan: CssScan = { quote: null, comment: false, paren: 0 }
   let start = 0
-  let quote: '"' | "'" | null = null
-  let comment = false
-  let paren = 0
-
-  for (let i = 0; i < body.length; i++) {
+  let i = 0
+  while (i < body.length) {
     const c = body[i]
-    const next = body[i + 1]
-
-    if (comment) {
-      if (c === '*' && next === '/') {
-        comment = false
-        i++
-      }
-      continue
-    }
-    if (quote) {
-      if (c === '\\') {
-        i++
-        continue
-      }
-      if (c === quote) quote = null
-      continue
-    }
-    if (c === '/' && next === '*') {
-      comment = true
-      i++
-      continue
-    }
-    if (c === '"' || c === "'") {
-      quote = c
-      continue
-    }
-    if (c === '(') {
-      paren++
-      continue
-    }
-    if (c === ')' && paren > 0) {
-      paren--
-      continue
-    }
-    if (c === ';' && paren === 0) {
+    if (c === ';' && isCssCode(scan) && scan.paren === 0) {
       const decl = body.slice(start, i).trim()
       if (decl) decls.push(decl)
       start = i + 1
+      i++
+      continue
     }
+    i += advanceCssScan(scan, body, i)
   }
-
   const tail = body.slice(start).trim()
   if (tail) decls.push(tail)
   return decls
@@ -175,6 +186,46 @@ function keepNonGeneratedDeclarations(body: string): string {
   return kept.join('\n')
 }
 
+function matchThemeSelector(
+  source: string,
+  i: number
+): { selector: ':root' | '.dark'; openBrace: number } | null {
+  if (i > 0 && /[\w-]/.test(source[i - 1] ?? '')) return null
+  let selector: ':root' | '.dark' | null = null
+  if (source.startsWith(':root', i)) selector = ':root'
+  else if (source.startsWith('.dark', i)) selector = '.dark'
+  if (!selector) return null
+  let j = i + selector.length
+  while (j < source.length && /\s/.test(source[j] ?? '')) j++
+  if (source[j] !== '{') return null
+  return { selector, openBrace: j }
+}
+
+/** Index of the `}` that closes the `{` at `openIndex`, ignoring braces inside quotes, comments, or parentheses. */
+function findMatchingBrace(source: string, openIndex: number): number {
+  const scan: CssScan = { quote: null, comment: false, paren: 0 }
+  let depth = 0
+  let i = openIndex
+  while (i < source.length) {
+    const c = source[i]
+    if (isCssCode(scan) && scan.paren === 0) {
+      if (c === '{') {
+        depth++
+        i++
+        continue
+      }
+      if (c === '}') {
+        depth--
+        if (depth === 0) return i
+        i++
+        continue
+      }
+    }
+    i += advanceCssScan(scan, source, i)
+  }
+  return source.length
+}
+
 /**
  * CSS left after removing generated theme declarations.
  * Drops `:root` / `.dark` variables (and the generated `font-family` rule)
@@ -182,15 +233,38 @@ function keepNonGeneratedDeclarations(body: string): string {
  * leaves every other rule as-is. Generated-only CSS yields ''.
  */
 export function advancedCssRemainder(cssText: string): string {
-  const result = cssText.replace(
-    /(?<![\w-])(:root|\.dark)\s*\{([\s\S]*?)\}/g,
-    (_match, selector: string, body: string) => {
-      const kept = keepNonGeneratedDeclarations(body)
-      if (!kept) return ''
-      return `${selector} {\n${kept}\n}`
+  let out = ''
+  let i = 0
+  const scan: CssScan = { quote: null, comment: false, paren: 0 }
+  let braceDepth = 0
+
+  while (i < cssText.length) {
+    if (braceDepth === 0 && isCssCode(scan) && scan.paren === 0) {
+      const theme = matchThemeSelector(cssText, i)
+      if (theme) {
+        const close = findMatchingBrace(cssText, theme.openBrace)
+        const body = cssText.slice(theme.openBrace + 1, close)
+        const kept = keepNonGeneratedDeclarations(body)
+        if (kept) out += `${theme.selector} {\n${kept}\n}`
+        i = close < cssText.length ? close + 1 : cssText.length
+        scan.quote = null
+        scan.comment = false
+        scan.paren = 0
+        continue
+      }
     }
-  )
-  return result.replace(/(?:\n[ \t]*){3,}/g, '\n\n').trim()
+
+    const c = cssText[i]
+    if (isCssCode(scan) && scan.paren === 0) {
+      if (c === '{') braceDepth++
+      else if (c === '}' && braceDepth > 0) braceDepth--
+    }
+    const n = advanceCssScan(scan, cssText, i)
+    out += cssText.slice(i, i + n)
+    i += n
+  }
+
+  return out.replace(/(?:\n[ \t]*){3,}/g, '\n\n').trim()
 }
 
 function formatCssBlock(selector: string, vars: ThemeVariables): string {
