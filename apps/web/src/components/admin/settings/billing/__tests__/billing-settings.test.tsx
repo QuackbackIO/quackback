@@ -282,6 +282,18 @@ describe('BillingPlansView', () => {
     expect(screen.queryByRole('button', { name: /Continue with/ })).not.toBeInTheDocument()
   })
 
+  it('does not offer Continue with a historical trial on a paid plan', () => {
+    renderView({
+      overview: {
+        ...paidOverview,
+        canUpgrade: true,
+        trialPlanId: null,
+        trialPlanName: null,
+      },
+    })
+    expect(screen.queryByRole('button', { name: /Continue with/ })).not.toBeInTheDocument()
+  })
+
   it('shows annual monthly equivalent from the catalogue', () => {
     renderView()
     expect(screen.getByText(/Moving up applies now/)).toBeInTheDocument()

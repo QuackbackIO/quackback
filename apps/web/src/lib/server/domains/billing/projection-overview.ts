@@ -62,6 +62,20 @@ export function catalogueAiIncludedCents(
  * Free, trial, workspace-billed, and missing billedPer (grandfathered /
  * catalogue unavailable) stay null so Add seats cannot target an overlay.
  */
+/** lastTrialPlanId is catalogue history. Only surface it while a product
+ *  trial is running or in the 7-day ended window; a paid workspace must
+ *  not keep a Continue-with CTA for a plan it already left. */
+export function trialPlanIdForOverview(input: {
+  trialActive: boolean
+  trialEnded: boolean
+  plan: PlanId
+  lastTrialPlanId: Exclude<PlanId, 'free'> | null
+}): Exclude<PlanId, 'free'> | null {
+  if (input.trialActive && input.plan !== 'free') return input.plan
+  if (input.trialEnded) return input.lastTrialPlanId
+  return null
+}
+
 export function purchasedSeatsFromProjection(input: {
   billedPer: 'seat' | 'workspace' | undefined
   plan: PlanId
@@ -117,14 +131,18 @@ export async function getBillingProjectionOverview(): Promise<BillingProjectionO
         })
       : null
 
-  const lastTrialPlanId = catalogue?.lastTrialPlanId ?? null
-  const trialPlanId =
-    cloud.trialActive && cloud.plan && cloud.plan !== 'free' ? cloud.plan : lastTrialPlanId
   const trialEnded = isTrialEnded({
     plan: cloud.plan,
     trialActive: cloud.trialActive,
     trialExpiresAt: cloud.trialExpiresAt,
     status: cloud.subscriptionStatus,
+  })
+  const lastTrialPlanId = catalogue?.lastTrialPlanId ?? null
+  const trialPlanId = trialPlanIdForOverview({
+    trialActive: cloud.trialActive,
+    trialEnded,
+    plan: cloud.plan,
+    lastTrialPlanId,
   })
 
   return {
