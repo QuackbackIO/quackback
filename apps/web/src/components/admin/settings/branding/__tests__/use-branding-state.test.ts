@@ -54,11 +54,13 @@ describe('useBrandingState setThemeMode', () => {
       })
     )
 
+    const before = result.current.cssText
     act(() => {
       result.current.setThemeMode('dark')
     })
 
-    expect(result.current.cssText).toBe(custom)
+    expect(result.current.cssText).toBe(before)
+    expect(result.current.cssText).toContain('.brand { color: red; }')
   })
 
   it('rewrites leftover Advanced CSS as remainder-only when extras are unchanged', async () => {
@@ -168,22 +170,42 @@ describe('useBrandingState setThemeMode', () => {
 
 describe('useBrandingState typography', () => {
   it('reads font and radius from the dark block in dark-only CSS', () => {
-    const custom = [
-      '.dark {',
-      '  --font-sans: "Lora", ui-serif, Georgia, serif;',
-      '  --radius: 1.25rem;',
-      '}',
-      '',
-    ].join('\n')
     const { result } = renderHook(() =>
       useBrandingState({
         initialLogoUrl: null,
-        initialThemeConfig: { themeMode: 'dark' },
-        initialCustomCss: custom,
+        initialThemeConfig: {
+          themeMode: 'dark',
+          dark: {
+            fontSans: '"Lora", ui-serif, Georgia, serif',
+            radius: '1.25rem',
+          },
+        },
+        initialCustomCss: '',
       })
     )
 
     expect(result.current.font).toBe('"Lora", ui-serif, Georgia, serif')
     expect(result.current.radius).toBe(1.25)
+  })
+})
+
+describe('useBrandingState initial cssText', () => {
+  it('seeds generated theme CSS from brandingConfig and appends remainder-only custom CSS', () => {
+    const customPrimary = 'oklch(0.55 0.2 250)'
+    const { result } = renderHook(() =>
+      useBrandingState({
+        initialLogoUrl: null,
+        initialThemeConfig: {
+          themeMode: 'user',
+          light: { primary: customPrimary },
+          dark: { primary: customPrimary },
+        },
+        initialCustomCss: '.brand { color: red; }',
+      })
+    )
+
+    expect(result.current.cssText).toContain(`--primary: ${customPrimary}`)
+    expect(result.current.cssText).toContain('.brand { color: red; }')
+    expect(result.current.cssText).not.toBe('.brand { color: red; }')
   })
 })

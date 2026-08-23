@@ -110,11 +110,66 @@ function isGeneratedThemeDeclaration(decl: string): boolean {
   return name != null && GENERATED_THEME_VAR_NAMES.has(name)
 }
 
+/** Split a declaration block on `;` while ignoring those inside quotes, comments, or parentheses (including `url(...)`). */
+function splitCssDeclarations(body: string): string[] {
+  const decls: string[] = []
+  let start = 0
+  let quote: '"' | "'" | null = null
+  let comment = false
+  let paren = 0
+
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i]
+    const next = body[i + 1]
+
+    if (comment) {
+      if (c === '*' && next === '/') {
+        comment = false
+        i++
+      }
+      continue
+    }
+    if (quote) {
+      if (c === '\\') {
+        i++
+        continue
+      }
+      if (c === quote) quote = null
+      continue
+    }
+    if (c === '/' && next === '*') {
+      comment = true
+      i++
+      continue
+    }
+    if (c === '"' || c === "'") {
+      quote = c
+      continue
+    }
+    if (c === '(') {
+      paren++
+      continue
+    }
+    if (c === ')' && paren > 0) {
+      paren--
+      continue
+    }
+    if (c === ';' && paren === 0) {
+      const decl = body.slice(start, i).trim()
+      if (decl) decls.push(decl)
+      start = i + 1
+    }
+  }
+
+  const tail = body.slice(start).trim()
+  if (tail) decls.push(tail)
+  return decls
+}
+
 function keepNonGeneratedDeclarations(body: string): string {
   const kept: string[] = []
-  for (const raw of body.split(';')) {
-    const decl = raw.trim()
-    if (!decl || isGeneratedThemeDeclaration(decl)) continue
+  for (const decl of splitCssDeclarations(body)) {
+    if (isGeneratedThemeDeclaration(decl)) continue
     kept.push(`  ${decl};`)
   }
   return kept.join('\n')

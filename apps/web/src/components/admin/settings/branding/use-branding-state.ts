@@ -166,10 +166,6 @@ export interface BrandingState {
 }
 
 function buildInitialCss(initialCustomCss: string, initialThemeConfig: ThemeConfig): string {
-  // If user already has custom CSS, use it as-is
-  if (initialCustomCss.trim()) return initialCustomCss
-
-  // Otherwise generate readable CSS from the structured config
   const defaultPreset = themePresets.default
   const lightMinimal = extractMinimal({
     ...defaultPreset.light,
@@ -180,7 +176,10 @@ function buildInitialCss(initialCustomCss: string, initialThemeConfig: ThemeConf
     ...(initialThemeConfig.dark ?? {}),
   })
 
-  return generateReadableCSS(lightMinimal, darkMinimal, initialThemeConfig.themeMode)
+  const generated = generateReadableCSS(lightMinimal, darkMinimal, initialThemeConfig.themeMode)
+  const remainder = advancedCssRemainder(initialCustomCss)
+  if (!remainder) return generated
+  return `${generated.trimEnd()}\n\n${remainder}`
 }
 
 export function useBrandingState(options: UseBrandingStateOptions): BrandingState {

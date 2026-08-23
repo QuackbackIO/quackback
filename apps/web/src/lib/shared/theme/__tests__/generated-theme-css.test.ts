@@ -49,4 +49,11 @@ describe('advancedCssRemainder', () => {
     expect(remainder).toMatch(/:root\s*\{[^}]*color-scheme:\s*dark/)
     expect(remainder).not.toContain('--primary')
   })
+
+  it('does not split on a semicolon inside a declaration value', () => {
+    const css = ':root { --primary: oklch(0.5 0.2 250); --logo: url(data:image/png;base64,abc); }\n'
+    const remainder = advancedCssRemainder(css)
+    expect(remainder).toContain('--logo: url(data:image/png;base64,abc)')
+    expect(remainder).not.toContain('--primary')
+  })
 })
