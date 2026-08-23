@@ -21,7 +21,9 @@ export function resolveCloudConfig(
     projection.planLimitsExpireAt !== null &&
     now.getTime() >= Date.parse(projection.planLimitsExpireAt)
   const trialActive =
-    projection.trialExpiresAt !== null && now.getTime() < Date.parse(projection.trialExpiresAt)
+    projection.subscriptionStatus == null &&
+    projection.trialExpiresAt !== null &&
+    now.getTime() < Date.parse(projection.trialExpiresAt)
 
   return {
     enabled: true,

@@ -19,8 +19,10 @@ import {
   type BillingPlanAction,
   type PaidPlanId,
 } from '@/lib/shared/billing/plan-action'
+import { daysUntil } from '@/lib/shared/billing/trial-state'
 import { AddSeatsDialog } from './add-seats-dialog'
 import { RemoveSeatsDialog } from './remove-seats-dialog'
+import { SubscribeDialog } from './subscribe-dialog'
 import { TopUpDialog } from './topup-dialog'
 import { UsageMeter } from './usage-meter'
 
@@ -63,7 +65,9 @@ export function BillingPlansView(props: {
   const [addSeatsOpen, setAddSeatsOpen] = useState(false)
   const [removeSeatsOpen, setRemoveSeatsOpen] = useState(false)
   const [topupMeter, setTopupMeter] = useState<'ai' | 'email' | null>(null)
+  const [subscribePlanId, setSubscribePlanId] = useState<PaidPlanId | null>(null)
   const { overview, catalogue } = props
+  const subscribePlan = catalogue?.plans.find((plan) => plan.id === subscribePlanId)
   const trialDays = catalogueTrialDays(catalogue)
   const trialedPlanIds = catalogueTrialedPlanIds(catalogue)
   const checkoutQuantity = Math.max(overview.seats?.used ?? 1, 1)
@@ -78,6 +82,7 @@ export function BillingPlansView(props: {
         catalogue={catalogue}
         onAddSeats={() => setAddSeatsOpen(true)}
         onRemoveSeats={() => setRemoveSeatsOpen(true)}
+        onSubscribe={setSubscribePlanId}
       />
 
       <UsageCard
@@ -92,8 +97,8 @@ export function BillingPlansView(props: {
           <div>
             <h2 className="text-base font-semibold">Plans</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Upgrades apply immediately (pro-rata). Downgrades take effect at the end of the
-              current billing period. A {trialDays}-day trial is available once per paid plan.
+              Moving up applies now, billed pro-rata. Moving to a lower plan waits until the end of
+              the current period. You can try each paid plan once for {trialDays} days.
               {grandfatheredFlat ? ' Switching plans moves you onto per-seat pricing.' : null}
             </p>
           </div>
@@ -122,6 +127,8 @@ export function BillingPlansView(props: {
                 trialActive={overview.trialActive && overview.plan === plan.id}
                 index={index}
                 checkoutQuantity={checkoutQuantity}
+                subscribeIsContinuation={Boolean(overview.trialActive || overview.trialEnded)}
+                onSubscribe={setSubscribePlanId}
               />
             ))}
           </div>
@@ -148,6 +155,18 @@ export function BillingPlansView(props: {
 
       {addSeatsOpen ? <AddSeatsDialog open onOpenChange={setAddSeatsOpen} /> : null}
       {removeSeatsOpen ? <RemoveSeatsDialog open onOpenChange={setRemoveSeatsOpen} /> : null}
+      {subscribePlan && subscribePlan.id !== 'free' ? (
+        <SubscribeDialog
+          open
+          plan={subscribePlan}
+          endsTrial={Boolean(overview.trialActive || overview.trialEnded)}
+          minSeats={checkoutQuantity}
+          discountMonths={catalogue?.annualDiscountMonths ?? 2}
+          onOpenChange={(open) => {
+            if (!open) setSubscribePlanId(null)
+          }}
+        />
+      ) : null}
       {topupMeter ? (
         <TopUpDialog
           open
@@ -166,21 +185,43 @@ function CurrentPlanCard(props: {
   catalogue: BillingCatalogue | null
   onAddSeats: () => void
   onRemoveSeats: () => void
+  onSubscribe: (planId: PaidPlanId) => void
 }) {
   const { overview, catalogue } = props
   const plan = catalogue?.plans.find((entry) => entry.id === overview.plan)
   const purchased = overview.seats?.purchased ?? null
   const showSeats = purchased != null
+  const trialPlanName = overview.trialPlanName ?? overview.planName
+  const subscribePlanId = overview.trialPlanId ?? (overview.plan !== 'free' ? overview.plan : null)
+  const canSubscribe = Boolean(overview.canUpgrade && subscribePlanId)
+  const daysLeft =
+    overview.trialActive && overview.trialExpiresAt ? daysUntil(overview.trialExpiresAt) : null
   const statusLabel = overview.trialActive
     ? 'Trial'
-    : overview.status
-      ? (STATUS_LABELS[overview.status] ?? overview.status)
-      : null
+    : overview.trialEnded
+      ? 'Trial ended'
+      : overview.status
+        ? (STATUS_LABELS[overview.status] ?? overview.status)
+        : null
   const perSeat = plan ? seatUnitCents(plan, null) : 0
   const renewalBits: string[] = []
-  if (overview.cancellationAt)
-    renewalBits.push(`Access ends ${formatDate(overview.cancellationAt)}`)
-  else if (overview.renewalAt) renewalBits.push(`Renews ${formatDate(overview.renewalAt)}`)
+  if (overview.trialActive && overview.trialExpiresAt) {
+    const left =
+      daysLeft === null
+        ? ''
+        : daysLeft === 0
+          ? ' (ends today)'
+          : ` (${daysLeft} ${daysLeft === 1 ? 'day' : 'days'} left)`
+    renewalBits.push(`Trial ends ${formatDate(overview.trialExpiresAt)}${left}`)
+  } else if (overview.trialEnded && overview.trialExpiresAt) {
+    renewalBits.push(
+      `Your ${trialPlanName} trial ended ${formatDate(overview.trialExpiresAt)}. Everything you built is still here.`
+    )
+  } else if (overview.cancellationAt) {
+    renewalBits.push(`Paid through ${formatDate(overview.cancellationAt)}`)
+  } else if (overview.renewalAt) {
+    renewalBits.push(`Renews ${formatDate(overview.renewalAt)}`)
+  }
   if (showSeats && plan && plan.billedPer === 'seat') {
     renewalBits.push(`${purchased} seats × ${formatUsd(perSeat, 0)}/seat`)
   }
@@ -201,9 +242,20 @@ function CurrentPlanCard(props: {
             <p className="text-[13px] text-muted-foreground">{renewalBits.join(' · ')}</p>
           ) : null}
         </div>
-        {overview.canManageBilling ? <PortalButton label="Manage billing" /> : null}
+        <div className="flex shrink-0 items-center gap-2">
+          {canSubscribe && subscribePlanId ? (
+            <Button size="sm" type="button" onClick={() => props.onSubscribe(subscribePlanId)}>
+              Continue with {trialPlanName}
+            </Button>
+          ) : null}
+          {overview.canManageBilling ? <PortalButton label="Manage billing" /> : null}
+        </div>
       </div>
-      {showSeats ? (
+      {overview.trialActive ? (
+        <TrialSeatsRow overview={overview} />
+      ) : overview.trialEnded ? (
+        <EndedSeatsRow overview={overview} />
+      ) : showSeats ? (
         <SeatsBlock
           overview={overview}
           purchased={purchased}
@@ -212,6 +264,42 @@ function CurrentPlanCard(props: {
         />
       ) : null}
     </section>
+  )
+}
+
+function TrialSeatsRow(props: { overview: BillingProjectionOverview }) {
+  const seats = props.overview.seats
+  const used = seats?.used ?? 0
+  const members = seats?.members ?? used
+  const pending = seats?.pending ?? 0
+  return (
+    <div className="border-t border-border/50 px-6 py-5">
+      <p className="text-[13px] text-muted-foreground">
+        Uncapped during your trial · {members} {members === 1 ? 'member' : 'members'} · {pending}{' '}
+        pending {pending === 1 ? 'invite' : 'invites'} · checkout starts at your current {used}{' '}
+        {used === 1 ? 'seat' : 'seats'}
+      </p>
+    </div>
+  )
+}
+
+function EndedSeatsRow(props: { overview: BillingProjectionOverview }) {
+  const seats = props.overview.seats
+  const used = seats?.used ?? 0
+  const cap = 1
+  return (
+    <div className="flex flex-col gap-2.5 border-t border-border/50 px-6 py-5">
+      <div className="flex items-baseline justify-between gap-3">
+        <div className="text-[13px] font-medium">Seats</div>
+        <div className="font-mono text-[12px] text-muted-foreground tabular-nums">
+          {used} of {cap} used
+        </div>
+      </div>
+      <Progress value={used} max={cap} />
+      <p className="text-[12px] text-muted-foreground">
+        Everyone keeps access. New invites pause until you continue with a paid plan.
+      </p>
+    </div>
   )
 }
 
@@ -390,6 +478,8 @@ function PlanCard(props: {
   trialActive: boolean
   index: number
   checkoutQuantity: number
+  subscribeIsContinuation: boolean
+  onSubscribe: (planId: PaidPlanId) => void
 }) {
   const { plan, period, action } = props
   const isAnnual = period === 'annual'
@@ -447,6 +537,8 @@ function PlanCard(props: {
           trialDays={props.trialDays}
           period={period}
           checkoutQuantity={props.checkoutQuantity}
+          subscribeIsContinuation={props.subscribeIsContinuation}
+          onSubscribe={props.onSubscribe}
         />
       </div>
     </article>
@@ -459,6 +551,8 @@ function PlanActionButton(props: {
   trialDays: number
   period: 'monthly' | 'annual'
   checkoutQuantity: number
+  subscribeIsContinuation: boolean
+  onSubscribe: (planId: PaidPlanId) => void
 }) {
   const { action } = props
   if (action.kind === 'current') {
@@ -471,7 +565,7 @@ function PlanActionButton(props: {
   if (action.kind === 'unavailable') {
     return (
       <Button size="sm" variant="outline" className="w-full" disabled>
-        {props.planName === 'Free' ? 'Downgrade' : `Choose ${props.planName}`}
+        {props.planName === 'Free' ? 'Switch to Free' : `Choose ${props.planName}`}
       </Button>
     )
   }
@@ -483,7 +577,21 @@ function PlanActionButton(props: {
   if (action.kind === 'downgrade') {
     return <DowngradeButton />
   }
-  const label = action.kind === 'switch' ? `Switch to this plan` : `Subscribe to ${props.planName}`
+  if (action.kind === 'subscribe') {
+    return (
+      <Button
+        size="sm"
+        type="button"
+        className="w-full"
+        variant="outline"
+        onClick={() => props.onSubscribe(action.planId)}
+      >
+        {props.subscribeIsContinuation
+          ? `Continue with ${props.planName}`
+          : `Subscribe to ${props.planName}`}
+      </Button>
+    )
+  }
   return (
     <form method="post" action="/api/billing/session">
       <input type="hidden" name="action" value="checkout" />
@@ -491,7 +599,7 @@ function PlanActionButton(props: {
       <input type="hidden" name="billingPeriod" value={props.period} />
       <input type="hidden" name="quantity" value={String(props.checkoutQuantity)} />
       <Button size="sm" type="submit" className="w-full" variant="outline">
-        {label}
+        Switch to this plan
       </Button>
     </form>
   )
@@ -513,8 +621,8 @@ function TrialButton(props: { planId: PaidPlanId; planName: string; trialDays: n
       <ConfirmDialog
         open={open}
         onOpenChange={setOpen}
-        title={`Start a ${props.trialDays}-day ${props.planName} trial?`}
-        description={`You’ll have ${props.planName} for ${props.trialDays} days. When it ends you return to Free. Nothing is deleted. You can’t trial ${props.planName} again.`}
+        title={`Try ${props.planName} for ${props.trialDays} days?`}
+        description={`You’ll have ${props.planName} for ${props.trialDays} days. When it ends you continue on Free with everything you have built. Each paid plan can be tried once.`}
         confirmLabel={`Start ${props.planName} trial`}
         onConfirm={() => {
           const form = document.getElementById(`trial-${props.planId}`) as HTMLFormElement | null
@@ -544,14 +652,14 @@ function DowngradeButton() {
         className="w-full"
         onClick={() => setOpen(true)}
       >
-        Downgrade
+        Switch to Free
       </Button>
       <ConfirmDialog
         open={open}
         onOpenChange={setOpen}
-        title="Downgrade to Free?"
-        description="Your workspace stays online. New work that exceeds Free limits will be refused; existing data is kept. A paid plan stays in force until the end of the current period. An active trial ends now."
-        confirmLabel="Downgrade to Free"
+        title="Switch to Free?"
+        description="You’ll keep all existing data and stay online. New work that goes past Free limits will pause until you pick a paid plan again. If you are on a paid period, Free starts when it ends. An active trial ends now."
+        confirmLabel="Switch to Free"
         variant="destructive"
         onConfirm={() => {
           const form = document.getElementById('downgrade-free') as HTMLFormElement | null

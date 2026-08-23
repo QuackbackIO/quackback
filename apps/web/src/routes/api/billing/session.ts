@@ -3,24 +3,26 @@ import { z } from 'zod'
 import { isSameOriginFormPost } from '@/lib/server/http/same-origin-form'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 
+export function billingErrorCode(error: unknown): string {
+  const message = error instanceof Error ? error.message : ''
+  if (message === 'already_on_plan') return 'already_on_plan'
+  if (message === 'seats_below_usage') return 'seats_below_usage'
+  if (message === 'Authentication required') return 'unauthorized'
+  if (message === 'Access denied: Not a team member') return 'not_teammate'
+  if (message.startsWith('Access denied:')) return 'forbidden'
+  return 'unavailable'
+}
+
+/** Browser form POSTs must 303 back to billing. Raw JSON is a dead end. */
+export function billingFormErrorResponse(error: unknown, code = billingErrorCode(error)): Response {
+  return new Response(null, {
+    status: 303,
+    headers: { location: `/admin/settings/billing?billing_error=${encodeURIComponent(code)}` },
+  })
+}
+
 export function billingSessionErrorResponse(error: unknown): Response {
-  const message = error instanceof Error ? error.message : 'Billing is temporarily unavailable.'
-  if (message === 'already_on_plan') {
-    return Response.json({ error: 'already_on_plan' }, { status: 409 })
-  }
-  if (message === 'seats_below_usage') {
-    return Response.json({ error: 'seats_below_usage' }, { status: 400 })
-  }
-  if (message === 'Authentication required') {
-    return Response.json({ error: 'unauthorized' }, { status: 401 })
-  }
-  if (message === 'Access denied: Not a team member') {
-    return Response.json({ error: 'not_teammate' }, { status: 403 })
-  }
-  if (message.startsWith('Access denied:')) {
-    return Response.json({ error: 'forbidden' }, { status: 403 })
-  }
-  return Response.json({ error: message }, { status: 503 })
+  return billingFormErrorResponse(error)
 }
 
 const actionSchema = z.discriminatedUnion('action', [
@@ -58,8 +60,7 @@ export const Route = createFileRoute('/api/billing/session')({
           await requireAuth({ permission: PERMISSIONS.BILLING_MANAGE })
           const form = await request.formData()
           const parsed = actionSchema.safeParse(Object.fromEntries(form.entries()))
-          if (!parsed.success)
-            return Response.json({ error: 'invalid_billing_action' }, { status: 400 })
+          if (!parsed.success) return billingFormErrorResponse(null, 'invalid')
           const { getCloudConfig } =
             await import('@/lib/server/domains/settings/cloud/cloud.service')
           const cloud = await getCloudConfig()
@@ -68,7 +69,7 @@ export const Route = createFileRoute('/api/billing/session')({
               ? cloud.canManageBilling
               : cloud.canUpgrade || cloud.canManageBilling
           if (!cloud.enabled || !actionAllowed) {
-            return Response.json({ error: 'billing_action_unavailable' }, { status: 403 })
+            return billingFormErrorResponse(null, 'unavailable')
           }
           const { createHostedBillingSession } = await import('@/lib/server/control-plane/client')
           const session =

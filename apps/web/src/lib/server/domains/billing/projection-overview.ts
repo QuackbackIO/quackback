@@ -1,6 +1,7 @@
 import { getCloudConfig } from '@/lib/server/domains/settings/cloud/cloud.service'
 import { PLAN_CATALOGUE, type PlanId } from '@/lib/server/domains/settings/cloud/cloud.types'
 import type { BillingCatalogue, CataloguePlanId } from '@/lib/server/control-plane/client'
+import { isTrialEnded } from '@/lib/shared/billing/trial-state'
 
 export type BillingSeatsOverview = {
   used: number
@@ -20,7 +21,10 @@ export interface BillingProjectionOverview {
   planName: string
   status: string | null
   trialActive: boolean
+  trialEnded?: boolean
   trialExpiresAt: string | null
+  trialPlanId?: Exclude<PlanId, 'free'> | null
+  trialPlanName?: string | null
   renewalAt: string | null
   cancellationAt: string | null
   canUpgrade: boolean
@@ -113,12 +117,25 @@ export async function getBillingProjectionOverview(): Promise<BillingProjectionO
         })
       : null
 
+  const lastTrialPlanId = catalogue?.lastTrialPlanId ?? null
+  const trialPlanId =
+    cloud.trialActive && cloud.plan && cloud.plan !== 'free' ? cloud.plan : lastTrialPlanId
+  const trialEnded = isTrialEnded({
+    plan: cloud.plan,
+    trialActive: cloud.trialActive,
+    trialExpiresAt: cloud.trialExpiresAt,
+    status: cloud.subscriptionStatus,
+  })
+
   return {
     plan: cloud.plan,
     planName: PLAN_CATALOGUE[cloud.plan].name,
     status: cloud.subscriptionStatus,
     trialActive: cloud.trialActive,
+    trialEnded,
     trialExpiresAt: cloud.trialExpiresAt,
+    trialPlanId,
+    trialPlanName: trialPlanId ? PLAN_CATALOGUE[trialPlanId].name : null,
     renewalAt: cloud.renewalAt,
     cancellationAt: cloud.cancellationAt,
     canUpgrade: cloud.canUpgrade,

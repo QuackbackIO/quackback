@@ -146,4 +146,16 @@ describe('projected commercial state', () => {
     expect(atExpiry.trialActive).toBe(false)
     expect(atExpiry.trialExpiresAt).toBe(PROJECTION.trialExpiresAt)
   })
+
+  it('does not keep a Trial badge after a mid-trial purchase', () => {
+    const cloud = resolveCloudConfig(
+      {
+        enabled: true,
+        projection: { ...PROJECTION, subscriptionStatus: 'active', planLimitsExpireAt: null },
+      },
+      new Date('2026-08-14T12:00:00.000Z')
+    )
+    expect(cloud.trialActive).toBe(false)
+    expect(cloud.plan).toBe('pro')
+  })
 })

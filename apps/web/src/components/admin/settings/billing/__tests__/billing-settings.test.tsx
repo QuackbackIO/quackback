@@ -209,25 +209,60 @@ describe('BillingPlansView', () => {
     expect(screen.getAllByRole('button', { name: 'Start 7-day trial' })).toHaveLength(3)
     expect(screen.getByRole('button', { name: 'Current plan' })).toBeDisabled()
     expect(screen.queryByRole('button', { name: 'Downgrade' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Switch to Free' })).not.toBeInTheDocument()
   })
 
-  it('shows a trial badge and no seat meter while seats are uncapped', () => {
+  it('shows trial expiry, Continue with the plan, and uncapped seats', () => {
     renderView({
       overview: {
         ...paidOverview,
-        status: 'trialing',
+        plan: 'growth',
+        planName: 'Growth',
+        status: null,
         trialActive: true,
+        trialPlanId: 'growth',
+        trialPlanName: 'Growth',
         trialExpiresAt: '2026-09-01T00:00:00.000Z',
+        canUpgrade: true,
+        canManageBilling: false,
         seats: { used: 4, pending: 1, members: 3, purchased: null },
       },
     })
     expect(screen.getAllByText('Trial').length).toBeGreaterThan(0)
+    expect(screen.getByText(/Trial ends/)).toBeInTheDocument()
+    expect(screen.getByText(/Uncapped during your trial/)).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Continue with Growth' }).length).toBeGreaterThan(
+      0
+    )
     expect(screen.queryByRole('button', { name: 'Add seats' })).not.toBeInTheDocument()
+  })
+
+  it('explains a trial that ended and that everyone keeps access', () => {
+    renderView({
+      overview: {
+        ...paidOverview,
+        plan: 'free',
+        planName: 'Free',
+        status: null,
+        trialActive: false,
+        trialEnded: true,
+        trialPlanId: 'pro',
+        trialPlanName: 'Pro',
+        trialExpiresAt: '2026-08-18T00:00:00.000Z',
+        canUpgrade: true,
+        canManageBilling: false,
+        seats: { used: 3, pending: 0, members: 3, purchased: null },
+      },
+    })
+    expect(screen.getByText('Trial ended')).toBeInTheDocument()
+    expect(screen.getByText(/Everything you built is still here/)).toBeInTheDocument()
+    expect(screen.getByText(/Everyone keeps access/)).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Continue with Pro' }).length).toBeGreaterThan(0)
   })
 
   it('shows annual monthly equivalent from the catalogue', () => {
     renderView()
-    expect(screen.getByText(/Upgrades apply immediately/)).toBeInTheDocument()
+    expect(screen.getByText(/Moving up applies now/)).toBeInTheDocument()
     expect(screen.getByText('$24')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('radio', { name: 'Monthly' }))
     expect(screen.getByText('$30')).toBeInTheDocument()

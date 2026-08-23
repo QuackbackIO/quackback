@@ -17,6 +17,7 @@ const hoisted = vi.hoisted(() => ({
   mockRequireAuth: vi.fn(),
   mockGetTierLimits: vi.fn(),
   mockGetWorkspaceSettings: vi.fn(),
+  mockFetchCatalogue: vi.fn(),
 }))
 
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
@@ -29,6 +30,14 @@ vi.mock('@/lib/server/functions/auth-helpers', () => ({
 
 vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
   getTierLimits: hoisted.mockGetTierLimits,
+}))
+
+vi.mock('@/lib/server/control-plane/client', () => ({
+  fetchBillingCatalogue: (...args: unknown[]) => hoisted.mockFetchCatalogue(...args),
+}))
+
+vi.mock('@/lib/server/control-plane/starter-trial', () => ({
+  reportStarterTrialIfDue: vi.fn().mockResolvedValue(undefined),
 }))
 
 type AnyHandler = () => Promise<unknown>
@@ -165,8 +174,21 @@ describe('getPlanNotice — the trial countdown', () => {
     )
   })
 
-  it('says nothing once the trial has ended, with the row unchanged', async () => {
+  it('keeps a calm ended banner for seven days after expiry', async () => {
     vi.setSystemTime(AFTER)
+    hoisted.mockFetchCatalogue.mockResolvedValue({ lastTrialPlanId: 'pro' })
+    hoisted.mockGetWorkspaceSettings.mockResolvedValue({ settings: { cloud: trialing } })
+    await expect(getPlanNoticeHandler()).resolves.toEqual(
+      expect.objectContaining({
+        label: 'Pro trial',
+        dismissible: true,
+        actionLabel: 'Continue with Pro',
+      })
+    )
+  })
+
+  it('drops the ended banner after seven days, with the row unchanged', async () => {
+    vi.setSystemTime(new Date('2026-03-23T00:00:00.000Z'))
     hoisted.mockGetWorkspaceSettings.mockResolvedValue({ settings: { cloud: trialing } })
     await expect(getPlanNoticeHandler()).resolves.toBeNull()
   })

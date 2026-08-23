@@ -109,8 +109,10 @@ describe('POST /api/billing/session seats', () => {
 
   it('refuses a quantity below live seat usage before the hosted call', async () => {
     const res = await POST({ request: seatsRequest(6) })
-    expect(res.status).toBe(400)
-    await expect(res.json()).resolves.toEqual({ error: 'seats_below_usage' })
+    expect(res.status).toBe(303)
+    expect(res.headers.get('location')).toBe(
+      '/admin/settings/billing?billing_error=seats_below_usage'
+    )
     expect(hoisted.createHostedBillingSession).not.toHaveBeenCalled()
     expect(hoisted.forUpdate).toHaveBeenCalledWith('update')
   })

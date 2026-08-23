@@ -173,6 +173,7 @@ export type BillingCatalogue = {
   }>
   trialDays?: number
   trialedPlanIds?: Array<'growth' | 'pro' | 'scale'>
+  lastTrialPlanId?: 'growth' | 'pro' | 'scale' | null
 }
 
 export type CustomerInvoice = {
