@@ -421,6 +421,11 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
     concurrency: 1,
     maxAttempts: 10,
     retryBackoffMs: 15 * 60_000,
+    // Hourly catch-up reuses `usage-report:<month>` for the whole previous
+    // month. Keep the succeeded row past that window so prune cannot reopen
+    // the month and POST the snapshot again.
+    retentionMs: 45 * DAY_MS,
+    failedRetentionMs: 45 * DAY_MS,
     cronEnabled: () =>
       import('@/lib/server/domains/billing/usage-report-queue').then((m) =>
         m.isHostedBillingConfigured()

@@ -151,3 +151,11 @@ describe('usage-report job', () => {
     expect(previousUtcMonth(new Date('2026-08-01T00:10:00.000Z'))).toBe('2026-07')
   })
 })
+
+describe('usage-report job retention', () => {
+  it('keeps the monthly dedupe row past the previous-month reporting window', async () => {
+    const { retentionOverrides } = await import('@/lib/server/jobs/definitions')
+    const day = 86_400_000
+    expect(retentionOverrides()['usage-report']?.succeeded).toBeGreaterThanOrEqual(40 * day)
+  })
+})

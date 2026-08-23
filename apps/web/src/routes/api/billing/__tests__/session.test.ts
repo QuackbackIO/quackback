@@ -137,6 +137,7 @@ describe('POST /api/billing/session seats', () => {
 describe('POST /api/billing/session checkout', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    hoisted.transactionActive = false
     hoisted.requireAuth.mockResolvedValue({ user: { id: 'user_1' } })
     hoisted.getCloudConfig.mockResolvedValue({
       enabled: true,
@@ -144,6 +145,23 @@ describe('POST /api/billing/session checkout', () => {
       canManageBilling: true,
     })
     hoisted.countSeatUsage.mockResolvedValue({ members: 6, pendingInvites: 1, used: 7 })
+    hoisted.forUpdate.mockResolvedValue([{ id: 'ws_1' }])
+    hoisted.transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => {
+      hoisted.transactionActive = true
+      try {
+        return await fn({
+          select: () => ({
+            from: () => ({
+              limit: () => ({
+                for: (...args: unknown[]) => hoisted.forUpdate(...args),
+              }),
+            }),
+          }),
+        })
+      } finally {
+        hoisted.transactionActive = false
+      }
+    })
     hoisted.createHostedBillingSession.mockResolvedValue({
       url: 'https://billing.example.com/checkout',
     })
@@ -187,5 +205,17 @@ describe('POST /api/billing/session checkout', () => {
       billingPeriod: 'monthly',
       quantity: 8,
     })
+  })
+
+  it('holds the settings lock through hosted checkout creation', async () => {
+    hoisted.createHostedBillingSession.mockImplementation(async () => {
+      expect(hoisted.transactionActive).toBe(true)
+      expect(hoisted.forUpdate).toHaveBeenCalledWith('update')
+      return { url: 'https://billing.example.com/checkout' }
+    })
+    const res = await POST({ request: checkoutRequest(8) })
+    expect(res.status).toBe(303)
+    expect(hoisted.transaction).toHaveBeenCalledOnce()
+    expect(hoisted.transactionActive).toBe(false)
   })
 })
