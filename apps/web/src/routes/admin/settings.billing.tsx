@@ -38,8 +38,8 @@ function BillingPage() {
       </div>
       <PageHeader
         icon={CreditCardIcon}
-        title="Plan & billing"
-        description="Your Quackback Cloud plan and billing access."
+        title="Plans & billing"
+        description="Manage your plan and billing history here."
       />
       {billingEnabled ? (
         <BillingSettings />

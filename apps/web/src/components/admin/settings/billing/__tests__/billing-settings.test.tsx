@@ -66,6 +66,7 @@ const overview = {
   plan: 'pro' as const,
   planName: 'Pro',
   status: 'active',
+  trialActive: false,
   trialExpiresAt: null,
   renewalAt: '2026-09-14T00:00:00.000Z',
   cancellationAt: null,
@@ -100,20 +101,19 @@ describe('BillingPlansView', () => {
       />
     )
 
-    expect(screen.getByRole('heading', { name: 'Current plan' })).toBeInTheDocument()
-    expect(screen.getByText(/Renews on/)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Plans' })).toBeInTheDocument()
+    expect(screen.getByText(/Renews/)).toBeInTheDocument()
     expect(screen.getAllByRole('radio')).toHaveLength(2)
-    expect(screen.getByText('Current')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Current plan' })).toBeDisabled()
-    const change = screen.getByRole('button', { name: 'Change to Scale' })
-    expect(change).toBeInTheDocument()
-    const form = change.closest('form')
+    const scaleField = document.querySelector('input[name="planId"][value="scale"]')
+    const form = scaleField?.closest('form')
     expect(form).toHaveAttribute('action', '/api/billing/session')
     expect(form?.querySelector('input[name="action"]')).toHaveValue('checkout')
-    expect(form?.querySelector('input[name="planId"]')).toHaveValue('scale')
     expect(form?.querySelector('input[name="billingPeriod"]')).toHaveValue('annual')
+    expect(screen.getAllByRole('button', { name: 'Switch to this plan' }).length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: 'Downgrade' })).toBeEnabled()
     expect(screen.getByText('INV-1001')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /View/ })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'View invoice' })).toHaveAttribute(
       'href',
       'https://billing.example.com/invoice/in_1'
     )
@@ -133,9 +133,31 @@ describe('BillingPlansView', () => {
         ]}
       />
     )
-    expect(screen.getByRole('heading', { name: 'Usage' })).toBeInTheDocument()
-    expect(screen.getByText('1 of 3 boards')).toBeInTheDocument()
-    expect(screen.getByText('1 of 1 seats')).toBeInTheDocument()
+    expect(screen.getByText(/1 of 3 boards/)).toBeInTheDocument()
+    expect(screen.getByText(/1 of 1 seats/)).toBeInTheDocument()
+  })
+
+  it('offers a 7-day trial on untried paid plans from Free', () => {
+    render(
+      <BillingPlansView
+        overview={{
+          ...overview,
+          plan: 'free',
+          planName: 'Free',
+          status: null,
+          canUpgrade: true,
+          canManageBilling: false,
+          renewalAt: null,
+        }}
+        catalogue={catalogue}
+        catalogueError={null}
+        invoices={[]}
+        invoicesError={null}
+      />
+    )
+    expect(screen.getAllByRole('button', { name: 'Start 7-day trial' })).toHaveLength(3)
+    expect(screen.getByRole('button', { name: 'Current plan' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Downgrade' })).not.toBeInTheDocument()
   })
 
   it('shows annual monthly equivalent from the catalogue', () => {
@@ -149,6 +171,7 @@ describe('BillingPlansView', () => {
       />
     )
     expect(screen.getByText(/Upgrades apply immediately/)).toBeInTheDocument()
+    expect(screen.getByText(/7-day trial is available once per paid plan/)).toBeInTheDocument()
     expect(screen.getByText('$49')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('radio', { name: 'Monthly' }))
     expect(screen.getByText('$62')).toBeInTheDocument()
