@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const invalidateQueries = vi.fn()
+const updateThemeFn = vi.fn(async () => ({ ok: true }))
+const updateCustomCssFn = vi.fn(async () => ({ ok: true }))
 
 vi.mock('@tanstack/react-query', async () => {
   const actual =
@@ -11,6 +13,12 @@ vi.mock('@tanstack/react-query', async () => {
     useQueryClient: vi.fn(() => ({ invalidateQueries })),
   }
 })
+
+vi.mock('@/lib/server/functions/settings', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/functions/settings')>()),
+  updateThemeFn,
+  updateCustomCssFn,
+}))
 
 describe('settings config mutations cache invalidation', () => {
   beforeEach(() => {
@@ -69,6 +77,32 @@ describe('settings config mutations cache invalidation', () => {
 
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['settings', 'helpCenterConfig'] })
     expect(result).toBeInstanceOf(Promise)
+  })
+
+  it('useSaveBrandingTheme skips the customCss write unless persistCustomCss is set', async () => {
+    const { useSaveBrandingTheme } = await import('../settings')
+    const mutation = useSaveBrandingTheme() as {
+      mutationFn: (input: {
+        brandingConfig: Record<string, unknown>
+        customCss: string
+        persistCustomCss: boolean
+      }) => Promise<unknown>
+    }
+
+    await mutation.mutationFn({
+      brandingConfig: { preset: 'default' },
+      customCss: ':root { --primary: red; }',
+      persistCustomCss: false,
+    })
+    expect(updateThemeFn).toHaveBeenCalledOnce()
+    expect(updateCustomCssFn).not.toHaveBeenCalled()
+
+    await mutation.mutationFn({
+      brandingConfig: { preset: 'default' },
+      customCss: '.brand { color: red; }',
+      persistCustomCss: true,
+    })
+    expect(updateCustomCssFn).toHaveBeenCalledOnce()
   })
 
   it('useSaveBrandingTheme.onSuccess awaits invalidation of branding and customCss queries', async () => {

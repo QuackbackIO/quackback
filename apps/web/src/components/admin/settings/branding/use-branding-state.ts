@@ -299,12 +299,19 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
         dark: { ...darkMinimal, fontSans: font, radius: `${radius}rem` },
       }
 
+      const generatedCss = generateReadableCSS(lightMinimal, darkMinimal, themeMode)
+      // The Advanced CSS panel writes extra rules into cssText. Generated
+      // theme CSS is reconstructed from brandingConfig on the portal, so
+      // posting it as customCss would hit the Pro-only customCss gate.
+      const persistCustomCss = cssText.trim() !== generatedCss.trim()
+
       // The mutation hook invalidates the branding + customCss queries on success,
       // so the next visit reflects the save instead of re-seeding the editor from
       // the stale pre-save cache.
       await saveBrandingTheme({
         brandingConfig: themeConfig as unknown as Record<string, unknown>,
         customCss: cssText,
+        persistCustomCss,
       })
 
       setSaveSuccess(true)
