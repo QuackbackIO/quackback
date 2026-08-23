@@ -158,4 +158,17 @@ describe('projected commercial state', () => {
     expect(cloud.trialActive).toBe(false)
     expect(cloud.plan).toBe('pro')
   })
+
+  it('does not treat a live Stripe subscription as a product trial', () => {
+    const cloud = resolveCloudConfig(
+      {
+        enabled: true,
+        projection: { ...PROJECTION, subscriptionStatus: 'trialing', planLimitsExpireAt: null },
+      },
+      new Date('2026-08-14T12:00:00.000Z')
+    )
+    expect(cloud.trialActive).toBe(false)
+    expect(cloud.subscriptionStatus).toBe('trialing')
+    expect(cloud.plan).toBe('pro')
+  })
 })

@@ -26,6 +26,7 @@ describe('SubscribeDialog', () => {
         endsTrial
         minSeats={3}
         discountMonths={2}
+        period="annual"
       />
     )
     expect(screen.getByText('3')).toBeInTheDocument()
@@ -47,6 +48,7 @@ describe('SubscribeDialog', () => {
         endsTrial={false}
         minSeats={1}
         discountMonths={2}
+        period="annual"
       />
     )
     expect(screen.queryByText(/your trial ends/)).not.toBeInTheDocument()
@@ -62,9 +64,44 @@ describe('SubscribeDialog', () => {
         endsTrial
         minSeats={2}
         discountMonths={2}
+        period="annual"
       />
     )
     fireEvent.click(screen.getByRole('radio', { name: 'Monthly' }))
     expect(screen.getByText('$60.00')).toBeInTheDocument()
+  })
+
+  it('opens on the period selected on the plans page', () => {
+    render(
+      <SubscribeDialog
+        open
+        onOpenChange={() => {}}
+        plan={plan}
+        endsTrial
+        minSeats={2}
+        discountMonths={2}
+        period="monthly"
+      />
+    )
+    expect(screen.getByRole('radio', { name: 'Monthly' })).toHaveAttribute('aria-checked', 'true')
+    expect(document.querySelector('input[name="billingPeriod"]')).toHaveValue('monthly')
+    expect(screen.getByText('$60.00')).toBeInTheDocument()
+  })
+
+  it('does not multiply a workspace price by seat usage', () => {
+    render(
+      <SubscribeDialog
+        open
+        onOpenChange={() => {}}
+        plan={{ ...plan, billedPer: 'workspace' }}
+        endsTrial
+        minSeats={4}
+        discountMonths={2}
+        period="annual"
+      />
+    )
+    expect(screen.queryByText('Seats')).not.toBeInTheDocument()
+    expect(screen.getByText('$288.00')).toBeInTheDocument()
+    expect(document.querySelector('input[name="quantity"]')).toHaveValue('1')
   })
 })

@@ -28,11 +28,15 @@ export function PlanNoticeBanner({ notice }: PlanNoticeBannerProps) {
   const [ready, setReady] = useState(!dismissible)
   const [dismissed, setDismissed] = useState(false)
   useEffect(() => {
-    if (!dismissible) return
+    if (!dismissible) {
+      setDismissed(false)
+      setReady(true)
+      return
+    }
     setDismissed(readDismissed(notice?.expiresAt))
     setReady(true)
   }, [dismissible, notice?.expiresAt])
-  if (!view || !ready || dismissed) return null
+  if (!view || !ready || (dismissible && dismissed)) return null
 
   const tone = view.urgent
     ? 'bg-amber-500/10 border-amber-500/20'

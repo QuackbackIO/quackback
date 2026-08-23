@@ -290,6 +290,30 @@ describe('BillingPlansView', () => {
     expect(screen.getByText('$30')).toBeInTheDocument()
   })
 
+  it('opens the subscribe dialog on the selected billing period', () => {
+    renderView({
+      overview: {
+        ...paidOverview,
+        plan: 'free',
+        planName: 'Free',
+        status: null,
+        trialActive: false,
+        trialEnded: true,
+        trialPlanId: 'pro',
+        trialPlanName: 'Pro',
+        trialExpiresAt: '2026-08-18T00:00:00.000Z',
+        canUpgrade: true,
+        canManageBilling: false,
+        renewalAt: null,
+        seats: { used: 3, pending: 0, members: 3, purchased: null },
+      },
+    })
+    fireEvent.click(screen.getByRole('radio', { name: 'Monthly' }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Continue with Pro' })[0])
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(document.querySelector('form input[name="billingPeriod"]')).toHaveValue('monthly')
+  })
+
   it('hides Top up when pack prices are missing', () => {
     const { aiTopUpPackCents: _ai, emailTopUpPackCents: _email, ...rest } = catalogue
     renderView({

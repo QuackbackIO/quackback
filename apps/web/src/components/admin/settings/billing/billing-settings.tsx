@@ -162,6 +162,7 @@ export function BillingPlansView(props: {
           endsTrial={Boolean(overview.trialActive || overview.trialEnded)}
           minSeats={checkoutQuantity}
           discountMonths={catalogue?.annualDiscountMonths ?? 2}
+          period={period}
           onOpenChange={(open) => {
             if (!open) setSubscribePlanId(null)
           }}

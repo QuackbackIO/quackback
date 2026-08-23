@@ -20,13 +20,15 @@ export function SubscribeDialog(props: {
   endsTrial: boolean
   minSeats: number
   discountMonths: number
+  period: 'monthly' | 'annual'
 }) {
-  const [period, setPeriod] = useState<'monthly' | 'annual'>('annual')
+  const billedPerSeat = props.plan.billedPer === 'seat'
+  const [period, setPeriod] = useState<'monthly' | 'annual'>(props.period)
   const [seats, setSeats] = useState(() => Math.max(props.minSeats, 1))
-  const quantity = Math.max(seats, props.minSeats, 1)
+  const quantity = billedPerSeat ? Math.max(seats, props.minSeats, 1) : 1
   const isAnnual = period === 'annual'
   const unitCents = isAnnual ? props.plan.priceYearlyCents : props.plan.priceMonthlyCents
-  const dueCents = quantity * unitCents
+  const dueCents = billedPerSeat ? quantity * unitCents : unitCents
   const monthlyCents = isAnnual
     ? Math.round(props.plan.priceYearlyCents / 12)
     : props.plan.priceMonthlyCents
@@ -37,7 +39,7 @@ export function SubscribeDialog(props: {
         <DialogHeader>
           <DialogTitle>Subscribe to {props.plan.name}</DialogTitle>
           <DialogDescription>
-            {props.plan.billedPer === 'seat'
+            {billedPerSeat
               ? `${formatUsd(monthlyCents, 0)}/seat/${isAnnual ? 'mo billed yearly' : 'mo'}.`
               : `${formatUsd(monthlyCents, 0)}/${isAnnual ? 'mo billed yearly' : 'mo'}.`}
           </DialogDescription>
@@ -72,7 +74,7 @@ export function SubscribeDialog(props: {
           ))}
         </div>
 
-        {props.plan.billedPer === 'seat' ? (
+        {billedPerSeat ? (
           <div className="flex items-center justify-between gap-3">
             <div className="text-sm font-medium">Seats</div>
             <QuantityStepper
@@ -86,7 +88,7 @@ export function SubscribeDialog(props: {
         ) : null}
 
         <div className="flex flex-col gap-2 rounded-[10px] border border-border/50 bg-muted/30 px-4 py-3">
-          {props.plan.billedPer === 'seat' ? (
+          {billedPerSeat ? (
             <div className="flex items-baseline justify-between gap-3 text-[13px]">
               <span className="text-muted-foreground">
                 {quantity} {quantity === 1 ? 'seat' : 'seats'} × {formatUsd(unitCents, 0)}
