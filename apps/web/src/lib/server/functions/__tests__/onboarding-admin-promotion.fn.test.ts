@@ -245,6 +245,7 @@ describe('saveWorkspaceAndGoalFn bootstrap authorization', () => {
         name: 'Acme Inc',
         slug: 'acme-inc',
         useCase: 'customer_support',
+        enabledModules: ['Support'],
       })
     )
   })
@@ -329,6 +330,23 @@ describe('saveWorkspaceAndGoalFn bootstrap authorization', () => {
     expect(result.name).toBe('Acme Labs')
     expect(result.slug).toBe('fixed-portal')
     expect(result.managed).toEqual({ name: false, slug: true, useCase: false })
+    expect(result.enabledModules).toEqual([])
+  })
+
+  it('enables Help Center when an existing workspace picks that goal', async () => {
+    hoisted.getSettings.mockResolvedValue({
+      ...STAMPED_SETTINGS,
+      featureFlags: JSON.stringify(DEFAULT_FEATURE_FLAGS),
+    })
+    hoisted.principalFindFirst.mockResolvedValue({ id: 'principal_1', role: 'admin' })
+
+    const result = await saveWorkspaceAndGoalFn({
+      data: { workspaceName: 'Acme', useCase: 'help_center' },
+    })
+
+    expect(result.enabledModules).toEqual(['Help Center'])
+    const written = hoisted.flagWrites.find((values) => typeof values.featureFlags === 'string')
+    expect(resolveFeatureFlags(written!.featureFlags as string).helpCenter).toBe(true)
   })
 
   it.each([

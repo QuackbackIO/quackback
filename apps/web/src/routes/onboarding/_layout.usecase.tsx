@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { ArrowPathIcon } from '@heroicons/react/24/solid'
-import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { UseCaseSelector } from '@/components/onboarding/use-case-selector'
+import { toastEnabledModules } from '@/lib/client/enabled-modules-toast'
 import { checkOnboardingState } from '@/lib/server/functions/admin'
 import { getCloudIdentityFn } from '@/lib/server/functions/cloud-identity'
 import { saveCloudOnboardingGoalFn } from '@/lib/server/functions/onboarding'
@@ -39,11 +39,7 @@ export function CloudUseCaseStep() {
       existingUseCase={existingUseCase}
       onSave={async (useCase) => {
         const result = await saveCloudOnboardingGoalFn({ data: { useCase } })
-        if (result.enabledModules.length === 1) {
-          toast.success(`${result.enabledModules[0]} turned on`)
-        } else if (result.enabledModules.length > 1) {
-          toast.success(`Turned on ${result.enabledModules.join(', ')}`)
-        }
+        toastEnabledModules(result.enabledModules)
         await navigate({ to: '/onboarding/complete' })
       }}
     />

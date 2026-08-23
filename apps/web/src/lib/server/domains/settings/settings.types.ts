@@ -1230,6 +1230,15 @@ export function newlyEnabledProductLabels(before: FeatureFlags, after: FeatureFl
   ).map((product) => product.label)
 }
 
+/** Merge a goal onto current flags and name what this change newly turned on. */
+export function flagsForGoal(
+  current: FeatureFlags,
+  useCase?: FeatureFlagUseCase | null
+): { flags: FeatureFlags; enabledModules: string[] } {
+  const flags = enableFlagsForUseCase(current, useCase)
+  return { flags, enabledModules: newlyEnabledProductLabels(current, flags) }
+}
+
 function getProductDefinition(productId: ProductId): ProductDefinition {
   return PRODUCT_DEFINITIONS.find((product) => product.id === productId)!
 }

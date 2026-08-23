@@ -21,6 +21,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { PageHeader } from '@/components/shared/page-header'
 import { UseCaseSelector } from '@/components/onboarding/use-case-selector'
 import { ActivationActionButton } from '@/components/admin/activation-action-button'
+import { toastEnabledModules } from '@/lib/client/enabled-modules-toast'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { setLaunchTaskResolutionFn } from '@/lib/server/functions/admin'
 import { setActivationGoalFn } from '@/lib/server/functions/activation'
@@ -110,27 +111,7 @@ function GettingStartedPage() {
       await router.invalidate()
       setEditingGoal(false)
       requestAnimationFrame(() => changeGoalButtonRef.current?.focus())
-      if (result.enabledModules.length === 1) {
-        toast.success(
-          intl.formatMessage(
-            {
-              id: 'activation.goal.enabledOne',
-              defaultMessage: '{product} turned on',
-            },
-            { product: result.enabledModules[0] }
-          )
-        )
-      } else if (result.enabledModules.length > 1) {
-        toast.success(
-          intl.formatMessage(
-            {
-              id: 'activation.goal.enabledMany',
-              defaultMessage: 'Turned on {products}',
-            },
-            { products: result.enabledModules.join(', ') }
-          )
-        )
-      }
+      toastEnabledModules(result.enabledModules)
     },
     onError: (error) =>
       toast.error(

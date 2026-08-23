@@ -30,8 +30,7 @@ import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service
 import {
   DEFAULT_MESSENGER_CONFIG,
   DEFAULT_WIDGET_CONFIG,
-  enableFlagsForUseCase,
-  newlyEnabledProductLabels,
+  flagsForGoal,
   resolveFeatureFlags,
 } from '@/lib/server/domains/settings/settings.types'
 import { parseJsonConfig } from '@/lib/server/domains/settings/settings.helpers'
@@ -239,15 +238,17 @@ export const setActivationGoalFn = createServerFn({ method: 'POST' })
       if (isPathManaged('workspace.useCase', row.managedFieldPaths)) {
         throw new Error('Workspace goal is managed by your workspace admin')
       }
-      const currentFlags = resolveFeatureFlags(row.featureFlags)
-      const nextFlags = enableFlagsForUseCase(currentFlags, data.outcome)
+      const { flags, enabledModules } = flagsForGoal(
+        resolveFeatureFlags(row.featureFlags),
+        data.outcome
+      )
       await tx
         .update(settings)
-        .set({ featureFlags: JSON.stringify(nextFlags) })
+        .set({ featureFlags: JSON.stringify(flags) })
         .where(eq(settings.id, row.id))
       return {
         state: { ...current, useCase: data.outcome },
-        value: { enabledModules: newlyEnabledProductLabels(currentFlags, nextFlags) },
+        value: { enabledModules },
       }
     })
     await emitPlgEvent(

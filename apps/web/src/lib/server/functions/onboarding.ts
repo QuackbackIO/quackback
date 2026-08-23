@@ -26,9 +26,8 @@ import { isOnboardingComplete } from '@/lib/shared/db-types'
 import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
 import { DEFAULT_AUTH_CONFIG, DEFAULT_PORTAL_CONFIG } from '@/lib/server/domains/settings'
 import {
-  enableFlagsForUseCase,
-  featureFlagsForUseCase,
-  newlyEnabledProductLabels,
+  DEFAULT_FEATURE_FLAGS,
+  flagsForGoal,
   resolveFeatureFlags,
 } from '@/lib/server/domains/settings/settings.types'
 import { isPathManaged } from '@/lib/server/config-file/managed-paths'
@@ -185,6 +184,7 @@ export interface SaveWorkspaceAndGoalResult {
   slug: string
   useCase: OnboardingOutcome
   managed: { name: boolean; slug: boolean; useCase: boolean }
+  enabledModules: string[]
 }
 
 // ============================================
@@ -253,6 +253,7 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
             data.useCase
           ),
         }
+        const { flags, enabledModules } = flagsForGoal(DEFAULT_FEATURE_FLAGS, data.useCase)
         const [created] = await db
           .insert(settings)
           .values({
@@ -263,7 +264,7 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
             portalConfig: JSON.stringify(DEFAULT_PORTAL_CONFIG),
             authConfig: JSON.stringify({ ...DEFAULT_AUTH_CONFIG, openSignup: true }),
             setupState: JSON.stringify(initialState),
-            featureFlags: JSON.stringify(featureFlagsForUseCase(data.useCase)),
+            featureFlags: JSON.stringify(flags),
           })
           .returning()
         await invalidateSettingsCache()
@@ -273,6 +274,7 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
           slug: created.slug,
           useCase: data.useCase,
           managed: { name: false, slug: false, useCase: false },
+          enabledModules,
         }
       } else {
         const { value } = await mutateSetupStateAtomic(async (current, row, tx) => {
@@ -285,16 +287,16 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
           if (useCaseManaged && data.useCase !== current.useCase) {
             throw new Error('Workspace goal is managed by your workspace admin')
           }
+          const goal = useCaseManaged ? (current.useCase ?? data.useCase) : data.useCase
+          const { flags, enabledModules } = flagsForGoal(
+            resolveFeatureFlags(row.featureFlags),
+            goal
+          )
           const updatePayload: Record<string, unknown> = {
             portalConfig: row.portalConfig ?? JSON.stringify(DEFAULT_PORTAL_CONFIG),
             authConfig:
               row.authConfig ?? JSON.stringify({ ...DEFAULT_AUTH_CONFIG, openSignup: true }),
-            featureFlags: JSON.stringify(
-              enableFlagsForUseCase(
-                resolveFeatureFlags(row.featureFlags),
-                useCaseManaged ? (current.useCase ?? data.useCase) : data.useCase
-              )
-            ),
+            featureFlags: JSON.stringify(flags),
           }
           if (!nameManaged) updatePayload.name = workspaceName
           if (!slugManaged) updatePayload.slug = slug
@@ -303,13 +305,13 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
             .set(updatePayload)
             .where(eq(settings.id, row.id))
             .returning()
-          const goal = useCaseManaged ? (current.useCase ?? data.useCase) : data.useCase
           return {
             state: applyDeferredLaunchStartingPoint(current, goal),
             value: {
               updated,
               goal,
               managed: { name: nameManaged, slug: slugManaged, useCase: useCaseManaged },
+              enabledModules,
             },
           }
         })
@@ -319,6 +321,7 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
           slug: value.updated.slug,
           useCase: value.goal,
           managed: value.managed,
+          enabledModules: value.enabledModules,
         }
       }
 
@@ -358,15 +361,17 @@ export const saveCloudOnboardingGoalFn = createServerFn({ method: 'POST' })
       if (!current.workspaceDetailsSeenAt) {
         throw new Error('Set your workspace name and URL first')
       }
-      const currentFlags = resolveFeatureFlags(row.featureFlags)
-      const nextFlags = enableFlagsForUseCase(currentFlags, data.useCase)
+      const { flags, enabledModules } = flagsForGoal(
+        resolveFeatureFlags(row.featureFlags),
+        data.useCase
+      )
       await tx
         .update(settings)
-        .set({ featureFlags: JSON.stringify(nextFlags) })
+        .set({ featureFlags: JSON.stringify(flags) })
         .where(eq(settings.id, row.id))
       return {
         state: applyDeferredLaunchStartingPoint(current, data.useCase),
-        value: { enabledModules: newlyEnabledProductLabels(currentFlags, nextFlags) },
+        value: { enabledModules },
       }
     })
 

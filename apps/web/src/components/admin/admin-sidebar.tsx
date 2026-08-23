@@ -172,8 +172,9 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
   const canManageWorkflows = usePermission(PERMISSIONS.WORKFLOW_MANAGE)
   const canOpenAutomation = canManageAssistant || canManageWorkflows
   // Launch-plan progress for the shell badge (admins only). The query stays
-  // enabled until the first-win milestone so a quiet dot can clear; skip
-  // and complete actions invalidate ['admin', 'onboarding'] explicitly.
+  // enabled and polls until the first-win milestone so a quiet dot can clear
+  // when the win happens off this page; skip and complete actions also
+  // invalidate ['admin', 'onboarding'] explicitly.
   const queryClient = useQueryClient()
   const onboardingQueryOptions = adminQueries.onboardingStatus()
   const cachedOnboardingStatus = queryClient.getQueryData<LaunchStatus>(
@@ -185,6 +186,10 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
   const onboardingQuery = useQuery({
     ...onboardingQueryOptions,
     enabled: isAdmin && !cachedFirstWin,
+    refetchInterval: (query) => {
+      const data = query.state.data
+      return data && launchChecklistSummary(data).firstWinComplete ? false : 15_000
+    },
   })
   const launchSummary = onboardingQuery.data ? launchChecklistSummary(onboardingQuery.data) : null
   const showLaunchNav = isAdmin && (!launchSummary || !launchSummary.firstWinComplete)
