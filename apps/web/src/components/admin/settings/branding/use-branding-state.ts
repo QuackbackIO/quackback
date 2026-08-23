@@ -195,44 +195,20 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
     initialMode === 'dark' ? 'dark' : 'light'
   )
   const [themeMode, setThemeModeRaw] = useState<ThemeMode>(() => initialMode)
+
+  // Forced light/dark also locks the preview toggle. cssText is left intact so
+  // the inactive palette is still present when saveTheme parses brandingConfig.
+  const setThemeMode = useCallback((mode: ThemeMode) => {
+    setThemeModeRaw(mode)
+    if (mode === 'dark') setPreviewMode('dark')
+    else if (mode === 'light') setPreviewMode('light')
+  }, [])
   const [cssText, setCssText] = useState(() =>
     buildInitialCss(initialCustomCss, initialThemeConfig)
   )
 
   const [isSaving, setIsSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
-
-  const defaultPreset = themePresets.default
-  const defaultLightMinimal = useMemo(() => extractMinimal(defaultPreset.light), [defaultPreset])
-  const defaultDarkMinimal = useMemo(() => extractMinimal(defaultPreset.dark), [defaultPreset])
-
-  // When theme mode changes, auto-switch preview to match and regenerate CSS
-  // if the editor is still showing generated theme CSS (not Advanced CSS).
-  const setThemeMode = useCallback(
-    (mode: ThemeMode) => {
-      const previousMode = themeMode
-      setThemeModeRaw(mode)
-      if (mode === 'dark') setPreviewMode('dark')
-      else if (mode === 'light') setPreviewMode('light')
-
-      setCssText((prev) => {
-        if (previousMode === mode) return prev
-        const parsed = extractCssVariables(prev)
-        const lightMinimal: Partial<MinimalThemeVariables> = {
-          ...defaultLightMinimal,
-          ...parseCssToMinimal(parsed.light),
-        }
-        const darkMinimal: Partial<MinimalThemeVariables> = {
-          ...defaultDarkMinimal,
-          ...parseCssToMinimal(parsed.dark),
-        }
-        const previousGenerated = generateReadableCSS(lightMinimal, darkMinimal, previousMode)
-        if (prev.trim() !== previousGenerated.trim()) return prev
-        return generateReadableCSS(lightMinimal, darkMinimal, mode)
-      })
-    },
-    [themeMode, defaultLightMinimal, defaultDarkMinimal]
-  )
 
   // ============================================
   // Parsed CSS variables (derived synchronously — regex is <1ms)
@@ -245,8 +221,15 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
   const previewModeDisabled: 'light' | 'dark' | null =
     themeMode === 'dark' ? 'light' : themeMode === 'light' ? 'dark' : null
 
+  const defaultPreset = themePresets.default
+  const defaultLightMinimal = useMemo(() => extractMinimal(defaultPreset.light), [defaultPreset])
+  const defaultDarkMinimal = useMemo(() => extractMinimal(defaultPreset.dark), [defaultPreset])
+
   const font = useMemo(
-    () => parsedCssVariables.light['--font-sans'] || DEFAULT_FONT,
+    () =>
+      parsedCssVariables.light['--font-sans'] ||
+      parsedCssVariables.dark['--font-sans'] ||
+      DEFAULT_FONT,
     [parsedCssVariables]
   )
 
@@ -256,7 +239,7 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
   )
 
   const radius = useMemo(() => {
-    const raw = parsedCssVariables.light['--radius']
+    const raw = parsedCssVariables.light['--radius'] || parsedCssVariables.dark['--radius']
     if (!raw) return DEFAULT_RADIUS
     const match = raw.match(/^([\d.]+)rem$/)
     return match ? parseFloat(match[1]) : DEFAULT_RADIUS

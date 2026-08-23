@@ -9,7 +9,7 @@ vi.mock('@/lib/client/mutations/settings', () => ({
 import { useBrandingState } from '../use-branding-state'
 
 describe('useBrandingState setThemeMode', () => {
-  it('regenerates cssText when it is still generated CSS for the previous mode', () => {
+  it('keeps both palettes in cssText when switching from user to light', () => {
     const { result } = renderHook(() =>
       useBrandingState({
         initialLogoUrl: null,
@@ -19,7 +19,7 @@ describe('useBrandingState setThemeMode', () => {
     )
 
     expect(result.current.cssText).toContain(':root')
-    expect(result.current.cssText).toContain('.dark')
+    expect(result.current.cssText).toMatch(/\.dark\s*\{/)
 
     act(() => {
       result.current.setThemeMode('light')
@@ -27,7 +27,7 @@ describe('useBrandingState setThemeMode', () => {
 
     expect(result.current.themeMode).toBe('light')
     expect(result.current.cssText).toContain(':root')
-    expect(result.current.cssText).not.toMatch(/\.dark\s*\{/)
+    expect(result.current.cssText).toMatch(/\.dark\s*\{/)
   })
 
   it('leaves Advanced CSS extra rules untouched', () => {
@@ -45,5 +45,27 @@ describe('useBrandingState setThemeMode', () => {
     })
 
     expect(result.current.cssText).toBe(custom)
+  })
+})
+
+describe('useBrandingState typography', () => {
+  it('reads font and radius from the dark block in dark-only CSS', () => {
+    const custom = [
+      '.dark {',
+      '  --font-sans: "Lora", ui-serif, Georgia, serif;',
+      '  --radius: 1.25rem;',
+      '}',
+      '',
+    ].join('\n')
+    const { result } = renderHook(() =>
+      useBrandingState({
+        initialLogoUrl: null,
+        initialThemeConfig: { themeMode: 'dark' },
+        initialCustomCss: custom,
+      })
+    )
+
+    expect(result.current.font).toBe('"Lora", ui-serif, Georgia, serif')
+    expect(result.current.radius).toBe(1.25)
   })
 })
