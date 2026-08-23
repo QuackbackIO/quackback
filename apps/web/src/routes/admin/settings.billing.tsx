@@ -54,6 +54,10 @@ export const Route = createFileRoute('/admin/settings/billing')({
   component: BillingPage,
 })
 
+function clearBillingFlash() {
+  return { checkout: undefined, billing_error: undefined }
+}
+
 function BillingPage() {
   const { billingEnabled } = useRouteContext({ from: '__root__' })
   const search = Route.useSearch()
@@ -61,7 +65,7 @@ function BillingPage() {
 
   useEffect(() => {
     if (search.checkout === 'cancelled') {
-      void navigate({ search: {}, replace: true })
+      void navigate({ search: clearBillingFlash, replace: true })
     }
   }, [search.checkout, navigate])
 
@@ -76,7 +80,9 @@ function BillingPage() {
         description="Manage your plan, seats, and billing history here."
       />
       {search.checkout === 'success' ? (
-        <CheckoutSuccessFlash onDismiss={() => navigate({ search: {}, replace: true })} />
+        <CheckoutSuccessFlash
+          onDismiss={() => navigate({ search: clearBillingFlash, replace: true })}
+        />
       ) : null}
       {search.billing_error ? (
         <BillingFlash
@@ -86,7 +92,7 @@ function BillingPage() {
             BILLING_ERROR_COPY[search.billing_error] ??
             'Billing is temporarily unavailable. Try again in a moment.'
           }
-          onDismiss={() => navigate({ search: {}, replace: true })}
+          onDismiss={() => navigate({ search: clearBillingFlash, replace: true })}
         />
       ) : null}
       {billingEnabled ? (

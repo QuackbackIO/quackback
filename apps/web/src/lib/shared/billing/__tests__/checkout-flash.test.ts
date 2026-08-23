@@ -17,7 +17,7 @@ const catalogue = {
       recommended: true,
     },
   ],
-} as BillingCatalogue
+} as unknown as BillingCatalogue
 
 const overview = {
   plan: 'pro',

@@ -33,16 +33,20 @@ export const getPlanNotice = createServerFn({ method: 'GET' }).handler(
     const running = trialNotice(cloud)
     if (running) return running
 
-    let trialPlanName: string | null = null
+    const ended = trialEndedNotice(cloud)
+    if (!ended) return null
+
     try {
       const { fetchBillingCatalogue } = await import('@/lib/server/control-plane/client')
       const { PLAN_CATALOGUE } = await import('@/lib/server/domains/settings/cloud/cloud.types')
       const catalogue = await fetchBillingCatalogue()
       const last = catalogue.lastTrialPlanId
-      if (last && last in PLAN_CATALOGUE) trialPlanName = PLAN_CATALOGUE[last].name
+      if (last && last in PLAN_CATALOGUE) {
+        return trialEndedNotice(cloud, { trialPlanName: PLAN_CATALOGUE[last].name })
+      }
     } catch {
-      /* catalogue is optional; ended copy falls back to "Your trial ended" */
+      /* catalogue is optional; ended copy falls back without the plan name */
     }
-    return trialEndedNotice(cloud, { trialPlanName })
+    return ended
   }
 )
