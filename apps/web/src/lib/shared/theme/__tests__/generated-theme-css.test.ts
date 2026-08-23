@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { extractMinimal } from '../expand'
-import { generateReadableCSS, isGeneratedThemeCss } from '../generator'
+import { advancedCssRemainder, generateReadableCSS, isGeneratedThemeCss } from '../generator'
 import { themePresets } from '../presets'
 import type { ThemeMode } from '../types'
 
@@ -29,5 +29,17 @@ describe('isGeneratedThemeCss', () => {
     expect(userCss).not.toBe(lightCss)
     expect(isGeneratedThemeCss(userCss, lightMinimal, darkMinimal)).toBe(true)
     expect(isGeneratedThemeCss(lightCss, lightMinimal, darkMinimal)).toBe(true)
+  })
+})
+
+describe('advancedCssRemainder', () => {
+  it('returns empty for generated CSS', () => {
+    const css = generateReadableCSS(lightMinimal, darkMinimal, 'user')
+    expect(advancedCssRemainder(css)).toBe('')
+  })
+
+  it('returns extra rules after stripping theme blocks', () => {
+    const css = generateReadableCSS(lightMinimal, darkMinimal, 'user')
+    expect(advancedCssRemainder(`${css}\n.brand { color: red; }\n`)).toBe('.brand { color: red; }')
   })
 })

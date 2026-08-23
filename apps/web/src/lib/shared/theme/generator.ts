@@ -98,6 +98,17 @@ export function isGeneratedThemeCss(
   )
 }
 
+/**
+ * CSS left after removing generated `:root` / `.dark` theme blocks.
+ * Extra rules (Advanced CSS) remain; generated-only CSS yields ''.
+ */
+export function advancedCssRemainder(cssText: string): string {
+  return cssText
+    .replace(/:root\s*\{[\s\S]*?\}/g, '')
+    .replace(/\.dark\s*\{[\s\S]*?\}/g, '')
+    .trim()
+}
+
 function formatCssBlock(selector: string, vars: ThemeVariables): string {
   const lines: string[] = [`${selector} {`]
 

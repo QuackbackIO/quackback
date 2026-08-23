@@ -6,6 +6,7 @@ import {
   extractCssVariables,
   generateReadableCSS,
   isGeneratedThemeCss,
+  advancedCssRemainder,
   parseCssToMinimal,
   replaceCssVar,
   normalizeFontSans,
@@ -305,12 +306,12 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
       }
 
       // Generated theme CSS is reconstructed from brandingConfig, so posting
-      // it as customCss would hit the Pro-only gate. Leftover Advanced CSS
-      // that the user did not edit must not be rewritten either — a theme-mode
-      // switch keeps cssText as-is, and that save is still a structured write.
+      // it as customCss would hit the Pro-only gate. Leftover extra rules
+      // that the user did not edit must not be rewritten either — colour,
+      // font, and radius edits live in :root/.dark and still skip the write.
       const customCssWrite = isGeneratedThemeCss(cssText, lightMinimal, darkMinimal)
         ? 'clear'
-        : cssText.trim() === initialCustomCss.trim()
+        : advancedCssRemainder(cssText) === advancedCssRemainder(initialCustomCss)
           ? 'skip'
           : 'persist'
 

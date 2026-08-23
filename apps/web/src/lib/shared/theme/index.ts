@@ -96,6 +96,7 @@ export {
   generateThemeCSS,
   generateReadableCSS,
   isGeneratedThemeCss,
+  advancedCssRemainder,
   parseCssToMinimal,
   replaceCssVar,
   parseThemeConfig,

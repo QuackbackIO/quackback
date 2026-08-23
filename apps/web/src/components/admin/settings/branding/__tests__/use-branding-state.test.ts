@@ -76,6 +76,75 @@ describe('useBrandingState setThemeMode', () => {
       expect.objectContaining({ customCssWrite: 'skip' })
     )
   })
+
+  it('skips the customCss write when leftover extra rules are unchanged after a var edit', async () => {
+    const leftover = [
+      ':root { --primary: oklch(0.5 0.2 250); --radius: 0.625rem; }',
+      '.dark { --primary: oklch(0.7 0.2 250); --radius: 0.625rem; }',
+      '.brand { color: red; }',
+      '',
+    ].join('\n')
+    const { result } = renderHook(() =>
+      useBrandingState({
+        initialLogoUrl: null,
+        initialThemeConfig: { themeMode: 'user' },
+        initialCustomCss: leftover,
+      })
+    )
+
+    act(() => {
+      result.current.setRadius(1.25)
+    })
+    await act(async () => {
+      await result.current.saveTheme()
+    })
+
+    expect(result.current.cssText).toContain('1.25rem')
+    expect(result.current.cssText).toContain('.brand { color: red; }')
+    expect(saveBrandingTheme).toHaveBeenCalledWith(
+      expect.objectContaining({ customCssWrite: 'skip' })
+    )
+  })
+
+  it('clears stored customCss when cssText is generated theme CSS', async () => {
+    const { result } = renderHook(() =>
+      useBrandingState({
+        initialLogoUrl: null,
+        initialThemeConfig: { themeMode: 'user' },
+        initialCustomCss: '',
+      })
+    )
+
+    await act(async () => {
+      await result.current.saveTheme()
+    })
+
+    expect(saveBrandingTheme).toHaveBeenCalledWith(
+      expect.objectContaining({ customCssWrite: 'clear' })
+    )
+  })
+
+  it('persists when leftover extra rules themselves change', async () => {
+    const leftover = ':root { --primary: oklch(0.5 0.2 250); }\n.brand { color: red; }\n'
+    const { result } = renderHook(() =>
+      useBrandingState({
+        initialLogoUrl: null,
+        initialThemeConfig: { themeMode: 'user' },
+        initialCustomCss: leftover,
+      })
+    )
+
+    act(() => {
+      result.current.setCssText(`${leftover}.hero { color: blue; }\n`)
+    })
+    await act(async () => {
+      await result.current.saveTheme()
+    })
+
+    expect(saveBrandingTheme).toHaveBeenCalledWith(
+      expect.objectContaining({ customCssWrite: 'persist' })
+    )
+  })
 })
 
 describe('useBrandingState typography', () => {
