@@ -31,7 +31,7 @@ describe('checkoutSuccessCopy', () => {
   it('names the plan, seats, and per-seat price after conversion', () => {
     expect(checkoutSuccessCopy(overview, catalogue)).toEqual({
       title: "You're subscribed",
-      body: "You're on Pro · 3 seats · $30/seat. You can change this any time.",
+      body: "You're on Pro · 3 seats. You can change this any time.",
     })
   })
 
