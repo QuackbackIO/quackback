@@ -209,6 +209,24 @@ describe('useBrandingState initial cssText', () => {
     expect(result.current.cssText).not.toBe('.brand { color: red; }')
   })
 
+  it('seeds both palettes when themeMode is light so the dark side survives', () => {
+    const darkPrimary = 'oklch(0.4 0.2 250)'
+    const { result } = renderHook(() =>
+      useBrandingState({
+        initialLogoUrl: null,
+        initialThemeConfig: {
+          themeMode: 'light',
+          dark: { primary: darkPrimary },
+        },
+        initialCustomCss: '',
+      })
+    )
+
+    expect(result.current.themeMode).toBe('light')
+    expect(result.current.cssText).toMatch(/\.dark\s*\{/)
+    expect(result.current.parsedCssVariables.dark['--primary']).toBe(darkPrimary)
+  })
+
   it('keeps a CSS-only palette when brandingConfig is empty', () => {
     const cssPrimary = 'oklch(0.55 0.2 250)'
     const { result } = renderHook(() =>

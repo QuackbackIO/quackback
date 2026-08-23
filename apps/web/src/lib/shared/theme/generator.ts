@@ -104,9 +104,20 @@ const GENERATED_THEME_VAR_NAMES = new Set(
     .map(([, cssVar]) => cssVar)
 )
 
+function stripLeadingCssComments(decl: string): string {
+  let s = decl.trim()
+  while (s.startsWith('/*')) {
+    const end = s.indexOf('*/')
+    if (end === -1) break
+    s = s.slice(end + 2).trim()
+  }
+  return s
+}
+
 function isGeneratedThemeDeclaration(decl: string): boolean {
-  if (/^font-family\s*:/i.test(decl)) return true
-  const name = /^(--[\w-]+)\s*:/.exec(decl)?.[1]
+  const stripped = stripLeadingCssComments(decl)
+  if (/^font-family\s*:/i.test(stripped)) return true
+  const name = /^(--[\w-]+)\s*:/.exec(stripped)?.[1]
   return name != null && GENERATED_THEME_VAR_NAMES.has(name)
 }
 
@@ -236,10 +247,9 @@ export function advancedCssRemainder(cssText: string): string {
   let out = ''
   let i = 0
   const scan: CssScan = { quote: null, comment: false, paren: 0 }
-  let braceDepth = 0
 
   while (i < cssText.length) {
-    if (braceDepth === 0 && isCssCode(scan) && scan.paren === 0) {
+    if (isCssCode(scan) && scan.paren === 0) {
       const theme = matchThemeSelector(cssText, i)
       if (theme) {
         const close = findMatchingBrace(cssText, theme.openBrace)
@@ -254,11 +264,6 @@ export function advancedCssRemainder(cssText: string): string {
       }
     }
 
-    const c = cssText[i]
-    if (isCssCode(scan) && scan.paren === 0) {
-      if (c === '{') braceDepth++
-      else if (c === '}' && braceDepth > 0) braceDepth--
-    }
     const n = advanceCssScan(scan, cssText, i)
     out += cssText.slice(i, i + n)
     i += n

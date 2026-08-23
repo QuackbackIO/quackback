@@ -181,7 +181,10 @@ function buildInitialCss(initialCustomCss: string, initialThemeConfig: ThemeConf
     ...(initialThemeConfig.dark ?? {}),
   }
 
-  const generated = generateReadableCSS(lightMinimal, darkMinimal, initialThemeConfig.themeMode)
+  // Always emit both palettes so a later switch back to user mode still
+  // has the inactive side in cssText for saveTheme to parse. Preview
+  // locking uses initialThemeConfig.themeMode separately.
+  const generated = generateReadableCSS(lightMinimal, darkMinimal, 'user')
   const remainder = advancedCssRemainder(initialCustomCss)
   if (!remainder) return generated
   return `${generated.trimEnd()}\n\n${remainder}`
@@ -230,13 +233,12 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
   const defaultLightMinimal = useMemo(() => extractMinimal(defaultPreset.light), [defaultPreset])
   const defaultDarkMinimal = useMemo(() => extractMinimal(defaultPreset.dark), [defaultPreset])
 
-  const font = useMemo(
-    () =>
-      parsedCssVariables.light['--font-sans'] ||
-      parsedCssVariables.dark['--font-sans'] ||
-      DEFAULT_FONT,
-    [parsedCssVariables]
-  )
+  const font = useMemo(() => {
+    const light = parsedCssVariables.light['--font-sans']
+    const dark = parsedCssVariables.dark['--font-sans']
+    if (themeMode === 'dark') return dark || light || DEFAULT_FONT
+    return light || dark || DEFAULT_FONT
+  }, [parsedCssVariables, themeMode])
 
   const currentFontId = useMemo(
     () => FONT_OPTIONS.find((f) => f.value === normalizeFontSans(font))?.id || 'inter',
@@ -244,11 +246,13 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
   )
 
   const radius = useMemo(() => {
-    const raw = parsedCssVariables.light['--radius'] || parsedCssVariables.dark['--radius']
+    const light = parsedCssVariables.light['--radius']
+    const dark = parsedCssVariables.dark['--radius']
+    const raw = themeMode === 'dark' ? dark || light : light || dark
     if (!raw) return DEFAULT_RADIUS
     const match = raw.match(/^([\d.]+)rem$/)
     return match ? parseFloat(match[1]) : DEFAULT_RADIUS
-  }, [parsedCssVariables])
+  }, [parsedCssVariables, themeMode])
 
   const activePresetId = useMemo(() => {
     const parsedLight = parseCssToMinimal(parsedCssVariables.light)

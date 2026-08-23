@@ -63,4 +63,17 @@ describe('advancedCssRemainder', () => {
     expect(remainder).toContain('--token: "}"')
     expect(remainder).toMatch(/color-scheme:\s*dark/)
   })
+
+  it('strips generated theme declarations nested inside at-rules', () => {
+    const css = '@layer base { :root { --primary: oklch(0.5 0.2 250); color-scheme: dark; } }\n'
+    const remainder = advancedCssRemainder(css)
+    expect(remainder).toContain('@layer')
+    expect(remainder).toMatch(/color-scheme:\s*dark/)
+    expect(remainder).not.toContain('--primary')
+  })
+
+  it('treats a generated var with a leading comment as generated', () => {
+    const css = ':root { /* primary */ --primary: oklch(0.5 0.2 250); }\n'
+    expect(advancedCssRemainder(css)).toBe('')
+  })
 })
