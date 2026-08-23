@@ -50,29 +50,47 @@ test.describe('Launch plan (Getting Started)', () => {
     await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
   })
 
-  test('offers an action for the next available setup step', async ({ page }) => {
-    const essentials = page
-      .getByRole('heading', { name: 'Set up the essentials' })
-      .locator('xpath=ancestor::section[1]')
-    const actionableLinks = essentials.locator('ul a')
-    const nextStep = page.getByRole('heading', { name: 'Next step' })
-
-    if ((await actionableLinks.count()) === 0 && (await nextStep.count()) === 0) {
+  test('emphasizes the current setup step with its action', async ({ page }) => {
+    const upNext = page.getByText('Up next')
+    if ((await upNext.count()) === 0) {
       test.skip(true, 'The seeded workspace has no available setup steps')
       return
     }
 
-    if ((await nextStep.count()) > 0) {
-      await expect(
-        page
-          .getByRole('link')
-          .filter({ hasText: /board|article|Messenger|teammate/i })
-          .first()
-      ).toBeVisible()
+    await expect(upNext).toBeVisible()
+    const essentials = page
+      .getByRole('heading', { name: 'Set up the essentials' })
+      .locator('xpath=ancestor::section[1]')
+    await expect(
+      essentials
+        .getByRole('link')
+        .or(essentials.getByRole('button', { name: /Write|Create|Connect|Copy|Turn on/i }))
+        .first()
+    ).toBeVisible()
+  })
+
+  test('skip moves a step into Skipped steps and Add back restores the count', async ({ page }) => {
+    const progress = page.getByRole('progressbar', { name: 'Setup progress' })
+    if ((await progress.count()) === 0) {
+      test.skip(true, 'All essentials are already skipped')
       return
     }
 
-    await expect(actionableLinks.first()).toBeVisible()
+    const skip = page.getByRole('button', { name: 'Skip' }).first()
+    if ((await skip.count()) === 0) {
+      test.skip(true, 'No skippable setup step is on the page')
+      return
+    }
+
+    const maxBefore = await progress.getAttribute('aria-valuemax')
+    await skip.click()
+    await expect(page.getByRole('heading', { name: 'Skipped steps' })).toBeVisible()
+    await page.getByRole('heading', { name: 'Skipped steps' }).click()
+    await page.getByRole('button', { name: 'Add back' }).click()
+    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute(
+      'aria-valuemax',
+      maxBefore ?? ''
+    )
   })
 
   test('changing the goal to Help Center turns the product on', async ({ page }) => {

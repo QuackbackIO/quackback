@@ -70,8 +70,7 @@ export interface LaunchTask {
   availability: LaunchTaskAvailability
   classification: LaunchTaskClassification
   isCompleted: boolean
-  isDeferred: boolean
-  isDismissed: boolean
+  isSkipped: boolean
   blocked?: LaunchTaskBlocked
   blockedReason?: string
   href?: LaunchTaskHref
@@ -81,7 +80,7 @@ export interface LaunchTask {
 
 interface LaunchTaskInput extends Omit<
   LaunchTask,
-  'availability' | 'isCompleted' | 'isDeferred' | 'isDismissed' | 'blocked' | 'blockedReason'
+  'availability' | 'isCompleted' | 'isSkipped' | 'blocked' | 'blockedReason'
 > {
   completed: boolean
   canAct?: boolean
@@ -123,6 +122,13 @@ export const OUTCOME_HOME: Record<OnboardingOutcome, { label: string; href: Laun
   internal: { label: 'Open feedback', href: '/admin/feedback' },
 }
 
+export const FIRST_WIN_NOUN: Record<OnboardingOutcome, string> = {
+  product_feedback: 'customer post or vote',
+  customer_support: 'customer conversation',
+  help_center: 'published article',
+  internal: 'team idea',
+}
+
 const ALLOW_ALL: LaunchPermissions = {
   settingsManage: true,
   boardManage: true,
@@ -138,11 +144,10 @@ function materializeTask(
   resolutions: OutcomeTaskResolutions | undefined
 ): LaunchTask {
   const stored = resolutions?.[outcome]?.[task.id]
-  const isDeferred = !task.completed && stored?.resolution === 'deferred'
-  const isDismissed =
-    !task.completed && task.classification === 'polish' && stored?.resolution === 'dismissed'
+  const isSkipped =
+    !task.completed && (stored?.resolution === 'dismissed' || stored?.resolution === 'deferred')
   const blocked: LaunchTaskBlocked | undefined =
-    !task.completed && !isDismissed
+    !task.completed && !isSkipped
       ? (task.blocked ?? (task.canAct === false ? { kind: 'permission' } : undefined))
       : undefined
   const blockedReason = blocked ? (task.unavailableReason ?? blockedReasonFrom(blocked)) : undefined
@@ -153,8 +158,7 @@ function materializeTask(
     classification: task.classification,
     availability: task.completed ? 'complete' : blockedReason ? 'blocked' : 'available',
     isCompleted: task.completed,
-    isDeferred,
-    isDismissed,
+    isSkipped,
     ...(blocked ? { blocked } : {}),
     ...(blockedReason ? { blockedReason } : {}),
     ...(task.href && task.canAct !== false ? { href: task.href } : {}),
@@ -241,8 +245,8 @@ export function buildLaunchTasks(
   }
   const helpDraft: LaunchTaskInput = {
     id: 'help-article',
-    title: 'Prepare your first article',
-    description: 'Turn your draft into a useful answer for customers.',
+    title: 'Write your first article',
+    description: 'Draft the first answer your customers should find.',
     completed: Boolean(status.hasHelpArticle),
     canAct: permissions.helpCenterManage,
     ...(features.helpCenter
@@ -250,7 +254,7 @@ export function buildLaunchTasks(
       : { blocked: { kind: 'module-off' as const, productId: 'helpCenter' as const } }),
     classification: 'prerequisite',
     href: '/admin/help-center',
-    actionLabel: 'Continue article',
+    actionLabel: 'Write article',
     completedLabel: 'Open article',
   }
   const invite: LaunchTaskInput = {
@@ -325,21 +329,7 @@ export function buildLaunchTasks(
       break
   }
 
-  const tasks = inputs.map((task) => materializeTask(task, outcome, status.taskResolutions))
-  const hasOtherActionablePrerequisite = tasks.some(
-    (task) =>
-      task.classification === 'prerequisite' &&
-      task.availability === 'available' &&
-      !task.isDeferred
-  )
-  if (!hasOtherActionablePrerequisite) return tasks
-
-  const prerequisites = tasks.filter((task) => task.classification === 'prerequisite')
-  return [
-    ...prerequisites.filter((task) => !task.isDeferred),
-    ...prerequisites.filter((task) => task.isDeferred),
-    ...tasks.filter((task) => task.classification !== 'prerequisite'),
-  ]
+  return inputs.map((task) => materializeTask(task, outcome, status.taskResolutions))
 }
 
 export function launchChecklistSummary(
@@ -347,6 +337,7 @@ export function launchChecklistSummary(
   outcomeOverride?: OnboardingOutcome
 ): {
   tasks: LaunchTask[]
+  skippedTasks: LaunchTask[]
   outcome: OnboardingOutcome
   doneCount: number
   denominator: number
@@ -360,29 +351,36 @@ export function launchChecklistSummary(
   const outcome = outcomeOverride ?? normalizeOutcome(status.useCase)
   const tasks = buildLaunchTasks(status, outcome)
   const prerequisites = tasks.filter((task) => task.classification === 'prerequisite')
-  const doneCount = prerequisites.filter((task) => task.isCompleted).length
-  const remaining = prerequisites.filter((task) => !task.isCompleted).length
-  const blockedCount = prerequisites.filter((task) => task.availability === 'blocked').length
+  const skippedTasks = tasks.filter((task) => task.isSkipped && task.classification !== 'first_win')
+  const counted = prerequisites.filter((task) => !task.isSkipped)
+  const doneCount = counted.filter((task) => task.isCompleted).length
+  const remaining = counted.filter((task) => !task.isCompleted).length
+  const blockedCount = counted.filter((task) => task.availability === 'blocked').length
   const firstWinComplete = tasks.some(
     (task) => task.classification === 'first_win' && task.isCompleted
   )
+  const hasAvailable = counted.some(
+    (task) => task.availability === 'available' && !task.isCompleted
+  )
   const allComplete = remaining === 0
+  const winNoun = FIRST_WIN_NOUN[outcome]
   return {
     tasks,
+    skippedTasks,
     outcome,
     doneCount,
-    denominator: prerequisites.length,
+    denominator: counted.length,
     remaining,
     blockedCount,
     allComplete,
     firstWinComplete,
-    resolved: allComplete && firstWinComplete,
+    resolved: allComplete,
     headline: firstWinComplete
       ? 'You’re up and running'
-      : blockedCount > 0 && remaining === 0
-        ? 'Your workspace needs attention before you can launch'
-        : allComplete
-          ? 'Everything is ready for your first result'
-          : `${remaining} setup step${remaining === 1 ? '' : 's'} to go`,
+      : blockedCount > 0 && !hasAvailable
+        ? 'One thing needs attention before you can launch'
+        : remaining === 0
+          ? `You’re ready for your first ${winNoun}`
+          : `${remaining} step${remaining === 1 ? '' : 's'} to your first ${winNoun}`,
   }
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { ArrowPathIcon } from '@heroicons/react/24/solid'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { UseCaseSelector } from '@/components/onboarding/use-case-selector'
 import { checkOnboardingState } from '@/lib/server/functions/admin'
@@ -37,7 +38,12 @@ export function CloudUseCaseStep() {
     <CloudUseCaseForm
       existingUseCase={existingUseCase}
       onSave={async (useCase) => {
-        await saveCloudOnboardingGoalFn({ data: { useCase } })
+        const result = await saveCloudOnboardingGoalFn({ data: { useCase } })
+        if (result.enabledModules.length === 1) {
+          toast.success(`${result.enabledModules[0]} turned on`)
+        } else if (result.enabledModules.length > 1) {
+          toast.success(`Turned on ${result.enabledModules.join(', ')}`)
+        }
         await navigate({ to: '/onboarding/complete' })
       }}
     />

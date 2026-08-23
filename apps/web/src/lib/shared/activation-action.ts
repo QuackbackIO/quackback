@@ -1,9 +1,5 @@
 import type { OnboardingOutcome, StartingPointState } from '@/lib/shared/db-types'
-import {
-  buildLaunchTasks,
-  normalizeOutcome,
-  type LaunchStatus,
-} from '@/lib/shared/launch-checklist'
+import { normalizeOutcome, type LaunchStatus } from '@/lib/shared/launch-checklist'
 
 export type ActivationSurface =
   'onboarding_handoff' | 'feedback_empty' | 'conversation_empty' | 'launch_plan'
@@ -37,7 +33,7 @@ export interface ActivationActionContext {
   startingPoint?: StartingPointState | null
 }
 
-function copyBoardAction(
+export function copyBoardLinkAction(
   outcome: OnboardingOutcome,
   status: LaunchStatus
 ): ActivationAction | null {
@@ -81,7 +77,7 @@ export function selectActivationAction({
     }
     if (!status.publicBoardLinkCopiedAt && !status.hasWidgetInstalled && !status.hasFirstWin) {
       if (status.permissions?.boardManage === false) return null
-      return copyBoardAction(outcome, status)
+      return copyBoardLinkAction(outcome, status)
     }
     return null
   }
@@ -123,7 +119,7 @@ export function selectActivationAction({
     }
     if (outcome === 'product_feedback') {
       return (
-        copyBoardAction(outcome, status) ?? {
+        copyBoardLinkAction(outcome, status) ?? {
           id: 'open-feedback-board',
           outcome,
           label: 'Open your board',
@@ -168,23 +164,7 @@ export function selectActivationAction({
     }
   }
 
-  const nextTask = buildLaunchTasks(status, outcome).find(
-    (task) =>
-      task.classification === 'prerequisite' &&
-      !task.isCompleted &&
-      !task.isDeferred &&
-      task.availability === 'available'
-  )
-  if (!nextTask) return null
-  if (nextTask.id === 'distribute-feedback') return copyBoardAction(outcome, status)
-  if (!nextTask.href) return null
-  return {
-    id: nextTask.id,
-    outcome,
-    label: nextTask.actionLabel ?? nextTask.title,
-    kind: 'link',
-    destination: nextTask.href,
-  }
+  return null
 }
 
 /**

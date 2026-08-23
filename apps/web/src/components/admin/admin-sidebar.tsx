@@ -107,6 +107,7 @@ function NavItem({
   isActive,
   onClick,
   badge,
+  dot,
 }: {
   href: string
   icon: typeof ChatBubbleLeftIcon
@@ -115,6 +116,8 @@ function NavItem({
   onClick?: () => void
   /** Optional count or short mark (e.g. remaining launch steps) */
   badge?: string | number | null
+  /** Quiet marker while the plan is resolved but the first win is still open */
+  dot?: boolean
 }) {
   return (
     <Tooltip>
@@ -141,6 +144,12 @@ function NavItem({
               {badge}
             </span>
           )}
+          {dot && (badge == null || badge === '') && (
+            <span
+              className="absolute top-0.5 right-0.5 size-2 rounded-full bg-primary"
+              aria-hidden="true"
+            />
+          )}
           <span className="sr-only">{label}</span>
         </Link>
       </TooltipTrigger>
@@ -162,30 +171,28 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
   const canManageAssistant = usePermission(PERMISSIONS.ASSISTANT_MANAGE)
   const canManageWorkflows = usePermission(PERMISSIONS.WORKFLOW_MANAGE)
   const canOpenAutomation = canManageAssistant || canManageWorkflows
-  // Launch-plan progress for the shell badge (admins only). Once the
-  // checklist is complete there's nothing left to watch for, so the query
-  // stops refetching — read the last-known result straight from the cache
-  // (rather than from `onboardingQuery.data`, which isn't declared yet) to
-  // decide whether to keep it enabled. Skip/complete actions invalidate
-  // ['admin', 'onboarding'] explicitly, so this can't go stale forever.
+  // Launch-plan progress for the shell badge (admins only). The query stays
+  // enabled until the first-win milestone so a quiet dot can clear; skip
+  // and complete actions invalidate ['admin', 'onboarding'] explicitly.
   const queryClient = useQueryClient()
   const onboardingQueryOptions = adminQueries.onboardingStatus()
   const cachedOnboardingStatus = queryClient.getQueryData<LaunchStatus>(
     onboardingQueryOptions.queryKey
   )
-  const cachedAllComplete = cachedOnboardingStatus
-    ? launchChecklistSummary(cachedOnboardingStatus).resolved
+  const cachedFirstWin = cachedOnboardingStatus
+    ? launchChecklistSummary(cachedOnboardingStatus).firstWinComplete
     : false
   const onboardingQuery = useQuery({
     ...onboardingQueryOptions,
-    enabled: isAdmin && !cachedAllComplete,
+    enabled: isAdmin && !cachedFirstWin,
   })
   const launchSummary = onboardingQuery.data ? launchChecklistSummary(onboardingQuery.data) : null
-  const showLaunchNav = isAdmin && (!launchSummary || !launchSummary.resolved)
+  const showLaunchNav = isAdmin && (!launchSummary || !launchSummary.firstWinComplete)
   const launchRemaining =
     launchSummary && !launchSummary.resolved && launchSummary.remaining > 0
       ? launchSummary.remaining
       : null
+  const launchQuietDot = Boolean(launchSummary?.resolved && !launchSummary.firstWinComplete)
   const launchPlanLabel =
     launchRemaining != null
       ? intl.formatMessage(
@@ -288,6 +295,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                   label={launchPlanLabel}
                   isActive={isNavActive(pathname, '/admin/getting-started')}
                   badge={launchRemaining}
+                  dot={launchQuietDot}
                 />
               )}
               {filteredNavItems.map((item) => (

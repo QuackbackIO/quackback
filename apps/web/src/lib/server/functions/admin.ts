@@ -455,8 +455,9 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
   }
 })
 
-/** Save or clear a launch-plan task preference. Required steps can be moved
- * later; only optional customisation can be hidden. */
+/** Save or clear a launch-plan skip. Any incomplete non-milestone task can
+ *  be skipped; storage is always `dismissed`. Legacy clients may still send
+ *  `deferred`, which is accepted and normalized. */
 const taskResolutionSchema = z.object({
   outcome: z.enum(['product_feedback', 'customer_support', 'help_center', 'internal']),
   taskId: z.string().min(1),
@@ -474,14 +475,14 @@ export const setLaunchTaskResolutionFn = createServerFn({ method: 'POST' })
       (candidate) => candidate.id === data.taskId
     )
     if (!task) throw new Error('Unknown launch task')
-    if (data.resolution === 'deferred' && task.classification !== 'prerequisite') {
-      throw new Error('Only setup steps can be moved later')
+    if (task.classification === 'first_win' && data.resolution) {
+      throw new Error('The milestone cannot be skipped')
     }
-    if (data.resolution === 'dismissed' && task.classification !== 'polish') {
-      throw new Error('Only optional customization can be skipped')
+    if (task.isCompleted && data.resolution) {
+      throw new Error('Completed tasks cannot be skipped')
     }
-    if (task.isCompleted && data.resolution)
-      throw new Error('Completed tasks cannot be deferred or dismissed')
+
+    const storedResolution = data.resolution === 'deferred' ? 'dismissed' : data.resolution
 
     const { mutateSetupStateAtomic } = await import('@/lib/server/setup-state')
     const { state } = await mutateSetupStateAtomic((current) => {
@@ -489,9 +490,9 @@ export const setLaunchTaskResolutionFn = createServerFn({ method: 'POST' })
         throw new Error('Task outcome does not match the workspace goal')
       const taskResolutions = { ...(current.taskResolutions ?? {}) }
       const outcomeTasks = { ...(taskResolutions[data.outcome] ?? {}) }
-      if (data.resolution) {
+      if (storedResolution) {
         outcomeTasks[data.taskId] = {
-          resolution: data.resolution,
+          resolution: storedResolution,
           resolvedAt: new Date().toISOString(),
         }
       } else {
@@ -508,7 +509,7 @@ export const setLaunchTaskResolutionFn = createServerFn({ method: 'POST' })
       }
     })
 
-    log.info({ task_id: data.taskId, resolution: data.resolution }, 'launch task resolution saved')
+    log.info({ task_id: data.taskId, resolution: storedResolution }, 'launch task resolution saved')
     return { taskResolutions: state.taskResolutions ?? {} }
   })
 
