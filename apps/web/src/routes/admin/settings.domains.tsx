@@ -86,7 +86,7 @@ function DomainsSettingsPage() {
         window.location.assign(target)
         return
       }
-      toast.success('Quackback URL saved')
+      toast.success('Workspace URL saved')
       await router.invalidate()
     },
   })
@@ -168,7 +168,7 @@ export function QuackbackUrlCard(props: {
   onSubmit: () => void
 }) {
   return (
-    <SettingsCard title="Quackback URL" description="The address customers use for this workspace">
+    <SettingsCard title="Workspace URL" description="The address customers use for this workspace">
       <form
         className="max-w-xl space-y-5"
         onSubmit={(event) => {
@@ -178,7 +178,7 @@ export function QuackbackUrlCard(props: {
       >
         <div className="space-y-1.5">
           <Label htmlFor="platform-label" className="text-xs text-muted-foreground">
-            Quackback URL
+            Workspace URL
           </Label>
           <div className="flex h-9 items-center border border-input bg-transparent shadow-xs transition-[color,box-shadow] outline-none focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-[3px] dark:bg-input/30 [border-radius:calc(var(--radius)*0.8)]">
             <Input
@@ -198,7 +198,7 @@ export function QuackbackUrlCard(props: {
         </div>
         {props.error && (
           <p role="alert" className="text-sm text-destructive">
-            {props.error.message || 'Could not save Quackback URL. Try again.'}
+            {props.error.message || 'Could not save Workspace URL. Try again.'}
           </p>
         )}
         <Button type="submit" disabled={props.pending || !props.platformLabel.trim()}>

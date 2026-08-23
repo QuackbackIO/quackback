@@ -13,7 +13,7 @@ vi.mock('@/components/admin/settings/logo-uploader', () => ({
 }))
 
 describe('General workspace identity', () => {
-  it('shows logo and name with no Quackback URL field', () => {
+  it('shows logo and name with no Workspace URL field', () => {
     render(
       <WorkspaceIdentityCard
         workspaceName="Acme"
@@ -28,7 +28,7 @@ describe('General workspace identity', () => {
     ).toBeInTheDocument()
     expect(screen.getByLabelText('Workspace Name')).toHaveValue('Acme')
     expect(screen.getByRole('button', { name: 'Change workspace logo' })).toBeInTheDocument()
-    expect(screen.queryByLabelText('Quackback URL')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Workspace URL')).not.toBeInTheDocument()
     expect(screen.queryByText(/Friendly Quackback URL/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/ws-/)).not.toBeInTheDocument()
   })

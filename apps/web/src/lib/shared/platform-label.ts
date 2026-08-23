@@ -23,7 +23,7 @@ export function hostnameRegistrableSuffix(hostname: string): string {
 }
 
 /**
- * Suffix shown next to the friendly Quackback URL field.
+ * Suffix shown next to the Workspace URL field.
  * Always taken from `platformHostname` when one exists — `canonicalOrigin`
  * becomes a custom domain after that domain is made primary.
  */

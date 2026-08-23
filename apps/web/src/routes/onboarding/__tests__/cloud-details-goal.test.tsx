@@ -27,7 +27,7 @@ describe('cloud post-handoff onboarding', () => {
     render(<CloudWorkspaceDetailsForm identity={IDENTITY} onSave={save} />)
 
     expect(screen.getByLabelText('Workspace name')).toHaveValue('Untitled workspace')
-    expect(screen.getByLabelText('Friendly Quackback URL')).toHaveValue('')
+    expect(screen.getByLabelText('Workspace URL')).toHaveValue('')
     expect(screen.queryByText(/Current address:/)).not.toBeInTheDocument()
     expect(screen.queryByText(IDENTITY.canonicalOrigin)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Skip/ })).not.toBeInTheDocument()
@@ -38,7 +38,7 @@ describe('cloud post-handoff onboarding', () => {
     fireEvent.click(continueButton)
     expect(save).not.toHaveBeenCalled()
 
-    fireEvent.change(screen.getByLabelText('Friendly Quackback URL'), {
+    fireEvent.change(screen.getByLabelText('Workspace URL'), {
       target: { value: 'awesome' },
     })
     expect(continueButton).toBeEnabled()
@@ -62,7 +62,7 @@ describe('cloud post-handoff onboarding', () => {
       />
     )
 
-    expect(screen.getByLabelText('Friendly Quackback URL')).toHaveValue('')
+    expect(screen.getByLabelText('Workspace URL')).toHaveValue('')
     expect(screen.queryByText(/ws-4a048e07941c5e7840e986c0/)).not.toBeInTheDocument()
   })
 
