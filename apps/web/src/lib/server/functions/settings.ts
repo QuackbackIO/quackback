@@ -232,17 +232,27 @@ export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).
       expiresAt: inv.expiresAt.toISOString(),
     }))
 
-    // Seat line data: same predicate as enforceSeatLimit / the usage report
-    // (human admin/member principals), plus the plan cap (null = unlimited).
     const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
-    const limits = await getTierLimits()
-    const [seatRow] = await db
-      .select({ count: sqlOp<number>`count(*)`.as('count') })
-      .from(principal)
-      .where(and(inArray(principal.role, ['admin', 'member']), eq(principal.type, 'user')))
+    const { countSeatUsage } = await import('@/lib/server/domains/principals/seat-usage')
+    const { getCloudConfig } = await import('@/lib/server/domains/settings/cloud/cloud.service')
+    const [limits, seats, cloud] = await Promise.all([
+      getTierLimits(),
+      countSeatUsage(),
+      getCloudConfig(),
+    ])
+    const addSeatAvailable =
+      cloud.enabled &&
+      cloud.canManageBilling &&
+      cloud.plan != null &&
+      cloud.plan !== 'free' &&
+      !cloud.trialActive &&
+      limits.maxTeamSeats != null
     const seatUsage = {
-      used: Number(seatRow?.count ?? 0),
+      used: seats.used,
+      members: seats.members,
+      pendingInvites: seats.pendingInvites,
       limit: limits.maxTeamSeats,
+      addSeatAvailable,
     }
 
     return { members, avatarMap, formattedInvitations, seatUsage }

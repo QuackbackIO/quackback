@@ -207,7 +207,7 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
       (existingBeforeClaim.role === 'admin' || existingBeforeClaim.role === 'member')
     if (!alreadySeated) {
       const { enforceSeatLimit } = await import('@/lib/server/domains/principals/seat-limit')
-      await enforceSeatLimit()
+      await enforceSeatLimit({ convertingInvite: true })
     }
 
     const role = (inv.role || 'member') as Role

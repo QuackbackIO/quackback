@@ -516,6 +516,6 @@ describe('acceptInvitationFn — seat cap', () => {
 
     await acceptHandler({ data: { invitationId: 'invite_1' } })
 
-    expect(hoisted.mockEnforceSeatLimit).toHaveBeenCalledOnce()
+    expect(hoisted.mockEnforceSeatLimit).toHaveBeenCalledWith({ convertingInvite: true })
   })
 })
