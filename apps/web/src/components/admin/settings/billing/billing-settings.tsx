@@ -191,7 +191,8 @@ function CurrentPlanCard(props: {
   const plan = catalogue?.plans.find((entry) => entry.id === overview.plan)
   const purchased = overview.seats?.purchased ?? null
   const showSeats = purchased != null
-  const trialPlanName = overview.trialPlanName ?? overview.planName
+  const trialPlanName =
+    overview.trialPlanName && overview.trialPlanName !== 'Free' ? overview.trialPlanName : null
   const subscribePlanId = overview.trialPlanId ?? (overview.plan !== 'free' ? overview.plan : null)
   const canSubscribe = Boolean(overview.canUpgrade && subscribePlanId)
   const daysLeft =
@@ -215,7 +216,9 @@ function CurrentPlanCard(props: {
     renewalBits.push(`Trial ends ${formatDate(overview.trialExpiresAt)}${left}`)
   } else if (overview.trialEnded && overview.trialExpiresAt) {
     renewalBits.push(
-      `Your ${trialPlanName} trial ended ${formatDate(overview.trialExpiresAt)}. Everything you built is still here.`
+      trialPlanName
+        ? `Your ${trialPlanName} trial ended ${formatDate(overview.trialExpiresAt)}. Everything you built is still here.`
+        : `Your trial ended ${formatDate(overview.trialExpiresAt)}. Everything you built is still here.`
     )
   } else if (overview.cancellationAt) {
     renewalBits.push(`Paid through ${formatDate(overview.cancellationAt)}`)
@@ -245,7 +248,7 @@ function CurrentPlanCard(props: {
         <div className="flex shrink-0 items-center gap-2">
           {canSubscribe && subscribePlanId ? (
             <Button size="sm" type="button" onClick={() => props.onSubscribe(subscribePlanId)}>
-              Continue with {trialPlanName}
+              Continue with {trialPlanName ?? 'a paid plan'}
             </Button>
           ) : null}
           {overview.canManageBilling ? <PortalButton label="Manage billing" /> : null}

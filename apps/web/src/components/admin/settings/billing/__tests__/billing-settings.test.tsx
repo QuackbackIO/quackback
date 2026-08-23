@@ -260,6 +260,28 @@ describe('BillingPlansView', () => {
     expect(screen.getAllByRole('button', { name: 'Continue with Pro' }).length).toBeGreaterThan(0)
   })
 
+  it('does not call a Free trial when the last plan name is missing', () => {
+    renderView({
+      overview: {
+        ...paidOverview,
+        plan: 'free',
+        planName: 'Free',
+        status: null,
+        trialActive: false,
+        trialEnded: true,
+        trialPlanId: null,
+        trialPlanName: null,
+        trialExpiresAt: '2026-08-18T00:00:00.000Z',
+        canUpgrade: true,
+        canManageBilling: false,
+        seats: { used: 3, pending: 0, members: 3, purchased: null },
+      },
+    })
+    expect(screen.getByText(/Your trial ended/)).toBeInTheDocument()
+    expect(screen.queryByText(/Your Free trial ended/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Continue with/ })).not.toBeInTheDocument()
+  })
+
   it('shows annual monthly equivalent from the catalogue', () => {
     renderView()
     expect(screen.getByText(/Moving up applies now/)).toBeInTheDocument()

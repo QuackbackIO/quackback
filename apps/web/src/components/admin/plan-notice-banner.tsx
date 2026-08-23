@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ArrowTopRightOnSquareIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import type { PlanNotice } from '@/lib/server/domains/settings/tier-limits.types'
 import { presentPlanNotice } from '@/lib/shared/plan-notice'
@@ -24,10 +24,15 @@ function readDismissed(expiresAt: string | undefined): boolean {
  */
 export function PlanNoticeBanner({ notice }: PlanNoticeBannerProps) {
   const view = presentPlanNotice(notice)
-  const [dismissed, setDismissed] = useState(() =>
-    notice?.dismissible ? readDismissed(notice.expiresAt) : false
-  )
-  if (!view || dismissed) return null
+  const dismissible = Boolean(notice?.dismissible)
+  const [ready, setReady] = useState(!dismissible)
+  const [dismissed, setDismissed] = useState(false)
+  useEffect(() => {
+    if (!dismissible) return
+    setDismissed(readDismissed(notice?.expiresAt))
+    setReady(true)
+  }, [dismissible, notice?.expiresAt])
+  if (!view || !ready || dismissed) return null
 
   const tone = view.urgent
     ? 'bg-amber-500/10 border-amber-500/20'
