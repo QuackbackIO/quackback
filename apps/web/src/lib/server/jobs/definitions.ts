@@ -410,6 +410,22 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
         (m) => m.runMembershipSync
       ),
   },
+  {
+    // Monthly usage snapshot for hosted billing. Self-host without a hosted
+    // URL is a successful no-op. On-demand enqueues (after a top-up) use a
+    // per-month dedupe key; this cron is the month-close backstop.
+    name: 'usage-report',
+    cron: '10 0 1 * *',
+    concurrency: 1,
+    maxAttempts: 10,
+    retryBackoffMs: 15 * 60_000,
+    cronEnabled: () =>
+      import('@/lib/server/domains/billing/usage-report-queue').then((m) =>
+        m.isHostedBillingConfigured()
+      ),
+    handler: () =>
+      import('@/lib/server/domains/billing/usage-report-queue').then((m) => m.runUsageReport),
+  },
 ]
 
 let overrides: readonly JobDefinition[] | null = null

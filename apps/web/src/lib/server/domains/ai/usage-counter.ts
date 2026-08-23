@@ -10,15 +10,29 @@ import { sql } from 'drizzle-orm'
  * with WHERE call_type='chat_completion' AND status='success'.
  */
 export async function aiTokensThisMonth(): Promise<number> {
+  return aiTokensInUtcMonth(new Date())
+}
+
+/** Sum successful chat-completion tokens in the UTC month containing `at`. */
+export async function aiTokensInUtcMonth(at: Date): Promise<number> {
+  const start = utcMonthStart(at)
+  const end = utcNextMonthStart(at)
   const result = await db.execute(sql`
     SELECT coalesce(sum(total_tokens), 0)::bigint AS total
     FROM ai_usage_log
-    WHERE created_at >= date_trunc('month', now())
-      AND created_at < date_trunc('month', now() + interval '1 month')
+    WHERE created_at >= ${start.toISOString()}::timestamptz
+      AND created_at < ${end.toISOString()}::timestamptz
       AND call_type = 'chat_completion'
       AND status = 'success'
   `)
   const rows = result as unknown as Array<{ total: string | number }>
-  // bigint comes back as string from postgres-js
   return Number(rows[0]?.total ?? 0)
+}
+
+function utcMonthStart(at: Date): Date {
+  return new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), 1))
+}
+
+function utcNextMonthStart(at: Date): Date {
+  return new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth() + 1, 1))
 }
