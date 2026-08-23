@@ -28,6 +28,7 @@ import { setActivationGoalFn } from '@/lib/server/functions/activation'
 import { updateFeatureFlagsFn } from '@/lib/server/functions/feature-flags'
 import {
   FIRST_WIN_NOUN,
+  isLaunchPlanActive,
   launchChecklistSummary,
   OUTCOME_HOME,
   OUTCOME_TAB_LABEL,
@@ -56,7 +57,8 @@ function GettingStartedPage() {
     ...adminQueries.onboardingStatus(),
     refetchInterval: (query) => {
       const data = query.state.data
-      return data && launchChecklistSummary(data).firstWinComplete ? false : 15_000
+      if (!data) return 15_000
+      return isLaunchPlanActive(launchChecklistSummary(data)) ? 15_000 : false
     },
   })
   const queryClient = useQueryClient()

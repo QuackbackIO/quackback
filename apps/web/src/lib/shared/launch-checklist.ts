@@ -233,7 +233,7 @@ export function buildLaunchTasks(
       : status.hasMessengerEnabled
         ? 'Messenger is configured. Add the SDK to your website to connect it.'
         : 'Turn on the Messages tab and add the SDK to your website.',
-    completed: status.hasWidgetInstalled === true,
+    completed: status.hasWidgetInstalled === true && features.supportInbox,
     canAct: permissions.settingsManage,
     ...(features.supportInbox
       ? {}
@@ -247,7 +247,7 @@ export function buildLaunchTasks(
     id: 'help-article',
     title: 'Write your first article',
     description: 'Draft the first answer your customers should find.',
-    completed: Boolean(status.hasHelpArticle),
+    completed: Boolean(status.hasHelpArticle) && features.helpCenter,
     canAct: permissions.helpCenterManage,
     ...(features.helpCenter
       ? {}

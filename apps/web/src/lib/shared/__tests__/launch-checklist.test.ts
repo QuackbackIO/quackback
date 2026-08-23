@@ -52,6 +52,40 @@ describe('buildLaunchTasks V2', () => {
     expect(summary.doneCount).toBe(0)
   })
 
+  it('keeps a Help Center article blocked when the product is later turned off', () => {
+    const summary = launchChecklistSummary({
+      ...base,
+      useCase: 'help_center',
+      hasHelpArticle: true,
+      features: {
+        supportInbox: false,
+        helpCenter: false,
+        statusPage: false,
+        integrations: true,
+      },
+    })
+    const article = summary.tasks.find((task) => task.id === 'help-article')
+    expect(article?.isCompleted).toBe(false)
+    expect(article?.blocked).toEqual({ kind: 'module-off', productId: 'helpCenter' })
+    expect(summary.resolved).toBe(false)
+  })
+
+  it('keeps Connect Messenger blocked when Support is later turned off', () => {
+    const task = buildLaunchTasks({
+      ...base,
+      useCase: 'customer_support',
+      hasWidgetInstalled: true,
+      features: {
+        supportInbox: false,
+        helpCenter: false,
+        statusPage: false,
+        integrations: true,
+      },
+    }).find((row) => row.id === 'connect-messenger')
+    expect(task?.isCompleted).toBe(false)
+    expect(task?.blocked).toEqual({ kind: 'module-off', productId: 'support' })
+  })
+
   it('counts a blocked Help Center step as 0/1, never 0/0', () => {
     const summary = launchChecklistSummary({
       ...base,
