@@ -22,6 +22,7 @@ import {
   updateCloudIdentityFn,
 } from '@/lib/server/functions/cloud-identity'
 import type { CustomDomainInstruction } from '@/lib/server/control-plane/client'
+import { platformUrlSuffix } from '@/lib/shared/platform-label'
 
 export const Route = createFileRoute('/admin/settings/domains')({
   loader: async ({ context }) => {
@@ -133,10 +134,7 @@ function DomainsSettingsPage() {
           {cloudIdentity && (
             <QuackbackUrlCard
               platformLabel={platformLabel}
-              domainSuffix={new URL(cloudIdentity.canonicalOrigin).hostname
-                .split('.')
-                .slice(1)
-                .join('.')}
+              domainSuffix={platformUrlSuffix(cloudIdentity)}
               pending={identityMutation.isPending}
               error={identityMutation.error}
               onPlatformLabelChange={setPlatformLabel}

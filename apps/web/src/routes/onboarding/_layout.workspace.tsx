@@ -10,7 +10,7 @@ import {
   markCloudWorkspaceDetailsSeenFn,
   updateCloudIdentityFn,
 } from '@/lib/server/functions/cloud-identity'
-import { friendlyPlatformLabel } from '@/lib/shared/platform-label'
+import { friendlyPlatformLabel, platformUrlSuffix } from '@/lib/shared/platform-label'
 import { checkOnboardingState } from '@/lib/server/functions/admin'
 import { UseCaseSelector } from '@/components/onboarding/use-case-selector'
 import { pickOnboardingStep } from './-onboarding-step'
@@ -110,10 +110,7 @@ export function CloudWorkspaceDetailsForm(props: {
   )
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState('')
-  const domainSuffix = new URL(props.identity.canonicalOrigin).hostname
-    .split('.')
-    .slice(1)
-    .join('.')
+  const domainSuffix = platformUrlSuffix(props.identity)
 
   async function run(action: () => Promise<void>, fallback: string): Promise<void> {
     setIsSaving(true)

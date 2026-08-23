@@ -66,6 +66,22 @@ describe('cloud post-handoff onboarding', () => {
     expect(screen.queryByText(/ws-4a048e07941c5e7840e986c0/)).not.toBeInTheDocument()
   })
 
+  it('keeps the Quackback suffix when a custom domain is canonical', () => {
+    render(
+      <CloudWorkspaceDetailsForm
+        identity={{
+          ...IDENTITY,
+          canonicalOrigin: 'https://feedback.example.com',
+          platformHostname: 'awesome.quackback.co.uk',
+        }}
+        onSave={vi.fn()}
+      />
+    )
+
+    expect(screen.getByText('.quackback.co.uk')).toBeInTheDocument()
+    expect(screen.queryByText('.example.com')).not.toBeInTheDocument()
+  })
+
   it('keeps the outcome screen to one primary action', async () => {
     const save = vi.fn().mockResolvedValue(undefined)
     render(
