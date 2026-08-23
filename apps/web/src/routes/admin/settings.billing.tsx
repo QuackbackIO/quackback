@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { createFileRoute, useRouteContext } from '@tanstack/react-router'
 import { CreditCardIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -8,6 +9,7 @@ import { PageHeader } from '@/components/shared/page-header'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { BillingSettings } from '@/components/admin/settings/billing/billing-settings'
 import { billingQueries } from '@/lib/client/queries/billing'
+import { checkoutSuccessCopy } from '@/lib/shared/billing/checkout-flash'
 import { cn } from '@/lib/shared/utils'
 
 const BILLING_ERROR_COPY: Record<string, string> = {
@@ -74,12 +76,7 @@ function BillingPage() {
         description="Manage your plan, seats, and billing history here."
       />
       {search.checkout === 'success' ? (
-        <BillingFlash
-          tone="success"
-          title="You're subscribed"
-          body="Your plan, seats, and invoices are on this page. You can change them any time."
-          onDismiss={() => navigate({ search: {}, replace: true })}
-        />
+        <CheckoutSuccessFlash onDismiss={() => navigate({ search: {}, replace: true })} />
       ) : null}
       {search.billing_error ? (
         <BillingFlash
@@ -100,6 +97,15 @@ function BillingPage() {
         </p>
       )}
     </div>
+  )
+}
+
+function CheckoutSuccessFlash(props: { onDismiss: () => void }) {
+  const overview = useQuery(billingQueries.overview())
+  const catalogue = useQuery(billingQueries.catalogue())
+  const copy = checkoutSuccessCopy(overview.data, catalogue.data ?? null)
+  return (
+    <BillingFlash tone="success" title={copy.title} body={copy.body} onDismiss={props.onDismiss} />
   )
 }
 
