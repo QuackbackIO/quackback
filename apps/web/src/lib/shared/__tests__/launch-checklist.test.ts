@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { buildLaunchTasks, launchChecklistSummary, normalizeOutcome } from '../launch-checklist'
+import {
+  buildLaunchTasks,
+  isLaunchPlanActive,
+  launchChecklistSummary,
+  normalizeOutcome,
+} from '../launch-checklist'
 import type { LaunchStatus } from '../launch-checklist'
 
 const base: LaunchStatus = {
@@ -36,12 +41,69 @@ describe('buildLaunchTasks V2', () => {
     expect(configured.filter((task) => task.classification === 'prerequisite')).toHaveLength(1)
   })
 
-  it('blocks an unavailable board without adding it to the readiness denominator', () => {
+  it('counts a blocked board step in the readiness denominator', () => {
     const status = { ...base, boardCount: 1, maxBoards: 1 }
     const board = buildLaunchTasks(status).find((task) => task.id === 'create-board')
     expect(board?.availability).toBe('blocked')
+    expect(board?.blocked?.kind).toBe('plan-limit')
     expect(board?.blockedReason).toMatch(/board limit/i)
-    expect(launchChecklistSummary(status).denominator).toBe(0)
+    const summary = launchChecklistSummary(status)
+    expect(summary.denominator).toBeGreaterThan(0)
+    expect(summary.doneCount).toBe(0)
+  })
+
+  it('keeps a Help Center article blocked when the product is later turned off', () => {
+    const summary = launchChecklistSummary({
+      ...base,
+      useCase: 'help_center',
+      hasHelpArticle: true,
+      features: {
+        supportInbox: false,
+        helpCenter: false,
+        statusPage: false,
+        integrations: true,
+      },
+    })
+    const article = summary.tasks.find((task) => task.id === 'help-article')
+    expect(article?.isCompleted).toBe(false)
+    expect(article?.blocked).toEqual({ kind: 'module-off', productId: 'helpCenter' })
+    expect(summary.resolved).toBe(false)
+  })
+
+  it('keeps Connect Messenger blocked when Support is later turned off', () => {
+    const task = buildLaunchTasks({
+      ...base,
+      useCase: 'customer_support',
+      hasWidgetInstalled: true,
+      features: {
+        supportInbox: false,
+        helpCenter: false,
+        statusPage: false,
+        integrations: true,
+      },
+    }).find((row) => row.id === 'connect-messenger')
+    expect(task?.isCompleted).toBe(false)
+    expect(task?.blocked).toEqual({ kind: 'module-off', productId: 'support' })
+  })
+
+  it('counts a blocked Help Center step as 0/1, never 0/0', () => {
+    const summary = launchChecklistSummary({
+      ...base,
+      useCase: 'help_center',
+      features: {
+        supportInbox: false,
+        helpCenter: false,
+        statusPage: false,
+        integrations: true,
+      },
+    })
+    const article = summary.tasks.find((task) => task.id === 'help-article')
+    expect(article?.availability).toBe('blocked')
+    expect(article?.blocked).toEqual({ kind: 'module-off', productId: 'helpCenter' })
+    expect(summary.denominator).toBe(1)
+    expect(summary.doneCount).toBe(0)
+    expect(summary.blockedCount).toBe(1)
+    expect(summary.remaining).toBe(1)
   })
 
   it('removes action links when the caller lacks the responsible permission', () => {
@@ -60,7 +122,7 @@ describe('buildLaunchTasks V2', () => {
     expect(tasks.find((task) => task.id === 'create-board')?.availability).toBe('blocked')
   })
 
-  it('keeps deferred prerequisites pending without bypassing their dependency', () => {
+  it('reads legacy deferred rows as skipped without bypassing their dependency', () => {
     const tasks = buildLaunchTasks({
       ...base,
       taskResolutions: {
@@ -73,12 +135,32 @@ describe('buildLaunchTasks V2', () => {
       },
     })
     const board = tasks.find((task) => task.id === 'create-board')!
-    expect(board.isDeferred).toBe(true)
+    expect(board.isSkipped).toBe(true)
     expect(board.isCompleted).toBe(false)
     expect(tasks.find((task) => task.id === 'distribute-feedback')?.availability).toBe('blocked')
   })
 
-  it('honors dismissal only as excluded optional polish', () => {
+  it('excludes skipped essentials from numerator and denominator', () => {
+    const summary = launchChecklistSummary({
+      ...base,
+      taskResolutions: {
+        product_feedback: {
+          'create-board': {
+            resolution: 'dismissed',
+            resolvedAt: '2026-07-13T10:00:00.000Z',
+          },
+        },
+      },
+    })
+    const board = summary.tasks.find((task) => task.id === 'create-board')!
+    expect(board.isSkipped).toBe(true)
+    expect(summary.skippedTasks.map((task) => task.id)).toContain('create-board')
+    expect(summary.denominator).toBe(1)
+    expect(summary.doneCount).toBe(0)
+    expect(summary.resolved).toBe(false)
+  })
+
+  it('treats polish dismissal as skipped without changing the essentials count', () => {
     const summary = launchChecklistSummary({
       ...base,
       hasBoards: true,
@@ -93,13 +175,13 @@ describe('buildLaunchTasks V2', () => {
       },
     })
     const branding = summary.tasks.find((task) => task.id === 'customize-branding')!
-    expect(branding.isDismissed).toBe(true)
+    expect(branding.isSkipped).toBe(true)
     expect(branding.isCompleted).toBe(false)
     expect(summary.denominator).toBe(2)
     expect(summary.doneCount).toBe(2)
   })
 
-  it('keeps first win independent of readiness completion', () => {
+  it('resolves once every prerequisite is done or skipped, without waiting for the first win', () => {
     const summary = launchChecklistSummary({
       ...base,
       hasBoards: true,
@@ -107,7 +189,56 @@ describe('buildLaunchTasks V2', () => {
     })
     expect(summary.allComplete).toBe(true)
     expect(summary.firstWinComplete).toBe(false)
-    expect(summary.resolved).toBe(false)
+    expect(summary.resolved).toBe(true)
+  })
+
+  it('keeps the launch-plan nav until essentials resolve, even if the first win arrived early', () => {
+    expect(isLaunchPlanActive({ resolved: false, firstWinComplete: true })).toBe(true)
+    expect(isLaunchPlanActive({ resolved: true, firstWinComplete: false })).toBe(true)
+    expect(isLaunchPlanActive({ resolved: false, firstWinComplete: false })).toBe(true)
+    expect(isLaunchPlanActive({ resolved: true, firstWinComplete: true })).toBe(false)
+  })
+
+  it('resolves an all-skipped essentials list and hides it from the count', () => {
+    const summary = launchChecklistSummary({
+      ...base,
+      useCase: 'help_center',
+      features: {
+        supportInbox: false,
+        helpCenter: true,
+        statusPage: false,
+        integrations: true,
+      },
+      taskResolutions: {
+        help_center: {
+          'help-article': {
+            resolution: 'deferred',
+            resolvedAt: '2026-07-13T10:00:00.000Z',
+          },
+        },
+      },
+    })
+    expect(summary.denominator).toBe(0)
+    expect(summary.doneCount).toBe(0)
+    expect(summary.skippedTasks).toHaveLength(1)
+    expect(summary.resolved).toBe(true)
+    expect(summary.firstWinComplete).toBe(false)
+  })
+
+  it('uses the write-article copy for the Help Center essential', () => {
+    const task = buildLaunchTasks({
+      ...base,
+      useCase: 'help_center',
+      features: {
+        supportInbox: false,
+        helpCenter: true,
+        statusPage: false,
+        integrations: true,
+      },
+    }).find((row) => row.id === 'help-article')
+    expect(task?.title).toBe('Write your first article')
+    expect(task?.description).toMatch(/first answer/i)
+    expect(task?.actionLabel).toBe('Write article')
   })
 
   it('uses only the current goal task set', () => {

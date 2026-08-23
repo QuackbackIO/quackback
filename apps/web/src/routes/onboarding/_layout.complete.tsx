@@ -3,6 +3,7 @@ import { createFileRoute, redirect } from '@tanstack/react-router'
 import { ArrowPathIcon, ArrowRightIcon, CheckIcon } from '@heroicons/react/24/solid'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { checkOnboardingState, fetchOnboardingStatus } from '@/lib/server/functions/admin'
 import {
   acknowledgeActivationHandoffFn,
@@ -134,6 +135,11 @@ function LaunchPreview({ tasks }: { tasks: LaunchTask[] }) {
             >
               {task.title}
             </span>
+            {task.availability === 'blocked' && (
+              <Badge size="sm" shape="pill" variant="outline" className="ml-auto">
+                Needs attention
+              </Badge>
+            )}
           </li>
         )
       })}

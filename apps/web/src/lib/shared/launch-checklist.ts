@@ -4,6 +4,7 @@ import {
   type OutcomeTaskResolutions,
   type UseCaseType,
 } from '@/lib/shared/db-types'
+import type { ProductId } from '@/lib/shared/types/settings'
 
 export interface LaunchPermissions {
   settingsManage: boolean
@@ -57,6 +58,11 @@ export type LaunchTaskHref =
 export type LaunchTaskAvailability = 'available' | 'blocked' | 'complete'
 export type LaunchTaskClassification = 'prerequisite' | 'polish' | 'first_win'
 
+export interface LaunchTaskBlocked {
+  kind: 'module-off' | 'plan-limit' | 'permission'
+  productId?: ProductId
+}
+
 export interface LaunchTask {
   id: string
   title: string
@@ -64,8 +70,8 @@ export interface LaunchTask {
   availability: LaunchTaskAvailability
   classification: LaunchTaskClassification
   isCompleted: boolean
-  isDeferred: boolean
-  isDismissed: boolean
+  isSkipped: boolean
+  blocked?: LaunchTaskBlocked
   blockedReason?: string
   href?: LaunchTaskHref
   actionLabel?: string
@@ -74,11 +80,28 @@ export interface LaunchTask {
 
 interface LaunchTaskInput extends Omit<
   LaunchTask,
-  'availability' | 'isCompleted' | 'isDeferred' | 'isDismissed' | 'blockedReason'
+  'availability' | 'isCompleted' | 'isSkipped' | 'blocked' | 'blockedReason'
 > {
   completed: boolean
   canAct?: boolean
   unavailableReason?: string
+  blocked?: LaunchTaskBlocked
+}
+
+function blockedReasonFrom(blocked: LaunchTaskBlocked): string {
+  if (blocked.kind === 'module-off') {
+    const label =
+      blocked.productId === 'helpCenter'
+        ? 'Help Center'
+        : blocked.productId === 'support'
+          ? 'Customer support'
+          : 'This product'
+    return `${label} is turned off for this workspace. Ask a workspace admin to enable it in Settings → General.`
+  }
+  if (blocked.kind === 'plan-limit') {
+    return "You've reached the board limit for your plan. Remove a board or upgrade to continue."
+  }
+  return 'Ask a workspace admin to complete this step.'
 }
 
 export function normalizeOutcome(useCase?: UseCaseType | null): OnboardingOutcome {
@@ -99,6 +122,13 @@ export const OUTCOME_HOME: Record<OnboardingOutcome, { label: string; href: Laun
   internal: { label: 'Open feedback', href: '/admin/feedback' },
 }
 
+export const FIRST_WIN_NOUN: Record<OnboardingOutcome, string> = {
+  product_feedback: 'customer post or vote',
+  customer_support: 'customer conversation',
+  help_center: 'published article',
+  internal: 'team idea',
+}
+
 const ALLOW_ALL: LaunchPermissions = {
   settingsManage: true,
   boardManage: true,
@@ -114,14 +144,13 @@ function materializeTask(
   resolutions: OutcomeTaskResolutions | undefined
 ): LaunchTask {
   const stored = resolutions?.[outcome]?.[task.id]
-  const isDeferred = !task.completed && stored?.resolution === 'deferred'
-  const isDismissed =
-    !task.completed && task.classification === 'polish' && stored?.resolution === 'dismissed'
-  const blockedReason =
-    !task.completed && !isDismissed
-      ? (task.unavailableReason ??
-        (task.canAct === false ? 'Ask a workspace admin to complete this step.' : undefined))
+  const isSkipped =
+    !task.completed && (stored?.resolution === 'dismissed' || stored?.resolution === 'deferred')
+  const blocked: LaunchTaskBlocked | undefined =
+    !task.completed && !isSkipped
+      ? (task.blocked ?? (task.canAct === false ? { kind: 'permission' } : undefined))
       : undefined
+  const blockedReason = blocked ? (task.unavailableReason ?? blockedReasonFrom(blocked)) : undefined
   return {
     id: task.id,
     title: task.title,
@@ -129,8 +158,8 @@ function materializeTask(
     classification: task.classification,
     availability: task.completed ? 'complete' : blockedReason ? 'blocked' : 'available',
     isCompleted: task.completed,
-    isDeferred,
-    isDismissed,
+    isSkipped,
+    ...(blocked ? { blocked } : {}),
     ...(blockedReason ? { blockedReason } : {}),
     ...(task.href && task.canAct !== false ? { href: task.href } : {}),
     ...(task.actionLabel ? { actionLabel: task.actionLabel } : {}),
@@ -165,9 +194,13 @@ export function buildLaunchTasks(
         : 'Give customers a place to submit and vote on ideas.',
     completed: hasGoalBoard,
     canAct: permissions.boardManage,
-    unavailableReason: boardCapacityBlocked
-      ? "You've reached the board limit for your plan. Remove a board or upgrade to continue."
-      : undefined,
+    ...(boardCapacityBlocked
+      ? {
+          blocked: { kind: 'plan-limit' as const },
+          unavailableReason:
+            "You've reached the board limit for your plan. Remove a board or upgrade to continue.",
+        }
+      : {}),
     classification: 'prerequisite',
     href: '/admin/settings/boards',
     actionLabel: 'Create board',
@@ -200,11 +233,11 @@ export function buildLaunchTasks(
       : status.hasMessengerEnabled
         ? 'Messenger is configured. Add the SDK to your website to connect it.'
         : 'Turn on the Messages tab and add the SDK to your website.',
-    completed: status.hasWidgetInstalled === true,
+    completed: status.hasWidgetInstalled === true && features.supportInbox,
     canAct: permissions.settingsManage,
-    unavailableReason: features.supportInbox
-      ? undefined
-      : 'Customer support is turned off for this workspace. Ask a workspace admin to enable it in Settings → General.',
+    ...(features.supportInbox
+      ? {}
+      : { blocked: { kind: 'module-off' as const, productId: 'support' as const } }),
     classification: 'prerequisite',
     href: '/admin/settings/widget/install',
     actionLabel: 'Connect Messenger',
@@ -212,16 +245,16 @@ export function buildLaunchTasks(
   }
   const helpDraft: LaunchTaskInput = {
     id: 'help-article',
-    title: 'Prepare your first article',
-    description: 'Turn your draft into a useful answer for customers.',
-    completed: Boolean(status.hasHelpArticle),
+    title: 'Write your first article',
+    description: 'Draft the first answer your customers should find.',
+    completed: Boolean(status.hasHelpArticle) && features.helpCenter,
     canAct: permissions.helpCenterManage,
-    unavailableReason: features.helpCenter
-      ? undefined
-      : 'Help Center is turned off for this workspace. Ask a workspace admin to enable it in Settings → General.',
+    ...(features.helpCenter
+      ? {}
+      : { blocked: { kind: 'module-off' as const, productId: 'helpCenter' as const } }),
     classification: 'prerequisite',
     href: '/admin/help-center',
-    actionLabel: 'Continue article',
+    actionLabel: 'Write article',
     completedLabel: 'Open article',
   }
   const invite: LaunchTaskInput = {
@@ -252,9 +285,12 @@ export function buildLaunchTasks(
     description: 'Keep Quackback in sync with the tools your team already uses.',
     completed: Boolean(status.hasIntegration),
     canAct: permissions.integrationManage,
-    unavailableReason: features.integrations
-      ? undefined
-      : 'Integrations are not included in your current plan.',
+    ...(features.integrations
+      ? {}
+      : {
+          blocked: { kind: 'plan-limit' as const },
+          unavailableReason: 'Integrations are not included in your current plan.',
+        }),
     classification: 'polish',
     href: '/admin/settings/integrations',
     actionLabel: 'Connect',
@@ -293,21 +329,7 @@ export function buildLaunchTasks(
       break
   }
 
-  const tasks = inputs.map((task) => materializeTask(task, outcome, status.taskResolutions))
-  const hasOtherActionablePrerequisite = tasks.some(
-    (task) =>
-      task.classification === 'prerequisite' &&
-      task.availability === 'available' &&
-      !task.isDeferred
-  )
-  if (!hasOtherActionablePrerequisite) return tasks
-
-  const prerequisites = tasks.filter((task) => task.classification === 'prerequisite')
-  return [
-    ...prerequisites.filter((task) => !task.isDeferred),
-    ...prerequisites.filter((task) => task.isDeferred),
-    ...tasks.filter((task) => task.classification !== 'prerequisite'),
-  ]
+  return inputs.map((task) => materializeTask(task, outcome, status.taskResolutions))
 }
 
 export function launchChecklistSummary(
@@ -315,6 +337,7 @@ export function launchChecklistSummary(
   outcomeOverride?: OnboardingOutcome
 ): {
   tasks: LaunchTask[]
+  skippedTasks: LaunchTask[]
   outcome: OnboardingOutcome
   doneCount: number
   denominator: number
@@ -327,34 +350,45 @@ export function launchChecklistSummary(
 } {
   const outcome = outcomeOverride ?? normalizeOutcome(status.useCase)
   const tasks = buildLaunchTasks(status, outcome)
-  const availableSteps = tasks.filter(
-    (task) => task.classification === 'prerequisite' && task.availability !== 'blocked'
-  )
-  const doneCount = availableSteps.filter((task) => task.isCompleted).length
-  const remaining = availableSteps.filter((task) => !task.isCompleted).length
-  const blockedCount = tasks.filter(
-    (task) => task.classification === 'prerequisite' && task.availability === 'blocked'
-  ).length
+  const prerequisites = tasks.filter((task) => task.classification === 'prerequisite')
+  const skippedTasks = tasks.filter((task) => task.isSkipped && task.classification !== 'first_win')
+  const counted = prerequisites.filter((task) => !task.isSkipped)
+  const doneCount = counted.filter((task) => task.isCompleted).length
+  const remaining = counted.filter((task) => !task.isCompleted).length
+  const blockedCount = counted.filter((task) => task.availability === 'blocked').length
   const firstWinComplete = tasks.some(
     (task) => task.classification === 'first_win' && task.isCompleted
   )
+  const hasAvailable = counted.some(
+    (task) => task.availability === 'available' && !task.isCompleted
+  )
   const allComplete = remaining === 0
+  const winNoun = FIRST_WIN_NOUN[outcome]
   return {
     tasks,
+    skippedTasks,
     outcome,
     doneCount,
-    denominator: availableSteps.length,
+    denominator: counted.length,
     remaining,
     blockedCount,
     allComplete,
     firstWinComplete,
-    resolved: allComplete && firstWinComplete,
+    resolved: allComplete,
     headline: firstWinComplete
       ? 'You’re up and running'
-      : blockedCount > 0 && remaining === 0
-        ? 'Your workspace needs attention before you can launch'
-        : allComplete
-          ? 'Everything is ready for your first result'
-          : `${remaining} setup step${remaining === 1 ? '' : 's'} to go`,
+      : blockedCount > 0 && !hasAvailable
+        ? 'One thing needs attention before you can launch'
+        : remaining === 0
+          ? `You’re ready for your first ${winNoun}`
+          : `${remaining} step${remaining === 1 ? '' : 's'} to your first ${winNoun}`,
   }
+}
+
+/** Sidebar still shows Getting Started until essentials resolve and the first win lands. */
+export function isLaunchPlanActive(summary: {
+  resolved: boolean
+  firstWinComplete: boolean
+}): boolean {
+  return !summary.resolved || !summary.firstWinComplete
 }

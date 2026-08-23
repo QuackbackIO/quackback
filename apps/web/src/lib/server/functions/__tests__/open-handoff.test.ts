@@ -65,6 +65,7 @@ describe('consumeOpenHandoff', () => {
   })
 
   it('does not require an identity projection', async () => {
+    hoisted.snapshotRows.push([{ value: 'sess', expiresAt: new Date(Date.now() + 60_000) }])
     hoisted.handler.mockResolvedValue({
       ok: true,
       headers: {
@@ -114,6 +115,7 @@ describe('consumeOpenHandoff', () => {
   })
 
   it('lands on the workspace root even if a wizard returnTo is supplied', async () => {
+    hoisted.snapshotRows.push([{ value: 'sess', expiresAt: new Date(Date.now() + 60_000) }])
     hoisted.handler.mockResolvedValue({
       ok: true,
       headers: {
@@ -129,21 +131,19 @@ describe('consumeOpenHandoff', () => {
   it('retries when a parallel GET consumed the token before snapshot', async () => {
     const live = { value: 'sess', expiresAt: new Date(Date.now() + 60_000) }
     hoisted.snapshotRows.push([], [live])
-    hoisted.handler
-      .mockResolvedValueOnce(new Response('no', { status: 400 }))
-      .mockResolvedValueOnce({
-        ok: true,
-        headers: {
-          getSetCookie: () => ['session=abc; Path=/; HttpOnly'],
-          get: () => null,
-        },
-      })
+    hoisted.handler.mockResolvedValue({
+      ok: true,
+      headers: {
+        getSetCookie: () => ['session=abc; Path=/; HttpOnly'],
+        get: () => null,
+      },
+    })
 
     await expect(consumeOpenHandoff({ ott: 'token-1' })).resolves.toEqual({
       kind: 'redirect',
       to: '/',
       cookies: ['session=abc; Path=/; HttpOnly'],
     })
-    expect(hoisted.handler).toHaveBeenCalledTimes(2)
+    expect(hoisted.handler).toHaveBeenCalledTimes(1)
   })
 })

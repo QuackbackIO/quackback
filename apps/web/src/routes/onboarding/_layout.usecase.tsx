@@ -3,6 +3,7 @@ import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { ArrowPathIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { UseCaseSelector } from '@/components/onboarding/use-case-selector'
+import { toastEnabledModules } from '@/lib/client/enabled-modules-toast'
 import { checkOnboardingState } from '@/lib/server/functions/admin'
 import { getCloudIdentityFn } from '@/lib/server/functions/cloud-identity'
 import { saveCloudOnboardingGoalFn } from '@/lib/server/functions/onboarding'
@@ -37,7 +38,8 @@ export function CloudUseCaseStep() {
     <CloudUseCaseForm
       existingUseCase={existingUseCase}
       onSave={async (useCase) => {
-        await saveCloudOnboardingGoalFn({ data: { useCase } })
+        const result = await saveCloudOnboardingGoalFn({ data: { useCase } })
+        toastEnabledModules(result.enabledModules)
         await navigate({ to: '/onboarding/complete' })
       }}
     />

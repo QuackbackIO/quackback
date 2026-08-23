@@ -13,6 +13,7 @@ import {
 import { friendlyPlatformLabel, platformUrlSuffix } from '@/lib/shared/platform-label'
 import { checkOnboardingState } from '@/lib/server/functions/admin'
 import { UseCaseSelector } from '@/components/onboarding/use-case-selector'
+import { toastEnabledModules } from '@/lib/client/enabled-modules-toast'
 import { pickOnboardingStep } from './-onboarding-step'
 import { isPathManagedFromBootstrap, MANAGED_PATHS } from '@/lib/client/config-file'
 import { normalizeOnboardingOutcome, type OnboardingOutcome } from '@/lib/shared/db-types'
@@ -281,9 +282,10 @@ function WorkspaceAndGoalStep() {
     setIsLoading(true)
     setError('')
     try {
-      await saveWorkspaceAndGoalFn({
+      const result = await saveWorkspaceAndGoalFn({
         data: { workspaceName: workspaceName.trim(), useCase },
       })
+      toastEnabledModules(result.enabledModules)
       localStorage.removeItem(DRAFT_KEY)
       await navigate({ to: '/onboarding/complete' })
     } catch (err) {

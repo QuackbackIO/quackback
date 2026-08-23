@@ -42,7 +42,11 @@ import {
   openOwnerWorkspaceFn,
 } from '@/lib/server/functions/owner-workspaces'
 import { friendlySiblingAddress, WorkspaceSwitcher } from '@/components/admin/workspace-switcher'
-import { launchChecklistSummary, type LaunchStatus } from '@/lib/shared/launch-checklist'
+import {
+  isLaunchPlanActive,
+  launchChecklistSummary,
+  type LaunchStatus,
+} from '@/lib/shared/launch-checklist'
 import { useIntl } from 'react-intl'
 import { usePermission } from '@/lib/client/hooks/use-permission'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -107,6 +111,7 @@ function NavItem({
   isActive,
   onClick,
   badge,
+  dot,
 }: {
   href: string
   icon: typeof ChatBubbleLeftIcon
@@ -115,6 +120,8 @@ function NavItem({
   onClick?: () => void
   /** Optional count or short mark (e.g. remaining launch steps) */
   badge?: string | number | null
+  /** Quiet marker while the plan is resolved but the first win is still open */
+  dot?: boolean
 }) {
   return (
     <Tooltip>
@@ -141,6 +148,12 @@ function NavItem({
               {badge}
             </span>
           )}
+          {dot && (badge == null || badge === '') && (
+            <span
+              className="absolute top-0.5 right-0.5 size-2 rounded-full bg-primary"
+              aria-hidden="true"
+            />
+          )}
           <span className="sr-only">{label}</span>
         </Link>
       </TooltipTrigger>
@@ -162,30 +175,34 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
   const canManageAssistant = usePermission(PERMISSIONS.ASSISTANT_MANAGE)
   const canManageWorkflows = usePermission(PERMISSIONS.WORKFLOW_MANAGE)
   const canOpenAutomation = canManageAssistant || canManageWorkflows
-  // Launch-plan progress for the shell badge (admins only). Once the
-  // checklist is complete there's nothing left to watch for, so the query
-  // stops refetching — read the last-known result straight from the cache
-  // (rather than from `onboardingQuery.data`, which isn't declared yet) to
-  // decide whether to keep it enabled. Skip/complete actions invalidate
-  // ['admin', 'onboarding'] explicitly, so this can't go stale forever.
+  // Launch-plan progress for the shell badge (admins only). Stay visible and
+  // polling until essentials resolve *and* the first win lands — a first win
+  // can arrive while invite-team is still open. Skip/complete actions also
+  // invalidate ['admin', 'onboarding'] explicitly.
   const queryClient = useQueryClient()
   const onboardingQueryOptions = adminQueries.onboardingStatus()
   const cachedOnboardingStatus = queryClient.getQueryData<LaunchStatus>(
     onboardingQueryOptions.queryKey
   )
-  const cachedAllComplete = cachedOnboardingStatus
-    ? launchChecklistSummary(cachedOnboardingStatus).resolved
+  const cachedLaunchSettled = cachedOnboardingStatus
+    ? !isLaunchPlanActive(launchChecklistSummary(cachedOnboardingStatus))
     : false
   const onboardingQuery = useQuery({
     ...onboardingQueryOptions,
-    enabled: isAdmin && !cachedAllComplete,
+    enabled: isAdmin && !cachedLaunchSettled,
+    refetchInterval: (query) => {
+      const data = query.state.data
+      if (!data) return 15_000
+      return isLaunchPlanActive(launchChecklistSummary(data)) ? 15_000 : false
+    },
   })
   const launchSummary = onboardingQuery.data ? launchChecklistSummary(onboardingQuery.data) : null
-  const showLaunchNav = isAdmin && (!launchSummary || !launchSummary.resolved)
+  const showLaunchNav = isAdmin && (!launchSummary || isLaunchPlanActive(launchSummary))
   const launchRemaining =
     launchSummary && !launchSummary.resolved && launchSummary.remaining > 0
       ? launchSummary.remaining
       : null
+  const launchQuietDot = Boolean(launchSummary?.resolved && !launchSummary.firstWinComplete)
   const launchPlanLabel =
     launchRemaining != null
       ? intl.formatMessage(
@@ -288,6 +305,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                   label={launchPlanLabel}
                   isActive={isNavActive(pathname, '/admin/getting-started')}
                   badge={launchRemaining}
+                  dot={launchQuietDot}
                 />
               )}
               {filteredNavItems.map((item) => (

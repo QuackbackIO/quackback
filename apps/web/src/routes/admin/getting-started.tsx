@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { createFileRoute, Link } from '@tanstack/react-router'
+import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import {
   ArrowPathIcon,
@@ -21,18 +21,28 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { PageHeader } from '@/components/shared/page-header'
 import { UseCaseSelector } from '@/components/onboarding/use-case-selector'
 import { ActivationActionButton } from '@/components/admin/activation-action-button'
+import { toastEnabledModules } from '@/lib/client/enabled-modules-toast'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { setLaunchTaskResolutionFn } from '@/lib/server/functions/admin'
 import { setActivationGoalFn } from '@/lib/server/functions/activation'
+import { updateFeatureFlagsFn } from '@/lib/server/functions/feature-flags'
 import {
+  FIRST_WIN_NOUN,
+  isLaunchPlanActive,
   launchChecklistSummary,
   OUTCOME_HOME,
   OUTCOME_TAB_LABEL,
+  type LaunchStatus,
   type LaunchTask,
 } from '@/lib/shared/launch-checklist'
 import { normalizeOnboardingOutcome, type OnboardingOutcome } from '@/lib/shared/db-types'
 import { cn } from '@/lib/shared/utils'
-import { selectActivationAction } from '@/lib/shared/activation-action'
+import { copyBoardLinkAction } from '@/lib/shared/activation-action'
+import {
+  getProductFlagUpdate,
+  PRODUCT_DEFINITIONS,
+  type ProductId,
+} from '@/lib/shared/types/settings'
 
 export const Route = createFileRoute('/admin/getting-started')({
   loader: async ({ context }) => {
@@ -47,10 +57,12 @@ function GettingStartedPage() {
     ...adminQueries.onboardingStatus(),
     refetchInterval: (query) => {
       const data = query.state.data
-      return data && launchChecklistSummary(data).resolved ? false : 15_000
+      if (!data) return 15_000
+      return isLaunchPlanActive(launchChecklistSummary(data)) ? 15_000 : false
     },
   })
   const queryClient = useQueryClient()
+  const router = useRouter()
   const status = statusQuery.data
   const outcome = normalizeOnboardingOutcome(status.useCase) ?? 'product_feedback'
   const summary = launchChecklistSummary(status, outcome)
@@ -58,14 +70,6 @@ function GettingStartedPage() {
   const [goalDraft, setGoalDraft] = useState<OnboardingOutcome>(outcome)
   const changeGoalButtonRef = useRef<HTMLButtonElement>(null)
   const canManage = status.permissions.settingsManage
-  const nextAction = selectActivationAction({ surface: 'launch_plan', status })
-  const nextTask = nextAction
-    ? summary.tasks.find((task) =>
-        nextAction.id === 'copy-board-link'
-          ? task.id === 'distribute-feedback'
-          : task.id === nextAction.id
-      )
-    : undefined
 
   useEffect(() => setGoalDraft(outcome), [outcome])
 
@@ -84,12 +88,32 @@ function GettingStartedPage() {
       ),
   })
 
-  const goalMutation = useMutation({
-    mutationFn: (next: OnboardingOutcome) => setActivationGoalFn({ data: { outcome: next } }),
+  const enableProductMutation = useMutation({
+    mutationFn: (productId: ProductId) =>
+      updateFeatureFlagsFn({ data: getProductFlagUpdate(productId, true) }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['admin', 'onboarding'] })
+      await router.invalidate()
+    },
+    onError: (error) =>
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : intl.formatMessage({
+              id: 'activation.error.enableProduct',
+              defaultMessage: 'We couldn’t turn that product on. Try again.',
+            })
+      ),
+  })
+
+  const goalMutation = useMutation({
+    mutationFn: (next: OnboardingOutcome) => setActivationGoalFn({ data: { outcome: next } }),
+    onSuccess: async (result) => {
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'onboarding'] })
+      await router.invalidate()
       setEditingGoal(false)
       requestAnimationFrame(() => changeGoalButtonRef.current?.focus())
+      toastEnabledModules(result.enabledModules)
     },
     onError: (error) =>
       toast.error(
@@ -102,31 +126,45 @@ function GettingStartedPage() {
       ),
   })
 
-  const prerequisiteTasks = summary.tasks.filter((task) => task.classification === 'prerequisite')
-  const polishTasks = summary.tasks.filter((task) => task.classification === 'polish')
+  const prerequisiteTasks = summary.tasks.filter(
+    (task) => task.classification === 'prerequisite' && !task.isSkipped
+  )
+  const polishTasks = summary.tasks.filter(
+    (task) => task.classification === 'polish' && !task.isSkipped
+  )
   const firstWinTask = summary.tasks.find((task) => task.classification === 'first_win')
+  const currentTask = prerequisiteTasks.find(
+    (task) => task.availability === 'available' && !task.isCompleted
+  )
+  const allPrereqsSkipped =
+    summary.denominator === 0 &&
+    summary.skippedTasks.some((task) => task.classification === 'prerequisite')
+  const winNoun = FIRST_WIN_NOUN[outcome]
   const pageDescription = summary.firstWinComplete
     ? intl.formatMessage({
         id: 'activation.summary.firstWin',
         defaultMessage: 'You’re up and running',
       })
-    : summary.blockedCount > 0 && summary.remaining === 0
+    : summary.blockedCount > 0 && !currentTask
       ? intl.formatMessage({
           id: 'activation.summary.attention',
-          defaultMessage: 'Your workspace needs attention before you can launch',
+          defaultMessage: 'One thing needs attention before you can launch',
         })
-      : summary.allComplete
-        ? intl.formatMessage({
-            id: 'activation.summary.ready',
-            defaultMessage: 'Everything is ready for your first result',
-          })
+      : summary.remaining === 0
+        ? intl.formatMessage(
+            {
+              id: 'activation.summary.ready',
+              defaultMessage: 'You’re ready for your first {win}',
+            },
+            { win: winNoun }
+          )
         : intl.formatMessage(
             {
               id: 'activation.summary.remaining',
               defaultMessage:
-                '{count, plural, one {# setup step to go} other {# setup steps to go}}',
+                '{count, plural, one {# step to your first {win}} other {# steps to your first {win}}}',
             },
-            { count: summary.remaining }
+            { count: summary.remaining, win: winNoun }
           )
 
   return (
@@ -161,18 +199,29 @@ function GettingStartedPage() {
                 />
               </h2>
             </div>
-            <Button
-              ref={changeGoalButtonRef}
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-11 sm:h-9"
-              disabled={!canManage || status.goalManaged}
-              onClick={() => setEditingGoal((value) => !value)}
-            >
-              <PencilSquareIcon className="h-4 w-4" />
-              <FormattedMessage id="activation.goal.change" defaultMessage="Change goal" />
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button asChild variant="ghost" size="sm" className="h-11 sm:h-9">
+                <Link to={OUTCOME_HOME[outcome].href}>
+                  <FormattedMessage
+                    id={`activation.home.${outcome}`}
+                    defaultMessage={OUTCOME_HOME[outcome].label}
+                  />
+                  <ArrowRightIcon className="h-4 w-4" />
+                </Link>
+              </Button>
+              <Button
+                ref={changeGoalButtonRef}
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-11 sm:h-9"
+                disabled={!canManage || status.goalManaged}
+                onClick={() => setEditingGoal((value) => !value)}
+              >
+                <PencilSquareIcon className="h-4 w-4" />
+                <FormattedMessage id="activation.goal.change" defaultMessage="Change goal" />
+              </Button>
+            </div>
           </div>
           {status.goalManaged && (
             <p className="text-xs text-muted-foreground">
@@ -220,34 +269,6 @@ function GettingStartedPage() {
           )}
         </section>
 
-        {nextAction && nextTask && (
-          <section
-            aria-labelledby="next-step-heading"
-            className="rounded-2xl border border-primary/25 bg-primary/5 p-6"
-          >
-            <p className="text-xs font-medium uppercase tracking-wide text-primary">
-              <FormattedMessage id="activation.nextStep.eyebrow" defaultMessage="Next step" />
-            </p>
-            <h2 id="next-step-heading" className="mt-2 text-lg font-semibold">
-              <FormattedMessage
-                id={`activation.task.${outcome}.${nextTask.id}.title`}
-                defaultMessage={nextTask.title}
-              />
-            </h2>
-            <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-              <FormattedMessage
-                id={`activation.task.${outcome}.${nextTask.id}.description`}
-                defaultMessage={nextTask.description}
-              />
-            </p>
-            <ActivationActionButton
-              action={nextAction}
-              surface="launch_plan"
-              className="mt-5 h-11"
-            />
-          </section>
-        )}
-
         <section aria-labelledby="readiness-heading" className="space-y-4">
           <div className="flex items-end justify-between gap-4">
             <div>
@@ -264,38 +285,90 @@ function GettingStartedPage() {
                 />
               </p>
             </div>
-            <span className="text-sm font-medium tabular-nums" aria-live="polite">
-              {summary.doneCount} / {summary.denominator}
-            </span>
+            {!allPrereqsSkipped && (
+              <span className="text-sm font-medium tabular-nums" aria-live="polite">
+                {summary.doneCount} / {summary.denominator}
+              </span>
+            )}
           </div>
-          <div
-            className="h-2 overflow-hidden rounded-full bg-muted"
-            role="progressbar"
-            aria-label={intl.formatMessage({
-              id: 'activation.progress.label',
-              defaultMessage: 'Setup progress',
-            })}
-            aria-valuemin={0}
-            aria-valuemax={summary.denominator}
-            aria-valuenow={summary.doneCount}
-          >
-            <div
-              className="h-full rounded-full bg-primary transition-transform duration-300 motion-reduce:transition-none"
-              style={{
-                transform: `scaleX(${summary.denominator ? summary.doneCount / summary.denominator : 1})`,
-                transformOrigin: 'left',
-              }}
-            />
-          </div>
-          <TaskList
-            tasks={prerequisiteTasks}
-            outcome={outcome}
-            canManage={canManage}
-            pending={resolutionMutation.isPending}
-            showLinks={false}
-            onResolution={(taskId, resolution) => resolutionMutation.mutate({ taskId, resolution })}
-          />
+          {allPrereqsSkipped ? (
+            <p className="rounded-xl border bg-card px-5 py-4 text-sm text-muted-foreground">
+              <FormattedMessage
+                id="activation.readiness.allSkipped"
+                defaultMessage="All setup steps are skipped — add one back anytime, or head to your {home}."
+                values={{ home: OUTCOME_HOME[outcome].label }}
+              />
+            </p>
+          ) : (
+            <>
+              <div
+                className="h-2 overflow-hidden rounded-full bg-muted"
+                role="progressbar"
+                aria-label={intl.formatMessage({
+                  id: 'activation.progress.label',
+                  defaultMessage: 'Setup progress',
+                })}
+                aria-valuemin={0}
+                aria-valuemax={summary.denominator}
+                aria-valuenow={summary.doneCount}
+              >
+                <div
+                  className="h-full rounded-full bg-primary transition-transform duration-300 motion-reduce:transition-none"
+                  style={{
+                    transform: `scaleX(${summary.denominator ? summary.doneCount / summary.denominator : 0})`,
+                    transformOrigin: 'left',
+                  }}
+                />
+              </div>
+              <TaskList
+                tasks={prerequisiteTasks}
+                outcome={outcome}
+                status={status}
+                canManage={canManage}
+                pending={resolutionMutation.isPending || enableProductMutation.isPending}
+                currentTaskId={currentTask?.id}
+                onResolution={(taskId, resolution) =>
+                  resolutionMutation.mutate({ taskId, resolution })
+                }
+                onEnableProduct={(productId) => enableProductMutation.mutate(productId)}
+              />
+            </>
+          )}
         </section>
+
+        {summary.skippedTasks.length > 0 && (
+          <details className="group rounded-xl border bg-card">
+            <summary className="cursor-pointer list-none px-5 py-4 marker:hidden">
+              <div className="flex items-baseline justify-between gap-3">
+                <h2 id="skipped-heading" className="text-base font-semibold">
+                  <FormattedMessage id="activation.skipped.title" defaultMessage="Skipped steps" />
+                </h2>
+                <span className="text-xs tabular-nums text-muted-foreground">
+                  {summary.skippedTasks.length}
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                <FormattedMessage
+                  id="activation.skipped.description"
+                  defaultMessage="Add a step back anytime to put it on your launch plan."
+                />
+              </p>
+            </summary>
+            <div className="border-t p-3">
+              <TaskList
+                tasks={summary.skippedTasks}
+                outcome={outcome}
+                status={status}
+                canManage={canManage}
+                pending={resolutionMutation.isPending || enableProductMutation.isPending}
+                onResolution={(taskId, resolution) =>
+                  resolutionMutation.mutate({ taskId, resolution })
+                }
+                onEnableProduct={(productId) => enableProductMutation.mutate(productId)}
+              />
+            </div>
+          </details>
+        )}
 
         {polishTasks.length > 0 && (
           <details className="group rounded-xl border bg-card">
@@ -314,12 +387,13 @@ function GettingStartedPage() {
               <TaskList
                 tasks={polishTasks}
                 outcome={outcome}
+                status={status}
                 canManage={canManage}
-                pending={resolutionMutation.isPending}
-                showLinks
+                pending={resolutionMutation.isPending || enableProductMutation.isPending}
                 onResolution={(taskId, resolution) =>
                   resolutionMutation.mutate({ taskId, resolution })
                 }
+                onEnableProduct={(productId) => enableProductMutation.mutate(productId)}
               />
             </div>
           </details>
@@ -403,121 +477,172 @@ function GettingStartedPage() {
   )
 }
 
+function productLabel(productId: ProductId): string {
+  return PRODUCT_DEFINITIONS.find((product) => product.id === productId)?.label ?? 'product'
+}
+
 function TaskList({
   tasks,
   outcome,
+  status,
   canManage,
   pending,
-  showLinks,
+  currentTaskId,
   onResolution,
+  onEnableProduct,
 }: {
   tasks: LaunchTask[]
   outcome: OnboardingOutcome
+  status: LaunchStatus
   canManage: boolean
   pending: boolean
-  showLinks: boolean
-  onResolution: (taskId: string, resolution: 'deferred' | 'dismissed' | null) => void
+  currentTaskId?: string
+  onResolution: (taskId: string, resolution: 'dismissed' | null) => void
+  onEnableProduct: (productId: ProductId) => void
 }) {
   return (
-    <ul className="divide-y rounded-xl border bg-card">
-      {tasks.map((task) => (
-        <li key={task.id} className={cn('p-5', task.isDismissed && 'bg-muted/20')}>
-          <div className="flex items-start gap-4">
-            <TaskStateIcon task={task} />
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h3
-                  className={cn('text-sm font-medium', task.isDismissed && 'text-muted-foreground')}
-                >
-                  <FormattedMessage
-                    id={`activation.task.${outcome}.${task.id}.title`}
-                    defaultMessage={task.title}
-                  />
-                </h3>
-                {task.isDeferred && (
-                  <Badge variant="secondary">
-                    <FormattedMessage id="activation.state.later" defaultMessage="For later" />
-                  </Badge>
-                )}
-                {task.isDismissed && (
-                  <Badge variant="secondary">
-                    <FormattedMessage id="activation.state.skipped" defaultMessage="Skipped" />
-                  </Badge>
-                )}
-                {task.availability === 'blocked' && (
-                  <Badge variant="outline">
+    <ul className="divide-y overflow-hidden rounded-xl border bg-card">
+      {tasks.map((task) => {
+        const moduleOffProduct =
+          task.blocked?.kind === 'module-off' ? task.blocked.productId : undefined
+        const canEnableModule = Boolean(moduleOffProduct && canManage)
+        const waitingOnAdmin = Boolean(moduleOffProduct && !canManage)
+        const isCurrent = currentTaskId === task.id
+        const copyAction =
+          task.id === 'distribute-feedback' && !task.isCompleted && !task.isSkipped
+            ? copyBoardLinkAction(outcome, status)
+            : null
+        const description =
+          canEnableModule && moduleOffProduct
+            ? `${productLabel(moduleOffProduct)} was turned off in Settings. Turn it back on to continue — it’s your workspace goal.`
+            : (task.blockedReason ?? task.description)
+        return (
+          <li
+            key={task.id}
+            className={cn(
+              'p-5',
+              isCurrent && 'border-l-[3px] border-l-primary bg-primary/5',
+              task.isSkipped && 'bg-muted/20'
+            )}
+          >
+            <div className="flex items-start gap-4">
+              <TaskStateIcon task={task} />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3
+                    className={cn('text-sm font-medium', task.isSkipped && 'text-muted-foreground')}
+                  >
                     <FormattedMessage
-                      id="activation.state.attention"
-                      defaultMessage="Needs attention"
+                      id={`activation.task.${outcome}.${task.id}.title`}
+                      defaultMessage={task.title}
                     />
-                  </Badge>
-                )}
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                <FormattedMessage
-                  id={`activation.task.${outcome}.${task.id}.${task.blockedReason ? 'blocked' : 'description'}`}
-                  defaultMessage={task.blockedReason ?? task.description}
-                />
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {showLinks && !task.isDismissed && task.href && (
-                  <Button asChild size="sm" variant="outline" className="h-11 sm:h-9">
-                    <Link to={task.href}>
+                  </h3>
+                  {isCurrent && (
+                    <Badge size="sm" shape="pill" variant="secondary">
+                      <FormattedMessage id="activation.state.upNext" defaultMessage="Up next" />
+                    </Badge>
+                  )}
+                  {task.isSkipped && (
+                    <Badge variant="secondary">
+                      <FormattedMessage id="activation.state.skipped" defaultMessage="Skipped" />
+                    </Badge>
+                  )}
+                  {waitingOnAdmin ? (
+                    <Badge variant="outline">
                       <FormattedMessage
-                        id={`activation.task.${outcome}.${task.id}.${task.isCompleted ? 'completedAction' : 'action'}`}
-                        defaultMessage={task.isCompleted ? task.completedLabel : task.actionLabel}
+                        id="activation.state.waiting"
+                        defaultMessage="Waiting on an admin"
                       />
-                      <ArrowRightIcon className="h-3.5 w-3.5" />
-                    </Link>
-                  </Button>
-                )}
-                {!task.isCompleted && canManage && task.classification === 'prerequisite' && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="h-11 sm:h-9"
-                    disabled={pending}
-                    onClick={() => onResolution(task.id, task.isDeferred ? null : 'deferred')}
-                  >
-                    {task.isDeferred ? (
-                      <ArrowUturnLeftIcon className="h-4 w-4" />
-                    ) : (
-                      <ClockIcon className="h-4 w-4" />
-                    )}
-                    <FormattedMessage
-                      id={
-                        task.isDeferred ? 'activation.action.moveUp' : 'activation.action.doLater'
-                      }
-                      defaultMessage={task.isDeferred ? 'Move up' : 'Do later'}
+                    </Badge>
+                  ) : (
+                    task.availability === 'blocked' &&
+                    !task.isSkipped && (
+                      <Badge variant="outline">
+                        <FormattedMessage
+                          id="activation.state.attention"
+                          defaultMessage="Needs attention"
+                        />
+                      </Badge>
+                    )
+                  )}
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  <FormattedMessage
+                    id={`activation.task.${outcome}.${task.id}.${task.blockedReason && !canEnableModule ? 'blocked' : 'description'}`}
+                    defaultMessage={description}
+                  />
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {canEnableModule && moduleOffProduct && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-11 sm:h-9"
+                      disabled={pending}
+                      onClick={() => onEnableProduct(moduleOffProduct)}
+                    >
+                      <FormattedMessage
+                        id={`activation.task.${outcome}.${task.id}.enable`}
+                        defaultMessage="Turn on {product}"
+                        values={{ product: productLabel(moduleOffProduct) }}
+                      />
+                    </Button>
+                  )}
+                  {copyAction && (
+                    <ActivationActionButton
+                      action={copyAction}
+                      surface="launch_plan"
+                      className="h-11 sm:h-9"
                     />
-                  </Button>
-                )}
-                {!task.isCompleted && canManage && task.classification === 'polish' && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="h-11 sm:h-9"
-                    disabled={pending}
-                    onClick={() => onResolution(task.id, task.isDismissed ? null : 'dismissed')}
-                  >
-                    {task.isDismissed ? (
-                      <ArrowUturnLeftIcon className="h-4 w-4" />
-                    ) : (
-                      <MinusIcon className="h-4 w-4" />
+                  )}
+                  {!copyAction &&
+                    !canEnableModule &&
+                    !waitingOnAdmin &&
+                    !task.isSkipped &&
+                    task.href && (
+                      <Button
+                        asChild
+                        size="sm"
+                        variant={isCurrent ? 'default' : 'outline'}
+                        className="h-11 sm:h-9"
+                      >
+                        <Link to={task.href}>
+                          <FormattedMessage
+                            id={`activation.task.${outcome}.${task.id}.${task.isCompleted ? 'completedAction' : 'action'}`}
+                            defaultMessage={
+                              task.isCompleted ? task.completedLabel : task.actionLabel
+                            }
+                          />
+                          <ArrowRightIcon className="h-3.5 w-3.5" />
+                        </Link>
+                      </Button>
                     )}
-                    <FormattedMessage
-                      id={task.isDismissed ? 'activation.action.addBack' : 'activation.action.skip'}
-                      defaultMessage={task.isDismissed ? 'Add back' : 'Skip'}
-                    />
-                  </Button>
-                )}
+                  {!waitingOnAdmin && !task.isCompleted && canManage && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-11 sm:h-9"
+                      disabled={pending}
+                      onClick={() => onResolution(task.id, task.isSkipped ? null : 'dismissed')}
+                    >
+                      {task.isSkipped ? (
+                        <ArrowUturnLeftIcon className="h-4 w-4" />
+                      ) : (
+                        <MinusIcon className="h-4 w-4" />
+                      )}
+                      <FormattedMessage
+                        id={task.isSkipped ? 'activation.action.addBack' : 'activation.action.skip'}
+                        defaultMessage={task.isSkipped ? 'Add back' : 'Skip'}
+                      />
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        </li>
-      ))}
+          </li>
+        )
+      })}
     </ul>
   )
 }
@@ -527,9 +652,7 @@ function TaskStateIcon({ task }: { task: LaunchTask }) {
     <CheckIcon className="h-4 w-4" />
   ) : task.availability === 'blocked' ? (
     <LockClosedIcon className="h-4 w-4" />
-  ) : task.isDeferred ? (
-    <ClockIcon className="h-4 w-4" />
-  ) : task.isDismissed ? (
+  ) : task.isSkipped ? (
     <MinusIcon className="h-4 w-4" />
   ) : (
     <span className="h-2 w-2 rounded-full bg-current" />

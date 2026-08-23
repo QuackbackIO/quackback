@@ -21,6 +21,8 @@ interface OutcomeOption {
   description: string
   /** Who this is for — ICP cue, not jargon */
   forWhom: string
+  /** What picking this goal turns on or uses */
+  whatYouGet: string
   icon: ComponentType<{ className?: string }>
 }
 
@@ -42,6 +44,7 @@ const OUTCOME_OPTIONS: OutcomeOption[] = [
     label: 'Product feedback',
     description: 'Collect ideas, prioritize requests, and share what’s coming next',
     forWhom: 'Product teams',
+    whatYouGet: 'Uses the Feedback product that’s already on',
     icon: LightBulbIcon,
   },
   {
@@ -49,6 +52,7 @@ const OUTCOME_OPTIONS: OutcomeOption[] = [
     label: 'Customer support',
     description: 'Talk with customers and manage conversations in a shared inbox',
     forWhom: 'Support teams',
+    whatYouGet: 'Turns on the Support inbox',
     icon: ChatBubbleLeftRightIcon,
   },
   {
@@ -56,6 +60,7 @@ const OUTCOME_OPTIONS: OutcomeOption[] = [
     label: 'Help Center',
     description: 'Publish answers customers can find whenever they need them',
     forWhom: 'Support & content',
+    whatYouGet: 'Turns on the Help Center product',
     icon: BookOpenIcon,
   },
   {
@@ -63,6 +68,7 @@ const OUTCOME_OPTIONS: OutcomeOption[] = [
     label: 'Internal feedback',
     description: 'Give teammates a private place to share ideas and improvements',
     forWhom: 'Your team',
+    whatYouGet: 'Uses the Feedback product for a private team board',
     icon: UserGroupIcon,
   },
 ]
@@ -145,6 +151,12 @@ export function UseCaseSelector({ value, onChange, disabled }: UseCaseSelectorPr
                 <FormattedMessage
                   id={`onboarding.goal.${option.id}.description`}
                   defaultMessage={option.description}
+                />
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground/80">
+                <FormattedMessage
+                  id={`onboarding.goal.${option.id}.whatYouGet`}
+                  defaultMessage={option.whatYouGet}
                 />
               </div>
             </div>
