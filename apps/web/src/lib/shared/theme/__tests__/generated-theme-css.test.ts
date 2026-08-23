@@ -1,0 +1,111 @@
+import { describe, expect, it } from 'vitest'
+import { extractCssVariables } from '../css-parser'
+import { extractMinimal } from '../expand'
+import { advancedCssRemainder, generateReadableCSS, isGeneratedThemeCss } from '../generator'
+import { themePresets } from '../presets'
+import type { ThemeMode } from '../types'
+
+const lightMinimal = extractMinimal(themePresets.default.light)
+const darkMinimal = extractMinimal(themePresets.default.dark)
+const THEME_MODES: ThemeMode[] = ['user', 'light', 'dark']
+
+describe('isGeneratedThemeCss', () => {
+  it('returns true for generated CSS in every theme mode', () => {
+    for (const mode of THEME_MODES) {
+      const css = generateReadableCSS(lightMinimal, darkMinimal, mode)
+      expect(isGeneratedThemeCss(css, lightMinimal, darkMinimal)).toBe(true)
+    }
+  })
+
+  it('returns false when generated CSS has an extra rule', () => {
+    const css = generateReadableCSS(lightMinimal, darkMinimal, 'user')
+    expect(isGeneratedThemeCss(`${css}\n.brand { color: red; }\n`, lightMinimal, darkMinimal)).toBe(
+      false
+    )
+  })
+
+  it('treats CSS generated for a different mode as generated, not Advanced CSS', () => {
+    const userCss = generateReadableCSS(lightMinimal, darkMinimal, 'user')
+    const lightCss = generateReadableCSS(lightMinimal, darkMinimal, 'light')
+    expect(userCss).not.toBe(lightCss)
+    expect(isGeneratedThemeCss(userCss, lightMinimal, darkMinimal)).toBe(true)
+    expect(isGeneratedThemeCss(lightCss, lightMinimal, darkMinimal)).toBe(true)
+  })
+})
+
+describe('advancedCssRemainder', () => {
+  it('returns empty for generated CSS', () => {
+    const css = generateReadableCSS(lightMinimal, darkMinimal, 'user')
+    expect(advancedCssRemainder(css)).toBe('')
+  })
+
+  it('returns extra rules after stripping theme blocks', () => {
+    const css = generateReadableCSS(lightMinimal, darkMinimal, 'user')
+    expect(advancedCssRemainder(`${css}\n.brand { color: red; }\n`)).toBe('.brand { color: red; }')
+  })
+
+  it('keeps unknown declarations inside :root after stripping generated vars', () => {
+    const css = ':root { --primary: oklch(0.5 0.2 250); color-scheme: dark; }\n'
+    const remainder = advancedCssRemainder(css)
+    expect(remainder).toMatch(/:root\s*\{[^}]*color-scheme:\s*dark/)
+    expect(remainder).not.toContain('--primary')
+  })
+
+  it('does not split on a semicolon inside a declaration value', () => {
+    const css = ':root { --primary: oklch(0.5 0.2 250); --logo: url(data:image/png;base64,abc); }\n'
+    const remainder = advancedCssRemainder(css)
+    expect(remainder).toContain('--logo: url(data:image/png;base64,abc)')
+    expect(remainder).not.toContain('--primary')
+  })
+
+  it('does not end a :root block on a quoted brace', () => {
+    const css = ':root { --token: "}"; color-scheme: dark; }\n'
+    const remainder = advancedCssRemainder(css)
+    expect(remainder).toContain('--token: "}"')
+    expect(remainder).toMatch(/color-scheme:\s*dark/)
+  })
+
+  it('strips generated theme declarations nested inside at-rules', () => {
+    const css = '@layer base { :root { --primary: oklch(0.5 0.2 250); color-scheme: dark; } }\n'
+    const remainder = advancedCssRemainder(css)
+    expect(remainder).toContain('@layer')
+    expect(remainder).toMatch(/color-scheme:\s*dark/)
+    expect(remainder).not.toContain('--primary')
+  })
+
+  it('treats a generated var with a leading comment as generated', () => {
+    const css = ':root { /* primary */ --primary: oklch(0.5 0.2 250); }\n'
+    expect(advancedCssRemainder(css)).toBe('')
+  })
+
+  it('keeps a derived var whose value differs from expandTheme output', () => {
+    const light = { primary: 'oklch(0.5 0.2 250)' }
+    const generated = generateReadableCSS(light, {}, 'user')
+    const customFg = 'oklch(0.1 0 0)'
+    const css = `:root { --primary: oklch(0.5 0.2 250); --primary-foreground: ${customFg}; }\n`
+    const remainder = advancedCssRemainder(css, generated)
+    expect(remainder).toContain(`--primary-foreground: ${customFg}`)
+    expect(remainder).not.toMatch(/--primary:/)
+  })
+
+  it('keeps a font-family that differs from the generated stack', () => {
+    const generated = generateReadableCSS(lightMinimal, darkMinimal, 'user')
+    const css = ':root { --primary: oklch(0.5 0.2 250); font-family: "My Brand"; }\n'
+    const remainder = advancedCssRemainder(css, generated)
+    expect(remainder).toContain('font-family: "My Brand"')
+  })
+
+  it('imports a last declaration without a trailing semicolon', () => {
+    const css = ':root { --primary: oklch(0.5 0.2 250); color-scheme: dark }\n'
+    const remainder = advancedCssRemainder(css)
+    expect(remainder).toMatch(/color-scheme:\s*dark/)
+    expect(remainder).not.toContain('--primary')
+  })
+})
+
+describe('extractCssVariables', () => {
+  it('reads a last custom property without a trailing semicolon', () => {
+    const vars = extractCssVariables(':root { --primary: oklch(0.5 0.2 250) }')
+    expect(vars.light['--primary']).toBe('oklch(0.5 0.2 250)')
+  })
+})

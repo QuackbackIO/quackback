@@ -232,7 +232,14 @@ describe('resolveEffectiveTierLimits (cloud, no operator row)', () => {
     const effective = resolveEffectiveTierLimits(null, growth, beforeExpiry)
     expect(effective.features.analyticsExports).toBe(false)
     expect(effective.features.integrations).toBe(false)
-    expect(effective.features.customColors).toBe(false)
+    expect(effective.features.customColors).toBe(true)
+    expect(effective.features.customCss).toBe(false)
+  })
+
+  it('allows custom colours on Free', () => {
+    const free: BillingProjection = { ...PROJECTION, effectivePlan: 'free' }
+    const effective = resolveEffectiveTierLimits(null, free, beforeExpiry)
+    expect(effective.features.customColors).toBe(true)
     expect(effective.features.customCss).toBe(false)
   })
 
@@ -243,6 +250,7 @@ describe('resolveEffectiveTierLimits (cloud, no operator row)', () => {
     expect(effective.features.webhooks).toBe(false)
     expect(effective.features.analyticsExports).toBe(false)
     expect(effective.features.integrations).toBe(false)
+    expect(effective.features.customColors).toBe(true)
   })
 
   it('still raises a stored operator floor in the least-restrictive direction', () => {

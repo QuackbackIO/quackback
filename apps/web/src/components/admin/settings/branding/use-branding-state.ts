@@ -5,6 +5,8 @@ import {
   extractMinimal,
   extractCssVariables,
   generateReadableCSS,
+  isGeneratedThemeCss,
+  advancedCssRemainder,
   parseCssToMinimal,
   replaceCssVar,
   normalizeFontSans,
@@ -164,21 +166,28 @@ export interface BrandingState {
 }
 
 function buildInitialCss(initialCustomCss: string, initialThemeConfig: ThemeConfig): string {
-  // If user already has custom CSS, use it as-is
-  if (initialCustomCss.trim()) return initialCustomCss
-
-  // Otherwise generate readable CSS from the structured config
   const defaultPreset = themePresets.default
-  const lightMinimal = extractMinimal({
-    ...defaultPreset.light,
+  const parsed = extractCssVariables(initialCustomCss)
+  // Structured brandingConfig wins; CSS-parsed values fill gaps so a
+  // CSS-only palette (empty/partial config) is not replaced by defaults.
+  const lightMinimal: Partial<MinimalThemeVariables> = {
+    ...extractMinimal(defaultPreset.light),
+    ...parseCssToMinimal(parsed.light),
     ...(initialThemeConfig.light ?? {}),
-  })
-  const darkMinimal = extractMinimal({
-    ...defaultPreset.dark,
+  }
+  const darkMinimal: Partial<MinimalThemeVariables> = {
+    ...extractMinimal(defaultPreset.dark),
+    ...parseCssToMinimal(parsed.dark),
     ...(initialThemeConfig.dark ?? {}),
-  })
+  }
 
-  return generateReadableCSS(lightMinimal, darkMinimal, initialThemeConfig.themeMode)
+  // Always emit both palettes so a later switch back to user mode still
+  // has the inactive side in cssText for saveTheme to parse. Preview
+  // locking uses initialThemeConfig.themeMode separately.
+  const generated = generateReadableCSS(lightMinimal, darkMinimal, 'user')
+  const remainder = advancedCssRemainder(initialCustomCss, generated)
+  if (!remainder) return generated
+  return `${generated.trimEnd()}\n\n${remainder}`
 }
 
 export function useBrandingState(options: UseBrandingStateOptions): BrandingState {
@@ -195,7 +204,8 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
   )
   const [themeMode, setThemeModeRaw] = useState<ThemeMode>(() => initialMode)
 
-  // When theme mode changes, auto-switch preview to match and regenerate CSS
+  // Forced light/dark also locks the preview toggle. cssText is left intact so
+  // the inactive palette is still present when saveTheme parses brandingConfig.
   const setThemeMode = useCallback((mode: ThemeMode) => {
     setThemeModeRaw(mode)
     if (mode === 'dark') setPreviewMode('dark')
@@ -223,10 +233,12 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
   const defaultLightMinimal = useMemo(() => extractMinimal(defaultPreset.light), [defaultPreset])
   const defaultDarkMinimal = useMemo(() => extractMinimal(defaultPreset.dark), [defaultPreset])
 
-  const font = useMemo(
-    () => parsedCssVariables.light['--font-sans'] || DEFAULT_FONT,
-    [parsedCssVariables]
-  )
+  const font = useMemo(() => {
+    const light = parsedCssVariables.light['--font-sans']
+    const dark = parsedCssVariables.dark['--font-sans']
+    if (themeMode === 'dark') return dark || light || DEFAULT_FONT
+    return light || dark || DEFAULT_FONT
+  }, [parsedCssVariables, themeMode])
 
   const currentFontId = useMemo(
     () => FONT_OPTIONS.find((f) => f.value === normalizeFontSans(font))?.id || 'inter',
@@ -234,11 +246,13 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
   )
 
   const radius = useMemo(() => {
-    const raw = parsedCssVariables.light['--radius']
+    const light = parsedCssVariables.light['--radius']
+    const dark = parsedCssVariables.dark['--radius']
+    const raw = themeMode === 'dark' ? dark || light : light || dark
     if (!raw) return DEFAULT_RADIUS
     const match = raw.match(/^([\d.]+)rem$/)
     return match ? parseFloat(match[1]) : DEFAULT_RADIUS
-  }, [parsedCssVariables])
+  }, [parsedCssVariables, themeMode])
 
   const activePresetId = useMemo(() => {
     const parsedLight = parseCssToMinimal(parsedCssVariables.light)
@@ -299,12 +313,26 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
         dark: { ...darkMinimal, fontSans: font, radius: `${radius}rem` },
       }
 
+      // Generated theme CSS is reconstructed from brandingConfig. Stored
+      // customCss is remainder-only so leftover :root/.dark theme vars cannot
+      // override the saved colours. Extra rules that changed still persist
+      // through the Pro gate; unchanged extras are rewritten without it.
+      const generated = generateReadableCSS(lightMinimal, darkMinimal, 'user')
+      const remainder = advancedCssRemainder(cssText, generated)
+      const customCssWrite =
+        isGeneratedThemeCss(cssText, lightMinimal, darkMinimal) || !remainder
+          ? 'clear'
+          : remainder === advancedCssRemainder(initialCustomCss, generated)
+            ? 'rewrite'
+            : 'persist'
+
       // The mutation hook invalidates the branding + customCss queries on success,
       // so the next visit reflects the save instead of re-seeding the editor from
       // the stale pre-save cache.
       await saveBrandingTheme({
         brandingConfig: themeConfig as unknown as Record<string, unknown>,
-        customCss: cssText,
+        customCss: remainder,
+        customCssWrite,
       })
 
       setSaveSuccess(true)
@@ -312,7 +340,16 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
     } finally {
       setIsSaving(false)
     }
-  }, [cssText, themeMode, font, radius, defaultLightMinimal, defaultDarkMinimal, saveBrandingTheme])
+  }, [
+    cssText,
+    themeMode,
+    font,
+    radius,
+    defaultLightMinimal,
+    defaultDarkMinimal,
+    saveBrandingTheme,
+    initialCustomCss,
+  ])
 
   return {
     logoUrl,

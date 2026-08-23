@@ -80,6 +80,278 @@ export function generateReadableCSS(
   return parts.join('\n\n') + '\n'
 }
 
+const THEME_MODES = ['user', 'light', 'dark'] as const satisfies readonly ThemeMode[]
+
+/**
+ * True when `cssText` is the output of `generateReadableCSS` for any theme
+ * mode. Extra rules (Advanced CSS) fail this check.
+ */
+export function isGeneratedThemeCss(
+  cssText: string,
+  lightMinimal: Partial<MinimalThemeVariables>,
+  darkMinimal: Partial<MinimalThemeVariables>
+): boolean {
+  const trimmed = cssText.trim()
+  if (!trimmed) return false
+  return THEME_MODES.some(
+    (mode) => generateReadableCSS(lightMinimal, darkMinimal, mode).trim() === trimmed
+  )
+}
+
+const MINIMAL_THEME_CSS_VARS = new Set(
+  (
+    [
+      'primary',
+      'background',
+      'foreground',
+      'card',
+      'muted',
+      'mutedForeground',
+      'border',
+      'destructive',
+      'success',
+      'ring',
+      'secondary',
+      'accent',
+      'fontSans',
+      'radius',
+    ] as const
+  ).map((key) => variableMap[key])
+)
+
+function stripLeadingCssComments(decl: string): string {
+  let s = decl.trim()
+  while (s.startsWith('/*')) {
+    const end = s.indexOf('*/')
+    if (end === -1) break
+    s = s.slice(end + 2).trim()
+  }
+  return s
+}
+
+function normalizeCssValue(value: string): string {
+  return value.trim().replace(/\s+/g, ' ')
+}
+
+function parsePropertyValue(decl: string): { property: string; value: string } | null {
+  const stripped = stripLeadingCssComments(decl)
+  const match = /^((?:--[\w-]+)|font-family)\s*:\s*(.*)$/i.exec(stripped)
+  if (!match) return null
+  const property = match[1].toLowerCase() === 'font-family' ? 'font-family' : match[1]
+  return { property, value: match[2].replace(/;?\s*$/, '').trim() }
+}
+
+function isGeneratedThemeDeclaration(decl: string, generated: Map<string, string>): boolean {
+  const parsed = parsePropertyValue(decl)
+  if (!parsed) return false
+  const emitted = generated.get(parsed.property)
+  if (emitted === undefined) return false
+  // Minimal keys live in brandingConfig; stale copies must not override.
+  if (parsed.property !== 'font-family' && MINIMAL_THEME_CSS_VARS.has(parsed.property)) return true
+  return normalizeCssValue(parsed.value) === normalizeCssValue(emitted)
+}
+
+interface CssScan {
+  quote: '"' | "'" | null
+  comment: boolean
+  paren: number
+}
+
+function isCssCode(scan: CssScan): boolean {
+  return !scan.comment && scan.quote === null
+}
+
+/** Consume one token of CSS context (quotes, comments, `url()` / paren depth). Returns chars consumed. */
+function advanceCssScan(scan: CssScan, source: string, i: number): number {
+  const c = source[i]
+  const next = source[i + 1]
+  if (scan.comment) {
+    if (c === '*' && next === '/') {
+      scan.comment = false
+      return 2
+    }
+    return 1
+  }
+  if (scan.quote) {
+    if (c === '\\' && next !== undefined) return 2
+    if (c === scan.quote) scan.quote = null
+    return 1
+  }
+  if (c === '/' && next === '*') {
+    scan.comment = true
+    return 2
+  }
+  if (c === '"' || c === "'") {
+    scan.quote = c
+    return 1
+  }
+  if (c === '(') {
+    scan.paren++
+    return 1
+  }
+  if (c === ')' && scan.paren > 0) {
+    scan.paren--
+    return 1
+  }
+  return 1
+}
+
+/** Split a declaration block on `;` while ignoring those inside quotes, comments, or parentheses (including `url(...)`). */
+function splitCssDeclarations(body: string): string[] {
+  const decls: string[] = []
+  const scan: CssScan = { quote: null, comment: false, paren: 0 }
+  let start = 0
+  let i = 0
+  while (i < body.length) {
+    const c = body[i]
+    if (c === ';' && isCssCode(scan) && scan.paren === 0) {
+      const decl = body.slice(start, i).trim()
+      if (decl) decls.push(decl)
+      start = i + 1
+      i++
+      continue
+    }
+    i += advanceCssScan(scan, body, i)
+  }
+  const tail = body.slice(start).trim()
+  if (tail) decls.push(tail)
+  return decls
+}
+
+function keepNonGeneratedDeclarations(body: string, generated: Map<string, string>): string {
+  const kept: string[] = []
+  for (const decl of splitCssDeclarations(body)) {
+    if (isGeneratedThemeDeclaration(decl, generated)) continue
+    kept.push(`  ${decl};`)
+  }
+  return kept.join('\n')
+}
+
+function declMapFromBlock(body: string): Map<string, string> {
+  const map = new Map<string, string>()
+  for (const decl of splitCssDeclarations(body)) {
+    const parsed = parsePropertyValue(decl)
+    if (parsed) map.set(parsed.property, parsed.value)
+  }
+  return map
+}
+
+function matchThemeSelector(
+  source: string,
+  i: number
+): { selector: ':root' | '.dark'; openBrace: number } | null {
+  if (i > 0 && /[\w-]/.test(source[i - 1] ?? '')) return null
+  let selector: ':root' | '.dark' | null = null
+  if (source.startsWith(':root', i)) selector = ':root'
+  else if (source.startsWith('.dark', i)) selector = '.dark'
+  if (!selector) return null
+  let j = i + selector.length
+  while (j < source.length && /\s/.test(source[j] ?? '')) j++
+  if (source[j] !== '{') return null
+  return { selector, openBrace: j }
+}
+
+/** Index of the `}` that closes the `{` at `openIndex`, ignoring braces inside quotes, comments, or parentheses. */
+function findMatchingBrace(source: string, openIndex: number): number {
+  const scan: CssScan = { quote: null, comment: false, paren: 0 }
+  let depth = 0
+  let i = openIndex
+  while (i < source.length) {
+    const c = source[i]
+    if (isCssCode(scan) && scan.paren === 0) {
+      if (c === '{') {
+        depth++
+        i++
+        continue
+      }
+      if (c === '}') {
+        depth--
+        if (depth === 0) return i
+        i++
+        continue
+      }
+    }
+    i += advanceCssScan(scan, source, i)
+  }
+  return source.length
+}
+
+function walkThemeBlocks(
+  cssText: string,
+  onThemeBlock: (selector: ':root' | '.dark', body: string) => string | void,
+  copyOther = false
+): string {
+  let out = ''
+  let i = 0
+  const scan: CssScan = { quote: null, comment: false, paren: 0 }
+
+  while (i < cssText.length) {
+    if (isCssCode(scan) && scan.paren === 0) {
+      const theme = matchThemeSelector(cssText, i)
+      if (theme) {
+        const close = findMatchingBrace(cssText, theme.openBrace)
+        const body = cssText.slice(theme.openBrace + 1, close)
+        const replacement = onThemeBlock(theme.selector, body)
+        if (copyOther && replacement) out += replacement
+        i = close < cssText.length ? close + 1 : cssText.length
+        scan.quote = null
+        scan.comment = false
+        scan.paren = 0
+        continue
+      }
+    }
+
+    const n = advanceCssScan(scan, cssText, i)
+    if (copyOther) out += cssText.slice(i, i + n)
+    i += n
+  }
+
+  return out
+}
+
+function generatedDeclMaps(generatedCss: string): Record<':root' | '.dark', Map<string, string>> {
+  const maps: Record<':root' | '.dark', Map<string, string>> = {
+    ':root': new Map(),
+    '.dark': new Map(),
+  }
+  walkThemeBlocks(generatedCss, (selector, body) => {
+    maps[selector] = declMapFromBlock(body)
+  })
+  return maps
+}
+
+function inferGeneratedCss(cssText: string): string {
+  const light: Record<string, string> = {}
+  const dark: Record<string, string> = {}
+  walkThemeBlocks(cssText, (selector, body) => {
+    const target = selector === ':root' ? light : dark
+    for (const [property, value] of declMapFromBlock(body)) {
+      if (property.startsWith('--')) target[property] = value
+    }
+  })
+  return generateReadableCSS(parseCssToMinimal(light), parseCssToMinimal(dark), 'user')
+}
+
+/**
+ * CSS left after removing generated theme declarations.
+ * Drops `:root` / `.dark` declarations that `generateReadableCSS` emits
+ * (minimal keys always; derived keys and `font-family` only when the value
+ * matches). Unknown inner declarations stay. Generated-only CSS yields ''.
+ */
+export function advancedCssRemainder(cssText: string, generatedCss?: string): string {
+  const maps = generatedDeclMaps(generatedCss ?? inferGeneratedCss(cssText))
+  const result = walkThemeBlocks(
+    cssText,
+    (selector, body) => {
+      const kept = keepNonGeneratedDeclarations(body, maps[selector])
+      if (!kept) return ''
+      return `${selector} {\n${kept}\n}`
+    },
+    true
+  )
+  return result.replace(/(?:\n[ \t]*){3,}/g, '\n\n').trim()
+}
+
 function formatCssBlock(selector: string, vars: ThemeVariables): string {
   const lines: string[] = [`${selector} {`]
 

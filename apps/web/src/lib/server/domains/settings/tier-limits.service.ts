@@ -48,13 +48,13 @@ const PLAN_ONLY_FEATURES: Record<
 > = {
   free: {
     analyticsExports: false,
-    customColors: false,
+    customColors: true,
     customCss: false,
     integrations: false,
   },
   growth: {
     analyticsExports: false,
-    customColors: false,
+    customColors: true,
     customCss: false,
     integrations: false,
   },
