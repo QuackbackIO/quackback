@@ -27,7 +27,26 @@ export const getPlanNotice = createServerFn({ method: 'GET' }).handler(
     await reportStarterTrialIfDue({ principalId: auth.principal.id })
 
     const { getCloudConfig } = await import('@/lib/server/domains/settings/cloud/cloud.service')
-    const { trialNotice } = await import('@/lib/server/domains/settings/cloud/commercial-notice')
-    return trialNotice(await getCloudConfig())
+    const { trialNotice, trialEndedNotice } =
+      await import('@/lib/server/domains/settings/cloud/commercial-notice')
+    const cloud = await getCloudConfig()
+    const running = trialNotice(cloud)
+    if (running) return running
+
+    const ended = trialEndedNotice(cloud)
+    if (!ended) return null
+
+    try {
+      const { fetchBillingCatalogue } = await import('@/lib/server/control-plane/client')
+      const { PLAN_CATALOGUE } = await import('@/lib/server/domains/settings/cloud/cloud.types')
+      const catalogue = await fetchBillingCatalogue()
+      const last = catalogue.lastTrialPlanId
+      if (last && last in PLAN_CATALOGUE) {
+        return trialEndedNotice(cloud, { trialPlanName: PLAN_CATALOGUE[last].name })
+      }
+    } catch {
+      /* catalogue is optional; ended copy falls back without the plan name */
+    }
+    return ended
   }
 )

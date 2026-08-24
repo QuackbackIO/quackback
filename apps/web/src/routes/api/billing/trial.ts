@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { isSameOriginFormPost } from '@/lib/server/http/same-origin-form'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { billingSessionErrorResponse } from './session'
+import { billingFormErrorResponse, billingSessionErrorResponse } from './session'
 
 const trialSchema = z.object({
   planId: z.enum(['growth', 'pro', 'scale']),
@@ -21,13 +21,13 @@ export const Route = createFileRoute('/api/billing/trial')({
           const form = await request.formData()
           const parsed = trialSchema.safeParse(Object.fromEntries(form.entries()))
           if (!parsed.success) {
-            return Response.json({ error: 'invalid_billing_action' }, { status: 400 })
+            return billingFormErrorResponse(null, 'invalid')
           }
           const { getCloudConfig } =
             await import('@/lib/server/domains/settings/cloud/cloud.service')
           const cloud = await getCloudConfig()
           if (!cloud.enabled || !cloud.canUpgrade) {
-            return Response.json({ error: 'billing_action_unavailable' }, { status: 403 })
+            return billingFormErrorResponse(null, 'unavailable')
           }
           const { startWorkspaceTrial } = await import('@/lib/server/control-plane/client')
           await startWorkspaceTrial(parsed.data.planId)

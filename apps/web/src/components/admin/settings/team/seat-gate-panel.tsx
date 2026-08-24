@@ -30,7 +30,12 @@ export function SeatGatePanel({ usage, onAddSeat }: { usage: SeatUsage; onAddSea
           </Button>
         ) : (
           <Button type="button" size="sm" className="shrink-0" asChild>
-            <Link to="/admin/settings/billing">See plans</Link>
+            <Link
+              to="/admin/settings/billing"
+              search={{ checkout: undefined, billing_error: undefined }}
+            >
+              See plans
+            </Link>
           </Button>
         )}
       </div>

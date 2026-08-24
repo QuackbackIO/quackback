@@ -1,6 +1,7 @@
 import { getCloudConfig } from '@/lib/server/domains/settings/cloud/cloud.service'
 import { PLAN_CATALOGUE, type PlanId } from '@/lib/server/domains/settings/cloud/cloud.types'
 import type { BillingCatalogue, CataloguePlanId } from '@/lib/server/control-plane/client'
+import { isTrialEnded } from '@/lib/shared/billing/trial-state'
 
 export type BillingSeatsOverview = {
   used: number
@@ -20,7 +21,10 @@ export interface BillingProjectionOverview {
   planName: string
   status: string | null
   trialActive: boolean
+  trialEnded?: boolean
   trialExpiresAt: string | null
+  trialPlanId?: Exclude<PlanId, 'free'> | null
+  trialPlanName?: string | null
   renewalAt: string | null
   cancellationAt: string | null
   canUpgrade: boolean
@@ -58,6 +62,20 @@ export function catalogueAiIncludedCents(
  * Free, trial, workspace-billed, and missing billedPer (grandfathered /
  * catalogue unavailable) stay null so Add seats cannot target an overlay.
  */
+/** lastTrialPlanId is catalogue history. Only surface it while a product
+ *  trial is running or in the 7-day ended window; a paid workspace must
+ *  not keep a Continue-with CTA for a plan it already left. */
+export function trialPlanIdForOverview(input: {
+  trialActive: boolean
+  trialEnded: boolean
+  plan: PlanId
+  lastTrialPlanId: Exclude<PlanId, 'free'> | null
+}): Exclude<PlanId, 'free'> | null {
+  if (input.trialActive && input.plan !== 'free') return input.plan
+  if (input.trialEnded) return input.lastTrialPlanId
+  return null
+}
+
 export function purchasedSeatsFromProjection(input: {
   billedPer: 'seat' | 'workspace' | undefined
   plan: PlanId
@@ -113,12 +131,29 @@ export async function getBillingProjectionOverview(): Promise<BillingProjectionO
         })
       : null
 
+  const trialEnded = isTrialEnded({
+    plan: cloud.plan,
+    trialActive: cloud.trialActive,
+    trialExpiresAt: cloud.trialExpiresAt,
+    status: cloud.subscriptionStatus,
+  })
+  const lastTrialPlanId = catalogue?.lastTrialPlanId ?? null
+  const trialPlanId = trialPlanIdForOverview({
+    trialActive: cloud.trialActive,
+    trialEnded,
+    plan: cloud.plan,
+    lastTrialPlanId,
+  })
+
   return {
     plan: cloud.plan,
     planName: PLAN_CATALOGUE[cloud.plan].name,
     status: cloud.subscriptionStatus,
     trialActive: cloud.trialActive,
+    trialEnded,
     trialExpiresAt: cloud.trialExpiresAt,
+    trialPlanId,
+    trialPlanName: trialPlanId ? PLAN_CATALOGUE[trialPlanId].name : null,
     renewalAt: cloud.renewalAt,
     cancellationAt: cloud.cancellationAt,
     canUpgrade: cloud.canUpgrade,

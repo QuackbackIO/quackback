@@ -6,6 +6,7 @@ const hoisted = vi.hoisted(() => ({
   getCloudConfig: vi.fn(),
   countSeatUsage: vi.fn(),
   createHostedBillingSession: vi.fn(),
+  fetchBillingCatalogue: vi.fn(),
   transaction: vi.fn(),
   forUpdate: vi.fn(),
   transactionActive: false,
@@ -39,6 +40,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
 
 vi.mock('@/lib/server/control-plane/client', () => ({
   createHostedBillingSession: (...args: unknown[]) => hoisted.createHostedBillingSession(...args),
+  fetchBillingCatalogue: (...args: unknown[]) => hoisted.fetchBillingCatalogue(...args),
 }))
 
 import { Route } from '../session'
@@ -109,8 +111,10 @@ describe('POST /api/billing/session seats', () => {
 
   it('refuses a quantity below live seat usage before the hosted call', async () => {
     const res = await POST({ request: seatsRequest(6) })
-    expect(res.status).toBe(400)
-    await expect(res.json()).resolves.toEqual({ error: 'seats_below_usage' })
+    expect(res.status).toBe(303)
+    expect(res.headers.get('location')).toBe(
+      '/admin/settings/billing?billing_error=seats_below_usage'
+    )
     expect(hoisted.createHostedBillingSession).not.toHaveBeenCalled()
     expect(hoisted.forUpdate).toHaveBeenCalledWith('update')
   })
@@ -165,6 +169,9 @@ describe('POST /api/billing/session checkout', () => {
     hoisted.createHostedBillingSession.mockResolvedValue({
       url: 'https://billing.example.com/checkout',
     })
+    hoisted.fetchBillingCatalogue.mockResolvedValue({
+      plans: [{ id: 'growth', billedPer: 'seat' }],
+    })
   })
 
   it('raises a stale quantity to live seat usage before the hosted call', async () => {
@@ -194,6 +201,20 @@ describe('POST /api/billing/session checkout', () => {
     expect(hoisted.createHostedBillingSession).toHaveBeenCalledWith(
       expect.objectContaining({ quantity: 1 })
     )
+  })
+
+  it('keeps quantity 1 for a workspace-priced plan', async () => {
+    hoisted.fetchBillingCatalogue.mockResolvedValue({
+      plans: [{ id: 'growth', billedPer: 'workspace' }],
+    })
+    const res = await POST({ request: checkoutRequest(1) })
+    expect(res.status).toBe(303)
+    expect(hoisted.createHostedBillingSession).toHaveBeenCalledWith({
+      action: 'checkout',
+      planId: 'growth',
+      billingPeriod: 'monthly',
+      quantity: 1,
+    })
   })
 
   it('forwards a quantity at or above live usage', async () => {

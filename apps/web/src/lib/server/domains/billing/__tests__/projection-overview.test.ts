@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { composeAiUsage, purchasedSeatsFromProjection } from '../projection-overview'
+import {
+  composeAiUsage,
+  purchasedSeatsFromProjection,
+  trialPlanIdForOverview,
+} from '../projection-overview'
 
 describe('composeAiUsage', () => {
   it('converts tokens at the catalogue blended rate and derives extra from the cap', () => {
@@ -49,5 +53,40 @@ describe('purchasedSeatsFromProjection', () => {
     expect(purchasedSeatsFromProjection({ ...billed, trialActive: true })).toBeNull()
     expect(purchasedSeatsFromProjection({ ...billed, billedPer: 'workspace' })).toBeNull()
     expect(purchasedSeatsFromProjection({ ...billed, billedPer: undefined })).toBeNull()
+  })
+})
+
+describe('trialPlanIdForOverview', () => {
+  it('uses the live plan while the product trial is running', () => {
+    expect(
+      trialPlanIdForOverview({
+        trialActive: true,
+        trialEnded: false,
+        plan: 'growth',
+        lastTrialPlanId: 'pro',
+      })
+    ).toBe('growth')
+  })
+
+  it('uses lastTrialPlanId only in the ended window', () => {
+    expect(
+      trialPlanIdForOverview({
+        trialActive: false,
+        trialEnded: true,
+        plan: 'free',
+        lastTrialPlanId: 'pro',
+      })
+    ).toBe('pro')
+  })
+
+  it('ignores historical trial plans on a paid workspace', () => {
+    expect(
+      trialPlanIdForOverview({
+        trialActive: false,
+        trialEnded: false,
+        plan: 'scale',
+        lastTrialPlanId: 'growth',
+      })
+    ).toBeNull()
   })
 })
