@@ -329,13 +329,6 @@ export function DomainsCard(props: {
                     Add a CNAME from <span className="font-mono">{domain.hostname}</span> to{' '}
                     <span className="font-mono">{domain.cnameTarget}</span>.
                   </p>
-                  {domain.ownershipTxt && (
-                    <p className="mt-1 text-muted-foreground">
-                      And a TXT record at{' '}
-                      <span className="font-mono">{domain.ownershipTxt.name}</span> with{' '}
-                      <span className="font-mono">{domain.ownershipTxt.value}</span>.
-                    </p>
-                  )}
                 </div>
               )}
             </li>
