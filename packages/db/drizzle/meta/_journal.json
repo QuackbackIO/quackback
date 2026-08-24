@@ -1723,6 +1723,13 @@
       "when": 1785700000026,
       "tag": "0268_cloud_identity_projection",
       "breakpoints": true
+    },
+    {
+      "idx": 246,
+      "version": "7",
+      "when": 1785700000027,
+      "tag": "0269_messenger_ai_default_on",
+      "breakpoints": true
     }
   ]
 }

@@ -197,6 +197,8 @@ export type HostedBillingSessionInput =
   | { action: 'downgrade'; planId: 'free' }
   | { action: 'seats'; quantity: number }
   | { action: 'topup'; meter: 'ai' | 'email'; packs: number }
+  | { action: 'branding'; billingPeriod: 'monthly' | 'annual' }
+  | { action: 'branding-remove' }
 
 export type HostedBillingSessionResult = {
   url?: string
@@ -219,7 +221,12 @@ export async function createHostedBillingSession(
     }
     throw new ControlPlaneUnavailableError()
   }
-  if (input.action === 'seats') {
+  if (
+    input.action === 'seats' ||
+    input.action === 'branding' ||
+    input.action === 'branding-remove' ||
+    input.action === 'checkout'
+  ) {
     if (result.status === 'updated' || result.status === 'scheduled') {
       return { status: result.status }
     }

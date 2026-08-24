@@ -12,6 +12,7 @@ import { portalQueries } from '@/lib/client/queries/portal'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { isStatusPagePublished } from '@/lib/shared/status-settings'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
+import { getShowPoweredByFn } from '@/lib/server/functions/powered-by'
 
 const searchSchema = z.object({
   board: z.string().optional(),
@@ -95,6 +96,7 @@ export const Route = createFileRoute('/_portal/')({
       portalQueries.portalData(portalDataParams(searchParams, session?.user?.id))
     )
 
+    const showPoweredBy = await getShowPoweredByFn()
     return {
       // Only head()-critical scalars ride in loader data now. The full settings
       // copy (`org`) and `session` used to be returned here too — both already
@@ -104,6 +106,7 @@ export const Route = createFileRoute('/_portal/')({
       // suspense query) since the feed query is no longer awaited here.
       workspaceName: org.name,
       baseUrl: context.baseUrl ?? '',
+      showPoweredBy,
     }
   },
   head: ({ loaderData }) => {
@@ -155,6 +158,7 @@ function PublicPortalPage() {
 function PortalFeed() {
   const intl = useIntl()
   const { session, settings } = useRouteContext({ from: '__root__' })
+  const { showPoweredBy } = Route.useLoaderData()
   const search = Route.useSearch()
 
   const currentBoard = search.board
@@ -209,6 +213,7 @@ function PortalFeed() {
       currentSort={currentSort}
       defaultBoardId={portalData.boards[0]?.id}
       boardPermissions={portalData.boardPermissions}
+      showPoweredBy={showPoweredBy}
     />
   )
 }

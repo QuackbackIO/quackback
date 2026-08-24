@@ -36,10 +36,10 @@ function fixtureRow(widget: WidgetConfig, featureFlags?: Record<string, boolean>
 
 describe('Widget Config Types', () => {
   describe('DEFAULT_MESSENGER_CONFIG', () => {
-    it('is AI-first by default: assistant deployment is on and replies are off', () => {
+    it('is AI-first by default: assistant identity and replies are on', () => {
       expect(DEFAULT_MESSENGER_CONFIG.assistant).toEqual({
         enabled: true,
-        respond: false,
+        respond: true,
       })
     })
   })
@@ -49,8 +49,12 @@ describe('Widget Config Types', () => {
       expect(DEFAULT_WIDGET_CONFIG.enabled).toBe(false)
     })
 
-    it('keeps the messenger (Messages) tab off by default', () => {
-      expect(DEFAULT_WIDGET_CONFIG.tabs?.messenger).toBe(false)
+    it('keeps the messenger (Messages) tab on by default', () => {
+      expect(DEFAULT_WIDGET_CONFIG.tabs?.messenger).toBe(true)
+    })
+
+    it('keeps the changelog tab on by default', () => {
+      expect(DEFAULT_WIDGET_CONFIG.tabs?.changelog).toBe(true)
     })
 
     it('should not have optional fields set', () => {
@@ -288,7 +292,7 @@ describe('getPublicWidgetConfig — tickets projection (converged Messages)', ()
 
   it('projects tabs.tickets false when the flag is off', async () => {
     settingsRow.current = fixtureRow(
-      { enabled: true, tabs: { feedback: false } },
+      { enabled: true, tabs: { feedback: false, changelog: false, messenger: false } },
       { supportTickets: false }
     )
     const projected = await getPublicWidgetConfig()

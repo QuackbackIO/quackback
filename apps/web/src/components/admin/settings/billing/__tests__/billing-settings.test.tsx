@@ -82,6 +82,7 @@ const paidOverview: BillingProjectionOverview = {
   ],
   seats: { used: 7, pending: 1, members: 6, purchased: 10 },
   ai: { includedCents: 3000, usedCents: 2520, extraCents: 1000 },
+  hideBranding: false,
 }
 
 function renderView(
@@ -151,6 +152,22 @@ describe('BillingPlansView', () => {
     expect(screen.getAllByRole('button', { name: 'Top up' })).toHaveLength(2)
     expect(screen.getByRole('heading', { name: 'Add-ons' })).toBeInTheDocument()
     expect(screen.getByText('Remove Quackback branding')).toBeInTheDocument()
+    const addBranding = screen.getByRole('button', { name: 'Add' })
+    expect(addBranding).toBeEnabled()
+    const brandingForm = addBranding.closest('form')
+    expect(brandingForm).toHaveAttribute('action', '/api/billing/session')
+    expect(brandingForm?.querySelector('input[name="action"]')).toHaveValue('branding')
+    expect(brandingForm?.querySelector('input[name="billingPeriod"]')).toHaveValue('annual')
+  })
+
+  it('lets a purchased branding add-on be removed', () => {
+    renderView({ overview: { ...paidOverview, hideBranding: true } })
+    const remove = screen.getByRole('button', { name: 'Remove' })
+    expect(remove).toBeEnabled()
+    expect(remove.closest('form')?.querySelector('input[name="action"]')).toHaveValue(
+      'branding-remove'
+    )
+    expect(screen.queryByRole('button', { name: 'Add' })).not.toBeInTheDocument()
   })
 
   it('hides the seat meter on a grandfathered flat plan', () => {

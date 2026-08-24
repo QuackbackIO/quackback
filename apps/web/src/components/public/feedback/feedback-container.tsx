@@ -53,6 +53,7 @@ interface FeedbackContainerProps {
    * every card — including infinite-scroll pages — and the submit CTA.
    */
   boardPermissions?: Record<string, { canSubmit: boolean; canVote: boolean }>
+  showPoweredBy?: boolean
 }
 
 export function FeedbackContainer({
@@ -70,6 +71,7 @@ export function FeedbackContainer({
   defaultBoardId,
   user,
   boardPermissions,
+  showPoweredBy = true,
 }: FeedbackContainerProps): React.ReactElement {
   const intl = useIntl()
   const router = useRouter()
@@ -449,6 +451,7 @@ export function FeedbackContainer({
           currentBoard={activeBoard}
           onBoardChange={handleBoardChange}
           workspaceSlug={workspaceSlug}
+          showPoweredBy={showPoweredBy}
         />
       </div>
     </div>

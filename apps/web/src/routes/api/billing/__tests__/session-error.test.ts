@@ -7,6 +7,12 @@ function location(res: Response): string {
 
 describe('billingSessionErrorResponse', () => {
   it('sends form posts back to billing with a named error', () => {
+    const res = billingSessionErrorResponse(new Error('already_on_addon'))
+    expect(res.status).toBe(303)
+    expect(location(res)).toBe('/admin/settings/billing?billing_error=already_on_addon')
+  })
+
+  it('maps already_on_plan', () => {
     const res = billingSessionErrorResponse(new Error('already_on_plan'))
     expect(res.status).toBe(303)
     expect(location(res)).toBe('/admin/settings/billing?billing_error=already_on_plan')

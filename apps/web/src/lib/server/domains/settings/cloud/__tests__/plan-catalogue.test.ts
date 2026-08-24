@@ -47,7 +47,7 @@ function on(plan: PlanId): CloudConfig {
  * The cheapest plan each entitlement is included on. Hand-transcribed from the
  * price list; not derived from the catalogue under test.
  */
-const INCLUDED_FROM: Record<EntitlementKey, PlanId> = {
+const INCLUDED_FROM: Partial<Record<EntitlementKey, PlanId>> = {
   customDomain: 'growth',
   aiAssistant: 'growth',
   aiDrafts: 'growth',
@@ -59,6 +59,8 @@ const INCLUDED_FROM: Record<EntitlementKey, PlanId> = {
   auditLog: 'scale',
   sso: 'scale',
 }
+
+const ADD_ON_KEYS: EntitlementKey[] = ['hideBranding']
 
 describe('the plan ladder', () => {
   it('is the four plans the product sells, cheapest first', () => {
@@ -88,7 +90,9 @@ describe('what each plan includes', () => {
   it('states a level for every entitlement in the catalogue', () => {
     // Keeps this file exhaustive: a key added without a considered level
     // fails here rather than shipping at whatever level it landed on.
-    expect(Object.keys(INCLUDED_FROM).sort()).toEqual([...ENTITLEMENT_KEYS].sort())
+    expect(Object.keys(INCLUDED_FROM).sort()).toEqual(
+      ENTITLEMENT_KEYS.filter((key) => !ADD_ON_KEYS.includes(key)).sort()
+    )
   })
 
   it.each(Object.entries(INCLUDED_FROM) as Array<[EntitlementKey, PlanId]>)(
@@ -154,5 +158,12 @@ describe('the levels the price list moved', () => {
     expect(isEntitled(on('growth'), 'aiInsights')).toBe(true)
     expect(isEntitled(on('pro'), 'aiDrafts')).toBe(true)
     expect(isEntitled(on('pro'), 'aiInsights')).toBe(true)
+  })
+
+  it('never grants hideBranding from a plan; it is a purchased overlay', () => {
+    for (const plan of PLAN_DEFINITIONS) {
+      expect(isEntitled(on(plan.id), 'hideBranding')).toBe(false)
+    }
+    expect(minimumPlanFor('hideBranding')).toBeNull()
   })
 })

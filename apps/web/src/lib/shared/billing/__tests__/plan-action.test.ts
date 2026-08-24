@@ -19,6 +19,7 @@ const unpaidFree: BillingProjectionOverview = {
   ],
   seats: { used: 1, pending: 0, members: 1, purchased: null },
   ai: null,
+  hideBranding: false,
 }
 
 describe('billingPlanAction', () => {

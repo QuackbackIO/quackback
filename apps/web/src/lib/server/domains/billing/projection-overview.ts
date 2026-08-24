@@ -32,6 +32,7 @@ export interface BillingProjectionOverview {
   purchasablePlans: Array<{ id: Exclude<PlanId, 'free'>; name: string }>
   seats: BillingSeatsOverview
   ai: BillingAiOverview | null
+  hideBranding: boolean
 }
 
 export function composeAiUsage(input: {
@@ -169,6 +170,7 @@ export async function getBillingProjectionOverview(): Promise<BillingProjectionO
       purchased,
     },
     ai,
+    hideBranding: cloud.entitlements.hideBranding === true,
   }
 }
 

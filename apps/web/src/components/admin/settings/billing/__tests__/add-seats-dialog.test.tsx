@@ -24,6 +24,7 @@ const overview: BillingProjectionOverview = {
   ],
   seats: { used: 7, pending: 1, members: 6, purchased: 10 },
   ai: { includedCents: 3000, usedCents: 2520, extraCents: 1000 },
+  hideBranding: false,
 }
 
 const catalogue: BillingCatalogue = {

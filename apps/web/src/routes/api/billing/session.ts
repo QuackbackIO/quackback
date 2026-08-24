@@ -6,6 +6,8 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 export function billingErrorCode(error: unknown): string {
   const message = error instanceof Error ? error.message : ''
   if (message === 'already_on_plan') return 'already_on_plan'
+  if (message === 'already_on_addon') return 'already_on_addon'
+  if (message === 'not_on_addon') return 'not_on_addon'
   if (message === 'seats_below_usage') return 'seats_below_usage'
   if (message === 'Authentication required') return 'unauthorized'
   if (message === 'Access denied: Not a team member') return 'not_teammate'
@@ -46,6 +48,13 @@ const actionSchema = z.discriminatedUnion('action', [
     meter: z.enum(['ai', 'email']),
     packs: z.coerce.number().int().positive(),
   }),
+  z.object({
+    action: z.literal('branding'),
+    billingPeriod: z.enum(['monthly', 'annual']),
+  }),
+  z.object({
+    action: z.literal('branding-remove'),
+  }),
 ])
 
 export const Route = createFileRoute('/api/billing/session')({
@@ -78,10 +87,14 @@ export const Route = createFileRoute('/api/billing/session')({
               : parsed.data.action === 'checkout'
                 ? await createCheckoutSession(parsed.data)
                 : await createHostedBillingSession(parsed.data)
+          const flashSuccess =
+            parsed.data.action === 'checkout' || parsed.data.action === 'branding'
           const location =
             typeof session.url === 'string' && session.url.startsWith('https://')
               ? session.url
-              : '/admin/settings/billing'
+              : flashSuccess && session.status
+                ? '/admin/settings/billing?checkout=success'
+                : '/admin/settings/billing'
           return new Response(null, { status: 303, headers: { location } })
         } catch (error) {
           return billingSessionErrorResponse(error)

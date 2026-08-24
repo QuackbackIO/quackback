@@ -178,7 +178,7 @@ export function AssistantDeploymentCard({
             ? intl.formatMessage({
                 id: 'automation.agent.deployment.enableConfirmDescription',
                 defaultMessage:
-                  'The AI agent will begin answering customers using your saved settings. Test the agent before enabling it.',
+                  'The AI agent will start answering new customer messages in Messenger using your saved settings.',
               })
             : intl.formatMessage({
                 id: 'automation.agent.deployment.pauseConfirmDescription',

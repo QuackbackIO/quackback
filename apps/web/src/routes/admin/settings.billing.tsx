@@ -15,6 +15,8 @@ import { cn } from '@/lib/shared/utils'
 const BILLING_ERROR_COPY: Record<string, string> = {
   seats_below_usage: 'Pick at least as many seats as people you already have.',
   already_on_plan: 'You are already on this plan.',
+  already_on_addon: 'Branding removal is already on this workspace.',
+  not_on_addon: 'Branding removal is not on this workspace.',
   unavailable: 'That billing action is not available right now.',
   invalid: 'That billing request was not valid. Try again from this page.',
   unauthorized: 'Sign in again to manage billing.',

@@ -378,7 +378,7 @@ export const DEFAULT_PORTAL_CONFIG: PortalConfig = {
   },
   moderationDefault: { requireApproval: 'none', holdImages: false, holdLinks: false },
   access: { visibility: 'public', allowedDomains: [], widgetSignIn: false, allowedSegmentIds: [] },
-  support: { enabled: false },
+  support: { enabled: true },
 }
 
 /**
@@ -737,18 +737,19 @@ export const DEFAULT_MESSENGER_CONFIG: MessengerConfig = {
   enabled: false,
   welcomeMessage: 'Hi! 👋 How can we help you today?',
   offlineMessage: "We're away right now. Leave a message and we'll get back to you by email.",
-  // AI-first by default: conversations open fronted by the assistant identity.
-  // Admins can rename or disable it under Settings → AI & Automation. `respond`
-  // defaults off — identity is on, in-process answering is opt-in.
-  assistant: { enabled: true, respond: false },
+  // AI-first: identity on, and Quinn answers when a model is configured.
+  // Admins pause replies under Automation → Agent. The widget master stays
+  // off until Support is turned on (or the install CTA) so a pasted snippet
+  // does not go live by itself.
+  assistant: { enabled: true, respond: true },
 }
 
 export const DEFAULT_WIDGET_CONFIG: WidgetConfig = {
   enabled: false,
   tabs: {
     feedback: true,
-    changelog: false,
-    messenger: false,
+    changelog: true,
+    messenger: true,
     home: true,
   },
   messenger: DEFAULT_MESSENGER_CONFIG,

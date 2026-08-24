@@ -1,4 +1,8 @@
-import { setEmailLogSink, type EmailLogSinkEntry } from '@quackback/email'
+import {
+  setEmailLogSink,
+  setEmailPoweredByResolver,
+  type EmailLogSinkEntry,
+} from '@quackback/email'
 import type { ConversationId, PostId, TicketId } from '@quackback/ids'
 import { db, emailLog } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
@@ -67,5 +71,10 @@ export function ensureEmailLogSink(): void {
   registered = true
   setEmailLogSink((entry) => {
     void writeOutbound(entry)
+  })
+  setEmailPoweredByResolver(async () => {
+    const { getCloudConfig } = await import('@/lib/server/domains/settings/cloud/cloud.service')
+    const { shouldShowPoweredBy } = await import('@/lib/server/domains/settings/cloud/powered-by')
+    return shouldShowPoweredBy(await getCloudConfig())
   })
 }

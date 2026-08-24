@@ -81,14 +81,13 @@ function parseEntitlements(
 ): Partial<Record<(typeof ENTITLEMENT_KEYS)[number], boolean>> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const entitlements = value as Record<string, unknown>
-  if (
-    Object.entries(entitlements).some(
-      ([key, enabled]) => !ENTITLEMENT_KEYS_SET.has(key) || typeof enabled !== 'boolean'
-    )
-  ) {
-    return null
+  const parsed: Partial<Record<(typeof ENTITLEMENT_KEYS)[number], boolean>> = {}
+  for (const [key, enabled] of Object.entries(entitlements)) {
+    if (!ENTITLEMENT_KEYS_SET.has(key)) continue
+    if (typeof enabled !== 'boolean') return null
+    parsed[key as (typeof ENTITLEMENT_KEYS)[number]] = enabled
   }
-  return entitlements as Partial<Record<(typeof ENTITLEMENT_KEYS)[number], boolean>>
+  return parsed
 }
 
 function isNullableIsoDate(value: unknown): value is string | null {

@@ -393,7 +393,7 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
   const hasBranding = Boolean(orgSettings?.logoKey)
   const hasWidgetEnabled = widgetConfig.enabled === true
   // Messenger is "live" when the widget is on and the Messages tab is shown.
-  const hasMessengerEnabled = hasWidgetEnabled && (widgetConfig.tabs?.messenger ?? false)
+  const hasMessengerEnabled = hasWidgetEnabled && (widgetConfig.tabs?.messenger ?? true)
   const hasIntegration = Boolean(connectedIntegration)
   const hasInternalBoard = orgBoards.some((board) => board.access.view === 'team')
   const publicBoard = orgBoards.find((board) => board.access.view === 'anonymous')

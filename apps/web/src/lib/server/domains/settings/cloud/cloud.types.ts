@@ -76,18 +76,15 @@ export const ENTITLEMENTS = {
     chokepoint: 'lib/server/functions/sso.ts (upsertIdentityProviderFn)',
   },
   /**
-   * Not wired: the customer-facing half (the orchestrator) and the
-   * teammate-facing half (the Copilot gate) are two seams, and the second one
-   * already carries {@link ENTITLEMENTS.aiDrafts}. Wiring this key wants a
-   * decision about which surfaces each of the two AI keys owns, not another
-   * gate on the same line.
+   * Customer-facing Quinn replies in Messenger. Teammate Copilot stays on
+   * {@link ENTITLEMENTS.aiDrafts}; this key only gates the orchestrator.
    */
   aiAssistant: {
     friendly: 'The AI assistant',
     plural: false,
     tierFeature: null,
     chokepoint:
-      'not wired: lib/server/domains/assistant/assistant.orchestrator.ts, lib/server/domains/assistant/copilot-gate.ts',
+      'lib/server/domains/assistant/assistant.orchestrator.ts (previewAssistantTurnForConversation, runAssistantTurnForConversation)',
   },
   /**
    * Post summaries and sentiment. Deliberately *not* the drafting half of the
@@ -151,6 +148,18 @@ export const ENTITLEMENTS = {
     plural: false,
     tierFeature: null,
     chokepoint: 'lib/server/functions/audit-log.ts (listAuditEventsFn)',
+  },
+  /**
+   * Display-only overlay. Never granted by a plan. Self-hosted installs must
+   * keep the badge: do not call {@link isEntitled} for this key, because that
+   * function is true when cloud is off.
+   */
+  hideBranding: {
+    friendly: 'Branding removal',
+    plural: false,
+    tierFeature: null,
+    chokepoint:
+      'not wired: display-only via shouldShowPoweredBy; lib/server/domains/settings/cloud/powered-by.ts',
   },
 } as const satisfies Record<string, EntitlementDefinition>
 

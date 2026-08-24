@@ -47,7 +47,7 @@ import {
   resolveFeatureFlags,
 } from './settings.types'
 import { signupOpenFor } from '@/lib/shared/signup-open'
-import { projectPublicWidgetConfig } from './settings.widget'
+import { projectPublicWidgetConfig, widgetActivationConfig } from './settings.widget'
 import { getSetupState, isOnboardingComplete } from '@/lib/shared/db-types'
 import { resolveStatusSettings } from './settings.status'
 import {
@@ -1029,12 +1029,19 @@ export async function updateFeatureFlags(input: Partial<FeatureFlags>): Promise<
   // persists a clean shape.
   const current = resolveFeatureFlags(org.featureFlags)
   const updated = { ...current, ...input, feedback: true }
+  const turningSupportOn = current.supportInbox !== true && updated.supportInbox === true
+  const turningHelpOn = current.helpCenter !== true && updated.helpCenter === true
   // General Status ON is the single publish control: clear a legacy
   // unpublished bit so the page actually goes live. OFF only flips the flag;
   // workspaces that stored statusPage:true with enabled:false stay unpublished
   // until that toggle is flipped on. Written with the flags so a crash
   // between the two cannot leave one side published and the other not.
-  const patch: { featureFlags: string; metadata?: string } = {
+  const patch: {
+    featureFlags: string
+    metadata?: string
+    widgetConfig?: string
+    portalConfig?: string
+  } = {
     featureFlags: JSON.stringify(updated),
   }
   if (input.statusPage === true) {
@@ -1042,6 +1049,19 @@ export async function updateFeatureFlags(input: Partial<FeatureFlags>): Promise<
     const meta = parseJsonOrNull<Record<string, unknown>>(org.metadata) ?? {}
     meta.statusSettings = { ...existing, enabled: true }
     patch.metadata = JSON.stringify(meta)
+  }
+  if (turningSupportOn || turningHelpOn) {
+    let widget = parseJsonConfig(org.widgetConfig, DEFAULT_WIDGET_CONFIG)
+    if (turningSupportOn) widget = widgetActivationConfig(widget, 'messenger')
+    if (turningHelpOn) widget = { ...widget, tabs: { ...widget.tabs, help: true } }
+    patch.widgetConfig = JSON.stringify(widget)
+  }
+  if (turningSupportOn) {
+    const portal = parsePortalConfig(org.portalConfig)
+    patch.portalConfig = JSON.stringify({
+      ...portal,
+      support: { ...portal.support, enabled: true },
+    })
   }
   await db.update(settings).set(patch).where(eq(settings.id, org.id))
   await invalidateSettingsCache()

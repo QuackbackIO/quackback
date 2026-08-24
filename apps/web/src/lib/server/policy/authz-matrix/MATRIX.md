@@ -978,7 +978,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-188 of 967 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+189 of 968 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -1049,6 +1049,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/portal.ts`::getCommentsSectionDataFn | server-fn |
 | `lib/server/functions/portal.ts`::getPrincipalIdForUser | server-fn |
 | `lib/server/functions/post-merge.ts`::getPostMergeInfoFn | server-fn |
+| `lib/server/functions/powered-by.ts`::getShowPoweredByFn | server-fn |
 | `lib/server/functions/public-cache.ts`::setPublicDocumentCacheHeaders | server-fn |
 | `lib/server/functions/public-posts.ts`::findSimilarPostsFn | server-fn |
 | `lib/server/functions/public-posts.ts`::getPostPermissionsFn | server-fn |

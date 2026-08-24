@@ -33,7 +33,7 @@ import {
   flagsForGoal,
   resolveFeatureFlags,
 } from '@/lib/server/domains/settings/settings.types'
-import { parseJsonConfig } from '@/lib/server/domains/settings/settings.helpers'
+import { parseJsonConfig, parsePortalConfig } from '@/lib/server/domains/settings/settings.helpers'
 import { accessForPreset } from '@/lib/shared/schemas/boards'
 import { logger } from '@/lib/server/logger'
 import { emitPlgEvent } from '@/lib/server/plg-events'
@@ -317,6 +317,7 @@ export const completeStartingPointFn = createServerFn({ method: 'POST' })
           resolution = 'unavailable'
         } else {
           const widget = parseJsonConfig(row.widgetConfig, DEFAULT_WIDGET_CONFIG)
+          const portal = parsePortalConfig(row.portalConfig)
           await tx
             .update(settings)
             .set({
@@ -329,6 +330,10 @@ export const completeStartingPointFn = createServerFn({ method: 'POST' })
                   ...(widget.messenger ?? {}),
                   enabled: true,
                 },
+              }),
+              portalConfig: JSON.stringify({
+                ...portal,
+                support: { ...portal.support, enabled: true },
               }),
             })
             .where(eq(settings.id, row.id))
