@@ -7,6 +7,7 @@ export function billingErrorCode(error: unknown): string {
   const message = error instanceof Error ? error.message : ''
   if (message === 'already_on_plan') return 'already_on_plan'
   if (message === 'already_on_addon') return 'already_on_addon'
+  if (message === 'not_on_addon') return 'not_on_addon'
   if (message === 'seats_below_usage') return 'seats_below_usage'
   if (message === 'Authentication required') return 'unauthorized'
   if (message === 'Access denied: Not a team member') return 'not_teammate'
@@ -50,6 +51,9 @@ const actionSchema = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('branding'),
     billingPeriod: z.enum(['monthly', 'annual']),
+  }),
+  z.object({
+    action: z.literal('branding-remove'),
   }),
 ])
 

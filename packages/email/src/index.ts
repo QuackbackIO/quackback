@@ -512,7 +512,10 @@ async function sendEmail(
   const showPoweredBy = await resolveEmailPoweredBy()
   return dispatch({
     ...options,
-    react: createElement(EmailPoweredByProvider, { value: showPoweredBy }, options.react),
+    react: createElement(EmailPoweredByProvider, {
+      value: showPoweredBy,
+      children: options.react,
+    }),
   })
 }
 

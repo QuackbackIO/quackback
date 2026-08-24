@@ -160,9 +160,13 @@ describe('BillingPlansView', () => {
     expect(brandingForm?.querySelector('input[name="billingPeriod"]')).toHaveValue('annual')
   })
 
-  it('marks branding removal as added after purchase', () => {
+  it('lets a purchased branding add-on be removed', () => {
     renderView({ overview: { ...paidOverview, hideBranding: true } })
-    expect(screen.getByText('Added')).toBeInTheDocument()
+    const remove = screen.getByRole('button', { name: 'Remove' })
+    expect(remove).toBeEnabled()
+    expect(remove.closest('form')?.querySelector('input[name="action"]')).toHaveValue(
+      'branding-remove'
+    )
     expect(screen.queryByRole('button', { name: 'Add' })).not.toBeInTheDocument()
   })
 

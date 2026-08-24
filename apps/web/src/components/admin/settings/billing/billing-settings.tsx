@@ -477,9 +477,12 @@ function AddOnsCard(props: {
             </div>
           </div>
           {props.hideBranding ? (
-            <Badge size="sm" variant="secondary">
-              Added
-            </Badge>
+            <form method="post" action="/api/billing/session">
+              <input type="hidden" name="action" value="branding-remove" />
+              <Button type="submit" size="sm" variant="outline">
+                Remove
+              </Button>
+            </form>
           ) : props.canPurchase ? (
             <form method="post" action="/api/billing/session">
               <input type="hidden" name="action" value="branding" />
