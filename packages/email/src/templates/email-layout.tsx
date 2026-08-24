@@ -18,6 +18,11 @@ interface EmailLayoutProps {
   logoAlt?: string
   children: React.ReactNode
   footer?: React.ReactNode
+  /**
+   * Override the process-wide Powered-by flag. Capability-free templates
+   * (no link, no code, no token) pass false so the footer cannot add an anchor.
+   */
+  showPoweredBy?: boolean
 }
 
 /**
@@ -32,8 +37,10 @@ export function EmailLayout({
   logoAlt = 'Quackback',
   children,
   footer,
+  showPoweredBy: showPoweredByOverride,
 }: EmailLayoutProps) {
-  const showPoweredBy = useEmailShowPoweredBy()
+  const fromContext = useEmailShowPoweredBy()
+  const showPoweredBy = showPoweredByOverride ?? fromContext
   return (
     <Html>
       <Head />
