@@ -41,7 +41,6 @@ import type {
 import {
   DEFAULT_AUTH_CONFIG,
   DEFAULT_DEVELOPER_CONFIG,
-  DEFAULT_WIDGET_CONFIG,
   DEFAULT_FEATURE_FLAGS,
   DEFAULT_HELP_CENTER_CONFIG,
   resolveFeatureFlags,
@@ -54,6 +53,7 @@ import {
   parseJsonConfig,
   parseJsonOrNull,
   parsePortalConfig,
+  parseWidgetConfig,
   deepMerge,
   requireSettings,
   wrapDbError,
@@ -897,7 +897,7 @@ export async function getWorkspaceSettings(): Promise<WorkspaceSettings | null> 
     const brandingConfig = parseJsonOrNull<BrandingConfig>(org.brandingConfig) ?? {}
     const developerConfig = parseJsonConfig(org.developerConfig, DEFAULT_DEVELOPER_CONFIG)
 
-    const widgetConfig = parseJsonConfig(org.widgetConfig, DEFAULT_WIDGET_CONFIG)
+    const widgetConfig = parseWidgetConfig(org.widgetConfig)
     const assistantConfig = assistantConfigSchema.safeParse(org.assistantConfig)
     const assistantIdentity = assistantConfig.success
       ? assistantConfig.data.identity
@@ -1051,7 +1051,7 @@ export async function updateFeatureFlags(input: Partial<FeatureFlags>): Promise<
     patch.metadata = JSON.stringify(meta)
   }
   if (turningSupportOn || turningHelpOn) {
-    let widget = parseJsonConfig(org.widgetConfig, DEFAULT_WIDGET_CONFIG)
+    let widget = parseWidgetConfig(org.widgetConfig)
     if (turningSupportOn) widget = widgetActivationConfig(widget, 'messenger')
     if (turningHelpOn) widget = { ...widget, tabs: { ...widget.tabs, help: true } }
     patch.widgetConfig = JSON.stringify(widget)

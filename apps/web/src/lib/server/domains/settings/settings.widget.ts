@@ -11,11 +11,7 @@ import type {
   UpdateWidgetConfigInput,
   MessengerConfig,
 } from './settings.types'
-import {
-  DEFAULT_WIDGET_CONFIG,
-  DEFAULT_MESSENGER_CONFIG,
-  resolveFeatureFlags,
-} from './settings.types'
+import { DEFAULT_MESSENGER_CONFIG, resolveFeatureFlags } from './settings.types'
 import type { AssistantConfigAuditActor } from './settings.assistant'
 import { recordAuditEventInTransaction } from '@/lib/server/audit/log'
 import {
@@ -163,7 +159,7 @@ import {
   requireSettings,
   requireSettingsCached,
   wrapDbError,
-  parseJsonConfig,
+  parseWidgetConfig,
   deepMerge,
   invalidateSettingsCache,
 } from './settings.helpers'
@@ -172,7 +168,7 @@ export async function getWidgetConfig(): Promise<WidgetConfig> {
   try {
     // Read-only + on public hot paths (sdk.js, identify): cached row.
     const org = await requireSettingsCached()
-    return parseJsonConfig(org.widgetConfig, DEFAULT_WIDGET_CONFIG)
+    return parseWidgetConfig(org.widgetConfig)
   } catch (error) {
     log.error({ err: error }, 'get widget config failed')
     wrapDbError('fetch widget config', error)
@@ -183,7 +179,7 @@ export async function updateWidgetConfig(input: UpdateWidgetConfigInput): Promis
   log.info('update widget config')
   try {
     const org = await requireSettings()
-    const existing = parseJsonConfig(org.widgetConfig, DEFAULT_WIDGET_CONFIG)
+    const existing = parseWidgetConfig(org.widgetConfig)
     const incoming = { ...input } as Partial<WidgetConfig>
     if (incoming.messenger && 'routing' in incoming.messenger) {
       const { routing: _routing, ...messenger } = incoming.messenger
@@ -266,7 +262,7 @@ export async function configureWidgetForActivation(mode: WidgetActivationMode): 
           })
         : null
     const usableBoard = publicBoard?.access.view === 'anonymous' ? publicBoard : null
-    const existing = parseJsonConfig(row.widgetConfig, DEFAULT_WIDGET_CONFIG)
+    const existing = parseWidgetConfig(row.widgetConfig)
     const config = widgetActivationConfig(existing, mode, usableBoard?.slug)
     await tx
       .update(settings)
@@ -291,7 +287,7 @@ export async function updateWidgetAssistantDeployment(
       .for('update')
     if (!row) throw new Error('Settings not found')
 
-    const config = parseJsonConfig(row.widgetConfig, DEFAULT_WIDGET_CONFIG)
+    const config = parseWidgetConfig(row.widgetConfig)
     const current = config.messenger?.assistant ?? {}
     const messenger = {
       ...(config.messenger ?? DEFAULT_MESSENGER_CONFIG),
@@ -373,7 +369,7 @@ export async function getPublicWidgetConfig(): Promise<PublicWidgetConfig> {
   try {
     // Read-only + on public hot paths (config.json, widget SSR): cached row.
     const org = await requireSettingsCached()
-    const config = parseJsonConfig(org.widgetConfig, DEFAULT_WIDGET_CONFIG)
+    const config = parseWidgetConfig(org.widgetConfig)
     const assistantConfig = assistantConfigSchema.safeParse(org.assistantConfig)
     const identity = assistantConfig.success
       ? assistantConfig.data.identity

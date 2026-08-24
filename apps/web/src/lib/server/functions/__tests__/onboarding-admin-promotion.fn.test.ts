@@ -45,6 +45,7 @@ vi.mock('@/lib/server/domains/settings/settings.helpers', () => ({
 vi.mock('@/lib/server/domains/settings', () => ({
   DEFAULT_AUTH_CONFIG: { openSignup: false },
   DEFAULT_PORTAL_CONFIG: {},
+  DEFAULT_WIDGET_CONFIG: {},
 }))
 vi.mock('@/lib/server/config-file/managed-paths', () => ({
   isPathManaged: vi.fn((path: string, paths: string[] | null | undefined) =>
