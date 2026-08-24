@@ -27,6 +27,7 @@ import { portalQueries } from '@/lib/client/queries/portal'
 import { publicChangelogQueries } from '@/lib/client/queries/changelog'
 import { publicHelpCenterQueries } from '@/lib/client/queries/help-center'
 import { fetchBoardCapabilitiesFn } from '@/lib/server/functions/portal'
+import { getShowPoweredByFn } from '@/lib/server/functions/powered-by'
 import { listPublicArticlesFn } from '@/lib/server/functions/help-center'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { sendToHost } from '@/lib/client/widget-bridge'
@@ -205,13 +206,7 @@ export const Route = createFileRoute('/widget/')({
       new Set(portalData.votedPostIds)
     )
 
-    const [{ getCloudConfig }, { shouldShowPoweredBy }] = await Promise.all([
-      // oxlint-disable-next-line no-restricted-imports -- server-loader dynamic import
-      import('@/lib/server/domains/settings/cloud/cloud.service'),
-      // oxlint-disable-next-line no-restricted-imports -- server-loader dynamic import
-      import('@/lib/server/domains/settings/cloud/powered-by'),
-    ])
-    const showPoweredBy = shouldShowPoweredBy(await getCloudConfig())
+    const showPoweredBy = await getShowPoweredByFn()
 
     return {
       posts: portalData.posts.items.map((p) => ({

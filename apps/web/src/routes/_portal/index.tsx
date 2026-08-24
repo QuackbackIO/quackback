@@ -12,6 +12,7 @@ import { portalQueries } from '@/lib/client/queries/portal'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { isStatusPagePublished } from '@/lib/shared/status-settings'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
+import { getShowPoweredByFn } from '@/lib/server/functions/powered-by'
 
 const searchSchema = z.object({
   board: z.string().optional(),
@@ -95,10 +96,7 @@ export const Route = createFileRoute('/_portal/')({
       portalQueries.portalData(portalDataParams(searchParams, session?.user?.id))
     )
 
-    // oxlint-disable-next-line no-restricted-imports -- server-loader dynamic import
-    const { getCloudConfig } = await import('@/lib/server/domains/settings/cloud/cloud.service')
-    // oxlint-disable-next-line no-restricted-imports -- server-loader dynamic import
-    const { shouldShowPoweredBy } = await import('@/lib/server/domains/settings/cloud/powered-by')
+    const showPoweredBy = await getShowPoweredByFn()
     return {
       // Only head()-critical scalars ride in loader data now. The full settings
       // copy (`org`) and `session` used to be returned here too — both already
@@ -108,7 +106,7 @@ export const Route = createFileRoute('/_portal/')({
       // suspense query) since the feed query is no longer awaited here.
       workspaceName: org.name,
       baseUrl: context.baseUrl ?? '',
-      showPoweredBy: shouldShowPoweredBy(await getCloudConfig()),
+      showPoweredBy,
     }
   },
   head: ({ loaderData }) => {
