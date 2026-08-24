@@ -343,6 +343,7 @@ describe('replayGateVerdict', () => {
       '0266_settings_cloud_secret_canary',
       '0267_drop_workspace_billing',
       '0268_cloud_identity_projection',
+      '0269_messenger_ai_default_on',
     ])
     const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
     expect(verdict.ok).toBe(false)

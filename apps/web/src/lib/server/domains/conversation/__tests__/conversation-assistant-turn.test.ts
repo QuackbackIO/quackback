@@ -48,6 +48,10 @@ const mockEnforceAiTokenBudget = vi.hoisted(() => vi.fn(async () => {}))
 vi.mock('@/lib/server/domains/settings/tier-enforce', () => ({
   enforceAiTokenBudget: mockEnforceAiTokenBudget,
 }))
+const mockRequireEntitlement = vi.hoisted(() => vi.fn(async () => {}))
+vi.mock('@/lib/server/domains/settings/cloud/entitlements', () => ({
+  requireEntitlement: mockRequireEntitlement,
+}))
 vi.mock('@/lib/server/domains/settings/settings.office-hours', () => ({
   getOfficeHoursSchedule: vi.fn(async () => ({ enabled: false, timezone: 'UTC', intervals: [] })),
 }))
@@ -290,6 +294,7 @@ beforeEach(() => {
   assistantMock.openInvolvement.mockResolvedValue({ id: 'assistant_involvement_1' })
   getMessengerConfig.mockResolvedValue({ assistant: { respond: true, name: 'Quinn' } })
   mockEnforceAiTokenBudget.mockResolvedValue(undefined)
+  mockRequireEntitlement.mockResolvedValue(undefined)
   mockIsFeatureEnabled.mockResolvedValue(false)
   mockGetLiveWorkflowReferencedAttributeKeys.mockResolvedValue(new Set())
   mockClassifyConversationAttributes.mockResolvedValue([])
@@ -333,6 +338,25 @@ describe('runAssistantTurnForConversation gate', () => {
     assistantMock.isAssistantConfigured.mockReturnValue(false)
     await runAssistantTurnForConversation(CONV)
     expect(assistantMock.runAssistantTurn).not.toHaveBeenCalled()
+  })
+
+  it('does not run when the workspace is not entitled to the AI assistant', async () => {
+    const { EntitlementRequiredError } = await import('@/lib/server/errors/entitlement-error')
+    mockRequireEntitlement.mockRejectedValue(
+      new EntitlementRequiredError({
+        entitlement: 'aiAssistant',
+        friendly: 'The AI assistant',
+        friendlyIsPlural: false,
+        requiredPlanArticle: 'a',
+        currentPlan: 'free',
+        currentPlanName: 'Free',
+        requiredPlan: 'growth',
+        requiredPlanName: 'Growth',
+      })
+    )
+    await runAssistantTurnForConversation(CONV)
+    expect(assistantMock.runAssistantTurn).not.toHaveBeenCalled()
+    expect(assistantMock.ensureAssistantPrincipal).not.toHaveBeenCalled()
   })
 
   it('stays silent after a handoff even before the first teammate reply', async () => {

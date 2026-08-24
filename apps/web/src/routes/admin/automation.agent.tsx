@@ -74,7 +74,7 @@ function AssistantAgentSettings() {
   const initialDeployment = settings?.publicWidgetConfig?.messenger?.assistant
   const [deployment, setDeployment] = useState<WidgetAssistantDeployment>({
     enabled: initialDeployment?.enabled ?? true,
-    respond: initialDeployment?.respond ?? false,
+    respond: initialDeployment?.respond ?? true,
   })
   const unsavedLabel = intl.formatMessage({
     id: 'automation.agent.tabs.unsaved',

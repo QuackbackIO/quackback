@@ -449,6 +449,36 @@ describe('updateFeatureFlags', () => {
     expect(meta.statusSettings?.enabled).toBe(true)
   })
 
+  it('lights Messenger surfaces when turning Support on', async () => {
+    await updateFeatureFlags({ supportInbox: true, supportTickets: true })
+    const call = mockSet.mock.calls.find((entry) => entry[0] && 'widgetConfig' in entry[0]) as
+      [{ widgetConfig: string; portalConfig: string }] | undefined
+    expect(call).toBeTruthy()
+    const widget = JSON.parse(call![0].widgetConfig) as {
+      enabled?: boolean
+      tabs?: { messenger?: boolean }
+    }
+    const portal = JSON.parse(call![0].portalConfig) as { support?: { enabled?: boolean } }
+    expect(widget.enabled).toBe(true)
+    expect(widget.tabs?.messenger).toBe(true)
+    expect(portal.support?.enabled).toBe(true)
+  })
+
+  it('does not rewrite Messenger surfaces when Support stays off', async () => {
+    await updateFeatureFlags({ helpCenter: false })
+    const widgetCall = mockSet.mock.calls.find((entry) => entry[0] && 'widgetConfig' in entry[0])
+    expect(widgetCall).toBeUndefined()
+  })
+
+  it('turns the widget Help tab on when turning Help Center on', async () => {
+    await updateFeatureFlags({ helpCenter: true })
+    const call = mockSet.mock.calls.find((entry) => entry[0] && 'widgetConfig' in entry[0]) as
+      [{ widgetConfig: string }] | undefined
+    expect(call).toBeTruthy()
+    const widget = JSON.parse(call![0].widgetConfig) as { tabs?: { help?: boolean } }
+    expect(widget.tabs?.help).toBe(true)
+  })
+
   it('does not write statusSettings.enabled when turning Status off', async () => {
     mockFindFirst.mockResolvedValue(
       makeSettingsRow({
