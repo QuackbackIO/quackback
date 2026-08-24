@@ -135,7 +135,12 @@ export function BillingPlansView(props: {
         )}
       </section>
 
-      <AddOnsCard catalogue={catalogue} />
+      <AddOnsCard
+        catalogue={catalogue}
+        period={period}
+        hideBranding={overview.hideBranding}
+        canPurchase={overview.canUpgrade || overview.canManageBilling}
+      />
 
       <section className="space-y-3">
         <h2 className="text-base font-semibold">Previous invoices</h2>
@@ -448,9 +453,18 @@ function UsageCard(props: {
   )
 }
 
-function AddOnsCard({ catalogue }: { catalogue: BillingCatalogue | null }) {
-  const branding = catalogue?.brandingRemoval
+function AddOnsCard(props: {
+  catalogue: BillingCatalogue | null
+  period: 'monthly' | 'annual'
+  hideBranding: boolean
+  canPurchase: boolean
+}) {
+  const branding = props.catalogue?.brandingRemoval
   if (!branding) return null
+  const price =
+    props.period === 'annual'
+      ? `${formatUsd(branding.annualCents, 0)}/yr`
+      : `${formatUsd(branding.monthlyCents, 0)}/mo`
   return (
     <section className="space-y-3">
       <h2 className="text-base font-semibold">Add-ons</h2>
@@ -459,13 +473,26 @@ function AddOnsCard({ catalogue }: { catalogue: BillingCatalogue | null }) {
           <div className="min-w-0">
             <div className="text-[13px] font-medium">Remove Quackback branding</div>
             <div className="text-[12px] text-muted-foreground">
-              Hide &quot;Powered by Quackback&quot; on the portal, widget, and emails.{' '}
-              {formatUsd(branding.monthlyCents, 0)}/mo.
+              Hide &quot;Powered by Quackback&quot; on the portal, widget, and emails. {price}.
             </div>
           </div>
-          <Button type="button" size="sm" variant="outline" disabled>
-            Add
-          </Button>
+          {props.hideBranding ? (
+            <Badge size="sm" variant="secondary">
+              Added
+            </Badge>
+          ) : props.canPurchase ? (
+            <form method="post" action="/api/billing/session">
+              <input type="hidden" name="action" value="branding" />
+              <input type="hidden" name="billingPeriod" value={props.period} />
+              <Button type="submit" size="sm" variant="outline">
+                Add
+              </Button>
+            </form>
+          ) : (
+            <Button type="button" size="sm" variant="outline" disabled>
+              Add
+            </Button>
+          )}
         </div>
       </div>
     </section>

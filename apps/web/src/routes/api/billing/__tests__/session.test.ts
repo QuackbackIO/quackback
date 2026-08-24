@@ -228,6 +228,19 @@ describe('POST /api/billing/session checkout', () => {
     })
   })
 
+  it('forwards branding-removal purchase to the control plane', async () => {
+    hoisted.createHostedBillingSession.mockResolvedValue({ status: 'updated' })
+    const res = await POST({
+      request: formRequest({ action: 'branding', billingPeriod: 'monthly' }),
+    })
+    expect(res.status).toBe(303)
+    expect(hoisted.createHostedBillingSession).toHaveBeenCalledWith({
+      action: 'branding',
+      billingPeriod: 'monthly',
+    })
+    expect(res.headers.get('location')).toBe('/admin/settings/billing?checkout=success')
+  })
+
   it('holds the settings lock through hosted checkout creation', async () => {
     hoisted.createHostedBillingSession.mockImplementation(async () => {
       expect(hoisted.transactionActive).toBe(true)

@@ -57,6 +57,7 @@ import type { IncidentImpact } from './templates/status-incident-published'
 import { StatusMaintenanceScheduledEmail } from './templates/status-maintenance-scheduled'
 import { CsatRequestEmail } from './templates/csat-request'
 import { VerifyAddressEmail } from './templates/verify-address'
+export { setEmailShowPoweredBy, getEmailShowPoweredBy } from './powered-by'
 
 /**
  * Get environment variable at runtime.

@@ -152,6 +152,18 @@ export const ENTITLEMENTS = {
     tierFeature: null,
     chokepoint: 'lib/server/functions/audit-log.ts (listAuditEventsFn)',
   },
+  /**
+   * Display-only overlay. Never granted by a plan. Self-hosted installs must
+   * keep the badge: do not call {@link isEntitled} for this key, because that
+   * function is true when cloud is off.
+   */
+  hideBranding: {
+    friendly: 'Branding removal',
+    plural: false,
+    tierFeature: null,
+    chokepoint:
+      'not wired: display-only via shouldShowPoweredBy; lib/server/domains/settings/cloud/powered-by.ts',
+  },
 } as const satisfies Record<string, EntitlementDefinition>
 
 export interface EntitlementDefinition {

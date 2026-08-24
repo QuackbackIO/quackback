@@ -95,6 +95,10 @@ export const Route = createFileRoute('/_portal/')({
       portalQueries.portalData(portalDataParams(searchParams, session?.user?.id))
     )
 
+    // oxlint-disable-next-line no-restricted-imports -- server-loader dynamic import
+    const { getCloudConfig } = await import('@/lib/server/domains/settings/cloud/cloud.service')
+    // oxlint-disable-next-line no-restricted-imports -- server-loader dynamic import
+    const { shouldShowPoweredBy } = await import('@/lib/server/domains/settings/cloud/powered-by')
     return {
       // Only head()-critical scalars ride in loader data now. The full settings
       // copy (`org`) and `session` used to be returned here too — both already
@@ -104,6 +108,7 @@ export const Route = createFileRoute('/_portal/')({
       // suspense query) since the feed query is no longer awaited here.
       workspaceName: org.name,
       baseUrl: context.baseUrl ?? '',
+      showPoweredBy: shouldShowPoweredBy(await getCloudConfig()),
     }
   },
   head: ({ loaderData }) => {
@@ -155,6 +160,7 @@ function PublicPortalPage() {
 function PortalFeed() {
   const intl = useIntl()
   const { session, settings } = useRouteContext({ from: '__root__' })
+  const { showPoweredBy } = Route.useLoaderData()
   const search = Route.useSearch()
 
   const currentBoard = search.board
@@ -209,6 +215,7 @@ function PortalFeed() {
       currentSort={currentSort}
       defaultBoardId={portalData.boards[0]?.id}
       boardPermissions={portalData.boardPermissions}
+      showPoweredBy={showPoweredBy}
     />
   )
 }

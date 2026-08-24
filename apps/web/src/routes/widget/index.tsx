@@ -205,6 +205,14 @@ export const Route = createFileRoute('/widget/')({
       new Set(portalData.votedPostIds)
     )
 
+    const [{ getCloudConfig }, { shouldShowPoweredBy }] = await Promise.all([
+      // oxlint-disable-next-line no-restricted-imports -- server-loader dynamic import
+      import('@/lib/server/domains/settings/cloud/cloud.service'),
+      // oxlint-disable-next-line no-restricted-imports -- server-loader dynamic import
+      import('@/lib/server/domains/settings/cloud/powered-by'),
+    ])
+    const showPoweredBy = shouldShowPoweredBy(await getCloudConfig())
+
     return {
       posts: portalData.posts.items.map((p) => ({
         id: p.id,
@@ -290,6 +298,7 @@ export const Route = createFileRoute('/widget/')({
       // widget handoff URL always points at the portal host — not at the widget
       // iframe origin, which may differ in self-hosted deployments.
       portalOrigin: getBaseUrl(),
+      showPoweredBy,
     }
   },
   component: WidgetRoute,
@@ -375,6 +384,7 @@ function WidgetPage() {
     assistant,
     team,
     messengerEnabled,
+    showPoweredBy,
   } = Route.useLoaderData()
   const { ensureSession, sessionVersion } = useWidgetAuth()
 
@@ -720,6 +730,7 @@ function WidgetPage() {
       portalAccess={portalAccess}
       portalOrigin={portalOrigin}
       team={team}
+      showPoweredBy={showPoweredBy}
       logoUrl={(home?.showLogo ?? true) ? logoUrl : null}
       headerContent={messengerHeader}
       // The hero backdrop belongs to Home only; detail views keep a plain panel.

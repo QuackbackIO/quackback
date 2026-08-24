@@ -193,12 +193,18 @@ describe('projected numeric limits', () => {
     expect(parsed?.canManageBilling).toBe(false)
   })
 
-  it('rejects unrecognised plans, entitlements, and non-canonical dates', () => {
+  it('rejects unrecognised plans and non-canonical dates', () => {
     expect(parseBillingProjection({ ...PROJECTION, effectivePlan: 'enterprise' })).toBeNull()
-    expect(
-      parseBillingProjection({ ...PROJECTION, entitlements: { secretFeature: true } })
-    ).toBeNull()
     expect(parseBillingProjection({ ...PROJECTION, trialExpiresAt: 'August 15' })).toBeNull()
+  })
+
+  it('ignores unknown entitlement keys so a newer control plane cannot drop the projection', () => {
+    expect(
+      parseBillingProjection({
+        ...PROJECTION,
+        entitlements: { ...PROJECTION.entitlements, secretFeature: true },
+      })
+    ).toEqual(PROJECTION)
   })
 })
 

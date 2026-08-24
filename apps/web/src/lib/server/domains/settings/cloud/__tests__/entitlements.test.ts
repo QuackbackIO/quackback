@@ -141,15 +141,24 @@ describe('the refusal names the plan', () => {
     expect(err.message).toBe('Workflows are a Pro feature. Upgrade to Pro to enable it.')
   })
 
-  it.each(ENTITLEMENT_KEYS)('%s refuses with a nameable plan from the free tier', (key) => {
-    const err = buildRefusal(cloud({ plan: 'free' }), key)
-    // Every catalogue entry must be reachable by upgrading — an entitlement no
-    // plan grants is a pricing bug, and this pins it at build time.
-    const cheapest = minimumPlanFor(key)
-    expect(cheapest).not.toBeNull()
-    expect(err.requiredPlan).toBe(cheapest!.id)
-    expect(err.message).toContain(ENTITLEMENTS[key].friendly)
-    expect(err.message).toContain(PLAN_CATALOGUE[cheapest!.id].name)
+  it.each(ENTITLEMENT_KEYS.filter((key) => key !== 'hideBranding'))(
+    '%s refuses with a nameable plan from the free tier',
+    (key) => {
+      const err = buildRefusal(cloud({ plan: 'free' }), key)
+      // Every catalogue entry must be reachable by upgrading — an entitlement no
+      // plan grants is a pricing bug, and this pins it at build time.
+      const cheapest = minimumPlanFor(key)
+      expect(cheapest).not.toBeNull()
+      expect(err.requiredPlan).toBe(cheapest!.id)
+      expect(err.message).toContain(ENTITLEMENTS[key].friendly)
+      expect(err.message).toContain(PLAN_CATALOGUE[cheapest!.id].name)
+    }
+  )
+
+  it('hideBranding has no plan; refusal degrades to contact us', () => {
+    const err = buildRefusal(cloud({ plan: 'free' }), 'hideBranding')
+    expect(minimumPlanFor('hideBranding')).toBeNull()
+    expect(err.requiredPlan).toBeNull()
   })
 })
 
@@ -246,6 +255,7 @@ describe('requireEntitlement against a configured workspace', () => {
       mcpServer: true,
       webhooks: true,
       auditLog: false,
+      hideBranding: false,
     })
   })
 
@@ -265,6 +275,7 @@ describe('requireEntitlement against a configured workspace', () => {
       mcpServer: true,
       webhooks: true,
       auditLog: false,
+      hideBranding: false,
     })
   })
 })
