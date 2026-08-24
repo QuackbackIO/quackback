@@ -10,15 +10,25 @@ import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 import { logger } from '@/lib/server/logger'
 import {
   DEFAULT_PORTAL_CONFIG,
+  DEFAULT_WIDGET_CONFIG,
   EMPTY_WELCOME_BODY,
+  LEGACY_PORTAL_CONFIG,
+  LEGACY_WIDGET_CONFIG,
   type PortalConfig,
   type PortalWelcomeCard,
+  type WidgetConfig,
 } from './settings.types'
 import type { TiptapContent } from '@/lib/shared/db-types'
 
 const log = logger.child({ component: 'settings-helpers' })
 
 export type SettingsRecord = NonNullable<Awaited<ReturnType<typeof db.query.settings.findFirst>>>
+
+function storedJsonIsBlank(json: string | null): boolean {
+  if (!json) return true
+  const trimmed = json.trim()
+  return trimmed === '' || trimmed === 'null'
+}
 
 /** @internal */
 export function parseJsonConfig<T extends object>(json: string | null, defaultValue: T): T {
@@ -28,6 +38,28 @@ export function parseJsonConfig<T extends object>(json: string | null, defaultVa
   } catch {
     return defaultValue
   }
+}
+
+/**
+ * Merge stored JSON over `legacyDefault` so missing nested keys keep their
+ * historical off values. Null/empty blobs use `currentDefault` (new installs).
+ */
+export function parseStoredConfig<T extends object>(
+  json: string | null,
+  currentDefault: T,
+  legacyDefault: T
+): T {
+  if (storedJsonIsBlank(json)) return currentDefault
+  try {
+    return deepMerge(legacyDefault, JSON.parse(json as string))
+  } catch {
+    return currentDefault
+  }
+}
+
+/** @internal */
+export function parseWidgetConfig(json: string | null): WidgetConfig {
+  return parseStoredConfig(json, DEFAULT_WIDGET_CONFIG, LEGACY_WIDGET_CONFIG)
 }
 
 /** @internal */
@@ -185,7 +217,7 @@ export function resolveWelcomeCard(
  * @internal
  */
 export function parsePortalConfig(json: string | null): PortalConfig {
-  const parsed = parseJsonConfig(json, DEFAULT_PORTAL_CONFIG)
+  const parsed = parseStoredConfig(json, DEFAULT_PORTAL_CONFIG, LEGACY_PORTAL_CONFIG)
   return { ...parsed, welcomeCard: resolveWelcomeCard(parsed.welcomeCard) }
 }
 

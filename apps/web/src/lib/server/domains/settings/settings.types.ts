@@ -756,6 +756,32 @@ export const DEFAULT_WIDGET_CONFIG: WidgetConfig = {
 }
 
 /**
+ * Defaults that were live before Messenger / Quinn replies / changelog tab
+ * flipped on. Stored JSON is merged over this object so missing nested keys
+ * stay off. Null/empty blobs pick up {@link DEFAULT_WIDGET_CONFIG} instead.
+ */
+export const LEGACY_WIDGET_CONFIG: WidgetConfig = {
+  enabled: false,
+  tabs: {
+    feedback: true,
+    changelog: false,
+    messenger: false,
+    home: true,
+  },
+  messenger: {
+    ...DEFAULT_MESSENGER_CONFIG,
+    enabled: false,
+    assistant: { enabled: true, respond: false },
+  },
+}
+
+/** Same split as {@link LEGACY_WIDGET_CONFIG} for portal chats. */
+export const LEGACY_PORTAL_CONFIG: PortalConfig = {
+  ...DEFAULT_PORTAL_CONFIG,
+  support: { enabled: false },
+}
+
+/**
  * Input for updating widget config (partial update)
  */
 export interface UpdateWidgetConfigInput {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseJsonConfig } from '../settings.helpers'
+import { parseJsonConfig, parsePortalConfig, parseWidgetConfig } from '../settings.helpers'
 import {
   DEFAULT_AUTH_CONFIG,
   DEFAULT_PORTAL_CONFIG,
@@ -155,5 +155,34 @@ describe('workspaceAllowsAnonymous', () => {
   it('fails closed on malformed JSON instead of throwing', () => {
     expect(() => workspaceAllowsAnonymous('{ not valid json')).not.toThrow()
     expect(workspaceAllowsAnonymous('{ not valid json')).toBe(false)
+  })
+})
+
+describe('parseWidgetConfig', () => {
+  it('uses the new defaults for a blank blob', () => {
+    expect(parseWidgetConfig(null).tabs?.messenger).toBe(true)
+    expect(parseWidgetConfig(null).tabs?.changelog).toBe(true)
+    expect(parseWidgetConfig(null).messenger?.assistant?.respond).toBe(true)
+  })
+
+  it('keeps missing messenger, changelog, and respond keys off on a stored config', () => {
+    const result = parseWidgetConfig(JSON.stringify({ enabled: true, tabs: { feedback: true } }))
+    expect(result.enabled).toBe(true)
+    expect(result.tabs?.feedback).toBe(true)
+    expect(result.tabs?.messenger).toBe(false)
+    expect(result.tabs?.changelog).toBe(false)
+    expect(result.messenger?.assistant?.respond).toBe(false)
+  })
+})
+
+describe('parsePortalConfig', () => {
+  it('uses portal chats on for a blank blob', () => {
+    expect(parsePortalConfig(null).support?.enabled).toBe(true)
+  })
+
+  it('keeps missing portal chats off on a stored config', () => {
+    expect(
+      parsePortalConfig(JSON.stringify({ features: { allowAnonymous: true } })).support?.enabled
+    ).toBe(false)
   })
 })

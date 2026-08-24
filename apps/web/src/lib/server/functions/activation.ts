@@ -29,11 +29,13 @@ import { isPathManaged } from '@/lib/server/config-file/managed-paths'
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
 import {
   DEFAULT_MESSENGER_CONFIG,
-  DEFAULT_WIDGET_CONFIG,
   flagsForGoal,
   resolveFeatureFlags,
 } from '@/lib/server/domains/settings/settings.types'
-import { parseJsonConfig, parsePortalConfig } from '@/lib/server/domains/settings/settings.helpers'
+import {
+  parsePortalConfig,
+  parseWidgetConfig,
+} from '@/lib/server/domains/settings/settings.helpers'
 import { accessForPreset } from '@/lib/shared/schemas/boards'
 import { logger } from '@/lib/server/logger'
 import { emitPlgEvent } from '@/lib/server/plg-events'
@@ -316,7 +318,7 @@ export const completeStartingPointFn = createServerFn({ method: 'POST' })
         if (!flags.supportInbox) {
           resolution = 'unavailable'
         } else {
-          const widget = parseJsonConfig(row.widgetConfig, DEFAULT_WIDGET_CONFIG)
+          const widget = parseWidgetConfig(row.widgetConfig)
           const portal = parsePortalConfig(row.portalConfig)
           await tx
             .update(settings)
