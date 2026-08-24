@@ -460,6 +460,15 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'secret: the key id names a principal, the secret is never part of it.',
   },
   {
+    file: 'packages/email/src/powered-by.ts',
+    name: 'resolver',
+    category: 'process-lifetime',
+    reason:
+      'Holds a function that each branded send awaits, so the Powered-by footer reads live ' +
+      'workspace cloud config rather than a cached boolean. One workspace per process installs ' +
+      'the function at boot; a pooled process would need a WorkspaceKeyedCache of resolvers.',
+  },
+  {
     file: 'packages/email/src/index.ts',
     name: 'smtpTransporter',
     category: 'fleet-wide',

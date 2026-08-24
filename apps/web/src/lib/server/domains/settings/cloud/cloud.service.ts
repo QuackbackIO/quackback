@@ -40,14 +40,6 @@ export function resolveCloudConfig(
   }
 }
 
-function syncEmailPoweredBy(config: CloudConfig): void {
-  void import('@quackback/email')
-    .then((mail) => {
-      mail.setEmailShowPoweredBy(config.enabled && config.entitlements.hideBranding !== true)
-    })
-    .catch(() => {})
-}
-
 /**
  * Read commercial state from local workspace settings. A missing or malformed
  * projection resolves to disabled, which is the self-hosted default and never
@@ -58,12 +50,9 @@ export async function getCloudConfig(): Promise<CloudConfig> {
     const { getWorkspaceSettings } = await import('../settings.service')
     const workspace = await getWorkspaceSettings()
     const stored = (workspace?.settings as { cloud?: StoredCloudConfig | null } | undefined)?.cloud
-    const config = resolveCloudConfig(stored ?? null)
-    syncEmailPoweredBy(config)
-    return config
+    return resolveCloudConfig(stored ?? null)
   } catch (error) {
     log.error({ err: error }, 'cloud config read failed; falling back to disabled')
-    syncEmailPoweredBy(DISABLED_CLOUD_CONFIG)
     return DISABLED_CLOUD_CONFIG
   }
 }

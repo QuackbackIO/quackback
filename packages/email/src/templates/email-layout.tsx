@@ -10,7 +10,7 @@ import {
   Link,
 } from '@react-email/components'
 import { layout, branding, typography, utils, colors, DEFAULT_LOGO_URL } from './shared-styles'
-import { getEmailShowPoweredBy } from '../powered-by'
+import { useEmailShowPoweredBy } from '../powered-by'
 
 interface EmailLayoutProps {
   preview: string
@@ -33,6 +33,7 @@ export function EmailLayout({
   children,
   footer,
 }: EmailLayoutProps) {
+  const showPoweredBy = useEmailShowPoweredBy()
   return (
     <Html>
       <Head />
@@ -56,7 +57,7 @@ export function EmailLayout({
 
             {/* Footer */}
             {footer}
-            {getEmailShowPoweredBy() ? (
+            {showPoweredBy ? (
               <Text style={typography.footer}>
                 <Link href="https://quackback.io" style={{ ...utils.link, fontSize: '13px' }}>
                   Powered by Quackback
