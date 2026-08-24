@@ -27,8 +27,8 @@ const config = {
         posts: true,
         pastConversations: true,
         internalNotes: true,
-        tickets: false,
-        changelog: false,
+        tickets: true,
+        changelog: true,
         status: true,
       },
     },
@@ -95,7 +95,7 @@ describe('CopilotKnowledgeCard', () => {
     await screen.findByText('Tickets')
     fireEvent.click(screen.getByLabelText('Use Tickets'))
     await waitFor(() => expect(updateCopilotKnowledge).toHaveBeenCalledTimes(1))
-    expect(updateCopilotKnowledge.mock.calls[0][0].data.knowledge.tickets).toBe(true)
+    expect(updateCopilotKnowledge.mock.calls[0][0].data.knowledge.tickets).toBe(false)
   })
 })
 

@@ -34,6 +34,7 @@ import {
 } from '@/lib/server/domains/assistant/assistant-activity-snapshot'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
+import { EntitlementRequiredError } from '@/lib/server/errors/entitlement-error'
 import { getLiveWorkflowReferencedAttributeKeys } from '@/lib/server/domains/workflows/workflow.service'
 import { classifyConversationAttributes } from '@/lib/server/domains/conversation-attributes/ai-classification.service'
 import {
@@ -130,6 +131,13 @@ export async function previewAssistantTurnForConversation(
 ): Promise<AssistantTurnEligibility> {
   if (!isAssistantConfigured()) return 'declined'
   try {
+    const { requireEntitlement } = await import('@/lib/server/domains/settings/cloud/entitlements')
+    await requireEntitlement('aiAssistant')
+  } catch (err) {
+    if (err instanceof EntitlementRequiredError) return 'declined'
+    throw err
+  }
+  try {
     await enforceAiTokenBudget()
   } catch (err) {
     if (err instanceof TierLimitError) return 'declined'
@@ -162,6 +170,17 @@ export async function runAssistantTurnForConversation(
   }
 ): Promise<void> {
   if (!isAssistantConfigured()) return
+
+  try {
+    const { requireEntitlement } = await import('@/lib/server/domains/settings/cloud/entitlements')
+    await requireEntitlement('aiAssistant')
+  } catch (err) {
+    if (err instanceof EntitlementRequiredError) {
+      log.info({ conversationId }, 'assistant turn skipped: ai assistant not entitled')
+      return
+    }
+    throw err
+  }
 
   try {
     await enforceAiTokenBudget()

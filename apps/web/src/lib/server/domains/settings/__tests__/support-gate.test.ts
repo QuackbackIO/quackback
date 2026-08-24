@@ -23,8 +23,8 @@ import {
 } from '@/lib/shared/support-surfaces'
 
 describe('DEFAULT_PORTAL_CONFIG.support', () => {
-  it('is disabled by default so shipping the gate changes nothing for existing workspaces', () => {
-    expect(DEFAULT_PORTAL_CONFIG.support?.enabled).toBe(false)
+  it('is on by default so Support ON is enough to start portal chats', () => {
+    expect(DEFAULT_PORTAL_CONFIG.support?.enabled).toBe(true)
   })
 })
 

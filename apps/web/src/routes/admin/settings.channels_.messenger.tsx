@@ -44,9 +44,9 @@ export function MessengerChannelPage() {
   const messengerConfig = config.messenger
   const [isPending, startTransition] = useTransition()
   const [savingField, setSavingField] = useState<string | null>(null)
-  const [widgetMessenger, setWidgetMessenger] = useState(config.tabs?.messenger ?? false)
+  const [widgetMessenger, setWidgetMessenger] = useState(config.tabs?.messenger ?? true)
   const [portalSupportEnabled, setPortalSupportEnabled] = useState(
-    portalConfigQuery.data?.support?.enabled ?? false
+    portalConfigQuery.data?.support?.enabled ?? true
   )
   const [preventRepliesWhenClosed, setPreventRepliesWhenClosed] = useState(
     messengerConfig?.preventRepliesWhenClosed ?? false

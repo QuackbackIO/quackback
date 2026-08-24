@@ -353,9 +353,9 @@ export function ModulesCard({
   const [defaultBoard, setDefaultBoard] = useState(config.defaultBoard ?? '')
   const [tabs, setTabs] = useState({
     home: config.tabs?.home ?? true,
-    messenger: config.tabs?.messenger ?? false,
+    messenger: config.tabs?.messenger ?? true,
     feedback: config.tabs?.feedback ?? true,
-    changelog: config.tabs?.changelog ?? false,
+    changelog: config.tabs?.changelog ?? true,
     help: config.tabs?.help ?? false,
   })
 

@@ -868,7 +868,7 @@
   "automation.agent.deployment.pausedStatus": "Automatic replies are paused.",
   "automation.agent.deployment.error": "The deployment setting could not be changed. Try again.",
   "automation.agent.deployment.enableConfirmTitle": "Enable automatic replies in Messenger?",
-  "automation.agent.deployment.enableConfirmDescription": "The AI agent will begin answering customers using your saved settings. Test the agent before enabling it.",
+  "automation.agent.deployment.enableConfirmDescription": "The AI agent will start answering new customer messages in Messenger using your saved settings.",
   "automation.agent.deployment.enableConfirm": "Enable replies",
   "automation.agent.deployment.pauseConfirmTitle": "Pause automatic replies in Messenger?",
   "automation.agent.deployment.pauseConfirmDescription": "The AI agent will stop answering new customer messages automatically.",

@@ -312,7 +312,7 @@ export async function updateWidgetAssistantDeployment(
         changedPaths: ['widget.assistant.enabled', 'widget.assistant.respond'],
         transitions: [
           { path: 'widget.assistant.enabled', from: current.enabled ?? true, to: input.enabled },
-          { path: 'widget.assistant.respond', from: current.respond ?? false, to: input.respond },
+          { path: 'widget.assistant.respond', from: current.respond ?? true, to: input.respond },
         ],
       },
     })
@@ -334,9 +334,9 @@ export function projectPublicWidgetConfig(
 ): PublicWidgetConfig {
   const tabs = {
     feedback: (config.tabs?.feedback ?? true) && flags.feedback,
-    changelog: (config.tabs?.changelog ?? false) && flags.changelog,
+    changelog: (config.tabs?.changelog ?? true) && flags.changelog,
     help: (config.tabs?.help ?? false) && flags.helpCenter,
-    messenger: (config.tabs?.messenger ?? false) && flags.supportInbox,
+    messenger: (config.tabs?.messenger ?? true) && flags.supportInbox,
     // Converged Messages: ticket pairs surface through the messenger tab,
     // gated by the supportTickets flag alone (there is no stored Tickets tab).
     tickets: flags.supportTickets,
@@ -397,9 +397,9 @@ export async function getMessengerConfig(): Promise<MessengerConfig> {
 
 /**
  * Whether the widget messenger surface is live. Gated first by the
- * experimental `supportInbox` feature flag (off by default); below it the
- * widget master and the Messages tab still apply. There is no separate
- * messenger master switch — the module flag is that switch. This is the
+ * Support product flag (`supportInbox`, off by default); below it the
+ * widget master and the Messages tab still apply. The Messages tab defaults
+ * on; the widget master turns on when Support is enabled. This is the
  * single choke point the widget-facing messenger paths (send, stream,
  * visitor history) already consult, so flipping the flag off fails them all
  * closed.
