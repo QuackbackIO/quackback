@@ -24,7 +24,12 @@ import {
 import { db, settings, principal, user, postStatuses, eq, DEFAULT_STATUSES } from '@/lib/server/db'
 import { isOnboardingComplete } from '@/lib/shared/db-types'
 import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
-import { DEFAULT_AUTH_CONFIG, DEFAULT_PORTAL_CONFIG } from '@/lib/server/domains/settings'
+import {
+  DEFAULT_AUTH_CONFIG,
+  DEFAULT_PORTAL_CONFIG,
+  DEFAULT_WIDGET_CONFIG,
+} from '@/lib/server/domains/settings'
+import { DEFAULT_ASSISTANT_CONFIG } from '@/lib/shared/assistant/config'
 import {
   DEFAULT_FEATURE_FLAGS,
   flagsForGoal,
@@ -262,6 +267,8 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
             slug,
             createdAt: new Date(),
             portalConfig: JSON.stringify(DEFAULT_PORTAL_CONFIG),
+            widgetConfig: JSON.stringify(DEFAULT_WIDGET_CONFIG),
+            assistantConfig: DEFAULT_ASSISTANT_CONFIG,
             authConfig: JSON.stringify({ ...DEFAULT_AUTH_CONFIG, openSignup: true }),
             setupState: JSON.stringify(initialState),
             featureFlags: JSON.stringify(flags),

@@ -1,6 +1,11 @@
 import { db, settings, eq } from '@/lib/server/db'
 import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
-import { featureFlagsForUseCase } from '@/lib/server/domains/settings/settings.types'
+import {
+  DEFAULT_PORTAL_CONFIG,
+  DEFAULT_WIDGET_CONFIG,
+  featureFlagsForUseCase,
+} from '@/lib/server/domains/settings/settings.types'
+import { DEFAULT_ASSISTANT_CONFIG } from '@/lib/shared/assistant/config'
 import { getSetupState } from '@/lib/shared/db-types'
 import { invalidateTierLimitsCache } from '@/lib/server/domains/settings/tier-limits.service'
 import { bumpAuthConfigVersionInTx } from '@/lib/server/auth/config-version'
@@ -76,6 +81,9 @@ export function makeReconcileDeps(): ReconcileDeps {
           tierLimits: insert.tierLimits,
           managedFieldPaths: insert.managedFieldPaths,
           authConfigVersion: 1,
+          portalConfig: JSON.stringify(DEFAULT_PORTAL_CONFIG),
+          widgetConfig: JSON.stringify(DEFAULT_WIDGET_CONFIG),
+          assistantConfig: DEFAULT_ASSISTANT_CONFIG,
           featureFlags: JSON.stringify(
             featureFlagsForUseCase(getSetupState(insert.setupState ?? null)?.useCase)
           ),
