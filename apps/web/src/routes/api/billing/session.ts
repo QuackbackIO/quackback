@@ -118,21 +118,29 @@ async function createSeatChangeSession(quantity: number) {
   })
 }
 
-/** Floor checkout seats at live usage so a stale form cannot under-seat. */
+/** Floor seat-billed checkout at live usage so a stale form cannot under-seat.
+ *  Workspace-priced plans stay quantity 1. */
 async function createCheckoutSession(input: {
   planId: 'growth' | 'pro' | 'scale'
   billingPeriod: 'monthly' | 'annual'
   quantity?: number
 }) {
   const { countSeatUsage } = await import('@/lib/server/domains/principals/seat-usage')
-  const { createHostedBillingSession } = await import('@/lib/server/control-plane/client')
+  const { createHostedBillingSession, fetchBillingCatalogue } =
+    await import('@/lib/server/control-plane/client')
   return withSettingsLock(async (tx) => {
-    const seats = await countSeatUsage(tx)
+    const [seats, catalogue] = await Promise.all([
+      countSeatUsage(tx),
+      fetchBillingCatalogue().catch(() => null),
+    ])
+    const billedPer = catalogue?.plans.find((plan) => plan.id === input.planId)?.billedPer
+    const quantity =
+      billedPer === 'workspace' ? 1 : Math.max(input.quantity ?? seats.used, seats.used, 1)
     return createHostedBillingSession({
       action: 'checkout',
       planId: input.planId,
       billingPeriod: input.billingPeriod,
-      quantity: Math.max(input.quantity ?? seats.used, seats.used, 1),
+      quantity,
     })
   })
 }
