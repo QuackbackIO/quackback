@@ -241,6 +241,15 @@ describe('POST /api/billing/session checkout', () => {
     expect(res.headers.get('location')).toBe('/admin/settings/billing?checkout=success')
   })
 
+  it('does not treat branding removal as a checkout success', async () => {
+    hoisted.createHostedBillingSession.mockResolvedValue({ status: 'updated' })
+    const res = await POST({
+      request: formRequest({ action: 'branding-remove' }),
+    })
+    expect(res.status).toBe(303)
+    expect(res.headers.get('location')).toBe('/admin/settings/billing')
+  })
+
   it('holds the settings lock through hosted checkout creation', async () => {
     hoisted.createHostedBillingSession.mockImplementation(async () => {
       expect(hoisted.transactionActive).toBe(true)

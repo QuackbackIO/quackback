@@ -18,6 +18,11 @@ describe('shouldShowPoweredBy', () => {
     expect(shouldShowPoweredBy(DISABLED_CLOUD_CONFIG)).toBe(true)
   })
 
+  it('is the same rule for portal, widget, and branded emails', () => {
+    expect(shouldShowPoweredBy(DISABLED_CLOUD_CONFIG)).toBe(true)
+    expect(shouldShowPoweredBy(cloudOn({ entitlements: { hideBranding: true } }))).toBe(false)
+  })
+
   it('shows on cloud until the add-on is purchased', () => {
     expect(shouldShowPoweredBy(cloudOn({ entitlements: {} }))).toBe(true)
     expect(shouldShowPoweredBy(cloudOn({ entitlements: { hideBranding: false } }))).toBe(true)

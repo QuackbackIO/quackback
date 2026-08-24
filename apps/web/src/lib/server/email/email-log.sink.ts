@@ -74,7 +74,7 @@ export function ensureEmailLogSink(): void {
   })
   setEmailPoweredByResolver(async () => {
     const { getCloudConfig } = await import('@/lib/server/domains/settings/cloud/cloud.service')
-    const config = await getCloudConfig()
-    return config.enabled && config.entitlements.hideBranding !== true
+    const { shouldShowPoweredBy } = await import('@/lib/server/domains/settings/cloud/powered-by')
+    return shouldShowPoweredBy(await getCloudConfig())
   })
 }

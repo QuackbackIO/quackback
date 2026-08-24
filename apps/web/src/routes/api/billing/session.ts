@@ -87,12 +87,12 @@ export const Route = createFileRoute('/api/billing/session')({
               : parsed.data.action === 'checkout'
                 ? await createCheckoutSession(parsed.data)
                 : await createHostedBillingSession(parsed.data)
+          const flashSuccess =
+            parsed.data.action === 'checkout' || parsed.data.action === 'branding'
           const location =
             typeof session.url === 'string' && session.url.startsWith('https://')
               ? session.url
-              : session.status === 'updated' ||
-                  session.status === 'scheduled' ||
-                  session.status === 'downgraded'
+              : flashSuccess && session.status
                 ? '/admin/settings/billing?checkout=success'
                 : '/admin/settings/billing'
           return new Response(null, { status: 303, headers: { location } })
