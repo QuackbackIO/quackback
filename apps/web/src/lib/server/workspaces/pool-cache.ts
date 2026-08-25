@@ -283,7 +283,7 @@ async function verifyWorkspaceDatabase(
   // The resolved key goes in with the read: the identity question includes
   // whether this key opens ciphertext the database is already holding, and that
   // has to be answered from a sample rather than from the minted canary alone.
-  const observed = await observeWorkspaceIdentity(sql, secrets.secretKey)
+  const observed = await observeWorkspaceIdentity(sql, secrets.secretKey, workspace.workspaceKey)
   const verdict = evaluateWorkspaceIdentity(workspace.fingerprint, workspace.physical, observed)
   const keyVerdict = verdict.ok
     ? evaluateSecretKeyCanary(

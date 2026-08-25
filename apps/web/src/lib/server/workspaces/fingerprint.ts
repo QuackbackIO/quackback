@@ -57,7 +57,11 @@ import {
   type PhysicalFailure,
 } from './physical-identity'
 import { verifySecretKeyCanary } from './vendor/fleet-secrets'
-import { probeStoredCiphertext, type StoredCiphertextProbe } from './stored-ciphertext'
+import {
+  probeHkdfCiphertext,
+  probeStoredCiphertext,
+  type StoredCiphertextProbe,
+} from './stored-ciphertext'
 
 /** Where the workspace id was read from, for the refusal log. */
 export type StampSource = 'column' | 'metadata' | 'none'
@@ -289,7 +293,8 @@ async function readSettingsIdentity(sql: Sql): Promise<SettingsIdentityRow[]> {
  */
 export async function observeWorkspaceIdentity(
   sql: Sql,
-  secretKey: string
+  secretKey: string,
+  workspaceKey?: string
 ): Promise<WorkspaceIdentityObservation> {
   const rows = await readSettingsIdentity(sql)
 
@@ -340,8 +345,47 @@ export async function observeWorkspaceIdentity(
     stampSource,
     stampSourceConflict: conflict,
     secretCanary: normalise(row.cloud_secret_canary),
-    storedCiphertext: await probeStoredCiphertext(secretKey, row.stored_ciphertext),
+    storedCiphertext: await corroborateStoredCiphertext(
+      sql,
+      secretKey,
+      workspaceKey,
+      await probeStoredCiphertext(secretKey, row.stored_ciphertext)
+    ),
   }
+}
+
+/**
+ * JWKS is always sampled. When checkout also has the workspace key, try one
+ * platform-credential row sealed under the pooled HKDF info. Unopenable wins:
+ * that is the imported-tenant case (canary and JWKS pass, OAuth ciphertext does
+ * not). Missing table or no row leaves the JWKS result alone.
+ */
+async function corroborateStoredCiphertext(
+  sql: Sql,
+  secretKey: string,
+  workspaceKey: string | undefined,
+  jwks: StoredCiphertextProbe
+): Promise<StoredCiphertextProbe> {
+  if (!workspaceKey || jwks.kind === 'unopenable') return jwks
+  let sample: string | null = null
+  try {
+    const rows = (await sql`
+      SELECT secrets
+        FROM integration_platform_credentials
+       WHERE secrets IS NOT NULL AND secrets <> ''
+       ORDER BY created_at ASC, id ASC
+       LIMIT 1
+    `) as unknown as Array<{ secrets: string | null }>
+    sample = rows[0]?.secrets ?? null
+  } catch (err) {
+    if ((err as { code?: string } | null)?.code === '42P01') return jwks
+    throw err
+  }
+  const extra = probeHkdfCiphertext(secretKey, workspaceKey, sample)
+  if (extra.kind === 'unopenable') return extra
+  if (jwks.kind === 'opened') return jwks
+  if (extra.kind === 'opened') return extra
+  return jwks
 }
 
 /**

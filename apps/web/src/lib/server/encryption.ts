@@ -80,19 +80,18 @@ function hkdfInfo(namespace: string, purpose: string): string {
  * @param purpose - Identifies what the key is used for (e.g., 'integration-tokens')
  * @returns 256-bit derived key
  */
+/** HKDF-SHA256 for a purpose, from explicit IKM and workspace namespace. */
+export function derivePurposeKey(secretKey: string, namespace: string, purpose: string): Buffer {
+  return Buffer.from(
+    hkdfSync('sha256', secretKey, HKDF_SALT, hkdfInfo(namespace, purpose), KEY_LENGTH)
+  )
+}
+
 function deriveKey(purpose: string): Buffer {
   const cached = derivedKeys.get(purpose)
   if (cached) return cached
 
-  const derived = hkdfSync(
-    'sha256',
-    activeSecretKey(),
-    HKDF_SALT,
-    hkdfInfo(currentWorkspaceNamespace(), purpose),
-    KEY_LENGTH
-  )
-
-  const key = Buffer.from(derived)
+  const key = derivePurposeKey(activeSecretKey(), currentWorkspaceNamespace(), purpose)
   derivedKeys.set(purpose, key)
   return key
 }
@@ -151,7 +150,29 @@ export function decrypt(ciphertext: string, purpose: string): string {
   if (!purpose || typeof purpose !== 'string') {
     throw new Error('Encryption purpose is required')
   }
+  return openCiphertext(ciphertext, deriveKey(purpose))
+}
 
+/**
+ * Open ciphertext with an explicit master secret and namespace.
+ *
+ * Pool checkout samples stored rows before a workspace scope exists, so it
+ * cannot go through `decrypt()` (that reads ALS). Same wire format and HKDF
+ * info as `decrypt()`.
+ */
+export function decryptWithSecret(
+  ciphertext: string,
+  secretKey: string,
+  namespace: string,
+  purpose: string
+): string {
+  if (!purpose || typeof purpose !== 'string') {
+    throw new Error('Encryption purpose is required')
+  }
+  return openCiphertext(ciphertext, derivePurposeKey(secretKey, namespace, purpose))
+}
+
+function openCiphertext(ciphertext: string, key: Buffer): string {
   const parts = ciphertext.split('.')
   if (parts.length !== 3) {
     throw new Error('Invalid ciphertext format')
@@ -162,7 +183,6 @@ export function decrypt(ciphertext: string, purpose: string): string {
   const authTag = Buffer.from(authTagB64, 'base64url')
   const encrypted = Buffer.from(encryptedB64, 'base64url')
 
-  // Validate lengths to fail fast
   if (iv.length !== IV_LENGTH) {
     throw new Error('Invalid IV length')
   }
@@ -170,7 +190,6 @@ export function decrypt(ciphertext: string, purpose: string): string {
     throw new Error('Invalid auth tag length')
   }
 
-  const key = deriveKey(purpose)
   const decipher = createDecipheriv(ALGORITHM, key, iv, {
     authTagLength: AUTH_TAG_LENGTH,
   })

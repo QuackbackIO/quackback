@@ -18,25 +18,22 @@
  * So the check gets a second, independent fact: a real sample of the workspace's
  * own ciphertext, opened with the key that is about to be put into service.
  *
- * ## Why `jwks.private_key` and nothing else
+ * ## Why `jwks.private_key` is the always-on sample
  *
- * Several things are encrypted at rest — integration OAuth bundles, webhook
- * signing secrets, connector secrets, app signing secrets — and
- * every one of them goes through `encryption.ts`, which derives its key with
- * HKDF over *the active workspace namespace and a purpose string*. Reproducing that
- * derivation here would mean this module reconstructing, before the workspace scope
- * exists, the exact namespace and purpose each row was written under. Get it
- * wrong and the sample fails to open under the correct key: a false refusal, an
- * outage, and a worse failure than the silent one being fixed.
+ * The `jwt()` plugin seals the auth signing key with the master secret
+ * **directly** (`secret: activeSecretKey()`), through the auth library's own
+ * `symmetricEncrypt`, with no HKDF in between. Opening it therefore requires no
+ * assumption about namespace or purpose. It is also the first ciphertext most
+ * workspaces ever write.
  *
- * The auth signing key is the exception. The `jwt()` plugin seals it with the
- * master secret **directly** (`secret: activeSecretKey()`), through the auth
- * library's own `symmetricEncrypt`, with no derivation in between. Opening it
- * therefore requires no assumption at all: the key either opens it or it does
- * not. It is also the value that actually broke, the only encrypted value the
- * broken workspace held, and the first ciphertext most workspaces ever write — a
- * workspace mints it on the first request that signs anything, long before it
- * connects an integration.
+ * Integration and platform-credential rows go through `encryption.ts` HKDF.
+ * Those cannot use `decrypt()` at checkout — that reads ALS, and the scope does
+ * not exist yet. When the observer has the workspace key, a second sample
+ * (`integration_platform_credentials.secrets`) is opened with `decryptWithSecret`
+ * using the same info string production uses. A wrong purpose string would
+ * refuse a healthy workspace, so the purpose is the production constant
+ * `integration-platform-credentials`. Absent rows stay `absent`; only an
+ * auth-tag failure is `unopenable`.
  *
  * The row is read with the library's own opener rather than a local
  * reimplementation, for the same reason `vendor/fleet-secrets.ts` is pinned
@@ -49,12 +46,17 @@
  * "refuse" — those are the verdict's to make, in one place, in `fingerprint.ts`.
  */
 import { symmetricDecrypt } from 'better-auth/crypto'
+import { decryptWithSecret } from '@/lib/server/encryption'
 
 /**
  * The one column sampled, named so the refusal can say where the evidence came
  * from. Not key material: a column name.
  */
 export const STORED_CIPHERTEXT_SOURCE = 'jwks.private_key'
+
+/** Second sample: HKDF-sealed platform OAuth app credentials. */
+export const PLATFORM_CREDENTIALS_SOURCE = 'integration_platform_credentials.secrets'
+export const PLATFORM_CREDENTIALS_PURPOSE = 'integration-platform-credentials'
 
 /**
  * Why a sample carried nothing to open.
@@ -127,6 +129,32 @@ export async function probeStoredCiphertext(
     await symmetricDecrypt({ key: secretKey, data: sealed })
     return { kind: 'opened', source }
   } catch {
+    return { kind: 'unopenable', source }
+  }
+}
+
+/**
+ * Open an `encryption.ts` ciphertext with an explicit master secret and
+ * workspace namespace — checkout has both, and no ALS scope yet.
+ */
+export function probeHkdfCiphertext(
+  secretKey: string,
+  workspaceKey: string,
+  sample: string | null,
+  source = PLATFORM_CREDENTIALS_SOURCE,
+  purpose = PLATFORM_CREDENTIALS_PURPOSE
+): StoredCiphertextProbe {
+  if (sample === null || sample === undefined) return { kind: 'absent', source, reason: 'no-row' }
+  if (sample.trim() === '') return { kind: 'absent', source, reason: 'empty' }
+  const parts = sample.split('.')
+  if (parts.length !== 3) return { kind: 'absent', source, reason: 'unrecognised' }
+  try {
+    decryptWithSecret(sample, secretKey, workspaceKey, purpose)
+    return { kind: 'opened', source }
+  } catch (err) {
+    if (err instanceof Error && err.message === 'Invalid ciphertext format') {
+      return { kind: 'absent', source, reason: 'unrecognised' }
+    }
     return { kind: 'unopenable', source }
   }
 }

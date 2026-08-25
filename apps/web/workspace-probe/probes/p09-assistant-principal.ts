@@ -43,9 +43,10 @@ export const p09AssistantPrincipal: Probe = {
     'conversation or attribution table.',
   requires: ['db'],
   poolingCaveat:
-    'The memo this targets is process-scoped, so it can only be poisoned once one process serves both ' +
-    'workspaces. Today the probe proves the two ids are distinct and unreferenced, which is the baseline ' +
-    'the pooled check will be measured against.',
+    'The memos this originally targeted (assistant.orchestrator and assistant-principal) are ' +
+    'WorkspaceKeyedCache instances, so a process serving both workspaces no longer shares one ' +
+    'principal id. A pass here is evidence the two ids are distinct and unreferenced — the ' +
+    'restore/clone case — not a live shared-memo leak.',
 
   async run(ctx: ProbeContext) {
     const { alpha, bravo } = ctx
