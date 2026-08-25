@@ -59,7 +59,12 @@ import {
   KEY_CUSTODY_FAILURE_CODES,
   observeWorkspaceIdentity,
 } from '../fingerprint'
-import { probeStoredCiphertext } from '../stored-ciphertext'
+import {
+  PLATFORM_CREDENTIALS_PURPOSE,
+  PLATFORM_CREDENTIALS_SOURCE,
+  probeHkdfCiphertext,
+  probeStoredCiphertext,
+} from '../stored-ciphertext'
 import { sealSecretKeyCanary } from '../vendor/fleet-secrets'
 
 const WORKSPACE = 'inst_cloud_ws_t2'
@@ -370,5 +375,119 @@ describe('the verdict, once it can see a real sample', () => {
     // And the derived list request-scope's own suite iterates carries it, so the
     // end-to-end assertion there covers this code rather than skipping it.
     expect(KEY_CUSTODY_FAILURE_CODES).toContain(verdict.code)
+  })
+})
+
+function sealPlatformCreds(masterSecret: string, workspaceKey: string, plaintext: string): string {
+  const info = `quackback:v1:t:${workspaceKey}:${PLATFORM_CREDENTIALS_PURPOSE}`
+  const key = Buffer.from(
+    hkdfSync('sha256', masterSecret, 'quackback-encryption-salt-v1', info, 32)
+  )
+  const iv = randomBytes(12)
+  const cipher = createCipheriv('aes-256-gcm', key, iv, { authTagLength: 16 })
+  const body = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()])
+  return [
+    iv.toString('base64url'),
+    cipher.getAuthTag().toString('base64url'),
+    body.toString('base64url'),
+  ].join('.')
+}
+
+describe('platform-credential corroboration at checkout', () => {
+  it('does not query platform credentials when no workspace key is passed', async () => {
+    const stored = await sealAuthSigningKey(KEY_AT_WRITE_TIME, JWK)
+    const { sql, statements } = fakeSql([
+      [{ ...SETTINGS_ROW, stored_ciphertext: stored }],
+      [{ catalog_name: null, catalog_oid: null }],
+    ])
+    await observeWorkspaceIdentity(sql as never, KEY_AT_WRITE_TIME)
+    expect(statements).toHaveLength(2)
+    expect(statements.join('\n')).not.toContain('integration_platform_credentials')
+  })
+
+  it('keeps a JWKS-opened sample when platform credentials open under the pooled info', async () => {
+    const stored = await sealAuthSigningKey(KEY_AT_WRITE_TIME, JWK)
+    const creds = sealPlatformCreds(KEY_AT_WRITE_TIME, WORKSPACE, '{"clientId":"x"}')
+    const { sql, statements } = fakeSql([
+      [{ ...SETTINGS_ROW, stored_ciphertext: stored }],
+      [{ catalog_name: null, catalog_oid: null }],
+      [{ secrets: creds }],
+    ])
+    const observed = await observeWorkspaceIdentity(sql as never, KEY_AT_WRITE_TIME, WORKSPACE)
+    expect(observed.storedCiphertext).toMatchObject({ kind: 'opened', source: 'jwks.private_key' })
+    expect(statements[2]).toContain('integration_platform_credentials')
+  })
+
+  it('refuses when JWKS opens but platform credentials were sealed under historical info', async () => {
+    const stored = await sealAuthSigningKey(KEY_AT_WRITE_TIME, JWK)
+    const historicalInfo = `quackback:v1:${PLATFORM_CREDENTIALS_PURPOSE}`
+    const key = Buffer.from(
+      hkdfSync('sha256', KEY_AT_WRITE_TIME, 'quackback-encryption-salt-v1', historicalInfo, 32)
+    )
+    const iv = randomBytes(12)
+    const cipher = createCipheriv('aes-256-gcm', key, iv, { authTagLength: 16 })
+    const body = Buffer.concat([cipher.update('{"clientId":"x"}', 'utf8'), cipher.final()])
+    const stale = [
+      iv.toString('base64url'),
+      cipher.getAuthTag().toString('base64url'),
+      body.toString('base64url'),
+    ].join('.')
+
+    const { sql } = fakeSql([
+      [{ ...SETTINGS_ROW, stored_ciphertext: stored }],
+      [{ catalog_name: null, catalog_oid: null }],
+      [{ secrets: stale }],
+    ])
+    const observed = await observeWorkspaceIdentity(sql as never, KEY_AT_WRITE_TIME, WORKSPACE)
+    expect(observed.storedCiphertext).toMatchObject({
+      kind: 'unopenable',
+      source: PLATFORM_CREDENTIALS_SOURCE,
+    })
+    const verdict = evaluateSecretKeyCanary(
+      WORKSPACE,
+      KEY_AT_WRITE_TIME,
+      sealSecretKeyCanary(KEY_AT_WRITE_TIME, WORKSPACE),
+      observed.storedCiphertext
+    )
+    expect(verdict).toMatchObject({ ok: false, code: 'secret_key_stored_ciphertext_mismatch' })
+  })
+
+  it('treats a missing platform-credentials table as no extra sample', async () => {
+    const stored = await sealAuthSigningKey(KEY_AT_WRITE_TIME, JWK)
+    const { sql } = fakeSql([
+      [{ ...SETTINGS_ROW, stored_ciphertext: stored }],
+      [{ catalog_name: null, catalog_oid: null }],
+      () =>
+        Object.assign(new Error('relation "integration_platform_credentials" does not exist'), {
+          code: '42P01',
+        }),
+    ])
+    const observed = await observeWorkspaceIdentity(sql as never, KEY_AT_WRITE_TIME, WORKSPACE)
+    expect(observed.storedCiphertext).toMatchObject({ kind: 'opened', source: 'jwks.private_key' })
+  })
+
+  it('opens pooled-info ciphertext and refuses historical-info ciphertext as a unit', () => {
+    const pooled = sealPlatformCreds(KEY_AT_WRITE_TIME, WORKSPACE, '{"clientId":"x"}')
+    expect(probeHkdfCiphertext(KEY_AT_WRITE_TIME, WORKSPACE, pooled).kind).toBe('opened')
+    const historical = (() => {
+      const key = Buffer.from(
+        hkdfSync(
+          'sha256',
+          KEY_AT_WRITE_TIME,
+          'quackback-encryption-salt-v1',
+          `quackback:v1:${PLATFORM_CREDENTIALS_PURPOSE}`,
+          32
+        )
+      )
+      const iv = randomBytes(12)
+      const cipher = createCipheriv('aes-256-gcm', key, iv, { authTagLength: 16 })
+      const body = Buffer.concat([cipher.update('{"clientId":"x"}', 'utf8'), cipher.final()])
+      return [
+        iv.toString('base64url'),
+        cipher.getAuthTag().toString('base64url'),
+        body.toString('base64url'),
+      ].join('.')
+    })()
+    expect(probeHkdfCiphertext(KEY_AT_WRITE_TIME, WORKSPACE, historical).kind).toBe('unopenable')
   })
 })
