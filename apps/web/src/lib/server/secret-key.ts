@@ -7,9 +7,9 @@
  * is worse than no resolver at all: it reads as solved.
  *
  * Under a pooled workspace scope this is the workspace's own key, resolved from the
- * registry record's `appSecretsRef` on pool checkout. With no scope — every
- * self-hosted install, and every pooled code path that runs outside a request —
- * it is `config.secretKey`, unchanged byte for byte.
+ * registry record's `appSecretsRef` on pool checkout. With no scope on a
+ * self-hosted install it is `config.secretKey`, unchanged. Under pooled tenancy
+ * an unscoped read throws: the fleet-wide key must not encrypt workspace data.
  *
  * `getWorkspaceSecretKey()` returns exactly this one string and nothing else on
  * the scope, so the signing key and the storage credential no longer come out
@@ -31,8 +31,16 @@
  * instead of letting the fleet discover the problem one integration at a time.
  */
 import { config } from './config'
-import { getWorkspaceSecretKey } from './workspaces/workspace-context'
+import { isPooledTenancy } from './workspaces/mode'
+import { getWorkspaceSecretKey, WorkspaceScopeMissingError } from './workspaces/workspace-context'
 
 export function activeSecretKey(): string {
-  return getWorkspaceSecretKey() ?? config.secretKey
+  const scoped = getWorkspaceSecretKey()
+  if (scoped) return scoped
+  if (isPooledTenancy()) {
+    throw new WorkspaceScopeMissingError(
+      'encryption/signing was attempted with no workspace resolved.'
+    )
+  }
+  return config.secretKey
 }

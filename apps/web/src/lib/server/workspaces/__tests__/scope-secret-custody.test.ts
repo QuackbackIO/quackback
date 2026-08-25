@@ -60,6 +60,7 @@ const {
   getWorkspaceSecretKey,
   getWorkspaceStorageCredential,
   runWithWorkspaceScope,
+  WorkspaceScopeMissingError,
   WorkspaceScopeSecretsMissingError,
 } = await import('../workspace-context')
 const { runWithLogContext } = await import('@/lib/server/log-context')
@@ -113,6 +114,13 @@ describe('the signing-key consumer still works', () => {
   it('falls back to the process key with no scope, which is the self-hosted path', () => {
     expect(getWorkspaceSecretKey()).toBeNull()
     expect(activeSecretKey()).toBe(FLEET_SECRET_KEY)
+  })
+
+  it('throws under pooled tenancy with no workspace scope', () => {
+    vi.stubEnv('QUACKBACK_TENANCY', 'pooled')
+    expect(getWorkspaceSecretKey()).toBeNull()
+    expect(() => activeSecretKey()).toThrow(WorkspaceScopeMissingError)
+    vi.unstubAllEnvs()
   })
 })
 
