@@ -100,11 +100,14 @@ describe('a workspace cannot send from another workspace’s verified domain', (
   })
 
   it('uses the scoped workspace From as platformFrom', async () => {
+    vi.stubEnv('QUACKBACK_TENANCY', 'pooled')
     vi.stubEnv('EMAIL_FROM', 'Fleet <noreply@fleet.example>')
-    const identity = await withWorkspace('inst_alpha', () =>
-      permittedSendingIdentity('support@inst_alpha.example.com')
-    )
-    expect(identity).toBe('support@inst_alpha.example.com')
+    await withWorkspace('inst_alpha', async () => {
+      await expect(permittedSendingIdentity('support@inst_alpha.example.com')).resolves.toBe(
+        'support@inst_alpha.example.com'
+      )
+      await expect(permittedSendingIdentity('noreply@fleet.example')).resolves.toBeNull()
+    })
     vi.unstubAllEnvs()
   })
 

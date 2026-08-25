@@ -1,23 +1,23 @@
 /**
  * Pooled From is the workspace registry field; self-host stays EMAIL_FROM.
+ *
+ * Pins the production install in `ensureEmailLogSink`, not a copy of the
+ * resolver. `registered` is once-per-process, so this file does not reset
+ * the resolver between cases.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { getEmailFrom, resetDefaultFromResolver, setDefaultFromResolver } from '@quackback/email'
+import { getEmailFrom } from '@quackback/email'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
 import { withWorkspace } from '@/lib/server/__tests__/workspace-scope'
-
-function installProductionResolver(): void {
-  setDefaultFromResolver(() => getCurrentWorkspace()?.email.from ?? null)
-}
+import { ensureEmailLogSink } from '../email-log.sink'
 
 describe('pooled default From', () => {
   beforeEach(() => {
     vi.stubEnv('EMAIL_FROM', 'Fleet <noreply@fleet.example>')
-    installProductionResolver()
+    ensureEmailLogSink()
   })
 
   afterEach(() => {
-    resetDefaultFromResolver()
     vi.unstubAllEnvs()
   })
 
@@ -47,11 +47,10 @@ describe('self-host default From', () => {
   beforeEach(() => {
     vi.stubEnv('EMAIL_FROM', 'Selfhost <noreply@self.example>')
     vi.stubEnv('QUACKBACK_TENANCY', 'single')
-    installProductionResolver()
+    ensureEmailLogSink()
   })
 
   afterEach(() => {
-    resetDefaultFromResolver()
     vi.unstubAllEnvs()
   })
 

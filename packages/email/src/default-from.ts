@@ -1,9 +1,10 @@
 /**
  * Optional override for the platform default From.
  *
- * The package default is `EMAIL_FROM`. A pooled process installs a resolver
- * that reads the active workspace's registry `email.from`. Self-host never
- * installs one, so behaviour stays the env read.
+ * The package default is `EMAIL_FROM`. The app installs a resolver that reads
+ * the active workspace's registry `email.from`. With no workspace scope
+ * (self-host, and pooled sends outside a scope) the resolver returns null
+ * and this falls through to `EMAIL_FROM`.
  */
 let resolver: (() => string | null | undefined) | null = null
 
