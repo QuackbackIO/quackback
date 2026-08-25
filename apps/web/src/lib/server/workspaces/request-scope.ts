@@ -62,10 +62,11 @@ function refusal(status: number, body: string, extra?: Record<string, string>): 
  * they arrive on a workspace hostname like everything else. Resolving a workspace for
  * them would open a pool — and therefore **wake a suspended workspace
  * database** — once per probe, forever, which silently destroys the idle-cost
- * model the pooling exists for. Readiness under pooled tenancy asserts only that
- * the process can reach the control store, so it needs no workspace either.
+ * model the pooling exists for. Liveness is process-up only. Readiness under
+ * pooled tenancy asserts only that the process can reach the control store, so
+ * it needs no workspace either.
  */
-const FLEET_PATHS = ['/api/health', '/api/health/ready']
+const FLEET_PATHS = ['/api/health', '/api/health/live', '/api/health/ready']
 
 export { requestWorkspaceHost } from './saas-edge-host'
 
