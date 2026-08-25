@@ -58,8 +58,10 @@ import { StatusMaintenanceScheduledEmail } from './templates/status-maintenance-
 import { CsatRequestEmail } from './templates/csat-request'
 import { VerifyAddressEmail } from './templates/verify-address'
 export { setEmailPoweredByResolver } from './powered-by'
+export { setDefaultFromResolver, resetDefaultFromResolver } from './default-from'
 import { createElement } from 'react'
 import { EmailPoweredByProvider, resolveEmailPoweredBy } from './powered-by'
+import { resolvedDefaultFrom } from './default-from'
 
 /**
  * Get environment variable at runtime.
@@ -88,8 +90,8 @@ export class EmailConfigError extends Error {
   }
 }
 
-function getEmailFrom(): string {
-  const from = getEnv('EMAIL_FROM')
+export function getEmailFrom(): string {
+  const from = resolvedDefaultFrom() ?? getEnv('EMAIL_FROM')
   if (!from) {
     throw new EmailConfigError('EMAIL_FROM environment variable is required for sending emails')
   }
