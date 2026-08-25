@@ -457,10 +457,12 @@ describe('platform-credential corroboration at checkout', () => {
     const { sql } = fakeSql([
       [{ ...SETTINGS_ROW, stored_ciphertext: stored }],
       [{ catalog_name: null, catalog_oid: null }],
-      () =>
-        Object.assign(new Error('relation "integration_platform_credentials" does not exist'), {
-          code: '42P01',
-        }),
+      () => {
+        throw Object.assign(
+          new Error('relation "integration_platform_credentials" does not exist'),
+          { code: '42P01' }
+        )
+      },
     ])
     const observed = await observeWorkspaceIdentity(sql as never, KEY_AT_WRITE_TIME, WORKSPACE)
     expect(observed.storedCiphertext).toMatchObject({ kind: 'opened', source: 'jwks.private_key' })
