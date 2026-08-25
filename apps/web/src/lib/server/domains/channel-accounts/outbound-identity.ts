@@ -20,8 +20,9 @@
  * 1. Its domain is one THIS workspace verified, which means someone published a
  *    token in that zone that exists in no other workspace's row.
  * 2. It is exactly the platform's own default sender. Exactly, not
- *    domain-matched: that address is fleet-wide, so matching its domain would
- *    let any workspace mint any local part on the platform's brand.
+ *    domain-matched: matching its domain would let any workspace mint any local
+ *    part on the platform's brand. Under pooled tenancy this is the workspace's
+ *    registry `email.from`; self-host it is `EMAIL_FROM`.
  * 3. It is an address on the platform's shared MINTING domain whose label is
  *    THIS workspace's mail slug. That domain is where every workspace's new
  *    reply addresses live, so the slug is what separates them.
@@ -76,6 +77,7 @@ import {
   workspaceSlugFromInboundAddress,
 } from '@/lib/server/domains/conversation/conversation.email-channel'
 import { currentMailSlug } from '@/lib/server/domains/conversation/conversation.mail-slug'
+import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
 
 const log = logger.child({
   component: 'outbound-identity',
@@ -225,7 +227,7 @@ async function sendingIdentityContext(env: EnvLike = process.env): Promise<Sendi
     .where(eq(emailSendingDomains.status, 'verified'))
   return {
     verifiedDomains: verified.map((r) => r.domain),
-    platformFrom: env[EMAIL_FROM_ENV] ?? null,
+    platformFrom: getCurrentWorkspace()?.email.from ?? env[EMAIL_FROM_ENV] ?? null,
     inboundDomain: inboundMintDomain(env),
     mailSlug: currentMailSlug(),
     pooled: isPooledTenancy(env),

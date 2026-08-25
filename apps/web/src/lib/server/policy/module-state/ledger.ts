@@ -464,9 +464,18 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     name: 'resolver',
     category: 'process-lifetime',
     reason:
-      'Holds a function that each branded send awaits, so the Powered-by footer reads live ' +
-      'workspace cloud config rather than a cached boolean. One workspace per process installs ' +
-      'the function at boot; a pooled process would need a WorkspaceKeyedCache of resolvers.',
+      'Holds a function pointer installed at boot. Each send awaits it, and the function reads ' +
+      'live workspace cloud config through the scoped db Proxy, so sharing the pointer is not a ' +
+      'cross-workspace cache.',
+  },
+  {
+    file: 'packages/email/src/default-from.ts',
+    name: 'resolver',
+    category: 'process-lifetime',
+    reason:
+      'Holds a function pointer installed at boot. Each send calls it synchronously; the ' +
+      'function reads getCurrentWorkspace()?.email.from, so two workspaces in one process get ' +
+      'different From addresses. Null falls through to EMAIL_FROM, which is the self-host path.',
   },
   {
     file: 'packages/email/src/index.ts',
@@ -474,12 +483,9 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     category: 'fleet-wide',
     reason:
       'Built from EMAIL_SMTP_HOST/PORT/USER/PASS. A transport, not an identity, so the client ' +
-      'itself is fleet-wide. Say the rest plainly: the per-workspace part of email is the From ' +
-      'address, and it is BROKEN under pooling - getEmailFrom() reads process.env.EMAIL_FROM per ' +
-      'send, the registry carries a per-workspace email.from, and NOTHING repo-wide reads it, so every ' +
-      'workspace mail goes out from one address. Not this singleton fault and not fixed here (it is ' +
-      'section 8 config resolution, not section 4 process state) - recorded so the next reader is ' +
-      'not reassured by a transport that was never the problem.',
+      'itself is fleet-wide. The per-workspace From is resolved separately: getEmailFrom() ' +
+      'consults the default-from resolver, which a pooled process installs to read registry ' +
+      'email.from, and self-host keeps EMAIL_FROM.',
   },
   {
     file: 'apps/web/src/lib/server/domains/api/openapi.ts',

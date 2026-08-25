@@ -1,4 +1,5 @@
 import {
+  setDefaultFromResolver,
   setEmailLogSink,
   setEmailPoweredByResolver,
   type EmailLogSinkEntry,
@@ -6,6 +7,7 @@ import {
 import type { ConversationId, PostId, TicketId } from '@quackback/ids'
 import { db, emailLog } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
+import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
 
 const log = logger.child({ component: 'email-log' })
 
@@ -77,4 +79,5 @@ export function ensureEmailLogSink(): void {
     const { shouldShowPoweredBy } = await import('@/lib/server/domains/settings/cloud/powered-by')
     return shouldShowPoweredBy(await getCloudConfig())
   })
+  setDefaultFromResolver(() => getCurrentWorkspace()?.email.from ?? null)
 }

@@ -85,9 +85,27 @@ describe('a workspace cannot send from another workspace’s verified domain', (
     expect(isSendingIdentityPermitted('security@mail.platform.test', workspaceB)).toBe(false)
   })
 
+  it('permits the workspace registry From when it differs from EMAIL_FROM', () => {
+    const registryFrom = {
+      ...workspaceB,
+      platformFrom: 'Alpha <noreply@alpha.notifications.test>',
+    }
+    expect(isSendingIdentityPermitted('noreply@alpha.notifications.test', registryFrom)).toBe(true)
+    expect(isSendingIdentityPermitted('notifications@mail.platform.test', registryFrom)).toBe(false)
+  })
+
   it('refuses when the workspace has no slug to be recognised by', () => {
     const unscoped = { ...workspaceB, mailSlug: null }
     expect(isSendingIdentityPermitted('beta@mail.platform.test', unscoped)).toBe(false)
+  })
+
+  it('uses the scoped workspace From as platformFrom', async () => {
+    vi.stubEnv('EMAIL_FROM', 'Fleet <noreply@fleet.example>')
+    const identity = await withWorkspace('inst_alpha', () =>
+      permittedSendingIdentity('support@inst_alpha.example.com')
+    )
+    expect(identity).toBe('support@inst_alpha.example.com')
+    vi.unstubAllEnvs()
   })
 
   it('permits anything on a single-workspace install', () => {
