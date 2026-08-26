@@ -547,7 +547,8 @@ export async function getSendingAddress(
  * The sending address an outbound message for a conversation should come from
  * (§4.8): the conversation's assigned team's sending address for the module, else
  * the default team's, else null so the caller falls back to the workspace default
- * (EMAIL_FROM). The one place the outbound From is resolved.
+ * (`getEmailFrom()`, registry `email.from` when pooled). The one place the outbound
+ * From is resolved.
  *
  * Every answer passes the sending-identity guard on the way out. A row's mere
  * existence in this database is not authority to send as the address it holds:
