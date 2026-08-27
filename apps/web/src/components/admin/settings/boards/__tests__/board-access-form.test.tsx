@@ -13,6 +13,8 @@
  *   - Auto-bump when workspace flips off while a cell sits on Anonymous
  *   - Save payload preserves `moderation` round-trip (passthrough only —
  *     editing moderation lives in `<BoardModerationForm>`)
+ *   - Replies switch reads/writes `access.replyPolicy` and round-trips
+ *     every other access key
  *
  * The mutation, segments, and portalConfig queries are mocked. The
  * portalConfig mock is mutable so tests can flip workspace flags between
@@ -497,6 +499,101 @@ describe('<BoardAccessForm> save', () => {
         })
       )
     )
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Replies (access.replyPolicy)
+// ---------------------------------------------------------------------------
+
+describe('<BoardAccessForm> reply policy', () => {
+  const REPLY_LABEL = 'Only the post author and team members can reply'
+
+  function replySwitch() {
+    return screen.getByRole('switch', { name: REPLY_LABEL })
+  }
+
+  it('renders the Replies switch off when access.replyPolicy is absent', () => {
+    renderForm(PUBLIC_ACCESS)
+    expect(replySwitch()).toHaveAttribute('data-state', 'unchecked')
+  })
+
+  it("renders the Replies switch off for an explicit replyPolicy: 'anyone'", () => {
+    renderForm({ ...PUBLIC_ACCESS, replyPolicy: 'anyone' })
+    expect(replySwitch()).toHaveAttribute('data-state', 'unchecked')
+  })
+
+  it("renders the Replies switch on for replyPolicy: 'author-only'", () => {
+    renderForm({ ...PUBLIC_ACCESS, replyPolicy: 'author-only' })
+    expect(replySwitch()).toHaveAttribute('data-state', 'checked')
+  })
+
+  it('toggling the switch marks the form dirty and surfaces the save dock', () => {
+    renderForm(PUBLIC_ACCESS)
+    expect(
+      screen.getByRole('region', { name: /save changes/i }).getAttribute('data-dirty')
+    ).toBeNull()
+    fireEvent.click(replySwitch())
+    expect(screen.getByRole('region', { name: /save changes/i }).getAttribute('data-dirty')).toBe(
+      'true'
+    )
+    expect(replySwitch()).toHaveAttribute('data-state', 'checked')
+  })
+
+  it("saves replyPolicy: 'author-only' while every other access key is unchanged", async () => {
+    const access: BoardAccess = {
+      view: 'anonymous',
+      vote: 'authenticated',
+      comment: 'authenticated',
+      submit: 'segments',
+      segments: { view: [], vote: [], comment: [], submit: ['seg_alpha'] },
+      moderation: { anonPosts: 'on', signedPosts: 'inherit', comments: 'off' },
+    }
+    renderForm(access)
+    fireEvent.click(replySwitch())
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }))
+    await waitFor(() =>
+      expect(mutate).toHaveBeenCalledWith({
+        boardId: BOARD_ID,
+        access: { ...access, replyPolicy: 'author-only' },
+      })
+    )
+  })
+
+  it("switching off writes an explicit replyPolicy: 'anyone'", async () => {
+    const access: BoardAccess = { ...PUBLIC_ACCESS, replyPolicy: 'author-only' }
+    renderForm(access)
+    fireEvent.click(replySwitch())
+    expect(replySwitch()).toHaveAttribute('data-state', 'unchecked')
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }))
+    await waitFor(() =>
+      expect(mutate).toHaveBeenCalledWith({
+        boardId: BOARD_ID,
+        access: { ...access, replyPolicy: 'anyone' },
+      })
+    )
+  })
+
+  it('saving a tier change preserves an existing author-only replyPolicy', async () => {
+    const access: BoardAccess = { ...PUBLIC_ACCESS, replyPolicy: 'author-only' }
+    renderForm(access)
+    // Edit the matrix only — the reply switch is untouched.
+    clickTierCell('Comment', 'Team only')
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }))
+    await waitFor(() =>
+      expect(mutate).toHaveBeenCalledWith({
+        boardId: BOARD_ID,
+        access: { ...access, comment: 'team' },
+      })
+    )
+  })
+
+  it('Discard restores the original reply policy', () => {
+    renderForm({ ...PUBLIC_ACCESS, replyPolicy: 'author-only' })
+    fireEvent.click(replySwitch())
+    expect(replySwitch()).toHaveAttribute('data-state', 'unchecked')
+    fireEvent.click(screen.getByRole('button', { name: /discard/i }))
+    expect(replySwitch()).toHaveAttribute('data-state', 'checked')
   })
 })
 

@@ -3,6 +3,7 @@ import {
   ACCESS_TIERS,
   ACCESS_TIER_RANK,
   MODERATION_RULE_VALUES,
+  REPLY_POLICIES,
   type BoardAccess,
 } from '@/lib/shared/db-types'
 
@@ -32,6 +33,11 @@ const INHERIT_MODERATION = {
 /**
  * Fill leftover board.access rows that predate vote/comment/moderation.
  * Missing moderation is inherit (workspace default), not a crash.
+ *
+ * `replyPolicy` is PRESERVED when present and never injected when absent:
+ * absent is already the permissive default (resolveReplyPolicy), and adding
+ * the key here would make a normalized legacy row stop deep-equalling
+ * DEFAULT_BOARD_ACCESS.
  */
 export function normalizeBoardAccess(access: Partial<BoardAccess> | null | undefined): BoardAccess {
   const view = access?.view ?? 'team'
@@ -56,6 +62,7 @@ export function normalizeBoardAccess(access: Partial<BoardAccess> | null | undef
       signedPosts: moderation?.signedPosts ?? INHERIT_MODERATION.signedPosts,
       comments: moderation?.comments ?? INHERIT_MODERATION.comments,
     },
+    ...(access?.replyPolicy ? { replyPolicy: access.replyPolicy } : {}),
   }
 }
 
@@ -111,6 +118,7 @@ export type DeleteBoardInput = z.infer<typeof deleteBoardSchema>
 
 const tierSchema = z.enum(ACCESS_TIERS)
 const moderationRuleSchema = z.enum(MODERATION_RULE_VALUES)
+const replyPolicySchema = z.enum(REPLY_POLICIES)
 
 /**
  * Validation for the per-action `BoardAccess` payload
@@ -131,6 +139,11 @@ const moderationRuleSchema = z.enum(MODERATION_RULE_VALUES)
  * Moderation rules are tri-state (`inherit | on | off`) — see
  * resolveModerationRule in policy/posts.ts for how `inherit` resolves
  * against the workspace requireApproval default.
+ *
+ * `replyPolicy` is optional: an omitted key is the permissive default
+ * (`'anyone'`), so a board that never touches the setting keeps writing the
+ * exact shape it always did. It carries no tier-rank invariant — it narrows
+ * WHO may reply within the comment tier, per post, and never widens it.
  */
 export const boardAccessSchema = z
   .object({
@@ -149,6 +162,7 @@ export const boardAccessSchema = z
       signedPosts: moderationRuleSchema,
       comments: moderationRuleSchema,
     }),
+    replyPolicy: replyPolicySchema.optional(),
   })
   .superRefine((val, ctx) => {
     if (ACCESS_TIER_RANK[val.vote] < ACCESS_TIER_RANK[val.view]) {

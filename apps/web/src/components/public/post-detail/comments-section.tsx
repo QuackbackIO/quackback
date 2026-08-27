@@ -149,6 +149,11 @@ export function CommentsSection({
   // Use server-detected team membership when not in explicit admin mode
   const effectiveIsTeamMember = isTeamMember ?? data?.isTeamMember ?? false
 
+  // Why the composer is closed on an author-only board. Undefined in admin mode
+  // (the query is disabled there), which the thread reads as 'anyone' — admin
+  // commenting is unaffected by the board's reply rule.
+  const replyPolicy = data?.replyPolicy
+
   return (
     <div
       className="p-6 animate-in fade-in duration-200 fill-mode-backwards"
@@ -168,6 +173,7 @@ export function CommentsSection({
         postId={postId}
         comments={comments}
         allowCommenting={allowCommenting}
+        replyPolicy={replyPolicy}
         user={adminUser ?? data?.user}
         lockedMessage={lockedMessage}
         pinnedCommentId={pinnedCommentId}

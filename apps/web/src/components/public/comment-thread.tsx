@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useIntl } from 'react-intl'
+import { FormattedMessage, useIntl } from 'react-intl'
 import {
   ArrowRightIcon,
   ArrowUturnLeftIcon,
@@ -33,7 +33,7 @@ import { CommentForm, type CreateCommentMutation } from './comment-form'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { COMMENT_EDITOR_FEATURES } from './comment-editor-features'
 import { commentMarkdownToTiptapJson } from '@/lib/server/markdown-tiptap'
-import type { TiptapContent } from '@/lib/shared/db-types'
+import type { ReplyPolicy, TiptapContent } from '@/lib/shared/db-types'
 import type { PostCommentId, PostId, PrincipalId } from '@quackback/ids'
 import { InlineModerationActions } from '@/components/shared/inline-moderation-actions'
 import { useApproveComment, useRejectComment } from '@/lib/client/mutations/moderation'
@@ -113,6 +113,12 @@ interface CommentThreadProps {
    * authn): show "You don't have access" instead of a sign-in prompt.
    */
   noAccess?: boolean
+  /**
+   * The board's reply rule, as reported by the server. `'author-only'` narrows
+   * the `noAccess` notice from the generic tier denial to "this thread belongs
+   * to its author". Undefined (admin mode, legacy payloads) means `'anyone'`.
+   */
+  replyPolicy?: ReplyPolicy
   user?: { name: string | null; email: string; principalId?: PrincipalId }
   /** Logo URL for the team badge (from branding settings) */
   teamBadgeLogoUrl?: string
@@ -166,6 +172,7 @@ export function CommentThread({
   comments,
   allowCommenting = true,
   noAccess = false,
+  replyPolicy,
   user,
   teamBadgeLogoUrl,
   teamBadgeLabel,
@@ -222,6 +229,25 @@ export function CommentThread({
         <div className="flex items-center justify-center gap-3 py-4 px-4 bg-muted/30 [border-radius:var(--radius)] border border-border/30">
           <LockClosedIcon className="h-4 w-4 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">{lockedMessage}</p>
+        </div>
+      )
+    }
+
+    // Signed in but denied because the board only lets each post's own author
+    // (and the team) reply. Name that rule instead of the generic tier denial —
+    // the viewer's account is fine, this thread just isn't theirs. Signed-out
+    // viewers fall through to the sign-in CTA below: they may yet sign in as
+    // the author.
+    if (noAccess && replyPolicy === 'author-only') {
+      return (
+        <div className="flex items-center justify-center gap-3 py-4 px-4 bg-muted/30 [border-radius:var(--radius)] border border-border/30">
+          <LockClosedIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+          <p className="text-sm text-muted-foreground">
+            <FormattedMessage
+              id="portal.commentThread.authorOnlyReplies"
+              defaultMessage="Only the post author and team members can reply on this board"
+            />
+          </p>
         </div>
       )
     }

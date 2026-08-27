@@ -282,13 +282,22 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
           </div>
 
           {/* Identified viewer denied by the board's comment tier (segments/team)
-              — authorization, not auth: state it, no form or login prompt. */}
+              — authorization, not auth: state it, no form or login prompt. An
+              author-only board names that rule instead: the account is fine,
+              this thread just isn't the viewer's. */}
           {!post.isCommentsLocked && commentNoAccess && (
             <p className="text-xs text-muted-foreground/70 mb-3">
-              <FormattedMessage
-                id="widget.postDetail.commentNoAccess"
-                defaultMessage="You don't have access to comment on this board"
-              />
+              {post.replyPolicy === 'author-only' ? (
+                <FormattedMessage
+                  id="widget.postDetail.authorOnlyReplies"
+                  defaultMessage="Only the post author and team members can reply on this board"
+                />
+              ) : (
+                <FormattedMessage
+                  id="widget.postDetail.commentNoAccess"
+                  defaultMessage="You don't have access to comment on this board"
+                />
+              )}
             </p>
           )}
 
