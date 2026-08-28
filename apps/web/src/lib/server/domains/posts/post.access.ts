@@ -36,6 +36,27 @@ export async function loadBoardAccessForPost(postId: PostId) {
   return rows[0]?.access ?? null
 }
 
+/**
+ * Same resolution as {@link loadBoardAccessForPost}, plus the post's own
+ * author and moderation state — the inputs a PER-POST comment capability
+ * needs (`canCommentOnPost`): an author-only board decides the reply right
+ * against the real post's author, which the board matrix alone can't answer.
+ * Returns null on the same soft-delete/missing conditions.
+ */
+export async function loadCommentContextForPost(postId: PostId) {
+  const rows = await db
+    .select({
+      access: boards.access,
+      moderationState: posts.moderationState,
+      principalId: posts.principalId,
+    })
+    .from(posts)
+    .innerJoin(boards, eq(posts.boardId, boards.id))
+    .where(and(eq(posts.id, postId), isNull(posts.deletedAt), isNull(boards.deletedAt)))
+    .limit(1)
+  return rows[0] ?? null
+}
+
 export async function assertPostViewable(postId: PostId, actor: Actor): Promise<void> {
   // Fetch only the fields the policy needs. Soft-deleted post or board
   // is treated as "doesn't exist" — the join uses INNER + isNull

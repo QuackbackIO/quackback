@@ -129,6 +129,15 @@ export const ACCESS_TIER_RANK: Record<AccessTier, number> = {
 export const MODERATION_RULE_VALUES = ['inherit', 'on', 'off'] as const
 export type ModerationRuleValue = (typeof MODERATION_RULE_VALUES)[number]
 
+/** Who may reply on a board's threads, on top of the `comment` tier.
+ *   - `anyone`      — today's behaviour: the comment tier alone decides.
+ *   - `author-only` — only each post's own author and the team may reply.
+ *  Everyone the view tier admits still reads every thread in full — each
+ *  thread stays a publicly readable conversation between its author and
+ *  the team. */
+export const REPLY_POLICIES = ['anyone', 'author-only'] as const
+export type ReplyPolicy = (typeof REPLY_POLICIES)[number]
+
 export interface BoardAccess {
   view: AccessTier
   vote: AccessTier
@@ -152,6 +161,12 @@ export interface BoardAccess {
     signedPosts: ModerationRuleValue
     comments: ModerationRuleValue
   }
+  /** Optional reply restriction (see {@link REPLY_POLICIES}). Absent means
+   *  `'anyone'` — read it through {@link resolveReplyPolicy}, never directly.
+   *  Deliberately optional and ABSENT from {@link DEFAULT_BOARD_ACCESS}: the
+   *  column default is byte-pinned to its migration literal, so keeping the
+   *  key out of the default is what lets this ship without a migration. */
+  replyPolicy?: ReplyPolicy
 }
 
 // Key order is jsonb-canonical (length, then bytewise) so the serialized
@@ -569,6 +584,17 @@ export function needsCloudOnboardingWizard(setupState: SetupState | null): boole
   if (!setupState || setupState.completionSource !== 'managed') return false
   if (!setupState.workspaceDetailsSeenAt) return true
   return setupState.steps.startingPoint?.source === 'managed'
+}
+
+/**
+ * Resolve a board's reply policy. Every row that predates the setting (and
+ * every board that never enabled it) carries no key, which means the
+ * permissive default — so absent, null and undefined all read as `'anyone'`.
+ */
+export function resolveReplyPolicy(
+  access: { replyPolicy?: ReplyPolicy } | null | undefined
+): ReplyPolicy {
+  return access?.replyPolicy ?? 'anyone'
 }
 
 // Helper to get typed board settings

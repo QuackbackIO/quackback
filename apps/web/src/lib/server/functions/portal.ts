@@ -11,6 +11,9 @@ import {
   type UserId,
 } from '@quackback/ids'
 import type { BoardSettings, BoardAccess } from '@/lib/server/db'
+// Pure helper + its type, imported through the client-safe re-export so suites
+// that mock '@/lib/server/db' don't have to stub them.
+import { resolveReplyPolicy, type ReplyPolicy } from '@/lib/shared/db-types'
 import type { Actor } from '@/lib/server/policy'
 import {
   getOptionalAuth,
@@ -379,9 +382,17 @@ export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
     // per-board tier + the workspace anonymous ceiling (non-user actors only),
     // so the UI never advertises a vote/comment CTA the board's tier rejects
     // (#191). canSubmit is unused on the detail view.
-    const { boardCapabilitiesForActor } = await import('@/lib/server/policy')
-    const { canVote, canComment } = boardCapabilitiesForActor(
+    const { boardCapabilitiesForActor, canCommentOnPost } = await import('@/lib/server/policy')
+    const { canVote } = boardCapabilitiesForActor(actor, result.boardAccess, allowAnonymous)
+    // canComment is per-POST: on an author-only board the reply right turns on
+    // this post's own author, which the board-level capability can't see. View
+    // is already proven (getPublicPostDetail returned a row for this actor), so
+    // moderationState='published' keeps the inner view check a no-op and the
+    // decision reflects the comment gates — same convention as the vote gate in
+    // public-posts.ts.
+    const canComment = canCommentOnPost(
       actor,
+      { moderationState: 'published', principalId: result.principalId },
       result.boardAccess,
       allowAnonymous
     )
@@ -404,6 +415,11 @@ export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
       mergedPostCount: mergedPostsList.length > 0 ? mergedPostsList.length : undefined,
       canVote,
       canComment,
+      // The board's reply rule, so a denied viewer can be told WHY the composer
+      // is closed ("only the author and the team can reply") instead of getting
+      // the generic no-access notice. Safe to expose: it is a public property of
+      // the board, unlike the access matrix stripped above.
+      replyPolicy: resolveReplyPolicy(result.boardAccess),
     }
   })
 
@@ -653,7 +669,15 @@ export const getCommentsSectionDataFn = createServerFn({ method: 'GET' })
   .validator(getCommentsSectionDataSchema)
   .handler(async ({ data }) => {
     log.debug({ post_id: data.postId }, 'get comments section data')
-    const denied = { isMember: false, isTeamMember: false, canComment: false, user: undefined }
+    // replyPolicy rides the denied shape too, so the response type stays one
+    // object rather than a union the client has to narrow before reading it.
+    const denied = {
+      isMember: false,
+      isTeamMember: false,
+      canComment: false,
+      user: undefined,
+      replyPolicy: 'anyone' as ReplyPolicy,
+    }
     const postId = data.postId as PostId
 
     // Portal-visibility gate: a caller who can't see the portal must not
@@ -674,16 +698,17 @@ export const getCommentsSectionDataFn = createServerFn({ method: 'GET' })
       throw err
     }
 
-    // Per-board comment capability for the real actor, composed with the
-    // workspace anonymous ceiling. boardCapabilitiesForActor is the single
-    // source of truth the portal + widget UIs share, so the CTA can't desync
-    // from the server-side canCreateComment gate (it passes a published,
-    // unlocked post internally — assertPostViewable already proved view, and
-    // comments-locked is handled by the component's lockedMessage).
-    const { loadBoardAccessForPost } = await import('@/lib/server/domains/posts/post.access')
-    const { boardCapabilitiesForActor } = await import('@/lib/server/policy')
-    const boardAccess = await loadBoardAccessForPost(postId)
-    if (!boardAccess) return denied
+    // Per-POST comment capability for the real actor, composed with the
+    // workspace anonymous ceiling. canCommentOnPost is the single source of
+    // truth the portal + widget UIs share, so the CTA can't desync from the
+    // server-side canCreateComment gate. It needs the post's own author (an
+    // author-only board decides the reply right against it) alongside the
+    // board matrix, so the row carries all three; comments-locked stays out
+    // and is handled by the component's lockedMessage.
+    const { loadCommentContextForPost } = await import('@/lib/server/domains/posts/post.access')
+    const { canCommentOnPost } = await import('@/lib/server/policy')
+    const commentContext = await loadCommentContextForPost(postId)
+    if (!commentContext) return denied
 
     // The workspace anonymous ceiling only applies to non-user actors, so
     // only real anonymous / no-session viewers need the (uncached) config
@@ -694,7 +719,15 @@ export const getCommentsSectionDataFn = createServerFn({ method: 'GET' })
     if (actor.principalType !== 'user') {
       allowAnonymous = await loadAllowAnonymous()
     }
-    const canComment = boardCapabilitiesForActor(actor, boardAccess, allowAnonymous).canComment
+    const canComment = canCommentOnPost(
+      actor,
+      {
+        moderationState: commentContext.moderationState,
+        principalId: commentContext.principalId,
+      },
+      commentContext.access,
+      allowAnonymous
+    )
 
     const isMember = !!(ctx?.user && ctx?.principal)
     const isTeamMember =
@@ -707,6 +740,10 @@ export const getCommentsSectionDataFn = createServerFn({ method: 'GET' })
       user: isMember
         ? { name: ctx.user.name, email: ctx.user.email, principalId: ctx.principal.id }
         : undefined,
+      // Why the composer is closed, when it is: an author-only board tells the
+      // signed-in non-author that the thread is the author's, instead of the
+      // generic "you can't comment here" notice.
+      replyPolicy: resolveReplyPolicy(commentContext.access),
     }
   })
 

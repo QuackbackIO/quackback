@@ -607,6 +607,107 @@ describe('canCreateComment — isCommentsLocked gate', () => {
   })
 })
 
+describe('canCreateComment — author-only reply policy', () => {
+  // An author-only board keeps every thread readable by whoever the view tier
+  // admits, but only the post's own author (and the team) may answer.
+  const AUTHOR_ONLY_DENY = 'Only the post author and team members can reply on this board'
+  const OTHER = 'p_other' as PrincipalId
+
+  const authorOnly = (overrides: Partial<BoardAccess> = {}): { access: BoardAccess } => ({
+    access: { ...mkAccess('anonymous'), replyPolicy: 'author-only', ...overrides },
+  })
+  const post = (principalId: PrincipalId | null, isCommentsLocked = false) => ({
+    moderationState: 'published' as ModerationState,
+    principalId,
+    isCommentsLocked,
+  })
+
+  it('the post author CAN reply on their own thread', () => {
+    expect(canCreateComment(portal, post(portal.principalId), authorOnly(), 'none')).toEqual({
+      allowed: true,
+      requiresApproval: false,
+    })
+  })
+
+  it('another signed-in user is denied with the author-only reason', () => {
+    const d = canCreateComment(portal, post(OTHER), authorOnly(), 'none')
+    expect(d.allowed).toBe(false)
+    if (!d.allowed) expect(d.reason).toBe(AUTHOR_ONLY_DENY)
+  })
+
+  it('admin and member reply on anyone’s thread (same bypass as the comments lock)', () => {
+    expect(canCreateComment(admin, post(OTHER), authorOnly(), 'none').allowed).toBe(true)
+    expect(canCreateComment(member, post(OTHER), authorOnly(), 'none').allowed).toBe(true)
+  })
+
+  it('an anonymous viewer is denied even on an anonymously-authored post (null !== null)', () => {
+    // Critical, and the same guard canViewPost's own-pending hatch needs: a
+    // falsy-equal author check would hand every principal-less viewer the
+    // author's reply right on every anonymous post.
+    const d = canCreateComment(anon, post(null), authorOnly(), 'none')
+    expect(d.allowed).toBe(false)
+    if (!d.allowed) expect(d.reason).toBe(AUTHOR_ONLY_DENY)
+  })
+
+  it('a service principal is denied on someone else’s thread but may reply on its own', () => {
+    expect(canCreateComment(service, post(OTHER), authorOnly(), 'none').allowed).toBe(false)
+    expect(canCreateComment(service, post(service.principalId), authorOnly(), 'none').allowed).toBe(
+      true
+    )
+  })
+
+  it("an absent replyPolicy key behaves as 'anyone' (today's boards are unchanged)", () => {
+    expect(canCreateComment(portal, post(OTHER), publicBoard, 'none').allowed).toBe(true)
+  })
+
+  it("an explicit 'anyone' behaves exactly like the absent key", () => {
+    const anyone = authorOnly({ replyPolicy: 'anyone' })
+    expect(canCreateComment(portal, post(OTHER), anyone, 'none').allowed).toBe(true)
+  })
+
+  it('the comment tier still denies first — the policy narrows, it never widens', () => {
+    const d = canCreateComment(
+      portal,
+      post(portal.principalId),
+      authorOnly({ comment: 'team' }),
+      'none'
+    )
+    expect(d.allowed).toBe(false)
+    if (!d.allowed) expect(d.reason).toBe('Only team members can comment on this board')
+  })
+
+  it('lock beats author: the author is denied on their own LOCKED post', () => {
+    const d = canCreateComment(portal, post(portal.principalId, true), authorOnly(), 'none')
+    expect(d.allowed).toBe(false)
+    if (!d.allowed) expect(d.reason).toMatch(/locked/i)
+  })
+
+  it('a non-author on a locked author-only board gets the reply-policy reason (checked first)', () => {
+    const d = canCreateComment(portal, post(OTHER, true), authorOnly(), 'none')
+    expect(d.allowed).toBe(false)
+    if (!d.allowed) expect(d.reason).toBe(AUTHOR_ONLY_DENY)
+  })
+
+  it("the author's own reply is still held when moderation.comments='on'", () => {
+    const held = authorOnly({
+      moderation: { anonPosts: 'inherit', signedPosts: 'inherit', comments: 'on' },
+    })
+    expect(canCreateComment(portal, post(portal.principalId), held, 'none')).toEqual({
+      allowed: true,
+      requiresApproval: true,
+    })
+  })
+
+  it('the author can reply on their own PENDING post (view hatch composes)', () => {
+    const ownPending = {
+      moderationState: 'pending' as ModerationState,
+      principalId: portal.principalId,
+      isCommentsLocked: false,
+    }
+    expect(canCreateComment(portal, ownPending, authorOnly(), 'none').allowed).toBe(true)
+  })
+})
+
 describe('canCreateComment — board.access.comment tier gates commenting independent of view', () => {
   const publishedPost = {
     moderationState: 'published' as ModerationState,
