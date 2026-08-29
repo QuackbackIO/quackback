@@ -174,23 +174,30 @@ describe('getPlanNotice — the trial countdown', () => {
     )
   })
 
-  it('keeps a calm ended banner for seven days after expiry', async () => {
+  it('keeps a persistent ended banner after expiry', async () => {
     vi.setSystemTime(AFTER)
     hoisted.mockFetchCatalogue.mockResolvedValue({ lastTrialPlanId: 'pro' })
     hoisted.mockGetWorkspaceSettings.mockResolvedValue({ settings: { cloud: trialing } })
     await expect(getPlanNoticeHandler()).resolves.toEqual(
       expect.objectContaining({
-        label: 'Pro trial',
-        dismissible: true,
-        actionLabel: 'Continue with Pro',
+        label: 'Pro trial ended',
+        ended: true,
+        actionLabel: 'Update billing',
       })
     )
   })
 
-  it('drops the ended banner after seven days, with the row unchanged', async () => {
+  it('still shows the ended banner more than seven days later', async () => {
     vi.setSystemTime(new Date('2026-03-23T00:00:00.000Z'))
+    hoisted.mockFetchCatalogue.mockResolvedValue({ lastTrialPlanId: 'pro' })
     hoisted.mockGetWorkspaceSettings.mockResolvedValue({ settings: { cloud: trialing } })
-    await expect(getPlanNoticeHandler()).resolves.toBeNull()
+    await expect(getPlanNoticeHandler()).resolves.toEqual(
+      expect.objectContaining({
+        label: 'Pro trial ended',
+        ended: true,
+        actionLabel: 'Update billing',
+      })
+    )
   })
 
   it('never talks over a notice the operator set', async () => {
