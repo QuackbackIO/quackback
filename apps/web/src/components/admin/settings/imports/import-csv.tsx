@@ -103,6 +103,8 @@ export function ImportCsv() {
     if (step === 'committing' && run && !IN_FLIGHT_RUN_STATUSES.has(run.status)) {
       setStep(run.status === 'completed' ? 'done' : 'failed')
       void queryClient.invalidateQueries({ queryKey: ['import-runs'] })
+      void queryClient.invalidateQueries({ queryKey: adminQueries.boardsForSettings().queryKey })
+      void queryClient.invalidateQueries({ queryKey: adminQueries.boardsWithCounts().queryKey })
     }
   }, [step, run, queryClient])
 
