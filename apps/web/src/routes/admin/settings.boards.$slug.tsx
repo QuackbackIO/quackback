@@ -47,10 +47,14 @@ export const Route = createFileRoute('/admin/settings/boards/$slug')({
     // on first paint (no flash). portalConfig backs the Moderation tab's
     // inherit-from-workspace pills and the Access tab's workspace ceiling;
     // without prefetch the moderation pills flicker Off -> the real default.
-    const [boards] = await Promise.all([
+    const [cachedBoards] = await Promise.all([
       queryClient.ensureQueryData(adminQueries.boardsForSettings()),
       queryClient.ensureQueryData(settingsQueries.portalConfig()),
     ])
+    let boards = cachedBoards
+    if (!boards.some((b) => b.slug === params.slug)) {
+      boards = await queryClient.fetchQuery(adminQueries.boardsForSettings())
+    }
     if (!boards.some((b) => b.slug === params.slug)) {
       throw redirect({ to: '/admin/settings/boards' })
     }

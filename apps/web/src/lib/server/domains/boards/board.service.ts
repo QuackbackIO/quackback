@@ -345,7 +345,7 @@ export async function listBoards(): Promise<Board[]> {
 }
 
 /**
- * List all boards with post counts (excludes soft-deleted)
+ * List all boards with post counts (excludes soft-deleted and merged duplicates)
  */
 export async function listBoardsWithDetails(): Promise<BoardWithDetails[]> {
   // Get all active boards ordered by name
@@ -366,7 +366,9 @@ export async function listBoardsWithDetails(): Promise<BoardWithDetails[]> {
       count: sql<number>`count(*)`.as('count'),
     })
     .from(posts)
-    .where(and(inArray(posts.boardId, boardIds), sql`${posts.deletedAt} IS NULL`))
+    .where(
+      and(inArray(posts.boardId, boardIds), isNull(posts.deletedAt), isNull(posts.canonicalPostId))
+    )
     .groupBy(posts.boardId)
 
   // Create a map of board ID -> post count
