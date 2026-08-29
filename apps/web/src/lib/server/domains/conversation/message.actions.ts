@@ -97,6 +97,29 @@ async function publishMessageUpdated(
   return { reactions: enriched.reactions, flaggedAt: enriched.flaggedAt }
 }
 
+/** Fan a freshly persisted metadata change (channel delivery ticks, etc.) to
+ *  every agent's open thread. Uses the message author as the reaction viewer
+ *  so counts ride along; each client overlays its own hasReacted. */
+export async function broadcastInboxMessageUpdated(message: ConversationMessage): Promise<void> {
+  if (!message.conversationId) return
+  const viewerId = message.principalId
+  if (!viewerId) {
+    publishAgentConversationEvent({
+      kind: 'message_updated',
+      conversationId: message.conversationId,
+      message: {
+        ...toMessageDTO(message, null),
+        reactions: [],
+        flaggedAt: null,
+        postSuggestion: null,
+        translatedFrom: null,
+      },
+    })
+    return
+  }
+  await publishMessageUpdated(message, viewerId)
+}
+
 /** Add an emoji reaction (idempotent via the unique index). */
 export async function addMessageReaction(
   messageId: ConversationMessageId,

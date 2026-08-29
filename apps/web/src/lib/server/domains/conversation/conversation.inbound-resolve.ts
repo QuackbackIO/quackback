@@ -39,6 +39,24 @@ export async function lookupChannelThread(
   return row?.conversationId ?? null
 }
 
+export async function lookupChannelThreadByConversation(
+  conversationId: ConversationId
+): Promise<{ channelAccountId: ChannelAccountId; externalThreadKey: string } | null> {
+  const [row] = await db
+    .select({
+      channelAccountId: channelThreads.channelAccountId,
+      externalThreadKey: channelThreads.externalThreadKey,
+    })
+    .from(channelThreads)
+    .where(eq(channelThreads.conversationId, conversationId))
+    .limit(1)
+  if (!row) return null
+  return {
+    channelAccountId: row.channelAccountId as ChannelAccountId,
+    externalThreadKey: row.externalThreadKey,
+  }
+}
+
 export async function rememberChannelThread(input: {
   channelAccountId: ChannelAccountId
   externalThreadKey: string

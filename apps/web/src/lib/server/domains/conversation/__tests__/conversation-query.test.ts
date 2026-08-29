@@ -214,6 +214,33 @@ describe('toMessageDTO', () => {
     expect(dto).not.toHaveProperty('reactions')
     expect(dto).not.toHaveProperty('flaggedAt')
   })
+
+  it('maps channelDelivery from metadata and defaults to null', () => {
+    const pending = {
+      status: 'pending' as const,
+      channel: 'github' as const,
+      at: '2026-08-29T12:00:00.000Z',
+    }
+    const dto = toMessageDTO(makeMessage({ metadata: { channelDelivery: pending } }), visitorAuthor)
+    expect(dto.channelDelivery).toEqual(pending)
+    expect(toMessageDTO(makeMessage({ metadata: null }), visitorAuthor).channelDelivery).toBeNull()
+  })
+
+  it('treats a stored GitHub comment id on an agent reply as already sent', () => {
+    const dto = toMessageDTO(
+      makeMessage({
+        senderType: 'agent',
+        metadata: { source: 'github', githubCommentId: '5462483061' },
+      }),
+      visitorAuthor
+    )
+    expect(dto.channelDelivery).toEqual({
+      status: 'sent',
+      channel: 'github',
+      at: '2026-01-02T03:04:05.000Z',
+      externalId: '5462483061',
+    })
+  })
 })
 
 describe('enrichMessagesForAgent', () => {

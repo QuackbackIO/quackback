@@ -1730,6 +1730,13 @@
       "when": 1785700000027,
       "tag": "0269_messenger_ai_default_on",
       "breakpoints": true
+    },
+    {
+      "idx": 247,
+      "version": "7",
+      "when": 1785700000028,
+      "tag": "0270_github_channel",
+      "breakpoints": true
     }
   ]
 }

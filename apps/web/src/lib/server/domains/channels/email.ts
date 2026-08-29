@@ -12,6 +12,7 @@ export const emailAdapter: ChannelAdapter = {
   deliverAgentMessage: (ctx) => deliverAgentMessageOnChannel('email', ctx),
 
   async deliverLifecycleEvent(kind, ctx) {
+    if (kind === 'reopened') return
     const { notifyConversationClosed } =
       await import('@/lib/server/domains/conversation/conversation.notify-closed')
     await notifyConversationClosed({

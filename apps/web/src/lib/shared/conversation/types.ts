@@ -15,6 +15,8 @@ import type {
 // so the client type can never drift from the column's allowed values. Imported
 // locally (used below) and re-exported for the module's consumers.
 import type {
+  Channel,
+  ChannelDelivery,
   ConversationStatus,
   ConversationSystemEvent,
   TiptapContent,
@@ -34,6 +36,7 @@ import type { JsonValue } from '@/lib/shared/json'
 // way) so this adds no new dependency-graph edge to adjudicate.
 import type { TicketDTO } from '@/lib/server/domains/tickets'
 export type {
+  ChannelDelivery,
   ConversationStatus,
   ConversationSystemEvent,
   ConversationEndReason,
@@ -49,7 +52,7 @@ export type ConversationSide = Exclude<MessageSenderType, 'system'>
 /** The surface a conversation is currently conducted on — mirrors the
  *  conversations.channel column enum. It follows the customer between surfaces;
  *  for how the thread originally arrived, read `source`. */
-export type Channel = 'messenger' | 'email'
+export type { Channel }
 
 /**
  * @deprecated Migration-only shape. One weekday's availability window in the
@@ -147,6 +150,10 @@ export interface ConversationMessageDTO {
   contentJson: TiptapContent | null
   /** True when this message arrived via the email channel (inbound reply). */
   viaEmail: boolean
+  /** Outbound delivery onto a thread-addressed channel (GitHub issue, etc.).
+   *  Null/absent for messenger, email, inbound, and notes. Optional so existing
+   *  fixtures do not all need updating; toMessageDTO always sets it. */
+  channelDelivery?: ChannelDelivery | null
   /** Structured event for a 'system' message, so clients can localize it; null
    *  for ordinary messages (and legacy system rows, which fall back to content). */
   systemEvent: ConversationSystemEvent | null
@@ -390,11 +397,7 @@ export type AssistantActivityStatus = 'thinking' | 'searching_kb' | 'reviewing_c
  *  ASSISTANT_INVOLVEMENT_STATUSES; inlined here so the browser-safe module has
  *  no server import). */
 export type AssistantInvolvementOutcome =
-  | 'active'
-  | 'handed_off'
-  | 'resolved_confirmed'
-  | 'resolved_assumed'
-  | 'abandoned'
+  'active' | 'handed_off' | 'resolved_confirmed' | 'resolved_assumed' | 'abandoned'
 
 /** Short, teammate-facing phrasing for why Quinn handed off (keys mirror the db
  *  ASSISTANT_HANDOFF_REASONS). Single source for the escalation note + the agent

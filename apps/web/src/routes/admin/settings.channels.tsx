@@ -2,6 +2,7 @@ import { createFileRoute, Link, redirect } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { ChatBubbleLeftRightIcon, EnvelopeIcon } from '@heroicons/react/24/solid'
+import { GitHubIcon } from '@/components/icons/integration-icons'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
@@ -17,6 +18,7 @@ import {
   getEmailChannelStatusFn,
   updateConversationRoutingFn,
 } from '@/lib/server/functions/settings'
+import { getGitHubChannelStatusFn } from '@/integrations/github/server/functions'
 import { useQuery } from '@tanstack/react-query'
 import { getChannelDescriptor } from '@/lib/shared/channels'
 import {
@@ -51,6 +53,11 @@ function ChannelsHubPage() {
     queryFn: () => getEmailChannelStatusFn(),
     staleTime: 60_000,
   })
+  const githubStatusQuery = useQuery({
+    queryKey: ['settings', 'github-channel-status'],
+    queryFn: () => getGitHubChannelStatusFn(),
+    staleTime: 60_000,
+  })
   const routingQuery = useQuery({
     queryKey: ['conversation-routing'],
     queryFn: () => fetchConversationRoutingFn(),
@@ -61,6 +68,7 @@ function ChannelsHubPage() {
   const enabled = routingEnabled ?? routingQuery.data?.enabled ?? false
   const messenger = getChannelDescriptor('messenger')
   const email = getChannelDescriptor('email')
+  const github = getChannelDescriptor('github')
   const messengerOn =
     isWidgetMessengerEnabled(flags, widget.data) ||
     isPortalSupportSurfaceEnabled(flags, portal.data)
@@ -68,6 +76,23 @@ function ChannelsHubPage() {
   const sendingOnly = !receiving && !!emailStatusQuery.data?.fromAddress
   const emailStatus = receiving ? 'Receiving' : sendingOnly ? 'Sending only' : 'Set up'
   const emailSubtitle = emailStatusQuery.data?.inboundDomain ?? 'Add an inbound route'
+  const githubStatus = githubStatusQuery.data
+  const githubAttention =
+    !!githubStatus?.connected &&
+    (!!githubStatus.lastError ||
+      githubStatus.status !== 'active' ||
+      (githubStatus.inboxEnabled && !githubStatus.hasToken))
+  const githubBadge = !githubStatus?.connected
+    ? { label: 'Set up', variant: 'secondary' as const }
+    : githubAttention
+      ? { label: 'Attention', variant: 'destructive' as const }
+      : githubStatus.inboxEnabled
+        ? { label: 'On', variant: 'default' as const }
+        : { label: 'Off', variant: 'secondary' as const }
+  const githubSubtitle =
+    githubStatus?.connected && githubStatus.repo && (githubStatus.inboxEnabled || githubAttention)
+      ? githubStatus.repo
+      : 'Issues as conversations'
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -92,7 +117,7 @@ function ChannelsHubPage() {
               <p className="text-xs text-muted-foreground">Widget and portal</p>
             </div>
           </div>
-          <Badge size="sm" shape="pill">
+          <Badge size="sm" shape="pill" variant={messengerOn ? 'default' : 'secondary'}>
             {messengerOn ? 'On' : 'Off'}
           </Badge>
         </Link>
@@ -107,8 +132,27 @@ function ChannelsHubPage() {
               <p className="text-xs text-muted-foreground">{emailSubtitle}</p>
             </div>
           </div>
-          <Badge size="sm" shape="pill">
+          <Badge
+            size="sm"
+            shape="pill"
+            variant={emailStatus === 'Set up' ? 'secondary' : 'default'}
+          >
             {emailStatus}
+          </Badge>
+        </Link>
+        <Link
+          to="/admin/settings/channels/github"
+          className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/40"
+        >
+          <div className="flex items-center gap-3">
+            <GitHubIcon className="size-4 text-muted-foreground" />
+            <div>
+              <p className="text-sm font-medium">{github?.label ?? 'GitHub'}</p>
+              <p className="text-xs text-muted-foreground">{githubSubtitle}</p>
+            </div>
+          </div>
+          <Badge size="sm" shape="pill" variant={githubBadge.variant}>
+            {githubBadge.label}
           </Badge>
         </Link>
       </div>

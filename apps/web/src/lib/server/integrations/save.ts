@@ -8,6 +8,20 @@ import { getIntegration } from './index'
 import type { IntegrationId, PrincipalId } from '@quackback/ids'
 import { createServicePrincipal } from '@/lib/server/domains/principals/principal.service'
 
+/** Overlay OAuth-returned config onto the stored blob so reconnect cannot
+ *  wipe channelId / webhook ids. Exported for tests. */
+export function mergeIntegrationConfig(
+  existing: Record<string, unknown> | null | undefined,
+  oauthConfig: Record<string, unknown> | undefined,
+  tokenExpiresAt?: Date
+): Record<string, unknown> {
+  return {
+    ...(existing ?? {}),
+    ...(oauthConfig ?? {}),
+    ...(tokenExpiresAt ? { tokenExpiresAt: tokenExpiresAt.toISOString() } : {}),
+  }
+}
+
 export interface SaveIntegrationParams {
   principalId: PrincipalId
   accessToken?: string
@@ -36,16 +50,19 @@ export async function saveIntegration(
   const now = new Date()
   const tokenExpiresAt = expiresIn ? new Date(now.getTime() + expiresIn * 1000) : undefined
 
-  const config = {
-    ...oauthConfig,
-    ...(tokenExpiresAt ? { tokenExpiresAt: tokenExpiresAt.toISOString() } : {}),
-  }
-
-  // Check if integration already exists (for reconnect — keep existing service principal)
+  // Check if integration already exists (for reconnect — keep existing service
+  // principal AND overlay OAuth config onto stored config so reconnect cannot
+  // wipe channelId / webhook ids).
   const existing = await db.query.integrations.findFirst({
     where: eq(integrations.integrationType, integrationType),
-    columns: { principalId: true },
+    columns: { principalId: true, config: true },
   })
+
+  const config = mergeIntegrationConfig(
+    existing?.config as Record<string, unknown> | undefined,
+    oauthConfig,
+    tokenExpiresAt
+  )
 
   // Create service principal if this is a new integration or missing one
   let integrationPrincipalId = existing?.principalId ?? null

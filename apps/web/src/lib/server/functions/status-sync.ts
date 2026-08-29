@@ -110,7 +110,12 @@ export const enableStatusSyncFn = createServerFn({ method: 'POST' })
           { err: error, integration_type: data.integrationType },
           'webhook registration failed'
         )
+        const { recordIntegrationLastError } =
+          await import('@/lib/server/integrations/webhook-registration')
         const raw = error instanceof Error ? error.message : 'Unknown error'
+        await recordIntegrationLastError(integrationId, `Failed to register webhook: ${raw}`).catch(
+          () => {}
+        )
         // Providers reject a second webhook at the same callback URL (Linear:
         // "url not unique"; GitHub: "Hook already exists"). This means a prior
         // status-sync webhook was left registered — surface an actionable
@@ -156,6 +161,20 @@ export const disableStatusSyncFn = createServerFn({ method: 'POST' })
     if (!integration) throw new Error('Integration not found')
 
     const config = (integration.config ?? {}) as Record<string, unknown>
+    if (data.integrationType === 'github') {
+      const { getLiveGitHubConnectionAccount } =
+        await import('@/lib/server/domains/channel-accounts/github-connection')
+      if (await getLiveGitHubConnectionAccount()) {
+        await db
+          .update(integrations)
+          .set({
+            config: { ...config, statusSyncEnabled: false },
+            updatedAt: new Date(),
+          })
+          .where(eq(integrations.id, integrationId))
+        return { success: true }
+      }
+    }
     const externalWebhookId = config.externalWebhookId as string | undefined
 
     // Clean up external webhook if one was registered

@@ -365,6 +365,10 @@ export const conversationMessages = pgTable(
     uniqueIndex('conversation_messages_email_message_id_idx')
       .using('btree', sql`(metadata ->> 'emailMessageId')`)
       .where(sql`(metadata ->> 'emailMessageId') IS NOT NULL`),
+    // Inbound GitHub comment dedupe: one message per REST comment id.
+    uniqueIndex('conversation_messages_github_comment_id_idx')
+      .using('btree', sql`(metadata ->> 'githubCommentId')`)
+      .where(sql`(metadata ->> 'githubCommentId') IS NOT NULL`),
     // Inbound-webhook dedupe: one external-status system note per (ticket,
     // delivery) — a redelivered tracker webhook no-ops instead of double-noting
     // (same idiom as emailMessageId above; one delivery fans to many tickets,

@@ -27,6 +27,9 @@ import {
   AdjustmentsHorizontalIcon,
   LightBulbIcon,
   ArrowTopRightOnSquareIcon,
+  ClockIcon,
+  CheckIcon,
+  ExclamationCircleIcon,
 } from '@heroicons/react/24/solid'
 import { BookmarkIcon, SparklesIcon } from '@heroicons/react/24/outline'
 import { Avatar } from '@/components/ui/avatar'
@@ -53,9 +56,11 @@ import type { TiptapContent, WorkflowBlockPayload } from '@/lib/shared/db-types'
 import type { ConversationMessageId } from '@quackback/ids'
 import type {
   AgentConversationMessageDTO,
+  ChannelDelivery,
   ConversationAttachment,
   ConversationMessageCitation,
 } from '@/lib/shared/conversation/types'
+import { getChannelDescriptor } from '@/lib/shared/channels'
 import type { MessageTranslationDisplay } from '@/lib/shared/conversation/translation'
 import type { BlockState } from '@/components/shared/conversation/conversation-rows'
 import {
@@ -66,6 +71,55 @@ import { PendingActionCard } from '@/components/conversation/pending-action-card
 
 function timeLabel(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+}
+
+function channelDeliveryLabel(delivery: ChannelDelivery): string {
+  const name = getChannelDescriptor(delivery.channel)?.label ?? 'channel'
+  if (delivery.status === 'pending') return `Sending to ${name}`
+  if (delivery.status === 'sent') return `Sent to ${name}`
+  return delivery.error || `Could not send to ${name}`
+}
+
+function ChannelDeliveryTicks({
+  delivery,
+  onRetry,
+}: {
+  delivery: ChannelDelivery
+  onRetry?: () => void
+}) {
+  const label = channelDeliveryLabel(delivery)
+  const failed = delivery.status === 'failed'
+  const icon =
+    delivery.status === 'pending' ? (
+      <ClockIcon className="h-3 w-3 animate-pulse" />
+    ) : delivery.status === 'sent' ? (
+      <CheckIcon className="h-3 w-3" />
+    ) : (
+      <ExclamationCircleIcon className="h-3 w-3" />
+    )
+  if (failed && onRetry) {
+    const retryLabel = label.endsWith('.') ? `${label} Retry` : `${label}. Retry`
+    return (
+      <button
+        type="button"
+        className="inline-flex shrink-0 items-center text-destructive"
+        aria-label={retryLabel}
+        title={retryLabel}
+        onClick={onRetry}
+      >
+        {icon}
+      </button>
+    )
+  }
+  return (
+    <span
+      className={cn('inline-flex shrink-0 items-center', failed && 'text-destructive')}
+      aria-label={label}
+      title={label}
+    >
+      {icon}
+    </span>
+  )
 }
 
 /** `issue_type` -> "Issue type" — good enough for an attribute key with no
@@ -257,6 +311,8 @@ interface AgentMessageBubbleProps {
    *  noise; internal notes and system events never carry it (their own
    *  markers already say what they are). */
   ticketProvenance?: boolean
+  /** Retry a failed GitHub (thread-channel) send. */
+  onRetryChannelDelivery?: (messageId: ConversationMessageId) => void
 }
 
 interface VisitorMessageBubbleProps {
@@ -300,6 +356,7 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
   translation,
   blockState,
   ticketProvenance = false,
+  onRetryChannelDelivery,
 }: AgentMessageBubbleProps) {
   // Keep the hover toolbar visible while its emoji popover or overflow menu is
   // open (the pointer leaves the row to interact with the portal'd content).
@@ -643,6 +700,18 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
             <span className="shrink-0">· via ticket thread</span>
           )}
           <span>{timeLabel(message.createdAt)}</span>
+          {isAgent && !isNote && message.channelDelivery ? (
+            <ChannelDeliveryTicks
+              delivery={message.channelDelivery}
+              onRetry={
+                onRetryChannelDelivery &&
+                message.channelDelivery.status === 'failed' &&
+                message.channelDelivery.channel === 'github'
+                  ? () => onRetryChannelDelivery(message.id)
+                  : undefined
+              }
+            />
+          ) : null}
           {isFlagged && (
             <BookmarkSolidIcon
               className="h-3.5 w-3.5 shrink-0 text-amber-500"

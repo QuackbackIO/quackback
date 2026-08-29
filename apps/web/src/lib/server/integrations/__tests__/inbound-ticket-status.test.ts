@@ -394,6 +394,20 @@ describe.skipIf(!fixture.available)('inbound webhook ticket branch (real DB, rol
     expect((await ticketState(ticketId)).statusId).toBe(closed)
   })
 
+  it('acknowledges a malformed body with 200 not 500', async () => {
+    await seedSettings()
+    await seedGitHubIntegration({})
+    const body = '{not-json'
+    const signature = 'sha256=' + createHmac('sha256', WEBHOOK_SECRET).update(body).digest('hex')
+    const request = new Request('http://localhost/api/integrations/github/webhook', {
+      method: 'POST',
+      headers: { 'X-Hub-Signature-256': signature, 'Content-Type': 'application/json' },
+      body,
+    })
+    const response = await handleInboundWebhook(request, 'github')
+    expect(response.status).toBe(200)
+  })
+
   it('rejects a bad signature', async () => {
     await seedSettings()
     const { closed } = await seedStatuses()

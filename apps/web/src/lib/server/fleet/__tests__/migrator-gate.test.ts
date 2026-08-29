@@ -344,6 +344,7 @@ describe('replayGateVerdict', () => {
       '0267_drop_workspace_billing',
       '0268_cloud_identity_projection',
       '0269_messenger_ai_default_on',
+      '0270_github_channel',
     ])
     const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
     expect(verdict.ok).toBe(false)

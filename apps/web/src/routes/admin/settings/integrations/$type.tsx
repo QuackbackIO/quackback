@@ -73,15 +73,23 @@ function IntegrationSettingsPage() {
 
       {integration && (isConnected || isPaused) && (
         <>
-          <IntegrationHealthPanel health={integration.health} />
-          {entry.renderConfig ? (
-            <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-              <Suspense fallback={<Skeleton className="h-40 w-full" />}>
-                {entry.renderConfig({ integration, isConnected })}
-              </Suspense>
-            </div>
+          {entry.bareConfig ? (
+            <Suspense fallback={<Skeleton className="h-40 w-full" />}>
+              {entry.renderConfig?.({ integration, isConnected })}
+            </Suspense>
           ) : (
-            entry.connectedBanner
+            <>
+              <IntegrationHealthPanel health={integration.health} />
+              {entry.renderConfig ? (
+                <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
+                  <Suspense fallback={<Skeleton className="h-40 w-full" />}>
+                    {entry.renderConfig({ integration, isConnected })}
+                  </Suspense>
+                </div>
+              ) : (
+                entry.connectedBanner
+              )}
+            </>
           )}
         </>
       )}

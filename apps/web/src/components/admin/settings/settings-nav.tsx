@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ComponentType } from 'react'
 import { Link, useRouterState, useRouteContext } from '@tanstack/react-router'
 import {
   Cog6ToothIcon,
@@ -26,6 +26,7 @@ import {
   CreditCardIcon,
   GlobeAltIcon,
 } from '@heroicons/react/24/solid'
+import { GitHubIcon } from '@/components/icons/integration-icons'
 import { cn } from '@/lib/shared/utils'
 import { NAV_ICON_CLASS, NAV_ITEM_CLASS, NAV_SECTION_CLASS } from '@/components/shared/nav-tokens'
 import { isProductEnabled, type FeatureFlags } from '@/lib/shared/types'
@@ -33,16 +34,18 @@ import { isProductEnabled, type FeatureFlags } from '@/lib/shared/types'
 interface NavItem {
   label: string
   to: string
-  icon: typeof Cog6ToothIcon
+  icon: ComponentType<{ className?: string }>
+  /** Highlight only on this path, not nested child pages. */
+  exact?: boolean
 }
 
 /** A product accordion inside the Products section (Feedback & Roadmaps, Support, ...). */
 interface NavGroup {
   label: string
-  icon: typeof Cog6ToothIcon
+  icon: ComponentType<{ className?: string }>
   /** When set, the group label is also a page (Channels hub). */
   to?: string
-  kids: NavItem[]
+  kids: NavEntry[]
 }
 
 type NavEntry = NavItem | NavGroup
@@ -85,14 +88,9 @@ export function buildNavSections(
     ],
   })
 
-  const supportKids: NavItem[] = [
+  const channelPages: NavItem[] = [
     ...(flags?.supportInbox
       ? [
-          {
-            label: 'Channels',
-            to: '/admin/settings/channels',
-            icon: ChatBubbleLeftRightIcon,
-          },
           {
             label: 'Messenger',
             to: '/admin/settings/channels/messenger',
@@ -103,6 +101,23 @@ export function buildNavSections(
     ...(isProductEnabled(flags, 'support')
       ? [
           { label: 'Email', to: '/admin/settings/channels/email', icon: EnvelopeIcon },
+          { label: 'GitHub', to: '/admin/settings/channels/github', icon: GitHubIcon },
+        ]
+      : []),
+  ]
+  const supportKids: NavEntry[] = [
+    ...(flags?.supportInbox
+      ? [
+          {
+            label: 'Channels',
+            to: '/admin/settings/channels',
+            icon: ChatBubbleLeftRightIcon,
+            kids: channelPages,
+          } satisfies NavGroup,
+        ]
+      : channelPages),
+    ...(isProductEnabled(flags, 'support')
+      ? [
           { label: 'Macros', to: '/admin/settings/macros', icon: DocumentDuplicateIcon },
           { label: 'Office Hours', to: '/admin/settings/office-hours', icon: ClockIcon },
           { label: 'SLA policies', to: '/admin/settings/sla', icon: ShieldCheckIcon },
@@ -259,6 +274,14 @@ function NavCard({ section, pathname }: { section: NavSection; pathname: string 
   )
 }
 
+function entryIsInPath(entry: NavEntry, pathname: string): boolean {
+  if (isNavGroup(entry)) {
+    if (entry.to && (pathname === entry.to || pathname.startsWith(`${entry.to}/`))) return true
+    return entry.kids.some((kid) => entryIsInPath(kid, pathname))
+  }
+  return pathname === entry.to || pathname.startsWith(`${entry.to}/`)
+}
+
 /** A product accordion: a toggle row plus its indented child links. */
 function NavGroupRows({
   group,
@@ -269,40 +292,59 @@ function NavGroupRows({
   pathname: string
   parentOpen: boolean
 }) {
-  const hasActiveKid = group.kids.some(
-    (kid) => pathname === kid.to || pathname.startsWith(kid.to + '/')
-  )
+  const hasActiveKid = group.kids.some((kid) => entryIsInPath(kid, pathname))
+  const groupPageActive = !!group.to && pathname === group.to
+  const inGroup = groupPageActive || hasActiveKid
   // Groups with the active page start open; others start collapsed to keep
-  // the Products section scannable.
-  const [open, setOpen] = useState(hasActiveKid)
+  // the Products section scannable. A linked group (Channels) always shows
+  // its child pages — those are breadcrumb children, not a second accordion.
+  const [open, setOpen] = useState(inGroup)
+  const showKids = !!group.to || open
   const Icon = group.icon
 
   return (
     <div>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        tabIndex={parentOpen ? undefined : -1}
-        className={cn(
-          NAV_ITEM_CLASS,
-          'w-full font-medium',
-          hasActiveKid ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
-        )}
-      >
-        <Icon className={cn(NAV_ICON_CLASS, hasActiveKid && 'text-primary')} />
-        <span className="truncate flex-1 text-left">{group.label}</span>
-        <ChevronDownIcon
-          className={cn(
-            'h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 ease-out',
-            !open && '-rotate-90'
-          )}
+      {group.to ? (
+        <NavLink
+          item={{ label: group.label, to: group.to, icon: group.icon, exact: true }}
+          pathname={pathname}
+          tabbable={parentOpen}
         />
-      </button>
-      {open && (
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          tabIndex={parentOpen ? undefined : -1}
+          className={cn(
+            NAV_ITEM_CLASS,
+            'w-full font-medium',
+            inGroup ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
+          )}
+        >
+          <Icon className={cn(NAV_ICON_CLASS, inGroup && 'text-primary')} />
+          <span className="truncate flex-1 text-left">{group.label}</span>
+          <ChevronDownIcon
+            className={cn(
+              'h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 ease-out',
+              !open && '-rotate-90'
+            )}
+          />
+        </button>
+      )}
+      {showKids && (
         <div className="ml-4 border-l border-border/50 pl-1.5 space-y-0.5">
-          {group.kids.map((kid) => (
-            <NavLink key={kid.to} item={kid} pathname={pathname} tabbable={parentOpen} />
-          ))}
+          {group.kids.map((kid) =>
+            isNavGroup(kid) ? (
+              <NavGroupRows
+                key={kid.label}
+                group={kid}
+                pathname={pathname}
+                parentOpen={parentOpen}
+              />
+            ) : (
+              <NavLink key={kid.to} item={kid} pathname={pathname} tabbable={parentOpen} />
+            )
+          )}
         </div>
       )}
     </div>
@@ -318,9 +360,7 @@ function NavLink({
   pathname: string
   tabbable: boolean
 }) {
-  const isActive =
-    pathname === item.to ||
-    (item.to !== '/admin/settings/channels' && pathname.startsWith(`${item.to}/`))
+  const isActive = pathname === item.to || (!item.exact && pathname.startsWith(`${item.to}/`))
   const Icon = item.icon
 
   return (

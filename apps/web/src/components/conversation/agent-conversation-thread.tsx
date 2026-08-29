@@ -70,6 +70,15 @@ import {
 } from '@/lib/server/functions/conversation'
 import { isMissingRequiredAttributesMessage } from '@/lib/shared/conversation/attribute-values'
 import {
+  channelCloseActionLabel,
+  channelCloseFailureToast,
+  channelCloseToast,
+  channelReplyPlaceholder,
+  channelShowsEndConversation,
+  githubIssuePeopleFromMessages,
+  isNativeIssueChannel,
+} from '@/lib/shared/channels'
+import {
   sendTicketMessageFn,
   addTicketNoteFn,
   listTicketMessagesFn,
@@ -455,6 +464,11 @@ export function AgentConversationThread({
   const messages: AgentConversationMessageDTO[] = isTicket
     ? (ticketThread?.messages ?? [])
     : (convThread?.messages ?? [])
+  const issuePeople = useMemo(
+    () =>
+      conversation?.channel === 'github' ? githubIssuePeopleFromMessages(messages) : undefined,
+    [conversation?.channel, messages]
+  )
   const hasMoreOlder = isTicket ? (ticketThread?.hasMore ?? false) : (convThread?.hasMore ?? false)
   const isLoading = isTicket ? ticketThreadLoading || ticketDetailLoading : convLoading
 
@@ -1063,6 +1077,15 @@ export function AgentConversationThread({
     onSuccess: () => onChanged(),
     onError: () => toast.error('Failed to mark unread'),
   })
+  const retryGithubMutation = useMutation({
+    mutationFn: async (messageId: ConversationMessageId) => {
+      const { retryGitHubAgentMessageFn } = await import('@/integrations/github/server/functions')
+      await retryGitHubAgentMessageFn({ data: { messageId } })
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : 'Could not send to GitHub.')
+    },
+  })
 
   // Stable per-message dispatchers for AgentMessageBubble (perf review): each
   // bubble is `memo`'d, so passing a FRESH closure per message per render
@@ -1094,6 +1117,10 @@ export function AgentConversationThread({
   const handleTrackSuggestion = useCallback((message: AgentConversationMessageDTO) => {
     if (message.postSuggestion) setConvertSeed(message.postSuggestion)
   }, [])
+  const handleRetryChannelDelivery = useCallback(
+    (messageId: ConversationMessageId) => retryGithubMutation.mutate(messageId),
+    [retryGithubMutation.mutate]
+  )
 
   // ── Header action bar (§2.7) ─────────────────────────────────────────────
 
@@ -1194,18 +1221,18 @@ export function AgentConversationThread({
   // ticket resolve sets the workspace's default closed-category status.
   const [closeBlocked, setCloseBlocked] = useState<string[] | null>(null)
   const closeConversationMutation = useMutation({
-    mutationFn: () =>
+    mutationFn: (next: 'open' | 'closed') =>
       setConversationStatusFn({
-        data: { conversationId: conversationId ?? INACTIVE_CONVERSATION_ID, status: 'closed' },
+        data: { conversationId: conversationId ?? INACTIVE_CONVERSATION_ID, status: next },
       }),
-    onSuccess: () => {
-      toast.success('Conversation closed')
+    onSuccess: (_data, next) => {
+      toast.success(channelCloseToast(conversation?.channel, next === 'closed'))
       refreshThread()
     },
-    onError: (error) => {
+    onError: (error, next) => {
       const message = error instanceof Error ? error.message : null
       if (message && isMissingRequiredAttributesMessage(message)) setCloseBlocked([message])
-      else toast.error('Failed to close conversation')
+      else toast.error(channelCloseFailureToast(conversation?.channel, next === 'closed'))
     },
   })
   const resolveTicketMutation = useMutation({
@@ -1242,6 +1269,10 @@ export function AgentConversationThread({
       resolveTicketMutation.mutate(closedStatusId)
       return
     }
+    if (isClosedConversation) {
+      closeConversationMutation.mutate('open')
+      return
+    }
     setCloseCheckPending(true)
     queryClient
       .fetchQuery({
@@ -1250,14 +1281,15 @@ export function AgentConversationThread({
       })
       .then((linked) => {
         if (linked && linked.statusCategory !== 'closed') setCloseConfirmTicket(linked)
-        else closeConversationMutation.mutate()
+        else closeConversationMutation.mutate('closed')
       })
       // A failed freshness check must not block the close — fall back to the
       // pre-guard behavior (close unconditionally).
-      .catch(() => closeConversationMutation.mutate())
+      .catch(() => closeConversationMutation.mutate('closed'))
       .finally(() => setCloseCheckPending(false))
   }, [
     isTicket,
+    isClosedConversation,
     ticketStatusList,
     resolveTicketMutation,
     closeConversationMutation,
@@ -1272,7 +1304,7 @@ export function AgentConversationThread({
     linkedTicketStatusMutation.isPending || closeConversationMutation.isPending
   const closeConversationOnly = useCallback(() => {
     setCloseConfirmTicket(null)
-    closeConversationMutation.mutate()
+    closeConversationMutation.mutate('closed')
   }, [closeConversationMutation])
   const resolveTicketAndClose = useCallback(async () => {
     if (!closeConfirmTicket) return
@@ -1291,7 +1323,7 @@ export function AgentConversationThread({
       return
     }
     setCloseConfirmTicket(null)
-    closeConversationMutation.mutate()
+    closeConversationMutation.mutate('closed')
   }, [closeConfirmTicket, ticketStatusList, linkedTicketStatusMutation, closeConversationMutation])
 
   // Seed an insert into a mode's draft, then remount that editor so the new
@@ -1497,6 +1529,7 @@ export function AgentConversationThread({
             onToggleReaction={handleToggleReaction}
             onToggleFlag={handleToggleFlag}
             onMarkUnread={markUnreadMutation.mutate}
+            onRetryChannelDelivery={handleRetryChannelDelivery}
             onSharePost={capabilities.convertToPost ? handleSharePost : undefined}
             onTrackAsPost={capabilities.convertToPost ? handleTrackAsPost : undefined}
             onTrackSuggestion={capabilities.convertToPost ? handleTrackSuggestion : undefined}
@@ -1701,12 +1734,15 @@ export function AgentConversationThread({
               Add customer…
             </DropdownMenuItem>
           )}
-          {!isTicket && conversation && !isClosedConversation && (
-            <DropdownMenuItem onClick={() => setEndDialogOpen(true)}>
-              <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
-              End conversation
-            </DropdownMenuItem>
-          )}
+          {!isTicket &&
+            conversation &&
+            !isClosedConversation &&
+            channelShowsEndConversation(conversation.channel) && (
+              <DropdownMenuItem onClick={() => setEndDialogOpen(true)}>
+                <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
+                End conversation
+              </DropdownMenuItem>
+            )}
           {conversation && capabilities.convertToPost && (
             <DropdownMenuItem
               onSelect={() =>
@@ -1737,7 +1773,9 @@ export function AgentConversationThread({
       </DropdownMenu>
       <Button type="button" size="sm" onClick={runPrimaryAction} disabled={primaryActionPending}>
         <CheckIcon className="h-4 w-4" />
-        {isTicket ? 'Resolve' : 'Close'}
+        {isTicket
+          ? 'Resolve'
+          : channelCloseActionLabel(conversation?.channel, isClosedConversation)}
       </Button>
     </div>
   )
@@ -2010,7 +2048,10 @@ export function AgentConversationThread({
                 minHeight="4.5rem"
                 autofocus={replyKey > 0 ? 'end' : false}
                 disabled={sendMutation.isPending}
-                placeholder={isTicket ? 'Reply to the requester…' : 'Type your reply…'}
+                placeholder={channelReplyPlaceholder(conversation?.channel, {
+                  closed: isClosedConversation,
+                  isTicket,
+                })}
                 className="max-h-64 overflow-y-auto"
                 onChange={onReplyChange}
                 onSubmit={onSend}
@@ -2178,8 +2219,9 @@ export function AgentConversationThread({
                   is still open
                 </AlertDialogTitle>
                 <AlertDialogDescription>
-                  Closing the conversation leaves the ticket open — and with its own inbox row
-                  folded into the conversation, it can go stale unnoticed.
+                  {isNativeIssueChannel(conversation?.channel)
+                    ? 'Closing the issue leaves the ticket open — and with its own inbox row folded into the conversation, it can go stale unnoticed.'
+                    : 'Closing the conversation leaves the ticket open — and with its own inbox row folded into the conversation, it can go stale unnoticed.'}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -2197,7 +2239,9 @@ export function AgentConversationThread({
                   disabled={closeConfirmPending}
                   onClick={closeConversationOnly}
                 >
-                  Close conversation only
+                  {isNativeIssueChannel(conversation?.channel)
+                    ? 'Close issue only'
+                    : 'Close conversation only'}
                 </Button>
                 {/* Resolving the linked ticket requires `ticket.set_status`
                     (B24) — without it the mutation can only 403, so the
@@ -2267,6 +2311,7 @@ export function AgentConversationThread({
           onCreateTicket={handleCreateTicketFromPanel}
           onInsertFromCopilot={insertFromCopilot}
           openCopilotToken={openCopilotToken}
+          issuePeople={issuePeople}
         />
       )}
     </div>

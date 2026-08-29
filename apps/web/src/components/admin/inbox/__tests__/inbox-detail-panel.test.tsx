@@ -120,7 +120,10 @@ function makeConversation(overrides: Partial<ConversationDTO> = {}): Conversatio
 
 function renderPanel(
   conversation: ConversationDTO = makeConversation(),
-  extra: { openCopilotToken?: number } = {}
+  extra: {
+    openCopilotToken?: number
+    issuePeople?: { principalId: string; displayName: string; avatarUrl: string | null }[]
+  } = {}
 ) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const ui = (props: { openCopilotToken?: number }) => (
@@ -140,7 +143,10 @@ function renderPanel(
   const result = render(ui(extra))
   return {
     ...result,
-    rerenderWith: (props: { openCopilotToken?: number }) => result.rerender(ui(props)),
+    rerenderWith: (props: {
+      openCopilotToken?: number
+      issuePeople?: { principalId: string; displayName: string; avatarUrl: string | null }[]
+    }) => result.rerender(ui(props)),
   }
 }
 
@@ -260,5 +266,35 @@ describe('<InboxDetailPanel> openCopilotToken ping (the Ask Copilot shortcut)', 
 
     expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
     expect(screen.getByText('Properties')).toBeInTheDocument()
+  })
+})
+
+describe('<InboxDetailPanel> GitHub issue people', () => {
+  it('lists distinct people on a GitHub issue', () => {
+    routeContextState.principal = undefined
+    renderPanel(
+      makeConversation({
+        channel: 'github',
+        visitorEmail: null,
+        customAttributes: { githubUrl: 'https://github.com/acme/api/issues/201' },
+      }),
+      {
+        issuePeople: [
+          { principalId: 'p1', displayName: 'jane', avatarUrl: null },
+          { principalId: 'p2', displayName: 'bob', avatarUrl: null },
+        ],
+      }
+    )
+    expect(screen.getByText('On this issue')).toBeInTheDocument()
+    expect(screen.getByText('jane')).toBeInTheDocument()
+    expect(screen.getByText('bob')).toBeInTheDocument()
+  })
+
+  it('hides the people list when the thread is not GitHub', () => {
+    routeContextState.principal = undefined
+    renderPanel(makeConversation(), {
+      issuePeople: [{ principalId: 'p1', displayName: 'jane', avatarUrl: null }],
+    })
+    expect(screen.queryByText('On this issue')).not.toBeInTheDocument()
   })
 })

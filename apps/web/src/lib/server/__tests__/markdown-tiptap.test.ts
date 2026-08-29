@@ -5,6 +5,8 @@ import {
   contentJsonToMarkdown,
   projectContentJsonToMarkdown,
   commentMarkdownToTiptapJson,
+  githubMarkdownToTiptapJson,
+  normalizeGitHubMarkdown,
   tiptapJsonToText,
   hasTextLeaf,
   hasImageNode,
@@ -396,6 +398,20 @@ describe('commentMarkdownToTiptapJson', () => {
     const result = commentMarkdownToTiptapJson('Hello 😀 world!')
     const json = JSON.stringify(result)
     expect(json).toContain('😀')
+  })
+})
+
+describe('githubMarkdownToTiptapJson', () => {
+  test('turns a literal backslash-n body into real line breaks', () => {
+    expect(normalizeGitHubMarkdown('Steps:\\n1. Open Safari')).toBe('Steps:\n1. Open Safari')
+    const result = githubMarkdownToTiptapJson(
+      'Steps:\\n1. Open checkout on Safari 17\\n2. Submit payment'
+    )
+    const json = JSON.stringify(result)
+    expect(json).not.toContain('\\n')
+    expect(json).toContain('Steps:')
+    expect(json).toContain('Open checkout')
+    expect(json).toContain('orderedList')
   })
 })
 

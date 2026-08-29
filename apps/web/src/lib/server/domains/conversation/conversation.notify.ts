@@ -2,11 +2,13 @@
  * Offline notifications for support-inbox conversations. Fire-and-forget from the service after a
  * write commits — a delivery failure must never break sending a message.
  *
- * Because it is fire-and-forget, a failed send has no caller to surface it: the
- * message row is already committed and the thread already renders it as sent. So
- * visitor-facing sends go through a small bounded retry (see sendWithRetry) to
- * convert the common transient provider failure into a success rather than a log
- * line nobody reads. A send that exhausts the retries is still only logged.
+ * Because it is fire-and-forget, a failed send has no caller to roll back: the
+ * message row is already committed. Thread-addressed channels (GitHub) mark
+ * that row pending at insert and move it to sent/failed once the provider
+ * answers, so the inbox can show ticks instead of a silent drop. Visitor-facing
+ * email still goes through a small bounded retry (see sendWithRetry) to convert
+ * the common transient provider failure into a success rather than a log line
+ * nobody reads. A send that exhausts the retries is still only logged.
  *
  *  - Visitor message  -> email the team only when no agent currently has a
  *    live stream (offline coverage). The in-app team bell for the same
@@ -38,7 +40,7 @@ import { agentReplyDisplayName, assembleOutboundThreading } from '@quackback/ema
 import { getChannelDescriptor } from '@/lib/shared/channels'
 import { requireChannelAdapter } from '@/lib/server/domains/channels'
 import type { Conversation } from '@/lib/server/db'
-import type { PrincipalId, ConversationId } from '@quackback/ids'
+import type { ConversationId, ConversationMessageId, PrincipalId } from '@quackback/ids'
 import type { JSONContent } from '@tiptap/core'
 import { generateContentHTML } from '@/lib/shared/content-html'
 import { withEmailProxyHint } from '@/lib/server/content/email-image-proxy'
@@ -472,6 +474,9 @@ export async function notifyAgentReply(opts: {
    *  compile rather than silently default to 'messenger' and reinstate the
    *  presence-suppression bug this parameter exists to fix. */
   channel: Conversation['channel']
+  /** The agent message being delivered; thread-addressed adapters stamp
+   *  pending → sent/failed on this row. */
+  messageId?: ConversationMessageId
 }): Promise<void> {
   try {
     // Presence gates the MESSENGER surface only. On an email conversation the
@@ -516,14 +521,16 @@ export async function notifyAgentReply(opts: {
     // only navigates — it carries no capability of its own.
     const ctaUrl = await resolveVisitorConversationLink(ctx.portalBaseUrl, opts.conversationId)
     const adapter = requireChannelAdapter(opts.channel)
-    if (recipient) {
+    const threadAddressed = getChannelDescriptor(opts.channel)?.addressing === 'thread'
+    if (recipient || threadAddressed) {
       await adapter.deliverAgentMessage({
         conversationId: opts.conversationId,
+        messageId: opts.messageId,
         visitorPrincipalId: opts.visitorPrincipalId,
         content: opts.content,
         contentJson: opts.contentJson,
         agentName: opts.agentName,
-        recipient,
+        recipient: recipient ?? '',
         ctaUrl,
         workspaceName: ctx.workspaceName,
         logoUrl: ctx.logoUrl,
@@ -547,6 +554,7 @@ export async function notifyAgentReply(opts: {
         try {
           await adapter.deliverAgentMessage({
             conversationId: opts.conversationId,
+            messageId: opts.messageId,
             visitorPrincipalId: participant.principalId,
             content: opts.content,
             contentJson: opts.contentJson,
@@ -586,6 +594,7 @@ export async function notifyConversationStarted(opts: {
   /** Rich message body (TipTap doc) rendered inline in the email, when present. */
   contentJson?: JSONContent | null
   agentName: string
+  messageId?: ConversationMessageId
 }): Promise<void> {
   try {
     const [visitor] = await db
@@ -596,7 +605,10 @@ export async function notifyConversationStarted(opts: {
       .limit(1)
 
     const recipient = resolveReplyRecipient(visitor, visitor?.contactEmail, null)
-    if (!recipient) {
+    const mailCtx = await loadConversationMailContext(opts.conversationId)
+    const channel = mailCtx.channel ?? 'messenger'
+    const threadAddressed = getChannelDescriptor(channel)?.addressing === 'thread'
+    if (!recipient && !threadAddressed) {
       log.warn(
         { conversation_id: opts.conversationId },
         'outbound message undeliverable (no email)'
@@ -607,15 +619,14 @@ export async function notifyConversationStarted(opts: {
     const ctx = await buildHookContext()
     if (!ctx) return
     const ctaUrl = await resolveVisitorConversationLink(ctx.portalBaseUrl, opts.conversationId)
-    const mailCtx = await loadConversationMailContext(opts.conversationId)
-    const channel = mailCtx.channel ?? 'messenger'
     await requireChannelAdapter(channel).deliverAgentMessage({
       conversationId: opts.conversationId,
+      messageId: opts.messageId,
       visitorPrincipalId: opts.visitorPrincipalId,
       content: opts.content,
       contentJson: opts.contentJson,
       agentName: opts.agentName,
-      recipient,
+      recipient: recipient ?? '',
       ctaUrl,
       workspaceName: ctx.workspaceName,
       logoUrl: ctx.logoUrl,
@@ -679,7 +690,8 @@ export async function notifyCsatRequestEmail(
       .where(eq(principal.id, visitorPrincipalId))
       .limit(1)
     const recipient = resolveReplyRecipient(visitor, visitor?.contactEmail, null)
-    if (!recipient) return
+    const threadAddressed = getChannelDescriptor(conv.channel)?.addressing === 'thread'
+    if (!recipient && !threadAddressed) return
 
     const ctx = await buildHookContext()
     if (!ctx) return
@@ -698,7 +710,7 @@ export async function notifyCsatRequestEmail(
     await requireChannelAdapter(conv.channel).deliverCsatRequest({
       conversationId,
       visitorPrincipalId,
-      recipient,
+      recipient: recipient ?? '',
       promptText,
       ratingUrls,
       workspaceName: ctx.workspaceName,

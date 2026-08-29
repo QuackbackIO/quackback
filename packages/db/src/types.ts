@@ -683,10 +683,10 @@ export type AgentAvailability = (typeof AGENT_AVAILABILITY_VALUES)[number]
 // The inbound channel a conversation arrived on — kept in sync with the
 // conversations.channel column enum. Widget threads are 'messenger' (ticket
 // intake forms mint messenger-channel backing conversations with source
-// 'ticket_form'); 'email' threads point at their inbound channel account.
-// This keeps one polymorphic conversation object with a channel field, not
-// a per-channel table.
-export const CHANNELS = ['messenger', 'email'] as const
+// 'ticket_form'); 'email' threads point at their inbound channel account;
+// 'github' threads are a connected repository's issues. This keeps one
+// polymorphic conversation object with a channel field, not a per-channel table.
+export const CHANNELS = ['messenger', 'email', 'github'] as const
 export type Channel = (typeof CHANNELS)[number]
 
 // Agent-set conversation priority for inbox triage — kept in sync with the
@@ -937,9 +937,34 @@ export type BlockReplyMetadata =
   | { kind: 'collectReply'; inReplyToMessageId: string; value: string }
   | { kind: 'csat'; inReplyToMessageId: string; rating: number; comment?: string }
 
+/** Outbound delivery of an agent reply onto a thread-addressed channel
+ *  (the customer's GitHub issue, etc.). Pending at insert; sent once the
+ *  provider accepts; failed if the post does not land. Messenger/email
+ *  replies do not carry this. */
+export type ChannelDeliveryStatus = 'pending' | 'sent' | 'failed'
+
+export interface ChannelDelivery {
+  status: ChannelDeliveryStatus
+  channel: Channel
+  /** ISO timestamp of the last status change. */
+  at: string
+  /** Provider-side id once accepted (GitHub issue comment id). */
+  externalId?: string
+  /** Short agent-facing reason when status is failed. */
+  error?: string
+}
+
 export interface ConversationMessageMetadata {
   /** The channel this message arrived through, when not the in-app messenger. */
-  source?: 'email'
+  source?: 'email' | 'github'
+  /** GitHub issue comment REST id, used to dedupe webhook retries. */
+  githubCommentId?: string
+  /** Live outbound status for a thread-addressed channel send. */
+  channelDelivery?: ChannelDelivery
+  /** GitHub issue number for the message's thread, when known. */
+  githubIssueNumber?: string
+  /** Tracker inbound webhook body hash, used to dedupe redelivered status notes. */
+  inboundDeliveryKey?: string
   /** Provider Message-ID for an inbound email, used to dedupe webhook retries. */
   emailMessageId?: string
   /** RFC 5322 threading of an inbound email message: the parent it replied to

@@ -13,6 +13,21 @@
 import { isValidTypeId } from '@quackback/ids'
 import { sanitizeUrl, sanitizeImageUrl, safePositiveInt } from '@/lib/shared/utils/sanitize'
 import { isTrustedAttachmentUrl } from '@/lib/server/storage/trusted-url'
+
+function isExtraTrustedImageHost(rawSrc: string, extraHosts: string[] | undefined): boolean {
+  if (!extraHosts?.length) return false
+  try {
+    const u = new URL(rawSrc)
+    if (u.protocol !== 'https:') return false
+    const host = u.hostname.toLowerCase()
+    return extraHosts.some((allowed) => {
+      const a = allowed.toLowerCase()
+      return host === a || host.endsWith(`.${a}`)
+    })
+  } catch {
+    return false
+  }
+}
 import { ARTICLE_SLUG_RE } from '@/lib/shared/embeds/parse-embed-url'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
 
@@ -103,6 +118,9 @@ export interface SanitizeTiptapOptions {
    * paste targets there, as in posts).
    */
   restrictImagesToTrustedOrigins?: boolean
+  /** Extra hostnames (or parent domains) allowed when image restriction is on.
+   *  GitHub ingest uses this for `*.githubusercontent.com` user-content images. */
+  extraTrustedImageHosts?: string[]
 }
 
 /**
@@ -144,7 +162,11 @@ function sanitizeAttrs(
       // Untrusted senders may only reference our own upload pipeline — mirror
       // the chatImage guard below. Clearing (not dropping) keeps the node
       // shape intact so the serializer renders nothing.
-      if (opts?.restrictImagesToTrustedOrigins && !isTrustedAttachmentUrl(rawSrc)) {
+      if (
+        opts?.restrictImagesToTrustedOrigins &&
+        !isTrustedAttachmentUrl(rawSrc) &&
+        !isExtraTrustedImageHost(rawSrc, opts.extraTrustedImageHosts)
+      ) {
         return { src: '', alt: '' }
       }
       const src = sanitizeImageUrl(rawSrc)

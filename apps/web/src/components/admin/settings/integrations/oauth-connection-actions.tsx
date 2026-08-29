@@ -17,6 +17,8 @@ interface OAuthConnectionActionsProps {
   displayName: string
   /** Description for the disconnect dialog */
   disconnectDescription: string
+  /** Connect button label. Defaults to "Connect". */
+  connectLabel?: string
 }
 
 export function OAuthConnectionActions({
@@ -26,6 +28,7 @@ export function OAuthConnectionActions({
   getConnectUrl,
   displayName,
   disconnectDescription,
+  connectLabel = 'Connect',
 }: OAuthConnectionActionsProps) {
   const search = useSearch({ strict: false })
   const deleteMutation = useDeleteIntegration()
@@ -83,7 +86,7 @@ export function OAuthConnectionActions({
                 Connecting...
               </>
             ) : (
-              'Connect'
+              connectLabel
             )}
           </Button>
         )}

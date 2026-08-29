@@ -9,4 +9,6 @@ export const messengerDescriptor: ChannelDescriptor = {
   reopenOnReply: 'configurable',
   accountRoles: [],
   richText: 'full',
+  addressing: 'email',
+  closeSurface: 'session',
 }
