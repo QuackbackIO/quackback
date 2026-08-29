@@ -125,6 +125,7 @@ export async function handleInboundWebhook(
       })
     } catch (error) {
       log.error({ err: error, integration_type: integrationType }, 'inbound github channel failed')
+      return new Response('Inbox ingest failed', { status: 500 })
     }
   }
 

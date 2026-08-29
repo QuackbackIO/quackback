@@ -56,6 +56,8 @@ export interface GitHubIssue {
   body?: string | null
   html_url?: string
   user?: GitHubUser
+  /** Present on pull-request payloads that reuse the issues/comment events. */
+  pull_request?: unknown
 }
 
 export interface GitHubComment {

@@ -1796,11 +1796,7 @@ export async function deleteConversationMessage(
   ) {
     const { deleteGitHubIssueComment } =
       await import('@/lib/server/domains/channels/github-deliver')
-    await deleteGitHubIssueComment(conversationId, message.metadata.githubCommentId).catch(
-      (err) => {
-        log.warn({ err, conversation_id: conversationId }, 'failed to delete GitHub issue comment')
-      }
-    )
+    await deleteGitHubIssueComment(conversationId, message.metadata.githubCommentId)
   }
 
   await db

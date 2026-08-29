@@ -33,8 +33,8 @@ export function githubInboxEnableDeniedReason(opts: {
   status?: string | null
   accessToken?: string | null
 }): string | null {
-  const connected = opts.status === 'active' || opts.status === 'paused'
-  if (!connected || !opts.accessToken) return GITHUB_INBOX_CONNECT_COPY
+  if (opts.status === 'paused') return 'Resume GitHub before enabling the inbox channel.'
+  if (opts.status !== 'active' || !opts.accessToken) return GITHUB_INBOX_CONNECT_COPY
   return null
 }
 

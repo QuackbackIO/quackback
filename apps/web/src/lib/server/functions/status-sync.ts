@@ -161,6 +161,20 @@ export const disableStatusSyncFn = createServerFn({ method: 'POST' })
     if (!integration) throw new Error('Integration not found')
 
     const config = (integration.config ?? {}) as Record<string, unknown>
+    if (data.integrationType === 'github') {
+      const { getLiveGitHubConnectionAccount } =
+        await import('@/lib/server/domains/channel-accounts/github-connection')
+      if (await getLiveGitHubConnectionAccount()) {
+        await db
+          .update(integrations)
+          .set({
+            config: { ...config, statusSyncEnabled: false },
+            updatedAt: new Date(),
+          })
+          .where(eq(integrations.id, integrationId))
+        return { success: true }
+      }
+    }
     const externalWebhookId = config.externalWebhookId as string | undefined
 
     // Clean up external webhook if one was registered

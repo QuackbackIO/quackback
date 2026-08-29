@@ -154,6 +154,21 @@ describe.skipIf(!fixture.available)('github channel ingest (real DB, rolled back
     expect(thread.externalThreadKey).toBe(githubThreadKey('acme/api', 201))
   })
 
+  it('ignores pull-request payloads that reuse the issues event', async () => {
+    const { integration } = await seedConnection()
+    const payload = issuePayload({}) as Record<string, unknown>
+    payload.issue = {
+      ...(payload.issue as object),
+      pull_request: { url: 'https://github.com/acme/api/pull/201' },
+    }
+    await ingestGitHubChannelEvent({
+      body: JSON.stringify(payload),
+      eventName: 'issues',
+      integration: { id: integration.id as IntegrationId, config: integration.config },
+    })
+    expect(await testDb.select().from(conversations)).toHaveLength(0)
+  })
+
   it('opened by the connected username does not create a conversation', async () => {
     const { integration } = await seedConnection()
     await ingestGitHubChannelEvent({

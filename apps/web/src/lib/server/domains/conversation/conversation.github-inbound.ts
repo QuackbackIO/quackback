@@ -66,6 +66,7 @@ export async function ingestGitHubChannelEvent(opts: {
     (typeof config.channelId === 'string' ? config.channelId : null)
   const issue = payload.issue
   if (!ownerRepo || !issue?.number) return
+  if (issue.pull_request) return
 
   const issueNumber = String(issue.number)
   const threadKey = githubThreadKey(ownerRepo, issueNumber)

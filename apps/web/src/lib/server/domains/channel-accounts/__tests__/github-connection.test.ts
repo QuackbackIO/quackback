@@ -16,7 +16,9 @@ describe('github inbox enable gate', () => {
     expect(githubInboxEnableDeniedReason({ status: 'active', accessToken: '' })).toBe(
       GITHUB_INBOX_CONNECT_COPY
     )
-    expect(githubInboxEnableDeniedReason({ status: 'paused', accessToken: 'tok' })).toBeNull()
+    expect(githubInboxEnableDeniedReason({ status: 'paused', accessToken: 'tok' })).toBe(
+      'Resume GitHub before enabling the inbox channel.'
+    )
     expect(githubInboxEnableDeniedReason({ status: 'active', accessToken: 'tok' })).toBeNull()
   })
 
