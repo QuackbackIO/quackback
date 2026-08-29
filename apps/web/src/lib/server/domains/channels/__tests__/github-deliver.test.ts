@@ -8,7 +8,7 @@ const persist = vi.hoisted(() => vi.fn(async () => {}))
 const recordLastError = vi.hoisted(() => vi.fn(async () => {}))
 
 vi.mock('@/lib/server/domains/conversation/conversation.inbound-resolve', () => ({
-  lookupChannelThreadByConversation: (...a: unknown[]) => lookup(...a),
+  lookupChannelThreadByConversation: lookup,
 }))
 
 vi.mock('@/lib/server/logger', () => ({
@@ -26,7 +26,7 @@ vi.mock('@/lib/server/db', () => ({
       }),
     }),
     query: {
-      integrations: { findFirst: (...a: unknown[]) => findFirst(...a) },
+      integrations: { findFirst: findFirst },
     },
     update: () => ({ set: () => ({ where: async () => [] }) }),
   },
@@ -48,11 +48,11 @@ vi.mock('@/lib/server/markdown-tiptap', () => ({
 }))
 
 vi.mock('@/lib/server/domains/conversation/conversation.channel-delivery', () => ({
-  persistChannelDelivery: (...a: unknown[]) => persist(...a),
+  persistChannelDelivery: persist,
 }))
 
 vi.mock('@/lib/server/integrations/webhook-registration', () => ({
-  recordIntegrationLastError: (...a: unknown[]) => recordLastError(...a),
+  recordIntegrationLastError: recordLastError,
 }))
 
 import {
