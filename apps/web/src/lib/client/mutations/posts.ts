@@ -23,6 +23,7 @@ import { toggleVoteFn } from '@/lib/server/functions/public-posts'
 import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
 import { roadmapPostsKeys } from '@/lib/client/hooks/use-roadmap-posts-query'
 import { votedPostsKeys } from '@/lib/client/hooks/use-portal-posts-query'
+import { adminQueries } from '@/lib/client/queries/admin'
 import type { PostDetails } from '@/lib/shared/types'
 import type { PostListItem, InboxPostListResult, PostTag } from '@/lib/shared/db-types'
 import type { PrincipalId, PostId, PostStatusId, PostTagId, BoardId } from '@quackback/ids'
@@ -312,6 +313,7 @@ export function useChangePostBoard() {
     onSuccess: (_data, { postId }) => {
       queryClient.invalidateQueries({ queryKey: inboxKeys.detail(postId) })
       queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: adminQueries.boardsWithCounts().queryKey })
     },
   })
 }
@@ -544,6 +546,7 @@ export function useCreatePost() {
       })
       queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
       queryClient.invalidateQueries({ queryKey: roadmapPostsKeys.all })
+      queryClient.invalidateQueries({ queryKey: adminQueries.boardsWithCounts().queryKey })
     },
   })
 }
@@ -646,6 +649,7 @@ export function useDeletePost() {
       // Invalidate lists and roadmap
       queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
       queryClient.invalidateQueries({ queryKey: roadmapPostsKeys.all })
+      queryClient.invalidateQueries({ queryKey: adminQueries.boardsWithCounts().queryKey })
     },
   })
 }
@@ -679,6 +683,7 @@ export function useRestorePost() {
       // Invalidate all lists and roadmap (restored posts may reappear in roadmaps)
       queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
       queryClient.invalidateQueries({ queryKey: roadmapPostsKeys.all })
+      queryClient.invalidateQueries({ queryKey: adminQueries.boardsWithCounts().queryKey })
     },
   })
 }

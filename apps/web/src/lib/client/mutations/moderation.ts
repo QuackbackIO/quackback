@@ -19,6 +19,7 @@ function invalidateModerationSurfaces(
 ) {
   queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
   queryClient.invalidateQueries({ queryKey: publicPostsKeys.lists() })
+  queryClient.invalidateQueries({ queryKey: adminQueries.boardsWithCounts().queryKey })
   queryClient.invalidateQueries({ queryKey: adminQueries.moderationStatus().queryKey })
   queryClient.invalidateQueries({ queryKey: ['admin', 'moderation'] })
   queryClient.invalidateQueries({ queryKey: pendingPostsKey })
