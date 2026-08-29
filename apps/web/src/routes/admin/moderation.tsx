@@ -41,6 +41,8 @@ function ModerationPage() {
   const invalidateAfterDecision = () => {
     queryClient.invalidateQueries({ queryKey: ['admin', 'moderation'] })
     queryClient.invalidateQueries({ queryKey: adminQueries.moderationStatus().queryKey })
+    // Reject soft-deletes the post, so the settings list count must refresh.
+    queryClient.invalidateQueries({ queryKey: adminQueries.boardsWithCounts().queryKey })
   }
 
   const onError = () => {

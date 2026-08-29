@@ -13,6 +13,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
+import { useNavigate } from '@tanstack/react-router'
 import { useUpdateBoard } from '@/lib/client/mutations'
 import type { BoardId } from '@quackback/ids'
 
@@ -29,6 +30,7 @@ interface BoardGeneralFormProps {
 
 export function BoardGeneralForm({ board }: BoardGeneralFormProps) {
   const mutation = useUpdateBoard()
+  const navigate = useNavigate()
 
   const form = useForm<UpdateBoardInput>({
     resolver: standardSchemaResolver(updateBoardSchema),
@@ -39,11 +41,25 @@ export function BoardGeneralForm({ board }: BoardGeneralFormProps) {
   })
 
   function onSubmit(data: UpdateBoardInput) {
-    mutation.mutate({
-      id: board.id,
-      name: data.name,
-      description: data.description,
-    })
+    mutation.mutate(
+      {
+        id: board.id,
+        name: data.name,
+        description: data.description,
+      },
+      {
+        onSuccess: (updated) => {
+          if (updated.slug !== board.slug) {
+            void navigate({
+              to: '/admin/settings/boards/$slug',
+              params: { slug: updated.slug },
+              search: {},
+              replace: true,
+            })
+          }
+        },
+      }
+    )
   }
 
   return (

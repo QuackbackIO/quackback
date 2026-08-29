@@ -613,15 +613,13 @@ test.describe('Board Settings Tabs', () => {
     await expect(page.getByRole('button', { name: /export csv/i })).toBeVisible()
   })
 
-  test('navigating between tabs with keyboard (Tab key reaches nav buttons)', async ({ page }) => {
+  test('arrow keys move between board settings tabs', async ({ page }) => {
     const generalTab = page.getByRole('tab', { name: 'General' })
     if ((await generalTab.count()) === 0) return
 
-    // Focus the General tab and navigate via keyboard to Access
     await generalTab.focus()
-    await page.keyboard.press('Tab')
+    await page.keyboard.press('ArrowRight')
 
-    // The next focused element should be the Access tab
     await expect(page.getByRole('tab', { name: 'Access' })).toBeFocused()
   })
 
@@ -693,13 +691,10 @@ test.describe('Board Slug', () => {
     await page.getByRole('textbox', { name: 'Board name', exact: true }).fill(updatedName)
     await page.getByRole('button', { name: 'Save changes' }).click()
 
-    // Renaming regenerates the slug, so this slug-keyed page no longer
-    // matches a board and the loader sends us back to the list.
-    await expect(page).toHaveURL(/\/admin\/settings\/boards\/?(\?|$)/, { timeout: 10000 })
-    await expect(page.getByRole('heading', { name: 'Boards' })).toBeVisible()
-
-    await page.goto(`/admin/settings/boards/${slugify(updatedName)}`)
-    await page.waitForLoadState('networkidle')
+    await expect(page).toHaveURL(
+      new RegExp(`/admin/settings/boards/${slugify(updatedName)}(?:\\?|$)`),
+      { timeout: 10000 }
+    )
     await expect(page.getByRole('heading', { name: updatedName })).toBeVisible({ timeout: 10000 })
 
     await deleteCurrentBoard(page, updatedName)

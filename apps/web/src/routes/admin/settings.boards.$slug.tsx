@@ -1,4 +1,5 @@
 import { createFileRoute, Navigate, redirect } from '@tanstack/react-router'
+import { useRef } from 'react'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { z } from 'zod'
 import { adminQueries } from '@/lib/client/queries/admin'
@@ -68,7 +69,15 @@ function BoardSettingsPage() {
   const { tab } = Route.useSearch()
   const navigate = Route.useNavigate()
   const { data: boards } = useSuspenseQuery(adminQueries.boardsForSettings())
-  const currentBoard = boards.find((b) => b.slug === slug)
+  const matchedBoard = boards.find((b) => b.slug === slug)
+  const lastBoardRef = useRef(matchedBoard)
+  if (matchedBoard) lastBoardRef.current = matchedBoard
+  // A rename updates the slug in the cached list before the form navigates
+  // to the new URL. Keep showing the same board (by id) until that lands,
+  // instead of bouncing to the list.
+  const heldBoard = lastBoardRef.current
+  const currentBoard =
+    matchedBoard ?? (heldBoard && boards.some((b) => b.id === heldBoard.id) ? heldBoard : undefined)
   const selectedTab: BoardTab = tab ?? 'general'
 
   if (!currentBoard) {

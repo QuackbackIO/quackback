@@ -632,8 +632,9 @@ function buildActiveChips(args: {
   const chips: ActiveChipDescriptor[] = []
 
   // Board chip — only shown when a specific board is selected (omit for
-  // "All Posts"). When the board is page context, the chip is not a switcher.
-  if (filters.board && boards.length > 1) {
+  // "All Posts") and the board is not page context. A locked board is
+  // switched from the sidebar, not as a removable filter.
+  if (filters.board && boards.length > 1 && !boardLocked) {
     const board = boards.find((b) => b.slug === filters.board)
     if (board) {
       chips.push({
@@ -645,12 +646,8 @@ function buildActiveChips(args: {
         }),
         value: board.name,
         valueId: board.slug,
-        ...(boardLocked
-          ? {}
-          : {
-              options: boards.map((b) => ({ id: b.slug, label: b.name })),
-              onChange: (newSlug: string) => setFilters({ board: newSlug }),
-            }),
+        options: boards.map((b) => ({ id: b.slug, label: b.name })),
+        onChange: (newSlug: string) => setFilters({ board: newSlug }),
         onRemove: () => setFilters({ board: undefined }),
       })
     }

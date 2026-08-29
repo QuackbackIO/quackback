@@ -88,10 +88,9 @@ describe('PublicFiltersBar', () => {
     expect(screen.getByText('Bugs')).toBeInTheDocument()
   })
 
-  it('does not make the board chip a switcher when the board is locked', () => {
+  it('does not render a board chip when the board is locked', () => {
     renderBar({ filters: { sort: 'top', board: 'bugs' }, boardLocked: true })
-    expect(screen.getByText('Bugs')).toBeInTheDocument()
-    expect(screen.getByText('Bugs').closest('button')).toBeNull()
+    expect(screen.queryByText(/^Board:$/)).not.toBeInTheDocument()
   })
 
   it('does not render a board chip when only one board exists', () => {
