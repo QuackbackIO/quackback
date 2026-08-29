@@ -45,15 +45,10 @@ export const fetchSeatsPreviewFn = createServerFn({ method: 'GET' })
     }
   })
 
-export const fetchPlanUsageFn = createServerFn({ method: 'GET' }).handler(async () => {
-  await requireAuth({ permission: PERMISSIONS.BILLING_MANAGE })
-  const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
+async function loadUsageCounts(): Promise<Record<string, number>> {
   const { aiTokensThisMonth } = await import('@/lib/server/domains/ai/usage-counter')
-  const { finiteUsageLines } = await import('@/lib/server/domains/billing/plan-usage')
   const { db, eq, isNull, sql, posts, boards, roles, statusComponents, emailSendingDomains } =
     await import('@/lib/server/db')
-
-  const limits = await getTierLimits()
   const { countSeatUsage } = await import('@/lib/server/domains/principals/seat-usage')
   const { emailsSentThisMonth } = await import('@/lib/server/email/email-budget')
   const [boardRow, postRow, seats, statusRow, roleRow, domainRow, aiTokens, emailsSent] =
@@ -79,45 +74,80 @@ export const fetchPlanUsageFn = createServerFn({ method: 'GET' }).handler(async 
       aiTokensThisMonth(),
       emailsSentThisMonth(),
     ])
+  return {
+    maxBoards: boardRow[0]?.count ?? 0,
+    maxPosts: postRow[0]?.count ?? 0,
+    maxTeamSeats: seats.used,
+    maxStatusComponents: statusRow[0]?.count ?? 0,
+    maxCustomRoles: roleRow[0]?.count ?? 0,
+    maxSendingDomains: domainRow[0]?.count ?? 0,
+    aiTokensPerMonth: aiTokens,
+    emailsPerMonth: emailsSent,
+  }
+}
 
+export const fetchPlanUsageFn = createServerFn({ method: 'GET' }).handler(async () => {
+  await requireAuth({ permission: PERMISSIONS.BILLING_MANAGE })
+  const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
+  const { finiteUsageLines } = await import('@/lib/server/domains/billing/plan-usage')
+  const [limits, used] = await Promise.all([getTierLimits(), loadUsageCounts()])
   return finiteUsageLines([
-    { key: 'maxBoards', label: 'boards', used: boardRow[0]?.count ?? 0, limit: limits.maxBoards },
-    { key: 'maxPosts', label: 'posts', used: postRow[0]?.count ?? 0, limit: limits.maxPosts },
+    { key: 'maxBoards', label: 'boards', used: used.maxBoards ?? 0, limit: limits.maxBoards },
+    { key: 'maxPosts', label: 'posts', used: used.maxPosts ?? 0, limit: limits.maxPosts },
     {
       key: 'maxTeamSeats',
       label: 'seats',
-      used: seats.used,
+      used: used.maxTeamSeats ?? 0,
       limit: limits.maxTeamSeats,
     },
     {
       key: 'maxStatusComponents',
       label: 'status components',
-      used: statusRow[0]?.count ?? 0,
+      used: used.maxStatusComponents ?? 0,
       limit: limits.maxStatusComponents,
     },
     {
       key: 'maxCustomRoles',
       label: 'custom roles',
-      used: roleRow[0]?.count ?? 0,
+      used: used.maxCustomRoles ?? 0,
       limit: limits.maxCustomRoles,
     },
     {
       key: 'maxSendingDomains',
       label: 'sending domains',
-      used: domainRow[0]?.count ?? 0,
+      used: used.maxSendingDomains ?? 0,
       limit: limits.maxSendingDomains,
     },
     {
       key: 'aiTokensPerMonth',
       label: 'AI tokens this month',
-      used: aiTokens,
+      used: used.aiTokensPerMonth ?? 0,
       limit: limits.aiTokensPerMonth,
     },
     {
       key: 'emailsPerMonth',
       label: 'emails',
-      used: emailsSent,
+      used: used.emailsPerMonth ?? 0,
       limit: limits.emailsPerMonth,
     },
   ])
 })
+
+export const fetchFreeDowngradePreviewFn = createServerFn({ method: 'GET' }).handler(async () => {
+  await requireAuth({ permission: PERMISSIONS.BILLING_MANAGE })
+  const { getBillingProjectionOverview } =
+    await import('@/lib/server/domains/billing/projection-overview')
+  const [overview, used] = await Promise.all([getBillingProjectionOverview(), loadUsageCounts()])
+  const { freeDowngradeIssues, featuresDisabledOnFree } =
+    await import('@/lib/shared/billing/free-downgrade')
+  return {
+    issues: freeDowngradeIssues(used),
+    featuresDisabled: featuresDisabledOnFree(overview?.trialPlanId ?? overview?.plan),
+  }
+})
+
+export async function assertFitsFreePlan(): Promise<void> {
+  const used = await loadUsageCounts()
+  const { freeDowngradeIssues } = await import('@/lib/shared/billing/free-downgrade')
+  if (freeDowngradeIssues(used).length > 0) throw new Error('over_free_limits')
+}

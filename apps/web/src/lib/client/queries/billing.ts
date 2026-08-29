@@ -4,6 +4,7 @@ import {
   fetchBillingInvoicesFn,
   fetchBillingOverviewFn,
   fetchPlanUsageFn,
+  fetchFreeDowngradePreviewFn,
   fetchSeatsPreviewFn,
 } from '@/lib/server/functions/billing'
 
@@ -33,6 +34,12 @@ export const billingQueries = {
       queryKey: ['billing', 'usage'] as const,
       queryFn: () => fetchPlanUsageFn(),
       staleTime: 30_000,
+    }),
+  freeDowngradePreview: () =>
+    queryOptions({
+      queryKey: ['billing', 'free-downgrade'] as const,
+      queryFn: () => fetchFreeDowngradePreviewFn(),
+      staleTime: 10_000,
     }),
   seatsPreview: (quantity: number) =>
     queryOptions({

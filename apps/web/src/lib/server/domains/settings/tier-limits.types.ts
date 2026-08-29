@@ -45,6 +45,8 @@ export interface PlanNotice {
   actionLabel?: string
   /** Ended-trial banner only: per-admin localStorage dismiss. */
   dismissible?: boolean
+  /** Expired-trial strip: persistent red, no countdown. */
+  ended?: boolean
 }
 
 export interface TierLimits {

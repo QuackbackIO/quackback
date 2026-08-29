@@ -9,6 +9,7 @@ export function billingErrorCode(error: unknown): string {
   if (message === 'already_on_addon') return 'already_on_addon'
   if (message === 'not_on_addon') return 'not_on_addon'
   if (message === 'seats_below_usage') return 'seats_below_usage'
+  if (message === 'over_free_limits') return 'over_free_limits'
   if (message === 'Authentication required') return 'unauthorized'
   if (message === 'Access denied: Not a team member') return 'not_teammate'
   if (message.startsWith('Access denied:')) return 'forbidden'
@@ -79,6 +80,10 @@ export const Route = createFileRoute('/api/billing/session')({
               : cloud.canUpgrade || cloud.canManageBilling
           if (!cloud.enabled || !actionAllowed) {
             return billingFormErrorResponse(null, 'unavailable')
+          }
+          if (parsed.data.action === 'downgrade') {
+            const { assertFitsFreePlan } = await import('@/lib/server/functions/billing')
+            await assertFitsFreePlan()
           }
           const { createHostedBillingSession } = await import('@/lib/server/control-plane/client')
           const session =
