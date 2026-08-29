@@ -54,6 +54,24 @@ const manager = new MarkdownManager({
 })
 
 /**
+ * GitHub issue bodies are LF markdown. Some clients (and `gh issue create`
+ * without $'...' quoting) store the two-character sequence `\n` instead of a
+ * real line break; turn those into LFs when the body has no actual newlines.
+ */
+export function normalizeGitHubMarkdown(raw: string): string {
+  let text = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  if (!text.includes('\n') && text.includes('\\n')) {
+    text = text.replace(/\\n/g, '\n')
+  }
+  return text
+}
+
+/** Parse a GitHub issue or comment body into TipTap JSON. */
+export function githubMarkdownToTiptapJson(markdown: string): TiptapContent {
+  return commentMarkdownToTiptapJson(normalizeGitHubMarkdown(markdown))
+}
+
+/**
  * Parse a markdown string into TipTap JSON.
  *
  * Used by the service layer when content arrives via MCP/API without contentJson.

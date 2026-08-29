@@ -760,6 +760,24 @@ describe('sanitizeTiptapContent', () => {
     expect(node!.attrs!.src).toBe('https://cdn.example.com/shot.png')
   })
 
+  it('keeps extraTrustedImageHosts when image restriction is on', () => {
+    const input = {
+      type: 'doc',
+      content: [
+        {
+          type: 'image',
+          attrs: { src: 'https://user-images.githubusercontent.com/1/pic.png', alt: 'gh' },
+        },
+      ],
+    }
+    const result = sanitizeTiptapContent(input, {
+      restrictImagesToTrustedOrigins: true,
+      extraTrustedImageHosts: ['githubusercontent.com'],
+    })
+    const image = result.content!.find((n) => n.type === 'image')
+    expect(image!.attrs!.src).toBe('https://user-images.githubusercontent.com/1/pic.png')
+  })
+
   it('strips an external resizableImage src under restrictImagesToTrustedOrigins', () => {
     const input = {
       type: 'doc',

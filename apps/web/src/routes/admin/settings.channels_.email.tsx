@@ -7,7 +7,7 @@ import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { useUpdateSpamFilterConfig } from '@/lib/client/mutations/settings'
-import { BackLink } from '@/components/ui/back-link'
+import { ChannelSettingsCrumb } from '@/components/admin/settings/channel-settings-crumb'
 import { PageHeader } from '@/components/shared/page-header'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { Badge } from '@/components/ui/badge'
@@ -36,14 +36,14 @@ export const Route = createFileRoute('/admin/settings/channels_/email')({
 function EmailChannelPage() {
   return (
     <div className="space-y-6 max-w-3xl">
-      <div className="lg:hidden">
-        <BackLink to="/admin/settings/channels">Channels</BackLink>
+      <div className="space-y-1.5">
+        <ChannelSettingsCrumb page="Email" />
+        <PageHeader
+          icon={EnvelopeIcon}
+          title="Email"
+          description="Receive and send support conversations from the customer's mailbox."
+        />
       </div>
-      <PageHeader
-        icon={EnvelopeIcon}
-        title="Email"
-        description="Receive and send support conversations from the customer's mailbox."
-      />
       <EmailTransportCard />
       <EmailChannelSettings />
       <TrustedSendersSection />

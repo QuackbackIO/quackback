@@ -111,6 +111,23 @@ export async function handleInboundWebhook(
   // Decrypt secrets so handlers can access OAuth tokens
   const secrets = integration.secrets ? decryptSecrets(integration.secrets) : {}
 
+  // GitHub inbox channel is a second consumer, isolated from tracker status
+  // sync. It must run even when parseStatusChange returns null (comments are
+  // not status changes) and must never 500 the webhook.
+  if (integrationType === 'github') {
+    try {
+      const { ingestGitHubChannelEvent } =
+        await import('@/lib/server/domains/conversation/conversation.github-inbound')
+      await ingestGitHubChannelEvent({
+        body,
+        eventName: request.headers.get('X-GitHub-Event'),
+        integration,
+      })
+    } catch (error) {
+      log.error({ err: error, integration_type: integrationType }, 'inbound github channel failed')
+    }
+  }
+
   // Parse the webhook payload for a status change
   const result = await definition.inbound.parseStatusChange(body, config, secrets)
   if (!result) {

@@ -333,6 +333,38 @@ describe('applyAgentThreadEvent', () => {
     expect(next.messages[0].flaggedAt).toBe('flag-t')
   })
 
+  it('patches channelDelivery on message_updated so ticks move pending to sent', () => {
+    const prev = agentCache({
+      messages: [
+        agentMessage('m1', {
+          channelDelivery: { status: 'pending', channel: 'github', at: 't0' },
+        }),
+      ],
+    })
+    const next = applyAgentThreadEvent(
+      prev,
+      {
+        kind: 'message_updated',
+        conversationId: CONV_ID,
+        message: agentMessage('m1', {
+          channelDelivery: {
+            status: 'sent',
+            channel: 'github',
+            at: 't1',
+            externalId: '444',
+          },
+        }),
+      },
+      CONV_ID
+    )!
+    expect(next.messages[0].channelDelivery).toEqual({
+      status: 'sent',
+      channel: 'github',
+      at: 't1',
+      externalId: '444',
+    })
+  })
+
   it('returns prev untouched on message_updated for a message outside the loaded page', () => {
     const prev = agentCache()
     const evt: ConversationStreamEvent = {

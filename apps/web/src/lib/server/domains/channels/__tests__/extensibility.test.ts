@@ -210,4 +210,37 @@ describe('channel extensibility exit test', () => {
     })
     expect(hoisted.deliverLifecycleEvent).toHaveBeenCalledWith('closed', { conversationId })
   })
+
+  it('notify delivers on a thread-addressed channel even when the principal has no email', async () => {
+    visitorRows = [{ type: 'anonymous', email: null, contactEmail: null }]
+
+    await notifyAgentReply({
+      conversationId,
+      visitorPrincipalId,
+      content: 'reply',
+      agentName: 'Alex',
+      channel: TEST_CHANNEL_ID,
+      capturedEmail: null,
+    })
+
+    expect(hoisted.deliverAgentMessage).toHaveBeenCalledTimes(1)
+    expect(hoisted.deliverAgentMessage.mock.calls[0][0]).toMatchObject({
+      conversationId,
+      visitorPrincipalId,
+      recipient: '',
+      direction: 'agent_reply',
+    })
+
+    limitQueue = [
+      [{ channel: TEST_CHANNEL_ID, visitorPrincipalId }],
+      [{ type: 'anonymous', email: null, contactEmail: null }],
+    ]
+    await notifyCsatRequestEmail(conversationId, 'How did we do?')
+    expect(hoisted.deliverCsatRequest).toHaveBeenCalledTimes(1)
+    expect(hoisted.deliverCsatRequest.mock.calls[0][0]).toMatchObject({
+      conversationId,
+      visitorPrincipalId,
+      recipient: '',
+    })
+  })
 })

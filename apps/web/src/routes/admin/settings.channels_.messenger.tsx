@@ -6,7 +6,7 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { ChatBubbleLeftRightIcon } from '@heroicons/react/24/solid'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { useUpdatePortalConfig, useUpdateWidgetConfig } from '@/lib/client/mutations/settings'
-import { BackLink } from '@/components/ui/back-link'
+import { ChannelSettingsCrumb } from '@/components/admin/settings/channel-settings-crumb'
 import { PageHeader } from '@/components/shared/page-header'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { Switch } from '@/components/ui/switch'
@@ -77,14 +77,14 @@ export function MessengerChannelPage() {
 
   return (
     <div className="space-y-6 max-w-3xl">
-      <div className="lg:hidden">
-        <BackLink to="/admin/settings/channels">Channels</BackLink>
+      <div className="space-y-1.5">
+        <ChannelSettingsCrumb page="Messenger" />
+        <PageHeader
+          icon={ChatBubbleLeftRightIcon}
+          title="Messenger"
+          description="Live chat in the widget and on the portal."
+        />
       </div>
-      <PageHeader
-        icon={ChatBubbleLeftRightIcon}
-        title="Messenger"
-        description="Live chat in the widget and on the portal."
-      />
 
       <SettingsCard title="Surfaces" description="Where customers can start conversations.">
         <div className="flex items-center justify-between py-1">

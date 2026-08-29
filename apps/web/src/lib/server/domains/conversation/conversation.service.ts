@@ -41,7 +41,12 @@ import type {
   TeamId,
 } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
-import { channelFromVisitorTransport } from '@/lib/shared/channels'
+import {
+  channelFromVisitorTransport,
+  channelCloseSystemCopy,
+  getChannelDescriptor,
+} from '@/lib/shared/channels'
+import { isThreadAddressedChannel, pendingChannelDelivery } from './conversation.channel-delivery'
 import {
   canSendVisitorMessage,
   canStartConversation,
@@ -389,7 +394,11 @@ export async function sendVisitorMessage(
     // a block posted on an already-closed conversation is the intended
     // post-close CSAT/button flow, not the customer reopening the thread —
     // see applyVisitorReopenStatus's doc.
-    const visitorNextStatus = applyVisitorReopenStatus(conversation.status, !!resolvedBlockReply)
+    const visitorNextStatus = applyVisitorReopenStatus(
+      conversation.status,
+      !!resolvedBlockReply,
+      getChannelDescriptor(conversation.channel)?.reopenOnReply ?? 'always'
+    )
     const [updated] = await tx
       .update(conversations)
       .set({
@@ -656,6 +665,7 @@ export async function startAgentConversation(
     content: content || fallbackLabel,
     contentJson: safeContentJson,
     agentName: agent.displayName ?? 'Support',
+    messageId: txResult.message.id,
   })
 
   void emitConversationCreated(actor, agent, txResult.conversation)
@@ -710,6 +720,14 @@ export async function sendAgentMessage(
       throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
     }
 
+    const channelDelivery = isThreadAddressedChannel(existing.channel)
+      ? pendingChannelDelivery(existing.channel)
+      : undefined
+    const metadata: ConversationMessageMetadata = {
+      ...(extraMetadata ?? {}),
+      ...(channelDelivery ? { channelDelivery } : {}),
+    }
+
     const [message] = await tx
       .insert(conversationMessages)
       .values({
@@ -719,11 +737,14 @@ export async function sendAgentMessage(
         content,
         contentJson: safeContentJson,
         attachments: attachments.length > 0 ? attachments : null,
-        metadata: extraMetadata ?? null,
+        metadata: Object.keys(metadata).length > 0 ? metadata : null,
       })
       .returning()
 
-    const agentNextStatus = applyAgentReopenStatus(existing.status)
+    const agentNextStatus = applyAgentReopenStatus(
+      existing.status,
+      getChannelDescriptor(existing.channel)?.reopenOnReply ?? 'always'
+    )
     const [updated] = await tx
       .update(conversations)
       .set({
@@ -780,6 +801,7 @@ export async function sendAgentMessage(
     flaggedAt: null,
     postSuggestion: null,
     translatedFrom: extraMetadata?.translatedFrom ?? null,
+    channelDelivery: txResult.message.metadata?.channelDelivery ?? null,
   }
   if (agentMessageDTO.translatedFrom) {
     // Inbox channel ONLY (never the visitor's conversation channel, unlike
@@ -801,6 +823,7 @@ export async function sendAgentMessage(
     agentName: agent.displayName ?? 'Support',
     capturedEmail: txResult.conversation.visitorEmail,
     channel: txResult.conversation.channel,
+    messageId: txResult.message.id,
   })
 
   // isFirstMessage only matters for a VISITOR message — this is an agent
@@ -952,18 +975,19 @@ export async function setConversationStatus(
     .where(eq(conversations.id, conversationId))
     .returning()
   // Mark the lifecycle change in the transcript for both sides (author-less).
+  const closeCopy = channelCloseSystemCopy(updated.channel)
   if (status !== previous) {
     if (status === 'closed') {
       await emitSystemMessage(
         conversationId,
-        'Conversation ended',
+        closeCopy.ended,
         { kind: 'chat_ended' },
         { workflowName: attribution?.workflowName }
       )
     } else if (previous === 'closed') {
       await emitSystemMessage(
         conversationId,
-        'Conversation reopened',
+        closeCopy.reopened,
         { kind: 'chat_reopened' },
         { workflowName: attribution?.workflowName }
       )
@@ -992,6 +1016,17 @@ export async function setConversationStatus(
       )
       .catch((err) => {
         log.warn({ err, conversationId }, 'conversation close lifecycle delivery failed')
+      })
+  } else if (status === 'open' && previous === 'closed') {
+    void import('@/lib/server/domains/channels')
+      .then(({ requireChannelAdapter }) =>
+        requireChannelAdapter(updated.channel).deliverLifecycleEvent('reopened', {
+          conversationId,
+          closerPrincipalId: actor.principalId,
+        })
+      )
+      .catch((err) => {
+        log.warn({ err, conversationId }, 'conversation reopen lifecycle delivery failed')
       })
   }
   if (status === 'closed' && previous !== 'closed' && actor.principalType === 'user') {
@@ -1108,7 +1143,9 @@ export async function endConversation(
   // Mark the close in the transcript for both sides — but only on a real
   // open/pending → closed transition, mirroring setConversationStatus.
   if (previous !== 'closed') {
-    await emitSystemMessage(conversationId, 'Conversation ended', { kind: 'chat_ended' })
+    await emitSystemMessage(conversationId, channelCloseSystemCopy(updated.channel).ended, {
+      kind: 'chat_ended',
+    })
   }
   const dto = await conversationToDTO(updated, 'agent')
   publishConversationUpdate(conversationId, dto)
@@ -1752,6 +1789,20 @@ export async function deleteConversationMessage(
     throw new ForbiddenError('FORBIDDEN', decision.reason)
   }
 
+  if (
+    conversation.channel === 'github' &&
+    !message.isInternal &&
+    message.metadata?.githubCommentId
+  ) {
+    const { deleteGitHubIssueComment } =
+      await import('@/lib/server/domains/channels/github-deliver')
+    await deleteGitHubIssueComment(conversationId, message.metadata.githubCommentId).catch(
+      (err) => {
+        log.warn({ err, conversation_id: conversationId }, 'failed to delete GitHub issue comment')
+      }
+    )
+  }
+
   await db
     .update(conversationMessages)
     .set({ deletedAt: new Date(), deletedByPrincipalId: actor.principalId, updatedAt: new Date() })
@@ -2092,7 +2143,10 @@ export async function appendAssistantReply(
         metadata: opts.metadata ?? null,
       })
       .returning()
-    const nextStatus = applyAgentReopenStatus(existing.status)
+    const nextStatus = applyAgentReopenStatus(
+      existing.status,
+      getChannelDescriptor(existing.channel)?.reopenOnReply ?? 'always'
+    )
     const [updated] = await tx
       .update(conversations)
       .set({

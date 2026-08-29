@@ -6,7 +6,7 @@
  * toggle, flips to the original on click, and reads "Show translation" once
  * showing the original.
  */
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import { render, screen, cleanup, fireEvent } from '@testing-library/react'
 import { AgentMessageBubble } from '../message-bubble'
 import type { AgentConversationMessageDTO } from '@/lib/shared/conversation/types'
@@ -117,6 +117,121 @@ describe('AgentMessageBubble — inbox translation (P2-D.1)', () => {
     )
     expect(screen.getByText('Bonjour, comment puis-je aider?')).toBeInTheDocument()
     expect(screen.getByText('Translated to French · Show original')).toBeInTheDocument()
+  })
+})
+
+describe('AgentMessageBubble — channel delivery ticks', () => {
+  it('shows a sending tick on a pending GitHub reply', () => {
+    render(
+      <AgentMessageBubble
+        message={baseMessage({
+          senderType: 'agent',
+          content: 'the fix is out',
+          channelDelivery: { status: 'pending', channel: 'github', at: '2026-08-29T12:00:00.000Z' },
+        })}
+      />
+    )
+    expect(screen.getByLabelText('Sending to GitHub')).toBeInTheDocument()
+  })
+
+  it('shows a sent tick once GitHub accepted the comment', () => {
+    render(
+      <AgentMessageBubble
+        message={baseMessage({
+          senderType: 'agent',
+          content: 'the fix is out',
+          channelDelivery: {
+            status: 'sent',
+            channel: 'github',
+            at: '2026-08-29T12:00:01.000Z',
+            externalId: '444',
+          },
+        })}
+      />
+    )
+    expect(screen.getByLabelText('Sent to GitHub')).toBeInTheDocument()
+  })
+
+  it('shows the failure reason when the comment did not land', () => {
+    render(
+      <AgentMessageBubble
+        message={baseMessage({
+          senderType: 'agent',
+          content: 'the fix is out',
+          channelDelivery: {
+            status: 'failed',
+            channel: 'github',
+            at: '2026-08-29T12:00:01.000Z',
+            error: 'GitHub is not connected.',
+          },
+        })}
+      />
+    )
+    expect(screen.getByLabelText('GitHub is not connected.')).toBeInTheDocument()
+  })
+
+  it('does not show ticks on visitor messages or notes', () => {
+    const { rerender } = render(
+      <AgentMessageBubble
+        message={baseMessage({
+          senderType: 'visitor',
+          channelDelivery: { status: 'sent', channel: 'github', at: 't' },
+        })}
+      />
+    )
+    expect(screen.queryByLabelText('Sent to GitHub')).not.toBeInTheDocument()
+    rerender(
+      <AgentMessageBubble
+        message={baseMessage({
+          senderType: 'agent',
+          isInternal: true,
+          content: 'internal',
+          channelDelivery: { status: 'pending', channel: 'github', at: 't' },
+        })}
+      />
+    )
+    expect(screen.queryByLabelText('Sending to GitHub')).not.toBeInTheDocument()
+  })
+
+  it('exposes a retry control only on a failed GitHub send', () => {
+    const onRetry = vi.fn()
+    render(
+      <AgentMessageBubble
+        message={baseMessage({
+          senderType: 'agent',
+          content: 'the fix is out',
+          channelDelivery: {
+            status: 'failed',
+            channel: 'github',
+            at: '2026-08-29T12:00:01.000Z',
+            error: 'GitHub is not connected.',
+          },
+        })}
+        onRetryChannelDelivery={onRetry}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'GitHub is not connected. Retry' }))
+    expect(onRetry).toHaveBeenCalledWith('conversation_msg_1')
+  })
+
+  it('does not expose retry on a sent GitHub tick', () => {
+    render(
+      <AgentMessageBubble
+        message={baseMessage({
+          senderType: 'agent',
+          content: 'the fix is out',
+          channelDelivery: {
+            status: 'sent',
+            channel: 'github',
+            at: '2026-08-29T12:00:01.000Z',
+            externalId: '444',
+          },
+        })}
+        onRetryChannelDelivery={vi.fn()}
+      />
+    )
+    expect(screen.queryByRole('button', { name: /Retry/ })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Sent to GitHub')).toBeInTheDocument()
   })
 })
 

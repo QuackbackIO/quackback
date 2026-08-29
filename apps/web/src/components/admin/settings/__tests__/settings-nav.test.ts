@@ -11,17 +11,36 @@ function groupKids(
   sections: ReturnType<typeof buildNavSections>,
   section: string,
   group: string
-): { label: string; to: string }[] {
+): { label: string; to?: string }[] {
   const s = sections.find((x) => x.label === section)!
   const g = s.items.find((i) => i.label === group)
   if (!g || !isNavGroup(g)) return []
-  return g.kids.map((k) => ({ label: k.label, to: k.to }))
+  return g.kids.map((k) => ({ label: k.label, to: 'to' in k ? k.to : undefined }))
+}
+
+function nestedGroupKids(
+  sections: ReturnType<typeof buildNavSections>,
+  section: string,
+  group: string,
+  nested: string
+): { label: string; to?: string }[] {
+  const s = sections.find((x) => x.label === section)!
+  const g = s.items.find((i) => i.label === group)
+  if (!g || !isNavGroup(g)) return []
+  const child = g.kids.find((i) => i.label === nested)
+  if (!child || !isNavGroup(child)) return []
+  return child.kids.map((k) => ({ label: k.label, to: 'to' in k ? k.to : undefined }))
+}
+
+function entryLabels(
+  entry: ReturnType<typeof buildNavSections>[number]['items'][number]
+): string[] {
+  if (!isNavGroup(entry)) return [entry.label]
+  return [entry.label, ...entry.kids.flatMap(entryLabels)]
 }
 
 function allLabels(sections: ReturnType<typeof buildNavSections>): string[] {
-  return sections.flatMap((s) =>
-    s.items.flatMap((i) => (isNavGroup(i) ? [i.label, ...i.kids.map((k) => k.label)] : [i.label]))
-  )
+  return sections.flatMap((s) => s.items.flatMap(entryLabels))
 }
 
 describe('buildNavSections', () => {
@@ -68,24 +87,23 @@ describe('buildNavSections', () => {
     expect(itemLabels(sections, 'Products')).not.toContain('Support')
   })
 
-  it('Support shows Channels, Messenger, Email, Macros, Office Hours and SLA policies under supportInbox', () => {
+  it('Support shows Channels as the parent of channel pages, then Macros, Office Hours and SLA policies', () => {
     const sections = buildNavSections({ supportInbox: true })
     expect(groupKids(sections, 'Products', 'Support').map((k) => k.label)).toEqual([
       'Channels',
-      'Messenger',
-      'Email',
       'Macros',
       'Office Hours',
       'SLA policies',
     ])
+    expect(
+      nestedGroupKids(sections, 'Products', 'Support', 'Channels').map((k) => k.label)
+    ).toEqual(['Messenger', 'Email', 'GitHub'])
   })
 
   it('Support shows ticket pages under supportTickets, after the inbox pages', () => {
     const sections = buildNavSections({ supportInbox: true, supportTickets: true })
     expect(groupKids(sections, 'Products', 'Support').map((k) => k.label)).toEqual([
       'Channels',
-      'Messenger',
-      'Email',
       'Macros',
       'Office Hours',
       'SLA policies',
@@ -94,10 +112,11 @@ describe('buildNavSections', () => {
     ])
   })
 
-  it('Support shows Email, SLA, Office Hours, Macros, and ticket pages when just supportTickets is on', () => {
+  it('Support shows Email, GitHub, SLA, Office Hours, Macros, and ticket pages when just supportTickets is on', () => {
     const sections = buildNavSections({ supportTickets: true })
     expect(groupKids(sections, 'Products', 'Support').map((k) => k.label)).toEqual([
       'Email',
+      'GitHub',
       'Macros',
       'Office Hours',
       'SLA policies',
@@ -114,9 +133,18 @@ describe('buildNavSections', () => {
     const sections = buildNavSections({ supportInbox: true })
     const kids = groupKids(sections, 'Products', 'Support')
     expect(kids.find((k) => k.label === 'Channels')!.to).toBe('/admin/settings/channels')
-    expect(kids.find((k) => k.label === 'Messenger')!.to).toBe('/admin/settings/channels/messenger')
-    expect(kids.find((k) => k.label === 'Email')!.to).toBe('/admin/settings/channels/email')
+    const channelPages = nestedGroupKids(sections, 'Products', 'Support', 'Channels')
+    expect(channelPages.find((k) => k.label === 'Messenger')!.to).toBe(
+      '/admin/settings/channels/messenger'
+    )
+    expect(channelPages.find((k) => k.label === 'Email')!.to).toBe('/admin/settings/channels/email')
+    expect(channelPages.find((k) => k.label === 'GitHub')!.to).toBe(
+      '/admin/settings/channels/github'
+    )
     expect(itemLabels(sections, 'Workspace')).not.toContain('Emails')
+    expect(kids.map((k) => k.label)).not.toContain('Messenger')
+    expect(kids.map((k) => k.label)).not.toContain('Email')
+    expect(kids.map((k) => k.label)).not.toContain('GitHub')
   })
 
   it('Help Center is a flat link that appears only with the helpCenter flag', () => {

@@ -32,7 +32,15 @@ export const githubInboundHandler: InboundWebhookHandler = {
   },
 
   async parseStatusChange(body: string): Promise<InboundWebhookResult | null> {
-    const payload = JSON.parse(body)
+    let payload: {
+      action?: string
+      issue?: { number?: number }
+    }
+    try {
+      payload = JSON.parse(body) as typeof payload
+    } catch {
+      return null
+    }
 
     // Only handle issue events with relevant actions
     if (payload.action !== 'closed' && payload.action !== 'reopened') {

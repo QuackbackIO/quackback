@@ -13,4 +13,6 @@ export const testChannelDescriptor: ChannelDescriptor = {
   reopenOnReply: 'always',
   accountRoles: ['connection'],
   richText: 'limited',
+  addressing: 'thread',
+  closeSurface: 'native',
 }

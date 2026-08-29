@@ -142,5 +142,15 @@ export function toMessageDTO(
     systemEvent: message.metadata?.systemEvent ?? null,
     block: message.metadata?.block ?? null,
     blockReply: message.metadata?.blockReply ?? null,
+    channelDelivery:
+      message.metadata?.channelDelivery ??
+      (message.senderType === 'agent' && message.metadata?.githubCommentId
+        ? {
+            status: 'sent' as const,
+            channel: 'github' as const,
+            at: message.createdAt.toISOString(),
+            externalId: message.metadata.githubCommentId,
+          }
+        : null),
   }
 }

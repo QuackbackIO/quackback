@@ -1,11 +1,14 @@
-import type { ConversationId, PrincipalId } from '@quackback/ids'
+import type { ConversationId, ConversationMessageId, PrincipalId } from '@quackback/ids'
 import type { Channel } from '@/lib/shared/channels'
 import type { JSONContent } from '@tiptap/core'
 
-export type LifecycleKind = 'closed' | 'auto_closed'
+export type LifecycleKind = 'closed' | 'auto_closed' | 'reopened'
 
 export interface AgentMessageDeliveryCtx {
   conversationId: ConversationId
+  /** The agent message this send is delivering. Thread-addressed channels
+   *  use it to move pending → sent/failed on that row. */
+  messageId?: ConversationMessageId
   visitorPrincipalId: PrincipalId
   content: string
   contentJson?: JSONContent | null

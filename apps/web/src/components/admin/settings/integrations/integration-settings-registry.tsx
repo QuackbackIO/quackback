@@ -59,6 +59,11 @@ export interface IntegrationSettingsEntry {
   connectedBanner?: ReactNode
   /** Override the "Connected to X" workspace label (e.g. azure_devops → organizationName). */
   getWorkspaceName?: (integration: IntegrationSettingsData) => string | null | undefined
+  /**
+   * When true, the route skips the wrapping card and the shared health panel
+   * so this config can own Connection / Health / product sections.
+   */
+  bareConfig?: boolean
 }
 
 // ── lazy per-provider components ────────────────────────────────────────────
@@ -471,12 +476,14 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
         </p>,
       ],
     },
+    bareConfig: true,
     renderConfig: ({ integration, isConnected }) => (
       <GitHubConfig
         integrationId={integration.id}
         initialConfig={integration.config}
         initialEventMappings={integration.eventMappings}
         enabled={isConnected}
+        health={integration.health}
       />
     ),
   },

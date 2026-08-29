@@ -1,6 +1,7 @@
 import { ChatBubbleLeftRightIcon, EnvelopeIcon } from '@heroicons/react/24/solid'
 import type { Channel } from '@/lib/shared/conversation/types'
 import { channelLabelMap, getChannelDescriptor } from '@/lib/shared/channels'
+import { GitHubIcon } from '@/components/icons/integration-icons'
 
 /** Every channel's display label — sourced from the descriptor registry. */
 export const CHANNEL_LABEL: Record<Channel, string> = channelLabelMap()
@@ -8,6 +9,7 @@ export const CHANNEL_LABEL: Record<Channel, string> = channelLabelMap()
 const CHANNEL_ICON = {
   messenger: ChatBubbleLeftRightIcon,
   email: EnvelopeIcon,
+  github: GitHubIcon,
 } as const
 
 /** Badge showing a non-default (their-surface) channel; first-party messenger is silent. */

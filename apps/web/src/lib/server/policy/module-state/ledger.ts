@@ -976,6 +976,17 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       "workspace's data.",
   },
   {
+    file: 'apps/web/src/lib/server/domains/channels/github-deliver.ts',
+    name: 'postedThisInvocation',
+    category: 'workspace-scoped-key',
+    keyedBy: 'conversationId',
+    reason:
+      'A one-tick latch so notify fan-out posts one GitHub comment per message. Keyed by ' +
+      'conversationId:messageId TypeIDs, which name one conversation in one workspace. A ' +
+      "cross-workspace hit cannot skip another workspace's send because those ids do not collide, " +
+      'and the entry is deleted at the next macrotask so it does not persist across requests.',
+  },
+  {
     file: 'apps/web/src/lib/shared/channels/registry.ts',
     name: 'DESCRIPTORS',
     category: 'process-lifetime',

@@ -44,6 +44,7 @@ import { ConversationTagsEditor } from '@/components/admin/conversation/conversa
 import { ConversationAttributesEditor } from '@/components/admin/conversation/conversation-attributes-editor'
 import { StatusControl } from '@/components/admin/conversation/status-control'
 import { UnreachableBadge, CHANNEL_LABEL } from '@/components/admin/conversation/channel-badge'
+import { getChannelDescriptor, githubIssueRefFromUrl } from '@/lib/shared/channels'
 import { TONE_CLASSES } from '@/components/admin/conversation/sla-chip'
 import { CompanyCard } from '@/components/admin/conversation/company-card'
 import { CopilotPanel } from '@/components/admin/conversation/copilot-panel'
@@ -212,6 +213,8 @@ export interface InboxDetailPanelProps {
    *  Same bump-a-counter ping as the thread's `createTicketToken`. No-op when
    *  the tab isn't available (flag/permission off). */
   openCopilotToken?: number
+  /** Distinct GitHub users who have written on this issue. */
+  issuePeople?: { principalId: string; displayName: string; avatarUrl: string | null }[]
 }
 
 /**
@@ -234,6 +237,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
   onCreateTicket,
   onInsertFromCopilot,
   openCopilotToken,
+  issuePeople,
 }: InboxDetailPanelProps) {
   const { settings } = useRouteContext({ from: '/admin' }) as {
     settings?: { featureFlags?: FeatureFlags } | null
@@ -392,6 +396,10 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
                         <span className="ml-1 text-muted-foreground/50">(in conversation)</span>
                       )}
                     </p>
+                  ) : getChannelDescriptor(conversation?.channel ?? '')?.addressing === 'thread' ? (
+                    <p className="truncate text-xs text-muted-foreground">
+                      {getChannelDescriptor(conversation!.channel)?.label} user
+                    </p>
                   ) : (
                     <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                       Anonymous <UnreachableBadge channel={conversation?.channel ?? 'email'} />
@@ -481,6 +489,27 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
             )}
           </div>
         )}
+
+        {!isTicketItem &&
+          conversation?.channel === 'github' &&
+          issuePeople &&
+          issuePeople.length > 0 && (
+            <div className="space-y-2 border-t border-border/30 pt-4">
+              <span className={MENU_LABEL}>On this issue</span>
+              <ul className="space-y-2">
+                {issuePeople.map((person) => (
+                  <li key={person.principalId} className="flex min-w-0 items-center gap-2">
+                    <Avatar
+                      src={person.avatarUrl}
+                      name={person.displayName}
+                      className="size-6 shrink-0 text-xs"
+                    />
+                    <span className="truncate text-sm font-medium">{person.displayName}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
         {/* 2. Ticket card — populated when the item is or links a ticket;
               otherwise the create-ticket empty slot. */}
@@ -666,6 +695,20 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
               </span>
             </Row>
           )}
+          {!isTicketItem &&
+            conversation?.channel === 'github' &&
+            githubIssueRefFromUrl(conversation.customAttributes?.githubUrl) && (
+              <Row icon={ArrowTopRightOnSquareIcon} label="Issue">
+                <a
+                  href={String(conversation.customAttributes.githubUrl)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="truncate text-sm font-medium text-foreground underline-offset-2 hover:underline"
+                >
+                  {githubIssueRefFromUrl(conversation.customAttributes.githubUrl)}
+                </a>
+              </Row>
+            )}
           {!isTicketItem && conversation && (
             <Row icon={CalendarIcon} label="Created">
               <span className="text-sm font-medium text-foreground">

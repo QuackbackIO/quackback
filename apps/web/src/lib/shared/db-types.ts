@@ -35,6 +35,7 @@ export {
   CONVERSATION_END_REASONS,
   CONVERSATION_SPAM_FILED_BY,
   CONVERSATION_PRIORITIES,
+  CHANNELS,
   TEAM_ASSIGNMENT_METHODS,
   TICKET_TYPES,
   TICKET_STATUS_CATEGORIES,
@@ -47,6 +48,7 @@ export {
 } from '@quackback/db/types'
 export type {
   AccessTier,
+  Channel,
   BoardAccess,
   ModerationRuleValue,
   ConversationEndReason,
