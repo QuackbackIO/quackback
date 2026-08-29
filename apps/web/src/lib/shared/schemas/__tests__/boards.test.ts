@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { accessForPreset, normalizeBoardAccess } from '../boards'
+import { accessForPreset, normalizeBoardAccess, presetForAccess } from '../boards'
 
 describe('accessForPreset', () => {
   it('public preset: view=anonymous, vote/comment/submit=authenticated, segments empty, moderation all inherit', () => {
@@ -28,6 +28,51 @@ describe('accessForPreset', () => {
       signedPosts: 'inherit',
       comments: 'inherit',
     })
+  })
+})
+
+describe('presetForAccess', () => {
+  it('returns public for the public preset matrix', () => {
+    expect(presetForAccess(accessForPreset('public'))).toBe('public')
+  })
+
+  it('returns private for the private preset matrix', () => {
+    expect(presetForAccess(accessForPreset('private'))).toBe('private')
+  })
+
+  it('returns custom when any action tier differs from both presets', () => {
+    const access = accessForPreset('public')
+    expect(presetForAccess({ ...access, submit: 'team' })).toBe('custom')
+  })
+
+  it('returns custom when public tiers have a non-empty segment list', () => {
+    const access = accessForPreset('public')
+    expect(
+      presetForAccess({
+        ...access,
+        segments: { ...access.segments, view: ['seg_customers'] },
+      })
+    ).toBe('custom')
+  })
+
+  it('returns custom when private tiers have a non-empty segment list', () => {
+    const access = accessForPreset('private')
+    expect(
+      presetForAccess({
+        ...access,
+        segments: { ...access.segments, submit: ['seg_beta'] },
+      })
+    ).toBe('custom')
+  })
+
+  it('ignores moderation when classifying a preset', () => {
+    const access = accessForPreset('public')
+    expect(
+      presetForAccess({
+        ...access,
+        moderation: { anonPosts: 'on', signedPosts: 'off', comments: 'on' },
+      })
+    ).toBe('public')
   })
 })
 

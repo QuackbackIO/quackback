@@ -49,7 +49,6 @@ export function DeleteBoardForm({ board }: DeleteBoardFormProps) {
       { id: board.id },
       {
         onSuccess: () => {
-          // Navigate to boards page without board param - will auto-select first remaining board
           void navigate({
             to: '/admin/settings/boards',
             search: {},

@@ -7,13 +7,6 @@ import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
 import { PencilIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { usePortalImageUpload } from '@/lib/client/hooks/use-image-upload'
 import { useCreatePublicPost } from '@/lib/client/mutations/portal-posts'
@@ -23,6 +16,7 @@ import { useSimilarPosts } from '@/lib/client/hooks/use-similar-posts'
 import { useEnsureAnonSession } from '@/lib/client/hooks/use-ensure-anon-session'
 import { SimilarPostsCard } from '@/components/public/similar-posts-card'
 import { BoardCustomFields } from '@/components/public/feedback/board-custom-fields'
+import { PostingToBoard } from '@/components/public/feedback/posting-to-board'
 import { validatePostCustomFieldValues } from '@/lib/shared/post-custom-fields'
 import type { BoardSettings } from '@/lib/shared/db-types'
 import { signOut } from '@/lib/client/auth-client'
@@ -49,6 +43,11 @@ export interface FeedbackHeaderProps {
    */
   boardPermissions?: Record<string, { canSubmit: boolean; canVote: boolean }>
   onPostCreated?: (postId: string, boardSlug: string) => void
+  /**
+   * When true, posts go to this page's board and the form does not offer a
+   * board switcher.
+   */
+  boardLocked?: boolean
 }
 
 export function FeedbackHeaderAnimated({
@@ -57,6 +56,7 @@ export function FeedbackHeaderAnimated({
   user,
   boardPermissions,
   onPostCreated,
+  boardLocked = false,
 }: FeedbackHeaderProps) {
   const intl = useIntl()
   const router = useRouter()
@@ -267,7 +267,7 @@ export function FeedbackHeaderAnimated({
       transition={{ duration: 0.2 }}
       onKeyDown={handleKeyDown}
     >
-      {/* Board selector - above title when expanded */}
+      {/* Destination board, above title when expanded */}
       <AnimatePresence>
         {expanded && boards.length > 0 && (
           <motion.div
@@ -277,42 +277,17 @@ export function FeedbackHeaderAnimated({
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="flex items-center px-4 sm:px-5 pt-3 pb-1">
-              <span className="text-xs text-muted-foreground me-1">
-                <FormattedMessage
-                  id="portal.feedback.header.postingTo"
-                  defaultMessage="Posting to"
-                />
-              </span>
-              <Select
-                value={selectedBoardId}
-                onValueChange={(id) => {
-                  setSelectedBoardId(id)
-                  // Answers are per-board: switching boards drops the previous
-                  // board's field values rather than smuggling them across.
-                  setCustomFieldValues({})
-                }}
-              >
-                <SelectTrigger
-                  size="xs"
-                  className="border-0 bg-transparent shadow-none font-medium text-foreground hover:text-foreground/80 focus-visible:ring-0"
-                >
-                  <SelectValue
-                    placeholder={intl.formatMessage({
-                      id: 'portal.feedback.header.selectBoard',
-                      defaultMessage: 'Select a board',
-                    })}
-                  />
-                </SelectTrigger>
-                <SelectContent align="start">
-                  {boards.map((board) => (
-                    <SelectItem key={board.id} value={board.id} className="py-1">
-                      {board.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <PostingToBoard
+              boards={boards}
+              selectedBoardId={selectedBoardId}
+              locked={boardLocked}
+              onSelect={(id) => {
+                setSelectedBoardId(id)
+                // Answers are per-board: switching boards drops the previous
+                // board's field values rather than smuggling them across.
+                setCustomFieldValues({})
+              }}
+            />
           </motion.div>
         )}
       </AnimatePresence>
