@@ -81,6 +81,33 @@ export function accessForPreset(preset: BoardPreset): BoardAccess {
   }
 }
 
+export type AccessPresetKind = 'public' | 'private' | 'custom'
+
+function segmentsEmpty(access: BoardAccess): boolean {
+  return (
+    access.segments.view.length === 0 &&
+    access.segments.vote.length === 0 &&
+    access.segments.comment.length === 0 &&
+    access.segments.submit.length === 0
+  )
+}
+
+function sameActionTiers(a: BoardAccess, b: BoardAccess): boolean {
+  return a.view === b.view && a.vote === b.vote && a.comment === b.comment && a.submit === b.submit
+}
+
+/**
+ * Classify a stored access matrix as one of the two create-time presets,
+ * or `custom` when the four action tiers or any segment allowlist differ.
+ * Moderation is ignored — it is a separate policy surface.
+ */
+export function presetForAccess(access: BoardAccess): AccessPresetKind {
+  if (!segmentsEmpty(access)) return 'custom'
+  if (sameActionTiers(access, accessForPreset('public'))) return 'public'
+  if (sameActionTiers(access, accessForPreset('private'))) return 'private'
+  return 'custom'
+}
+
 export const createBoardSchema = z.object({
   name: z.string().min(1, 'Board name is required').max(100),
   description: z.string().max(500).optional(),

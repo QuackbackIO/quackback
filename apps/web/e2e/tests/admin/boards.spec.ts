@@ -37,14 +37,24 @@ async function createBoard(page: Page, name: string): Promise<void> {
   await dialog.getByLabel('Board name').fill(name)
   await dialog.getByRole('button', { name: 'Create board' }).click()
   await expect(dialog).toBeHidden({ timeout: 10000 })
-  // Wait until the page has navigated to the new board (switcher reflects it).
-  await expect(page.getByTestId('board-switcher')).toContainText(name, { timeout: 10000 })
+  await expect(page).toHaveURL(new RegExp(`/admin/settings/boards/${slugify(name)}(?:\\?|$)`), {
+    timeout: 10000,
+  })
+  await expect(page.getByRole('heading', { name })).toBeVisible({ timeout: 10000 })
+}
+
+/** Open the first board row on the settings list. */
+async function openFirstBoard(page: Page): Promise<void> {
+  const row = page.locator('a[href*="/admin/settings/boards/"]').first()
+  await expect(row).toBeVisible({ timeout: 10000 })
+  await row.click()
+  await expect(page.getByText('Board Details')).toBeVisible({ timeout: 10000 })
 }
 
 /** Create a throwaway board and open its Access tab, settled on Public. */
 async function createBoardOnAccessTab(page: Page, name: string): Promise<void> {
   await createBoard(page, name)
-  await page.locator('nav').getByRole('button', { name: 'Access' }).click()
+  await page.getByRole('tab', { name: 'Access' }).click()
   await expect(page.getByText('Access Control')).toBeVisible({ timeout: 5000 })
   // New boards default to the Public preset; wait for the matrix to settle on it
   // (the optimistic insert can briefly show defaults before the refetch lands).
@@ -57,34 +67,33 @@ async function createBoardOnAccessTab(page: Page, name: string): Promise<void> {
 
 /** Delete the board currently open in settings (type-to-confirm danger zone). */
 async function deleteCurrentBoard(page: Page, name: string): Promise<void> {
-  await page.locator('nav').getByRole('button', { name: 'General' }).click()
+  await page.getByRole('tab', { name: 'General' }).click()
   await expect(page.getByText('Danger Zone')).toBeVisible({ timeout: 5000 })
   await page.getByPlaceholder(name).fill(name)
   const del = page.getByRole('button', { name: 'Delete board', exact: true })
   await expect(del).toBeEnabled()
   await del.click()
-  await expect(page).toHaveURL(/\/admin\/settings\/boards/, { timeout: 10000 })
+  await expect(page).toHaveURL(/\/admin\/settings\/boards\/?(\?|$)/, { timeout: 10000 })
 }
 
 test.describe('Admin Board Management', () => {
   test.beforeEach(async ({ page }) => {
-    // Navigate to board settings (will redirect to first board)
     await page.goto('/admin/settings/boards')
     await page.waitForLoadState('networkidle')
   })
 
   test('displays board settings page', async ({ page }) => {
-    // Should show board details card (page redirects to first board)
-    await expect(page.getByText('Board Details')).toBeVisible({ timeout: 10000 })
+    await expect(page.getByRole('heading', { name: 'Boards' })).toBeVisible({ timeout: 10000 })
   })
 
   test('can access board general settings', async ({ page }) => {
-    // Should show board details card
+    await openFirstBoard(page)
     const generalSettings = page.getByText('Board Details')
     await expect(generalSettings).toBeVisible({ timeout: 10000 })
   })
 
   test('can edit board name', async ({ page }) => {
+    await openFirstBoard(page)
     // Find the board name input in the General Settings section (first input, not the delete confirmation)
     const nameInput = page.getByRole('textbox', { name: 'Board name', exact: true })
 
@@ -105,6 +114,7 @@ test.describe('Admin Board Management', () => {
   })
 
   test('can edit board description', async ({ page }) => {
+    await openFirstBoard(page)
     // Find the description input/textarea
     const descInput = page.getByLabel('Description').or(page.locator('textarea'))
 
@@ -145,6 +155,7 @@ test.describe('Admin Board Management', () => {
   })
 
   test('shows danger zone with delete option', async ({ page }) => {
+    await openFirstBoard(page)
     // Should show danger zone section
     const dangerZone = page.getByText('Danger Zone')
     await expect(dangerZone).toBeVisible({ timeout: 10000 })
@@ -155,6 +166,7 @@ test.describe('Admin Board Management', () => {
   })
 
   test('delete button shows confirmation dialog', async ({ page }) => {
+    await openFirstBoard(page)
     // Find delete button - use exact match to avoid matching board switcher
     const deleteButton = page.getByRole('button', { name: 'Delete board', exact: true })
 
@@ -181,6 +193,7 @@ test.describe('Admin Board Management', () => {
   })
 
   test('can navigate between settings tabs', async ({ page }) => {
+    await openFirstBoard(page)
     // Look for board navigation links in sidebar nav
     const boardNav = page.locator('nav ul')
 
@@ -198,6 +211,7 @@ test.describe('Admin Board Management', () => {
   })
 
   test('can access board access settings', async ({ page }) => {
+    await openFirstBoard(page)
     // Navigate to access settings tab
     const accessLink = page.getByRole('link', { name: 'Access' })
 
@@ -216,11 +230,10 @@ test.describe('Board Access Settings', () => {
     await page.goto('/admin/settings/boards')
     await page.waitForLoadState('networkidle')
 
-    // Wait for the board settings page to fully load (redirects to first board)
-    await expect(page.getByText('Board Details')).toBeVisible({ timeout: 10000 })
+    await openFirstBoard(page)
 
-    // Switch to the Access tab (a settings-nav button; sets ?tab=access).
-    await page.locator('nav').getByRole('button', { name: 'Access' }).click()
+    // Switch to the Access tab (sets ?tab=access).
+    await page.getByRole('tab', { name: 'Access' }).click()
     await expect(page.getByText('Access Control')).toBeVisible({ timeout: 5000 })
   })
 
@@ -294,8 +307,7 @@ test.describe('Board Deletion Flow', () => {
     // Wait for the page to show the new board's settings
     await expect(page.getByText('Board Details')).toBeVisible({ timeout: 10000 })
 
-    // Verify we're on the correct board's settings page (board switcher shows the board name)
-    await expect(page.getByTestId('board-switcher')).toContainText(testBoardName)
+    await expect(page.getByRole('heading', { name: testBoardName })).toBeVisible()
     // Find the delete button (should be disabled until we type confirmation)
     // Use exact: true to avoid matching the board switcher that contains "Delete Board" in its name
     const deleteButton = page.getByRole('button', { name: 'Delete board', exact: true })
@@ -319,6 +331,7 @@ test.describe('Board Deletion Flow', () => {
   test('delete button stays disabled until name matches', async ({ page }) => {
     await page.goto('/admin/settings/boards')
     await page.waitForLoadState('networkidle')
+    await openFirstBoard(page)
 
     // Find the delete button - use exact match to avoid matching board switcher
     const deleteButton = page.getByRole('button', { name: 'Delete board', exact: true })
@@ -358,8 +371,10 @@ test.describe('Create Board Dialog', () => {
     await page.goto('/admin/settings/boards')
     await page.waitForLoadState('networkidle')
 
-    // Wait for page to be ready - either board settings or empty state
-    await expect(page.getByText('Board Details').or(page.getByText('No boards yet'))).toBeVisible({
+    // Wait for page to be ready - either the boards list or empty state
+    await expect(
+      page.getByRole('heading', { name: 'Boards' }).or(page.getByText('No boards yet'))
+    ).toBeVisible({
       timeout: 10000,
     })
   })
@@ -468,27 +483,14 @@ test.describe('Create Board Dialog', () => {
     // Wait for navigation to complete and page to fully load
     await page.waitForLoadState('networkidle')
 
-    // Wait for the board switcher to show the new board name (confirms navigation completed)
-    const boardSwitcherButton = page.getByTestId('board-switcher')
-    await expect(boardSwitcherButton).toContainText(testBoardName, { timeout: 10000 })
-
-    // Verify board was created by checking we're on the new board's settings page
-    // The board name should be visible in the page heading/switcher
+    await expect(page.getByRole('heading', { name: testBoardName })).toBeVisible({ timeout: 10000 })
     await expect(page.getByText('Board Details')).toBeVisible({ timeout: 5000 })
 
-    // Open the board switcher dropdown to verify the board exists in the list
-    await boardSwitcherButton.click()
-
-    // Wait for dropdown menu to appear
-    const dropdownContent = page.getByRole('menu')
-    await expect(dropdownContent).toBeVisible({ timeout: 5000 })
-
-    // The new board should appear in the dropdown menu
-    const boardMenuItem = dropdownContent.getByRole('menuitem', { name: testBoardName })
-    await expect(boardMenuItem).toBeVisible({ timeout: 5000 })
-
-    // Close the dropdown
-    await page.keyboard.press('Escape')
+    await page.goto('/admin/settings/boards')
+    await page.waitForLoadState('networkidle')
+    await expect(page.getByRole('link', { name: new RegExp(testBoardName) })).toBeVisible({
+      timeout: 10000,
+    })
   })
 
   test('can create a private board', async ({ page }) => {
@@ -563,9 +565,13 @@ test.describe('Board Settings Tabs', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/admin/settings/boards')
     await page.waitForLoadState('networkidle')
-    await expect(page.getByText('Board Details').or(page.getByText('No boards yet'))).toBeVisible({
+    await expect(
+      page.getByRole('heading', { name: 'Boards' }).or(page.getByText('No boards yet'))
+    ).toBeVisible({
       timeout: 10000,
     })
+    if (await page.getByText('No boards yet').count()) return
+    await openFirstBoard(page)
   })
 
   test('General tab shows Board Details and Danger Zone cards', async ({ page }) => {
@@ -575,30 +581,27 @@ test.describe('Board Settings Tabs', () => {
   })
 
   test('settings nav shows General, Access, Import Data, Export Data buttons', async ({ page }) => {
-    const nav = page.locator('nav')
-    await expect(nav.getByRole('button', { name: 'General' })).toBeVisible({ timeout: 5000 })
-    await expect(nav.getByRole('button', { name: 'Access' })).toBeVisible()
-    await expect(nav.getByRole('button', { name: 'Import Data' })).toBeVisible()
-    await expect(nav.getByRole('button', { name: 'Export Data' })).toBeVisible()
+    await expect(page.getByRole('tab', { name: 'General' })).toBeVisible({ timeout: 5000 })
+    await expect(page.getByRole('tab', { name: 'Access' })).toBeVisible()
+    await expect(page.getByRole('tab', { name: 'Import Data' })).toBeVisible()
+    await expect(page.getByRole('tab', { name: 'Export Data' })).toBeVisible()
   })
 
   test('clicking Access tab switches to Access Control view', async ({ page }) => {
-    const nav = page.locator('nav')
-    const accessButton = nav.getByRole('button', { name: 'Access' })
-    if ((await accessButton.count()) === 0) return
+    const accessTab = page.getByRole('tab', { name: 'Access' })
+    if ((await accessTab.count()) === 0) return
 
-    await accessButton.click()
+    await accessTab.click()
     await expect(page.getByText('Access Control')).toBeVisible({ timeout: 5000 })
     // URL should reflect the tab change
     await expect(page).toHaveURL(/tab=access/)
   })
 
   test('clicking Import Data tab switches to import view', async ({ page }) => {
-    const nav = page.locator('nav')
-    const importButton = nav.getByRole('button', { name: 'Import Data' })
-    if ((await importButton.count()) === 0) return
+    const importTab = page.getByRole('tab', { name: 'Import Data' })
+    if ((await importTab.count()) === 0) return
 
-    await importButton.click()
+    await importTab.click()
     await expect(page.getByText('Import Data')).toBeVisible({ timeout: 5000 })
     await expect(page.getByText('Import posts from a CSV file into this board')).toBeVisible()
   })
@@ -606,56 +609,46 @@ test.describe('Board Settings Tabs', () => {
   test('clicking Export Data tab switches to export view and shows Export CSV button', async ({
     page,
   }) => {
-    const nav = page.locator('nav')
-    const exportButton = nav.getByRole('button', { name: 'Export Data' })
-    if ((await exportButton.count()) === 0) return
+    const exportTab = page.getByRole('tab', { name: 'Export Data' })
+    if ((await exportTab.count()) === 0) return
 
-    await exportButton.click()
+    await exportTab.click()
     await expect(page.getByText('Export Data')).toBeVisible({ timeout: 5000 })
     await expect(page.getByText('Download all posts from this board as CSV')).toBeVisible()
     await expect(page.getByRole('button', { name: /export csv/i })).toBeVisible()
   })
 
   test('navigating between tabs with keyboard (Tab key reaches nav buttons)', async ({ page }) => {
-    const nav = page.locator('nav')
-    const generalButton = nav.getByRole('button', { name: 'General' })
-    if ((await generalButton.count()) === 0) return
+    const generalTab = page.getByRole('tab', { name: 'General' })
+    if ((await generalTab.count()) === 0) return
 
-    // Focus the General button and navigate via keyboard to Access
-    await generalButton.focus()
+    // Focus the General tab and navigate via keyboard to Access
+    await generalTab.focus()
     await page.keyboard.press('Tab')
 
-    // The next focused element should be the Access button
-    const accessButton = nav.getByRole('button', { name: 'Access' })
-    await expect(accessButton).toBeFocused()
+    // The next focused element should be the Access tab
+    await expect(page.getByRole('tab', { name: 'Access' })).toBeFocused()
   })
 
   test('General tab is active by default (highlighted)', async ({ page }) => {
-    const nav = page.locator('nav')
-    const generalButton = nav.getByRole('button', { name: 'General' })
-    if ((await generalButton.count()) === 0) return
+    const generalTab = page.getByRole('tab', { name: 'General' })
+    if ((await generalTab.count()) === 0) return
 
-    // The active nav button is the only one with `font-medium` (inactive buttons
-    // carry `hover:bg-muted/...`, so a bg-* match wouldn't discriminate).
-    // toHaveClass auto-retries, so it tolerates the client re-render.
-    await expect(generalButton).toHaveClass(/font-medium/)
+    await expect(generalTab).toHaveAttribute('data-state', 'active')
   })
 
   test('active tab button is visually distinct after switching', async ({ page }) => {
-    const nav = page.locator('nav')
-    const accessButton = nav.getByRole('button', { name: 'Access' })
-    if ((await accessButton.count()) === 0) return
+    const accessTab = page.getByRole('tab', { name: 'Access' })
+    if ((await accessTab.count()) === 0) return
 
-    await accessButton.click()
+    await accessTab.click()
     await page.waitForLoadState('networkidle')
 
-    // Access button should now have the active marker. toHaveClass auto-retries,
-    // so it waits out the client-side re-render after the tab switch.
-    await expect(accessButton).toHaveClass(/font-medium/)
-
-    // General button should no longer be active
-    const generalButton = nav.getByRole('button', { name: 'General' })
-    await expect(generalButton).not.toHaveClass(/font-medium/)
+    await expect(accessTab).toHaveAttribute('data-state', 'active')
+    await expect(page.getByRole('tab', { name: 'General' })).toHaveAttribute(
+      'data-state',
+      'inactive'
+    )
   })
 })
 
@@ -667,9 +660,13 @@ test.describe('Board Slug', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/admin/settings/boards')
     await page.waitForLoadState('networkidle')
-    await expect(page.getByText('Board Details').or(page.getByText('No boards yet'))).toBeVisible({
+    await expect(
+      page.getByRole('heading', { name: 'Boards' }).or(page.getByText('No boards yet'))
+    ).toBeVisible({
       timeout: 10000,
     })
+    if (await page.getByText('No boards yet').count()) return
+    await openFirstBoard(page)
   })
 
   test('Board Details form shows Board name and Description fields', async ({ page }) => {
@@ -692,7 +689,7 @@ test.describe('Board Slug', () => {
     expect(currentName.trim().length).toBeGreaterThan(0)
   })
 
-  test('board switcher shows the current board name after a name edit', async ({ page }) => {
+  test('board heading shows the current board name after a name edit', async ({ page }) => {
     // Own a throwaway board so the rename can't race other parallel tests on the
     // shared redirect-target board.
     const createName = `Slug Edit ${Date.now()}`
@@ -702,17 +699,13 @@ test.describe('Board Slug', () => {
     await page.getByRole('textbox', { name: 'Board name', exact: true }).fill(updatedName)
     await page.getByRole('button', { name: 'Save changes' }).click()
 
-    // Renaming regenerates the slug, orphaning this slug-keyed page once the
-    // server round-trip lands (Board Details unmounts) — a reliable "persisted"
-    // signal. (The switcher can't reflect it in place: the optimistic write
-    // targets the boards list, not the settings query, and the slug change
-    // orphans the page before the refetch arrives.)
+    // Renaming regenerates the slug, so this slug-keyed page no longer
+    // matches a board and the loader sends us back to the list.
     await expect(page.getByText('Board Details')).toBeHidden({ timeout: 10000 })
 
-    // Land on the new slug: a fresh load shows the renamed board in the switcher.
-    await page.goto(`/admin/settings/boards?board=${slugify(updatedName)}`)
+    await page.goto(`/admin/settings/boards/${slugify(updatedName)}`)
     await page.waitForLoadState('networkidle')
-    await expect(page.getByTestId('board-switcher')).toContainText(updatedName, { timeout: 10000 })
+    await expect(page.getByRole('heading', { name: updatedName })).toBeVisible({ timeout: 10000 })
 
     await deleteCurrentBoard(page, updatedName)
   })

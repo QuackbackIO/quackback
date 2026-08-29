@@ -65,6 +65,7 @@ export function useCreateBoard() {
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: boardKeys.lists() })
       queryClient.invalidateQueries({ queryKey: adminQueries.boardsForSettings().queryKey })
+      queryClient.invalidateQueries({ queryKey: adminQueries.boardsWithCounts().queryKey })
     },
   })
 }
@@ -124,6 +125,7 @@ export function useUpdateBoard() {
       queryClient.invalidateQueries({ queryKey: boardKeys.lists() })
       queryClient.invalidateQueries({ queryKey: boardKeys.detail(input.id as BoardId) })
       queryClient.invalidateQueries({ queryKey: adminQueries.boardsForSettings().queryKey })
+      queryClient.invalidateQueries({ queryKey: adminQueries.boardsWithCounts().queryKey })
     },
   })
 }
@@ -181,6 +183,7 @@ export function useUpdateBoardAccess() {
       queryClient.invalidateQueries({ queryKey: boardKeys.lists() })
       queryClient.invalidateQueries({ queryKey: boardKeys.detail(input.boardId) })
       queryClient.invalidateQueries({ queryKey: adminQueries.boardsForSettings().queryKey })
+      queryClient.invalidateQueries({ queryKey: adminQueries.boardsWithCounts().queryKey })
     },
   })
 }
@@ -213,6 +216,7 @@ export function useDeleteBoard() {
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: boardKeys.lists() })
       queryClient.invalidateQueries({ queryKey: adminQueries.boardsForSettings().queryKey })
+      queryClient.invalidateQueries({ queryKey: adminQueries.boardsWithCounts().queryKey })
     },
   })
 }

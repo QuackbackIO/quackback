@@ -74,8 +74,9 @@ export function CreateBoardDialog({
         // for the new board so they can fine-tune the matrix without
         // hunting through the boards list.
         void navigate({
-          to: '/admin/settings/boards',
-          search: customize ? { board: board.slug, tab: 'access' } : { board: board.slug },
+          to: '/admin/settings/boards/$slug',
+          params: { slug: board.slug },
+          search: customize ? { tab: 'access' } : {},
         })
         setCustomize(false)
         router.invalidate()

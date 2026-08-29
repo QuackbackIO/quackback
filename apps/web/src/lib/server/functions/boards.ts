@@ -10,6 +10,7 @@ import { requireAuth } from './auth-helpers'
 import { db, boards, eq } from '@/lib/server/db'
 import {
   listBoards,
+  listBoardsWithDetails,
   getBoardById,
   createBoard,
   updateBoard,
@@ -101,6 +102,23 @@ export const fetchBoardsFn = createServerFn({ method: 'GET' }).handler(async () 
   const boards = await listBoards()
   log.debug({ count: boards.length }, 'fetch boards')
   return boards.map(serializeBoard)
+})
+
+/**
+ * List boards with post counts for the settings list page.
+ * Separate from fetchBoardsFn so the app-wide boards reference query
+ * stays a cheap row read.
+ */
+export const fetchBoardsWithCountsFn = createServerFn({ method: 'GET' }).handler(async () => {
+  log.debug({}, 'fetch boards with counts')
+  await requireAuth({ permission: PERMISSIONS.BOARD_MANAGE })
+
+  const boards = await listBoardsWithDetails()
+  log.debug({ count: boards.length }, 'fetch boards with counts')
+  return boards.map((b) => ({
+    ...serializeBoard(b),
+    postCount: b.postCount,
+  }))
 })
 
 /**

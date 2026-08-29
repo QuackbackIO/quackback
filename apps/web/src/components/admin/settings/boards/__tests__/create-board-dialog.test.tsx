@@ -131,8 +131,9 @@ describe('<CreateBoardDialog> submit', () => {
     })
 
     expect(navigate).toHaveBeenCalledWith({
-      to: '/admin/settings/boards',
-      search: { board: 'feedback' },
+      to: '/admin/settings/boards/$slug',
+      params: { slug: 'feedback' },
+      search: {},
     })
   })
 
@@ -152,8 +153,9 @@ describe('<CreateBoardDialog> submit', () => {
     })
 
     expect(navigate).toHaveBeenCalledWith({
-      to: '/admin/settings/boards',
-      search: { board: 'locked-board', tab: 'access' },
+      to: '/admin/settings/boards/$slug',
+      params: { slug: 'locked-board' },
+      search: { tab: 'access' },
     })
   })
 })

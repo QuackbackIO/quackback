@@ -1,171 +1,124 @@
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import { createFileRoute, Link, redirect } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { useEffect } from 'react'
 import { z } from 'zod'
 import { adminQueries } from '@/lib/client/queries/admin'
-import { settingsQueries } from '@/lib/client/queries/settings'
-import {
-  Squares2X2Icon,
-  ChatBubbleLeftIcon,
-  Cog6ToothIcon,
-  LockClosedIcon,
-  ShieldCheckIcon,
-  ArrowUpTrayIcon,
-  ArrowDownTrayIcon,
-} from '@heroicons/react/24/solid'
+import { Squares2X2Icon, ChatBubbleLeftIcon, LockClosedIcon } from '@heroicons/react/24/solid'
 import { EmptyState } from '@/components/shared/empty-state'
 import { PageHeader } from '@/components/shared/page-header'
-import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { BackLink } from '@/components/ui/back-link'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Badge } from '@/components/ui/badge'
 import { CreateBoardDialog } from '@/components/admin/settings/boards/create-board-dialog'
-import { BoardSettingsHeader } from '@/components/admin/settings/boards/board-settings-header'
-import { BoardGeneralForm } from '@/components/admin/settings/boards/board-general-form'
-import { BoardAccessForm } from '@/components/admin/settings/boards/board-access-form'
-import { BoardModerationForm } from '@/components/admin/settings/boards/board-moderation-form'
-import { BoardImportSection } from '@/components/admin/settings/boards/board-import-section'
-import { BoardExportSection } from '@/components/admin/settings/boards/board-export-section'
-import { DeleteBoardForm } from '@/components/admin/settings/boards/delete-board-form'
-import {
-  useBoardSelection,
-  type BoardTab,
-} from '@/components/admin/settings/boards/use-board-selection'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { isProductEnabled } from '@/lib/shared/types/settings'
+import { normalizeBoardAccess, presetForAccess } from '@/lib/shared/schemas/boards'
+import type { BoardAccess } from '@/lib/shared/db-types'
+
+const BOARD_TABS = ['general', 'access', 'moderation', 'import', 'export'] as const
 
 const searchSchema = z.object({
   board: z.string().optional(),
-  tab: z.enum(['general', 'access', 'moderation', 'import', 'export']).optional(),
+  tab: z.enum(BOARD_TABS).optional(),
 })
 
 export const Route = createFileRoute('/admin/settings/boards/')({
   validateSearch: searchSchema,
-  beforeLoad: ({ context }) => {
+  beforeLoad: ({ context, search }) => {
     if (!isProductEnabled(context.settings?.featureFlags, 'feedback')) {
       throw redirect({ to: '/admin/settings/general' })
+    }
+    if (search.board) {
+      throw redirect({
+        to: '/admin/settings/boards/$slug',
+        params: { slug: search.board },
+        search: search.tab ? { tab: search.tab } : {},
+      })
     }
   },
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.BOARD_MANAGE)
-    const { queryClient } = context
-    // Warm both queries the board forms read so they render with real data
-    // on first paint (no flash). portalConfig backs the Moderation tab's
-    // inherit-from-workspace pills and the Access tab's workspace ceiling;
-    // without prefetch the moderation pills flicker Off -> the real default.
-    await Promise.all([
-      queryClient.ensureQueryData(adminQueries.boardsForSettings()),
-      queryClient.ensureQueryData(settingsQueries.portalConfig()),
-    ])
+    await context.queryClient.ensureQueryData(adminQueries.boardsWithCounts())
     return {}
   },
   component: BoardsSettingsPage,
 })
 
 function BoardsSettingsPage() {
-  const { data: boards } = useSuspenseQuery(adminQueries.boardsForSettings())
-  const { selectedBoardSlug, selectedTab, setSelectedBoard, setSelectedTab } = useBoardSelection()
+  const { data: boards } = useSuspenseQuery(adminQueries.boardsWithCounts())
 
-  // Auto-select first board if none selected
-  useEffect(() => {
-    if (boards.length > 0 && !selectedBoardSlug) {
-      setSelectedBoard(boards[0].slug)
-    }
-  }, [boards, selectedBoardSlug, setSelectedBoard])
-
-  const currentBoard = boards.find((b) => b.slug === selectedBoardSlug)
-
-  // No boards - show empty state
   if (boards.length === 0) {
     return <EmptyBoardsState />
   }
 
-  // Board not found (invalid slug in URL)
-  if (!currentBoard) {
-    return null // Will auto-redirect via useEffect
-  }
-
   return (
-    <div className="space-y-6 max-w-5xl w-full">
+    <div className="space-y-6 max-w-3xl">
       <div className="lg:hidden">
         <BackLink to="/admin/settings">Settings</BackLink>
       </div>
-      <BoardSettingsHeader currentBoard={currentBoard} allBoards={boards} />
+      <PageHeader
+        icon={Squares2X2Icon}
+        title="Boards"
+        description="Where feedback is collected and organized."
+        action={<CreateBoardDialog />}
+      />
 
-      <Tabs
-        value={selectedTab}
-        onValueChange={(next) => setSelectedTab(next as BoardTab)}
-        variant="line"
-        className="space-y-6"
-      >
-        <TabsList>
-          <TabsTrigger value="general">
-            <Cog6ToothIcon />
-            General
-          </TabsTrigger>
-          <TabsTrigger value="access">
-            <LockClosedIcon />
-            Access
-          </TabsTrigger>
-          <TabsTrigger value="moderation">
-            <ShieldCheckIcon />
-            Moderation
-          </TabsTrigger>
-          <TabsTrigger value="import">
-            <ArrowUpTrayIcon />
-            Import Data
-          </TabsTrigger>
-          <TabsTrigger value="export">
-            <ArrowDownTrayIcon />
-            Export Data
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="general" className="space-y-6">
-          <SettingsCard>
-            <BoardGeneralForm key={currentBoard.id} board={currentBoard} />
-          </SettingsCard>
-
-          <SettingsCard title="Danger Zone" variant="danger">
-            <DeleteBoardForm key={currentBoard.id} board={currentBoard} />
-          </SettingsCard>
-        </TabsContent>
-
-        <TabsContent value="access">
-          <SettingsCard>
-            <BoardAccessForm key={currentBoard.id} board={currentBoard} />
-          </SettingsCard>
-        </TabsContent>
-
-        <TabsContent value="moderation">
-          <SettingsCard>
-            <BoardModerationForm key={currentBoard.id} board={currentBoard} />
-          </SettingsCard>
-        </TabsContent>
-
-        <TabsContent value="import">
-          <SettingsCard description="Import posts from a CSV file into this board">
-            <BoardImportSection boardId={currentBoard.id} />
-          </SettingsCard>
-        </TabsContent>
-
-        <TabsContent value="export">
-          <SettingsCard description="Download all posts from this board as CSV">
-            <BoardExportSection boardId={currentBoard.id} />
-          </SettingsCard>
-        </TabsContent>
-      </Tabs>
+      <div className="divide-y divide-border rounded-xl border border-border/60 bg-card">
+        {boards.map((board) => (
+          <Link
+            key={board.id}
+            to="/admin/settings/boards/$slug"
+            params={{ slug: board.slug }}
+            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/40"
+          >
+            <div className="flex min-w-0 items-center gap-3">
+              <ChatBubbleLeftIcon className="size-4 shrink-0 text-muted-foreground" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium">{board.name}</p>
+                {board.description ? (
+                  <p className="text-xs text-muted-foreground truncate">{board.description}</p>
+                ) : null}
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <BoardAccessBadge access={board.access} />
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {board.postCount === 1 ? '1 post' : `${board.postCount} posts`}
+              </span>
+            </div>
+          </Link>
+        ))}
+      </div>
     </div>
+  )
+}
+
+function BoardAccessBadge({ access }: { access: BoardAccess }) {
+  const preset = presetForAccess(normalizeBoardAccess(access))
+  if (preset === 'public') return null
+  return (
+    <Badge size="sm" shape="pill" variant="secondary">
+      {preset === 'private' ? (
+        <>
+          <LockClosedIcon />
+          Team only
+        </>
+      ) : (
+        'Custom'
+      )}
+    </Badge>
   )
 }
 
 function EmptyBoardsState() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-3xl">
+      <div className="lg:hidden">
+        <BackLink to="/admin/settings">Settings</BackLink>
+      </div>
       <PageHeader
         icon={Squares2X2Icon}
-        title="Board Settings"
-        description="Configure your feedback board settings and preferences"
+        title="Boards"
+        description="Where feedback is collected and organized."
       />
 
       <div className="rounded-xl border border-border/50 bg-card p-4 sm:p-6 shadow-sm">

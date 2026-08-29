@@ -34,6 +34,9 @@ vi.mock('@/lib/client/queries/admin', () => ({
     boardsForSettings: () => ({
       queryKey: ['admin', 'settings', 'boards'],
     }),
+    boardsWithCounts: () => ({
+      queryKey: ['admin', 'boards', 'with-counts'],
+    }),
   },
 }))
 
@@ -52,6 +55,9 @@ describe('board mutations cache invalidation', () => {
     expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['admin', 'settings', 'boards'],
     })
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['admin', 'boards', 'with-counts'],
+    })
   })
 
   it('useUpdateBoard.onSettled invalidates board list, detail, and admin settings caches', async () => {
@@ -69,6 +75,9 @@ describe('board mutations cache invalidation', () => {
     expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['admin', 'settings', 'boards'],
     })
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['admin', 'boards', 'with-counts'],
+    })
   })
 
   it('useDeleteBoard.onSettled invalidates both board list and admin settings caches', async () => {
@@ -80,6 +89,9 @@ describe('board mutations cache invalidation', () => {
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['boards', 'list'] })
     expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['admin', 'settings', 'boards'],
+    })
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['admin', 'boards', 'with-counts'],
     })
   })
 

@@ -13,7 +13,7 @@ import {
   listSegmentsFn,
   listUserAttributesFn,
 } from '@/lib/server/functions/admin'
-import { fetchBoardsFn } from '@/lib/server/functions/boards'
+import { fetchBoardsFn, fetchBoardsWithCountsFn } from '@/lib/server/functions/boards'
 import { fetchPlatformCredentialsMaskedFn } from '@/lib/server/functions/platform-credentials'
 import {
   fetchAuthProviderStatusFn,
@@ -74,6 +74,17 @@ export const adminQueries = {
       queryKey: ['admin', 'boards'],
       queryFn: () => fetchBoardsFn(),
       staleTime: 5 * 60 * 1000, // 5min - reference data
+    }),
+
+  /**
+   * Board list with post counts for the settings hub. Isolated query key
+   * so counting does not inflate the app-wide `['admin', 'boards']` cache.
+   */
+  boardsWithCounts: () =>
+    queryOptions({
+      queryKey: ['admin', 'boards', 'with-counts'],
+      queryFn: () => fetchBoardsWithCountsFn(),
+      staleTime: 5 * 60 * 1000,
     }),
 
   /**
