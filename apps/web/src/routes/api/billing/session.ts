@@ -28,6 +28,16 @@ export function billingSessionErrorResponse(error: unknown): Response {
   return billingFormErrorResponse(error)
 }
 
+/** Switch to Free after the trial window lapsed is already commercially Free.
+ *  Treat that conflict as success so the expired page can confirm Free. */
+export function billingDowngradeAlreadyOnPlanResponse(error: unknown): Response | null {
+  if (billingErrorCode(error) !== 'already_on_plan') return null
+  return new Response(null, {
+    status: 303,
+    headers: { location: '/admin/settings/billing' },
+  })
+}
+
 const actionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('portal') }),
   z.object({
@@ -65,12 +75,14 @@ export const Route = createFileRoute('/api/billing/session')({
         if (!isSameOriginFormPost(request)) {
           return Response.json({ error: 'invalid_origin' }, { status: 403 })
         }
+        let action: string | undefined
         try {
           const { requireAuth } = await import('@/lib/server/functions/auth-helpers')
           await requireAuth({ permission: PERMISSIONS.BILLING_MANAGE })
           const form = await request.formData()
           const parsed = actionSchema.safeParse(Object.fromEntries(form.entries()))
           if (!parsed.success) return billingFormErrorResponse(null, 'invalid')
+          action = parsed.data.action
           const { getCloudConfig } =
             await import('@/lib/server/domains/settings/cloud/cloud.service')
           const cloud = await getCloudConfig()
@@ -102,6 +114,10 @@ export const Route = createFileRoute('/api/billing/session')({
                 : '/admin/settings/billing'
           return new Response(null, { status: 303, headers: { location } })
         } catch (error) {
+          if (action === 'downgrade') {
+            const already = billingDowngradeAlreadyOnPlanResponse(error)
+            if (already) return already
+          }
           return billingSessionErrorResponse(error)
         }
       },

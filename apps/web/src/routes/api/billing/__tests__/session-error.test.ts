@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { billingSessionErrorResponse } from '../session'
+import { billingDowngradeAlreadyOnPlanResponse, billingSessionErrorResponse } from '../session'
 
 function location(res: Response): string {
   return res.headers.get('location') ?? ''
@@ -16,6 +16,13 @@ describe('billingSessionErrorResponse', () => {
     const res = billingSessionErrorResponse(new Error('already_on_plan'))
     expect(res.status).toBe(303)
     expect(location(res)).toBe('/admin/settings/billing?billing_error=already_on_plan')
+  })
+
+  it('treats Switch to Free after a lapsed trial as already on Free', () => {
+    const res = billingDowngradeAlreadyOnPlanResponse(new Error('already_on_plan'))
+    expect(res?.status).toBe(303)
+    expect(res && location(res)).toBe('/admin/settings/billing')
+    expect(billingDowngradeAlreadyOnPlanResponse(new Error('unavailable'))).toBeNull()
   })
 
   it('names a missing session as unauthorized', () => {
