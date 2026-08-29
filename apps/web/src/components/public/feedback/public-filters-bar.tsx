@@ -51,14 +51,7 @@ interface FilterBarBoard {
 }
 
 type FilterCategory =
-  | 'board'
-  | 'status'
-  | 'tag'
-  | 'votes'
-  | 'date'
-  | 'response'
-  | 'owner'
-  | 'segment'
+  'board' | 'status' | 'tag' | 'votes' | 'date' | 'response' | 'owner' | 'segment'
 type ChipType = 'board' | 'status' | 'tags' | 'votes' | 'date' | 'response' | 'owner' | 'segment'
 
 type IconComponent = React.ComponentType<{ className?: string }>
@@ -105,6 +98,11 @@ interface PublicFiltersBarProps {
   statuses: PostStatusEntity[]
   tags: PostTag[]
   boards: FilterBarBoard[]
+  /**
+   * When true, the selected board is page context (sidebar / ?board=) and is
+   * not offered as a switchable filter.
+   */
+  boardLocked?: boolean
 }
 
 export function PublicFiltersBar({
@@ -114,14 +112,25 @@ export function PublicFiltersBar({
   statuses,
   tags,
   boards,
+  boardLocked = false,
 }: PublicFiltersBarProps) {
   const intl = useIntl()
   const { members, segments } = useTeamOnlyFilterOptions()
 
   const activeChips = useMemo(
     () =>
-      buildActiveChips({ filters, setFilters, statuses, tags, boards, members, segments, intl }),
-    [filters, setFilters, statuses, tags, boards, members, segments, intl]
+      buildActiveChips({
+        filters,
+        setFilters,
+        statuses,
+        tags,
+        boards,
+        members,
+        segments,
+        intl,
+        boardLocked,
+      }),
+    [filters, setFilters, statuses, tags, boards, members, segments, intl, boardLocked]
   )
 
   if (activeChips.length === 0) return null
@@ -142,6 +151,7 @@ export function PublicFiltersBar({
         statuses={statuses}
         tags={tags}
         boards={boards}
+        boardLocked={boardLocked}
         variant="pill"
       />
 
@@ -169,6 +179,7 @@ interface AddFilterButtonProps {
   statuses: PostStatusEntity[]
   tags: PostTag[]
   boards: FilterBarBoard[]
+  boardLocked?: boolean
   /**
    * Trigger style:
    *   - "pill" (default): dashed "+ Add filter" pill that matches the chip shape.
@@ -201,6 +212,7 @@ function AddFilterButton({
   statuses,
   tags,
   boards,
+  boardLocked = false,
   variant = 'pill',
 }: AddFilterButtonProps) {
   const intl = useIntl()
@@ -213,7 +225,7 @@ function AddFilterButton({
     setActiveCategory(null)
   }
 
-  const showBoardCategory = boards.length > 1
+  const showBoardCategory = boards.length > 1 && !boardLocked
   // Team-only categories are hidden entirely for non-privileged callers (empty
   // option lists) and also hide individually when their option query is empty.
   const showOwnerCategory = members.length > 0
@@ -614,16 +626,16 @@ function buildActiveChips(args: {
   members: TeamMember[]
   segments: SegmentListItem[]
   intl: ReturnType<typeof useIntl>
+  boardLocked: boolean
 }): ActiveChipDescriptor[] {
-  const { filters, setFilters, statuses, tags, boards, members, segments, intl } = args
+  const { filters, setFilters, statuses, tags, boards, members, segments, intl, boardLocked } = args
   const chips: ActiveChipDescriptor[] = []
 
   // Board chip — only shown when a specific board is selected (omit for
-  // "All Posts"). Single-select: switching replaces the value.
+  // "All Posts"). When the board is page context, the chip is not a switcher.
   if (filters.board && boards.length > 1) {
     const board = boards.find((b) => b.slug === filters.board)
     if (board) {
-      const boardOptions: FilterOption[] = boards.map((b) => ({ id: b.slug, label: b.name }))
       chips.push({
         key: `board-${board.slug}`,
         type: 'board',
@@ -633,8 +645,12 @@ function buildActiveChips(args: {
         }),
         value: board.name,
         valueId: board.slug,
-        options: boardOptions,
-        onChange: (newSlug) => setFilters({ board: newSlug }),
+        ...(boardLocked
+          ? {}
+          : {
+              options: boards.map((b) => ({ id: b.slug, label: b.name })),
+              onChange: (newSlug: string) => setFilters({ board: newSlug }),
+            }),
         onRemove: () => setFilters({ board: undefined }),
       })
     }

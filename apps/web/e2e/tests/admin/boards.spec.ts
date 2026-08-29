@@ -48,7 +48,8 @@ async function openFirstBoard(page: Page): Promise<void> {
   const row = page.locator('a[href*="/admin/settings/boards/"]').first()
   await expect(row).toBeVisible({ timeout: 10000 })
   await row.click()
-  await expect(page.getByText('Board Details')).toBeVisible({ timeout: 10000 })
+  await expect(page).toHaveURL(/\/admin\/settings\/boards\/[^/?]+/)
+  await expect(page.getByRole('tab', { name: 'General' })).toBeVisible({ timeout: 10000 })
 }
 
 /** Create a throwaway board and open its Access tab, settled on Public. */
@@ -88,8 +89,10 @@ test.describe('Admin Board Management', () => {
 
   test('can access board general settings', async ({ page }) => {
     await openFirstBoard(page)
-    const generalSettings = page.getByText('Board Details')
-    await expect(generalSettings).toBeVisible({ timeout: 10000 })
+    await expect(page.getByRole('tab', { name: 'General' })).toHaveAttribute('data-state', 'active')
+    await expect(page.getByRole('textbox', { name: 'Board name', exact: true })).toBeVisible()
+    await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toBeVisible()
+    await expect(page.getByTestId('board-switcher')).toHaveCount(0)
   })
 
   test('can edit board name', async ({ page }) => {
@@ -160,14 +163,12 @@ test.describe('Admin Board Management', () => {
     const dangerZone = page.getByText('Danger Zone')
     await expect(dangerZone).toBeVisible({ timeout: 10000 })
 
-    // Should have delete button - use exact match to avoid matching board switcher
     const deleteButton = page.getByRole('button', { name: 'Delete board', exact: true })
     await expect(deleteButton).toBeVisible()
   })
 
   test('delete button shows confirmation dialog', async ({ page }) => {
     await openFirstBoard(page)
-    // Find delete button - use exact match to avoid matching board switcher
     const deleteButton = page.getByRole('button', { name: 'Delete board', exact: true })
 
     // Check if button exists
@@ -303,13 +304,7 @@ test.describe('Board Deletion Flow', () => {
     await expect(dialog).toBeHidden({ timeout: 10000 })
     await page.waitForLoadState('networkidle')
 
-    // After creating a board, the page automatically navigates to the new board's settings
-    // Wait for the page to show the new board's settings
-    await expect(page.getByText('Board Details')).toBeVisible({ timeout: 10000 })
-
-    await expect(page.getByRole('heading', { name: testBoardName })).toBeVisible()
-    // Find the delete button (should be disabled until we type confirmation)
-    // Use exact: true to avoid matching the board switcher that contains "Delete Board" in its name
+    await expect(page.getByRole('heading', { name: testBoardName })).toBeVisible({ timeout: 10000 })
     const deleteButton = page.getByRole('button', { name: 'Delete board', exact: true })
     await expect(deleteButton).toBeVisible({ timeout: 5000 })
     await expect(deleteButton).toBeDisabled()
@@ -333,7 +328,6 @@ test.describe('Board Deletion Flow', () => {
     await page.waitForLoadState('networkidle')
     await openFirstBoard(page)
 
-    // Find the delete button - use exact match to avoid matching board switcher
     const deleteButton = page.getByRole('button', { name: 'Delete board', exact: true })
     await expect(deleteButton).toBeVisible({ timeout: 5000 })
 
@@ -484,7 +478,7 @@ test.describe('Create Board Dialog', () => {
     await page.waitForLoadState('networkidle')
 
     await expect(page.getByRole('heading', { name: testBoardName })).toBeVisible({ timeout: 10000 })
-    await expect(page.getByText('Board Details')).toBeVisible({ timeout: 5000 })
+    await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toContainText(testBoardName)
 
     await page.goto('/admin/settings/boards')
     await page.waitForLoadState('networkidle')
@@ -574,9 +568,10 @@ test.describe('Board Settings Tabs', () => {
     await openFirstBoard(page)
   })
 
-  test('General tab shows Board Details and Danger Zone cards', async ({ page }) => {
-    // Default tab is General. The card heading is "Board Details" (not "General Settings")
-    await expect(page.getByText('Board Details')).toBeVisible({ timeout: 10000 })
+  test('General tab shows the board form and Danger Zone', async ({ page }) => {
+    await expect(page.getByRole('textbox', { name: 'Board name', exact: true })).toBeVisible({
+      timeout: 10000,
+    })
     await expect(page.getByText('Danger Zone')).toBeVisible()
   })
 
@@ -669,8 +664,7 @@ test.describe('Board Slug', () => {
     await openFirstBoard(page)
   })
 
-  test('Board Details form shows Board name and Description fields', async ({ page }) => {
-    // The General form (board-general-form.tsx) has "Board name" and "Description" labels
+  test('General form shows Board name and Description fields', async ({ page }) => {
     const boardNameInput = page.getByRole('textbox', { name: 'Board name', exact: true })
     const descInput = page.getByLabel('Description')
 
@@ -701,7 +695,8 @@ test.describe('Board Slug', () => {
 
     // Renaming regenerates the slug, so this slug-keyed page no longer
     // matches a board and the loader sends us back to the list.
-    await expect(page.getByText('Board Details')).toBeHidden({ timeout: 10000 })
+    await expect(page).toHaveURL(/\/admin\/settings\/boards\/?(\?|$)/, { timeout: 10000 })
+    await expect(page.getByRole('heading', { name: 'Boards' })).toBeVisible()
 
     await page.goto(`/admin/settings/boards/${slugify(updatedName)}`)
     await page.waitForLoadState('networkidle')

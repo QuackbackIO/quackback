@@ -387,9 +387,10 @@ test.describe('Board Selector', () => {
     const editor = globalPage.locator('.tiptap')
     await expect(editor).toBeVisible({ timeout: 10000 })
 
-    // Board selector should show the filtered board (Feature Requests)
-    const boardSelector = globalPage.locator('[role="combobox"]')
-    await expect(boardSelector).toContainText(/Feature Requests/i, { timeout: 10000 })
+    // Viewing a board locks posting to that board — no switcher.
+    const postingTo = globalPage.getByLabel(/Posting to Feature Requests/i)
+    await expect(postingTo).toBeVisible({ timeout: 10000 })
+    await expect(postingTo.getByRole('combobox')).toHaveCount(0)
   })
 
   test('can submit post to a different board than default', async () => {
@@ -527,7 +528,6 @@ test.describe('Board Selector', () => {
 
   test('switching board filter updates default board in dialog', async () => {
     const editor = globalPage.locator('.tiptap')
-    const boardSelector = globalPage.locator('[role="combobox"]')
 
     // Start with no filter - open form and note default board
     await globalPage.getByPlaceholder("What's your idea?").click()
@@ -549,13 +549,13 @@ test.describe('Board Selector', () => {
       await globalPage.getByPlaceholder("What's your idea?").click()
       await expect(editor).toBeVisible({ timeout: 5000 })
 
-      // Board selector should now show Bug Reports
-      await expect(boardSelector).toContainText(/Bug Reports/i)
+      const postingTo = globalPage.getByLabel(/Posting to Bug Reports/i)
+      await expect(postingTo).toBeVisible()
+      await expect(postingTo.getByRole('combobox')).toHaveCount(0)
     }
   })
 
   test('switching between multiple board filters updates form default each time', async () => {
-    const boardSelector = globalPage.locator('[role="combobox"]')
     const editor = globalPage.locator('.tiptap')
 
     // Click Feature Requests filter (board that exists in database)
@@ -564,10 +564,12 @@ test.describe('Board Selector', () => {
       await featuresFilter.click()
       await globalPage.waitForLoadState('networkidle')
 
-      // Open form - should default to Feature Requests
+      // Open form - should post to Feature Requests with no switcher
       await globalPage.getByPlaceholder("What's your idea?").click()
       await expect(editor).toBeVisible({ timeout: 5000 })
-      await expect(boardSelector).toContainText(/Feature Requests/i)
+      const featuresPosting = globalPage.getByLabel(/Posting to Feature Requests/i)
+      await expect(featuresPosting).toBeVisible()
+      await expect(featuresPosting.getByRole('combobox')).toHaveCount(0)
 
       // Close form
       await globalPage.keyboard.press('Escape')
@@ -582,10 +584,12 @@ test.describe('Board Selector', () => {
       await bugsFilter.click()
       await globalPage.waitForLoadState('networkidle')
 
-      // Open form - should default to Bug Reports
+      // Open form - should post to Bug Reports with no switcher
       await globalPage.getByPlaceholder("What's your idea?").click()
       await expect(editor).toBeVisible({ timeout: 5000 })
-      await expect(boardSelector).toContainText(/Bug Reports/i)
+      const bugsPosting = globalPage.getByLabel(/Posting to Bug Reports/i)
+      await expect(bugsPosting).toBeVisible()
+      await expect(bugsPosting.getByRole('combobox')).toHaveCount(0)
 
       // Close form
       await globalPage.keyboard.press('Escape')
@@ -602,7 +606,8 @@ test.describe('Board Selector', () => {
     await globalPage.getByPlaceholder("What's your idea?").click()
     await expect(editor).toBeVisible({ timeout: 5000 })
 
-    // Board selector should be visible and show a board name
+    // Home keeps the board switcher
+    const boardSelector = globalPage.locator('[role="combobox"]')
     await expect(boardSelector).toBeVisible()
     await expect(boardSelector).not.toHaveText('Select board')
   })

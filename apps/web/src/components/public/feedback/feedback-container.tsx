@@ -239,6 +239,9 @@ export function FeedbackContainer({
 
   const currentBoardInfo = activeBoard ? boards.find((b) => b.slug === activeBoard) : boards[0]
   const boardIdForCreate = currentBoardInfo?.id || defaultBoardId
+  // A selected board is page context (sidebar / ?board=), not a filter the
+  // submit form or chip row should switch away from.
+  const boardLocked = Boolean(activeBoard)
 
   function handlePostCreated(postId: string): void {
     setTimeout(() => {
@@ -330,6 +333,7 @@ export function FeedbackContainer({
             user={effectiveUser}
             boardPermissions={boardPermissions}
             onPostCreated={handlePostCreated}
+            boardLocked={boardLocked}
           />
 
           <FeedbackToolbar
@@ -345,6 +349,7 @@ export function FeedbackContainer({
                 statuses={statuses}
                 tags={tags}
                 boards={boards}
+                boardLocked={boardLocked}
               />
             }
           />
@@ -356,6 +361,7 @@ export function FeedbackContainer({
               statuses={statuses}
               tags={tags}
               boards={boards}
+              boardLocked={boardLocked}
             />
           </div>
 
