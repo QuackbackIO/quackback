@@ -254,7 +254,7 @@ describe('BillingPlansView', () => {
     expect(screen.queryByRole('button', { name: 'Add seats' })).not.toBeInTheDocument()
   })
 
-  it('explains a trial that ended and that everyone keeps access', () => {
+  it('sends an ended trial to the choose-a-plan page with payment', () => {
     renderView({
       overview: {
         ...paidOverview,
@@ -271,10 +271,10 @@ describe('BillingPlansView', () => {
         seats: { used: 3, pending: 0, members: 3, purchased: null },
       },
     })
-    expect(screen.getByText('Trial ended')).toBeInTheDocument()
-    expect(screen.getByText(/Everything you built is still here/)).toBeInTheDocument()
-    expect(screen.getByText(/Everyone keeps access/)).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: 'Continue with Pro' }).length).toBeGreaterThan(0)
+    expect(screen.getByText('Order summary')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Continue to payment' })).toBeInTheDocument()
+    expect(screen.getByText('Current')).toBeInTheDocument()
+    expect(screen.getByText(/Downgrade to Free plan/)).toBeInTheDocument()
   })
 
   it('does not call a Free trial when the last plan name is missing', () => {
@@ -294,9 +294,9 @@ describe('BillingPlansView', () => {
         seats: { used: 3, pending: 0, members: 3, purchased: null },
       },
     })
-    expect(screen.getByText(/Your trial ended/)).toBeInTheDocument()
+    expect(screen.getByText('Order summary')).toBeInTheDocument()
     expect(screen.queryByText(/Your Free trial ended/)).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Continue with/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Continue to payment' })).toBeInTheDocument()
   })
 
   it('does not offer Continue when the catalogue did not load', () => {
@@ -358,7 +358,7 @@ describe('BillingPlansView', () => {
       },
     })
     fireEvent.click(screen.getByRole('radio', { name: 'Monthly' }))
-    fireEvent.click(screen.getAllByRole('button', { name: 'Continue with Pro' })[0])
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to payment' }))
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(document.querySelector('form input[name="billingPeriod"]')).toHaveValue('monthly')
   })

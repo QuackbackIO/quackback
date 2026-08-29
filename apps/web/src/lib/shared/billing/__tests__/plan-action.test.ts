@@ -82,6 +82,19 @@ describe('billingPlanAction', () => {
     expect(billingPlanAction('pro', grant)).toEqual({ kind: 'subscribe', planId: 'pro' })
   })
 
+  it('treats an ended trial as choosing a plan, with Free as a gated downgrade', () => {
+    const ended: BillingProjectionOverview = {
+      ...unpaidFree,
+      trialEnded: true,
+      trialPlanId: 'pro',
+      trialPlanName: 'Pro',
+      trialExpiresAt: '2026-08-18T00:00:00.000Z',
+    }
+    expect(billingPlanAction('pro', ended)).toEqual({ kind: 'subscribe', planId: 'pro' })
+    expect(billingPlanAction('growth', ended)).toEqual({ kind: 'subscribe', planId: 'growth' })
+    expect(billingPlanAction('free', ended).kind).toBe('downgrade')
+  })
+
   it('covers every catalogue id', () => {
     const ids: CataloguePlanId[] = ['free', 'growth', 'pro', 'scale']
     for (const id of ids) {

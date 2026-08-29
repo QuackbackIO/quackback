@@ -26,6 +26,12 @@ export function billingPlanAction(
   trialedPlanIds: readonly string[] = []
 ): BillingPlanAction {
   const canAct = overview.canUpgrade || overview.canManageBilling
+  if (overview.trialEnded && overview.trialPlanId) {
+    if (!canAct) return { kind: 'unavailable' }
+    if (planId === 'free') return { kind: 'downgrade' }
+    if (isPaidPlanId(planId)) return { kind: 'subscribe', planId }
+    return { kind: 'unavailable' }
+  }
   if (overview.plan === planId) return { kind: 'current' }
   if (!canAct) return { kind: 'unavailable' }
 

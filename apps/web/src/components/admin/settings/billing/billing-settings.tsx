@@ -25,6 +25,8 @@ import { RemoveSeatsDialog } from './remove-seats-dialog'
 import { SubscribeDialog } from './subscribe-dialog'
 import { TopUpDialog } from './topup-dialog'
 import { UsageMeter } from './usage-meter'
+import { TrialExpiredBilling } from './trial-expired-billing'
+import { FreeDowngradeDialog } from './free-downgrade-dialog'
 
 /** Workspace-local presentation of the control-plane billing projection. */
 export function BillingSettings() {
@@ -74,6 +76,16 @@ export function BillingPlansView(props: {
   const currentCataloguePlan = catalogue?.plans.find((plan) => plan.id === overview.plan)
   const grandfatheredFlat =
     currentCataloguePlan?.billedPer === 'workspace' && overview.plan !== 'free'
+
+  if (overview.trialEnded) {
+    return (
+      <TrialExpiredBilling
+        overview={overview}
+        catalogue={catalogue}
+        catalogueError={props.catalogueError}
+      />
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -693,22 +705,7 @@ function DowngradeButton() {
       >
         Switch to Free
       </Button>
-      <ConfirmDialog
-        open={open}
-        onOpenChange={setOpen}
-        title="Switch to Free?"
-        description="You’ll keep all existing data and stay online. New work that goes past Free limits will pause until you pick a paid plan again. If you are on a paid period, Free starts when it ends. An active trial ends now."
-        confirmLabel="Switch to Free"
-        variant="destructive"
-        onConfirm={() => {
-          const form = document.getElementById('downgrade-free') as HTMLFormElement | null
-          form?.requestSubmit()
-        }}
-      />
-      <form id="downgrade-free" method="post" action="/api/billing/session" className="hidden">
-        <input type="hidden" name="action" value="downgrade" />
-        <input type="hidden" name="planId" value="free" />
-      </form>
+      {open ? <FreeDowngradeDialog open onOpenChange={setOpen} /> : null}
     </>
   )
 }

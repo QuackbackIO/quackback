@@ -27,7 +27,7 @@ describe('trialNotice', () => {
     expect(notice).toMatchObject({
       label: 'Growth trial',
       actionLabel: 'See plans',
-      message: expect.stringContaining('continue on Free'),
+      message: expect.stringContaining('pick a paid plan'),
     })
   })
 
@@ -48,10 +48,10 @@ describe('trialEndedNotice', () => {
       { trialPlanName: 'Growth', now: NOW }
     )
     expect(notice).toMatchObject({
-      label: 'Growth trial',
-      dismissible: true,
-      actionLabel: 'Continue with Growth',
+      label: 'Growth trial ended',
+      actionLabel: 'Update billing',
     })
-    expect(notice?.message).toMatch(/everything you built is still here/)
+    expect(notice?.dismissible).toBeUndefined()
+    expect(notice?.message).toMatch(/trial has come to an end/)
   })
 })

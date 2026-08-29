@@ -7,6 +7,7 @@ vi.mock('@/lib/server/functions/billing', () => ({
   fetchBillingInvoicesFn: vi.fn(),
   fetchBillingOverviewFn: vi.fn(),
   fetchPlanUsageFn: vi.fn(),
+  fetchFreeDowngradePreviewFn: vi.fn(),
 }))
 
 const { billingQueries, ensureBillingCatalogue } = await import('../billing')

@@ -21,7 +21,7 @@ export function trialNotice(config: CloudConfig, now: Date = new Date()): PlanNo
   const urgent = daysLeft !== null && daysLeft <= 3
   return {
     label: `${planLabel(config)} trial`,
-    message: 'When this ends you will continue on Free. Everything you have built stays.',
+    message: 'When this ends, pick a paid plan or switch to Free from billing.',
     expiresAt: config.trialExpiresAt,
     ...(actionUrl
       ? {
@@ -51,21 +51,12 @@ export function trialEndedNotice(
   }
   const actionUrl = plansActionUrl(config)
   const name = options.trialPlanName
-  const ended = formatNoticeDate(config.trialExpiresAt!)
+  const product = name ?? 'Quackback'
   return {
-    label: name ? `${name} trial` : 'Trial',
-    message: name
-      ? `Your ${name} trial ended ${ended}. You are on Free now, and everything you built is still here.`
-      : `Your trial ended ${ended}. You are on Free now, and everything you built is still here.`,
+    label: name ? `${name} trial ended` : 'Trial ended',
+    message: `Your trial has come to an end. Please update your billing information to continue using ${product}.`,
     expiresAt: config.trialExpiresAt!,
-    dismissible: true,
-    ...(actionUrl ? { actionUrl, actionLabel: name ? `Continue with ${name}` : 'See plans' } : {}),
+    ended: true,
+    ...(actionUrl ? { actionUrl, actionLabel: 'Update billing' } : {}),
   }
-}
-
-function formatNoticeDate(iso: string): string {
-  const date = new Date(iso)
-  return Number.isNaN(date.getTime())
-    ? iso
-    : date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
 }

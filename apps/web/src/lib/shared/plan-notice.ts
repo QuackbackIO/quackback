@@ -14,6 +14,7 @@ export interface PlanNoticeView {
   actionUrl?: string
   actionLabel?: string
   dismissible: boolean
+  ended: boolean
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -38,5 +39,6 @@ export function presentPlanNotice(
     actionUrl: notice.actionUrl,
     actionLabel: notice.actionLabel,
     dismissible: Boolean(notice.dismissible),
+    ended: Boolean(notice.ended),
   }
 }

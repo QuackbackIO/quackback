@@ -4,7 +4,7 @@ import { daysUntil, isTrialEnded } from '../trial-state'
 const NOW = new Date('2026-08-20T12:00:00.000Z')
 
 describe('isTrialEnded', () => {
-  it('is true on Free after a trial window, for seven days', () => {
+  it('is true on Free after a trial window until they subscribe', () => {
     expect(
       isTrialEnded({
         plan: 'free',
@@ -40,7 +40,7 @@ describe('isTrialEnded', () => {
     ).toBe(false)
   })
 
-  it('is false more than seven days after expiry', () => {
+  it('stays true more than seven days after expiry until they subscribe', () => {
     expect(
       isTrialEnded({
         plan: 'free',
@@ -49,7 +49,7 @@ describe('isTrialEnded', () => {
         status: null,
         now: NOW,
       })
-    ).toBe(false)
+    ).toBe(true)
   })
 })
 

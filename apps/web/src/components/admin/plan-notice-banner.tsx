@@ -20,7 +20,7 @@ function readDismissed(expiresAt: string | undefined): boolean {
 /**
  * Operator-set or trial notice strip. Driven by settings.tier_limits.notice
  * or a derived trial countdown. Operator notices are not dismissible.
- * The ended-trial banner is, via per-admin localStorage.
+ * An expired product trial is a persistent red strip, not dismissible.
  */
 export function PlanNoticeBanner({ notice }: PlanNoticeBannerProps) {
   const view = presentPlanNotice(notice)
@@ -38,9 +38,16 @@ export function PlanNoticeBanner({ notice }: PlanNoticeBannerProps) {
   }, [dismissible, notice?.expiresAt])
   if (!view || !ready || (dismissible && dismissed)) return null
 
-  const tone = view.urgent
-    ? 'bg-amber-500/10 border-amber-500/20'
-    : 'bg-primary/5 border-primary/10'
+  const ended = view.ended
+  const tone = ended
+    ? 'bg-red-600 text-white border-red-700'
+    : view.urgent
+      ? 'bg-amber-500/10 border-amber-500/20'
+      : 'bg-primary/5 border-primary/10'
+  const muted = ended ? 'text-white/80' : 'text-muted-foreground'
+  const actionClass = ended
+    ? 'inline-flex items-center gap-1 font-medium text-white underline underline-offset-2 hover:text-white'
+    : 'inline-flex items-center gap-1 text-primary font-medium hover:underline'
 
   function dismiss() {
     if (notice?.expiresAt) {
@@ -56,8 +63,10 @@ export function PlanNoticeBanner({ notice }: PlanNoticeBannerProps) {
   return (
     <div className={`flex items-center justify-between gap-3 px-4 py-2.5 text-sm border-b ${tone}`}>
       <div className="flex items-center gap-2 min-w-0">
-        <span className="font-medium text-foreground shrink-0">{view.label}</span>
-        {view.daysLeft !== null && (
+        <span className={`font-medium shrink-0 ${ended ? 'text-white' : 'text-foreground'}`}>
+          {view.label}
+        </span>
+        {!ended && view.daysLeft !== null && (
           <>
             <span className="text-muted-foreground">·</span>
             <span
@@ -68,15 +77,13 @@ export function PlanNoticeBanner({ notice }: PlanNoticeBannerProps) {
               }
             >
               {view.daysLeft === 0
-                ? view.dismissible
-                  ? 'ended'
-                  : 'ends today'
+                ? 'ends today'
                 : `${view.daysLeft} day${view.daysLeft === 1 ? '' : 's'} left`}
             </span>
           </>
         )}
         {view.message && (
-          <span className="text-muted-foreground hidden sm:inline truncate">{view.message}</span>
+          <span className={`${muted} hidden sm:inline truncate`}>{view.message}</span>
         )}
       </div>
       <div className="flex items-center gap-2 shrink-0">
@@ -86,7 +93,7 @@ export function PlanNoticeBanner({ notice }: PlanNoticeBannerProps) {
             {...(view.actionUrl.startsWith('/')
               ? {}
               : { target: '_blank', rel: 'noopener noreferrer' })}
-            className="inline-flex items-center gap-1 text-primary font-medium hover:underline"
+            className={actionClass}
           >
             {view.actionLabel ?? 'Manage'}
             {!view.actionUrl.startsWith('/') && <ArrowTopRightOnSquareIcon className="h-3 w-3" />}
