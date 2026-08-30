@@ -148,7 +148,7 @@ describe('BillingPlansView', () => {
     expect(screen.getByText(/\$30\/mo included, used first/)).toBeInTheDocument()
     expect(screen.getByText(/\$10\.00 extra credit/)).toBeInTheDocument()
     expect(screen.getByText('Emails')).toBeInTheDocument()
-    expect(screen.getByText('Billable outbound mail this month.')).toBeInTheDocument()
+    expect(screen.getByText('Changelog and status-page mail this month.')).toBeInTheDocument()
     expect(screen.getByText('1,840 of 10,000')).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'Top up' })).toHaveLength(2)
     expect(screen.getByRole('heading', { name: 'Add-ons' })).toBeInTheDocument()

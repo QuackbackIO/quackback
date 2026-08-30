@@ -391,7 +391,7 @@ function usageMeterLabel(line: { key: string; label: string }): string {
 function usageMeterDescription(key: string): string | undefined {
   switch (key) {
     case 'emailsPerMonth':
-      return 'Billable outbound mail this month.'
+      return 'Changelog and status-page mail this month.'
     case 'apiRequestsPerMonth':
       return 'REST API calls this month.'
     case 'maxStatusComponents':

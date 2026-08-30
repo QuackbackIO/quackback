@@ -9,14 +9,14 @@ describe('UsageMeter', () => {
     render(
       <UsageMeter
         label="Emails"
-        description="Billable outbound mail this month."
+        description="Changelog and status-page mail this month."
         valueText="80 of 5,000"
         used={80}
         limit={5_000}
       />
     )
     expect(screen.getByText('Emails')).toBeInTheDocument()
-    expect(screen.getByText('Billable outbound mail this month.')).toBeInTheDocument()
+    expect(screen.getByText('Changelog and status-page mail this month.')).toBeInTheDocument()
     expect(screen.getByText('80 of 5,000')).toBeInTheDocument()
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '80')
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuemax', '5000')
