@@ -59,8 +59,9 @@ describe('widgetInstallPresence', () => {
         connected: true,
         enabled: true,
         originHost: 'docs.example.com',
-        requireMessengerTab: true,
-        messengerTab: true,
+        requireChannel: 'messenger',
+        channelTab: true,
+        channelAvailable: true,
       })
     ).toMatchObject({
       title: 'Widget connected',
@@ -74,13 +75,62 @@ describe('widgetInstallPresence', () => {
         connected: true,
         enabled: true,
         originHost: 'docs.example.com',
-        requireMessengerTab: true,
-        messengerTab: false,
+        requireChannel: 'messenger',
+        channelTab: false,
+        channelAvailable: true,
       })
     ).toEqual({
       title: 'Messages tab is off',
       description:
         'First request came from docs.example.com. Turn on the Messages tab so conversations can start from the widget.',
+      tone: 'channel-off',
+    })
+  })
+
+  it('does not report live for Connect Messenger while Support is off', () => {
+    expect(
+      widgetInstallPresence({
+        connected: true,
+        enabled: true,
+        originHost: 'docs.example.com',
+        requireChannel: 'messenger',
+        channelTab: true,
+        channelAvailable: false,
+      })
+    ).toMatchObject({
+      title: 'Customer support is off',
+      tone: 'channel-off',
+    })
+  })
+
+  it('does not report live for feedback while the Feedback tab is off', () => {
+    expect(
+      widgetInstallPresence({
+        connected: true,
+        enabled: true,
+        originHost: 'docs.example.com',
+        requireChannel: 'feedback',
+        channelTab: false,
+        channelAvailable: true,
+      })
+    ).toMatchObject({
+      title: 'Feedback tab is off',
+      tone: 'channel-off',
+    })
+  })
+
+  it('does not report live for feedback without a public board', () => {
+    expect(
+      widgetInstallPresence({
+        connected: true,
+        enabled: true,
+        originHost: 'docs.example.com',
+        requireChannel: 'feedback',
+        channelTab: true,
+        channelAvailable: false,
+      })
+    ).toMatchObject({
+      title: 'No public board',
       tone: 'channel-off',
     })
   })
