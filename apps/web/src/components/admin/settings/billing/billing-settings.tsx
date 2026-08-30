@@ -388,6 +388,27 @@ function usageMeterLabel(line: { key: string; label: string }): string {
   return line.label.charAt(0).toUpperCase() + line.label.slice(1)
 }
 
+function usageMeterDescription(key: string): string | undefined {
+  switch (key) {
+    case 'emailsPerMonth':
+      return 'Billable outbound mail this month.'
+    case 'apiRequestsPerMonth':
+      return 'REST API calls this month.'
+    case 'maxStatusComponents':
+      return 'Active components on the status page.'
+    case 'maxCustomRoles':
+      return 'Roles beyond Owner, Admin, and Member.'
+    case 'maxSendingDomains':
+      return 'Authenticated domains for outbound mail.'
+    case 'maxBoards':
+      return 'Public and private boards.'
+    case 'maxPosts':
+      return 'Feedback posts across all boards.'
+    default:
+      return undefined
+  }
+}
+
 function UsageCard(props: {
   overview: BillingProjectionOverview
   catalogue: BillingCatalogue | null
@@ -422,72 +443,81 @@ function UsageCard(props: {
           <div className="text-[12px] text-muted-foreground">Monthly meters reset {reset}</div>
         ) : null}
       </div>
-      <div className="grid grid-cols-1 gap-x-8 gap-y-5 p-6 sm:grid-cols-2">
+      <div className="divide-y divide-border/50">
         {hasAi && ai ? (
-          <UsageMeter
-            label="AI usage"
-            valueText={`${formatUsd(meterUsed, 2)} of ${formatUsd(ai.includedCents, 2)}`}
-            used={meterUsed}
-            limit={ai.includedCents}
-            footer={
-              <>
-                {formatUsd(ai.includedCents, 0)}/mo included, used first
-                {ai.extraCents > 0 ? ` · ${formatUsd(ai.extraCents, 2)} extra credit` : ''}
-              </>
-            }
-            action={
-              canTopUp && hasTopUpPackPrice(props.catalogue?.aiTopUpPackCents) ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => props.onTopUp('ai')}
-                >
-                  Top up
-                </Button>
-              ) : null
-            }
-          />
+          <div className="px-6 py-4">
+            <UsageMeter
+              label="AI usage"
+              description={
+                ai.extraCents > 0
+                  ? `${formatUsd(ai.includedCents, 0)}/mo included, used first. ${formatUsd(ai.extraCents, 2)} extra credit.`
+                  : `${formatUsd(ai.includedCents, 0)}/mo included, used first.`
+              }
+              valueText={`${formatUsd(meterUsed, 2)} of ${formatUsd(ai.includedCents, 2)}`}
+              used={meterUsed}
+              limit={ai.includedCents}
+              action={
+                canTopUp && hasTopUpPackPrice(props.catalogue?.aiTopUpPackCents) ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => props.onTopUp('ai')}
+                  >
+                    Top up
+                  </Button>
+                ) : null
+              }
+            />
+          </div>
         ) : null}
         {hasEmails && emails && emails.limit != null ? (
-          <UsageMeter
-            label="Emails"
-            valueText={`${emails.used.toLocaleString()} of ${emails.limit.toLocaleString()}`}
-            used={emails.used}
-            limit={emails.limit}
-            action={
-              canTopUp &&
-              emails.limit != null &&
-              hasTopUpPackPrice(props.catalogue?.emailTopUpPackCents) ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => props.onTopUp('email')}
-                >
-                  Top up
-                </Button>
-              ) : null
-            }
-          />
+          <div className="px-6 py-4">
+            <UsageMeter
+              label="Emails"
+              description={usageMeterDescription('emailsPerMonth')}
+              valueText={`${emails.used.toLocaleString()} of ${emails.limit.toLocaleString()}`}
+              used={emails.used}
+              limit={emails.limit}
+              action={
+                canTopUp &&
+                emails.limit != null &&
+                hasTopUpPackPrice(props.catalogue?.emailTopUpPackCents) ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => props.onTopUp('email')}
+                  >
+                    Top up
+                  </Button>
+                ) : null
+              }
+            />
+          </div>
         ) : null}
         {hasApi && api && api.limit != null ? (
-          <UsageMeter
-            label="API requests"
-            valueText={`${api.used.toLocaleString()} of ${api.limit.toLocaleString()}`}
-            used={api.used}
-            limit={api.limit}
-          />
+          <div className="px-6 py-4">
+            <UsageMeter
+              label="API requests"
+              description={usageMeterDescription('apiRequestsPerMonth')}
+              valueText={`${api.used.toLocaleString()} of ${api.limit.toLocaleString()}`}
+              used={api.used}
+              limit={api.limit}
+            />
+          </div>
         ) : null}
         {inventory.map((line) =>
           line.limit != null ? (
-            <UsageMeter
-              key={line.key}
-              label={usageMeterLabel(line)}
-              valueText={`${line.used.toLocaleString()} of ${line.limit.toLocaleString()}`}
-              used={line.used}
-              limit={line.limit}
-            />
+            <div key={line.key} className="px-6 py-4">
+              <UsageMeter
+                label={usageMeterLabel(line)}
+                description={usageMeterDescription(line.key)}
+                valueText={`${line.used.toLocaleString()} of ${line.limit.toLocaleString()}`}
+                used={line.used}
+                limit={line.limit}
+              />
+            </div>
           ) : null
         )}
       </div>
