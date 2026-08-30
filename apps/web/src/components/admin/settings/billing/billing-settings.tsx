@@ -379,6 +379,15 @@ function SeatsBlock(props: {
   )
 }
 
+/** Seats live on the current-plan card; AI tokens are the dollar AI meter. */
+const USAGE_CARD_SKIP = new Set(['maxTeamSeats', 'aiTokensPerMonth'])
+
+function usageMeterLabel(line: { key: string; label: string }): string {
+  if (line.key === 'emailsPerMonth') return 'Emails'
+  if (line.key === 'apiRequestsPerMonth') return 'API requests'
+  return line.label.charAt(0).toUpperCase() + line.label.slice(1)
+}
+
 function UsageCard(props: {
   overview: BillingProjectionOverview
   catalogue: BillingCatalogue | null
@@ -387,21 +396,31 @@ function UsageCard(props: {
 }) {
   const emails = props.usage.find((line) => line.key === 'emailsPerMonth')
   const api = props.usage.find((line) => line.key === 'apiRequestsPerMonth')
+  const inventory = props.usage.filter(
+    (line) =>
+      line.limit != null &&
+      !USAGE_CARD_SKIP.has(line.key) &&
+      line.key !== 'emailsPerMonth' &&
+      line.key !== 'apiRequestsPerMonth'
+  )
   const ai = props.overview.ai
   const canTopUp = props.overview.canManageBilling
   const hasAi = ai != null && (ai.includedCents > 0 || ai.extraCents > 0)
   const hasEmails = emails != null && emails.limit != null
   const hasApi = api != null && api.limit != null
-  if (!hasAi && !hasEmails && !hasApi) return null
+  if (!hasAi && !hasEmails && !hasApi && inventory.length === 0) return null
 
   const reset = nextMonthResetLabel()
   const meterUsed = ai ? Math.min(ai.usedCents, ai.includedCents) : 0
+  const hasMonthly = hasAi || hasEmails || hasApi
 
   return (
     <section className="overflow-hidden rounded-xl border border-border/50 bg-card">
       <div className="flex items-center justify-between border-b border-border/50 px-6 py-4">
         <h2 className="text-base font-semibold">Usage</h2>
-        <div className="text-[12px] text-muted-foreground">Monthly meters reset {reset}</div>
+        {hasMonthly ? (
+          <div className="text-[12px] text-muted-foreground">Monthly meters reset {reset}</div>
+        ) : null}
       </div>
       <div className="grid grid-cols-1 gap-x-8 gap-y-5 p-6 sm:grid-cols-2">
         {hasAi && ai ? (
@@ -460,6 +479,17 @@ function UsageCard(props: {
             limit={api.limit}
           />
         ) : null}
+        {inventory.map((line) =>
+          line.limit != null ? (
+            <UsageMeter
+              key={line.key}
+              label={usageMeterLabel(line)}
+              valueText={`${line.used.toLocaleString()} of ${line.limit.toLocaleString()}`}
+              used={line.used}
+              limit={line.limit}
+            />
+          ) : null
+        )}
       </div>
     </section>
   )

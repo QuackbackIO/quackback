@@ -51,29 +51,40 @@ async function loadUsageCounts(): Promise<Record<string, number>> {
     await import('@/lib/server/db')
   const { countSeatUsage } = await import('@/lib/server/domains/principals/seat-usage')
   const { emailsSentThisMonth } = await import('@/lib/server/email/email-budget')
-  const [boardRow, postRow, seats, statusRow, roleRow, domainRow, aiTokens, emailsSent] =
-    await Promise.all([
-      db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(boards)
-        .where(isNull(boards.deletedAt)),
-      db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(posts)
-        .where(isNull(posts.deletedAt)),
-      countSeatUsage(),
-      db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(statusComponents)
-        .where(isNull(statusComponents.deletedAt)),
-      db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(roles)
-        .where(eq(roles.isSystem, false)),
-      db.select({ count: sql<number>`count(*)::int` }).from(emailSendingDomains),
-      aiTokensThisMonth(),
-      emailsSentThisMonth(),
-    ])
+  const { apiRequestsThisMonth } = await import('@/lib/server/domains/api/monthly-usage')
+  const [
+    boardRow,
+    postRow,
+    seats,
+    statusRow,
+    roleRow,
+    domainRow,
+    aiTokens,
+    emailsSent,
+    apiRequests,
+  ] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(boards)
+      .where(isNull(boards.deletedAt)),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(posts)
+      .where(isNull(posts.deletedAt)),
+    countSeatUsage(),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(statusComponents)
+      .where(isNull(statusComponents.deletedAt)),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(roles)
+      .where(eq(roles.isSystem, false)),
+    db.select({ count: sql<number>`count(*)::int` }).from(emailSendingDomains),
+    aiTokensThisMonth(),
+    emailsSentThisMonth(),
+    apiRequestsThisMonth(),
+  ])
   return {
     maxBoards: boardRow[0]?.count ?? 0,
     maxPosts: postRow[0]?.count ?? 0,
@@ -83,6 +94,7 @@ async function loadUsageCounts(): Promise<Record<string, number>> {
     maxSendingDomains: domainRow[0]?.count ?? 0,
     aiTokensPerMonth: aiTokens,
     emailsPerMonth: emailsSent,
+    apiRequestsPerMonth: apiRequests,
   }
 }
 
@@ -129,6 +141,12 @@ export const fetchPlanUsageFn = createServerFn({ method: 'GET' }).handler(async 
       label: 'emails',
       used: used.emailsPerMonth ?? 0,
       limit: limits.emailsPerMonth,
+    },
+    {
+      key: 'apiRequestsPerMonth',
+      label: 'API requests',
+      used: used.apiRequestsPerMonth ?? 0,
+      limit: limits.apiRequestsPerMonth,
     },
   ])
 })

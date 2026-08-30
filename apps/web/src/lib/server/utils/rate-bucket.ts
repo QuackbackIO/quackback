@@ -25,6 +25,7 @@
 import {
   incrementRateBucket,
   incrementRateBuckets,
+  rateBucketCount,
   rateBucketRetryAfter,
 } from '@/lib/server/kv/pg-kv'
 import { logger } from '@/lib/server/logger'
@@ -83,5 +84,15 @@ export async function bucketRetryAfter(spec: RateBucketSpec): Promise<number> {
     return await rateBucketRetryAfter(spec)
   } catch {
     return spec.windowSeconds
+  }
+}
+
+/** Live count, or 0 when the bucket is missing, expired, or the store errors. */
+export async function getBucketCount(key: string): Promise<number> {
+  try {
+    return await rateBucketCount(key)
+  } catch (error) {
+    log.error({ err: error, key }, 'bucket count failed, treating as zero')
+    return 0
   }
 }

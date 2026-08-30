@@ -7,11 +7,8 @@
  * Forwarding headers are ignored unless TRUSTED_PROXY_HOPS is configured;
  * see getClientIp() below for the two resolution modes.
  */
-import {
-  bucketRetryAfter,
-  incrementBucket,
-  type RateBucketSpec,
-} from '@/lib/server/utils/rate-bucket'
+import { bucketRetryAfter, incrementBuckets } from '@/lib/server/utils/rate-bucket'
+import { API_MONTH_BUCKET_KEY, secondsUntilNextUtcMonth } from './monthly-usage'
 import { isIP } from 'node:net'
 import { config } from '@/lib/server/config'
 import { getRequestIP } from '@tanstack/react-start/server'
@@ -53,14 +50,17 @@ export async function checkRateLimit(
   const baseLimit = limits.apiRequestsPerMinute ?? MAX_REQUESTS
   const maxRequests = importMode ? Math.max(baseLimit * 20, IMPORT_MIN) : baseLimit
 
-  const spec: RateBucketSpec = { key: rateLimitKey(ip), windowSeconds: WINDOW_SECONDS }
-  const { count } = await incrementBucket(spec)
+  const minute = { key: rateLimitKey(ip), windowSeconds: WINDOW_SECONDS }
+  const [count] = await incrementBuckets([
+    minute,
+    { key: API_MONTH_BUCKET_KEY, windowSeconds: secondsUntilNextUtcMonth() },
+  ])
 
   // Redis error → fail open.
   if (count === null) return { allowed: true, remaining: maxRequests }
 
   if (count > maxRequests) {
-    return { allowed: false, remaining: 0, retryAfter: await bucketRetryAfter(spec) }
+    return { allowed: false, remaining: 0, retryAfter: await bucketRetryAfter(minute) }
   }
 
   return { allowed: true, remaining: Math.max(0, maxRequests - count) }
