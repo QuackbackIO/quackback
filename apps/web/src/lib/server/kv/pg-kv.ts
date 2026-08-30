@@ -297,6 +297,16 @@ export async function incrementRateBuckets(
   })
 }
 
+/** Live count for a window that has not expired. Missing or expired is 0. */
+export async function rateBucketCount(key: string): Promise<number> {
+  const result = await db.execute(sql`
+    SELECT count FROM rate_bucket
+    WHERE workspace_key = ${currentWorkspaceNamespace()} AND key = ${key} AND window_expires_at > now()
+  `)
+  const rows = getExecuteRows<{ count: number }>(result)
+  return Number(rows[0]?.count ?? 0)
+}
+
 /** TTL. Falls back to the window size when the bucket is absent or expired. */
 export async function rateBucketRetryAfter(spec: BucketIncrement): Promise<number> {
   const result = await db.execute(sql`

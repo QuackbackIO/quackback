@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import '@testing-library/jest-dom/vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { BillingCatalogue } from '@/lib/server/control-plane/client'
 import type { BillingProjectionOverview } from '@/lib/server/domains/billing/projection-overview'
@@ -378,5 +378,33 @@ describe('BillingPlansView', () => {
     })
     expect(screen.queryByText('Emails')).not.toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'Top up' })).toHaveLength(1)
+  })
+
+  it('shows API requests and finite plan limits for the current subscription', () => {
+    renderView({
+      usage: [
+        { key: 'apiRequestsPerMonth', label: 'API requests', used: 1200, limit: 250_000 },
+        { key: 'maxStatusComponents', label: 'status components', used: 4, limit: 25 },
+        { key: 'maxCustomRoles', label: 'custom roles', used: 1, limit: 5 },
+        { key: 'maxSendingDomains', label: 'sending domains', used: 0, limit: 3 },
+        { key: 'maxTeamSeats', label: 'seats', used: 7, limit: 10 },
+        { key: 'aiTokensPerMonth', label: 'AI tokens this month', used: 100, limit: 6_000_000 },
+        { key: 'maxBoards', label: 'boards', used: 2, limit: null },
+      ],
+    })
+    expect(screen.getByText('AI usage')).toBeInTheDocument()
+    expect(screen.getByText('API requests')).toBeInTheDocument()
+    expect(screen.getByText('1,200 of 250,000')).toBeInTheDocument()
+    expect(screen.getByText('Status components')).toBeInTheDocument()
+    expect(screen.getByText('4 of 25')).toBeInTheDocument()
+    expect(screen.getByText('Custom roles')).toBeInTheDocument()
+    expect(screen.getByText('1 of 5')).toBeInTheDocument()
+    expect(screen.getByText('Sending domains')).toBeInTheDocument()
+    expect(screen.getByText('0 of 3')).toBeInTheDocument()
+    const usage = screen.getByRole('heading', { name: 'Usage' }).closest('section')
+    expect(usage).toBeTruthy()
+    expect(within(usage as HTMLElement).queryByText('Seats')).not.toBeInTheDocument()
+    expect(screen.queryByText('AI tokens this month')).not.toBeInTheDocument()
+    expect(screen.queryByText('Boards')).not.toBeInTheDocument()
   })
 })
