@@ -116,8 +116,8 @@ export function SubscribeDialog(props: {
         </DialogFooter>
         <p className="text-[12px] text-muted-foreground">
           {props.endsTrial
-            ? 'Payment is handled by Stripe. Billing starts today and your trial ends when it goes through. You can still change the seat count on the checkout page.'
-            : 'Payment is handled by Stripe. You can still change the seat count on the checkout page.'}
+            ? 'Payment is handled by Stripe. Billing starts today and your trial ends when it goes through.'
+            : 'Payment is handled by Stripe.'}
         </p>
       </DialogContent>
     </Dialog>
