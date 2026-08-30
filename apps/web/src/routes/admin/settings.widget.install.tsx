@@ -26,7 +26,7 @@ import {
 import { widgetInstallPresence, widgetOriginVerifiedLabel } from '@/lib/shared/widget/widget-origin'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { adminQueries } from '@/lib/client/queries/admin'
-import { useUpdateWidgetConfig } from '@/lib/client/mutations/settings'
+import { useEnableWidgetFromInstall, useUpdateWidgetConfig } from '@/lib/client/mutations/settings'
 import { InlineSpinner } from '@/components/admin/settings/inline-spinner'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
@@ -55,13 +55,17 @@ function WidgetInstallPage() {
   const status = statusQuery.data!
   const mode = status.useCase === 'customer_support' ? 'messenger' : 'feedback'
   const updateWidgetConfig = useUpdateWidgetConfig()
+  const enableFromInstall = useEnableWidgetFromInstall()
   const [isPending, startTransition] = useTransition()
   const [savingEnabled, setSavingEnabled] = useState(false)
   const [enabled, setEnabled] = useState(Boolean(configQuery.data.enabled))
+  const [messengerTab, setMessengerTab] = useState(configQuery.data.tabs?.messenger ?? true)
   const presence = widgetInstallPresence({
     connected: Boolean(status.hasWidgetInstalled),
     enabled,
     originHost: status.widgetOriginHost,
+    requireMessengerTab: mode === 'messenger',
+    messengerTab,
   })
   const [copying, setCopying] = useState<'snippet' | 'secret' | null>(null)
   const [identifyUsers, setIdentifyUsers] = useState(true)
@@ -87,13 +91,21 @@ function WidgetInstallPage() {
   )
 
   async function handleEnabled(checked: boolean) {
+    const previousEnabled = enabled
+    const previousMessengerTab = messengerTab
     setEnabled(checked)
+    if (checked && mode === 'messenger') setMessengerTab(true)
     setSavingEnabled(true)
     try {
-      await updateWidgetConfig.mutateAsync({ enabled: checked })
+      if (checked) {
+        await enableFromInstall.mutateAsync({ mode })
+      } else {
+        await updateWidgetConfig.mutateAsync({ enabled: false })
+      }
       startTransition(() => router.invalidate())
     } catch {
-      setEnabled(!checked)
+      setEnabled(previousEnabled)
+      setMessengerTab(previousMessengerTab)
     } finally {
       setSavingEnabled(false)
     }
@@ -227,6 +239,25 @@ function WidgetInstallPage() {
                 disabled={savingEnabled || isPending}
                 aria-label="Widget"
               />
+            </div>
+          </div>
+        ) : presence.tone === 'channel-off' ? (
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              The widget is on. Conversations will not start until the Messages tab is on.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <InlineSpinner visible={savingEnabled || isPending} />
+              <Button
+                size="sm"
+                onClick={() => void handleEnabled(true)}
+                disabled={savingEnabled || isPending}
+              >
+                Turn on the Messages tab
+              </Button>
+              <Button asChild size="sm" variant="ghost">
+                <Link to="/admin/settings/channels/messenger">Messenger settings</Link>
+              </Button>
             </div>
           </div>
         ) : (

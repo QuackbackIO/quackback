@@ -19,6 +19,7 @@ import {
   updatePortalConfigFn,
   updateModerationDefaultFn,
   updateWidgetConfigFn,
+  enableWidgetFromInstallFn,
   regenerateWidgetSecretFn,
   updateThemeFn,
   updateCustomCssFn,
@@ -50,6 +51,7 @@ import {
   getFaviconUploadUrlFn,
 } from '@/lib/server/functions/uploads'
 import { settingsQueries } from '@/lib/client/queries/settings'
+import { adminQueries } from '@/lib/client/queries/admin'
 import { downscaleSquareImage } from '@/lib/client/downscale-square-image'
 
 // ============================================================================
@@ -290,6 +292,20 @@ export function useUpdateWidgetConfig() {
       updateWidgetConfigFn({ data }),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: settingsQueries.widgetConfig().queryKey }),
+  })
+}
+
+export function useEnableWidgetFromInstall() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (data: Parameters<typeof enableWidgetFromInstallFn>[0]['data']) =>
+      enableWidgetFromInstallFn({ data }),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: settingsQueries.widgetConfig().queryKey }),
+        queryClient.invalidateQueries({ queryKey: adminQueries.onboardingStatus().queryKey }),
+      ]),
   })
 }
 

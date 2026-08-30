@@ -231,6 +231,27 @@ export function widgetActivationConfig(
   }
 }
 
+/** Turn the widget on from the install page. Messenger mode also turns on the Messages tab. */
+export async function enableWidgetFromInstall(mode: WidgetActivationMode): Promise<WidgetConfig> {
+  try {
+    const org = await requireSettings()
+    const existing = parseWidgetConfig(org.widgetConfig)
+    const updated =
+      mode === 'messenger'
+        ? widgetActivationConfig(existing, 'messenger')
+        : { ...existing, enabled: true }
+    await db
+      .update(settings)
+      .set({ widgetConfig: JSON.stringify(updated) })
+      .where(eq(settings.id, org.id))
+    await invalidateSettingsCache()
+    return updated
+  } catch (error) {
+    log.error({ err: error }, 'enable widget from install failed')
+    wrapDbError('enable widget from install', error)
+  }
+}
+
 /** Update only the web-widget deployment flags; behavior config is never touched. */
 export async function updateWidgetAssistantDeployment(
   input: { enabled: boolean; respond: boolean },

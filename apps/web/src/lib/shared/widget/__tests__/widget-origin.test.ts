@@ -52,4 +52,36 @@ describe('widgetInstallPresence', () => {
       tone: 'live',
     })
   })
+
+  it('reports live for Connect Messenger when the Messages tab is on', () => {
+    expect(
+      widgetInstallPresence({
+        connected: true,
+        enabled: true,
+        originHost: 'docs.example.com',
+        requireMessengerTab: true,
+        messengerTab: true,
+      })
+    ).toMatchObject({
+      title: 'Widget connected',
+      tone: 'live',
+    })
+  })
+
+  it('does not report live for Connect Messenger while the Messages tab is off', () => {
+    expect(
+      widgetInstallPresence({
+        connected: true,
+        enabled: true,
+        originHost: 'docs.example.com',
+        requireMessengerTab: true,
+        messengerTab: false,
+      })
+    ).toEqual({
+      title: 'Messages tab is off',
+      description:
+        'First request came from docs.example.com. Turn on the Messages tab so conversations can start from the widget.',
+      tone: 'channel-off',
+    })
+  })
 })

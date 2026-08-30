@@ -867,6 +867,25 @@ export const updateWidgetConfigFn = createServerFn({ method: 'POST' })
     return await updateWidgetConfig(data)
   })
 
+export const enableWidgetFromInstallFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ mode: z.enum(['messenger', 'feedback']) }))
+  .handler(async ({ data }) => {
+    const auth = await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+    const { enableWidgetFromInstall } =
+      await import('@/lib/server/domains/settings/settings.widget')
+    const config = await enableWidgetFromInstall(data.mode)
+    const { emitPlgEvent } = await import('@/lib/server/plg-events')
+    await emitPlgEvent(
+      {
+        name: 'widget_configured',
+        outcome: data.mode === 'messenger' ? 'customer_support' : 'product_feedback',
+        artifactType: 'widget',
+      },
+      { workspaceId: auth.settings.id, principalId: auth.principal.id }
+    )
+    return config
+  })
+
 export const saveWidgetHeroImageKeyFn = createServerFn({ method: 'POST' })
   .validator(z.object({ key: z.string().min(1).max(512) }))
   .handler(async ({ data }) => {

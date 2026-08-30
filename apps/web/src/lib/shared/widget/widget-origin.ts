@@ -34,7 +34,7 @@ export function widgetOriginVerifiedLabel(host: string | null | undefined): stri
   return `First request came from ${host}.`
 }
 
-export type WidgetInstallPresenceTone = 'idle' | 'detected' | 'live'
+export type WidgetInstallPresenceTone = 'idle' | 'detected' | 'channel-off' | 'live'
 
 export type WidgetInstallPresence = {
   title: string
@@ -44,12 +44,15 @@ export type WidgetInstallPresence = {
 
 /**
  * Install status as shown to admins. Observing the SDK is not the same as the
- * widget being visible — `enabled` is the Show on your website switch.
+ * widget being visible — `enabled` is the Show on your website switch. For
+ * Connect Messenger, the Messages tab must also be on before the flow is live.
  */
 export function widgetInstallPresence(input: {
   connected: boolean
   enabled: boolean
   originHost?: string | null
+  requireMessengerTab?: boolean
+  messengerTab?: boolean
 }): WidgetInstallPresence {
   if (!input.connected) {
     return {
@@ -64,6 +67,13 @@ export function widgetInstallPresence(input: {
       title: 'SDK detected',
       description: `${origin} Turn on Show on your website so visitors can see it.`,
       tone: 'detected',
+    }
+  }
+  if (input.requireMessengerTab && input.messengerTab === false) {
+    return {
+      title: 'Messages tab is off',
+      description: `${origin} Turn on the Messages tab so conversations can start from the widget.`,
+      tone: 'channel-off',
     }
   }
   return {

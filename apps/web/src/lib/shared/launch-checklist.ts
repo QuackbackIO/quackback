@@ -231,7 +231,10 @@ export function buildLaunchTasks(
     description: status.hasWidgetInstalled
       ? `Messenger was found on ${status.widgetOriginHost ?? 'your site'}.`
       : 'Add the SDK to your website to connect it.',
-    completed: status.hasWidgetInstalled === true && features.supportInbox,
+    completed:
+      status.hasWidgetInstalled === true &&
+      status.hasMessengerEnabled === true &&
+      features.supportInbox,
     canAct: permissions.settingsManage,
     ...(features.supportInbox
       ? {}

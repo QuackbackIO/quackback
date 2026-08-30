@@ -41,6 +41,38 @@ describe('buildLaunchTasks V2', () => {
     expect(configured.filter((task) => task.classification === 'prerequisite')).toHaveLength(1)
   })
 
+  it('keeps Connect Messenger pending until Messenger is actually live', () => {
+    const task = buildLaunchTasks({
+      ...base,
+      useCase: 'customer_support',
+      hasWidgetInstalled: true,
+      hasMessengerEnabled: false,
+      features: {
+        supportInbox: true,
+        helpCenter: false,
+        statusPage: false,
+        integrations: true,
+      },
+    }).find((row) => row.id === 'connect-messenger')
+    expect(task?.isCompleted).toBe(false)
+  })
+
+  it('completes Connect Messenger when the SDK is observed and Messenger is live', () => {
+    const task = buildLaunchTasks({
+      ...base,
+      useCase: 'customer_support',
+      hasWidgetInstalled: true,
+      hasMessengerEnabled: true,
+      features: {
+        supportInbox: true,
+        helpCenter: false,
+        statusPage: false,
+        integrations: true,
+      },
+    }).find((row) => row.id === 'connect-messenger')
+    expect(task?.isCompleted).toBe(true)
+  })
+
   it('counts a blocked board step in the readiness denominator', () => {
     const status = { ...base, boardCount: 1, maxBoards: 1 }
     const board = buildLaunchTasks(status).find((task) => task.id === 'create-board')
