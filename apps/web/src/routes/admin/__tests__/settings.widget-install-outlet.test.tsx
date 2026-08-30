@@ -48,6 +48,6 @@ describe('widget settings child outlet', () => {
     const { WidgetSettingsGate } = await import('../settings.widget')
     render(<WidgetSettingsGate />)
     expect(screen.getByText('install-outlet')).toBeTruthy()
-    expect(screen.queryByText(/Add the SDK to your site/i)).toBeNull()
+    expect(screen.queryByText('Add to your site')).toBeNull()
   })
 })

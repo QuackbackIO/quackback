@@ -739,8 +739,8 @@ export const DEFAULT_MESSENGER_CONFIG: MessengerConfig = {
   offlineMessage: "We're away right now. Leave a message and we'll get back to you by email.",
   // AI-first: identity on, and Quinn answers when a model is configured.
   // Admins pause replies under Automation → Agent. The widget master stays
-  // off until Support is turned on (or the install CTA) so a pasted snippet
-  // does not go live by itself.
+  // off until Support is turned on (or Show on your website) so a pasted
+  // snippet does not go live by itself.
   assistant: { enabled: true, respond: true },
 }
 
