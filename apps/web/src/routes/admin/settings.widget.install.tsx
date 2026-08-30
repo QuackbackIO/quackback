@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { createFileRoute, Link, useRouteContext } from '@tanstack/react-router'
+import { useMemo, useState, useTransition } from 'react'
+import { createFileRoute, Link, useRouteContext, useRouter } from '@tanstack/react-router'
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import {
   ArrowLeftIcon,
@@ -23,9 +23,11 @@ import {
   buildWidgetInstallSnippet,
   maskWidgetSecretInPrompt,
 } from '@/lib/shared/widget/install-prompt'
-import { widgetOriginVerifiedLabel } from '@/lib/shared/widget/widget-origin'
+import { widgetInstallPresence, widgetOriginVerifiedLabel } from '@/lib/shared/widget/widget-origin'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { adminQueries } from '@/lib/client/queries/admin'
+import { useUpdateWidgetConfig } from '@/lib/client/mutations/settings'
+import { InlineSpinner } from '@/components/admin/settings/inline-spinner'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 
@@ -33,6 +35,7 @@ export const Route = createFileRoute('/admin/settings/widget/install')({
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MANAGE)
     await Promise.all([
+      context.queryClient.ensureQueryData(settingsQueries.widgetConfig()),
       context.queryClient.ensureQueryData(settingsQueries.widgetSecret()),
       context.queryClient.ensureQueryData(adminQueries.onboardingStatus()),
     ])
@@ -41,7 +44,9 @@ export const Route = createFileRoute('/admin/settings/widget/install')({
 })
 
 function WidgetInstallPage() {
+  const router = useRouter()
   const { baseUrl } = useRouteContext({ from: '__root__' })
+  const configQuery = useSuspenseQuery(settingsQueries.widgetConfig())
   const secretQuery = useSuspenseQuery(settingsQueries.widgetSecret())
   const statusQuery = useQuery({
     ...adminQueries.onboardingStatus(),
@@ -49,6 +54,15 @@ function WidgetInstallPage() {
   })
   const status = statusQuery.data!
   const mode = status.useCase === 'customer_support' ? 'messenger' : 'feedback'
+  const updateWidgetConfig = useUpdateWidgetConfig()
+  const [isPending, startTransition] = useTransition()
+  const [savingEnabled, setSavingEnabled] = useState(false)
+  const [enabled, setEnabled] = useState(Boolean(configQuery.data.enabled))
+  const presence = widgetInstallPresence({
+    connected: Boolean(status.hasWidgetInstalled),
+    enabled,
+    originHost: status.widgetOriginHost,
+  })
   const [copying, setCopying] = useState<'snippet' | 'secret' | null>(null)
   const [identifyUsers, setIdentifyUsers] = useState(true)
   const snippet = useMemo(
@@ -71,6 +85,19 @@ function WidgetInstallPage() {
     () => maskWidgetSecretInPrompt(agentPrompt, secretQuery.data),
     [agentPrompt, secretQuery.data]
   )
+
+  async function handleEnabled(checked: boolean) {
+    setEnabled(checked)
+    setSavingEnabled(true)
+    try {
+      await updateWidgetConfig.mutateAsync({ enabled: checked })
+      startTransition(() => router.invalidate())
+    } catch {
+      setEnabled(!checked)
+    } finally {
+      setSavingEnabled(false)
+    }
+  }
 
   async function copy(kind: 'snippet' | 'secret', text: string) {
     setCopying(kind)
@@ -172,15 +199,36 @@ function WidgetInstallPage() {
       <SettingsCard
         title="Verify the connection"
         description={
-          status.hasWidgetInstalled
-            ? widgetOriginVerifiedLabel(status.widgetOriginHost)
-            : 'Waiting for the first request from your deployed site. Checking every five seconds.'
+          presence.tone === 'idle'
+            ? 'Waiting for the first request from your deployed site. Checking every five seconds.'
+            : widgetOriginVerifiedLabel(status.widgetOriginHost)
         }
       >
-        {status.hasWidgetInstalled ? (
+        {presence.tone === 'live' ? (
           <p className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
             <CheckCircleIcon className="h-5 w-5" /> Widget connection verified
           </p>
+        ) : presence.tone === 'detected' ? (
+          <div className="flex items-center justify-between gap-4 rounded-lg border border-border/50 p-4">
+            <div className="min-w-0">
+              <Label htmlFor="install-widget-toggle" className="cursor-pointer text-sm font-medium">
+                Show on your website
+              </Label>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                The SDK is installed. Visitors will not see the widget until this is on.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <InlineSpinner visible={savingEnabled || isPending} />
+              <Switch
+                id="install-widget-toggle"
+                checked={enabled}
+                onCheckedChange={(checked) => void handleEnabled(checked)}
+                disabled={savingEnabled || isPending}
+                aria-label="Widget"
+              />
+            </div>
+          </div>
         ) : (
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             <ArrowPathIcon className="h-4 w-4 animate-spin" /> Waiting for installation…

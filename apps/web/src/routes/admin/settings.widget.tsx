@@ -78,7 +78,7 @@ import {
   type WidgetContentTranslation,
   type WidgetTranslations,
 } from '@/lib/shared/widget/translations'
-import { widgetOriginVerifiedLabel } from '@/lib/shared/widget/widget-origin'
+import { widgetInstallPresence } from '@/lib/shared/widget/widget-origin'
 import { DEFAULT_WIDGET_HOME_CARDS } from '@/lib/shared/types/settings'
 import { WIDGET_HERO_PATTERNS, heroBackdropStyle } from '@/lib/shared/widget/hero-style'
 import { ColorPickerGrid, ColorHexInput } from '@/components/shared/color-picker'
@@ -238,7 +238,11 @@ function WidgetSiteCard({
   const [isPending, startTransition] = useTransition()
   const [saving, setSaving] = useState(false)
   const [enabled, setEnabled] = useState(initialEnabled)
-  const connected = Boolean(status.hasWidgetInstalled)
+  const presence = widgetInstallPresence({
+    connected: Boolean(status.hasWidgetInstalled),
+    enabled,
+    originHost: status.widgetOriginHost,
+  })
 
   async function handleToggle(checked: boolean) {
     setEnabled(checked)
@@ -282,23 +286,23 @@ function WidgetSiteCard({
               <span
                 className={cn(
                   'h-2 w-2 shrink-0 rounded-full',
-                  connected ? 'bg-emerald-500' : 'bg-muted-foreground/40'
+                  presence.tone === 'live'
+                    ? 'bg-emerald-500'
+                    : presence.tone === 'detected'
+                      ? 'bg-amber-500'
+                      : 'bg-muted-foreground/40'
                 )}
               />
-              {connected ? 'Widget connected' : 'Not detected yet'}
+              {presence.title}
             </p>
             <Button asChild size="sm" variant="ghost" className="shrink-0">
               <Link to="/admin/settings/widget/install">
-                {connected ? 'View installation' : 'Install widget'}
+                {presence.tone === 'idle' ? 'Install widget' : 'View installation'}
                 <ArrowRightIcon className="h-3.5 w-3.5" />
               </Link>
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {connected
-              ? widgetOriginVerifiedLabel(status.widgetOriginHost)
-              : 'Paste the SDK to connect it'}
-          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">{presence.description}</p>
         </div>
       </div>
     </SettingsCard>
