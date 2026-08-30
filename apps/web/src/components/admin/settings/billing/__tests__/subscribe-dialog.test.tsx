@@ -34,6 +34,7 @@ describe('SubscribeDialog', () => {
     expect(screen.getByText(/Due today/)).toBeInTheDocument()
     expect(screen.getByText('$864.00')).toBeInTheDocument()
     expect(screen.getByText(/Billing starts today and your trial ends/)).toBeInTheDocument()
+    expect(screen.queryByText(/checkout page/)).not.toBeInTheDocument()
     const form = document.querySelector('form')
     expect(form?.querySelector('input[name="quantity"]')).toHaveValue('3')
     expect(form?.querySelector('input[name="billingPeriod"]')).toHaveValue('annual')
@@ -53,6 +54,7 @@ describe('SubscribeDialog', () => {
     )
     expect(screen.queryByText(/your trial ends/)).not.toBeInTheDocument()
     expect(screen.getByText(/Payment is handled by Stripe/)).toBeInTheDocument()
+    expect(screen.queryByText(/checkout page/)).not.toBeInTheDocument()
   })
 
   it('switches due-today to monthly stickers', () => {
