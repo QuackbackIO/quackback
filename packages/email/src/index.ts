@@ -72,6 +72,21 @@ function getEnv(key: string): string | undefined {
 }
 
 /**
+ * The product name that transactional subjects and headings speak in.
+ *
+ * Defaults to Quackback, which is what the hosted service and every existing
+ * install already say. A self-hoster running under their own brand sets
+ * `EMAIL_BRAND_NAME` once, and the sign-in, invite, welcome, and reset mails
+ * then carry that name instead — the inbox being the one surface that in-app
+ * theming, a custom logo, and a custom domain never reach. This is the product
+ * name, not the per-workspace name: `workspaceName` still names the board the
+ * mail is about, so "join Acme on Quackback" keeps both halves distinct.
+ */
+function productName(): string {
+  return getEnv('EMAIL_BRAND_NAME') || 'Quackback'
+}
+
+/**
  * A send refused because the install is not configured for it.
  *
  * Declares itself permanent for the same reason the transport's own errors do.
@@ -560,13 +575,14 @@ export async function sendInvitationEmail(params: SendInvitationParams): Promise
 
   return sendEmail({
     to,
-    subject: `You've been invited to join ${workspaceName} on Quackback`,
+    subject: `You've been invited to join ${workspaceName} on ${productName()}`,
     react: InvitationEmail({
       invitedByName,
       inviteeName,
       organizationName: workspaceName,
       inviteLink,
       logoUrl,
+      brandName: productName(),
     }),
     emailType: 'InvitationEmail',
     preview: { inviteLink },
@@ -614,8 +630,8 @@ export async function sendWelcomeEmail(params: SendWelcomeParams): Promise<Email
 
   return sendEmail({
     to,
-    subject: `Welcome to ${workspaceName} on Quackback!`,
-    react: WelcomeEmail({ name, workspaceName, dashboardUrl, logoUrl }),
+    subject: `Welcome to ${workspaceName} on ${productName()}!`,
+    react: WelcomeEmail({ name, workspaceName, dashboardUrl, logoUrl, brandName: productName() }),
     emailType: 'WelcomeEmail',
     preview: { dashboardUrl },
   })
@@ -638,8 +654,8 @@ export async function sendMagicLinkEmail(params: SendMagicLinkParams): Promise<E
   log.debug('sending sign-in email')
   return sendEmail({
     to,
-    subject: 'Your Quackback sign-in link',
-    react: MagicLinkEmail({ signInUrl, code, logoUrl }),
+    subject: `Your ${productName()} sign-in link`,
+    react: MagicLinkEmail({ signInUrl, code, logoUrl, brandName: productName() }),
     emailType: 'MagicLinkEmail',
     preview: { signInUrl, code },
   })
@@ -674,7 +690,7 @@ export async function sendSignupNotAllowedEmail(
   log.debug('sending sign-in refusal email')
   return sendEmail({
     to,
-    subject: 'About your Quackback sign-in request',
+    subject: `About your ${productName()} sign-in request`,
     react: SignupNotAllowedEmail({ workspaceName, logoUrl }),
     emailType: 'SignupNotAllowedEmail',
   })
@@ -698,8 +714,8 @@ export async function sendPasswordResetEmail(
   log.debug('sending password reset email')
   return sendEmail({
     to,
-    subject: 'Reset your Quackback password',
-    react: PasswordResetEmail({ resetLink, logoUrl }),
+    subject: `Reset your ${productName()} password`,
+    react: PasswordResetEmail({ resetLink, logoUrl, brandName: productName() }),
     emailType: 'PasswordResetEmail',
     preview: { resetLink },
   })

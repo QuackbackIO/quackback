@@ -8,6 +8,7 @@ interface InvitationEmailProps {
   organizationName: string
   inviteLink: string
   logoUrl?: string
+  brandName?: string
 }
 
 export function InvitationEmail({
@@ -16,10 +17,11 @@ export function InvitationEmail({
   organizationName,
   inviteLink,
   logoUrl,
+  brandName = 'Quackback',
 }: InvitationEmailProps) {
   return (
     <EmailLayout
-      preview={`Join ${organizationName} on Quackback`}
+      preview={`Join ${organizationName} on ${brandName}`}
       logoUrl={logoUrl}
       logoAlt={organizationName}
     >
@@ -29,7 +31,7 @@ export function InvitationEmail({
       </Heading>
       <Text style={typography.text}>
         <strong>{invitedByName}</strong> has invited you to join <strong>{organizationName}</strong>{' '}
-        on Quackback.
+        on {brandName}.
       </Text>
 
       {/* CTA Button */}
