@@ -223,6 +223,40 @@ export async function getCategoryBySlug(slug: string): Promise<HelpCenterCategor
  * NotFoundError shape as a genuinely missing slug, so gated content can't
  * be distinguished from nonexistent content.
  */
+export async function getPublicCategoryByUrlId(
+  urlId: number,
+  viewer: Actor = ANONYMOUS_ACTOR
+): Promise<HelpCenterCategory> {
+  const category = await db.query.helpCenterCategories.findFirst({
+    where: and(
+      eq(helpCenterCategories.urlId, urlId),
+      isNull(helpCenterCategories.deletedAt),
+      eq(helpCenterCategories.isPublic, true)
+    ),
+  })
+  if (!category || !segmentGateAllows(viewer, category.segmentIds)) {
+    throw new NotFoundError('CATEGORY_NOT_FOUND', `Category not found`)
+  }
+  return category
+}
+
+export async function getPublicCategoryById(
+  id: KbCategoryId,
+  viewer: Actor = ANONYMOUS_ACTOR
+): Promise<HelpCenterCategory> {
+  const category = await db.query.helpCenterCategories.findFirst({
+    where: and(
+      eq(helpCenterCategories.id, id),
+      isNull(helpCenterCategories.deletedAt),
+      eq(helpCenterCategories.isPublic, true)
+    ),
+  })
+  if (!category || !segmentGateAllows(viewer, category.segmentIds)) {
+    throw new NotFoundError('CATEGORY_NOT_FOUND', `Category ${id} not found`)
+  }
+  return category
+}
+
 export async function getPublicCategoryBySlug(
   slug: string,
   viewer: Actor = ANONYMOUS_ACTOR

@@ -73,6 +73,7 @@ const KB_ASK_RELATED_TOP_K = 3
 function toSourceMeta(a: RetrievedKbArticle): KbAskSourceMeta {
   return {
     articleId: a.id,
+    urlId: a.urlId,
     title: a.title,
     slug: a.slug,
     categorySlug: a.categorySlug,

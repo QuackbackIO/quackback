@@ -108,6 +108,7 @@ beforeEach(() => {
 
 const SOURCE_META = {
   articleId: 'kb_article_1',
+  urlId: 1,
   title: 'Title kb_article_1',
   slug: 'slug-kb_article_1',
   categorySlug: 'general',
@@ -322,6 +323,7 @@ describe('POST /api/widget/kb-ask', () => {
       related: [
         {
           articleId: 'kb_article_9',
+          urlId: 9,
           title: 'Title kb_article_9',
           slug: 'slug-kb_article_9',
           categorySlug: 'general',

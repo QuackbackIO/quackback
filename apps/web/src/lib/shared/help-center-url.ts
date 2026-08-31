@@ -9,14 +9,47 @@ export function getHelpCenterBaseUrl(): string {
 }
 
 /**
- * Build an /hc path for a given locale from its canonical (default-locale,
- * unprefixed) form -- domains/languages §2: `/hc/{locale}/...`, default
- * locale stays unprefixed for URL stability. `path` must start with `/hc`.
+ * Join a public numeric id and slug as `{urlId}-{slug}`.
+ */
+export function formatHcIdSlug(urlId: number, slug: string): string {
+  const trimmed = slug.replace(/^-+|-+$/g, '')
+  return trimmed ? `${urlId}-${trimmed}` : String(urlId)
+}
+
+/**
+ * Split an `{urlId}-{slug}` path param. Returns null for a legacy category
+ * slug like `getting-started`.
+ */
+export function parseHcIdSlug(param: string): { urlId: number; slug: string } | null {
+  const hyphen = param.indexOf('-')
+  const key = hyphen === -1 ? param : param.slice(0, hyphen)
+  if (!/^[1-9]\d*$/.test(key)) return null
+  const urlId = Number(key)
+  if (!Number.isSafeInteger(urlId)) return null
+  return { urlId, slug: hyphen === -1 ? '' : param.slice(hyphen + 1) }
+}
+
+/** Public article URL: `/hc/{locale}/articles/{urlId}-{slug}`. */
+export function hcArticlePath(opts: { locale: string; urlId: number; slug: string }): string {
+  return `/hc/${opts.locale}/articles/${formatHcIdSlug(opts.urlId, opts.slug)}`
+}
+
+/** Public collection URL: `/hc/{locale}/collections/{urlId}-{slug}`. */
+export function hcCollectionPath(opts: { locale: string; urlId: number; slug: string }): string {
+  return `/hc/${opts.locale}/collections/${formatHcIdSlug(opts.urlId, opts.slug)}`
+}
+
+/**
+ * Build an /hc path for a given locale from its canonical (unprefixed) form.
+ * The homepage stays unprefixed for the default locale (`/hc`); every other
+ * path — including default-locale articles and collections — carries the
+ * locale (`/hc/en/articles/...`).
  */
 export function localizedHcPath(locale: string, path: string): string {
-  if (locale === DEFAULT_LOCALE) return path
-  if (path === '/hc') return `/hc/${locale}`
-  return path.replace(/^\/hc/, `/hc/${locale}`)
+  const isHome = path === '/hc' || path === '/hc/'
+  if (isHome) return locale === DEFAULT_LOCALE ? '/hc' : `/hc/${locale}`
+  const rest = path.replace(/^\/hc/, '')
+  return `/hc/${locale}${rest}`
 }
 
 /**

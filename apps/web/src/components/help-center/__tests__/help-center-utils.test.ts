@@ -52,7 +52,11 @@ describe('getActiveCategory', () => {
     expect(getActiveCategory('/hc/categories/getting-started')).toBe('getting-started')
   })
 
-  it('returns the category slug for an article path', () => {
+  it('returns the slug tail of a numeric collection path', () => {
+    expect(getActiveCategory('/hc/en/collections/42-getting-started')).toBe('getting-started')
+  })
+
+  it('returns the category slug for a legacy article path', () => {
     expect(getActiveCategory('/hc/articles/getting-started/first-steps')).toBe('getting-started')
   })
 
@@ -95,9 +99,9 @@ describe('getSubcategories', () => {
 
 describe('buildCategoryBreadcrumbs (hierarchical)', () => {
   const tree = [
-    { id: 'root', parentId: null, slug: 'root', name: 'Root' },
-    { id: 'mid', parentId: 'root', slug: 'mid', name: 'Middle' },
-    { id: 'leaf', parentId: 'mid', slug: 'leaf', name: 'Leaf' },
+    { id: 'root', urlId: 1, parentId: null, slug: 'root', name: 'Root' },
+    { id: 'mid', urlId: 2, parentId: 'root', slug: 'mid', name: 'Middle' },
+    { id: 'leaf', urlId: 3, parentId: 'mid', slug: 'leaf', name: 'Leaf' },
   ]
 
   it('returns Help Center > Category for a top-level category', () => {
@@ -116,8 +120,8 @@ describe('buildCategoryBreadcrumbs (hierarchical)', () => {
       categoryId: 'leaf',
     })
     expect(items.map((i) => i.label)).toEqual(['Help Center', 'Root', 'Middle', 'Leaf'])
-    expect(items[1].href).toBe('/hc/categories/root')
-    expect(items[2].href).toBe('/hc/categories/mid')
+    expect(items[1].href).toBe('/hc/en/collections/1-root')
+    expect(items[2].href).toBe('/hc/en/collections/2-mid')
     expect(items[3].href).toBeUndefined()
   })
 
@@ -134,7 +138,7 @@ describe('buildCategoryBreadcrumbs (hierarchical)', () => {
       'Leaf',
       'Installing the CLI',
     ])
-    expect(items[3].href).toBe('/hc/categories/leaf')
+    expect(items[3].href).toBe('/hc/en/collections/3-leaf')
     expect(items[4].href).toBeUndefined()
   })
 
@@ -149,8 +153,8 @@ describe('buildCategoryBreadcrumbs (hierarchical)', () => {
   it('bails out of a cycle without looping forever', () => {
     // Broken data: a -> b -> a
     const cyclic = [
-      { id: 'a', parentId: 'b', slug: 'a', name: 'A' },
-      { id: 'b', parentId: 'a', slug: 'b', name: 'B' },
+      { id: 'a', urlId: 1, parentId: 'b', slug: 'a', name: 'A' },
+      { id: 'b', urlId: 2, parentId: 'a', slug: 'b', name: 'B' },
     ]
     const items = buildCategoryBreadcrumbs({
       allCategories: cyclic,

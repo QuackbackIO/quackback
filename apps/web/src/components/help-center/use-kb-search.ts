@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 export interface KbSearchArticle {
   id: string
+  urlId: number
   slug: string
   title: string
   content: string

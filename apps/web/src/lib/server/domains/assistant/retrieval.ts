@@ -35,6 +35,7 @@ export const RELATED_SIMILARITY_FLOOR = 0.3
 
 export interface RetrievedKbArticle {
   id: string
+  urlId: number
   slug: string
   title: string
   content: string
@@ -119,6 +120,7 @@ export async function retrieveKbArticles(
 
   return rows.map((r) => ({
     id: r.id,
+    urlId: r.urlId,
     slug: r.slug,
     title: r.title,
     content: r.content ?? '',
@@ -133,6 +135,7 @@ export async function retrieveKbArticles(
 
 interface RetrievalRow {
   id: string
+  urlId: number
   slug: string
   title: string
   content: string
@@ -180,6 +183,7 @@ async function hybridQuery(
   return db
     .select({
       id: helpCenterArticles.id,
+      urlId: helpCenterArticles.urlId,
       slug: helpCenterArticles.slug,
       title: helpCenterArticles.title,
       content: trimmedContent(),
@@ -230,6 +234,7 @@ async function keywordQuery(
   return db
     .select({
       id: helpCenterArticles.id,
+      urlId: helpCenterArticles.urlId,
       slug: helpCenterArticles.slug,
       title: helpCenterArticles.title,
       content: trimmedContent(),

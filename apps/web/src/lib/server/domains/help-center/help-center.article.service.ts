@@ -38,7 +38,7 @@ export async function resolveArticleWithCategory(
   const [category, authorRecord] = await Promise.all([
     db.query.helpCenterCategories.findFirst({
       where: eq(helpCenterCategories.id, article.categoryId),
-      columns: { id: true, slug: true, name: true },
+      columns: { id: true, urlId: true, slug: true, name: true },
     }),
     article.principalId
       ? db.query.principal.findFirst({
@@ -51,8 +51,13 @@ export async function resolveArticleWithCategory(
   return {
     ...article,
     category: category
-      ? { id: category.id as KbCategoryId, slug: category.slug, name: category.name }
-      : { id: article.categoryId as KbCategoryId, slug: '', name: 'Unknown' },
+      ? {
+          id: category.id as KbCategoryId,
+          urlId: category.urlId,
+          slug: category.slug,
+          name: category.name,
+        }
+      : { id: article.categoryId as KbCategoryId, urlId: 0, slug: '', name: 'Unknown' },
     author: authorRecord?.displayName
       ? {
           id: authorRecord.id as PrincipalId,
@@ -79,6 +84,42 @@ export async function getArticleBySlug(slug: string): Promise<HelpCenterArticleW
   })
   if (!article) {
     throw new NotFoundError('ARTICLE_NOT_FOUND', `Article with slug "${slug}" not found`)
+  }
+  return resolveArticleWithCategory(article)
+}
+
+export async function getPublicArticleByUrlId(
+  urlId: number,
+  viewer: Actor = ANONYMOUS_ACTOR
+): Promise<HelpCenterArticleWithCategory> {
+  const rows = await db
+    .select({ article: helpCenterArticles })
+    .from(helpCenterArticles)
+    .innerJoin(helpCenterCategories, eq(helpCenterArticles.categoryId, helpCenterCategories.id))
+    .where(
+      and(eq(helpCenterArticles.urlId, urlId), ...helpCenterVisibilityConditions('public', viewer))
+    )
+    .limit(1)
+  const article = rows[0]?.article
+  if (!article) {
+    throw new NotFoundError('ARTICLE_NOT_FOUND', `Article not found`)
+  }
+  return resolveArticleWithCategory(article)
+}
+
+export async function getPublicArticleById(
+  id: KbArticleId,
+  viewer: Actor = ANONYMOUS_ACTOR
+): Promise<HelpCenterArticleWithCategory> {
+  const rows = await db
+    .select({ article: helpCenterArticles })
+    .from(helpCenterArticles)
+    .innerJoin(helpCenterCategories, eq(helpCenterArticles.categoryId, helpCenterCategories.id))
+    .where(and(eq(helpCenterArticles.id, id), ...helpCenterVisibilityConditions('public', viewer)))
+    .limit(1)
+  const article = rows[0]?.article
+  if (!article) {
+    throw new NotFoundError('ARTICLE_NOT_FOUND', `Article not found`)
   }
   return resolveArticleWithCategory(article)
 }

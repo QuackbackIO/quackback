@@ -39,8 +39,19 @@ export const RELATED_ARTICLE_SIMILARITY_FLOOR = 0.3
 /** Default size of the Related Articles block on the public article page. */
 export const RELATED_ARTICLES_LIMIT = 4
 
+/** pgvector may come back as number[] or a '[1,2,...]' string depending on the driver. */
+function embeddingToVectorLiteral(embedding: unknown): string | null {
+  if (embedding == null) return null
+  if (Array.isArray(embedding)) return `[${embedding.join(',')}]`
+  if (typeof embedding === 'string' && embedding.length > 0) {
+    return embedding.startsWith('[') ? embedding : `[${embedding}]`
+  }
+  return null
+}
+
 export interface RelatedArticle {
   id: string
+  urlId: number
   slug: string
   title: string
   description: string | null
@@ -49,6 +60,7 @@ export interface RelatedArticle {
 
 const relatedArticleColumns = {
   id: helpCenterArticles.id,
+  urlId: helpCenterArticles.urlId,
   slug: helpCenterArticles.slug,
   title: helpCenterArticles.title,
   description: helpCenterArticles.description,
@@ -94,8 +106,8 @@ export async function getRelatedArticles(
 
   let scoreExpr
   let matchCondition
-  if (source.embedding) {
-    const vectorStr = `[${source.embedding.join(',')}]`
+  const vectorStr = embeddingToVectorLiteral(source.embedding)
+  if (vectorStr) {
     scoreExpr = sql<number>`1 - (${helpCenterArticles.embedding} <=> ${vectorStr}::vector)`.as(
       'related_score'
     )
@@ -127,6 +139,7 @@ export async function getRelatedArticles(
 
   const related: RelatedArticle[] = ranked.map((r) => ({
     id: r.id,
+    urlId: r.urlId,
     slug: r.slug,
     title: r.title,
     description: r.description,
@@ -158,6 +171,7 @@ export async function getRelatedArticles(
       if (related.some((r) => r.id === row.id)) continue
       related.push({
         id: row.id,
+        urlId: row.urlId,
         slug: row.slug,
         title: row.title,
         description: row.description,

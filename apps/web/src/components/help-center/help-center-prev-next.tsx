@@ -1,31 +1,31 @@
 import { Link } from '@tanstack/react-router'
-import { localizedHcPath } from '@/lib/shared/help-center-url'
+import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
+import { hcArticlePath } from '@/lib/shared/help-center-url'
 
 interface ArticleLink {
+  id: string
+  urlId: number
   slug: string
   title: string
 }
 
 interface HelpCenterPrevNextProps {
-  categorySlug: string
   prev: ArticleLink | null
   next: ArticleLink | null
-  /** Content locale (domains/languages §2); omitted = default locale links. */
   locale?: string
 }
 
-export function HelpCenterPrevNext({ categorySlug, prev, next, locale }: HelpCenterPrevNextProps) {
+export function HelpCenterPrevNext({ prev, next, locale }: HelpCenterPrevNextProps) {
   if (!prev && !next) return null
+  const loc = locale ?? DEFAULT_LOCALE
 
-  const hrefFor = (slug: string) => {
-    const path = `/hc/articles/${categorySlug}/${slug}`
-    return (locale ? localizedHcPath(locale, path) : path) as '/hc'
-  }
+  const hrefFor = (article: ArticleLink) =>
+    hcArticlePath({ locale: loc, urlId: article.urlId, slug: article.slug }) as '/hc'
 
   return (
     <div className="mt-10 pt-8 border-t border-border/40 flex items-start justify-between gap-4">
       {prev ? (
-        <Link to={hrefFor(prev.slug)} className="group text-left">
+        <Link to={hrefFor(prev)} className="group text-left">
           <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">
             &larr; Previous
           </span>
@@ -37,7 +37,7 @@ export function HelpCenterPrevNext({ categorySlug, prev, next, locale }: HelpCen
         <div />
       )}
       {next ? (
-        <Link to={hrefFor(next.slug)} className="group text-right">
+        <Link to={hrefFor(next)} className="group text-right">
           <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">
             Next &rarr;
           </span>

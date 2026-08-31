@@ -61,8 +61,10 @@ import { SEMANTIC_SIMILARITY_FLOOR } from '@/lib/server/domains/help-center/help
 import { retrieveKbArticles, KB_ASK_CONTEXT_CHARS } from '../retrieval'
 
 function row(id: string, content = 'body text') {
+  const trailingDigits = id.match(/(\d+)$/)
   return {
     id,
+    urlId: trailingDigits ? Number(trailingDigits[1]) : 1,
     slug: `slug-${id}`,
     title: `Title ${id}`,
     content,

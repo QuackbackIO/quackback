@@ -114,11 +114,13 @@ const mockArticle: HelpCenterArticleWithCategory = {
   viewCount: 42,
   helpfulCount: 10,
   notHelpfulCount: 2,
+  urlId: 1,
   createdAt: new Date('2026-01-01'),
   updatedAt: new Date('2026-01-10'),
   deletedAt: null,
   category: {
     id: 'kb_category_1' as KbCategoryId,
+    urlId: 1,
     slug: 'getting-started',
     name: 'Getting Started',
   },
@@ -321,6 +323,7 @@ describe('GET /api/v1/help-center/articles/:id', () => {
     expect(json.data.id).toBe('kb_article_1')
     expect(json.data.category).toEqual({
       id: 'kb_category_1',
+      urlId: 1,
       slug: 'getting-started',
       name: 'Getting Started',
     })

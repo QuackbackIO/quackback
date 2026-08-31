@@ -50,6 +50,7 @@ export interface ArticleListScope {
 // preview of `content`.
 const LIST_COLUMNS = {
   id: true,
+  urlId: true,
   categoryId: true,
   slug: true,
   title: true,
@@ -251,7 +252,7 @@ async function resolveArticleRelations(
     categoryIds.length > 0
       ? db.query.helpCenterCategories.findMany({
           where: inArray(helpCenterCategories.id, categoryIds),
-          columns: { id: true, slug: true, name: true },
+          columns: { id: true, urlId: true, slug: true, name: true },
         })
       : [],
     principalIds.length > 0
@@ -274,8 +275,8 @@ async function resolveArticleRelations(
       // that need the full JSON (e.g. article detail page) call getArticleById.
       contentJson: null,
       category: cat
-        ? { id: cat.id as KbCategoryId, slug: cat.slug, name: cat.name }
-        : { id: article.categoryId as KbCategoryId, slug: '', name: 'Unknown' },
+        ? { id: cat.id as KbCategoryId, urlId: cat.urlId, slug: cat.slug, name: cat.name }
+        : { id: article.categoryId as KbCategoryId, urlId: 0, slug: '', name: 'Unknown' },
       author: author?.displayName
         ? { id: author.id as PrincipalId, name: author.displayName, avatarUrl: author.avatarUrl }
         : null,
@@ -306,6 +307,7 @@ export async function listPublicArticlesForCategory(
   return db
     .select({
       id: helpCenterArticles.id,
+      urlId: helpCenterArticles.urlId,
       slug: helpCenterArticles.slug,
       title: helpCenterArticles.title,
       description: helpCenterArticles.description,
@@ -359,6 +361,7 @@ export async function listPublicArticlesForCategories(
     .select({
       categoryId: helpCenterArticles.categoryId,
       id: helpCenterArticles.id,
+      urlId: helpCenterArticles.urlId,
       slug: helpCenterArticles.slug,
       title: helpCenterArticles.title,
       description: helpCenterArticles.description,
@@ -390,6 +393,7 @@ export async function listPublicArticlesForCategories(
     .select({
       categoryId: ranked.categoryId,
       id: ranked.id,
+      urlId: ranked.urlId,
       slug: ranked.slug,
       title: ranked.title,
       description: ranked.description,
@@ -422,6 +426,7 @@ export async function listPopularPublicArticles(limit: number, viewer: Actor = A
   return db
     .select({
       id: helpCenterArticles.id,
+      urlId: helpCenterArticles.urlId,
       slug: helpCenterArticles.slug,
       title: helpCenterArticles.title,
       categorySlug: helpCenterCategories.slug,

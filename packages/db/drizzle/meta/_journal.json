@@ -1744,6 +1744,13 @@
       "when": 1785700000029,
       "tag": "0271_widget_installed_sdk_version",
       "breakpoints": true
+    },
+    {
+      "idx": 249,
+      "version": "7",
+      "when": 1785700000030,
+      "tag": "0272_kb_url_id",
+      "breakpoints": true
     }
   ]
 }

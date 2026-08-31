@@ -210,7 +210,7 @@ describe('search', () => {
       type: 'article',
       id: 'kb_article_1',
       title: 'Title kb_article_1',
-      url: '/hc/articles/general/slug-kb_article_1',
+      url: '/hc/en/articles/1-slug-kb_article_1',
       updatedAt: '2026-06-01T00:00:00.000Z',
     })
   })

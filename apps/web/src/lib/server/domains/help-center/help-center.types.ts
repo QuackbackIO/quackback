@@ -35,6 +35,8 @@ export interface HelpCenterCategory {
   /** Segments a public category is restricted to; [] = everyone. */
   segmentIds: string[]
   position: number
+  /** Public numeric id used in help-center URLs. */
+  urlId: number
   createdAt: Date
   updatedAt: Date
   deletedAt?: Date | null
@@ -71,6 +73,8 @@ export interface HelpCenterArticle {
   viewCount: number
   helpfulCount: number
   notHelpfulCount: number
+  /** Public numeric id used in help-center URLs. */
+  urlId: number
   createdAt: Date
   updatedAt: Date
   deletedAt?: Date | null
@@ -79,6 +83,7 @@ export interface HelpCenterArticle {
 export interface HelpCenterArticleWithCategory extends HelpCenterArticle {
   category: {
     id: KbCategoryId
+    urlId: number
     slug: string
     name: string
   }

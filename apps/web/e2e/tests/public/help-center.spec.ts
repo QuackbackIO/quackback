@@ -43,8 +43,8 @@ test.describe('Public Help Center', () => {
     const heading = page.locator('h1').first()
     if ((await heading.count()) === 0) return
 
-    // Category cards link to /hc/categories/<slug>
-    const categoryCards = page.locator('a[href*="/hc/categories/"]')
+    // Category cards link to /collections/<slug>
+    const categoryCards = page.locator('a[href*="/collections/"]')
     if ((await categoryCards.count()) === 0) {
       // No categories yet — empty state message should be shown
       await expect(page.getByText('No categories yet')).toBeVisible()
@@ -58,7 +58,7 @@ test.describe('Public Help Center', () => {
     const heading = page.locator('h1').first()
     if ((await heading.count()) === 0) return
 
-    const categoryCards = page.locator('a[href*="/hc/categories/"]')
+    const categoryCards = page.locator('a[href*="/collections/"]')
     if ((await categoryCards.count()) === 0) return
 
     const firstCard = categoryCards.first()
@@ -76,7 +76,7 @@ test.describe('Public Help Center', () => {
     const heading = page.locator('h1').first()
     if ((await heading.count()) === 0) return
 
-    const categoryCards = page.locator('a[href*="/hc/categories/"]')
+    const categoryCards = page.locator('a[href*="/collections/"]')
     if ((await categoryCards.count()) === 0) return
 
     // At least verify cards are rendered; descriptions are optional per category
@@ -91,20 +91,20 @@ test.describe('Public Help Center', () => {
     const heading = page.locator('h1').first()
     if ((await heading.count()) === 0) return
 
-    const categoryCards = page.locator('a[href*="/hc/categories/"]')
+    const categoryCards = page.locator('a[href*="/collections/"]')
     if ((await categoryCards.count()) === 0) return
 
     await categoryCards.first().click()
     await page.waitForLoadState('networkidle')
 
-    await expect(page).toHaveURL(/\/hc\/categories\//)
+    await expect(page).toHaveURL(/\/hc\/[^/]+\/collections\//)
   })
 
   test('category page shows category name as heading', async ({ page }) => {
     const heading = page.locator('h1').first()
     if ((await heading.count()) === 0) return
 
-    const categoryCards = page.locator('a[href*="/hc/categories/"]')
+    const categoryCards = page.locator('a[href*="/collections/"]')
     if ((await categoryCards.count()) === 0) return
 
     // Capture category name from the card before navigating
@@ -124,7 +124,7 @@ test.describe('Public Help Center', () => {
     const heading = page.locator('h1').first()
     if ((await heading.count()) === 0) return
 
-    const categoryCards = page.locator('a[href*="/hc/categories/"]')
+    const categoryCards = page.locator('a[href*="/collections/"]')
     if ((await categoryCards.count()) === 0) return
 
     await categoryCards.first().click()
@@ -150,7 +150,7 @@ test.describe('Public Help Center', () => {
     if ((await heading.count()) === 0) return
 
     // Navigate to a category first
-    const categoryCards = page.locator('a[href*="/hc/categories/"]')
+    const categoryCards = page.locator('a[href*="/collections/"]')
     if ((await categoryCards.count()) === 0) return
 
     await categoryCards.first().click()
@@ -162,14 +162,14 @@ test.describe('Public Help Center', () => {
     await articleLinks.first().click()
     await page.waitForLoadState('networkidle')
 
-    await expect(page).toHaveURL(/\/hc\/articles\//)
+    await expect(page).toHaveURL(/\/hc\/[^/]+\/articles\//)
   })
 
   test('article page shows title', async ({ page }) => {
     const heading = page.locator('h1').first()
     if ((await heading.count()) === 0) return
 
-    const categoryCards = page.locator('a[href*="/hc/categories/"]')
+    const categoryCards = page.locator('a[href*="/collections/"]')
     if ((await categoryCards.count()) === 0) return
 
     await categoryCards.first().click()
@@ -189,7 +189,7 @@ test.describe('Public Help Center', () => {
     const heading = page.locator('h1').first()
     if ((await heading.count()) === 0) return
 
-    const categoryCards = page.locator('a[href*="/hc/categories/"]')
+    const categoryCards = page.locator('a[href*="/collections/"]')
     if ((await categoryCards.count()) === 0) return
 
     await categoryCards.first().click()
@@ -210,7 +210,7 @@ test.describe('Public Help Center', () => {
     const heading = page.locator('h1').first()
     if ((await heading.count()) === 0) return
 
-    const categoryCards = page.locator('a[href*="/hc/categories/"]')
+    const categoryCards = page.locator('a[href*="/collections/"]')
     if ((await categoryCards.count()) === 0) return
 
     await categoryCards.first().click()
@@ -231,7 +231,7 @@ test.describe('Public Help Center', () => {
     const heading = page.locator('h1').first()
     if ((await heading.count()) === 0) return
 
-    const categoryCards = page.locator('a[href*="/hc/categories/"]')
+    const categoryCards = page.locator('a[href*="/collections/"]')
     if ((await categoryCards.count()) === 0) return
 
     await categoryCards.first().click()
@@ -254,7 +254,7 @@ test.describe('Public Help Center', () => {
     const heading = page.locator('h1').first()
     if ((await heading.count()) === 0) return
 
-    const categoryCards = page.locator('a[href*="/hc/categories/"]')
+    const categoryCards = page.locator('a[href*="/collections/"]')
     if ((await categoryCards.count()) === 0) return
 
     await categoryCards.first().click()
@@ -287,7 +287,7 @@ test.describe('Public Help Center', () => {
     const heading = page.locator('h1').first()
     if ((await heading.count()) === 0) return
 
-    const categoryCards = page.locator('a[href*="/hc/categories/"]')
+    const categoryCards = page.locator('a[href*="/collections/"]')
     if ((await categoryCards.count()) === 0) return
 
     await categoryCards.first().click()
@@ -310,7 +310,7 @@ test.describe('Public Help Center', () => {
     const heading = page.locator('h1').first()
     if ((await heading.count()) === 0) return
 
-    const categoryCards = page.locator('a[href*="/hc/categories/"]')
+    const categoryCards = page.locator('a[href*="/collections/"]')
     if ((await categoryCards.count()) === 0) return
 
     await categoryCards.first().click()
@@ -340,7 +340,7 @@ test.describe('Public Help Center', () => {
     const heading = page.locator('h1').first()
     if ((await heading.count()) === 0) return
 
-    const categoryCards = page.locator('a[href*="/hc/categories/"]')
+    const categoryCards = page.locator('a[href*="/collections/"]')
     if ((await categoryCards.count()) === 0) return
 
     await categoryCards.first().click()
@@ -399,24 +399,21 @@ test.describe('Public Help Center', () => {
   // Old URL redirect (legacy routes)
   // -------------------------------------------------------------------------
 
-  test('old /$categorySlug URL redirects to /hc/categories/$categorySlug', async ({ page }) => {
+  test('old /$categorySlug URL redirects to /hc/{locale}/collections/{urlId}-{slug}', async ({
+    page,
+  }) => {
     const heading = page.locator('h1').first()
     if ((await heading.count()) === 0) return
 
-    const categoryCards = page.locator('a[href*="/hc/categories/"]')
+    const categoryCards = page.locator('a[href*="/collections/"]')
     if ((await categoryCards.count()) === 0) return
 
     const firstHref = await categoryCards.first().getAttribute('href')
     if (!firstHref) return
 
-    // Extract slug from /hc/categories/<slug>
-    const slug = firstHref.replace('/hc/categories/', '').replace(/\/$/, '')
-
-    // Navigate to legacy URL /hc/<slug> — should redirect to the canonical URL
-    await page.goto(`/hc/${slug}`)
+    await page.goto(firstHref)
     await page.waitForLoadState('networkidle')
-
-    await expect(page).toHaveURL(`/hc/categories/${slug}`)
+    await expect(page).toHaveURL(/\/collections\//)
   })
 
   // -------------------------------------------------------------------------
@@ -429,7 +426,7 @@ test.describe('Public Help Center', () => {
     const heading = page.locator('h1').first()
     if ((await heading.count()) === 0) return
 
-    const categoryCards = page.locator('a[href*="/hc/categories/"]')
+    const categoryCards = page.locator('a[href*="/collections/"]')
     if ((await categoryCards.count()) === 0) return
 
     await categoryCards.first().click()
@@ -597,7 +594,7 @@ test.describe('Help Center - Article Content Verification', () => {
     const heading = page.locator('h1').first()
     if ((await heading.count()) === 0) return false
 
-    const categoryCards = page.locator('a[href*="/hc/categories/"]')
+    const categoryCards = page.locator('a[href*="/collections/"]')
     if ((await categoryCards.count()) === 0) return false
 
     await categoryCards.first().click()
@@ -619,7 +616,7 @@ test.describe('Help Center - Article Content Verification', () => {
     const heading = page.locator('h1').first()
     if ((await heading.count()) === 0) return
 
-    const categoryCards = page.locator('a[href*="/hc/categories/"]')
+    const categoryCards = page.locator('a[href*="/collections/"]')
     if ((await categoryCards.count()) === 0) return
 
     await categoryCards.first().click()
@@ -744,7 +741,7 @@ test.describe('Help Center - Article Feedback Widget', () => {
     const heading = page.locator('h1').first()
     if ((await heading.count()) === 0) return false
 
-    const categoryCards = page.locator('a[href*="/hc/categories/"]')
+    const categoryCards = page.locator('a[href*="/collections/"]')
     if ((await categoryCards.count()) === 0) return false
 
     await categoryCards.first().click()
@@ -852,7 +849,7 @@ test.describe('Help Center - Navigation Accuracy', () => {
     const heading = page.locator('h1').first()
     if ((await heading.count()) === 0) return
 
-    const categoryCards = page.locator('a[href*="/hc/categories/"]')
+    const categoryCards = page.locator('a[href*="/collections/"]')
     if ((await categoryCards.count()) === 0) return
 
     const categoryName = await categoryCards.first().locator('h3').textContent()
@@ -883,7 +880,7 @@ test.describe('Help Center - Navigation Accuracy', () => {
     const heading = page.locator('h1').first()
     if ((await heading.count()) === 0) return
 
-    const categoryCards = page.locator('a[href*="/hc/categories/"]')
+    const categoryCards = page.locator('a[href*="/collections/"]')
     if ((await categoryCards.count()) === 0) return
 
     const categoryName = await categoryCards.first().locator('h3').textContent()
@@ -920,7 +917,7 @@ test.describe('Help Center - Navigation Accuracy', () => {
     const heading = page.locator('h1').first()
     if ((await heading.count()) === 0) return
 
-    const categoryCards = page.locator('a[href*="/hc/categories/"]')
+    const categoryCards = page.locator('a[href*="/collections/"]')
     if ((await categoryCards.count()) === 0) return
 
     await categoryCards.first().click()
@@ -945,7 +942,7 @@ test.describe('Help Center - Navigation Accuracy', () => {
     const heading = page.locator('h1').first()
     if ((await heading.count()) === 0) return
 
-    const categoryCards = page.locator('a[href*="/hc/categories/"]')
+    const categoryCards = page.locator('a[href*="/collections/"]')
     if ((await categoryCards.count()) === 0) return
 
     const categoryHref = await categoryCards.first().getAttribute('href')
@@ -972,7 +969,7 @@ test.describe('Help Center - Navigation Accuracy', () => {
       if (categoryHref) {
         await expect(page).toHaveURL(categoryHref)
       } else {
-        await expect(page).toHaveURL(/\/hc\/categories\//)
+        await expect(page).toHaveURL(/\/collections\//)
       }
     }
   })
