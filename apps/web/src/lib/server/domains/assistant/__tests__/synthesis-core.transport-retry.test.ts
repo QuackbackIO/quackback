@@ -74,6 +74,16 @@ function emptyTextThenError(message: string) {
   })()
 }
 
+/** RUN_STARTED, a whitespace-only text delta (DeepSeek json_schema prefix),
+ *  then RUN_ERROR: still pristine — a space does not commit. */
+function whitespaceTextThenError(message: string) {
+  return (async function* () {
+    yield { type: 'RUN_STARTED' }
+    yield { type: 'TEXT_MESSAGE_CONTENT', delta: ' ' }
+    yield { type: 'RUN_ERROR', message }
+  })()
+}
+
 /** RUN_STARTED, a non-empty text delta (streamed to the caller), then RUN_ERROR:
  *  COMMITTED — re-dialing would double-emit. */
 function textThenError(message: string) {
@@ -205,6 +215,51 @@ describe('transport retry — pristine RUN_ERROR (real adapter shape)', () => {
     const result = await settle(runSynthesis(baseOptions()))
     expect((result as { final: unknown }).final).toEqual({ text: 'ok' })
     expect(mockChat).toHaveBeenCalledTimes(2)
+  })
+
+  it('treats a whitespace-only text delta as still pristine and retries', async () => {
+    mockChat
+      .mockReturnValueOnce(whitespaceTextThenError('429 rate limit'))
+      .mockReturnValueOnce(goodStream('ok'))
+
+    const result = await settle(runSynthesis(baseOptions()))
+    expect((result as { final: unknown }).final).toEqual({ text: 'ok' })
+    expect(mockChat).toHaveBeenCalledTimes(2)
+  })
+
+  it('hides OpenRouter reasoning tokens on tool-less structured streams', async () => {
+    mockConfig.openaiBaseUrl = 'https://openrouter.ai/api/v1'
+    mockChat.mockReturnValueOnce(goodStream('ok'))
+
+    await settle(runSynthesis(baseOptions({ transportRetries: 0 })))
+
+    expect(mockChat).toHaveBeenCalledTimes(1)
+    const call = mockChat.mock.calls[0]![0] as {
+      modelOptions?: { reasoning?: { exclude?: boolean } }
+    }
+    expect(call.modelOptions?.reasoning).toEqual({ exclude: true })
+  })
+
+  it('does not hide reasoning on tool-using OpenRouter streams', async () => {
+    mockConfig.openaiBaseUrl = 'https://openrouter.ai/api/v1'
+    mockChat.mockReturnValueOnce(goodStream('ok'))
+
+    await settle(
+      runSynthesis(
+        baseOptions({
+          transportRetries: 0,
+          tools: {
+            specs: [],
+            context: {},
+            agentLoopStrategy: {} as never,
+            names: new Set(),
+          },
+        })
+      )
+    )
+
+    const call = mockChat.mock.calls[0]![0] as { modelOptions?: { reasoning?: unknown } }
+    expect(call.modelOptions?.reasoning).toBeUndefined()
   })
 
   it('retries a pristine RUN_ERROR in strict mode too', async () => {

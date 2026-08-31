@@ -212,11 +212,13 @@ class CommittedStreamError extends Error {
  * the transport the failure happened.
  *
  * `committed` flips on the first meaningful chunk: TEXT_MESSAGE_CONTENT with a
- * non-empty delta (answer text reached the caller via onTextDelta), any
+ * non-whitespace delta (answer text reached the caller via onTextDelta), any
  * TOOL_CALL_* chunk (a tool is executing, with persisted side effects), or the
  * structured-output CUSTOM chunk (the decoded answer). Envelope chunks —
- * RUN_STARTED, TEXT_MESSAGE_START, STEP_* — do NOT commit: nothing has streamed
- * and no tool has run, so a re-dial is safe.
+ * RUN_STARTED, TEXT_MESSAGE_START, STEP_*, empty or whitespace-only text
+ * deltas — do NOT commit: nothing has streamed and no tool has run, so a
+ * re-dial is safe. DeepSeek v4 Flash prefixes structured JSON with a space;
+ * treating that as a commit made a later RUN_ERROR un-retryable.
  *
  * A RUN_ERROR seen while still pristine is therefore a candidate transport
  * failure: it exits as a plain throw so withRetry can classify it via
@@ -260,6 +262,14 @@ async function streamOnce<TContext>(
     // advertise silently shrinks the pool to none and the turn dies with no
     // output.
     ...structuredOutputProviderOptions(),
+    // Tool-less structured streams (Ask AI) must not emit reasoning tokens on
+    // the content channel. DeepSeek v4 Flash via OpenRouter otherwise spends
+    // the first seconds on thinking/whitespace, which commits the SSE on a
+    // single space and then looks idle to the edge proxy. Quinn's tool loop
+    // keeps reasoning so it can round-trip reasoning_details across calls.
+    ...(config.openaiBaseUrl?.includes('openrouter.ai') && !opts.tools
+      ? { reasoning: { exclude: true } }
+      : {}),
   }
 
   const tools = opts.tools
@@ -334,10 +344,12 @@ async function streamOnce<TContext>(
       if (chunk.type.startsWith('TOOL_CALL')) committed = true
       switch (chunk.type) {
         case 'TEXT_MESSAGE_CONTENT': {
-          // A non-empty delta is the first byte of the answer reaching the
-          // caller (streamed via onTextDelta below): a meaningful commit. An
-          // empty delta is an envelope tick and leaves the stream pristine.
-          if (chunk.delta.length > 0) committed = true
+          // A non-whitespace delta is the first byte of the answer reaching
+          // the caller (streamed via onTextDelta below): a meaningful commit.
+          // Empty or whitespace-only deltas are envelope ticks (DeepSeek v4
+          // Flash prefixes json_schema streams with a space) and leave the
+          // stream pristine so a later RUN_ERROR can still re-dial.
+          if (chunk.delta.trim().length > 0) committed = true
           // Deltas are raw JSON; surface only the growth of the target field
           // so consumers stream clean text, not the JSON envelope.
           raw += chunk.delta
