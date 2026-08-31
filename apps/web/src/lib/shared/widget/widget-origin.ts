@@ -64,13 +64,9 @@ export function widgetInstallPresence(input: {
     }
   }
   const origin = widgetOriginVerifiedLabel(input.originHost)
-  if (!input.enabled) {
-    return {
-      title: 'SDK detected',
-      description: `${origin} Turn on Show on your website so visitors can see it.`,
-      tone: 'detected',
-    }
-  }
+  // Prerequisites that `enableWidgetFromInstall` will refuse must win over
+  // "turn the widget on" so the install page offers General / Create board
+  // instead of a switch that always fails.
   if (input.requireChannel === 'messenger' && input.channelAvailable === false) {
     return {
       title: 'Customer support is off',
@@ -78,17 +74,24 @@ export function widgetInstallPresence(input: {
       tone: 'channel-off',
     }
   }
-  if (input.requireChannel === 'messenger' && input.channelTab === false) {
-    return {
-      title: 'Messages tab is off',
-      description: `${origin} Turn on the Messages tab so conversations can start from the widget.`,
-      tone: 'channel-off',
-    }
-  }
   if (input.requireChannel === 'feedback' && input.channelAvailable === false) {
     return {
       title: 'No public board',
       description: `${origin} Create a public feedback board before the widget can take ideas.`,
+      tone: 'channel-off',
+    }
+  }
+  if (!input.enabled) {
+    return {
+      title: 'SDK detected',
+      description: `${origin} Turn on Show on your website so visitors can see it.`,
+      tone: 'detected',
+    }
+  }
+  if (input.requireChannel === 'messenger' && input.channelTab === false) {
+    return {
+      title: 'Messages tab is off',
+      description: `${origin} Turn on the Messages tab so conversations can start from the widget.`,
       tone: 'channel-off',
     }
   }

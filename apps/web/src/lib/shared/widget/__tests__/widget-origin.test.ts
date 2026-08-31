@@ -103,6 +103,38 @@ describe('widgetInstallPresence', () => {
     })
   })
 
+  it('offers the Support prerequisite instead of a failing enable switch', () => {
+    expect(
+      widgetInstallPresence({
+        connected: true,
+        enabled: false,
+        originHost: 'docs.example.com',
+        requireChannel: 'messenger',
+        channelTab: true,
+        channelAvailable: false,
+      })
+    ).toMatchObject({
+      title: 'Customer support is off',
+      tone: 'channel-off',
+    })
+  })
+
+  it('offers create-board instead of a failing enable switch', () => {
+    expect(
+      widgetInstallPresence({
+        connected: true,
+        enabled: false,
+        originHost: 'docs.example.com',
+        requireChannel: 'feedback',
+        channelTab: true,
+        channelAvailable: false,
+      })
+    ).toMatchObject({
+      title: 'No public board',
+      tone: 'channel-off',
+    })
+  })
+
   it('does not report live for feedback while the Feedback tab is off', () => {
     expect(
       widgetInstallPresence({
