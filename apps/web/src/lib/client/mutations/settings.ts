@@ -50,6 +50,7 @@ import {
   getFaviconUploadUrlFn,
 } from '@/lib/server/functions/uploads'
 import { settingsQueries } from '@/lib/client/queries/settings'
+import { adminQueries } from '@/lib/client/queries/admin'
 import { downscaleSquareImage } from '@/lib/client/downscale-square-image'
 
 // ============================================================================
@@ -289,7 +290,10 @@ export function useUpdateWidgetConfig() {
     mutationFn: (data: Parameters<typeof updateWidgetConfigFn>[0]['data']) =>
       updateWidgetConfigFn({ data }),
     onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: settingsQueries.widgetConfig().queryKey }),
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: settingsQueries.widgetConfig().queryKey }),
+        queryClient.invalidateQueries({ queryKey: adminQueries.onboardingStatus().queryKey }),
+      ]),
   })
 }
 

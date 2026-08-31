@@ -14,6 +14,7 @@ const base: LaunchStatus = {
   memberCount: 1,
   hasBranding: false,
   hasWidgetInstalled: false,
+  hasWidgetEnabled: false,
   hasMessengerEnabled: false,
   hasHelpArticle: false,
   hasIntegration: false,
@@ -34,11 +35,49 @@ describe('buildLaunchTasks V2', () => {
     const configured = buildLaunchTasks({
       ...base,
       useCase: 'customer_support',
-      hasMessengerEnabled: true,
+      hasWidgetEnabled: true,
       hasWidgetInstalled: false,
+      features: {
+        supportInbox: true,
+        helpCenter: false,
+        statusPage: false,
+        integrations: true,
+      },
     })
     expect(configured.find((task) => task.id === 'connect-messenger')?.isCompleted).toBe(false)
     expect(configured.filter((task) => task.classification === 'prerequisite')).toHaveLength(1)
+  })
+
+  it('keeps Connect Messenger pending until the widget is on', () => {
+    const task = buildLaunchTasks({
+      ...base,
+      useCase: 'customer_support',
+      hasWidgetInstalled: true,
+      hasWidgetEnabled: false,
+      features: {
+        supportInbox: true,
+        helpCenter: false,
+        statusPage: false,
+        integrations: true,
+      },
+    }).find((row) => row.id === 'connect-messenger')
+    expect(task?.isCompleted).toBe(false)
+  })
+
+  it('completes Connect Messenger when the SDK is observed and the widget is on', () => {
+    const task = buildLaunchTasks({
+      ...base,
+      useCase: 'customer_support',
+      hasWidgetInstalled: true,
+      hasWidgetEnabled: true,
+      features: {
+        supportInbox: true,
+        helpCenter: false,
+        statusPage: false,
+        integrations: true,
+      },
+    }).find((row) => row.id === 'connect-messenger')
+    expect(task?.isCompleted).toBe(true)
   })
 
   it('counts a blocked board step in the readiness denominator', () => {
@@ -75,6 +114,7 @@ describe('buildLaunchTasks V2', () => {
       ...base,
       useCase: 'customer_support',
       hasWidgetInstalled: true,
+      hasWidgetEnabled: true,
       features: {
         supportInbox: false,
         helpCenter: false,
@@ -287,12 +327,22 @@ describe('buildLaunchTasks V2', () => {
 
   it.each([
     { publicBoardLinkCopiedAt: '2026-08-14T10:00:00.000Z' },
-    { hasWidgetInstalled: true },
+    { hasWidgetInstalled: true, hasWidgetEnabled: true },
     { hasFirstWin: true },
   ])('accepts any real distribution signal: %o', (signal) => {
     const task = buildLaunchTasks({ ...base, hasPublicBoard: true, ...signal }).find(
       (candidate) => candidate.id === 'distribute-feedback'
     )
     expect(task?.isCompleted).toBe(true)
+  })
+
+  it('does not treat a disabled widget as distributed', () => {
+    const task = buildLaunchTasks({
+      ...base,
+      hasPublicBoard: true,
+      hasWidgetInstalled: true,
+      hasWidgetEnabled: false,
+    }).find((candidate) => candidate.id === 'distribute-feedback')
+    expect(task?.isCompleted).toBe(false)
   })
 })

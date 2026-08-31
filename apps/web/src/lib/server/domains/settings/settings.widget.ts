@@ -1,5 +1,5 @@
 import { randomBytes } from 'crypto'
-import { db, and, boards, eq, lte, or, isNull, sql, settings } from '@/lib/server/db'
+import { db, and, eq, lte, or, isNull, sql, settings } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 import { absolutizeOffHostAssetUrl } from '@/lib/server/storage/asset-url'
 import { deleteObject, getPublicUrlOrNull } from '@/lib/server/storage/s3'
@@ -12,6 +12,7 @@ import type {
   MessengerConfig,
 } from './settings.types'
 import { DEFAULT_MESSENGER_CONFIG, resolveFeatureFlags } from './settings.types'
+import { ValidationError } from '@/lib/shared/errors'
 import type { AssistantConfigAuditActor } from './settings.assistant'
 import { recordAuditEventInTransaction } from '@/lib/server/audit/log'
 import {
@@ -209,7 +210,10 @@ export function widgetActivationConfig(
   publicBoardSlug?: string
 ): WidgetConfig {
   if (mode === 'feedback' && !publicBoardSlug) {
-    throw new Error('Create a public feedback board before connecting the widget')
+    throw new ValidationError(
+      'PUBLIC_BOARD_REQUIRED',
+      'Create a public feedback board before connecting the widget'
+    )
   }
   if (mode === 'messenger') {
     return {
@@ -229,49 +233,6 @@ export function widgetActivationConfig(
     defaultBoard: publicBoardSlug,
     tabs: { ...existing.tabs, feedback: true },
   }
-}
-
-/** Enable the selected activation channel in one locked settings update. */
-export async function configureWidgetForActivation(mode: WidgetActivationMode): Promise<{
-  mode: WidgetActivationMode
-  config: WidgetConfig
-  boardId: string | null
-}> {
-  const result = await db.transaction(async (tx) => {
-    const [row] = await tx
-      .select({
-        id: settings.id,
-        widgetConfig: settings.widgetConfig,
-        featureFlags: settings.featureFlags,
-      })
-      .from(settings)
-      .limit(1)
-      .for('update')
-    if (!row) throw new Error('Settings not found')
-
-    const flags = resolveFeatureFlags(row.featureFlags)
-    if (mode === 'messenger' && !flags.supportInbox) {
-      throw new Error('Customer support is turned off for this workspace')
-    }
-
-    const publicBoard =
-      mode === 'feedback'
-        ? await tx.query.boards.findFirst({
-            where: and(isNull(boards.deletedAt), sql`${boards.access}->>'view' = 'anonymous'`),
-            columns: { id: true, slug: true, access: true },
-          })
-        : null
-    const usableBoard = publicBoard?.access.view === 'anonymous' ? publicBoard : null
-    const existing = parseWidgetConfig(row.widgetConfig)
-    const config = widgetActivationConfig(existing, mode, usableBoard?.slug)
-    await tx
-      .update(settings)
-      .set({ widgetConfig: JSON.stringify(config) })
-      .where(eq(settings.id, row.id))
-    return { mode, config, boardId: usableBoard?.id ?? null }
-  })
-  await invalidateSettingsCache()
-  return result
 }
 
 /** Update only the web-widget deployment flags; behavior config is never touched. */

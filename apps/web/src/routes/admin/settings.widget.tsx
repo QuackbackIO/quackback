@@ -78,7 +78,7 @@ import {
   type WidgetContentTranslation,
   type WidgetTranslations,
 } from '@/lib/shared/widget/translations'
-import { widgetOriginVerifiedLabel } from '@/lib/shared/widget/widget-origin'
+import { widgetInstallPresence } from '@/lib/shared/widget/widget-origin'
 import { DEFAULT_WIDGET_HOME_CARDS } from '@/lib/shared/types/settings'
 import { WIDGET_HERO_PATTERNS, heroBackdropStyle } from '@/lib/shared/widget/hero-style'
 import { ColorPickerGrid, ColorHexInput } from '@/components/shared/color-picker'
@@ -159,12 +159,10 @@ function WidgetSettingsPage() {
         description="Embed the messenger widget in your product — feedback, conversations, help, and updates"
       />
 
-      <WidgetInstallationStatusCard status={onboardingQuery.data} />
-
       {/* Full-screen editor: controls left, live preview right (sticky). */}
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(360px,440px)_minmax(0,1fr)] gap-6 items-start">
         <div className="space-y-4 min-w-0">
-          <WidgetToggle initialEnabled={config.enabled} />
+          <WidgetSiteCard initialEnabled={config.enabled} status={onboardingQuery.data} />
 
           <ModulesCard
             config={config}
@@ -228,54 +226,33 @@ function WidgetSettingsPage() {
   )
 }
 
-function WidgetInstallationStatusCard({
+function WidgetSiteCard({
+  initialEnabled,
   status,
 }: {
+  initialEnabled: boolean
   status: { hasWidgetInstalled?: boolean; widgetOriginHost?: string | null }
 }) {
-  return (
-    <SettingsCard
-      title="Installation"
-      description={
-        status.hasWidgetInstalled
-          ? widgetOriginVerifiedLabel(status.widgetOriginHost)
-          : 'Add the SDK to your site and verify the connection'
-      }
-    >
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/50 p-4">
-        <div className="flex items-center gap-2 text-sm">
-          <span
-            className={cn(
-              'h-2.5 w-2.5 rounded-full',
-              status.hasWidgetInstalled ? 'bg-emerald-500' : 'bg-muted-foreground/40'
-            )}
-          />
-          {status.hasWidgetInstalled ? 'Widget connected' : 'Not detected yet'}
-        </div>
-        <Button asChild size="sm" variant="outline">
-          <Link to="/admin/settings/widget/install">
-            {status.hasWidgetInstalled ? 'View installation' : 'Install widget'}
-            <ArrowRightIcon className="h-4 w-4" />
-          </Link>
-        </Button>
-      </div>
-    </SettingsCard>
-  )
-}
-
-function WidgetToggle({ initialEnabled }: { initialEnabled: boolean }) {
   const router = useRouter()
   const updateWidgetConfig = useUpdateWidgetConfig()
   const [isPending, startTransition] = useTransition()
   const [saving, setSaving] = useState(false)
   const [enabled, setEnabled] = useState(initialEnabled)
+  const presence = widgetInstallPresence({
+    connected: Boolean(status.hasWidgetInstalled),
+    enabled,
+    originHost: status.widgetOriginHost,
+  })
 
   async function handleToggle(checked: boolean) {
+    const previous = enabled
     setEnabled(checked)
     setSaving(true)
     try {
       await updateWidgetConfig.mutateAsync({ enabled: checked })
       startTransition(() => router.invalidate())
+    } catch {
+      setEnabled(previous)
     } finally {
       setSaving(false)
     }
@@ -286,24 +263,49 @@ function WidgetToggle({ initialEnabled }: { initialEnabled: boolean }) {
       title="Add to your site"
       description="Show Quackback on your product so customers can send feedback and messages"
     >
-      <div className="flex items-center justify-between rounded-lg border border-border/50 p-4">
-        <div>
-          <Label htmlFor="widget-toggle" className="text-sm font-medium cursor-pointer">
-            Show on your website
-          </Label>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Use the focused installation flow after turning this on
-          </p>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-border/50 px-3 py-2.5">
+          <div className="min-w-0 pe-3">
+            <Label htmlFor="widget-toggle" className="text-xs font-medium cursor-pointer">
+              Show on your website
+            </Label>
+            <p className="text-xs text-muted-foreground">Visible on pages that include the SDK</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <InlineSpinner visible={saving || isPending} />
+            <Switch
+              id="widget-toggle"
+              checked={enabled}
+              onCheckedChange={handleToggle}
+              disabled={saving || isPending}
+              aria-label="Widget"
+            />
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <InlineSpinner visible={saving || isPending} />
-          <Switch
-            id="widget-toggle"
-            checked={enabled}
-            onCheckedChange={handleToggle}
-            disabled={saving || isPending}
-            aria-label="Widget"
-          />
+
+        <div className="rounded-lg border border-border/50 px-3 py-2.5">
+          <div className="flex items-center justify-between gap-3">
+            <p className="flex min-w-0 items-center gap-2 text-xs font-medium">
+              <span
+                className={cn(
+                  'h-2 w-2 shrink-0 rounded-full',
+                  presence.tone === 'live'
+                    ? 'bg-emerald-500'
+                    : presence.tone === 'detected'
+                      ? 'bg-amber-500'
+                      : 'bg-muted-foreground/40'
+                )}
+              />
+              {presence.title}
+            </p>
+            <Button asChild size="sm" variant="ghost" className="shrink-0">
+              <Link to="/admin/settings/widget/install">
+                {presence.tone === 'idle' ? 'Install widget' : 'View installation'}
+                <ArrowRightIcon className="h-3.5 w-3.5" />
+              </Link>
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">{presence.description}</p>
         </div>
       </div>
     </SettingsCard>

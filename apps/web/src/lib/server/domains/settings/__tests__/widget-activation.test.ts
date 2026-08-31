@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { widgetActivationConfig } from '../settings.widget'
 import { DEFAULT_WIDGET_CONFIG } from '../settings.types'
+import { ValidationError } from '@/lib/shared/errors'
 
 describe('widgetActivationConfig', () => {
   it('enables Messenger and its Messages tab together without losing other config', () => {
@@ -19,6 +20,7 @@ describe('widgetActivationConfig', () => {
       tabs: { feedback: false, changelog: true, messenger: true },
       messenger: { enabled: true },
     })
+    expect(config.defaultBoard).toBeUndefined()
   })
 
   it('enables feedback and selects the existing public board', () => {
@@ -30,6 +32,7 @@ describe('widgetActivationConfig', () => {
   })
 
   it('refuses feedback activation without a public board', () => {
+    expect(() => widgetActivationConfig(DEFAULT_WIDGET_CONFIG, 'feedback')).toThrow(ValidationError)
     expect(() => widgetActivationConfig(DEFAULT_WIDGET_CONFIG, 'feedback')).toThrow(
       /public feedback board/i
     )

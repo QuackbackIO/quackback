@@ -45,9 +45,22 @@ test.describe('Admin Widget Settings', () => {
     await expect(page.getByText('Default board')).toBeVisible()
   })
 
-  test('shows Installation card linking to the install flow', async ({ page }) => {
-    await expect(page.getByText('Installation')).toBeVisible({ timeout: 10000 })
+  test('shows install status inside Add to your site', async ({ page }) => {
+    await expect(page.getByText('Add to your site')).toBeVisible({ timeout: 10000 })
     await expect(page.getByRole('link', { name: /Install widget|View installation/ })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Installation' })).toHaveCount(0)
+  })
+
+  test('install page shows the snippet without an enable-channel step', async ({ page }) => {
+    await page.goto('/admin/settings/widget/install')
+    await expect(page.getByText('Ask your agent')).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('Or add the snippet yourself')).toBeVisible()
+    await expect(page.getByText('Verify the connection')).toBeVisible()
+    await expect(page.getByText('Enable the channel')).toHaveCount(0)
+    await expect(page.locator('#widget-toggle')).toHaveCount(0)
+    await expect(
+      page.getByRole('button', { name: /Turn on the Messages tab|Enable feedback widget/ })
+    ).toHaveCount(0)
   })
 
   test('shows widget preview panel', async ({ page }) => {

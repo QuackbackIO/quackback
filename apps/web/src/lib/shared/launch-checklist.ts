@@ -29,6 +29,7 @@ export interface LaunchStatus {
   hasBranding: boolean
   hasWidgetInstalled?: boolean
   widgetOriginHost?: string | null
+  hasWidgetEnabled?: boolean
   hasMessengerEnabled?: boolean
   hasHelpArticle?: boolean
   hasIntegration?: boolean
@@ -206,16 +207,15 @@ export function buildLaunchTasks(
     actionLabel: 'Create board',
     completedLabel: 'View boards',
   }
+  const widgetDistributed = status.hasWidgetInstalled === true && status.hasWidgetEnabled === true
   const distributionComplete =
-    Boolean(status.publicBoardLinkCopiedAt) ||
-    status.hasWidgetInstalled === true ||
-    status.hasFirstWin === true
+    Boolean(status.publicBoardLinkCopiedAt) || widgetDistributed || status.hasFirstWin === true
   const distributeFeedback: LaunchTaskInput = {
     id: 'distribute-feedback',
     title: 'Share your feedback board',
     description: status.publicBoardLinkCopiedAt
       ? 'Your public board link has been copied.'
-      : status.hasWidgetInstalled
+      : widgetDistributed
         ? `Your feedback widget was found on ${status.widgetOriginHost ?? 'your site'}.`
         : 'Copy the public board link and share it with customers.',
     completed: distributionComplete,
@@ -230,10 +230,11 @@ export function buildLaunchTasks(
     title: 'Connect Messenger',
     description: status.hasWidgetInstalled
       ? `Messenger was found on ${status.widgetOriginHost ?? 'your site'}.`
-      : status.hasMessengerEnabled
-        ? 'Messenger is configured. Add the SDK to your website to connect it.'
-        : 'Turn on the Messages tab and add the SDK to your website.',
-    completed: status.hasWidgetInstalled === true && features.supportInbox,
+      : 'Add the SDK to your website to connect it.',
+    completed:
+      status.hasWidgetInstalled === true &&
+      status.hasWidgetEnabled === true &&
+      features.supportInbox,
     canAct: permissions.settingsManage,
     ...(features.supportInbox
       ? {}

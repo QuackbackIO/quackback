@@ -423,6 +423,7 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
     hasBranding,
     hasWidgetInstalled: Boolean(orgSettings?.widgetInstalledFirstSeenAt),
     widgetOriginHost: orgSettings?.widgetInstalledOriginHost ?? null,
+    hasWidgetEnabled,
     hasMessengerEnabled,
     hasHelpArticle: Boolean(helpArticle),
     hasIntegration,
