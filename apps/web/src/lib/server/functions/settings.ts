@@ -34,8 +34,9 @@ import {
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { actorFromAuth, recordAuditEvent, type AuditEventType } from '@/lib/server/audit/log'
 import { requireAuth } from './auth-helpers'
+import { teamMemberWhere } from '@/lib/server/domains/principals/principal.service'
 import { getSession } from '@/lib/server/auth/session'
-import { db, principal, user, invitation, account, eq, ne, and } from '@/lib/server/db'
+import { db, principal, user, invitation, account, eq, and } from '@/lib/server/db'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { officeHoursScheduleSchema } from '@/lib/server/domains/settings/settings.office-hours'
 import { changelogSettingsSchema } from '@/lib/shared/changelog-settings'
@@ -143,7 +144,7 @@ export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).
       .from(principal)
       .innerJoin(user, eq(principal.userId, user.id))
       .leftJoin(lastSession, eq(lastSession.userId, user.id))
-      .where(ne(principal.role, 'user'))
+      .where(teamMemberWhere())
 
     // Serialise to ISO string on the boundary so the client type
     // stays narrow (`string | null`). `toIsoStringOrNull` handles

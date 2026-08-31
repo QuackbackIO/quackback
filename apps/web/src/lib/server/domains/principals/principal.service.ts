@@ -79,7 +79,7 @@ export {
  * Without the role guard a portal end-user (role='user', type='user') would
  * leak into team surfaces. People-facing pickers use searchPeople instead.
  */
-function teamMemberWhere() {
+export function teamMemberWhere() {
   return and(eq(principal.type, 'user'), ne(principal.role, 'user'))
 }
 
