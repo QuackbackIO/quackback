@@ -30,6 +30,7 @@ export interface LaunchStatus {
   hasWidgetInstalled?: boolean
   widgetOriginHost?: string | null
   hasMessengerEnabled?: boolean
+  hasFeedbackWidgetEnabled?: boolean
   hasHelpArticle?: boolean
   hasIntegration?: boolean
   hasFirstWin?: boolean
@@ -206,16 +207,16 @@ export function buildLaunchTasks(
     actionLabel: 'Create board',
     completedLabel: 'View boards',
   }
+  const widgetDistributed =
+    status.hasWidgetInstalled === true && status.hasFeedbackWidgetEnabled === true
   const distributionComplete =
-    Boolean(status.publicBoardLinkCopiedAt) ||
-    status.hasWidgetInstalled === true ||
-    status.hasFirstWin === true
+    Boolean(status.publicBoardLinkCopiedAt) || widgetDistributed || status.hasFirstWin === true
   const distributeFeedback: LaunchTaskInput = {
     id: 'distribute-feedback',
     title: 'Share your feedback board',
     description: status.publicBoardLinkCopiedAt
       ? 'Your public board link has been copied.'
-      : status.hasWidgetInstalled
+      : widgetDistributed
         ? `Your feedback widget was found on ${status.widgetOriginHost ?? 'your site'}.`
         : 'Copy the public board link and share it with customers.',
     completed: distributionComplete,

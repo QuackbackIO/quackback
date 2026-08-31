@@ -319,12 +319,22 @@ describe('buildLaunchTasks V2', () => {
 
   it.each([
     { publicBoardLinkCopiedAt: '2026-08-14T10:00:00.000Z' },
-    { hasWidgetInstalled: true },
+    { hasWidgetInstalled: true, hasFeedbackWidgetEnabled: true },
     { hasFirstWin: true },
   ])('accepts any real distribution signal: %o', (signal) => {
     const task = buildLaunchTasks({ ...base, hasPublicBoard: true, ...signal }).find(
       (candidate) => candidate.id === 'distribute-feedback'
     )
     expect(task?.isCompleted).toBe(true)
+  })
+
+  it('does not treat a disabled feedback widget as distributed', () => {
+    const task = buildLaunchTasks({
+      ...base,
+      hasPublicBoard: true,
+      hasWidgetInstalled: true,
+      hasFeedbackWidgetEnabled: false,
+    }).find((candidate) => candidate.id === 'distribute-feedback')
+    expect(task?.isCompleted).toBe(false)
   })
 })

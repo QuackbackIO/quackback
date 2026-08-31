@@ -245,11 +245,14 @@ function WidgetSiteCard({
   })
 
   async function handleToggle(checked: boolean) {
+    const previous = enabled
     setEnabled(checked)
     setSaving(true)
     try {
       await updateWidgetConfig.mutateAsync({ enabled: checked })
       startTransition(() => router.invalidate())
+    } catch {
+      setEnabled(previous)
     } finally {
       setSaving(false)
     }
