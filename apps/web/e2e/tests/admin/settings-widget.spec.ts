@@ -57,6 +57,7 @@ test.describe('Admin Widget Settings', () => {
     await expect(page.getByText('Or add the snippet yourself')).toBeVisible()
     await expect(page.getByText('Verify the connection')).toBeVisible()
     await expect(page.getByText('Enable the channel')).toHaveCount(0)
+    await expect(page.locator('#widget-toggle')).toHaveCount(0)
     await expect(
       page.getByRole('button', { name: /Turn on the Messages tab|Enable feedback widget/ })
     ).toHaveCount(0)

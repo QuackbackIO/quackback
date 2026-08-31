@@ -53,6 +53,10 @@ describe('Widget Config Types', () => {
       expect(DEFAULT_WIDGET_CONFIG.tabs?.messenger).toBe(true)
     })
 
+    it('keeps the feedback tab on by default', () => {
+      expect(DEFAULT_WIDGET_CONFIG.tabs?.feedback).toBe(true)
+    })
+
     it('keeps the changelog tab on by default', () => {
       expect(DEFAULT_WIDGET_CONFIG.tabs?.changelog).toBe(true)
     })

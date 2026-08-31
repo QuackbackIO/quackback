@@ -34,7 +34,7 @@ export function widgetOriginVerifiedLabel(host: string | null | undefined): stri
   return `First request came from ${host}.`
 }
 
-export type WidgetInstallPresenceTone = 'idle' | 'detected' | 'channel-off' | 'live'
+export type WidgetInstallPresenceTone = 'idle' | 'detected' | 'live'
 
 export type WidgetInstallPresence = {
   title: string
@@ -44,17 +44,12 @@ export type WidgetInstallPresence = {
 
 /**
  * Install status as shown to admins. Observing the SDK is not the same as the
- * widget being visible — `enabled` is the Show on your website switch. For
- * Connect Messenger / Install feedback widget, the matching channel must also
- * be live before the flow is complete.
+ * widget being visible — `enabled` is the Show on your website switch.
  */
 export function widgetInstallPresence(input: {
   connected: boolean
   enabled: boolean
   originHost?: string | null
-  requireChannel?: 'messenger' | 'feedback'
-  channelTab?: boolean
-  channelAvailable?: boolean
 }): WidgetInstallPresence {
   if (!input.connected) {
     return {
@@ -64,42 +59,11 @@ export function widgetInstallPresence(input: {
     }
   }
   const origin = widgetOriginVerifiedLabel(input.originHost)
-  // Prerequisites that `enableWidgetFromInstall` will refuse must win over
-  // "turn the widget on" so the install page offers General / Create board
-  // instead of a switch that always fails.
-  if (input.requireChannel === 'messenger' && input.channelAvailable === false) {
-    return {
-      title: 'Customer support is off',
-      description: `${origin} Turn on Customer support in Settings → General so conversations can start.`,
-      tone: 'channel-off',
-    }
-  }
-  if (input.requireChannel === 'feedback' && input.channelAvailable === false) {
-    return {
-      title: 'No public board',
-      description: `${origin} Create a public feedback board before the widget can take ideas.`,
-      tone: 'channel-off',
-    }
-  }
   if (!input.enabled) {
     return {
       title: 'SDK detected',
       description: `${origin} Turn on Show on your website so visitors can see it.`,
       tone: 'detected',
-    }
-  }
-  if (input.requireChannel === 'messenger' && input.channelTab === false) {
-    return {
-      title: 'Messages tab is off',
-      description: `${origin} Turn on the Messages tab so conversations can start from the widget.`,
-      tone: 'channel-off',
-    }
-  }
-  if (input.requireChannel === 'feedback' && input.channelTab === false) {
-    return {
-      title: 'Feedback tab is off',
-      description: `${origin} Turn on the Feedback tab so visitors can send ideas.`,
-      tone: 'channel-off',
     }
   }
   return {

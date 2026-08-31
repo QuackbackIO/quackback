@@ -1,5 +1,5 @@
 import { randomBytes } from 'crypto'
-import { db, and, boards, eq, lte, or, isNull, sql, settings } from '@/lib/server/db'
+import { db, and, eq, lte, or, isNull, sql, settings } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 import { absolutizeOffHostAssetUrl } from '@/lib/server/storage/asset-url'
 import { deleteObject, getPublicUrlOrNull } from '@/lib/server/storage/s3'
@@ -12,7 +12,7 @@ import type {
   MessengerConfig,
 } from './settings.types'
 import { DEFAULT_MESSENGER_CONFIG, resolveFeatureFlags } from './settings.types'
-import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/shared/errors'
+import { ValidationError } from '@/lib/shared/errors'
 import type { AssistantConfigAuditActor } from './settings.assistant'
 import { recordAuditEventInTransaction } from '@/lib/server/audit/log'
 import {
@@ -232,53 +232,6 @@ export function widgetActivationConfig(
     enabled: true,
     defaultBoard: publicBoardSlug,
     tabs: { ...existing.tabs, feedback: true },
-  }
-}
-
-/** Turn the widget on from the install page, including the selected channel. */
-export async function enableWidgetFromInstall(mode: WidgetActivationMode): Promise<WidgetConfig> {
-  try {
-    const updated = await db.transaction(async (tx) => {
-      const [row] = await tx
-        .select({
-          id: settings.id,
-          widgetConfig: settings.widgetConfig,
-          featureFlags: settings.featureFlags,
-        })
-        .from(settings)
-        .limit(1)
-        .for('update')
-      if (!row) throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
-
-      const flags = resolveFeatureFlags(row.featureFlags)
-      if (mode === 'messenger' && !flags.supportInbox) {
-        throw new ForbiddenError(
-          'SUPPORT_DISABLED',
-          'Customer support is turned off for this workspace'
-        )
-      }
-
-      const publicBoard =
-        mode === 'feedback'
-          ? await tx.query.boards.findFirst({
-              where: and(isNull(boards.deletedAt), sql`${boards.access}->>'view' = 'anonymous'`),
-              columns: { id: true, slug: true, access: true },
-            })
-          : null
-      const usableBoard = publicBoard?.access.view === 'anonymous' ? publicBoard : null
-      const existing = parseWidgetConfig(row.widgetConfig)
-      const config = widgetActivationConfig(existing, mode, usableBoard?.slug)
-      await tx
-        .update(settings)
-        .set({ widgetConfig: JSON.stringify(config) })
-        .where(eq(settings.id, row.id))
-      return config
-    })
-    await invalidateSettingsCache()
-    return updated
-  } catch (error) {
-    log.error({ err: error }, 'enable widget from install failed')
-    wrapDbError('enable widget from install', error)
   }
 }
 

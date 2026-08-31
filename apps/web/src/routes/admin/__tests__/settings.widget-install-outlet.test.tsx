@@ -38,7 +38,6 @@ vi.mock('next-themes', () => ({
 }))
 vi.mock('@/lib/client/mutations/settings', () => ({
   useUpdateWidgetConfig: () => ({ mutate: vi.fn(), isPending: false }),
-  useEnableWidgetFromInstall: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUploadWidgetHeroImage: () => ({ mutate: vi.fn() }),
   useDeleteWidgetHeroImage: () => ({ mutate: vi.fn() }),
 }))

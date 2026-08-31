@@ -29,8 +29,8 @@ export interface LaunchStatus {
   hasBranding: boolean
   hasWidgetInstalled?: boolean
   widgetOriginHost?: string | null
+  hasWidgetEnabled?: boolean
   hasMessengerEnabled?: boolean
-  hasFeedbackWidgetEnabled?: boolean
   hasHelpArticle?: boolean
   hasIntegration?: boolean
   hasFirstWin?: boolean
@@ -207,8 +207,7 @@ export function buildLaunchTasks(
     actionLabel: 'Create board',
     completedLabel: 'View boards',
   }
-  const widgetDistributed =
-    status.hasWidgetInstalled === true && status.hasFeedbackWidgetEnabled === true
+  const widgetDistributed = status.hasWidgetInstalled === true && status.hasWidgetEnabled === true
   const distributionComplete =
     Boolean(status.publicBoardLinkCopiedAt) || widgetDistributed || status.hasFirstWin === true
   const distributeFeedback: LaunchTaskInput = {
@@ -234,7 +233,7 @@ export function buildLaunchTasks(
       : 'Add the SDK to your website to connect it.',
     completed:
       status.hasWidgetInstalled === true &&
-      status.hasMessengerEnabled === true &&
+      status.hasWidgetEnabled === true &&
       features.supportInbox,
     canAct: permissions.settingsManage,
     ...(features.supportInbox

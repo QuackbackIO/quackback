@@ -20,6 +20,7 @@ describe('widgetActivationConfig', () => {
       tabs: { feedback: false, changelog: true, messenger: true },
       messenger: { enabled: true },
     })
+    expect(config.defaultBoard).toBeUndefined()
   })
 
   it('enables feedback and selects the existing public board', () => {

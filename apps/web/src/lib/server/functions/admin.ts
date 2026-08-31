@@ -398,8 +398,6 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
   const hasInternalBoard = orgBoards.some((board) => board.access.view === 'team')
   const publicBoard = orgBoards.find((board) => board.access.view === 'anonymous')
   const hasPublicBoard = Boolean(publicBoard)
-  const hasFeedbackWidgetEnabled =
-    hasWidgetEnabled && (widgetConfig.tabs?.feedback ?? true) && flags.feedback && hasPublicBoard
 
   log.debug(
     {
@@ -425,8 +423,8 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
     hasBranding,
     hasWidgetInstalled: Boolean(orgSettings?.widgetInstalledFirstSeenAt),
     widgetOriginHost: orgSettings?.widgetInstalledOriginHost ?? null,
+    hasWidgetEnabled,
     hasMessengerEnabled,
-    hasFeedbackWidgetEnabled,
     hasHelpArticle: Boolean(helpArticle),
     hasIntegration,
     hasFirstWin: firstWin.reached,

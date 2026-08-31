@@ -19,7 +19,6 @@ import {
   updatePortalConfigFn,
   updateModerationDefaultFn,
   updateWidgetConfigFn,
-  enableWidgetFromInstallFn,
   regenerateWidgetSecretFn,
   updateThemeFn,
   updateCustomCssFn,
@@ -290,17 +289,6 @@ export function useUpdateWidgetConfig() {
   return useMutation({
     mutationFn: (data: Parameters<typeof updateWidgetConfigFn>[0]['data']) =>
       updateWidgetConfigFn({ data }),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: settingsQueries.widgetConfig().queryKey }),
-  })
-}
-
-export function useEnableWidgetFromInstall() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: (data: Parameters<typeof enableWidgetFromInstallFn>[0]['data']) =>
-      enableWidgetFromInstallFn({ data }),
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: settingsQueries.widgetConfig().queryKey }),

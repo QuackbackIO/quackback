@@ -862,28 +862,26 @@ export const updateWidgetConfigFn = createServerFn({ method: 'POST' })
   .validator(updateWidgetConfigSchema)
   .handler(async ({ data }) => {
     log.info({ enabled: data.enabled, position: data.position }, 'update widget config')
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
-    const { updateWidgetConfig } = await import('@/lib/server/domains/settings/settings.widget')
-    return await updateWidgetConfig(data)
-  })
-
-export const enableWidgetFromInstallFn = createServerFn({ method: 'POST' })
-  .validator(z.object({ mode: z.enum(['messenger', 'feedback']) }))
-  .handler(async ({ data }) => {
     const auth = await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
-    const { enableWidgetFromInstall } =
-      await import('@/lib/server/domains/settings/settings.widget')
-    const config = await enableWidgetFromInstall(data.mode)
-    const { emitPlgEvent } = await import('@/lib/server/plg-events')
-    await emitPlgEvent(
-      {
-        name: 'widget_configured',
-        outcome: data.mode === 'messenger' ? 'customer_support' : 'product_feedback',
-        artifactType: 'widget',
-      },
-      { workspaceId: auth.settings.id, principalId: auth.principal.id }
-    )
-    return config
+    const { updateWidgetConfig } = await import('@/lib/server/domains/settings/settings.widget')
+    const { parseWidgetConfig, requireSettings } =
+      await import('@/lib/server/domains/settings/settings.helpers')
+    const previous = data.enabled === true ? await requireSettings() : null
+    const updated = await updateWidgetConfig(data)
+    if (data.enabled === true && previous && !parseWidgetConfig(previous.widgetConfig).enabled) {
+      const { getSetupState } = await import('@/lib/shared/db-types')
+      const { emitPlgEvent } = await import('@/lib/server/plg-events')
+      const useCase = getSetupState(previous.setupState ?? null)?.useCase
+      await emitPlgEvent(
+        {
+          name: 'widget_configured',
+          outcome: useCase === 'customer_support' ? 'customer_support' : 'product_feedback',
+          artifactType: 'widget',
+        },
+        { workspaceId: auth.settings.id, principalId: auth.principal.id }
+      )
+    }
+    return updated
   })
 
 export const saveWidgetHeroImageKeyFn = createServerFn({ method: 'POST' })

@@ -1,5 +1,5 @@
-import { useMemo, useState, useTransition } from 'react'
-import { createFileRoute, Link, useRouteContext, useRouter } from '@tanstack/react-router'
+import { useMemo, useState } from 'react'
+import { createFileRoute, Link, useRouteContext } from '@tanstack/react-router'
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import {
   ArrowLeftIcon,
@@ -26,17 +26,13 @@ import {
 import { widgetInstallPresence, widgetOriginVerifiedLabel } from '@/lib/shared/widget/widget-origin'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { adminQueries } from '@/lib/client/queries/admin'
-import { useEnableWidgetFromInstall, useUpdateWidgetConfig } from '@/lib/client/mutations/settings'
-import { InlineSpinner } from '@/components/admin/settings/inline-spinner'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
-import type { FeatureFlags } from '@/lib/shared/types/settings'
 
 export const Route = createFileRoute('/admin/settings/widget/install')({
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MANAGE)
     await Promise.all([
-      context.queryClient.ensureQueryData(settingsQueries.widgetConfig()),
       context.queryClient.ensureQueryData(settingsQueries.widgetSecret()),
       context.queryClient.ensureQueryData(adminQueries.onboardingStatus()),
     ])
@@ -45,9 +41,7 @@ export const Route = createFileRoute('/admin/settings/widget/install')({
 })
 
 function WidgetInstallPage() {
-  const router = useRouter()
-  const { baseUrl, settings } = useRouteContext({ from: '__root__' })
-  const configQuery = useSuspenseQuery(settingsQueries.widgetConfig())
+  const { baseUrl } = useRouteContext({ from: '__root__' })
   const secretQuery = useSuspenseQuery(settingsQueries.widgetSecret())
   const statusQuery = useQuery({
     ...adminQueries.onboardingStatus(),
@@ -55,23 +49,10 @@ function WidgetInstallPage() {
   })
   const status = statusQuery.data!
   const mode = status.useCase === 'customer_support' ? 'messenger' : 'feedback'
-  const flags = settings?.featureFlags as FeatureFlags | undefined
-  const supportInbox = flags?.supportInbox ?? false
-  const hasPublicBoard = Boolean(status.hasPublicBoard)
-  const updateWidgetConfig = useUpdateWidgetConfig()
-  const enableFromInstall = useEnableWidgetFromInstall()
-  const [isPending, startTransition] = useTransition()
-  const [savingEnabled, setSavingEnabled] = useState(false)
-  const [enabled, setEnabled] = useState(Boolean(configQuery.data.enabled))
-  const [messengerTab, setMessengerTab] = useState(configQuery.data.tabs?.messenger ?? true)
-  const [feedbackTab, setFeedbackTab] = useState(configQuery.data.tabs?.feedback ?? true)
   const presence = widgetInstallPresence({
     connected: Boolean(status.hasWidgetInstalled),
-    enabled,
+    enabled: Boolean(status.hasWidgetEnabled),
     originHost: status.widgetOriginHost,
-    requireChannel: mode,
-    channelTab: mode === 'messenger' ? messengerTab : feedbackTab,
-    channelAvailable: mode === 'messenger' ? supportInbox : hasPublicBoard,
   })
   const [copying, setCopying] = useState<'snippet' | 'secret' | null>(null)
   const [identifyUsers, setIdentifyUsers] = useState(true)
@@ -95,31 +76,6 @@ function WidgetInstallPage() {
     () => maskWidgetSecretInPrompt(agentPrompt, secretQuery.data),
     [agentPrompt, secretQuery.data]
   )
-
-  async function handleEnabled(checked: boolean) {
-    const previousEnabled = enabled
-    const previousMessengerTab = messengerTab
-    const previousFeedbackTab = feedbackTab
-    setEnabled(checked)
-    if (checked && mode === 'messenger') setMessengerTab(true)
-    if (checked && mode === 'feedback') setFeedbackTab(true)
-    setSavingEnabled(true)
-    try {
-      if (checked) {
-        await enableFromInstall.mutateAsync({ mode })
-      } else {
-        await updateWidgetConfig.mutateAsync({ enabled: false })
-      }
-      startTransition(() => router.invalidate())
-    } catch (error) {
-      setEnabled(previousEnabled)
-      setMessengerTab(previousMessengerTab)
-      setFeedbackTab(previousFeedbackTab)
-      toast.error(error instanceof Error ? error.message : 'Couldn’t enable the widget')
-    } finally {
-      setSavingEnabled(false)
-    }
-  }
 
   async function copy(kind: 'snippet' | 'secret', text: string) {
     setCopying(kind)
@@ -231,70 +187,13 @@ function WidgetInstallPage() {
             <CheckCircleIcon className="h-5 w-5" /> Widget connection verified
           </p>
         ) : presence.tone === 'detected' ? (
-          <div className="flex items-center justify-between gap-4 rounded-lg border border-border/50 p-4">
-            <div className="min-w-0">
-              <Label htmlFor="install-widget-toggle" className="cursor-pointer text-sm font-medium">
-                Show on your website
-              </Label>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                The SDK is installed. Visitors will not see the widget until this is on.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <InlineSpinner visible={savingEnabled || isPending} />
-              <Switch
-                id="install-widget-toggle"
-                checked={enabled}
-                onCheckedChange={(checked) => void handleEnabled(checked)}
-                disabled={savingEnabled || isPending}
-                aria-label="Widget"
-              />
-            </div>
-          </div>
-        ) : presence.tone === 'channel-off' ? (
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-muted-foreground">
-              {mode === 'messenger'
-                ? supportInbox
-                  ? 'The widget is on. Conversations will not start until the Messages tab is on.'
-                  : 'Customer support is turned off, so visitors cannot start conversations from the widget.'
-                : hasPublicBoard
-                  ? 'The widget is on. Visitors will not see Feedback until that tab is on.'
-                  : 'Create a public feedback board before the widget can take ideas.'}
+              The SDK is installed. Turn on Show on your website so visitors can see it.
             </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <InlineSpinner visible={savingEnabled || isPending} />
-              {mode === 'messenger' && supportInbox ? (
-                <>
-                  <Button
-                    size="sm"
-                    onClick={() => void handleEnabled(true)}
-                    disabled={savingEnabled || isPending}
-                  >
-                    Turn on the Messages tab
-                  </Button>
-                  <Button asChild size="sm" variant="ghost">
-                    <Link to="/admin/settings/channels/messenger">Messenger settings</Link>
-                  </Button>
-                </>
-              ) : mode === 'messenger' ? (
-                <Button asChild size="sm" variant="outline">
-                  <Link to="/admin/settings/general">Settings → General</Link>
-                </Button>
-              ) : hasPublicBoard ? (
-                <Button
-                  size="sm"
-                  onClick={() => void handleEnabled(true)}
-                  disabled={savingEnabled || isPending}
-                >
-                  Turn on the Feedback tab
-                </Button>
-              ) : (
-                <Button asChild size="sm" variant="outline">
-                  <Link to="/admin/settings/boards">Create a public board</Link>
-                </Button>
-              )}
-            </div>
+            <Button asChild size="sm" variant="outline">
+              <Link to="/admin/settings/widget">Widget settings</Link>
+            </Button>
           </div>
         ) : (
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
