@@ -95,9 +95,8 @@ jobs:
 
   # Assemble the multi-arch manifest list (OCI image index) from the per-arch
   # digests and apply the moving tags (`main` on branch pushes, `X.Y.Z` +
-  # `latest` on v* tags). Cosign/Kyverno signature tags are gone: Cloud runs
-  # on Railway and digest-pins the index, so `sha256-*.sig` package tags were
-  # only noise.
+  # `latest` on v* tags). Do not attach Cosign signature tags: they clutter
+  # the package with sha256-*.sig versions and are unused.
   merge:
     runs-on: ubuntu-latest
     needs: [build]
