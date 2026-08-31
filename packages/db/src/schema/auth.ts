@@ -719,8 +719,12 @@ export type ServiceMetadata =
  * - 'user': Portal user access only, can vote/comment on public portal
  *
  * Principal types:
- * - 'user': Human user with a userId pointing to the user table
+ * - 'user': Identified customer human with a userId pointing to the user table
+ * - 'anonymous': Unidentified visitor
  * - 'service': Integration or API key actor (userId is null)
+ * - 'support': Cloud platform-support admin with a user row (can hold a session)
+ *   that is not a customer human — omitted from seats, membership sync, and
+ *   customer directories. Role still governs /admin privilege.
  *
  * The role determines access level: admin/member can access /admin dashboard,
  * while 'user' role can only interact with the public portal.
@@ -736,7 +740,7 @@ export const principal = pgTable(
     // Unified roles: 'admin' | 'member' | 'user'
     // 'user' role = portal users (public portal access only, no admin dashboard)
     role: text('role').default('member').notNull(),
-    // Principal type: 'user' (human), 'anonymous' (unidentified visitor), or 'service' (integration/API key)
+    // Principal type: 'user' | 'anonymous' | 'service' | 'support'
     type: text('type').default('user').notNull(),
     // Display name — always populated (humans synced from user.name, service principals set on creation)
     displayName: text('display_name'),

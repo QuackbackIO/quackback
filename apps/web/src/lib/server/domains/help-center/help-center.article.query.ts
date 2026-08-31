@@ -450,6 +450,7 @@ export async function listPublicCategoryEditors(): Promise<
       and(
         isNotNull(helpCenterArticles.publishedAt),
         isNull(helpCenterArticles.deletedAt),
+        eq(principal.type, 'user'),
         inArray(principal.role, ['admin', 'member'])
       )
     )

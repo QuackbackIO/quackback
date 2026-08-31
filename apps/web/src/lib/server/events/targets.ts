@@ -1098,7 +1098,7 @@ export async function getMessageCreatedTargets(event: EventData): Promise<HookTa
   const team = await db
     .select({ principalId: principal.id })
     .from(principal)
-    .where(inArray(principal.role, ['admin', 'member']))
+    .where(and(eq(principal.type, 'user'), inArray(principal.role, ['admin', 'member'])))
   if (team.length === 0) return null
 
   const authorName = event.data.message.authorName ?? 'A visitor'

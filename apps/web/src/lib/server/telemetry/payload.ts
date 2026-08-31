@@ -238,6 +238,7 @@ async function getSeats7d(): Promise<ScaleBracket> {
           INNER JOIN "principal" p ON p.user_id = s.user_id
           WHERE s.updated_at > now() - interval '7 days'
             AND p.role IN ('admin', 'member')
+            AND p.type = 'user'
             AND p.user_id IS NOT NULL`
     )
     const row = getExecuteRows<{ seats: number }>(result)[0]

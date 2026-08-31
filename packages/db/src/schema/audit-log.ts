@@ -29,7 +29,7 @@ export const auditLog = pgTable(
     actorUserAgent: text('actor_user_agent'),
     /** Correlation handle — value of x-request-id / x-correlation-id header, if present. */
     requestId: text('request_id'),
-    /** Denormalised principal type at write time ('user' | 'service' | 'anonymous' | 'system' | 'api_key'). */
+    /** Denormalised principal type at write time ('user' | 'service' | 'anonymous' | 'system' | 'api_key' | 'support'). */
     actorType: text('actor_type'),
     /** Auth method used for sign-in events ('password' | 'sso' | 'magic_link' | 'ott' | 'api_key' | 'session'). */
     authMethod: text('auth_method'),
