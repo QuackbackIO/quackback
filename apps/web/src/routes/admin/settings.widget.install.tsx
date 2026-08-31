@@ -14,7 +14,9 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { PageHeader } from '@/components/shared/page-header'
+import { WarningBox } from '@/components/shared/warning-box'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
+import { WidgetLastDetected } from '@/components/admin/settings/widget/widget-last-detected'
 import { copyWithFallback } from '@/components/admin/activation-action-button'
 import { CopyAgentPromptButton } from '@/components/admin/settings/widget/copy-agent-prompt-button'
 import {
@@ -24,6 +26,10 @@ import {
   maskWidgetSecretInPrompt,
 } from '@/lib/shared/widget/install-prompt'
 import { widgetInstallPresence, widgetOriginVerifiedLabel } from '@/lib/shared/widget/widget-origin'
+import {
+  widgetConnectedStatusLabel,
+  widgetSdkUpdateDescription,
+} from '@/lib/shared/widget/sdk-version'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -45,7 +51,12 @@ function WidgetInstallPage() {
   const secretQuery = useSuspenseQuery(settingsQueries.widgetSecret())
   const statusQuery = useQuery({
     ...adminQueries.onboardingStatus(),
-    refetchInterval: (query) => (query.state.data?.hasWidgetInstalled ? false : 5_000),
+    refetchInterval: (query) => {
+      const data = query.state.data
+      if (!data?.hasWidgetInstalled) return 5_000
+      if (data.widgetSdkNeedsUpdate) return 15_000
+      return false
+    },
   })
   const status = statusQuery.data!
   const mode = status.useCase === 'customer_support' ? 'messenger' : 'feedback'
@@ -179,21 +190,41 @@ function WidgetInstallPage() {
         description={
           presence.tone === 'idle'
             ? 'Waiting for the first request from your deployed site. Checking every five seconds.'
-            : widgetOriginVerifiedLabel(status.widgetOriginHost)
+            : status.widgetSdkNeedsUpdate
+              ? widgetSdkUpdateDescription(status.widgetSdkVersion, status.currentWidgetSdkVersion)
+              : widgetOriginVerifiedLabel(status.widgetOriginHost)
         }
       >
-        {presence.tone === 'live' ? (
-          <p className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
-            <CheckCircleIcon className="h-5 w-5" /> Widget connection verified
-          </p>
-        ) : presence.tone === 'detected' ? (
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-muted-foreground">
-              The SDK is installed. Turn on Show on your website so visitors can see it.
+        {presence.tone === 'live' && status.widgetSdkNeedsUpdate ? (
+          <div className="space-y-2">
+            <WarningBox
+              variant="warning"
+              title={widgetConnectedStatusLabel({
+                hasWidgetInstalled: true,
+                widgetSdkNeedsUpdate: true,
+              })}
+              description="Reinstall with the snippet above so the launcher picks up current features."
+            />
+            <WidgetLastDetected at={status.widgetLastDetectedAt} />
+          </div>
+        ) : presence.tone === 'live' ? (
+          <div className="space-y-0.5">
+            <p className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
+              <CheckCircleIcon className="h-5 w-5" /> Widget connection verified
             </p>
-            <Button asChild size="sm" variant="outline">
-              <Link to="/admin/settings/widget">Widget settings</Link>
-            </Button>
+            <WidgetLastDetected at={status.widgetLastDetectedAt} />
+          </div>
+        ) : presence.tone === 'detected' ? (
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-muted-foreground">
+                The SDK is installed. Turn on Show on your website so visitors can see it.
+              </p>
+              <Button asChild size="sm" variant="outline">
+                <Link to="/admin/settings/widget">Widget settings</Link>
+              </Button>
+            </div>
+            <WidgetLastDetected at={status.widgetLastDetectedAt} />
           </div>
         ) : (
           <p className="flex items-center gap-2 text-sm text-muted-foreground">

@@ -39,6 +39,8 @@ function renderModules(
       onPositionChange={vi.fn()}
       launcherLabel=""
       onLabelChange={vi.fn()}
+      launcherGreeting=""
+      onGreetingChange={vi.fn()}
       helpCenterFlagEnabled={flags.helpCenterFlagEnabled ?? false}
       supportInboxFlagEnabled={flags.supportInboxFlagEnabled ?? true}
       feedbackFlagEnabled={flags.feedbackFlagEnabled ?? true}
@@ -49,6 +51,12 @@ function renderModules(
 }
 
 describe('Widget Modules card', () => {
+  it('exposes launcher chrome fields separately from the Home greeting', () => {
+    renderModules()
+    expect(screen.getByLabelText('Launcher greeting')).toBeInTheDocument()
+    expect(screen.getByLabelText('Button label')).toBeInTheDocument()
+  })
+
   it('has no Messages row and lists Feedback and Changelog when those products are on', () => {
     renderModules()
     expect(screen.queryByRole('switch', { name: 'Messages tab' })).not.toBeInTheDocument()

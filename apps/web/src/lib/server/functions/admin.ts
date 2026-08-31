@@ -31,6 +31,7 @@ import {
 } from '@/lib/server/domains/principals/bootstrap-admin'
 import { isAdmin } from '@/lib/shared/roles'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { CURRENT_WIDGET_SDK_VERSION, widgetSdkNeedsUpdate } from '@/lib/shared/widget/sdk-version'
 import { listInboxPosts } from '@/lib/server/domains/posts/post.inbox'
 import { listPostTags } from '@/lib/server/domains/post-tags/post-tag.service'
 import { listStatuses } from '@/lib/server/domains/statuses/status.service'
@@ -423,6 +424,14 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
     hasBranding,
     hasWidgetInstalled: Boolean(orgSettings?.widgetInstalledFirstSeenAt),
     widgetOriginHost: orgSettings?.widgetInstalledOriginHost ?? null,
+    widgetLastDetectedAt: orgSettings?.widgetInstalledLastSeenAt
+      ? orgSettings.widgetInstalledLastSeenAt.toISOString()
+      : null,
+    widgetSdkVersion: orgSettings?.widgetInstalledSdkVersion ?? null,
+    currentWidgetSdkVersion: CURRENT_WIDGET_SDK_VERSION,
+    widgetSdkNeedsUpdate:
+      Boolean(orgSettings?.widgetInstalledFirstSeenAt) &&
+      widgetSdkNeedsUpdate(orgSettings?.widgetInstalledSdkVersion, CURRENT_WIDGET_SDK_VERSION),
     hasWidgetEnabled,
     hasMessengerEnabled,
     hasHelpArticle: Boolean(helpArticle),

@@ -1,3 +1,5 @@
+import { SDK_VERSION } from '../version'
+
 /** Server config shape returned from `/api/widget/config.json`. */
 export interface ServerConfig {
   /**
@@ -34,9 +36,14 @@ export interface ServerConfig {
   position?: 'left' | 'right'
 }
 
+/** Public config ping. `sdk` is the embed's package version so the instance
+ *  can tell an npm/file install is behind the workspace's current SDK. */
 export async function fetchServerConfig(instanceUrl: string): Promise<ServerConfig> {
   try {
-    const res = await fetch(`${instanceUrl}/api/widget/config.json`)
+    // Query param, not a custom header: a header would CORS-preflight this
+    // cross-origin GET and break embeds that only allow simple requests.
+    const url = `${instanceUrl}/api/widget/config.json?sdk=${encodeURIComponent(SDK_VERSION)}`
+    const res = await fetch(url)
     if (!res.ok) return {}
     return (await res.json()) as ServerConfig
   } catch {

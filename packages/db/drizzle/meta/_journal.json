@@ -1737,6 +1737,13 @@
       "when": 1785700000028,
       "tag": "0270_github_channel",
       "breakpoints": true
+    },
+    {
+      "idx": 248,
+      "version": "7",
+      "when": 1785700000029,
+      "tag": "0271_widget_installed_sdk_version",
+      "breakpoints": true
     }
   ]
 }

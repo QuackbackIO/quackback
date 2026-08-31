@@ -17,6 +17,7 @@ describe('public API', () => {
     expect(typeof Quackback.off).toBe('function')
     expect(typeof Quackback.metadata).toBe('function')
     expect(typeof Quackback.destroy).toBe('function')
+    expect(typeof Quackback.version).toBe('string')
   })
 
   it('init throws when instanceUrl is missing', () => {
