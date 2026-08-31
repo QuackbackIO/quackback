@@ -402,11 +402,6 @@ export async function sendVisitorConversationEmail(opts: {
     resolvedFrom && fromDisplayName
       ? formatNamedSendingAddress(resolvedFrom, fromDisplayName)
       : resolvedFrom
-  const { emailBudgetAvailable } = await import('@/lib/server/domains/settings/tier-enforce')
-  if (!(await emailBudgetAvailable())) {
-    log.warn({ conversation_id: opts.conversationId }, 'email budget exhausted; send skipped')
-    return
-  }
   const { sendConversationMessageEmail } = await import('@quackback/email')
   const result = await sendWithRetry(opts.conversationId, () =>
     sendConversationMessageEmail({

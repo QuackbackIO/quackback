@@ -68,12 +68,6 @@ export async function maybeSendColdInboundAck(opts: {
     return 'rate_capped'
   }
 
-  const { emailBudgetAvailable } = await import('@/lib/server/domains/settings/tier-enforce')
-  if (!(await emailBudgetAvailable())) {
-    log.warn({ reason: 'budget' }, 'auto-ack skipped')
-    return 'skipped'
-  }
-
   try {
     const { sendConversationAutoAckEmail } = await import('@quackback/email')
     const { inboundReplyToAddress, mintOutboundMessageId } =

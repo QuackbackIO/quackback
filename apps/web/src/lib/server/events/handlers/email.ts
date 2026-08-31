@@ -114,6 +114,12 @@ function noteMentionThreading(cfg: NoteMentionEmailConfig): {
 
 const log = logger.child({ component: 'email' })
 
+const BROADCAST_EMAIL_EVENTS = new Set([
+  'changelog.published',
+  'status.incident_created',
+  'status.maintenance_scheduled',
+])
+
 export const emailHook: HookHandler = {
   async run(event: EventData, target: unknown, config: unknown): Promise<HookResult> {
     const { email, unsubscribeUrl } = target as EmailTarget
@@ -122,6 +128,14 @@ export const emailHook: HookHandler = {
     log.debug({ event_type: event.type }, 'sending email notification')
 
     try {
+      if (BROADCAST_EMAIL_EVENTS.has(event.type)) {
+        const { emailBudgetAvailable } = await import('@/lib/server/domains/settings/tier-enforce')
+        if (!(await emailBudgetAvailable())) {
+          log.warn({ event_type: event.type }, 'email budget exhausted; broadcast skipped')
+          return { success: true }
+        }
+      }
+
       let result: EmailResult
 
       if (event.type === 'post.status_changed') {

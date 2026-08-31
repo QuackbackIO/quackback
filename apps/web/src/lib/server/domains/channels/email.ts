@@ -23,8 +23,6 @@ export const emailAdapter: ChannelAdapter = {
   },
 
   async deliverCsatRequest(ctx) {
-    const { enforceEmailBudget } = await import('@/lib/server/domains/settings/tier-enforce')
-    await enforceEmailBudget()
     const from = (await resolveConversationFrom(ctx.conversationId)) ?? undefined
     const { sendCsatRequestEmail } = await import('@quackback/email')
     await sendCsatRequestEmail({

@@ -1,11 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { EMAIL_BILLABLE, isEmailBillable } from '../mail-class'
-
-const METERED = [
-  'ChangelogPublishedEmail',
-  'StatusIncidentPublishedEmail',
-  'StatusMaintenanceScheduledEmail',
-] as const
+import { EMAIL_BILLABLE, METERED_EMAIL_TYPES, isEmailBillable } from '../mail-class'
 
 describe('email meter classes', () => {
   it('meters changelog and status-page subscriber sends only', () => {
@@ -13,7 +7,7 @@ describe('email meter classes', () => {
       .filter(([, billable]) => billable)
       .map(([type]) => type)
       .sort()
-    expect(billed).toEqual([...METERED].sort())
+    expect(billed).toEqual([...METERED_EMAIL_TYPES].sort())
   })
 
   it('does not meter inbox, ticket, or feedback status mail', () => {

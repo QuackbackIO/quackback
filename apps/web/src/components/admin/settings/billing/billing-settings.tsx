@@ -399,7 +399,7 @@ function usageMeterDescription(key: string): string | undefined {
     case 'maxCustomRoles':
       return 'Roles beyond Owner, Admin, and Member.'
     case 'maxSendingDomains':
-      return 'Authenticated domains for outbound mail.'
+      return 'Configured sending domains, including pending ones.'
     case 'maxBoards':
       return 'Public and private boards.'
     case 'maxPosts':

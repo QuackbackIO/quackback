@@ -1661,7 +1661,7 @@ export {
   teamAlertSubject,
 } from './conversation-copy'
 export { ConversationClosedEmail } from './templates/conversation-closed'
-export { EMAIL_BILLABLE, isEmailBillable } from './mail-class'
+export { EMAIL_BILLABLE, METERED_EMAIL_TYPES, isEmailBillable } from './mail-class'
 
 // ============================================================================
 // Address verification (add or change)

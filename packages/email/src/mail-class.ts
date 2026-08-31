@@ -6,6 +6,14 @@
  * and auth mail do not draw from it. Unclassified senders fail the
  * mail-class-coverage trip-wire.
  */
+export const METERED_EMAIL_TYPES = [
+  'ChangelogPublishedEmail',
+  'StatusIncidentPublishedEmail',
+  'StatusMaintenanceScheduledEmail',
+] as const
+
+export type MeteredEmailType = (typeof METERED_EMAIL_TYPES)[number]
+
 export const EMAIL_BILLABLE: Record<string, boolean> = {
   ChangelogPublishedEmail: true,
   StatusIncidentPublishedEmail: true,
