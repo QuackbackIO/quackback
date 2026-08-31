@@ -201,6 +201,7 @@ export async function getTicketAgentWatchersForEvent(ticketId: TicketId): Promis
       and(
         eq(ticketSubscriptions.ticketId, ticketId),
         notMuted(),
+        eq(principal.type, 'user'),
         inArray(principal.role, ['admin', 'member'])
       )
     )

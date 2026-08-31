@@ -11,11 +11,11 @@ import type { EvtId } from '@quackback/ids'
 
 /**
  * Who or what caused an event.
- * Mirrors `principalType` ('user' | 'anonymous' | 'service'), plus 'system' for
- * non-attributable automated origins (scheduled sweeps, SLA deadline scans)
- * that carry no principal.
+ * Mirrors `principalType` ('user' | 'anonymous' | 'service' | 'support'), plus
+ * 'system' for non-attributable automated origins (scheduled sweeps, SLA
+ * deadline scans) that carry no principal.
  */
-export type EventActorType = 'user' | 'anonymous' | 'service' | 'system'
+export type EventActorType = 'user' | 'anonymous' | 'service' | 'support' | 'system'
 
 export interface EventContext {
   /** Request/trace id; propagated across events caused by this one. */

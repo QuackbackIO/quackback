@@ -52,7 +52,7 @@ function shouldSyncMembership(args: {
   fromRole?: string | null
   toRole: string
 }): boolean {
-  if (args.type === 'service' || args.type === 'anonymous') return false
+  if (args.type === 'service' || args.type === 'anonymous' || args.type === 'support') return false
   return isTeamMember(args.toRole) || isTeamMember(args.fromRole)
 }
 
@@ -149,7 +149,8 @@ export interface EnsurePrincipalInput extends ProfileFields {
  * it inserts with `onConflictDoNothing` (the partial unique index on `user_id`
  * is the backstop) and re-reads the winner on a lost race. Returns the existing
  * or newly-created principal plus whether it inserted. Busts the principal cache
- * only when it actually inserts.
+ * only when it actually inserts. An existing row is returned as-is — including
+ * `type='support'` — and is never rewritten to `type='user'`.
  */
 export async function ensurePrincipalForUser(
   input: EnsurePrincipalInput,
@@ -317,6 +318,9 @@ export async function setPrincipalRole(
       .where(whereClause)
       .limit(1)
       .for('update')
+  }
+  if (target?.type === 'support' || current?.type === 'support') {
+    throw new ForbiddenError('SUPPORT_PRINCIPAL', 'Cannot change the role of a support principal')
   }
   await exec.update(principal).set({ role }).where(whereClause)
   // Reconcile only when the role actually changed or an explicit assignment

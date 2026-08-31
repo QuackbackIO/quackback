@@ -79,7 +79,7 @@ export {
  * Without the role guard a portal end-user (role='user', type='user') would
  * leak into team surfaces. People-facing pickers use searchPeople instead.
  */
-function teamMemberWhere() {
+export function teamMemberWhere() {
   return and(eq(principal.type, 'user'), ne(principal.role, 'user'))
 }
 
@@ -268,8 +268,9 @@ export async function updateMemberRole(
       throw new NotFoundError('MEMBER_NOT_FOUND', 'Team member not found')
     }
 
-    // Ensure target is a team member (admin or member), not a portal user
-    if (!isTeamMember(targetMember.role)) {
+    // Ensure target is a customer teammate. Cloud support (type=support) is an
+    // admin for privilege but is not on the customer roster.
+    if (!isTeamMember(targetMember.role) || targetMember.type === 'support') {
       throw new NotFoundError('MEMBER_NOT_FOUND', 'Team member not found')
     }
 
@@ -348,8 +349,8 @@ export async function removeTeamMember(
       throw new NotFoundError('MEMBER_NOT_FOUND', 'Team member not found')
     }
 
-    // Ensure target is a team member (admin or member), not a portal user
-    if (!isTeamMember(targetMember.role)) {
+    // Ensure target is a customer teammate. Cloud support is not on the roster.
+    if (!isTeamMember(targetMember.role) || targetMember.type === 'support') {
       throw new NotFoundError('MEMBER_NOT_FOUND', 'Team member not found')
     }
 

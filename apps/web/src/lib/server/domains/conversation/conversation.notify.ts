@@ -227,7 +227,7 @@ export async function notifyVisitorMessage(opts: {
       })
       .from(principal)
       .leftJoin(user, eq(principal.userId, user.id))
-      .where(inArray(principal.role, ['admin', 'member']))
+      .where(and(eq(principal.type, 'user'), inArray(principal.role, ['admin', 'member'])))
 
     if (team.length === 0) return
 

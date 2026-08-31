@@ -44,7 +44,7 @@ export const events = pgTable(
     entityType: text('entity_type').notNull(),
     /** Branded TypeID of the subject aggregate. */
     entityId: text('entity_id').notNull(),
-    /** 'user' | 'anonymous' | 'service' | 'system'. */
+    /** 'user' | 'anonymous' | 'service' | 'support' | 'system'. */
     actorType: text('actor_type').notNull(),
     actorId: text('actor_id'),
     /** Validated against the catalogue zod schema before insert. Minimal snapshot. */

@@ -74,6 +74,17 @@ async function seedServiceAdmin(): Promise<void> {
   })
 }
 
+async function seedSupportAdmin(): Promise<void> {
+  const userId = await seedUserOnly()
+  await testDb.insert(principal).values({
+    id: createId('principal') as PrincipalId,
+    userId,
+    role: 'admin',
+    type: 'support',
+    createdAt: new Date(),
+  })
+}
+
 async function seedInvite(
   kind: 'team' | 'portal',
   inviterId: UserId,
@@ -137,6 +148,7 @@ describe.skipIf(!fixture.available)('countSeatUsage', () => {
     await seedHuman('member')
     await seedHuman('user')
     await seedServiceAdmin()
+    await seedSupportAdmin()
     await seedInvite('team', inviterId)
     await seedInvite('team', inviterId)
     await seedInvite('portal', inviterId)

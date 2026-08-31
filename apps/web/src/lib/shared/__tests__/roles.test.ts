@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isTeamMember, isAdmin } from '../roles'
+import { isTeamMember, isAdmin, isIdentifiedHuman } from '../roles'
 
 describe('isTeamMember', () => {
   it('returns true for admin', () => {
@@ -22,6 +22,16 @@ describe('isTeamMember', () => {
 
   it('returns false for undefined', () => {
     expect(isTeamMember(undefined)).toBe(false)
+  })
+})
+
+describe('isIdentifiedHuman', () => {
+  it('is true only for customer humans', () => {
+    expect(isIdentifiedHuman('user')).toBe(true)
+    expect(isIdentifiedHuman('anonymous')).toBe(false)
+    expect(isIdentifiedHuman('service')).toBe(false)
+    expect(isIdentifiedHuman('support')).toBe(false)
+    expect(isIdentifiedHuman(null)).toBe(false)
   })
 })
 

@@ -9,7 +9,18 @@ vi.mock('@/lib/server/domains/segments/segment-membership.service', () => ({
   ),
 }))
 
-import { policyActorFromAuth } from '../auth-helpers'
+import { policyActorFromAuth, normalizePrincipalType } from '../auth-helpers'
+
+describe('normalizePrincipalType', () => {
+  it('preserves support and does not collapse it to user', () => {
+    expect(normalizePrincipalType('support')).toBe('support')
+    expect(normalizePrincipalType('user')).toBe('user')
+    expect(normalizePrincipalType('anonymous')).toBe('anonymous')
+    expect(normalizePrincipalType('service')).toBe('service')
+    expect(normalizePrincipalType('future_kind')).toBe('user')
+    expect(normalizePrincipalType(null)).toBe('user')
+  })
+})
 
 // Build a fully-typed AuthContext (no `as never`/`as unknown` casts).
 // principal.role is constrained to {admin, member, user} — service is a
@@ -76,6 +87,16 @@ describe('policyActorFromAuth', () => {
     )
     expect(actor.principalType).toBe('service')
     expect(actor.role).toBe('member')
+  })
+
+  it('preserves principalType=support for Cloud support admins', async () => {
+    // Collapsing this onto 'user' would make isIdentifiedHuman true and put
+    // the operator on people lists. Role stays admin so isTeamActor still admits /admin.
+    const actor = await policyActorFromAuth(
+      buildAuth({ principalType: 'support', principalRole: 'admin' })
+    )
+    expect(actor.principalType).toBe('support')
+    expect(actor.role).toBe('admin')
   })
 
   it('maps admin role through verbatim', async () => {
