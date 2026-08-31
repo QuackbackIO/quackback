@@ -200,22 +200,24 @@ describe('extractHeadings', () => {
 // =============================================================================
 
 interface ArticleLike {
+  id: string
+  urlId: number
   slug: string
   title: string
 }
 
 describe('computePrevNext', () => {
   const articles: ArticleLike[] = [
-    { slug: 'first', title: 'First Article' },
-    { slug: 'second', title: 'Second Article' },
-    { slug: 'third', title: 'Third Article' },
+    { id: 'a1', urlId: 1, slug: 'first', title: 'First Article' },
+    { id: 'a2', urlId: 2, slug: 'second', title: 'Second Article' },
+    { id: 'a3', urlId: 3, slug: 'third', title: 'Third Article' },
   ]
 
   it('returns prev and next for a middle article', () => {
     const result = computePrevNext(articles, 'second')
     expect(result).toEqual({
-      prev: { slug: 'first', title: 'First Article' },
-      next: { slug: 'third', title: 'Third Article' },
+      prev: articles[0],
+      next: articles[2],
     })
   })
 
@@ -223,14 +225,14 @@ describe('computePrevNext', () => {
     const result = computePrevNext(articles, 'first')
     expect(result).toEqual({
       prev: null,
-      next: { slug: 'second', title: 'Second Article' },
+      next: articles[1],
     })
   })
 
   it('returns null next for the last article', () => {
     const result = computePrevNext(articles, 'third')
     expect(result).toEqual({
-      prev: { slug: 'second', title: 'Second Article' },
+      prev: articles[1],
       next: null,
     })
   })
@@ -246,7 +248,7 @@ describe('computePrevNext', () => {
   })
 
   it('returns both null for a single article', () => {
-    const result = computePrevNext([{ slug: 'only', title: 'Only' }], 'only')
+    const result = computePrevNext([{ id: 'a1', urlId: 1, slug: 'only', title: 'Only' }], 'only')
     expect(result).toEqual({ prev: null, next: null })
   })
 })

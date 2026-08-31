@@ -252,7 +252,7 @@ async function resolveArticleRelations(
     categoryIds.length > 0
       ? db.query.helpCenterCategories.findMany({
           where: inArray(helpCenterCategories.id, categoryIds),
-          columns: { id: true, slug: true, name: true },
+          columns: { id: true, urlId: true, slug: true, name: true },
         })
       : [],
     principalIds.length > 0
@@ -275,8 +275,8 @@ async function resolveArticleRelations(
       // that need the full JSON (e.g. article detail page) call getArticleById.
       contentJson: null,
       category: cat
-        ? { id: cat.id as KbCategoryId, slug: cat.slug, name: cat.name }
-        : { id: article.categoryId as KbCategoryId, slug: '', name: 'Unknown' },
+        ? { id: cat.id as KbCategoryId, urlId: cat.urlId, slug: cat.slug, name: cat.name }
+        : { id: article.categoryId as KbCategoryId, urlId: 0, slug: '', name: 'Unknown' },
       author: author?.displayName
         ? { id: author.id as PrincipalId, name: author.displayName, avatarUrl: author.avatarUrl }
         : null,

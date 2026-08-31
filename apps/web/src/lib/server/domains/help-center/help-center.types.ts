@@ -83,6 +83,7 @@ export interface HelpCenterArticle {
 export interface HelpCenterArticleWithCategory extends HelpCenterArticle {
   category: {
     id: KbCategoryId
+    urlId: number
     slug: string
     name: string
   }

@@ -137,7 +137,8 @@ function CollectionPage() {
   })
 
   const totalArticles =
-    articles.length + subcategories.reduce((sum, s) => sum + s.articles.length, 0)
+    articles.length +
+    subcategories.reduce((sum: number, s: { articles: unknown[] }) => sum + s.articles.length, 0)
 
   const editors = useMemo(() => {
     const result: Author[] = []

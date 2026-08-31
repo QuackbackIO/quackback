@@ -38,7 +38,7 @@ export async function resolveArticleWithCategory(
   const [category, authorRecord] = await Promise.all([
     db.query.helpCenterCategories.findFirst({
       where: eq(helpCenterCategories.id, article.categoryId),
-      columns: { id: true, slug: true, name: true },
+      columns: { id: true, urlId: true, slug: true, name: true },
     }),
     article.principalId
       ? db.query.principal.findFirst({
@@ -51,8 +51,13 @@ export async function resolveArticleWithCategory(
   return {
     ...article,
     category: category
-      ? { id: category.id as KbCategoryId, slug: category.slug, name: category.name }
-      : { id: article.categoryId as KbCategoryId, slug: '', name: 'Unknown' },
+      ? {
+          id: category.id as KbCategoryId,
+          urlId: category.urlId,
+          slug: category.slug,
+          name: category.name,
+        }
+      : { id: article.categoryId as KbCategoryId, urlId: 0, slug: '', name: 'Unknown' },
     author: authorRecord?.displayName
       ? {
           id: authorRecord.id as PrincipalId,
