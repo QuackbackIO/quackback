@@ -17,6 +17,7 @@ afterEach(() => {
 
 const META: AskAiSourceMeta = {
   articleId: 'kb_article_1',
+  urlId: 1,
   title: 'Refund policy',
   slug: 'refund-policy',
   categorySlug: 'billing',

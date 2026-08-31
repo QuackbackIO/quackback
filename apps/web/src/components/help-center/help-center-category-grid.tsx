@@ -1,10 +1,12 @@
 import { Link } from '@tanstack/react-router'
 import { getTopLevelCategories } from './help-center-utils'
 import { CategoryIcon } from './category-icon'
-import { localizedHcPath } from '@/lib/shared/help-center-url'
+import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
+import { hcCollectionPath } from '@/lib/shared/help-center-url'
 
 interface SerializedCategory {
   id: string
+  urlId: number
   parentId?: string | null
   slug: string
   name: string
@@ -36,9 +38,11 @@ export function HelpCenterCategoryGrid({ categories, locale }: HelpCenterCategor
         <Link
           key={cat.id}
           to={
-            (locale
-              ? localizedHcPath(locale, `/hc/categories/${cat.slug}`)
-              : `/hc/categories/${cat.slug}`) as '/hc'
+            hcCollectionPath({
+              locale: locale ?? DEFAULT_LOCALE,
+              urlId: cat.urlId,
+              slug: cat.slug,
+            }) as '/hc'
           }
           className="group flex items-start gap-4 rounded-2xl border border-border bg-card p-6 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary hover:bg-primary/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background animate-in fade-in fill-mode-backwards"
           style={{ animationDelay: `${index * 40}ms` }}

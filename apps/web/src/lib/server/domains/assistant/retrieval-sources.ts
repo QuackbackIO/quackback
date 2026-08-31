@@ -23,6 +23,8 @@ import type { PrincipalId, ConversationId } from '@quackback/ids'
 import type { ContentAudience } from './audience'
 import { toHelpCenterAudience } from './audience'
 import { retrieveKbArticles } from './retrieval'
+import { hcArticlePath } from '@/lib/shared/help-center-url'
+import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import type { AssistantConfig, AssistantAgentKind } from '@/lib/shared/assistant/config'
 import type { AssistantCitation } from './assistant.toolspec'
 import { ASSISTANT_CITATION_TYPES, type AssistantCitationType } from './citation-types'
@@ -89,8 +91,8 @@ export interface KnowledgeSource {
 }
 
 /** Public help-center path for a retrieved article. */
-function helpArticleUrl(categorySlug: string, slug: string): string {
-  return `/hc/articles/${categorySlug}/${slug}`
+function helpArticleUrl(urlId: number, slug: string): string {
+  return hcArticlePath({ locale: DEFAULT_LOCALE, urlId, slug })
 }
 
 /**
@@ -127,7 +129,7 @@ export const kbKnowledgeSource: KnowledgeSource = {
         type: 'article' as const,
         id: a.id,
         title: a.title,
-        url: helpArticleUrl(a.categorySlug, a.slug),
+        url: helpArticleUrl(a.urlId, a.slug),
         // Public at the 'public' ceiling is guaranteed by the audience filter
         // (isPublic is always true there); on 'team' it distinguishes a
         // team-only article, flagged for the copilot leak gate.

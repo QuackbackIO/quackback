@@ -303,8 +303,7 @@ export function QuackbackEmbedCard({
     // Help-center articles have no "open in modal" concept — modal surfaces
     // open them in a new tab rather than navigating away from the inbox.
     const arOpenMode = openMode === 'modal' ? 'newTab' : openMode
-    const arHref =
-      arOpenMode === 'newTab' ? data.url : `/hc/articles/${data.categorySlug}/${data.articleId}`
+    const arHref = data.url
     return (
       <EmbedShell href={arHref} openMode={arOpenMode}>
         {articleInner}

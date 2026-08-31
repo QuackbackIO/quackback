@@ -29,13 +29,22 @@ import type { KbArticleId, KbCategoryId } from '@quackback/ids'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
 import { NotFoundError } from '@/lib/shared/errors'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
-import { listPublicCategories, getPublicCategoryBySlug } from './help-center.category.service'
+import {
+  listPublicCategories,
+  getPublicCategoryBySlug,
+  getPublicCategoryById,
+  getPublicCategoryByUrlId,
+} from './help-center.category.service'
 import {
   listPublicArticlesForCategory,
   listPublicArticlesForCategories,
   type PublicCategoryArticle,
 } from './help-center.article.query'
-import { getPublicArticleBySlug } from './help-center.article.service'
+import {
+  getPublicArticleBySlug,
+  getPublicArticleById,
+  getPublicArticleByUrlId,
+} from './help-center.article.service'
 import {
   getPublishedArticleTranslation,
   getCategoryTranslation,
@@ -94,6 +103,37 @@ export async function listPublicCategoriesForLocale(
     visible.push({ ...cat, name: translation.name, description: translation.description })
   }
   return visible
+}
+
+export async function getPublicCategoryByUrlIdForLocale(
+  urlId: number,
+  locale: string,
+  viewer: Actor = ANONYMOUS_ACTOR
+): ReturnType<typeof getPublicCategoryByUrlId> {
+  const category = await getPublicCategoryByUrlId(urlId, viewer)
+  if (locale === DEFAULT_LOCALE) return category
+  const translation = await getCategoryTranslation(category.id as KbCategoryId, locale)
+  if (!translation || !translation.name.trim()) {
+    throw new NotFoundError(
+      'CATEGORY_NOT_FOUND',
+      `No "${locale}" translation for category "${urlId}"`
+    )
+  }
+  return { ...category, name: translation.name, description: translation.description }
+}
+
+export async function getPublicCategoryByIdForLocale(
+  id: KbCategoryId,
+  locale: string,
+  viewer: Actor = ANONYMOUS_ACTOR
+): ReturnType<typeof getPublicCategoryById> {
+  const category = await getPublicCategoryById(id, viewer)
+  if (locale === DEFAULT_LOCALE) return category
+  const translation = await getCategoryTranslation(category.id as KbCategoryId, locale)
+  if (!translation || !translation.name.trim()) {
+    throw new NotFoundError('CATEGORY_NOT_FOUND', `No "${locale}" translation for category "${id}"`)
+  }
+  return { ...category, name: translation.name, description: translation.description }
 }
 
 export async function getPublicCategoryBySlugForLocale(
@@ -184,6 +224,52 @@ export async function listPublicArticlesForCategoriesLocale(
     )
   }
   return translated
+}
+
+export async function getPublicArticleByUrlIdForLocale(
+  urlId: number,
+  locale: string,
+  viewer: Actor = ANONYMOUS_ACTOR
+): Promise<HelpCenterArticleWithCategory> {
+  const article = await getPublicArticleByUrlId(urlId, viewer)
+  if (locale === DEFAULT_LOCALE) return article
+  const translation = await getPublishedArticleTranslation(article.id as KbArticleId, locale)
+  if (!translation) {
+    throw new NotFoundError(
+      'ARTICLE_NOT_FOUND',
+      `No published "${locale}" translation for article "${urlId}"`
+    )
+  }
+  return {
+    ...article,
+    title: translation.title,
+    description: translation.description,
+    content: translation.content,
+    contentJson: translation.contentJson ?? article.contentJson,
+  }
+}
+
+export async function getPublicArticleByIdForLocale(
+  id: KbArticleId,
+  locale: string,
+  viewer: Actor = ANONYMOUS_ACTOR
+): Promise<HelpCenterArticleWithCategory> {
+  const article = await getPublicArticleById(id, viewer)
+  if (locale === DEFAULT_LOCALE) return article
+  const translation = await getPublishedArticleTranslation(article.id as KbArticleId, locale)
+  if (!translation) {
+    throw new NotFoundError(
+      'ARTICLE_NOT_FOUND',
+      `No published "${locale}" translation for article "${id}"`
+    )
+  }
+  return {
+    ...article,
+    title: translation.title,
+    description: translation.description,
+    content: translation.content,
+    contentJson: translation.contentJson ?? article.contentJson,
+  }
 }
 
 export async function getPublicArticleBySlugForLocale(

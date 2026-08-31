@@ -12,6 +12,7 @@
 /** Display metadata for one retrieved article, sent before synthesis starts. */
 export interface KbAskSourceMeta {
   articleId: string
+  urlId: number
   title: string
   slug: string
   categorySlug: string

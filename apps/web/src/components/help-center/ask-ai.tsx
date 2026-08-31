@@ -25,6 +25,8 @@ import { AssistantAnswer } from '@/components/shared/conversation/assistant-turn
 import type { ConversationMessageCitation } from '@/lib/shared/conversation/types'
 import { extractHttpErrorMessage } from '@/lib/client/utils/http-error'
 import { splitByTerms } from './ask-ai-text'
+import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
+import { hcArticlePath } from '@/lib/shared/help-center-url'
 
 // Existing importers keep the AskAiSourceMeta name.
 export type AskAiSourceMeta = KbAskSourceMeta
@@ -76,9 +78,13 @@ const IDLE_STATE: AskAiState = {
   related: [],
 }
 
-/** In-app two-segment help-center article path (category + article slug). */
+/** Public help-center article path. */
 function articleHref(source: AskAiSourceMeta): string {
-  return `/hc/articles/${source.categorySlug}/${source.slug}`
+  return hcArticlePath({
+    locale: DEFAULT_LOCALE,
+    urlId: source.urlId,
+    slug: source.slug,
+  })
 }
 
 /** Present cited sources as the shared assistant citation shape so the answer

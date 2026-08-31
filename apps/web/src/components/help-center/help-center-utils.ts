@@ -3,6 +3,8 @@
  * Extracted for testability — no React dependencies.
  */
 
+import { hcCollectionPath } from '@/lib/shared/help-center-url'
+
 interface CategoryLike {
   parentId?: string | null
 }
@@ -16,15 +18,22 @@ export function getTopLevelCategories<T extends CategoryLike>(categories: T[]): 
 
 /**
  * Extracts the active category slug from the current pathname.
- * Understands /hc/categories/:slug and /hc/articles/:categorySlug/:articleSlug.
+ * Understands /hc/{locale}/collections/{urlId}-{slug} and legacy /hc/categories/:slug.
  * Returns null when not on a specific category.
  */
 export function getActiveCategory(pathname: string): string | null {
   if (!pathname) return null
   const segments = pathname.split('/').filter(Boolean)
   if (segments[0] !== 'hc') return null
-  // /hc/categories/:slug  or  /hc/articles/:categorySlug/...
-  if (segments[1] === 'categories' || segments[1] === 'articles') return segments[2] ?? null
+  // /hc/{locale}/collections/{urlId}-{slug}  or legacy /hc/categories/:slug
+  if (segments[1] === 'categories') return segments[2] ?? null
+  if (segments[2] === 'collections' || segments[2] === 'articles') {
+    const idSlug = segments[3] ?? null
+    if (!idSlug) return null
+    const hyphen = idSlug.indexOf('-')
+    return hyphen === -1 ? idSlug : idSlug.slice(hyphen + 1)
+  }
+  if (segments[1] === 'articles') return segments[2] ?? null
   return null
 }
 
@@ -37,6 +46,7 @@ export function getSubcategories<T extends CategoryLike>(categories: T[], parent
 
 interface CategoryLikeWithSlug {
   id: string
+  urlId: number
   parentId?: string | null
   slug: string
   name: string
@@ -73,7 +83,10 @@ export function buildCategoryBreadcrumbs<T extends CategoryLikeWithSlug>(params:
   allCategories: T[]
   categoryId: string
   articleTitle?: string
+  /** Locale for collection URLs. Defaults to `en`. */
+  locale?: string
 }): Array<{ label: string; href?: string }> {
+  const locale = params.locale ?? 'en'
   const chain = buildAncestorChain(params.allCategories, params.categoryId)
   const items: Array<{ label: string; href?: string }> = [{ label: 'Help Center', href: '/hc' }]
 
@@ -90,7 +103,10 @@ export function buildCategoryBreadcrumbs<T extends CategoryLikeWithSlug>(params:
     if (isLast && !params.articleTitle) {
       items.push({ label: cat.name })
     } else {
-      items.push({ label: cat.name, href: `/hc/categories/${cat.slug}` })
+      items.push({
+        label: cat.name,
+        href: hcCollectionPath({ locale, urlId: cat.urlId, slug: cat.slug }),
+      })
     }
   })
 

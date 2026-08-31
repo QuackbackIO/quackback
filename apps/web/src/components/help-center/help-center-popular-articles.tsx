@@ -1,8 +1,11 @@
 import { Link } from '@tanstack/react-router'
 import { DocumentTextIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
+import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
+import { hcArticlePath } from '@/lib/shared/help-center-url'
 
 export interface PopularArticle {
   id: string
+  urlId: number
   slug: string
   title: string
   categorySlug: string
@@ -25,7 +28,13 @@ export function HelpCenterPopularArticles({ articles }: HelpCenterPopularArticle
         {articles.map((article) => (
           <Link
             key={article.id}
-            to={`/hc/articles/${article.categorySlug}/${article.slug}` as '/hc'}
+            to={
+              hcArticlePath({
+                locale: DEFAULT_LOCALE,
+                urlId: article.urlId,
+                slug: article.slug,
+              }) as '/hc'
+            }
             className="group flex items-center gap-4 px-6 py-5 transition-colors hover:bg-primary/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
           >
             <DocumentTextIcon className="size-5 shrink-0 text-primary" />

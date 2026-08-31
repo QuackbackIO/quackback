@@ -1,9 +1,11 @@
 import { Link } from '@tanstack/react-router'
 import { ChevronRightIcon } from '@heroicons/react/24/outline'
-import { localizedHcPath } from '@/lib/shared/help-center-url'
+import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
+import { hcArticlePath } from '@/lib/shared/help-center-url'
 
 export interface RelatedArticleLink {
   id: string
+  urlId: number
   slug: string
   title: string
   description: string | null
@@ -19,10 +21,12 @@ interface HelpCenterRelatedArticlesProps {
 export function HelpCenterRelatedArticles({ articles, locale }: HelpCenterRelatedArticlesProps) {
   if (articles.length === 0) return null
 
-  const hrefFor = (article: RelatedArticleLink) => {
-    const path = `/hc/articles/${article.categorySlug}/${article.slug}`
-    return (locale ? localizedHcPath(locale, path) : path) as '/hc'
-  }
+  const hrefFor = (article: RelatedArticleLink) =>
+    hcArticlePath({
+      locale: locale ?? DEFAULT_LOCALE,
+      urlId: article.urlId,
+      slug: article.slug,
+    }) as '/hc'
 
   return (
     <section aria-labelledby="hc-related" className="mt-10 pt-8 border-t border-border/40">

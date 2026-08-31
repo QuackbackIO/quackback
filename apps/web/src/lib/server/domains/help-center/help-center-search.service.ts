@@ -153,6 +153,7 @@ export function publicCategoryExistsCondition(viewer: Actor) {
 
 export interface HybridSearchResult {
   id: string
+  urlId: number
   slug: string
   title: string
   description: string | null
@@ -220,6 +221,7 @@ async function hybridQuery(
   const results = await db
     .select({
       id: helpCenterArticles.id,
+      urlId: helpCenterArticles.urlId,
       slug: helpCenterArticles.slug,
       title: helpCenterArticles.title,
       description: helpCenterArticles.description,
@@ -265,6 +267,7 @@ async function hybridQuery(
 
   return results.map((r) => ({
     id: r.id,
+    urlId: r.urlId,
     slug: r.slug,
     title: r.title,
     description: r.description,
@@ -384,6 +387,7 @@ async function keywordOnlyQuery(
   const results = await db
     .select({
       id: helpCenterArticles.id,
+      urlId: helpCenterArticles.urlId,
       slug: helpCenterArticles.slug,
       title: helpCenterArticles.title,
       description: helpCenterArticles.description,
@@ -410,6 +414,7 @@ async function keywordOnlyQuery(
 
   return results.map((r) => ({
     id: r.id,
+    urlId: r.urlId,
     slug: r.slug,
     title: r.title,
     description: r.description,
@@ -444,6 +449,7 @@ async function keywordOnlyQueryForLocale(
   const results = await db
     .select({
       id: helpCenterArticles.id,
+      urlId: helpCenterArticles.urlId,
       slug: helpCenterArticles.slug,
       title: helpCenterArticleTranslations.title,
       description: helpCenterArticleTranslations.description,
@@ -485,6 +491,7 @@ async function keywordOnlyQueryForLocale(
 
   return results.map((r) => ({
     id: r.id,
+    urlId: r.urlId,
     slug: r.slug,
     title: r.title,
     description: r.description,

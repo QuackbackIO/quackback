@@ -50,6 +50,7 @@ export interface ArticleListScope {
 // preview of `content`.
 const LIST_COLUMNS = {
   id: true,
+  urlId: true,
   categoryId: true,
   slug: true,
   title: true,
@@ -306,6 +307,7 @@ export async function listPublicArticlesForCategory(
   return db
     .select({
       id: helpCenterArticles.id,
+      urlId: helpCenterArticles.urlId,
       slug: helpCenterArticles.slug,
       title: helpCenterArticles.title,
       description: helpCenterArticles.description,
@@ -359,6 +361,7 @@ export async function listPublicArticlesForCategories(
     .select({
       categoryId: helpCenterArticles.categoryId,
       id: helpCenterArticles.id,
+      urlId: helpCenterArticles.urlId,
       slug: helpCenterArticles.slug,
       title: helpCenterArticles.title,
       description: helpCenterArticles.description,
@@ -390,6 +393,7 @@ export async function listPublicArticlesForCategories(
     .select({
       categoryId: ranked.categoryId,
       id: ranked.id,
+      urlId: ranked.urlId,
       slug: ranked.slug,
       title: ranked.title,
       description: ranked.description,
@@ -422,6 +426,7 @@ export async function listPopularPublicArticles(limit: number, viewer: Actor = A
   return db
     .select({
       id: helpCenterArticles.id,
+      urlId: helpCenterArticles.urlId,
       slug: helpCenterArticles.slug,
       title: helpCenterArticles.title,
       categorySlug: helpCenterCategories.slug,

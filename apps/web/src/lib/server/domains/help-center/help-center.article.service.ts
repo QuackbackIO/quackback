@@ -83,6 +83,42 @@ export async function getArticleBySlug(slug: string): Promise<HelpCenterArticleW
   return resolveArticleWithCategory(article)
 }
 
+export async function getPublicArticleByUrlId(
+  urlId: number,
+  viewer: Actor = ANONYMOUS_ACTOR
+): Promise<HelpCenterArticleWithCategory> {
+  const rows = await db
+    .select({ article: helpCenterArticles })
+    .from(helpCenterArticles)
+    .innerJoin(helpCenterCategories, eq(helpCenterArticles.categoryId, helpCenterCategories.id))
+    .where(
+      and(eq(helpCenterArticles.urlId, urlId), ...helpCenterVisibilityConditions('public', viewer))
+    )
+    .limit(1)
+  const article = rows[0]?.article
+  if (!article) {
+    throw new NotFoundError('ARTICLE_NOT_FOUND', `Article not found`)
+  }
+  return resolveArticleWithCategory(article)
+}
+
+export async function getPublicArticleById(
+  id: KbArticleId,
+  viewer: Actor = ANONYMOUS_ACTOR
+): Promise<HelpCenterArticleWithCategory> {
+  const rows = await db
+    .select({ article: helpCenterArticles })
+    .from(helpCenterArticles)
+    .innerJoin(helpCenterCategories, eq(helpCenterArticles.categoryId, helpCenterCategories.id))
+    .where(and(eq(helpCenterArticles.id, id), ...helpCenterVisibilityConditions('public', viewer)))
+    .limit(1)
+  const article = rows[0]?.article
+  if (!article) {
+    throw new NotFoundError('ARTICLE_NOT_FOUND', `Article not found`)
+  }
+  return resolveArticleWithCategory(article)
+}
+
 export async function getPublicArticleBySlug(
   slug: string,
   viewer: Actor = ANONYMOUS_ACTOR
