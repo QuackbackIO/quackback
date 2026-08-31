@@ -1,5 +1,10 @@
 # @quackback/widget
 
+## 0.1.6 - 2026-08-31
+
+- The config.json install ping now includes `?sdk=<version>` so the instance can tell an npm/file embed is behind and prompt an update on the widget settings page.
+- `Quackback.version` / `SDK_VERSION` expose the package version to host apps.
+
 ## 0.1.5 - 2026-05-18
 
 - Fix: `Quackback("init", { launcher: false, placement: "left" })` from a script-tag install now applies your options instead of silently keeping the default launcher and right-side placement. A repeat `init` call also reconfigures cleanly.

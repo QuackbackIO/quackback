@@ -45,6 +45,7 @@ import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { WidgetPreview } from '@/components/admin/settings/widget/widget-preview'
+import { WidgetLastDetected } from '@/components/admin/settings/widget/widget-last-detected'
 import { PreviewToggleButton } from '@/components/admin/settings/preview-toggle'
 import { InlineSpinner } from '@/components/admin/settings/inline-spinner'
 import { Label } from '@/components/ui/label'
@@ -79,6 +80,10 @@ import {
   type WidgetTranslations,
 } from '@/lib/shared/widget/translations'
 import { widgetInstallPresence } from '@/lib/shared/widget/widget-origin'
+import {
+  widgetConnectedStatusLabel,
+  widgetSdkUpdateDescription,
+} from '@/lib/shared/widget/sdk-version'
 import { DEFAULT_WIDGET_HOME_CARDS } from '@/lib/shared/types/settings'
 import { WIDGET_HERO_PATTERNS, heroBackdropStyle } from '@/lib/shared/widget/hero-style'
 import { ColorPickerGrid, ColorHexInput } from '@/components/shared/color-picker'
@@ -127,6 +132,7 @@ function WidgetSettingsPage() {
   )
   // Draft label — mirrors into the preview live; persisted on blur.
   const [launcherLabel, setLauncherLabel] = useState(config.launcherLabel ?? '')
+  const [launcherGreeting, setLauncherGreeting] = useState(config.launcherGreeting ?? '')
   const [homeDraft, setHomeDraft] = useState<WidgetHomeConfig>(config.home ?? {})
 
   // The preview theme follows the admin's own theme until the toggle overrides
@@ -171,6 +177,8 @@ function WidgetSettingsPage() {
             onPositionChange={setPosition}
             launcherLabel={launcherLabel}
             onLabelChange={setLauncherLabel}
+            launcherGreeting={launcherGreeting}
+            onGreetingChange={setLauncherGreeting}
             helpCenterFlagEnabled={helpCenterFlagEnabled}
             supportInboxFlagEnabled={supportInboxFlagEnabled}
             feedbackFlagEnabled={feedbackFlagEnabled}
@@ -215,6 +223,7 @@ function WidgetSettingsPage() {
               <WidgetPreview
                 position={position}
                 label={launcherLabel.trim() || undefined}
+                greeting={launcherGreeting.trim() || undefined}
                 theme={previewTheme}
                 refreshKey={previewRefreshKey}
               />
@@ -231,7 +240,14 @@ function WidgetSiteCard({
   status,
 }: {
   initialEnabled: boolean
-  status: { hasWidgetInstalled?: boolean; widgetOriginHost?: string | null }
+  status: {
+    hasWidgetInstalled?: boolean
+    widgetOriginHost?: string | null
+    widgetLastDetectedAt?: string | null
+    widgetSdkVersion?: string | null
+    currentWidgetSdkVersion?: string
+    widgetSdkNeedsUpdate?: boolean
+  }
 }) {
   const router = useRouter()
   const updateWidgetConfig = useUpdateWidgetConfig()
@@ -243,6 +259,17 @@ function WidgetSiteCard({
     enabled,
     originHost: status.widgetOriginHost,
   })
+  const needsUpdate = Boolean(status.hasWidgetInstalled && status.widgetSdkNeedsUpdate)
+  const statusTitle = needsUpdate
+    ? widgetConnectedStatusLabel({
+        hasWidgetInstalled: true,
+        widgetSdkNeedsUpdate: true,
+      })
+    : presence.title
+  const statusDescription = needsUpdate
+    ? widgetSdkUpdateDescription(status.widgetSdkVersion, status.currentWidgetSdkVersion)
+    : presence.description
+  const statusTone = needsUpdate ? 'detected' : presence.tone
 
   async function handleToggle(checked: boolean) {
     const previous = enabled
@@ -289,14 +316,14 @@ function WidgetSiteCard({
               <span
                 className={cn(
                   'h-2 w-2 shrink-0 rounded-full',
-                  presence.tone === 'live'
+                  statusTone === 'live'
                     ? 'bg-emerald-500'
-                    : presence.tone === 'detected'
+                    : statusTone === 'detected'
                       ? 'bg-amber-500'
                       : 'bg-muted-foreground/40'
                 )}
               />
-              {presence.title}
+              {statusTitle}
             </p>
             <Button asChild size="sm" variant="ghost" className="shrink-0">
               <Link to="/admin/settings/widget/install">
@@ -305,7 +332,8 @@ function WidgetSiteCard({
               </Link>
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground mt-0.5">{presence.description}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{statusDescription}</p>
+          {status.hasWidgetInstalled && <WidgetLastDetected at={status.widgetLastDetectedAt} />}
         </div>
       </div>
     </SettingsCard>
@@ -319,6 +347,8 @@ export function ModulesCard({
   onPositionChange,
   launcherLabel,
   onLabelChange,
+  launcherGreeting,
+  onGreetingChange,
   helpCenterFlagEnabled,
   supportInboxFlagEnabled,
   feedbackFlagEnabled,
@@ -342,6 +372,8 @@ export function ModulesCard({
   onPositionChange: (val: 'bottom-right' | 'bottom-left') => void
   launcherLabel: string
   onLabelChange: (val: string) => void
+  launcherGreeting: string
+  onGreetingChange: (val: string) => void
   helpCenterFlagEnabled: boolean
   supportInboxFlagEnabled: boolean
   feedbackFlagEnabled: boolean
@@ -521,10 +553,11 @@ export function ModulesCard({
         </Label>
         <Input
           id="launcher-greeting"
-          defaultValue={config.launcherGreeting ?? ''}
+          value={launcherGreeting}
           maxLength={120}
           placeholder="e.g. Need a hand?"
           disabled={isBusy}
+          onChange={(e) => onGreetingChange(e.target.value)}
           onBlur={(e) => {
             const value = e.target.value.trim()
             if (value === (config.launcherGreeting ?? '')) return
@@ -532,7 +565,7 @@ export function ModulesCard({
           }}
         />
         <p className="text-[11px] text-muted-foreground/70">
-          Shown in a bubble beside the closed launcher to invite a chat. Leave blank for none.
+          Shown in a bubble beside the launcher to invite a chat. Leave blank for none.
         </p>
       </div>
 

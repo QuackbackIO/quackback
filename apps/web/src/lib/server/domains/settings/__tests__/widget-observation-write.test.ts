@@ -38,11 +38,14 @@ vi.mock('@/lib/server/storage/s3', () => ({
 
 const { observeExternalWidgetRequest } = await import('../settings.widget')
 
-function requestWithOrigin(origin: string): Request {
+function requestWithOrigin(
+  origin: string,
+  url = 'https://app.quackback.test/api/widget/config.json'
+): Request {
   // happy-dom drops `origin` from init headers (forbidden-header list); set it
   // after construction to emulate the browser-set header — see
   // widget-observation.test.ts.
-  const req = new Request('https://app.quackback.test/api/widget/config.json')
+  const req = new Request(url)
   req.headers.set('origin', origin)
   return req
 }
@@ -67,6 +70,7 @@ describe('observeExternalWidgetRequest writes', () => {
         widgetInstalledLastSeenAt: now,
         widgetInstalledOriginHost: 'customer.example',
         widgetInstalledFirstSeenAt: expect.anything(),
+        widgetInstalledSdkVersion: null,
       })
     )
     expect(hoisted.invalidate).not.toHaveBeenCalled()
@@ -79,6 +83,30 @@ describe('observeExternalWidgetRequest writes', () => {
     expect(observed).toBe(false)
     expect(hoisted.findSettings).not.toHaveBeenCalled()
     expect(hoisted.updateSettings).not.toHaveBeenCalled()
+  })
+
+  it('stores the sdk query param from a config.json ping', async () => {
+    await observeExternalWidgetRequest(
+      requestWithOrigin(
+        'https://customer.example',
+        'https://app.quackback.test/api/widget/config.json?sdk=0.1.5'
+      ),
+      new Date('2026-07-13T12:00:00.000Z')
+    )
+    expect(hoisted.setValues).toHaveBeenCalledWith(
+      expect.objectContaining({ widgetInstalledSdkVersion: '0.1.5' })
+    )
+  })
+
+  it('records the instance SDK version for a script-tag sdk.js fetch', async () => {
+    const req = new Request('https://app.quackback.test/api/widget/sdk.js')
+    req.headers.set('origin', 'https://customer.example')
+    await observeExternalWidgetRequest(req, new Date('2026-07-13T12:00:00.000Z'))
+    expect(hoisted.setValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        widgetInstalledSdkVersion: expect.stringMatching(/^\d+\.\d+\.\d+/),
+      })
+    )
   })
 
   it('reports a throttled no-op when the conditional update changes no row', async () => {

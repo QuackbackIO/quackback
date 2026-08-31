@@ -29,6 +29,10 @@ export interface LaunchStatus {
   hasBranding: boolean
   hasWidgetInstalled?: boolean
   widgetOriginHost?: string | null
+  widgetLastDetectedAt?: string | null
+  widgetSdkVersion?: string | null
+  currentWidgetSdkVersion?: string
+  widgetSdkNeedsUpdate?: boolean
   hasWidgetEnabled?: boolean
   hasMessengerEnabled?: boolean
   hasHelpArticle?: boolean

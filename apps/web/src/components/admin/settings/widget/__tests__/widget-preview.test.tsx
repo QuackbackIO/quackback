@@ -7,6 +7,8 @@
  * the host chrome the SDK provides on a customer page:
  *   - The iframe targets /widget with the selected theme forced via ?theme=.
  *   - The launcher button toggles the panel open/closed.
+ *   - Panel and launcher share a bottom corner (panel above, button below).
+ *   - An optional greeting bubble sits above the closed launcher.
  *   - The widget's own close button messages its host (quackback:close);
  *     the preview honours it like the SDK would, but only from its own origin.
  */
@@ -29,7 +31,7 @@ describe('WidgetPreview', () => {
   it('toggles the panel via the launcher button', () => {
     render(<WidgetPreview position="bottom-right" />)
 
-    const launcher = screen.getByRole('button')
+    const launcher = screen.getByRole('button', { name: /feedback widget/i })
     fireEvent.click(launcher)
     expect(screen.queryByTitle('Widget preview')).toBeNull()
 
@@ -54,6 +56,45 @@ describe('WidgetPreview', () => {
   it('places the launcher on the configured side', () => {
     render(<WidgetPreview position="bottom-left" />)
 
-    expect(screen.getByRole('button').className).toContain('left-4')
+    expect(screen.getByRole('button', { name: /feedback widget/i }).className).toContain('left-6')
+  })
+
+  it('stacks the open panel above the launcher in the same corner', () => {
+    render(<WidgetPreview position="bottom-right" />)
+
+    const panel = screen.getByTitle('Widget preview').parentElement
+    const launcher = screen.getByRole('button', { name: /feedback widget/i })
+    expect(panel?.className).toContain('bottom-[88px]')
+    expect(panel?.className).toContain('right-6')
+    expect(launcher.className).toContain('bottom-6')
+    expect(launcher.className).toContain('right-6')
+  })
+
+  it('shows the launcher greeting bubble while the panel is closed', () => {
+    render(<WidgetPreview position="bottom-right" greeting="Need a hand?" />)
+
+    expect(screen.queryByText('Need a hand?')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /feedback widget/i }))
+    expect(screen.getByText('Need a hand?')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss greeting' }))
+    expect(screen.queryByText('Need a hand?')).toBeNull()
+  })
+
+  it('opens the panel when the greeting bubble is clicked', () => {
+    render(<WidgetPreview position="bottom-right" greeting="Hi there" />)
+
+    fireEvent.click(screen.getByRole('button', { name: /feedback widget/i }))
+    expect(screen.queryByTitle('Widget preview')).toBeNull()
+
+    fireEvent.click(screen.getByText('Hi there'))
+    expect(screen.getByTitle('Widget preview')).toBeTruthy()
+    expect(screen.queryByText('Hi there')).toBeNull()
+  })
+
+  it('places the greeting bubble on the same side as the launcher', () => {
+    render(<WidgetPreview position="bottom-left" greeting="Hello" />)
+
+    fireEvent.click(screen.getByRole('button', { name: /feedback widget/i }))
+    expect(screen.getByText('Hello').parentElement?.className).toContain('left-6')
   })
 })

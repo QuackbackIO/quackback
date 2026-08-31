@@ -456,6 +456,8 @@ export const settings = pgTable('settings', {
   widgetInstalledLastSeenAt: timestamp('widget_installed_last_seen_at', { withTimezone: true }),
   /** Normalized external Origin hostname only (no path, query, port, or scheme). */
   widgetInstalledOriginHost: text('widget_installed_origin_host'),
+  /** Last SDK version reported on an install ping (`?sdk=` or instance-served sdk.js). */
+  widgetInstalledSdkVersion: text('widget_installed_sdk_version'),
   /** Feature flags for experimental features (JSON) */
   featureFlags: text('feature_flags'),
   /**

@@ -1,5 +1,9 @@
 import { randomBytes } from 'crypto'
 import { db, and, eq, lte, or, isNull, sql, settings } from '@/lib/server/db'
+import {
+  CURRENT_WIDGET_SDK_VERSION,
+  sdkVersionFromWidgetRequest,
+} from '@/lib/shared/widget/sdk-version'
 import { logger } from '@/lib/server/logger'
 import { absolutizeOffHostAssetUrl } from '@/lib/server/storage/asset-url'
 import { deleteObject, getPublicUrlOrNull } from '@/lib/server/storage/s3'
@@ -93,6 +97,7 @@ export async function observeExternalWidgetRequest(
   const org = await db.query.settings.findFirst({ columns: { id: true } })
   if (!org) return false
 
+  const sdkVersion = sdkVersionFromWidgetRequest(request, CURRENT_WIDGET_SDK_VERSION)
   const staleBefore = new Date(now.getTime() - WIDGET_OBSERVATION_THROTTLE_MS)
   const updated = await db
     .update(settings)
@@ -100,6 +105,7 @@ export async function observeExternalWidgetRequest(
       widgetInstalledFirstSeenAt: sql`coalesce(${settings.widgetInstalledFirstSeenAt}, now())`,
       widgetInstalledLastSeenAt: now,
       widgetInstalledOriginHost: hostname,
+      widgetInstalledSdkVersion: sdkVersion,
     })
     .where(
       and(
@@ -107,7 +113,10 @@ export async function observeExternalWidgetRequest(
         or(
           isNull(settings.widgetInstalledFirstSeenAt),
           isNull(settings.widgetInstalledLastSeenAt),
-          lte(settings.widgetInstalledLastSeenAt, staleBefore)
+          lte(settings.widgetInstalledLastSeenAt, staleBefore),
+          // A newly reported (or newly missing) version is recorded immediately
+          // so the admin "SDK update" hint does not wait out the 15-minute throttle.
+          sql`${settings.widgetInstalledSdkVersion} is distinct from ${sdkVersion}`
         )
       )
     )
