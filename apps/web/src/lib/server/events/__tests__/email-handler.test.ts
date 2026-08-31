@@ -26,6 +26,13 @@ vi.mock('@/lib/server/domains/channel-accounts/outbound-identity', () => ({
   permittedSendingIdentity: (from: string | null) => permittedSendingIdentity(from),
 }))
 
+const { emailBudgetAvailable } = vi.hoisted(() => ({
+  emailBudgetAvailable: vi.fn(async () => true),
+}))
+vi.mock('@/lib/server/domains/settings/tier-enforce', () => ({
+  emailBudgetAvailable: () => emailBudgetAvailable(),
+}))
+
 // Threading helpers are pure but read env-derived domains; force a known domain
 // so the created-root Message-ID assertion is deterministic.
 vi.stubEnv('EMAIL_FROM', 'Support <support@acme.test>')
@@ -97,6 +104,11 @@ const baseConfig = {
 } satisfies EmailConfig
 
 describe('emailHook', () => {
+  beforeEach(() => {
+    emailBudgetAvailable.mockReset()
+    emailBudgetAvailable.mockResolvedValue(true)
+  })
+
   describe('when email is configured (sent: true)', () => {
     it('sends status change email and returns success', async () => {
       mockStatusChangeEmail.mockResolvedValue({ sent: true })
@@ -171,6 +183,40 @@ describe('emailHook', () => {
           contentHtml: '<p>Intro</p><p><img src="https://example.com/x.png" alt="Shot" /></p>',
         })
       )
+    })
+
+    it('skips changelog mail when the monthly broadcast budget is exhausted', async () => {
+      mockChangelogPublishedEmail.mockClear()
+      emailBudgetAvailable.mockResolvedValueOnce(false)
+      const changelogPublishedEvent = {
+        id: 'evt-test',
+        type: 'changelog.published',
+        timestamp: new Date().toISOString(),
+        actor: { type: 'user', displayName: 'Test User' },
+      } as EventData
+
+      const result = await emailHook.run(changelogPublishedEvent, baseTarget, {
+        workspaceName: 'TestWorkspace',
+        changelogTitle: 'May Release',
+        changelogUrl: 'https://example.com/changelog/changelog_01',
+      })
+
+      expect(result).toEqual({ success: true })
+      expect(mockChangelogPublishedEmail).not.toHaveBeenCalled()
+    })
+
+    it('still sends feedback status mail when the broadcast budget is exhausted', async () => {
+      emailBudgetAvailable.mockResolvedValueOnce(false)
+      mockStatusChangeEmail.mockResolvedValue({ sent: true })
+
+      const result = await emailHook.run(statusChangedEvent, baseTarget, {
+        ...baseConfig,
+        previousStatus: 'open',
+        newStatus: 'in_progress',
+      })
+
+      expect(result).toEqual({ success: true })
+      expect(mockStatusChangeEmail).toHaveBeenCalled()
     })
   })
 

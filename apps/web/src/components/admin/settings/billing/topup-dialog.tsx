@@ -29,7 +29,7 @@ export function TopUpDialog(props: {
   const title = props.meter === 'email' ? 'Top up emails' : 'Top up AI usage'
   const unitHint =
     props.meter === 'email' && packUnits
-      ? `${packUnits.toLocaleString()} emails per pack`
+      ? `${packUnits.toLocaleString()} changelog and status-page emails per pack`
       : 'Credit carries over until it is used.'
 
   return (

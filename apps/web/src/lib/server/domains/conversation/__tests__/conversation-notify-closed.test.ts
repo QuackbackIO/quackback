@@ -222,7 +222,7 @@ describe('notifyConversationClosed', () => {
     ).toBeUndefined()
   })
 
-  it('skips send when the monthly email budget is exhausted', async () => {
+  it('still sends close mail when the monthly broadcast budget is exhausted', async () => {
     const { TierLimitError } = await import('@/lib/server/errors/tier-limit-error')
     enforceEmailBudget.mockRejectedValueOnce(
       new TierLimitError({ limit: 'emailsPerMonth', message: 'Email budget exhausted' })
@@ -246,6 +246,6 @@ describe('notifyConversationClosed', () => {
       variant: 'closed',
     })
 
-    expect(sendConversationClosedEmail).not.toHaveBeenCalled()
+    expect(sendConversationClosedEmail).toHaveBeenCalled()
   })
 })
