@@ -6,6 +6,7 @@ import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 import { execSync } from 'child_process'
 import { readFileSync } from 'fs'
+import { CLIENT_PROTECTED_SPECIFIERS } from './src/lib/server/policy/client-import-protection'
 
 /**
  * Replace the server-only structured logger with a no-op stub in the CLIENT
@@ -167,17 +168,7 @@ export default defineConfig(({ mode }) => {
         },
         importProtection: {
           behavior: { dev: 'error', build: 'error' },
-          client: {
-            specifiers: [
-              'postgres',
-              '@quackback/db',
-              '@quackback/db/client',
-              '@quackback/db/schema',
-              'openai',
-              '@quackback/logger',
-              'pino',
-            ],
-          },
+          client: { specifiers: [...CLIENT_PROTECTED_SPECIFIERS] },
         },
       }),
       viteReact(),

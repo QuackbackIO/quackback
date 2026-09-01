@@ -28,26 +28,73 @@ import * as ts from '@typescript/typescript6'
 import { readFileSync } from 'node:fs'
 import { join, relative, posix } from 'node:path'
 import { walkSourceFiles } from '../source-files'
+import { isClientProtectedSpecifier } from '../client-import-protection'
 
 const SRC_ROOT = join(__dirname, '../../../..') // apps/web/src
 const FUNCTIONS_ROOT = join(SRC_ROOT, 'lib/server/functions')
+
+/** `src/`-relative module path (no extension) of a `@/` or relative specifier; null for bare packages. */
+function resolveLocalSpecifier(spec: string, relPath: string): string | null {
+  let path: string
+  if (spec.startsWith('@/')) path = spec.slice(2)
+  else if (spec.startsWith('.')) path = posix.join(posix.dirname(relPath.replace(/\\/g, '/')), spec)
+  else return null
+  return path.replace(/\.tsx?$/, '')
+}
 
 /**
  * Modules that must never be reachable from the client half of a
  * server-function file. `relPath` is the importing file relative to `src/`,
  * so relative specifiers (`'../storage/s3'` from `lib/server/functions/…`)
  * are classified by where they land, not by how they are spelled.
+ *
+ * Under `lib/server/functions/` only modules that themselves declare server
+ * functions are client-safe: they get their own client half (and their own run
+ * of this guard). Helper-only siblings such as `auth-helpers.ts` are plain
+ * server modules — importing them from the browser drags in `@/lib/server/db`.
  */
-export function isServerOnlySpecifier(spec: string, relPath: string): boolean {
-  let path: string
-  if (spec.startsWith('@/')) path = spec.slice(2)
-  else if (spec.startsWith('.')) path = posix.join(posix.dirname(relPath.replace(/\\/g, '/')), spec)
-  else return spec === '@quackback/db' || spec.startsWith('@quackback/db/')
-  if (path.startsWith('lib/server/functions/')) return false
+export function isServerOnlySpecifier(
+  spec: string,
+  relPath: string,
+  isServerFnModule: (path: string) => boolean
+): boolean {
+  const path = resolveLocalSpecifier(spec, relPath)
+  if (path === null) return isClientProtectedSpecifier(spec)
+  if (path.startsWith('lib/server/functions/')) return !isServerFnModule(path)
   // vite.config.ts swaps these for a no-op stub in the client environment
   // (`stubServerLoggerInClient`), so module-scope `logger.child(...)` is fine.
-  if (/^lib\/server\/(logger|log-context)(\.ts)?$/.test(path)) return false
+  if (path === 'lib/server/logger' || path === 'lib/server/log-context') return false
   return path.startsWith('lib/server/')
+}
+
+const START_PACKAGES = new Set(['@tanstack/react-start', '@tanstack/react-start/server'])
+
+/** Local names bound to each Start builder, so `import { createServerFn as fn }` is seen through. */
+interface StartBuilders {
+  serverFn: Set<string>
+  middleware: Set<string>
+  serverOnlyFn: Set<string>
+}
+
+function collectStartBuilders(sf: ts.SourceFile): StartBuilders {
+  const builders: StartBuilders = {
+    serverFn: new Set(),
+    middleware: new Set(),
+    serverOnlyFn: new Set(),
+  }
+  for (const stmt of sf.statements) {
+    if (!ts.isImportDeclaration(stmt) || !ts.isStringLiteral(stmt.moduleSpecifier)) continue
+    if (!START_PACKAGES.has(stmt.moduleSpecifier.text)) continue
+    const bindings = stmt.importClause?.namedBindings
+    if (!bindings || !ts.isNamedImports(bindings)) continue
+    for (const el of bindings.elements) {
+      const imported = (el.propertyName ?? el.name).text
+      if (imported === 'createServerFn') builders.serverFn.add(el.name.text)
+      else if (imported === 'createMiddleware') builders.middleware.add(el.name.text)
+      else if (imported === 'createServerOnlyFn') builders.serverOnlyFn.add(el.name.text)
+    }
+  }
+  return builders
 }
 
 /** The identifier a builder chain like `createServerFn(...).validator(...).handler(...)` starts from. */
@@ -67,14 +114,41 @@ function chainRootName(callee: ts.Expression): string | null {
  * `createMiddleware()` only `.server(...)` is stripped (`.client(...)` runs in
  * the browser). `createServerOnlyFn(...)` drops its argument outright.
  */
-function isServerStrippedCall(node: ts.CallExpression): boolean {
+function isServerStrippedCall(node: ts.CallExpression, builders: StartBuilders): boolean {
   const callee = node.expression
-  if (ts.isIdentifier(callee)) return callee.text === 'createServerOnlyFn'
+  if (ts.isIdentifier(callee)) return builders.serverOnlyFn.has(callee.text)
   if (!ts.isPropertyAccessExpression(callee)) return false
   const root = chainRootName(callee)
-  if (root === 'createServerFn') return true
-  if (root === 'createMiddleware') return callee.name.text === 'server'
+  if (root === null) return false
+  if (builders.serverFn.has(root)) return true
+  if (builders.middleware.has(root)) return callee.name.text === 'server'
   return false
+}
+
+/**
+ * Whether the module declares server functions, i.e. gets a client half of RPC
+ * stubs that browser code imports. Server-only helper modules that also live
+ * under `functions/` (e.g. `origin-transfer.ts`, reached solely through
+ * `createServerOnlyFn`) never do, and are out of scope.
+ */
+export function declaresServerFunctions(sf: ts.SourceFile): boolean {
+  const { serverFn } = collectStartBuilders(sf)
+  if (serverFn.size === 0) return false
+  let found = false
+  const visit = (n: ts.Node): void => {
+    if (found) return
+    if (
+      ts.isCallExpression(n) &&
+      ts.isIdentifier(n.expression) &&
+      serverFn.has(n.expression.text)
+    ) {
+      found = true
+      return
+    }
+    ts.forEachChild(n, visit)
+  }
+  visit(sf)
+  return found
 }
 
 /** Interfaces, type aliases and `declare` blocks are erased; they cannot reach anything. */
@@ -119,11 +193,11 @@ function declaredNames(node: ts.Node): string[] {
  * Identifiers mentioned in `node` at runtime, skipping anything the compiler
  * strips from the client half and anything TypeScript erases (type positions).
  */
-function identifiersOutsideStrippedScopes(node: ts.Node): Set<string> {
+function identifiersOutsideStrippedScopes(node: ts.Node, builders: StartBuilders): Set<string> {
   const names = new Set<string>()
   const visit = (n: ts.Node): void => {
     if (ts.isTypeNode(n)) return
-    if (ts.isCallExpression(n) && isServerStrippedCall(n)) {
+    if (ts.isCallExpression(n) && isServerStrippedCall(n, builders)) {
       // The callee chain (`createServerFn().handler`) stays; the arguments go.
       visit(n.expression)
       return
@@ -135,17 +209,22 @@ function identifiersOutsideStrippedScopes(node: ts.Node): Set<string> {
   return names
 }
 
-function serverOnlyDynamicImports(sf: ts.SourceFile, root: ts.Node): ts.CallExpression[] {
-  const relPath = sf.fileName
+interface Analysis {
+  sf: ts.SourceFile
+  builders: StartBuilders
+  isServerOnly: (spec: string) => boolean
+}
+
+function serverOnlyDynamicImports(a: Analysis, root: ts.Node): ts.CallExpression[] {
   const found: ts.CallExpression[] = []
   const visit = (n: ts.Node): void => {
-    if (ts.isCallExpression(n) && isServerStrippedCall(n)) return
+    if (ts.isCallExpression(n) && isServerStrippedCall(n, a.builders)) return
     if (
       ts.isCallExpression(n) &&
       n.expression.kind === ts.SyntaxKind.ImportKeyword &&
       n.arguments[0] &&
       ts.isStringLiteral(n.arguments[0]) &&
-      isServerOnlySpecifier(n.arguments[0].text, relPath)
+      a.isServerOnly(n.arguments[0].text)
     ) {
       found.push(n)
     }
@@ -155,8 +234,17 @@ function serverOnlyDynamicImports(sf: ts.SourceFile, root: ts.Node): ts.CallExpr
   return found
 }
 
-export function findLeakedServerImports(relPath: string, text: string): LeakedImport[] {
+export function findLeakedServerImports(
+  relPath: string,
+  text: string,
+  isServerFnModule: (path: string) => boolean = () => false
+): LeakedImport[] {
   const sf = ts.createSourceFile(relPath, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+  const a: Analysis = {
+    sf,
+    builders: collectStartBuilders(sf),
+    isServerOnly: (spec) => isServerOnlySpecifier(spec, relPath, isServerFnModule),
+  }
 
   const byName = new Map<string, ts.Statement>()
   const roots: ts.Statement[] = []
@@ -168,7 +256,7 @@ export function findLeakedServerImports(relPath: string, text: string): LeakedIm
     if (ts.isImportDeclaration(stmt)) {
       if (!ts.isStringLiteral(stmt.moduleSpecifier)) continue
       const spec = stmt.moduleSpecifier.text
-      if (!isServerOnlySpecifier(spec, relPath)) continue
+      if (!a.isServerOnly(spec)) continue
       const clause = stmt.importClause
       // `import type` and side-effect imports leave no runtime binding to reach;
       // a bare `import '@/lib/server/x'` always runs, so it is a root.
@@ -197,7 +285,7 @@ export function findLeakedServerImports(relPath: string, text: string): LeakedIm
     if (ts.isExportDeclaration(stmt)) {
       if (stmt.moduleSpecifier && ts.isStringLiteral(stmt.moduleSpecifier)) {
         // `export … from '@/lib/server/x'` re-exports the server module itself.
-        if (!stmt.isTypeOnly && isServerOnlySpecifier(stmt.moduleSpecifier.text, relPath)) {
+        if (!stmt.isTypeOnly && a.isServerOnly(stmt.moduleSpecifier.text)) {
           roots.push(stmt)
           serverOnlyStaticImports.set(stmt, stmt.moduleSpecifier.text)
         }
@@ -235,7 +323,7 @@ export function findLeakedServerImports(relPath: string, text: string): LeakedIm
     const stmt = queue.pop()!
     if (reachable.has(stmt)) continue
     reachable.add(stmt)
-    for (const name of identifiersOutsideStrippedScopes(stmt)) {
+    for (const name of identifiersOutsideStrippedScopes(stmt, a.builders)) {
       const dep = byName.get(name)
       if (dep && !reachable.has(dep)) queue.push(dep)
     }
@@ -250,7 +338,7 @@ export function findLeakedServerImports(relPath: string, text: string): LeakedIm
       leaks.push({ file: relPath, line: line + 1, specifier: staticSpec })
       continue
     }
-    for (const call of serverOnlyDynamicImports(sf, stmt)) {
+    for (const call of serverOnlyDynamicImports(a, stmt)) {
       const { line } = sf.getLineAndCharacterOfPosition(call.getStart(sf))
       leaks.push({
         file: relPath,
@@ -262,7 +350,60 @@ export function findLeakedServerImports(relPath: string, text: string): LeakedIm
   return leaks
 }
 
+const START_IMPORT = `import { createServerFn, createMiddleware, createServerOnlyFn } from '@tanstack/react-start'\n`
+
+/** Samples assume the canonical builder imports; prepend them (one line, so line numbers shift by 1). */
+function leaks(file: string, src: string, isServerFnModule?: (path: string) => boolean) {
+  return findLeakedServerImports(file, START_IMPORT + src, isServerFnModule)
+}
+
 describe('findLeakedServerImports', () => {
+  it('recognises builders by their import binding, including aliases', () => {
+    const aliased = `
+      import { createServerFn as serverFn, createServerOnlyFn as onServer } from '@tanstack/react-start'
+      export const fn = serverFn().handler(async () => import('@/lib/server/db'))
+      export const only = onServer(async () => import('@/lib/server/auth'))
+    `
+    expect(findLeakedServerImports('x.ts', aliased)).toEqual([])
+    const sf = ts.createSourceFile('x.ts', aliased, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+    expect(declaresServerFunctions(sf)).toBe(true)
+
+    // A same-named local function is not the compiler's builder: nothing is stripped.
+    const homonym = `
+      const createServerFn = () => ({ handler: (f: unknown) => f })
+      export const fn = createServerFn().handler(async () => import('@/lib/server/db'))
+    `
+    expect(findLeakedServerImports('x.ts', homonym)).toHaveLength(1)
+    expect(
+      declaresServerFunctions(
+        ts.createSourceFile('x.ts', homonym, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+      )
+    ).toBe(false)
+  })
+
+  it('flags the bare packages vite.config.ts import-protects', () => {
+    const src = `
+      import postgres from 'postgres'
+      export async function ai() {
+        const { default: OpenAI } = await import('openai')
+        const { default: pino } = await import('pino/file')
+        return [postgres, OpenAI, pino]
+      }
+    `
+    expect(leaks('x.ts', src).map((l) => l.specifier)).toEqual(['postgres', 'openai', 'pino/file'])
+  })
+
+  it('only exempts functions/ siblings that declare server functions themselves', () => {
+    const file = 'lib/server/functions/posts.ts'
+    const src = `
+      import { requireAuth } from './auth-helpers'
+      import { fetchBoardsFn } from '@/lib/server/functions/boards'
+      export const check = () => [requireAuth, fetchBoardsFn]
+    `
+    const isServerFnModule = (p: string) => p === 'lib/server/functions/boards'
+    expect(leaks(file, src, isServerFnModule).map((l) => l.specifier)).toEqual(['./auth-helpers'])
+  })
+
   it('accepts a server import inside .handler()', () => {
     const src = `
       export const fn = createServerFn().handler(async () => {
@@ -270,7 +411,7 @@ describe('findLeakedServerImports', () => {
         return db
       })
     `
-    expect(findLeakedServerImports('x.ts', src)).toEqual([])
+    expect(leaks('x.ts', src)).toEqual([])
   })
 
   it('accepts server imports inside createMiddleware().server() and createServerOnlyFn()', () => {
@@ -281,7 +422,7 @@ describe('findLeakedServerImports', () => {
       })
       export const only = createServerOnlyFn(async () => import('@/lib/server/db'))
     `
-    expect(findLeakedServerImports('x.ts', src)).toEqual([])
+    expect(leaks('x.ts', src)).toEqual([])
   })
 
   it('treats the whole createServerFn chain as stripped: validators and middleware go too', () => {
@@ -294,7 +435,7 @@ describe('findLeakedServerImports', () => {
         .validator(z.object({ outcome: outcomeSchema }))
         .handler(async ({ data }) => data)
     `
-    expect(findLeakedServerImports('x.ts', src)).toEqual([])
+    expect(leaks('x.ts', src)).toEqual([])
   })
 
   it('keeps createMiddleware().client() and ignores type positions', () => {
@@ -302,14 +443,14 @@ describe('findLeakedServerImports', () => {
       import { db } from '@/lib/server/db'
       export const mw = createMiddleware().client(async ({ next }) => { db; return next() })
     `
-    expect(findLeakedServerImports('x.ts', client)).toHaveLength(1)
+    expect(leaks('x.ts', client)).toHaveLength(1)
 
     const typesOnly = `
       import { actorFromAuth } from '@/lib/server/audit/log'
       export interface Input { actor: ReturnType<typeof actorFromAuth> }
       export function shape(x: ReturnType<typeof actorFromAuth>): string { return String(x) }
     `
-    expect(findLeakedServerImports('x.ts', typesOnly)).toEqual([])
+    expect(leaks('x.ts', typesOnly)).toEqual([])
   })
 
   it('accepts a helper only handlers reach: the compiler drops it from the client half', () => {
@@ -320,7 +461,7 @@ describe('findLeakedServerImports', () => {
       }
       export const fn = createServerFn().handler(() => loadCounts())
     `
-    expect(findLeakedServerImports('x.ts', src)).toEqual([])
+    expect(leaks('x.ts', src)).toEqual([])
   })
 
   it('flags an exported helper with a server import', () => {
@@ -330,9 +471,7 @@ describe('findLeakedServerImports', () => {
         return db
       }
     `
-    expect(findLeakedServerImports('x.ts', src)).toEqual([
-      { file: 'x.ts', line: 3, specifier: '@/lib/server/db' },
-    ])
+    expect(leaks('x.ts', src)).toEqual([{ file: 'x.ts', line: 4, specifier: '@/lib/server/db' }])
   })
 
   it('follows references from exports into private helpers', () => {
@@ -345,9 +484,7 @@ describe('findLeakedServerImports', () => {
         return loadCounts()
       }
     `
-    expect(findLeakedServerImports('x.ts', src)).toEqual([
-      { file: 'x.ts', line: 3, specifier: '@/lib/server/db' },
-    ])
+    expect(leaks('x.ts', src)).toEqual([{ file: 'x.ts', line: 4, specifier: '@/lib/server/db' }])
   })
 
   it('honours export lists and treats bare top-level statements as roots', () => {
@@ -355,13 +492,13 @@ describe('findLeakedServerImports', () => {
       async function viaList() { await import('@/lib/server/db') }
       export { viaList }
     `
-    expect(findLeakedServerImports('x.ts', listed)).toHaveLength(1)
+    expect(leaks('x.ts', listed)).toHaveLength(1)
 
     const sideEffect = `
       async function warm() { await import('@/lib/server/cache') }
       void warm()
     `
-    expect(findLeakedServerImports('x.ts', sideEffect)).toHaveLength(1)
+    expect(leaks('x.ts', sideEffect)).toHaveLength(1)
   })
 
   it('flags a static server import that an export still references', () => {
@@ -371,9 +508,7 @@ describe('findLeakedServerImports', () => {
         return db.select()
       }
     `
-    expect(findLeakedServerImports('x.ts', src)).toEqual([
-      { file: 'x.ts', line: 2, specifier: '@/lib/server/db' },
-    ])
+    expect(leaks('x.ts', src)).toEqual([{ file: 'x.ts', line: 3, specifier: '@/lib/server/db' }])
   })
 
   it('accepts a static server import used only inside handlers, and type-only imports', () => {
@@ -384,7 +519,7 @@ describe('findLeakedServerImports', () => {
       export const fn = createServerFn().handler(async () => db.select())
       export type Out = Row
     `
-    expect(findLeakedServerImports('x.ts', src)).toEqual([])
+    expect(leaks('x.ts', src)).toEqual([])
   })
 
   it('flags namespace/default bindings, side-effect imports and re-exports of server modules', () => {
@@ -392,16 +527,16 @@ describe('findLeakedServerImports', () => {
       import * as auth from '@/lib/server/auth'
       export const check = () => auth.verify()
     `
-    expect(findLeakedServerImports('x.ts', ns)).toHaveLength(1)
+    expect(leaks('x.ts', ns)).toHaveLength(1)
 
     const sideEffect = `import '@/lib/server/db'`
-    expect(findLeakedServerImports('x.ts', sideEffect)).toHaveLength(1)
+    expect(leaks('x.ts', sideEffect)).toHaveLength(1)
 
     const reexport = `export { db } from '@/lib/server/db'`
-    expect(findLeakedServerImports('x.ts', reexport)).toHaveLength(1)
+    expect(leaks('x.ts', reexport)).toHaveLength(1)
 
     const typeReexport = `export type { Database } from '@/lib/server/db'`
-    expect(findLeakedServerImports('x.ts', typeReexport)).toEqual([])
+    expect(leaks('x.ts', typeReexport)).toEqual([])
   })
 
   it('classifies relative specifiers by where they resolve', () => {
@@ -413,19 +548,20 @@ describe('findLeakedServerImports', () => {
         return presign()
       }
     `
-    expect(findLeakedServerImports(file, leaky).map((l) => l.specifier)).toEqual([
+    expect(leaks(file, leaky).map((l) => l.specifier)).toEqual([
       '../storage/s3',
       '../integrations/save',
     ])
 
     const fine = `
-      import { requireAuth } from './auth-helpers'
+      import { fetchBoardsFn } from './boards'
       import { schema } from '../../shared/schemas/boards'
       import { logger } from '@/lib/server/logger'
       const log = logger.child({ component: 'uploads' })
-      export const check = () => [requireAuth, schema, log]
+      export const check = () => [fetchBoardsFn, schema, log]
     `
-    expect(findLeakedServerImports(file, fine)).toEqual([])
+    const isServerFnModule = (p: string) => p === 'lib/server/functions/boards'
+    expect(leaks(file, fine, isServerFnModule)).toEqual([])
   })
 
   it('ignores imports of other server-function modules and of shared code', () => {
@@ -435,27 +571,27 @@ describe('findLeakedServerImports', () => {
         await import('@/lib/shared/permissions')
       }
     `
-    expect(findLeakedServerImports('x.ts', src)).toEqual([])
+    const isServerFnModule = (p: string) => p === 'lib/server/functions/other'
+    expect(leaks('x.ts', src, isServerFnModule)).toEqual([])
   })
 })
 
-/**
- * Only modules that declare server functions are imported by the client for
- * their RPC stubs. A few server-only helper modules also live under
- * `functions/` (e.g. `origin-transfer.ts`, reached solely through
- * `createServerOnlyFn`) and never get a client half, so they are out of scope.
- */
-function declaresServerFunctions(text: string): boolean {
-  return /\bcreateServerFn\s*\(/.test(text)
-}
-
 describe('lib/server/functions client half', () => {
   it('never imports server-only modules outside a server-stripped scope', () => {
-    const leaks = walkSourceFiles(FUNCTIONS_ROOT).flatMap((file) => {
+    const modules = walkSourceFiles(FUNCTIONS_ROOT).map((file) => {
+      const relPath = relative(SRC_ROOT, file).replace(/\\/g, '/')
       const text = readFileSync(file, 'utf8')
-      if (!declaresServerFunctions(text)) return []
-      return findLeakedServerImports(relative(SRC_ROOT, file), text)
+      const sf = ts.createSourceFile(relPath, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+      return { relPath, text, isServerFnModule: declaresServerFunctions(sf) }
     })
+    const serverFnModules = new Set(
+      modules.filter((m) => m.isServerFnModule).map((m) => m.relPath.replace(/\.tsx?$/, ''))
+    )
+    expect(serverFnModules.size).toBeGreaterThan(20)
+
+    const leaks = modules
+      .filter((m) => m.isServerFnModule)
+      .flatMap((m) => findLeakedServerImports(m.relPath, m.text, (p) => serverFnModules.has(p)))
     const report = leaks.map((l) => `  ${l.file}:${l.line}  import('${l.specifier}')`).join('\n')
     expect(
       leaks,
