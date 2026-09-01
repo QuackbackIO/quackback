@@ -41,10 +41,14 @@ vi.mock('@tanstack/ai-openai/compatible', () => ({
   openaiCompatibleText: (...args: unknown[]) => mockAdapterFactory(...args),
 }))
 
-vi.mock('@/lib/server/domains/ai/config', () => ({
-  stripCodeFences: (s: string) => s,
-  structuredOutputProviderOptions: () => ({}),
-}))
+vi.mock('@/lib/server/domains/ai/config', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/server/domains/ai/config')>()
+  return {
+    ...actual,
+    stripCodeFences: (s: string) => s,
+    structuredOutputProviderOptions: () => ({}),
+  }
+})
 
 const mockWithUsageLogging = vi.fn()
 vi.mock('@/lib/server/domains/ai/usage-log', () => ({

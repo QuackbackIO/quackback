@@ -30,7 +30,11 @@ import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
 import { jsonrepair } from 'jsonrepair'
 import type { z } from 'zod'
 import { config } from '@/lib/server/config'
-import { stripCodeFences, structuredOutputProviderOptions } from '@/lib/server/domains/ai/config'
+import {
+  stripCodeFences,
+  structuredOutputProviderOptions,
+  reasoningExcludeProviderOptions,
+} from '@/lib/server/domains/ai/config'
 import { withRetry } from '@/lib/server/domains/ai/retry'
 import { withUsageLogging, type AiAnswerKind } from '@/lib/server/domains/ai/usage-log'
 import { isWireForwardable } from './agui'
@@ -262,14 +266,10 @@ async function streamOnce<TContext>(
     // advertise silently shrinks the pool to none and the turn dies with no
     // output.
     ...structuredOutputProviderOptions(),
-    // Tool-less structured streams (Ask AI) must not emit reasoning tokens on
-    // the content channel. DeepSeek v4 Flash via OpenRouter otherwise spends
-    // the first seconds on thinking/whitespace, which commits the SSE on a
-    // single space and then looks idle to the edge proxy. Quinn's tool loop
-    // keeps reasoning so it can round-trip reasoning_details across calls.
-    ...(config.openaiBaseUrl?.includes('openrouter.ai') && !opts.tools
-      ? { reasoning: { exclude: true } }
-      : {}),
+    // Tool-less only: Quinn's tool loop still needs reasoning_details on the
+    // wire. AI_REASONING_EXCLUDE is opt-in because require_parameters 404s
+    // models whose providers do not advertise `reasoning`.
+    ...(opts.tools ? {} : reasoningExcludeProviderOptions()),
   }
 
   const tools = opts.tools
