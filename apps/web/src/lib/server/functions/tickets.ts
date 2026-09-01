@@ -805,11 +805,11 @@ export const exportTicketTranscriptFn = createServerFn({ method: 'GET' })
   })
 
 // ---------------------------------------------------------------------------
-// Requester-facing — the requester's own-ticket create (the widget New-Ticket
-// form) plus converged Messages surface support reads (the ticket header card
-// on the shared thread) and the watch bell below. No `ticket.*` permission:
-// everything requester-reachable gates on ownership in requester.service.
-// Replies ride the conversation send path.
+// Requester-facing — the requester's own-ticket create (workflow
+// send_ticket_form block) plus converged Messages surface support reads (the
+// ticket header card on the shared thread) and the watch bell below. No
+// `ticket.*` permission: everything requester-reachable gates on ownership in
+// requester.service. Replies ride the conversation send path.
 // ---------------------------------------------------------------------------
 
 /**
@@ -1044,7 +1044,7 @@ const createMyTicketSchema = z.object({
 })
 
 /**
- * The requester opens their own customer ticket (the widget New-Ticket form).
+ * The requester opens their own customer ticket (workflow send_ticket_form).
  * Flag-gated like the other requester fns. Two identity tiers: a verified
  * principal files directly; an anonymous principal must already carry a
  * captured contact email or supply a plausible one here, captured
