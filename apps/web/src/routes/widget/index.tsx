@@ -17,8 +17,7 @@ import {
   homeEnabled,
   contentSurfaceCount,
   isExpandedView,
-  tabsForVisitor,
-  visibleTabs,
+  visibleTabsForVisitor,
 } from '@/components/widget/widget-nav'
 import { WidgetHome } from '@/components/widget/widget-home'
 import { WidgetOverview } from '@/components/widget/widget-overview'
@@ -395,7 +394,6 @@ function WidgetPage() {
 
   const { c: resumeConversationId } = Route.useSearch()
   const { hasTickets } = useTicketStageBadge(!!tabs.tickets)
-  const visitorTabs = tabsForVisitor(tabs, hasTickets)
   const threadTab: WidgetTab | null = tabs.messages ? 'messages' : tabs.tickets ? 'tickets' : null
   const initialTab = resolveInitialTab(tabs)
   // A `?c=` deep link opens the thread. Messages is preferred; Tickets still
@@ -482,17 +480,23 @@ function WidgetPage() {
     []
   )
 
-  // Once tickets load (or vanish), leave a Tickets view that is no longer in
-  // the bar rather than showing an empty Tickets tab.
+  // Once this visitor's tickets are KNOWN to be none (or to have vanished),
+  // leave a tab that is no longer in the bar — the empty Tickets view, or Home
+  // when hiding Tickets drops the workspace to a single surface. Never acts on
+  // the pending state: while identity or the list is still loading, the bar
+  // withholds only the Tickets slot (see visibleTabsForVisitor), and moving off
+  // the `resolveInitialTab` landing on that provisional shape would strand a
+  // ticket-holding visitor on the fallback tab after the answer arrives.
   useEffect(() => {
-    const shown = visibleTabs(visitorTabs)
+    if (hasTickets === null) return
     if (view === 'messenger') return
+    const shown = visibleTabsForVisitor(tabs, hasTickets)
     if (shown.length === 0) return
     if (shown.includes(activeTab)) return
     const next = shown[0]
     setActiveTab(next)
     setView(next === 'home' ? 'overview' : next)
-  }, [visitorTabs, activeTab, view])
+  }, [tabs, hasTickets, activeTab, view])
 
   // Long-form content reads better wide: ask the host SDK to grow the panel
   // while an article or changelog entry is open, and shrink it back after.

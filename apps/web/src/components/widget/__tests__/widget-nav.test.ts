@@ -7,6 +7,7 @@ import {
   resolveInitialTab,
   resolveInitialView,
   tabsForVisitor,
+  visibleTabsForVisitor,
 } from '../widget-nav'
 
 // Nav model: five independent content surfaces (messages, tickets, feedback,
@@ -99,6 +100,53 @@ describe('tabsForVisitor', () => {
   it('keeps the Tickets tab when the visitor has tickets', () => {
     expect(tabsForVisitor({ tickets: true }, true)).toEqual({ tickets: true })
     expect(visibleTabs(tabsForVisitor({ tickets: true }, true))).toEqual(['tickets'])
+  })
+})
+
+describe('visibleTabsForVisitor', () => {
+  // The email-first Messages+Tickets workspace: two admin surfaces, so Home is
+  // on — but whether THIS visitor sees Tickets (and therefore Home) depends on
+  // an async answer. The bar must not collapse to Messages-only while waiting.
+  const emailFirst = { messages: true, tickets: true }
+
+  it('withholds only the Tickets slot while the answer is pending', () => {
+    expect(visibleTabsForVisitor(emailFirst, null)).toEqual(['home', 'messages'])
+    expect(visibleTabsForVisitor({ feedback: true, help: true, tickets: true }, null)).toEqual([
+      'home',
+      'feedback',
+      'help',
+    ])
+  })
+
+  it('applies the visitor projection once known', () => {
+    expect(visibleTabsForVisitor(emailFirst, true)).toEqual(['home', 'messages', 'tickets'])
+    expect(visibleTabsForVisitor(emailFirst, false)).toEqual(['messages'])
+  })
+
+  it('keeps the Home landing in the pending bar', () => {
+    // Home is sized off the admin config, so the resolveInitialTab landing is
+    // still in the bar while tickets are pending — nothing to reroute off.
+    for (const tabs of [
+      emailFirst,
+      { tickets: true, feedback: true },
+      { messages: true, tickets: true, feedback: true, help: true, changelog: true },
+    ]) {
+      expect(resolveInitialTab(tabs)).toBe('home')
+      expect(visibleTabsForVisitor(tabs, null)).toContain('home')
+    }
+  })
+
+  it('is empty for a tickets-only workspace while pending (no bar either way)', () => {
+    expect(visibleTabsForVisitor({ tickets: true }, null)).toEqual([])
+    expect(visibleTabsForVisitor({ tickets: true }, true)).toEqual(['tickets'])
+  })
+
+  it('ignores the tri-state when the admin has Tickets off', () => {
+    expect(visibleTabsForVisitor({ messages: true, feedback: true }, null)).toEqual([
+      'home',
+      'messages',
+      'feedback',
+    ])
   })
 })
 
