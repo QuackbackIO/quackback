@@ -24,7 +24,7 @@ import { useMessengerUnread } from './use-messenger-unread'
 import { useChangelogUnread } from './use-changelog-unread'
 import { useTicketStageBadge } from './use-ticket-stage-badge'
 
-import { type WidgetTab, type EnabledTabs, visibleTabs } from './widget-nav'
+import { type WidgetTab, type EnabledTabs, visibleTabs, tabsForVisitor } from './widget-nav'
 export type { WidgetTab }
 
 const TAB_CONFIG: {
@@ -131,7 +131,13 @@ export function WidgetShell({
   children,
 }: WidgetShellProps) {
   const intl = useIntl()
-  const tabsToShow = visibleTabs(enabledTabs)
+  // Tickets whose stage moved since the requester last opened the Tickets tab
+  // badge the launcher (and the tab icon) until they do. Also tells us whether
+  // this visitor has any tickets — the bar never shows an empty Tickets tab.
+  const { unread: ticketStageUnread, hasTickets } = useTicketStageBadge(
+    enabledTabs.tickets ?? false
+  )
+  const tabsToShow = visibleTabs(tabsForVisitor(enabledTabs, hasTickets))
   const showTabBar = tabsToShow.length > 1 && !hideTabBar
   // Total unread across all the visitor's conversations, for the Messages tab
   // badge (only fetched when that tab is actually shown).
@@ -139,9 +145,6 @@ export function WidgetShell({
   // Newly published changelog entries badge the launcher until the visitor
   // opens the changelog surface (which advances their seen marker).
   const { unread: changelogUnread } = useChangelogUnread(enabledTabs.changelog ?? false)
-  // Tickets whose stage moved since the requester last opened the Tickets tab
-  // badge the launcher (and the tab icon) until they do.
-  const { unread: ticketStageUnread } = useTicketStageBadge(enabledTabs.tickets ?? false)
   // Mirror the combined total to the host so the floating launcher shows the
   // same badge while the widget is closed (the iframe keeps polling even when
   // hidden).

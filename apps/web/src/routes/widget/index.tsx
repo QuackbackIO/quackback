@@ -17,6 +17,8 @@ import {
   homeEnabled,
   contentSurfaceCount,
   isExpandedView,
+  tabsForVisitor,
+  visibleTabs,
 } from '@/components/widget/widget-nav'
 import { WidgetHome } from '@/components/widget/widget-home'
 import { WidgetOverview } from '@/components/widget/widget-overview'
@@ -41,6 +43,7 @@ import { ConversationPresenceBadge } from '@/components/shared/conversation/conv
 import { Avatar } from '@/components/ui/avatar'
 import { Spinner } from '@/components/shared/spinner'
 import { conversationSummaryKey } from '@/components/widget/use-messenger-summary'
+import { useTicketStageBadge } from '@/components/widget/use-ticket-stage-badge'
 
 // Secondary views load behind lazy() boundaries so the iframe's first paint
 // only needs the shell + Home/feedback — the detail views carry the
@@ -238,7 +241,8 @@ export const Route = createFileRoute('/widget/')({
         changelog: changelogTabEnabled,
         help: helpTabEnabled,
         // The persisted config names the messenger surface `messenger`; the
-        // widget speaks `messages`. Tickets is its own stored tab.
+        // widget speaks `messages`. Tickets is its own stored tab (hidden in
+        // the bar when this visitor has none).
         messages: messengerTabEnabled,
         tickets: settings?.publicWidgetConfig?.tabs?.tickets ?? false,
         // Admin opt-out for the aggregated Home tab (defaults to shown).
@@ -390,14 +394,17 @@ function WidgetPage() {
   })
 
   const { c: resumeConversationId } = Route.useSearch()
+  const { hasTickets } = useTicketStageBadge(!!tabs.tickets)
+  const visitorTabs = tabsForVisitor(tabs, hasTickets)
+  const threadTab: WidgetTab | null = tabs.messages ? 'messages' : tabs.tickets ? 'tickets' : null
   const initialTab = resolveInitialTab(tabs)
-  // A `?c=` deep link opens straight to Messenger (when Messenger is enabled); the widget
-  // then loads the visitor's active conversation from their session.
+  // A `?c=` deep link opens the thread. Messages is preferred; Tickets still
+  // owns the thread when Messages is off so email-first links keep working.
   const [view, setView] = useState<WidgetView>(
-    resumeConversationId && tabs.messages ? 'messenger' : resolveInitialView(tabs)
+    resumeConversationId && threadTab ? 'messenger' : resolveInitialView(tabs)
   )
   const [activeTab, setActiveTab] = useState<WidgetTab>(
-    resumeConversationId && tabs.messages ? 'messages' : initialTab
+    resumeConversationId && threadTab ? threadTab : initialTab
   )
   // Which thread the messenger view opens: an id, 'new', or null (active/default).
   // Seeded from the ?c= deep link so it opens that exact thread.
@@ -466,11 +473,26 @@ function WidgetPage() {
     return [...createdPosts, ...posts.filter((p) => !createdIds.has(p.id))]
   }, [posts, createdPosts])
 
-  const openMessenger = useCallback((target?: ConversationId | 'new') => {
-    setConversationTarget(target ?? null)
-    setActiveTab('messages')
-    setView('messenger')
-  }, [])
+  const openMessenger = useCallback(
+    (target?: ConversationId | 'new', from: WidgetTab = 'messages') => {
+      setConversationTarget(target ?? null)
+      setActiveTab(from === 'tickets' ? 'tickets' : 'messages')
+      setView('messenger')
+    },
+    []
+  )
+
+  // Once tickets load (or vanish), leave a Tickets view that is no longer in
+  // the bar rather than showing an empty Tickets tab.
+  useEffect(() => {
+    const shown = visibleTabs(visitorTabs)
+    if (view === 'messenger') return
+    if (shown.length === 0) return
+    if (shown.includes(activeTab)) return
+    const next = shown[0]
+    setActiveTab(next)
+    setView(next === 'home' ? 'overview' : next)
+  }, [visitorTabs, activeTab, view])
 
   // Long-form content reads better wide: ask the host SDK to grow the panel
   // while an article or changelog entry is open, and shrink it back after.
@@ -569,8 +591,8 @@ function WidgetPage() {
       return
     }
     if (view === 'messenger') {
-      // Messenger opens from the Messages tab; back returns to the conversation list.
-      setView('messages')
+      // Return to the list we opened from (Messages or Tickets).
+      setView(activeTab === 'tickets' ? 'tickets' : 'messages')
       return
     }
     // Root views only show a back arrow after a cross-navigation (e.g. a Home
@@ -591,7 +613,7 @@ function WidgetPage() {
     }
     setSelectedPostId(null)
     setView('feedback')
-  }, [view, selectedCategory, backTarget])
+  }, [view, selectedCategory, backTarget, activeTab])
 
   const navigateToTab = useCallback((tab: WidgetTab) => {
     setActiveTab(tab)
@@ -751,7 +773,7 @@ function WidgetPage() {
             }}
             onOpenTicket={(conversationId) => {
               setBackTarget({ tab: 'home', view: 'overview' })
-              openMessenger(conversationId)
+              openMessenger(conversationId, tabs.tickets ? 'tickets' : 'messages')
             }}
             onSeeChangelog={() => crossNavigate('changelog')}
             onOpenChangelogEntry={(id) => {
@@ -794,7 +816,7 @@ function WidgetPage() {
 
       {view === 'tickets' && (
         <ViewTransition id="tickets" kind="root">
-          <WidgetTickets onOpenTicket={openMessenger} />
+          <WidgetTickets onOpenTicket={(id) => openMessenger(id, 'tickets')} />
         </ViewTransition>
       )}
 

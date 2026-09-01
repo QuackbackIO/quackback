@@ -22,7 +22,7 @@ import {
  * First contact stamps a silent baseline: stages current at the first load
  * never badge; only later moves do (see ticket-stage-seen.ts).
  */
-export function useTicketStageBadge(enabled: boolean): { unread: number } {
+export function useTicketStageBadge(enabled: boolean): { unread: number; hasTickets: boolean } {
   const { sessionVersion, isIdentified } = useWidgetAuth()
   const { data } = useQuery({
     queryKey: widgetMyTicketsKey(sessionVersion),
@@ -49,5 +49,9 @@ export function useTicketStageBadge(enabled: boolean): { unread: number } {
     if (data && getTicketStagesSeen() === null) markTicketStagesSeen(data.tickets)
   }, [data])
 
-  return { unread: countTicketStageChanges(tickets, seen) }
+  return {
+    unread: countTicketStageChanges(tickets, seen),
+    // Unknown/loading counts as none so the Tickets tab never flashes empty.
+    hasTickets: isIdentified && tickets.length > 0,
+  }
 }

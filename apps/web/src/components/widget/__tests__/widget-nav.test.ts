@@ -6,6 +6,7 @@ import {
   visibleTabs,
   resolveInitialTab,
   resolveInitialView,
+  tabsForVisitor,
 } from '../widget-nav'
 
 // Nav model: five independent content surfaces (messages, tickets, feedback,
@@ -82,6 +83,22 @@ describe('visibleTabs', () => {
       'feedback',
       'changelog',
     ])
+  })
+})
+
+describe('tabsForVisitor', () => {
+  it('hides the Tickets tab when this visitor has none', () => {
+    expect(tabsForVisitor({ messages: true, tickets: true }, false)).toEqual({
+      messages: true,
+      tickets: false,
+    })
+    expect(visibleTabs(tabsForVisitor({ messages: true, tickets: true }, false))).toEqual([
+      'messages',
+    ])
+  })
+  it('keeps the Tickets tab when the visitor has tickets', () => {
+    expect(tabsForVisitor({ tickets: true }, true)).toEqual({ tickets: true })
+    expect(visibleTabs(tabsForVisitor({ tickets: true }, true))).toEqual(['tickets'])
   })
 })
 

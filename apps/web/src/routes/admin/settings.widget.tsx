@@ -460,7 +460,7 @@ export function TabsCard({
           <TabRow
             id="tab-tickets"
             label="Tickets"
-            description="Customers can view and follow their tickets"
+            description="Shown only when a customer has tickets"
             checked={tabs.tickets}
             disabled={isBusy || (tabs.tickets && lastSectionLock)}
             disabledHint={lastSectionHint}
