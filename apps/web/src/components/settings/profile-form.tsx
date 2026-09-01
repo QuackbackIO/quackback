@@ -5,7 +5,7 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import type { UserId } from '@quackback/ids'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Avatar } from '@/components/ui/avatar'
 import { ImageCropper } from '@/components/ui/image-cropper'
 import { authClient } from '@/lib/client/auth-client'
 import { useRouter } from '@tanstack/react-router'
@@ -13,7 +13,6 @@ import { updateProfileNameFn } from '@/lib/server/functions/user'
 import { useUploadAvatar, useDeleteAvatar } from '@/lib/client/mutations/avatar'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { PasswordForm } from '@/components/settings/password-form'
-import { getInitials } from '@/lib/shared/utils'
 import { EmailField } from '@/components/settings/email-field'
 
 interface ProfileFormProps {
@@ -46,10 +45,6 @@ export function ProfileForm({ user }: ProfileFormProps) {
   // Cropper state
   const [showCropper, setShowCropper] = useState(false)
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null)
-
-  const initials = getInitials(name)
-
-  const avatarSrc = avatarUrl || undefined
 
   const handleAvatarClick = () => {
     fileInputRef.current?.click()
@@ -166,10 +161,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
         <p className="text-sm text-muted-foreground mb-4">Your profile picture</p>
         <div className="flex items-center gap-4">
           <div className="relative group">
-            <Avatar className="h-16 w-16">
-              <AvatarImage src={avatarSrc} alt={name} />
-              <AvatarFallback className="text-lg">{initials}</AvatarFallback>
-            </Avatar>
+            <Avatar className="h-16 w-16" src={avatarUrl} name={name} fallbackClassName="text-lg" />
             {isUploadingAvatar && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full">
                 <ArrowPathIcon className="h-6 w-6 animate-spin text-white" />

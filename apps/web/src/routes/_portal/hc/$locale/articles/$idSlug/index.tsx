@@ -13,6 +13,7 @@ import {
   extractHeadings,
   computePrevNext,
 } from '@/components/help-center/help-center-article-utils'
+import { Avatar } from '@/components/ui/avatar'
 import { JsonLd } from '@/components/json-ld'
 import { buildArticleJsonLd, buildBreadcrumbJsonLd } from '@/lib/shared/json-ld'
 import { stripMarkdownPreview } from '@/lib/shared/utils'
@@ -163,17 +164,13 @@ function ArticleDetailPage() {
 
             {(article.author || article.updatedAt) && (
               <div className="mt-6 mb-8 flex items-center gap-3">
-                {article.author?.avatarUrl ? (
-                  <img
-                    src={article.author.avatarUrl}
-                    alt={article.author.name}
-                    className="w-10 h-10 rounded-full object-cover shrink-0"
-                  />
-                ) : (
-                  <span className="w-10 h-10 rounded-full bg-muted border border-border flex items-center justify-center text-sm font-semibold text-muted-foreground shrink-0">
-                    {article.author?.name.charAt(0).toUpperCase() ?? '?'}
-                  </span>
-                )}
+                <Avatar
+                  className="h-10 w-10 shrink-0 border border-border"
+                  src={article.author?.avatarUrl}
+                  name={article.author?.name}
+                  fallback={article.author?.name ? undefined : '?'}
+                  fallbackClassName="text-sm font-semibold"
+                />
                 <div className="flex flex-col gap-0.5">
                   {article.author && (
                     <span className="text-sm text-muted-foreground">

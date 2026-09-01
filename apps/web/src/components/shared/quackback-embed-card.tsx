@@ -3,13 +3,13 @@ import { useQuery } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { ChevronUpIcon } from '@heroicons/react/24/solid'
 import type { PostId } from '@quackback/ids'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Avatar } from '@/components/ui/avatar'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { getEmbedPreviewFn } from '@/lib/server/functions/embeds'
 import { usePostVote } from '@/lib/client/hooks/use-post-vote'
 import { priorityMeta } from '@/lib/shared/conversation/priority-meta'
-import { cn, getInitials } from '@/lib/shared/utils'
+import { cn } from '@/lib/shared/utils'
 
 const voteBoxCls =
   'flex w-11 shrink-0 flex-col items-center justify-center gap-0.5 rounded-md border py-1.5'
@@ -254,14 +254,12 @@ export function QuackbackEmbedCard({
           )}
 
           <div className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <Avatar className="size-4">
-              {data.authorAvatarUrl && (
-                <AvatarImage src={data.authorAvatarUrl} alt={data.authorName ?? 'Anonymous'} />
-              )}
-              <AvatarFallback className="bg-muted text-xs">
-                {getInitials(data.authorName)}
-              </AvatarFallback>
-            </Avatar>
+            <Avatar
+              className="size-4"
+              src={data.authorAvatarUrl}
+              name={data.authorName}
+              fallbackClassName="bg-muted text-xs"
+            />
             <span className="truncate">{data.authorName ?? 'Anonymous'}</span>
             {data.createdAt && (
               <>

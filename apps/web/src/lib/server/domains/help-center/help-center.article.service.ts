@@ -24,6 +24,7 @@ import type {
 } from './help-center.types'
 import { generateArticleEmbedding } from './help-center-embedding.service'
 import { helpCenterVisibilityConditions } from './help-center-search.service'
+import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'help-center-articles' })
@@ -43,7 +44,8 @@ export async function resolveArticleWithCategory(
     article.principalId
       ? db.query.principal.findFirst({
           where: eq(principal.id, article.principalId),
-          columns: { id: true, displayName: true, avatarUrl: true },
+          columns: { id: true, displayName: true, avatarUrl: true, avatarKey: true },
+          with: { user: { columns: { image: true, imageKey: true } } },
         })
       : null,
   ])
@@ -62,7 +64,12 @@ export async function resolveArticleWithCategory(
       ? {
           id: authorRecord.id as PrincipalId,
           name: authorRecord.displayName,
-          avatarUrl: authorRecord.avatarUrl,
+          avatarUrl: resolveUserAvatarUrl({
+            userImage: authorRecord.user?.image,
+            userImageKey: authorRecord.user?.imageKey,
+            principalAvatarUrl: authorRecord.avatarUrl,
+            principalAvatarKey: authorRecord.avatarKey,
+          }),
         }
       : null,
   }

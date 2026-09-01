@@ -3,11 +3,10 @@ import { useQuery } from '@tanstack/react-query'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { CheckBadgeIcon } from '@heroicons/react/24/solid'
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline'
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar } from '@/components/ui/avatar'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { TimeAgo } from '@/components/ui/time-ago'
-import { getInitials } from '@/lib/shared/utils'
 import { usePortalPermissions } from '@/lib/client/hooks/use-portal-permissions'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
@@ -90,10 +89,12 @@ function PublicProfilePage() {
       {/* Profile header card */}
       <div className="rounded-xl border border-border/60 bg-card p-6 animate-in fade-in duration-200 fill-mode-backwards">
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
-          <Avatar className="h-16 w-16 shrink-0">
-            {profile.avatarUrl && <AvatarImage src={profile.avatarUrl} alt={profile.displayName} />}
-            <AvatarFallback className="text-lg">{getInitials(profile.displayName)}</AvatarFallback>
-          </Avatar>
+          <Avatar
+            className="h-16 w-16 shrink-0"
+            src={profile.avatarUrl}
+            name={profile.displayName}
+            fallbackClassName="text-lg"
+          />
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">

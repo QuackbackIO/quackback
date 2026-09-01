@@ -9,7 +9,7 @@ import { buildCategoryBreadcrumbs } from '@/components/help-center/help-center-u
 import { JsonLd } from '@/components/json-ld'
 import { buildCollectionPageJsonLd, buildBreadcrumbJsonLd } from '@/lib/shared/json-ld'
 import { CategoryIcon } from '@/components/help-center/category-icon'
-import { getInitials } from '@/lib/shared/utils'
+import { Avatar } from '@/components/ui/avatar'
 import { hcArticlePath, hcCollectionPath } from '@/lib/shared/help-center-url'
 
 const MAX_ARTICLES_SHOWN = 8
@@ -61,20 +61,16 @@ interface Author {
 }
 
 function AuthorAvatar({ author, index }: { author: Author; index: number }) {
-  const initials = getInitials(author.name)
   const bg = AUTHOR_COLORS[index % AUTHOR_COLORS.length]
   return (
-    <span
-      className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold text-white overflow-hidden border-2 border-background ${bg}`}
+    <Avatar
+      className={`size-6 border-2 border-background ${bg}`}
+      src={author.avatarUrl}
+      name={author.name}
+      fallbackClassName={`text-xs font-bold text-white ${bg}`}
       style={{ marginLeft: index === 0 ? 0 : -8 }}
       title={author.name}
-    >
-      {author.avatarUrl ? (
-        <img src={author.avatarUrl} alt={author.name} className="w-full h-full object-cover" />
-      ) : (
-        initials
-      )}
-    </span>
+    />
   )
 }
 

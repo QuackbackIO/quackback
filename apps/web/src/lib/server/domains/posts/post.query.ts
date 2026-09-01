@@ -23,7 +23,7 @@ import {
   isNull,
   count,
 } from '@/lib/server/db'
-import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
+import { loadAuthors } from '@/lib/server/domains/principals/principal-display'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { type PostId, type PostCommentId, type PrincipalId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
@@ -121,15 +121,10 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
 
   let pinnedComment: PinnedComment | null = null
   if (pinnedCommentData && !pinnedCommentData.deletedAt) {
-    let avatarUrl: string | null = null
-    if (pinnedCommentData.author) {
-      if (pinnedCommentData.author.avatarKey) {
-        avatarUrl = getPublicUrlOrNull(pinnedCommentData.author.avatarKey)
-      }
-      if (!avatarUrl && pinnedCommentData.author.avatarUrl) {
-        avatarUrl = pinnedCommentData.author.avatarUrl
-      }
-    }
+    const author = (await loadAuthors([pinnedCommentData.principalId])).get(
+      pinnedCommentData.principalId
+    )
+    const avatarUrl = author?.avatarUrl ?? null
 
     const pinnedRawContentJson = pinnedCommentData.contentJson ?? null
     const pinnedHydratedContentJson = pinnedRawContentJson

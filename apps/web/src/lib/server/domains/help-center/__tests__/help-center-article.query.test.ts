@@ -89,7 +89,8 @@ describe('listPublicArticlesForCategory', () => {
 
     const orderByMock = vi.fn().mockResolvedValue(mockArticles)
     const whereMock = vi.fn().mockReturnValue({ orderBy: orderByMock })
-    const leftJoinMock = vi.fn().mockReturnValue({ where: whereMock })
+    const userJoinMock = vi.fn().mockReturnValue({ where: whereMock })
+    const leftJoinMock = vi.fn().mockReturnValue({ leftJoin: userJoinMock })
     const innerJoinMock = vi.fn().mockReturnValue({ leftJoin: leftJoinMock })
     const fromMock = vi.fn().mockReturnValue({ innerJoin: innerJoinMock })
     vi.mocked(db.select).mockReturnValueOnce({ from: fromMock } as never)
@@ -109,7 +110,8 @@ describe('listPublicArticlesForCategory', () => {
 
     const orderByMock = vi.fn().mockResolvedValue([])
     const whereMock = vi.fn().mockReturnValue({ orderBy: orderByMock })
-    const leftJoinMock = vi.fn().mockReturnValue({ where: whereMock })
+    const userJoinMock = vi.fn().mockReturnValue({ where: whereMock })
+    const leftJoinMock = vi.fn().mockReturnValue({ leftJoin: userJoinMock })
     const innerJoinMock = vi.fn().mockReturnValue({ leftJoin: leftJoinMock })
     const fromMock = vi.fn().mockReturnValue({ innerJoin: innerJoinMock })
     vi.mocked(db.select).mockReturnValueOnce({ from: fromMock } as never)
