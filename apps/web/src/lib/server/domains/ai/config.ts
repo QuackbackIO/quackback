@@ -129,3 +129,20 @@ export function structuredOutputProviderOptions(): {
     ? { provider: { require_parameters: true } }
     : {}
 }
+
+/**
+ * Hide reasoning tokens on the OpenRouter wire.
+ *
+ * Same shape as {@link structuredOutputProviderOptions}: an explicit boolean
+ * on an OpenRouter-only extra. Unset is off — `require_parameters` 404s
+ * models whose providers do not advertise `reasoning` (GLM 5.3 Flash). Set
+ * `AI_REASONING_EXCLUDE=true` for reasoning models such as DeepSeek v4 Flash,
+ * whose json_schema streams otherwise prefix thinking as whitespace and kill
+ * Ask AI. Callers that must round-trip `reasoning_details` (Quinn's tool loop)
+ * should skip this helper.
+ */
+export function reasoningExcludeProviderOptions(): { reasoning?: { exclude: true } } {
+  return config.openaiBaseUrl?.includes('openrouter.ai') && config.aiReasoningExclude === true
+    ? { reasoning: { exclude: true } }
+    : {}
+}

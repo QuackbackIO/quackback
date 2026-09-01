@@ -24,6 +24,7 @@ const mockAdapterFactory = vi.fn((..._args: unknown[]) => ({ kind: 'text' }))
 const mockConfig = vi.hoisted(() => ({
   openaiApiKey: 'test-key' as string | undefined,
   openaiBaseUrl: 'http://localhost:9999/v1' as string | undefined,
+  aiReasoningExclude: undefined as boolean | undefined,
 }))
 
 vi.mock('@/lib/server/config', () => ({ config: mockConfig }))
@@ -43,10 +44,14 @@ vi.mock('@tanstack/ai-openai/compatible', () => ({
   openaiCompatibleText: (...args: unknown[]) => mockAdapterFactory(...args),
 }))
 
-vi.mock('@/lib/server/domains/ai/config', () => ({
-  stripCodeFences: (s: string) => s,
-  structuredOutputProviderOptions: () => ({}),
-}))
+vi.mock('@/lib/server/domains/ai/config', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/server/domains/ai/config')>()
+  return {
+    ...actual,
+    stripCodeFences: (s: string) => s,
+    structuredOutputProviderOptions: () => ({}),
+  }
+})
 
 const mockWithUsageLogging = vi.fn()
 vi.mock('@/lib/server/domains/ai/usage-log', () => ({
@@ -70,6 +75,16 @@ function emptyTextThenError(message: string) {
   return (async function* () {
     yield { type: 'RUN_STARTED' }
     yield { type: 'TEXT_MESSAGE_CONTENT', delta: '' }
+    yield { type: 'RUN_ERROR', message }
+  })()
+}
+
+/** RUN_STARTED, a whitespace-only text delta (DeepSeek json_schema prefix),
+ *  then RUN_ERROR: still pristine — a space does not commit. */
+function whitespaceTextThenError(message: string) {
+  return (async function* () {
+    yield { type: 'RUN_STARTED' }
+    yield { type: 'TEXT_MESSAGE_CONTENT', delta: ' ' }
     yield { type: 'RUN_ERROR', message }
   })()
 }
@@ -140,6 +155,7 @@ beforeEach(() => {
   vi.useFakeTimers()
   mockConfig.openaiApiKey = 'test-key'
   mockConfig.openaiBaseUrl = 'http://localhost:9999/v1'
+  mockConfig.aiReasoningExclude = undefined
   mockWithUsageLogging.mockImplementation(
     async (
       _params: unknown,
@@ -205,6 +221,63 @@ describe('transport retry — pristine RUN_ERROR (real adapter shape)', () => {
     const result = await settle(runSynthesis(baseOptions()))
     expect((result as { final: unknown }).final).toEqual({ text: 'ok' })
     expect(mockChat).toHaveBeenCalledTimes(2)
+  })
+
+  it('treats a whitespace-only text delta as still pristine and retries', async () => {
+    mockChat
+      .mockReturnValueOnce(whitespaceTextThenError('429 rate limit'))
+      .mockReturnValueOnce(goodStream('ok'))
+
+    const result = await settle(runSynthesis(baseOptions()))
+    expect((result as { final: unknown }).final).toEqual({ text: 'ok' })
+    expect(mockChat).toHaveBeenCalledTimes(2)
+  })
+
+  it('hides OpenRouter reasoning tokens when AI_REASONING_EXCLUDE is on', async () => {
+    mockConfig.openaiBaseUrl = 'https://openrouter.ai/api/v1'
+    mockConfig.aiReasoningExclude = true
+    mockChat.mockReturnValueOnce(goodStream('ok'))
+
+    await settle(runSynthesis(baseOptions({ transportRetries: 0 })))
+
+    expect(mockChat).toHaveBeenCalledTimes(1)
+    const call = mockChat.mock.calls[0]![0] as {
+      modelOptions?: { reasoning?: { exclude?: boolean } }
+    }
+    expect(call.modelOptions?.reasoning).toEqual({ exclude: true })
+  })
+
+  it('does not hide reasoning on OpenRouter when AI_REASONING_EXCLUDE is unset', async () => {
+    mockConfig.openaiBaseUrl = 'https://openrouter.ai/api/v1'
+    mockChat.mockReturnValueOnce(goodStream('ok'))
+
+    await settle(runSynthesis(baseOptions({ transportRetries: 0 })))
+
+    const call = mockChat.mock.calls[0]![0] as { modelOptions?: { reasoning?: unknown } }
+    expect(call.modelOptions?.reasoning).toBeUndefined()
+  })
+
+  it('does not hide reasoning on tool-using OpenRouter streams', async () => {
+    mockConfig.openaiBaseUrl = 'https://openrouter.ai/api/v1'
+    mockConfig.aiReasoningExclude = true
+    mockChat.mockReturnValueOnce(goodStream('ok'))
+
+    await settle(
+      runSynthesis(
+        baseOptions({
+          transportRetries: 0,
+          tools: {
+            specs: [],
+            context: {},
+            agentLoopStrategy: {} as never,
+            names: new Set(),
+          },
+        })
+      )
+    )
+
+    const call = mockChat.mock.calls[0]![0] as { modelOptions?: { reasoning?: unknown } }
+    expect(call.modelOptions?.reasoning).toBeUndefined()
   })
 
   it('retries a pristine RUN_ERROR in strict mode too', async () => {
