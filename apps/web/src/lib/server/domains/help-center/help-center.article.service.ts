@@ -24,7 +24,7 @@ import type {
 } from './help-center.types'
 import { generateArticleEmbedding } from './help-center-embedding.service'
 import { helpCenterVisibilityConditions } from './help-center-search.service'
-import { loadAuthors } from '@/lib/server/domains/principals/principal-display'
+import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'help-center-articles' })
@@ -36,14 +36,19 @@ const log = logger.child({ component: 'help-center-articles' })
 export async function resolveArticleWithCategory(
   article: typeof helpCenterArticles.$inferSelect
 ): Promise<HelpCenterArticleWithCategory> {
-  const [category, authors] = await Promise.all([
+  const [category, authorRecord] = await Promise.all([
     db.query.helpCenterCategories.findFirst({
       where: eq(helpCenterCategories.id, article.categoryId),
       columns: { id: true, urlId: true, slug: true, name: true },
     }),
-    article.principalId ? loadAuthors([article.principalId]) : Promise.resolve(null),
+    article.principalId
+      ? db.query.principal.findFirst({
+          where: eq(principal.id, article.principalId),
+          columns: { id: true, displayName: true, avatarUrl: true, avatarKey: true },
+          with: { user: { columns: { image: true, imageKey: true } } },
+        })
+      : null,
   ])
-  const author = article.principalId && authors ? authors.get(article.principalId) : null
 
   return {
     ...article,
@@ -55,11 +60,16 @@ export async function resolveArticleWithCategory(
           name: category.name,
         }
       : { id: article.categoryId as KbCategoryId, urlId: 0, slug: '', name: 'Unknown' },
-    author: author?.displayName
+    author: authorRecord?.displayName
       ? {
-          id: author.principalId as PrincipalId,
-          name: author.displayName,
-          avatarUrl: author.avatarUrl,
+          id: authorRecord.id as PrincipalId,
+          name: authorRecord.displayName,
+          avatarUrl: resolveUserAvatarUrl({
+            userImage: authorRecord.user?.image,
+            userImageKey: authorRecord.user?.imageKey,
+            principalAvatarUrl: authorRecord.avatarUrl,
+            principalAvatarKey: authorRecord.avatarKey,
+          }),
         }
       : null,
   }

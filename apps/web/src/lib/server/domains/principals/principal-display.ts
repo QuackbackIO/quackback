@@ -52,6 +52,7 @@ export async function loadAuthors(
       id: principal.id,
       displayName: principal.displayName,
       avatarUrl: principal.avatarUrl,
+      avatarKey: principal.avatarKey,
       userImage: user.image,
       userImageKey: user.imageKey,
     })
@@ -66,6 +67,7 @@ export async function loadAuthors(
         userImage: row.userImage,
         userImageKey: row.userImageKey,
         principalAvatarUrl: row.avatarUrl,
+        principalAvatarKey: row.avatarKey,
       }),
     })
   }
