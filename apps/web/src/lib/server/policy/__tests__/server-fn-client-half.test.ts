@@ -26,17 +26,28 @@
 import { describe, it, expect } from 'vitest'
 import * as ts from '@typescript/typescript6'
 import { readFileSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import { join, relative, posix } from 'node:path'
 import { walkSourceFiles } from '../source-files'
 
 const SRC_ROOT = join(__dirname, '../../../..') // apps/web/src
 const FUNCTIONS_ROOT = join(SRC_ROOT, 'lib/server/functions')
 
-/** Modules that must never be reachable from the client half of a server-function file. */
-export function isServerOnlySpecifier(spec: string): boolean {
-  if (spec.startsWith('@/lib/server/functions/')) return false
-  if (spec.startsWith('@/lib/server/')) return true
-  return spec === '@quackback/db' || spec.startsWith('@quackback/db/')
+/**
+ * Modules that must never be reachable from the client half of a
+ * server-function file. `relPath` is the importing file relative to `src/`,
+ * so relative specifiers (`'../storage/s3'` from `lib/server/functions/…`)
+ * are classified by where they land, not by how they are spelled.
+ */
+export function isServerOnlySpecifier(spec: string, relPath: string): boolean {
+  let path: string
+  if (spec.startsWith('@/')) path = spec.slice(2)
+  else if (spec.startsWith('.')) path = posix.join(posix.dirname(relPath.replace(/\\/g, '/')), spec)
+  else return spec === '@quackback/db' || spec.startsWith('@quackback/db/')
+  if (path.startsWith('lib/server/functions/')) return false
+  // vite.config.ts swaps these for a no-op stub in the client environment
+  // (`stubServerLoggerInClient`), so module-scope `logger.child(...)` is fine.
+  if (/^lib\/server\/(logger|log-context)(\.ts)?$/.test(path)) return false
+  return path.startsWith('lib/server/')
 }
 
 /** The identifier a builder chain like `createServerFn(...).validator(...).handler(...)` starts from. */
@@ -125,6 +136,7 @@ function identifiersOutsideStrippedScopes(node: ts.Node): Set<string> {
 }
 
 function serverOnlyDynamicImports(sf: ts.SourceFile, root: ts.Node): ts.CallExpression[] {
+  const relPath = sf.fileName
   const found: ts.CallExpression[] = []
   const visit = (n: ts.Node): void => {
     if (ts.isCallExpression(n) && isServerStrippedCall(n)) return
@@ -133,7 +145,7 @@ function serverOnlyDynamicImports(sf: ts.SourceFile, root: ts.Node): ts.CallExpr
       n.expression.kind === ts.SyntaxKind.ImportKeyword &&
       n.arguments[0] &&
       ts.isStringLiteral(n.arguments[0]) &&
-      isServerOnlySpecifier(n.arguments[0].text)
+      isServerOnlySpecifier(n.arguments[0].text, relPath)
     ) {
       found.push(n)
     }
@@ -156,7 +168,7 @@ export function findLeakedServerImports(relPath: string, text: string): LeakedIm
     if (ts.isImportDeclaration(stmt)) {
       if (!ts.isStringLiteral(stmt.moduleSpecifier)) continue
       const spec = stmt.moduleSpecifier.text
-      if (!isServerOnlySpecifier(spec)) continue
+      if (!isServerOnlySpecifier(spec, relPath)) continue
       const clause = stmt.importClause
       // `import type` and side-effect imports leave no runtime binding to reach;
       // a bare `import '@/lib/server/x'` always runs, so it is a root.
@@ -185,7 +197,7 @@ export function findLeakedServerImports(relPath: string, text: string): LeakedIm
     if (ts.isExportDeclaration(stmt)) {
       if (stmt.moduleSpecifier && ts.isStringLiteral(stmt.moduleSpecifier)) {
         // `export … from '@/lib/server/x'` re-exports the server module itself.
-        if (!stmt.isTypeOnly && isServerOnlySpecifier(stmt.moduleSpecifier.text)) {
+        if (!stmt.isTypeOnly && isServerOnlySpecifier(stmt.moduleSpecifier.text, relPath)) {
           roots.push(stmt)
           serverOnlyStaticImports.set(stmt, stmt.moduleSpecifier.text)
         }
@@ -390,6 +402,30 @@ describe('findLeakedServerImports', () => {
 
     const typeReexport = `export type { Database } from '@/lib/server/db'`
     expect(findLeakedServerImports('x.ts', typeReexport)).toEqual([])
+  })
+
+  it('classifies relative specifiers by where they resolve', () => {
+    const file = 'lib/server/functions/uploads.ts'
+    const leaky = `
+      import { presign } from '../storage/s3'
+      export async function url() {
+        await import('../integrations/save')
+        return presign()
+      }
+    `
+    expect(findLeakedServerImports(file, leaky).map((l) => l.specifier)).toEqual([
+      '../storage/s3',
+      '../integrations/save',
+    ])
+
+    const fine = `
+      import { requireAuth } from './auth-helpers'
+      import { schema } from '../../shared/schemas/boards'
+      import { logger } from '@/lib/server/logger'
+      const log = logger.child({ component: 'uploads' })
+      export const check = () => [requireAuth, schema, log]
+    `
+    expect(findLeakedServerImports(file, fine)).toEqual([])
   })
 
   it('ignores imports of other server-function modules and of shared code', () => {
