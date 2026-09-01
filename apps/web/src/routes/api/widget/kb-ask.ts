@@ -41,6 +41,7 @@ import {
   runFinishedChunk,
   runErrorChunk,
   stateSnapshotChunk,
+  withSseKeepalive,
 } from '@/lib/server/domains/assistant/agui'
 import type {
   KbAskFinalPayload,
@@ -308,7 +309,9 @@ export async function handleKbAsk({ request }: { request: Request }): Promise<Re
     }
   })()
 
-  return toServerSentEventsResponse(queue.stream(), { headers: widgetCorsHeaders() })
+  return withSseKeepalive(
+    toServerSentEventsResponse(queue.stream(), { headers: widgetCorsHeaders() })
+  )
 }
 
 export const Route = createFileRoute('/api/widget/kb-ask')({
