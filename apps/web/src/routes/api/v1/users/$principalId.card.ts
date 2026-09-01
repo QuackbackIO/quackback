@@ -14,7 +14,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import type { PrincipalId, UserId } from '@quackback/ids'
 import { auth } from '@/lib/server/auth'
 import { db, principal, user, eq } from '@/lib/server/db'
-import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
+import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
 
 interface PrincipalCardBody {
   principalId: string
@@ -24,27 +24,9 @@ interface PrincipalCardBody {
   joinedAt: string
 }
 
-// Resolve in the order: principal own avatar → linked user image. The
-// user fallback covers principal rows that pre-date syncPrincipalProfile
-// being wired into every avatar-upload path, or any other gap where the
-// principal mirror drifted from the source-of-truth user record.
-function resolveCardAvatar(opts: {
-  principalAvatarKey: string | null
-  principalAvatarUrl: string | null
-  userImageKey: string | null | undefined
-  userImage: string | null | undefined
-}): string | null {
-  if (opts.principalAvatarKey) {
-    const s3Url = getPublicUrlOrNull(opts.principalAvatarKey)
-    if (s3Url) return s3Url
-  }
-  if (opts.principalAvatarUrl) return opts.principalAvatarUrl
-  if (opts.userImageKey) {
-    const s3Url = getPublicUrlOrNull(opts.userImageKey)
-    if (s3Url) return s3Url
-  }
-  return opts.userImage ?? null
-}
+// Uploaded key first, then OAuth/external URL — same as the admin sidebar.
+// User-row fields beat the principal mirror so stale `avatar_*` copies
+// (pre-syncPrincipalProfile rows) still show the current picture.
 
 export async function handlePrincipalCard({
   request,
@@ -92,11 +74,11 @@ export async function handlePrincipalCard({
   const body: PrincipalCardBody = {
     principalId: row.id,
     displayName: row.displayName ?? '',
-    avatarUrl: resolveCardAvatar({
-      principalAvatarKey: row.avatarKey,
-      principalAvatarUrl: row.avatarUrl,
-      userImageKey: row.userImageKey,
+    avatarUrl: resolveUserAvatarUrl({
       userImage: row.userImage,
+      userImageKey: row.userImageKey,
+      principalAvatarUrl: row.avatarUrl,
+      principalAvatarKey: row.avatarKey,
     }),
     role: row.role,
     joinedAt: row.createdAt.toISOString(),

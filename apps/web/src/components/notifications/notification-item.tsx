@@ -3,8 +3,8 @@
 import { Link } from '@tanstack/react-router'
 import { formatDistanceToNow, isToday, format } from 'date-fns'
 import { ArchiveBoxIcon } from '@heroicons/react/24/outline'
-import { cn, getInitials } from '@/lib/shared/utils'
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
+import { cn } from '@/lib/shared/utils'
+import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { getNotificationTypeConfig } from './notification-type-config'
 import { getNotificationTarget } from './notification-target'
@@ -163,12 +163,12 @@ function NotificationLeadingVisual({
   if (notification.actorName) {
     return (
       <div className="relative flex-shrink-0">
-        <Avatar className="h-9 w-9">
-          {notification.actorAvatarUrl && (
-            <AvatarImage src={notification.actorAvatarUrl} alt={notification.actorName} />
-          )}
-          <AvatarFallback className="text-xs">{getInitials(notification.actorName)}</AvatarFallback>
-        </Avatar>
+        <Avatar
+          className="h-9 w-9"
+          src={notification.actorAvatarUrl}
+          name={notification.actorName}
+          fallbackClassName="text-xs"
+        />
         <span
           className={cn(
             'absolute -bottom-0.5 -end-0.5 w-[17px] h-[17px] rounded-full border-2 border-card flex items-center justify-center',

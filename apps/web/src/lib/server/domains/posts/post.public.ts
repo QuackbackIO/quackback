@@ -16,6 +16,7 @@ import {
   postStatuses,
   userSegments,
   principal as principalTable,
+  user as userTable,
 } from '@/lib/server/db'
 import {
   toUuid,
@@ -30,17 +31,21 @@ import type { RespondedFilter } from '@/lib/shared/types/filters'
 import { postViewFilter, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
 
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
+import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
 
-/** Resolve avatar URL from principal's avatar fields */
-export function resolveAvatarUrl(principal: {
+/** Resolve avatar URL — uploaded key first, then OAuth/external URL. */
+export function resolveAvatarUrl(source: {
   avatarKey?: string | null
   avatarUrl?: string | null
+  userImageKey?: string | null
+  userImage?: string | null
 }): string | null {
-  if (principal.avatarKey) {
-    const s3Url = getPublicUrlOrNull(principal.avatarKey)
-    if (s3Url) return s3Url
-  }
-  return principal.avatarUrl ?? null
+  return resolveUserAvatarUrl({
+    userImage: source.userImage,
+    userImageKey: source.userImageKey,
+    principalAvatarUrl: source.avatarUrl,
+    principalAvatarKey: source.avatarKey,
+  })
 }
 
 export function parseJson<T>(value: string | T): T {
@@ -292,8 +297,11 @@ export async function listPublicPostsWithVotesAndAvatars(
             displayName: principalTable.displayName,
             avatarKey: principalTable.avatarKey,
             avatarUrl: principalTable.avatarUrl,
+            userImage: userTable.image,
+            userImageKey: userTable.imageKey,
           })
           .from(principalTable)
+          .leftJoin(userTable, eq(userTable.id, principalTable.userId))
           .where(inArray(principalTable.id, pageAuthorIds))
       : Promise.resolve([]),
   ])
@@ -308,12 +316,12 @@ export async function listPublicPostsWithVotesAndAvatars(
 
   const items = trimmedResults.map((post): PostWithVotesAndAvatars => {
     const author = authorById.get(post.principalId)
-    // Mirror the previous correlated subquery's avatar precedence exactly: the
-    // stored key (resolved to its S3 URL) wins, with the raw avatar_url only
-    // used when no key is present.
-    const avatarUrl = author?.avatarKey
-      ? getPublicUrlOrNull(author.avatarKey)
-      : (author?.avatarUrl ?? null)
+    const avatarUrl = resolveAvatarUrl({
+      avatarKey: author?.avatarKey,
+      avatarUrl: author?.avatarUrl,
+      userImageKey: author?.userImageKey,
+      userImage: author?.userImage,
+    })
     return {
       id: post.id,
       title: post.title,

@@ -24,6 +24,7 @@ import { can } from '@/lib/server/policy/authorize'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { db, principal as principalTable, user as userTable, eq, inArray } from '@/lib/server/db'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
+import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
 import {
   listPublicBoardsWithStats,
   getPublicBoardBySlug,
@@ -462,14 +463,11 @@ export const fetchUserAvatar = createServerFn({ method: 'GET' })
 
     if (!user) return { avatarUrl: data.fallbackImageUrl ?? null, hasCustomAvatar: false }
 
-    if (user.imageKey) {
-      const avatarUrl = getPublicUrlOrNull(user.imageKey)
-      if (avatarUrl) {
-        return { avatarUrl, hasCustomAvatar: true }
-      }
-    }
-
-    return { avatarUrl: user.image ?? data.fallbackImageUrl ?? null, hasCustomAvatar: false }
+    const avatarUrl = resolveUserAvatarUrl({
+      userImage: user.image ?? data.fallbackImageUrl,
+      userImageKey: user.imageKey,
+    })
+    return { avatarUrl, hasCustomAvatar: !!user.imageKey && !!getPublicUrlOrNull(user.imageKey) }
   })
 
 export const fetchAvatars = createServerFn({ method: 'GET' })
@@ -484,14 +482,24 @@ export const fetchAvatars = createServerFn({ method: 'GET' })
         id: principalTable.id,
         avatarKey: principalTable.avatarKey,
         avatarUrl: principalTable.avatarUrl,
+        userImage: userTable.image,
+        userImageKey: userTable.imageKey,
       })
       .from(principalTable)
+      .leftJoin(userTable, eq(userTable.id, principalTable.userId))
       .where(inArray(principalTable.id, principalIds))
 
     const avatarMap = new Map<PrincipalId, string | null>()
     for (const p of principals) {
-      const s3Url = p.avatarKey ? getPublicUrlOrNull(p.avatarKey) : null
-      avatarMap.set(p.id, s3Url ?? p.avatarUrl)
+      avatarMap.set(
+        p.id,
+        resolveUserAvatarUrl({
+          userImage: p.userImage,
+          userImageKey: p.userImageKey,
+          principalAvatarUrl: p.avatarUrl,
+          principalAvatarKey: p.avatarKey,
+        })
+      )
     }
     for (const id of principalIds) {
       if (!avatarMap.has(id)) avatarMap.set(id, null)

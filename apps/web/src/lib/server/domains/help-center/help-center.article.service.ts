@@ -24,6 +24,7 @@ import type {
 } from './help-center.types'
 import { generateArticleEmbedding } from './help-center-embedding.service'
 import { helpCenterVisibilityConditions } from './help-center-search.service'
+import { loadAuthors } from '@/lib/server/domains/principals/principal-display'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'help-center-articles' })
@@ -35,18 +36,14 @@ const log = logger.child({ component: 'help-center-articles' })
 export async function resolveArticleWithCategory(
   article: typeof helpCenterArticles.$inferSelect
 ): Promise<HelpCenterArticleWithCategory> {
-  const [category, authorRecord] = await Promise.all([
+  const [category, authors] = await Promise.all([
     db.query.helpCenterCategories.findFirst({
       where: eq(helpCenterCategories.id, article.categoryId),
       columns: { id: true, urlId: true, slug: true, name: true },
     }),
-    article.principalId
-      ? db.query.principal.findFirst({
-          where: eq(principal.id, article.principalId),
-          columns: { id: true, displayName: true, avatarUrl: true },
-        })
-      : null,
+    article.principalId ? loadAuthors([article.principalId]) : Promise.resolve(null),
   ])
+  const author = article.principalId && authors ? authors.get(article.principalId) : null
 
   return {
     ...article,
@@ -58,11 +55,11 @@ export async function resolveArticleWithCategory(
           name: category.name,
         }
       : { id: article.categoryId as KbCategoryId, urlId: 0, slug: '', name: 'Unknown' },
-    author: authorRecord?.displayName
+    author: author?.displayName
       ? {
-          id: authorRecord.id as PrincipalId,
-          name: authorRecord.displayName,
-          avatarUrl: authorRecord.avatarUrl,
+          id: author.principalId as PrincipalId,
+          name: author.displayName,
+          avatarUrl: author.avatarUrl,
         }
       : null,
   }

@@ -11,7 +11,7 @@ import {
 } from '@heroicons/react/24/solid'
 import { PencilSquareIcon, TrashIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { CheckBadgeIcon } from '@heroicons/react/24/solid'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Avatar } from '@/components/ui/avatar'
 import { ReactionChip } from '@/components/shared/reaction-chip'
 import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -24,7 +24,7 @@ import { addReactionFn, removeReactionFn } from '@/lib/server/functions/comments
 import { useEditComment } from '@/lib/client/mutations/portal-comments'
 import type { CommentReactionCount } from '@/lib/shared'
 import type { PublicCommentView } from '@/lib/client/queries/portal-detail'
-import { cn, getInitials } from '@/lib/shared/utils'
+import { cn } from '@/lib/shared/utils'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { CommentContent } from '@/components/public/comment-content'
 import { AuthorHoverCard } from '@/components/public/author-hover-card'
@@ -454,9 +454,7 @@ function CommentItem({
         >
           <div className="py-2">
             <div className="flex items-center gap-2">
-              <Avatar className="h-8 w-8 shrink-0 opacity-40">
-                <AvatarFallback className="text-xs">?</AvatarFallback>
-              </Avatar>
+              <Avatar className="h-8 w-8 shrink-0 opacity-40" fallback="?" />
               <span className="text-sm text-muted-foreground italic">
                 {intl.formatMessage({
                   id: 'portal.commentThread.deleted',
@@ -563,21 +561,12 @@ function CommentItem({
           )}
         >
           <div className="flex items-center gap-2">
-            <Avatar className="h-8 w-8 shrink-0">
-              {comment.avatarUrl && (
-                <AvatarImage
-                  src={comment.avatarUrl}
-                  alt={
-                    comment.authorName ||
-                    intl.formatMessage({
-                      id: 'portal.commentThread.authorAlt',
-                      defaultMessage: 'Comment author',
-                    })
-                  }
-                />
-              )}
-              <AvatarFallback className="text-xs">{getInitials(comment.authorName)}</AvatarFallback>
-            </Avatar>
+            <Avatar
+              className="h-8 w-8 shrink-0"
+              src={comment.avatarUrl}
+              name={comment.authorName}
+              fallbackClassName="text-xs"
+            />
             {linkAuthors && comment.principalId ? (
               authorLinkTo === 'admin' ? (
                 <AdminAuthorHoverCard

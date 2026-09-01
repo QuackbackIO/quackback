@@ -12,6 +12,7 @@ import {
   postCommentReactions,
   postStatuses,
   principal as principalTable,
+  user as userTable,
 } from '@/lib/server/db'
 import { toUuid, fromUuid, type PostId, type PostCommentId, type PrincipalId } from '@quackback/ids'
 import { buildCommentTree, toStatusChange } from '@/lib/shared'
@@ -156,11 +157,16 @@ export async function getPublicPostDetail(
         )`.as('author_name'),
         authorAvatarData: sql<string | null>`(
           SELECT CASE
+            WHEN u.image_key IS NOT NULL
+            THEN json_build_object('key', u.image_key)
             WHEN m.avatar_key IS NOT NULL
             THEN json_build_object('key', m.avatar_key)
+            WHEN u.image IS NOT NULL
+            THEN json_build_object('url', u.image)
             ELSE json_build_object('url', m.avatar_url)
           END
           FROM ${principalTable} m
+          LEFT JOIN ${userTable} u ON u.id = m.user_id
           WHERE m.id = ${posts.principalId}
         )`.as('author_avatar_data'),
       })
@@ -221,6 +227,8 @@ export async function getPublicPostDetail(
     deleted_by_principal_id: string | null
     avatar_key: string | null
     avatar_url: string | null
+    user_image: string | null
+    user_image_key: string | null
     reactions_json: string
     sc_from_name: string | null
     sc_from_color: string | null
@@ -248,7 +256,7 @@ export async function getPublicPostDetail(
         c.content, c.content_json, c.is_team_member, c.is_private,
         c.moderation_state,
         c.created_at, c.updated_at, c.deleted_at, c.deleted_by_principal_id,
-        m.avatar_key, m.avatar_url,
+        m.avatar_key, m.avatar_url, u.image as user_image, u.image_key as user_image_key,
         COALESCE(
           json_agg(json_build_object('emoji', cr.emoji, 'principalId', cr.principal_id))
           FILTER (WHERE cr.id IS NOT NULL),
@@ -258,6 +266,7 @@ export async function getPublicPostDetail(
         sct.name as sc_to_name, sct.color as sc_to_color
       FROM ${postComments} c
       INNER JOIN ${principalTable} m ON c.principal_id = m.id
+      LEFT JOIN ${userTable} u ON m.user_id = u.id
       LEFT JOIN ${postCommentReactions} cr ON cr.comment_id = c.id
       LEFT JOIN ${postStatuses} scf ON scf.id = c.status_change_from_id
       LEFT JOIN ${postStatuses} sct ON sct.id = c.status_change_to_id
@@ -265,7 +274,7 @@ export async function getPublicPostDetail(
       ${includePrivateComments ? sql`` : sql`AND c.is_private = false`}
       ${moderationFilterSql}
       ${whereExtra}
-      GROUP BY c.id, m.display_name, m.avatar_key, m.avatar_url, scf.name, scf.color, sct.name, sct.color
+      GROUP BY c.id, m.display_name, m.avatar_key, m.avatar_url, u.image, u.image_key, scf.name, scf.color, sct.name, sct.color
       ${orderLimit}
     `)
 
@@ -375,6 +384,8 @@ export async function getPublicPostDetail(
     avatarUrl: resolveAvatarUrl({
       avatarKey: comment.avatar_key,
       avatarUrl: comment.avatar_url,
+      userImageKey: comment.user_image_key,
+      userImage: comment.user_image,
     }),
     statusChange: toStatusChange(
       comment.sc_from_name ? { name: comment.sc_from_name, color: comment.sc_from_color! } : null,
@@ -457,6 +468,8 @@ export async function getPublicPostDetail(
         avatarUrl: resolveAvatarUrl({
           avatarKey: pinnedRow.avatar_key,
           avatarUrl: pinnedRow.avatar_url,
+          userImageKey: pinnedRow.user_image_key,
+          userImage: pinnedRow.user_image,
         }),
         createdAt: ensureDate(pinnedRow.created_at),
         isTeamMember: pinnedRow.is_team_member,

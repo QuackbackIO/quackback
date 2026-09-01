@@ -65,6 +65,17 @@ describe('resolveUserAvatarUrl', () => {
     ).toBe('https://cdn.example/avatars/uploaded.png')
   })
 
+  it('uses the principal uploaded key when the user row has none', () => {
+    expect(
+      resolveUserAvatarUrl({
+        userImage: 'https://lh3.googleusercontent.com/a/abc',
+        userImageKey: null,
+        principalAvatarKey: 'avatars/principal.png',
+        principalAvatarUrl: 'https://stale.example/p.png',
+      })
+    ).toBe('https://cdn.example/avatars/principal.png')
+  })
+
   it('falls back to the principal copy', () => {
     expect(
       resolveUserAvatarUrl({
