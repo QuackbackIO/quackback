@@ -102,10 +102,9 @@ export function buildAskAiSystemPrompts(articles: RetrievedKbArticle[]): string[
     '- NEVER invent product features, settings paths, or step-by-step instructions that are not in the sources. Do not guess how this product works.',
     '- Leave "sources" empty.',
     'Citations (required for a "grounded" answer):',
-    '- Support every claim with an inline citation marker in square brackets, like [1] or [2], placed right after the clause it supports.',
-    '- Number citations in the order you first use them: the first article you cite is [1], the next distinct article is [2], and so on.',
-    '- List each cited article once in "sources", in that same order, so [n] refers to the n-th entry of "sources". Every number used inline must have a matching "sources" entry, and every "sources" entry must be cited at least once.',
-    '- Put only the articleId values printed on the source articles below in "sources". Copy them character-for-character. You may also use the source number as a string ("1" for the first source). Never invent an articleId.',
+    '- Cite sources by the numbers they are listed under below. [1] always means Source 1, [2] means Source 2, and so on.',
+    '- Place an inline citation marker right after the clause it supports, like [1] or [2].',
+    '- In "sources", list each cited article once. Prefer the source number as a string ("1"). You may also copy the articleId printed on that source. Never invent an articleId.',
     'Style:',
     '- Reply in the same language as the question.',
     '- Be concise and factual: at most 120 words.',
@@ -113,8 +112,8 @@ export function buildAskAiSystemPrompts(articles: RetrievedKbArticle[]): string[
     'Security:',
     `- ${ASK_AI_USER_MESSAGE_GUARD}`,
     'Respond with ONLY a single JSON object and nothing else — no preamble, commentary, or markdown code fence — of the shape {"kind": "grounded" | "no_answer", "answer": string, "sources": [{"articleId": string}]}, where "answer" is the prose (with inline [n] markers when grounded) and "sources" is the ordered citation list.',
-    'Example output, grounded (articleId copied verbatim from a source article):',
-    '{"kind": "grounded", "answer": "You can export your data from **Settings** [1]. The export arrives by email as a ZIP [1].", "sources": [{"articleId": "art_01h4kxt2e8z9y3b1n72k9q5m8p"}]}',
+    'Example output, grounded ([1] is Source 1 below):',
+    '{"kind": "grounded", "answer": "You can export your data from **Settings** [1]. The export arrives by email as a ZIP [1].", "sources": [{"articleId": "1"}]}',
     'Example output, no answer:',
     '{"kind": "no_answer", "answer": "I could not find anything about SSO certificate rotation in our help articles. Try rephrasing your question, or reach out to the team for a hand.", "sources": []}',
   ].join('\n')
@@ -122,7 +121,7 @@ export function buildAskAiSystemPrompts(articles: RetrievedKbArticle[]): string[
   const sources = articles
     .map(
       (a, i) =>
-        `[${i + 1}]\narticleId: ${a.id}\nTitle: ${a.title}\nCategory: ${a.categoryName}\nContent:\n${a.content}`
+        `Source ${i + 1}\narticleId: ${a.id}\nTitle: ${a.title}\nCategory: ${a.categoryName}\nContent:\n${a.content}`
     )
     .join('\n\n---\n\n')
 
@@ -255,9 +254,65 @@ function resolveCitedArticleId(cited: string, orderedIds: readonly string[]): st
   return null
 }
 
+function stuffedCitationMarker(): RegExp {
+  return /\[(\d+)\]/g
+}
+
+function stuffedIdAt(n: number, orderedIds: readonly string[]): string | null {
+  if (n < 1 || n > orderedIds.length) return null
+  return orderedIds[n - 1] ?? null
+}
+
+/**
+ * Inline [n] is the stuffed source number. Walk those first (display order),
+ * then any articleIds the model listed that still resolve.
+ */
+function collectCitedIds(
+  answer: string,
+  modelSources: Array<{ articleId: string }>,
+  orderedIds: readonly string[]
+): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  const add = (id: string | null) => {
+    if (!id || seen.has(id)) return
+    seen.add(id)
+    out.push(id)
+  }
+  for (const match of answer.matchAll(stuffedCitationMarker())) {
+    add(stuffedIdAt(Number(match[1]), orderedIds))
+  }
+  for (const source of modelSources) {
+    add(resolveCitedArticleId(source.articleId, orderedIds))
+  }
+  return out
+}
+
+/**
+ * Rewrite stuffed [n] markers onto the final sources list so the UI's [n] →
+ * sources[n-1] join holds. Markers whose stuffed source did not survive are
+ * stripped.
+ */
+function relinkStuffedCitations(
+  answer: string,
+  orderedIds: readonly string[],
+  finalIds: readonly string[]
+): string {
+  const finalIndexById = new Map(finalIds.map((id, i) => [id, i + 1]))
+  return answer
+    .replace(stuffedCitationMarker(), (_m, raw: string) => {
+      const id = stuffedIdAt(Number(raw), orderedIds)
+      if (!id) return ''
+      const mapped = finalIndexById.get(id)
+      return mapped != null ? `[${mapped}]` : ''
+    })
+    .trimEnd()
+}
+
 /**
  * Server-side guardrail: re-validate the model output shape and keep only
- * citations that reference retrieved articles (deduplicated, model order).
+ * citations that reference retrieved articles (deduplicated, first appearance
+ * of a stuffed [n] in the answer, then any extra resolved sources[] ids).
  *
  * A grounded answer must cite at least one retrieved article; if none survive,
  * its prose may be an ungrounded fabrication, so we discard it and fall back to
@@ -266,16 +321,14 @@ function resolveCitedArticleId(cited: string, orderedIds: readonly string[]): st
  */
 function validateAnswer(object: unknown, orderedIds: readonly string[]): AskAiAnswer {
   const parsed = answerSchema.parse(object)
-  const seen = new Set<string>()
-  const sources: AskAiSource[] = []
-  for (const source of parsed.sources) {
-    const resolved = resolveCitedArticleId(source.articleId, orderedIds)
-    if (!resolved || seen.has(resolved)) continue
-    seen.add(resolved)
-    sources.push({ articleId: resolved })
-  }
+  const citedIds = collectCitedIds(parsed.answer, parsed.sources, orderedIds)
+  const sources = citedIds.map((articleId) => ({ articleId }))
   if (parsed.kind === 'grounded' && sources.length > 0) {
-    return { kind: 'grounded', answer: parsed.answer, sources }
+    return {
+      kind: 'grounded',
+      answer: relinkStuffedCitations(parsed.answer, orderedIds, citedIds),
+      sources,
+    }
   }
   const trimmed = parsed.answer.trim()
   const missText = parsed.kind === 'no_answer' && trimmed ? trimmed : ASK_AI_MISS_FALLBACK
