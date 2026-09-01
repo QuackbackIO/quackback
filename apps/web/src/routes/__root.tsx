@@ -241,7 +241,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   // structuralSharing keeps the array reference stable across store updates that
   // don't change the matched routes, so RootDocument doesn't re-render every tick.
   const routeIds = useRouterState({
-    select: (s) => s.matches.map((m) => m.routeId),
+    select: (s): string[] => s.matches.map((m) => m.routeId),
     structuralSharing: true,
   })
   // The widget honors a `?locale=` override (its SDK appends it); read it so the

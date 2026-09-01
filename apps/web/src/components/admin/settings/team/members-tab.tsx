@@ -2,10 +2,12 @@ import { Fragment, useState, useEffect, useMemo } from 'react'
 import {
   type ColumnDef,
   type FilterFn,
-  flexRender,
-  getCoreRowModel,
-  getFilteredRowModel,
-  useReactTable,
+  columnFilteringFeature,
+  createFilteredRowModel,
+  globalFilteringFeature,
+  metaHelper,
+  tableFeatures,
+  useTable,
 } from '@tanstack/react-table'
 import { useSuspenseQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouteContext } from '@tanstack/react-router'
@@ -72,6 +74,13 @@ type TeamRow =
       expiresAt: string
     }
 
+const features = tableFeatures({
+  columnFilteringFeature,
+  globalFilteringFeature,
+  filteredRowModel: createFilteredRowModel(),
+  columnMeta: metaHelper<{ className?: string }>(),
+})
+
 /**
  * One badge for both layouts: the resolved workspace assignment's name when
  * one exists (presets show Owner/Manager etc., matching the roles tab), the
@@ -99,7 +108,7 @@ function roleBadge(r: TeamRow, role: string, extra = '') {
   )
 }
 
-const teamFilterFn: FilterFn<TeamRow> = (row, _columnId, filterValue: string) => {
+const teamFilterFn: FilterFn<typeof features, TeamRow> = (row, _columnId, filterValue: string) => {
   const query = filterValue.toLowerCase()
   const r = row.original
   const name = r.type === 'member' ? r.name : r.name || ''
@@ -188,7 +197,7 @@ export function MembersTab({ workspaceName, currentMember }: MembersTabProps) {
     setInviteLinkMap((prev) => ({ ...prev, [id]: link }))
   }
 
-  const columns = useMemo<ColumnDef<TeamRow>[]>(
+  const columns = useMemo<ColumnDef<typeof features, TeamRow>[]>(
     () => [
       {
         id: 'name',
@@ -321,11 +330,10 @@ export function MembersTab({ workspaceName, currentMember }: MembersTabProps) {
     [avatarMap, currentMember.id, isCurrentUserAdmin, isLastAdmin]
   )
 
-  const table = useReactTable({
+  const table = useTable({
+    features,
     data,
     columns,
-    getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
     globalFilterFn: teamFilterFn,
     state: { globalFilter: search },
     onGlobalFilterChange: setSearch,
@@ -369,15 +377,8 @@ export function MembersTab({ workspaceName, currentMember }: MembersTabProps) {
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow key={headerGroup.id}>
                   {headerGroup.headers.map((header) => (
-                    <TableHead
-                      key={header.id}
-                      className={
-                        (header.column.columnDef.meta as { className?: string })?.className
-                      }
-                    >
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(header.column.columnDef.header, header.getContext())}
+                    <TableHead key={header.id} className={header.column.columnDef.meta?.className}>
+                      {header.isPlaceholder ? null : <table.FlexRender header={header} />}
                     </TableHead>
                   ))}
                 </TableRow>
@@ -401,14 +402,12 @@ export function MembersTab({ workspaceName, currentMember }: MembersTabProps) {
                   return (
                     <Fragment key={row.id}>
                       <TableRow>
-                        {row.getVisibleCells().map((cell) => (
+                        {row.getAllCells().map((cell) => (
                           <TableCell
                             key={cell.id}
-                            className={
-                              (cell.column.columnDef.meta as { className?: string })?.className
-                            }
+                            className={cell.column.columnDef.meta?.className}
                           >
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                            <table.FlexRender cell={cell} />
                           </TableCell>
                         ))}
                       </TableRow>
