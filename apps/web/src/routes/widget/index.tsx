@@ -105,13 +105,6 @@ export const Route = createFileRoute('/widget/')({
       ((settings?.featureFlags as { supportInbox?: boolean } | undefined)?.supportInbox ?? false) &&
       (settings?.publicWidgetConfig?.tabs?.messenger ?? false)
 
-    // Converged Messages surface: a tickets-enabled workspace surfaces its
-    // ticket pairs through the Messages tab even with the messenger off
-    // (email-first workspaces) — the chat-start affordance stays gated on the
-    // messenger via `messengerEnabled` below.
-    const ticketsEnabled =
-      (settings?.featureFlags as { supportTickets?: boolean } | undefined)?.supportTickets ?? false
-
     const helpTabEnabled =
       ((settings?.featureFlags as { helpCenter?: boolean } | undefined)?.helpCenter ?? false) &&
       (settings?.publicWidgetConfig?.tabs?.help ?? false)
@@ -244,22 +237,15 @@ export const Route = createFileRoute('/widget/')({
         feedback: feedbackProductEnabled && (settings?.publicWidgetConfig?.tabs?.feedback ?? true),
         changelog: changelogTabEnabled,
         help: helpTabEnabled,
-        // Support Inbox flag + Messages tab on (computed above), OR
-        // tickets on (the converged surface lists ticket pairs here). The
-        // persisted config names the messenger surface `messenger`; the widget
-        // speaks `messages`.
-        messages: messengerTabEnabled || ticketsEnabled,
-        // The requester's own-tickets list — projected already AND-ed with the
-        // supportTickets flag in the public widget config (fail-closed).
+        // The persisted config names the messenger surface `messenger`; the
+        // widget speaks `messages`. Tickets is its own stored tab.
+        messages: messengerTabEnabled,
         tickets: settings?.publicWidgetConfig?.tabs?.tickets ?? false,
         // Admin opt-out for the aggregated Home tab (defaults to shown).
         home: settings?.publicWidgetConfig?.tabs?.home ?? true,
       },
       // Home surface customisation (greeting, hero style, quick-link cards).
       home: settings?.publicWidgetConfig?.home ?? null,
-      // Per-locale copy overrides; the Home surface resolves greeting/subtitle
-      // against the visitor's locale client-side.
-      translations: settings?.publicWidgetConfig?.translations ?? null,
       // Workspace logo for the Home header (branding config).
       logoUrl: settings?.brandingData?.logoUrl ?? null,
       // Top help articles for the Home search card (public; SSR'd).
@@ -286,8 +272,8 @@ export const Route = createFileRoute('/widget/')({
         widgetSignIn: settings?.publicPortalConfig?.portalAccess?.widgetSignIn ?? false,
       },
       // Whether the visitor can START a conversation (the messenger proper).
-      // False for tickets-only workspaces: Messages lists their threads, but
-      // the chat-start affordances hide (agents/email initiate).
+      // False when the Messages tab is off — tickets-only workspaces hide
+      // the chat-start affordances (agents/email initiate).
       messengerEnabled: messengerTabEnabled,
       // The portal's own origin (BASE_URL env), resolved server-side so the
       // widget handoff URL always points at the portal host — not at the widget
@@ -372,7 +358,6 @@ function WidgetPage() {
     portalAccess,
     portalOrigin,
     home,
-    translations,
     logoUrl,
     topArticles,
     teamName,
@@ -745,7 +730,6 @@ function WidgetPage() {
           <WidgetOverview
             tabs={tabs}
             home={home}
-            translations={translations ?? undefined}
             assistant={assistant}
             team={team}
             topArticles={topArticles}

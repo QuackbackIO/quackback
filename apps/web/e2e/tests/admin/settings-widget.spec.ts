@@ -24,8 +24,8 @@ test.describe('Admin Widget Settings', () => {
     await expect(widgetToggle).toBeEnabled()
   })
 
-  test('shows Modules section with Feedback and Changelog toggles', async ({ page }) => {
-    await expect(page.getByText('Modules')).toBeVisible({ timeout: 10000 })
+  test('shows Tabs section with Feedback and Changelog toggles', async ({ page }) => {
+    await expect(page.getByText('Tabs', { exact: true })).toBeVisible({ timeout: 10000 })
     await expect(page.locator('#tab-feedback')).toBeVisible()
     await expect(page.locator('#tab-changelog')).toBeVisible()
   })
@@ -40,7 +40,8 @@ test.describe('Admin Widget Settings', () => {
     })
   })
 
-  test('shows Appearance controls', async ({ page }) => {
+  test('shows Layout controls', async ({ page }) => {
+    await expect(page.getByText('Layout')).toBeVisible({ timeout: 10000 })
     await expect(page.getByText('Button position')).toBeVisible({ timeout: 10000 })
     await expect(page.getByText('Default board')).toBeVisible()
   })

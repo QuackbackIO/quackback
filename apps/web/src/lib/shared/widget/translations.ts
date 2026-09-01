@@ -1,20 +1,17 @@
 /**
- * Admin-provided per-locale overrides for customer-facing widget copy. The base
- * (untranslated) fields on the config stay the fallback; a locale override wins
- * when present. Kept as a small, serializable shape so the same rule runs on the
- * server (messenger welcome/offline) and the client (home greeting/subtitle).
+ * Admin-provided per-locale overrides for messenger welcome/offline copy. The
+ * base (untranslated) fields on the config stay the fallback; a locale override
+ * wins when present.
  */
 export interface WidgetContentTranslation {
   welcomeMessage?: string
   offlineMessage?: string
-  greeting?: string
-  subtitle?: string
 }
 
 /** Locale code -> overrides. Empty/absent means the base copy is used. */
 export type WidgetTranslations = Record<string, WidgetContentTranslation>
 
-/** Display names for admin translation pickers (widget Home + messenger). */
+/** Display names for admin translation pickers (messenger). */
 export const WIDGET_LOCALE_LABELS: Record<string, string> = {
   en: 'English',
   de: 'German',

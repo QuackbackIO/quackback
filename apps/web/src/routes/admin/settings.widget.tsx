@@ -73,12 +73,6 @@ import type {
   WidgetCardAudience,
   WidgetHomeConfig,
 } from '@/lib/shared/types/settings'
-import { SUPPORTED_LOCALES } from '@/lib/shared/i18n'
-import {
-  WIDGET_LOCALE_LABELS,
-  type WidgetContentTranslation,
-  type WidgetTranslations,
-} from '@/lib/shared/widget/translations'
 import { widgetInstallPresence } from '@/lib/shared/widget/widget-origin'
 import {
   widgetConnectedStatusLabel,
@@ -170,20 +164,24 @@ function WidgetSettingsPage() {
         <div className="space-y-4 min-w-0">
           <WidgetSiteCard initialEnabled={config.enabled} status={onboardingQuery.data} />
 
-          <ModulesCard
+          <TabsCard
             config={config}
             boards={boardsQuery.data}
+            helpCenterFlagEnabled={helpCenterFlagEnabled}
+            supportInboxFlagEnabled={supportInboxFlagEnabled}
+            feedbackFlagEnabled={feedbackFlagEnabled}
+            changelogFlagEnabled={changelogFlagEnabled}
+            supportTicketsFlagEnabled={supportTicketsFlagEnabled}
+          />
+
+          <LayoutCard
+            config={config}
             position={position}
             onPositionChange={setPosition}
             launcherLabel={launcherLabel}
             onLabelChange={setLauncherLabel}
             launcherGreeting={launcherGreeting}
             onGreetingChange={setLauncherGreeting}
-            helpCenterFlagEnabled={helpCenterFlagEnabled}
-            supportInboxFlagEnabled={supportInboxFlagEnabled}
-            feedbackFlagEnabled={feedbackFlagEnabled}
-            changelogFlagEnabled={changelogFlagEnabled}
-            supportTicketsFlagEnabled={supportTicketsFlagEnabled}
           />
 
           <HomeCustomizationCard
@@ -193,8 +191,6 @@ function WidgetSettingsPage() {
           />
 
           <AssistantLinkCard assistant={config.messenger?.assistant} />
-
-          <WidgetTranslationsCard translations={config.translations} />
         </div>
 
         <div className="xl:sticky xl:top-6 min-w-0 xl:h-[calc(100vh-7.5rem)] flex flex-col">
@@ -340,15 +336,9 @@ function WidgetSiteCard({
   )
 }
 
-export function ModulesCard({
+export function TabsCard({
   config,
   boards,
-  position,
-  onPositionChange,
-  launcherLabel,
-  onLabelChange,
-  launcherGreeting,
-  onGreetingChange,
   helpCenterFlagEnabled,
   supportInboxFlagEnabled,
   feedbackFlagEnabled,
@@ -357,23 +347,16 @@ export function ModulesCard({
 }: {
   config: {
     defaultBoard?: string
-    launcherGreeting?: string
-    launcherLabel?: string
     tabs?: {
       feedback?: boolean
       changelog?: boolean
       help?: boolean
       messenger?: boolean
+      tickets?: boolean
       home?: boolean
     }
   }
   boards: { id: string; name: string; slug: string }[]
-  position: 'bottom-right' | 'bottom-left'
-  onPositionChange: (val: 'bottom-right' | 'bottom-left') => void
-  launcherLabel: string
-  onLabelChange: (val: string) => void
-  launcherGreeting: string
-  onGreetingChange: (val: string) => void
   helpCenterFlagEnabled: boolean
   supportInboxFlagEnabled: boolean
   feedbackFlagEnabled: boolean
@@ -388,19 +371,22 @@ export function ModulesCard({
   const [tabs, setTabs] = useState({
     home: config.tabs?.home ?? true,
     messenger: config.tabs?.messenger ?? true,
+    tickets: config.tabs?.tickets ?? true,
     feedback: config.tabs?.feedback ?? true,
     changelog: config.tabs?.changelog ?? true,
     help: config.tabs?.help ?? false,
   })
 
   const showHelpToggle = helpCenterFlagEnabled
+  const showMessagesToggle = supportInboxFlagEnabled
+  const showTicketsToggle = supportTicketsFlagEnabled
   const bothContentProductsOn = feedbackFlagEnabled && changelogFlagEnabled
   const contentSectionCount = [
     feedbackFlagEnabled && tabs.feedback,
     changelogFlagEnabled && tabs.changelog,
     helpCenterFlagEnabled && tabs.help,
     supportInboxFlagEnabled && tabs.messenger,
-    supportTicketsFlagEnabled,
+    supportTicketsFlagEnabled && tabs.tickets,
   ].filter(Boolean).length
   const lastSectionLock = contentSectionCount <= 1
   const lockFeedbackOff =
@@ -440,8 +426,8 @@ export function ModulesCard({
 
   return (
     <SettingsCard
-      title="Modules"
-      description="Choose which sections the widget shows. The tab bar hides with a single section."
+      title="Tabs"
+      description="Choose which tabs the widget shows. The tab bar hides with a single section."
     >
       <div className="space-y-3">
         <TabRow
@@ -453,6 +439,38 @@ export function ModulesCard({
           saving={saving}
           onChange={(checked) => void saveTab('home', checked)}
         />
+
+        {showMessagesToggle && (
+          <TabRow
+            id="tab-messages"
+            label="Messages"
+            description="Live chat conversations"
+            checked={tabs.messenger}
+            disabled={isBusy || (tabs.messenger && lastSectionLock)}
+            disabledHint={lastSectionHint}
+            saving={saving}
+            onChange={(checked) => {
+              if (!checked && lastSectionLock) return
+              void saveTab('messenger', checked)
+            }}
+          />
+        )}
+
+        {showTicketsToggle && (
+          <TabRow
+            id="tab-tickets"
+            label="Tickets"
+            description="Customers can view and follow their tickets"
+            checked={tabs.tickets}
+            disabled={isBusy || (tabs.tickets && lastSectionLock)}
+            disabledHint={lastSectionHint}
+            saving={saving}
+            onChange={(checked) => {
+              if (!checked && lastSectionLock) return
+              void saveTab('tickets', checked)
+            }}
+          />
+        )}
 
         {feedbackFlagEnabled && (
           <TabRow
@@ -503,7 +521,89 @@ export function ModulesCard({
         )}
       </div>
 
-      <div className="mt-5 space-y-2">
+      {feedbackFlagEnabled && (
+        <div className="mt-4 space-y-2">
+          <Label className="text-xs text-muted-foreground">Default board</Label>
+          <Select
+            value={defaultBoard || ''}
+            onValueChange={(val) => {
+              setDefaultBoard(val)
+              void save({ defaultBoard: val })
+            }}
+            disabled={isBusy}
+          >
+            <SelectTrigger
+              className="w-full"
+              onClear={
+                defaultBoard
+                  ? () => {
+                      setDefaultBoard('')
+                      void save({ defaultBoard: '' })
+                    }
+                  : undefined
+              }
+            >
+              <SelectValue placeholder="No default board" />
+            </SelectTrigger>
+            <SelectContent>
+              {boards.map((board) => (
+                <SelectItem key={board.id} value={board.slug}>
+                  {board.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Which board new posts from the widget default to
+          </p>
+        </div>
+      )}
+    </SettingsCard>
+  )
+}
+
+export function LayoutCard({
+  config,
+  position,
+  onPositionChange,
+  launcherLabel,
+  onLabelChange,
+  launcherGreeting,
+  onGreetingChange,
+}: {
+  config: {
+    launcherGreeting?: string
+    launcherLabel?: string
+  }
+  position: 'bottom-right' | 'bottom-left'
+  onPositionChange: (val: 'bottom-right' | 'bottom-left') => void
+  launcherLabel: string
+  onLabelChange: (val: string) => void
+  launcherGreeting: string
+  onGreetingChange: (val: string) => void
+}) {
+  const router = useRouter()
+  const updateWidgetConfig = useUpdateWidgetConfig()
+  const [isPending, startTransition] = useTransition()
+  const [saving, setSaving] = useState(false)
+  const isBusy = saving || isPending
+
+  async function save(updates: Parameters<typeof updateWidgetConfig.mutateAsync>[0]) {
+    setSaving(true)
+    try {
+      await updateWidgetConfig.mutateAsync(updates)
+      startTransition(() => router.invalidate())
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <SettingsCard
+      title="Layout"
+      description="Where the launcher sits and what it says on the host page"
+    >
+      <div className="space-y-2">
         <Label htmlFor="widget-position" className="text-xs text-muted-foreground">
           Button position
         </Label>
@@ -515,7 +615,7 @@ export function ModulesCard({
           }}
           disabled={isBusy}
         >
-          <SelectTrigger className="w-full">
+          <SelectTrigger id="widget-position" className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -566,42 +666,6 @@ export function ModulesCard({
         />
         <p className="text-[11px] text-muted-foreground/70">
           Shown in a bubble beside the launcher to invite a chat. Leave blank for none.
-        </p>
-      </div>
-
-      <div className="mt-4 space-y-2">
-        <Label className="text-xs text-muted-foreground">Default board</Label>
-        <Select
-          value={defaultBoard || ''}
-          onValueChange={(val) => {
-            setDefaultBoard(val)
-            void save({ defaultBoard: val })
-          }}
-          disabled={isBusy}
-        >
-          <SelectTrigger
-            className="w-full"
-            onClear={
-              defaultBoard
-                ? () => {
-                    setDefaultBoard('')
-                    void save({ defaultBoard: '' })
-                  }
-                : undefined
-            }
-          >
-            <SelectValue placeholder="No default board" />
-          </SelectTrigger>
-          <SelectContent>
-            {boards.map((board) => (
-              <SelectItem key={board.id} value={board.slug}>
-                {board.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-muted-foreground">
-          Which board new posts from the widget default to
         </p>
       </div>
     </SettingsCard>
@@ -1265,102 +1329,6 @@ function SortableHomeCardShell({
     >
       {children(dragHandle)}
     </div>
-  )
-}
-
-/** Cross-link to the AI & Automation page (assistant identity lives there). */
-const TRANSLATABLE_LOCALES = SUPPORTED_LOCALES.filter((l) => l !== 'en')
-const TRANSLATION_FIELDS: { key: keyof WidgetContentTranslation; placeholder: string }[] = [
-  { key: 'greeting', placeholder: 'Home greeting' },
-  { key: 'subtitle', placeholder: 'Home subtitle' },
-]
-
-function WidgetTranslationsCard({ translations }: { translations?: WidgetTranslations }) {
-  const updateWidgetConfig = useUpdateWidgetConfig()
-  const [draft, setDraft] = useState<WidgetTranslations>(translations ?? {})
-  const [saving, setSaving] = useState(false)
-  const configured = Object.keys(draft)
-  const available = TRANSLATABLE_LOCALES.filter((l) => !configured.includes(l))
-
-  async function commit(next: WidgetTranslations) {
-    setDraft(next)
-    setSaving(true)
-    try {
-      await updateWidgetConfig.mutateAsync({ translations: next })
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <SettingsCard
-      title="Translations"
-      description="Localise the customer-facing copy. Visitors see it in their browser language; the default copy is the fallback."
-    >
-      <div className="space-y-3">
-        {configured.length === 0 && (
-          <p className="text-xs text-muted-foreground">No translations yet.</p>
-        )}
-        {configured.map((locale) => (
-          <div key={locale} className="space-y-2 rounded-lg border border-border/50 p-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">{WIDGET_LOCALE_LABELS[locale] ?? locale}</span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs text-muted-foreground"
-                onClick={() => {
-                  const next = { ...draft }
-                  delete next[locale]
-                  void commit(next)
-                }}
-                disabled={saving}
-              >
-                Remove
-              </Button>
-            </div>
-            {TRANSLATION_FIELDS.map((f) => (
-              <Input
-                key={f.key}
-                defaultValue={draft[locale]?.[f.key] ?? ''}
-                placeholder={f.placeholder}
-                maxLength={1000}
-                className="h-8 text-xs"
-                disabled={saving}
-                onBlur={(e) => {
-                  const value = e.target.value.trim()
-                  if (value === (draft[locale]?.[f.key] ?? '')) return
-                  const entry: WidgetContentTranslation = {
-                    ...(draft[locale] ?? {}),
-                    [f.key]: value || undefined,
-                  }
-                  void commit({ ...draft, [locale]: entry })
-                }}
-              />
-            ))}
-          </div>
-        ))}
-        {available.length > 0 && (
-          <Select
-            value=""
-            onValueChange={(l) => void commit({ ...draft, [l]: {} })}
-            disabled={saving}
-          >
-            <SelectTrigger size="sm">
-              <SelectValue placeholder="Add a language" />
-            </SelectTrigger>
-            <SelectContent>
-              {available.map((l) => (
-                <SelectItem key={l} value={l}>
-                  {WIDGET_LOCALE_LABELS[l] ?? l}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-      </div>
-    </SettingsCard>
   )
 }
 

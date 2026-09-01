@@ -841,6 +841,7 @@ const updateWidgetConfigSchema = z.object({
       changelog: z.boolean().optional(),
       help: z.boolean().optional(),
       messenger: z.boolean().optional(),
+      tickets: z.boolean().optional(),
       home: z.boolean().optional(),
     })
     .optional(),
@@ -852,8 +853,6 @@ const updateWidgetConfigSchema = z.object({
       z.object({
         welcomeMessage: z.string().max(1000).optional(),
         offlineMessage: z.string().max(1000).optional(),
-        greeting: z.string().max(120).optional(),
-        subtitle: z.string().max(200).optional(),
       })
     )
     .optional(),
