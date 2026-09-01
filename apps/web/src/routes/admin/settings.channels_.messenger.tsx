@@ -278,12 +278,7 @@ function MessengerTranslations({
     if (value === (entry[key] ?? '')) return
     const nextEntry = { ...entry, [key]: value || undefined }
     const next = { ...translations, [selectedLocale]: nextEntry }
-    if (
-      !nextEntry.welcomeMessage &&
-      !nextEntry.offlineMessage &&
-      !nextEntry.greeting &&
-      !nextEntry.subtitle
-    ) {
+    if (!nextEntry.welcomeMessage && !nextEntry.offlineMessage) {
       const { [selectedLocale]: _removed, ...rest } = next
       onCommit(rest)
       return

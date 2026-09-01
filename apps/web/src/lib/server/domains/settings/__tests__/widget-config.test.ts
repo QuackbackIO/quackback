@@ -53,6 +53,10 @@ describe('Widget Config Types', () => {
       expect(DEFAULT_WIDGET_CONFIG.tabs?.messenger).toBe(true)
     })
 
+    it('keeps the Tickets tab on by default', () => {
+      expect(DEFAULT_WIDGET_CONFIG.tabs?.tickets).toBe(true)
+    })
+
     it('keeps the feedback tab on by default', () => {
       expect(DEFAULT_WIDGET_CONFIG.tabs?.feedback).toBe(true)
     })
@@ -277,10 +281,10 @@ describe('getPublicWidgetConfig — help tab projection', () => {
   })
 })
 
-describe('getPublicWidgetConfig — tickets projection (converged Messages)', () => {
-  it('projects tabs.tickets from the supportTickets flag alone — no stored tab', async () => {
+describe('getPublicWidgetConfig — tickets tab projection', () => {
+  it('projects tabs.tickets from the flag + stored tab, defaulting on', async () => {
     // The flag is set explicitly, and the stored tabs deliberately carry no
-    // `tickets` key: that is the point of the assertion. DEFAULT_FEATURE_FLAGS
+    // `tickets` key: missing means on, matching messenger. DEFAULT_FEATURE_FLAGS
     // is core-only (Feedback + Changelog) since 0268, so relying on a default
     // here would assert the default rather than the projection.
     settingsRow.current = fixtureRow(
@@ -288,10 +292,22 @@ describe('getPublicWidgetConfig — tickets projection (converged Messages)', ()
       { supportTickets: true }
     )
     const projected = await getPublicWidgetConfig()
-    // Ticket pairs surface through Messages; the flag alone decides.
     expect(projected.tabs?.tickets).toBe(true)
     // Tickets can be the sole enabled surface (email-first workspaces).
     expect(projected.enabled).toBe(true)
+  })
+
+  it('keeps the Tickets tab off when the stored tab is off', async () => {
+    settingsRow.current = fixtureRow(
+      {
+        enabled: true,
+        tabs: { feedback: false, changelog: false, messenger: false, tickets: false },
+      },
+      { supportTickets: true }
+    )
+    const projected = await getPublicWidgetConfig()
+    expect(projected.tabs?.tickets).toBe(false)
+    expect(projected.enabled).toBe(false)
   })
 
   it('projects tabs.tickets false when the flag is off', async () => {
@@ -306,18 +322,18 @@ describe('getPublicWidgetConfig — tickets projection (converged Messages)', ()
 })
 
 describe('getPublicWidgetConfig — translations', () => {
-  it('projects per-locale copy so the widget iframe sees Home and messenger strings', async () => {
+  it('projects per-locale messenger copy so the widget iframe sees welcome/offline strings', async () => {
     settingsRow.current = fixtureRow({
       enabled: true,
       translations: {
-        de: { greeting: 'Hallo', welcomeMessage: 'Willkommen' },
+        de: { welcomeMessage: 'Willkommen', offlineMessage: 'Wir sind offline' },
       },
       launcherGreeting: 'Need a hand?',
       launcherLabel: 'Chat',
     })
     const projected = await getPublicWidgetConfig()
     expect(projected.translations).toEqual({
-      de: { greeting: 'Hallo', welcomeMessage: 'Willkommen' },
+      de: { welcomeMessage: 'Willkommen', offlineMessage: 'Wir sind offline' },
     })
     expect(projected.launcherGreeting).toBe('Need a hand?')
     expect(projected.launcherLabel).toBe('Chat')

@@ -35,6 +35,7 @@ import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { actorFromAuth, recordAuditEvent, type AuditEventType } from '@/lib/server/audit/log'
 import { requireAuth } from './auth-helpers'
 import { teamMemberWhere } from '@/lib/server/domains/principals/principal.service'
+import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
 import { getSession } from '@/lib/server/auth/session'
 import { db, principal, user, invitation, account, eq, and } from '@/lib/server/db'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -137,6 +138,8 @@ export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).
         userId: principal.userId,
         avatarKey: principal.avatarKey,
         avatarUrl: principal.avatarUrl,
+        userImage: user.image,
+        userImageKey: user.imageKey,
         userName: user.name,
         userEmail: user.email,
         lastSignInAt: sqlOp<Date | null>`${lastSession.lastSignInAt}`,
@@ -204,7 +207,11 @@ export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).
 
     for (const m of members) {
       if (m.userId) {
-        avatarMap[m.userId] = buildAvatarUrl(m)
+        avatarMap[m.userId] = resolveUserAvatarUrl({
+          userImage: m.userImage,
+          userImageKey: m.userImageKey,
+          principalAvatarUrl: buildAvatarUrl(m),
+        })
       }
     }
 
@@ -841,6 +848,7 @@ const updateWidgetConfigSchema = z.object({
       changelog: z.boolean().optional(),
       help: z.boolean().optional(),
       messenger: z.boolean().optional(),
+      tickets: z.boolean().optional(),
       home: z.boolean().optional(),
     })
     .optional(),
@@ -852,8 +860,6 @@ const updateWidgetConfigSchema = z.object({
       z.object({
         welcomeMessage: z.string().max(1000).optional(),
         offlineMessage: z.string().max(1000).optional(),
-        greeting: z.string().max(120).optional(),
-        subtitle: z.string().max(200).optional(),
       })
     )
     .optional(),

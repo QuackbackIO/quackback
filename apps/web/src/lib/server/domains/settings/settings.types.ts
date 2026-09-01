@@ -689,6 +689,8 @@ export interface WidgetConfig {
     help?: boolean
     /** Messenger (the "Messages" tab). */
     messenger?: boolean
+    /** Requester's own-tickets list (the "Tickets" tab). Defaults on. */
+    tickets?: boolean
     /** Show the aggregated Home tab (defaults to on; only appears with 2+ sections) */
     home?: boolean
   }
@@ -696,8 +698,8 @@ export interface WidgetConfig {
   messenger?: MessengerConfig
   /** Home surface customisation (greeting, hero style, quick-link cards). */
   home?: WidgetHomeConfig
-  /** Per-locale overrides of the customer-facing copy (welcome/offline message,
-   *  home greeting/subtitle). The base fields are the fallback. */
+  /** Per-locale overrides of the messenger welcome/offline message. The base
+   *  fields are the fallback. */
   translations?: WidgetTranslations
 }
 
@@ -705,32 +707,21 @@ export interface WidgetConfig {
  * Public subset of widget config — safe to include in WorkspaceSettings / bootstrap data
  * Does NOT include identifyVerification (admin-only concern)
  */
-export type PublicWidgetConfig = Omit<
-  Pick<
-    WidgetConfig,
-    | 'enabled'
-    | 'defaultBoard'
-    | 'position'
-    | 'tabs'
-    | 'home'
-    | 'launcherGreeting'
-    | 'launcherLabel'
-    | 'translations'
-  >,
-  'tabs'
+export type PublicWidgetConfig = Pick<
+  WidgetConfig,
+  | 'enabled'
+  | 'defaultBoard'
+  | 'position'
+  | 'tabs'
+  | 'home'
+  | 'launcherGreeting'
+  | 'launcherLabel'
+  | 'translations'
 > & {
   /** Always true: identify requires a backend-signed ssoToken (GH issue #300). */
   hmacRequired?: boolean
   /** Client-safe messenger config (no agent-only fields like routing). */
   messenger?: PublicMessengerConfig
-  tabs?: NonNullable<WidgetConfig['tabs']> & {
-    /**
-     * Computed from the `supportTickets` flag — not a stored tab. Ticket
-     * pairs surface through Messages; this bit still drives the requester's
-     * own-tickets list in the widget.
-     */
-    tickets?: boolean
-  }
 }
 
 export const DEFAULT_MESSENGER_CONFIG: MessengerConfig = {
@@ -750,6 +741,7 @@ export const DEFAULT_WIDGET_CONFIG: WidgetConfig = {
     feedback: true,
     changelog: true,
     messenger: true,
+    tickets: true,
     home: true,
   },
   messenger: DEFAULT_MESSENGER_CONFIG,
@@ -795,6 +787,7 @@ export interface UpdateWidgetConfigInput {
     changelog?: boolean
     help?: boolean
     messenger?: boolean
+    tickets?: boolean
     home?: boolean
   }
   messenger?: Partial<MessengerConfig>

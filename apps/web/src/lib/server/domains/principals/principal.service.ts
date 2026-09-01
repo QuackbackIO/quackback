@@ -24,6 +24,7 @@ import { isTeamMember, isAdmin } from '@/lib/shared/roles'
 import type { PermissionKey } from '@/lib/shared/permissions'
 import { recordAuditEvent, type AuditActor } from '@/lib/server/audit/log'
 import type { TeamMember } from './principal.types'
+import { resolveUserAvatarUrl } from './principal-display'
 import { logger } from '@/lib/server/logger'
 import { setPrincipalRole } from './principal.factory'
 
@@ -111,6 +112,7 @@ export async function listTeamMembers(): Promise<TeamMember[]> {
         name: user.name,
         email: user.email,
         image: user.image,
+        imageKey: user.imageKey,
         role: principal.role,
         createdAt: principal.createdAt,
         lastSignInAt: sql<Date | string | null>`${lastSession.lastSignInAt}`,
@@ -126,7 +128,13 @@ export async function listTeamMembers(): Promise<TeamMember[]> {
     // the server-fn boundary (which wants string), so we use a Date
     // constructor directly rather than going through toIsoStringOrNull.
     return rawMembers.map((m) => ({
-      ...m,
+      id: m.id,
+      userId: m.userId,
+      name: m.name,
+      email: m.email,
+      image: resolveUserAvatarUrl({ userImage: m.image, userImageKey: m.imageKey }),
+      role: m.role,
+      createdAt: m.createdAt,
       lastSignInAt: m.lastSignInAt == null ? null : new Date(m.lastSignInAt),
     }))
   } catch (error) {
@@ -147,13 +155,19 @@ export async function listTeamAvatars(
 ): Promise<{ name: string; avatarUrl: string | null }[]> {
   try {
     const rows = await db
-      .select({ name: user.name, avatarUrl: user.image })
+      .select({ name: user.name, image: user.image, imageKey: user.imageKey })
       .from(principal)
       .innerJoin(user, eq(principal.userId, user.id))
       .where(teamMemberWhere())
-      .orderBy(sql`(${user.image} IS NOT NULL) DESC`, principal.createdAt)
+      .orderBy(
+        sql`((${user.image} IS NOT NULL) OR (${user.imageKey} IS NOT NULL)) DESC`,
+        principal.createdAt
+      )
       .limit(limit)
-    return rows
+    return rows.map((r) => ({
+      name: r.name,
+      avatarUrl: resolveUserAvatarUrl({ userImage: r.image, userImageKey: r.imageKey }),
+    }))
   } catch (error) {
     log.error({ err: error }, 'failed to list team avatars')
     throw new InternalError('DATABASE_ERROR', 'Failed to list team avatars', error)
@@ -179,13 +193,14 @@ export async function searchPeople(params: {
     conditions.push(or(ilike(user.name, q), ilike(user.email, q))!)
   }
 
-  return db
+  const rows = await db
     .select({
       id: principal.id,
       userId: user.id,
       name: user.name,
       email: user.email,
       image: user.image,
+      imageKey: user.imageKey,
       role: principal.role,
       createdAt: principal.createdAt,
       // The typeahead path never displays last-sign-in, so a null
@@ -197,6 +212,16 @@ export async function searchPeople(params: {
     .where(and(...conditions))
     .orderBy(user.name)
     .limit(limit)
+  return rows.map((r) => ({
+    id: r.id,
+    userId: r.userId,
+    name: r.name,
+    email: r.email,
+    image: resolveUserAvatarUrl({ userImage: r.image, userImageKey: r.imageKey }),
+    role: r.role,
+    createdAt: r.createdAt,
+    lastSignInAt: r.lastSignInAt,
+  }))
 }
 
 /**

@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { FormattedMessage } from 'react-intl'
-import { TicketIcon, PlusIcon } from '@heroicons/react/24/solid'
+import { TicketIcon } from '@heroicons/react/24/solid'
 import type { ConversationId } from '@quackback/ids'
 import { getMyTicketsFn } from '@/lib/server/functions/tickets'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
@@ -10,9 +10,8 @@ import { markTicketStagesSeen } from './ticket-stage-seen'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { StageChip } from '@/components/shared/ticket-stage'
-import { WidgetTicketNew } from './widget-ticket-new'
 
-/** The own-tickets list query key (shared with the New-Ticket form's invalidation). */
+/** The own-tickets list query key (shared with the Home recent-tickets card). */
 export function widgetMyTicketsKey(sessionVersion: number) {
   return ['widget', 'myTickets', sessionVersion] as const
 }
@@ -21,10 +20,10 @@ export function widgetMyTicketsKey(sessionVersion: number) {
  * The Tickets tab — the signed-in requester's own tickets, newest-activity
  * first, each row carrying its current public stage chip and reference. A row
  * opens its ticket's conversation thread (the converged pair) via
- * `onOpenTicket`; a legacy pair-less row stays inert. The "New ticket"
- * affordance swaps the list for the intake form; a submitted ticket lands at
- * the top of the list. Identified visitors only — an anonymous visitor has
- * no tickets, so the tab itself is gated on sign-in upstream.
+ * `onOpenTicket`; a legacy pair-less row stays inert. Visitors cannot file
+ * tickets here — agents and email create them. Identified visitors only; an
+ * anonymous visitor has no tickets, so the tab itself is gated on sign-in
+ * upstream.
  */
 export function WidgetTickets({
   onOpenTicket,
@@ -33,7 +32,6 @@ export function WidgetTickets({
   onOpenTicket: (conversationId: ConversationId) => void
 }) {
   const { sessionVersion } = useWidgetAuth()
-  const [composing, setComposing] = useState(false)
   const { data, isLoading } = useQuery({
     // Re-keyed on sessionVersion so the list refreshes after identify.
     queryKey: widgetMyTicketsKey(sessionVersion),
@@ -50,24 +48,8 @@ export function WidgetTickets({
     if (data) markTicketStagesSeen(data.tickets)
   }, [data])
 
-  if (composing) {
-    return (
-      <WidgetTicketNew onCreated={() => setComposing(false)} onCancel={() => setComposing(false)} />
-    )
-  }
-
   return (
     <div className="relative flex h-full flex-col">
-      <div className="flex shrink-0 items-center justify-end px-3 pt-2">
-        <button
-          type="button"
-          onClick={() => setComposing(true)}
-          className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-        >
-          <PlusIcon className="size-3.5" />
-          <FormattedMessage id="widget.tickets.new" defaultMessage="New ticket" />
-        </button>
-      </div>
       <ScrollArea scrollBarClassName="w-1.5" className="flex-1 min-h-0 h-full">
         {tickets.length > 0 ? (
           <ul className="px-3 pt-1 pb-24">
@@ -115,7 +97,7 @@ export function WidgetTickets({
               <p className="mt-0.5 text-xs text-muted-foreground/50">
                 <FormattedMessage
                   id="widget.tickets.emptyHint"
-                  defaultMessage="Open a ticket and we'll track it for you."
+                  defaultMessage="Tickets your team opens will show up here."
                 />
               </p>
             </div>

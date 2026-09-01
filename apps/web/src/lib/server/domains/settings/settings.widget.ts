@@ -303,9 +303,7 @@ export function projectPublicWidgetConfig(
     changelog: (config.tabs?.changelog ?? true) && flags.changelog,
     help: (config.tabs?.help ?? false) && flags.helpCenter,
     messenger: (config.tabs?.messenger ?? true) && flags.supportInbox,
-    // Converged Messages: ticket pairs surface through the messenger tab,
-    // gated by the supportTickets flag alone (there is no stored Tickets tab).
-    tickets: flags.supportTickets,
+    tickets: (config.tabs?.tickets ?? true) && flags.supportTickets,
     home: config.tabs?.home,
   }
   return {
@@ -329,8 +327,7 @@ export function projectPublicWidgetConfig(
       ...publicMessengerConfig(config.messenger ?? DEFAULT_MESSENGER_CONFIG, identity),
       enabled: flags.supportInbox,
     },
-    // Per-locale copy overrides — client-safe (customer-facing strings the
-    // widget resolves against its own locale for Home + messenger greetings).
+    // Per-locale messenger welcome/offline copy — client-safe.
     translations: config.translations,
   }
 }

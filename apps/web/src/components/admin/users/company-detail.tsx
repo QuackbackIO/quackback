@@ -205,7 +205,11 @@ function MembersSection({ companyId, canManage }: { companyId: CompanyId; canMan
         <div className="divide-y divide-border/50 overflow-hidden rounded-lg border border-border/50">
           {members.map((member) => (
             <div key={member.principalId} className="flex items-center gap-2.5 px-3 py-2">
-              <Avatar src={null} name={member.displayName ?? 'Person'} className="size-7 text-xs" />
+              <Avatar
+                src={member.avatarUrl}
+                name={member.displayName ?? 'Person'}
+                className="size-7 text-xs"
+              />
               <div className="min-w-0 flex-1">
                 <Link
                   to="/admin/users"

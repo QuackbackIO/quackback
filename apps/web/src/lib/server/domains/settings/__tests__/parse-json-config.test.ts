@@ -161,6 +161,7 @@ describe('workspaceAllowsAnonymous', () => {
 describe('parseWidgetConfig', () => {
   it('uses the new defaults for a blank blob', () => {
     expect(parseWidgetConfig(null).tabs?.messenger).toBe(true)
+    expect(parseWidgetConfig(null).tabs?.tickets).toBe(true)
     expect(parseWidgetConfig(null).tabs?.changelog).toBe(true)
     expect(parseWidgetConfig(null).messenger?.assistant?.respond).toBe(true)
   })

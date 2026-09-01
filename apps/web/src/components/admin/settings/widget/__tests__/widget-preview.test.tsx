@@ -56,7 +56,7 @@ describe('WidgetPreview', () => {
   it('places the launcher on the configured side', () => {
     render(<WidgetPreview position="bottom-left" />)
 
-    expect(screen.getByRole('button', { name: /feedback widget/i }).className).toContain('left-6')
+    expect(screen.getByRole('button', { name: /feedback widget/i }).className).toContain('left-0')
   })
 
   it('stacks the open panel above the launcher in the same corner', () => {
@@ -65,9 +65,11 @@ describe('WidgetPreview', () => {
     const panel = screen.getByTitle('Widget preview').parentElement
     const launcher = screen.getByRole('button', { name: /feedback widget/i })
     expect(panel?.className).toContain('bottom-[88px]')
-    expect(panel?.className).toContain('right-6')
-    expect(launcher.className).toContain('bottom-6')
-    expect(launcher.className).toContain('right-6')
+    expect(launcher.className).toContain('bottom-0')
+    expect(launcher.className).toContain('right-0')
+    expect(panel?.parentElement?.className).toContain('w-[400px]')
+    expect(panel?.parentElement?.parentElement?.className).toContain('items-center')
+    expect(panel?.parentElement?.parentElement?.className).toContain('justify-center')
   })
 
   it('shows the launcher greeting bubble while the panel is closed', () => {
@@ -95,6 +97,6 @@ describe('WidgetPreview', () => {
     render(<WidgetPreview position="bottom-left" greeting="Hello" />)
 
     fireEvent.click(screen.getByRole('button', { name: /feedback widget/i }))
-    expect(screen.getByText('Hello').parentElement?.className).toContain('left-6')
+    expect(screen.getByText('Hello').parentElement?.className).toContain('left-0')
   })
 })

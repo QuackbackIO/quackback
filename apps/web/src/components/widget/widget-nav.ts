@@ -4,12 +4,13 @@
  * config. Kept as a pure module (no React) so the routing rules are unit-tested
  * directly rather than through the route component.
  *
- * Each surface is independent: Messages (conversations — including ticket
- * pairs on the converged surface), Tickets (the requester's own ticket list),
- * Feedback, Help (articles), and Changelog each own a bottom-bar tab. A
- * "content surface" is any of those five; the aggregated Home appears only
- * when 2+ are enabled. The bottom bar carries, in order:
- * home | messages | tickets | feedback | help | changelog.
+ * Each surface is independent: Messages, Tickets, Feedback, Help, and Changelog
+ * each own a bottom-bar tab. Tickets is listed only when this visitor has at
+ * least one ticket (never an empty Tickets tab); until that is known the slot
+ * is simply withheld (see `visibleTabsForVisitor`). A "content surface" is any
+ * of those five; the aggregated Home appears only when 2+ are enabled. The
+ * bottom bar carries, in order: home | messages | tickets | feedback | help |
+ * changelog.
  */
 
 /** Bottom-bar tabs. "messages" is the messenger (conversations) surface. */
@@ -44,9 +45,9 @@ export interface EnabledTabs {
   feedback?: boolean
   changelog?: boolean
   help?: boolean
-  /** Messenger conversations and ticket pairs (the "Messages" tab). */
+  /** Messenger conversations (the "Messages" tab). */
   messages?: boolean
-  /** The requester's own ticket list (the "Tickets" tab). */
+  /** Requester's own-tickets list (the "Tickets" tab). Hidden when empty. */
   tickets?: boolean
   /**
    * Admin opt-out for the aggregated Home tab. Defaults to shown; when false,
@@ -54,6 +55,28 @@ export interface EnabledTabs {
    * content surfaces enabled.
    */
   home?: boolean
+}
+
+/**
+ * Drop the Tickets tab when this visitor has none, so the bar never shows an
+ * empty Tickets space. Admin `tabs.tickets` still means the surface is on.
+ */
+export function tabsForVisitor(tabs: EnabledTabs, hasTickets: boolean): EnabledTabs {
+  if (!tabs.tickets || hasTickets) return tabs
+  return { ...tabs, tickets: false }
+}
+
+/**
+ * Ordered bar for this visitor. `hasTickets` is tri-state: `null` means the
+ * answer is still pending (identity unresolved or the list loading). While
+ * pending, the bar is shaped by the admin config — Home stays if the admin
+ * enabled 2+ surfaces — and only the Tickets slot itself is withheld, so a
+ * Messages+Tickets workspace keeps its Home landing instead of collapsing to
+ * a single-surface bar and back. Once known, the visitor projection applies.
+ */
+export function visibleTabsForVisitor(tabs: EnabledTabs, hasTickets: boolean | null): WidgetTab[] {
+  if (hasTickets === null) return visibleTabs(tabs).filter((tab) => tab !== 'tickets')
+  return visibleTabs(tabsForVisitor(tabs, hasTickets))
 }
 
 /** Number of distinct content surfaces enabled (Messages, Tickets, Feedback, Help, Changelog). */

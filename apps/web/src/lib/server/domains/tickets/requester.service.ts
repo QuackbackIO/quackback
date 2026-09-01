@@ -5,8 +5,8 @@
  *
  * Converged Messages surface: a requester experiences their ticket AS its
  * conversation pair (one thread, ticket header on top), so this module carries
- * the requester's own-ticket create (`createMyTicket`, the widget New-Ticket
- * form's write), the reads that decorate that surface (linked-ticket header +
+ * the requester's own-ticket create (`createMyTicket`, used by the workflow
+ * send_ticket_form block), the reads that decorate that surface (linked-ticket header +
  * list summaries), the watch bell, and the reply-by-email ingest core.
  * Requester replies ride the conversation send path.
  */

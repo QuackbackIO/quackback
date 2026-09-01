@@ -44,6 +44,7 @@ import {
 import { NotFoundError, InternalError } from '@/lib/shared/errors'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { logger } from '@/lib/server/logger'
+import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
 
 const log = logger.child({ component: 'users' })
 import type {
@@ -343,6 +344,7 @@ export async function listPortalUsers(
           name: user.name,
           email: user.email,
           image: user.image,
+          imageKey: user.imageKey,
           emailVerified: user.emailVerified,
           metadata: user.metadata,
           principalType: principal.type,
@@ -379,7 +381,7 @@ export async function listPortalUsers(
       // Lead rows carry a synthetic account email that must never render;
       // their real identity signal is the captured contactEmail, if any.
       email: realEmail(row.email),
-      image: row.image,
+      image: resolveUserAvatarUrl({ userImage: row.image, userImageKey: row.imageKey }),
       emailVerified: row.emailVerified,
       metadata: row.metadata,
       isLead: row.principalType === 'anonymous',

@@ -38,7 +38,7 @@ export function WidgetPreview({
   // Same corner stack as the SDK: greeting sits above the launcher, and the
   // open panel covers that corner so the bubble hides.
   const showGreeting = greetingText.length > 0 && !greetingDismissed && !isOpen
-  const corner = onRight ? 'right-6' : 'left-6'
+  const corner = onRight ? 'right-0' : 'left-0'
 
   useEffect(() => {
     setGreetingDismissed(false)
@@ -62,72 +62,75 @@ export function WidgetPreview({
         {/* Simulated page background */}
         <PageBackdrop />
 
-        {/* Widget panel — same corner as the launcher, sitting just above it
-            (SDK: bottom 88px, side 24px, 400×600). */}
-        {isOpen && (
-          <div
-            className={cn(
-              'absolute z-10 w-[400px] max-w-[calc(100%-3rem)] h-[600px] max-h-[calc(100%-7rem)]',
-              'rounded-2xl border border-border bg-background shadow-2xl overflow-hidden',
-              'bottom-[88px]',
-              corner
+        {/* Widget + launcher as one centered unit so a wide pane doesn't pin
+            them to a far corner. The button still sits below the panel on the
+            configured side (SDK: bottom 88px, 400×600). */}
+        <div className="absolute inset-0 flex items-center justify-center p-6">
+          <div className="relative h-[688px] w-[400px] max-h-full max-w-full">
+            {isOpen && (
+              <div
+                className={cn(
+                  'absolute inset-x-0 top-0 bottom-[88px] z-10',
+                  'rounded-2xl border border-border bg-background shadow-2xl overflow-hidden'
+                )}
+              >
+                <iframe
+                  key={refreshKey}
+                  src={`/widget?theme=${theme}`}
+                  title="Widget preview"
+                  allow="clipboard-write"
+                  className="h-full w-full border-0"
+                />
+              </div>
             )}
-          >
-            <iframe
-              key={refreshKey}
-              src={`/widget?theme=${theme}`}
-              title="Widget preview"
-              allow="clipboard-write"
-              className="h-full w-full border-0"
-            />
-          </div>
-        )}
 
-        {/* Greeting bubble — same corner, just above the launcher. Hidden
-            while the panel is open, matching the host-page SDK. */}
-        {showGreeting && (
-          <div
-            className={cn(
-              'absolute bottom-[84px] z-10 flex max-w-[220px] items-center gap-2 rounded-[14px] px-3 py-2.5',
-              'bg-white text-[13px] leading-snug text-zinc-900 shadow-lg',
-              corner
+            {/* Greeting bubble — same side as the launcher, just above it.
+                Hidden while the panel is open, matching the host-page SDK. */}
+            {showGreeting && (
+              <div
+                className={cn(
+                  'absolute bottom-[84px] z-10 flex max-w-[220px] items-center gap-2 rounded-[14px] px-3 py-2.5',
+                  'bg-white text-[13px] leading-snug text-zinc-900 shadow-lg',
+                  corner
+                )}
+              >
+                <button
+                  type="button"
+                  className="min-w-0 flex-1 cursor-pointer text-start"
+                  onClick={() => setIsOpen(true)}
+                >
+                  {greetingText}
+                </button>
+                <button
+                  type="button"
+                  aria-label="Dismiss greeting"
+                  onClick={() => setGreetingDismissed(true)}
+                  className="flex size-[18px] shrink-0 items-center justify-center rounded-full text-base leading-none text-zinc-400 hover:text-zinc-600"
+                >
+                  ×
+                </button>
+              </div>
             )}
-          >
+
+            {/* Trigger button — bottom of the same side, below the open panel. */}
             <button
               type="button"
-              className="min-w-0 flex-1 cursor-pointer text-start"
-              onClick={() => setIsOpen(true)}
+              aria-label={isOpen ? 'Close feedback widget' : 'Open feedback widget'}
+              aria-expanded={isOpen}
+              onClick={() => setIsOpen(!isOpen)}
+              className={cn(
+                'absolute bottom-0 z-20 flex items-center justify-center h-12 rounded-full',
+                'bg-primary text-primary-foreground shadow-md',
+                'transition-all hover:shadow-lg hover:-translate-y-0.5',
+                label ? 'gap-1.5 ps-3 pe-4 text-xs font-semibold' : 'w-12',
+                corner
+              )}
             >
-              {greetingText}
-            </button>
-            <button
-              type="button"
-              aria-label="Dismiss greeting"
-              onClick={() => setGreetingDismissed(true)}
-              className="flex size-[18px] shrink-0 items-center justify-center rounded-full text-base leading-none text-zinc-400 hover:text-zinc-600"
-            >
-              ×
+              <ChatBubbleOvalLeftEllipsisIcon className="w-5 h-5 shrink-0" />
+              {label && <span className="max-w-40 truncate">{label}</span>}
             </button>
           </div>
-        )}
-
-        {/* Trigger button — bottom of the same corner, below the open panel. */}
-        <button
-          type="button"
-          aria-label={isOpen ? 'Close feedback widget' : 'Open feedback widget'}
-          aria-expanded={isOpen}
-          onClick={() => setIsOpen(!isOpen)}
-          className={cn(
-            'absolute bottom-6 z-20 flex items-center justify-center h-12 rounded-full',
-            'bg-primary text-primary-foreground shadow-md',
-            'transition-all hover:shadow-lg hover:-translate-y-0.5',
-            label ? 'gap-1.5 ps-3 pe-4 text-xs font-semibold' : 'w-12',
-            corner
-          )}
-        >
-          <ChatBubbleOvalLeftEllipsisIcon className="w-5 h-5 shrink-0" />
-          {label && <span className="max-w-40 truncate">{label}</span>}
-        </button>
+        </div>
       </div>
     </div>
   )

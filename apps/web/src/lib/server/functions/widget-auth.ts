@@ -4,6 +4,7 @@ import type { Role } from '@/lib/server/auth'
 import { auth } from '@/lib/server/auth'
 import { db, session, principal, eq, and, gt } from '@/lib/server/db'
 import { ensurePrincipalForUser } from '@/lib/server/domains/principals/principal.factory'
+import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
 import { rawSessionToken } from '@/lib/server/auth/session-token'
 import { shouldRollSession, WIDGET_SESSION_TTL_MS } from './widget-session-roll'
 import { logger } from '@/lib/server/logger'
@@ -93,7 +94,10 @@ export async function getWidgetSession(opts?: {
       id: userId,
       email: sessionRecord.user.email!, // Session users always have email
       name: sessionRecord.user.name,
-      image: sessionRecord.user.image ?? null,
+      image: resolveUserAvatarUrl({
+        userImage: sessionRecord.user.image,
+        userImageKey: sessionRecord.user.imageKey,
+      }),
     },
     principal: {
       id: principalRecord.id as PrincipalId,

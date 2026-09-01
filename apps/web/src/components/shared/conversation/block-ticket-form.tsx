@@ -6,12 +6,10 @@
  * never reaches for a surface-specific auth context).
  *
  * Compact by design: Subject (required), Details, and an Email field — the
- * same payload shape the widget New-Ticket form posts to createMyTicketFn
- * (use-ticket-intake-form / widget-ticket-new.tsx), minus the type picker and
- * custom intake fields, which stay on the full form surfaces. The email is
- * optional here: an identified visitor's ticket links to their session
- * principal, and an anonymous one can leave it blank (the full New-Ticket
- * form stays the path that REQUIRES it).
+ * same payload shape createMyTicketFn accepts, minus the type picker and
+ * custom intake fields. The email is optional here: an identified visitor's
+ * ticket links to their session principal, and an anonymous one can leave it
+ * blank.
  *
  * Filed state is local to the mounted card: a successful submit collapses
  * the form to a confirmation line, and the conversation's own

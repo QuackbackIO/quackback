@@ -38,7 +38,7 @@ import {
 import type { PrincipalId, SegmentId } from '@quackback/ids'
 import { InternalError } from '@/lib/shared/errors'
 import { realEmail } from '@/lib/shared/anonymous-email'
-import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
+import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
 import { postViewFilter, type Actor } from '@/lib/server/policy'
 import { logger } from '@/lib/server/logger'
 
@@ -244,10 +244,11 @@ export async function getPublicUserProfile(
     return {
       principalId: owner.principalId,
       displayName: owner.displayName ?? owner.userName ?? '',
-      // Canonical avatar precedence (matches loadAuthors): user.image →
-      // uploaded key's public URL → principal's synced copy.
-      avatarUrl:
-        owner.userImage ?? getPublicUrlOrNull(owner.userImageKey) ?? owner.principalAvatarUrl,
+      avatarUrl: resolveUserAvatarUrl({
+        userImage: owner.userImage,
+        userImageKey: owner.userImageKey,
+        principalAvatarUrl: owner.principalAvatarUrl,
+      }),
       isTeamMember: owner.role === 'admin' || owner.role === 'member',
       joinedAt: owner.joinedAt,
       postCount,
