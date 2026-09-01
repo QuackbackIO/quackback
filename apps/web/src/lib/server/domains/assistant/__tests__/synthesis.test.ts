@@ -107,9 +107,10 @@ describe('buildAskAiSystemPrompts', () => {
     const joined = prompts.join('\n')
     expect(joined).toContain('kb_article_1')
     expect(joined).toContain('Content of kb_article_2')
-    // Stuffed sources are numbered so the model can cite by index.
-    expect(joined).toContain('[1]\narticleId: kb_article_1')
-    expect(joined).toContain('[2]\narticleId: kb_article_2')
+    // Stuffed sources are numbered without [n], so inline markers stay unambiguous.
+    expect(joined).toContain('Source 1\narticleId: kb_article_1')
+    expect(joined).toContain('Source 2\narticleId: kb_article_2')
+    expect(joined.toLowerCase()).toContain('[1] always means source 1')
     // Wikipedia-style inline markers, taught by example.
     expect(joined).toContain('[1]')
     expect(joined).toContain('[2]')
@@ -252,10 +253,10 @@ describe('synthesizeAnswer', () => {
     })
   })
 
-  it('maps a stuffed source number onto the matching article id', async () => {
+  it('maps a stuffed source number onto the matching article id and relinks [n]', async () => {
     const object = {
       kind: 'grounded',
-      answer: 'Click save [1].',
+      answer: 'Click save [2].',
       sources: [{ articleId: '2' }],
     }
     mockChat.mockReturnValueOnce(chunkStream(completeRun(object, JSON.stringify(object))))
@@ -265,7 +266,51 @@ describe('synthesizeAnswer', () => {
       articles: [article('kb_article_1'), article('kb_article_2')],
     })
 
-    expect(result.sources).toEqual([{ articleId: 'kb_article_2' }])
+    expect(result).toEqual({
+      kind: 'grounded',
+      answer: 'Click save [1].',
+      sources: [{ articleId: 'kb_article_2' }],
+    })
+  })
+
+  it('recovers citations from stuffed [n] markers when the TypeID is too garbled to fuzzy-match', async () => {
+    const realId = 'kb_article_01m1cxgr9qf22rxt2vwk5jrchg'
+    const garbled = 'kb_article_01m1cxgr1qf22rxv2wk5jrchg'
+    const object = {
+      kind: 'grounded',
+      answer: 'Quackback collects feedback [1].',
+      sources: [{ articleId: garbled }],
+    }
+    mockChat.mockReturnValueOnce(chunkStream(completeRun(object, JSON.stringify(object))))
+
+    const result = await synthesizeAnswer({ query: 'q', articles: [article(realId)] })
+
+    expect(result).toEqual({
+      kind: 'grounded',
+      answer: 'Quackback collects feedback [1].',
+      sources: [{ articleId: realId }],
+    })
+  })
+
+  it('relinks stuffed [1] [4] onto the surviving two-source list', async () => {
+    const ids = ['kb_article_a', 'kb_article_b', 'kb_article_c', 'kb_article_d', 'kb_article_e']
+    const object = {
+      kind: 'grounded',
+      answer: 'It is a feedback tool [1] you can self-host [4].',
+      sources: [{ articleId: 'nope' }],
+    }
+    mockChat.mockReturnValueOnce(chunkStream(completeRun(object, JSON.stringify(object))))
+
+    const result = await synthesizeAnswer({
+      query: 'q',
+      articles: ids.map((id) => article(id)),
+    })
+
+    expect(result).toEqual({
+      kind: 'grounded',
+      answer: 'It is a feedback tool [1] you can self-host [2].',
+      sources: [{ articleId: 'kb_article_a' }, { articleId: 'kb_article_d' }],
+    })
   })
 
   it('does not repair when two retrieved ids are equally close', async () => {
