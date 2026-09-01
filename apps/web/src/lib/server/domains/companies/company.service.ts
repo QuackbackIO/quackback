@@ -31,6 +31,7 @@ import { companyCreated, companyDeleted } from '@/lib/server/events/catalogue'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
 import { isUniqueViolation } from '@/lib/server/utils'
 import { realEmail } from '@/lib/shared/anonymous-email'
+import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
 import { logger } from '@/lib/server/logger'
 import type {
   Company,
@@ -407,6 +408,9 @@ export async function listMembers(companyId: CompanyId): Promise<CompanyMember[]
       principalId: principal.id,
       displayName: principal.displayName,
       email: user.email,
+      userImage: user.image,
+      userImageKey: user.imageKey,
+      principalAvatarUrl: principal.avatarUrl,
       type: principal.type,
       createdAt: principal.createdAt,
     })
@@ -414,7 +418,18 @@ export async function listMembers(companyId: CompanyId): Promise<CompanyMember[]
     .leftJoin(user, eq(user.id, principal.userId))
     .where(eq(principal.companyId, companyId))
     .orderBy(asc(principal.createdAt))
-  return rows.map((r) => ({ ...r, email: realEmail(r.email) }))
+  return rows.map((r) => ({
+    principalId: r.principalId,
+    displayName: r.displayName,
+    email: realEmail(r.email),
+    avatarUrl: resolveUserAvatarUrl({
+      userImage: r.userImage,
+      userImageKey: r.userImageKey,
+      principalAvatarUrl: r.principalAvatarUrl,
+    }),
+    type: r.type,
+    createdAt: r.createdAt,
+  }))
 }
 
 /** Activity rollup counts: member conversations + tickets linked to the company. */

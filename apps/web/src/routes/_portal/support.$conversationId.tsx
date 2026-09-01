@@ -1,4 +1,10 @@
-import { createFileRoute, Navigate, useNavigate, useRouteContext } from '@tanstack/react-router'
+import {
+  createFileRoute,
+  Navigate,
+  useNavigate,
+  useRouteContext,
+  useLoaderData,
+} from '@tanstack/react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
 import { FormattedMessage, useIntl } from 'react-intl'
@@ -37,6 +43,11 @@ function SupportThreadPage() {
   const queryClient = useQueryClient()
   const { conversationId } = Route.useParams()
   const { session, settings } = useRouteContext({ from: '__root__' })
+  const portalLoader = useLoaderData({ from: '/_portal' })
+  const portalAvatar =
+    portalLoader && 'initialUserData' in portalLoader
+      ? (portalLoader.initialUserData?.avatarUrl ?? null)
+      : null
   const authPopover = useAuthPopoverSafe()
   const { upload } = usePortalImageUpload()
 
@@ -117,7 +128,7 @@ function SupportThreadPage() {
               conversationId === 'new' ? 'new' : (conversationId as ConversationId)
             }
             linkPreviews={!!settings?.featureFlags?.supportInbox}
-            currentUser={user ? { name: user.name, avatarUrl: user.image } : null}
+            currentUser={user ? { name: user.name, avatarUrl: portalAvatar ?? user.image } : null}
             uploadImage={upload}
             presence={presenceQuery.data ?? OFFLINE}
             embedOpenMode="navigate"

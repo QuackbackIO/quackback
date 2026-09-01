@@ -10,6 +10,15 @@ import type { PrincipalId } from '@quackback/ids'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import type { ConversationAuthorDTO } from '@/lib/shared/conversation/types'
 
+/** Display URL: OAuth `image`, else the public URL of an uploaded `imageKey`. */
+export function resolveUserAvatarUrl(opts: {
+  userImage?: string | null
+  userImageKey?: string | null
+  principalAvatarUrl?: string | null
+}): string | null {
+  return opts.userImage ?? getPublicUrlOrNull(opts.userImageKey) ?? opts.principalAvatarUrl ?? null
+}
+
 /** Batch-load principal display info, returning a lookup map. */
 export async function loadAuthors(
   ids: ReadonlyArray<PrincipalId | null | undefined>
@@ -37,7 +46,11 @@ export async function loadAuthors(
     map.set(row.id, {
       principalId: row.id,
       displayName: row.displayName ?? null,
-      avatarUrl: row.userImage ?? getPublicUrlOrNull(row.userImageKey) ?? row.avatarUrl ?? null,
+      avatarUrl: resolveUserAvatarUrl({
+        userImage: row.userImage,
+        userImageKey: row.userImageKey,
+        principalAvatarUrl: row.avatarUrl,
+      }),
     })
   }
   return map

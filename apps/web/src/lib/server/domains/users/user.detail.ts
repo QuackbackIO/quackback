@@ -31,6 +31,7 @@ import { InternalError } from '@/lib/shared/errors'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { truncate } from '@/lib/shared/utils/string'
 import { logger } from '@/lib/server/logger'
+import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
 
 const log = logger.child({ component: 'user-detail' })
 import type {
@@ -101,6 +102,7 @@ export async function getPortalUserDetail(
         name: user.name,
         email: user.email,
         image: user.image,
+        imageKey: user.imageKey,
         emailVerified: user.emailVerified,
         metadata: user.metadata,
         principalType: principal.type,
@@ -326,7 +328,10 @@ export async function getPortalUserDetail(
       name: principalData.name,
       // Synthetic anon placeholder must never surface (agent inbox, v1 API).
       email: realEmail(principalData.email),
-      image: principalData.image,
+      image: resolveUserAvatarUrl({
+        userImage: principalData.image,
+        userImageKey: principalData.imageKey,
+      }),
       emailVerified: principalData.emailVerified,
       metadata: principalData.metadata,
       isLead: principalData.principalType === 'anonymous',

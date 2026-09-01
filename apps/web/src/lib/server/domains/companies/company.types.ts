@@ -96,6 +96,7 @@ export interface CompanyMember {
   principalId: string
   displayName: string | null
   email: string | null
+  avatarUrl: string | null
   type: string
   createdAt: Date
 }

@@ -47,6 +47,12 @@ vi.mock('@/lib/server/functions/workspace', () => ({
   })),
 }))
 
+vi.mock('@/lib/server/storage/s3', () => ({
+  getPublicUrlOrNull: vi.fn((key: string | null | undefined) =>
+    key ? `https://cdn.example/${key}` : null
+  ),
+}))
+
 import { getWidgetSession } from '../widget-auth'
 
 describe('getWidgetSession', () => {
@@ -178,5 +184,28 @@ describe('getWidgetSession', () => {
     expect(result?.user.image).toBeNull()
     expect(result?.principal.role).toBe('member')
     expect(result?.principal.type).toBe('user')
+  })
+
+  it('resolves an uploaded imageKey when user.image is null', async () => {
+    mockGet.mockReturnValue('Bearer valid-token-123')
+    mockSessionFindFirst.mockResolvedValue({
+      userId: 'user_1',
+      user: {
+        id: 'user_1',
+        email: 'test@test.com',
+        name: 'Test',
+        image: null,
+        imageKey: 'avatars/me.png',
+      },
+    })
+    mockPrincipalFindFirst.mockResolvedValue({
+      id: 'principal_1',
+      role: 'member',
+      type: 'user',
+    })
+
+    const result = await getWidgetSession()
+
+    expect(result?.user.image).toBe('https://cdn.example/avatars/me.png')
   })
 })

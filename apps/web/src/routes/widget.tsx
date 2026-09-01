@@ -6,6 +6,7 @@ import { generateThemeCSS, readFontSans } from '@/lib/shared/theme'
 import { resolveLocale, loadWidgetMessages } from '@/lib/shared/i18n'
 import { WidgetAuthProvider } from '@/components/widget/widget-auth-provider'
 import { extractSessionTokenFromCookie } from '@/lib/server/functions/portal-session-token'
+import { fetchUserAvatar } from '@/lib/server/functions/portal'
 import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
 import { escapeInlineStyle } from '@/lib/shared/safe-inline-content'
 import { Button } from '@/components/ui/button'
@@ -74,7 +75,7 @@ export const Route = createFileRoute('/widget')({
     // If user is logged into the portal (same-origin), extract the signed
     // session cookie so the widget can reuse it directly as a Bearer token.
     // This prevents duplicate anonymous users and bypasses HMAC requirements.
-    const portalUser =
+    const portalUserBase =
       session?.user && session.user.principalType !== 'anonymous'
         ? {
             id: session.user.id,
@@ -94,10 +95,18 @@ export const Route = createFileRoute('/widget')({
     // fetch/XHR from within the iframe). The token in the iframe's serialized
     // HTML is safe: cross-origin parent pages cannot read iframe content.
     // Independent of locale resolution, so run both concurrently.
-    const [portalSessionToken, locale] = await Promise.all([
+    const [portalSessionToken, locale, portalAvatar] = await Promise.all([
       session?.user ? getPortalSessionToken() : Promise.resolve(null),
       getWidgetLocale({ data: { explicitLocale } }),
+      portalUserBase
+        ? fetchUserAvatar({
+            data: { userId: portalUserBase.id, fallbackImageUrl: portalUserBase.avatarUrl },
+          })
+        : Promise.resolve(null),
     ])
+    const portalUser = portalUserBase
+      ? { ...portalUserBase, avatarUrl: portalAvatar?.avatarUrl ?? portalUserBase.avatarUrl }
+      : null
     // Serialize the widget's catalog slice into loader data so the first
     // client render is already translated (the route is ssr: 'data-only' —
     // there's no SSR HTML to seed from).
