@@ -45,63 +45,18 @@ export const fetchSeatsPreviewFn = createServerFn({ method: 'GET' })
     }
   })
 
-async function loadUsageCounts(): Promise<Record<string, number>> {
-  const { aiTokensThisMonth } = await import('@/lib/server/domains/ai/usage-counter')
-  const { db, eq, isNull, sql, posts, boards, roles, statusComponents, emailSendingDomains } =
-    await import('@/lib/server/db')
-  const { countSeatUsage } = await import('@/lib/server/domains/principals/seat-usage')
-  const { emailsSentThisMonth } = await import('@/lib/server/email/email-budget')
-  const { apiRequestsThisMonth } = await import('@/lib/server/domains/api/monthly-usage')
-  const [
-    boardRow,
-    postRow,
-    seats,
-    statusRow,
-    roleRow,
-    domainRow,
-    aiTokens,
-    emailsSent,
-    apiRequests,
-  ] = await Promise.all([
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(boards)
-      .where(isNull(boards.deletedAt)),
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(posts)
-      .where(isNull(posts.deletedAt)),
-    countSeatUsage(),
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(statusComponents)
-      .where(isNull(statusComponents.deletedAt)),
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(roles)
-      .where(eq(roles.isSystem, false)),
-    db.select({ count: sql<number>`count(*)::int` }).from(emailSendingDomains),
-    aiTokensThisMonth(),
-    emailsSentThisMonth(),
-    apiRequestsThisMonth(),
-  ])
-  return {
-    maxBoards: boardRow[0]?.count ?? 0,
-    maxPosts: postRow[0]?.count ?? 0,
-    maxTeamSeats: seats.used,
-    maxStatusComponents: statusRow[0]?.count ?? 0,
-    maxCustomRoles: roleRow[0]?.count ?? 0,
-    maxSendingDomains: domainRow[0]?.count ?? 0,
-    aiTokensPerMonth: aiTokens,
-    emailsPerMonth: emailsSent,
-    apiRequestsPerMonth: apiRequests,
-  }
-}
+// This module is imported by the client for its RPC stubs: only `.handler()`
+// bodies are stripped, and any module-scope helper an export still reaches
+// ships to the browser with its imports. Helpers that touch the database
+// therefore live in `@/lib/server/domains/billing/usage-counts` and are
+// imported from inside the handlers like every other server dependency
+// (guarded by policy/__tests__/server-fn-client-half.test.ts).
 
 export const fetchPlanUsageFn = createServerFn({ method: 'GET' }).handler(async () => {
   await requireAuth({ permission: PERMISSIONS.BILLING_MANAGE })
   const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
   const { finiteUsageLines } = await import('@/lib/server/domains/billing/plan-usage')
+  const { loadUsageCounts } = await import('@/lib/server/domains/billing/usage-counts')
   const [limits, used] = await Promise.all([getTierLimits(), loadUsageCounts()])
   return finiteUsageLines([
     { key: 'maxBoards', label: 'boards', used: used.maxBoards ?? 0, limit: limits.maxBoards },
@@ -155,6 +110,7 @@ export const fetchFreeDowngradePreviewFn = createServerFn({ method: 'GET' }).han
   await requireAuth({ permission: PERMISSIONS.BILLING_MANAGE })
   const { getBillingProjectionOverview } =
     await import('@/lib/server/domains/billing/projection-overview')
+  const { loadUsageCounts } = await import('@/lib/server/domains/billing/usage-counts')
   const [overview, used] = await Promise.all([getBillingProjectionOverview(), loadUsageCounts()])
   const { freeDowngradeIssues, featuresDisabledOnFree } =
     await import('@/lib/shared/billing/free-downgrade')
@@ -163,9 +119,3 @@ export const fetchFreeDowngradePreviewFn = createServerFn({ method: 'GET' }).han
     featuresDisabled: featuresDisabledOnFree(overview?.trialPlanId ?? overview?.plan),
   }
 })
-
-export async function assertFitsFreePlan(): Promise<void> {
-  const used = await loadUsageCounts()
-  const { freeDowngradeIssues } = await import('@/lib/shared/billing/free-downgrade')
-  if (freeDowngradeIssues(used).length > 0) throw new Error('over_free_limits')
-}
