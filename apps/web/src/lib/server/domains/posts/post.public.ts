@@ -30,7 +30,6 @@ import type { PublicPostListResult } from './post.types'
 import type { RespondedFilter } from '@/lib/shared/types/filters'
 import { postViewFilter, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
 
-import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
 
 /** Resolve avatar URL — uploaded key first, then OAuth/external URL. */
@@ -50,16 +49,6 @@ export function resolveAvatarUrl(source: {
 
 export function parseJson<T>(value: string | T): T {
   return typeof value === 'string' ? JSON.parse(value) : value
-}
-
-export function parseAvatarData(json: string | null): string | null {
-  if (!json) return null
-  const data = parseJson<{ key?: string; url?: string }>(json)
-  if (data.key) {
-    const s3Url = getPublicUrlOrNull(data.key)
-    if (s3Url) return s3Url
-  }
-  return data.url ?? null
 }
 
 type SortOrder = 'top' | 'new' | 'trending'

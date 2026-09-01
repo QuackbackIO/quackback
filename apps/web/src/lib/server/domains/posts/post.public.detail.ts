@@ -18,7 +18,7 @@ import { toUuid, fromUuid, type PostId, type PostCommentId, type PrincipalId } f
 import { buildCommentTree, toStatusChange } from '@/lib/shared'
 import type { PublicPostDetail, PublicComment, PinnedComment } from './post.types'
 import { DEFAULT_COMMENT_PAGE_SIZE, encodeCommentCursor, decodeCommentCursor } from './comment-page'
-import { resolveAvatarUrl, parseJson, parseAvatarData } from './post.public'
+import { resolveAvatarUrl, parseJson } from './post.public'
 import { getExecuteRows } from '@/lib/server/utils'
 import {
   canViewPost,
@@ -155,16 +155,15 @@ export async function getPublicPostDetail(
           SELECT m.display_name FROM ${principalTable} m
           WHERE m.id = ${posts.principalId}
         )`.as('author_name'),
+        // All four sources — resolveUserAvatarUrl still needs the OAuth
+        // URLs when a stored key cannot produce a public URL (storage off).
         authorAvatarData: sql<string | null>`(
-          SELECT CASE
-            WHEN u.image_key IS NOT NULL
-            THEN json_build_object('key', u.image_key)
-            WHEN m.avatar_key IS NOT NULL
-            THEN json_build_object('key', m.avatar_key)
-            WHEN u.image IS NOT NULL
-            THEN json_build_object('url', u.image)
-            ELSE json_build_object('url', m.avatar_url)
-          END
+          SELECT json_build_object(
+            'userImageKey', u.image_key,
+            'avatarKey', m.avatar_key,
+            'userImage', u.image,
+            'avatarUrl', m.avatar_url
+          )
           FROM ${principalTable} m
           LEFT JOIN ${userTable} u ON u.id = m.user_id
           WHERE m.id = ${posts.principalId}
@@ -209,7 +208,15 @@ export async function getPublicPostDetail(
   const tagsResult = parseJson<
     Array<{ id: import('@quackback/ids').PostTagId; name: string; color: string }>
   >(postResult.tagsJson)
-  const authorAvatarUrl = parseAvatarData(postResult.authorAvatarData)
+  const authorAvatarFields = postResult.authorAvatarData
+    ? parseJson<{
+        userImageKey: string | null
+        avatarKey: string | null
+        userImage: string | null
+        avatarUrl: string | null
+      }>(postResult.authorAvatarData)
+    : null
+  const authorAvatarUrl = resolveAvatarUrl(authorAvatarFields ?? {})
 
   type CommentRow = {
     id: string
