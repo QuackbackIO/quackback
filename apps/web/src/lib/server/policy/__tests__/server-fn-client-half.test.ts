@@ -39,15 +39,40 @@ export function isServerOnlySpecifier(spec: string): boolean {
   return spec === '@quackback/db' || spec.startsWith('@quackback/db/')
 }
 
-/** Callee names whose function arguments the Start compiler removes from the client half. */
-const SERVER_STRIPPED_CALLS = new Set(['handler', 'server', 'createServerOnlyFn'])
+/** The identifier a builder chain like `createServerFn(...).validator(...).handler(...)` starts from. */
+function chainRootName(callee: ts.Expression): string | null {
+  let cur: ts.Expression = callee
+  for (;;) {
+    if (ts.isPropertyAccessExpression(cur)) cur = cur.expression
+    else if (ts.isCallExpression(cur)) cur = cur.expression
+    else return ts.isIdentifier(cur) ? cur.text : null
+  }
+}
 
-function isServerStrippedCall(node: ts.Node): boolean {
-  if (!ts.isCallExpression(node)) return false
+/**
+ * Calls whose arguments the Start compiler removes from the client half. The
+ * whole `createServerFn(...)` chain collapses to `.handler(createClientRpc(id))`
+ * — validators and middleware go too, not just the handler — while for
+ * `createMiddleware()` only `.server(...)` is stripped (`.client(...)` runs in
+ * the browser). `createServerOnlyFn(...)` drops its argument outright.
+ */
+function isServerStrippedCall(node: ts.CallExpression): boolean {
   const callee = node.expression
-  if (ts.isPropertyAccessExpression(callee)) return SERVER_STRIPPED_CALLS.has(callee.name.text)
-  if (ts.isIdentifier(callee)) return SERVER_STRIPPED_CALLS.has(callee.text)
+  if (ts.isIdentifier(callee)) return callee.text === 'createServerOnlyFn'
+  if (!ts.isPropertyAccessExpression(callee)) return false
+  const root = chainRootName(callee)
+  if (root === 'createServerFn') return true
+  if (root === 'createMiddleware') return callee.name.text === 'server'
   return false
+}
+
+/** Interfaces, type aliases and `declare` blocks are erased; they cannot reach anything. */
+function isTypeLevelStatement(stmt: ts.Statement): boolean {
+  return (
+    ts.isInterfaceDeclaration(stmt) ||
+    ts.isTypeAliasDeclaration(stmt) ||
+    ts.isModuleDeclaration(stmt)
+  )
 }
 
 export interface LeakedImport {
@@ -79,10 +104,14 @@ function declaredNames(node: ts.Node): string[] {
   return []
 }
 
-/** Identifiers mentioned in `node`, skipping anything the compiler strips from the client half. */
+/**
+ * Identifiers mentioned in `node` at runtime, skipping anything the compiler
+ * strips from the client half and anything TypeScript erases (type positions).
+ */
 function identifiersOutsideStrippedScopes(node: ts.Node): Set<string> {
   const names = new Set<string>()
   const visit = (n: ts.Node): void => {
+    if (ts.isTypeNode(n)) return
     if (ts.isCallExpression(n) && isServerStrippedCall(n)) {
       // The callee chain (`createServerFn().handler`) stays; the arguments go.
       visit(n.expression)
@@ -98,7 +127,7 @@ function identifiersOutsideStrippedScopes(node: ts.Node): Set<string> {
 function serverOnlyDynamicImports(sf: ts.SourceFile, root: ts.Node): ts.CallExpression[] {
   const found: ts.CallExpression[] = []
   const visit = (n: ts.Node): void => {
-    if (isServerStrippedCall(n)) return
+    if (ts.isCallExpression(n) && isServerStrippedCall(n)) return
     if (
       ts.isCallExpression(n) &&
       n.expression.kind === ts.SyntaxKind.ImportKeyword &&
@@ -120,11 +149,52 @@ export function findLeakedServerImports(relPath: string, text: string): LeakedIm
   const byName = new Map<string, ts.Statement>()
   const roots: ts.Statement[] = []
   const exportedNames = new Set<string>()
+  // Static imports of server-only modules, keyed by statement: reachable via
+  // any of their runtime bindings, exactly like a helper declaration.
+  const serverOnlyStaticImports = new Map<ts.Statement, string>()
   for (const stmt of sf.statements) {
-    if (ts.isImportDeclaration(stmt)) continue
-    if (ts.isExportDeclaration(stmt) && stmt.exportClause && ts.isNamedExports(stmt.exportClause)) {
-      for (const el of stmt.exportClause.elements) {
-        exportedNames.add((el.propertyName ?? el.name).text)
+    if (ts.isImportDeclaration(stmt)) {
+      if (!ts.isStringLiteral(stmt.moduleSpecifier)) continue
+      const spec = stmt.moduleSpecifier.text
+      if (!isServerOnlySpecifier(spec)) continue
+      const clause = stmt.importClause
+      // `import type` and side-effect imports leave no runtime binding to reach;
+      // a bare `import '@/lib/server/x'` always runs, so it is a root.
+      if (!clause) {
+        roots.push(stmt)
+        serverOnlyStaticImports.set(stmt, spec)
+        continue
+      }
+      if (clause.isTypeOnly) continue
+      const bindings: string[] = []
+      if (clause.name) bindings.push(clause.name.text)
+      if (clause.namedBindings) {
+        if (ts.isNamespaceImport(clause.namedBindings)) {
+          bindings.push(clause.namedBindings.name.text)
+        } else {
+          for (const el of clause.namedBindings.elements) {
+            if (!el.isTypeOnly) bindings.push(el.name.text)
+          }
+        }
+      }
+      if (bindings.length === 0) continue
+      for (const name of bindings) byName.set(name, stmt)
+      serverOnlyStaticImports.set(stmt, spec)
+      continue
+    }
+    if (ts.isExportDeclaration(stmt)) {
+      if (stmt.moduleSpecifier && ts.isStringLiteral(stmt.moduleSpecifier)) {
+        // `export … from '@/lib/server/x'` re-exports the server module itself.
+        if (!stmt.isTypeOnly && isServerOnlySpecifier(stmt.moduleSpecifier.text)) {
+          roots.push(stmt)
+          serverOnlyStaticImports.set(stmt, stmt.moduleSpecifier.text)
+        }
+        continue
+      }
+      if (stmt.exportClause && ts.isNamedExports(stmt.exportClause)) {
+        for (const el of stmt.exportClause.elements) {
+          exportedNames.add((el.propertyName ?? el.name).text)
+        }
       }
       continue
     }
@@ -132,6 +202,7 @@ export function findLeakedServerImports(relPath: string, text: string): LeakedIm
       roots.push(stmt)
       continue
     }
+    if (isTypeLevelStatement(stmt)) continue
     const names = declaredNames(stmt)
     if (names.length === 0) {
       // Bare top-level statement (side effect): always in the client half.
@@ -161,6 +232,12 @@ export function findLeakedServerImports(relPath: string, text: string): LeakedIm
   const leaks: LeakedImport[] = []
   for (const stmt of sf.statements) {
     if (!reachable.has(stmt)) continue
+    const staticSpec = serverOnlyStaticImports.get(stmt)
+    if (staticSpec !== undefined) {
+      const { line } = sf.getLineAndCharacterOfPosition(stmt.getStart(sf))
+      leaks.push({ file: relPath, line: line + 1, specifier: staticSpec })
+      continue
+    }
     for (const call of serverOnlyDynamicImports(sf, stmt)) {
       const { line } = sf.getLineAndCharacterOfPosition(call.getStart(sf))
       leaks.push({
@@ -193,6 +270,34 @@ describe('findLeakedServerImports', () => {
       export const only = createServerOnlyFn(async () => import('@/lib/server/db'))
     `
     expect(findLeakedServerImports('x.ts', src)).toEqual([])
+  })
+
+  it('treats the whole createServerFn chain as stripped: validators and middleware go too', () => {
+    const src = `
+      import { ONBOARDING_OUTCOMES } from '@/lib/server/db'
+      import { requireAdmin } from '@/lib/server/auth/guards'
+      const outcomeSchema = z.enum(ONBOARDING_OUTCOMES)
+      export const fn = createServerFn({ method: 'POST' })
+        .middleware([requireAdmin])
+        .validator(z.object({ outcome: outcomeSchema }))
+        .handler(async ({ data }) => data)
+    `
+    expect(findLeakedServerImports('x.ts', src)).toEqual([])
+  })
+
+  it('keeps createMiddleware().client() and ignores type positions', () => {
+    const client = `
+      import { db } from '@/lib/server/db'
+      export const mw = createMiddleware().client(async ({ next }) => { db; return next() })
+    `
+    expect(findLeakedServerImports('x.ts', client)).toHaveLength(1)
+
+    const typesOnly = `
+      import { actorFromAuth } from '@/lib/server/audit/log'
+      export interface Input { actor: ReturnType<typeof actorFromAuth> }
+      export function shape(x: ReturnType<typeof actorFromAuth>): string { return String(x) }
+    `
+    expect(findLeakedServerImports('x.ts', typesOnly)).toEqual([])
   })
 
   it('accepts a helper only handlers reach: the compiler drops it from the client half', () => {
@@ -245,6 +350,46 @@ describe('findLeakedServerImports', () => {
       void warm()
     `
     expect(findLeakedServerImports('x.ts', sideEffect)).toHaveLength(1)
+  })
+
+  it('flags a static server import that an export still references', () => {
+    const src = `
+      import { db } from '@/lib/server/db'
+      export async function count() {
+        return db.select()
+      }
+    `
+    expect(findLeakedServerImports('x.ts', src)).toEqual([
+      { file: 'x.ts', line: 2, specifier: '@/lib/server/db' },
+    ])
+  })
+
+  it('accepts a static server import used only inside handlers, and type-only imports', () => {
+    const src = `
+      import { db } from '@/lib/server/db'
+      import type { Row } from '@/lib/server/db'
+      import { type Other, requireAuth } from '@/lib/server/functions/auth-helpers'
+      export const fn = createServerFn().handler(async () => db.select())
+      export type Out = Row
+    `
+    expect(findLeakedServerImports('x.ts', src)).toEqual([])
+  })
+
+  it('flags namespace/default bindings, side-effect imports and re-exports of server modules', () => {
+    const ns = `
+      import * as auth from '@/lib/server/auth'
+      export const check = () => auth.verify()
+    `
+    expect(findLeakedServerImports('x.ts', ns)).toHaveLength(1)
+
+    const sideEffect = `import '@/lib/server/db'`
+    expect(findLeakedServerImports('x.ts', sideEffect)).toHaveLength(1)
+
+    const reexport = `export { db } from '@/lib/server/db'`
+    expect(findLeakedServerImports('x.ts', reexport)).toHaveLength(1)
+
+    const typeReexport = `export type { Database } from '@/lib/server/db'`
+    expect(findLeakedServerImports('x.ts', typeReexport)).toEqual([])
   })
 
   it('ignores imports of other server-function modules and of shared code', () => {
