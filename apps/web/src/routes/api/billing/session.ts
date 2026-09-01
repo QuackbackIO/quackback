@@ -94,7 +94,7 @@ export const Route = createFileRoute('/api/billing/session')({
             return billingFormErrorResponse(null, 'unavailable')
           }
           if (parsed.data.action === 'downgrade') {
-            const { assertFitsFreePlan } = await import('@/lib/server/functions/billing')
+            const { assertFitsFreePlan } = await import('@/lib/server/domains/billing/usage-counts')
             await assertFitsFreePlan()
           }
           const { createHostedBillingSession } = await import('@/lib/server/control-plane/client')
