@@ -25,11 +25,31 @@ describe('resolveUserAvatarUrl', () => {
     mockGetPublicUrlOrNull.mockClear()
   })
 
-  it('prefers the OAuth image URL when present', () => {
+  it('prefers the uploaded imageKey over the OAuth image', () => {
     expect(
       resolveUserAvatarUrl({
         userImage: 'https://lh3.googleusercontent.com/a/abc',
         userImageKey: 'avatars/uploaded.png',
+        principalAvatarUrl: 'https://stale.example/p.png',
+      })
+    ).toBe('https://cdn.example/avatars/uploaded.png')
+  })
+
+  it('falls back to the OAuth image when the imageKey has no public URL', () => {
+    mockGetPublicUrlOrNull.mockReturnValueOnce(null)
+    expect(
+      resolveUserAvatarUrl({
+        userImage: 'https://lh3.googleusercontent.com/a/abc',
+        userImageKey: 'avatars/orphaned.png',
+      })
+    ).toBe('https://lh3.googleusercontent.com/a/abc')
+  })
+
+  it('uses the OAuth image when no imageKey is stored', () => {
+    expect(
+      resolveUserAvatarUrl({
+        userImage: 'https://lh3.googleusercontent.com/a/abc',
+        userImageKey: null,
         principalAvatarUrl: 'https://stale.example/p.png',
       })
     ).toBe('https://lh3.googleusercontent.com/a/abc')
