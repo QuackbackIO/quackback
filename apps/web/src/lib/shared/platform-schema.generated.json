@@ -103,6 +103,12 @@
         "kind": "tristate",
         "group": "advanced",
         "sensitive": false
+      },
+      {
+        "key": "AI_REASONING_EXCLUDE",
+        "kind": "tristate",
+        "group": "advanced",
+        "sensitive": false
       }
     ]
   },
