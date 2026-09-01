@@ -107,6 +107,9 @@ describe('buildAskAiSystemPrompts', () => {
     const joined = prompts.join('\n')
     expect(joined).toContain('kb_article_1')
     expect(joined).toContain('Content of kb_article_2')
+    // Stuffed sources are numbered so the model can cite by index.
+    expect(joined).toContain('[1]\narticleId: kb_article_1')
+    expect(joined).toContain('[2]\narticleId: kb_article_2')
     // Wikipedia-style inline markers, taught by example.
     expect(joined).toContain('[1]')
     expect(joined).toContain('[2]')
@@ -226,6 +229,57 @@ describe('synthesizeAnswer', () => {
     mockChat.mockReturnValueOnce(chunkStream(completeRun(object, JSON.stringify(object))))
 
     const result = await synthesizeAnswer({ query: 'q', articles: [article('kb_article_1')] })
+
+    expect(result).toEqual({ kind: 'no_answer', answer: ASK_AI_MISS_FALLBACK, sources: [] })
+  })
+
+  it('repairs a one-character typo in a retrieved TypeID', async () => {
+    const realId = 'kb_article_01m1cxgr9qf22rxt2vwk5jrchg'
+    const mistyped = 'kb_article_01m1cxgr9qf22rxtv2wk5jrchg'
+    const object = {
+      kind: 'grounded',
+      answer: 'Quackback collects feedback [1].',
+      sources: [{ articleId: mistyped }],
+    }
+    mockChat.mockReturnValueOnce(chunkStream(completeRun(object, JSON.stringify(object))))
+
+    const result = await synthesizeAnswer({ query: 'q', articles: [article(realId)] })
+
+    expect(result).toEqual({
+      kind: 'grounded',
+      answer: 'Quackback collects feedback [1].',
+      sources: [{ articleId: realId }],
+    })
+  })
+
+  it('maps a stuffed source number onto the matching article id', async () => {
+    const object = {
+      kind: 'grounded',
+      answer: 'Click save [1].',
+      sources: [{ articleId: '2' }],
+    }
+    mockChat.mockReturnValueOnce(chunkStream(completeRun(object, JSON.stringify(object))))
+
+    const result = await synthesizeAnswer({
+      query: 'q',
+      articles: [article('kb_article_1'), article('kb_article_2')],
+    })
+
+    expect(result.sources).toEqual([{ articleId: 'kb_article_2' }])
+  })
+
+  it('does not repair when two retrieved ids are equally close', async () => {
+    const object = {
+      kind: 'grounded',
+      answer: 'A claim.',
+      sources: [{ articleId: 'kb_article_x3' }],
+    }
+    mockChat.mockReturnValueOnce(chunkStream(completeRun(object, JSON.stringify(object))))
+
+    const result = await synthesizeAnswer({
+      query: 'q',
+      articles: [article('kb_article_x1'), article('kb_article_x2')],
+    })
 
     expect(result).toEqual({ kind: 'no_answer', answer: ASK_AI_MISS_FALLBACK, sources: [] })
   })

@@ -105,7 +105,7 @@ export function buildAskAiSystemPrompts(articles: RetrievedKbArticle[]): string[
     '- Support every claim with an inline citation marker in square brackets, like [1] or [2], placed right after the clause it supports.',
     '- Number citations in the order you first use them: the first article you cite is [1], the next distinct article is [2], and so on.',
     '- List each cited article once in "sources", in that same order, so [n] refers to the n-th entry of "sources". Every number used inline must have a matching "sources" entry, and every "sources" entry must be cited at least once.',
-    '- Put only the articleId values listed below in "sources". Never invent an articleId.',
+    '- Put only the articleId values printed on the source articles below in "sources". Copy them character-for-character. You may also use the source number as a string ("1" for the first source). Never invent an articleId.',
     'Style:',
     '- Reply in the same language as the question.',
     '- Be concise and factual: at most 120 words.',
@@ -121,8 +121,8 @@ export function buildAskAiSystemPrompts(articles: RetrievedKbArticle[]): string[
 
   const sources = articles
     .map(
-      (a) =>
-        `articleId: ${a.id}\nTitle: ${a.title}\nCategory: ${a.categoryName}\nContent:\n${a.content}`
+      (a, i) =>
+        `[${i + 1}]\narticleId: ${a.id}\nTitle: ${a.title}\nCategory: ${a.categoryName}\nContent:\n${a.content}`
     )
     .join('\n\n---\n\n')
 
@@ -144,7 +144,6 @@ export async function synthesizeAnswer(params: SynthesizeAnswerParams): Promise<
     throw new AskAiNotConfiguredError()
   }
 
-  const retrievedIds = new Set(params.articles.map((a) => a.id))
   const articleIds = params.articles.map((a) => a.id)
   // The prompts are identical across attempts; build them once.
   const systemPrompts = buildAskAiSystemPrompts(params.articles)
@@ -175,7 +174,7 @@ export async function synthesizeAnswer(params: SynthesizeAnswerParams): Promise<
     // Prefer the validated structured object for classification; if the
     // stream never produced one (final is null), this attempt is invalid.
     deriveAnswerKind: (attempt) => {
-      const validated = attempt.final !== null ? validateAnswer(attempt.final, retrievedIds) : null
+      const validated = attempt.final !== null ? validateAnswer(attempt.final, articleIds) : null
       return validated === null
         ? 'invalid_output'
         : validated.kind === 'grounded'
@@ -192,7 +191,68 @@ export async function synthesizeAnswer(params: SynthesizeAnswerParams): Promise<
     // than resolving to a fallback value.
     throw outcome.lastError ?? new Error('answer synthesis failed')
   }
-  return validateAnswer(outcome.final, retrievedIds)
+  return validateAnswer(outcome.final, articleIds)
+}
+
+/** Max edit distance when repairing a mistyped retrieved articleId. */
+const CITED_ID_MAX_EDIT_DISTANCE = 2
+/** Min length before a prefix of a retrieved id is accepted as that id. */
+const CITED_ID_MIN_PREFIX_LENGTH = 16
+
+function levenshtein(a: string, b: string): number {
+  if (a === b) return 0
+  if (a.length === 0) return b.length
+  if (b.length === 0) return a.length
+  const row: number[] = Array.from({ length: b.length + 1 }, (_, i) => i)
+  for (let i = 1; i <= a.length; i++) {
+    let prev = row[0] ?? i
+    row[0] = i
+    for (let j = 1; j <= b.length; j++) {
+      const cur = row[j] ?? 0
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1
+      row[j] = Math.min((row[j] ?? 0) + 1, (row[j - 1] ?? 0) + 1, prev + cost)
+      prev = cur
+    }
+  }
+  return row[b.length] ?? b.length
+}
+
+/**
+ * Map a model-cited articleId onto a retrieved id. Small models (DeepSeek
+ * Flash) often drop or swap a character in a TypeID ULID; a unique close
+ * match or unique long prefix is still that article, not a hallucination.
+ * A decimal source number ("1") maps to the stuffed article at that index.
+ */
+function resolveCitedArticleId(cited: string, orderedIds: readonly string[]): string | null {
+  const trimmed = cited.trim()
+  if (!trimmed) return null
+  if (orderedIds.includes(trimmed)) return trimmed
+
+  const asIndex = Number.parseInt(trimmed, 10)
+  if (String(asIndex) === trimmed && asIndex >= 1 && asIndex <= orderedIds.length) {
+    return orderedIds[asIndex - 1] ?? null
+  }
+
+  const prefixHits = orderedIds.filter(
+    (id) => trimmed.length >= CITED_ID_MIN_PREFIX_LENGTH && id.startsWith(trimmed)
+  )
+  if (prefixHits.length === 1) return prefixHits[0] ?? null
+
+  let best: string | null = null
+  let bestDist = Number.POSITIVE_INFINITY
+  let ties = 0
+  for (const id of orderedIds) {
+    const distance = levenshtein(trimmed, id)
+    if (distance < bestDist) {
+      bestDist = distance
+      best = id
+      ties = 1
+    } else if (distance === bestDist) {
+      ties += 1
+    }
+  }
+  if (best && ties === 1 && bestDist <= CITED_ID_MAX_EDIT_DISTANCE) return best
+  return null
 }
 
 /**
@@ -204,14 +264,16 @@ export async function synthesizeAnswer(params: SynthesizeAnswerParams): Promise<
  * a safe miss. A declared miss keeps its contextual text (or the fallback when
  * the model wrote nothing), and never carries sources.
  */
-function validateAnswer(object: unknown, retrievedIds: Set<string>): AskAiAnswer {
+function validateAnswer(object: unknown, orderedIds: readonly string[]): AskAiAnswer {
   const parsed = answerSchema.parse(object)
   const seen = new Set<string>()
-  const sources = parsed.sources.filter((s) => {
-    if (!retrievedIds.has(s.articleId) || seen.has(s.articleId)) return false
-    seen.add(s.articleId)
-    return true
-  })
+  const sources: AskAiSource[] = []
+  for (const source of parsed.sources) {
+    const resolved = resolveCitedArticleId(source.articleId, orderedIds)
+    if (!resolved || seen.has(resolved)) continue
+    seen.add(resolved)
+    sources.push({ articleId: resolved })
+  }
   if (parsed.kind === 'grounded' && sources.length > 0) {
     return { kind: 'grounded', answer: parsed.answer, sources }
   }
