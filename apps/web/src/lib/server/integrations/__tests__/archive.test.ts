@@ -196,6 +196,24 @@ describe('gitlab close', () => {
     expect(result.success).toBe(false)
     expect(result.error).toContain('Cannot determine project')
   })
+
+  it('closes the issue on a custom HTTPS instance', async () => {
+    const fetchMock = mockFetch(200)
+    vi.stubGlobal('fetch', fetchMock)
+
+    await archiveExternalIssue(
+      'gitlab',
+      glCtx({
+        externalUrl: 'https://gitlab.example.com/my-org/my-project/-/issues/7',
+        integrationConfig: { instanceUrl: 'https://gitlab.example.com' },
+      })
+    )
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://gitlab.example.com/api/v4/projects/my-org%2Fmy-project/issues/7',
+      expect.objectContaining({ method: 'PUT' })
+    )
+  })
 })
 
 // ---------------------------------------------------------------------------

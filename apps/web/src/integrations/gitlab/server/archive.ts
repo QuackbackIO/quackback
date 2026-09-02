@@ -4,16 +4,19 @@ import {
   type ArchiveContext,
   type ArchiveResult,
 } from '@/lib/server/integrations/archive'
-
-const GITLAB_API = 'https://gitlab.com/api/v4'
+import {
+  extractGitLabProjectPath,
+  gitlabApiBase,
+  normalizeGitLabInstanceUrl,
+} from '@/integrations/gitlab/server/url'
 
 /** Close the linked GitLab issue on cascading post delete. */
 export async function closeGitLabIssue(ctx: ArchiveContext): Promise<ArchiveResult> {
-  const projectId = extractGitLabProjectId(ctx.externalUrl)
+  const projectId = extractGitLabProjectPath(ctx.externalUrl)
   if (!projectId) return { success: false, error: 'Cannot determine project from external URL' }
 
   const response = await fetch(
-    `${GITLAB_API}/projects/${encodeURIComponent(projectId)}/issues/${ctx.externalId}`,
+    `${gitlabApiBase(instanceUrlFrom(ctx))}/projects/${encodeURIComponent(projectId)}/issues/${ctx.externalId}`,
     {
       method: 'PUT',
       headers: {
@@ -30,8 +33,17 @@ export async function closeGitLabIssue(ctx: ArchiveContext): Promise<ArchiveResu
   return { success: true, action: 'closed' }
 }
 
-function extractGitLabProjectId(url?: string | null): string | null {
-  if (!url) return null
-  const match = url.match(/gitlab\.com\/(.+?)\/-\/issues/)
-  return match?.[1] ?? null
+function instanceUrlFrom(ctx: ArchiveContext): string {
+  const stored = ctx.integrationConfig.instanceUrl
+  if (typeof stored === 'string' && stored.trim()) {
+    return normalizeGitLabInstanceUrl(stored)
+  }
+  if (ctx.externalUrl) {
+    try {
+      return new URL(ctx.externalUrl).origin
+    } catch {
+      // fall through to gitlab.com default
+    }
+  }
+  return normalizeGitLabInstanceUrl(null)
 }

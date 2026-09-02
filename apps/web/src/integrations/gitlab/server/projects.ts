@@ -2,16 +2,17 @@
  * GitLab project listing.
  */
 
-const GITLAB_API = 'https://gitlab.com/api/v4'
+import { gitlabApiBase } from '@/integrations/gitlab/server/url'
 
 /**
  * List projects accessible to the authenticated user.
  */
 export async function listGitLabProjects(
-  accessToken: string
+  accessToken: string,
+  instanceUrl?: string | null
 ): Promise<Array<{ id: string; name: string }>> {
   const response = await fetch(
-    `${GITLAB_API}/projects?membership=true&order_by=last_activity_at&sort=desc&per_page=100`,
+    `${gitlabApiBase(instanceUrl)}/projects?membership=true&order_by=last_activity_at&sort=desc&per_page=100`,
     {
       headers: { Authorization: `Bearer ${accessToken}` },
     }

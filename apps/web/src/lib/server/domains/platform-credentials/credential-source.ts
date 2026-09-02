@@ -82,8 +82,19 @@ async function defaultKnownTypes(): Promise<string[]> {
   return listIntegrationTypes()
 }
 
-/** The platform-credential field keys a provider declares (all are required). */
+/** Declared field keys that must be present for the provider to count as configured. */
 async function defaultRequiredFields(integrationType: string): Promise<string[]> {
+  const mod = await import('@/lib/server/integrations')
+  return (
+    mod
+      .getIntegration?.(integrationType)
+      ?.platformCredentials?.filter((f) => f.required !== false)
+      .map((f) => f.key) ?? []
+  )
+}
+
+/** Every declared field key, including optional ones (e.g. GitLab instanceUrl). */
+async function defaultDeclaredFields(integrationType: string): Promise<string[]> {
   const mod = await import('@/lib/server/integrations')
   return mod.getIntegration?.(integrationType)?.platformCredentials?.map((f) => f.key) ?? []
 }
@@ -92,21 +103,35 @@ async function defaultRequiredFields(integrationType: string): Promise<string[]>
  * Managed-cloud source: shared OAuth-app credentials from
  * INTEGRATION_<PROVIDER>_<FIELD> env (projected from OpenBao via ESO).
  *
- * Reports an integration as configured only when EVERY field the provider declares
- * in `platformCredentials` is present (fail closed) — matching the DB write
- * validation in functions/platform-credentials.ts. This prevents a partially
- * populated OpenBao path from looking configured and then failing mid-OAuth (e.g.
- * clientId present but clientSecret/signingSecret missing).
+ * Reports an integration as configured only when every *required* field the
+ * provider declares in `platformCredentials` is present (fail closed) —
+ * matching the DB write validation in functions/platform-credentials.ts.
+ * Optional fields (required: false) may be absent; when present they are
+ * returned. This prevents a partially populated OpenBao path from looking
+ * configured and then failing mid-OAuth (e.g. clientId present but
+ * clientSecret/signingSecret missing), without forcing optional instance
+ * URLs to be set for gitlab.com.
  *
- * `env`, `knownTypes` and `requiredFields` are injectable for testing; in production
- * they default to process.env and the integration registry.
+ * `env`, `knownTypes`, `requiredFields`, and `declaredFields` are injectable
+ * for testing; in production they default to process.env and the registry.
  */
 export class EnvCredentialSource implements CredentialSource {
+  private readonly declaredFields: (type: string) => Promise<string[]>
+
   constructor(
     private readonly env: Record<string, string | undefined> = process.env,
     private readonly knownTypes: () => Promise<string[]> = defaultKnownTypes,
-    private readonly requiredFields: (type: string) => Promise<string[]> = defaultRequiredFields
-  ) {}
+    private readonly requiredFields: (type: string) => Promise<string[]> = defaultRequiredFields,
+    declaredFields?: (type: string) => Promise<string[]>
+  ) {
+    // Tests that only inject requiredFields keep the previous "required ===
+    // declared" behaviour. Production (`new EnvCredentialSource()`) uses
+    // both registry defaults so optional fields are returned when present
+    // without being demanded.
+    this.declaredFields =
+      declaredFields ??
+      (requiredFields === defaultRequiredFields ? defaultDeclaredFields : requiredFields)
+  }
 
   private read(integrationType: string): Record<string, string> {
     const prefix = envPrefix(integrationType)
@@ -122,19 +147,25 @@ export class EnvCredentialSource implements CredentialSource {
     return out
   }
 
-  /** The creds for a type, or null unless every declared field is present (fail closed). */
+  /** The creds for a type, or null unless every required field is present (fail closed). */
   private async complete(integrationType: string): Promise<Record<string, string> | null> {
     const required = await this.requiredFields(integrationType)
+    const declared = await this.declaredFields(integrationType)
     // A provider that declares no platform-credential fields is not configurable via
     // env — return null rather than reporting it configured off a stray INTEGRATION_* var.
+    if (declared.length === 0 && required.length === 0) return null
+    // Configurable providers must have at least one required field; an all-optional
+    // declaration would otherwise look configured with an empty object.
     if (required.length === 0) return null
     const creds = this.read(integrationType)
     // Return ONLY the declared fields (like the DB save path, which strips extras), so
     // an undeclared INTEGRATION_<TYPE>_* var can never leak through the masked admin API.
     const out: Record<string, string> = {}
+    for (const key of declared) {
+      if (creds[key]) out[key] = creds[key]
+    }
     for (const key of required) {
-      if (!creds[key]) return null
-      out[key] = creds[key]
+      if (!out[key]) return null
     }
     return out
   }

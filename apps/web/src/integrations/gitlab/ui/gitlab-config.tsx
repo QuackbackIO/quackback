@@ -221,6 +221,7 @@ export function GitLabConfig({
         config={initialConfig}
         enabled={integrationEnabled}
         externalStatuses={externalStatuses}
+        isManual
       />
 
       <TicketStatusSyncConfig

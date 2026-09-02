@@ -81,7 +81,8 @@ export const fetchGitLabProjectsFn = createServerFn({ method: 'GET' }).handler(
       throw new Error('GitLab access token missing')
     }
 
-    const projects = await listGitLabProjects(secrets.accessToken)
+    const instanceUrl = (integration.config as { instanceUrl?: string } | null)?.instanceUrl
+    const projects = await listGitLabProjects(secrets.accessToken, instanceUrl)
     return projects
   }
 )

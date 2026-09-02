@@ -2,6 +2,12 @@
  * GitLab OAuth utilities.
  */
 
+import { GITLAB_COM_ORIGIN, normalizeGitLabInstanceUrl } from '@/integrations/gitlab/server/url'
+
+function instanceOrigin(credentials?: Record<string, string>): string {
+  return normalizeGitLabInstanceUrl(credentials?.instanceUrl)
+}
+
 /**
  * Generate the GitLab OAuth authorization URL.
  */
@@ -24,7 +30,7 @@ export function getGitLabOAuthUrl(
     scope: 'api',
   })
 
-  return `https://gitlab.com/oauth/authorize?${params}`
+  return `${instanceOrigin(credentials)}/oauth/authorize?${params}`
 }
 
 /**
@@ -48,7 +54,9 @@ export async function exchangeGitLabCode(
     throw new Error('GitLab credentials not configured')
   }
 
-  const response = await fetch('https://gitlab.com/oauth/token', {
+  const origin = instanceOrigin(credentials)
+
+  const response = await fetch(`${origin}/oauth/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -72,7 +80,7 @@ export async function exchangeGitLabCode(
   }
 
   // Fetch user info for workspace name
-  const userResponse = await fetch('https://gitlab.com/api/v4/user', {
+  const userResponse = await fetch(`${origin}/api/v4/user`, {
     headers: { Authorization: `Bearer ${data.access_token}` },
   })
 
@@ -86,6 +94,10 @@ export async function exchangeGitLabCode(
     expiresIn: data.expires_in,
     config: {
       workspaceName: user?.name || user?.username || 'GitLab',
+      // Persist the origin so hook / archive / project listing talk to the
+      // same instance without a credentials lookup. Omit when defaulting
+      // to gitlab.com so existing connections stay unchanged.
+      ...(origin !== GITLAB_COM_ORIGIN ? { instanceUrl: origin } : {}),
     },
   }
 }
