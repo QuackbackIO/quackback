@@ -58,7 +58,12 @@ import {
 import { useUpdatePortalConfig } from '@/lib/client/mutations/settings'
 import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
 import { UpgradeModal } from '@/components/admin/upgrade'
-import { describePlanUpgrade, isPlanRefusal } from '@/lib/shared/describe-upgrade'
+import {
+  describePlanRefusal,
+  describePlanUpgrade,
+  isPlanRefusal,
+  type UpgradeDescription,
+} from '@/lib/shared/describe-upgrade'
 import { DEFAULT_PORTAL_CONFIG, isProductEnabled } from '@/lib/shared/types/settings'
 import { isStatusPagePublished } from '@/lib/shared/status-settings'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
@@ -155,7 +160,7 @@ function PortalPage() {
   const navBaseline = useRef(JSON.stringify(navItems))
 
   const [saving, setSaving] = useState(false)
-  const [upgradeOpen, setUpgradeOpen] = useState(false)
+  const [upgrade, setUpgrade] = useState<UpgradeDescription | null>(null)
 
   const themeDirty =
     state.cssText !== themeBaseline.current.css || state.themeMode !== themeBaseline.current.mode
@@ -204,7 +209,9 @@ function PortalPage() {
       startTransition(() => router.invalidate())
     } catch (error) {
       if (isPlanRefusal(error)) {
-        setUpgradeOpen(true)
+        setUpgrade(
+          describePlanRefusal(error, describePlanUpgrade('Custom colours', 'pro', { plural: true }))
+        )
       } else {
         toast.error(error instanceof Error ? error.message : "Couldn't save portal. Try again.")
       }
@@ -531,9 +538,11 @@ function PortalPage() {
         </div>
       </div>
       <UpgradeModal
-        open={upgradeOpen}
-        onOpenChange={setUpgradeOpen}
-        description={describePlanUpgrade('Custom colours', 'pro')}
+        open={upgrade !== null}
+        onOpenChange={(open) => {
+          if (!open) setUpgrade(null)
+        }}
+        description={upgrade ?? describePlanUpgrade('Custom colours', 'pro', { plural: true })}
       />
     </div>
   )

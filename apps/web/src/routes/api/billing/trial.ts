@@ -6,7 +6,21 @@ import { billingFormErrorResponse, billingSessionErrorResponse } from './session
 
 const trialSchema = z.object({
   planId: z.enum(['growth', 'pro', 'scale']),
+  /** Admin page the prompt was raised on, so the trial lands back on the now-unlocked feature. */
+  returnTo: z.string().optional(),
 })
+
+/**
+ * Only a same-origin admin path may be returned to. Anything else — absolute
+ * or protocol-relative URLs, backslashes, control characters, non-admin paths —
+ * falls back to Plan & billing so the form can never be used as an open redirect.
+ */
+export function trialReturnPath(returnTo: string | undefined): string {
+  if (!returnTo) return '/admin/settings/billing'
+  if (!/^\/admin(?:[/?]|$)/.test(returnTo)) return '/admin/settings/billing'
+  if (/[\\\s]/.test(returnTo)) return '/admin/settings/billing'
+  return returnTo
+}
 
 export const Route = createFileRoute('/api/billing/trial')({
   server: {
@@ -33,7 +47,7 @@ export const Route = createFileRoute('/api/billing/trial')({
           await startWorkspaceTrial(parsed.data.planId)
           return new Response(null, {
             status: 303,
-            headers: { location: '/admin/settings/billing' },
+            headers: { location: trialReturnPath(parsed.data.returnTo) },
           })
         } catch (error) {
           return billingSessionErrorResponse(error)

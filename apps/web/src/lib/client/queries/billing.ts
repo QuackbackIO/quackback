@@ -6,6 +6,7 @@ import {
   fetchPlanUsageFn,
   fetchFreeDowngradePreviewFn,
   fetchSeatsPreviewFn,
+  fetchUpgradeContextFn,
 } from '@/lib/server/functions/billing'
 
 /** Billing state and catalogue from the control plane. */
@@ -21,6 +22,12 @@ export const billingQueries = {
     queryOptions({
       queryKey: ['billing', 'catalogue'] as const,
       queryFn: () => fetchBillingCatalogueFn(),
+      staleTime: 60_000,
+    }),
+  upgradeContext: () =>
+    queryOptions({
+      queryKey: ['billing', 'upgrade-context'] as const,
+      queryFn: () => fetchUpgradeContextFn(),
       staleTime: 60_000,
     }),
   invoices: () =>
@@ -50,18 +57,25 @@ export const billingQueries = {
 }
 
 /**
- * Warm the advertised-plan catalogue before an upgrade surface renders.
- * Fail-open: a control-plane miss stores null so the offer still SSRs.
+ * Warm everything an upgrade surface reads before it renders: the advertised
+ * plan catalogue and the workspace's upgrade context (current plan, trial
+ * eligibility). Fail-open: a miss on either stores null so the offer still SSRs
+ * with plan-only copy. Resolves to the catalogue, as before.
  */
 export async function ensureBillingCatalogue(
   queryClient: QueryClient,
   billingEnabled: boolean | undefined
 ) {
   if (!billingEnabled) return null
-  try {
-    return await queryClient.ensureQueryData(billingQueries.catalogue())
-  } catch {
-    queryClient.setQueryData(billingQueries.catalogue().queryKey, null)
-    return null
-  }
+  const [catalogue] = await Promise.all([
+    queryClient.ensureQueryData(billingQueries.catalogue()).catch(() => {
+      queryClient.setQueryData(billingQueries.catalogue().queryKey, null)
+      return null
+    }),
+    queryClient.ensureQueryData(billingQueries.upgradeContext()).catch(() => {
+      queryClient.setQueryData(billingQueries.upgradeContext().queryKey, null)
+      return null
+    }),
+  ])
+  return catalogue
 }

@@ -73,7 +73,19 @@ describe('DefaultErrorPage', () => {
 
     expect(screen.queryByText(/Something went wrong/i)).toBeNull()
     expect(screen.queryByText(/Technical details/i)).toBeNull()
-    expect(screen.getByText(/This is a plan feature/i)).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'The audit log is available from the Scale plan' })
+    ).toBeInTheDocument()
     expect(screen.getByText(/The audit log is a Scale feature/)).toBeInTheDocument()
+  })
+
+  it('keeps the generic plan headline when the refusal names no plan', () => {
+    render(
+      <DefaultErrorPage
+        error={new Error('Workflows are not included in your plan. Contact us to enable it.')}
+      />
+    )
+
+    expect(screen.getByRole('heading', { name: 'This is a plan feature' })).toBeInTheDocument()
   })
 })

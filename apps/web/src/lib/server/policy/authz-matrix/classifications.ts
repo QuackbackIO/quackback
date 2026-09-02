@@ -360,6 +360,13 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
     'advertised plan catalogue; null when cloud is off'
   ),
 
+  // Current plan name and trial eligibility for upgrade prompts. Same audience
+  // as the catalogue: the plan name already reaches every teammate through the
+  // trial banner, and nothing else (references, dates, entitlements) is exposed.
+  'lib/server/functions/billing.ts::fetchUpgradeContextFn': END_USER(
+    'current plan + trial eligibility; null when cloud is off'
+  ),
+
   // Cloud workspace ownership. The gate admits any authenticated principal and
   // the *handler* makes the access decision by comparing the caller's own
   // session address against the owner the control plane reports — there is no

@@ -228,6 +228,37 @@ describe('POST /api/billing/session checkout', () => {
     })
   })
 
+  it('bundles branding removal into the checkout only when the box was ticked', async () => {
+    await POST({
+      request: formRequest({
+        action: 'checkout',
+        planId: 'growth',
+        billingPeriod: 'annual',
+        quantity: '8',
+        brandingRemoval: 'true',
+      }),
+    })
+    expect(hoisted.createHostedBillingSession).toHaveBeenCalledWith({
+      action: 'checkout',
+      planId: 'growth',
+      billingPeriod: 'annual',
+      quantity: 8,
+      brandingRemoval: true,
+    })
+
+    hoisted.createHostedBillingSession.mockClear()
+    const res = await POST({
+      request: formRequest({
+        action: 'checkout',
+        planId: 'growth',
+        billingPeriod: 'annual',
+        brandingRemoval: 'yes',
+      }),
+    })
+    expect(res.headers.get('location')).toContain('billing_error=invalid')
+    expect(hoisted.createHostedBillingSession).not.toHaveBeenCalled()
+  })
+
   it('forwards branding-removal purchase to the control plane', async () => {
     hoisted.createHostedBillingSession.mockResolvedValue({ status: 'updated' })
     const res = await POST({

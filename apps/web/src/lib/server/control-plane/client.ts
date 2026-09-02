@@ -193,6 +193,8 @@ export type HostedBillingSessionInput =
       planId: 'growth' | 'pro' | 'scale'
       billingPeriod: 'monthly' | 'annual'
       quantity?: number
+      /** Bundle branding removal into the same subscription and checkout. */
+      brandingRemoval?: boolean
     }
   | { action: 'downgrade'; planId: 'free' }
   | { action: 'seats'; quantity: number }
