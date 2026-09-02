@@ -11,11 +11,14 @@
  * routed immediately. This runs once per pool, after identity checks, and is a
  * no-op when the ledger already records every bundled migration.
  *
- * Uses the session-mode DSN: `runMigrations` refuses a transaction-mode pooler
- * because the advisory lock is session-scoped.
+ * Catch-up goes through {@link migrateDirect}, not raw `runMigrations`. Drizzle
+ * only applies a suffix above the ledger high-water mark, so a hole below the
+ * tip would otherwise 503-loop on every checkout. `migrateDirect` is the
+ * gap-aware planner that can truncate and replay, or refuse a mutating replay.
+ *
+ * Uses the session-mode DSN: the advisory lock is session-scoped.
  */
 import type { Sql } from 'postgres'
-import { runMigrations } from '@quackback/db/migrate'
 import {
   BUNDLED_MIGRATIONS,
   readAppliedLedger,
@@ -44,23 +47,28 @@ export async function ensureWorkspaceSchemaCurrent(opts: {
     'workspace schema is behind this build — migrating before serving'
   )
 
-  const result = await runMigrations(opts.directConnectionString)
-  if (result.postconditions && !result.postconditions.ok) {
+  // Dynamic import: migrator.ts imports pool-cache for the registry-backed
+  // wrapper, and pool-cache calls this module on checkout.
+  const { migrateDirect } = await import('./migrator')
+  const outcome = await migrateDirect(opts.workspaceKey, opts.directConnectionString)
+  if (!outcome.ok) {
     log.error(
       {
         workspaceKey: opts.workspaceKey,
-        violations: result.postconditions.violations.map((v) => v.detail),
+        code: outcome.code,
+        detail: outcome.detail,
+        gap: outcome.gap?.missing,
       },
-      'workspace migrate completed but post-conditions failed'
+      'workspace catch-up migrate refused or failed'
     )
     throw new WorkspaceSchemaFloorRefusal(opts.workspaceKey, {
       ok: false,
-      missing,
+      missing: outcome.gap?.missing ?? missing,
       floorTag: missing[missing.length - 1] ?? 'bundled',
     })
   }
 
-  const after = await readAppliedLedger(opts.sql)
+  const after = outcome.after ?? (await readAppliedLedger(opts.sql))
   const stillMissing = missingBundledMigrations(after)
   if (stillMissing.length > 0) {
     throw new WorkspaceSchemaFloorRefusal(opts.workspaceKey, {

@@ -9,15 +9,15 @@ import { BUNDLED_MIGRATIONS, latestBundledVersion } from '@quackback/db/schema-v
 import { WorkspaceSchemaFloorRefusal } from '../schema-floor'
 
 const readAppliedLedger = vi.fn()
-const runMigrations = vi.fn()
+const migrateDirect = vi.fn()
 
 vi.mock('@quackback/db/schema-version', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@quackback/db/schema-version')>()
   return { ...actual, readAppliedLedger: (...args: unknown[]) => readAppliedLedger(...args) }
 })
 
-vi.mock('@quackback/db/migrate', () => ({
-  runMigrations: (...args: unknown[]) => runMigrations(...args),
+vi.mock('../migrator', () => ({
+  migrateDirect: (...args: unknown[]) => migrateDirect(...args),
 }))
 
 vi.mock('@/lib/server/logger', () => ({
@@ -37,25 +37,29 @@ function allBut(...omit: string[]) {
   return BUNDLED_MIGRATIONS.filter((e) => !omit.includes(e.tag)).map((e) => e.tag)
 }
 
+function completeLedger() {
+  return {
+    versions: new Set(BUNDLED_MIGRATIONS.map((e) => e.when)),
+    count: BUNDLED_MIGRATIONS.length,
+    max: latestBundledVersion(),
+  }
+}
+
 describe('ensureWorkspaceSchemaCurrent', () => {
   beforeEach(() => {
     readAppliedLedger.mockReset()
-    runMigrations.mockReset()
+    migrateDirect.mockReset()
   })
 
   it('does not migrate when the ledger already records every bundled migration', async () => {
     const { ensureWorkspaceSchemaCurrent } = await import('../ensure-schema-current')
-    readAppliedLedger.mockResolvedValue({
-      versions: new Set(BUNDLED_MIGRATIONS.map((e) => e.when)),
-      count: BUNDLED_MIGRATIONS.length,
-      max: latestBundledVersion(),
-    })
+    readAppliedLedger.mockResolvedValue(completeLedger())
     await ensureWorkspaceSchemaCurrent({
       workspaceKey: 'inst_x',
       sql: {} as never,
       directConnectionString: 'postgresql://role:pw@direct.example/db',
     })
-    expect(runMigrations).not.toHaveBeenCalled()
+    expect(migrateDirect).not.toHaveBeenCalled()
   })
 
   it('migrates a mint whose vendor snapshot stopped short of this build', async () => {
@@ -66,15 +70,13 @@ describe('ensureWorkspaceSchemaCurrent', () => {
       '0271_widget_installed_sdk_version',
       '0272_kb_url_id',
     ])
-    readAppliedLedger.mockResolvedValueOnce(behind).mockResolvedValueOnce({
-      versions: new Set(BUNDLED_MIGRATIONS.map((e) => e.when)),
-      count: BUNDLED_MIGRATIONS.length,
-      max: latestBundledVersion(),
-    })
-    runMigrations.mockResolvedValue({
-      healed: [],
-      unhealable: [],
-      postconditions: { ok: true, violations: [], covers: [], observed: {} },
+    readAppliedLedger.mockResolvedValue(behind)
+    migrateDirect.mockResolvedValue({
+      ok: true,
+      code: 'reconciled',
+      detail: 'applied 2',
+      after: completeLedger(),
+      gap: null,
     })
 
     await ensureWorkspaceSchemaCurrent({
@@ -82,26 +84,38 @@ describe('ensureWorkspaceSchemaCurrent', () => {
       sql: {} as never,
       directConnectionString: 'postgresql://role:pw@direct.example/db',
     })
-    expect(runMigrations).toHaveBeenCalledWith('postgresql://role:pw@direct.example/db')
+    expect(migrateDirect).toHaveBeenCalledWith('inst_new', 'postgresql://role:pw@direct.example/db')
   })
 
-  it('refuses to serve when migrate reports failing post-conditions', async () => {
+  it('uses migrateDirect so a gapped ledger can be healed rather than 503-looping', async () => {
+    const { ensureWorkspaceSchemaCurrent } = await import('../ensure-schema-current')
+    const gapped = ledger(allBut('0271_widget_installed_sdk_version'))
+    readAppliedLedger.mockResolvedValue(gapped)
+    migrateDirect.mockResolvedValue({
+      ok: true,
+      code: 'healed_ledger_gap',
+      detail: 'healed',
+      after: completeLedger(),
+      gap: { missing: ['0271_widget_installed_sdk_version'] },
+    })
+
+    await ensureWorkspaceSchemaCurrent({
+      workspaceKey: 'inst_gap',
+      sql: {} as never,
+      directConnectionString: 'postgresql://role:pw@direct.example/db',
+    })
+    expect(migrateDirect).toHaveBeenCalledOnce()
+  })
+
+  it('refuses to serve when migrateDirect does not succeed', async () => {
     const { ensureWorkspaceSchemaCurrent } = await import('../ensure-schema-current')
     readAppliedLedger.mockResolvedValue(ledger(allBut('0271_widget_installed_sdk_version')))
-    runMigrations.mockResolvedValue({
-      healed: [],
-      unhealable: [],
-      postconditions: {
-        ok: false,
-        violations: [
-          {
-            kind: 'missing_column',
-            detail: 'column public.settings.widget_installed_sdk_version is missing',
-          },
-        ],
-        covers: [],
-        observed: {},
-      },
+    migrateDirect.mockResolvedValue({
+      ok: false,
+      code: 'postconditions_violated',
+      detail: 'column public.settings.widget_installed_sdk_version is missing',
+      after: null,
+      gap: null,
     })
 
     await expect(
