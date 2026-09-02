@@ -30,6 +30,7 @@ import {
 import { hydrateMentions } from './hydrate-mentions'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { JSONContent } from '@tiptap/core'
+import { contentJsonForClient } from '@/lib/server/content/storage-read-urls'
 
 /**
  * Fetch the public-facing detail view for a post.
@@ -439,9 +440,11 @@ export async function getPublicPostDetail(
   // renamed users show up-to-date names. List views skip this; only the
   // detail read paths pay the extra round-trip.
   const hydratePublicCommentTree = async (node: PublicComment): Promise<PublicComment> => {
-    const hydratedContentJson = node.contentJson
-      ? ((await hydrateMentions(node.contentJson as JSONContent)) as PublicComment['contentJson'])
-      : node.contentJson
+    const hydratedContentJson = contentJsonForClient(
+      node.contentJson
+        ? ((await hydrateMentions(node.contentJson as JSONContent)) as PublicComment['contentJson'])
+        : node.contentJson
+    )
     const hydratedReplies = await Promise.all(node.replies.map(hydratePublicCommentTree))
     return { ...node, contentJson: hydratedContentJson, replies: hydratedReplies }
   }
@@ -461,11 +464,13 @@ export async function getPublicPostDetail(
     if (pinnedRow && !pinnedRow.deleted_at) {
       const pinnedContentJson =
         (pinnedRow.content_json as PinnedComment['contentJson'] | null | undefined) ?? null
-      const pinnedHydrated = pinnedContentJson
-        ? ((await hydrateMentions(
-            pinnedContentJson as JSONContent
-          )) as PinnedComment['contentJson'])
-        : null
+      const pinnedHydrated = contentJsonForClient(
+        pinnedContentJson
+          ? ((await hydrateMentions(
+              pinnedContentJson as JSONContent
+            )) as PinnedComment['contentJson'])
+          : null
+      )
       pinnedComment = {
         id: fromUuid('post_comment', pinnedRow.id) as PostCommentId,
         content: pinnedRow.content,
@@ -484,9 +489,11 @@ export async function getPublicPostDetail(
     }
   }
 
-  const hydratedPostContentJson = postResult.contentJson
-    ? ((await hydrateMentions(postResult.contentJson as JSONContent)) as TiptapContent | null)
-    : postResult.contentJson
+  const hydratedPostContentJson = contentJsonForClient(
+    postResult.contentJson
+      ? ((await hydrateMentions(postResult.contentJson as JSONContent)) as TiptapContent | null)
+      : postResult.contentJson
+  )
 
   return {
     id: postResult.id,

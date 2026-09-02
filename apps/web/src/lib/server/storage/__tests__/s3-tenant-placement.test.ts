@@ -222,6 +222,12 @@ describe('public URLs', () => {
     )
   })
 
+  it('keeps an unsigned portal-images src unsigned', () => {
+    const src = '/api/storage/portal-images/2026/04/4eea0db0-screenshot.png'
+    expect(resignStoredAssetUrl(src)).toBe(src)
+    expect(resignStoredAssetUrl(`https://old.example.com${src}`)).toBe(src)
+  })
+
   it('leaves the unscoped read signature byte-identical to the historical one', () => {
     // HMAC-SHA256('env-secret-key', 'read|<key>') truncated to 32 hex chars —
     // the message as it stood before workspaces. These signatures are embedded in

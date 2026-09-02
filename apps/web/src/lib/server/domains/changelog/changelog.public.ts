@@ -22,6 +22,8 @@ import { computeStatus } from './changelog.service'
 import { getCategoriesForEntries, categoryGateAllows } from './changelog-category.service'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
 import type { PublicChangelogEntry, PublicChangelogListResult } from './changelog.types'
+import { contentJsonForClient } from '@/lib/server/content/storage-read-urls'
+import { resignStoredAssetUrl } from '@/lib/server/storage/s3'
 
 const effectiveDisplayDate = sql<Date>`coalesce(${changelogEntries.displayDate}, ${changelogEntries.publishedAt})`
 
@@ -156,9 +158,11 @@ export async function getPublicChangelogById(
     id: entry.id,
     title: entry.title,
     content: entry.content,
-    contentJson: entry.contentJson,
+    contentJson: contentJsonForClient(entry.contentJson),
     publishedAt: entry.displayDate ?? entry.publishedAt,
-    featuredImageUrl: entry.featuredImageUrl,
+    featuredImageUrl: entry.featuredImageUrl
+      ? resignStoredAssetUrl(entry.featuredImageUrl)
+      : entry.featuredImageUrl,
     categories: categories.map((c) => ({ id: c.id, name: c.name, color: c.color })),
     linkedPosts: linkedPostRows.map((lp) => ({
       id: lp.postId,
@@ -296,9 +300,11 @@ export async function listPublicChangelogs(
         id: entry.id,
         title: entry.title,
         content: entry.content,
-        contentJson: entry.contentJson,
+        contentJson: contentJsonForClient(entry.contentJson),
         publishedAt: entry.displayDate ?? entry.publishedAt!,
-        featuredImageUrl: entry.featuredImageUrl,
+        featuredImageUrl: entry.featuredImageUrl
+          ? resignStoredAssetUrl(entry.featuredImageUrl)
+          : entry.featuredImageUrl,
         categories: entryCategories.map((c) => ({ id: c.id, name: c.name, color: c.color })),
         linkedPosts: entryLinkedPosts.map((lp) => ({
           id: lp.postId,
