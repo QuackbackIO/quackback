@@ -60,6 +60,9 @@ interface WidgetAuthContextValue {
   metadata: WidgetMetadata | null
   /** Increments when the session token changes — use in query keys to trigger refetch */
   sessionVersion: number
+  /** Latest sessionVersion, readable inside async handlers after ensureSession()
+   *  may have bumped it (the rendered `sessionVersion` closure would be stale). */
+  getSessionVersion: () => number
 }
 
 const WidgetAuthContext = createContext<WidgetAuthContextValue | null>(null)
@@ -143,6 +146,7 @@ export function WidgetAuthProvider({
   }, [locale])
 
   const sessionVersionRef = useRef(0)
+  const getSessionVersion = useCallback(() => sessionVersionRef.current, [])
   const storeToken = useCallback((token: string) => {
     setWidgetToken(token)
     sessionReadyRef.current = true
@@ -445,6 +449,7 @@ export function WidgetAuthProvider({
       emitEvent,
       metadata: widgetMetadata,
       sessionVersion,
+      getSessionVersion,
     }),
     [
       user,
@@ -456,6 +461,7 @@ export function WidgetAuthProvider({
       emitEvent,
       widgetMetadata,
       sessionVersion,
+      getSessionVersion,
     ]
   )
 

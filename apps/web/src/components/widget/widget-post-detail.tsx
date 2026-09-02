@@ -147,6 +147,10 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
   }
 
   if (error || !post) {
+    // "Post not found" is the one error we raise ourselves and can name; any
+    // other message is a transport/stack string a visitor can't act on, so
+    // show the generic line and keep the raw text in a tooltip for support.
+    const notFound = error instanceof Error && error.message === 'Post not found'
     return (
       <div className="flex flex-col items-center justify-center h-full px-4 text-center">
         <p className="text-sm text-muted-foreground">
@@ -155,13 +159,21 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
             defaultMessage="Could not load post"
           />
         </p>
-        <p className="text-xs text-muted-foreground/60 mt-1">
-          {error instanceof Error
-            ? error.message
-            : intl.formatMessage({
-                id: 'widget.postDetail.error.somethingWrong',
-                defaultMessage: 'Something went wrong',
-              })}
+        <p
+          className="text-xs text-muted-foreground/60 mt-1"
+          title={!notFound && error instanceof Error ? error.message : undefined}
+        >
+          {notFound ? (
+            <FormattedMessage
+              id="widget.postDetail.error.notFound"
+              defaultMessage="This post may have been removed or made private."
+            />
+          ) : (
+            <FormattedMessage
+              id="widget.postDetail.error.somethingWrong"
+              defaultMessage="Something went wrong"
+            />
+          )}
         </p>
       </div>
     )

@@ -1168,5 +1168,10 @@
   "widget.success.title": "Спасибо за ваш отзыв!",
   "widget.success.subtitle": "Ваша идея отправлена.",
   "widget.success.backToIdeas": "Назад к идеям",
-  "widget.messenger.csat.rateAria": "Оценка {n} из 5"
+  "widget.messenger.csat.rateAria": "Оценка {n} из 5",
+  "widget.home.row.comments": "{count, plural, one {# комментарий} few {# комментария} other {# комментариев}}",
+  "widget.home.posting.chooseBoard": "Выберите доску для публикации",
+  "widget.home.boards.all": "Все",
+  "widget.portalTitle.openInPortal": "Открыть на портале",
+  "widget.postDetail.error.notFound": "Возможно, этот пост был удалён или скрыт."
 }

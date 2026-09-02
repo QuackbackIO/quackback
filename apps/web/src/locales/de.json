@@ -1168,5 +1168,10 @@
   "widget.success.title": "Danke für dein Feedback!",
   "widget.success.subtitle": "Deine Idee wurde eingereicht.",
   "widget.success.backToIdeas": "Zurück zu den Ideen",
-  "widget.messenger.csat.rateAria": "{n} von 5 bewerten"
+  "widget.messenger.csat.rateAria": "{n} von 5 bewerten",
+  "widget.home.row.comments": "{count, plural, one {# Kommentar} other {# Kommentare}}",
+  "widget.home.posting.chooseBoard": "Wähle ein Board zum Posten",
+  "widget.home.boards.all": "Alle",
+  "widget.portalTitle.openInPortal": "Im Portal öffnen",
+  "widget.postDetail.error.notFound": "Dieser Beitrag wurde möglicherweise entfernt oder auf privat gesetzt."
 }

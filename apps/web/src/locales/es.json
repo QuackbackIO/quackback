@@ -1168,5 +1168,10 @@
   "widget.success.title": "¡Gracias por tu comentario!",
   "widget.success.subtitle": "Tu idea se ha enviado.",
   "widget.success.backToIdeas": "Volver a las ideas",
-  "widget.messenger.csat.rateAria": "Puntuar {n} de 5"
+  "widget.messenger.csat.rateAria": "Puntuar {n} de 5",
+  "widget.home.row.comments": "{count, plural, one {# comentario} other {# comentarios}}",
+  "widget.home.posting.chooseBoard": "Elige un tablero para publicar",
+  "widget.home.boards.all": "Todos",
+  "widget.portalTitle.openInPortal": "Abrir en el portal",
+  "widget.postDetail.error.notFound": "Es posible que esta publicación se haya eliminado o sea privada."
 }
