@@ -18,6 +18,18 @@ export function createSuggestionPopup(): HTMLDivElement {
   return markSuggestionPopup(el)
 }
 
+/**
+ * True when a suggestion popup is actually showing. Presence in the DOM is
+ * not enough: the mention popup is a tippy instance whose `hide()` can leave
+ * the marked element mounted (hidden) for a beat, and any renderer may keep
+ * a hidden element around — a stale marker would make every Escape look like
+ * a dismissal and trap focus in the composer.
+ */
 export function hasOpenSuggestionPopup(): boolean {
-  return document.querySelector(`[${SUGGESTION_POPUP_ATTR}]`) !== null
+  const popups = document.querySelectorAll<HTMLElement>(`[${SUGGESTION_POPUP_ATTR}]`)
+  return Array.from(popups).some((el) =>
+    typeof el.checkVisibility === 'function'
+      ? el.checkVisibility({ visibilityProperty: true, opacityProperty: true })
+      : el.getClientRects().length > 0
+  )
 }
