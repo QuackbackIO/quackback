@@ -21,6 +21,7 @@ import { useWidgetAuth } from './widget-auth-provider'
 import { sendToHost } from '@/lib/client/widget-bridge'
 import { WidgetCommentForm } from './widget-comment-form'
 import { WidgetPortalTitle } from './widget-portal-title'
+import { WidgetPostDetailSkeleton } from './widget-skeletons'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { PostId } from '@quackback/ids'
 import { useWidgetImageUpload } from '@/lib/client/hooks/use-image-upload'
@@ -142,20 +143,7 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
   const liveCommentCount = post?.comments ? countLiveComments(post.comments) : 0
 
   if (isLoading) {
-    return (
-      <div className="flex flex-col h-full px-3 pt-3">
-        <div className="space-y-3 animate-pulse">
-          <div className="h-5 bg-muted/50 rounded w-3/4" />
-          <div className="h-3 bg-muted/30 rounded w-1/3" />
-          <div className="h-20 bg-muted/30 rounded mt-2" />
-          <div className="h-3 bg-muted/30 rounded w-1/2 mt-4" />
-          <div className="space-y-2 mt-2">
-            <div className="h-12 bg-muted/20 rounded" />
-            <div className="h-12 bg-muted/20 rounded" />
-          </div>
-        </div>
-      </div>
-    )
+    return <WidgetPostDetailSkeleton />
   }
 
   if (error || !post) {

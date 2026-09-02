@@ -9,6 +9,7 @@ import type { ChangelogId } from '@quackback/ids'
 import type { JSONContent } from '@tiptap/react'
 import { WidgetPortalTitle } from './widget-portal-title'
 import { sendToHost } from '@/lib/client/widget-bridge'
+import { WidgetArticleSkeleton } from './widget-skeletons'
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', {
@@ -33,13 +34,7 @@ export function WidgetChangelogDetail({ entryId }: WidgetChangelogDetailProps) {
   }, [changelogEntryId])
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-10">
-        <div className="text-sm text-muted-foreground">
-          <FormattedMessage id="widget.changelogDetail.loading" defaultMessage="Loading..." />
-        </div>
-      </div>
-    )
+    return <WidgetArticleSkeleton />
   }
 
   if (!entry) {

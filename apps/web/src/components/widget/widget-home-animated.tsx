@@ -9,7 +9,7 @@ import {
   ChevronRightIcon,
 } from '@heroicons/react/24/outline'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery, keepPreviousData } from '@tanstack/react-query'
 import { useIntl, FormattedMessage } from 'react-intl'
 import {
   Select,
@@ -21,6 +21,8 @@ import {
 import { listPublicPostsFn } from '@/lib/server/functions/public-posts'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { WidgetVoteButton } from './widget-vote-button'
+import { WidgetPostListSkeleton } from './widget-skeletons'
+import { cn } from '@/lib/shared/utils'
 import { useWidgetAuth } from './widget-auth-provider'
 import { sendToHost } from '@/lib/client/widget-bridge'
 import type { PostId } from '@quackback/ids'
@@ -301,7 +303,11 @@ export function WidgetHomeAnimated({
   })
 
   // Search query for popular ideas — replaces infinite list when active
-  const { data: popularSearchData, isFetching: isPopularSearchFetching } = useQuery({
+  const {
+    data: popularSearchData,
+    isFetching: isPopularSearchFetching,
+    isPlaceholderData: isPopularSearchStale,
+  } = useQuery({
     queryKey: ['widget', 'search', 'popular', debouncedPopularSearch, activeBoardSlug ?? 'all'],
     queryFn: async () => {
       const params = new URLSearchParams({ q: debouncedPopularSearch, limit: '20' })
@@ -311,7 +317,16 @@ export function WidgetHomeAnimated({
       return { posts: (json.data?.posts ?? []) as WidgetPost[] }
     },
     enabled: debouncedPopularSearch.length > 0,
+    // Refining a query keeps the previous hits on screen (dimmed) instead of
+    // blinking the list empty between keystrokes; only the very first search
+    // has nothing to hold and shows the row skeleton.
+    placeholderData: keepPreviousData,
   })
+  // Typed-but-unsettled (debounce window), or fetching, or showing hits that
+  // belong to the previous query.
+  const popularSearchPending =
+    isPopularSearchFetching || isPopularSearchStale || popularSearch !== debouncedPopularSearch
+  const popularSearchPosts = popularSearchData?.posts ?? []
 
   const handleAuthRequired = useCallback(
     (postId: string) => {
@@ -860,71 +875,61 @@ export function WidgetHomeAnimated({
 
             {debouncedPopularSearch.length > 0 && (
               <>
-                {(isPopularSearchFetching || popularSearch !== debouncedPopularSearch) && (
-                  <div className="flex justify-center py-4">
-                    <span className="text-xs text-muted-foreground/50">
+                {popularSearchPending && popularSearchPosts.length === 0 && (
+                  <WidgetPostListSkeleton count={4} />
+                )}
+                {!popularSearchPending && popularSearchPosts.length === 0 && (
+                  <div className="flex flex-col items-center justify-center py-8 text-center animate-in fade-in duration-200 motion-reduce:animate-none">
+                    <MagnifyingGlassIcon className="w-8 h-8 text-muted-foreground/30 mb-2" />
+                    <p className="text-sm font-medium text-muted-foreground/70">
                       <FormattedMessage
-                        id="widget.home.popular.search.searching"
-                        defaultMessage="Searching..."
+                        id="widget.home.popular.search.noResults"
+                        defaultMessage="No ideas found"
                       />
-                    </span>
+                    </p>
+                    <p className="text-xs text-muted-foreground/50 mt-0.5">
+                      <FormattedMessage
+                        id="widget.home.popular.search.noResultsHint"
+                        defaultMessage="Try a different search term"
+                      />
+                    </p>
                   </div>
                 )}
-                {!isPopularSearchFetching &&
-                  popularSearch === debouncedPopularSearch &&
-                  (popularSearchData?.posts.length ?? 0) === 0 && (
-                    <div className="flex flex-col items-center justify-center py-8 text-center">
-                      <MagnifyingGlassIcon className="w-8 h-8 text-muted-foreground/30 mb-2" />
-                      <p className="text-sm font-medium text-muted-foreground/70">
-                        <FormattedMessage
-                          id="widget.home.popular.search.noResults"
-                          defaultMessage="No ideas found"
-                        />
-                      </p>
-                      <p className="text-xs text-muted-foreground/50 mt-0.5">
-                        <FormattedMessage
-                          id="widget.home.popular.search.noResultsHint"
-                          defaultMessage="Try a different search term"
-                        />
-                      </p>
-                    </div>
-                  )}
-                {!isPopularSearchFetching &&
-                  popularSearch === debouncedPopularSearch &&
-                  (popularSearchData?.posts.length ?? 0) > 0 && (
-                    <div className="space-y-0.5">
-                      {popularSearchData!.posts.map((post) => (
-                        <WidgetPostRow
-                          key={post.id}
-                          post={post}
-                          statusMap={statusMap}
-                          showBoard
-                          canVote={rowCanVote(post.board?.id)}
-                          ensureSessionThen={ensureSessionThen}
-                          noAccessReason={voteNoAccessReason}
-                          onAuthRequired={() => handleAuthRequired(post.id)}
-                          onSelect={() => onPostSelect?.(post.id)}
-                        />
-                      ))}
-                    </div>
-                  )}
+                {popularSearchPosts.length > 0 && (
+                  <div
+                    className={cn(
+                      'space-y-0.5 transition-opacity duration-200',
+                      popularSearchPending && 'opacity-50'
+                    )}
+                    aria-busy={popularSearchPending || undefined}
+                  >
+                    {popularSearchPosts.map((post) => (
+                      <WidgetPostRow
+                        key={post.id}
+                        post={post}
+                        statusMap={statusMap}
+                        showBoard
+                        canVote={rowCanVote(post.board?.id)}
+                        ensureSessionThen={ensureSessionThen}
+                        noAccessReason={voteNoAccessReason}
+                        onAuthRequired={() => handleAuthRequired(post.id)}
+                        onSelect={() => onPostSelect?.(post.id)}
+                      />
+                    ))}
+                  </div>
+                )}
               </>
             )}
 
             {debouncedPopularSearch.length === 0 && (
               <>
+                {/* Board-pill switch: the list re-keys, so there is nothing to
+                    keep on screen — rows-shaped skeleton until page 1 lands. */}
                 {isFetchingPosts && !isFetchingNextPage && allPopularPosts.length === 0 && (
-                  <div className="flex justify-center py-4">
-                    <span className="text-xs text-muted-foreground/50">
-                      <FormattedMessage
-                        id="widget.home.popular.loading"
-                        defaultMessage="Loading..."
-                      />
-                    </span>
-                  </div>
+                  <WidgetPostListSkeleton />
                 )}
                 {!isFetchingPosts && allPopularPosts.length === 0 && (
-                  <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <div className="flex flex-col items-center justify-center py-8 text-center animate-in fade-in duration-200 motion-reduce:animate-none">
                     <LightBulbIcon className="w-8 h-8 text-muted-foreground/30 mb-2" />
                     <p className="text-sm font-medium text-muted-foreground/70">
                       {activeBoardSlug ? (
@@ -965,14 +970,9 @@ export function WidgetHomeAnimated({
                       />
                     ))}
                     {hasNextPage && (
-                      <div ref={postsSentinelRef} className="flex justify-center py-2">
+                      <div ref={postsSentinelRef} className="min-h-4">
                         {isFetchingNextPage && (
-                          <span className="text-xs text-muted-foreground/50">
-                            <FormattedMessage
-                              id="widget.home.popular.loading"
-                              defaultMessage="Loading..."
-                            />
-                          </span>
+                          <WidgetPostListSkeleton count={3} fade className="pb-1" />
                         )}
                       </div>
                     )}

@@ -19,6 +19,7 @@ import {
 } from './block-affordance'
 import { BlockTicketForm } from './block-ticket-form'
 import { ConversationPresenceBadge } from './conversation-presence-badge'
+import { ConversationThreadSkeleton } from './conversation-thread-skeleton'
 import { SystemEventNotice } from './system-event-notice'
 import { conversationAvailable } from '@/lib/shared/conversation/presence'
 import { ArrowUpIcon, ChevronDownIcon } from '@heroicons/react/24/solid'
@@ -714,9 +715,11 @@ export function VisitorConversationThread({
   // neutral "we'll reply here" note instead of a false email promise. With the
   // assistant fronting the conversation there is no "away" — it is always
   // available, so the hint is suppressed entirely; availability only becomes
-  // relevant again when the assistant hands off to a human (future).
+  // relevant again when the assistant hands off to a human (future). Withheld
+  // during the initial load: assistant/email-reply state is unknown until the
+  // thread arrives, and a hint that shows then vanishes reads as a glitch.
   const showOfflineHint =
-    !assistant && !available && (canEmailReply ? Boolean(offlineMessage) : true)
+    !loading && !assistant && !available && (canEmailReply ? Boolean(offlineMessage) : true)
 
   // Phase C conversational block layer: every block's derived state, computed
   // ONCE per [messages, conversationStatus] change and threaded into rows,
@@ -1178,6 +1181,19 @@ export function VisitorConversationThread({
           className="h-full"
           rowClassName="px-3 py-1.5"
         />
+
+        {/* First load: the viewport has no rows yet (the greeting/empty row
+            is withheld until we know which thread this is), so bubble-shaped
+            placeholders sit where the newest messages will land. Overlaid,
+            not swapped, so the virtualizer's viewport ref stays mounted and
+            its end-anchoring measures the real element. */}
+        {loading && messages.length === 0 && (
+          <div className="pointer-events-none absolute inset-0 bg-background">
+            <ConversationThreadSkeleton
+              variant={conversationTarget === 'new' ? 'greeting' : 'thread'}
+            />
+          </div>
+        )}
 
         {/* Jump to latest — shown only when the visitor has scrolled up to read
             history (followOnAppend keeps the view pinned when already at end). */}

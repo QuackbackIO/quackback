@@ -12,6 +12,7 @@ import { TimeAgo } from '@/components/ui/time-ago'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { StageChip } from '@/components/shared/ticket-stage'
 import { cn } from '@/lib/shared/utils'
+import { WidgetConversationListSkeleton } from './widget-skeletons'
 
 interface WidgetMessagesProps {
   /** Team label used when a conversation has no assigned agent. */
@@ -67,7 +68,9 @@ export function WidgetMessages({
   return (
     <div className="relative flex h-full flex-col">
       <ScrollArea scrollBarClassName="w-1.5" className="flex-1 min-h-0 h-full">
-        {conversations.length > 0 ? (
+        {isLoading ? (
+          <WidgetConversationListSkeleton />
+        ) : conversations.length > 0 ? (
           <ul className="px-3 pt-1 pb-24">
             {conversations.map((c) => {
               const name = c.assignedAgent?.displayName ?? fallbackName
@@ -145,23 +148,18 @@ export function WidgetMessages({
             })}
           </ul>
         ) : (
-          !isLoading && (
-            <div className="flex h-full flex-col items-center justify-center px-6 pt-16 pb-24 text-center">
-              <ChatBubbleOvalLeftEllipsisIcon className="mb-2 w-8 h-8 text-muted-foreground/30" />
-              <p className="text-sm font-medium text-muted-foreground/70">
-                <FormattedMessage
-                  id="widget.messages.empty"
-                  defaultMessage="No conversations yet"
-                />
-              </p>
-              <p className="mt-0.5 text-xs text-muted-foreground/50">
-                <FormattedMessage
-                  id="widget.messages.emptyHint"
-                  defaultMessage="Questions or feedback? We're here to help."
-                />
-              </p>
-            </div>
-          )
+          <div className="flex h-full flex-col items-center justify-center px-6 pt-16 pb-24 text-center animate-in fade-in duration-200 motion-reduce:animate-none">
+            <ChatBubbleOvalLeftEllipsisIcon className="mb-2 w-8 h-8 text-muted-foreground/30" />
+            <p className="text-sm font-medium text-muted-foreground/70">
+              <FormattedMessage id="widget.messages.empty" defaultMessage="No conversations yet" />
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground/50">
+              <FormattedMessage
+                id="widget.messages.emptyHint"
+                defaultMessage="Questions or feedback? We're here to help."
+              />
+            </p>
+          </div>
         )}
       </ScrollArea>
 

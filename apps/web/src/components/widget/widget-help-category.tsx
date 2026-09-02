@@ -4,6 +4,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { ChevronRightIcon } from '@heroicons/react/24/solid'
 import { publicHelpCenterQueries } from '@/lib/client/queries/help-center'
 import { CategoryIcon } from '@/components/help-center/category-icon'
+import { WidgetHelpArticleListSkeleton } from './widget-skeletons'
 
 interface WidgetHelpCategoryProps {
   categoryId: string
@@ -32,13 +33,7 @@ export function WidgetHelpCategory({
 
       <ScrollArea scrollBarClassName="w-1.5" className="flex-1 min-h-0 h-full">
         <div className="px-3 pt-1 pb-3">
-          {articlesQuery.isLoading && (
-            <div className="flex items-center justify-center py-8">
-              <span className="text-xs text-muted-foreground/50">
-                <FormattedMessage id="widget.help.loading" defaultMessage="Loading..." />
-              </span>
-            </div>
-          )}
+          {articlesQuery.isLoading && <WidgetHelpArticleListSkeleton />}
 
           {!articlesQuery.isLoading && (!articlesQuery.data || articlesQuery.data.length === 0) && (
             <div className="flex flex-col items-center justify-center py-8 text-center px-4">
