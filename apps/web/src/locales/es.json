@@ -1174,5 +1174,6 @@
   "widget.portalTitle.openInPortal": "Abrir en el portal",
   "widget.postDetail.error.notFound": "Es posible que esta publicación se haya eliminado o sea privada.",
   "widget.messages.emptyHint.ticketsOnly": "Las respuestas de nuestro equipo aparecerán aquí.",
-  "widget.tickets.stageChanged": "El estado cambió desde tu última visita"
+  "widget.tickets.stageChanged": "El estado cambió desde tu última visita",
+  "widget.shell.tab.messages.unread": "{count} sin leer"
 }

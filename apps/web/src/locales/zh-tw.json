@@ -1174,5 +1174,6 @@
   "widget.portalTitle.openInPortal": "在入口網站中開啟",
   "widget.postDetail.error.notFound": "此貼文可能已被移除或設為私密。",
   "widget.messages.emptyHint.ticketsOnly": "團隊的回覆將顯示在這裡。",
-  "widget.tickets.stageChanged": "自上次造訪以來狀態已變更"
+  "widget.tickets.stageChanged": "自上次造訪以來狀態已變更",
+  "widget.shell.tab.messages.unread": "{count} 則未讀"
 }

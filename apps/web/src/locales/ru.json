@@ -1174,5 +1174,6 @@
   "widget.portalTitle.openInPortal": "Открыть на портале",
   "widget.postDetail.error.notFound": "Возможно, этот пост был удалён или скрыт.",
   "widget.messages.emptyHint.ticketsOnly": "Ответы нашей команды появятся здесь.",
-  "widget.tickets.stageChanged": "Статус изменился с вашего последнего визита"
+  "widget.tickets.stageChanged": "Статус изменился с вашего последнего визита",
+  "widget.shell.tab.messages.unread": "{count} непрочитанных"
 }

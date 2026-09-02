@@ -1174,5 +1174,6 @@
   "widget.portalTitle.openInPortal": "Ouvrir dans le portail",
   "widget.postDetail.error.notFound": "Cette publication a peut-être été supprimée ou rendue privée.",
   "widget.messages.emptyHint.ticketsOnly": "Les réponses de notre équipe apparaîtront ici.",
-  "widget.tickets.stageChanged": "Le statut a changé depuis votre dernière visite"
+  "widget.tickets.stageChanged": "Le statut a changé depuis votre dernière visite",
+  "widget.shell.tab.messages.unread": "{count} non lu(s)"
 }

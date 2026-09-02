@@ -1174,5 +1174,6 @@
   "widget.portalTitle.openInPortal": "فتح في البوابة",
   "widget.postDetail.error.notFound": "ربما تمت إزالة هذه المشاركة أو جعلها خاصة.",
   "widget.messages.emptyHint.ticketsOnly": "ستظهر ردود فريقنا هنا.",
-  "widget.tickets.stageChanged": "تغيّرت الحالة منذ زيارتك الأخيرة"
+  "widget.tickets.stageChanged": "تغيّرت الحالة منذ زيارتك الأخيرة",
+  "widget.shell.tab.messages.unread": "{count} غير مقروءة"
 }

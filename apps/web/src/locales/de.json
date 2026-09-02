@@ -1174,5 +1174,6 @@
   "widget.portalTitle.openInPortal": "Im Portal öffnen",
   "widget.postDetail.error.notFound": "Dieser Beitrag wurde möglicherweise entfernt oder auf privat gesetzt.",
   "widget.messages.emptyHint.ticketsOnly": "Antworten unseres Teams erscheinen hier.",
-  "widget.tickets.stageChanged": "Status hat sich seit deinem letzten Besuch geändert"
+  "widget.tickets.stageChanged": "Status hat sich seit deinem letzten Besuch geändert",
+  "widget.shell.tab.messages.unread": "{count} ungelesen"
 }

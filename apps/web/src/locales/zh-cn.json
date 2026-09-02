@@ -1174,5 +1174,6 @@
   "widget.portalTitle.openInPortal": "在门户中打开",
   "widget.postDetail.error.notFound": "此帖子可能已被删除或设为私密。",
   "widget.messages.emptyHint.ticketsOnly": "团队的回复将显示在这里。",
-  "widget.tickets.stageChanged": "自上次访问以来状态已更改"
+  "widget.tickets.stageChanged": "自上次访问以来状态已更改",
+  "widget.shell.tab.messages.unread": "{count} 条未读"
 }
