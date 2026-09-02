@@ -22,6 +22,8 @@ import {
 import type { BoardId, ChangelogId, PrincipalId, PostId, PostStatusId } from '@quackback/ids'
 import { computeStatus } from './changelog.service'
 import { getCategoriesForEntries } from './changelog-category.service'
+import { contentJsonForClient } from '@/lib/server/content/storage-read-urls'
+import { resignStoredAssetUrl } from '@/lib/server/storage/s3'
 import type {
   ListChangelogParams,
   ChangelogEntryWithDetails,
@@ -158,11 +160,13 @@ export async function listChangelogs(params: ListChangelogParams): Promise<Chang
       id: entry.id,
       title: entry.title,
       content: entry.content,
-      contentJson: entry.contentJson,
+      contentJson: contentJsonForClient(entry.contentJson),
       principalId: entry.principalId,
       publishedAt: entry.publishedAt,
       displayDate: entry.displayDate,
-      featuredImageUrl: entry.featuredImageUrl,
+      featuredImageUrl: entry.featuredImageUrl
+        ? resignStoredAssetUrl(entry.featuredImageUrl)
+        : entry.featuredImageUrl,
       segmentIds: (entry.segmentIds ?? []) as ChangelogEntryWithDetails['segmentIds'],
       createdAt: entry.createdAt,
       updatedAt: entry.updatedAt,

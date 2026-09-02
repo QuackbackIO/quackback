@@ -29,6 +29,8 @@ import type { ChangelogId, PrincipalId, PostId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { markdownToTiptapJson, projectContentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { rehostExternalImages } from '@/lib/server/content/rehost-images'
+import { contentJsonForClient } from '@/lib/server/content/storage-read-urls'
+import { resignStoredAssetUrl } from '@/lib/server/storage/s3'
 import { changelogBodyHtml } from './changelog-email-body'
 import {
   buildEventActor,
@@ -412,11 +414,13 @@ export async function getChangelogById(id: ChangelogId): Promise<ChangelogEntryW
     id: entry.id,
     title: entry.title,
     content: entry.content,
-    contentJson: entry.contentJson,
+    contentJson: contentJsonForClient(entry.contentJson),
     principalId: entry.principalId,
     publishedAt: entry.publishedAt,
     displayDate: entry.displayDate,
-    featuredImageUrl: entry.featuredImageUrl,
+    featuredImageUrl: entry.featuredImageUrl
+      ? resignStoredAssetUrl(entry.featuredImageUrl)
+      : entry.featuredImageUrl,
     segmentIds: (entry.segmentIds ?? []) as ChangelogEntryWithDetails['segmentIds'],
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,

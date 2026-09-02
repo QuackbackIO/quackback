@@ -625,12 +625,18 @@ export async function currentWorkspaceStorage(): Promise<WorkspaceStorage> {
 const PUBLIC_STORAGE_PREFIXES = new Set([
   'assistant-avatars',
   'avatars',
+  // Admin changelog editor writes `changelog/`; rehost writes `changelog-images/`.
+  'changelog',
   'changelog-images',
+  'comment-images',
   'favicons',
   'header-logos',
   'help-center',
   'link-previews',
   'logos',
+  'portal-images',
+  'portal-og',
+  'portal-welcome',
   'post-images',
   'widget-hero',
 ])

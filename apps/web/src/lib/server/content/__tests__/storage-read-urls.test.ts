@@ -97,4 +97,10 @@ describe('withCurrentStorageReadTokens', () => {
     )
     expect(rewritten.content?.[0]?.attrs?.src).toBe('https://cdn.example.com/b.png')
   })
+
+  it('leaves an unsigned public portal-images src unsigned', () => {
+    const src = 'https://feedback.example.com/api/storage/portal-images/2026/04/shot.png'
+    const rewritten = withCurrentStorageReadTokens(doc([{ type: 'image', attrs: { src } }]))
+    expect(rewritten.content?.[0]?.attrs?.src).toBe('/api/storage/portal-images/2026/04/shot.png')
+  })
 })
