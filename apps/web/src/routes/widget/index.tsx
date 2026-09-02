@@ -510,9 +510,19 @@ function WidgetPage() {
     return [...createdPosts, ...posts.filter((p) => !createdIds.has(p.id))]
   }, [posts, createdPosts])
 
+  // Set when the messenger was opened from an article's "Still stuck?" ramp:
+  // back then resumes the read instead of landing on the Messages list. Kept
+  // apart from `backTarget`, which still holds where the *article* came from
+  // (e.g. a Home card), so that chevron survives the detour.
+  const messengerReturnRef = useRef<'help-detail' | null>(null)
   const openMessenger = useCallback(
-    (target?: ConversationId | 'new', from: WidgetTab = 'messages') => {
+    (
+      target?: ConversationId | 'new',
+      from: WidgetTab = 'messages',
+      opts?: { returnTo?: 'help-detail' }
+    ) => {
       lastNavRef.current = 'move'
+      messengerReturnRef.current = opts?.returnTo ?? null
       setConversationTarget(target ?? null)
       setActiveTab(from === 'tickets' ? 'tickets' : 'messages')
       setView('messenger')
@@ -646,10 +656,11 @@ function WidgetPage() {
     }
     if (view === 'messenger') {
       // Opened from an article's "Still stuck?" ramp: back resumes the read.
-      if (backTarget?.view === 'help-detail' && selectedHelpSlug) {
-        setActiveTab(backTarget.tab)
+      // `backTarget` is left alone — it still points at the article's origin.
+      if (messengerReturnRef.current === 'help-detail' && selectedHelpSlug) {
+        messengerReturnRef.current = null
+        setActiveTab('help')
         setView('help-detail')
-        setBackTarget(null)
         return
       }
       // Otherwise return to the list we opened from (Messages or Tickets).
@@ -983,8 +994,7 @@ function WidgetPage() {
                 ? () => {
                     // Back from the new thread returns to this article, not to
                     // the Messages list — the visitor was mid-read.
-                    setBackTarget({ tab: 'help', view: 'help-detail' })
-                    openMessenger('new')
+                    openMessenger('new', 'messages', { returnTo: 'help-detail' })
                   }
                 : undefined
             }

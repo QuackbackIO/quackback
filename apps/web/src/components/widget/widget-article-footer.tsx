@@ -5,6 +5,7 @@ import { ChatBubbleLeftRightIcon } from '@heroicons/react/24/solid'
 import { recordArticleFeedbackFn } from '@/lib/server/functions/help-center'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { cn } from '@/lib/shared/utils'
+import { useWidgetAuth } from './widget-auth-provider'
 import type { KbArticleId } from '@quackback/ids'
 
 interface WidgetArticleFooterProps {
@@ -23,12 +24,18 @@ interface WidgetArticleFooterProps {
 export function WidgetArticleFooter({ articleId, onAskQuestion }: WidgetArticleFooterProps) {
   const [vote, setVote] = useState<'helpful' | 'not-helpful' | null>(null)
   const [pending, setPending] = useState(false)
+  const { ensureSession } = useWidgetAuth()
 
   const cast = async (helpful: boolean) => {
     const next = helpful ? 'helpful' : 'not-helpful'
     if (pending || vote === next) return
     setPending(true)
     try {
+      // A fresh anonymous visitor has no token until their first write. Mint
+      // it here (like a vote or a post would) so the feedback is attributed
+      // to a principal — otherwise the server can't find an existing vote to
+      // update and every tap inserts and counts another row.
+      if (!(await ensureSession())) return
       await recordArticleFeedbackFn({
         data: { articleId: articleId as KbArticleId, helpful },
         headers: getWidgetAuthHeaders(),
