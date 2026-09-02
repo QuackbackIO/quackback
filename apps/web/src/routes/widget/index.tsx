@@ -399,6 +399,7 @@ function WidgetPage() {
     showPoweredBy,
   } = Route.useLoaderData()
   const { ensureSession, sessionVersion } = useWidgetAuth()
+  const intl = useIntl()
 
   // The loader seeds boardPermissions for the anonymous SSR baseline (no Bearer
   // at loader time). Refetch it for the REAL actor with the widget's Bearer
@@ -786,6 +787,18 @@ function WidgetPage() {
   // the assistant identity when enabled — always available, no presence — or
   // the live presence badge for assistant-less workspaces.
   const presence = useConversationPresence(messengerEnabled && !assistant)
+  // When office hours are configured, tell the visitor up front when the team
+  // is back — the thread body only says so once they've typed.
+  const presenceBackAt = useMemo(() => {
+    if (!presence.nextOpenAt) return null
+    const at = new Date(presence.nextOpenAt)
+    if (Number.isNaN(at.getTime())) return null
+    return new Intl.DateTimeFormat(intl.locale, {
+      weekday: 'long',
+      hour: 'numeric',
+      minute: '2-digit',
+    }).format(at)
+  }, [presence.nextOpenAt, intl.locale])
   const messengerHeader =
     view === 'messenger' ? (
       assistant ? (
@@ -804,9 +817,10 @@ function WidgetPage() {
           </div>
         </div>
       ) : (
-        <div className="ps-1">
+        <div className="min-w-0 ps-1">
           <ConversationPresenceBadge
             available={conversationAvailable(presence.agentsOnline, presence.withinOfficeHours)}
+            backAt={presenceBackAt}
           />
         </div>
       )
@@ -900,6 +914,9 @@ function WidgetPage() {
             onArticleSelect={handleHelpArticleSelect}
             conversationTarget={conversationTarget === null ? undefined : conversationTarget}
             linkPreviews={linkPreviews}
+            // A fresh thread exists to be typed into; a resumed one to be read.
+            // Mobile hosts skip it — the software keyboard would cover the thread.
+            autofocusComposer={conversationTarget === 'new' && !hostIsMobile}
           />
         </ViewTransition>
       )}

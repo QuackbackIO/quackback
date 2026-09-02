@@ -160,6 +160,13 @@ export interface VisitorConversationThreadProps {
   showHeader?: boolean
   /** Notified when the first send creates the conversation. */
   onConversationStarted?: (id: ConversationId) => void
+  /**
+   * Focus the composer as soon as it mounts. The surface decides: a "new
+   * conversation" landing on a desktop host wants the cursor in the box; a
+   * resumed thread (reading, not writing) or a mobile host (software keyboard
+   * would cover the thread) does not.
+   */
+  autofocusComposer?: boolean
 }
 
 /**
@@ -187,6 +194,7 @@ export function VisitorConversationThread({
   embedOpenMode = 'newTab',
   showHeader = true,
   onConversationStarted,
+  autofocusComposer = false,
 }: VisitorConversationThreadProps) {
   const intl = useIntl()
   const queryClient = useQueryClient()
@@ -1082,7 +1090,9 @@ export function VisitorConversationThread({
                       key={n}
                       type="button"
                       onClick={() => submitRating(n)}
-                      className="text-lg leading-none text-muted-foreground/50 transition-colors hover:text-amber-500"
+                      // Brand colour rather than a fixed amber: the stars are
+                      // the only element in the thread that ignored the theme.
+                      className="rounded text-lg leading-none text-muted-foreground/50 transition-colors hover:text-primary focus-visible:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                       aria-label={intl.formatMessage(
                         {
                           id: 'widget.messenger.csat.rateAria',
@@ -1343,16 +1353,17 @@ export function VisitorConversationThread({
                 <LazyRichTextEditor
                   // Remounts the editor to clear it after a send (no imperative
                   // ref exists to call clearContent()) — resetSignal starts at 0
-                  // (no remount, no autofocus on first mount) and increments on
-                  // every successful send, at which point we DO want focus back
-                  // so the visitor can keep typing without re-clicking.
+                  // and increments on every successful send, at which point we
+                  // DO want focus back so the visitor can keep typing without
+                  // re-clicking. First mount focuses only when the surface asks
+                  // (a fresh "new conversation" landing).
                   key={composer.resetSignal}
                   borderless
                   minHeight="1.5rem"
                   disabled={sending}
                   placeholder={composerPlaceholder}
                   features={VISITOR_CONVERSATION_FEATURES}
-                  autofocus={composer.resetSignal > 0 ? 'end' : false}
+                  autofocus={composer.resetSignal > 0 || autofocusComposer ? 'end' : false}
                   onChange={handleEditorChange}
                   onSubmit={onComposerSubmit}
                 />
