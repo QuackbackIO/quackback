@@ -19,10 +19,14 @@ export function ConversationPresenceBadge({
   className?: string
 }) {
   return (
-    <span className={cn('flex items-center gap-1.5 text-xs text-muted-foreground', className)}>
+    // min-w-0 down the chain: a flex item defaults to min-width:auto and
+    // would grow past its container instead of letting `truncate` ellipsize.
+    <span
+      className={cn('flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground', className)}
+    >
       <span
         className={cn(
-          'size-2 rounded-full',
+          'size-2 shrink-0 rounded-full',
           available ? 'bg-emerald-500' : 'bg-muted-foreground/40'
         )}
         aria-hidden
@@ -30,7 +34,7 @@ export function ConversationPresenceBadge({
       {available ? (
         <FormattedMessage id="widget.messenger.online" defaultMessage="We're online" />
       ) : (
-        <span className="truncate">
+        <span className="min-w-0 truncate">
           <FormattedMessage id="widget.messenger.offline" defaultMessage="We'll reply by email" />
           {backAt && (
             <span className="text-muted-foreground/70">

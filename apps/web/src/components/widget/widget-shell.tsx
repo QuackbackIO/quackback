@@ -257,8 +257,10 @@ export function WidgetShell({
           body; the header/content render transparently over it. */}
       {backdrop}
       <div className="relative z-10 flex items-center justify-between gap-2 px-4 py-3 shrink-0">
-        {/* Left: back button on detail views; workspace logo on Home. */}
-        <div className="flex items-center gap-1">
+        {/* Left: back button on detail views; workspace logo on Home. min-w-0 so
+            header content (presence copy) truncates instead of pushing the
+            right-zone controls. */}
+        <div className="flex min-w-0 items-center gap-1">
           {onHome && logoUrl && (
             <img src={logoUrl} alt="" className="h-6 max-w-[120px] object-contain" />
           )}
@@ -266,7 +268,7 @@ export function WidgetShell({
             <button
               type="button"
               onClick={onBack}
-              className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted transition-colors"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md hover:bg-muted transition-colors"
               aria-label={intl.formatMessage({
                 id: 'widget.shell.aria.goBack',
                 defaultMessage: 'Go back',

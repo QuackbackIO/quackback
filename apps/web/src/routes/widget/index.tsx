@@ -817,7 +817,7 @@ function WidgetPage() {
           </div>
         </div>
       ) : (
-        <div className="ps-1">
+        <div className="min-w-0 ps-1">
           <ConversationPresenceBadge
             available={conversationAvailable(presence.agentsOnline, presence.withinOfficeHours)}
             backAt={presenceBackAt}
