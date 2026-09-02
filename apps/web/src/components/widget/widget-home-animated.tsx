@@ -491,6 +491,11 @@ export function WidgetHomeAnimated({
         import('@/lib/client/widget-auth'),
         import('@/lib/server/functions/public-posts'),
       ])
+      // Headers and session version are captured together: the vote the
+      // server casts belongs to whichever principal made this request, even
+      // if the host identifies or clears the visitor while it is in flight.
+      const headers = getWidgetAuthHeaders()
+      const votedPostsKey = widgetQueryKeys.votedPosts.bySession(getSessionVersion())
       const result = await createPublicPostFn({
         data: {
           boardId: selectedBoardId,
@@ -499,7 +504,7 @@ export function WidgetHomeAnimated({
           contentJson: (contentJson ?? undefined) as TiptapContent | undefined,
           metadata: metadata ?? undefined,
         },
-        headers: getWidgetAuthHeaders(),
+        headers,
       })
 
       emitEvent('post:created', {
@@ -511,19 +516,18 @@ export function WidgetHomeAnimated({
 
       // The server auto-upvotes the author; reflect that immediately so the
       // success card shows a cast vote instead of an inviting empty 0 — a
-      // click on that would silently remove the server's vote. A fetch that
-      // started before the post existed must not land over the seed.
-      await queryClient.cancelQueries({ queryKey: widgetQueryKeys.votedPosts.all })
-      const addVote = (old?: Set<string>) => new Set([...(old ?? []), result.id])
-      // Every already-instantiated version key (ensureSession() may have
-      // bumped it mid-submit) …
-      queryClient.setQueriesData<Set<string>>({ queryKey: widgetQueryKeys.votedPosts.all }, addVote)
-      // … and the live one explicitly: when this submit minted the first
-      // session there are no rows yet, so no query for it exists to update.
+      // click on that would silently remove the server's vote. The seed is
+      // written explicitly (when this submit minted the first session there
+      // are no rows yet, so no query for the key exists to update) and then
+      // invalidated: the refetch replaces it with the server's complete set,
+      // so a visitor whose earlier votes were not cached yet does not see
+      // them vanish for the stale window, and a fetch that started before
+      // the post existed is cancelled rather than landing over the seed.
       queryClient.setQueryData<Set<string>>(
-        widgetQueryKeys.votedPosts.bySession(getSessionVersion()),
-        addVote
+        votedPostsKey,
+        (old) => new Set([...(old ?? []), result.id])
       )
+      void queryClient.invalidateQueries({ queryKey: votedPostsKey })
       onPostCreated?.({
         id: result.id,
         title: result.title,
