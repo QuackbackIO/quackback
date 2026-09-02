@@ -494,6 +494,10 @@ function WidgetPage() {
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
   const [selectedChangelogId, setSelectedChangelogId] = useState<string | null>(null)
   const [selectedHelpSlug, setSelectedHelpSlug] = useState<string | null>(null)
+  // Help search lives here (not in the view) so it survives the article
+  // round-trip: back from a result lands on the same results, not the
+  // collection list.
+  const [helpSearch, setHelpSearch] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<{
     id: string
     name: string
@@ -506,9 +510,19 @@ function WidgetPage() {
     return [...createdPosts, ...posts.filter((p) => !createdIds.has(p.id))]
   }, [posts, createdPosts])
 
+  // Set when the messenger was opened from an article's "Still stuck?" ramp:
+  // back then resumes the read instead of landing on the Messages list. Kept
+  // apart from `backTarget`, which still holds where the *article* came from
+  // (e.g. a Home card), so that chevron survives the detour.
+  const messengerReturnRef = useRef<'help-detail' | null>(null)
   const openMessenger = useCallback(
-    (target?: ConversationId | 'new', from: WidgetTab = 'messages') => {
+    (
+      target?: ConversationId | 'new',
+      from: WidgetTab = 'messages',
+      opts?: { returnTo?: 'help-detail' }
+    ) => {
       lastNavRef.current = 'move'
+      messengerReturnRef.current = opts?.returnTo ?? null
       setConversationTarget(target ?? null)
       setActiveTab(from === 'tickets' ? 'tickets' : 'messages')
       setView('messenger')
@@ -565,6 +579,11 @@ function WidgetPage() {
         setActiveTab('changelog')
         setView('changelog')
       } else if (opts.view === 'help' && tabs.help) {
+        // Same fresh start as navigateToTab('help'): the lifted search
+        // would otherwise resurface an old query on a programmatic open.
+        setSelectedHelpSlug(null)
+        setSelectedCategory(null)
+        setHelpSearch('')
         setActiveTab('help')
         setView('help')
       } else if (
@@ -636,7 +655,15 @@ function WidgetPage() {
       return
     }
     if (view === 'messenger') {
-      // Return to the list we opened from (Messages or Tickets).
+      // Opened from an article's "Still stuck?" ramp: back resumes the read.
+      // `backTarget` is left alone — it still points at the article's origin.
+      if (messengerReturnRef.current === 'help-detail' && selectedHelpSlug) {
+        messengerReturnRef.current = null
+        setActiveTab('help')
+        setView('help-detail')
+        return
+      }
+      // Otherwise return to the list we opened from (Messages or Tickets).
       setView(activeTab === 'tickets' ? 'tickets' : 'messages')
       return
     }
@@ -658,7 +685,7 @@ function WidgetPage() {
     }
     setSelectedPostId(null)
     setView('feedback')
-  }, [view, selectedCategory, backTarget, activeTab])
+  }, [view, selectedCategory, selectedHelpSlug, backTarget, activeTab])
 
   const navigateToTab = useCallback((tab: WidgetTab) => {
     setActiveTab(tab)
@@ -676,9 +703,11 @@ function WidgetPage() {
       setSelectedChangelogId(null)
       setView('changelog')
     } else {
-      // 'help' — the knowledge-base articles surface
+      // 'help' — the knowledge-base articles surface. A tab landing is a
+      // fresh start; only back navigations keep the query.
       setSelectedHelpSlug(null)
       setSelectedCategory(null)
+      setHelpSearch('')
       setView('help')
     }
   }, [])
@@ -923,6 +952,8 @@ function WidgetPage() {
           <WidgetHelp
             onArticleSelect={handleHelpArticleSelect}
             onCategorySelect={handleHelpCategorySelect}
+            search={helpSearch}
+            onSearchChange={setHelpSearch}
           />
         </ViewTransition>
       )}
@@ -955,7 +986,19 @@ function WidgetPage() {
           focusOnMount={focusIncoming}
           fallback={<WidgetArticleSkeleton />}
         >
-          <WidgetHelpDetail articleSlug={selectedHelpSlug} />
+          <WidgetHelpDetail
+            articleSlug={selectedHelpSlug}
+            onCategorySelect={(id, name) => handleHelpCategorySelect(id, name, null)}
+            onAskQuestion={
+              messengerEnabled
+                ? () => {
+                    // Back from the new thread returns to this article, not to
+                    // the Messages list — the visitor was mid-read.
+                    openMessenger('new', 'messages', { returnTo: 'help-detail' })
+                  }
+                : undefined
+            }
+          />
         </ViewTransition>
       )}
 

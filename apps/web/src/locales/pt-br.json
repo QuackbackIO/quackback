@@ -1175,5 +1175,17 @@
   "widget.postDetail.error.notFound": "Esta publicação pode ter sido removida ou tornada privada.",
   "widget.messages.emptyHint.ticketsOnly": "As respostas da nossa equipe aparecerão aqui.",
   "widget.tickets.stageChanged": "O status mudou desde sua última visita",
+  "widget.help.searchAria": "Pesquisar artigos de ajuda",
+  "widget.help.askAiSearchPlaceholder": "Pergunte à IA ou pesquise artigos…",
+  "widget.help.clearSearch": "Limpar pesquisa",
+  "widget.help.browseCollections": "Explorar coleções",
+  "widget.helpDetail.browseCategory": "Explorar esta coleção",
+  "widget.help.article.helpful": "Isso foi útil?",
+  "widget.help.article.helpful.thanks": "Obrigado! Que bom que ajudou.",
+  "widget.help.article.helpful.sorry": "Sentimos muito.",
+  "widget.help.article.helpful.yes": "Sim, ajudou",
+  "widget.help.article.helpful.no": "Não, não ajudou",
+  "widget.help.article.stillStuck": "Ainda com dúvidas?",
+  "widget.help.article.askQuestion": "Faça uma pergunta",
   "widget.shell.tab.messages.unread": "{count} não lida(s)"
 }

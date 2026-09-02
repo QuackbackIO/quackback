@@ -20,15 +20,38 @@ export function WidgetHelpCategory({
   onArticleSelect,
 }: WidgetHelpCategoryProps) {
   const articlesQuery = useQuery(publicHelpCenterQueries.articlesForCategory(categoryId))
+  // The collection list already has every category's description and icon;
+  // read them from that cache so the header carries context (and an icon even
+  // when we arrived from an article's eyebrow, which only knows id + name).
+  const categoriesQuery = useQuery(publicHelpCenterQueries.categories())
+  const category = categoriesQuery.data?.find((c) => c.id === categoryId)
+  const icon = categoryIcon ?? category?.icon ?? null
+  const articleCount = articlesQuery.data?.length ?? category?.articleCount
 
   return (
     <div className="flex flex-col h-full">
       {/* Category header */}
       <div className="px-3 pt-2 pb-2 shrink-0 border-b border-border/30">
         <div className="flex items-center gap-2">
-          {categoryIcon && <CategoryIcon icon={categoryIcon} className="w-5 h-5 shrink-0" />}
-          <h3 className="text-sm font-semibold text-foreground">{categoryName}</h3>
+          {icon && <CategoryIcon icon={icon} className="w-5 h-5 shrink-0" />}
+          <h3 className="text-sm font-semibold text-foreground min-w-0 flex-1 truncate">
+            {categoryName}
+          </h3>
+          {articleCount !== undefined && (
+            <span className="shrink-0 text-[11px] text-muted-foreground/60 tabular-nums">
+              <FormattedMessage
+                id="widget.help.articleCount"
+                defaultMessage="{count, plural, one {# article} other {# articles}}"
+                values={{ count: articleCount }}
+              />
+            </span>
+          )}
         </div>
+        {category?.description && (
+          <p className="mt-1 text-xs text-muted-foreground/70 line-clamp-2 leading-relaxed">
+            {category.description}
+          </p>
+        )}
       </div>
 
       <ScrollArea scrollBarClassName="w-1.5" className="flex-1 min-h-0 h-full">

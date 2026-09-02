@@ -1175,5 +1175,17 @@
   "widget.postDetail.error.notFound": "此貼文可能已被移除或設為私密。",
   "widget.messages.emptyHint.ticketsOnly": "團隊的回覆將顯示在這裡。",
   "widget.tickets.stageChanged": "自上次造訪以來狀態已變更",
+  "widget.help.searchAria": "搜尋說明文章",
+  "widget.help.askAiSearchPlaceholder": "詢問 AI 或搜尋文章…",
+  "widget.help.clearSearch": "清除搜尋",
+  "widget.help.browseCollections": "瀏覽分類",
+  "widget.helpDetail.browseCategory": "瀏覽此分類",
+  "widget.help.article.helpful": "這篇文章有幫助嗎？",
+  "widget.help.article.helpful.thanks": "謝謝，很高興對您有幫助。",
+  "widget.help.article.helpful.sorry": "很抱歉。",
+  "widget.help.article.helpful.yes": "有幫助",
+  "widget.help.article.helpful.no": "沒有幫助",
+  "widget.help.article.stillStuck": "仍有疑問？",
+  "widget.help.article.askQuestion": "向我們提問",
   "widget.shell.tab.messages.unread": "{count} 則未讀"
 }
