@@ -9,9 +9,13 @@ import { cn } from '@/lib/shared/utils'
  */
 export function ConversationPresenceBadge({
   available,
+  backAt,
   className,
 }: {
   available: boolean
+  /** Pre-formatted "when we're back" label, shown after the away copy when
+   *  office hours are configured — sets an honest expectation up front. */
+  backAt?: string | null
   className?: string
 }) {
   return (
@@ -26,7 +30,19 @@ export function ConversationPresenceBadge({
       {available ? (
         <FormattedMessage id="widget.messenger.online" defaultMessage="We're online" />
       ) : (
-        <FormattedMessage id="widget.messenger.offline" defaultMessage="We'll reply by email" />
+        <span className="truncate">
+          <FormattedMessage id="widget.messenger.offline" defaultMessage="We'll reply by email" />
+          {backAt && (
+            <span className="text-muted-foreground/70">
+              {' · '}
+              <FormattedMessage
+                id="widget.messenger.offline.backAt"
+                defaultMessage="Back {when}"
+                values={{ when: backAt }}
+              />
+            </span>
+          )}
+        </span>
       )}
     </span>
   )
