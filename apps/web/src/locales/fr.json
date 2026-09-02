@@ -116,7 +116,6 @@
   "widget.tickets.new.type": "Type",
   "widget.tickets.recent": "Tickets récents",
   "widget.messages.emptyHint": "Des questions ou des retours ? Nous sommes là pour vous aider.",
-  "widget.messages.resumeAria": "Ouvrir la conversation avec {name}",
   "widget.helpDetail.notFound": "Article introuvable",
   "widget.changelog.empty": "Aucune mise à jour pour le moment",
   "widget.changelog.emptyHint": "Revenez bientôt pour les dernières mises à jour produit.",
@@ -1173,5 +1172,8 @@
   "widget.home.posting.chooseBoard": "Choisissez un tableau pour publier",
   "widget.home.boards.all": "Tous",
   "widget.portalTitle.openInPortal": "Ouvrir dans le portail",
-  "widget.postDetail.error.notFound": "Cette publication a peut-être été supprimée ou rendue privée."
+  "widget.postDetail.error.notFound": "Cette publication a peut-être été supprimée ou rendue privée.",
+  "widget.messages.emptyHint.ticketsOnly": "Les réponses de notre équipe apparaîtront ici.",
+  "widget.tickets.stageChanged": "Le statut a changé depuis votre dernière visite",
+  "widget.shell.tab.messages.unread": "{count} non lu(s)"
 }

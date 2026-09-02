@@ -116,7 +116,6 @@
   "widget.tickets.new.type": "النوع",
   "widget.tickets.recent": "التذاكر الأخيرة",
   "widget.messages.emptyHint": "أسئلة أو ملاحظات؟ نحن هنا للمساعدة.",
-  "widget.messages.resumeAria": "فتح المحادثة مع {name}",
   "widget.helpDetail.notFound": "المقالة غير موجودة",
   "widget.changelog.empty": "لا توجد تحديثات بعد",
   "widget.changelog.emptyHint": "عد قريبًا للاطلاع على آخر تحديثات المنتج.",
@@ -1173,5 +1172,8 @@
   "widget.home.posting.chooseBoard": "اختر لوحة للنشر",
   "widget.home.boards.all": "الكل",
   "widget.portalTitle.openInPortal": "فتح في البوابة",
-  "widget.postDetail.error.notFound": "ربما تمت إزالة هذه المشاركة أو جعلها خاصة."
+  "widget.postDetail.error.notFound": "ربما تمت إزالة هذه المشاركة أو جعلها خاصة.",
+  "widget.messages.emptyHint.ticketsOnly": "ستظهر ردود فريقنا هنا.",
+  "widget.tickets.stageChanged": "تغيّرت الحالة منذ زيارتك الأخيرة",
+  "widget.shell.tab.messages.unread": "{count} غير مقروءة"
 }

@@ -116,7 +116,6 @@
   "widget.tickets.new.type": "类型",
   "widget.tickets.recent": "最近的工单",
   "widget.messages.emptyHint": "有问题或反馈？我们随时为您服务。",
-  "widget.messages.resumeAria": "打开与 {name} 的对话",
   "widget.helpDetail.notFound": "未找到文章",
   "widget.changelog.empty": "暂无更新",
   "widget.changelog.emptyHint": "请稍后再来查看最新的产品更新。",
@@ -1173,5 +1172,8 @@
   "widget.home.posting.chooseBoard": "选择要发布到的看板",
   "widget.home.boards.all": "全部",
   "widget.portalTitle.openInPortal": "在门户中打开",
-  "widget.postDetail.error.notFound": "此帖子可能已被删除或设为私密。"
+  "widget.postDetail.error.notFound": "此帖子可能已被删除或设为私密。",
+  "widget.messages.emptyHint.ticketsOnly": "团队的回复将显示在这里。",
+  "widget.tickets.stageChanged": "自上次访问以来状态已更改",
+  "widget.shell.tab.messages.unread": "{count} 条未读"
 }

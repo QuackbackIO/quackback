@@ -116,7 +116,6 @@
   "widget.tickets.new.type": "Тип",
   "widget.tickets.recent": "Недавние тикеты",
   "widget.messages.emptyHint": "Вопросы или отзывы? Мы готовы помочь.",
-  "widget.messages.resumeAria": "Открыть разговор с {name}",
   "widget.helpDetail.notFound": "Статья не найдена",
   "widget.changelog.empty": "Пока нет обновлений",
   "widget.changelog.emptyHint": "Загляните позже, чтобы увидеть последние обновления продукта.",
@@ -1173,5 +1172,8 @@
   "widget.home.posting.chooseBoard": "Выберите доску для публикации",
   "widget.home.boards.all": "Все",
   "widget.portalTitle.openInPortal": "Открыть на портале",
-  "widget.postDetail.error.notFound": "Возможно, этот пост был удалён или скрыт."
+  "widget.postDetail.error.notFound": "Возможно, этот пост был удалён или скрыт.",
+  "widget.messages.emptyHint.ticketsOnly": "Ответы нашей команды появятся здесь.",
+  "widget.tickets.stageChanged": "Статус изменился с вашего последнего визита",
+  "widget.shell.tab.messages.unread": "{count} непрочитанных"
 }
