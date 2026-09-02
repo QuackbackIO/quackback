@@ -80,13 +80,16 @@ export function WidgetMessages({
                 <li key={c.id} className="border-b border-border/40 last:border-b-0">
                   {/* No aria-label override: the row's own content (name,
                       time, preview, unread) is the accessible name, so AT
-                      users hear the same thing sighted users see. */}
+                      users hear the same thing sighted users see. The avatar
+                      is decorative — its initials / alt would otherwise
+                      repeat the name ("S Support …"). */}
                   <button
                     type="button"
                     onClick={() => onOpenMessenger(c.id)}
                     className="group flex w-full items-center gap-3 rounded-lg px-2 py-3 text-start transition-colors hover:bg-muted/40"
                   >
                     <Avatar
+                      aria-hidden
                       src={c.assignedAgent?.avatarUrl ?? fallbackAvatar}
                       name={name}
                       className="size-9 shrink-0 text-xs"
