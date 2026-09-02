@@ -27,7 +27,11 @@ import { ConversationThreadSkeleton } from '@/components/shared/conversation/con
 
 // ── Primitives ──
 
-/** Accessible wrapper: announces once, fades in, honors reduced motion. */
+/**
+ * Accessible wrapper: announces once, fades in, honors reduced motion. Only
+ * the fade is handled here — CSS animations don't inherit, so each `Skeleton`
+ * turns off its own pulse under `prefers-reduced-motion`.
+ */
 function SkeletonRegion({ className, children }: { className?: string; children: ReactNode }) {
   return (
     <div
