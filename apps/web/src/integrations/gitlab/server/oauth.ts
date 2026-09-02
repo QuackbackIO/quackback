@@ -3,6 +3,7 @@
  */
 
 import { GITLAB_COM_ORIGIN, normalizeGitLabInstanceUrl } from '@/integrations/gitlab/server/url'
+import { gitlabFetch } from '@/integrations/gitlab/server/fetch'
 
 function instanceOrigin(credentials?: Record<string, string>): string {
   return normalizeGitLabInstanceUrl(credentials?.instanceUrl)
@@ -56,7 +57,7 @@ export async function exchangeGitLabCode(
 
   const origin = instanceOrigin(credentials)
 
-  const response = await fetch(`${origin}/oauth/token`, {
+  const response = await gitlabFetch(`${origin}/oauth/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -80,7 +81,7 @@ export async function exchangeGitLabCode(
   }
 
   // Fetch user info for workspace name
-  const userResponse = await fetch(`${origin}/api/v4/user`, {
+  const userResponse = await gitlabFetch(`${origin}/api/v4/user`, {
     headers: { Authorization: `Bearer ${data.access_token}` },
   })
 

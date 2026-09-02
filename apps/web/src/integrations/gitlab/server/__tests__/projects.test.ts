@@ -1,6 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { listGitLabProjects } from '@/integrations/gitlab/server/projects'
 
+// GitLab requests go through the SSRF guard; route them to the stubbed global
+// fetch so the assertions below see the same calls.
+vi.mock('@/lib/server/content/ssrf-guard', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/content/ssrf-guard')>()),
+  safeFetch: (url: string, init?: RequestInit) => globalThis.fetch(url, init),
+}))
+
 function mockFetch(status: number, body: unknown = []) {
   return vi.fn().mockResolvedValue({
     ok: status >= 200 && status < 300,

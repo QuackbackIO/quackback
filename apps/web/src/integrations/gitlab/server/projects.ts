@@ -3,6 +3,7 @@
  */
 
 import { gitlabApiBase } from '@/integrations/gitlab/server/url'
+import { gitlabFetch } from '@/integrations/gitlab/server/fetch'
 
 /**
  * List projects accessible to the authenticated user.
@@ -11,7 +12,7 @@ export async function listGitLabProjects(
   accessToken: string,
   instanceUrl?: string | null
 ): Promise<Array<{ id: string; name: string }>> {
-  const response = await fetch(
+  const response = await gitlabFetch(
     `${gitlabApiBase(instanceUrl)}/projects?membership=true&order_by=last_activity_at&sort=desc&per_page=100`,
     {
       headers: { Authorization: `Bearer ${accessToken}` },

@@ -9,13 +9,14 @@ import {
   gitlabApiBase,
   normalizeGitLabInstanceUrl,
 } from '@/integrations/gitlab/server/url'
+import { gitlabFetch } from '@/integrations/gitlab/server/fetch'
 
 /** Close the linked GitLab issue on cascading post delete. */
 export async function closeGitLabIssue(ctx: ArchiveContext): Promise<ArchiveResult> {
   const projectId = extractGitLabProjectPath(ctx.externalUrl)
   if (!projectId) return { success: false, error: 'Cannot determine project from external URL' }
 
-  const response = await fetch(
+  const response = await gitlabFetch(
     `${gitlabApiBase(instanceUrlFrom(ctx))}/projects/${encodeURIComponent(projectId)}/issues/${ctx.externalId}`,
     {
       method: 'PUT',
@@ -24,7 +25,7 @@ export async function closeGitLabIssue(ctx: ArchiveContext): Promise<ArchiveResu
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ state_event: 'close' }),
-      signal: AbortSignal.timeout(ARCHIVE_TIMEOUT_MS),
+      timeoutMs: ARCHIVE_TIMEOUT_MS,
     }
   )
 

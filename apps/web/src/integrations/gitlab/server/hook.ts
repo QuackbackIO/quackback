@@ -8,6 +8,7 @@ import type { EventData } from '@/lib/server/events/types'
 import { isRetryableError } from '@/lib/server/events/hook-utils'
 import { buildGitLabIssue } from '@/integrations/gitlab/server/message'
 import { gitlabApiBase } from '@/integrations/gitlab/server/url'
+import { gitlabFetch } from '@/integrations/gitlab/server/fetch'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'gitlab' })
@@ -38,14 +39,17 @@ export const gitlabHook: HookHandler = {
     const { title, description } = buildGitLabIssue(event, rootUrl)
 
     try {
-      const response = await fetch(`${api}/projects/${encodeURIComponent(projectId)}/issues`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ title, description }),
-      })
+      const response = await gitlabFetch(
+        `${api}/projects/${encodeURIComponent(projectId)}/issues`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ title, description }),
+        }
+      )
 
       if (!response.ok) {
         const errorBody = await response.text()
@@ -92,7 +96,7 @@ export const gitlabHook: HookHandler = {
   async testConnection(config: unknown): Promise<{ ok: boolean; error?: string }> {
     const { accessToken, instanceUrl } = config as GitLabConfig
     try {
-      const response = await fetch(`${gitlabApiBase(instanceUrl)}/user`, {
+      const response = await gitlabFetch(`${gitlabApiBase(instanceUrl)}/user`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       })
       return { ok: response.ok, error: response.ok ? undefined : `HTTP ${response.status}` }

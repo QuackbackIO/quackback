@@ -2,6 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { EventData, PostCreatedEvent } from '@/lib/server/events/types'
 import { gitlabHook } from '@/integrations/gitlab/server/hook'
 
+// GitLab requests go through the SSRF guard; route them to the stubbed global
+// fetch so the assertions below see the same calls.
+vi.mock('@/lib/server/content/ssrf-guard', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/content/ssrf-guard')>()),
+  safeFetch: (url: string, init?: RequestInit) => globalThis.fetch(url, init),
+}))
+
 function mockFetch(status: number, body: unknown = {}) {
   return vi.fn().mockResolvedValue({
     ok: status >= 200 && status < 300,
@@ -81,6 +88,7 @@ describe('gitlabHook', () => {
     const fetchMock = mockFetch(200, { username: 'ada' })
     vi.stubGlobal('fetch', fetchMock)
 
+    if (!gitlabHook.testConnection) throw new Error('gitlabHook.testConnection missing')
     const result = await gitlabHook.testConnection({
       accessToken: 'tok',
       rootUrl: 'https://app.example.com',
