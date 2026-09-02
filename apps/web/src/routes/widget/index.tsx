@@ -569,6 +569,11 @@ function WidgetPage() {
         setActiveTab('changelog')
         setView('changelog')
       } else if (opts.view === 'help' && tabs.help) {
+        // Same fresh start as navigateToTab('help'): the lifted search
+        // would otherwise resurface an old query on a programmatic open.
+        setSelectedHelpSlug(null)
+        setSelectedCategory(null)
+        setHelpSearch('')
         setActiveTab('help')
         setView('help')
       } else if (
