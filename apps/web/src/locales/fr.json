@@ -1162,5 +1162,7 @@
   "automation.builtinTools.default": "Par défaut",
   "automation.builtinTools.saving": "Enregistrement…",
   "automation.builtinTools.saveError": "Impossible de mettre à jour les autorisations de l’outil.",
-  "automation.builtinTools.loadError": "Impossible de charger le catalogue d’outils."
+  "automation.builtinTools.loadError": "Impossible de charger le catalogue d’outils.",
+  "widget.shell.tab.changelog.unread": "{count, plural, one {# nouvelle mise à jour} other {# nouvelles mises à jour}}",
+  "widget.launcher.popularArticles": "Articles populaires"
 }

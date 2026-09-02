@@ -5,6 +5,7 @@ import { ReactRenderer } from '@tiptap/react'
 import tippy, { type Instance } from 'tippy.js'
 import 'tippy.js/dist/tippy.css'
 import { MentionPicker, type MentionItem, type MentionPickerHandle } from './mention-picker'
+import { markSuggestionPopup } from './suggestion-popup'
 
 const DEBOUNCE_MS = 200
 
@@ -47,7 +48,7 @@ const renderSuggestion: SuggestionOptions<MentionItem>['render'] = () => {
       popup = tippy(document.body, {
         getReferenceClientRect: () => props.clientRect?.() ?? new DOMRect(),
         appendTo: () => document.body,
-        content: component.element,
+        content: markSuggestionPopup(component.element),
         showOnCreate: true,
         interactive: true,
         trigger: 'manual',

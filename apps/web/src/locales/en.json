@@ -1162,5 +1162,7 @@
   "automation.builtinTools.default": "Default",
   "automation.builtinTools.saving": "Saving…",
   "automation.builtinTools.saveError": "Tool permissions could not be updated.",
-  "automation.builtinTools.loadError": "Could not load the tool catalogue."
+  "automation.builtinTools.loadError": "Could not load the tool catalogue.",
+  "widget.shell.tab.changelog.unread": "{count, plural, one {# new update} other {# new updates}}",
+  "widget.launcher.popularArticles": "Popular articles"
 }

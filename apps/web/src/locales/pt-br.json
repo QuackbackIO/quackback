@@ -1162,5 +1162,7 @@
   "automation.builtinTools.default": "Padrão",
   "automation.builtinTools.saving": "Salvando…",
   "automation.builtinTools.saveError": "Não foi possível atualizar as permissões da ferramenta.",
-  "automation.builtinTools.loadError": "Não foi possível carregar o catálogo de ferramentas."
+  "automation.builtinTools.loadError": "Não foi possível carregar o catálogo de ferramentas.",
+  "widget.shell.tab.changelog.unread": "{count, plural, one {# nova atualização} other {# novas atualizações}}",
+  "widget.launcher.popularArticles": "Artigos populares"
 }

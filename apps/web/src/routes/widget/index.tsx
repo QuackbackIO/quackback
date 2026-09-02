@@ -1,7 +1,16 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { z } from 'zod'
-import { lazy, Suspense, useState, useCallback, useEffect, useMemo, type ReactNode } from 'react'
+import {
+  lazy,
+  Suspense,
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  type ReactNode,
+} from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { FormattedMessage } from 'react-intl'
 import { CheckCircleIcon } from '@heroicons/react/24/solid'
@@ -323,28 +332,44 @@ interface SuccessPost {
  * while its data loads, so a cold-cache tab click paints one continuous
  * placeholder from chunk fetch through data fetch — no spinner → skeleton →
  * content hop. The idle-time prefetch makes the chunk phase a rare sight.
+ *
+ * `focusOnMount` moves keyboard/screen-reader focus into the new view. Push
+ * navigations and back navigations both leave focus on an element that has
+ * just unmounted (the tapped row, the back chevron), which would otherwise
+ * drop it to <body>. Tab-bar switches keep focus on the tab.
  */
 function ViewTransition({
   id,
   kind,
   fallback,
+  focusOnMount = false,
   children,
 }: {
   id: string
   kind: 'root' | 'push'
   fallback: ReactNode
+  focusOnMount?: boolean
   children: ReactNode
 }) {
   const reduceMotion = useReducedMotion()
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (focusOnMount) ref.current?.focus({ preventScroll: true })
+    // Mount-only by design: refocusing on every prop change would yank focus
+    // out of whatever the visitor moved to inside the view.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   return (
     <motion.div
       key={id}
+      ref={ref}
+      tabIndex={-1}
       initial={
         reduceMotion ? false : kind === 'push' ? { x: 28, opacity: 0 } : { y: 10, opacity: 0 }
       }
       animate={{ x: 0, y: 0, opacity: 1 }}
       transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
-      className="h-full"
+      className="h-full outline-none"
     >
       <Suspense fallback={fallback}>{children}</Suspense>
     </motion.div>
@@ -459,6 +484,12 @@ function WidgetPage() {
   // returns here. Cleared by any tab-bar click — tabs never show a back arrow.
   const [backTarget, setBackTarget] = useState<{ tab: WidgetTab; view: WidgetView } | null>(null)
 
+  // How the current view was reached. Tab-bar landings keep focus on the tab
+  // button; every other navigation ('move': push, back, cross-jump) unmounts
+  // the element that had focus, so the incoming view takes it instead.
+  const lastNavRef = useRef<'tab' | 'move'>('tab')
+  const focusIncoming = lastNavRef.current === 'move'
+
   const [successPost, setSuccessPost] = useState<SuccessPost | null>(null)
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
   const [selectedChangelogId, setSelectedChangelogId] = useState<string | null>(null)
@@ -477,6 +508,7 @@ function WidgetPage() {
 
   const openMessenger = useCallback(
     (target?: ConversationId | 'new', from: WidgetTab = 'messages') => {
+      lastNavRef.current = 'move'
       setConversationTarget(target ?? null)
       setActiveTab(from === 'tickets' ? 'tickets' : 'messages')
       setView('messenger')
@@ -498,6 +530,7 @@ function WidgetPage() {
     if (shown.length === 0) return
     if (shown.includes(activeTab)) return
     const next = shown[0]
+    lastNavRef.current = 'tab'
     setActiveTab(next)
     setView(next === 'home' ? 'overview' : next)
   }, [tabs, hasTickets, activeTab, view])
@@ -527,6 +560,7 @@ function WidgetPage() {
       const opts = msg.data as { view?: string }
       // SDK-driven opens are tab-level landings: no back-chevron origin.
       setBackTarget(null)
+      lastNavRef.current = 'tab'
       if (opts.view === 'changelog' && tabs.changelog) {
         setActiveTab('changelog')
         setView('changelog')
@@ -558,6 +592,7 @@ function WidgetPage() {
   }, [tabs, openMessenger])
 
   const handlePostCreated = useCallback((post: SuccessPost) => {
+    lastNavRef.current = 'move'
     setCreatedPosts((prev) => [
       {
         id: post.id as (typeof prev)[number]['id'],
@@ -574,11 +609,13 @@ function WidgetPage() {
   }, [])
 
   const handlePostSelect = useCallback((postId: string) => {
+    lastNavRef.current = 'move'
     setSelectedPostId(postId)
     setView('post-detail')
   }, [])
 
   const handleBack = useCallback(() => {
+    lastNavRef.current = 'move'
     if (view === 'changelog-detail') {
       setSelectedChangelogId(null)
       setView('changelog')
@@ -650,6 +687,7 @@ function WidgetPage() {
   // arrow — any pending cross-navigation origin is dropped.
   const handleTabChange = useCallback(
     (tab: WidgetTab) => {
+      lastNavRef.current = 'tab'
       setBackTarget(null)
       navigateToTab(tab)
     },
@@ -660,6 +698,7 @@ function WidgetPage() {
   // the origin so the destination shows a back chevron returning here.
   const crossNavigate = useCallback(
     (tab: WidgetTab) => {
+      lastNavRef.current = 'move'
       setBackTarget({ tab: activeTab, view })
       navigateToTab(tab)
     },
@@ -667,17 +706,20 @@ function WidgetPage() {
   )
 
   const handleChangelogEntrySelect = useCallback((entryId: string) => {
+    lastNavRef.current = 'move'
     setSelectedChangelogId(entryId)
     setView('changelog-detail')
   }, [])
 
   const handleHelpArticleSelect = useCallback((articleSlug: string) => {
+    lastNavRef.current = 'move'
     setSelectedHelpSlug(articleSlug)
     setView('help-detail')
   }, [])
 
   const handleHelpCategorySelect = useCallback(
     (categoryId: string, categoryName: string, categoryIcon: string | null) => {
+      lastNavRef.current = 'move'
       setSelectedCategory({ id: categoryId, name: categoryName, icon: categoryIcon })
       setView('help-category')
     },
@@ -685,9 +727,20 @@ function WidgetPage() {
   )
 
   const handleHelpCategoryArticleSelect = useCallback((articleSlug: string) => {
+    lastNavRef.current = 'move'
     setSelectedHelpSlug(articleSlug)
     setView('help-detail')
   }, [])
+
+  // The feedback view stays mounted (form state survives a detail round-trip),
+  // so it can't take focus via ViewTransition's mount hook; do it when it
+  // becomes visible again after a back/cross navigation.
+  const feedbackViewRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (view === 'feedback' && lastNavRef.current === 'move') {
+      feedbackViewRef.current?.focus({ preventScroll: true })
+    }
+  }, [view])
 
   // Detail views always get a back arrow; root views only when a
   // cross-navigation origin is pending (tab-bar landings never show one).
@@ -757,7 +810,7 @@ function WidgetPage() {
     >
       {view === 'overview' && (
         // Overview is statically imported (SSR-complete Home) — never suspends.
-        <ViewTransition id="overview" kind="root" fallback={null}>
+        <ViewTransition id="overview" kind="root" focusOnMount={focusIncoming} fallback={null}>
           <WidgetOverview
             tabs={tabs}
             home={home}
@@ -795,7 +848,12 @@ function WidgetPage() {
       )}
 
       {view === 'changelog' && (
-        <ViewTransition id="changelog" kind="root" fallback={<WidgetChangelogListSkeleton />}>
+        <ViewTransition
+          id="changelog"
+          kind="root"
+          focusOnMount={focusIncoming}
+          fallback={<WidgetChangelogListSkeleton />}
+        >
           <WidgetChangelog teamName={teamName} onEntrySelect={handleChangelogEntrySelect} />
         </ViewTransition>
       )}
@@ -804,6 +862,7 @@ function WidgetPage() {
         <ViewTransition
           id={`messenger-${conversationTarget ?? 'active'}`}
           kind="push"
+          focusOnMount={focusIncoming}
           fallback={<WidgetMessengerViewSkeleton isNew={conversationTarget === 'new'} />}
         >
           <WidgetMessenger
@@ -817,7 +876,12 @@ function WidgetPage() {
       )}
 
       {view === 'messages' && (
-        <ViewTransition id="messages" kind="root" fallback={<WidgetConversationListSkeleton />}>
+        <ViewTransition
+          id="messages"
+          kind="root"
+          focusOnMount={focusIncoming}
+          fallback={<WidgetConversationListSkeleton />}
+        >
           <WidgetMessages
             teamName={teamName}
             assistant={assistant}
@@ -828,7 +892,12 @@ function WidgetPage() {
       )}
 
       {view === 'tickets' && (
-        <ViewTransition id="tickets" kind="root" fallback={<WidgetTicketListSkeleton />}>
+        <ViewTransition
+          id="tickets"
+          kind="root"
+          focusOnMount={focusIncoming}
+          fallback={<WidgetTicketListSkeleton />}
+        >
           <WidgetTickets onOpenTicket={(id) => openMessenger(id, 'tickets')} />
         </ViewTransition>
       )}
@@ -837,6 +906,7 @@ function WidgetPage() {
         <ViewTransition
           id={`changelog-${selectedChangelogId}`}
           kind="push"
+          focusOnMount={focusIncoming}
           fallback={<WidgetArticleSkeleton />}
         >
           <WidgetChangelogDetail entryId={selectedChangelogId} />
@@ -844,7 +914,12 @@ function WidgetPage() {
       )}
 
       {view === 'help' && (
-        <ViewTransition id="help" kind="root" fallback={<WidgetHelpViewSkeleton />}>
+        <ViewTransition
+          id="help"
+          kind="root"
+          focusOnMount={focusIncoming}
+          fallback={<WidgetHelpViewSkeleton />}
+        >
           <WidgetHelp
             onArticleSelect={handleHelpArticleSelect}
             onCategorySelect={handleHelpCategorySelect}
@@ -856,6 +931,7 @@ function WidgetPage() {
         <ViewTransition
           id={`help-category-${selectedCategory.id}`}
           kind="push"
+          focusOnMount={focusIncoming}
           fallback={
             <WidgetHelpCategoryViewSkeleton
               categoryName={selectedCategory.name}
@@ -876,6 +952,7 @@ function WidgetPage() {
         <ViewTransition
           id={`help-detail-${selectedHelpSlug}`}
           kind="push"
+          focusOnMount={focusIncoming}
           fallback={<WidgetArticleSkeleton />}
         >
           <WidgetHelpDetail articleSlug={selectedHelpSlug} />
@@ -884,10 +961,12 @@ function WidgetPage() {
 
       {/* Keep home mounted (hidden) when viewing post detail so form state is preserved */}
       <div
+        ref={feedbackViewRef}
+        tabIndex={-1}
         className={
           view === 'feedback' || view === 'post-detail'
             ? view === 'feedback'
-              ? 'flex flex-col h-full'
+              ? 'flex flex-col h-full outline-none'
               : 'hidden'
             : 'hidden'
         }
@@ -917,6 +996,7 @@ function WidgetPage() {
         <ViewTransition
           id={`post-${selectedPostId}`}
           kind="push"
+          focusOnMount={focusIncoming}
           fallback={<WidgetPostDetailSkeleton />}
         >
           <WidgetPostDetail postId={selectedPostId} statuses={statuses} />
@@ -925,7 +1005,12 @@ function WidgetPage() {
 
       {view === 'success' && successPost && (
         // SuccessView is defined in this module — never suspends.
-        <ViewTransition id={`success-${successPost.id}`} kind="push" fallback={null}>
+        <ViewTransition
+          id={`success-${successPost.id}`}
+          kind="push"
+          focusOnMount={focusIncoming}
+          fallback={null}
+        >
           <SuccessView
             post={successPost}
             status={
