@@ -78,16 +78,12 @@ export function WidgetMessages({
               const ticket = linkedTickets[c.id]
               return (
                 <li key={c.id} className="border-b border-border/40 last:border-b-0">
+                  {/* No aria-label override: the row's own content (name,
+                      time, preview, unread) is the accessible name, so AT
+                      users hear the same thing sighted users see. */}
                   <button
                     type="button"
                     onClick={() => onOpenMessenger(c.id)}
-                    aria-label={intl.formatMessage(
-                      {
-                        id: 'widget.messages.resumeAria',
-                        defaultMessage: 'Open conversation with {name}',
-                      },
-                      { name }
-                    )}
                     className="group flex w-full items-center gap-3 rounded-lg px-2 py-3 text-start transition-colors hover:bg-muted/40"
                   >
                     <Avatar
@@ -139,7 +135,14 @@ export function WidgetMessages({
                     </span>
                     {unread && (
                       <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold text-primary-foreground">
-                        {c.unreadCount}
+                        <span aria-hidden>{c.unreadCount}</span>
+                        <span className="sr-only">
+                          <FormattedMessage
+                            id="widget.shell.tab.messages.unread"
+                            defaultMessage="{count} unread"
+                            values={{ count: c.unreadCount }}
+                          />
+                        </span>
                       </span>
                     )}
                   </button>
@@ -154,10 +157,19 @@ export function WidgetMessages({
               <FormattedMessage id="widget.messages.empty" defaultMessage="No conversations yet" />
             </p>
             <p className="mt-0.5 text-xs text-muted-foreground/50">
-              <FormattedMessage
-                id="widget.messages.emptyHint"
-                defaultMessage="Questions or feedback? We're here to help."
-              />
+              {canStartConversation ? (
+                <FormattedMessage
+                  id="widget.messages.emptyHint"
+                  defaultMessage="Questions or feedback? We're here to help."
+                />
+              ) : (
+                // Tickets-only workspace: no chat-start pill, so don't promise
+                // a path that isn't here — say what will show up instead.
+                <FormattedMessage
+                  id="widget.messages.emptyHint.ticketsOnly"
+                  defaultMessage="Replies from our team will show up here."
+                />
+              )}
             </p>
           </div>
         )}

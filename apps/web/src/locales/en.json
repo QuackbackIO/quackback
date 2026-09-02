@@ -116,7 +116,6 @@
   "widget.tickets.new.type": "Type",
   "widget.tickets.recent": "Recent tickets",
   "widget.messages.emptyHint": "Questions or feedback? We're here to help.",
-  "widget.messages.resumeAria": "Open conversation with {name}",
   "widget.helpDetail.notFound": "Article not found",
   "widget.changelog.empty": "No updates yet",
   "widget.changelog.emptyHint": "Check back soon for the latest product updates.",
@@ -1173,5 +1172,7 @@
   "widget.home.posting.chooseBoard": "Choose a board to post",
   "widget.home.boards.all": "All",
   "widget.portalTitle.openInPortal": "Open in portal",
-  "widget.postDetail.error.notFound": "This post may have been removed or made private."
+  "widget.postDetail.error.notFound": "This post may have been removed or made private.",
+  "widget.messages.emptyHint.ticketsOnly": "Replies from our team will show up here.",
+  "widget.tickets.stageChanged": "Status changed since your last visit"
 }

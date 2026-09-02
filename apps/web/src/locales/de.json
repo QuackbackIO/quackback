@@ -116,7 +116,6 @@
   "widget.tickets.new.type": "Typ",
   "widget.tickets.recent": "Aktuelle Tickets",
   "widget.messages.emptyHint": "Fragen oder Feedback? Wir helfen gerne.",
-  "widget.messages.resumeAria": "Unterhaltung mit {name} öffnen",
   "widget.helpDetail.notFound": "Artikel nicht gefunden",
   "widget.changelog.empty": "Noch keine Neuigkeiten vorhanden",
   "widget.changelog.emptyHint": "Schauen Sie bald wieder vorbei für die neuesten Produkt-Updates.",
@@ -1173,5 +1172,7 @@
   "widget.home.posting.chooseBoard": "Wähle ein Board zum Posten",
   "widget.home.boards.all": "Alle",
   "widget.portalTitle.openInPortal": "Im Portal öffnen",
-  "widget.postDetail.error.notFound": "Dieser Beitrag wurde möglicherweise entfernt oder auf privat gesetzt."
+  "widget.postDetail.error.notFound": "Dieser Beitrag wurde möglicherweise entfernt oder auf privat gesetzt.",
+  "widget.messages.emptyHint.ticketsOnly": "Antworten unseres Teams erscheinen hier.",
+  "widget.tickets.stageChanged": "Status hat sich seit deinem letzten Besuch geändert"
 }

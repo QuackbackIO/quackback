@@ -116,7 +116,6 @@
   "widget.tickets.new.type": "類型",
   "widget.tickets.recent": "最近的工單",
   "widget.messages.emptyHint": "有問題或意見回饋？我們隨時為您服務。",
-  "widget.messages.resumeAria": "開啟與 {name} 的對話",
   "widget.helpDetail.notFound": "找不到文章",
   "widget.changelog.empty": "還沒有更新",
   "widget.changelog.emptyHint": "稍後再回來查看最新的產品更新。",
@@ -1173,5 +1172,7 @@
   "widget.home.posting.chooseBoard": "選擇要發布到的看板",
   "widget.home.boards.all": "全部",
   "widget.portalTitle.openInPortal": "在入口網站中開啟",
-  "widget.postDetail.error.notFound": "此貼文可能已被移除或設為私密。"
+  "widget.postDetail.error.notFound": "此貼文可能已被移除或設為私密。",
+  "widget.messages.emptyHint.ticketsOnly": "團隊的回覆將顯示在這裡。",
+  "widget.tickets.stageChanged": "自上次造訪以來狀態已變更"
 }
