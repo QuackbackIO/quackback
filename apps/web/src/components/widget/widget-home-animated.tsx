@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, memo, useRef, useState } from 'react'
 import { usePillsScroll } from '@/lib/client/hooks/use-pills-scroll'
-import { Squares2X2Icon, PencilIcon } from '@heroicons/react/24/solid'
+import { Squares2X2Icon, PencilIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/solid'
 import {
   LightBulbIcon,
   MagnifyingGlassIcon,
@@ -9,7 +9,7 @@ import {
   ChevronRightIcon,
 } from '@heroicons/react/24/outline'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useInfiniteQuery, useQuery, keepPreviousData } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { useIntl, FormattedMessage } from 'react-intl'
 import {
   Select,
@@ -22,6 +22,7 @@ import { listPublicPostsFn } from '@/lib/server/functions/public-posts'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { WidgetVoteButton } from './widget-vote-button'
 import { WidgetPostListSkeleton } from './widget-skeletons'
+import { widgetQueryKeys } from '@/lib/client/hooks/use-widget-vote'
 import { cn } from '@/lib/shared/utils'
 import { useWidgetAuth } from './widget-auth-provider'
 import { sendToHost } from '@/lib/client/widget-bridge'
@@ -121,11 +122,31 @@ const WidgetPostRow = memo(
   }) {
     const status = post.statusId ? (statusMap.get(post.statusId) ?? null) : null
     return (
+      // The whole row is the tap target (a nested <button> would forbid the
+      // vote button inside it), so it carries the button role and keyboard
+      // activation itself. The vote button stops propagation both ways.
       <div
-        className={`w-full overflow-hidden flex items-center gap-2 rounded-lg hover:bg-muted/30 transition-colors cursor-pointer ${compact ? 'px-1.5 py-1' : 'px-2 py-1.5'}`}
+        role="button"
+        tabIndex={0}
         onClick={onSelect}
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            onSelect?.()
+          }
+        }}
+        className={cn(
+          'w-full overflow-hidden flex items-center gap-2 rounded-lg hover:bg-muted/30 transition-colors cursor-pointer',
+          'outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+          compact ? 'px-1.5 py-1' : 'px-2 py-1.5'
+        )}
       >
-        <div onClick={(e) => e.stopPropagation()} className="shrink-0">
+        <div
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+          className="shrink-0"
+        >
           <WidgetVoteButton
             postId={post.id as PostId}
             voteCount={post.voteCount}
@@ -160,6 +181,19 @@ const WidgetPostRow = memo(
               <span className="inline-flex items-center gap-0.5 text-[11px] text-muted-foreground/60">
                 <Squares2X2Icon className="h-2.5 w-2.5 text-muted-foreground/40" />
                 {post.board.name}
+              </span>
+            )}
+            {post.commentCount > 0 && (
+              <span className="ms-auto inline-flex items-center gap-0.5 text-[11px] text-muted-foreground/60 tabular-nums">
+                <ChatBubbleLeftIcon className="h-2.5 w-2.5 text-muted-foreground/40" aria-hidden />
+                <span aria-hidden>{post.commentCount}</span>
+                <span className="sr-only">
+                  <FormattedMessage
+                    id="widget.home.row.comments"
+                    defaultMessage="{count, plural, one {# comment} other {# comments}}"
+                    values={{ count: post.commentCount }}
+                  />
+                </span>
               </span>
             )}
           </div>
@@ -204,6 +238,7 @@ export function WidgetHomeAnimated({
     metadata,
   } = useWidgetAuth()
   const { upload: uploadImage } = useWidgetImageUpload()
+  const queryClient = useQueryClient()
   const inputRef = useRef<HTMLInputElement>(null)
 
   const [title, setTitle] = useState('')
@@ -479,10 +514,18 @@ export function WidgetHomeAnimated({
         statusId: result.statusId ?? null,
       })
 
+      // The server auto-upvotes the author; reflect that immediately so the
+      // success card shows a cast vote instead of an inviting empty 0. Written
+      // across every session-version key: ensureSession() may have bumped it
+      // mid-submit.
+      queryClient.setQueriesData<Set<string>>(
+        { queryKey: widgetQueryKeys.votedPosts.all },
+        (old) => new Set([...(old ?? []), result.id])
+      )
       onPostCreated?.({
         id: result.id,
         title: result.title,
-        voteCount: 0,
+        voteCount: Math.max(result.voteCount ?? 0, 1),
         statusId: result.statusId ?? null,
         board: result.board,
       })
@@ -705,6 +748,13 @@ export function WidgetHomeAnimated({
                             id="widget.home.posting.noAccess"
                             defaultMessage="You don't have access to post on this board"
                           />
+                        ) : boards.length > 1 && !selectedBoardId ? (
+                          // Submit is disabled until a board is picked; say so
+                          // rather than leaving a dead button unexplained.
+                          <FormattedMessage
+                            id="widget.home.posting.chooseBoard"
+                            defaultMessage="Choose a board to post"
+                          />
                         ) : user ? (
                           <FormattedMessage
                             id="widget.home.posting.postingAs"
@@ -775,6 +825,13 @@ export function WidgetHomeAnimated({
                     onChange={(e) => setPopularSearch(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') e.preventDefault()
+                      if (e.key === 'Escape') {
+                        // Own the first Escape (the shell closes the widget on
+                        // an unhandled one): clear or close the search instead.
+                        e.preventDefault()
+                        if (popularSearch) setPopularSearch('')
+                        else setPopularSearchOpen(false)
+                      }
                     }}
                     placeholder={intl.formatMessage({
                       id: 'widget.home.popular.search.placeholder',
@@ -809,7 +866,7 @@ export function WidgetHomeAnimated({
                   <button
                     type="button"
                     onClick={() => setPopularSearchOpen(true)}
-                    className="text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+                    className="flex size-6 items-center justify-center rounded-md text-muted-foreground/70 hover:bg-muted/50 hover:text-foreground transition-colors"
                     aria-label={intl.formatMessage({
                       id: 'widget.home.popular.search.aria',
                       defaultMessage: 'Search ideas',
@@ -827,6 +884,20 @@ export function WidgetHomeAnimated({
                   ref={pills.ref}
                   className="flex gap-1 overflow-x-auto scrollbar-none px-1 pb-0.5"
                 >
+                  {/* Explicit "All" (matching the changelog filter) — re-tapping
+                      the active board to clear it was undiscoverable. */}
+                  <button
+                    type="button"
+                    onClick={() => setActiveBoardSlug(null)}
+                    aria-pressed={activeBoardSlug === null}
+                    className={`rounded-full text-xs px-2 py-0.5 whitespace-nowrap transition-colors shrink-0 ${
+                      activeBoardSlug === null
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                    }`}
+                  >
+                    <FormattedMessage id="widget.home.boards.all" defaultMessage="All" />
+                  </button>
                   {boards.map((board) => (
                     <button
                       key={board.id}
@@ -834,6 +905,7 @@ export function WidgetHomeAnimated({
                       onClick={() =>
                         setActiveBoardSlug(activeBoardSlug === board.slug ? null : board.slug)
                       }
+                      aria-pressed={activeBoardSlug === board.slug}
                       className={`rounded-full text-xs px-2 py-0.5 whitespace-nowrap transition-colors shrink-0 ${
                         activeBoardSlug === board.slug
                           ? 'bg-primary text-primary-foreground'

@@ -1168,5 +1168,10 @@
   "widget.success.title": "感謝您的回饋！",
   "widget.success.subtitle": "您的想法已送出。",
   "widget.success.backToIdeas": "返回想法列表",
-  "widget.messenger.csat.rateAria": "評分 {n}/5"
+  "widget.messenger.csat.rateAria": "評分 {n}/5",
+  "widget.home.row.comments": "{count, plural, other {# 則留言}}",
+  "widget.home.posting.chooseBoard": "選擇要發布到的看板",
+  "widget.home.boards.all": "全部",
+  "widget.portalTitle.openInPortal": "在入口網站中開啟",
+  "widget.postDetail.error.notFound": "此貼文可能已被移除或設為私密。"
 }

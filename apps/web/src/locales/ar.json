@@ -1168,5 +1168,10 @@
   "widget.success.title": "شكرًا على ملاحظاتك!",
   "widget.success.subtitle": "تم إرسال فكرتك.",
   "widget.success.backToIdeas": "الرجوع إلى الأفكار",
-  "widget.messenger.csat.rateAria": "تقييم {n} من 5"
+  "widget.messenger.csat.rateAria": "تقييم {n} من 5",
+  "widget.home.row.comments": "{count, plural, one {تعليق واحد} other {# تعليقات}}",
+  "widget.home.posting.chooseBoard": "اختر لوحة للنشر",
+  "widget.home.boards.all": "الكل",
+  "widget.portalTitle.openInPortal": "فتح في البوابة",
+  "widget.postDetail.error.notFound": "ربما تمت إزالة هذه المشاركة أو جعلها خاصة."
 }

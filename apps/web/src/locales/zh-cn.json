@@ -1168,5 +1168,10 @@
   "widget.success.title": "感谢您的反馈！",
   "widget.success.subtitle": "您的想法已提交。",
   "widget.success.backToIdeas": "返回想法列表",
-  "widget.messenger.csat.rateAria": "评分 {n}/5"
+  "widget.messenger.csat.rateAria": "评分 {n}/5",
+  "widget.home.row.comments": "{count, plural, other {# 条评论}}",
+  "widget.home.posting.chooseBoard": "选择要发布到的看板",
+  "widget.home.boards.all": "全部",
+  "widget.portalTitle.openInPortal": "在门户中打开",
+  "widget.postDetail.error.notFound": "此帖子可能已被删除或设为私密。"
 }

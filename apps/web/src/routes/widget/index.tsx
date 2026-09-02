@@ -1075,10 +1075,23 @@ function SuccessView({
 
       <div className="px-3">
         <div
-          className="flex items-center gap-2 rounded-lg bg-muted/20 border border-border/50 px-2 py-2 cursor-pointer hover:bg-muted/30 transition-colors"
+          role="button"
+          tabIndex={0}
           onClick={onOpenPost}
+          onKeyDown={(e) => {
+            if (e.target !== e.currentTarget) return
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              onOpenPost()
+            }
+          }}
+          className="flex items-center gap-2 rounded-lg bg-muted/20 border border-border/50 px-2 py-2 cursor-pointer hover:bg-muted/30 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         >
-          <div onClick={(e) => e.stopPropagation()} className="shrink-0">
+          <div
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+            className="shrink-0"
+          >
             <WidgetVoteButton
               postId={post.id as PostId}
               voteCount={post.voteCount}
