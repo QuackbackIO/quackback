@@ -1187,5 +1187,6 @@
   "widget.help.article.helpful.no": "没有帮助",
   "widget.help.article.stillStuck": "仍有疑问？",
   "widget.help.article.askQuestion": "向我们提问",
+  "widget.changelog.new": "新",
   "widget.shell.tab.messages.unread": "{count} 条未读"
 }

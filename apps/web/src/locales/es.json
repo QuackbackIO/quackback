@@ -1187,5 +1187,6 @@
   "widget.help.article.helpful.no": "No, no me ayudó",
   "widget.help.article.stillStuck": "¿Sigues atascado?",
   "widget.help.article.askQuestion": "Haznos una pregunta",
+  "widget.changelog.new": "Nuevo",
   "widget.shell.tab.messages.unread": "{count} sin leer"
 }

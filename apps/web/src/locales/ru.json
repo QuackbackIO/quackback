@@ -1187,5 +1187,6 @@
   "widget.help.article.helpful.no": "Нет, не помогло",
   "widget.help.article.stillStuck": "Не нашли ответ?",
   "widget.help.article.askQuestion": "Задайте нам вопрос",
+  "widget.changelog.new": "Новое",
   "widget.shell.tab.messages.unread": "{count} непрочитанных"
 }
