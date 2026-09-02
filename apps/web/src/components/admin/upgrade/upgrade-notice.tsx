@@ -9,7 +9,7 @@ export function UpgradeNotice(props: {
 }) {
   const description = props.description ?? describeEntitlementUpgrade(props.entitlement!)
   return (
-    <div className="rounded-lg border border-dashed border-border/50 bg-muted/10 p-6">
+    <div className="rounded-lg border border-dashed border-border/50 bg-muted/10 p-5">
       <UpgradeOffer description={description} />
     </div>
   )

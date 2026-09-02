@@ -20,6 +20,7 @@ import {
   type PaidPlanId,
 } from '@/lib/shared/billing/plan-action'
 import { daysUntil } from '@/lib/shared/billing/trial-state'
+import { checkoutPath } from '@/lib/shared/billing/checkout-path'
 import { AddSeatsDialog } from './add-seats-dialog'
 import { RemoveSeatsDialog } from './remove-seats-dialog'
 import { SubscribeDialog } from './subscribe-dialog'
@@ -704,15 +705,17 @@ function PlanActionButton(props: {
     )
   }
   return (
-    <form method="post" action="/api/billing/session">
-      <input type="hidden" name="action" value="checkout" />
-      <input type="hidden" name="planId" value={action.planId} />
-      <input type="hidden" name="billingPeriod" value={props.period} />
-      <input type="hidden" name="quantity" value={String(props.checkoutQuantity)} />
-      <Button size="sm" type="submit" className="w-full" variant="outline">
+    <Button size="sm" className="w-full" variant="outline" asChild>
+      <a
+        href={checkoutPath({
+          plan: action.planId,
+          period: props.period,
+          seats: props.checkoutQuantity,
+        })}
+      >
         Switch to this plan
-      </Button>
-    </form>
+      </a>
+    </Button>
   )
 }
 

@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button'
+import { describePlanRefusal } from '@/lib/shared/describe-upgrade'
 import { cn } from '@/lib/shared/utils'
 
 interface ErrorPageProps {
@@ -92,15 +93,25 @@ export function EntitlementRequiredPage({
   fullPage?: boolean
 }) {
   const isAdminArea = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')
+  const refusal = describePlanRefusal(error, {
+    entitlement: null,
+    feature: 'This feature',
+    requiredPlan: null,
+    requiredPlanName: null,
+    headline: 'This is a plan feature',
+    body: error.message,
+  })
 
   return (
     <FriendlyShell fullPage={fullPage}>
-      <h1 className="text-2xl font-semibold tracking-tight">This is a plan feature</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">{refusal.headline}</h1>
       <p className="mt-2 text-sm text-muted-foreground">{error.message}</p>
       <div className="mt-6 flex items-center justify-center gap-3">
         {isAdminArea ? (
           <Button asChild>
-            <a href="/admin/settings/billing">See plans</a>
+            <a href="/admin/settings/billing">
+              {refusal.requiredPlanName ? `Upgrade to ${refusal.requiredPlanName}` : 'See plans'}
+            </a>
           </Button>
         ) : null}
         <Button variant="outline" asChild>

@@ -27,6 +27,18 @@ export const fetchBillingCatalogueFn = createServerFn({ method: 'GET' }).handler
   return fetchBillingCatalogue()
 })
 
+/**
+ * What an upgrade prompt may say about the workspace it is shown in: the plan
+ * in force and whether a trial can be offered. Same audience as the catalogue.
+ * Null on self-hosted installs and whenever no plan is in force.
+ */
+export const fetchUpgradeContextFn = createServerFn({ method: 'GET' }).handler(async () => {
+  await requireAuth()
+  const { getCloudConfig } = await import('@/lib/server/domains/settings/cloud/cloud.service')
+  const { upgradeContextFor } = await import('@/lib/server/domains/settings/cloud/upgrade-context')
+  return upgradeContextFor(await getCloudConfig())
+})
+
 export const fetchBillingInvoicesFn = createServerFn({ method: 'GET' }).handler(async () => {
   await requireAuth({ permission: PERMISSIONS.BILLING_MANAGE })
   const { fetchBillingInvoices } = await import('@/lib/server/control-plane/client')

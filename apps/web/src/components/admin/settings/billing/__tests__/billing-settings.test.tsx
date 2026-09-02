@@ -131,11 +131,11 @@ describe('BillingPlansView', () => {
     expect(screen.getByRole('button', { name: 'Remove seats' })).toBeEnabled()
     expect(screen.getByRole('heading', { name: 'Plans' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Current plan' })).toBeDisabled()
-    const scaleField = document.querySelector('input[name="planId"][value="scale"]')
-    const form = scaleField?.closest('form')
-    expect(form).toHaveAttribute('action', '/api/billing/session')
-    expect(form?.querySelector('input[name="action"]')).toHaveValue('checkout')
-    expect(form?.querySelector('input[name="quantity"]')).toHaveValue('7')
+    const switchLinks = screen.getAllByRole('link', { name: 'Switch to this plan' })
+    expect(switchLinks.map((link) => link.getAttribute('href'))).toEqual([
+      '/admin/settings/billing/checkout?plan=growth&period=annual&seats=7',
+      '/admin/settings/billing/checkout?plan=scale&period=annual&seats=7',
+    ])
     expect(screen.getByText('INV-1001')).toBeInTheDocument()
   })
 

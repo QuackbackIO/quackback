@@ -11,11 +11,12 @@ export function UpgradeScreen(props: {
 }) {
   const description = props.description ?? describeEntitlementUpgrade(props.entitlement!)
   return (
-    <div className="rounded-xl border border-border/60 bg-card/30 px-6 py-10">
+    <div className="rounded-xl border border-border/60 bg-card/30 p-6 sm:p-8">
       <UpgradeOffer
         description={description}
         onDismiss={props.onDismiss}
         dismissLabel={props.dismissLabel}
+        className="mx-auto max-w-2xl"
       />
     </div>
   )

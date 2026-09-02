@@ -45,6 +45,8 @@ const actionSchema = z.discriminatedUnion('action', [
     planId: z.enum(['growth', 'pro', 'scale']),
     billingPeriod: z.enum(['monthly', 'annual']),
     quantity: z.coerce.number().int().positive().optional(),
+    // A checked checkbox posts "true"; an unchecked one posts nothing.
+    brandingRemoval: z.enum(['true']).optional(),
   }),
   z.object({
     action: z.literal('downgrade'),
@@ -158,6 +160,7 @@ async function createCheckoutSession(input: {
   planId: 'growth' | 'pro' | 'scale'
   billingPeriod: 'monthly' | 'annual'
   quantity?: number
+  brandingRemoval?: 'true'
 }) {
   const { countSeatUsage } = await import('@/lib/server/domains/principals/seat-usage')
   const { createHostedBillingSession, fetchBillingCatalogue } =
@@ -175,6 +178,7 @@ async function createCheckoutSession(input: {
       planId: input.planId,
       billingPeriod: input.billingPeriod,
       quantity,
+      ...(input.brandingRemoval === 'true' ? { brandingRemoval: true } : {}),
     })
   })
 }

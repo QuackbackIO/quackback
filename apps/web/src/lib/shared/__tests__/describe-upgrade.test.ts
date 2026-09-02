@@ -3,16 +3,20 @@ import type { BillingCatalogue } from '@/lib/server/control-plane/client'
 import {
   cataloguePlanFor,
   describeEntitlementUpgrade,
+  describePlanRefusal,
   describePlanUpgrade,
   isPlanRefusal,
   throwIfServerFnFailed,
+  unlockedHighlights,
+  upgradeLead,
 } from '../describe-upgrade'
 
 const catalogue = {
   plans: [
-    { id: 'growth', name: 'Growth', highlights: ['Custom domain'] },
-    { id: 'pro', name: 'Pro', highlights: ['Workflows'] },
-    { id: 'scale', name: 'Scale', highlights: ['Audit log', 'SSO'] },
+    { id: 'free', name: 'Free', rank: 0, highlights: ['1 seat'] },
+    { id: 'growth', name: 'Growth', rank: 1, highlights: ['Custom domain'] },
+    { id: 'pro', name: 'Pro', rank: 2, highlights: ['Workflows'] },
+    { id: 'scale', name: 'Scale', rank: 3, highlights: ['Audit log', 'SSO'] },
   ],
 } as BillingCatalogue
 
@@ -21,8 +25,12 @@ describe('describeEntitlementUpgrade', () => {
     expect(describeEntitlementUpgrade('auditLog')).toMatchObject({
       requiredPlan: 'scale',
       requiredPlanName: 'Scale',
-      headline: 'Upgrade to Scale',
+      headline: 'The audit log is available from the Scale plan',
       body: 'The audit log is a Scale feature. Upgrade to Scale to enable it.',
+    })
+    expect(describeEntitlementUpgrade('webhooks')).toMatchObject({
+      headline: 'Webhooks are available from the Growth plan',
+      body: 'Webhooks are a Growth feature. Upgrade to Growth to enable them.',
     })
     expect(describeEntitlementUpgrade('sso').requiredPlan).toBe('scale')
     expect(describeEntitlementUpgrade('customDomain').requiredPlan).toBe('growth')
@@ -74,16 +82,95 @@ describe('describePlanUpgrade', () => {
   it('builds the same sentence shape for a named feature', () => {
     expect(describePlanUpgrade('Data export', 'pro')).toMatchObject({
       requiredPlan: 'pro',
-      headline: 'Upgrade to Pro',
+      headline: 'Data export is available from the Pro plan',
       body: 'Data export is a Pro feature. Upgrade to Pro to enable it.',
     })
+  })
+
+  it('takes a plural verb when asked', () => {
+    expect(describePlanUpgrade('Integrations', 'pro', { plural: true })).toMatchObject({
+      headline: 'Integrations are available from the Pro plan',
+      body: 'Integrations are a Pro feature. Upgrade to Pro to enable them.',
+    })
+  })
+})
+
+describe('describePlanRefusal', () => {
+  const fallback = describePlanUpgrade('Custom colours', 'pro', { plural: true })
+
+  it('names the feature and plan from an entitlement refusal', () => {
+    expect(
+      describePlanRefusal(
+        new Error(
+          'Workflows are a Pro feature. Your workspace is on Growth. Upgrade to Pro to enable it.'
+        ),
+        fallback
+      )
+    ).toMatchObject({ feature: 'Workflows', requiredPlan: 'pro' })
+  })
+
+  it('names the feature from a tier refusal and keeps the fallback plan', () => {
+    expect(
+      describePlanRefusal(
+        new Error('Custom CSS is not available on your plan. Upgrade to enable it.'),
+        fallback
+      )
+    ).toMatchObject({
+      feature: 'Custom CSS',
+      requiredPlan: 'pro',
+      headline: 'Custom CSS is available from the Pro plan',
+    })
+  })
+
+  it('keeps the fallback for anything else', () => {
+    expect(describePlanRefusal(new Error('boom'), fallback)).toBe(fallback)
+    expect(describePlanRefusal(null, fallback)).toBe(fallback)
+  })
+})
+
+describe('upgradeLead', () => {
+  it('names both ends of the move when the current plan is known', () => {
+    expect(upgradeLead('Free', 'Pro')).toBe('Upgrade from Free to Pro to unlock:')
+    expect(upgradeLead(null, 'Pro')).toBe('Upgrade to Pro to unlock:')
+    expect(upgradeLead('Pro', 'Pro')).toBe('Upgrade to Pro to unlock:')
+    expect(upgradeLead('Free', null)).toBe('Upgrade your plan to unlock:')
+  })
+
+  it('acknowledges a running trial', () => {
+    expect(upgradeLead('Growth', 'Pro', { trialActive: true })).toBe(
+      "You're trialing Growth. Upgrade to Pro to unlock:"
+    )
+  })
+})
+
+describe('unlockedHighlights', () => {
+  it('lists the target plan and everything in between, cheapest first', () => {
+    expect(unlockedHighlights(catalogue, 'free', 'scale')).toEqual({
+      target: ['Audit log', 'SSO'],
+      included: [
+        { planName: 'Growth', highlights: ['Custom domain'] },
+        { planName: 'Pro', highlights: ['Workflows'] },
+      ],
+    })
+    expect(unlockedHighlights(catalogue, 'growth', 'pro')).toEqual({
+      target: ['Workflows'],
+      included: [],
+    })
+  })
+
+  it('shows only the target when the current plan is unknown or the catalogue is missing', () => {
+    expect(unlockedHighlights(catalogue, null, 'scale')).toEqual({
+      target: ['Audit log', 'SSO'],
+      included: [],
+    })
+    expect(unlockedHighlights(null, 'free', 'scale')).toEqual({ target: [], included: [] })
   })
 })
 
 describe('cataloguePlanFor', () => {
   it('returns the billing-page plan row', () => {
     expect(cataloguePlanFor(catalogue, 'scale')?.highlights).toEqual(['Audit log', 'SSO'])
-    expect(cataloguePlanFor(catalogue, 'free')).toBeNull()
+    expect(cataloguePlanFor(catalogue, 'free')?.id).toBe('free')
     expect(cataloguePlanFor(null, 'scale')).toBeNull()
   })
 })
