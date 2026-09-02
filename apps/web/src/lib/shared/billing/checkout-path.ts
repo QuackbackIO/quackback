@@ -25,7 +25,9 @@ export function parseCheckoutSearch(raw: Record<string, unknown>): CheckoutSearc
   if (isPaidPlanId(raw.plan)) search.plan = raw.plan
   if (raw.period === 'monthly' || raw.period === 'annual') search.period = raw.period
   const seats = typeof raw.seats === 'string' ? Number(raw.seats) : raw.seats
-  if (typeof seats === 'number' && Number.isInteger(seats) && seats >= 1 && seats <= 1000) {
+  // Same bound as the checkout API (any positive integer): a workspace already
+  // past an arbitrary cap must still be able to add seats.
+  if (typeof seats === 'number' && Number.isSafeInteger(seats) && seats >= 1) {
     search.seats = seats
   }
   if (raw.branding === true || raw.branding === 'true') search.branding = true
