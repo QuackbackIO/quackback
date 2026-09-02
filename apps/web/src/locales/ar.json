@@ -1187,5 +1187,6 @@
   "widget.help.article.helpful.no": "لا، لم يكن مفيدًا",
   "widget.help.article.stillStuck": "ما زلت بحاجة إلى مساعدة؟",
   "widget.help.article.askQuestion": "اطرح علينا سؤالًا",
+  "widget.changelog.new": "جديد",
   "widget.shell.tab.messages.unread": "{count} غير مقروءة"
 }
