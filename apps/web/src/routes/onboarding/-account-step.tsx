@@ -6,6 +6,7 @@ import { PortalAuthFormInline } from '@/components/auth/portal-auth-form-inline'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { authClient } from '@/lib/client/auth-client'
 import type { WorkspaceClaim } from '@/lib/server/functions/onboarding'
+import type { OidcSignInButton } from '@/lib/shared/oidc-sign-in-button'
 
 /** Sign-in methods the workspace actually allows, in the shape
  *  `PortalAuthFormInline` already consumes on the portal. */
@@ -13,7 +14,7 @@ interface AccountAuthConfig {
   found: boolean
   oauth: Record<string, boolean | undefined>
   openSignup?: boolean
-  oidcProviders?: { id: string; name: string }[]
+  oidcProviders?: OidcSignInButton[]
   registeredAuthProviders?: string[]
   twoFactorRequired?: boolean
 }

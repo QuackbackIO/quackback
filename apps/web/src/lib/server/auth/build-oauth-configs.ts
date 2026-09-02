@@ -21,7 +21,7 @@
 
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import { authorizeRequestFor, supportsPrompt } from '@/lib/shared/oidc-request'
-import { resolveIdentity } from './resolve-identity'
+import { resolveIdentity, pickAvatarUrl } from './resolve-identity'
 import { synthesizeName } from './placeholder-identity'
 import { allowsMissingEmail } from '@/lib/shared/oidc-claim-mapping'
 
@@ -251,6 +251,11 @@ export async function buildGenericOAuthConfigs({
         resolvedEmail = await placeholderEmailFor(provider.registrationId, id)
       }
 
+      // Better-Auth's genericOAuth derives the avatar from `image` only, so
+      // promote the standard OIDC `picture` claim. Set once — `overrideUserInfo`
+      // stays off, so a later change at the IdP does not overwrite the account.
+      const resolvedImage = pickAvatarUrl(claims)
+
       // Raw claims first, mapped fields last: the mapped values are the
       // resolved answer and must not be shadowed by a same-named raw claim.
       return {
@@ -259,6 +264,7 @@ export async function buildGenericOAuthConfigs({
         emailVerified,
         ...(resolvedEmail ? { email: resolvedEmail } : {}),
         ...(resolvedName ? { name: resolvedName } : {}),
+        ...(resolvedImage ? { image: resolvedImage } : {}),
       }
     }
 

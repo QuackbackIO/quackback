@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { resolveIdentity } from '../resolve-identity'
+import { resolveIdentity, pickAvatarUrl } from '../resolve-identity'
 import {
   WORLD_A,
   WORLD_B,
@@ -318,5 +318,42 @@ describe('resolveIdentity — subject mismatch, observe vs enforce', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.identity.warnings ?? []).not.toContain('subject_mismatch')
+  })
+})
+
+describe('pickAvatarUrl — the OIDC `picture` claim', () => {
+  it('takes an absolute https URL', () => {
+    expect(pickAvatarUrl({ picture: 'https://cdn.example.com/u/42.png' })).toBe(
+      'https://cdn.example.com/u/42.png'
+    )
+  })
+
+  it('accepts http too', () => {
+    expect(pickAvatarUrl({ picture: 'http://idp.internal/avatar.jpg' })).toBe(
+      'http://idp.internal/avatar.jpg'
+    )
+  })
+
+  it('trims surrounding whitespace', () => {
+    expect(pickAvatarUrl({ picture: '  https://x.test/a.png\n' })).toBe('https://x.test/a.png')
+  })
+
+  it('returns undefined when the claim is absent, empty, or not a string', () => {
+    expect(pickAvatarUrl({})).toBeUndefined()
+    expect(pickAvatarUrl({ picture: '' })).toBeUndefined()
+    expect(pickAvatarUrl({ picture: '   ' })).toBeUndefined()
+    expect(pickAvatarUrl({ picture: 42 })).toBeUndefined()
+    expect(pickAvatarUrl({ picture: null })).toBeUndefined()
+    expect(pickAvatarUrl({ picture: { url: 'https://x.test/a.png' } })).toBeUndefined()
+  })
+
+  it('rejects a non-URL string', () => {
+    expect(pickAvatarUrl({ picture: 'not-a-url' })).toBeUndefined()
+    expect(pickAvatarUrl({ picture: '/relative/a.png' })).toBeUndefined()
+  })
+
+  it('rejects a non-http(s) scheme so it cannot become a dangerous <img src>', () => {
+    expect(pickAvatarUrl({ picture: 'data:image/png;base64,iVBORw0KGgo=' })).toBeUndefined()
+    expect(pickAvatarUrl({ picture: 'javascript:alert(1)' })).toBeUndefined()
   })
 })

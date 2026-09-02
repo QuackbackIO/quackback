@@ -325,3 +325,51 @@ describe('gap-fill for providers that release no email or name', () => {
     expect(info?.name).not.toContain(':')
   })
 })
+
+/**
+ * Better-Auth's genericOAuth only maps `userInfo.image` to the account avatar,
+ * never the OIDC-standard `picture` claim, so `getUserInfo` has to promote it.
+ */
+describe('avatar from the OIDC `picture` claim', () => {
+  const idToken = (payload: Record<string, unknown>) =>
+    `x.${Buffer.from(JSON.stringify(payload)).toString('base64url')}.y`
+
+  it('returns `picture` as `image` so Better-Auth sets the avatar', async () => {
+    const cfg = await buildOne()
+    const info = await cfg.getUserInfo?.({
+      idToken: idToken({
+        sub: 's1',
+        email: 'real@x.com',
+        name: 'Real',
+        picture: 'https://cdn.example.com/u/1.png',
+      }),
+      accessToken: undefined,
+    })
+    expect(info?.image).toBe('https://cdn.example.com/u/1.png')
+  })
+
+  it('omits `image` when the provider sends no usable picture', async () => {
+    const cfg = await buildOne()
+    const info = await cfg.getUserInfo?.({
+      idToken: idToken({ sub: 's1', email: 'real@x.com', name: 'Real' }),
+      accessToken: undefined,
+    })
+    expect(info && 'image' in info).toBe(false)
+    // The rest of the profile is unaffected.
+    expect(info?.email).toBe('real@x.com')
+    expect(info?.name).toBe('Real')
+  })
+
+  it('ignores a `picture` that is not an http(s) URL', async () => {
+    const cfg = await buildOne()
+    const info = await cfg.getUserInfo?.({
+      idToken: idToken({
+        sub: 's1',
+        email: 'real@x.com',
+        picture: 'data:image/png;base64,iVBORw0KGgo=',
+      }),
+      accessToken: undefined,
+    })
+    expect(info && 'image' in info).toBe(false)
+  })
+})

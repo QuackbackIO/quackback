@@ -1,11 +1,14 @@
 import { AUTH_PROVIDERS } from '@/lib/shared/auth-providers'
 import { authClient } from '@/lib/client/auth-client'
 import { stashSsoAttempt } from '@/lib/client/sso-attempt-stash'
+import type { OidcSignInButton } from '@/lib/shared/oidc-sign-in-button'
 
 export type OAuthProviderEntry = {
   id: string
   name: string
   type: 'social' | 'generic-oauth'
+  /** Uploaded provider logo (OIDC only); social providers use a bundled icon. */
+  logoUrl?: string | null
 }
 
 /**
@@ -123,8 +126,9 @@ export function resolveSoleOidcProvider(
 }
 
 /** A public OIDC button from the identity_provider list: `id` is the
- *  provider's registrationId, `name` its display label. */
-export type OidcProviderEntry = { id: string; name: string }
+ *  provider's registrationId, `name` its display label, `logoUrl` its
+ *  uploaded logo (or null). */
+export type OidcProviderEntry = OidcSignInButton
 
 /**
  * Build the portal sign-in button list. Social providers (google/github/…)
@@ -150,7 +154,7 @@ export function getEnabledOAuthProviders(
   }
 
   for (const p of oidcProviders ?? []) {
-    result.push({ id: p.id, name: p.name, type: 'generic-oauth' })
+    result.push({ id: p.id, name: p.name, type: 'generic-oauth', logoUrl: p.logoUrl ?? null })
   }
 
   return result

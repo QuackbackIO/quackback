@@ -101,6 +101,31 @@ function asNonEmptyString(value: unknown): string | undefined {
   return undefined
 }
 
+/**
+ * The avatar URL to adopt for an OIDC account, read from the OIDC Core `picture`
+ * claim (`userinfo` or the ID token — `claims` here is already the merged set).
+ *
+ * Better-Auth's genericOAuth only maps `userInfo.image` to `user.image`, never
+ * `picture`, so without this a fully compliant provider produces no avatar.
+ *
+ * Only an absolute `http(s)` URL is accepted: the value is stored verbatim and
+ * later rendered as an `<img src>`, so a `data:` / `javascript:` string must not
+ * pass. Kept standalone so it is unit-testable without the resolver.
+ */
+export function pickAvatarUrl(claims: Record<string, unknown>): string | undefined {
+  const raw = claims.picture
+  if (typeof raw !== 'string') return undefined
+  const trimmed = raw.trim()
+  if (trimmed === '') return undefined
+  try {
+    const url = new URL(trimmed)
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined
+    return trimmed
+  } catch {
+    return undefined
+  }
+}
+
 export async function resolveIdentity({
   tokens,
   fetchUserInfo,
