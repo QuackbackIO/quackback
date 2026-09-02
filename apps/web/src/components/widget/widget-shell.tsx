@@ -23,6 +23,7 @@ import { useWidgetAuth } from './widget-auth-provider'
 import { useMessengerUnread } from './use-messenger-unread'
 import { useChangelogUnread } from './use-changelog-unread'
 import { useTicketStageBadge } from './use-ticket-stage-badge'
+import { hasOpenSuggestionPopup } from '@/components/ui/suggestion-popup'
 
 import { type WidgetTab, type EnabledTabs, visibleTabsForVisitor } from './widget-nav'
 export type { WidgetTab }
@@ -194,18 +195,23 @@ export function WidgetShell({
   // key. A focused field (search box, composer) gets the first press: it
   // either handles it itself (and preventDefaults) or is blurred, so a second
   // press closes. Popovers (Radix Select, menus) preventDefault on dismiss;
-  // that runs in a listener registered after ours, so the check is deferred
-  // to a microtask, after the whole dispatch has finished.
+  // that runs in the target phase, after this capture listener, so the check
+  // is deferred to a microtask, after the whole dispatch has finished.
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key !== 'Escape') return
+      // Captured before the editor runs: dismissing a slash / emoji / mention
+      // popup removes it from the DOM synchronously, so by the microtask it
+      // is already gone.
+      const suggestionWasOpen = hasOpenSuggestionPopup()
       queueMicrotask(() => {
         const target = e.target instanceof HTMLElement ? e.target : null
-        // ProseMirror swallows Escape (preventDefault) without doing anything
-        // visible outside a suggestion popup, so the composer would otherwise
-        // trap the key: blur it regardless, and let the next press close.
         if (target?.isContentEditable) {
-          target.blur()
+          // The press was spent closing a suggestion popup: keep the draft
+          // focused. Otherwise ProseMirror swallows Escape (preventDefault)
+          // without doing anything visible, so the composer would trap the
+          // key: blur it and let the next press close.
+          if (!suggestionWasOpen) target.blur()
           return
         }
         if (e.defaultPrevented) return
@@ -216,8 +222,8 @@ export function WidgetShell({
         closeWidget()
       })
     }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
+    document.addEventListener('keydown', handleKeyDown, true)
+    return () => document.removeEventListener('keydown', handleKeyDown, true)
   }, [closeWidget])
 
   // "Go to portal" CTA — shown only when ALL three conditions hold:
