@@ -1162,5 +1162,7 @@
   "automation.builtinTools.default": "افتراضي",
   "automation.builtinTools.saving": "جارٍ الحفظ…",
   "automation.builtinTools.saveError": "تعذّر تحديث أذونات الأدوات.",
-  "automation.builtinTools.loadError": "تعذّر تحميل قائمة الأدوات."
+  "automation.builtinTools.loadError": "تعذّر تحميل قائمة الأدوات.",
+  "widget.shell.tab.changelog.unread": "{count, plural, one {تحديث جديد واحد} other {# تحديثات جديدة}}",
+  "widget.launcher.popularArticles": "مقالات شائعة"
 }

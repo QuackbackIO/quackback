@@ -190,12 +190,31 @@ export function WidgetShell({
 
   const onHome = activeTab === 'home' && !onBack
 
-  // Global Escape key handler — close widget from anywhere
+  // Global Escape closes the widget — but only when nothing closer owns the
+  // key. A focused field (search box, composer) gets the first press: it
+  // either handles it itself (and preventDefaults) or is blurred, so a second
+  // press closes. Popovers (Radix Select, menus) preventDefault on dismiss;
+  // that runs in a listener registered after ours, so the check is deferred
+  // to a microtask, after the whole dispatch has finished.
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
+      if (e.key !== 'Escape') return
+      queueMicrotask(() => {
+        const target = e.target instanceof HTMLElement ? e.target : null
+        // ProseMirror swallows Escape (preventDefault) without doing anything
+        // visible outside a suggestion popup, so the composer would otherwise
+        // trap the key: blur it regardless, and let the next press close.
+        if (target?.isContentEditable) {
+          target.blur()
+          return
+        }
+        if (e.defaultPrevented) return
+        if (target?.closest('input, textarea, select, [role="dialog"]')) {
+          target.blur()
+          return
+        }
         closeWidget()
-      }
+      })
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
@@ -376,20 +395,39 @@ export function WidgetShell({
                   const cfg = TAB_CONFIG.find((c) => c.tab === tab)
                   if (!cfg) return null
                   const Icon = cfg.icon
+                  const active = activeTab === tab
                   return (
+                    // The label stays foreground-coloured when active: `primary`
+                    // is the workspace brand colour, and a light brand (yellow,
+                    // lime) on the panel background fails text contrast. The
+                    // icon carries the tint; aria-current carries the state.
                     <button
                       key={tab}
                       type="button"
                       onClick={() => onTabChange(tab)}
+                      aria-current={active ? 'page' : undefined}
                       className={cn(
                         'flex-1 flex flex-col items-center gap-0.5 py-2 transition-colors',
-                        activeTab === tab
-                          ? 'text-primary'
+                        active
+                          ? 'text-foreground'
                           : 'text-muted-foreground/60 hover:text-muted-foreground'
                       )}
                     >
                       <div className="relative">
-                        <Icon className="w-5 h-5" />
+                        <Icon className={cn('w-5 h-5', active && 'text-primary')} />
+                        {tab === 'changelog' && changelogUnread > 0 && (
+                          <span
+                            className="absolute -top-0.5 -end-1 size-2 rounded-full bg-primary ring-2 ring-background"
+                            aria-label={intl.formatMessage(
+                              {
+                                id: 'widget.shell.tab.changelog.unread',
+                                defaultMessage:
+                                  '{count, plural, one {# new update} other {# new updates}}',
+                              },
+                              { count: changelogUnread }
+                            )}
+                          />
+                        )}
                         {tab === 'messages' && messengerUnread > 0 && (
                           <span
                             className="absolute -top-1 -end-1.5 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-primary px-1 text-xs font-semibold leading-none text-primary-foreground"

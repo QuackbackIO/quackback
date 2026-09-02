@@ -1162,5 +1162,7 @@
   "automation.builtinTools.default": "Standard",
   "automation.builtinTools.saving": "Wird gespeichert…",
   "automation.builtinTools.saveError": "Werkzeugberechtigungen konnten nicht aktualisiert werden.",
-  "automation.builtinTools.loadError": "Werkzeugkatalog konnte nicht geladen werden."
+  "automation.builtinTools.loadError": "Werkzeugkatalog konnte nicht geladen werden.",
+  "widget.shell.tab.changelog.unread": "{count, plural, one {# neue Aktualisierung} other {# neue Aktualisierungen}}",
+  "widget.launcher.popularArticles": "Beliebte Artikel"
 }

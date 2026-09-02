@@ -1162,5 +1162,7 @@
   "automation.builtinTools.default": "默认",
   "automation.builtinTools.saving": "保存中…",
   "automation.builtinTools.saveError": "无法更新工具权限。",
-  "automation.builtinTools.loadError": "无法加载工具目录。"
+  "automation.builtinTools.loadError": "无法加载工具目录。",
+  "widget.shell.tab.changelog.unread": "{count, plural, other {# 条新动态}}",
+  "widget.launcher.popularArticles": "热门文章"
 }

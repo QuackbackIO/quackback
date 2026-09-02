@@ -1162,5 +1162,7 @@
   "automation.builtinTools.default": "По умолчанию",
   "automation.builtinTools.saving": "Сохранение…",
   "automation.builtinTools.saveError": "Не удалось обновить разрешения инструментов.",
-  "automation.builtinTools.loadError": "Не удалось загрузить каталог инструментов."
+  "automation.builtinTools.loadError": "Не удалось загрузить каталог инструментов.",
+  "widget.shell.tab.changelog.unread": "{count, plural, one {# новое обновление} few {# новых обновления} other {# новых обновлений}}",
+  "widget.launcher.popularArticles": "Популярные статьи"
 }
