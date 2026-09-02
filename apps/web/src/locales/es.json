@@ -1164,5 +1164,9 @@
   "automation.builtinTools.saveError": "No se pudieron actualizar los permisos de la herramienta.",
   "automation.builtinTools.loadError": "No se pudo cargar el catálogo de herramientas.",
   "widget.shell.tab.changelog.unread": "{count, plural, one {# novedad} other {# novedades}}",
-  "widget.launcher.popularArticles": "Artículos populares"
+  "widget.launcher.popularArticles": "Artículos populares",
+  "widget.success.title": "¡Gracias por tu comentario!",
+  "widget.success.subtitle": "Tu idea se ha enviado.",
+  "widget.success.backToIdeas": "Volver a las ideas",
+  "widget.messenger.csat.rateAria": "Puntuar {n} de 5"
 }

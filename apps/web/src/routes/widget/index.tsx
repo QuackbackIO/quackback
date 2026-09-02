@@ -12,7 +12,7 @@ import {
   type ReactNode,
 } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
-import { FormattedMessage } from 'react-intl'
+import { FormattedMessage, useIntl } from 'react-intl'
 import { CheckCircleIcon } from '@heroicons/react/24/solid'
 import { ArrowLeftIcon } from '@heroicons/react/24/outline'
 import { WidgetVoteButton } from '@/components/widget/widget-vote-button'
@@ -1050,6 +1050,7 @@ function SuccessView({
   onOpenPost: () => void
   onBack: () => void
 }) {
+  const intl = useIntl()
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-2.5 px-4 pt-5 pb-3">
@@ -1057,8 +1058,18 @@ function SuccessView({
           <CheckCircleIcon className="w-4.5 h-4.5 text-primary" />
         </div>
         <div>
-          <p className="text-sm font-semibold text-foreground">Thanks for your feedback!</p>
-          <p className="text-[11px] text-muted-foreground">Your idea has been submitted.</p>
+          <p className="text-sm font-semibold text-foreground">
+            <FormattedMessage
+              id="widget.success.title"
+              defaultMessage="Thanks for your feedback!"
+            />
+          </p>
+          <p className="text-[11px] text-muted-foreground">
+            <FormattedMessage
+              id="widget.success.subtitle"
+              defaultMessage="Your idea has been submitted."
+            />
+          </p>
         </div>
       </div>
 
@@ -1072,7 +1083,14 @@ function SuccessView({
               postId={post.id as PostId}
               voteCount={post.voteCount}
               onBeforeVote={canVote ? ensureSession : undefined}
-              noAccessReason={canVote ? undefined : "You don't have access to vote on this board"}
+              noAccessReason={
+                canVote
+                  ? undefined
+                  : intl.formatMessage({
+                      id: 'widget.vote.noAccess',
+                      defaultMessage: "You don't have access to vote on this board",
+                    })
+              }
             />
           </div>
           <div className="flex-1 min-w-0">
@@ -1099,8 +1117,8 @@ function SuccessView({
           onClick={onBack}
           className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-foreground bg-muted/30 hover:bg-muted/50 rounded-lg border border-border/50 transition-colors"
         >
-          <ArrowLeftIcon className="w-3.5 h-3.5" />
-          Back to ideas
+          <ArrowLeftIcon className="w-3.5 h-3.5 rtl:rotate-180" />
+          <FormattedMessage id="widget.success.backToIdeas" defaultMessage="Back to ideas" />
         </button>
       </div>
     </div>

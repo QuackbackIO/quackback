@@ -1164,5 +1164,9 @@
   "automation.builtinTools.saveError": "Tool permissions could not be updated.",
   "automation.builtinTools.loadError": "Could not load the tool catalogue.",
   "widget.shell.tab.changelog.unread": "{count, plural, one {# new update} other {# new updates}}",
-  "widget.launcher.popularArticles": "Popular articles"
+  "widget.launcher.popularArticles": "Popular articles",
+  "widget.success.title": "Thanks for your feedback!",
+  "widget.success.subtitle": "Your idea has been submitted.",
+  "widget.success.backToIdeas": "Back to ideas",
+  "widget.messenger.csat.rateAria": "Rate {n} of 5"
 }

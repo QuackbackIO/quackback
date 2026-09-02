@@ -1083,7 +1083,13 @@ export function VisitorConversationThread({
                       type="button"
                       onClick={() => submitRating(n)}
                       className="text-lg leading-none text-muted-foreground/50 transition-colors hover:text-amber-500"
-                      aria-label={`Rate ${n} of 5`}
+                      aria-label={intl.formatMessage(
+                        {
+                          id: 'widget.messenger.csat.rateAria',
+                          defaultMessage: 'Rate {n} of 5',
+                        },
+                        { n }
+                      )}
                     >
                       ★
                     </button>

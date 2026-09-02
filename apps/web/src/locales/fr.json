@@ -1164,5 +1164,9 @@
   "automation.builtinTools.saveError": "Impossible de mettre à jour les autorisations de l’outil.",
   "automation.builtinTools.loadError": "Impossible de charger le catalogue d’outils.",
   "widget.shell.tab.changelog.unread": "{count, plural, one {# nouvelle mise à jour} other {# nouvelles mises à jour}}",
-  "widget.launcher.popularArticles": "Articles populaires"
+  "widget.launcher.popularArticles": "Articles populaires",
+  "widget.success.title": "Merci pour votre retour !",
+  "widget.success.subtitle": "Votre idée a été envoyée.",
+  "widget.success.backToIdeas": "Retour aux idées",
+  "widget.messenger.csat.rateAria": "Noter {n} sur 5"
 }
