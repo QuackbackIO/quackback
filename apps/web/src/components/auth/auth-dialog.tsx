@@ -8,6 +8,7 @@ import {
 } from '@/components/ui/dialog'
 import { PortalAuthFormInline } from './portal-auth-form-inline'
 import { headerForStep, type FormContext } from './auth-step-header'
+import { hasDistinctSignup } from './oauth-buttons'
 import { useAuthPopover } from './auth-popover-context'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { signOut } from '@/lib/client/auth-client'
@@ -37,13 +38,19 @@ export function AuthDialog({ authConfig, workspaceName }: AuthDialogProps) {
     useAuthPopover()
   const [formContext, setFormContext] = useState<FormContext>({ step: 'credentials', email: '' })
 
+  // Sign-up mode only differs from login when password auth is on and signups
+  // are open. Otherwise force login mode and drop the switch link, so a
+  // `?auth=signup` deep link still lands on the (identical) login form.
+  const distinctSignup = hasDistinctSignup(authConfig ?? {})
+  const effectiveMode = distinctSignup ? mode : 'login'
+
   // Listen for auth success broadcasts from popup windows
   useAuthBroadcast({
     onSuccess: onAuthSuccess,
     enabled: isOpen,
   })
 
-  const { title, description } = headerForStep(mode, formContext)
+  const { title, description } = headerForStep(effectiveMode, formContext)
 
   return (
     <Dialog
@@ -74,12 +81,12 @@ export function AuthDialog({ authConfig, workspaceName }: AuthDialogProps) {
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <PortalAuthFormInline
-          mode={mode}
+          mode={effectiveMode}
           authConfig={authConfig}
           workspaceName={workspaceName}
           callbackUrl={callbackUrl}
           linkConflict={linkConflict}
-          onModeSwitch={setMode}
+          onModeSwitch={distinctSignup ? setMode : undefined}
           onContextChange={setFormContext}
         />
       </DialogContent>

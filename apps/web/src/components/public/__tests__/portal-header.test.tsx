@@ -5,14 +5,21 @@ import { IntlProvider } from 'react-intl'
 
 // vi.hoisted ensures these mocks are available when the vi.mock factory runs
 // (vi.mock calls are hoisted above imports by the Vitest transformer).
-const { mockGetRouteContext, mockOpenAuthPopover, mockOauth2, mockResolveSole, mockHasAny } =
-  vi.hoisted(() => ({
-    mockGetRouteContext: vi.fn(),
-    mockOpenAuthPopover: vi.fn(),
-    mockOauth2: vi.fn(),
-    mockResolveSole: vi.fn((): string | null => null),
-    mockHasAny: vi.fn((): boolean => false),
-  }))
+const {
+  mockGetRouteContext,
+  mockOpenAuthPopover,
+  mockOauth2,
+  mockResolveSole,
+  mockHasAny,
+  mockHasDistinctSignup,
+} = vi.hoisted(() => ({
+  mockGetRouteContext: vi.fn(),
+  mockOpenAuthPopover: vi.fn(),
+  mockOauth2: vi.fn(),
+  mockResolveSole: vi.fn((): string | null => null),
+  mockHasAny: vi.fn((): boolean => false),
+  mockHasDistinctSignup: vi.fn((): boolean => true),
+}))
 
 vi.mock('@tanstack/react-router', () => ({
   useRouter: () => ({ invalidate: vi.fn(), navigate: vi.fn() }),
@@ -47,6 +54,7 @@ vi.mock('@/components/auth/auth-popover-context', () => ({
 vi.mock('@/components/auth/oauth-buttons', () => ({
   hasAnyPortalAuthMethod: () => mockHasAny(),
   resolveSoleOidcProvider: () => mockResolveSole(),
+  hasDistinctSignup: () => mockHasDistinctSignup(),
 }))
 
 vi.mock('@tanstack/react-query', () => ({
@@ -139,6 +147,7 @@ describe('PortalHeader — single-IdP redirect', () => {
     mockOauth2.mockClear()
     mockHasAny.mockReturnValue(true) // the portal has a usable sign-in method
     mockResolveSole.mockReturnValue(null)
+    mockHasDistinctSignup.mockReturnValue(true)
   })
   afterEach(() => cleanup())
 
@@ -156,5 +165,28 @@ describe('PortalHeader — single-IdP redirect', () => {
     fireEvent.click(screen.getByRole('button', { name: /log in/i }))
     expect(mockOpenAuthPopover).toHaveBeenCalledWith(expect.objectContaining({ mode: 'login' }))
     expect(mockOauth2).not.toHaveBeenCalled()
+  })
+})
+
+describe('PortalHeader — Sign up button visibility', () => {
+  beforeEach(() => {
+    mockOpenAuthPopover.mockClear()
+    mockHasAny.mockReturnValue(true)
+    mockResolveSole.mockReturnValue(null)
+  })
+  afterEach(() => cleanup())
+
+  it('shows both Log in and Sign up when sign-up is a distinct flow', () => {
+    mockHasDistinctSignup.mockReturnValue(true)
+    renderHeader({ userRole: null, isLoggedIn: false })
+    expect(screen.getByRole('button', { name: /log in/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /sign up/i })).toBeInTheDocument()
+  })
+
+  it('shows only Log in when sign-up would lead to the same form', () => {
+    mockHasDistinctSignup.mockReturnValue(false)
+    renderHeader({ userRole: null, isLoggedIn: false })
+    expect(screen.getByRole('button', { name: /log in/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /sign up/i })).toBeNull()
   })
 })

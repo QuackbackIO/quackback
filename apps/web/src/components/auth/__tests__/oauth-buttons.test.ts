@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   hasAnyPortalAuthMethod,
+  hasDistinctSignup,
   hasRoutableOidcProvider,
   resolveSoleOidcProvider,
 } from '../oauth-buttons'
@@ -91,6 +92,27 @@ describe('hasAnyPortalAuthMethod', () => {
         { registeredAuthProviders: ['google'] }
       )
     ).toBe(false)
+  })
+})
+
+describe('hasDistinctSignup', () => {
+  it('is true by default (password defaults on, signups default open)', () => {
+    expect(hasDistinctSignup({})).toBe(true)
+    expect(hasDistinctSignup({ oauth: {} })).toBe(true)
+  })
+
+  it('is true when password is on and signups are open', () => {
+    expect(hasDistinctSignup({ oauth: { password: true }, openSignup: true })).toBe(true)
+    expect(hasDistinctSignup({ oauth: { password: true } })).toBe(true)
+  })
+
+  it('is false when password sign-in is off (magic-link / SSO create accounts implicitly)', () => {
+    expect(hasDistinctSignup({ oauth: { password: false, magicLink: true } })).toBe(false)
+    expect(hasDistinctSignup({ oauth: { password: false }, openSignup: true })).toBe(false)
+  })
+
+  it('is false when self-service signup is closed, even with password on', () => {
+    expect(hasDistinctSignup({ oauth: { password: true }, openSignup: false })).toBe(false)
   })
 })
 

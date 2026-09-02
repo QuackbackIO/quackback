@@ -72,6 +72,28 @@ export function hasAnyPortalAuthMethod(
 }
 
 /**
+ * Whether a separate "Sign up" entry point is meaningful.
+ *
+ * Sign-up mode only diverges from login mode when password auth is on: it adds a
+ * name field, and — when self-service signup is closed — an upfront "new
+ * accounts are closed" screen. With password off, magic-link and SSO both create
+ * the account implicitly, so the sign-up form is byte-identical to the login
+ * form; and with signups closed there is nothing to sign up for. In both cases
+ * the portal collapses to a single "Log in" entry point.
+ *
+ * The dead-end note for a refused magic-link user (the code step's "not
+ * accepting new accounts" line) is driven by `openSignup`, not by mode, so
+ * collapsing to login mode keeps it.
+ */
+export function hasDistinctSignup(authConfig: {
+  oauth?: Record<string, boolean | undefined>
+  openSignup?: boolean
+}): boolean {
+  const passwordEnabled = authConfig.oauth?.password ?? true
+  return passwordEnabled && authConfig.openSignup !== false
+}
+
+/**
  * Does the workspace have a *routed-only* OIDC provider — one registered for
  * auth (legacy `sso` / `custom-oidc` or a net-new `oidc_*`) but with no public
  * button (verified domain, "show a button" off)? Such a provider is reachable
