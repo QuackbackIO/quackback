@@ -38,6 +38,7 @@ import { createDbFromSql, type Database } from '@quackback/db/client'
 import { config } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
 import { runWithLogContext } from '@/lib/server/log-context'
+import { ensureWorkspaceSchemaCurrent } from '@/lib/server/fleet/ensure-schema-current'
 import { assertSchemaFloor } from '@/lib/server/fleet/schema-floor'
 import {
   evaluateSecretKeyCanary,
@@ -48,7 +49,7 @@ import {
 import { openWorkspaceSecret } from './vendor/fleet-secrets'
 import type { WorkspaceDescriptor } from './registry'
 import { clearWorkspaceSecretsCache, resolveWorkspaceSecrets } from './workspace-secrets'
-import { parseSecretRef, redactRef } from './vendor/secret-ref'
+import { parseSecretRef, redactRef, withPassword } from './vendor/secret-ref'
 import type { ResolvedWorkspaceSecrets } from './vendor/workspace-secret-resolution'
 
 const log = logger.child({ component: 'workspace-pool-cache' })
@@ -271,7 +272,7 @@ async function verifyWorkspaceDatabase(
   // for the error. A password provider that throws is swallowed by the driver
   // and reported as `CONNECT_TIMEOUT` fifteen seconds later, which is both slow
   // and names the wrong cause; a missing secret should say so immediately.
-  await resolvePassword(workspace)
+  const password = await resolvePassword(workspace)
 
   // Before the first query, and before the fingerprint. An unresolvable
   // `SECRET_KEY` is not a degraded workspace, it is a workspace this process must not
@@ -294,11 +295,16 @@ async function verifyWorkspaceDatabase(
       )
     : verdict
   if (keyVerdict.ok) {
-    // §10.5's compatibility gate, in the same pass and cached the same way: this
-    // database is the right one, but is its schema new enough for this build to
-    // read? Deliberately *after* the identity checks — asking a database we have
-    // not established the identity of what version it is at would be answering
-    // the second question before the first.
+    // Identity first, then schema. A mint migrated by a lagging CP vendor
+    // snapshot is otherwise Ready and 500s on `settings` (explicit column
+    // lists, missing column). Catch up to this build, then the MIN_SCHEMA_VERSION
+    // floor — asking a database we have not identified what version it is at
+    // would be answering the second question before the first.
+    await ensureWorkspaceSchemaCurrent({
+      workspaceKey: workspace.workspaceKey,
+      sql,
+      directConnectionString: withPassword(workspace.database.directUrl, password),
+    })
     await assertSchemaFloor(workspace.workspaceKey, sql)
     log.info(
       {

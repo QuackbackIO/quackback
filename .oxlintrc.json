@@ -60,6 +60,7 @@
         "**/src/lib/server/fleet/migrator.ts",
         "**/src/lib/server/fleet/schema-state.ts",
         "**/src/lib/server/fleet/schema-floor.ts",
+        "**/src/lib/server/fleet/ensure-schema-current.ts",
         "**/src/lib/server/fleet/__tests__/**",
         "**/src/lib/server/policy/migration-contract/__tests__/lineage-double-apply.db.test.ts"
       ],
@@ -77,6 +78,7 @@
         "**/src/lib/server/fleet/migrator.ts",
         "**/src/lib/server/fleet/schema-state.ts",
         "**/src/lib/server/fleet/schema-floor.ts",
+        "**/src/lib/server/fleet/ensure-schema-current.ts",
         "**/src/lib/server/fleet/__tests__/**",
         "**/src/lib/server/policy/migration-contract/__tests__/lineage-double-apply.db.test.ts"
       ],
