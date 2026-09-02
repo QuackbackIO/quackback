@@ -25,9 +25,17 @@ interface WidgetChangelogProps {
  * the same "pick up where you left off" the kept-mounted Feedback view gets
  * for free. Module state is per iframe, i.e. per widget session.
  */
-const lastVisit: { scrollTop: number; categoryId: ChangelogCategoryId | null } = {
+const lastVisit: {
+  scrollTop: number
+  categoryId: ChangelogCategoryId | null
+  /** Seen marker as it stood when the list first had data this session;
+   *  `undefined` until captured. Lives here, not in the component, because
+   *  opening an entry unmounts the list and the marker has advanced by then. */
+  seenBaseline: string | null | undefined
+} = {
   scrollTop: 0,
   categoryId: null,
+  seenBaseline: undefined,
 }
 
 /** Filtered pages to pull ahead before conceding "nothing in this category". */
@@ -48,21 +56,13 @@ export function WidgetChangelog({ teamName, onEntrySelect }: WidgetChangelogProp
   const allEntries = data?.pages.flatMap((page) => page.items) ?? []
 
   // The launcher badge counted unread entries; the list should show which.
-  // Capture the seen marker once, when the list first has data — before the
-  // effect below advances it — so "New" holds for this visit.
-  const baselineRef = useRef<string | null | undefined>(undefined)
-  if (data && baselineRef.current === undefined) baselineRef.current = getChangelogSeenAt()
-  const baseline = baselineRef.current ? new Date(baselineRef.current).getTime() : null
+  // Capture the seen marker once per session, when the list first has data —
+  // before the effect below advances it — so "New" holds across detail
+  // round-trips and not just this mount.
+  if (data && lastVisit.seenBaseline === undefined) lastVisit.seenBaseline = getChangelogSeenAt()
+  const baseline = lastVisit.seenBaseline ? new Date(lastVisit.seenBaseline).getTime() : null
   const isNew = (publishedAt: string) =>
     baseline !== null && new Date(publishedAt).getTime() > baseline
-
-  // Entries on screen are seen: advance the visitor's marker to the newest
-  // loaded entry so the launcher badge clears. The list is newest-first, so
-  // the first entry carries the max publishedAt.
-  useEffect(() => {
-    const newest = allEntries[0]?.publishedAt
-    if (newest) markChangelogSeen(newest)
-  }, [allEntries])
 
   const categoriesInUse = useMemo(() => {
     const usedIds = new Set(allEntries.flatMap((e) => e.categories.map((c) => c.id)))
@@ -72,6 +72,16 @@ export function WidgetChangelog({ teamName, onEntrySelect }: WidgetChangelogProp
   const entries = activeCategoryId
     ? allEntries.filter((e) => e.categories.some((c) => c.id === activeCategoryId))
     : allEntries
+
+  // Entries on screen are seen: advance the visitor's marker to the newest
+  // VISIBLE entry so the launcher badge clears. The list is newest-first, so
+  // the first entry carries the max publishedAt. Under a restored category
+  // filter a newer entry from another category is not on screen, so it must
+  // keep its badge (the marker only ever moves forward, so this is safe).
+  useEffect(() => {
+    const newest = entries[0]?.publishedAt
+    if (newest) markChangelogSeen(newest)
+  }, [entries])
 
   const sentinelRef = useInfiniteScroll({
     hasMore: hasNextPage ?? false,
