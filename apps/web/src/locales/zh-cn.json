@@ -1175,5 +1175,17 @@
   "widget.postDetail.error.notFound": "此帖子可能已被删除或设为私密。",
   "widget.messages.emptyHint.ticketsOnly": "团队的回复将显示在这里。",
   "widget.tickets.stageChanged": "自上次访问以来状态已更改",
+  "widget.help.searchAria": "搜索帮助文章",
+  "widget.help.askAiSearchPlaceholder": "询问 AI 或搜索文章…",
+  "widget.help.clearSearch": "清除搜索",
+  "widget.help.browseCollections": "浏览分类",
+  "widget.helpDetail.browseCategory": "浏览此分类",
+  "widget.help.article.helpful": "这篇文章有帮助吗？",
+  "widget.help.article.helpful.thanks": "谢谢，很高兴对您有帮助。",
+  "widget.help.article.helpful.sorry": "很抱歉。",
+  "widget.help.article.helpful.yes": "有帮助",
+  "widget.help.article.helpful.no": "没有帮助",
+  "widget.help.article.stillStuck": "仍有疑问？",
+  "widget.help.article.askQuestion": "向我们提问",
   "widget.shell.tab.messages.unread": "{count} 条未读"
 }

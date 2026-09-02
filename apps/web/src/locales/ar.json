@@ -1175,5 +1175,17 @@
   "widget.postDetail.error.notFound": "ربما تمت إزالة هذه المشاركة أو جعلها خاصة.",
   "widget.messages.emptyHint.ticketsOnly": "ستظهر ردود فريقنا هنا.",
   "widget.tickets.stageChanged": "تغيّرت الحالة منذ زيارتك الأخيرة",
+  "widget.help.searchAria": "البحث في مقالات المساعدة",
+  "widget.help.askAiSearchPlaceholder": "اسأل الذكاء الاصطناعي أو ابحث في المقالات…",
+  "widget.help.clearSearch": "مسح البحث",
+  "widget.help.browseCollections": "استعراض المجموعات",
+  "widget.helpDetail.browseCategory": "استعراض هذه المجموعة",
+  "widget.help.article.helpful": "هل كان هذا مفيدًا؟",
+  "widget.help.article.helpful.thanks": "شكرًا — يسعدنا أنه كان مفيدًا.",
+  "widget.help.article.helpful.sorry": "نعتذر عن ذلك.",
+  "widget.help.article.helpful.yes": "نعم، كان مفيدًا",
+  "widget.help.article.helpful.no": "لا، لم يكن مفيدًا",
+  "widget.help.article.stillStuck": "ما زلت بحاجة إلى مساعدة؟",
+  "widget.help.article.askQuestion": "اطرح علينا سؤالًا",
   "widget.shell.tab.messages.unread": "{count} غير مقروءة"
 }

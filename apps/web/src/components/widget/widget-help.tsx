@@ -8,6 +8,7 @@ import {
   QuestionMarkCircleIcon,
   ArrowRightIcon,
   ChevronRightIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { publicHelpCenterQueries } from '@/lib/client/queries/help-center'
 import { getTopLevelCategories } from '@/components/help-center/help-center-utils'
@@ -27,11 +28,25 @@ import { WidgetHelpCollectionsSkeleton, WidgetHelpSearchSkeleton } from './widge
 interface WidgetHelpProps {
   onArticleSelect?: (articleSlug: string) => void
   onCategorySelect?: (categoryId: string, categoryName: string, categoryIcon: string | null) => void
+  /**
+   * Controlled search query. The page owner lifts it so a visitor who opens
+   * a result and comes back finds their query (and results) still there
+   * instead of the collection list; uncontrolled when omitted.
+   */
+  search?: string
+  onSearchChange?: (value: string) => void
 }
 
-export function WidgetHelp({ onArticleSelect, onCategorySelect }: WidgetHelpProps) {
+export function WidgetHelp({
+  onArticleSelect,
+  onCategorySelect,
+  search: controlledSearch,
+  onSearchChange,
+}: WidgetHelpProps) {
   const intl = useIntl()
-  const [search, setSearch] = useState('')
+  const [localSearch, setLocalSearch] = useState('')
+  const search = controlledSearch ?? localSearch
+  const setSearch = onSearchChange ?? setLocalSearch
 
   const categoriesQuery = useQuery(publicHelpCenterQueries.categories())
   const topLevelCategories = categoriesQuery.data ? getTopLevelCategories(categoriesQuery.data) : []
@@ -79,19 +94,44 @@ export function WidgetHelp({ onArticleSelect, onCategorySelect }: WidgetHelpProp
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={handleKeyDown}
+            aria-label={intl.formatMessage({
+              id: 'widget.help.searchAria',
+              defaultMessage: 'Search help articles',
+            })}
+            // The portal's Ask-AI placeholder is a full sentence that truncates
+            // at the widget's width; the widget gets a shorter one.
             placeholder={
               askAiAvailable
                 ? intl.formatMessage({
-                    id: 'helpAskAi.searchPlaceholder',
-                    defaultMessage: 'Ask AI or search our help articles to find an answer',
+                    id: 'widget.help.askAiSearchPlaceholder',
+                    defaultMessage: 'Ask AI or search articles…',
                   })
                 : intl.formatMessage({
                     id: 'widget.help.searchPlaceholder',
                     defaultMessage: 'Search help articles...',
                   })
             }
-            className="w-full ps-8 pe-9 py-2 text-sm bg-muted/30 border border-border/50 rounded-lg placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-transparent"
+            className={cn(
+              'w-full ps-8 py-2 text-sm bg-muted/30 border border-border/50 rounded-lg placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-transparent',
+              hasAskRow ? 'pe-16' : 'pe-9'
+            )}
           />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              aria-label={intl.formatMessage({
+                id: 'widget.help.clearSearch',
+                defaultMessage: 'Clear search',
+              })}
+              className={cn(
+                'absolute top-1/2 -translate-y-1/2 flex size-6 items-center justify-center rounded-md text-muted-foreground/60 hover:text-foreground hover:bg-muted/50 transition-colors',
+                hasAskRow ? 'end-8' : 'end-1.5'
+              )}
+            >
+              <XMarkIcon className="w-3.5 h-3.5" />
+            </button>
+          )}
           {hasAskRow && (
             <button
               type="button"
@@ -135,12 +175,20 @@ export function WidgetHelp({ onArticleSelect, onCategorySelect }: WidgetHelpProp
 
               {!categoriesQuery.isLoading && topLevelCategories.length > 0 && (
                 <>
-                  <p className="px-1 pt-2 pb-1 text-sm font-semibold text-foreground">
-                    <FormattedMessage
-                      id="widget.help.collectionsCount"
-                      defaultMessage="{count, plural, one {# collection} other {# collections}}"
-                      values={{ count: topLevelCategories.length }}
-                    />
+                  <p className="flex items-baseline justify-between px-1 pt-2 pb-1">
+                    <span className="text-sm font-semibold text-foreground">
+                      <FormattedMessage
+                        id="widget.help.browseCollections"
+                        defaultMessage="Browse collections"
+                      />
+                    </span>
+                    <span className="text-[11px] text-muted-foreground/60 tabular-nums">
+                      <FormattedMessage
+                        id="widget.help.collectionsCount"
+                        defaultMessage="{count, plural, one {# collection} other {# collections}}"
+                        values={{ count: topLevelCategories.length }}
+                      />
+                    </span>
                   </p>
                   <ul>
                     {topLevelCategories.map((cat) => (
@@ -152,7 +200,7 @@ export function WidgetHelp({ onArticleSelect, onCategorySelect }: WidgetHelpProp
                         >
                           <CategoryIcon icon={cat.icon} className="w-6 h-6 shrink-0" />
                           <span className="min-w-0 flex-1">
-                            <span className="block text-sm font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-1">
+                            <span className="block text-sm font-semibold text-foreground line-clamp-1">
                               {cat.name}
                             </span>
                             {cat.description && (
