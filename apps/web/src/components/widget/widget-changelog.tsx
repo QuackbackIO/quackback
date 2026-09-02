@@ -42,9 +42,8 @@ const lastVisit: {
 const FILTER_LOOKAHEAD_MIN_ROWS = 3
 
 export function WidgetChangelog({ teamName, onEntrySelect }: WidgetChangelogProps) {
-  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteQuery(
-    publicChangelogQueries.list()
-  )
+  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isFetchNextPageError, isLoading } =
+    useInfiniteQuery(publicChangelogQueries.list())
   const { data: categories = [] } = useQuery(changelogCategoryQueries.list())
   const [activeCategoryId, setActiveCategoryId] = useState<ChangelogCategoryId | null>(
     lastVisit.categoryId
@@ -92,10 +91,14 @@ export function WidgetChangelog({ teamName, onEntrySelect }: WidgetChangelogProp
   // Filtering is client-side over the pages loaded so far, so a sparse
   // category could show "nothing yet" while later pages hold matches. Pull
   // pages ahead until the filtered list has a few rows (or pages run out).
+  // A failed page stops the automatic pull — otherwise a dead API would be
+  // re-requested in a tight loop — and the empty state shows; the scroll
+  // sentinel below it still retries on the visitor's own scrolling.
   const filteredLookahead =
     activeCategoryId !== null &&
     entries.length < FILTER_LOOKAHEAD_MIN_ROWS &&
-    (hasNextPage ?? false)
+    (hasNextPage ?? false) &&
+    !isFetchNextPageError
   useEffect(() => {
     if (filteredLookahead && !isFetchingNextPage) void fetchNextPage()
   }, [filteredLookahead, isFetchingNextPage, fetchNextPage])
