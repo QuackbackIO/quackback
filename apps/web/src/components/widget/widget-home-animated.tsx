@@ -122,31 +122,17 @@ const WidgetPostRow = memo(
   }) {
     const status = post.statusId ? (statusMap.get(post.statusId) ?? null) : null
     return (
-      // The whole row is the tap target (a nested <button> would forbid the
-      // vote button inside it), so it carries the button role and keyboard
-      // activation itself. The vote button stops propagation both ways.
+      // Two sibling controls, never nested: a button-role ancestor would make
+      // the vote button presentational to assistive tech. The open button's
+      // ::after is stretched over the row so the whole row stays the tap
+      // target; the vote button sits above it.
       <div
-        role="button"
-        tabIndex={0}
-        onClick={onSelect}
-        onKeyDown={(e) => {
-          if (e.target !== e.currentTarget) return
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            onSelect?.()
-          }
-        }}
         className={cn(
-          'w-full overflow-hidden flex items-center gap-2 rounded-lg hover:bg-muted/30 transition-colors cursor-pointer',
-          'outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+          'relative w-full overflow-hidden flex items-center gap-2 rounded-lg hover:bg-muted/30 transition-colors',
           compact ? 'px-1.5 py-1' : 'px-2 py-1.5'
         )}
       >
-        <div
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => e.stopPropagation()}
-          className="shrink-0"
-        >
+        <div className="relative z-10 shrink-0">
           <WidgetVoteButton
             postId={post.id as PostId}
             voteCount={post.voteCount}
@@ -166,7 +152,15 @@ const WidgetPostRow = memo(
             onAuthRequired={!canVote ? onAuthRequired : undefined}
           />
         </div>
-        <div className="flex-1 min-w-0">
+        <button
+          type="button"
+          onClick={onSelect}
+          className={cn(
+            'flex-1 min-w-0 text-start cursor-pointer outline-none',
+            'after:absolute after:inset-0 after:rounded-lg',
+            'focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-ring/50'
+          )}
+        >
           <div className="flex items-center gap-1.5">
             {status && (
               <span className="inline-flex items-center gap-0.5 text-[11px] text-muted-foreground">
@@ -202,7 +196,7 @@ const WidgetPostRow = memo(
           >
             {post.title}
           </p>
-        </div>
+        </button>
       </div>
     )
   },
@@ -236,6 +230,7 @@ export function WidgetHomeAnimated({
     user,
     emitEvent,
     metadata,
+    getSessionVersion,
   } = useWidgetAuth()
   const { upload: uploadImage } = useWidgetImageUpload()
   const queryClient = useQueryClient()
@@ -515,12 +510,19 @@ export function WidgetHomeAnimated({
       })
 
       // The server auto-upvotes the author; reflect that immediately so the
-      // success card shows a cast vote instead of an inviting empty 0. Written
-      // across every session-version key: ensureSession() may have bumped it
-      // mid-submit.
-      queryClient.setQueriesData<Set<string>>(
-        { queryKey: widgetQueryKeys.votedPosts.all },
-        (old) => new Set([...(old ?? []), result.id])
+      // success card shows a cast vote instead of an inviting empty 0 — a
+      // click on that would silently remove the server's vote. A fetch that
+      // started before the post existed must not land over the seed.
+      await queryClient.cancelQueries({ queryKey: widgetQueryKeys.votedPosts.all })
+      const addVote = (old?: Set<string>) => new Set([...(old ?? []), result.id])
+      // Every already-instantiated version key (ensureSession() may have
+      // bumped it mid-submit) …
+      queryClient.setQueriesData<Set<string>>({ queryKey: widgetQueryKeys.votedPosts.all }, addVote)
+      // … and the live one explicitly: when this submit minted the first
+      // session there are no rows yet, so no query for it exists to update.
+      queryClient.setQueryData<Set<string>>(
+        widgetQueryKeys.votedPosts.bySession(getSessionVersion()),
+        addVote
       )
       onPostCreated?.({
         id: result.id,

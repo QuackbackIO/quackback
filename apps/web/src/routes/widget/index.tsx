@@ -1074,24 +1074,11 @@ function SuccessView({
       </div>
 
       <div className="px-3">
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={onOpenPost}
-          onKeyDown={(e) => {
-            if (e.target !== e.currentTarget) return
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault()
-              onOpenPost()
-            }
-          }}
-          className="flex items-center gap-2 rounded-lg bg-muted/20 border border-border/50 px-2 py-2 cursor-pointer hover:bg-muted/30 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
-            className="shrink-0"
-          >
+        {/* Vote and open are siblings (a button-role ancestor would hide the
+            vote button from assistive tech); the open button's ::after is
+            stretched over the card so the whole card stays tappable. */}
+        <div className="relative flex items-center gap-2 rounded-lg bg-muted/20 border border-border/50 px-2 py-2 hover:bg-muted/30 transition-colors">
+          <div className="relative z-10 shrink-0">
             <WidgetVoteButton
               postId={post.id as PostId}
               voteCount={post.voteCount}
@@ -1106,7 +1093,11 @@ function SuccessView({
               }
             />
           </div>
-          <div className="flex-1 min-w-0">
+          <button
+            type="button"
+            onClick={onOpenPost}
+            className="flex-1 min-w-0 text-start cursor-pointer outline-none after:absolute after:inset-0 after:rounded-lg focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-ring/50"
+          >
             <h3 className="text-sm font-medium text-foreground line-clamp-2">{post.title}</h3>
             <div className="flex items-center gap-1.5 mt-0.5">
               {status && (
@@ -1120,7 +1111,7 @@ function SuccessView({
               )}
               <span className="text-xs text-muted-foreground/60">{post.board.name}</span>
             </div>
-          </div>
+          </button>
         </div>
       </div>
 
