@@ -7,6 +7,7 @@ import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-co
 import type { JSONContent } from '@tiptap/react'
 import { WidgetPortalTitle } from './widget-portal-title'
 import { sendToHost } from '@/lib/client/widget-bridge'
+import { WidgetArticleSkeleton } from './widget-skeletons'
 
 interface WidgetHelpDetailProps {
   articleSlug: string
@@ -22,13 +23,7 @@ export function WidgetHelpDetail({ articleSlug }: WidgetHelpDetailProps) {
   }, [article])
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-10">
-        <div className="text-sm text-muted-foreground">
-          <FormattedMessage id="widget.helpDetail.loading" defaultMessage="Loading..." />
-        </div>
-      </div>
-    )
+    return <WidgetArticleSkeleton />
   }
 
   if (!article) {

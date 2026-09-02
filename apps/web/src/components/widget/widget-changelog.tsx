@@ -9,6 +9,7 @@ import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { markChangelogSeen } from './changelog-unread'
 import { NewspaperIcon } from '@heroicons/react/24/outline'
 import type { ChangelogCategoryId } from '@quackback/ids'
+import { WidgetChangelogListSkeleton, WidgetChangelogMoreSkeleton } from './widget-skeletons'
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', {
@@ -57,13 +58,7 @@ export function WidgetChangelog({ teamName, onEntrySelect }: WidgetChangelogProp
   })
 
   if (isLoading) {
-    return (
-      <div className="flex flex-col h-full items-center justify-center py-10">
-        <div className="text-sm text-muted-foreground">
-          <FormattedMessage id="widget.changelog.loading" defaultMessage="Loading changelog..." />
-        </div>
-      </div>
-    )
+    return <WidgetChangelogListSkeleton />
   }
 
   if (allEntries.length === 0) {
@@ -166,12 +161,8 @@ export function WidgetChangelog({ teamName, onEntrySelect }: WidgetChangelogProp
         )}
 
         {hasNextPage && (
-          <div ref={sentinelRef} className="flex justify-center py-2">
-            {isFetchingNextPage && (
-              <span className="text-xs text-muted-foreground/50">
-                <FormattedMessage id="widget.changelog.loadingMore" defaultMessage="Loading..." />
-              </span>
-            )}
+          <div ref={sentinelRef} className="min-h-4">
+            {isFetchingNextPage && <WidgetChangelogMoreSkeleton />}
           </div>
         )}
       </div>

@@ -40,7 +40,16 @@ import {
 import { conversationAvailable } from '@/lib/shared/conversation/presence'
 import { ConversationPresenceBadge } from '@/components/shared/conversation/conversation-presence-badge'
 import { Avatar } from '@/components/ui/avatar'
-import { Spinner } from '@/components/shared/spinner'
+import {
+  WidgetArticleSkeleton,
+  WidgetChangelogListSkeleton,
+  WidgetConversationListSkeleton,
+  WidgetHelpCategoryViewSkeleton,
+  WidgetHelpViewSkeleton,
+  WidgetMessengerViewSkeleton,
+  WidgetPostDetailSkeleton,
+  WidgetTicketListSkeleton,
+} from '@/components/widget/widget-skeletons'
 import { conversationSummaryKey } from '@/components/widget/use-messenger-summary'
 import { useTicketStageBadge } from '@/components/widget/use-ticket-stage-badge'
 
@@ -310,17 +319,20 @@ interface SuccessPost {
  * feel of polished in-product messengers. Honors prefers-reduced-motion.
  *
  * Every view here is a lazy() component, so each transition carries its own
- * Suspense boundary — a suspended view shows a centered spinner in place
- * without disturbing the kept-mounted feedback view outside the boundary.
- * The idle-time prefetch makes the fallback a cold-cache-only sight.
+ * Suspense boundary. The fallback is the SAME skeleton the view itself shows
+ * while its data loads, so a cold-cache tab click paints one continuous
+ * placeholder from chunk fetch through data fetch — no spinner → skeleton →
+ * content hop. The idle-time prefetch makes the chunk phase a rare sight.
  */
 function ViewTransition({
   id,
   kind,
+  fallback,
   children,
 }: {
   id: string
   kind: 'root' | 'push'
+  fallback: ReactNode
   children: ReactNode
 }) {
   const reduceMotion = useReducedMotion()
@@ -334,15 +346,7 @@ function ViewTransition({
       transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
       className="h-full"
     >
-      <Suspense
-        fallback={
-          <div className="flex h-full items-center justify-center">
-            <Spinner size="lg" />
-          </div>
-        }
-      >
-        {children}
-      </Suspense>
+      <Suspense fallback={fallback}>{children}</Suspense>
     </motion.div>
   )
 }
@@ -752,7 +756,8 @@ function WidgetPage() {
       }
     >
       {view === 'overview' && (
-        <ViewTransition id="overview" kind="root">
+        // Overview is statically imported (SSR-complete Home) — never suspends.
+        <ViewTransition id="overview" kind="root" fallback={null}>
           <WidgetOverview
             tabs={tabs}
             home={home}
@@ -790,13 +795,17 @@ function WidgetPage() {
       )}
 
       {view === 'changelog' && (
-        <ViewTransition id="changelog" kind="root">
+        <ViewTransition id="changelog" kind="root" fallback={<WidgetChangelogListSkeleton />}>
           <WidgetChangelog teamName={teamName} onEntrySelect={handleChangelogEntrySelect} />
         </ViewTransition>
       )}
 
       {view === 'messenger' && (
-        <ViewTransition id={`messenger-${conversationTarget ?? 'active'}`} kind="push">
+        <ViewTransition
+          id={`messenger-${conversationTarget ?? 'active'}`}
+          kind="push"
+          fallback={<WidgetMessengerViewSkeleton isNew={conversationTarget === 'new'} />}
+        >
           <WidgetMessenger
             key={conversationTarget ?? 'active'}
             helpEnabled={tabs.help}
@@ -808,7 +817,7 @@ function WidgetPage() {
       )}
 
       {view === 'messages' && (
-        <ViewTransition id="messages" kind="root">
+        <ViewTransition id="messages" kind="root" fallback={<WidgetConversationListSkeleton />}>
           <WidgetMessages
             teamName={teamName}
             assistant={assistant}
@@ -819,19 +828,23 @@ function WidgetPage() {
       )}
 
       {view === 'tickets' && (
-        <ViewTransition id="tickets" kind="root">
+        <ViewTransition id="tickets" kind="root" fallback={<WidgetTicketListSkeleton />}>
           <WidgetTickets onOpenTicket={(id) => openMessenger(id, 'tickets')} />
         </ViewTransition>
       )}
 
       {view === 'changelog-detail' && selectedChangelogId && (
-        <ViewTransition id={`changelog-${selectedChangelogId}`} kind="push">
+        <ViewTransition
+          id={`changelog-${selectedChangelogId}`}
+          kind="push"
+          fallback={<WidgetArticleSkeleton />}
+        >
           <WidgetChangelogDetail entryId={selectedChangelogId} />
         </ViewTransition>
       )}
 
       {view === 'help' && (
-        <ViewTransition id="help" kind="root">
+        <ViewTransition id="help" kind="root" fallback={<WidgetHelpViewSkeleton />}>
           <WidgetHelp
             onArticleSelect={handleHelpArticleSelect}
             onCategorySelect={handleHelpCategorySelect}
@@ -840,7 +853,16 @@ function WidgetPage() {
       )}
 
       {view === 'help-category' && selectedCategory && (
-        <ViewTransition id={`help-category-${selectedCategory.id}`} kind="push">
+        <ViewTransition
+          id={`help-category-${selectedCategory.id}`}
+          kind="push"
+          fallback={
+            <WidgetHelpCategoryViewSkeleton
+              categoryName={selectedCategory.name}
+              hasIcon={!!selectedCategory.icon}
+            />
+          }
+        >
           <WidgetHelpCategory
             categoryId={selectedCategory.id}
             categoryName={selectedCategory.name}
@@ -851,7 +873,11 @@ function WidgetPage() {
       )}
 
       {view === 'help-detail' && selectedHelpSlug && (
-        <ViewTransition id={`help-detail-${selectedHelpSlug}`} kind="push">
+        <ViewTransition
+          id={`help-detail-${selectedHelpSlug}`}
+          kind="push"
+          fallback={<WidgetArticleSkeleton />}
+        >
           <WidgetHelpDetail articleSlug={selectedHelpSlug} />
         </ViewTransition>
       )}
@@ -888,13 +914,18 @@ function WidgetPage() {
       </div>
 
       {view === 'post-detail' && selectedPostId && (
-        <ViewTransition id={`post-${selectedPostId}`} kind="push">
+        <ViewTransition
+          id={`post-${selectedPostId}`}
+          kind="push"
+          fallback={<WidgetPostDetailSkeleton />}
+        >
           <WidgetPostDetail postId={selectedPostId} statuses={statuses} />
         </ViewTransition>
       )}
 
       {view === 'success' && successPost && (
-        <ViewTransition id={`success-${successPost.id}`} kind="push">
+        // SuccessView is defined in this module — never suspends.
+        <ViewTransition id={`success-${successPost.id}`} kind="push" fallback={null}>
           <SuccessView
             post={successPost}
             status={

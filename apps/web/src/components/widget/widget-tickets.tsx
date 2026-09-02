@@ -10,6 +10,7 @@ import { markTicketStagesSeen } from './ticket-stage-seen'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { StageChip } from '@/components/shared/ticket-stage'
+import { WidgetTicketListSkeleton } from './widget-skeletons'
 
 /** The own-tickets list query key (shared with the Home recent-tickets card). */
 export function widgetMyTicketsKey(sessionVersion: number) {
@@ -51,7 +52,9 @@ export function WidgetTickets({
   return (
     <div className="relative flex h-full flex-col">
       <ScrollArea scrollBarClassName="w-1.5" className="flex-1 min-h-0 h-full">
-        {tickets.length > 0 ? (
+        {isLoading ? (
+          <WidgetTicketListSkeleton />
+        ) : tickets.length > 0 ? (
           <ul className="px-3 pt-1 pb-24">
             {tickets.map((t) => (
               <li key={t.ticketId} className="border-b border-border/40 last:border-b-0">
@@ -88,20 +91,18 @@ export function WidgetTickets({
             ))}
           </ul>
         ) : (
-          !isLoading && (
-            <div className="flex h-full flex-col items-center justify-center px-6 pt-16 pb-24 text-center">
-              <TicketIcon className="mb-2 w-8 h-8 text-muted-foreground/30" />
-              <p className="text-sm font-medium text-muted-foreground/70">
-                <FormattedMessage id="widget.tickets.empty" defaultMessage="No tickets yet" />
-              </p>
-              <p className="mt-0.5 text-xs text-muted-foreground/50">
-                <FormattedMessage
-                  id="widget.tickets.emptyHint"
-                  defaultMessage="Tickets your team opens will show up here."
-                />
-              </p>
-            </div>
-          )
+          <div className="flex h-full flex-col items-center justify-center px-6 pt-16 pb-24 text-center animate-in fade-in duration-200 motion-reduce:animate-none">
+            <TicketIcon className="mb-2 w-8 h-8 text-muted-foreground/30" />
+            <p className="text-sm font-medium text-muted-foreground/70">
+              <FormattedMessage id="widget.tickets.empty" defaultMessage="No tickets yet" />
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground/50">
+              <FormattedMessage
+                id="widget.tickets.emptyHint"
+                defaultMessage="Tickets your team opens will show up here."
+              />
+            </p>
+          </div>
         )}
       </ScrollArea>
     </div>

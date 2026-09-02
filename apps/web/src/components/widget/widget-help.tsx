@@ -20,6 +20,9 @@ import {
   useAskAiSearchController,
 } from '@/components/help-center/ask-ai'
 import { useKbSearch } from '@/components/help-center/use-kb-search'
+import { useDebouncedValue } from '@/lib/client/hooks/use-debounced-value'
+import { cn } from '@/lib/shared/utils'
+import { WidgetHelpCollectionsSkeleton, WidgetHelpSearchSkeleton } from './widget-skeletons'
 
 interface WidgetHelpProps {
   onArticleSelect?: (articleSlug: string) => void
@@ -37,6 +40,12 @@ export function WidgetHelp({ onArticleSelect, onCategorySelect }: WidgetHelpProp
   // Widget locale passthrough (domains/languages §2): the search API falls
   // back to the default locale server-side if this locale isn't enabled.
   const { results, isSearching } = useKbSearch({ query: search, limit: 10, locale: intl.locale })
+  // The search hook debounces 300ms before it even starts fetching; during
+  // that window `isSearching` is still false and `results` still belong to
+  // the previous query. Treat "typed but not yet settled" as pending too, so
+  // a fresh query never flashes "No results" before its search has begun.
+  const settledSearch = useDebouncedValue(search, 300)
+  const searchPending = isSearching || settledSearch !== search
   const {
     askAiState,
     selectedIndex,
@@ -104,13 +113,7 @@ export function WidgetHelp({ onArticleSelect, onCategorySelect }: WidgetHelpProp
           {/* Category grid (default view) */}
           {showCategories && (
             <>
-              {categoriesQuery.isLoading && (
-                <div className="flex items-center justify-center py-8">
-                  <span className="text-xs text-muted-foreground/50">
-                    <FormattedMessage id="widget.help.loading" defaultMessage="Loading..." />
-                  </span>
-                </div>
-              )}
+              {categoriesQuery.isLoading && <WidgetHelpCollectionsSkeleton />}
 
               {!categoriesQuery.isLoading && topLevelCategories.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-8 text-center px-4">
@@ -200,15 +203,12 @@ export function WidgetHelp({ onArticleSelect, onCategorySelect }: WidgetHelpProp
                 </div>
               )}
 
-              {isSearching && (
-                <div className="flex items-center justify-center py-8">
-                  <span className="text-xs text-muted-foreground/50">
-                    <FormattedMessage id="widget.help.searching" defaultMessage="Searching..." />
-                  </span>
-                </div>
-              )}
+              {/* First search for a query: nothing to keep on screen, so the
+                  hit-shaped skeleton stands in. Refinements keep the previous
+                  hits visible (dimmed) so the list never blinks empty. */}
+              {searchPending && results.length === 0 && <WidgetHelpSearchSkeleton />}
 
-              {!isSearching && results.length === 0 && (
+              {!searchPending && results.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-8 text-center px-4">
                   <QuestionMarkCircleIcon className="w-8 h-8 text-muted-foreground/30 mb-2" />
                   <p className="text-sm font-medium text-muted-foreground/70">
@@ -226,8 +226,14 @@ export function WidgetHelp({ onArticleSelect, onCategorySelect }: WidgetHelpProp
                 </div>
               )}
 
-              {!isSearching && results.length > 0 && (
-                <div className="space-y-1">
+              {results.length > 0 && (
+                <div
+                  className={cn(
+                    'space-y-1 transition-opacity duration-200',
+                    searchPending && 'opacity-50'
+                  )}
+                  aria-busy={searchPending || undefined}
+                >
                   {results.map((article, idx) => (
                     <button
                       key={article.id}
