@@ -1164,5 +1164,9 @@
   "automation.builtinTools.saveError": "無法更新工具權限。",
   "automation.builtinTools.loadError": "無法載入工具目錄。",
   "widget.shell.tab.changelog.unread": "{count, plural, other {# 則新動態}}",
-  "widget.launcher.popularArticles": "熱門文章"
+  "widget.launcher.popularArticles": "熱門文章",
+  "widget.success.title": "感謝您的回饋！",
+  "widget.success.subtitle": "您的想法已送出。",
+  "widget.success.backToIdeas": "返回想法列表",
+  "widget.messenger.csat.rateAria": "評分 {n}/5"
 }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import { FormattedMessage } from 'react-intl'
+import { FormattedDate, FormattedMessage } from 'react-intl'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { contentPreview } from '@/lib/shared/utils/string'
 import { cn } from '@/lib/shared/utils'
@@ -10,14 +10,6 @@ import { markChangelogSeen } from './changelog-unread'
 import { NewspaperIcon } from '@heroicons/react/24/outline'
 import type { ChangelogCategoryId } from '@quackback/ids'
 import { WidgetChangelogListSkeleton, WidgetChangelogMoreSkeleton } from './widget-skeletons'
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })
-}
 
 interface WidgetChangelogProps {
   /** Team label for the "From {team}" subline; omitted when unknown. */
@@ -145,8 +137,16 @@ export function WidgetChangelog({ teamName, onEntrySelect }: WidgetChangelogProp
                 className="w-full text-start rounded-xl border border-border/50 bg-card hover:bg-muted/30 transition-colors px-3.5 py-3 cursor-pointer"
               >
                 <div className="flex items-center gap-2 mb-1">
-                  <time className="text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wide">
-                    {formatDate(entry.publishedAt)}
+                  <time
+                    dateTime={entry.publishedAt}
+                    className="text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wide"
+                  >
+                    <FormattedDate
+                      value={entry.publishedAt}
+                      month="short"
+                      day="numeric"
+                      year="numeric"
+                    />
                   </time>
                 </div>
                 <h3 className="text-sm font-semibold text-foreground line-clamp-2 leading-snug">

@@ -1164,5 +1164,9 @@
   "automation.builtinTools.saveError": "Не удалось обновить разрешения инструментов.",
   "automation.builtinTools.loadError": "Не удалось загрузить каталог инструментов.",
   "widget.shell.tab.changelog.unread": "{count, plural, one {# новое обновление} few {# новых обновления} other {# новых обновлений}}",
-  "widget.launcher.popularArticles": "Популярные статьи"
+  "widget.launcher.popularArticles": "Популярные статьи",
+  "widget.success.title": "Спасибо за ваш отзыв!",
+  "widget.success.subtitle": "Ваша идея отправлена.",
+  "widget.success.backToIdeas": "Назад к идеям",
+  "widget.messenger.csat.rateAria": "Оценка {n} из 5"
 }

@@ -1164,5 +1164,9 @@
   "automation.builtinTools.saveError": "Werkzeugberechtigungen konnten nicht aktualisiert werden.",
   "automation.builtinTools.loadError": "Werkzeugkatalog konnte nicht geladen werden.",
   "widget.shell.tab.changelog.unread": "{count, plural, one {# neue Aktualisierung} other {# neue Aktualisierungen}}",
-  "widget.launcher.popularArticles": "Beliebte Artikel"
+  "widget.launcher.popularArticles": "Beliebte Artikel",
+  "widget.success.title": "Danke für dein Feedback!",
+  "widget.success.subtitle": "Deine Idee wurde eingereicht.",
+  "widget.success.backToIdeas": "Zurück zu den Ideen",
+  "widget.messenger.csat.rateAria": "{n} von 5 bewerten"
 }

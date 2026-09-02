@@ -1164,5 +1164,9 @@
   "automation.builtinTools.saveError": "Não foi possível atualizar as permissões da ferramenta.",
   "automation.builtinTools.loadError": "Não foi possível carregar o catálogo de ferramentas.",
   "widget.shell.tab.changelog.unread": "{count, plural, one {# nova atualização} other {# novas atualizações}}",
-  "widget.launcher.popularArticles": "Artigos populares"
+  "widget.launcher.popularArticles": "Artigos populares",
+  "widget.success.title": "Obrigado pelo seu feedback!",
+  "widget.success.subtitle": "Sua ideia foi enviada.",
+  "widget.success.backToIdeas": "Voltar às ideias",
+  "widget.messenger.csat.rateAria": "Avaliar {n} de 5"
 }
