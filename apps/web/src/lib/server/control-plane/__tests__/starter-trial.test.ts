@@ -123,6 +123,22 @@ describe('reportStarterTrialIfDue', () => {
     expect(hoisted.reportTrialActivation).not.toHaveBeenCalled()
   })
 
+  it('still reports after a canceled subscription on Free', async () => {
+    hoisted.getCloudConfig.mockResolvedValue({
+      enabled: true,
+      plan: 'free',
+      trialStartedAt: null,
+      trialActive: false,
+      subscriptionStatus: 'canceled',
+    })
+    hoisted.getWorkspaceSettings.mockResolvedValue({
+      settings: { id: 'ws_1', setupState: JSON.stringify(setup()) },
+    })
+    hoisted.reportTrialActivation.mockResolvedValue('started')
+    await expect(reportStarterTrialIfDue()).resolves.toBe('started')
+    expect(hoisted.reportTrialActivation).toHaveBeenCalled()
+  })
+
   it('reports the stamped evidence when Cloud is on and no trial has landed', async () => {
     hoisted.getCloudConfig.mockResolvedValue({
       enabled: true,

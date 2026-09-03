@@ -1,5 +1,6 @@
 import type { SetupState } from '@/lib/shared/db-types'
 import { getSetupState } from '@/lib/shared/db-types'
+import { hasLivePaidSub } from '@/lib/shared/billing/trial-state'
 import { logger } from '@/lib/server/logger'
 import { emitPlgEvent } from '@/lib/server/plg-events'
 
@@ -45,7 +46,8 @@ export async function reportStarterTrialIfDue(identity?: {
   const { getCloudConfig } = await import('@/lib/server/domains/settings/cloud/cloud.service')
   const cloud = await getCloudConfig()
   if (!cloud.enabled || cloud.trialStartedAt) return 'skipped'
-  if (cloud.subscriptionStatus) return 'skipped'
+  // Canceled is not live: upgradeContextFor still offers a trial on Free.
+  if (hasLivePaidSub(cloud.subscriptionStatus)) return 'skipped'
   if (cloud.plan && cloud.plan !== 'free' && !cloud.trialActive) return 'skipped'
 
   const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
