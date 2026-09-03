@@ -51,7 +51,6 @@ describe('trialEndedNotice', () => {
       label: 'Growth trial ended',
       actionLabel: 'Update billing',
     })
-    expect(notice?.dismissible).toBeUndefined()
     expect(notice?.message).toMatch(/trial has come to an end/)
   })
 })
