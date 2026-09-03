@@ -52,8 +52,7 @@ export function newRegistrationId(): string {
  *  enforcement on. Mirrors the server-side
  *  `isSsoEnforcementUnlocked(provider, null)` predicate. */
 export type ConnectionTestState =
-  | { kind: 'unsaved' | 'untested' | 'stale' }
-  | { kind: 'verified'; testedAt: string }
+  { kind: 'unsaved' | 'untested' | 'stale' } | { kind: 'verified'; testedAt: string }
 
 export function getConnectionTestState(provider: IdentityProvider | null): ConnectionTestState {
   if (!provider) return { kind: 'unsaved' }
@@ -115,6 +114,28 @@ export function withAllowMissingEmail(
  * persisted as absent (the canonical "no mapping" state). A custom claim path
  * on its own is inert.
  */
+/** The attributes section of `claim_mapping` — claim → person-attribute rows. */
+export type AttributeMapping = NonNullable<IdentityProviderClaimMapping['attributes']>
+
+/**
+ * Drop rows with an empty path or key. Persist `undefined` when nothing
+ * remains so `mergeClaimMapping` deletes the section. Flags are kept only
+ * when at least one row survives.
+ */
+export function normalizeAttributeMapping(
+  mapping: AttributeMapping | null | undefined
+): AttributeMapping | undefined {
+  if (!mapping) return undefined
+  const map = (mapping.map ?? []).filter(
+    (row) => row.claimPath.trim() !== '' && row.attributeKey.trim() !== ''
+  )
+  if (map.length === 0) return undefined
+  const next: AttributeMapping = { map }
+  if (mapping.overrideExisting === true) next.overrideExisting = true
+  if (mapping.syncOnSignIn === true) next.syncOnSignIn = true
+  return next
+}
+
 export function normalizeRoleMapping(mapping: RoleMapping | null): RoleMapping | undefined {
   if (!mapping) return undefined
   if (mapping.rules.length === 0 && mapping.syncOnEverySignIn !== true) return undefined

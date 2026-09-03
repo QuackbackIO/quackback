@@ -90,3 +90,86 @@ export function deriveClaimSuggestions(allClaims: Record<string, JsonValue>): Cl
 
   return { paths, valuesByPath }
 }
+
+/**
+ * Protocol claims that are never useful as person-attribute sources.
+ * Profile claims (`email`, `name`, `preferred_username`, …) stay — mapping
+ * `preferred_username` onto a username attribute is legitimate.
+ */
+const PROTOCOL_CLAIMS = new Set([
+  'iss',
+  'aud',
+  'exp',
+  'iat',
+  'nbf',
+  'jti',
+  'nonce',
+  'azp',
+  'at_hash',
+  'c_hash',
+  'sid',
+  'rh',
+  'uti',
+  'aio',
+  'ver',
+  'amr',
+  'acr',
+  'sub',
+])
+
+export type AttributeClaimPathSuggestion = {
+  path: string
+  description?: string
+}
+
+function truncatePreview(value: JsonValue, max = 48): string {
+  let text: string
+  if (Array.isArray(value)) {
+    text = value
+      .map((v) => (typeof v === 'string' || typeof v === 'number' ? String(v) : JSON.stringify(v)))
+      .join(', ')
+  } else if (value !== null && typeof value === 'object') {
+    text = JSON.stringify(value)
+  } else {
+    text = String(value)
+  }
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text
+}
+
+function isLeaf(value: JsonValue): boolean {
+  return value === null || typeof value !== 'object' || Array.isArray(value)
+}
+
+/**
+ * Leaf claim paths (scalars and arrays) at depth ≤ 2, for mapping onto
+ * person attributes. URL-shaped keys are literal. Each suggestion carries a
+ * truncated observed value as `description`.
+ */
+export function deriveAttributeClaimPaths(
+  allClaims: Record<string, JsonValue>
+): AttributeClaimPathSuggestion[] {
+  const out: AttributeClaimPathSuggestion[] = []
+
+  const record = (path: string, value: JsonValue) => {
+    if (!isLeaf(value)) return
+    out.push({ path, description: truncatePreview(value) })
+  }
+
+  for (const [key, value] of Object.entries(allClaims)) {
+    if (PROTOCOL_CLAIMS.has(key)) continue
+    if (key.includes('://')) {
+      record(key, value)
+      continue
+    }
+    if (isLeaf(value)) {
+      record(key, value)
+    } else if (value !== null && typeof value === 'object') {
+      for (const [childKey, childValue] of Object.entries(value)) {
+        if (childKey.includes('://')) continue
+        record(`${key}.${childKey}`, childValue as JsonValue)
+      }
+    }
+  }
+
+  return out
+}

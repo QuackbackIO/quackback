@@ -15,6 +15,11 @@ describe('coerceAttributeValue', () => {
       expect(coerceAttributeValue('hello', 'string')).toBe('hello')
     })
 
+    it('joins an array of primitives and refuses an array of objects', () => {
+      expect(coerceAttributeValue(['eng', 'sales'], 'string')).toBe('eng,sales')
+      expect(coerceAttributeValue([{ id: 1 }], 'string')).toBeUndefined()
+    })
+
     it('should coerce empty string', () => {
       expect(coerceAttributeValue('', 'string')).toBe('')
     })

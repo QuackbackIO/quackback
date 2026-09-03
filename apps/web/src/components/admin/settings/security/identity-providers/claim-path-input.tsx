@@ -5,7 +5,7 @@
  */
 
 import { Autocomplete } from '@/components/ui/autocomplete'
-import { deriveClaimSuggestions } from '@/lib/shared/claim-suggestions'
+import { deriveAttributeClaimPaths, deriveClaimSuggestions } from '@/lib/shared/claim-suggestions'
 import type { SsoTestCapture } from '@/lib/shared/sso-test-capture'
 import { TestSignInButton } from '../sso/test-sign-in-button'
 import { useSsoTestSignIn } from '../sso/use-sso-test-sign-in'
@@ -27,6 +27,7 @@ export function ClaimPathInput({
   ariaLabel,
   disabled,
   capture,
+  suggestionsFor = 'role',
 }: {
   value: string
   onChange: (next: string) => void
@@ -37,11 +38,20 @@ export function ClaimPathInput({
   disabled?: boolean
   /** Session or persisted fixture. Falls back to the sitting's lastSuccess. */
   capture?: SsoTestCapture | null
+  /** Role suggestions are array-of-string paths; attribute suggestions are
+   *  scalar and array leaves, including profile claims. */
+  suggestionsFor?: 'role' | 'attribute'
 }) {
   const { lastSuccess } = useSsoTestSignIn()
   const fixture = fixtureFor(registrationId, capture) ?? fixtureFor(registrationId, lastSuccess)
-  const suggestions = fixture ? deriveClaimSuggestions(fixture.claims) : null
-  const pathSuggestions = (suggestions?.paths ?? []).map((p) => ({ value: p }))
+  const pathSuggestions = fixture
+    ? suggestionsFor === 'attribute'
+      ? deriveAttributeClaimPaths(fixture.claims).map((s) => ({
+          value: s.path,
+          description: s.description,
+        }))
+      : deriveClaimSuggestions(fixture.claims).paths.map((p) => ({ value: p }))
+    : []
 
   return (
     <Autocomplete

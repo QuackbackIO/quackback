@@ -71,6 +71,17 @@ const { state } = vi.hoisted(() => ({
     credentialStatus: { _emailConfigured: true } as Record<string, boolean>,
     accountCount: 0,
     navigate: vi.fn(async () => undefined),
+    userAttributes: [] as Array<{
+      id: string
+      key: string
+      label: string
+      type: 'string' | 'number' | 'boolean' | 'date' | 'currency'
+      description: string | null
+      currencyCode: string | null
+      externalKey: string | null
+      createdAt: Date
+      updatedAt: Date
+    }>,
   },
 }))
 
@@ -142,6 +153,11 @@ vi.mock('@/lib/client/queries/admin', () => ({
       queryFn: async () => state.credentialStatus,
       staleTime: Infinity,
     }),
+    userAttributes: () => ({
+      queryKey: ['admin', 'userAttributes'],
+      queryFn: async () => state.userAttributes,
+      staleTime: Infinity,
+    }),
   },
 }))
 
@@ -150,9 +166,15 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 // Stub the Test sign-in button so the page doesn't pull in the test-flow
 // server fns / context. Pass `disabled` through so tests can assert state.
 vi.mock('../../sso/test-sign-in-button', () => ({
-  TestSignInButton: ({ disabled }: { disabled?: boolean }) => (
+  TestSignInButton: ({
+    disabled,
+    children,
+  }: {
+    disabled?: boolean
+    children?: React.ReactNode
+  }) => (
     <button type="button" disabled={disabled}>
-      Test sign-in
+      {children ?? 'Test sign-in'}
     </button>
   ),
 }))
@@ -212,6 +234,7 @@ function renderPage(provider: IdentityProvider) {
   qc.setQueryData(['settings', 'identityProviders', provider.id, 'accountCount'], {
     count: state.accountCount,
   })
+  qc.setQueryData(['admin', 'userAttributes'], state.userAttributes)
   return render(
     <QueryClientProvider client={qc}>
       <ProviderDetailPage providerId={provider.id} />
@@ -232,6 +255,7 @@ beforeEach(() => {
   discoveryScopesSpy.mockClear()
   discoveryScopesSpy.mockResolvedValue({ scopesSupported: null })
   ssoTestRef.current = null
+  state.userAttributes = []
   state.authConfig = { oauth: { password: true } }
   state.credentialStatus = { _emailConfigured: true }
   state.accountCount = 0
@@ -767,6 +791,181 @@ describe('<ProviderDetailPage> identity fields', () => {
  * what it would cost before offering it — both refusals mirror server-side
  * invariants rather than being UI politeness.
  */
+const PEOPLE_ATTRS = [
+  {
+    id: 'ua_1',
+    key: 'department',
+    label: 'Department',
+    type: 'string' as const,
+    description: null,
+    currencyCode: null,
+    externalKey: null,
+    createdAt: new Date('2026-01-01'),
+    updatedAt: new Date('2026-01-01'),
+  },
+  {
+    id: 'ua_2',
+    key: 'plan',
+    label: 'Plan',
+    type: 'string' as const,
+    description: null,
+    currencyCode: null,
+    externalKey: null,
+    createdAt: new Date('2026-01-01'),
+    updatedAt: new Date('2026-01-01'),
+  },
+]
+
+const matchingCapture = {
+  registrationId: 'oidc_x',
+  capturedAt: '2026-09-01T00:00:00.000Z',
+  identity: { id: 'sub', email: 'alice@example.com', sources: { email: 'idToken' as const } },
+  claims: { department: 'Engineering' },
+}
+
+describe('<ProviderDetailPage> claim → person-attribute mapping', () => {
+  it('adds a row, picks a claim path and attribute, and saves without touching role/profile', async () => {
+    state.userAttributes = PEOPLE_ATTRS
+    renderPage(makeProvider({ claimMapping: null }))
+    fireEvent.click(screen.getByRole('button', { name: /Copy claims into person attributes/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Add mapping/ }))
+    fireEvent.click(screen.getByRole('combobox', { name: /Claim path \(mapping 1\)/ }))
+    fireEvent.change(screen.getByPlaceholderText('Search or type…'), {
+      target: { value: 'department' },
+    })
+    fireEvent.click(screen.getByText(/Use ["“]department["”]/))
+    fireEvent.click(screen.getByRole('combobox', { name: /Person attribute \(mapping 1\)/ }))
+    fireEvent.click(screen.getByRole('option', { name: /Department/ }))
+    saveMapping()
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    const sent = lastUpsert().claimMapping as {
+      attributes?: { map?: Array<{ claimPath: string; attributeKey: string }> }
+      role?: unknown
+      profile?: unknown
+    }
+    expect(sent.attributes?.map).toEqual([{ claimPath: 'department', attributeKey: 'department' }])
+    expect(sent).not.toHaveProperty('role')
+    expect(sent).not.toHaveProperty('profile')
+  })
+
+  it('removes the only row on save so attributes is absent from the payload', async () => {
+    state.userAttributes = PEOPLE_ATTRS
+    renderPage(
+      makeProvider({
+        claimMapping: {
+          attributes: { map: [{ claimPath: 'department', attributeKey: 'department' }] },
+        },
+      })
+    )
+    fireEvent.click(screen.getByRole('button', { name: /Remove mapping 1/ }))
+    saveMapping()
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    expect(lastUpsert().claimMapping).toBeNull()
+  })
+
+  it('persists overrideExisting and syncOnSignIn independently', async () => {
+    state.userAttributes = PEOPLE_ATTRS
+    renderPage(
+      makeProvider({
+        claimMapping: {
+          attributes: { map: [{ claimPath: 'department', attributeKey: 'department' }] },
+        },
+      })
+    )
+    await userEvent.click(screen.getByLabelText('Overwrite values that are already set'))
+    saveMapping()
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    const first = lastUpsert().claimMapping as {
+      attributes?: { overrideExisting?: boolean; syncOnSignIn?: boolean }
+    }
+    expect(first.attributes?.overrideExisting).toBe(true)
+    expect(first.attributes?.syncOnSignIn).toBeUndefined()
+
+    upsertSpy.mockClear()
+    await userEvent.click(screen.getByLabelText('Clear an attribute when its claim is missing'))
+    saveMapping()
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    const second = lastUpsert().claimMapping as {
+      attributes?: { overrideExisting?: boolean; syncOnSignIn?: boolean }
+    }
+    expect(second.attributes?.overrideExisting).toBe(true)
+    expect(second.attributes?.syncOnSignIn).toBe(true)
+  })
+
+  it('shows the People empty state and no Add button when there are no definitions', () => {
+    state.userAttributes = []
+    renderPage(makeProvider({ claimMapping: null }))
+    fireEvent.click(screen.getByRole('button', { name: /Copy claims into person attributes/ }))
+    expect(screen.getByText(/No person attributes yet/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open People settings' })).toHaveAttribute(
+      'href',
+      '/admin/settings/people'
+    )
+    expect(screen.queryByRole('button', { name: /Add mapping/ })).not.toBeInTheDocument()
+  })
+
+  it('renders an orphan-row warning when the attribute no longer exists', () => {
+    state.userAttributes = PEOPLE_ATTRS
+    renderPage(
+      makeProvider({
+        claimMapping: {
+          attributes: { map: [{ claimPath: 'cc', attributeKey: 'cost_center' }] },
+        },
+      })
+    )
+    expect(screen.getByText('attribute no longer exists')).toBeInTheDocument()
+    expect(screen.getByText('cost_center')).toBeInTheDocument()
+  })
+
+  it('previews a written value and a missing-claim skip from a matching capture', async () => {
+    state.userAttributes = PEOPLE_ATTRS
+    renderPage(
+      makeProvider({
+        lastTestCapture: matchingCapture,
+        claimMapping: {
+          attributes: {
+            map: [
+              { claimPath: 'department', attributeKey: 'department' },
+              { claimPath: 'plan', attributeKey: 'plan' },
+            ],
+          },
+        },
+      })
+    )
+    expect(screen.getByText('Attribute writes from your last test sign-in')).toBeInTheDocument()
+    expect(screen.getByText(/“Engineering”/)).toBeInTheDocument()
+    expect(screen.getByText(/skipped: missing claim/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('combobox', { name: /Claim path \(mapping 1\)/ }))
+    fireEvent.change(screen.getByPlaceholderText('Search or type…'), {
+      target: { value: 'nope' },
+    })
+    fireEvent.click(screen.getByText(/Use ["“]nope["”]/))
+    await waitFor(() => {
+      expect(screen.queryByText(/“Engineering”/)).not.toBeInTheDocument()
+    })
+    expect(screen.getAllByText(/skipped: missing claim/).length).toBeGreaterThan(0)
+  })
+
+  it('hides the capture preview when the capture is for a different registrationId', () => {
+    state.userAttributes = PEOPLE_ATTRS
+    renderPage(
+      makeProvider({
+        lastTestCapture: { ...matchingCapture, registrationId: 'oidc_other' },
+        claimMapping: {
+          attributes: { map: [{ claimPath: 'department', attributeKey: 'department' }] },
+        },
+      })
+    )
+    expect(
+      screen.queryByText('Attribute writes from your last test sign-in')
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByText(/Run a test sign-in to preview what these mappings would write/)
+    ).toBeInTheDocument()
+  })
+})
+
 describe('<ProviderDetailPage> remove', () => {
   it('states that nobody is linked yet and allows removal', () => {
     state.accountCount = 0

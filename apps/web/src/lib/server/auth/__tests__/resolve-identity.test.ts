@@ -71,6 +71,55 @@ describe('resolveIdentity — the fast path', () => {
     await resolveIdentity({ tokens: { idToken: fakeJwt({ sub: 'x' }) }, fetchUserInfo })
     expect(fetchUserInfo).toHaveBeenCalledTimes(1)
   })
+
+  it('does not fetch userinfo when requiredClaimPaths are already in a complete ID token', async () => {
+    const fetchUserInfo = vi.fn(async () => ({ department: 'from-userinfo' }))
+    const result = await resolveIdentity({
+      tokens: WORLD_A.tokens,
+      fetchUserInfo,
+      requiredClaimPaths: ['email'],
+    })
+    expect(result.ok).toBe(true)
+    expect(fetchUserInfo).not.toHaveBeenCalled()
+  })
+
+  it('fetches userinfo when a required path is absent from a complete ID token', async () => {
+    const fetchUserInfo = vi.fn(async () => ({
+      sub: WORLD_A.expect.id,
+      email: 'a@example.com',
+      name: 'World A',
+      department: 'Engineering',
+    }))
+    const result = await resolveIdentity({
+      tokens: WORLD_A.tokens,
+      fetchUserInfo,
+      requiredClaimPaths: ['department'],
+    })
+    expect(fetchUserInfo).toHaveBeenCalledTimes(1)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.identity.claims.department).toBe('Engineering')
+    // Earlier source still wins on overlap.
+    expect(result.identity.email).toBe('a@example.com')
+    expect(result.identity.sources.email).toBe('idToken')
+  })
+
+  it('exhaustive fetches every source even when identity is complete', async () => {
+    const fetchUserInfo = vi.fn(async () => ({
+      sub: WORLD_A.expect.id,
+      department: 'Engineering',
+    }))
+    const result = await resolveIdentity({
+      tokens: WORLD_A.tokens,
+      fetchUserInfo,
+      exhaustive: true,
+    })
+    expect(fetchUserInfo).toHaveBeenCalledTimes(1)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.identity.claims.department).toBe('Engineering')
+    expect(result.identity.email).toBe('a@example.com')
+  })
 })
 
 describe('resolveIdentity — subject consistency (OIDC Core 5.3.2)', () => {

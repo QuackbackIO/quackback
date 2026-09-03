@@ -68,6 +68,7 @@ const mockGetPublicPortalConfig = vi.fn()
 const mockRecordAuditEvent = vi.fn(async (_spec: unknown) => undefined)
 const mockDeleteSessionCookie = vi.fn((_ctx: unknown) => undefined)
 const mockHasPlatformCredentials = vi.fn(async (_type: string) => true)
+const throwOnMetadataWrite = { value: false }
 
 vi.mock('@/lib/server/db', () => {
   const tx = {
@@ -89,11 +90,15 @@ vi.mock('@/lib/server/db', () => {
         account: { findFirst: mockAccountFindFirst },
       },
       update: () => ({
-        set: (patch: { role?: 'admin' | 'member' | 'user' }) => {
+        set: (patch: { role?: 'admin' | 'member' | 'user'; metadata?: string }) => {
           mockUpdateSet(patch)
+          if (throwOnMetadataWrite.value && typeof patch.metadata === 'string') {
+            throw new Error('claim-attribute db down')
+          }
           return { where: async () => undefined }
         },
       }),
+      select: () => ({ from: async () => [{ key: 'department', type: 'string' }] }),
       delete: (table: { __name: string }) => {
         mockDelete(table)
         if (table.__name === 'session') return { where: mockSessionDelete }
@@ -112,7 +117,9 @@ vi.mock('@/lib/server/db', () => {
     account: { __name: 'account', userId: 'account.userId', providerId: 'account.providerId' },
     and: vi.fn((...parts: unknown[]) => ({ op: 'and', parts })),
     eq: vi.fn((col: unknown, val: unknown) => ({ op: 'eq', col, val })),
+    desc: (col: unknown) => ({ op: 'desc', col }),
     sql: (strings: TemplateStringsArray) => ({ strings }),
+    userAttributeDefinitions: { __name: 'user_attribute_definitions' },
   }
 })
 
@@ -210,6 +217,7 @@ function ssoCallbackCtx(opts: { userId: string; email: string; token: string }) 
 
 beforeEach(() => {
   vi.clearAllMocks()
+  throwOnMetadataWrite.value = false
   state.role = 'user'
   mockTxPrincipalFindFirst.mockResolvedValue({ id: 'principal_existing_admin' })
   mockUserFindFirst.mockResolvedValue({ createdAt: new Date(Date.now() - 60 * 60_000) })
@@ -327,5 +335,63 @@ describe('hooksAfter — short-circuit on blocked sign-in', () => {
       .map(([spec]) => spec as { event: string })
       .find((spec) => spec.event === 'auth.signin.success')
     expect(successAudit).toBeUndefined()
+  })
+})
+
+describe('hooksAfter — claim attribute write failure does not block sign-in', () => {
+  it('swallows a DB throw, leaves the session, and continues the chain', async () => {
+    mockGetWorkspaceSettings.mockResolvedValue(
+      makeWorkspace({
+        authConfig: makeAuthConfig({
+          ssoOidc: { autoCreateUsers: true, autoProvisionRole: 'member' },
+        }),
+        verifiedDomains: [makeVerifiedDomain('acme.com', false)],
+      })
+    )
+    state.role = 'user'
+    mockListIdentityProviders.mockResolvedValue([
+      {
+        id: 'idp_sso',
+        registrationId: 'sso',
+        enabled: true,
+        autoCreateUsers: true,
+        autoProvisionRole: 'member',
+        claimMapping: {
+          attributes: { map: [{ claimPath: 'department', attributeKey: 'department' }] },
+        },
+        domains: [
+          {
+            name: 'acme.com',
+            verifiedAt: '2026-05-01T00:00:00.000Z',
+            enforced: false,
+          },
+        ],
+      },
+    ])
+    mockUserFindFirst.mockResolvedValue({
+      createdAt: new Date(Date.now() - 60 * 60_000),
+      metadata: '{}',
+    })
+    const payload = Buffer.from(
+      JSON.stringify({
+        department: 'Engineering',
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      })
+    ).toString('base64url')
+    mockAccountFindFirst.mockResolvedValue({
+      idToken: `h.${payload}.s`,
+      accountId: 'sub-1',
+    })
+    throwOnMetadataWrite.value = true
+
+    await expect(
+      hooksAfter(ssoCallbackCtx({ userId: 'user_new', email: 'alice@acme.com', token: 'tok' }))
+    ).resolves.toBeUndefined()
+
+    expect(mockUpdateSet).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: expect.any(String) })
+    )
+    expect(mockSessionDelete).not.toHaveBeenCalled()
+    expect(mockDeleteSessionCookie).not.toHaveBeenCalled()
   })
 })

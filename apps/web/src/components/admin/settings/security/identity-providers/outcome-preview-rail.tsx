@@ -9,12 +9,11 @@ import { Badge } from '@/components/ui/badge'
 import { MENU_LABEL } from '@/components/ui/menu'
 import { cn } from '@/lib/shared/utils'
 import { getClaimByPath } from '@/lib/shared/oidc-claim-mapping'
-import { planClaimAttributeWrites } from '@/lib/shared/plan-claim-attribute-writes'
 import { resolveSsoRoleMatch } from '@/lib/shared/resolve-sso-role'
 import type { SsoTestCapture } from '../sso/use-sso-test-sign-in'
 import { TestSignInButton } from '../sso/test-sign-in-button'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
-import { useUserAttributes } from '@/lib/client/hooks/use-user-attributes-queries'
+import { AttributeWritesPreview } from './attribute-writes-preview'
 
 type RoleMapping = NonNullable<NonNullable<IdentityProvider['claimMapping']>['role']>
 
@@ -32,7 +31,8 @@ export function OutcomePreviewRail({
   nameClaim,
   roleMapping,
   attributeRows,
-  mirrorAttributes,
+  overrideExisting,
+  syncOnSignIn,
   registrationId,
 }: {
   capture: SsoTestCapture
@@ -42,7 +42,8 @@ export function OutcomePreviewRail({
   nameClaim: string
   roleMapping: RoleMapping | null
   attributeRows: Array<{ claimPath: string; attributeKey: string }>
-  mirrorAttributes: boolean
+  overrideExisting: boolean
+  syncOnSignIn: boolean
   registrationId: string
 }) {
   const stale =
@@ -61,26 +62,6 @@ export function OutcomePreviewRail({
 
   const match = resolveSsoRoleMatch(claims, roleMapping ?? undefined)
   const matchedRule = match && roleMapping ? roleMapping.rules[match.ruleIndex] : undefined
-
-  const { data: attributes } = useUserAttributes()
-  const defs = (attributes ?? []).map((d) => ({
-    key: d.key,
-    type: d.type,
-    label: d.label,
-  }))
-  const plan =
-    attributeRows.length > 0
-      ? planClaimAttributeWrites({
-          claims,
-          mapping: {
-            map: attributeRows.filter((r) => r.claimPath && r.attributeKey),
-            ...(mirrorAttributes ? { overrideExisting: true, syncOnSignIn: true } : {}),
-          },
-          existing: {},
-          definitions: defs,
-          explain: true,
-        })
-      : null
 
   const provenance = formatProvenance(capture.identity.sources)
 
@@ -144,43 +125,15 @@ export function OutcomePreviewRail({
       </div>
 
       <div className="border-t border-border/40 pt-3">
-        <h3 className={cn(MENU_LABEL, 'mb-2 font-mono')}>Attribute writes</h3>
-        {plan && (Object.keys(plan.valid).length > 0 || (plan.skips?.length ?? 0) > 0) ? (
-          <dl className="grid grid-cols-[6.6em_1fr] gap-x-2.5 gap-y-1 text-[12px]">
-            {defs
-              .filter((d) => d.key in plan.valid || plan.skips?.some((s) => s.key === d.key))
-              .map((d) => {
-                const written = plan.valid[d.key]
-                const skip = plan.skips?.find((s) => s.key === d.key)
-                const row = attributeRows.find((r) => r.attributeKey === d.key)
-                const raw = row ? getClaimByPath(claims, row.claimPath) : undefined
-                const joined = Array.isArray(raw) && d.type === 'string'
-                return (
-                  <div key={d.key} className="contents">
-                    <dt className="text-muted-foreground">{d.label}</dt>
-                    <dd className="min-w-0 break-all">
-                      {written !== undefined ? (
-                        <>
-                          “{String(written)}”
-                          {joined && (
-                            <Badge variant="outline" className="ml-1 align-middle">
-                              array joined to text
-                            </Badge>
-                          )}
-                        </>
-                      ) : (
-                        <span className="text-muted-foreground">
-                          skipped: {skipReason(skip?.reason, raw)}
-                        </span>
-                      )}
-                    </dd>
-                  </div>
-                )
-              })}
-          </dl>
-        ) : (
-          <p className="text-xs text-muted-foreground">No attribute mappings yet.</p>
-        )}
+        <AttributeWritesPreview
+          capture={capture}
+          registrationId={registrationId}
+          detailsChangedAt={provider?.detailsChangedAt}
+          attributeRows={attributeRows}
+          overrideExisting={overrideExisting}
+          syncOnSignIn={syncOnSignIn}
+          canTest={!!provider}
+        />
       </div>
 
       <div className="border-t border-border/40 pt-3 text-xs text-muted-foreground">
@@ -215,13 +168,4 @@ function formatProvenance(sources: SsoTestCapture['identity']['sources']): strin
   }
   if (seen.length === 0) return null
   return `Captured via ${seen.join(' + ')}.`
-}
-
-function skipReason(reason: string | undefined, raw: unknown): string {
-  if (reason === 'type_mismatch') {
-    const kind = raw === null ? 'null' : Array.isArray(raw) ? 'array' : typeof raw
-    return `type mismatch (${kind})`
-  }
-  if (reason === 'kept_existing') return 'kept existing'
-  return 'missing claim'
 }

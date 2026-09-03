@@ -213,6 +213,49 @@ describe('buildGenericOAuthConfigs discovery + resolver wiring', () => {
     expect(discovery).not.toHaveBeenCalled()
   })
 
+  it('passes mapped claim paths to resolveIdentity so userinfo-only claims are fetched', async () => {
+    const fetchUserInfo = vi.fn(async () => ({ department: 'Engineering' }))
+    const idToken = (payload: Record<string, unknown>) =>
+      `x.${Buffer.from(JSON.stringify(payload)).toString('base64url')}.y`
+    const cfgs = await buildGenericOAuthConfigs({
+      providers: [
+        row({
+          userInfoUrl: 'https://idp/userinfo',
+          claimMapping: {
+            attributes: { map: [{ claimPath: 'department', attributeKey: 'department' }] },
+            role: { claimPath: 'groups', rules: [] },
+          },
+        }),
+      ] as never,
+      creds: async () => ({ clientId: 'c', clientSecret: 's' }),
+      tierAllowsOidc: true,
+      fetchUserInfo,
+    })
+    const info = await cfgs[0].getUserInfo?.({
+      idToken: idToken({ sub: 's1', email: 'e@x.com', name: 'N' }),
+      accessToken: 'at',
+    })
+    expect(fetchUserInfo).toHaveBeenCalledTimes(1)
+    expect(info?.department).toBe('Engineering')
+  })
+
+  it('keeps the zero-network fast path when nothing is mapped', async () => {
+    const fetchUserInfo = vi.fn(async () => ({ department: 'Engineering' }))
+    const idToken = (payload: Record<string, unknown>) =>
+      `x.${Buffer.from(JSON.stringify(payload)).toString('base64url')}.y`
+    const cfgs = await buildGenericOAuthConfigs({
+      providers: [row({ userInfoUrl: 'https://idp/userinfo' })] as never,
+      creds: async () => ({ clientId: 'c', clientSecret: 's' }),
+      tierAllowsOidc: true,
+      fetchUserInfo,
+    })
+    await cfgs[0].getUserInfo?.({
+      idToken: idToken({ sub: 's1', email: 'e@x.com', name: 'N' }),
+      accessToken: 'at',
+    })
+    expect(fetchUserInfo).not.toHaveBeenCalled()
+  })
+
   it('still builds when discovery is unreachable', async () => {
     // A discovery outage must not stop the provider registering — a complete
     // ID token needs no userinfo at all.

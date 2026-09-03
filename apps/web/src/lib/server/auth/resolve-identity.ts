@@ -17,7 +17,7 @@
  */
 
 import { decodeJwt } from 'jose'
-import { isAffirmativeClaim } from '@/lib/shared/oidc-claim-mapping'
+import { getClaimByPath, isAffirmativeClaim } from '@/lib/shared/oidc-claim-mapping'
 
 /** Sources in the order they are consulted. */
 export type IdentitySource = 'idToken' | 'userinfo' | 'accessTokenJwt'
@@ -67,6 +67,19 @@ export interface ResolveIdentityArgs {
    * also break every provider currently relying on the old behaviour.
    */
   subjectMismatch?: 'observe' | 'enforce'
+  /**
+   * Extra claim paths that must be present in `merged` before the fast path
+   * may skip remaining sources. Production passes mapped attribute and role
+   * paths so a complete ID token still fetches userinfo when those claims
+   * live only there.
+   */
+  requiredClaimPaths?: string[]
+  /**
+   * Walk every configured source even when identity (and required paths) are
+   * already complete. The connection test uses this so the capture shows
+   * everything the IdP can release.
+   */
+  exhaustive?: boolean
 }
 
 /**
@@ -101,11 +114,21 @@ function asNonEmptyString(value: unknown): string | undefined {
   return undefined
 }
 
+function requiredPathsResolved(
+  merged: Record<string, unknown>,
+  paths: string[] | undefined
+): boolean {
+  if (!paths?.length) return true
+  return paths.every((path) => getClaimByPath(merged, path) !== undefined)
+}
+
 export async function resolveIdentity({
   tokens,
   fetchUserInfo,
   mapping,
   subjectMismatch = 'observe',
+  requiredClaimPaths,
+  exhaustive = false,
 }: ResolveIdentityArgs): Promise<ResolveResult> {
   const idClaim = mapping?.idClaim ?? 'sub'
   const nameClaim = mapping?.nameClaim ?? 'name'
@@ -131,9 +154,12 @@ export async function resolveIdentity({
   }
 
   for (const source of sources) {
-    // Fast path: stop before any network call once everything is resolved, so
-    // a compliant provider takes no added latency from the cascade existing.
-    if (id && email && name) break
+    // Fast path: stop before any network call once identity is complete and
+    // every mapped claim is already in `merged`. `exhaustive` disables this
+    // so the connection test walks every source.
+    if (!exhaustive && id && email && name && requiredPathsResolved(merged, requiredClaimPaths)) {
+      break
+    }
 
     const claims = await loadSource(source)
     if (!claims) continue

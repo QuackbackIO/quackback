@@ -23,7 +23,7 @@ import type { IdentityProvider } from '@/lib/server/domains/settings/identity-pr
 import { authorizeRequestFor, supportsPrompt } from '@/lib/shared/oidc-request'
 import { resolveIdentity } from './resolve-identity'
 import { synthesizeName } from './placeholder-identity'
-import { allowsMissingEmail } from '@/lib/shared/oidc-claim-mapping'
+import { allowsMissingEmail, claimMappingFor } from '@/lib/shared/oidc-claim-mapping'
 
 // Re-exported so server callers keep this import path. The implementation lives
 // in `shared` because the admin editor needs it too, and having exactly one
@@ -216,6 +216,11 @@ export async function buildGenericOAuthConfigs({
     // library's own behaviour, so withholding it from unmapped providers would
     // leave two resolution paths — the thing this work exists to remove.
     const resolvedUserInfoUrl = userInfoUrl
+    const mapping = claimMappingFor(provider.claimMapping)
+    const requiredClaimPaths = [
+      ...(mapping.attributes?.map ?? []).map((entry) => entry.claimPath),
+      ...(mapping.role?.claimPath ? [mapping.role.claimPath] : []),
+    ]
     const getUserInfo: NonNullable<GenericOAuthConfig['getUserInfo']> = async (tokens) => {
       const result = await resolveIdentity({
         tokens,
@@ -223,6 +228,7 @@ export async function buildGenericOAuthConfigs({
           resolvedUserInfoUrl && tokens.accessToken && fetchUserInfo
             ? await fetchUserInfo(resolvedUserInfoUrl, tokens.accessToken)
             : null,
+        requiredClaimPaths: requiredClaimPaths.length > 0 ? requiredClaimPaths : undefined,
       })
       if (!result.ok) return null
       const { id, email, name, emailVerified, claims, warnings } = result.identity
