@@ -14,6 +14,7 @@ import { REACTION_EMOJIS } from '@/lib/shared/db-types'
 import { ReactionChip } from '@/components/shared/reaction-chip'
 import { addReactionFn, removeReactionFn } from '@/lib/server/functions/comments'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
+import { useWidgetAuth } from './widget-auth-provider'
 import { cn } from '@/lib/shared/utils'
 import { CommentContent } from '@/components/public/comment-content'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
@@ -101,6 +102,7 @@ function WidgetCommentItem({
   onImageUpload,
 }: WidgetCommentItemProps) {
   const intl = useIntl()
+  const { ensureSessionThen } = useWidgetAuth()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [showReplyForm, setShowReplyForm] = useState(false)
   const [replyText, setReplyText] = useState('')
@@ -135,11 +137,16 @@ function WidgetCommentItem({
     try {
       const hasReacted = reactions.some((r) => r.emoji === emoji && r.hasReacted)
       const fn = hasReacted ? removeReactionFn : addReactionFn
-      const result = await fn({
-        data: { commentId: comment.id, emoji },
-        headers: getWidgetAuthHeaders(),
+      // Reacting may be the visitor's first write, so there may be no session
+      // yet — mint one (anonymous is fine) or the request goes out with no
+      // Bearer and requireAuth() rejects it silently (GH #464).
+      await ensureSessionThen(async () => {
+        const result = await fn({
+          data: { commentId: comment.id, emoji },
+          headers: getWidgetAuthHeaders(),
+        })
+        setReactions(result.reactions)
       })
-      setReactions(result.reactions)
     } catch (error) {
       console.error('Failed to update reaction:', error)
     } finally {

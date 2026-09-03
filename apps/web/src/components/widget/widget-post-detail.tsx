@@ -24,7 +24,7 @@ import { WidgetPortalTitle } from './widget-portal-title'
 import { WidgetPostDetailSkeleton } from './widget-skeletons'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { PostId } from '@quackback/ids'
-import { useWidgetImageUpload } from '@/lib/client/hooks/use-image-upload'
+import { useWidgetImageUpload } from './use-widget-image-upload'
 
 interface StatusInfo {
   id: string

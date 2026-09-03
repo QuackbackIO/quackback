@@ -1,5 +1,4 @@
 import { useCallback } from 'react'
-import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { MAX_FILE_SIZE, isAllowedImageType } from '@/lib/shared/storage-config'
 
 interface UseImageUploadOptions {
@@ -93,12 +92,5 @@ export function usePortalImageUpload(
   return useImageUpload({ ...options, endpoint: '/api/portal/upload' })
 }
 
-export function useWidgetImageUpload(
-  options: Omit<UseImageUploadOptions, 'prefix' | 'endpoint' | 'extraHeaders'> = {}
-) {
-  return useImageUpload({
-    ...options,
-    endpoint: '/api/widget/upload',
-    extraHeaders: getWidgetAuthHeaders,
-  })
-}
+// The widget flavour lives in `@/components/widget/use-widget-image-upload`:
+// it needs the widget auth context to mint a session before uploading.
