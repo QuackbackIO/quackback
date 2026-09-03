@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   ArrowUturnLeftIcon,
   ChevronDownIcon,
@@ -14,6 +15,7 @@ import { REACTION_EMOJIS } from '@/lib/shared/db-types'
 import { ReactionChip } from '@/components/shared/reaction-chip'
 import { addReactionFn, removeReactionFn } from '@/lib/server/functions/comments'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
+import { widgetQueryKeys } from '@/lib/client/hooks/use-widget-vote'
 import { useWidgetAuth } from './widget-auth-provider'
 import { cn } from '@/lib/shared/utils'
 import { CommentContent } from '@/components/public/comment-content'
@@ -102,7 +104,8 @@ function WidgetCommentItem({
   onImageUpload,
 }: WidgetCommentItemProps) {
   const intl = useIntl()
-  const { ensureSessionThen } = useWidgetAuth()
+  const { ensureSessionThen, getSessionVersion } = useWidgetAuth()
+  const queryClient = useQueryClient()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [showReplyForm, setShowReplyForm] = useState(false)
   const [replyText, setReplyText] = useState('')
@@ -140,6 +143,7 @@ function WidgetCommentItem({
       // Reacting may be the visitor's first write, so there may be no session
       // yet — mint one (anonymous is fine) or the request goes out with no
       // Bearer and requireAuth() rejects it silently (GH #464).
+      const versionBefore = getSessionVersion()
       await ensureSessionThen(async () => {
         const result = await fn({
           data: { commentId: comment.id, emoji },
@@ -147,6 +151,13 @@ function WidgetCommentItem({
         })
         setReactions(result.reactions)
       })
+      // Minting re-keyed the post-detail query, and that refetch raced this
+      // mutation: if it read before the reaction committed, the sync effect
+      // above would overwrite the result with stale server state. Refetch so
+      // the detail cache reflects the committed reaction.
+      if (getSessionVersion() !== versionBefore) {
+        void queryClient.invalidateQueries({ queryKey: widgetQueryKeys.postDetail.all })
+      }
     } catch (error) {
       console.error('Failed to update reaction:', error)
     } finally {

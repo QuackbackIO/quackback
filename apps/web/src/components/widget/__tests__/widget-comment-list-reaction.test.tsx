@@ -8,21 +8,25 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { ReactNode } from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
 import type { PostCommentId } from '@quackback/ids'
 import type { PublicCommentView } from '@/lib/client/queries/portal-detail'
 
-const session = { token: null as string | null }
+const session = { token: null as string | null, version: 0 }
 const calls: string[] = []
 
 const ensureSessionThen = vi.fn(async (cb: () => void | Promise<void>) => {
   calls.push('ensureSession')
-  session.token = 'anon-minted'
+  if (!session.token) {
+    session.token = 'anon-minted'
+    session.version += 1
+  }
   await cb()
 })
 
 vi.mock('../widget-auth-provider', () => ({
-  useWidgetAuth: () => ({ ensureSessionThen }),
+  useWidgetAuth: () => ({ ensureSessionThen, getSessionVersion: () => session.version }),
 }))
 vi.mock('@/lib/client/widget-auth', () => ({
   getWidgetAuthHeaders: () => (session.token ? { Authorization: `Bearer ${session.token}` } : {}),
@@ -43,11 +47,14 @@ vi.mock('@/components/public/comment-content', () => ({
 
 import { WidgetCommentList } from '../widget-comment-list'
 
+let queryClient: QueryClient
 function wrapper({ children }: { children: ReactNode }) {
   return (
-    <IntlProvider locale="en" messages={{}}>
-      {children}
-    </IntlProvider>
+    <QueryClientProvider client={queryClient}>
+      <IntlProvider locale="en" messages={{}}>
+        {children}
+      </IntlProvider>
+    </QueryClientProvider>
   )
 }
 
@@ -71,9 +78,11 @@ const comment: PublicCommentView = {
 describe('WidgetCommentList — reaction session guard (GH #464)', () => {
   beforeEach(() => {
     session.token = null
+    session.version = 0
     calls.length = 0
     ensureSessionThen.mockClear()
     addReactionFn.mockClear()
+    queryClient = new QueryClient()
   })
 
   it('mints a session before firing the reaction and sends the Bearer', async () => {
@@ -89,5 +98,30 @@ describe('WidgetCommentList — reaction session guard (GH #464)', () => {
     })
     // Server result replaces the optimistic state.
     await waitFor(() => expect(screen.getByTestId('reaction-badge').textContent).toContain('2'))
+  })
+
+  it('refetches the post detail when the reaction minted the session (re-key race)', async () => {
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+    render(<WidgetCommentList comments={[comment]} pinnedCommentId={null} />, { wrapper })
+
+    fireEvent.click(screen.getByTestId('reaction-badge'))
+
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['widget', 'post'] }))
+  })
+
+  it('does not refetch the post detail when a session already existed', async () => {
+    session.token = 'anon-existing'
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+    render(<WidgetCommentList comments={[comment]} pinnedCommentId={null} />, { wrapper })
+
+    fireEvent.click(screen.getByTestId('reaction-badge'))
+
+    await waitFor(() => expect(addReactionFn).toHaveBeenCalledTimes(1))
+    expect(addReactionFn).toHaveBeenCalledWith({
+      data: { commentId: 'pcm_1', emoji: '👍' },
+      headers: { Authorization: 'Bearer anon-existing' },
+    })
+    await waitFor(() => expect(screen.getByTestId('reaction-badge').textContent).toContain('2'))
+    expect(invalidate).not.toHaveBeenCalled()
   })
 })
