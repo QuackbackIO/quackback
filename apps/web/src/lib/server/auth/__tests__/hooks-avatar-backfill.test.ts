@@ -19,6 +19,7 @@ const mockUpdate = vi.fn(() => ({
     return { where: mockUpdateWhere }
   },
 }))
+const mockSafeFetch = vi.fn()
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -34,6 +35,11 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   desc: vi.fn((col: unknown) => ({ op: 'desc', col })),
 }))
 
+vi.mock('@/lib/server/content/ssrf-guard', async (orig) => ({
+  ...(await orig<typeof import('@/lib/server/content/ssrf-guard')>()),
+  safeFetch: (...args: unknown[]) => mockSafeFetch(...args),
+}))
+
 vi.mock('@/lib/server/logger', () => ({
   logger: { child: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }) },
 }))
@@ -44,6 +50,13 @@ const { stashResolvedClaims, takeResolvedClaims } = await import('../resolved-cl
 const PROVIDER = 'oidc_acme'
 const REGISTERED = new Set([PROVIDER])
 const USER_ID = 'user_abc'
+
+/** Minimal provider row shape the hook reads for the userinfo fallback. */
+function providerRow(over: Record<string, unknown> = {}) {
+  return [
+    { registrationId: PROVIDER, userInfoUrl: null, discoveryUrl: null, ...over },
+  ] as unknown as Parameters<typeof handleAvatarBackfillAfter>[2]
+}
 
 function ctx(over: Record<string, unknown> = {}) {
   return {
@@ -56,7 +69,7 @@ function ctx(over: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mockAccountFindFirst.mockResolvedValue({ accountId: 'sub-1', idToken: null })
+  mockAccountFindFirst.mockResolvedValue({ accountId: 'sub-1', idToken: null, accessToken: null })
   // The stash is module state; drain any entry a prior test left (the hook
   // only peeks, so it never clears its own).
   takeResolvedClaims(PROVIDER, 'sub-1')
@@ -67,7 +80,7 @@ describe('handleAvatarBackfillAfter', () => {
     mockUserFindFirst.mockResolvedValue({ image: null })
     stashResolvedClaims(PROVIDER, 'sub-1', { picture: 'https://cdn.acme.test/u/1.png' })
 
-    await handleAvatarBackfillAfter(ctx(), REGISTERED)
+    await handleAvatarBackfillAfter(ctx(), REGISTERED, providerRow())
 
     expect(mockUpdateSet).toHaveBeenCalledWith({ image: 'https://cdn.acme.test/u/1.png' })
   })
@@ -76,7 +89,7 @@ describe('handleAvatarBackfillAfter', () => {
     mockUserFindFirst.mockResolvedValue({ image: 'https://user-chosen.test/me.png' })
     stashResolvedClaims(PROVIDER, 'sub-1', { picture: 'https://cdn.acme.test/u/1.png' })
 
-    await handleAvatarBackfillAfter(ctx(), REGISTERED)
+    await handleAvatarBackfillAfter(ctx(), REGISTERED, providerRow())
 
     expect(mockUpdateSet).not.toHaveBeenCalled()
   })
@@ -85,16 +98,16 @@ describe('handleAvatarBackfillAfter', () => {
     mockUserFindFirst.mockResolvedValue({ image: '   ' })
     stashResolvedClaims(PROVIDER, 'sub-1', { picture: 'https://cdn.acme.test/u/1.png' })
 
-    await handleAvatarBackfillAfter(ctx(), REGISTERED)
+    await handleAvatarBackfillAfter(ctx(), REGISTERED, providerRow())
 
     expect(mockUpdateSet).toHaveBeenCalledWith({ image: 'https://cdn.acme.test/u/1.png' })
   })
 
-  it('does nothing when no usable picture is available', async () => {
+  it('does nothing when no usable picture is available anywhere', async () => {
     mockUserFindFirst.mockResolvedValue({ image: null })
     stashResolvedClaims(PROVIDER, 'sub-1', { picture: 'not-a-url' })
 
-    await handleAvatarBackfillAfter(ctx(), REGISTERED)
+    await handleAvatarBackfillAfter(ctx(), REGISTERED, providerRow())
 
     expect(mockUpdateSet).not.toHaveBeenCalled()
   })
@@ -104,11 +117,53 @@ describe('handleAvatarBackfillAfter', () => {
       JSON.stringify({ sub: 'sub-1', picture: 'https://cdn.acme.test/from-id.png' })
     ).toString('base64url')}.y`
     mockUserFindFirst.mockResolvedValue({ image: null })
-    mockAccountFindFirst.mockResolvedValue({ accountId: 'sub-1', idToken })
+    mockAccountFindFirst.mockResolvedValue({ accountId: 'sub-1', idToken, accessToken: null })
 
-    await handleAvatarBackfillAfter(ctx(), REGISTERED)
+    await handleAvatarBackfillAfter(ctx(), REGISTERED, providerRow())
 
     expect(mockUpdateSet).toHaveBeenCalledWith({ image: 'https://cdn.acme.test/from-id.png' })
+  })
+
+  it('calls userinfo directly when neither the stash nor the ID token has a picture', async () => {
+    mockUserFindFirst.mockResolvedValue({ image: null })
+    mockAccountFindFirst.mockResolvedValue({
+      accountId: 'sub-1',
+      idToken: null,
+      accessToken: 'live-access-token',
+    })
+    mockSafeFetch.mockResolvedValue(
+      new Response(JSON.stringify({ sub: 'sub-1', picture: 'https://cdn.acme.test/from-ui.png' }), {
+        status: 200,
+      })
+    )
+
+    await handleAvatarBackfillAfter(
+      ctx(),
+      REGISTERED,
+      providerRow({ userInfoUrl: 'https://idp.acme.test/userinfo' })
+    )
+
+    expect(mockSafeFetch).toHaveBeenCalledWith(
+      'https://idp.acme.test/userinfo',
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer live-access-token' },
+      })
+    )
+    expect(mockUpdateSet).toHaveBeenCalledWith({ image: 'https://cdn.acme.test/from-ui.png' })
+  })
+
+  it('skips the userinfo call when there is no stored access token', async () => {
+    mockUserFindFirst.mockResolvedValue({ image: null })
+    mockAccountFindFirst.mockResolvedValue({ accountId: 'sub-1', idToken: null, accessToken: null })
+
+    await handleAvatarBackfillAfter(
+      ctx(),
+      REGISTERED,
+      providerRow({ userInfoUrl: 'https://idp.acme.test/userinfo' })
+    )
+
+    expect(mockSafeFetch).not.toHaveBeenCalled()
+    expect(mockUpdateSet).not.toHaveBeenCalled()
   })
 
   it('only peeks the stash, leaving it for role provisioning to consume', async () => {
@@ -118,9 +173,8 @@ describe('handleAvatarBackfillAfter', () => {
       groups: ['x'],
     })
 
-    await handleAvatarBackfillAfter(ctx(), REGISTERED)
+    await handleAvatarBackfillAfter(ctx(), REGISTERED, providerRow())
 
-    const { takeResolvedClaims } = await import('../resolved-claims-stash')
     expect(takeResolvedClaims(PROVIDER, 'sub-1')).toEqual({
       picture: 'https://cdn.acme.test/u/1.png',
       groups: ['x'],
@@ -128,17 +182,21 @@ describe('handleAvatarBackfillAfter', () => {
   })
 
   it('ignores non-callback paths', async () => {
-    await handleAvatarBackfillAfter(ctx({ path: '/sign-in/email' }), REGISTERED)
+    await handleAvatarBackfillAfter(ctx({ path: '/sign-in/email' }), REGISTERED, providerRow())
     expect(mockUserFindFirst).not.toHaveBeenCalled()
   })
 
   it('ignores an unregistered provider', async () => {
-    await handleAvatarBackfillAfter(ctx(), new Set<string>())
+    await handleAvatarBackfillAfter(ctx(), new Set<string>(), providerRow())
     expect(mockUserFindFirst).not.toHaveBeenCalled()
   })
 
   it('does nothing when there is no session user', async () => {
-    await handleAvatarBackfillAfter(ctx({ context: { newSession: null } }), REGISTERED)
+    await handleAvatarBackfillAfter(
+      ctx({ context: { newSession: null } }),
+      REGISTERED,
+      providerRow()
+    )
     expect(mockUserFindFirst).not.toHaveBeenCalled()
   })
 })
