@@ -102,6 +102,24 @@ describe('useWidgetImageUpload — session guard (GH #464)', () => {
     expect(onError.mock.calls[0][0]).toBeInstanceOf(WidgetSessionError)
   })
 
+  it('rejects an unusable file before minting anything', async () => {
+    mintSucceedsWith('anon-should-not-exist')
+    const fetchMock = vi.fn().mockResolvedValue(uploadOk)
+    vi.stubGlobal('fetch', fetchMock)
+    const onError = vi.fn()
+
+    const { result } = renderHook(() => useWidgetImageUpload({ onError }), { wrapper })
+    const pdf = new File([new Uint8Array([1])], 'doc.pdf', { type: 'application/pdf' })
+
+    await expect(result.current.upload(pdf)).rejects.toThrow(/Invalid file type/)
+    expect(onError).toHaveBeenCalledTimes(1)
+    expect(onError.mock.calls[0][0]).not.toBeInstanceOf(WidgetSessionError)
+    expect(mintAnon).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(getWidgetToken()).toBeNull()
+    expect(readPersistedToken()).toBeNull()
+  })
+
   it('skips the mint when a session already exists', async () => {
     mintSucceedsWith('anon-first')
     const fetchMock = vi.fn().mockResolvedValue(uploadOk)

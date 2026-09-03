@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
+import { useImageUpload, validateImageFile } from '@/lib/client/hooks/use-image-upload'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { useWidgetAuth } from './widget-auth-provider'
 
@@ -38,6 +38,13 @@ export function useWidgetImageUpload(options: UseWidgetImageUploadOptions = {}) 
 
   const upload = useCallback(
     async (file: File): Promise<string> => {
+      // Reject unusable files before touching the session: an invalid pick
+      // must not mint/persist an anonymous session or bump sessionVersion.
+      const invalid = validateImageFile(file)
+      if (invalid) {
+        onError?.(invalid)
+        throw invalid
+      }
       const ready = await ensureSession()
       if (!ready) {
         const error = new WidgetSessionError()
