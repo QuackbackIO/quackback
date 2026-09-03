@@ -71,6 +71,107 @@ describe('resolveIdentity — the fast path', () => {
     await resolveIdentity({ tokens: { idToken: fakeJwt({ sub: 'x' }) }, fetchUserInfo })
     expect(fetchUserInfo).toHaveBeenCalledTimes(1)
   })
+
+  it('with wantImage, keeps going to userinfo for a `picture` the ID token lacks', async () => {
+    // The reported bug: id + email + name are all in the ID token, so the fast
+    // path used to stop before userinfo — where this provider's only `picture`
+    // lives — and the avatar was silently dropped.
+    const fetchUserInfo = vi.fn(async () => ({
+      sub: 'x',
+      picture: 'https://cdn.example.com/x.png',
+    }))
+    const result = await resolveIdentity({
+      tokens: { idToken: fakeJwt({ sub: 'x', email: 'e@x.com', name: 'N' }) },
+      fetchUserInfo,
+      wantImage: true,
+    })
+    expect(fetchUserInfo).toHaveBeenCalledTimes(1)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.identity.image).toBe('https://cdn.example.com/x.png')
+    expect(result.identity.sources.image).toBe('userinfo')
+    expect(result.identity.claims.picture).toBe('https://cdn.example.com/x.png')
+  })
+
+  it('with wantImage, still short-circuits once the picture is in the ID token', async () => {
+    const fetchUserInfo = vi.fn(async () => ({ sub: 'x', picture: 'https://cdn/other.png' }))
+    const result = await resolveIdentity({
+      tokens: {
+        idToken: fakeJwt({
+          sub: 'x',
+          email: 'e@x.com',
+          name: 'N',
+          picture: 'https://cdn/id.png',
+        }),
+      },
+      fetchUserInfo,
+      wantImage: true,
+    })
+    expect(fetchUserInfo).not.toHaveBeenCalled()
+    if (!result.ok) throw new Error('expected ok')
+    expect(result.identity.image).toBe('https://cdn/id.png')
+    expect(result.identity.sources.image).toBe('idToken')
+  })
+
+  it('without wantImage (the default), a picture at userinfo is never fetched for', async () => {
+    const fetchUserInfo = vi.fn(async () => ({ sub: 'x', picture: 'https://cdn/x.png' }))
+    const result = await resolveIdentity({
+      tokens: { idToken: fakeJwt({ sub: 'x', email: 'e@x.com', name: 'N' }) },
+      fetchUserInfo,
+    })
+    expect(fetchUserInfo).not.toHaveBeenCalled()
+    if (!result.ok) throw new Error('expected ok')
+    expect(result.identity.image).toBeUndefined()
+    expect('image' in result.identity).toBe(false)
+  })
+
+  it('with wantImage but no picture anywhere, resolves without an image', async () => {
+    const fetchUserInfo = vi.fn(async () => ({ sub: 'x' }))
+    const result = await resolveIdentity({
+      tokens: { idToken: fakeJwt({ sub: 'x', email: 'e@x.com', name: 'N' }) },
+      fetchUserInfo,
+      wantImage: true,
+    })
+    // One fetch (looking for the picture), then gives up cleanly.
+    expect(fetchUserInfo).toHaveBeenCalledTimes(1)
+    if (!result.ok) throw new Error('expected ok')
+    expect(result.identity.image).toBeUndefined()
+  })
+
+  it('with wantImage, rejects a non-http(s) picture claim', async () => {
+    const result = await resolveIdentity({
+      tokens: {
+        idToken: fakeJwt({
+          sub: 'x',
+          email: 'e@x.com',
+          name: 'N',
+          picture: 'data:image/png;base64,iVBORw0KGgo=',
+        }),
+      },
+      fetchUserInfo: async () => null,
+      wantImage: true,
+    })
+    if (!result.ok) throw new Error('expected ok')
+    expect(result.identity.image).toBeUndefined()
+  })
+
+  it('with wantImage + imageClaim, reads a non-standard avatar claim', async () => {
+    const result = await resolveIdentity({
+      tokens: {
+        idToken: fakeJwt({
+          sub: 'x',
+          email: 'e@x.com',
+          name: 'N',
+          avatar_url: 'https://cdn/a.png',
+        }),
+      },
+      fetchUserInfo: async () => null,
+      wantImage: true,
+      mapping: { imageClaim: 'avatar_url' },
+    })
+    if (!result.ok) throw new Error('expected ok')
+    expect(result.identity.image).toBe('https://cdn/a.png')
+  })
 })
 
 describe('resolveIdentity — subject consistency (OIDC Core 5.3.2)', () => {
@@ -318,6 +419,26 @@ describe('resolveIdentity — subject mismatch, observe vs enforce', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.identity.warnings ?? []).not.toContain('subject_mismatch')
+  })
+
+  it('clears an ID-token image alongside the rest on a subject mismatch', async () => {
+    const result = await resolveIdentity({
+      tokens: {
+        idToken: fakeJwt({ sub: 'from-token', picture: 'https://cdn/token.png' }),
+        accessToken: 'at',
+      },
+      fetchUserInfo: async () => ({
+        sub: 'from-userinfo',
+        email: 'e@x.com',
+        name: 'N',
+        picture: 'https://cdn/userinfo.png',
+      }),
+      wantImage: true,
+    })
+    if (!result.ok) throw new Error('expected ok')
+    // The token's image must not survive when the token's subject didn't.
+    expect(result.identity.image).toBe('https://cdn/userinfo.png')
+    expect(result.identity.sources.image).toBe('userinfo')
   })
 })
 

@@ -46,7 +46,8 @@ import {
 } from './signin-device-tracker'
 import { isSyntheticAnonEmail } from '@/lib/shared/anonymous-email'
 import { decodeSsoClaims } from './sso-claims-decode'
-import { takeResolvedClaims } from './resolved-claims-stash'
+import { peekResolvedClaims, takeResolvedClaims } from './resolved-claims-stash'
+import { pickAvatarUrl } from './resolve-identity'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'auth-hooks' })
@@ -754,6 +755,66 @@ async function readSsoClaims(
 }
 
 /**
+ * Fill `user.image` from the SSO `picture` claim — but only when the account
+ * has no avatar yet.
+ *
+ * Better-Auth's genericOAuth writes `image` only when it CREATES the user, and
+ * we deliberately leave `overrideUserInfo` off ("set once, never clobber a
+ * picture the user chose in Quackback"). Neither covers the common case: an
+ * account that already existed before the workspace's IdP started returning a
+ * `picture`, or before this feature shipped. This closes that gap without ever
+ * overwriting a non-empty avatar.
+ *
+ * Claims come from the request's resolved set first (peeked, not consumed, so
+ * role provisioning still takes its copy), then the stored ID token. The
+ * production `getUserInfo` resolves with `wantImage`, so for a provider that
+ * only exposes `picture` at userinfo the merged claims still carry it here.
+ */
+export async function handleAvatarBackfillAfter(
+  ctx: {
+    path?: string
+    params?: Record<string, unknown>
+    context?: { newSession?: { user?: { id?: string } } | null }
+  },
+  registeredOidcIds: Set<string>
+): Promise<void> {
+  if (ctx.path !== '/oauth2/callback/:providerId') return
+  const providerId = ctx.params?.providerId
+  if (typeof providerId !== 'string' || !isRegisteredOidcProvider(providerId, registeredOidcIds))
+    return
+  const userId = ctx.context?.newSession?.user?.id
+  if (typeof userId !== 'string' || userId.length === 0) return
+  type UserId = `user_${string}`
+  const userIdTyped = userId as UserId
+
+  const { db, user: userTable, account, and, eq, desc } = await import('@/lib/server/db')
+
+  const owner = await db.query.user.findFirst({
+    where: eq(userTable.id, userIdTyped),
+    columns: { image: true },
+  })
+  // Only fill an empty avatar — never replace one the user set, and never
+  // re-write an identical URL.
+  if (!owner || (typeof owner.image === 'string' && owner.image.trim() !== '')) return
+
+  const row = await db.query.account.findFirst({
+    where: and(eq(account.userId, userIdTyped), eq(account.providerId, providerId)),
+    columns: { idToken: true, accountId: true },
+    orderBy: desc(account.createdAt),
+  })
+
+  const claims: Record<string, unknown> =
+    (row?.accountId ? peekResolvedClaims(providerId, row.accountId) : null) ??
+    decodeSsoClaims(row?.idToken)
+
+  const image = pickAvatarUrl(claims)
+  if (!image) return
+
+  await db.update(userTable).set({ image }).where(eq(userTable.id, userIdTyped))
+  log.info({ user_id: userId, provider_id: providerId }, 'backfilled sso avatar')
+}
+
+/**
  * Layer C — post-session compensating cleanup for OAuth callbacks.
  *
  * `hooks.after` for `/callback/:id` and `/oauth2/callback/:providerId`
@@ -1343,6 +1404,12 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
   await handleAutoProvisionAfter(
     ctx as Parameters<typeof handleAutoProvisionAfter>[0],
     providers,
+    registeredOidcIds
+  )
+  // After auto-provision so role mapping consumes the resolved-claims stash
+  // first; this one only peeks. Fills an empty avatar from the `picture` claim.
+  await handleAvatarBackfillAfter(
+    ctx as Parameters<typeof handleAvatarBackfillAfter>[0],
     registeredOidcIds
   )
   await handleCallbackPolicyCleanup(

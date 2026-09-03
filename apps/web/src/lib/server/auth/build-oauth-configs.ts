@@ -223,9 +223,14 @@ export async function buildGenericOAuthConfigs({
           resolvedUserInfoUrl && tokens.accessToken && fetchUserInfo
             ? await fetchUserInfo(resolvedUserInfoUrl, tokens.accessToken)
             : null,
+        // Pursue the avatar through the cascade — a `picture` claim commonly
+        // lives only at userinfo, past where id + email + name already stopped
+        // the fast path. `claims` (merged) then carries it for the after-hook
+        // backfill via `onResolved`.
+        wantImage: true,
       })
       if (!result.ok) return null
-      const { id, email, name, emailVerified, claims, warnings } = result.identity
+      const { id, email, name, image, emailVerified, claims, warnings } = result.identity
       // Phase one of observe-then-enforce: the discrepancy is recorded, not
       // acted on, so the real rate is known before a release starts refusing
       // sign-ins over it. `onWarning` is injected for the same reason the
@@ -252,9 +257,10 @@ export async function buildGenericOAuthConfigs({
       }
 
       // Better-Auth's genericOAuth derives the avatar from `image` only, so
-      // promote the standard OIDC `picture` claim. Set once — `overrideUserInfo`
-      // stays off, so a later change at the IdP does not overwrite the account.
-      const resolvedImage = pickAvatarUrl(claims)
+      // hand it the resolved `picture` URL. Better-Auth persists it only when it
+      // CREATES the user; an existing account is backfilled by
+      // `handleAvatarBackfillAfter` (fill-if-empty, never overwrites).
+      const resolvedImage = image ?? pickAvatarUrl(claims)
 
       // Raw claims first, mapped fields last: the mapped values are the
       // resolved answer and must not be shadowed by a same-named raw claim.

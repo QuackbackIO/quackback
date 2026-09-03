@@ -372,4 +372,26 @@ describe('avatar from the OIDC `picture` claim', () => {
     })
     expect(info && 'image' in info).toBe(false)
   })
+
+  it('pulls `picture` from userinfo when the ID token is otherwise complete', async () => {
+    // The reported failure: a "custom OIDC" provider whose ID token carries
+    // sub + email + name (so the resolver fast-path stopped there) but whose
+    // avatar is only at userinfo. `wantImage` keeps the cascade going for it.
+    const fetchUserInfo = vi.fn(async () => ({
+      sub: 's1',
+      picture: 'https://cdn.example.com/from-userinfo.png',
+    }))
+    const cfgs = await buildGenericOAuthConfigs({
+      providers: [row({ discoveryUrl: null, userInfoUrl: 'https://idp/userinfo' })] as never,
+      creds: async () => ({ clientId: 'c', clientSecret: 's' }),
+      tierAllowsOidc: true,
+      fetchUserInfo,
+    } as never)
+    const info = await cfgs[0].getUserInfo?.({
+      idToken: idToken({ sub: 's1', email: 'real@x.com', name: 'Real' }),
+      accessToken: 'opaque',
+    })
+    expect(fetchUserInfo).toHaveBeenCalledWith('https://idp/userinfo', 'opaque')
+    expect(info?.image).toBe('https://cdn.example.com/from-userinfo.png')
+  })
 })

@@ -83,3 +83,17 @@ export function takeResolvedClaims(
   if (Date.now() - held.ts >= TTL_MS) return null
   return held.claims
 }
+
+/**
+ * Read the stashed claims WITHOUT consuming them, so another after-hook that
+ * takes them (role provisioning) still gets its copy. Same TTL rule as
+ * {@link takeResolvedClaims}.
+ */
+export function peekResolvedClaims(
+  providerId: string,
+  accountId: string
+): Record<string, unknown> | null {
+  const held = entries.get(key(providerId, accountId))
+  if (!held || Date.now() - held.ts >= TTL_MS) return null
+  return held.claims
+}
