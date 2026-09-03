@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, memo, useRef, useState } from 'react'
 import { usePillsScroll } from '@/lib/client/hooks/use-pills-scroll'
-import { Squares2X2Icon, PencilIcon } from '@heroicons/react/24/solid'
+import { Squares2X2Icon, PencilIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/solid'
 import {
   LightBulbIcon,
   MagnifyingGlassIcon,
@@ -9,7 +9,7 @@ import {
   ChevronRightIcon,
 } from '@heroicons/react/24/outline'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { useIntl, FormattedMessage } from 'react-intl'
 import {
   Select,
@@ -21,6 +21,9 @@ import {
 import { listPublicPostsFn } from '@/lib/server/functions/public-posts'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { WidgetVoteButton } from './widget-vote-button'
+import { WidgetPostListSkeleton } from './widget-skeletons'
+import { widgetQueryKeys } from '@/lib/client/hooks/use-widget-vote'
+import { cn } from '@/lib/shared/utils'
 import { useWidgetAuth } from './widget-auth-provider'
 import { sendToHost } from '@/lib/client/widget-bridge'
 import type { PostId } from '@quackback/ids'
@@ -119,11 +122,17 @@ const WidgetPostRow = memo(
   }) {
     const status = post.statusId ? (statusMap.get(post.statusId) ?? null) : null
     return (
+      // Two sibling controls, never nested: a button-role ancestor would make
+      // the vote button presentational to assistive tech. The open button's
+      // ::after is stretched over the row so the whole row stays the tap
+      // target; the vote button sits above it.
       <div
-        className={`w-full overflow-hidden flex items-center gap-2 rounded-lg hover:bg-muted/30 transition-colors cursor-pointer ${compact ? 'px-1.5 py-1' : 'px-2 py-1.5'}`}
-        onClick={onSelect}
+        className={cn(
+          'relative w-full overflow-hidden flex items-center gap-2 rounded-lg hover:bg-muted/30 transition-colors',
+          compact ? 'px-1.5 py-1' : 'px-2 py-1.5'
+        )}
       >
-        <div onClick={(e) => e.stopPropagation()} className="shrink-0">
+        <div className="relative z-10 shrink-0">
           <WidgetVoteButton
             postId={post.id as PostId}
             voteCount={post.voteCount}
@@ -143,7 +152,15 @@ const WidgetPostRow = memo(
             onAuthRequired={!canVote ? onAuthRequired : undefined}
           />
         </div>
-        <div className="flex-1 min-w-0">
+        <button
+          type="button"
+          onClick={onSelect}
+          className={cn(
+            'flex-1 min-w-0 text-start cursor-pointer outline-none',
+            'after:absolute after:inset-0 after:rounded-lg',
+            'focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-ring/50'
+          )}
+        >
           <div className="flex items-center gap-1.5">
             {status && (
               <span className="inline-flex items-center gap-0.5 text-[11px] text-muted-foreground">
@@ -160,13 +177,26 @@ const WidgetPostRow = memo(
                 {post.board.name}
               </span>
             )}
+            {post.commentCount > 0 && (
+              <span className="ms-auto inline-flex items-center gap-0.5 text-[11px] text-muted-foreground/60 tabular-nums">
+                <ChatBubbleLeftIcon className="h-2.5 w-2.5 text-muted-foreground/40" aria-hidden />
+                <span aria-hidden>{post.commentCount}</span>
+                <span className="sr-only">
+                  <FormattedMessage
+                    id="widget.home.row.comments"
+                    defaultMessage="{count, plural, one {# comment} other {# comments}}"
+                    values={{ count: post.commentCount }}
+                  />
+                </span>
+              </span>
+            )}
           </div>
           <p
             className={`font-medium text-foreground line-clamp-1 ${compact ? 'text-xs' : 'text-sm'}`}
           >
             {post.title}
           </p>
-        </div>
+        </button>
       </div>
     )
   },
@@ -200,8 +230,10 @@ export function WidgetHomeAnimated({
     user,
     emitEvent,
     metadata,
+    getSessionVersion,
   } = useWidgetAuth()
   const { upload: uploadImage } = useWidgetImageUpload()
+  const queryClient = useQueryClient()
   const inputRef = useRef<HTMLInputElement>(null)
 
   const [title, setTitle] = useState('')
@@ -301,7 +333,11 @@ export function WidgetHomeAnimated({
   })
 
   // Search query for popular ideas — replaces infinite list when active
-  const { data: popularSearchData, isFetching: isPopularSearchFetching } = useQuery({
+  const {
+    data: popularSearchData,
+    isFetching: isPopularSearchFetching,
+    isPlaceholderData: isPopularSearchStale,
+  } = useQuery({
     queryKey: ['widget', 'search', 'popular', debouncedPopularSearch, activeBoardSlug ?? 'all'],
     queryFn: async () => {
       const params = new URLSearchParams({ q: debouncedPopularSearch, limit: '20' })
@@ -311,7 +347,16 @@ export function WidgetHomeAnimated({
       return { posts: (json.data?.posts ?? []) as WidgetPost[] }
     },
     enabled: debouncedPopularSearch.length > 0,
+    // Refining a query keeps the previous hits on screen (dimmed) instead of
+    // blinking the list empty between keystrokes; only the very first search
+    // has nothing to hold and shows the row skeleton.
+    placeholderData: keepPreviousData,
   })
+  // Typed-but-unsettled (debounce window), or fetching, or showing hits that
+  // belong to the previous query.
+  const popularSearchPending =
+    isPopularSearchFetching || isPopularSearchStale || popularSearch !== debouncedPopularSearch
+  const popularSearchPosts = popularSearchData?.posts ?? []
 
   const handleAuthRequired = useCallback(
     (postId: string) => {
@@ -446,6 +491,11 @@ export function WidgetHomeAnimated({
         import('@/lib/client/widget-auth'),
         import('@/lib/server/functions/public-posts'),
       ])
+      // Headers and session version are captured together: the vote the
+      // server casts belongs to whichever principal made this request, even
+      // if the host identifies or clears the visitor while it is in flight.
+      const headers = getWidgetAuthHeaders()
+      const votedPostsKey = widgetQueryKeys.votedPosts.bySession(getSessionVersion())
       const result = await createPublicPostFn({
         data: {
           boardId: selectedBoardId,
@@ -454,7 +504,7 @@ export function WidgetHomeAnimated({
           contentJson: (contentJson ?? undefined) as TiptapContent | undefined,
           metadata: metadata ?? undefined,
         },
-        headers: getWidgetAuthHeaders(),
+        headers,
       })
 
       emitEvent('post:created', {
@@ -464,10 +514,24 @@ export function WidgetHomeAnimated({
         statusId: result.statusId ?? null,
       })
 
+      // The server auto-upvotes the author; reflect that immediately so the
+      // success card shows a cast vote instead of an inviting empty 0 — a
+      // click on that would silently remove the server's vote. The seed is
+      // written explicitly (when this submit minted the first session there
+      // are no rows yet, so no query for the key exists to update) and then
+      // invalidated: the refetch replaces it with the server's complete set,
+      // so a visitor whose earlier votes were not cached yet does not see
+      // them vanish for the stale window, and a fetch that started before
+      // the post existed is cancelled rather than landing over the seed.
+      queryClient.setQueryData<Set<string>>(
+        votedPostsKey,
+        (old) => new Set([...(old ?? []), result.id])
+      )
+      void queryClient.invalidateQueries({ queryKey: votedPostsKey })
       onPostCreated?.({
         id: result.id,
         title: result.title,
-        voteCount: 0,
+        voteCount: Math.max(result.voteCount ?? 0, 1),
         statusId: result.statusId ?? null,
         board: result.board,
       })
@@ -690,6 +754,13 @@ export function WidgetHomeAnimated({
                             id="widget.home.posting.noAccess"
                             defaultMessage="You don't have access to post on this board"
                           />
+                        ) : boards.length > 1 && !selectedBoardId ? (
+                          // Submit is disabled until a board is picked; say so
+                          // rather than leaving a dead button unexplained.
+                          <FormattedMessage
+                            id="widget.home.posting.chooseBoard"
+                            defaultMessage="Choose a board to post"
+                          />
                         ) : user ? (
                           <FormattedMessage
                             id="widget.home.posting.postingAs"
@@ -760,6 +831,13 @@ export function WidgetHomeAnimated({
                     onChange={(e) => setPopularSearch(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') e.preventDefault()
+                      if (e.key === 'Escape') {
+                        // Own the first Escape (the shell closes the widget on
+                        // an unhandled one): clear or close the search instead.
+                        e.preventDefault()
+                        if (popularSearch) setPopularSearch('')
+                        else setPopularSearchOpen(false)
+                      }
                     }}
                     placeholder={intl.formatMessage({
                       id: 'widget.home.popular.search.placeholder',
@@ -794,7 +872,7 @@ export function WidgetHomeAnimated({
                   <button
                     type="button"
                     onClick={() => setPopularSearchOpen(true)}
-                    className="text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+                    className="flex size-6 items-center justify-center rounded-md text-muted-foreground/70 hover:bg-muted/50 hover:text-foreground transition-colors"
                     aria-label={intl.formatMessage({
                       id: 'widget.home.popular.search.aria',
                       defaultMessage: 'Search ideas',
@@ -812,6 +890,20 @@ export function WidgetHomeAnimated({
                   ref={pills.ref}
                   className="flex gap-1 overflow-x-auto scrollbar-none px-1 pb-0.5"
                 >
+                  {/* Explicit "All" (matching the changelog filter) — re-tapping
+                      the active board to clear it was undiscoverable. */}
+                  <button
+                    type="button"
+                    onClick={() => setActiveBoardSlug(null)}
+                    aria-pressed={activeBoardSlug === null}
+                    className={`rounded-full text-xs px-2 py-0.5 whitespace-nowrap transition-colors shrink-0 ${
+                      activeBoardSlug === null
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                    }`}
+                  >
+                    <FormattedMessage id="widget.home.boards.all" defaultMessage="All" />
+                  </button>
                   {boards.map((board) => (
                     <button
                       key={board.id}
@@ -819,6 +911,7 @@ export function WidgetHomeAnimated({
                       onClick={() =>
                         setActiveBoardSlug(activeBoardSlug === board.slug ? null : board.slug)
                       }
+                      aria-pressed={activeBoardSlug === board.slug}
                       className={`rounded-full text-xs px-2 py-0.5 whitespace-nowrap transition-colors shrink-0 ${
                         activeBoardSlug === board.slug
                           ? 'bg-primary text-primary-foreground'
@@ -860,71 +953,61 @@ export function WidgetHomeAnimated({
 
             {debouncedPopularSearch.length > 0 && (
               <>
-                {(isPopularSearchFetching || popularSearch !== debouncedPopularSearch) && (
-                  <div className="flex justify-center py-4">
-                    <span className="text-xs text-muted-foreground/50">
+                {popularSearchPending && popularSearchPosts.length === 0 && (
+                  <WidgetPostListSkeleton count={4} />
+                )}
+                {!popularSearchPending && popularSearchPosts.length === 0 && (
+                  <div className="flex flex-col items-center justify-center py-8 text-center animate-in fade-in duration-200 motion-reduce:animate-none">
+                    <MagnifyingGlassIcon className="w-8 h-8 text-muted-foreground/30 mb-2" />
+                    <p className="text-sm font-medium text-muted-foreground/70">
                       <FormattedMessage
-                        id="widget.home.popular.search.searching"
-                        defaultMessage="Searching..."
+                        id="widget.home.popular.search.noResults"
+                        defaultMessage="No ideas found"
                       />
-                    </span>
+                    </p>
+                    <p className="text-xs text-muted-foreground/50 mt-0.5">
+                      <FormattedMessage
+                        id="widget.home.popular.search.noResultsHint"
+                        defaultMessage="Try a different search term"
+                      />
+                    </p>
                   </div>
                 )}
-                {!isPopularSearchFetching &&
-                  popularSearch === debouncedPopularSearch &&
-                  (popularSearchData?.posts.length ?? 0) === 0 && (
-                    <div className="flex flex-col items-center justify-center py-8 text-center">
-                      <MagnifyingGlassIcon className="w-8 h-8 text-muted-foreground/30 mb-2" />
-                      <p className="text-sm font-medium text-muted-foreground/70">
-                        <FormattedMessage
-                          id="widget.home.popular.search.noResults"
-                          defaultMessage="No ideas found"
-                        />
-                      </p>
-                      <p className="text-xs text-muted-foreground/50 mt-0.5">
-                        <FormattedMessage
-                          id="widget.home.popular.search.noResultsHint"
-                          defaultMessage="Try a different search term"
-                        />
-                      </p>
-                    </div>
-                  )}
-                {!isPopularSearchFetching &&
-                  popularSearch === debouncedPopularSearch &&
-                  (popularSearchData?.posts.length ?? 0) > 0 && (
-                    <div className="space-y-0.5">
-                      {popularSearchData!.posts.map((post) => (
-                        <WidgetPostRow
-                          key={post.id}
-                          post={post}
-                          statusMap={statusMap}
-                          showBoard
-                          canVote={rowCanVote(post.board?.id)}
-                          ensureSessionThen={ensureSessionThen}
-                          noAccessReason={voteNoAccessReason}
-                          onAuthRequired={() => handleAuthRequired(post.id)}
-                          onSelect={() => onPostSelect?.(post.id)}
-                        />
-                      ))}
-                    </div>
-                  )}
+                {popularSearchPosts.length > 0 && (
+                  <div
+                    className={cn(
+                      'space-y-0.5 transition-opacity duration-200',
+                      popularSearchPending && 'opacity-50'
+                    )}
+                    aria-busy={popularSearchPending || undefined}
+                  >
+                    {popularSearchPosts.map((post) => (
+                      <WidgetPostRow
+                        key={post.id}
+                        post={post}
+                        statusMap={statusMap}
+                        showBoard
+                        canVote={rowCanVote(post.board?.id)}
+                        ensureSessionThen={ensureSessionThen}
+                        noAccessReason={voteNoAccessReason}
+                        onAuthRequired={() => handleAuthRequired(post.id)}
+                        onSelect={() => onPostSelect?.(post.id)}
+                      />
+                    ))}
+                  </div>
+                )}
               </>
             )}
 
             {debouncedPopularSearch.length === 0 && (
               <>
+                {/* Board-pill switch: the list re-keys, so there is nothing to
+                    keep on screen — rows-shaped skeleton until page 1 lands. */}
                 {isFetchingPosts && !isFetchingNextPage && allPopularPosts.length === 0 && (
-                  <div className="flex justify-center py-4">
-                    <span className="text-xs text-muted-foreground/50">
-                      <FormattedMessage
-                        id="widget.home.popular.loading"
-                        defaultMessage="Loading..."
-                      />
-                    </span>
-                  </div>
+                  <WidgetPostListSkeleton />
                 )}
                 {!isFetchingPosts && allPopularPosts.length === 0 && (
-                  <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <div className="flex flex-col items-center justify-center py-8 text-center animate-in fade-in duration-200 motion-reduce:animate-none">
                     <LightBulbIcon className="w-8 h-8 text-muted-foreground/30 mb-2" />
                     <p className="text-sm font-medium text-muted-foreground/70">
                       {activeBoardSlug ? (
@@ -965,14 +1048,9 @@ export function WidgetHomeAnimated({
                       />
                     ))}
                     {hasNextPage && (
-                      <div ref={postsSentinelRef} className="flex justify-center py-2">
+                      <div ref={postsSentinelRef} className="min-h-4">
                         {isFetchingNextPage && (
-                          <span className="text-xs text-muted-foreground/50">
-                            <FormattedMessage
-                              id="widget.home.popular.loading"
-                              defaultMessage="Loading..."
-                            />
-                          </span>
+                          <WidgetPostListSkeleton count={3} fade className="pb-1" />
                         )}
                       </div>
                     )}

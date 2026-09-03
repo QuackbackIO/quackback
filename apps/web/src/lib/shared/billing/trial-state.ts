@@ -27,7 +27,3 @@ export function isTrialEnded(input: {
   const now = (input.now ?? new Date()).getTime()
   return now >= expires
 }
-
-export function trialEndedStorageKey(expiresAt: string): string {
-  return `qb.trial-ended:${expiresAt}`
-}

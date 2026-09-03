@@ -19,6 +19,7 @@ import {
 } from './block-affordance'
 import { BlockTicketForm } from './block-ticket-form'
 import { ConversationPresenceBadge } from './conversation-presence-badge'
+import { ConversationThreadSkeleton } from './conversation-thread-skeleton'
 import { SystemEventNotice } from './system-event-notice'
 import { conversationAvailable } from '@/lib/shared/conversation/presence'
 import { ArrowUpIcon, ChevronDownIcon } from '@heroicons/react/24/solid'
@@ -159,6 +160,13 @@ export interface VisitorConversationThreadProps {
   showHeader?: boolean
   /** Notified when the first send creates the conversation. */
   onConversationStarted?: (id: ConversationId) => void
+  /**
+   * Focus the composer as soon as it mounts. The surface decides: a "new
+   * conversation" landing on a desktop host wants the cursor in the box; a
+   * resumed thread (reading, not writing) or a mobile host (software keyboard
+   * would cover the thread) does not.
+   */
+  autofocusComposer?: boolean
 }
 
 /**
@@ -186,6 +194,7 @@ export function VisitorConversationThread({
   embedOpenMode = 'newTab',
   showHeader = true,
   onConversationStarted,
+  autofocusComposer = false,
 }: VisitorConversationThreadProps) {
   const intl = useIntl()
   const queryClient = useQueryClient()
@@ -714,9 +723,11 @@ export function VisitorConversationThread({
   // neutral "we'll reply here" note instead of a false email promise. With the
   // assistant fronting the conversation there is no "away" — it is always
   // available, so the hint is suppressed entirely; availability only becomes
-  // relevant again when the assistant hands off to a human (future).
+  // relevant again when the assistant hands off to a human (future). Withheld
+  // during the initial load: assistant/email-reply state is unknown until the
+  // thread arrives, and a hint that shows then vanishes reads as a glitch.
   const showOfflineHint =
-    !assistant && !available && (canEmailReply ? Boolean(offlineMessage) : true)
+    !loading && !assistant && !available && (canEmailReply ? Boolean(offlineMessage) : true)
 
   // Phase C conversational block layer: every block's derived state, computed
   // ONCE per [messages, conversationStatus] change and threaded into rows,
@@ -1079,8 +1090,16 @@ export function VisitorConversationThread({
                       key={n}
                       type="button"
                       onClick={() => submitRating(n)}
-                      className="text-lg leading-none text-muted-foreground/50 transition-colors hover:text-amber-500"
-                      aria-label={`Rate ${n} of 5`}
+                      // Brand colour rather than a fixed amber: the stars are
+                      // the only element in the thread that ignored the theme.
+                      className="rounded text-lg leading-none text-muted-foreground/50 transition-colors hover:text-primary focus-visible:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                      aria-label={intl.formatMessage(
+                        {
+                          id: 'widget.messenger.csat.rateAria',
+                          defaultMessage: 'Rate {n} of 5',
+                        },
+                        { n }
+                      )}
                     >
                       ★
                     </button>
@@ -1178,6 +1197,19 @@ export function VisitorConversationThread({
           className="h-full"
           rowClassName="px-3 py-1.5"
         />
+
+        {/* First load: the viewport has no rows yet (the greeting/empty row
+            is withheld until we know which thread this is), so bubble-shaped
+            placeholders sit where the newest messages will land. Overlaid,
+            not swapped, so the virtualizer's viewport ref stays mounted and
+            its end-anchoring measures the real element. */}
+        {loading && messages.length === 0 && (
+          <div className="pointer-events-none absolute inset-0 bg-background">
+            <ConversationThreadSkeleton
+              variant={conversationTarget === 'new' ? 'greeting' : 'thread'}
+            />
+          </div>
+        )}
 
         {/* Jump to latest — shown only when the visitor has scrolled up to read
             history (followOnAppend keeps the view pinned when already at end). */}
@@ -1321,16 +1353,17 @@ export function VisitorConversationThread({
                 <LazyRichTextEditor
                   // Remounts the editor to clear it after a send (no imperative
                   // ref exists to call clearContent()) — resetSignal starts at 0
-                  // (no remount, no autofocus on first mount) and increments on
-                  // every successful send, at which point we DO want focus back
-                  // so the visitor can keep typing without re-clicking.
+                  // and increments on every successful send, at which point we
+                  // DO want focus back so the visitor can keep typing without
+                  // re-clicking. First mount focuses only when the surface asks
+                  // (a fresh "new conversation" landing).
                   key={composer.resetSignal}
                   borderless
                   minHeight="1.5rem"
                   disabled={sending}
                   placeholder={composerPlaceholder}
                   features={VISITOR_CONVERSATION_FEATURES}
-                  autofocus={composer.resetSignal > 0 ? 'end' : false}
+                  autofocus={composer.resetSignal > 0 || autofocusComposer ? 'end' : false}
                   onChange={handleEditorChange}
                   onSubmit={onComposerSubmit}
                 />

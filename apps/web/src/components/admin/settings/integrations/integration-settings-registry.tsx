@@ -496,16 +496,19 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
     setup: {
       title: 'Connect GitLab',
       description:
-        'Connect GitLab to automatically create issues from feedback and sync statuses between platforms.',
+        'Connect GitLab.com or a self-hosted GitLab instance to create issues from feedback and sync statuses.',
       steps: [
         <p key="1">
           Configure your GitLab{' '}
-          <span className="font-medium text-foreground">OAuth application credentials</span> in the
-          platform settings.
+          <span className="font-medium text-foreground">Application ID and Secret</span>. For a
+          self-hosted instance, also set the{' '}
+          <span className="font-medium text-foreground">GitLab instance URL</span>. Register the
+          redirect URI shown in the credentials form on your GitLab OAuth application.
         </p>,
         <p key="2">
           Click <span className="font-medium text-foreground">Connect</span> to authorize Quackback
-          with your GitLab account.
+          with your GitLab account. You will be sent to GitLab.com or your instance, depending on
+          the URL you configured.
         </p>,
         <p key="3">
           Select a project to create issues in, then choose which events should trigger new issues.

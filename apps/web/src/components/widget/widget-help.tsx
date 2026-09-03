@@ -8,6 +8,7 @@ import {
   QuestionMarkCircleIcon,
   ArrowRightIcon,
   ChevronRightIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { publicHelpCenterQueries } from '@/lib/client/queries/help-center'
 import { getTopLevelCategories } from '@/components/help-center/help-center-utils'
@@ -20,15 +21,32 @@ import {
   useAskAiSearchController,
 } from '@/components/help-center/ask-ai'
 import { useKbSearch } from '@/components/help-center/use-kb-search'
+import { useDebouncedValue } from '@/lib/client/hooks/use-debounced-value'
+import { cn } from '@/lib/shared/utils'
+import { WidgetHelpCollectionsSkeleton, WidgetHelpSearchSkeleton } from './widget-skeletons'
 
 interface WidgetHelpProps {
   onArticleSelect?: (articleSlug: string) => void
   onCategorySelect?: (categoryId: string, categoryName: string, categoryIcon: string | null) => void
+  /**
+   * Controlled search query. The page owner lifts it so a visitor who opens
+   * a result and comes back finds their query (and results) still there
+   * instead of the collection list; uncontrolled when omitted.
+   */
+  search?: string
+  onSearchChange?: (value: string) => void
 }
 
-export function WidgetHelp({ onArticleSelect, onCategorySelect }: WidgetHelpProps) {
+export function WidgetHelp({
+  onArticleSelect,
+  onCategorySelect,
+  search: controlledSearch,
+  onSearchChange,
+}: WidgetHelpProps) {
   const intl = useIntl()
-  const [search, setSearch] = useState('')
+  const [localSearch, setLocalSearch] = useState('')
+  const search = controlledSearch ?? localSearch
+  const setSearch = onSearchChange ?? setLocalSearch
 
   const categoriesQuery = useQuery(publicHelpCenterQueries.categories())
   const topLevelCategories = categoriesQuery.data ? getTopLevelCategories(categoriesQuery.data) : []
@@ -37,6 +55,12 @@ export function WidgetHelp({ onArticleSelect, onCategorySelect }: WidgetHelpProp
   // Widget locale passthrough (domains/languages §2): the search API falls
   // back to the default locale server-side if this locale isn't enabled.
   const { results, isSearching } = useKbSearch({ query: search, limit: 10, locale: intl.locale })
+  // The search hook debounces 300ms before it even starts fetching; during
+  // that window `isSearching` is still false and `results` still belong to
+  // the previous query. Treat "typed but not yet settled" as pending too, so
+  // a fresh query never flashes "No results" before its search has begun.
+  const settledSearch = useDebouncedValue(search, 300)
+  const searchPending = isSearching || settledSearch !== search
   const {
     askAiState,
     selectedIndex,
@@ -70,19 +94,44 @@ export function WidgetHelp({ onArticleSelect, onCategorySelect }: WidgetHelpProp
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={handleKeyDown}
+            aria-label={intl.formatMessage({
+              id: 'widget.help.searchAria',
+              defaultMessage: 'Search help articles',
+            })}
+            // The portal's Ask-AI placeholder is a full sentence that truncates
+            // at the widget's width; the widget gets a shorter one.
             placeholder={
               askAiAvailable
                 ? intl.formatMessage({
-                    id: 'helpAskAi.searchPlaceholder',
-                    defaultMessage: 'Ask AI or search our help articles to find an answer',
+                    id: 'widget.help.askAiSearchPlaceholder',
+                    defaultMessage: 'Ask AI or search articles…',
                   })
                 : intl.formatMessage({
                     id: 'widget.help.searchPlaceholder',
                     defaultMessage: 'Search help articles...',
                   })
             }
-            className="w-full ps-8 pe-9 py-2 text-sm bg-muted/30 border border-border/50 rounded-lg placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-transparent"
+            className={cn(
+              'w-full ps-8 py-2 text-sm bg-muted/30 border border-border/50 rounded-lg placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-transparent',
+              hasAskRow ? 'pe-16' : 'pe-9'
+            )}
           />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              aria-label={intl.formatMessage({
+                id: 'widget.help.clearSearch',
+                defaultMessage: 'Clear search',
+              })}
+              className={cn(
+                'absolute top-1/2 -translate-y-1/2 flex size-6 items-center justify-center rounded-md text-muted-foreground/60 hover:text-foreground hover:bg-muted/50 transition-colors',
+                hasAskRow ? 'end-8' : 'end-1.5'
+              )}
+            >
+              <XMarkIcon className="w-3.5 h-3.5" />
+            </button>
+          )}
           {hasAskRow && (
             <button
               type="button"
@@ -104,13 +153,7 @@ export function WidgetHelp({ onArticleSelect, onCategorySelect }: WidgetHelpProp
           {/* Category grid (default view) */}
           {showCategories && (
             <>
-              {categoriesQuery.isLoading && (
-                <div className="flex items-center justify-center py-8">
-                  <span className="text-xs text-muted-foreground/50">
-                    <FormattedMessage id="widget.help.loading" defaultMessage="Loading..." />
-                  </span>
-                </div>
-              )}
+              {categoriesQuery.isLoading && <WidgetHelpCollectionsSkeleton />}
 
               {!categoriesQuery.isLoading && topLevelCategories.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-8 text-center px-4">
@@ -132,12 +175,20 @@ export function WidgetHelp({ onArticleSelect, onCategorySelect }: WidgetHelpProp
 
               {!categoriesQuery.isLoading && topLevelCategories.length > 0 && (
                 <>
-                  <p className="px-1 pt-2 pb-1 text-sm font-semibold text-foreground">
-                    <FormattedMessage
-                      id="widget.help.collectionsCount"
-                      defaultMessage="{count, plural, one {# collection} other {# collections}}"
-                      values={{ count: topLevelCategories.length }}
-                    />
+                  <p className="flex items-baseline justify-between px-1 pt-2 pb-1">
+                    <span className="text-sm font-semibold text-foreground">
+                      <FormattedMessage
+                        id="widget.help.browseCollections"
+                        defaultMessage="Browse collections"
+                      />
+                    </span>
+                    <span className="text-[11px] text-muted-foreground/60 tabular-nums">
+                      <FormattedMessage
+                        id="widget.help.collectionsCount"
+                        defaultMessage="{count, plural, one {# collection} other {# collections}}"
+                        values={{ count: topLevelCategories.length }}
+                      />
+                    </span>
                   </p>
                   <ul>
                     {topLevelCategories.map((cat) => (
@@ -149,7 +200,7 @@ export function WidgetHelp({ onArticleSelect, onCategorySelect }: WidgetHelpProp
                         >
                           <CategoryIcon icon={cat.icon} className="w-6 h-6 shrink-0" />
                           <span className="min-w-0 flex-1">
-                            <span className="block text-sm font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-1">
+                            <span className="block text-sm font-semibold text-foreground line-clamp-1">
                               {cat.name}
                             </span>
                             {cat.description && (
@@ -200,15 +251,12 @@ export function WidgetHelp({ onArticleSelect, onCategorySelect }: WidgetHelpProp
                 </div>
               )}
 
-              {isSearching && (
-                <div className="flex items-center justify-center py-8">
-                  <span className="text-xs text-muted-foreground/50">
-                    <FormattedMessage id="widget.help.searching" defaultMessage="Searching..." />
-                  </span>
-                </div>
-              )}
+              {/* First search for a query: nothing to keep on screen, so the
+                  hit-shaped skeleton stands in. Refinements keep the previous
+                  hits visible (dimmed) so the list never blinks empty. */}
+              {searchPending && results.length === 0 && <WidgetHelpSearchSkeleton />}
 
-              {!isSearching && results.length === 0 && (
+              {!searchPending && results.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-8 text-center px-4">
                   <QuestionMarkCircleIcon className="w-8 h-8 text-muted-foreground/30 mb-2" />
                   <p className="text-sm font-medium text-muted-foreground/70">
@@ -226,8 +274,14 @@ export function WidgetHelp({ onArticleSelect, onCategorySelect }: WidgetHelpProp
                 </div>
               )}
 
-              {!isSearching && results.length > 0 && (
-                <div className="space-y-1">
+              {results.length > 0 && (
+                <div
+                  className={cn(
+                    'space-y-1 transition-opacity duration-200',
+                    searchPending && 'opacity-50'
+                  )}
+                  aria-busy={searchPending || undefined}
+                >
                   {results.map((article, idx) => (
                     <button
                       key={article.id}

@@ -12,6 +12,7 @@ import { TimeAgo } from '@/components/ui/time-ago'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { StageChip } from '@/components/shared/ticket-stage'
 import { cn } from '@/lib/shared/utils'
+import { WidgetConversationListSkeleton } from './widget-skeletons'
 
 interface WidgetMessagesProps {
   /** Team label used when a conversation has no assigned agent. */
@@ -67,7 +68,9 @@ export function WidgetMessages({
   return (
     <div className="relative flex h-full flex-col">
       <ScrollArea scrollBarClassName="w-1.5" className="flex-1 min-h-0 h-full">
-        {conversations.length > 0 ? (
+        {isLoading ? (
+          <WidgetConversationListSkeleton />
+        ) : conversations.length > 0 ? (
           <ul className="px-3 pt-1 pb-24">
             {conversations.map((c) => {
               const name = c.assignedAgent?.displayName ?? fallbackName
@@ -75,19 +78,18 @@ export function WidgetMessages({
               const ticket = linkedTickets[c.id]
               return (
                 <li key={c.id} className="border-b border-border/40 last:border-b-0">
+                  {/* No aria-label override: the row's own content (name,
+                      time, preview, unread) is the accessible name, so AT
+                      users hear the same thing sighted users see. The avatar
+                      is decorative — its initials / alt would otherwise
+                      repeat the name ("S Support …"). */}
                   <button
                     type="button"
                     onClick={() => onOpenMessenger(c.id)}
-                    aria-label={intl.formatMessage(
-                      {
-                        id: 'widget.messages.resumeAria',
-                        defaultMessage: 'Open conversation with {name}',
-                      },
-                      { name }
-                    )}
                     className="group flex w-full items-center gap-3 rounded-lg px-2 py-3 text-start transition-colors hover:bg-muted/40"
                   >
                     <Avatar
+                      aria-hidden
                       src={c.assignedAgent?.avatarUrl ?? fallbackAvatar}
                       name={name}
                       className="size-9 shrink-0 text-xs"
@@ -136,7 +138,14 @@ export function WidgetMessages({
                     </span>
                     {unread && (
                       <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold text-primary-foreground">
-                        {c.unreadCount}
+                        <span aria-hidden>{c.unreadCount}</span>
+                        <span className="sr-only">
+                          <FormattedMessage
+                            id="widget.shell.tab.messages.unread"
+                            defaultMessage="{count} unread"
+                            values={{ count: c.unreadCount }}
+                          />
+                        </span>
                       </span>
                     )}
                   </button>
@@ -145,23 +154,27 @@ export function WidgetMessages({
             })}
           </ul>
         ) : (
-          !isLoading && (
-            <div className="flex h-full flex-col items-center justify-center px-6 pt-16 pb-24 text-center">
-              <ChatBubbleOvalLeftEllipsisIcon className="mb-2 w-8 h-8 text-muted-foreground/30" />
-              <p className="text-sm font-medium text-muted-foreground/70">
-                <FormattedMessage
-                  id="widget.messages.empty"
-                  defaultMessage="No conversations yet"
-                />
-              </p>
-              <p className="mt-0.5 text-xs text-muted-foreground/50">
+          <div className="flex h-full flex-col items-center justify-center px-6 pt-16 pb-24 text-center animate-in fade-in duration-200 motion-reduce:animate-none">
+            <ChatBubbleOvalLeftEllipsisIcon className="mb-2 w-8 h-8 text-muted-foreground/30" />
+            <p className="text-sm font-medium text-muted-foreground/70">
+              <FormattedMessage id="widget.messages.empty" defaultMessage="No conversations yet" />
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground/50">
+              {canStartConversation ? (
                 <FormattedMessage
                   id="widget.messages.emptyHint"
                   defaultMessage="Questions or feedback? We're here to help."
                 />
-              </p>
-            </div>
-          )
+              ) : (
+                // Tickets-only workspace: no chat-start pill, so don't promise
+                // a path that isn't here — say what will show up instead.
+                <FormattedMessage
+                  id="widget.messages.emptyHint.ticketsOnly"
+                  defaultMessage="Replies from our team will show up here."
+                />
+              )}
+            </p>
+          </div>
         )}
       </ScrollArea>
 

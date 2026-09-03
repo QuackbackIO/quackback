@@ -7,6 +7,7 @@ import { useSavePlatformCredentials, useDeletePlatformCredentials } from '@/lib/
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { CopyButton } from '@/components/shared/copy-button'
 import type { PlatformCredentialField } from '@/lib/shared/integration-types'
 
 interface PlatformCredentialsFormProps {
@@ -65,7 +66,28 @@ export function PlatformCredentialsForm({
     )
   }
 
-  const allFieldsFilled = fields.every((f) => values[f.key]?.trim())
+  const requiredFilled = fields
+    .filter((f) => f.required !== false)
+    .every((f) => values[f.key]?.trim())
+
+  const redirectUri =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}/oauth/${integrationType}/callback`
+      : `/oauth/${integrationType}/callback`
+
+  const redirectCallout = (
+    <div className="rounded-lg border border-border/50 bg-muted/20 p-3 space-y-1.5">
+      <Label className="text-xs font-medium text-muted-foreground">
+        Redirect URI to register in your OAuth application
+      </Label>
+      <div className="flex items-center gap-2">
+        <code className="flex-1 rounded bg-muted px-3 py-2 text-xs font-mono break-all">
+          {redirectUri}
+        </code>
+        <CopyButton value={redirectUri} variant="outline" size="sm" />
+      </div>
+    </div>
+  )
 
   // Managed cloud: credentials are platform-provided and not editable per-workspace.
   if (isManaged) {
@@ -94,6 +116,7 @@ export function PlatformCredentialsForm({
   if (isConfigured && !isEditing) {
     return (
       <div className="space-y-4">
+        {redirectCallout}
         <div className="space-y-3">
           {fields.map((field) => (
             <div key={field.key}>
@@ -125,15 +148,19 @@ export function PlatformCredentialsForm({
   // Show input form when not configured or editing
   return (
     <div className="space-y-4">
+      {redirectCallout}
       <div className="space-y-3">
         {fields.map((field) => (
           <div key={field.key}>
             <Label htmlFor={`cred-${field.key}`} className="text-sm font-medium">
               {field.label}
+              {field.required === false ? (
+                <span className="ml-1 font-normal text-muted-foreground">(optional)</span>
+              ) : null}
             </Label>
             <Input
               id={`cred-${field.key}`}
-              type={field.sensitive ? 'password' : 'text'}
+              type={field.sensitive ? 'password' : field.url ? 'url' : 'text'}
               placeholder={field.placeholder ?? ''}
               value={values[field.key] ?? ''}
               onChange={(e) => setValues((prev) => ({ ...prev, [field.key]: e.target.value }))}
@@ -156,11 +183,7 @@ export function PlatformCredentialsForm({
         ))}
       </div>
       <div className="flex gap-2">
-        <Button
-          size="sm"
-          onClick={handleSave}
-          disabled={!allFieldsFilled || saveMutation.isPending}
-        >
+        <Button size="sm" onClick={handleSave} disabled={!requiredFilled || saveMutation.isPending}>
           {saveMutation.isPending ? 'Saving...' : 'Save'}
         </Button>
         {isEditing && (

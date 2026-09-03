@@ -19,9 +19,24 @@ describe('presentPlanNotice', () => {
     expect(v).toMatchObject({ daysLeft: 2, urgent: true })
   })
 
-  it('clamps an already-expired notice to 0 days, urgent', () => {
-    const v = presentPlanNotice({ label: 'Free trial', expiresAt: '2026-06-01T00:00:00.000Z' }, NOW)
-    expect(v).toMatchObject({ daysLeft: 0, urgent: true })
+  it('hides an already-expired dated notice instead of clamping to "ends today"', () => {
+    expect(
+      presentPlanNotice({ label: 'Free trial', expiresAt: '2026-06-01T00:00:00.000Z' }, NOW)
+    ).toBeNull()
+  })
+
+  it('hides a notice that expired less than a day ago, not "ends today"', () => {
+    expect(
+      presentPlanNotice({ label: 'Free trial', expiresAt: '2026-06-15T11:00:00.000Z' }, NOW)
+    ).toBeNull()
+  })
+
+  it('keeps rendering a persistent ended strip after expiry', () => {
+    const v = presentPlanNotice(
+      { label: 'Pro trial ended', expiresAt: '2026-06-01T00:00:00.000Z', ended: true },
+      NOW
+    )
+    expect(v).toMatchObject({ label: 'Pro trial ended', ended: true, daysLeft: 0 })
   })
 
   it('passes through label-only notices with no countdown', () => {

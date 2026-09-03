@@ -38,6 +38,8 @@ export interface PlatformCredentialField {
   /** true → the value is a URL the server will fetch; validated against the
    *  SSRF guard at save so an admin can't point it at internal infrastructure. */
   url?: boolean
+  /** false → the field may be omitted (empty). Defaults to required. */
+  required?: boolean
 }
 
 export interface IntegrationOAuthConfig {

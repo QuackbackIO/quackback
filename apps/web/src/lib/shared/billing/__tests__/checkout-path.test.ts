@@ -39,6 +39,7 @@ describe('parseCheckoutSearch', () => {
     expect(parseCheckoutSearch({ branding: 'yes' })).toEqual({})
     expect(parseCheckoutSearch({ plan: 'enterprise', seats: 'lots' })).toEqual({})
     expect(parseCheckoutSearch({ seats: 2.5 })).toEqual({})
+    expect(parseCheckoutSearch({ seats: '1001' })).toEqual({ seats: 1001 })
   })
 })
 
