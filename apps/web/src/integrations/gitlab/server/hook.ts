@@ -7,11 +7,11 @@ import type { HookHandler, HookResult } from '@/lib/server/events/hook-types'
 import type { EventData } from '@/lib/server/events/types'
 import { isRetryableError } from '@/lib/server/events/hook-utils'
 import { buildGitLabIssue } from '@/integrations/gitlab/server/message'
+import { gitlabApiBase } from '@/integrations/gitlab/server/url'
+import { gitlabFetch } from '@/integrations/gitlab/server/fetch'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'gitlab' })
-
-const GITLAB_API = 'https://gitlab.com/api/v4'
 
 export interface GitLabTarget {
   channelId: string // projectId stored as channelId for consistency
@@ -20,6 +20,8 @@ export interface GitLabTarget {
 export interface GitLabConfig {
   accessToken: string
   rootUrl: string
+  /** Origin of a self-hosted GitLab instance; omitted for gitlab.com. */
+  instanceUrl?: string
 }
 
 export const gitlabHook: HookHandler = {
@@ -29,15 +31,16 @@ export const gitlabHook: HookHandler = {
     }
 
     const { channelId: projectId } = target as GitLabTarget
-    const { accessToken, rootUrl } = config as GitLabConfig
+    const { accessToken, rootUrl, instanceUrl } = config as GitLabConfig
+    const api = gitlabApiBase(instanceUrl)
 
     log.debug({ event_type: event.type, project_id: projectId }, 'processing event')
 
     const { title, description } = buildGitLabIssue(event, rootUrl)
 
     try {
-      const response = await fetch(
-        `${GITLAB_API}/projects/${encodeURIComponent(projectId)}/issues`,
+      const response = await gitlabFetch(
+        `${api}/projects/${encodeURIComponent(projectId)}/issues`,
         {
           method: 'POST',
           headers: {
@@ -91,9 +94,9 @@ export const gitlabHook: HookHandler = {
   },
 
   async testConnection(config: unknown): Promise<{ ok: boolean; error?: string }> {
-    const { accessToken } = config as GitLabConfig
+    const { accessToken, instanceUrl } = config as GitLabConfig
     try {
-      const response = await fetch(`${GITLAB_API}/user`, {
+      const response = await gitlabFetch(`${gitlabApiBase(instanceUrl)}/user`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       })
       return { ok: response.ok, error: response.ok ? undefined : `HTTP ${response.status}` }
