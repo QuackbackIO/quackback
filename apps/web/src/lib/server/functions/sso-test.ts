@@ -262,7 +262,8 @@ export type SsoTestDiagnostic = {
           id: string
           email?: string
           name?: string
-          sources: Partial<Record<'id' | 'email' | 'name', string>>
+          image?: string
+          sources: Partial<Record<'id' | 'email' | 'name' | 'image', string>>
         }
       }
     | {

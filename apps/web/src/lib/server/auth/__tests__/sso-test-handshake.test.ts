@@ -213,6 +213,80 @@ describe('runHandshake', () => {
   })
 })
 
+/**
+ * Avatar is optional. The test reports whether the IdP released a `picture`,
+ * but a missing one is informational — the connection still passes.
+ */
+describe('runHandshake — avatar / picture claim', () => {
+  async function runWithUserinfo(userinfoBody: Record<string, unknown>) {
+    const { publicKey, privateKey } = await generateKeyPair('RS256', { extractable: true })
+    const publicJwk = await exportJWK(publicKey)
+    publicJwk.kid = 'test-key'
+    publicJwk.alg = 'RS256'
+    const issuer = 'https://idp.example'
+    // email + name in the ID token; the avatar (if any) only at userinfo.
+    const idToken = await new SignJWT({
+      email: 'alice@idp.example',
+      name: 'Alice Example',
+      nonce: 'nonce789',
+    })
+      .setProtectedHeader({ alg: 'RS256', kid: 'test-key' })
+      .setIssuer(issuer)
+      .setAudience('cid')
+      .setSubject('user-sub-123')
+      .setIssuedAt()
+      .setExpirationTime('5m')
+      .sign(privateKey)
+
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          issuer,
+          token_endpoint: `${issuer}/token`,
+          jwks_uri: `${issuer}/jwks`,
+          userinfo_endpoint: `${issuer}/userinfo`,
+        }),
+        { status: 200 }
+      )
+    )
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ id_token: idToken, access_token: 'at', token_type: 'Bearer' }),
+        { status: 200 }
+      )
+    )
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ keys: [publicJwk] }), { status: 200 })
+    )
+    safeFetchMock.mockResolvedValue(new Response(JSON.stringify(userinfoBody), { status: 200 }))
+
+    return runHandshake(baseInput)
+  }
+
+  it('reports a green "Avatar resolved" step and the URL when the IdP returns `picture`', async () => {
+    const result = await runWithUserinfo({
+      sub: 'user-sub-123',
+      picture: 'https://cdn.idp.example/alice.png',
+    })
+    if (!result.ok) throw new Error(`expected success, got ${result.stage}`)
+    expect(result.identity?.image).toBe('https://cdn.idp.example/alice.png')
+    expect(result.identity?.sources.image).toBe('userinfo')
+    const step = result.steps.find((s) => s.label === 'Avatar resolved')
+    expect(step).toMatchObject({ ok: true, detail: 'from userinfo' })
+    expect(step?.severity).toBeUndefined()
+  })
+
+  it('reports a muted "No avatar released" step — not a failure — when there is no picture', async () => {
+    const result = await runWithUserinfo({ sub: 'user-sub-123' })
+    if (!result.ok) throw new Error(`expected success, got ${result.stage}`)
+    expect(result.identity?.image).toBeUndefined()
+    const step = result.steps.find((s) => s.label === 'No avatar released')
+    expect(step).toMatchObject({ ok: true, severity: 'info' })
+    // The overall handshake still succeeds.
+    expect(result.ok).toBe(true)
+  })
+})
+
 describe('runHandshake — provider that releases no email', () => {
   it('fails when the placeholder option is off, naming both remedies', async () => {
     const result = await runWorldCHandshake({ allowMissingEmail: false })
