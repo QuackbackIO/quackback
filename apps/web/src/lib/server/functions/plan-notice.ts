@@ -17,11 +17,14 @@ export const getPlanNotice = createServerFn({ method: 'GET' }).handler(
     const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
     const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
     const { getCloudConfig } = await import('@/lib/server/domains/settings/cloud/cloud.service')
-    const [limits, cloud] = await Promise.all([getTierLimits(), getCloudConfig()])
-    if (!cloud.enabled && limits.notice) return limits.notice
+    const [limits, initial] = await Promise.all([getTierLimits(), getCloudConfig()])
+    if (!initial.enabled && limits.notice) return limits.notice
 
     const { reportStarterTrialIfDue } = await import('@/lib/server/control-plane/starter-trial')
     await reportStarterTrialIfDue({ principalId: auth.principal.id })
+    // Re-read after reporting: a starter retry can land the signed trial
+    // projection before this returns, and the admin layout caches the result.
+    const cloud = initial.enabled ? await getCloudConfig() : initial
 
     const { trialNotice, trialEndedNotice } =
       await import('@/lib/server/domains/settings/cloud/commercial-notice')

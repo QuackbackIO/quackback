@@ -174,6 +174,24 @@ describe('getPlanNotice — the trial countdown', () => {
     )
   })
 
+  it('re-reads cloud config after reporting a starter trial', async () => {
+    const preTrial = {
+      ...trialing,
+      projection: {
+        ...trialing.projection,
+        trialStartedAt: null,
+        trialExpiresAt: null,
+        planLimitsExpireAt: null,
+      },
+    }
+    hoisted.mockGetWorkspaceSettings
+      .mockResolvedValueOnce({ settings: { cloud: preTrial } })
+      .mockResolvedValueOnce({ settings: { cloud: trialing } })
+    await expect(getPlanNoticeHandler()).resolves.toEqual(
+      expect.objectContaining({ label: 'Pro trial', expiresAt: ENDS })
+    )
+  })
+
   it('keeps a persistent ended banner after expiry', async () => {
     vi.setSystemTime(AFTER)
     hoisted.mockFetchCatalogue.mockResolvedValue({ lastTrialPlanId: 'pro' })

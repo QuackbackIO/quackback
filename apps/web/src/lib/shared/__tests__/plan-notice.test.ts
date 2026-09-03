@@ -25,6 +25,12 @@ describe('presentPlanNotice', () => {
     ).toBeNull()
   })
 
+  it('hides a notice that expired less than a day ago, not "ends today"', () => {
+    expect(
+      presentPlanNotice({ label: 'Free trial', expiresAt: '2026-06-15T11:00:00.000Z' }, NOW)
+    ).toBeNull()
+  })
+
   it('keeps rendering a persistent ended strip after expiry', () => {
     const v = presentPlanNotice(
       { label: 'Pro trial ended', expiresAt: '2026-06-01T00:00:00.000Z', ended: true },
