@@ -43,8 +43,6 @@ export interface PlanNotice {
   /** When set the banner renders an action button linking here. */
   actionUrl?: string
   actionLabel?: string
-  /** Ended-trial banner only: per-admin localStorage dismiss. */
-  dismissible?: boolean
   /** Expired-trial strip: persistent red, no countdown. */
   ended?: boolean
 }
