@@ -103,8 +103,50 @@ describe('reportStarterTrialIfDue', () => {
     expect(hoisted.reportTrialActivation).not.toHaveBeenCalled()
   })
 
+  it('skips complimentary grants and paid plans that omit trial timestamps', async () => {
+    hoisted.getCloudConfig.mockResolvedValueOnce({
+      enabled: true,
+      plan: 'scale',
+      trialStartedAt: null,
+      trialActive: false,
+      subscriptionStatus: null,
+    })
+    await expect(reportStarterTrialIfDue()).resolves.toBe('skipped')
+    hoisted.getCloudConfig.mockResolvedValueOnce({
+      enabled: true,
+      plan: 'pro',
+      trialStartedAt: null,
+      trialActive: false,
+      subscriptionStatus: 'active',
+    })
+    await expect(reportStarterTrialIfDue()).resolves.toBe('skipped')
+    expect(hoisted.reportTrialActivation).not.toHaveBeenCalled()
+  })
+
+  it('still reports after a canceled subscription on Free', async () => {
+    hoisted.getCloudConfig.mockResolvedValue({
+      enabled: true,
+      plan: 'free',
+      trialStartedAt: null,
+      trialActive: false,
+      subscriptionStatus: 'canceled',
+    })
+    hoisted.getWorkspaceSettings.mockResolvedValue({
+      settings: { id: 'ws_1', setupState: JSON.stringify(setup()) },
+    })
+    hoisted.reportTrialActivation.mockResolvedValue('started')
+    await expect(reportStarterTrialIfDue()).resolves.toBe('started')
+    expect(hoisted.reportTrialActivation).toHaveBeenCalled()
+  })
+
   it('reports the stamped evidence when Cloud is on and no trial has landed', async () => {
-    hoisted.getCloudConfig.mockResolvedValue({ enabled: true, trialStartedAt: null })
+    hoisted.getCloudConfig.mockResolvedValue({
+      enabled: true,
+      plan: 'free',
+      trialStartedAt: null,
+      trialActive: false,
+      subscriptionStatus: null,
+    })
     hoisted.getWorkspaceSettings.mockResolvedValue({
       settings: { id: 'ws_1', setupState: JSON.stringify(setup()) },
     })
@@ -124,7 +166,13 @@ describe('reportStarterTrialIfDue', () => {
   })
 
   it('does not block the admin surface when the control plane is down', async () => {
-    hoisted.getCloudConfig.mockResolvedValue({ enabled: true, trialStartedAt: null })
+    hoisted.getCloudConfig.mockResolvedValue({
+      enabled: true,
+      plan: 'free',
+      trialStartedAt: null,
+      trialActive: false,
+      subscriptionStatus: null,
+    })
     hoisted.getWorkspaceSettings.mockResolvedValue({
       settings: { id: 'ws_1', setupState: JSON.stringify(setup()) },
     })

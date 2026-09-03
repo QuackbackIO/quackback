@@ -17,6 +17,8 @@ interface WidgetMessengerProps {
   conversationTarget?: ConversationId | 'new'
   /** When true, render link preview cards below message bubbles. */
   linkPreviews?: boolean
+  /** Put the cursor in the composer on mount (new-thread landings on desktop). */
+  autofocusComposer?: boolean
 }
 
 /**
@@ -30,6 +32,7 @@ export function WidgetMessenger({
   onArticleSelect,
   conversationTarget,
   linkPreviews = false,
+  autofocusComposer = false,
 }: WidgetMessengerProps = {}) {
   const queryClient = useQueryClient()
   const { user, ensureSession, sessionVersion } = useWidgetAuth()
@@ -71,6 +74,7 @@ export function WidgetMessenger({
       helpSearch={helpSearch}
       embedOpenMode="newTab"
       showHeader={false}
+      autofocusComposer={autofocusComposer}
     />
   )
 }

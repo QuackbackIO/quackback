@@ -8,10 +8,11 @@
  *    is `env`, `EnvCredentialSource` reads those fields from
  *    `INTEGRATION_<TYPE>_<FIELD>` variables instead of the database, so whatever
  *    populates that environment needs the field list and the exact variable
- *    names, and needs them without importing this code. Every declared field is
- *    required: `EnvCredentialSource` reports a provider as configured only when
- *    all of them are present, so a partial population reads as unconfigured and
+ *    names, and needs them without importing this code. Required fields must
+ *    all be present: `EnvCredentialSource` reports a provider as configured
+ *    only when they are, so a partial population reads as unconfigured and
  *    the provider disappears from the catalog rather than half working.
+ *    Optional fields (`required: false`) may be absent.
  * 2. AI configuration keys, taken from the explicit env mapping in
  *    `src/lib/server/config.ts`.
  *
@@ -89,6 +90,10 @@ export interface PlatformFieldSchema {
   placeholder?: string
   helpText?: string
   helpUrl?: string
+  /** false when the field may be omitted. Omitted means required. */
+  required?: boolean
+  /** true when the value is a URL the server will fetch (SSRF-checked at save). */
+  url?: boolean
 }
 
 export interface PlatformProviderSchema {
@@ -271,6 +276,8 @@ function toFieldSchema(id: string, field: PlatformCredentialField): PlatformFiel
     ...(field.placeholder === undefined ? {} : { placeholder: field.placeholder }),
     ...(field.helpText === undefined ? {} : { helpText: field.helpText }),
     ...(field.helpUrl === undefined ? {} : { helpUrl: field.helpUrl }),
+    ...(field.required === false ? { required: false } : {}),
+    ...(field.url ? { url: true } : {}),
   }
 }
 

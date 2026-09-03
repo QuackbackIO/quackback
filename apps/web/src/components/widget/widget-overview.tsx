@@ -249,7 +249,14 @@ export function WidgetOverview({
               </span>
               <MagnifyingGlassIcon className="w-4 h-4 text-muted-foreground" />
             </button>
-            <ul className="mt-1">
+            {/* Eyebrow so the list reads as content, not as part of the search control. */}
+            <p className="mt-2 px-3 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/60">
+              <FormattedMessage
+                id="widget.launcher.popularArticles"
+                defaultMessage="Popular articles"
+              />
+            </p>
+            <ul className="mt-0.5">
               {topArticles.map((a) => (
                 <li key={a.slug}>
                   <button

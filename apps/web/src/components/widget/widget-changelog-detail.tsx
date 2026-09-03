@@ -9,14 +9,8 @@ import type { ChangelogId } from '@quackback/ids'
 import type { JSONContent } from '@tiptap/react'
 import { WidgetPortalTitle } from './widget-portal-title'
 import { sendToHost } from '@/lib/client/widget-bridge'
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  })
-}
+import { WidgetArticleSkeleton } from './widget-skeletons'
+import { ChangelogMetaRow } from './widget-changelog-meta'
 
 interface WidgetChangelogDetailProps {
   entryId: string
@@ -33,13 +27,7 @@ export function WidgetChangelogDetail({ entryId }: WidgetChangelogDetailProps) {
   }, [changelogEntryId])
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-10">
-        <div className="text-sm text-muted-foreground">
-          <FormattedMessage id="widget.changelogDetail.loading" defaultMessage="Loading..." />
-        </div>
-      </div>
-    )
+    return <WidgetArticleSkeleton />
   }
 
   if (!entry) {
@@ -57,22 +45,9 @@ export function WidgetChangelogDetail({ entryId }: WidgetChangelogDetailProps) {
       <ScrollArea scrollBarClassName="w-1.5" className="flex-1 min-h-0">
         {/* Readable column when the host panel expands for long-form content. */}
         <div className="mx-auto w-full max-w-2xl px-4 py-3">
-          <time className="text-[11px] text-muted-foreground/60 uppercase tracking-wide">
-            {formatDate(entry.publishedAt)}
-          </time>
-          {entry.categories.length > 0 && (
-            <div className="mt-1.5 flex flex-wrap gap-1">
-              {entry.categories.map((category) => (
-                <span
-                  key={category.id}
-                  className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
-                  style={{ backgroundColor: category.color + '1a', color: category.color }}
-                >
-                  {category.name}
-                </span>
-              ))}
-            </div>
-          )}
+          {/* Same meta strip as the list card, so the push doesn't reshuffle
+              date and chips around the title. */}
+          <ChangelogMetaRow publishedAt={entry.publishedAt} categories={entry.categories} long />
           <WidgetPortalTitle title={entry.title} onClick={handleViewOnPortal} />
 
           <div className="mt-3">

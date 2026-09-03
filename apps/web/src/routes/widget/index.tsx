@@ -1,9 +1,18 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { z } from 'zod'
-import { lazy, Suspense, useState, useCallback, useEffect, useMemo, type ReactNode } from 'react'
+import {
+  lazy,
+  Suspense,
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  type ReactNode,
+} from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
-import { FormattedMessage } from 'react-intl'
+import { FormattedMessage, useIntl } from 'react-intl'
 import { CheckCircleIcon } from '@heroicons/react/24/solid'
 import { ArrowLeftIcon } from '@heroicons/react/24/outline'
 import { WidgetVoteButton } from '@/components/widget/widget-vote-button'
@@ -40,7 +49,16 @@ import {
 import { conversationAvailable } from '@/lib/shared/conversation/presence'
 import { ConversationPresenceBadge } from '@/components/shared/conversation/conversation-presence-badge'
 import { Avatar } from '@/components/ui/avatar'
-import { Spinner } from '@/components/shared/spinner'
+import {
+  WidgetArticleSkeleton,
+  WidgetChangelogListSkeleton,
+  WidgetConversationListSkeleton,
+  WidgetHelpCategoryViewSkeleton,
+  WidgetHelpViewSkeleton,
+  WidgetMessengerViewSkeleton,
+  WidgetPostDetailSkeleton,
+  WidgetTicketListSkeleton,
+} from '@/components/widget/widget-skeletons'
 import { conversationSummaryKey } from '@/components/widget/use-messenger-summary'
 import { useTicketStageBadge } from '@/components/widget/use-ticket-stage-badge'
 
@@ -310,39 +328,50 @@ interface SuccessPost {
  * feel of polished in-product messengers. Honors prefers-reduced-motion.
  *
  * Every view here is a lazy() component, so each transition carries its own
- * Suspense boundary — a suspended view shows a centered spinner in place
- * without disturbing the kept-mounted feedback view outside the boundary.
- * The idle-time prefetch makes the fallback a cold-cache-only sight.
+ * Suspense boundary. The fallback is the SAME skeleton the view itself shows
+ * while its data loads, so a cold-cache tab click paints one continuous
+ * placeholder from chunk fetch through data fetch — no spinner → skeleton →
+ * content hop. The idle-time prefetch makes the chunk phase a rare sight.
+ *
+ * `focusOnMount` moves keyboard/screen-reader focus into the new view. Push
+ * navigations and back navigations both leave focus on an element that has
+ * just unmounted (the tapped row, the back chevron), which would otherwise
+ * drop it to <body>. Tab-bar switches keep focus on the tab.
  */
 function ViewTransition({
   id,
   kind,
+  fallback,
+  focusOnMount = false,
   children,
 }: {
   id: string
   kind: 'root' | 'push'
+  fallback: ReactNode
+  focusOnMount?: boolean
   children: ReactNode
 }) {
   const reduceMotion = useReducedMotion()
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (focusOnMount) ref.current?.focus({ preventScroll: true })
+    // Mount-only by design: refocusing on every prop change would yank focus
+    // out of whatever the visitor moved to inside the view.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   return (
     <motion.div
       key={id}
+      ref={ref}
+      tabIndex={-1}
       initial={
         reduceMotion ? false : kind === 'push' ? { x: 28, opacity: 0 } : { y: 10, opacity: 0 }
       }
       animate={{ x: 0, y: 0, opacity: 1 }}
       transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
-      className="h-full"
+      className="h-full outline-none"
     >
-      <Suspense
-        fallback={
-          <div className="flex h-full items-center justify-center">
-            <Spinner size="lg" />
-          </div>
-        }
-      >
-        {children}
-      </Suspense>
+      <Suspense fallback={fallback}>{children}</Suspense>
     </motion.div>
   )
 }
@@ -370,6 +399,7 @@ function WidgetPage() {
     showPoweredBy,
   } = Route.useLoaderData()
   const { ensureSession, sessionVersion } = useWidgetAuth()
+  const intl = useIntl()
 
   // The loader seeds boardPermissions for the anonymous SSR baseline (no Bearer
   // at loader time). Refetch it for the REAL actor with the widget's Bearer
@@ -455,10 +485,20 @@ function WidgetPage() {
   // returns here. Cleared by any tab-bar click — tabs never show a back arrow.
   const [backTarget, setBackTarget] = useState<{ tab: WidgetTab; view: WidgetView } | null>(null)
 
+  // How the current view was reached. Tab-bar landings keep focus on the tab
+  // button; every other navigation ('move': push, back, cross-jump) unmounts
+  // the element that had focus, so the incoming view takes it instead.
+  const lastNavRef = useRef<'tab' | 'move'>('tab')
+  const focusIncoming = lastNavRef.current === 'move'
+
   const [successPost, setSuccessPost] = useState<SuccessPost | null>(null)
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
   const [selectedChangelogId, setSelectedChangelogId] = useState<string | null>(null)
   const [selectedHelpSlug, setSelectedHelpSlug] = useState<string | null>(null)
+  // Help search lives here (not in the view) so it survives the article
+  // round-trip: back from a result lands on the same results, not the
+  // collection list.
+  const [helpSearch, setHelpSearch] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<{
     id: string
     name: string
@@ -471,8 +511,19 @@ function WidgetPage() {
     return [...createdPosts, ...posts.filter((p) => !createdIds.has(p.id))]
   }, [posts, createdPosts])
 
+  // Set when the messenger was opened from an article's "Still stuck?" ramp:
+  // back then resumes the read instead of landing on the Messages list. Kept
+  // apart from `backTarget`, which still holds where the *article* came from
+  // (e.g. a Home card), so that chevron survives the detour.
+  const messengerReturnRef = useRef<'help-detail' | null>(null)
   const openMessenger = useCallback(
-    (target?: ConversationId | 'new', from: WidgetTab = 'messages') => {
+    (
+      target?: ConversationId | 'new',
+      from: WidgetTab = 'messages',
+      opts?: { returnTo?: 'help-detail' }
+    ) => {
+      lastNavRef.current = 'move'
+      messengerReturnRef.current = opts?.returnTo ?? null
       setConversationTarget(target ?? null)
       setActiveTab(from === 'tickets' ? 'tickets' : 'messages')
       setView('messenger')
@@ -494,6 +545,7 @@ function WidgetPage() {
     if (shown.length === 0) return
     if (shown.includes(activeTab)) return
     const next = shown[0]
+    lastNavRef.current = 'tab'
     setActiveTab(next)
     setView(next === 'home' ? 'overview' : next)
   }, [tabs, hasTickets, activeTab, view])
@@ -523,10 +575,16 @@ function WidgetPage() {
       const opts = msg.data as { view?: string }
       // SDK-driven opens are tab-level landings: no back-chevron origin.
       setBackTarget(null)
+      lastNavRef.current = 'tab'
       if (opts.view === 'changelog' && tabs.changelog) {
         setActiveTab('changelog')
         setView('changelog')
       } else if (opts.view === 'help' && tabs.help) {
+        // Same fresh start as navigateToTab('help'): the lifted search
+        // would otherwise resurface an old query on a programmatic open.
+        setSelectedHelpSlug(null)
+        setSelectedCategory(null)
+        setHelpSearch('')
         setActiveTab('help')
         setView('help')
       } else if (
@@ -554,6 +612,7 @@ function WidgetPage() {
   }, [tabs, openMessenger])
 
   const handlePostCreated = useCallback((post: SuccessPost) => {
+    lastNavRef.current = 'move'
     setCreatedPosts((prev) => [
       {
         id: post.id as (typeof prev)[number]['id'],
@@ -570,11 +629,13 @@ function WidgetPage() {
   }, [])
 
   const handlePostSelect = useCallback((postId: string) => {
+    lastNavRef.current = 'move'
     setSelectedPostId(postId)
     setView('post-detail')
   }, [])
 
   const handleBack = useCallback(() => {
+    lastNavRef.current = 'move'
     if (view === 'changelog-detail') {
       setSelectedChangelogId(null)
       setView('changelog')
@@ -595,7 +656,15 @@ function WidgetPage() {
       return
     }
     if (view === 'messenger') {
-      // Return to the list we opened from (Messages or Tickets).
+      // Opened from an article's "Still stuck?" ramp: back resumes the read.
+      // `backTarget` is left alone — it still points at the article's origin.
+      if (messengerReturnRef.current === 'help-detail' && selectedHelpSlug) {
+        messengerReturnRef.current = null
+        setActiveTab('help')
+        setView('help-detail')
+        return
+      }
+      // Otherwise return to the list we opened from (Messages or Tickets).
       setView(activeTab === 'tickets' ? 'tickets' : 'messages')
       return
     }
@@ -617,7 +686,7 @@ function WidgetPage() {
     }
     setSelectedPostId(null)
     setView('feedback')
-  }, [view, selectedCategory, backTarget, activeTab])
+  }, [view, selectedCategory, selectedHelpSlug, backTarget, activeTab])
 
   const navigateToTab = useCallback((tab: WidgetTab) => {
     setActiveTab(tab)
@@ -635,9 +704,11 @@ function WidgetPage() {
       setSelectedChangelogId(null)
       setView('changelog')
     } else {
-      // 'help' — the knowledge-base articles surface
+      // 'help' — the knowledge-base articles surface. A tab landing is a
+      // fresh start; only back navigations keep the query.
       setSelectedHelpSlug(null)
       setSelectedCategory(null)
+      setHelpSearch('')
       setView('help')
     }
   }, [])
@@ -646,6 +717,7 @@ function WidgetPage() {
   // arrow — any pending cross-navigation origin is dropped.
   const handleTabChange = useCallback(
     (tab: WidgetTab) => {
+      lastNavRef.current = 'tab'
       setBackTarget(null)
       navigateToTab(tab)
     },
@@ -656,6 +728,7 @@ function WidgetPage() {
   // the origin so the destination shows a back chevron returning here.
   const crossNavigate = useCallback(
     (tab: WidgetTab) => {
+      lastNavRef.current = 'move'
       setBackTarget({ tab: activeTab, view })
       navigateToTab(tab)
     },
@@ -663,17 +736,20 @@ function WidgetPage() {
   )
 
   const handleChangelogEntrySelect = useCallback((entryId: string) => {
+    lastNavRef.current = 'move'
     setSelectedChangelogId(entryId)
     setView('changelog-detail')
   }, [])
 
   const handleHelpArticleSelect = useCallback((articleSlug: string) => {
+    lastNavRef.current = 'move'
     setSelectedHelpSlug(articleSlug)
     setView('help-detail')
   }, [])
 
   const handleHelpCategorySelect = useCallback(
     (categoryId: string, categoryName: string, categoryIcon: string | null) => {
+      lastNavRef.current = 'move'
       setSelectedCategory({ id: categoryId, name: categoryName, icon: categoryIcon })
       setView('help-category')
     },
@@ -681,9 +757,20 @@ function WidgetPage() {
   )
 
   const handleHelpCategoryArticleSelect = useCallback((articleSlug: string) => {
+    lastNavRef.current = 'move'
     setSelectedHelpSlug(articleSlug)
     setView('help-detail')
   }, [])
+
+  // The feedback view stays mounted (form state survives a detail round-trip),
+  // so it can't take focus via ViewTransition's mount hook; do it when it
+  // becomes visible again after a back/cross navigation.
+  const feedbackViewRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (view === 'feedback' && lastNavRef.current === 'move') {
+      feedbackViewRef.current?.focus({ preventScroll: true })
+    }
+  }, [view])
 
   // Detail views always get a back arrow; root views only when a
   // cross-navigation origin is pending (tab-bar landings never show one).
@@ -700,6 +787,18 @@ function WidgetPage() {
   // the assistant identity when enabled — always available, no presence — or
   // the live presence badge for assistant-less workspaces.
   const presence = useConversationPresence(messengerEnabled && !assistant)
+  // When office hours are configured, tell the visitor up front when the team
+  // is back — the thread body only says so once they've typed.
+  const presenceBackAt = useMemo(() => {
+    if (!presence.nextOpenAt) return null
+    const at = new Date(presence.nextOpenAt)
+    if (Number.isNaN(at.getTime())) return null
+    return new Intl.DateTimeFormat(intl.locale, {
+      weekday: 'long',
+      hour: 'numeric',
+      minute: '2-digit',
+    }).format(at)
+  }, [presence.nextOpenAt, intl.locale])
   const messengerHeader =
     view === 'messenger' ? (
       assistant ? (
@@ -718,9 +817,10 @@ function WidgetPage() {
           </div>
         </div>
       ) : (
-        <div className="ps-1">
+        <div className="min-w-0 ps-1">
           <ConversationPresenceBadge
             available={conversationAvailable(presence.agentsOnline, presence.withinOfficeHours)}
+            backAt={presenceBackAt}
           />
         </div>
       )
@@ -752,7 +852,8 @@ function WidgetPage() {
       }
     >
       {view === 'overview' && (
-        <ViewTransition id="overview" kind="root">
+        // Overview is statically imported (SSR-complete Home) — never suspends.
+        <ViewTransition id="overview" kind="root" focusOnMount={focusIncoming} fallback={null}>
           <WidgetOverview
             tabs={tabs}
             home={home}
@@ -790,25 +891,43 @@ function WidgetPage() {
       )}
 
       {view === 'changelog' && (
-        <ViewTransition id="changelog" kind="root">
+        <ViewTransition
+          id="changelog"
+          kind="root"
+          focusOnMount={focusIncoming}
+          fallback={<WidgetChangelogListSkeleton />}
+        >
           <WidgetChangelog teamName={teamName} onEntrySelect={handleChangelogEntrySelect} />
         </ViewTransition>
       )}
 
       {view === 'messenger' && (
-        <ViewTransition id={`messenger-${conversationTarget ?? 'active'}`} kind="push">
+        <ViewTransition
+          id={`messenger-${conversationTarget ?? 'active'}`}
+          kind="push"
+          focusOnMount={focusIncoming}
+          fallback={<WidgetMessengerViewSkeleton isNew={conversationTarget === 'new'} />}
+        >
           <WidgetMessenger
             key={conversationTarget ?? 'active'}
             helpEnabled={tabs.help}
             onArticleSelect={handleHelpArticleSelect}
             conversationTarget={conversationTarget === null ? undefined : conversationTarget}
             linkPreviews={linkPreviews}
+            // A fresh thread exists to be typed into; a resumed one to be read.
+            // Mobile hosts skip it — the software keyboard would cover the thread.
+            autofocusComposer={conversationTarget === 'new' && !hostIsMobile}
           />
         </ViewTransition>
       )}
 
       {view === 'messages' && (
-        <ViewTransition id="messages" kind="root">
+        <ViewTransition
+          id="messages"
+          kind="root"
+          focusOnMount={focusIncoming}
+          fallback={<WidgetConversationListSkeleton />}
+        >
           <WidgetMessages
             teamName={teamName}
             assistant={assistant}
@@ -819,28 +938,55 @@ function WidgetPage() {
       )}
 
       {view === 'tickets' && (
-        <ViewTransition id="tickets" kind="root">
+        <ViewTransition
+          id="tickets"
+          kind="root"
+          focusOnMount={focusIncoming}
+          fallback={<WidgetTicketListSkeleton />}
+        >
           <WidgetTickets onOpenTicket={(id) => openMessenger(id, 'tickets')} />
         </ViewTransition>
       )}
 
       {view === 'changelog-detail' && selectedChangelogId && (
-        <ViewTransition id={`changelog-${selectedChangelogId}`} kind="push">
+        <ViewTransition
+          id={`changelog-${selectedChangelogId}`}
+          kind="push"
+          focusOnMount={focusIncoming}
+          fallback={<WidgetArticleSkeleton />}
+        >
           <WidgetChangelogDetail entryId={selectedChangelogId} />
         </ViewTransition>
       )}
 
       {view === 'help' && (
-        <ViewTransition id="help" kind="root">
+        <ViewTransition
+          id="help"
+          kind="root"
+          focusOnMount={focusIncoming}
+          fallback={<WidgetHelpViewSkeleton />}
+        >
           <WidgetHelp
             onArticleSelect={handleHelpArticleSelect}
             onCategorySelect={handleHelpCategorySelect}
+            search={helpSearch}
+            onSearchChange={setHelpSearch}
           />
         </ViewTransition>
       )}
 
       {view === 'help-category' && selectedCategory && (
-        <ViewTransition id={`help-category-${selectedCategory.id}`} kind="push">
+        <ViewTransition
+          id={`help-category-${selectedCategory.id}`}
+          kind="push"
+          focusOnMount={focusIncoming}
+          fallback={
+            <WidgetHelpCategoryViewSkeleton
+              categoryName={selectedCategory.name}
+              hasIcon={!!selectedCategory.icon}
+            />
+          }
+        >
           <WidgetHelpCategory
             categoryId={selectedCategory.id}
             categoryName={selectedCategory.name}
@@ -851,17 +997,36 @@ function WidgetPage() {
       )}
 
       {view === 'help-detail' && selectedHelpSlug && (
-        <ViewTransition id={`help-detail-${selectedHelpSlug}`} kind="push">
-          <WidgetHelpDetail articleSlug={selectedHelpSlug} />
+        <ViewTransition
+          id={`help-detail-${selectedHelpSlug}`}
+          kind="push"
+          focusOnMount={focusIncoming}
+          fallback={<WidgetArticleSkeleton />}
+        >
+          <WidgetHelpDetail
+            articleSlug={selectedHelpSlug}
+            onCategorySelect={(id, name) => handleHelpCategorySelect(id, name, null)}
+            onAskQuestion={
+              messengerEnabled
+                ? () => {
+                    // Back from the new thread returns to this article, not to
+                    // the Messages list — the visitor was mid-read.
+                    openMessenger('new', 'messages', { returnTo: 'help-detail' })
+                  }
+                : undefined
+            }
+          />
         </ViewTransition>
       )}
 
       {/* Keep home mounted (hidden) when viewing post detail so form state is preserved */}
       <div
+        ref={feedbackViewRef}
+        tabIndex={-1}
         className={
           view === 'feedback' || view === 'post-detail'
             ? view === 'feedback'
-              ? 'flex flex-col h-full'
+              ? 'flex flex-col h-full outline-none'
               : 'hidden'
             : 'hidden'
         }
@@ -888,13 +1053,24 @@ function WidgetPage() {
       </div>
 
       {view === 'post-detail' && selectedPostId && (
-        <ViewTransition id={`post-${selectedPostId}`} kind="push">
+        <ViewTransition
+          id={`post-${selectedPostId}`}
+          kind="push"
+          focusOnMount={focusIncoming}
+          fallback={<WidgetPostDetailSkeleton />}
+        >
           <WidgetPostDetail postId={selectedPostId} statuses={statuses} />
         </ViewTransition>
       )}
 
       {view === 'success' && successPost && (
-        <ViewTransition id={`success-${successPost.id}`} kind="push">
+        // SuccessView is defined in this module — never suspends.
+        <ViewTransition
+          id={`success-${successPost.id}`}
+          kind="push"
+          focusOnMount={focusIncoming}
+          fallback={null}
+        >
           <SuccessView
             post={successPost}
             status={
@@ -934,6 +1110,7 @@ function SuccessView({
   onOpenPost: () => void
   onBack: () => void
 }) {
+  const intl = useIntl()
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-2.5 px-4 pt-5 pb-3">
@@ -941,25 +1118,46 @@ function SuccessView({
           <CheckCircleIcon className="w-4.5 h-4.5 text-primary" />
         </div>
         <div>
-          <p className="text-sm font-semibold text-foreground">Thanks for your feedback!</p>
-          <p className="text-[11px] text-muted-foreground">Your idea has been submitted.</p>
+          <p className="text-sm font-semibold text-foreground">
+            <FormattedMessage
+              id="widget.success.title"
+              defaultMessage="Thanks for your feedback!"
+            />
+          </p>
+          <p className="text-[11px] text-muted-foreground">
+            <FormattedMessage
+              id="widget.success.subtitle"
+              defaultMessage="Your idea has been submitted."
+            />
+          </p>
         </div>
       </div>
 
       <div className="px-3">
-        <div
-          className="flex items-center gap-2 rounded-lg bg-muted/20 border border-border/50 px-2 py-2 cursor-pointer hover:bg-muted/30 transition-colors"
-          onClick={onOpenPost}
-        >
-          <div onClick={(e) => e.stopPropagation()} className="shrink-0">
+        {/* Vote and open are siblings (a button-role ancestor would hide the
+            vote button from assistive tech); the open button's ::after is
+            stretched over the card so the whole card stays tappable. */}
+        <div className="relative flex items-center gap-2 rounded-lg bg-muted/20 border border-border/50 px-2 py-2 hover:bg-muted/30 transition-colors">
+          <div className="relative z-10 shrink-0">
             <WidgetVoteButton
               postId={post.id as PostId}
               voteCount={post.voteCount}
               onBeforeVote={canVote ? ensureSession : undefined}
-              noAccessReason={canVote ? undefined : "You don't have access to vote on this board"}
+              noAccessReason={
+                canVote
+                  ? undefined
+                  : intl.formatMessage({
+                      id: 'widget.vote.noAccess',
+                      defaultMessage: "You don't have access to vote on this board",
+                    })
+              }
             />
           </div>
-          <div className="flex-1 min-w-0">
+          <button
+            type="button"
+            onClick={onOpenPost}
+            className="flex-1 min-w-0 text-start cursor-pointer outline-none after:absolute after:inset-0 after:rounded-lg focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-ring/50"
+          >
             <h3 className="text-sm font-medium text-foreground line-clamp-2">{post.title}</h3>
             <div className="flex items-center gap-1.5 mt-0.5">
               {status && (
@@ -973,7 +1171,7 @@ function SuccessView({
               )}
               <span className="text-xs text-muted-foreground/60">{post.board.name}</span>
             </div>
-          </div>
+          </button>
         </div>
       </div>
 
@@ -983,8 +1181,8 @@ function SuccessView({
           onClick={onBack}
           className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-foreground bg-muted/30 hover:bg-muted/50 rounded-lg border border-border/50 transition-colors"
         >
-          <ArrowLeftIcon className="w-3.5 h-3.5" />
-          Back to ideas
+          <ArrowLeftIcon className="w-3.5 h-3.5 rtl:rotate-180" />
+          <FormattedMessage id="widget.success.backToIdeas" defaultMessage="Back to ideas" />
         </button>
       </div>
     </div>

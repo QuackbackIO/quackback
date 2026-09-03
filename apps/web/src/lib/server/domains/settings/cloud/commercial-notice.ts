@@ -2,10 +2,8 @@ import type { PlanNotice } from '../tier-limits.types'
 import { PLAN_CATALOGUE, type CloudConfig } from './cloud.types'
 import { daysUntil, isTrialEnded } from '@/lib/shared/billing/trial-state'
 
-export const IN_APP_PLANS_PATH = '/admin/settings/billing'
-
 export function plansActionUrl(config: Pick<CloudConfig, 'enabled' | 'canUpgrade'>): string | null {
-  return config.enabled && config.canUpgrade ? IN_APP_PLANS_PATH : null
+  return config.enabled && config.canUpgrade ? '/admin/settings/billing' : null
 }
 
 function planLabel(config: CloudConfig, trialPlanName?: string | null): string {

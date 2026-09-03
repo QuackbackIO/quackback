@@ -13,7 +13,6 @@ export interface PlanNoticeView {
   urgent: boolean
   actionUrl?: string
   actionLabel?: string
-  dismissible: boolean
   ended: boolean
 }
 
@@ -28,6 +27,10 @@ export function presentPlanNotice(
   if (notice.expiresAt) {
     const expires = Date.parse(notice.expiresAt)
     if (!Number.isNaN(expires)) {
+      // Compare the raw instant first. Math.ceil of a negative fraction
+      // (expired less than a day ago) rounds to 0, which used to keep the
+      // banner as "ends today". Persistent trial-ended strips set `ended`.
+      if (expires <= now.getTime() && !notice.ended) return null
       daysLeft = Math.max(0, Math.ceil((expires - now.getTime()) / DAY_MS))
     }
   }
@@ -38,7 +41,6 @@ export function presentPlanNotice(
     urgent: daysLeft !== null && daysLeft <= 3,
     actionUrl: notice.actionUrl,
     actionLabel: notice.actionLabel,
-    dismissible: Boolean(notice.dismissible),
     ended: Boolean(notice.ended),
   }
 }
