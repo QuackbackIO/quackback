@@ -127,21 +127,29 @@ function requiredPathsResolved(
   return paths.every((path) => !claimIsMissing(getClaimByPath(merged, path)))
 }
 
+/** Segments that would walk onto or rewrite a prototype rather than a claim. */
+const UNSAFE_SEGMENTS = new Set(['__proto__', 'constructor', 'prototype'])
+
 /**
  * Write a leaf onto `claims` without replacing an already-present parent
  * object. Used to gap-fill required nested paths (e.g. `org.costCenter`)
  * after the shallow earlier-source-wins merge has already taken `org`.
+ *
+ * The path is admin-configured, so a segment like `__proto__` is refused
+ * outright rather than followed: `current['__proto__']` is `Object.prototype`,
+ * and assigning the leaf there would pollute every object in the process.
  */
 function setClaimByPath(claims: Record<string, unknown>, path: string, value: unknown): void {
-  if (path in claims || path.includes('://') || !path.includes('.')) {
+  const segments = path.split('.')
+  if (segments.some((segment) => UNSAFE_SEGMENTS.has(segment))) return
+  if (Object.hasOwn(claims, path) || path.includes('://') || segments.length === 1) {
     claims[path] = value
     return
   }
-  const segments = path.split('.')
   let current: Record<string, unknown> = claims
   for (let i = 0; i < segments.length - 1; i++) {
     const segment = segments[i]
-    const next = current[segment]
+    const next = Object.hasOwn(current, segment) ? current[segment] : undefined
     if (next === null || typeof next !== 'object' || Array.isArray(next)) {
       current[segment] = {}
     }
@@ -199,7 +207,8 @@ export async function resolveIdentity({
     // Fast path: stop before any network call once identity is complete and
     // every mapped claim is already in `merged`. `exhaustive` disables this
     // so the connection test walks every source.
-    if (!exhaustive && id && email && name && requiredPathsResolved(merged, requiredClaimPaths)) {
+    const identityComplete = Boolean(id && email && name)
+    if (!exhaustive && identityComplete && requiredPathsResolved(merged, requiredClaimPaths)) {
       break
     }
 
@@ -234,6 +243,13 @@ export async function resolveIdentity({
         return { ok: false, reason: 'subject_mismatch', claims: merged }
       }
       warnings.push('subject_mismatch')
+      // The legacy re-key below only ever applied when the ID token was
+      // INCOMPLETE, because a complete one never reached userinfo. When this
+      // fetch happened solely for a mapped claim path (or the exhaustive test
+      // walk), the account is already keyed by the ID token and must stay so:
+      // adding an attribute mapping cannot be what links a different account.
+      // Per OIDC Core 5.3.2 the mismatched response is discarded outright.
+      if (identityComplete) continue
       // Legacy behaviour: userinfo wins wholesale, which means its subject is
       // what keys the account. Anything already taken from the ID token is
       // cleared so the two are never mixed.

@@ -1,8 +1,8 @@
 /**
  * Claim → person-attribute mapping. A second disclosure under role mapping,
  * same chrome. Writes the `attributes` section of `claim_mapping`. Opens when
- * a mapping already exists. Empty definitions replace the rows with a link
- * to People settings.
+ * a mapping already exists. With no definitions and no rows, a link to People
+ * settings replaces the editor; existing rows stay removable regardless.
  */
 import { useEffect, useState } from 'react'
 import { Link } from '@tanstack/react-router'
@@ -60,6 +60,10 @@ export function ClaimAttributeMappingEditor({
   const { data: definitions } = useUserAttributes()
   const defs = definitions ?? []
   const noDefinitions = definitions !== undefined && defs.length === 0
+  // Existing rows stay visible with no definitions left, or an orphaned
+  // mapping could never be removed — and it would keep forcing a userinfo
+  // fetch on every sign-in.
+  const showEmptyState = noDefinitions && rows.length === 0
 
   const [open, setOpen] = useState(hasConfig)
   useEffect(() => {
@@ -99,7 +103,7 @@ export function ClaimAttributeMappingEditor({
             are kept unless you say otherwise.
           </p>
 
-          {noDefinitions ? (
+          {showEmptyState ? (
             <div className="space-y-2">
               <p className="text-xs text-muted-foreground">
                 No person attributes yet. Define one under People, then come back to map a claim to
@@ -194,17 +198,31 @@ export function ClaimAttributeMappingEditor({
                     </div>
                   )
                 })}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-9"
-                  onClick={() => update({ map: [...rows, { claimPath: '', attributeKey: '' }] })}
-                  disabled={disabled}
-                >
-                  <PlusIcon className="size-3.5" />
-                  Add mapping
-                </Button>
+                {noDefinitions ? (
+                  <p className="text-xs text-muted-foreground">
+                    No person attributes are defined any more, so these mappings write nothing.
+                    Remove them, or{' '}
+                    <Link
+                      to="/admin/settings/people"
+                      className="font-medium text-primary underline-offset-4 hover:underline"
+                    >
+                      define attributes under People
+                    </Link>
+                    .
+                  </p>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-9"
+                    onClick={() => update({ map: [...rows, { claimPath: '', attributeKey: '' }] })}
+                    disabled={disabled}
+                  >
+                    <PlusIcon className="size-3.5" />
+                    Add mapping
+                  </Button>
+                )}
               </div>
 
               <label className="flex items-start gap-2 text-sm">

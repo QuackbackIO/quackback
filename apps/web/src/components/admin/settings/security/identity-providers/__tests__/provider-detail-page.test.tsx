@@ -909,6 +909,26 @@ describe('<ProviderDetailPage> claim → person-attribute mapping', () => {
     expect(screen.queryByRole('button', { name: /Add mapping/ })).not.toBeInTheDocument()
   })
 
+  it('keeps an orphan row removable when the last definition is gone', async () => {
+    state.userAttributes = []
+    renderPage(
+      makeProvider({
+        claimMapping: {
+          attributes: { map: [{ claimPath: 'cc', attributeKey: 'cost_center' }] },
+        },
+      })
+    )
+    // The row, not the empty state: hiding it would leave the stale mapping
+    // unremovable and still forcing a userinfo fetch on every sign-in.
+    expect(screen.queryByText(/No person attributes yet/)).not.toBeInTheDocument()
+    expect(screen.getByText('attribute no longer exists')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Add mapping/ })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Remove mapping 1/ }))
+    saveMapping()
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    expect(lastUpsert().claimMapping).toBeNull()
+  })
+
   it('renders an orphan-row warning when the attribute no longer exists', () => {
     state.userAttributes = PEOPLE_ATTRS
     renderPage(

@@ -150,6 +150,49 @@ describe('resolveIdentity — the fast path', () => {
     expect(result.identity.claims.org).toEqual({ department: 'from-token', costCenter: 'cc-9' })
   })
 
+  it('refuses a required path that would walk onto a prototype', async () => {
+    const fetchUserInfo = vi.fn(async () => ({
+      sub: WORLD_A.expect.id,
+      __proto__: { polluted: 'yes' },
+      constructor: { prototype: { polluted: 'yes' } },
+    }))
+    const result = await resolveIdentity({
+      tokens: WORLD_A.tokens,
+      fetchUserInfo,
+      requiredClaimPaths: ['__proto__.polluted', 'constructor.prototype.polluted'],
+    })
+    expect(result.ok).toBe(true)
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined()
+    expect(Object.prototype).not.toHaveProperty('polluted')
+  })
+
+  it('does not re-key the account when userinfo was fetched only for a mapped claim', async () => {
+    // Before required paths existed a complete ID token never reached
+    // userinfo, so its subject always keyed the account. Adding a mapping must
+    // not change which account a person lands in.
+    const fetchUserInfo = vi.fn(async () => ({
+      sub: 'someone-else',
+      email: 'other@example.com',
+      name: 'Other',
+      department: 'Engineering',
+    }))
+    const result = await resolveIdentity({
+      tokens: WORLD_A.tokens,
+      fetchUserInfo,
+      requiredClaimPaths: ['department'],
+    })
+    expect(fetchUserInfo).toHaveBeenCalledTimes(1)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.identity.id).toBe(WORLD_A.expect.id)
+    expect(result.identity.email).toBe('a@example.com')
+    expect(result.identity.sources.id).toBe('idToken')
+    expect(result.identity.warnings).toContain('subject_mismatch')
+    // The mismatched response is discarded wholesale (OIDC Core 5.3.2), so
+    // the mapped claim is NOT taken from it either.
+    expect(result.identity.claims.department).toBeUndefined()
+  })
+
   it('exhaustive fetches every source even when identity is complete', async () => {
     const fetchUserInfo = vi.fn(async () => ({
       sub: WORLD_A.expect.id,
