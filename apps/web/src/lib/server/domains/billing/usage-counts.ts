@@ -81,10 +81,12 @@ export async function loadUsageCounts(): Promise<Record<string, number>> {
 }
 
 /** Throws when current usage would not fit `planId`'s numeric caps. */
-export async function assertFitsPlan(planId: PlanId): Promise<void> {
+export async function assertFitsPlan(planId: string): Promise<void> {
+  const id = parseTargetPlanId(planId)
+  if (!id) throw new Error('invalid')
   const used = await loadUsageCounts()
-  if (planDowngradeIssues(used, planId).length === 0) return
-  throw new Error(planId === 'free' ? 'over_free_limits' : 'over_plan_limits')
+  if (planDowngradeIssues(used, id).length === 0) return
+  throw new Error(id === 'free' ? 'over_free_limits' : 'over_plan_limits')
 }
 
 /** Throws `over_free_limits` when current usage would not fit the free plan. */
