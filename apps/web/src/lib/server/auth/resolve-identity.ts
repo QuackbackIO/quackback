@@ -30,15 +30,20 @@ export interface IdentityMapping {
   idClaim?: string
   nameClaim?: string
   emailClaim?: string
+  /** Claim holding the avatar URL. Defaults to the OIDC-standard `picture`. */
+  imageClaim?: string
 }
 
 export interface ResolvedIdentity {
   id: string
   email?: string
   name?: string
+  /** Avatar URL, resolved only when `wantImage` is set. Always an absolute
+   *  `http(s)` URL (see {@link pickAvatarUrl}); `undefined` otherwise. */
+  image?: string
   emailVerified: boolean
   /** Which source supplied each field, for the test's provenance report. */
-  sources: Partial<Record<'id' | 'email' | 'name', IdentitySource>>
+  sources: Partial<Record<'id' | 'email' | 'name' | 'image', IdentitySource>>
   /** Every raw claim seen, earlier sources winning. Spread into the profile by
    *  the caller so `mapProfileToUser` still sees what it always did. */
   claims: Record<string, unknown>
@@ -80,6 +85,14 @@ export interface ResolveIdentityArgs {
    * everything the IdP can release.
    */
   exhaustive?: boolean
+  /**
+   * Also resolve `identity.image` from the `picture` claim (or
+   * `mapping.imageClaim`). Off by default so the fast path still stops before
+   * userinfo once id + email + name are in hand; when on, the cascade keeps
+   * going to a later source for the avatar, which is where a `picture` claim
+   * usually lives for providers that don't put it in the ID token.
+   */
+  wantImage?: boolean
 }
 
 /**
@@ -172,6 +185,36 @@ function fillRequiredLeaves(
   }
 }
 
+/**
+ * A trimmed absolute `http(s)` URL, or `undefined`. The value is stored verbatim
+ * and later rendered as an `<img src>`, so a relative path or a `data:` /
+ * `javascript:` string must not pass.
+ */
+function asHttpUrl(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  if (trimmed === '') return undefined
+  try {
+    const url = new URL(trimmed)
+    return url.protocol === 'http:' || url.protocol === 'https:' ? trimmed : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * The avatar URL to adopt for an OIDC account, read from the OIDC Core `picture`
+ * claim (`userinfo` or the ID token — `claims` here is already the merged set).
+ *
+ * Better-Auth's genericOAuth only maps `userInfo.image` to `user.image`, never
+ * `picture`, so without this a fully compliant provider produces no avatar.
+ * Kept standalone so it is unit-testable without the resolver, and reused by the
+ * after-callback avatar backfill.
+ */
+export function pickAvatarUrl(claims: Record<string, unknown>): string | undefined {
+  return asHttpUrl(claims.picture)
+}
+
 export async function resolveIdentity({
   tokens,
   fetchUserInfo,
@@ -179,10 +222,12 @@ export async function resolveIdentity({
   subjectMismatch = 'observe',
   requiredClaimPaths,
   exhaustive = false,
+  wantImage = false,
 }: ResolveIdentityArgs): Promise<ResolveResult> {
   const idClaim = mapping?.idClaim ?? 'sub'
   const nameClaim = mapping?.nameClaim ?? 'name'
   const emailClaim = mapping?.emailClaim ?? 'email'
+  const imageClaim = mapping?.imageClaim ?? 'picture'
   const sources = mapping?.sources ?? DEFAULT_SOURCES
 
   const merged: Record<string, unknown> = {}
@@ -190,6 +235,7 @@ export async function resolveIdentity({
   let id: string | undefined
   let email: string | undefined
   let name: string | undefined
+  let image: string | undefined
   let emailVerified = false
   const warnings: ResolveWarning[] = []
 
@@ -205,10 +251,17 @@ export async function resolveIdentity({
 
   for (const source of sources) {
     // Fast path: stop before any network call once identity is complete and
-    // every mapped claim is already in `merged`. `exhaustive` disables this
+    // every mapped claim is already in `merged`. With `wantImage`, keep going
+    // for the avatar too — its claim commonly lives only at userinfo, past
+    // where id + email + name already stopped us. `exhaustive` disables this
     // so the connection test walks every source.
     const identityComplete = Boolean(id && email && name)
-    if (!exhaustive && identityComplete && requiredPathsResolved(merged, requiredClaimPaths)) {
+    if (
+      !exhaustive &&
+      identityComplete &&
+      (!wantImage || image) &&
+      requiredPathsResolved(merged, requiredClaimPaths)
+    ) {
       break
     }
 
@@ -245,9 +298,9 @@ export async function resolveIdentity({
       warnings.push('subject_mismatch')
       // The legacy re-key below only ever applied when the ID token was
       // INCOMPLETE, because a complete one never reached userinfo. When this
-      // fetch happened solely for a mapped claim path (or the exhaustive test
-      // walk), the account is already keyed by the ID token and must stay so:
-      // adding an attribute mapping cannot be what links a different account.
+      // fetch happened solely for a mapped claim path, the avatar, or the
+      // exhaustive test walk, the account is already keyed by the ID token and
+      // must stay so: enabling a mapping cannot be what links a different account.
       // Per OIDC Core 5.3.2 the mismatched response is discarded outright.
       if (identityComplete) continue
       // Legacy behaviour: userinfo wins wholesale, which means its subject is
@@ -256,10 +309,12 @@ export async function resolveIdentity({
       id = undefined
       email = undefined
       name = undefined
+      image = undefined
       emailVerified = false
       found.id = undefined
       found.email = undefined
       found.name = undefined
+      found.image = undefined
     }
 
     // Earlier sources win: only fill what is still absent.
@@ -292,6 +347,13 @@ export async function resolveIdentity({
         emailVerified = isAffirmativeClaim(resolveClaim(claims, 'email_verified'))
       }
     }
+    if (wantImage && !image) {
+      const claimedImage = asHttpUrl(resolveClaim(claims, imageClaim))
+      if (claimedImage) {
+        image = claimedImage
+        found.image = source
+      }
+    }
   }
 
   if (!id) return { ok: false, reason: 'no_identity', claims: merged }
@@ -302,6 +364,7 @@ export async function resolveIdentity({
       id,
       email,
       name,
+      ...(image ? { image } : {}),
       emailVerified,
       sources: found,
       claims: merged,

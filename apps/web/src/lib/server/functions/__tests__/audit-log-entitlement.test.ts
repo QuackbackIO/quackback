@@ -128,10 +128,10 @@ describe('listAuditEventsFn — plan gate', () => {
     expect(refusal).toBeInstanceOf(EntitlementRequiredError)
     const error = refusal as EntitlementRequiredError
     expect(error.entitlement).toBe('auditLog')
-    expect(error.requiredPlanName).toBe('Scale')
+    expect(error.requiredPlanName).toBe('Enterprise')
     expect(error.statusCode).toBe(402)
     expect(error.message).toBe(
-      'The audit log is a Scale feature. Your workspace is on Pro. Upgrade to Scale to enable it.'
+      'The audit log is an Enterprise feature. Your workspace is on Business. Upgrade to Enterprise to enable it.'
     )
     // No read happened.
     expect(hoisted.mockQueryAuditEvents).not.toHaveBeenCalled()

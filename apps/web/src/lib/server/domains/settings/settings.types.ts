@@ -10,6 +10,7 @@ import type { Role } from '@/lib/shared/roles'
 import type { OfficeHoursConfig } from '@/lib/shared/conversation/types'
 import type { WidgetTranslations } from '@/lib/shared/widget/translations'
 import type { StatusSettings } from '@/lib/shared/status-settings'
+import type { OidcSignInButton } from '@/lib/shared/oidc-sign-in-button'
 
 // =============================================================================
 // Auth Configuration (Team sign-in settings)
@@ -1009,7 +1010,7 @@ export interface PublicPortalConfig {
    * button-eligible, registered providers appear — routed-only providers
    * (verified domain + showButton:false) are omitted.
    */
-  oidcProviders?: { id: string; name: string }[]
+  oidcProviders?: OidcSignInButton[]
   /** Welcome message on the portal index. Absent / empty body = nothing rendered. */
   welcomeCard?: PortalWelcomeCard
   /**

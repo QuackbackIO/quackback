@@ -24,7 +24,7 @@ import { WidgetPortalTitle } from './widget-portal-title'
 import { WidgetPostDetailSkeleton } from './widget-skeletons'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { PostId } from '@quackback/ids'
-import { useWidgetImageUpload } from '@/lib/client/hooks/use-image-upload'
+import { useWidgetImageUpload } from './use-widget-image-upload'
 
 interface StatusInfo {
   id: string
@@ -64,6 +64,13 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
       if (!result) throw new Error('Post not found')
       return result as PublicPostDetailView
     },
+    // Minting/identifying bumps sessionVersion mid-action (first-visit upload,
+    // reaction, comment), which re-keys this query. Keep showing the same
+    // post while the Bearer refetch runs so the comment editors and reaction
+    // chips stay mounted for the in-flight request to land in — a skeleton
+    // here would tear them down. Only for the same post: switching posts
+    // still shows the skeleton rather than the previous post.
+    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey[2] === postId ? prev : undefined),
     staleTime: 30 * 1000,
   })
 

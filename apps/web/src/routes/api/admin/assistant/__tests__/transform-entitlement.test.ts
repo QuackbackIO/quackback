@@ -86,9 +86,10 @@ function makeRequest(): Request {
   })
 }
 
-const NULL_LIMITS = Object.fromEntries(
-  PROJECTED_LIMIT_KEYS.map((key) => [key, null])
-) as Record<(typeof PROJECTED_LIMIT_KEYS)[number], null>
+const NULL_LIMITS = Object.fromEntries(PROJECTED_LIMIT_KEYS.map((key) => [key, null])) as Record<
+  (typeof PROJECTED_LIMIT_KEYS)[number],
+  null
+>
 
 /**
  * Build the stored cloud block the resolver actually accepts: commercial state
@@ -161,14 +162,14 @@ describe('POST /api/admin/assistant/transform — plan gate', () => {
     }
     expect(body.error.code).toBe('ENTITLEMENT_REQUIRED')
     expect(body.error.message).toBe(
-      'AI drafts are a Growth feature. Your workspace is on Free. Upgrade to Growth to enable it.'
+      'AI drafts are a Pro feature. Your workspace is on Free. Upgrade to Pro to enable it.'
     )
     expect(body.error.details).toMatchObject({
       error: 'entitlement_required',
       entitlement: 'aiDrafts',
       currentPlan: 'free',
       requiredPlan: 'growth',
-      requiredPlanName: 'Growth',
+      requiredPlanName: 'Pro',
     })
     // No model work was started.
     expect(mockRunCopilotTransform).not.toHaveBeenCalled()

@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 672 surfaces
+### Server functions (`requireAuth`) — 675 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -616,6 +616,8 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/sso.ts`::listIdentityProvidersFn | auth.manage |
 | `lib/server/functions/sso.ts`::upsertIdentityProviderFn | auth.manage |
 | `lib/server/functions/sso.ts`::deleteIdentityProviderFn | auth.manage |
+| `lib/server/functions/sso.ts`::saveIdentityProviderLogoFn | auth.manage |
+| `lib/server/functions/sso.ts`::deleteIdentityProviderLogoFn | auth.manage |
 | `lib/server/functions/sso.ts`::setProviderCredentialsFn | auth.manage |
 | `lib/server/functions/sso.ts`::addProviderDomainFn | auth.manage |
 | `lib/server/functions/sso.ts`::verifyProviderDomainFn | auth.manage |
@@ -750,6 +752,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/uploads.ts`::getLogoUploadUrlFn | settings.manage |
 | `lib/server/functions/uploads.ts`::getFaviconUploadUrlFn | settings.manage |
 | `lib/server/functions/uploads.ts`::getHeaderLogoUploadUrlFn | settings.manage |
+| `lib/server/functions/uploads.ts`::getIdentityProviderLogoUploadUrlFn | auth.manage |
 | `lib/server/functions/uploads.ts`::getWidgetHeroUploadUrlFn | settings.manage |
 | `lib/server/functions/uploads.ts`::getAvatarUploadUrlFn | END_USER (any authenticated) |
 | `lib/server/functions/uploads.ts`::getAssistantAvatarUploadUrlFn | assistant.manage |
@@ -983,7 +986,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-191 of 975 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+191 of 978 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 

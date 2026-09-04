@@ -19,6 +19,26 @@ describe('parseSsoTestCapture', () => {
     expect(parsed).toEqual(valid)
   })
 
+  it('carries the avatar URL and its provenance when present', () => {
+    const withImage = {
+      ...valid,
+      identity: {
+        ...valid.identity,
+        image: 'https://cdn.acme.com/jane.png',
+        sources: { ...valid.identity.sources, image: 'userinfo' },
+      },
+    }
+    expect(parseSsoTestCapture(withImage)).toEqual(withImage)
+  })
+
+  it('drops a non-string image', () => {
+    const parsed = parseSsoTestCapture({
+      ...valid,
+      identity: { ...valid.identity, image: 42 },
+    })
+    expect(parsed?.identity.image).toBeUndefined()
+  })
+
   it('returns null for missing or malformed payloads', () => {
     expect(parseSsoTestCapture(null)).toBeNull()
     expect(parseSsoTestCapture({})).toBeNull()

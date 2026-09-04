@@ -88,7 +88,7 @@ describe('updateDeveloperConfig — mcpServer entitlement', () => {
         currentPlan: 'free',
         currentPlanName: 'Free',
         requiredPlan: 'growth',
-        requiredPlanName: 'Growth',
+        requiredPlanName: 'Pro',
       })
     )
 
@@ -99,7 +99,7 @@ describe('updateDeveloperConfig — mcpServer entitlement', () => {
     expect(refusal).toBeInstanceOf(EntitlementRequiredError)
     const error = refusal as EntitlementRequiredError
     expect(error.entitlement).toBe('mcpServer')
-    expect(error.requiredPlanName).toBe('Growth')
+    expect(error.requiredPlanName).toBe('Pro')
     expect(error.statusCode).toBe(402)
     expect(hoisted.requireEntitlement).toHaveBeenCalledWith('mcpServer')
     expect(hoisted.mockDbUpdate).not.toHaveBeenCalled()

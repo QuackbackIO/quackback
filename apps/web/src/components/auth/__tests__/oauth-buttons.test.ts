@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  getEnabledOAuthProviders,
   hasAnyPortalAuthMethod,
   hasRoutableOidcProvider,
   resolveSoleOidcProvider,
@@ -91,6 +92,33 @@ describe('hasAnyPortalAuthMethod', () => {
         { registeredAuthProviders: ['google'] }
       )
     ).toBe(false)
+  })
+})
+
+describe('getEnabledOAuthProviders', () => {
+  it('carries the uploaded logo URL onto an OIDC entry', () => {
+    const entries = getEnabledOAuthProviders({}, [
+      { id: 'oidc_okta', name: 'Okta', logoUrl: 'https://cdn.test/okta.png' },
+    ])
+    expect(entries).toEqual([
+      {
+        id: 'oidc_okta',
+        name: 'Okta',
+        type: 'generic-oauth',
+        logoUrl: 'https://cdn.test/okta.png',
+      },
+    ])
+  })
+
+  it('normalises a missing logo to null on the OIDC entry', () => {
+    const [entry] = getEnabledOAuthProviders({}, [{ id: 'oidc_okta', name: 'Okta' }])
+    expect(entry.logoUrl).toBeNull()
+  })
+
+  it('leaves social providers without a logoUrl', () => {
+    const [entry] = getEnabledOAuthProviders({ google: true })
+    expect(entry).toEqual({ id: 'google', name: 'Google', type: 'social' })
+    expect(entry.logoUrl).toBeUndefined()
   })
 })
 

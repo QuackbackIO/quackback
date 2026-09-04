@@ -347,6 +347,7 @@ describe('replayGateVerdict', () => {
       '0270_github_channel',
       '0271_widget_installed_sdk_version',
       '0272_kb_url_id',
+      '0273_identity_provider_logo_key',
     ])
     const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
     expect(verdict.ok).toBe(false)

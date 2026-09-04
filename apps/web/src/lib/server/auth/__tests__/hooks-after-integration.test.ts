@@ -117,7 +117,7 @@ vi.mock('@/lib/server/db', () => {
     account: { __name: 'account', userId: 'account.userId', providerId: 'account.providerId' },
     and: vi.fn((...parts: unknown[]) => ({ op: 'and', parts })),
     eq: vi.fn((col: unknown, val: unknown) => ({ op: 'eq', col, val })),
-    desc: (col: unknown) => ({ op: 'desc', col }),
+    desc: vi.fn((col: unknown) => ({ op: 'desc', col })),
     sql: (strings: TemplateStringsArray) => ({ strings }),
     userAttributeDefinitions: { __name: 'user_attribute_definitions' },
   }

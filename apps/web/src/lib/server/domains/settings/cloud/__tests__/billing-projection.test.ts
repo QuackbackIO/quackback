@@ -130,6 +130,24 @@ describe('projected commercial state', () => {
     })
   })
 
+  it('does not drop a projection whose effectivePlan is a business/enterprise alias', () => {
+    const cloud = resolveCloudConfig(
+      { enabled: true, projection: { ...PROJECTION, effectivePlan: 'business' } },
+      new Date('2026-08-14T23:59:59.999Z')
+    )
+    expect(cloud).toMatchObject({
+      enabled: true,
+      plan: 'pro',
+      entitlements: { customDomain: true },
+    })
+    expect(
+      resolveCloudConfig(
+        { enabled: true, projection: { ...PROJECTION, effectivePlan: 'enterprise' } },
+        new Date('2026-08-14T23:59:59.999Z')
+      ).plan
+    ).toBe('scale')
+  })
+
   it('falls back to Free at the exact projected expiry instant', () => {
     const before = resolveCloudConfig(
       { enabled: true, projection: PROJECTION },

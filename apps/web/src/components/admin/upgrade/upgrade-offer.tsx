@@ -12,7 +12,7 @@ import {
   catalogueTrialedPlanIds,
   type PaidPlanId,
 } from '@/lib/shared/billing/plan-action'
-import { checkoutPath, isPaidPlanId } from '@/lib/shared/billing/checkout-path'
+import { annualSavingsLabel, checkoutPath, isPaidPlanId } from '@/lib/shared/billing/checkout-path'
 import {
   cataloguePlanFor,
   unlockedHighlights,
@@ -250,6 +250,7 @@ function PriceRow(props: {
         <PeriodToggle
           value={props.period}
           discountMonths={props.discountMonths}
+          savingsLabel={annualSavingsLabel(props.plan)}
           onChange={props.onPeriodChange}
         />
       </div>
@@ -266,6 +267,7 @@ function PriceRow(props: {
 function PeriodToggle(props: {
   value: BillingPeriod
   discountMonths: number
+  savingsLabel: string | null
   onChange: (next: BillingPeriod) => void
 }) {
   return (
@@ -289,9 +291,9 @@ function PeriodToggle(props: {
           )}
         >
           {option === 'annual' ? 'Annual' : 'Monthly'}
-          {option === 'annual' ? (
+          {option === 'annual' && props.savingsLabel ? (
             <span className="ms-1 text-[11px] font-semibold text-primary">
-              {props.discountMonths} mo free
+              {props.savingsLabel}
             </span>
           ) : null}
         </button>

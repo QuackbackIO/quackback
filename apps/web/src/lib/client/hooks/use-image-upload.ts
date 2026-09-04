@@ -1,5 +1,4 @@
 import { useCallback } from 'react'
-import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { MAX_FILE_SIZE, isAllowedImageType } from '@/lib/shared/storage-config'
 
 interface UseImageUploadOptions {
@@ -9,6 +8,17 @@ interface UseImageUploadOptions {
   onStart?: () => void
   onSuccess?: (url: string) => void
   onError?: (error: Error) => void
+}
+
+/** Client-side type/size check shared by every upload flavour; null when uploadable. */
+export function validateImageFile(file: File): Error | null {
+  if (!isAllowedImageType(file.type)) {
+    return new Error(`Invalid file type: ${file.type}. Allowed types: JPEG, PNG, GIF, WebP.`)
+  }
+  if (file.size > MAX_FILE_SIZE) {
+    return new Error(`File too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB.`)
+  }
+  return null
 }
 
 export function useImageUpload(options: UseImageUploadOptions = {}) {
@@ -23,18 +33,10 @@ export function useImageUpload(options: UseImageUploadOptions = {}) {
 
   const upload = useCallback(
     async (file: File): Promise<string> => {
-      if (!isAllowedImageType(file.type)) {
-        const error = new Error(
-          `Invalid file type: ${file.type}. Allowed types: JPEG, PNG, GIF, WebP.`
-        )
-        onError?.(error)
-        throw error
-      }
-
-      if (file.size > MAX_FILE_SIZE) {
-        const error = new Error(`File too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB.`)
-        onError?.(error)
-        throw error
+      const invalid = validateImageFile(file)
+      if (invalid) {
+        onError?.(invalid)
+        throw invalid
       }
 
       onStart?.()
@@ -93,12 +95,5 @@ export function usePortalImageUpload(
   return useImageUpload({ ...options, endpoint: '/api/portal/upload' })
 }
 
-export function useWidgetImageUpload(
-  options: Omit<UseImageUploadOptions, 'prefix' | 'endpoint' | 'extraHeaders'> = {}
-) {
-  return useImageUpload({
-    ...options,
-    endpoint: '/api/widget/upload',
-    extraHeaders: getWidgetAuthHeaders,
-  })
-}
+// The widget flavour lives in `@/components/widget/use-widget-image-upload`:
+// it needs the widget auth context to mint a session before uploading.

@@ -28,7 +28,7 @@ const catalogue: BillingCatalogue = {
     },
     {
       id: 'growth',
-      name: 'Growth',
+      name: 'Pro',
       rank: 1,
       priceMonthlyCents: 2900,
       priceYearlyCents: 29000,
@@ -39,7 +39,7 @@ const catalogue: BillingCatalogue = {
     },
     {
       id: 'pro',
-      name: 'Pro',
+      name: 'Business',
       rank: 2,
       priceMonthlyCents: 5900,
       priceYearlyCents: 59000,
@@ -50,7 +50,7 @@ const catalogue: BillingCatalogue = {
     },
     {
       id: 'scale',
-      name: 'Scale',
+      name: 'Enterprise',
       rank: 3,
       priceMonthlyCents: 11500,
       priceYearlyCents: 106800,
@@ -95,7 +95,7 @@ function renderOffer(
 
 const onPro: UpgradeContext = {
   currentPlan: 'pro',
-  currentPlanName: 'Pro',
+  currentPlanName: 'Business',
   trialActive: false,
   trialEligible: false,
 }
@@ -116,14 +116,14 @@ describe('UpgradeOffer', () => {
   it('names the feature, both plans, the unlock list and the price on the first paint', () => {
     renderOffer(onPro)
     expect(
-      screen.getByRole('heading', { name: 'The audit log is available from the Scale plan' })
+      screen.getByRole('heading', { name: 'The audit log is available from the Enterprise plan' })
     ).toBeTruthy()
-    expect(screen.getByText('Upgrade from Pro to Scale to unlock:')).toBeTruthy()
+    expect(screen.getByText('Upgrade from Business to Enterprise to unlock:')).toBeTruthy()
     expect(screen.getByText('Audit log')).toBeTruthy()
     expect(screen.getByText('SSO')).toBeTruthy()
     expect(screen.queryByText(/Plus everything in/)).toBeNull()
     expect(screen.getByText('$89')).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Upgrade to Scale' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Upgrade to Enterprise' })).toHaveAttribute(
       'href',
       '/admin/settings/billing/checkout?plan=scale&period=annual'
     )
@@ -137,7 +137,7 @@ describe('UpgradeOffer', () => {
   it('carries the chosen billing cycle into the configurator', () => {
     renderOffer(onPro)
     fireEvent.click(screen.getByRole('radio', { name: /Monthly/ }))
-    expect(screen.getByRole('link', { name: 'Upgrade to Scale' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Upgrade to Enterprise' })).toHaveAttribute(
       'href',
       '/admin/settings/billing/checkout?plan=scale&period=monthly'
     )
@@ -145,16 +145,16 @@ describe('UpgradeOffer', () => {
 
   it('folds in the plans between the current one and the target', () => {
     renderOffer({ ...onFree, trialEligible: false })
-    expect(screen.getByText('Upgrade from Free to Scale to unlock:')).toBeTruthy()
-    expect(screen.getByText('Plus everything in Growth:')).toBeTruthy()
-    expect(screen.getByText(/Custom domain · API, MCP & webhooks/)).toBeTruthy()
+    expect(screen.getByText('Upgrade from Free to Enterprise to unlock:')).toBeTruthy()
     expect(screen.getByText('Plus everything in Pro:')).toBeTruthy()
+    expect(screen.getByText(/Custom domain · API, MCP & webhooks/)).toBeTruthy()
+    expect(screen.getByText('Plus everything in Business:')).toBeTruthy()
   })
 
   it('offers a first-time trial that returns to the page that raised the prompt', () => {
     renderOffer(onFree, { entitlement: 'workflows' })
-    expect(screen.getByRole('button', { name: 'Try Pro free for 14 days' })).toBeTruthy()
-    expect(screen.queryByRole('link', { name: 'Upgrade to Pro' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Try Business free for 14 days' })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Upgrade to Business' })).toBeNull()
     expect(screen.getByText(/Free for 14 days, then the price above/)).toBeTruthy()
     const form = document.querySelector('form')
     expect(form?.getAttribute('action')).toBe('/api/billing/trial')
@@ -169,23 +169,23 @@ describe('UpgradeOffer', () => {
       entitlement: 'workflows',
       catalogue: { ...catalogue, trialedPlanIds: ['pro'] },
     })
-    expect(screen.getByRole('link', { name: 'Upgrade to Pro' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Upgrade to Business' })).toBeTruthy()
     expect(screen.queryByText(/Free for 14 days/)).toBeNull()
   })
 
   it('acknowledges a running trial', () => {
     renderOffer(
-      { currentPlan: 'growth', currentPlanName: 'Growth', trialActive: true, trialEligible: false },
+      { currentPlan: 'growth', currentPlanName: 'Pro', trialActive: true, trialEligible: false },
       { entitlement: 'workflows' }
     )
-    expect(screen.getByText("You're trialing Growth. Upgrade to Pro to unlock:")).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Upgrade to Pro' })).toBeTruthy()
+    expect(screen.getByText("You're trialing Pro. Upgrade to Business to unlock:")).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Upgrade to Business' })).toBeTruthy()
   })
 
   it('uses plan-only copy when the current plan is unknown', () => {
     renderOffer(null)
-    expect(screen.getByText('Upgrade to Scale to unlock:')).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Upgrade to Scale' })).toBeTruthy()
+    expect(screen.getByText('Upgrade to Enterprise to unlock:')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Upgrade to Enterprise' })).toBeTruthy()
   })
 
   it('tells teammates without billing access who can act instead of linking to a page they cannot open', () => {
@@ -206,7 +206,7 @@ describe('UpgradeOffer', () => {
         <UpgradeOffer description={describeEntitlementUpgrade('auditLog')} />
       </QueryClientProvider>
     )
-    expect(screen.getByText(/The audit log is a Scale feature/)).toBeTruthy()
+    expect(screen.getByText(/The audit log is an Enterprise feature/)).toBeTruthy()
     expect(screen.getByRole('link', { name: 'View & compare plans' })).toHaveAttribute(
       'href',
       '/admin/settings/billing'
@@ -218,9 +218,9 @@ describe('UpgradeOffer', () => {
     routerState.billingEnabled = false
     renderOffer(onPro)
     expect(
-      screen.getByRole('heading', { name: 'The audit log is available from the Scale plan' })
+      screen.getByRole('heading', { name: 'The audit log is available from the Enterprise plan' })
     ).toBeTruthy()
-    expect(screen.getByText(/The audit log is a Scale feature/)).toBeTruthy()
+    expect(screen.getByText(/The audit log is an Enterprise feature/)).toBeTruthy()
     expect(document.querySelector('form')).toBeNull()
     expect(screen.queryByRole('link')).toBeNull()
   })

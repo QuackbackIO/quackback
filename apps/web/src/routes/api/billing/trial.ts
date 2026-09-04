@@ -1,11 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { isSameOriginFormPost } from '@/lib/server/http/same-origin-form'
+import { INCOMING_PAID_PLAN_IDS, parsePaidPlanId } from '@/lib/shared/billing/checkout-path'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { billingFormErrorResponse, billingSessionErrorResponse } from './session'
 
 const trialSchema = z.object({
-  planId: z.enum(['growth', 'pro', 'scale']),
+  planId: z.enum(INCOMING_PAID_PLAN_IDS),
   /** Admin page the prompt was raised on, so the trial lands back on the now-unlocked feature. */
   returnTo: z.string().optional(),
 })
@@ -43,8 +44,12 @@ export const Route = createFileRoute('/api/billing/trial')({
           if (!cloud.enabled || !cloud.canUpgrade) {
             return billingFormErrorResponse(null, 'unavailable')
           }
+          const planId = parsePaidPlanId(parsed.data.planId)
+          if (!planId) {
+            return billingFormErrorResponse(null, 'invalid')
+          }
           const { startWorkspaceTrial } = await import('@/lib/server/control-plane/client')
-          await startWorkspaceTrial(parsed.data.planId)
+          await startWorkspaceTrial(planId)
           return new Response(null, {
             status: 303,
             headers: { location: trialReturnPath(parsed.data.returnTo) },

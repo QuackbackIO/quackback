@@ -129,6 +129,14 @@ vi.mock('@/lib/server/functions/sso', () => ({
   fetchDiscoveryScopesFn: discoveryScopesSpy,
   setDomainEnforcedFn: vi.fn(),
   removeVerifiedDomainFn: vi.fn(),
+  saveIdentityProviderLogoFn: vi.fn(),
+  deleteIdentityProviderLogoFn: vi.fn(),
+}))
+
+// The Sign-in card's logo uploader pulls in this server-fn module; stub it so
+// the real `createServerFn` never loads under jsdom.
+vi.mock('@/lib/server/functions/uploads', () => ({
+  getIdentityProviderLogoUploadUrlFn: vi.fn(),
 }))
 
 vi.mock('@/lib/client/queries/settings', () => ({
@@ -210,6 +218,8 @@ function makeProvider(over: Partial<IdentityProvider>): IdentityProvider {
     autoProvisionRole: 'user',
     claimMapping: null,
     showButton: false,
+    logoKey: null,
+    logoUrl: null,
     detailsChangedAt: null,
     lastSuccessfulTestAt: null,
     createdAt: '2026-05-01T00:00:00.000Z',

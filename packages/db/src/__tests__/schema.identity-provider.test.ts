@@ -25,6 +25,7 @@ describe('identity_provider schema', () => {
       'autoProvisionRole',
       'claimMapping',
       'showButton',
+      'logoKey',
       'detailsChangedAt',
       'lastSuccessfulTestAt',
       'lastTestCapture',
@@ -54,6 +55,8 @@ describe('identity_provider schema', () => {
     expect(cols.kind.notNull).toBe(false)
     expect(cols.scopes.notNull).toBe(false)
     expect(cols.claimMapping.notNull).toBe(false)
+    // Optional branding; null falls back to the inferred brand glyph.
+    expect(cols.logoKey.notNull).toBe(false)
   })
 
   it('domains reference a provider via a nullable uuid TypeID FK', () => {

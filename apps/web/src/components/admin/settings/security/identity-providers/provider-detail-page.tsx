@@ -141,7 +141,15 @@ function ProviderHeader({
   return (
     <div className="flex flex-wrap items-start justify-between gap-4">
       <div className="flex min-w-0 items-start gap-3">
-        <IdpLogo kind={kind} className="mt-0.5 h-9 w-9 shrink-0" iconClassName="h-5 w-5" />
+        {provider.logoUrl ? (
+          <img
+            src={provider.logoUrl}
+            alt=""
+            className="mt-0.5 h-9 w-9 shrink-0 rounded-lg border border-border object-cover"
+          />
+        ) : (
+          <IdpLogo kind={kind} className="mt-0.5 h-9 w-9 shrink-0" iconClassName="h-5 w-5" />
+        )}
         <div className="min-w-0 space-y-1.5">
           <h1 className="truncate text-lg font-semibold">{provider.label}</h1>
           <div className="flex flex-wrap items-center gap-1.5">

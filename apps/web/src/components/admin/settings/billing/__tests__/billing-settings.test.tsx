@@ -31,7 +31,7 @@ const catalogue: BillingCatalogue = {
     },
     {
       id: 'growth',
-      name: 'Growth',
+      name: 'Pro',
       rank: 1,
       priceMonthlyCents: 1500,
       priceYearlyCents: 14400,
@@ -42,7 +42,7 @@ const catalogue: BillingCatalogue = {
     },
     {
       id: 'pro',
-      name: 'Pro',
+      name: 'Business',
       rank: 2,
       priceMonthlyCents: 3000,
       priceYearlyCents: 28800,
@@ -53,7 +53,7 @@ const catalogue: BillingCatalogue = {
     },
     {
       id: 'scale',
-      name: 'Scale',
+      name: 'Enterprise',
       rank: 3,
       priceMonthlyCents: 5900,
       priceYearlyCents: 58800,
@@ -67,7 +67,7 @@ const catalogue: BillingCatalogue = {
 
 const paidOverview: BillingProjectionOverview = {
   plan: 'pro',
-  planName: 'Pro',
+  planName: 'Business',
   status: 'active',
   trialActive: false,
   trialExpiresAt: null,
@@ -76,9 +76,9 @@ const paidOverview: BillingProjectionOverview = {
   canUpgrade: false,
   canManageBilling: true,
   purchasablePlans: [
-    { id: 'growth', name: 'Growth' },
-    { id: 'pro', name: 'Pro' },
-    { id: 'scale', name: 'Scale' },
+    { id: 'growth', name: 'Pro' },
+    { id: 'pro', name: 'Business' },
+    { id: 'scale', name: 'Enterprise' },
   ],
   seats: { used: 7, pending: 1, members: 6, purchased: 10 },
   ai: { includedCents: 3000, usedCents: 2520, extraCents: 1000 },
@@ -118,7 +118,7 @@ describe('BillingPlansView', () => {
   it('renders the active paid plan, seat meter, and invoices', () => {
     renderView()
 
-    expect(screen.getByRole('heading', { level: 2, name: 'Pro' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'Business' })).toBeInTheDocument()
     expect(screen.getByText('Active')).toBeInTheDocument()
     expect(screen.getByText(/Renews/)).toBeInTheDocument()
     expect(screen.getByText(/10 seats × \$30\/seat/)).toBeInTheDocument()
@@ -171,7 +171,7 @@ describe('BillingPlansView', () => {
     expect(screen.queryByRole('button', { name: 'Add' })).not.toBeInTheDocument()
   })
 
-  it('hides the seat meter on a grandfathered flat plan', () => {
+  it('hides Add seats on a workspace-billed plan', () => {
     renderView({
       overview: {
         ...paidOverview,
@@ -187,7 +187,7 @@ describe('BillingPlansView', () => {
     })
     expect(screen.queryByText(/of \d+ used/)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Add seats' })).not.toBeInTheDocument()
-    expect(screen.getByText(/Switching plans moves you onto per-seat pricing/)).toBeInTheDocument()
+    expect(screen.queryByText(/per-seat pricing/)).not.toBeInTheDocument()
   })
 
   it('shows leftover AI extra credit on Free', () => {
@@ -230,28 +230,26 @@ describe('BillingPlansView', () => {
     expect(screen.queryByRole('button', { name: 'Switch to Free' })).not.toBeInTheDocument()
   })
 
-  it('shows trial expiry, Continue with the plan, and uncapped seats', () => {
+  it('shows trial expiry, Continue with the plan, and included seats', () => {
     renderView({
       overview: {
         ...paidOverview,
         plan: 'growth',
-        planName: 'Growth',
+        planName: 'Pro',
         status: null,
         trialActive: true,
         trialPlanId: 'growth',
-        trialPlanName: 'Growth',
+        trialPlanName: 'Pro',
         trialExpiresAt: '2026-09-01T00:00:00.000Z',
         canUpgrade: true,
         canManageBilling: false,
-        seats: { used: 4, pending: 1, members: 3, purchased: null },
+        seats: { used: 3, pending: 0, members: 3, purchased: null, limit: 5 },
       },
     })
     expect(screen.getAllByText('Trial').length).toBeGreaterThan(0)
     expect(screen.getByText(/Trial ends/)).toBeInTheDocument()
-    expect(screen.getByText(/Uncapped during your trial/)).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: 'Continue with Growth' }).length).toBeGreaterThan(
-      0
-    )
+    expect(screen.getByText('3 of 5 seats included with Pro')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Continue with Pro' }).length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: 'Add seats' })).not.toBeInTheDocument()
   })
 
@@ -306,11 +304,11 @@ describe('BillingPlansView', () => {
       overview: {
         ...paidOverview,
         plan: 'growth',
-        planName: 'Growth',
+        planName: 'Pro',
         status: null,
         trialActive: true,
         trialPlanId: 'growth',
-        trialPlanName: 'Growth',
+        trialPlanName: 'Pro',
         trialExpiresAt: '2026-09-01T00:00:00.000Z',
         canUpgrade: true,
         canManageBilling: false,
@@ -338,6 +336,34 @@ describe('BillingPlansView', () => {
     expect(screen.getByText('$24')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('radio', { name: 'Monthly' }))
     expect(screen.getByText('$30')).toBeInTheDocument()
+  })
+
+  it('shows annual savings for the selected expired-trial plan, not the recommended one', () => {
+    renderView({
+      overview: {
+        ...paidOverview,
+        plan: 'free',
+        planName: 'Free',
+        status: null,
+        trialActive: false,
+        trialEnded: true,
+        trialPlanId: 'pro',
+        trialPlanName: 'Business',
+        trialExpiresAt: '2026-08-18T00:00:00.000Z',
+        canUpgrade: true,
+        canManageBilling: false,
+        renewalAt: null,
+        seats: { used: 3, pending: 0, members: 3, purchased: null },
+      },
+    })
+    expect(screen.getByRole('radio', { name: /Save \$72\/yr/ })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /For small teams getting started/ }))
+    expect(screen.getByRole('radio', { name: /Save \$36\/yr/ })).toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /Save \$72\/yr/ })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /For trying Quackback out/ }))
+    expect(screen.queryByText(/Save \$/)).not.toBeInTheDocument()
   })
 
   it('opens the subscribe dialog on the selected billing period', () => {

@@ -137,7 +137,19 @@ function ProviderRow({
 
   return (
     <li className="flex items-start gap-3 rounded-lg border border-border/50 bg-card p-3 shadow-sm">
-      <IdpLogo kind={kind} className="mt-0.5 h-8 w-8 shrink-0" iconClassName="h-[18px] w-[18px]" />
+      {provider.logoUrl ? (
+        <img
+          src={provider.logoUrl}
+          alt=""
+          className="mt-0.5 h-8 w-8 shrink-0 rounded-lg border border-border object-cover"
+        />
+      ) : (
+        <IdpLogo
+          kind={kind}
+          className="mt-0.5 h-8 w-8 shrink-0"
+          iconClassName="h-[18px] w-[18px]"
+        />
+      )}
       <div className="min-w-0 flex-1">
         <span className="block truncate text-sm font-semibold">{provider.label}</span>
         <p className="mt-0.5 text-xs text-muted-foreground">{IDP_KIND_NAMES[kind]}</p>

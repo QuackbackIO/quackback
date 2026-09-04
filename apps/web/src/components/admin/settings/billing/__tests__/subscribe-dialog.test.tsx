@@ -6,7 +6,7 @@ import { SubscribeDialog } from '../subscribe-dialog'
 
 const plan = {
   id: 'pro' as const,
-  name: 'Pro',
+  name: 'Business',
   rank: 2,
   priceMonthlyCents: 3000,
   priceYearlyCents: 28800,

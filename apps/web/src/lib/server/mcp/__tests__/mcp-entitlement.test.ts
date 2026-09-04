@@ -107,14 +107,14 @@ describe('handleMcpRequest — plan gate', () => {
       error: { message: string; data: Record<string, unknown> }
     }
     expect(body.error.message).toBe(
-      'The MCP server is a Growth feature. Your workspace is on Free. Upgrade to Growth to enable it.'
+      'The MCP server is a Pro feature. Your workspace is on Free. Upgrade to Pro to enable it.'
     )
     expect(body.error.data).toMatchObject({
       error: 'entitlement_required',
       entitlement: 'mcpServer',
       currentPlan: 'free',
       requiredPlan: 'growth',
-      requiredPlanName: 'Growth',
+      requiredPlanName: 'Pro',
     })
     // The server was never built, so no tool could run.
     expect(hoisted.mockCreateMcpServer).not.toHaveBeenCalled()

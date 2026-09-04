@@ -24,7 +24,10 @@ import {
   ENTITLEMENT_KEYS,
   PLAN_CATALOGUE,
   PLAN_DEFINITIONS,
+  PLAN_ID_ALIASES,
   PLAN_IDS,
+  canonicalPlanId,
+  isPlanId,
   minimumPlanFor,
   type CloudConfig,
   type EntitlementKey,
@@ -82,7 +85,26 @@ describe('the plan ladder', () => {
   it('reads correctly in refusal copy, article and all', () => {
     expect(
       PLAN_IDS.map((id) => `${PLAN_CATALOGUE[id].article} ${PLAN_CATALOGUE[id].name} plan`)
-    ).toEqual(['a Free plan', 'a Growth plan', 'a Pro plan', 'a Scale plan'])
+    ).toEqual(['a Free plan', 'a Pro plan', 'a Business plan', 'an Enterprise plan'])
+  })
+
+  it('maps business/enterprise onto pro/scale without adding catalogue rows', () => {
+    expect(PLAN_ID_ALIASES).toEqual({ business: 'pro', enterprise: 'scale' })
+    expect(canonicalPlanId('business')).toBe('pro')
+    expect(canonicalPlanId('enterprise')).toBe('scale')
+    expect(canonicalPlanId('pro')).toBe('pro')
+    expect(canonicalPlanId('scale')).toBe('scale')
+    expect(isPlanId('business')).toBe(false)
+    expect(isPlanId('enterprise')).toBe(false)
+    expect(PLAN_CATALOGUE[canonicalPlanId('business')]).toEqual(PLAN_CATALOGUE.pro)
+    expect(PLAN_CATALOGUE[canonicalPlanId('enterprise')]).toEqual(PLAN_CATALOGUE.scale)
+    expect(PLAN_CATALOGUE[canonicalPlanId('business')].name).toBe('Business')
+    expect(PLAN_CATALOGUE[canonicalPlanId('enterprise')]).toMatchObject({
+      name: 'Enterprise',
+      article: 'an',
+      rank: PLAN_CATALOGUE.scale.rank,
+      grants: PLAN_CATALOGUE.scale.grants,
+    })
   })
 })
 
@@ -133,22 +155,22 @@ describe('the levels the price list moved', () => {
   // One test per correction. Each states the level it moved FROM as well as
   // the one it moved to, so a catalogue that simply granted more would fail.
 
-  it('includes the MCP server from Growth, the cheapest paid plan', () => {
+  it('includes the MCP server from Pro, the cheapest paid plan', () => {
     expect(isEntitled(on('free'), 'mcpServer')).toBe(false)
     expect(isEntitled(on('growth'), 'mcpServer')).toBe(true)
   })
 
-  it('includes AI insights from Growth, the cheapest paid plan', () => {
+  it('includes AI insights from Pro, the cheapest paid plan', () => {
     expect(isEntitled(on('free'), 'aiInsights')).toBe(false)
     expect(isEntitled(on('growth'), 'aiInsights')).toBe(true)
   })
 
-  it('starts workflows at Pro, not at Growth', () => {
+  it('starts workflows at Business, not at Pro', () => {
     expect(isEntitled(on('growth'), 'workflows')).toBe(false)
     expect(isEntitled(on('pro'), 'workflows')).toBe(true)
   })
 
-  it('starts the audit log at Scale, not at Pro', () => {
+  it('starts the audit log at Enterprise, not at Business', () => {
     expect(isEntitled(on('pro'), 'auditLog')).toBe(false)
     expect(isEntitled(on('scale'), 'auditLog')).toBe(true)
   })

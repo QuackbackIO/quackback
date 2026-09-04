@@ -15,10 +15,33 @@ import type { TierFeatureFlags } from '../tier-limits.types'
  * derive what it grants. A free-form string can do none of those. Operators who
  * need a bespoke arrangement express it as explicit entitlement overrides on
  * top of a catalogue plan, not as a new plan id.
+ *
+ * Stored and projected ids stay `growth` / `pro` / `scale` until later remap
+ * steps. Incoming CP/checkout slugs `business` and `enterprise` are aliases of
+ * today's `pro` (Business) and `scale` (Enterprise); {@link canonicalPlanId}
+ * maps them before catalogue lookup or storage.
  */
 export const PLAN_IDS = ['free', 'growth', 'pro', 'scale'] as const
 
 export type PlanId = (typeof PLAN_IDS)[number]
+
+/** Incoming slugs that mean a canonical {@link PlanId} until later B steps. */
+export const PLAN_ID_ALIASES = {
+  business: 'pro',
+  enterprise: 'scale',
+} as const satisfies Record<string, PlanId>
+
+export type PlanIdAlias = keyof typeof PLAN_ID_ALIASES
+
+/**
+ * Maps incoming CP/checkout slugs onto stored catalogue ids.
+ * Unknown strings are returned as-is; {@link isPlanId} is the closed-set guard.
+ */
+export function canonicalPlanId(id: string): PlanId {
+  if (id === 'business') return 'pro'
+  if (id === 'enterprise') return 'scale'
+  return id as PlanId
+}
 
 export interface PlanDefinition {
   id: PlanId
@@ -31,10 +54,9 @@ export interface PlanDefinition {
   rank: number
   /**
    * Indefinite article for {@link name} in refusal copy ("a Pro feature",
-   * "an Advanced feature"). Declared rather than derived: an initial-vowel
+   * "an Enterprise feature"). Declared rather than derived: an initial-vowel
    * test is wrong for names like "Unlimited" ("an Unlimited plan") and
-   * "One" ("a One plan"), and there are only a handful of plans. Every plan
-   * in today's catalogue happens to take "a".
+   * "One" ("a One plan"), and there are only a handful of plans.
    */
   article: 'a' | 'an'
   /** Entitlements this plan grants by default. */
@@ -216,7 +238,7 @@ export const PLAN_CATALOGUE: Record<PlanId, PlanDefinition> = {
   growth: {
     id: 'growth',
     article: 'a',
-    name: 'Growth',
+    name: 'Pro',
     rank: 1,
     grants: [
       'customDomain',
@@ -231,7 +253,7 @@ export const PLAN_CATALOGUE: Record<PlanId, PlanDefinition> = {
   pro: {
     id: 'pro',
     article: 'a',
-    name: 'Pro',
+    name: 'Business',
     rank: 2,
     grants: [
       'customDomain',
@@ -246,8 +268,8 @@ export const PLAN_CATALOGUE: Record<PlanId, PlanDefinition> = {
   },
   scale: {
     id: 'scale',
-    article: 'a',
-    name: 'Scale',
+    article: 'an',
+    name: 'Enterprise',
     rank: 3,
     grants: [
       'customDomain',

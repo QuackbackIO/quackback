@@ -34,7 +34,7 @@ export const Route = createFileRoute('/admin/settings/security/authentication')(
     assertRoutePermission(context.permissions, PERMISSIONS.AUTH_MANAGE)
 
     const { queryClient } = context
-    // Auth + SSO reads are cheap and never 402. The audit feed is a Scale
+    // Auth + SSO reads are cheap and never 402. The audit feed is an Enterprise
     // entitlement: prefetching it here took down Portal access and Sign-in
     // on every other plan. The audit tab loads that query only when entitled.
     const { listEntitlementsFn } = await import('@/lib/server/functions/entitlement-status')
