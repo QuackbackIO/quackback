@@ -108,11 +108,11 @@ describe('the refusal names the plan', () => {
   it('names the cheapest plan that would grant the feature', () => {
     const err = buildRefusal(cloud({ plan: 'free' }), 'customDomain')
     expect(err.requiredPlan).toBe('growth')
-    expect(err.requiredPlanName).toBe('Growth')
+    expect(err.requiredPlanName).toBe('Pro')
     expect(err.currentPlan).toBe('free')
     expect(err.currentPlanName).toBe('Free')
     expect(err.message).toBe(
-      'Custom domains are a Growth feature. Your workspace is on Free. Upgrade to Growth to enable it.'
+      'Custom domains are a Pro feature. Your workspace is on Free. Upgrade to Pro to enable it.'
     )
   })
 
@@ -120,8 +120,8 @@ describe('the refusal names the plan', () => {
     // The MCP server is included from the cheapest paid plan; the audit log
     // only from the dearest. A refusal that always pointed at the top plan
     // would over-sell and read as dishonest.
-    expect(buildRefusal(cloud({ plan: 'free' }), 'mcpServer').requiredPlanName).toBe('Growth')
-    expect(buildRefusal(cloud({ plan: 'free' }), 'auditLog').requiredPlanName).toBe('Scale')
+    expect(buildRefusal(cloud({ plan: 'free' }), 'mcpServer').requiredPlanName).toBe('Pro')
+    expect(buildRefusal(cloud({ plan: 'free' }), 'auditLog').requiredPlanName).toBe('Enterprise')
   })
 
   it('does not invent an upsell when the workspace already has the plan', () => {
@@ -130,15 +130,15 @@ describe('the refusal names the plan', () => {
     const err = buildRefusal(cloud({ plan: 'scale', entitlements: { sso: false } }), 'sso')
     expect(err.requiredPlan).toBeNull()
     expect(err.message).toBe(
-      'Single sign-on is not included in your plan. Your workspace is on Scale. Contact us to enable it.'
+      'Single sign-on is not included in your plan. Your workspace is on Enterprise. Contact us to enable it.'
     )
   })
 
   it('still names a plan when the workspace has none', () => {
     const err = buildRefusal(cloud({ plan: null }), 'workflows')
     expect(err.currentPlan).toBeNull()
-    expect(err.requiredPlanName).toBe('Pro')
-    expect(err.message).toBe('Workflows are a Pro feature. Upgrade to Pro to enable it.')
+    expect(err.requiredPlanName).toBe('Business')
+    expect(err.message).toBe('Workflows are a Business feature. Upgrade to Business to enable it.')
   })
 
   it.each(ENTITLEMENT_KEYS.filter((key) => key !== 'hideBranding'))(
@@ -180,11 +180,11 @@ describe('the refusal reuses the existing 402 plumbing', () => {
       limit: 'entitlements.mcpServer',
       entitlement: 'mcpServer',
       message:
-        'The MCP server is a Growth feature. Your workspace is on Free. Upgrade to Growth to enable it.',
+        'The MCP server is a Pro feature. Your workspace is on Free. Upgrade to Pro to enable it.',
       currentPlan: 'free',
       currentPlanName: 'Free',
       requiredPlan: 'growth',
-      requiredPlanName: 'Growth',
+      requiredPlanName: 'Pro',
       upgradeUrl: '/admin/settings/billing',
     })
   })
@@ -212,7 +212,7 @@ describe('requireEntitlement against a configured workspace', () => {
     })
     const { requireEntitlement } = await import('../entitlements')
     await expect(requireEntitlement('customDomain')).rejects.toThrow(
-      /Custom domains are a Growth feature/
+      /Custom domains are a Pro feature/
     )
   })
 
@@ -235,7 +235,7 @@ describe('requireEntitlement against a configured workspace', () => {
     await expect(requireEntitlement('mcpServer')).resolves.toBeUndefined()
     await expect(requireEntitlement('aiInsights')).resolves.toBeUndefined()
     await expect(requireEntitlement('workflows')).rejects.toThrow(
-      /Workflows are a Pro feature. Your workspace is on Growth./
+      /Workflows are a Business feature. Your workspace is on Pro./
     )
   })
 

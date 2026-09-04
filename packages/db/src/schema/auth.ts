@@ -646,6 +646,10 @@ export const identityProvider = pgTable(
     autoProvisionRole: text('auto_provision_role').$type<'admin' | 'member' | 'user'>(),
     claimMapping: jsonb('claim_mapping').$type<IdentityProviderClaimMapping>(),
     showButton: boolean('show_button').notNull().default(false),
+    /** Provider logo — S3 storage key (e.g. "idp-logos/2026/09/abc-logo.png").
+     *  Rendered on the portal sign-in button and the provider list; null falls
+     *  back to the brand glyph for the inferred IdP kind. */
+    logoKey: text('logo_key'),
     /** Bumped when redirect-affecting details change; freshness baseline. */
     detailsChangedAt: timestamp('details_changed_at', { withTimezone: true }),
     lastSuccessfulTestAt: timestamp('last_successful_test_at', { withTimezone: true }),

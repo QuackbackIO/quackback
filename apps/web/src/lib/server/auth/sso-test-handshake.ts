@@ -66,6 +66,12 @@ export interface DiagnosticStep {
   stage: HandshakeStage
   label: string
   detail?: string
+  /**
+   * `'info'` renders muted — neither a pass nor a fail. For optional signals
+   * (the avatar) that report what the IdP released without gating the
+   * connection. Absent → the row's icon follows `ok`.
+   */
+  severity?: 'info'
 }
 
 export type HandshakeResult =
@@ -98,7 +104,8 @@ export type HandshakeResult =
         id: string
         email?: string
         name?: string
-        sources: Partial<Record<'id' | 'email' | 'name', string>>
+        image?: string
+        sources: Partial<Record<'id' | 'email' | 'name' | 'image', string>>
       }
     }
   | {
@@ -403,6 +410,9 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
   const resolution = await resolveIdentity({
     tokens: { idToken: tokens.id_token, accessToken: tokens.access_token },
     mapping: input.identityMapping,
+    exhaustive: true,
+    // Mirror production, which now resolves the avatar from `picture`.
+    wantImage: true,
     fetchUserInfo: async () => {
       if (!discovery.userinfo_endpoint || !tokens.access_token) return null
       try {
@@ -453,6 +463,29 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
       stage: 'claim-check',
       label: `${field === 'id' ? 'Account identifier' : field === 'email' ? 'Email address' : 'Display name'} resolved`,
       detail: source === 'idToken' ? 'from the ID token' : `from ${source}`,
+    })
+  }
+
+  // Avatar is optional: report it, but a missing `picture` is informational,
+  // not a failed connection.
+  if (identity.image) {
+    steps.push({
+      ok: true,
+      stage: 'claim-check',
+      label: 'Avatar resolved',
+      detail:
+        identity.sources.image === 'idToken'
+          ? 'from the ID token'
+          : `from ${identity.sources.image}`,
+    })
+  } else {
+    steps.push({
+      ok: true,
+      severity: 'info',
+      stage: 'claim-check',
+      label: 'No avatar released',
+      detail:
+        'The IdP returned no `picture` claim (in the ID token or userinfo). Sign-in works without one; add it to your IdP’s claim/scope mapping to give users an avatar.',
     })
   }
 
@@ -517,6 +550,7 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
       id: identity.id,
       email: identity.email,
       name: identity.name,
+      image: identity.image,
       sources: identity.sources,
     },
   }

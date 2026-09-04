@@ -14,13 +14,13 @@ const { IntegrationsSettingsBody } = await import('../settings.integrations.inde
 describe('integrations settings page', () => {
   it('shows the in-route upgrade screen when integrations are off', () => {
     render(<IntegrationsSettingsBody enabled={false} catalog={[]} integrations={[]} />)
-    expect(screen.getByText(/Integrations are a Pro feature/)).toBeTruthy()
+    expect(screen.getByText(/Integrations are a Business feature/)).toBeTruthy()
     expect(screen.queryByText('integration catalog')).toBeNull()
   })
 
   it('shows the catalog when integrations are on', () => {
     render(<IntegrationsSettingsBody enabled catalog={[]} integrations={[]} />)
     expect(screen.getByText('integration catalog')).toBeTruthy()
-    expect(screen.queryByText(/Integrations are a Pro feature/)).toBeNull()
+    expect(screen.queryByText(/Integrations are a Business feature/)).toBeNull()
   })
 })

@@ -28,7 +28,7 @@ import { useWidgetAuth } from './widget-auth-provider'
 import { sendToHost } from '@/lib/client/widget-bridge'
 import type { PostId } from '@quackback/ids'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
-import { useWidgetImageUpload } from '@/lib/client/hooks/use-image-upload'
+import { useWidgetImageUpload, WidgetSessionError } from './use-widget-image-upload'
 import type { JSONContent } from '@tiptap/react'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
 
@@ -232,7 +232,6 @@ export function WidgetHomeAnimated({
     metadata,
     getSessionVersion,
   } = useWidgetAuth()
-  const { upload: uploadImage } = useWidgetImageUpload()
   const queryClient = useQueryClient()
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -275,6 +274,27 @@ export function WidgetHomeAnimated({
   const signInRequired = !isIdentified && !!selectedBoardId && !canPost
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // The editor swallows onImageUpload rejections, so a failed session mint
+  // would otherwise look like the attach did nothing (GH #464). Other upload
+  // failures (type/size/server) keep their existing behaviour.
+  const handleUploadStart = useCallback(() => setError(null), [])
+  const handleUploadError = useCallback(
+    (err: Error) => {
+      if (!(err instanceof WidgetSessionError)) return
+      setError(
+        intl.formatMessage({
+          id: 'widget.home.form.errorSession',
+          defaultMessage: 'Could not create session. Please try again.',
+        })
+      )
+    },
+    [intl]
+  )
+  const { upload: uploadImage } = useWidgetImageUpload({
+    onStart: handleUploadStart,
+    onError: handleUploadError,
+  })
 
   const [similarPostResults, setSimilarPostResults] = useState<SearchResult | null>(null)
   const [isSimilarSearching, setIsSimilarSearching] = useState(false)

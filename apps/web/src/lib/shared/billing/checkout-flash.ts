@@ -1,5 +1,6 @@
 import type { BillingCatalogue } from '@/lib/server/control-plane/client'
 import type { BillingProjectionOverview } from '@/lib/server/domains/billing/projection-overview'
+import { canonicalPlanId } from '@/lib/server/domains/settings/cloud/cloud.types'
 
 export function checkoutSuccessCopy(
   overview: BillingProjectionOverview | null | undefined,
@@ -11,7 +12,7 @@ export function checkoutSuccessCopy(
       body: 'Your plan, seats, and invoices are on this page. You can change them any time.',
     }
   }
-  const plan = catalogue?.plans.find((entry) => entry.id === overview.plan)
+  const plan = catalogue?.plans.find((entry) => canonicalPlanId(entry.id) === overview.plan)
   const seats = overview.seats?.purchased ?? overview.seats?.used ?? 0
   const bits = [`You're on ${overview.planName}`]
   if (plan?.billedPer === 'seat' && seats > 0) {

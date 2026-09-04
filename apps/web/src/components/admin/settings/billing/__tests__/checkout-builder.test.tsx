@@ -32,7 +32,7 @@ const catalogue: BillingCatalogue = {
     },
     {
       id: 'growth',
-      name: 'Growth',
+      name: 'Pro',
       rank: 1,
       priceMonthlyCents: 2900,
       priceYearlyCents: 29000,
@@ -43,7 +43,7 @@ const catalogue: BillingCatalogue = {
     },
     {
       id: 'pro',
-      name: 'Pro',
+      name: 'Business',
       rank: 2,
       priceMonthlyCents: 5900,
       priceYearlyCents: 59000,
@@ -54,7 +54,7 @@ const catalogue: BillingCatalogue = {
     },
     {
       id: 'scale',
-      name: 'Scale',
+      name: 'Enterprise',
       rank: 3,
       priceMonthlyCents: 11500,
       priceYearlyCents: 106800,
@@ -77,9 +77,9 @@ const freeOverview: BillingProjectionOverview = {
   canUpgrade: true,
   canManageBilling: false,
   purchasablePlans: [
-    { id: 'growth', name: 'Growth' },
-    { id: 'pro', name: 'Pro' },
-    { id: 'scale', name: 'Scale' },
+    { id: 'growth', name: 'Pro' },
+    { id: 'pro', name: 'Business' },
+    { id: 'scale', name: 'Enterprise' },
   ],
   seats: { used: 3, pending: 1, members: 2, purchased: null },
   ai: null,
@@ -89,7 +89,7 @@ const freeOverview: BillingProjectionOverview = {
 const proOverview: BillingProjectionOverview = {
   ...freeOverview,
   plan: 'pro',
-  planName: 'Pro',
+  planName: 'Business',
   status: 'active',
   canManageBilling: true,
   seats: { used: 7, pending: 1, members: 6, purchased: 10 },
@@ -123,12 +123,12 @@ describe('CheckoutBuilder', () => {
     renderBuilder(freeOverview)
 
     expect(screen.getByRole('radio', { name: /Yearly/ })).toHaveAttribute('aria-checked', 'true')
-    expect(screen.getByRole('radio', { name: /Save 17%/ })).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: /^Pro/ })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('radio', { name: /Save \$118\/yr/ })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /^Business/ })).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByText('Workflows & SLAs')).toBeInTheDocument()
 
     const summary = screen.getByRole('complementary')
-    expect(within(summary).getByText('Pro plan')).toBeInTheDocument()
+    expect(within(summary).getByText('Business plan')).toBeInTheDocument()
     expect(within(summary).getByText('3 seats × $590/year')).toBeInTheDocument()
     expect(within(summary).getAllByText('$1,770/year')).toHaveLength(2)
     expect(within(summary).getByText('$148/mo')).toBeInTheDocument()
@@ -142,14 +142,16 @@ describe('CheckoutBuilder', () => {
 
   it('offers the trial as an alternative to a Free workspace that has not tried the plan', () => {
     renderBuilder(freeOverview)
-    expect(screen.getByRole('button', { name: /Or try Pro free for 14 days/ })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /Or try Business free for 14 days/ })
+    ).toBeInTheDocument()
   })
 
   it('reports selection changes without clearing the plan', () => {
     const { onChange } = renderBuilder(freeOverview)
     fireEvent.click(screen.getByRole('radio', { name: /Monthly/ }))
     expect(onChange).toHaveBeenCalledWith({ period: 'monthly' })
-    fireEvent.click(screen.getByRole('radio', { name: /^Scale/ }))
+    fireEvent.click(screen.getByRole('radio', { name: /^Enterprise/ }))
     expect(onChange).toHaveBeenCalledWith({ plan: 'scale' })
     fireEvent.click(screen.getByRole('button', { name: 'More seats' }))
     expect(onChange).toHaveBeenCalledWith({ seats: 4 })

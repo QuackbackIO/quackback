@@ -9,6 +9,7 @@ import { describe, it, expect } from 'vitest'
 import {
   identityMappingIssue,
   mergeClaimMapping,
+  normalizeAttributeMapping,
   normalizeRoleMapping,
   withAllowMissingEmail,
 } from '../provider-shared'
@@ -67,6 +68,45 @@ describe('withAllowMissingEmail', () => {
       sources: ['idToken'],
       allowMissingEmail: true,
     })
+  })
+})
+
+describe('normalizeAttributeMapping', () => {
+  it('drops empty rows and returns undefined when nothing remains', () => {
+    expect(
+      normalizeAttributeMapping({
+        map: [
+          { claimPath: '', attributeKey: 'department' },
+          { claimPath: 'dept', attributeKey: '  ' },
+        ],
+      })
+    ).toBeUndefined()
+    expect(normalizeAttributeMapping({ map: [] })).toBeUndefined()
+    expect(normalizeAttributeMapping(null)).toBeUndefined()
+  })
+
+  it('preserves flags on a non-empty mapping', () => {
+    expect(
+      normalizeAttributeMapping({
+        map: [{ claimPath: 'dept', attributeKey: 'department' }],
+        overrideExisting: true,
+        syncOnSignIn: true,
+      })
+    ).toEqual({
+      map: [{ claimPath: 'dept', attributeKey: 'department' }],
+      overrideExisting: true,
+      syncOnSignIn: true,
+    })
+  })
+
+  it('drops flags that are off so the stored shape stays sparse', () => {
+    expect(
+      normalizeAttributeMapping({
+        map: [{ claimPath: 'dept', attributeKey: 'department' }],
+        overrideExisting: false,
+        syncOnSignIn: false,
+      })
+    ).toEqual({ map: [{ claimPath: 'dept', attributeKey: 'department' }] })
   })
 })
 

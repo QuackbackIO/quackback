@@ -6,9 +6,9 @@
  * accounts, so packaging it under "create accounts for new people" would hide
  * a live control from exactly the workspaces most likely to need it.
  *
- * It writes two sections of the shared `claim_mapping` column (`profile` and
- * `role`) through `mergeClaimMapping`, which carries `attributes` — and the
- * parts of `profile` that have no UI — through verbatim.
+ * It writes three sections of the shared `claim_mapping` column (`profile`,
+ * `role`, and `attributes`) through `mergeClaimMapping`, which carries the
+ * parts of `profile` that have no UI through verbatim.
  */
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -16,10 +16,14 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import { ClaimMappingEditor } from './claim-mapping-editor'
+import { ClaimAttributeMappingEditor } from './claim-attribute-mapping-editor'
+import { useSsoTestSignIn } from '../sso/use-sso-test-sign-in'
 import {
   mergeClaimMapping,
+  normalizeAttributeMapping,
   normalizeRoleMapping,
   withAllowMissingEmail,
+  type AttributeMapping,
   type RoleMapping,
 } from './provider-shared'
 import { useProviderSave } from './use-provider-save'
@@ -27,9 +31,23 @@ import { useProviderSave } from './use-provider-save'
 export function ClaimMappingCard({ provider }: { provider: IdentityProvider }) {
   const { saving, save } = useProviderSave(provider)
   const [mapping, setMapping] = useState<RoleMapping | null>(provider.claimMapping?.role ?? null)
+  const [attributes, setAttributes] = useState<AttributeMapping | null>(
+    provider.claimMapping?.attributes ?? null
+  )
   const [allowMissingEmail, setAllowMissingEmail] = useState(
     provider.claimMapping?.profile?.allowMissingEmail === true
   )
+  const { lastSuccess } = useSsoTestSignIn()
+  // In-session lastSuccess is the test that just completed; the persisted
+  // capture is only reloaded with the provider row. Prefer the session copy
+  // so suggestions and preview update without a refresh.
+  const capture =
+    lastSuccess && lastSuccess.registrationId === provider.registrationId
+      ? lastSuccess
+      : provider.lastTestCapture &&
+          provider.lastTestCapture.registrationId === provider.registrationId
+        ? provider.lastTestCapture
+        : null
 
   const handleSave = () =>
     void save(
@@ -37,6 +55,7 @@ export function ClaimMappingCard({ provider }: { provider: IdentityProvider }) {
         claimMapping: mergeClaimMapping(provider.claimMapping, {
           role: normalizeRoleMapping(mapping),
           profile: withAllowMissingEmail(provider.claimMapping?.profile, allowMissingEmail),
+          attributes: normalizeAttributeMapping(attributes),
         }),
       },
       'Claim mapping saved.'
@@ -77,6 +96,16 @@ export function ClaimMappingCard({ provider }: { provider: IdentityProvider }) {
           registrationId={provider.registrationId}
           canTest
           onChange={setMapping}
+        />
+
+        <ClaimAttributeMappingEditor
+          mapping={attributes}
+          disabled={saving}
+          registrationId={provider.registrationId}
+          canTest
+          capture={capture}
+          detailsChangedAt={provider.detailsChangedAt}
+          onChange={setAttributes}
         />
 
         <div className="flex justify-end border-t border-border/40 pt-5">

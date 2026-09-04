@@ -16,7 +16,7 @@ import {
   type PaidPlanId,
 } from '@/lib/shared/billing/plan-action'
 import {
-  annualSavingsPercent,
+  annualSavingsLabel,
   checkoutSummary,
   isPaidPlanId,
   type BillingPeriod,
@@ -68,7 +68,7 @@ export function CheckoutBuilder(props: {
   const trialDays = catalogueTrialDays(catalogue)
   const savingsReference =
     selectedPlan ?? paidPlans.find((plan) => plan.recommended) ?? paidPlans[0]
-  const savings = savingsReference ? annualSavingsPercent(savingsReference) : null
+  const savings = annualSavingsLabel(savingsReference)
   const freeAction = freePlan ? billingPlanAction('free', overview, trialedPlanIds) : null
   const canPurchase = overview.canUpgrade || overview.canManageBilling
   const branding = catalogue.brandingRemoval ?? null
@@ -83,7 +83,7 @@ export function CheckoutBuilder(props: {
           <SectionTitle>Billing cycle</SectionTitle>
           <CycleToggle
             value={selection.period}
-            savingsPercent={savings}
+            savingsLabel={savings}
             discountMonths={catalogue.annualDiscountMonths}
             onChange={(period) => props.onChange({ period })}
           />
@@ -181,7 +181,7 @@ function SectionTitle(props: { children: React.ReactNode }) {
 
 function CycleToggle(props: {
   value: BillingPeriod
-  savingsPercent: number | null
+  savingsLabel: string | null
   discountMonths: number
   onChange: (next: BillingPeriod) => void
 }) {
@@ -208,11 +208,9 @@ function CycleToggle(props: {
             )}
           >
             {option === 'annual' ? 'Yearly' : 'Monthly'}
-            {option === 'annual' ? (
+            {option === 'annual' && props.savingsLabel ? (
               <Badge size="sm" shape="pill" variant={active ? 'default' : 'secondary'}>
-                {props.savingsPercent != null
-                  ? `Save ${props.savingsPercent}%`
-                  : `${props.discountMonths} mo free`}
+                {props.savingsLabel}
               </Badge>
             ) : null}
           </button>

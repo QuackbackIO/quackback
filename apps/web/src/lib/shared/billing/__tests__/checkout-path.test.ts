@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
+  annualSavingsCents,
+  annualSavingsLabel,
   annualSavingsPercent,
   checkoutPath,
   checkoutSummary,
   parseCheckoutSearch,
+  parsePaidPlanId,
 } from '../checkout-path'
 
 const pro = { priceMonthlyCents: 5900, priceYearlyCents: 59000, billedPer: 'seat' as const }
@@ -12,6 +15,12 @@ describe('checkoutPath', () => {
   it('encodes only what was given', () => {
     expect(checkoutPath()).toBe('/admin/settings/billing/checkout')
     expect(checkoutPath({ plan: 'pro' })).toBe('/admin/settings/billing/checkout?plan=pro')
+    expect(parsePaidPlanId('business')).toBe('pro')
+    expect(parsePaidPlanId('enterprise')).toBe('scale')
+    expect(parsePaidPlanId('growth')).toBe('growth')
+    expect(checkoutPath({ plan: parsePaidPlanId('business') ?? 'pro' })).toBe(
+      '/admin/settings/billing/checkout?plan=pro'
+    )
     expect(checkoutPath({ plan: 'pro', period: 'monthly', seats: 3 })).toBe(
       '/admin/settings/billing/checkout?plan=pro&period=monthly&seats=3'
     )
@@ -37,7 +46,9 @@ describe('parseCheckoutSearch', () => {
     expect(parseCheckoutSearch({ plan: 'free', period: 'weekly', seats: '0' })).toEqual({})
     expect(parseCheckoutSearch({ branding: 'false' })).toEqual({})
     expect(parseCheckoutSearch({ branding: 'yes' })).toEqual({})
-    expect(parseCheckoutSearch({ plan: 'enterprise', seats: 'lots' })).toEqual({})
+    expect(parseCheckoutSearch({ plan: 'platinum', seats: 'lots' })).toEqual({})
+    expect(parseCheckoutSearch({ plan: 'enterprise' })).toEqual({ plan: 'scale' })
+    expect(parseCheckoutSearch({ plan: 'business' })).toEqual({ plan: 'pro' })
     expect(parseCheckoutSearch({ seats: 2.5 })).toEqual({})
     expect(parseCheckoutSearch({ seats: '1001' })).toEqual({ seats: 1001 })
   })
@@ -74,5 +85,15 @@ describe('annualSavingsPercent', () => {
     expect(annualSavingsPercent(pro)).toBe(17)
     expect(annualSavingsPercent({ priceMonthlyCents: 1000, priceYearlyCents: 12000 })).toBeNull()
     expect(annualSavingsPercent({ priceMonthlyCents: 0, priceYearlyCents: 0 })).toBeNull()
+  })
+})
+
+describe('annualSavingsLabel', () => {
+  it('quotes the yearly dollar saving and prefers a catalogue amount', () => {
+    expect(annualSavingsCents(pro)).toBe(11800)
+    expect(annualSavingsLabel(pro)).toBe('Save $118/yr')
+    expect(annualSavingsLabel({ ...pro, annualSavingsCents: 9600 })).toBe('Save $96/yr')
+    expect(annualSavingsLabel({ priceMonthlyCents: 1000, priceYearlyCents: 12000 })).toBeNull()
+    expect(annualSavingsLabel(null)).toBeNull()
   })
 })

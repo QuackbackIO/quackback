@@ -21,9 +21,9 @@
 
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import { authorizeRequestFor, supportsPrompt } from '@/lib/shared/oidc-request'
-import { resolveIdentity } from './resolve-identity'
+import { resolveIdentity, pickAvatarUrl } from './resolve-identity'
 import { synthesizeName } from './placeholder-identity'
-import { allowsMissingEmail } from '@/lib/shared/oidc-claim-mapping'
+import { allowsMissingEmail, claimMappingFor } from '@/lib/shared/oidc-claim-mapping'
 
 // Re-exported so server callers keep this import path. The implementation lives
 // in `shared` because the admin editor needs it too, and having exactly one
@@ -216,6 +216,11 @@ export async function buildGenericOAuthConfigs({
     // library's own behaviour, so withholding it from unmapped providers would
     // leave two resolution paths — the thing this work exists to remove.
     const resolvedUserInfoUrl = userInfoUrl
+    const mapping = claimMappingFor(provider.claimMapping)
+    const requiredClaimPaths = [
+      ...(mapping.attributes?.map ?? []).map((entry) => entry.claimPath),
+      ...(mapping.role?.claimPath ? [mapping.role.claimPath] : []),
+    ]
     const getUserInfo: NonNullable<GenericOAuthConfig['getUserInfo']> = async (tokens) => {
       const result = await resolveIdentity({
         tokens,
@@ -223,9 +228,15 @@ export async function buildGenericOAuthConfigs({
           resolvedUserInfoUrl && tokens.accessToken && fetchUserInfo
             ? await fetchUserInfo(resolvedUserInfoUrl, tokens.accessToken)
             : null,
+        requiredClaimPaths: requiredClaimPaths.length > 0 ? requiredClaimPaths : undefined,
+        // Pursue the avatar through the cascade — a `picture` claim commonly
+        // lives only at userinfo, past where id + email + name already stopped
+        // the fast path. `claims` (merged) then carries it for the after-hook
+        // backfill via `onResolved`.
+        wantImage: true,
       })
       if (!result.ok) return null
-      const { id, email, name, emailVerified, claims, warnings } = result.identity
+      const { id, email, name, image, emailVerified, claims, warnings } = result.identity
       // Phase one of observe-then-enforce: the discrepancy is recorded, not
       // acted on, so the real rate is known before a release starts refusing
       // sign-ins over it. `onWarning` is injected for the same reason the
@@ -251,6 +262,12 @@ export async function buildGenericOAuthConfigs({
         resolvedEmail = await placeholderEmailFor(provider.registrationId, id)
       }
 
+      // Better-Auth's genericOAuth derives the avatar from `image` only, so
+      // hand it the resolved `picture` URL. Better-Auth persists it only when it
+      // CREATES the user; an existing account is backfilled by
+      // `handleAvatarBackfillAfter` (fill-if-empty, never overwrites).
+      const resolvedImage = image ?? pickAvatarUrl(claims)
+
       // Raw claims first, mapped fields last: the mapped values are the
       // resolved answer and must not be shadowed by a same-named raw claim.
       return {
@@ -259,6 +276,7 @@ export async function buildGenericOAuthConfigs({
         emailVerified,
         ...(resolvedEmail ? { email: resolvedEmail } : {}),
         ...(resolvedName ? { name: resolvedName } : {}),
+        ...(resolvedImage ? { image: resolvedImage } : {}),
       }
     }
 

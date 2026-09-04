@@ -91,12 +91,14 @@ function provider(overrides: {
   label: string
   showButton?: boolean
   verified?: boolean
+  logoUrl?: string | null
 }) {
   return {
     registrationId: overrides.registrationId,
     label: overrides.label,
     showButton: overrides.showButton ?? false,
     enabled: true,
+    logoUrl: overrides.logoUrl ?? null,
     domains: overrides.verified
       ? [{ verifiedAt: '2026-01-01T00:00:00.000Z' }]
       : [{ verifiedAt: null }],
@@ -118,7 +120,11 @@ describe('getPublicPortalConfig — oidcProviders buttons', () => {
     mockGetRegisteredOidcProviderIds.mockResolvedValue(new Set(['custom-oidc']))
 
     const result = await getPublicPortalConfig()
-    expect(result?.oidcProviders).toContainEqual({ id: 'custom-oidc', name: 'Okta' })
+    expect(result?.oidcProviders).toContainEqual({
+      id: 'custom-oidc',
+      name: 'Okta',
+      logoUrl: null,
+    })
   })
 
   it('emits a button for a routed provider the admin opted back in via showButton', async () => {
@@ -128,7 +134,26 @@ describe('getPublicPortalConfig — oidcProviders buttons', () => {
     mockGetRegisteredOidcProviderIds.mockResolvedValue(new Set(['auth0']))
 
     const result = await getPublicPortalConfig()
-    expect(result?.oidcProviders).toContainEqual({ id: 'auth0', name: 'Auth0' })
+    expect(result?.oidcProviders).toContainEqual({ id: 'auth0', name: 'Auth0', logoUrl: null })
+  })
+
+  it('forwards the uploaded provider logo URL onto the button', async () => {
+    mockListIdentityProviders.mockResolvedValue([
+      provider({
+        registrationId: 'custom-oidc',
+        label: 'Okta',
+        showButton: true,
+        logoUrl: 'https://cdn.test/idp-logos/2026/09/okta.png',
+      }),
+    ])
+    mockGetRegisteredOidcProviderIds.mockResolvedValue(new Set(['custom-oidc']))
+
+    const result = await getPublicPortalConfig()
+    expect(result?.oidcProviders).toContainEqual({
+      id: 'custom-oidc',
+      name: 'Okta',
+      logoUrl: 'https://cdn.test/idp-logos/2026/09/okta.png',
+    })
   })
 
   it('does NOT emit a button for a routed-only provider (verified domain + showButton:false)', async () => {

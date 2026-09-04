@@ -31,7 +31,7 @@ describe('upgradeContextFor', () => {
   it('withholds the trial while one is running, on a paid plan, with a live sub, or without canUpgrade', () => {
     expect(upgradeContextFor(cloud({ trialActive: true, plan: 'growth' }))).toMatchObject({
       currentPlan: 'growth',
-      currentPlanName: 'Growth',
+      currentPlanName: 'Pro',
       trialActive: true,
       trialEligible: false,
     })

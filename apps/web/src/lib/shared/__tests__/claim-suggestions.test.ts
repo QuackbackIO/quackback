@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { deriveClaimSuggestions } from '../claim-suggestions'
+import { deriveAttributeClaimPaths, deriveClaimSuggestions } from '../claim-suggestions'
 
 describe('deriveClaimSuggestions', () => {
   it('surfaces a top-level string[] claim as a path with its values', () => {
@@ -38,5 +38,46 @@ describe('deriveClaimSuggestions', () => {
     })
     expect(out.paths).toEqual(['groups'])
     expect(out.valuesByPath.groups).toEqual(['a', 'b'])
+  })
+})
+
+describe('deriveAttributeClaimPaths', () => {
+  it('includes scalars and arrays, with a truncated value preview', () => {
+    const out = deriveAttributeClaimPaths({
+      department: 'Engineering',
+      groups: ['admins', 'devs'],
+    })
+    expect(out.map((s) => s.path)).toEqual(['department', 'groups'])
+    expect(out.find((s) => s.path === 'department')?.description).toBe('Engineering')
+    expect(out.find((s) => s.path === 'groups')?.description).toBe('admins, devs')
+  })
+
+  it('walks nested objects to depth 2', () => {
+    const out = deriveAttributeClaimPaths({ org: { costCenter: 'cc-1' } })
+    expect(out.map((s) => s.path)).toEqual(['org.costCenter'])
+    expect(out[0]?.description).toBe('cc-1')
+  })
+
+  it('records a URL-shaped key literally', () => {
+    const out = deriveAttributeClaimPaths({ 'https://acme.com/plan': 'enterprise' })
+    expect(out.map((s) => s.path)).toEqual(['https://acme.com/plan'])
+  })
+
+  it('excludes protocol claims and keeps profile claims', () => {
+    const out = deriveAttributeClaimPaths({
+      iss: 'https://idp',
+      sub: 'u1',
+      aud: 'cid',
+      exp: 1,
+      email: 'a@b.com',
+      preferred_username: 'alice',
+      name: 'Alice',
+    })
+    const paths = out.map((s) => s.path)
+    expect(paths).toEqual(expect.arrayContaining(['email', 'preferred_username', 'name']))
+    expect(paths).not.toContain('iss')
+    expect(paths).not.toContain('sub')
+    expect(paths).not.toContain('aud')
+    expect(paths).not.toContain('exp')
   })
 })

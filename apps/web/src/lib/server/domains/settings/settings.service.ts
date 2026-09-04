@@ -19,6 +19,7 @@ import { assertNotManaged } from '@/lib/server/config-file/managed-guard'
 import { absolutizeOffHostAssetUrl } from '@/lib/server/storage/asset-url'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { logger } from '@/lib/server/logger'
+import type { OidcSignInButton } from '@/lib/shared/oidc-sign-in-button'
 import type {
   AuthConfig,
   UpdateAuthConfigInput,
@@ -148,7 +149,7 @@ async function getEmailDependentPassthroughKeys(): Promise<string[]> {
  * Routed-only providers (verified domain + `showButton:false`) are
  * reached via the email-first SSO routing, so they're excluded here.
  */
-export async function getPublicOidcProviders(): Promise<{ id: string; name: string }[]> {
+export async function getPublicOidcProviders(): Promise<OidcSignInButton[]> {
   const { listIdentityProviders, shouldRenderPublicButton } =
     await import('./identity-providers.service')
   const { getRegisteredOidcProviderIds } = await import('@/lib/server/auth/registered-providers')
@@ -160,7 +161,7 @@ export async function getPublicOidcProviders(): Promise<{ id: string; name: stri
 
   return providers
     .filter((p) => registered.has(p.registrationId) && shouldRenderPublicButton(p))
-    .map((p) => ({ id: p.registrationId, name: p.label }))
+    .map((p) => ({ id: p.registrationId, name: p.label, logoUrl: p.logoUrl }))
 }
 
 export async function getAuthConfig(): Promise<AuthConfig> {
@@ -665,7 +666,7 @@ export async function updateDeveloperConfig(
 ): Promise<DeveloperConfig> {
   log.info('update developer config')
   try {
-    // Plan first (names Growth), then the operator-cap overlay. Disabling MCP
+    // Plan first (names the plan), then the operator-cap overlay. Disabling MCP
     // stays open so a downgraded workspace can turn the endpoint off.
     if (input.mcpEnabled === true) {
       const { requireEntitlement } =

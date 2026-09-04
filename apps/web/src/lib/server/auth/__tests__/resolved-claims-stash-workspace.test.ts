@@ -17,7 +17,11 @@
  * account-takeover adjacent.
  */
 import { describe, it, expect } from 'vitest'
-import { stashResolvedClaims, takeResolvedClaims } from '../resolved-claims-stash'
+import {
+  peekResolvedClaims,
+  stashResolvedClaims,
+  takeResolvedClaims,
+} from '../resolved-claims-stash'
 import { withWorkspace } from '@/lib/server/__tests__/workspace-scope'
 
 const PROVIDER = 'google'
@@ -81,6 +85,29 @@ describe('the same identity signing into two workspaces', () => {
   it('still works with no workspace scope, for a self-hosted install', () => {
     stashResolvedClaims(PROVIDER, SUBJECT, { role: 'admin' })
     expect(takeResolvedClaims(PROVIDER, SUBJECT)).toEqual({ role: 'admin' })
+  })
+
+  it('peek reads without consuming, so a later take still gets the claims', () => {
+    withWorkspace('workspace-alpha', () =>
+      stashResolvedClaims(PROVIDER, SUBJECT, { picture: 'https://cdn/a.png' })
+    )
+    expect(withWorkspace('workspace-alpha', () => peekResolvedClaims(PROVIDER, SUBJECT))).toEqual({
+      picture: 'https://cdn/a.png',
+    })
+    // The avatar backfill peeks; role provisioning still takes.
+    expect(withWorkspace('workspace-alpha', () => takeResolvedClaims(PROVIDER, SUBJECT))).toEqual({
+      picture: 'https://cdn/a.png',
+    })
+    expect(withWorkspace('workspace-alpha', () => peekResolvedClaims(PROVIDER, SUBJECT))).toBeNull()
+  })
+
+  it('peek respects workspace isolation', () => {
+    withWorkspace('workspace-alpha', () =>
+      stashResolvedClaims(PROVIDER, SUBJECT, { picture: 'https://cdn/a.png' })
+    )
+    expect(withWorkspace('workspace-bravo', () => peekResolvedClaims(PROVIDER, SUBJECT))).toBeNull()
+    // Drain so the entry doesn't leak into a later unscoped test.
+    withWorkspace('workspace-alpha', () => takeResolvedClaims(PROVIDER, SUBJECT))
   })
 
   it('does not let an unscoped stash be drained by a workspace, or the reverse', () => {

@@ -45,8 +45,11 @@ import {
   markDeviceSeen,
 } from './signin-device-tracker'
 import { isSyntheticAnonEmail } from '@/lib/shared/anonymous-email'
+import { readSsoClaims, readSsoClaimsWithProvenance, type ClaimRead } from './read-sso-claims'
+import { applyClaimAttributesAfter } from './apply-claim-attributes'
 import { decodeSsoClaims } from './sso-claims-decode'
-import { takeResolvedClaims } from './resolved-claims-stash'
+import { peekResolvedClaims } from './resolved-claims-stash'
+import { pickAvatarUrl } from './resolve-identity'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'auth-hooks' })
@@ -601,7 +604,9 @@ export async function handleAutoProvisionAfter(
     >
   >,
   /** OIDC provider ids registered right now (from getRegisteredOidcProviderIds). */
-  registeredOidcIds: Set<string>
+  registeredOidcIds: Set<string>,
+  /** Shared per-callback claim reader. Omitted, falls back to `readSsoClaims`. */
+  readClaims?: () => Promise<ClaimRead>
 ): Promise<void> {
   if (ctx.path !== '/oauth2/callback/:providerId') return
   const providerId = ctx.params?.providerId
@@ -631,7 +636,11 @@ export async function handleAutoProvisionAfter(
   const roleMapping = roleMappingFor(provider.claimMapping)
   let claimRole: Role | null = null
   if (roleMapping) {
-    const claims = await readSsoClaims(userIdTyped, providerId)
+    // Role resolution is indifferent to provenance: a role claim absent from
+    // the stored token yields the default role either way.
+    const claims = readClaims
+      ? (await readClaims()).claims
+      : await readSsoClaims(userIdTyped, providerId)
     const { resolveSsoRole } = await import('./resolve-sso-role')
     claimRole = resolveSsoRole(claims, roleMapping)
   }
@@ -712,45 +721,125 @@ export async function handleAutoProvisionAfter(
   log.info({ user_id: userId, role: targetRole }, 'auto-provisioned verified-domain user via sso')
 }
 
+type IdpRows = Awaited<
+  ReturnType<
+    typeof import('@/lib/server/domains/settings/identity-providers.service').listIdentityProviders
+  >
+>
+
 /**
- * Read the latest stored ID-token claims for a user's OIDC account.
- * Returns an empty object when no token is stored or the token is
- * malformed — caller should fall back to the legacy auto-provision
- * field in that case.
- *
- * `providerId` is the callback provider's registrationId (the account's
- * `provider_id`). It must match what just authenticated, else the row
- * lookup misses and attribute mapping silently returns {} → default role
- * for every non-`sso` provider.
+ * Resolve a provider's userinfo endpoint: the manual URL if set, else the
+ * `userinfo_endpoint` from its discovery document. SSRF-guarded, best-effort.
  */
-async function readSsoClaims(
-  userId: `user_${string}`,
-  providerId: string
-): Promise<Record<string, unknown>> {
-  const { db, account, and, eq, desc } = await import('@/lib/server/db')
+async function resolveUserInfoEndpoint(
+  provider: IdpRows[number] | undefined
+): Promise<string | null> {
+  if (!provider) return null
+  if (provider.userInfoUrl) return provider.userInfoUrl
+  if (!provider.discoveryUrl) return null
+  try {
+    const { safeFetch } = await import('@/lib/server/content/ssrf-guard')
+    const res = await safeFetch(provider.discoveryUrl, { timeoutMs: 5000 })
+    if (!res.ok) return null
+    const doc: unknown = await res.json()
+    const endpoint = (doc as { userinfo_endpoint?: unknown } | null)?.userinfo_endpoint
+    return typeof endpoint === 'string' ? endpoint : null
+  } catch {
+    return null
+  }
+}
+
+/** Fetch a userinfo document with the bearer token. Best-effort. */
+async function fetchUserInfoDoc(
+  url: string,
+  accessToken: string
+): Promise<Record<string, unknown> | null> {
+  try {
+    const { safeFetch } = await import('@/lib/server/content/ssrf-guard')
+    const res = await safeFetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      timeoutMs: 5000,
+    })
+    if (!res.ok) return null
+    const body: unknown = await res.json()
+    return body !== null && typeof body === 'object' ? (body as Record<string, unknown>) : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Fill `user.image` from the SSO `picture` claim — but only when the account
+ * has no avatar yet.
+ *
+ * Better-Auth's genericOAuth writes `image` only when it CREATES the user, and
+ * we deliberately leave `overrideUserInfo` off ("set once, never clobber a
+ * picture the user chose in Quackback"). Neither covers the common case: an
+ * account that already existed before the workspace's IdP started returning a
+ * `picture`, or before this feature shipped. This closes that gap without ever
+ * overwriting a non-empty avatar.
+ *
+ * `picture` is sourced, in order:
+ *   1. the request's resolved claims (peeked, not consumed, so role
+ *      provisioning still takes its copy) — the free path;
+ *   2. the stored ID token;
+ *   3. a live userinfo call with the just-issued access token — the
+ *      deterministic path for an IdP that exposes `picture` only at userinfo,
+ *      where (1) can miss if role provisioning drained the stash first.
+ *
+ * Runs BEFORE `handleAutoProvisionAfter` so the peek in (1) sees the stash.
+ */
+export async function handleAvatarBackfillAfter(
+  ctx: {
+    path?: string
+    params?: Record<string, unknown>
+    context?: { newSession?: { user?: { id?: string } } | null }
+  },
+  registeredOidcIds: Set<string>,
+  providers: IdpRows
+): Promise<void> {
+  if (ctx.path !== '/oauth2/callback/:providerId') return
+  const providerId = ctx.params?.providerId
+  if (typeof providerId !== 'string' || !isRegisteredOidcProvider(providerId, registeredOidcIds))
+    return
+  const userId = ctx.context?.newSession?.user?.id
+  if (typeof userId !== 'string' || userId.length === 0) return
+  type UserId = `user_${string}`
+  const userIdTyped = userId as UserId
+
+  const { db, user: userTable, account, and, eq, desc } = await import('@/lib/server/db')
+
+  const owner = await db.query.user.findFirst({
+    where: eq(userTable.id, userIdTyped),
+    columns: { image: true },
+  })
+  // Only fill an empty avatar — never replace one the user set.
+  if (!owner || (typeof owner.image === 'string' && owner.image.trim() !== '')) return
+
   const row = await db.query.account.findFirst({
-    where: and(eq(account.userId, userId), eq(account.providerId, providerId)),
-    columns: { idToken: true, accountId: true },
-    // Deterministic ordering. There is no uniqueness constraint on
-    // (user_id, provider_id), so a duplicate account row — which a change in
-    // which claim supplies the account identifier can create — would otherwise
-    // leave this reading whichever row the database happened to return, quite
-    // possibly a stale one, on every sign-in.
+    where: and(eq(account.userId, userIdTyped), eq(account.providerId, providerId)),
+    columns: { idToken: true, accountId: true, accessToken: true },
     orderBy: desc(account.createdAt),
   })
 
-  // Prefer what the resolver actually validated this request. The stored ID
-  // token is a fallback: a provider resolving identity from userinfo or an
-  // access token has none, and would otherwise always land on the default role
-  // however its claims are mapped.
-  if (row?.accountId) {
-    const fresh = takeResolvedClaims(providerId, row.accountId)
-    if (fresh) return fresh
+  const stashed = row?.accountId ? peekResolvedClaims(providerId, row.accountId) : null
+  let image = pickAvatarUrl(stashed ?? decodeSsoClaims(row?.idToken))
+
+  // Last resort: ask userinfo directly. `picture` frequently lives only there,
+  // and the stash can be gone by now.
+  if (!image && row?.accessToken) {
+    const endpoint = await resolveUserInfoEndpoint(
+      providers.find((p) => p.registrationId === providerId)
+    )
+    if (endpoint) {
+      image = pickAvatarUrl((await fetchUserInfoDoc(endpoint, row.accessToken)) ?? {})
+    }
   }
 
-  // Refuses an expired token; see sso-claims-decode.ts for why freshness is
-  // the property that matters when the signature is not verified.
-  return decodeSsoClaims(row?.idToken)
+  if (!image) return
+
+  await db.update(userTable).set({ image }).where(eq(userTable.id, userIdTyped))
+  log.info({ user_id: userId, provider_id: providerId }, 'backfilled sso avatar')
 }
 
 /**
@@ -1297,11 +1386,14 @@ export async function handleCountryCapture(ctx: {
  *     per-domain SSO enforcement or a disabled per-method toggle. SSO is
  *     allowed for every role, so verified-domain users pass this step; it
  *     gates the non-SSO providers.
- *  4. `handleSignInSuccessAudit` — emits `auth.signin.success` if a
+ *  4. `applyClaimAttributesAfter` — copy mapped IdP claims into person
+ *     attributes. After cleanup so a revoked session writes nothing;
+ *     wrapped in try/catch so a DB error never blocks sign-in.
+ *  5. `handleSignInSuccessAudit` — emits `auth.signin.success` if a
  *     session still exists at this point (i.e. wasn't revoked by
  *     prior steps). Runs after the gates so it only records sign-ins
  *     that actually stuck.
- *  5. `handleNewDeviceNotification` — sends a "new device" email +
+ *  6. `handleNewDeviceNotification` — sends a "new device" email +
  *     records an audit row when the user's UA + /24-IP combination
  *     hasn't been seen for them within the last 90 days.
  */
@@ -1312,9 +1404,10 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
   }
 
   // The provider registry is only consulted by the OAuth-callback after-hooks
-  // (bootstrap promotion, auto-provision, policy cleanup). Skip the DB read on
-  // password / magic-link success paths — those callbacks early-return before
-  // touching `providers` / `registeredOidcIds`, so the empty defaults are safe.
+  // (bootstrap promotion, auto-provision, policy cleanup, claim attributes).
+  // Skip the DB read on password / magic-link success paths — those callbacks
+  // early-return before touching `providers` / `registeredOidcIds`, so the
+  // empty defaults are safe.
   let providers: Awaited<
     ReturnType<
       typeof import('@/lib/server/domains/settings/identity-providers.service').listIdentityProviders
@@ -1340,10 +1433,39 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
   const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
   const workspace = await getWorkspaceSettings()
 
+  // One claim read per callback. The stash is take-once, so role
+  // provisioning and attribute writes must share the result rather than
+  // each calling `takeResolvedClaims`.
+  let claimsPromise: Promise<ClaimRead> | undefined
+  const callbackUserId = ctx.context?.newSession?.user?.id
+  const callbackProviderId = ctx.params?.providerId
+  const readClaims =
+    ctx.path === '/oauth2/callback/:providerId' &&
+    typeof callbackUserId === 'string' &&
+    typeof callbackProviderId === 'string'
+      ? () => {
+          if (!claimsPromise) {
+            claimsPromise = readSsoClaimsWithProvenance(
+              callbackUserId as `user_${string}`,
+              callbackProviderId
+            )
+          }
+          return claimsPromise
+        }
+      : undefined
+
+  // Before auto-provision: this one only PEEKS the resolved-claims stash, and
+  // role provisioning (below) TAKES it — so the avatar has to look first.
+  await handleAvatarBackfillAfter(
+    ctx as Parameters<typeof handleAvatarBackfillAfter>[0],
+    registeredOidcIds,
+    providers
+  )
   await handleAutoProvisionAfter(
     ctx as Parameters<typeof handleAutoProvisionAfter>[0],
     providers,
-    registeredOidcIds
+    registeredOidcIds,
+    readClaims
   )
   await handleCallbackPolicyCleanup(
     ctx as Parameters<typeof handleCallbackPolicyCleanup>[0],
@@ -1351,6 +1473,19 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
     providers,
     registeredOidcIds
   )
+  try {
+    await applyClaimAttributesAfter(
+      ctx as Parameters<typeof applyClaimAttributesAfter>[0],
+      providers,
+      registeredOidcIds,
+      readClaims
+    )
+  } catch (err) {
+    log.error(
+      { err, user_id: callbackUserId, provider_id: callbackProviderId },
+      'claim attribute write failed'
+    )
+  }
   // SOC2 trail for user-initiated 2FA lifecycle (`two_factor.enabled`
   // and `two_factor.disabled`). Independent of sign-in success audit;
   // both can fire on the same request only for the verify-totp

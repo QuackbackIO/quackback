@@ -15,6 +15,7 @@ const hoisted = vi.hoisted(() => ({
   cacheDel: vi.fn(),
   runHandshake: vi.fn(),
   userFindFirst: vi.fn(),
+  userUpdate: vi.fn(),
   markSsoTestSucceeded: vi.fn(),
   listIdentityProviders: vi.fn(),
   markTestSucceeded: vi.fn(),
@@ -38,6 +39,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
     query: {
       user: { findFirst: (...args: unknown[]) => hoisted.userFindFirst(...args) },
     },
+    update: (...args: unknown[]) => hoisted.userUpdate(...args),
   },
   eq: (col: unknown, val: unknown) => ({ __eq: [col, val] }),
 }))
@@ -267,6 +269,35 @@ describe('handleSsoTestCallback', () => {
       { result: okResult, identityMatched: false },
       600
     )
+  })
+
+  it('never writes user.metadata — a test callback must not copy claims onto the admin', async () => {
+    hoisted.cacheGet.mockResolvedValueOnce(validSession)
+    hoisted.listIdentityProviders.mockResolvedValueOnce([
+      { id: 'idp_sso', registrationId: 'sso', domains: [] },
+    ])
+    hoisted.runHandshake.mockResolvedValueOnce({
+      ok: true,
+      steps: [],
+      claims: {
+        iss: 'https://idp',
+        sub: 'u1',
+        aud: 'cid',
+        email: 'alice@example.com',
+        department: 'Engineering',
+      },
+      tokenInfo: { idTokenAlg: 'RS256', hasAccessToken: true, hasRefreshToken: false },
+    })
+    hoisted.userFindFirst.mockResolvedValueOnce({ email: 'alice@example.com' })
+
+    await handleSsoTestCallback({
+      state: 'state-xyz',
+      code: 'authcode',
+      error: null,
+      errorDescription: null,
+    })
+
+    expect(hoisted.userUpdate).not.toHaveBeenCalled()
   })
 
   it('no email claim still stamps but returns identityMatched=false and skips the user lookup', async () => {

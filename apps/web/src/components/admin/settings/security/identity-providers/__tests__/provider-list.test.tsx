@@ -21,7 +21,9 @@ const { upsertSpy } = vi.hoisted(() => ({
 }))
 
 vi.mock('@/components/admin/upgrade', () => ({
-  UpgradeNotice: () => <p>Single sign-on is a Scale feature. Upgrade to Scale to enable it.</p>,
+  UpgradeNotice: () => (
+    <p>Single sign-on is an Enterprise feature. Upgrade to Enterprise to enable it.</p>
+  ),
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -114,6 +116,8 @@ function makeProvider(over: Partial<IdentityProvider>): IdentityProvider {
     autoProvisionRole: 'user',
     claimMapping: null,
     showButton: false,
+    logoKey: null,
+    logoUrl: null,
     detailsChangedAt: null,
     lastSuccessfulTestAt: null,
     createdAt: '2026-05-01T00:00:00.000Z',
@@ -187,7 +191,7 @@ describe('<IdentityProvidersSection>', () => {
 })
 
 describe('plan gate', () => {
-  it('hides Add provider and names Scale when SSO is not entitled', () => {
+  it('hides Add provider and names Enterprise when SSO is not entitled', () => {
     const qc = new QueryClient()
     qc.setQueryData(['settings', 'identityProviders'], [buttonProvider, routedProvider])
     render(
@@ -196,7 +200,7 @@ describe('plan gate', () => {
       </QueryClientProvider>
     )
     expect(screen.queryByRole('link', { name: /add provider/i })).toBeNull()
-    expect(screen.getByText(/Single sign-on is a Scale feature/)).toBeTruthy()
+    expect(screen.getByText(/Single sign-on is an Enterprise feature/)).toBeTruthy()
   })
 })
 

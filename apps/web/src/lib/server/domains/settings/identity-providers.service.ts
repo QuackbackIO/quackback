@@ -27,6 +27,8 @@ import {
 import type { IdentityProviderId } from '@quackback/ids'
 import { parseSsoTestCapture, type SsoTestCapture } from '@/lib/shared/sso-test-capture'
 import { logger } from '@/lib/server/logger'
+import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
+import { absolutizeOffHostAssetUrl } from '@/lib/server/storage/asset-url'
 import {
   getPlatformCredentials,
   deletePlatformCredentials,
@@ -83,6 +85,11 @@ export interface IdentityProvider {
   autoProvisionRole: Role | null
   claimMapping: IdentityProviderClaimMapping | null
   showButton: boolean
+  /** S3 storage key for the uploaded provider logo, or null. */
+  logoKey: string | null
+  /** Public URL for {@link logoKey}, absolutised for off-host rendering. Null
+   *  when no logo is set — the UI then falls back to the brand glyph. */
+  logoUrl: string | null
   /** ISO-8601 UTC; null until a redirect-affecting detail changes. */
   detailsChangedAt: string | null
   /** ISO-8601 UTC; null until a test sign-in succeeds. */
@@ -198,6 +205,13 @@ export function connectionAffectingChange(
 // Row mappers
 // ============================================================================
 
+/** S3 key → public URL, absolutised so an off-host portal can render it. Mirrors
+ *  the helper of the same name in `settings.service.ts`. */
+function offHostPublicUrl(key: string | null | undefined): string | null {
+  const stored = getPublicUrlOrNull(key)
+  return stored ? absolutizeOffHostAssetUrl(stored) : stored
+}
+
 function rowToVerifiedDomain(row: typeof ssoVerifiedDomain.$inferSelect): VerifiedDomain {
   return {
     id: row.id,
@@ -236,6 +250,8 @@ function rowToIdentityProvider(
     autoProvisionRole: row.autoProvisionRole,
     claimMapping: row.claimMapping ?? null,
     showButton: row.showButton,
+    logoKey: row.logoKey,
+    logoUrl: offHostPublicUrl(row.logoKey),
     detailsChangedAt: row.detailsChangedAt ? row.detailsChangedAt.toISOString() : null,
     lastSuccessfulTestAt: row.lastSuccessfulTestAt ? row.lastSuccessfulTestAt.toISOString() : null,
     lastTestCapture: parseSsoTestCapture(row.lastTestCapture),
@@ -612,3 +628,8 @@ export async function markTestSucceeded(
     wrapDbError('mark identity provider test succeeded', error)
   }
 }
+
+// The provider-logo write path lives in `identity-provider-logo.service.ts`,
+// mirroring how `settings.media.ts` sits beside `settings.service.ts` — the
+// logo only feeds the rendered sign-in button and is managed on its own so an
+// image upload never rides along with a connection edit.

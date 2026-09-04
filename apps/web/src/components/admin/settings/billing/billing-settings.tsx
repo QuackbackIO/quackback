@@ -10,6 +10,7 @@ import { Progress } from '@/components/ui/progress'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { cn } from '@/lib/shared/utils'
 import { formatUsd } from '@/lib/shared/format-usd'
+import { annualSavingsLabel } from '@/lib/shared/billing/checkout-path'
 import { seatUnitCents } from './seat-price'
 import { hasTopUpPackPrice } from './topup-price'
 import {
@@ -74,9 +75,10 @@ export function BillingPlansView(props: {
   const trialDays = catalogueTrialDays(catalogue)
   const trialedPlanIds = catalogueTrialedPlanIds(catalogue)
   const checkoutQuantity = Math.max(overview.seats?.used ?? 1, 1)
-  const currentCataloguePlan = catalogue?.plans.find((plan) => plan.id === overview.plan)
-  const grandfatheredFlat =
-    currentCataloguePlan?.billedPer === 'workspace' && overview.plan !== 'free'
+  const savingsPlan =
+    catalogue?.plans.find((plan) => plan.recommended) ??
+    catalogue?.plans.find((plan) => plan.id !== 'free') ??
+    null
 
   if (overview.trialEnded) {
     return (
@@ -112,12 +114,12 @@ export function BillingPlansView(props: {
             <p className="mt-1 text-xs text-muted-foreground">
               Moving up applies now, billed pro-rata. Moving to a lower plan waits until the end of
               the current period. You can try each paid plan once for {trialDays} days.
-              {grandfatheredFlat ? ' Switching plans moves you onto per-seat pricing.' : null}
             </p>
           </div>
           <PeriodToggle
             value={period}
             discountMonths={catalogue?.annualDiscountMonths ?? 2}
+            savingsLabel={annualSavingsLabel(savingsPlan)}
             onChange={setPeriod}
           />
         </div>
@@ -297,15 +299,17 @@ function CurrentPlanCard(props: {
 function TrialSeatsRow(props: { overview: BillingProjectionOverview }) {
   const seats = props.overview.seats
   const used = seats?.used ?? 0
-  const members = seats?.members ?? used
-  const pending = seats?.pending ?? 0
+  const cap = seats?.limit
+  const planName = props.overview.planName
+  const included =
+    cap === null
+      ? `Unlimited seats included with ${planName}`
+      : typeof cap === 'number'
+        ? `${used} of ${cap} seats included with ${planName}`
+        : `${used} ${used === 1 ? 'seat' : 'seats'} included with ${planName}`
   return (
     <div className="border-t border-border/50 px-6 py-5">
-      <p className="text-[13px] text-muted-foreground">
-        Uncapped during your trial · {members} {members === 1 ? 'member' : 'members'} · {pending}{' '}
-        pending {pending === 1 ? 'invite' : 'invites'} · checkout starts at your current {used}{' '}
-        {used === 1 ? 'seat' : 'seats'}
-      </p>
+      <p className="text-[13px] text-muted-foreground">{included}</p>
     </div>
   )
 }
@@ -776,6 +780,7 @@ function DowngradeButton() {
 function PeriodToggle(props: {
   value: 'monthly' | 'annual'
   discountMonths: number
+  savingsLabel: string | null
   onChange: (next: 'monthly' | 'annual') => void
 }) {
   return (
@@ -799,11 +804,11 @@ function PeriodToggle(props: {
           )}
         >
           {option === 'annual' ? 'Annual' : 'Monthly'}
-          {option === 'annual' && (
+          {option === 'annual' && props.savingsLabel ? (
             <span className="ms-1.5 text-[11px] font-semibold text-primary">
-              {props.discountMonths} mo free
+              {props.savingsLabel}
             </span>
-          )}
+          ) : null}
         </button>
       ))}
     </div>

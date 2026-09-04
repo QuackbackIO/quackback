@@ -96,10 +96,10 @@ describe('analyzeSentiment — plan gate', () => {
     expect(refusal).toBeInstanceOf(EntitlementRequiredError)
     const error = refusal as EntitlementRequiredError
     expect(error.entitlement).toBe('aiInsights')
-    expect(error.requiredPlanName).toBe('Growth')
+    expect(error.requiredPlanName).toBe('Pro')
     expect(error.statusCode).toBe(402)
     expect(error.message).toBe(
-      'AI insights are a Growth feature. Your workspace is on Free. Upgrade to Growth to enable it.'
+      'AI insights are a Pro feature. Your workspace is on Free. Upgrade to Pro to enable it.'
     )
     // No model call, no spend.
     expect(hoisted.mockChat).not.toHaveBeenCalled()

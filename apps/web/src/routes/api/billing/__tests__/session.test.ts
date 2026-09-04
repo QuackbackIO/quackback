@@ -217,6 +217,43 @@ describe('POST /api/billing/session checkout', () => {
     })
   })
 
+  it('accepts business/enterprise checkout slugs and forwards canonical ids', async () => {
+    hoisted.fetchBillingCatalogue.mockResolvedValue({
+      plans: [
+        { id: 'pro', billedPer: 'workspace' },
+        { id: 'scale', billedPer: 'workspace' },
+      ],
+    })
+    await POST({
+      request: formRequest({
+        action: 'checkout',
+        planId: 'business',
+        billingPeriod: 'monthly',
+      }),
+    })
+    expect(hoisted.createHostedBillingSession).toHaveBeenCalledWith({
+      action: 'checkout',
+      planId: 'pro',
+      billingPeriod: 'monthly',
+      quantity: 1,
+    })
+
+    hoisted.createHostedBillingSession.mockClear()
+    await POST({
+      request: formRequest({
+        action: 'checkout',
+        planId: 'enterprise',
+        billingPeriod: 'annual',
+      }),
+    })
+    expect(hoisted.createHostedBillingSession).toHaveBeenCalledWith({
+      action: 'checkout',
+      planId: 'scale',
+      billingPeriod: 'annual',
+      quantity: 1,
+    })
+  })
+
   it('forwards a quantity at or above live usage', async () => {
     const res = await POST({ request: checkoutRequest(8) })
     expect(res.status).toBe(303)

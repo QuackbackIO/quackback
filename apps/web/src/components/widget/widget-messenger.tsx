@@ -5,7 +5,7 @@ import { VisitorConversationThread } from '@/components/shared/conversation/visi
 import { useWidgetAuth } from './widget-auth-provider'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { useConversationPresence, markAgentPresentInCache } from './use-messenger-presence'
-import { useWidgetImageUpload } from '@/lib/client/hooks/use-image-upload'
+import { useWidgetImageUpload } from './use-widget-image-upload'
 
 interface WidgetMessengerProps {
   /** Whether the help center is available (gates in-conversation article suggestions). */

@@ -1,5 +1,10 @@
 import { getCloudConfig } from '@/lib/server/domains/settings/cloud/cloud.service'
-import { PLAN_CATALOGUE, type PlanId } from '@/lib/server/domains/settings/cloud/cloud.types'
+import {
+  PLAN_CATALOGUE,
+  canonicalPlanId,
+  isPlanId,
+  type PlanId,
+} from '@/lib/server/domains/settings/cloud/cloud.types'
 import type { BillingCatalogue, CataloguePlanId } from '@/lib/server/control-plane/client'
 import { isTrialEnded } from '@/lib/shared/billing/trial-state'
 
@@ -8,6 +13,8 @@ export type BillingSeatsOverview = {
   pending: number
   members: number
   purchased: number | null
+  /** Plan/enforcement cap. Null means unlimited. */
+  limit?: number | null
 }
 
 export type BillingAiOverview = {
@@ -53,7 +60,7 @@ export function catalogueAiIncludedCents(
   catalogue: BillingCatalogue | null,
   plan: PlanId
 ): number | null {
-  const value = catalogue?.aiIncludedCentsPerMonth?.[plan as CataloguePlanId]
+  const value = catalogue?.aiIncludedCentsPerMonth?.[canonicalPlanId(plan) as CataloguePlanId]
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
@@ -113,7 +120,9 @@ export async function getBillingProjectionOverview(): Promise<BillingProjectionO
     projectedPlanLimitsMaxTeamSeats(),
   ])
 
-  const billedPer = catalogue?.plans.find((plan) => plan.id === cloud.plan)?.billedPer
+  const billedPer = catalogue?.plans.find(
+    (plan) => canonicalPlanId(plan.id) === cloud.plan
+  )?.billedPer
   const purchased = purchasedSeatsFromProjection({
     billedPer,
     plan: cloud.plan,
@@ -138,7 +147,8 @@ export async function getBillingProjectionOverview(): Promise<BillingProjectionO
     trialExpiresAt: cloud.trialExpiresAt,
     status: cloud.subscriptionStatus,
   })
-  const lastTrialPlanId = catalogue?.lastTrialPlanId ?? null
+  const lastRaw = catalogue?.lastTrialPlanId ? canonicalPlanId(catalogue.lastTrialPlanId) : null
+  const lastTrialPlanId = lastRaw && lastRaw !== 'free' && isPlanId(lastRaw) ? lastRaw : null
   const trialPlanId = trialPlanIdForOverview({
     trialActive: cloud.trialActive,
     trialEnded,
@@ -168,10 +178,19 @@ export async function getBillingProjectionOverview(): Promise<BillingProjectionO
       pending: seats.pendingInvites,
       members: seats.members,
       purchased,
+      limit: limits.maxTeamSeats,
     },
     ai,
     hideBranding: cloud.entitlements.hideBranding === true,
   }
+}
+
+export async function catalogueBilledPer(
+  planId: PlanId | null | undefined
+): Promise<'seat' | 'workspace' | undefined> {
+  if (!planId) return undefined
+  const catalogue = await loadCatalogue()
+  return catalogue?.plans.find((plan) => canonicalPlanId(plan.id) === planId)?.billedPer
 }
 
 async function loadCatalogue(): Promise<BillingCatalogue | null> {
