@@ -194,8 +194,19 @@ describe('projected numeric limits', () => {
   })
 
   it('rejects unrecognised plans and non-canonical dates', () => {
-    expect(parseBillingProjection({ ...PROJECTION, effectivePlan: 'enterprise' })).toBeNull()
+    expect(parseBillingProjection({ ...PROJECTION, effectivePlan: 'platinum' })).toBeNull()
     expect(parseBillingProjection({ ...PROJECTION, trialExpiresAt: 'August 15' })).toBeNull()
+  })
+
+  it('normalises business/enterprise projection slugs to pro/scale', () => {
+    expect(parseBillingProjection({ ...PROJECTION, effectivePlan: 'business' })).toEqual({
+      ...PROJECTION,
+      effectivePlan: 'pro',
+    })
+    expect(parseBillingProjection({ ...PROJECTION, effectivePlan: 'enterprise' })).toEqual({
+      ...PROJECTION,
+      effectivePlan: 'scale',
+    })
   })
 
   it('ignores unknown entitlement keys so a newer control plane cannot drop the projection', () => {
@@ -231,6 +242,23 @@ describe('resolveEffectiveTierLimits (cloud, no operator row)', () => {
     expect(effective.features.customColors).toBe(true)
     expect(effective.features.customCss).toBe(true)
     expect(effective.features.integrations).toBe(true)
+  })
+
+  it('keeps Business/Enterprise aliases on the same PLAN_ONLY_FEATURES as pro/scale', () => {
+    const business = parseBillingProjection({ ...PROJECTION, effectivePlan: 'business' })
+    const enterprise = parseBillingProjection({ ...PROJECTION, effectivePlan: 'enterprise' })
+    expect(business).not.toBeNull()
+    expect(enterprise).not.toBeNull()
+    const fromBusiness = resolveEffectiveTierLimits(null, business, beforeExpiry)
+    const fromPro = resolveEffectiveTierLimits(null, PROJECTION, beforeExpiry)
+    const fromEnterprise = resolveEffectiveTierLimits(null, enterprise, beforeExpiry)
+    const fromScale = resolveEffectiveTierLimits(
+      null,
+      { ...PROJECTION, effectivePlan: 'scale' },
+      beforeExpiry
+    )
+    expect(fromBusiness.features).toEqual(fromPro.features)
+    expect(fromEnterprise.features).toEqual(fromScale.features)
   })
 
   it('keeps Growth feature flags closed for keys that are not entitlements', () => {

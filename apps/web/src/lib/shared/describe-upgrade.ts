@@ -1,6 +1,7 @@
 import {
   ENTITLEMENTS,
   PLAN_CATALOGUE,
+  canonicalPlanId,
   minimumPlanFor,
   type EntitlementKey,
   type PlanId,
@@ -112,7 +113,7 @@ export function cataloguePlanFor(
   planId: PlanId | null | undefined
 ): BillingCatalogue['plans'][number] | null {
   if (!catalogue || !planId) return null
-  return catalogue.plans.find((plan) => plan.id === planId) ?? null
+  return catalogue.plans.find((plan) => canonicalPlanId(plan.id) === planId) ?? null
 }
 
 function refusalMessage(error: unknown): string {

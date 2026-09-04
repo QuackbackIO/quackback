@@ -15,10 +15,33 @@ import type { TierFeatureFlags } from '../tier-limits.types'
  * derive what it grants. A free-form string can do none of those. Operators who
  * need a bespoke arrangement express it as explicit entitlement overrides on
  * top of a catalogue plan, not as a new plan id.
+ *
+ * Stored and projected ids stay `growth` / `pro` / `scale` until later remap
+ * steps. Incoming CP/checkout slugs `business` and `enterprise` are aliases of
+ * today's `pro` (Business) and `scale` (Enterprise); {@link canonicalPlanId}
+ * maps them before catalogue lookup or storage.
  */
 export const PLAN_IDS = ['free', 'growth', 'pro', 'scale'] as const
 
 export type PlanId = (typeof PLAN_IDS)[number]
+
+/** Incoming slugs that mean a canonical {@link PlanId} until later B steps. */
+export const PLAN_ID_ALIASES = {
+  business: 'pro',
+  enterprise: 'scale',
+} as const satisfies Record<string, PlanId>
+
+export type PlanIdAlias = keyof typeof PLAN_ID_ALIASES
+
+/**
+ * Maps incoming CP/checkout slugs onto stored catalogue ids.
+ * Unknown strings are returned as-is; {@link isPlanId} is the closed-set guard.
+ */
+export function canonicalPlanId(id: string): PlanId {
+  if (id === 'business') return 'pro'
+  if (id === 'enterprise') return 'scale'
+  return id as PlanId
+}
 
 export interface PlanDefinition {
   id: PlanId

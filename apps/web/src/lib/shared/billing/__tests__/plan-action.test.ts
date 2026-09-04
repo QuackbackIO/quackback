@@ -101,4 +101,11 @@ describe('billingPlanAction', () => {
       expect(billingPlanAction(id, unpaidFree).kind).toBeTruthy()
     }
   })
+
+  it('treats business/enterprise as the current pro/scale actions', () => {
+    expect(billingPlanAction('business', unpaidFree)).toEqual(billingPlanAction('pro', unpaidFree))
+    expect(billingPlanAction('enterprise', unpaidFree)).toEqual(
+      billingPlanAction('scale', unpaidFree)
+    )
+  })
 })
