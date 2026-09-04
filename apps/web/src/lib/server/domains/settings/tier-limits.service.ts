@@ -110,7 +110,7 @@ function featuresFromProjection(projection: BillingProjection, now: Date): TierL
  *
  * No row + cloud off (no projection) stays OSS unlimited. No row + a
  * projection must not inherit that unlimited default — otherwise every
- * cloud Free/Growth workspace is uncapped.
+ * cloud Free/Pro workspace is uncapped.
  */
 export function resolveEffectiveTierLimits(
   stored: StoredTierLimits | null,

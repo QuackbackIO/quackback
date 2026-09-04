@@ -665,7 +665,7 @@ export async function updateDeveloperConfig(
 ): Promise<DeveloperConfig> {
   log.info('update developer config')
   try {
-    // Plan first (names Growth), then the operator-cap overlay. Disabling MCP
+    // Plan first (names the plan), then the operator-cap overlay. Disabling MCP
     // stays open so a downgraded workspace can turn the endpoint off.
     if (input.mcpEnabled === true) {
       const { requireEntitlement } =

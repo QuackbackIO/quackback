@@ -170,7 +170,7 @@ describe('getPlanNotice — the trial countdown', () => {
   it('counts down while the trial is running', async () => {
     hoisted.mockGetWorkspaceSettings.mockResolvedValue({ settings: { cloud: trialing } })
     await expect(getPlanNoticeHandler()).resolves.toEqual(
-      expect.objectContaining({ label: 'Pro trial', expiresAt: ENDS })
+      expect.objectContaining({ label: 'Business trial', expiresAt: ENDS })
     )
   })
 
@@ -188,7 +188,7 @@ describe('getPlanNotice — the trial countdown', () => {
       .mockResolvedValueOnce({ settings: { cloud: preTrial } })
       .mockResolvedValueOnce({ settings: { cloud: trialing } })
     await expect(getPlanNoticeHandler()).resolves.toEqual(
-      expect.objectContaining({ label: 'Pro trial', expiresAt: ENDS })
+      expect.objectContaining({ label: 'Business trial', expiresAt: ENDS })
     )
   })
 
@@ -198,7 +198,7 @@ describe('getPlanNotice — the trial countdown', () => {
     hoisted.mockGetWorkspaceSettings.mockResolvedValue({ settings: { cloud: trialing } })
     await expect(getPlanNoticeHandler()).resolves.toEqual(
       expect.objectContaining({
-        label: 'Pro trial ended',
+        label: 'Business trial ended',
         ended: true,
         actionLabel: 'Update billing',
       })
@@ -211,7 +211,7 @@ describe('getPlanNotice — the trial countdown', () => {
     hoisted.mockGetWorkspaceSettings.mockResolvedValue({ settings: { cloud: trialing } })
     await expect(getPlanNoticeHandler()).resolves.toEqual(
       expect.objectContaining({
-        label: 'Pro trial ended',
+        label: 'Business trial ended',
         ended: true,
         actionLabel: 'Update billing',
       })

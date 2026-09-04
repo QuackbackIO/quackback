@@ -23,7 +23,7 @@ describe('isEntitlementError', () => {
     expect(
       isEntitlementError(
         new Error(
-          'The audit log is a Scale feature. Your workspace is on Pro. Upgrade to Scale to enable it.'
+          'The audit log is an Enterprise feature. Your workspace is on Business. Upgrade to Enterprise to enable it.'
         )
       )
     ).toBe(true)
@@ -65,7 +65,7 @@ describe('DefaultErrorPage', () => {
       <DefaultErrorPage
         error={
           new Error(
-            'The audit log is a Scale feature. Your workspace is on Pro. Upgrade to Scale to enable it.'
+            'The audit log is an Enterprise feature. Your workspace is on Business. Upgrade to Enterprise to enable it.'
           )
         }
       />
@@ -74,9 +74,9 @@ describe('DefaultErrorPage', () => {
     expect(screen.queryByText(/Something went wrong/i)).toBeNull()
     expect(screen.queryByText(/Technical details/i)).toBeNull()
     expect(
-      screen.getByRole('heading', { name: 'The audit log is available from the Scale plan' })
+      screen.getByRole('heading', { name: 'The audit log is available from the Enterprise plan' })
     ).toBeInTheDocument()
-    expect(screen.getByText(/The audit log is a Scale feature/)).toBeInTheDocument()
+    expect(screen.getByText(/The audit log is an Enterprise feature/)).toBeInTheDocument()
   })
 
   it('keeps the generic plan headline when the refusal names no plan', () => {

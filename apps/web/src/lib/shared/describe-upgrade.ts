@@ -88,8 +88,8 @@ export type UnlockedHighlights = {
 
 /**
  * Everything the workspace gains by moving from `currentPlan` to `requiredPlan`.
- * Catalogue highlights are incremental per plan, so a Free → Pro move also
- * brings Growth's list. Unknown current plan means only the target's list.
+ * Catalogue highlights are incremental per plan, so a Free → Business move also
+ * brings Pro's list. Unknown current plan means only the target's list.
  */
 export function unlockedHighlights(
   catalogue: BillingCatalogue | null | undefined,

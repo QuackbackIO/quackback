@@ -351,7 +351,7 @@ describe('runAssistantTurnForConversation gate', () => {
         currentPlan: 'free',
         currentPlanName: 'Free',
         requiredPlan: 'growth',
-        requiredPlanName: 'Growth',
+        requiredPlanName: 'Pro',
       })
     )
     await runAssistantTurnForConversation(CONV)

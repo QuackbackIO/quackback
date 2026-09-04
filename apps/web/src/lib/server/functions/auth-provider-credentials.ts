@@ -49,7 +49,7 @@ export const saveAuthProviderCredentialsFn = createServerFn({ method: 'POST' })
 
     // Built-in social providers (Google/GitHub/etc.) are operator-level
     // infrastructure for self-hosters and not gated. Only generic-oauth
-    // (the customer's own IdP via custom OIDC) hits the Scale paywall.
+    // (the customer's own IdP via custom OIDC) hits the Enterprise paywall.
     if (provider.type === 'generic-oauth') {
       const { assertTierFeature } = await import('@/lib/server/domains/settings/tier-enforce')
       await assertTierFeature('customOidcProvider', 'Single sign-on (custom OIDC)')

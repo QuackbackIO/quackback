@@ -13,9 +13,9 @@ const unpaidFree: BillingProjectionOverview = {
   canUpgrade: true,
   canManageBilling: false,
   purchasablePlans: [
-    { id: 'growth', name: 'Growth' },
-    { id: 'pro', name: 'Pro' },
-    { id: 'scale', name: 'Scale' },
+    { id: 'growth', name: 'Pro' },
+    { id: 'pro', name: 'Business' },
+    { id: 'scale', name: 'Enterprise' },
   ],
   seats: { used: 1, pending: 0, members: 1, purchased: null },
   ai: null,
@@ -44,7 +44,7 @@ describe('billingPlanAction', () => {
     const trialing: BillingProjectionOverview = {
       ...unpaidFree,
       plan: 'growth',
-      planName: 'Growth',
+      planName: 'Pro',
       trialActive: true,
       trialExpiresAt: '2026-09-01T00:00:00.000Z',
     }
@@ -57,7 +57,7 @@ describe('billingPlanAction', () => {
     const paid: BillingProjectionOverview = {
       ...unpaidFree,
       plan: 'growth',
-      planName: 'Growth',
+      planName: 'Pro',
       status: 'active',
       canUpgrade: false,
       canManageBilling: true,
@@ -72,7 +72,7 @@ describe('billingPlanAction', () => {
     const grant: BillingProjectionOverview = {
       ...unpaidFree,
       plan: 'scale',
-      planName: 'Scale',
+      planName: 'Enterprise',
       status: null,
       canUpgrade: true,
       canManageBilling: false,
@@ -87,7 +87,7 @@ describe('billingPlanAction', () => {
       ...unpaidFree,
       trialEnded: true,
       trialPlanId: 'pro',
-      trialPlanName: 'Pro',
+      trialPlanName: 'Business',
       trialExpiresAt: '2026-08-18T00:00:00.000Z',
     }
     expect(billingPlanAction('pro', ended)).toEqual({ kind: 'subscribe', planId: 'pro' })

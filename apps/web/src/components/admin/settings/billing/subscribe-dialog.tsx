@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { formatUsd } from '@/lib/shared/format-usd'
+import { annualSavingsLabel } from '@/lib/shared/billing/checkout-path'
 import { cn } from '@/lib/shared/utils'
 import type { BillingCatalogue } from '@/lib/server/control-plane/client'
 import { QuantityStepper } from './quantity-stepper'
@@ -32,6 +33,7 @@ export function SubscribeDialog(props: {
   const monthlyCents = isAnnual
     ? Math.round(props.plan.priceYearlyCents / 12)
     : props.plan.priceMonthlyCents
+  const savingsLabel = annualSavingsLabel(props.plan)
 
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
@@ -65,11 +67,11 @@ export function SubscribeDialog(props: {
               )}
             >
               {option === 'annual' ? 'Annual' : 'Monthly'}
-              {option === 'annual' && (
+              {option === 'annual' && savingsLabel ? (
                 <span className="ms-1.5 text-[11px] font-semibold text-primary">
-                  {props.discountMonths} mo free
+                  {savingsLabel}
                 </span>
-              )}
+              ) : null}
             </button>
           ))}
         </div>

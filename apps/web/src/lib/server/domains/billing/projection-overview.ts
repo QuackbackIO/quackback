@@ -8,6 +8,8 @@ export type BillingSeatsOverview = {
   pending: number
   members: number
   purchased: number | null
+  /** Plan/enforcement cap. Null means unlimited. */
+  limit?: number | null
 }
 
 export type BillingAiOverview = {
@@ -168,10 +170,19 @@ export async function getBillingProjectionOverview(): Promise<BillingProjectionO
       pending: seats.pendingInvites,
       members: seats.members,
       purchased,
+      limit: limits.maxTeamSeats,
     },
     ai,
     hideBranding: cloud.entitlements.hideBranding === true,
   }
+}
+
+export async function catalogueBilledPer(
+  planId: PlanId | null | undefined
+): Promise<'seat' | 'workspace' | undefined> {
+  if (!planId) return undefined
+  const catalogue = await loadCatalogue()
+  return catalogue?.plans.find((plan) => plan.id === planId)?.billedPer
 }
 
 async function loadCatalogue(): Promise<BillingCatalogue | null> {
