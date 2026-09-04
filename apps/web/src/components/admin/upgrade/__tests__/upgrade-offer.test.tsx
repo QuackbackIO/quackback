@@ -10,7 +10,7 @@ const catalogue: BillingCatalogue = {
   version: 1,
   currency: 'usd',
   annualDiscountMonths: 2,
-  recommendedPlanId: 'pro',
+  recommendedPlanId: 'growth',
   brandingRemoval: { monthlyCents: 5900, annualCents: 59000 },
   trialDays: 14,
   trialedPlanIds: [],
@@ -38,7 +38,7 @@ const catalogue: BillingCatalogue = {
       recommended: false,
     },
     {
-      id: 'pro',
+      id: 'business',
       name: 'Business',
       rank: 2,
       priceMonthlyCents: 5900,
@@ -49,7 +49,7 @@ const catalogue: BillingCatalogue = {
       recommended: true,
     },
     {
-      id: 'scale',
+      id: 'enterprise',
       name: 'Enterprise',
       rank: 3,
       priceMonthlyCents: 11500,
@@ -94,7 +94,7 @@ function renderOffer(
 }
 
 const onPro: UpgradeContext = {
-  currentPlan: 'pro',
+  currentPlan: 'business',
   currentPlanName: 'Business',
   trialActive: false,
   trialEligible: false,
@@ -125,7 +125,7 @@ describe('UpgradeOffer', () => {
     expect(screen.getByText('$89')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Upgrade to Enterprise' })).toHaveAttribute(
       'href',
-      '/admin/settings/billing/checkout?plan=scale&period=annual'
+      '/admin/settings/billing/checkout?plan=enterprise&period=annual'
     )
     expect(screen.getByRole('link', { name: /Compare all plans/ })).toHaveAttribute(
       'href',
@@ -139,7 +139,7 @@ describe('UpgradeOffer', () => {
     fireEvent.click(screen.getByRole('radio', { name: /Monthly/ }))
     expect(screen.getByRole('link', { name: 'Upgrade to Enterprise' })).toHaveAttribute(
       'href',
-      '/admin/settings/billing/checkout?plan=scale&period=monthly'
+      '/admin/settings/billing/checkout?plan=enterprise&period=monthly'
     )
   })
 
@@ -158,7 +158,9 @@ describe('UpgradeOffer', () => {
     expect(screen.getByText(/Free for 14 days, then the price above/)).toBeTruthy()
     const form = document.querySelector('form')
     expect(form?.getAttribute('action')).toBe('/api/billing/trial')
-    expect((document.querySelector('input[name="planId"]') as HTMLInputElement)?.value).toBe('pro')
+    expect((document.querySelector('input[name="planId"]') as HTMLInputElement)?.value).toBe(
+      'business'
+    )
     expect((document.querySelector('input[name="returnTo"]') as HTMLInputElement)?.value).toBe(
       '/admin/automation/workflows'
     )
@@ -167,7 +169,7 @@ describe('UpgradeOffer', () => {
   it('falls back to checkout once that plan has been tried', () => {
     renderOffer(onFree, {
       entitlement: 'workflows',
-      catalogue: { ...catalogue, trialedPlanIds: ['pro'] },
+      catalogue: { ...catalogue, trialedPlanIds: ['business'] },
     })
     expect(screen.getByRole('link', { name: 'Upgrade to Business' })).toBeTruthy()
     expect(screen.queryByText(/Free for 14 days/)).toBeNull()

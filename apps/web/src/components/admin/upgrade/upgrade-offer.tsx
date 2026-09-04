@@ -216,7 +216,7 @@ function trialPlanIdFor(
   catalogue: BillingCatalogue | null
 ): PaidPlanId | null {
   if (!plan || !context?.trialEligible) return null
-  if (plan.id !== 'growth' && plan.id !== 'pro' && plan.id !== 'scale') return null
+  if (plan.id !== 'growth' && plan.id !== 'business' && plan.id !== 'enterprise') return null
   return catalogueTrialedPlanIds(catalogue).includes(plan.id) ? null : plan.id
 }
 

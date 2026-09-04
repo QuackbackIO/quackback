@@ -187,7 +187,7 @@ describe('POST /api/admin/assistant/transform — plan gate', () => {
     withCloud({ enabled: true, plan: 'free', entitlements: { aiDrafts: true } })
     expect((await handleTransform({ request: makeRequest() })).status).toBe(200)
 
-    withCloud({ enabled: true, plan: 'scale', entitlements: { aiDrafts: false } })
+    withCloud({ enabled: true, plan: 'enterprise', entitlements: { aiDrafts: false } })
     expect((await handleTransform({ request: makeRequest() })).status).toBe(402)
   })
 })

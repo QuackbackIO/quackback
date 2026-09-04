@@ -103,7 +103,7 @@ async function seedInvite(
 }
 
 async function projectMaxTeamSeats(maxTeamSeats: number): Promise<void> {
-  const cloud = storedCloud('pro')
+  const cloud = storedCloud('business')
   const projection = {
     ...cloud,
     projection: {
@@ -134,7 +134,7 @@ describe.skipIf(!fixture.available)('countSeatUsage', () => {
     await fixture.begin()
     hoisted.getCloudConfig.mockResolvedValue({
       enabled: true,
-      plan: 'pro',
+      plan: 'business',
       trialActive: false,
     })
     invalidateTierLimitsCache()

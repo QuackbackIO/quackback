@@ -14,8 +14,8 @@ const unpaidFree: BillingProjectionOverview = {
   canManageBilling: false,
   purchasablePlans: [
     { id: 'growth', name: 'Pro' },
-    { id: 'pro', name: 'Business' },
-    { id: 'scale', name: 'Enterprise' },
+    { id: 'business', name: 'Business' },
+    { id: 'enterprise', name: 'Enterprise' },
   ],
   seats: { used: 1, pending: 0, members: 1, purchased: null },
   ai: null,
@@ -26,7 +26,10 @@ describe('billingPlanAction', () => {
   it('offers a 7-day trial of untried paid plans on Free', () => {
     expect(billingPlanAction('free', unpaidFree).kind).toBe('current')
     expect(billingPlanAction('growth', unpaidFree)).toEqual({ kind: 'trial', planId: 'growth' })
-    expect(billingPlanAction('pro', unpaidFree)).toEqual({ kind: 'trial', planId: 'pro' })
+    expect(billingPlanAction('business', unpaidFree)).toEqual({
+      kind: 'trial',
+      planId: 'business',
+    })
   })
 
   it('does not re-trial a plan already in the ledger', () => {
@@ -34,9 +37,9 @@ describe('billingPlanAction', () => {
       kind: 'subscribe',
       planId: 'growth',
     })
-    expect(billingPlanAction('pro', unpaidFree, ['growth'])).toEqual({
+    expect(billingPlanAction('business', unpaidFree, ['growth'])).toEqual({
       kind: 'trial',
-      planId: 'pro',
+      planId: 'business',
     })
   })
 
@@ -50,7 +53,10 @@ describe('billingPlanAction', () => {
     }
     expect(billingPlanAction('growth', trialing).kind).toBe('current')
     expect(billingPlanAction('free', trialing).kind).toBe('downgrade')
-    expect(billingPlanAction('pro', trialing)).toEqual({ kind: 'subscribe', planId: 'pro' })
+    expect(billingPlanAction('business', trialing)).toEqual({
+      kind: 'subscribe',
+      planId: 'business',
+    })
   })
 
   it('switches paid plans and always allows a Free downgrade', () => {
@@ -64,9 +70,11 @@ describe('billingPlanAction', () => {
       renewalAt: '2026-09-14T00:00:00.000Z',
     }
     expect(billingPlanAction('growth', paid).kind).toBe('current')
-    expect(billingPlanAction('pro', paid)).toEqual({ kind: 'switch', planId: 'pro' })
+    expect(billingPlanAction('business', paid)).toEqual({ kind: 'switch', planId: 'business' })
     expect(billingPlanAction('free', paid)).toEqual({ kind: 'downgrade', planId: 'free' })
-    expect(billingPlanAction('growth', { ...paid, plan: 'pro', planName: 'Business' })).toEqual({
+    expect(
+      billingPlanAction('growth', { ...paid, plan: 'business', planName: 'Business' })
+    ).toEqual({
       kind: 'downgrade',
       planId: 'growth',
     })
@@ -82,41 +90,47 @@ describe('billingPlanAction', () => {
   it('does not let a complimentary grant self-downgrade', () => {
     const grant: BillingProjectionOverview = {
       ...unpaidFree,
-      plan: 'scale',
+      plan: 'enterprise',
       planName: 'Enterprise',
       status: null,
       canUpgrade: true,
       canManageBilling: false,
     }
-    expect(billingPlanAction('scale', grant).kind).toBe('current')
+    expect(billingPlanAction('enterprise', grant).kind).toBe('current')
     expect(billingPlanAction('free', grant).kind).toBe('unavailable')
-    expect(billingPlanAction('pro', grant)).toEqual({ kind: 'subscribe', planId: 'pro' })
+    expect(billingPlanAction('business', grant)).toEqual({
+      kind: 'subscribe',
+      planId: 'business',
+    })
   })
 
   it('treats an ended trial as choosing a plan, with Free as a gated downgrade', () => {
     const ended: BillingProjectionOverview = {
       ...unpaidFree,
       trialEnded: true,
-      trialPlanId: 'pro',
+      trialPlanId: 'business',
       trialPlanName: 'Business',
       trialExpiresAt: '2026-08-18T00:00:00.000Z',
     }
-    expect(billingPlanAction('pro', ended)).toEqual({ kind: 'subscribe', planId: 'pro' })
+    expect(billingPlanAction('business', ended)).toEqual({
+      kind: 'subscribe',
+      planId: 'business',
+    })
     expect(billingPlanAction('growth', ended)).toEqual({ kind: 'subscribe', planId: 'growth' })
     expect(billingPlanAction('free', ended).kind).toBe('downgrade')
   })
 
   it('covers every catalogue id', () => {
-    const ids: CataloguePlanId[] = ['free', 'growth', 'pro', 'scale']
+    const ids: CataloguePlanId[] = ['free', 'growth', 'business', 'enterprise']
     for (const id of ids) {
       expect(billingPlanAction(id, unpaidFree).kind).toBeTruthy()
     }
   })
 
-  it('treats business/enterprise as the current pro/scale actions', () => {
-    expect(billingPlanAction('business', unpaidFree)).toEqual(billingPlanAction('pro', unpaidFree))
-    expect(billingPlanAction('enterprise', unpaidFree)).toEqual(
-      billingPlanAction('scale', unpaidFree)
+  it('treats pro/scale as the current growth/enterprise actions', () => {
+    expect(billingPlanAction('pro', unpaidFree)).toEqual(billingPlanAction('growth', unpaidFree))
+    expect(billingPlanAction('scale', unpaidFree)).toEqual(
+      billingPlanAction('enterprise', unpaidFree)
     )
   })
 })

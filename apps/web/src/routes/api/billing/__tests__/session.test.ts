@@ -217,11 +217,11 @@ describe('POST /api/billing/session checkout', () => {
     })
   })
 
-  it('accepts business/enterprise checkout slugs and forwards canonical ids', async () => {
+  it('accepts business/enterprise checkout slugs and forwards those ids', async () => {
     hoisted.fetchBillingCatalogue.mockResolvedValue({
       plans: [
-        { id: 'pro', billedPer: 'workspace' },
-        { id: 'scale', billedPer: 'workspace' },
+        { id: 'business', billedPer: 'workspace' },
+        { id: 'enterprise', billedPer: 'workspace' },
       ],
     })
     await POST({
@@ -233,7 +233,7 @@ describe('POST /api/billing/session checkout', () => {
     })
     expect(hoisted.createHostedBillingSession).toHaveBeenCalledWith({
       action: 'checkout',
-      planId: 'pro',
+      planId: 'business',
       billingPeriod: 'monthly',
       quantity: 1,
     })
@@ -248,7 +248,7 @@ describe('POST /api/billing/session checkout', () => {
     })
     expect(hoisted.createHostedBillingSession).toHaveBeenCalledWith({
       action: 'checkout',
-      planId: 'scale',
+      planId: 'enterprise',
       billingPeriod: 'annual',
       quantity: 1,
     })

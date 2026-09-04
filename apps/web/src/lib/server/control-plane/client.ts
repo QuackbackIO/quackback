@@ -141,9 +141,9 @@ export async function fetchBillingInvoices(): Promise<CustomerInvoice[]> {
   return Array.isArray(result.invoices) ? result.invoices : []
 }
 
-export type CanonicalCataloguePlanId = 'free' | 'growth' | 'pro' | 'scale'
+export type CanonicalCataloguePlanId = 'free' | 'growth' | 'business' | 'enterprise'
 /** Incoming CP slugs; aliases are normalised to {@link CanonicalCataloguePlanId} on fetch. */
-export type CataloguePlanId = CanonicalCataloguePlanId | 'business' | 'enterprise'
+export type CataloguePlanId = CanonicalCataloguePlanId | 'pro' | 'scale'
 export type PaidCataloguePlanId = Exclude<CataloguePlanId, 'free'>
 
 export type BillingCatalogue = {
@@ -200,7 +200,7 @@ function remapPlanKeyedRecord<T>(
   return next
 }
 
-/** Maps `business`/`enterprise` onto stored `pro`/`scale` without dropping the payload. */
+/** Maps `pro`/`scale` onto stored `growth`/`enterprise` without dropping the payload. */
 export function normalizeBillingCatalogue(catalogue: BillingCatalogue): BillingCatalogue {
   return {
     ...catalogue,

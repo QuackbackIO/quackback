@@ -15,7 +15,7 @@ const catalogue: BillingCatalogue = {
   version: 1,
   currency: 'usd',
   annualDiscountMonths: 2,
-  recommendedPlanId: 'pro',
+  recommendedPlanId: 'growth',
   brandingRemoval: { monthlyCents: 5900, annualCents: 59000 },
   trialDays: 14,
   trialedPlanIds: [],
@@ -43,7 +43,7 @@ const catalogue: BillingCatalogue = {
       recommended: false,
     },
     {
-      id: 'pro',
+      id: 'business',
       name: 'Business',
       rank: 2,
       priceMonthlyCents: 5900,
@@ -54,7 +54,7 @@ const catalogue: BillingCatalogue = {
       recommended: true,
     },
     {
-      id: 'scale',
+      id: 'enterprise',
       name: 'Enterprise',
       rank: 3,
       priceMonthlyCents: 11500,
@@ -79,8 +79,8 @@ const freeOverview: BillingProjectionOverview = {
   canManageBilling: false,
   purchasablePlans: [
     { id: 'growth', name: 'Pro' },
-    { id: 'pro', name: 'Business' },
-    { id: 'scale', name: 'Enterprise' },
+    { id: 'business', name: 'Business' },
+    { id: 'enterprise', name: 'Enterprise' },
   ],
   seats: { used: 3, pending: 1, members: 2, purchased: null },
   ai: null,
@@ -89,7 +89,7 @@ const freeOverview: BillingProjectionOverview = {
 
 const proOverview: BillingProjectionOverview = {
   ...freeOverview,
-  plan: 'pro',
+  plan: 'business',
   planName: 'Business',
   status: 'active',
   canManageBilling: true,
@@ -105,7 +105,7 @@ function renderBuilder(
     <CheckoutBuilder
       overview={overview}
       catalogue={catalogue}
-      selection={{ plan: 'pro', period: 'annual', seats: 3, branding: false, ...selection }}
+      selection={{ plan: 'business', period: 'annual', seats: 3, branding: false, ...selection }}
       onChange={onChange}
     />
   )
@@ -135,7 +135,7 @@ describe('CheckoutBuilder', () => {
     expect(within(summary).getByText('$148/mo')).toBeInTheDocument()
 
     const form = checkoutForm()
-    expect(form?.querySelector('input[name="planId"]')).toHaveValue('pro')
+    expect(form?.querySelector('input[name="planId"]')).toHaveValue('business')
     expect(form?.querySelector('input[name="billingPeriod"]')).toHaveValue('annual')
     expect(form?.querySelector('input[name="quantity"]')).toHaveValue('3')
     expect(within(summary).getByRole('button', { name: 'Continue to payment' })).toBeEnabled()
@@ -153,7 +153,7 @@ describe('CheckoutBuilder', () => {
     fireEvent.click(screen.getByRole('radio', { name: /Monthly/ }))
     expect(onChange).toHaveBeenCalledWith({ period: 'monthly' })
     fireEvent.click(screen.getByRole('radio', { name: /^Enterprise/ }))
-    expect(onChange).toHaveBeenCalledWith({ plan: 'scale' })
+    expect(onChange).toHaveBeenCalledWith({ plan: 'enterprise' })
     fireEvent.click(screen.getByRole('button', { name: 'More seats' }))
     expect(onChange).toHaveBeenCalledWith({ seats: 4 })
   })
@@ -175,7 +175,7 @@ describe('CheckoutBuilder', () => {
   })
 
   it('marks the current plan and disables checkout for it', () => {
-    renderBuilder(proOverview, { plan: 'pro', seats: 7 })
+    renderBuilder(proOverview, { plan: 'business', seats: 7 })
     expect(screen.getAllByText('Current').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: 'Current plan' })).toBeDisabled()
     expect(checkoutForm()).toBeNull()
@@ -183,7 +183,7 @@ describe('CheckoutBuilder', () => {
   })
 
   it('explains pro-rata and end-of-period timing when moving between paid plans', () => {
-    renderBuilder(proOverview, { plan: 'scale', seats: 7 })
+    renderBuilder(proOverview, { plan: 'enterprise', seats: 7 })
     expect(screen.getByText(/Moving up applies now, billed pro-rata/)).toBeInTheDocument()
     renderBuilder(proOverview, { plan: 'growth', seats: 7 })
     expect(screen.getByText(/takes effect at the end of the current period/)).toBeInTheDocument()
@@ -221,12 +221,12 @@ describe('CheckoutBuilder', () => {
     expect(within(summary).getByText('$2,360/year')).toBeInTheDocument()
     expect(within(summary).getByText('$197/mo')).toBeInTheDocument()
     const form = checkoutForm()
-    expect(form?.querySelector('input[name="planId"]')).toHaveValue('pro')
+    expect(form?.querySelector('input[name="planId"]')).toHaveValue('business')
     expect(form?.querySelector('input[name="brandingRemoval"]')).toHaveValue('true')
   })
 
   it('sells the add-on on its own when the plan is the current one', () => {
-    renderBuilder(proOverview, { plan: 'pro', seats: 7, branding: true })
+    renderBuilder(proOverview, { plan: 'business', seats: 7, branding: true })
     const summary = screen.getByRole('complementary')
     expect(within(summary).queryByText(/7 seats ×/)).not.toBeInTheDocument()
     expect(within(summary).getAllByText('$590/year')).toHaveLength(2)

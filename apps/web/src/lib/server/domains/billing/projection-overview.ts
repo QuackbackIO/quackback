@@ -169,7 +169,7 @@ export async function getBillingProjectionOverview(): Promise<BillingProjectionO
     cancellationAt: cloud.cancellationAt,
     canUpgrade: cloud.canUpgrade,
     canManageBilling: cloud.canManageBilling,
-    purchasablePlans: (['growth', 'pro', 'scale'] as const).map((id) => ({
+    purchasablePlans: (['growth', 'business', 'enterprise'] as const).map((id) => ({
       id,
       name: PLAN_CATALOGUE[id].name,
     })),

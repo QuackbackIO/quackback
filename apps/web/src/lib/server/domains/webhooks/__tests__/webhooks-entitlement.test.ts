@@ -133,7 +133,7 @@ describe('createWebhook — plan gate', () => {
     withCloud(storedCloud('free', { webhooks: true }))
     await expect(createWebhook(INPUT, CREATOR)).resolves.toBeDefined()
 
-    withCloud(storedCloud('scale', { webhooks: false }))
+    withCloud(storedCloud('enterprise', { webhooks: false }))
     await expect(createWebhook(INPUT, CREATOR)).rejects.toBeInstanceOf(EntitlementRequiredError)
   })
 })

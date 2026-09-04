@@ -133,7 +133,7 @@ describe('generateAndSavePostSummary — plan gate', () => {
     await expect(generateAndSavePostSummary(POST_ID)).resolves.toBeUndefined()
     expect(hoisted.mockChat).toHaveBeenCalledOnce()
 
-    withCloud(storedCloud('scale', { aiInsights: false }))
+    withCloud(storedCloud('enterprise', { aiInsights: false }))
     await expect(generateAndSavePostSummary(POST_ID)).rejects.toBeInstanceOf(
       EntitlementRequiredError
     )

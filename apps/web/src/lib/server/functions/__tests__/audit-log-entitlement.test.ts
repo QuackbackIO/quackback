@@ -65,7 +65,7 @@ const LIMITS = {
 }
 
 function storedCloud(
-  plan: 'free' | 'growth' | 'pro' | 'scale',
+  plan: 'free' | 'growth' | 'business' | 'enterprise',
   entitlements?: Partial<Record<(typeof ENTITLEMENT_KEYS)[number], boolean>>
 ) {
   const grants = new Set(PLAN_CATALOGUE[plan].grants)
@@ -121,7 +121,7 @@ describe('listAuditEventsFn — no cloud config', () => {
 
 describe('listAuditEventsFn — plan gate', () => {
   it('refuses on a plan without the entitlement and names the plan that has it', async () => {
-    withCloud(storedCloud('pro'))
+    withCloud(storedCloud('business'))
 
     const refusal = await listAuditEvents({ data: {} }).catch((error: unknown) => error)
 
@@ -138,7 +138,7 @@ describe('listAuditEventsFn — plan gate', () => {
   })
 
   it('returns events on a plan that includes it', async () => {
-    withCloud(storedCloud('scale'))
+    withCloud(storedCloud('enterprise'))
     await expect(listAuditEvents({ data: {} })).resolves.toMatchObject({ hasMore: false })
     expect(hoisted.mockQueryAuditEvents).toHaveBeenCalledOnce()
   })
@@ -147,7 +147,7 @@ describe('listAuditEventsFn — plan gate', () => {
     withCloud(storedCloud('free', { auditLog: true }))
     await expect(listAuditEvents({ data: {} })).resolves.toBeDefined()
 
-    withCloud(storedCloud('scale', { auditLog: false }))
+    withCloud(storedCloud('enterprise', { auditLog: false }))
     await expect(listAuditEvents({ data: {} })).rejects.toBeInstanceOf(EntitlementRequiredError)
   })
 

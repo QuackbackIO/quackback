@@ -101,17 +101,28 @@ describe('workspace control-plane credential', () => {
     expect(init.body).toBeUndefined()
   })
 
-  it('normalises business/enterprise catalogue slugs to pro/scale', () => {
+  it('keeps business/enterprise catalogue slugs and maps pro/scale onto growth/enterprise', () => {
     const normalised = normalizeBillingCatalogue({
       version: 1,
       currency: 'usd',
       annualDiscountMonths: 2,
-      recommendedPlanId: 'business',
+      recommendedPlanId: 'pro',
       brandingRemoval: { monthlyCents: 5900, annualCents: 59000 },
-      lastTrialPlanId: 'enterprise',
-      trialedPlanIds: ['business', 'pro'],
-      aiIncludedCentsPerMonth: { business: 3000, enterprise: 10000 },
+      lastTrialPlanId: 'scale',
+      trialedPlanIds: ['pro', 'business'],
+      aiIncludedCentsPerMonth: { pro: 1000, business: 3000, scale: 10000 },
       plans: [
+        {
+          id: 'pro',
+          name: 'Pro',
+          rank: 1,
+          priceMonthlyCents: 3700,
+          priceYearlyCents: 34800,
+          billedPer: 'workspace',
+          bestFor: 'Small teams',
+          highlights: [],
+          recommended: true,
+        },
         {
           id: 'business',
           name: 'Business',
@@ -124,7 +135,7 @@ describe('workspace control-plane credential', () => {
           recommended: false,
         },
         {
-          id: 'enterprise',
+          id: 'scale',
           name: 'Enterprise',
           rank: 3,
           priceMonthlyCents: 12900,
@@ -136,11 +147,15 @@ describe('workspace control-plane credential', () => {
         },
       ],
     })
-    expect(normalised.recommendedPlanId).toBe('pro')
-    expect(normalised.lastTrialPlanId).toBe('scale')
-    expect(normalised.trialedPlanIds).toEqual(['pro'])
-    expect(normalised.aiIncludedCentsPerMonth).toEqual({ pro: 3000, scale: 10000 })
-    expect(normalised.plans.map((plan) => plan.id)).toEqual(['pro', 'scale'])
+    expect(normalised.recommendedPlanId).toBe('growth')
+    expect(normalised.lastTrialPlanId).toBe('enterprise')
+    expect(normalised.trialedPlanIds).toEqual(['growth', 'business'])
+    expect(normalised.aiIncludedCentsPerMonth).toEqual({
+      growth: 1000,
+      business: 3000,
+      enterprise: 10000,
+    })
+    expect(normalised.plans.map((plan) => plan.id)).toEqual(['growth', 'business', 'enterprise'])
   })
 
   it('forwards checkout and trial aliases as canonical plan ids', async () => {
@@ -149,21 +164,21 @@ describe('workspace control-plane credential', () => {
     )
     await createHostedBillingSession({
       action: 'checkout',
-      planId: 'enterprise',
+      planId: 'scale',
       billingPeriod: 'annual',
     })
     const [, checkoutInit] = hoisted.fetch.mock.calls[0] as [URL, RequestInit]
     expect(JSON.parse(String(checkoutInit.body))).toMatchObject({
       action: 'checkout',
-      planId: 'scale',
+      planId: 'enterprise',
     })
 
     hoisted.fetch.mockResolvedValue(
       new Response(JSON.stringify({ status: 'started' }), { status: 200 })
     )
-    await startWorkspaceTrial('business')
+    await startWorkspaceTrial('pro')
     const [, trialInit] = hoisted.fetch.mock.calls[1] as [URL, RequestInit]
-    expect(JSON.parse(String(trialInit.body))).toEqual({ planId: 'pro' })
+    expect(JSON.parse(String(trialInit.body))).toEqual({ planId: 'growth' })
   })
 
   it('lists owner workspaces over GET without a workspace id', async () => {

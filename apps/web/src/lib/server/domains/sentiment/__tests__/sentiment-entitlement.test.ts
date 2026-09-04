@@ -121,7 +121,7 @@ describe('analyzeSentiment — plan gate', () => {
       sentiment: 'positive',
     })
 
-    withCloud(storedCloud('scale', { aiInsights: false }))
+    withCloud(storedCloud('enterprise', { aiInsights: false }))
     await expect(analyzeSentiment('Title', 'Great feature!')).rejects.toBeInstanceOf(
       EntitlementRequiredError
     )

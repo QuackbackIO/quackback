@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { SubscribeDialog } from '../subscribe-dialog'
 
 const plan = {
-  id: 'pro' as const,
+  id: 'business' as const,
   name: 'Business',
   rank: 2,
   priceMonthlyCents: 3000,

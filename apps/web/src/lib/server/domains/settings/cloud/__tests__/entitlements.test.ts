@@ -44,7 +44,7 @@ const LIMITS = {
   apiRequestsPerMinute: 600,
 }
 
-function storedCloud(plan: 'free' | 'growth' | 'pro' | 'scale') {
+function storedCloud(plan: 'free' | 'growth' | 'business' | 'enterprise') {
   const grants = new Set(PLAN_CATALOGUE[plan].grants)
   return {
     enabled: true,
@@ -68,13 +68,13 @@ function storedCloud(plan: 'free' | 'growth' | 'pro' | 'scale') {
 
 describe('isEntitled', () => {
   it('grants what the plan grants', () => {
-    const config = cloud({ plan: 'pro' })
+    const config = cloud({ plan: 'business' })
     expect(isEntitled(config, 'customDomain')).toBe(true)
     expect(isEntitled(config, 'workflows')).toBe(true)
   })
 
   it('denies what the plan does not grant', () => {
-    const config = cloud({ plan: 'pro' })
+    const config = cloud({ plan: 'business' })
     expect(isEntitled(config, 'sso')).toBe(false)
     expect(isEntitled(config, 'auditLog')).toBe(false)
   })
@@ -89,7 +89,9 @@ describe('isEntitled', () => {
   })
 
   it('lets an explicit override close a feature the plan does include', () => {
-    expect(isEntitled(cloud({ plan: 'scale', entitlements: { sso: false } }), 'sso')).toBe(false)
+    expect(isEntitled(cloud({ plan: 'enterprise', entitlements: { sso: false } }), 'sso')).toBe(
+      false
+    )
   })
 
   it('denies everything when enabled with no plan (fail closed)', () => {
@@ -127,7 +129,7 @@ describe('the refusal names the plan', () => {
   it('does not invent an upsell when the workspace already has the plan', () => {
     // An explicit override denied a feature the top plan grants. Telling the
     // customer to upgrade to it would be nonsense.
-    const err = buildRefusal(cloud({ plan: 'scale', entitlements: { sso: false } }), 'sso')
+    const err = buildRefusal(cloud({ plan: 'enterprise', entitlements: { sso: false } }), 'sso')
     expect(err.requiredPlan).toBeNull()
     expect(err.message).toBe(
       'Single sign-on is not included in your plan. Your workspace is on Enterprise. Contact us to enable it.'
@@ -218,7 +220,7 @@ describe('requireEntitlement against a configured workspace', () => {
 
   it('allows what the plan grants', async () => {
     hoisted.mockGetWorkspaceSettings.mockResolvedValue({
-      settings: { id: 'ws_1', cloud: storedCloud('pro') },
+      settings: { id: 'ws_1', cloud: storedCloud('business') },
     })
     const { requireEntitlement } = await import('../entitlements')
     await expect(requireEntitlement('customDomain')).resolves.toBeUndefined()
@@ -261,7 +263,7 @@ describe('requireEntitlement against a configured workspace', () => {
 
   it('reports a different set one plan up, so the surface is not a constant', async () => {
     hoisted.mockGetWorkspaceSettings.mockResolvedValue({
-      settings: { id: 'ws_1', cloud: storedCloud('pro') },
+      settings: { id: 'ws_1', cloud: storedCloud('business') },
     })
     const { listEntitlements } = await import('../entitlements')
     expect(await listEntitlements()).toEqual({

@@ -80,8 +80,16 @@ describe('planDowngradeIssues', () => {
 
 describe('featuresDisabledOnFree', () => {
   it('names Pro features when the trial plan is Pro', () => {
-    expect(featuresDisabledOnFree('pro')).toContain('Workflows and automations will be disabled')
     expect(featuresDisabledOnFree('pro')).toContain('MCP access will be revoked')
+    expect(featuresDisabledOnFree('pro')).not.toContain(
+      'Workflows and automations will be disabled'
+    )
+  })
+
+  it('names Business features when leaving Business', () => {
+    expect(featuresDisabledOnFree('business')).toContain(
+      'Workflows and automations will be disabled'
+    )
   })
 
   it('only lists disabled features when the target is Free', () => {

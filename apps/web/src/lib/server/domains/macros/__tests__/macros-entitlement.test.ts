@@ -113,7 +113,7 @@ describe('macro library — plan gate', () => {
     withCloud(storedCloud('free', { aiDrafts: true }))
     await expect(listMacros()).resolves.toEqual([ROW])
 
-    withCloud(storedCloud('scale', { aiDrafts: false }))
+    withCloud(storedCloud('enterprise', { aiDrafts: false }))
     await expect(listMacros()).rejects.toBeInstanceOf(EntitlementRequiredError)
   })
 })

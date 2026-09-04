@@ -75,7 +75,7 @@ describe('enforceSeatLimit', () => {
     hoisted.countSeatUsage.mockResolvedValue({ members: 8, pendingInvites: 2, used: 10 })
     hoisted.getCloudConfig.mockResolvedValue({
       enabled: true,
-      plan: 'pro',
+      plan: 'business',
       trialActive: false,
     })
     hoisted.catalogueBilledPer.mockResolvedValue('seat')
@@ -138,7 +138,7 @@ describe('enforceSeatLimit', () => {
     })
     hoisted.getCloudConfig.mockResolvedValue({
       enabled: true,
-      plan: 'pro',
+      plan: 'business',
       trialActive: false,
     })
     hoisted.countSeatUsage.mockResolvedValue({ members: 10, pendingInvites: 0, used: 10 })
