@@ -42,7 +42,17 @@ export default defineConfig({
     },
     deps: {
       optimizer: {
-        ssr: { enabled: true },
+        ssr: {
+          enabled: true,
+          // zod's entry does `import * as z from './v4/classic/external.js'`
+          // then `export * from` the same module plus `export { z }`. Vite's
+          // SSR transform drops the `z` binding in that combination, so
+          // `import { z } from 'zod'` lands as undefined and every schema in
+          // the codebase throws on load. Pre-bundling zod with esbuild
+          // sidesteps the SSR transform and re-exports it correctly.
+          // Externalizing it instead does NOT help — verified.
+          include: ['zod'],
+        },
       },
     },
   },
