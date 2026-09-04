@@ -17,13 +17,13 @@ describe('checkoutPath', () => {
     expect(checkoutPath({ plan: 'business' })).toBe(
       '/admin/settings/billing/checkout?plan=business'
     )
-    expect(parsePaidPlanId('pro')).toBe('growth')
+    expect(parsePaidPlanId('pro')).toBe('pro')
+    expect(parsePaidPlanId('growth')).toBe('pro')
     expect(parsePaidPlanId('scale')).toBe('enterprise')
     expect(parsePaidPlanId('business')).toBe('business')
     expect(parsePaidPlanId('enterprise')).toBe('enterprise')
-    expect(parsePaidPlanId('growth')).toBe('growth')
-    expect(checkoutPath({ plan: parsePaidPlanId('pro') ?? 'growth' })).toBe(
-      '/admin/settings/billing/checkout?plan=growth'
+    expect(checkoutPath({ plan: parsePaidPlanId('pro') ?? 'pro' })).toBe(
+      '/admin/settings/billing/checkout?plan=pro'
     )
     expect(checkoutPath({ plan: 'business', period: 'monthly', seats: 3 })).toBe(
       '/admin/settings/billing/checkout?plan=business&period=monthly&seats=3'
@@ -52,7 +52,8 @@ describe('parseCheckoutSearch', () => {
     expect(parseCheckoutSearch({ branding: 'yes' })).toEqual({})
     expect(parseCheckoutSearch({ plan: 'platinum', seats: 'lots' })).toEqual({})
     expect(parseCheckoutSearch({ plan: 'enterprise' })).toEqual({ plan: 'enterprise' })
-    expect(parseCheckoutSearch({ plan: 'pro' })).toEqual({ plan: 'growth' })
+    expect(parseCheckoutSearch({ plan: 'pro' })).toEqual({ plan: 'pro' })
+    expect(parseCheckoutSearch({ plan: 'growth' })).toEqual({ plan: 'pro' })
     expect(parseCheckoutSearch({ plan: 'business' })).toEqual({ plan: 'business' })
     expect(parseCheckoutSearch({ seats: 2.5 })).toEqual({})
     expect(parseCheckoutSearch({ seats: '1001' })).toEqual({ seats: 1001 })

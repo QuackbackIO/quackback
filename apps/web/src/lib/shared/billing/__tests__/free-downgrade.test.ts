@@ -47,11 +47,11 @@ describe('freeDowngradeIssues', () => {
 
 describe('planDowngradeIssues', () => {
   it('skips unlimited caps on a paid plan', () => {
-    expect(planDowngradeIssues({ maxBoards: 12, maxPosts: 400 }, 'growth')).toEqual([])
+    expect(planDowngradeIssues({ maxBoards: 12, maxPosts: 400 }, 'pro')).toEqual([])
   })
 
   it('flags status components over the Pro (growth) cap', () => {
-    const issues = planDowngradeIssues({ maxStatusComponents: 12, maxSendingDomains: 1 }, 'growth')
+    const issues = planDowngradeIssues({ maxStatusComponents: 12, maxSendingDomains: 1 }, 'pro')
     expect(issues).toEqual([
       {
         key: 'maxStatusComponents',
@@ -65,7 +65,7 @@ describe('planDowngradeIssues', () => {
   })
 
   it('requires deleting every custom role when the target cap is 0', () => {
-    const issues = planDowngradeIssues({ maxCustomRoles: 2 }, 'growth')
+    const issues = planDowngradeIssues({ maxCustomRoles: 2 }, 'pro')
     expect(issues[0]).toMatchObject({
       message: 'You have 2 out of 0 custom roles',
       actionLabel: 'Remove 2 custom roles',
@@ -93,7 +93,7 @@ describe('featuresDisabledOnFree', () => {
   })
 
   it('only lists disabled features when the target is Free', () => {
-    expect(featuresDisabledOnDowngrade('scale', 'growth')).toEqual([])
+    expect(featuresDisabledOnDowngrade('scale', 'pro')).toEqual([])
     expect(featuresDisabledOnDowngrade('scale', 'free').length).toBeGreaterThan(0)
   })
 })

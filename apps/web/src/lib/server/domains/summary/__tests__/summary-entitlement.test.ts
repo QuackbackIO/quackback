@@ -121,7 +121,7 @@ describe('generateAndSavePostSummary — plan gate', () => {
   })
 
   it('summarises the post on a plan that includes it', async () => {
-    withCloud(storedCloud('growth'))
+    withCloud(storedCloud('pro'))
     await expect(generateAndSavePostSummary(POST_ID)).resolves.toBeUndefined()
     expect(hoisted.mockChat).toHaveBeenCalledOnce()
     expect(hoisted.mockUpdate).toHaveBeenCalledOnce()

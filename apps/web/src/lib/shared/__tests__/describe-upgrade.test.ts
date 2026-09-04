@@ -14,7 +14,7 @@ import {
 const catalogue = {
   plans: [
     { id: 'free', name: 'Free', rank: 0, highlights: ['1 seat'] },
-    { id: 'growth', name: 'Pro', rank: 1, highlights: ['Custom domain'] },
+    { id: 'pro', name: 'Pro', rank: 1, highlights: ['Custom domain'] },
     { id: 'business', name: 'Business', rank: 2, highlights: ['Workflows'] },
     { id: 'enterprise', name: 'Enterprise', rank: 3, highlights: ['Audit log', 'SSO'] },
   ],
@@ -33,12 +33,12 @@ describe('describeEntitlementUpgrade', () => {
       body: 'Webhooks are a Pro feature. Upgrade to Pro to enable them.',
     })
     expect(describeEntitlementUpgrade('sso').requiredPlan).toBe('enterprise')
-    expect(describeEntitlementUpgrade('customDomain').requiredPlan).toBe('growth')
-    expect(describeEntitlementUpgrade('webhooks').requiredPlan).toBe('growth')
+    expect(describeEntitlementUpgrade('customDomain').requiredPlan).toBe('pro')
+    expect(describeEntitlementUpgrade('webhooks').requiredPlan).toBe('pro')
     expect(describeEntitlementUpgrade('workflows').requiredPlan).toBe('business')
-    expect(describeEntitlementUpgrade('mcpServer').requiredPlan).toBe('growth')
-    expect(describeEntitlementUpgrade('aiDrafts').requiredPlan).toBe('growth')
-    expect(describeEntitlementUpgrade('aiInsights').requiredPlan).toBe('growth')
+    expect(describeEntitlementUpgrade('mcpServer').requiredPlan).toBe('pro')
+    expect(describeEntitlementUpgrade('aiDrafts').requiredPlan).toBe('pro')
+    expect(describeEntitlementUpgrade('aiInsights').requiredPlan).toBe('pro')
   })
 })
 
@@ -152,7 +152,7 @@ describe('unlockedHighlights', () => {
         { planName: 'Business', highlights: ['Workflows'] },
       ],
     })
-    expect(unlockedHighlights(catalogue, 'growth', 'business')).toEqual({
+    expect(unlockedHighlights(catalogue, 'pro', 'business')).toEqual({
       target: ['Workflows'],
       included: [],
     })

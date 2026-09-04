@@ -62,10 +62,10 @@ describe('trialPlanIdForOverview', () => {
       trialPlanIdForOverview({
         trialActive: true,
         trialEnded: false,
-        plan: 'growth',
+        plan: 'pro',
         lastTrialPlanId: 'business',
       })
-    ).toBe('growth')
+    ).toBe('pro')
   })
 
   it('uses lastTrialPlanId only in the ended window', () => {
@@ -85,7 +85,7 @@ describe('trialPlanIdForOverview', () => {
         trialActive: false,
         trialEnded: false,
         plan: 'enterprise',
-        lastTrialPlanId: 'growth',
+        lastTrialPlanId: 'pro',
       })
     ).toBeNull()
   })

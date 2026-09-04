@@ -15,9 +15,9 @@ export type CheckoutSearch = {
   branding?: boolean
 }
 
-const PAID_PLAN_IDS: readonly PaidPlanId[] = ['growth', 'business', 'enterprise']
+const PAID_PLAN_IDS: readonly PaidPlanId[] = ['pro', 'business', 'enterprise']
 
-/** Checkout/trial forms accept these; aliases are stored and forwarded as canonical ids. */
+/** Checkout/trial forms accept these; leftover growth/scale alias onto canonical ids. */
 export const INCOMING_PAID_PLAN_IDS = ['growth', 'pro', 'scale', 'business', 'enterprise'] as const
 
 export function isPaidPlanId(value: unknown): value is PaidPlanId {

@@ -61,6 +61,6 @@ describe('POST /api/billing/trial', () => {
 
   it('maps a pro checkout slug onto the entry-tier trial', async () => {
     await POST({ request: formRequest({ planId: 'pro' }) })
-    expect(hoisted.startWorkspaceTrial).toHaveBeenCalledWith('growth')
+    expect(hoisted.startWorkspaceTrial).toHaveBeenCalledWith('pro')
   })
 })

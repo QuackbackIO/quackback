@@ -53,7 +53,7 @@ describe('setHelpCenterDomain — unconfigured install', () => {
 })
 
 describe('setHelpCenterDomain — cloud amputates the local writer', () => {
-  it.each(['free', 'growth', 'business', 'enterprise'] as const)(
+  it.each(['free', 'pro', 'business', 'enterprise'] as const)(
     'refuses the local reverse-proxy writer on cloud %s',
     async (plan) => {
       withCloud({ enabled: true, plan })

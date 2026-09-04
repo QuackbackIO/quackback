@@ -198,7 +198,7 @@ describe('projected numeric limits', () => {
     expect(parseBillingProjection({ ...PROJECTION, trialExpiresAt: 'August 15' })).toBeNull()
   })
 
-  it('keeps business/enterprise projection slugs and maps pro/scale onto growth/enterprise', () => {
+  it('keeps pro/business/enterprise projection slugs and maps leftover growth/scale', () => {
     expect(parseBillingProjection({ ...PROJECTION, effectivePlan: 'business' })).toEqual({
       ...PROJECTION,
       effectivePlan: 'business',
@@ -209,7 +209,11 @@ describe('projected numeric limits', () => {
     })
     expect(parseBillingProjection({ ...PROJECTION, effectivePlan: 'pro' })).toEqual({
       ...PROJECTION,
-      effectivePlan: 'growth',
+      effectivePlan: 'pro',
+    })
+    expect(parseBillingProjection({ ...PROJECTION, effectivePlan: 'growth' })).toEqual({
+      ...PROJECTION,
+      effectivePlan: 'pro',
     })
     expect(parseBillingProjection({ ...PROJECTION, effectivePlan: 'scale' })).toEqual({
       ...PROJECTION,
@@ -252,7 +256,7 @@ describe('resolveEffectiveTierLimits (cloud, no operator row)', () => {
     expect(effective.features.integrations).toBe(true)
   })
 
-  it('maps pro/scale aliases onto growth/enterprise PLAN_ONLY_FEATURES', () => {
+  it('maps leftover growth/scale onto pro/enterprise PLAN_ONLY_FEATURES', () => {
     const pro = parseBillingProjection({ ...PROJECTION, effectivePlan: 'pro' })
     const growth = parseBillingProjection({ ...PROJECTION, effectivePlan: 'growth' })
     const scale = parseBillingProjection({ ...PROJECTION, effectivePlan: 'scale' })
@@ -272,7 +276,7 @@ describe('resolveEffectiveTierLimits (cloud, no operator row)', () => {
   })
 
   it('keeps Growth feature flags closed for keys that are not entitlements', () => {
-    const growth: BillingProjection = { ...PROJECTION, effectivePlan: 'growth' }
+    const growth: BillingProjection = { ...PROJECTION, effectivePlan: 'pro' }
     const effective = resolveEffectiveTierLimits(null, growth, beforeExpiry)
     expect(effective.features.analyticsExports).toBe(false)
     expect(effective.features.integrations).toBe(false)

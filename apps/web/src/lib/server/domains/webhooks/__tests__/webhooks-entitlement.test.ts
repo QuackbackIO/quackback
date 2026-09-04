@@ -122,7 +122,7 @@ describe('createWebhook — plan gate', () => {
   })
 
   it('creates the webhook on a plan that includes it', async () => {
-    withCloud(storedCloud('growth'))
+    withCloud(storedCloud('pro'))
     await expect(createWebhook(INPUT, CREATOR)).resolves.toMatchObject({
       webhook: { url: INPUT.url },
     })

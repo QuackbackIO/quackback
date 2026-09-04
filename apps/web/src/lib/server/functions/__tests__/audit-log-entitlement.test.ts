@@ -65,7 +65,7 @@ const LIMITS = {
 }
 
 function storedCloud(
-  plan: 'free' | 'growth' | 'business' | 'enterprise',
+  plan: 'free' | 'pro' | 'business' | 'enterprise',
   entitlements?: Partial<Record<(typeof ENTITLEMENT_KEYS)[number], boolean>>
 ) {
   const grants = new Set(PLAN_CATALOGUE[plan].grants)
@@ -152,7 +152,7 @@ describe('listAuditEventsFn — plan gate', () => {
   })
 
   it('refuses before the query even for an admin (the gate is not a permission check)', async () => {
-    withCloud(storedCloud('growth'))
+    withCloud(storedCloud('pro'))
     await expect(listAuditEvents({ data: { limit: 10 } })).rejects.toBeInstanceOf(
       EntitlementRequiredError
     )

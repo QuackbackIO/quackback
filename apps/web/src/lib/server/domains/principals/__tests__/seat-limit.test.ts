@@ -89,7 +89,7 @@ describe('enforceSeatLimit', () => {
     hoisted.countSeatUsage.mockResolvedValue({ members: 5, pendingInvites: 0, used: 5 })
     hoisted.getCloudConfig.mockResolvedValue({
       enabled: true,
-      plan: 'growth',
+      plan: 'pro',
       trialActive: false,
     })
     hoisted.catalogueBilledPer.mockResolvedValue('workspace')

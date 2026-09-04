@@ -137,7 +137,7 @@ describe('projected commercial state', () => {
     )
     expect(cloud).toMatchObject({
       enabled: true,
-      plan: 'growth',
+      plan: 'pro',
       entitlements: { customDomain: true },
     })
     expect(

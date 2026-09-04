@@ -10,7 +10,7 @@ const catalogue: BillingCatalogue = {
   version: 1,
   currency: 'usd',
   annualDiscountMonths: 2,
-  recommendedPlanId: 'growth',
+  recommendedPlanId: 'pro',
   brandingRemoval: { monthlyCents: 5900, annualCents: 59000 },
   trialDays: 14,
   trialedPlanIds: [],
@@ -27,7 +27,7 @@ const catalogue: BillingCatalogue = {
       recommended: false,
     },
     {
-      id: 'growth',
+      id: 'pro',
       name: 'Pro',
       rank: 1,
       priceMonthlyCents: 2900,
@@ -177,7 +177,7 @@ describe('UpgradeOffer', () => {
 
   it('acknowledges a running trial', () => {
     renderOffer(
-      { currentPlan: 'growth', currentPlanName: 'Pro', trialActive: true, trialEligible: false },
+      { currentPlan: 'pro', currentPlanName: 'Pro', trialActive: true, trialEligible: false },
       { entitlement: 'workflows' }
     )
     expect(screen.getByText("You're trialing Pro. Upgrade to Business to unlock:")).toBeTruthy()

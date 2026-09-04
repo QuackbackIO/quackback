@@ -44,7 +44,7 @@ const LIMITS = {
   apiRequestsPerMinute: 600,
 }
 
-function storedCloud(plan: 'free' | 'growth' | 'business' | 'enterprise') {
+function storedCloud(plan: 'free' | 'pro' | 'business' | 'enterprise') {
   const grants = new Set(PLAN_CATALOGUE[plan].grants)
   return {
     enabled: true,
@@ -109,7 +109,7 @@ describe('isEntitled', () => {
 describe('the refusal names the plan', () => {
   it('names the cheapest plan that would grant the feature', () => {
     const err = buildRefusal(cloud({ plan: 'free' }), 'customDomain')
-    expect(err.requiredPlan).toBe('growth')
+    expect(err.requiredPlan).toBe('pro')
     expect(err.requiredPlanName).toBe('Pro')
     expect(err.currentPlan).toBe('free')
     expect(err.currentPlanName).toBe('Free')
@@ -185,7 +185,7 @@ describe('the refusal reuses the existing 402 plumbing', () => {
         'The MCP server is a Pro feature. Your workspace is on Free. Upgrade to Pro to enable it.',
       currentPlan: 'free',
       currentPlanName: 'Free',
-      requiredPlan: 'growth',
+      requiredPlan: 'pro',
       requiredPlanName: 'Pro',
       upgradeUrl: '/admin/settings/billing',
     })
@@ -231,7 +231,7 @@ describe('requireEntitlement against a configured workspace', () => {
     // catalogue level is reached through the real resolution path rather than
     // asserted on a hand-built config object.
     hoisted.mockGetWorkspaceSettings.mockResolvedValue({
-      settings: { id: 'ws_1', cloud: storedCloud('growth') },
+      settings: { id: 'ws_1', cloud: storedCloud('pro') },
     })
     const { requireEntitlement } = await import('../entitlements')
     await expect(requireEntitlement('mcpServer')).resolves.toBeUndefined()
@@ -243,7 +243,7 @@ describe('requireEntitlement against a configured workspace', () => {
 
   it('reports the whole catalogue for a plan surface', async () => {
     hoisted.mockGetWorkspaceSettings.mockResolvedValue({
-      settings: { id: 'ws_1', cloud: storedCloud('growth') },
+      settings: { id: 'ws_1', cloud: storedCloud('pro') },
     })
     const { listEntitlements } = await import('../entitlements')
     expect(await listEntitlements()).toEqual({
