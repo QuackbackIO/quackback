@@ -7,7 +7,7 @@ import {
   type BillingProjection,
   type ProjectedLimits,
 } from './cloud/billing-projection'
-import type { PlanId } from './cloud/cloud.types'
+import { canonicalPlanId, isPlanId, type PlanId } from './cloud/cloud.types'
 
 type StoredTierLimits = Partial<Omit<TierLimits, 'features'>> & {
   features?: Partial<TierLimits['features']>
@@ -94,7 +94,8 @@ function featuresFromProjection(projection: BillingProjection, now: Date): TierL
     projection.planLimitsExpireAt !== null &&
     now.getTime() >= Date.parse(projection.planLimitsExpireAt)
   const entitlements = expired ? {} : projection.entitlements
-  const planId: PlanId = expired ? 'free' : projection.effectivePlan
+  const resolved = expired ? 'free' : canonicalPlanId(projection.effectivePlan)
+  const planId: PlanId = isPlanId(resolved) ? resolved : 'free'
   return {
     ...CLOSED_CLOUD_FEATURES,
     ...PLAN_ONLY_FEATURES[planId],

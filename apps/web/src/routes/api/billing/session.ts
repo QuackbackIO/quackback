@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { isSameOriginFormPost } from '@/lib/server/http/same-origin-form'
+import { INCOMING_PAID_PLAN_IDS, parsePaidPlanId } from '@/lib/shared/billing/checkout-path'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 
 export function billingErrorCode(error: unknown): string {
@@ -43,7 +44,7 @@ const actionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('portal') }),
   z.object({
     action: z.literal('checkout'),
-    planId: z.enum(['growth', 'pro', 'scale']),
+    planId: z.enum(INCOMING_PAID_PLAN_IDS),
     billingPeriod: z.enum(['monthly', 'annual']),
     quantity: z.coerce.number().int().positive().optional(),
     // A checked checkbox posts "true"; an unchecked one posts nothing.
@@ -158,11 +159,13 @@ async function createSeatChangeSession(quantity: number) {
 /** Floor seat-billed checkout at live usage so a stale form cannot under-seat.
  *  Workspace-priced plans stay quantity 1. */
 async function createCheckoutSession(input: {
-  planId: 'growth' | 'pro' | 'scale'
+  planId: (typeof INCOMING_PAID_PLAN_IDS)[number]
   billingPeriod: 'monthly' | 'annual'
   quantity?: number
   brandingRemoval?: 'true'
 }) {
+  const planId = parsePaidPlanId(input.planId)
+  if (!planId) throw new Error('invalid')
   const { countSeatUsage } = await import('@/lib/server/domains/principals/seat-usage')
   const { createHostedBillingSession, fetchBillingCatalogue } =
     await import('@/lib/server/control-plane/client')
@@ -171,12 +174,14 @@ async function createCheckoutSession(input: {
       countSeatUsage(tx),
       fetchBillingCatalogue().catch(() => null),
     ])
-    const billedPer = catalogue?.plans.find((plan) => plan.id === input.planId)?.billedPer
+    const billedPer = catalogue?.plans.find(
+      (plan) => parsePaidPlanId(plan.id) === planId
+    )?.billedPer
     const quantity =
       billedPer === 'workspace' ? 1 : Math.max(input.quantity ?? seats.used, seats.used, 1)
     return createHostedBillingSession({
       action: 'checkout',
-      planId: input.planId,
+      planId,
       billingPeriod: input.billingPeriod,
       quantity,
       ...(input.brandingRemoval === 'true' ? { brandingRemoval: true } : {}),

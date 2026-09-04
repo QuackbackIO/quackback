@@ -24,7 +24,10 @@ import {
   ENTITLEMENT_KEYS,
   PLAN_CATALOGUE,
   PLAN_DEFINITIONS,
+  PLAN_ID_ALIASES,
   PLAN_IDS,
+  canonicalPlanId,
+  isPlanId,
   minimumPlanFor,
   type CloudConfig,
   type EntitlementKey,
@@ -83,6 +86,25 @@ describe('the plan ladder', () => {
     expect(
       PLAN_IDS.map((id) => `${PLAN_CATALOGUE[id].article} ${PLAN_CATALOGUE[id].name} plan`)
     ).toEqual(['a Free plan', 'a Pro plan', 'a Business plan', 'an Enterprise plan'])
+  })
+
+  it('maps business/enterprise onto pro/scale without adding catalogue rows', () => {
+    expect(PLAN_ID_ALIASES).toEqual({ business: 'pro', enterprise: 'scale' })
+    expect(canonicalPlanId('business')).toBe('pro')
+    expect(canonicalPlanId('enterprise')).toBe('scale')
+    expect(canonicalPlanId('pro')).toBe('pro')
+    expect(canonicalPlanId('scale')).toBe('scale')
+    expect(isPlanId('business')).toBe(false)
+    expect(isPlanId('enterprise')).toBe(false)
+    expect(PLAN_CATALOGUE[canonicalPlanId('business')]).toEqual(PLAN_CATALOGUE.pro)
+    expect(PLAN_CATALOGUE[canonicalPlanId('enterprise')]).toEqual(PLAN_CATALOGUE.scale)
+    expect(PLAN_CATALOGUE[canonicalPlanId('business')].name).toBe('Business')
+    expect(PLAN_CATALOGUE[canonicalPlanId('enterprise')]).toMatchObject({
+      name: 'Enterprise',
+      article: 'an',
+      rank: PLAN_CATALOGUE.scale.rank,
+      grants: PLAN_CATALOGUE.scale.grants,
+    })
   })
 })
 

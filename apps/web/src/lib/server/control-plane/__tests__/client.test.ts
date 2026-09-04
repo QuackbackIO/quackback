@@ -23,6 +23,8 @@ import {
   reportWorkspaceUsage,
   requestWorkspaceIdentityMutation,
   createHostedBillingSession,
+  normalizeBillingCatalogue,
+  startWorkspaceTrial,
 } from '../client'
 
 beforeEach(() => {
@@ -97,6 +99,71 @@ describe('workspace control-plane credential', () => {
     expect(String(url)).toContain('/api/v1/internal/billing/catalogue')
     expect(init.method).toBe('GET')
     expect(init.body).toBeUndefined()
+  })
+
+  it('normalises business/enterprise catalogue slugs to pro/scale', () => {
+    const normalised = normalizeBillingCatalogue({
+      version: 1,
+      currency: 'usd',
+      annualDiscountMonths: 2,
+      recommendedPlanId: 'business',
+      brandingRemoval: { monthlyCents: 5900, annualCents: 59000 },
+      lastTrialPlanId: 'enterprise',
+      trialedPlanIds: ['business', 'pro'],
+      aiIncludedCentsPerMonth: { business: 3000, enterprise: 10000 },
+      plans: [
+        {
+          id: 'business',
+          name: 'Business',
+          rank: 2,
+          priceMonthlyCents: 7500,
+          priceYearlyCents: 70800,
+          billedPer: 'workspace',
+          bestFor: 'Growing teams',
+          highlights: [],
+          recommended: false,
+        },
+        {
+          id: 'enterprise',
+          name: 'Enterprise',
+          rank: 3,
+          priceMonthlyCents: 12900,
+          priceYearlyCents: 118800,
+          billedPer: 'workspace',
+          bestFor: 'Security',
+          highlights: [],
+          recommended: false,
+        },
+      ],
+    })
+    expect(normalised.recommendedPlanId).toBe('pro')
+    expect(normalised.lastTrialPlanId).toBe('scale')
+    expect(normalised.trialedPlanIds).toEqual(['pro'])
+    expect(normalised.aiIncludedCentsPerMonth).toEqual({ pro: 3000, scale: 10000 })
+    expect(normalised.plans.map((plan) => plan.id)).toEqual(['pro', 'scale'])
+  })
+
+  it('forwards checkout and trial aliases as canonical plan ids', async () => {
+    hoisted.fetch.mockResolvedValue(
+      new Response(JSON.stringify({ url: 'https://billing.example.com/checkout' }), { status: 200 })
+    )
+    await createHostedBillingSession({
+      action: 'checkout',
+      planId: 'enterprise',
+      billingPeriod: 'annual',
+    })
+    const [, checkoutInit] = hoisted.fetch.mock.calls[0] as [URL, RequestInit]
+    expect(JSON.parse(String(checkoutInit.body))).toMatchObject({
+      action: 'checkout',
+      planId: 'scale',
+    })
+
+    hoisted.fetch.mockResolvedValue(
+      new Response(JSON.stringify({ status: 'started' }), { status: 200 })
+    )
+    await startWorkspaceTrial('business')
+    const [, trialInit] = hoisted.fetch.mock.calls[1] as [URL, RequestInit]
+    expect(JSON.parse(String(trialInit.body))).toEqual({ planId: 'pro' })
   })
 
   it('lists owner workspaces over GET without a workspace id', async () => {

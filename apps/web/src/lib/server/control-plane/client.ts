@@ -1,4 +1,5 @@
 import { createHmac } from 'node:crypto'
+import { canonicalPlanId, isPlanId } from '@/lib/server/domains/settings/cloud/cloud.types'
 import {
   getCurrentWorkspace,
   getWorkspaceSecretKey,
@@ -127,7 +128,10 @@ async function requestWorkspaceControlPlane<T>(
 }
 
 export async function fetchBillingCatalogue(): Promise<BillingCatalogue> {
-  return getWorkspaceControlPlane<BillingCatalogue>('/api/v1/internal/billing/catalogue')
+  const catalogue = await getWorkspaceControlPlane<BillingCatalogue>(
+    '/api/v1/internal/billing/catalogue'
+  )
+  return normalizeBillingCatalogue(catalogue)
 }
 
 export async function fetchBillingInvoices(): Promise<CustomerInvoice[]> {
@@ -137,13 +141,16 @@ export async function fetchBillingInvoices(): Promise<CustomerInvoice[]> {
   return Array.isArray(result.invoices) ? result.invoices : []
 }
 
-export type CataloguePlanId = 'free' | 'growth' | 'pro' | 'scale'
+export type CanonicalCataloguePlanId = 'free' | 'growth' | 'pro' | 'scale'
+/** Incoming CP slugs; aliases are normalised to {@link CanonicalCataloguePlanId} on fetch. */
+export type CataloguePlanId = CanonicalCataloguePlanId | 'business' | 'enterprise'
+export type PaidCataloguePlanId = Exclude<CataloguePlanId, 'free'>
 
 export type BillingCatalogue = {
   version: 1
   currency: 'usd'
   annualDiscountMonths: number
-  recommendedPlanId: 'growth' | 'pro' | 'scale'
+  recommendedPlanId: PaidCataloguePlanId
   /** @deprecated unread; older catalogues may still send this. */
   aiOutcomePriceCents?: number
   /** @deprecated unread; older catalogues may still send this. */
@@ -173,8 +180,52 @@ export type BillingCatalogue = {
     recommended: boolean
   }>
   trialDays?: number
-  trialedPlanIds?: Array<'growth' | 'pro' | 'scale'>
-  lastTrialPlanId?: 'growth' | 'pro' | 'scale' | null
+  trialedPlanIds?: PaidCataloguePlanId[]
+  lastTrialPlanId?: PaidCataloguePlanId | null
+}
+
+function canonicalCataloguePlanId(id: string): CataloguePlanId {
+  const canonical = canonicalPlanId(id)
+  return isPlanId(canonical) ? canonical : (id as CataloguePlanId)
+}
+
+function remapPlanKeyedRecord<T>(
+  record: Partial<Record<CataloguePlanId, T>> | undefined
+): Partial<Record<CataloguePlanId, T>> | undefined {
+  if (!record) return record
+  const next: Partial<Record<CataloguePlanId, T>> = {}
+  for (const [key, value] of Object.entries(record)) {
+    next[canonicalCataloguePlanId(key)] = value as T
+  }
+  return next
+}
+
+/** Maps `business`/`enterprise` onto stored `pro`/`scale` without dropping the payload. */
+export function normalizeBillingCatalogue(catalogue: BillingCatalogue): BillingCatalogue {
+  return {
+    ...catalogue,
+    recommendedPlanId: canonicalCataloguePlanId(catalogue.recommendedPlanId) as PaidCataloguePlanId,
+    lastTrialPlanId:
+      catalogue.lastTrialPlanId == null
+        ? catalogue.lastTrialPlanId
+        : (canonicalCataloguePlanId(catalogue.lastTrialPlanId) as PaidCataloguePlanId),
+    trialedPlanIds: catalogue.trialedPlanIds
+      ? [
+          ...new Set(
+            catalogue.trialedPlanIds.map(
+              (id) => canonicalCataloguePlanId(id) as PaidCataloguePlanId
+            )
+          ),
+        ]
+      : undefined,
+    plans: catalogue.plans.map((plan) => ({
+      ...plan,
+      id: canonicalCataloguePlanId(plan.id),
+    })),
+    liteSeatsIncluded: remapPlanKeyedRecord(catalogue.liteSeatsIncluded) as
+      Record<CataloguePlanId, number | null> | undefined,
+    aiIncludedCentsPerMonth: remapPlanKeyedRecord(catalogue.aiIncludedCentsPerMonth),
+  }
 }
 
 export type CustomerInvoice = {
@@ -191,7 +242,7 @@ export type HostedBillingSessionInput =
   | { action: 'portal' }
   | {
       action: 'checkout'
-      planId: 'growth' | 'pro' | 'scale'
+      planId: PaidCataloguePlanId
       billingPeriod: 'monthly' | 'annual'
       quantity?: number
       /** Bundle branding removal into the same subscription and checkout. */
@@ -208,12 +259,19 @@ export type HostedBillingSessionResult = {
   status?: 'downgraded' | 'scheduled' | 'updated'
 }
 
+function canonicalizeSessionInput(input: HostedBillingSessionInput): HostedBillingSessionInput {
+  if (input.action !== 'checkout') return input
+  const planId = canonicalCataloguePlanId(input.planId)
+  return { ...input, planId: planId as PaidCataloguePlanId }
+}
+
 export async function createHostedBillingSession(
   input: HostedBillingSessionInput
 ): Promise<HostedBillingSessionResult> {
+  const payload = canonicalizeSessionInput(input)
   const result = await callWorkspaceControlPlane<{ url?: unknown; status?: unknown }>(
     '/api/v1/internal/billing/session',
-    input
+    payload
   )
   if (typeof result.url === 'string' && result.url.startsWith('https://')) {
     return { url: result.url }
@@ -276,11 +334,11 @@ export async function reportWorkspaceUsage(report: WorkspaceUsageReport): Promis
 }
 
 export async function startWorkspaceTrial(
-  planId: 'growth' | 'pro' | 'scale'
+  planId: PaidCataloguePlanId
 ): Promise<'started' | 'already_started'> {
   const result = await callWorkspaceControlPlane<{ status?: unknown }>(
     '/api/v1/internal/billing/start-trial',
-    { planId }
+    { planId: canonicalCataloguePlanId(planId) }
   )
   if (result.status !== 'started' && result.status !== 'already_started') {
     throw new ControlPlaneUnavailableError()
