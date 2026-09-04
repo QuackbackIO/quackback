@@ -338,6 +338,34 @@ describe('BillingPlansView', () => {
     expect(screen.getByText('$30')).toBeInTheDocument()
   })
 
+  it('shows annual savings for the selected expired-trial plan, not the recommended one', () => {
+    renderView({
+      overview: {
+        ...paidOverview,
+        plan: 'free',
+        planName: 'Free',
+        status: null,
+        trialActive: false,
+        trialEnded: true,
+        trialPlanId: 'pro',
+        trialPlanName: 'Business',
+        trialExpiresAt: '2026-08-18T00:00:00.000Z',
+        canUpgrade: true,
+        canManageBilling: false,
+        renewalAt: null,
+        seats: { used: 3, pending: 0, members: 3, purchased: null },
+      },
+    })
+    expect(screen.getByRole('radio', { name: /Save \$72\/yr/ })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /For small teams getting started/ }))
+    expect(screen.getByRole('radio', { name: /Save \$36\/yr/ })).toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /Save \$72\/yr/ })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /For trying Quackback out/ }))
+    expect(screen.queryByText(/Save \$/)).not.toBeInTheDocument()
+  })
+
   it('opens the subscribe dialog on the selected billing period', () => {
     renderView({
       overview: {

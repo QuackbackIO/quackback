@@ -21,6 +21,12 @@ export async function enforceSeatLimit(opts?: {
   if (limits.maxTeamSeats === null) return
 
   const executor = opts?.executor
+  // Catalogue billedPer is a control-plane round-trip (10s timeout). Resolve
+  // it before FOR UPDATE so CP latency cannot hold the settings-row lock.
+  const billedPer = executor
+    ? await billedPerIfAlreadyAtCap(limits.maxTeamSeats, opts?.convertingInvite, executor)
+    : undefined
+
   if (executor) {
     const [row] = await executor.select({ id: settings.id }).from(settings).limit(1).for('update')
     if (!row) throw new Error('Workspace is not set up yet')
@@ -34,23 +40,41 @@ export async function enforceSeatLimit(opts?: {
     limit: 'maxTeamSeats',
     current,
     max: limits.maxTeamSeats,
-    message: await seatCapMessage(limits.maxTeamSeats),
+    message: seatCapMessage(
+      limits.maxTeamSeats,
+      billedPer ?? (executor ? undefined : await resolveSeatBilledPer())
+    ),
   })
 }
 
-async function seatCapMessage(limit: number): Promise<string> {
+async function billedPerIfAlreadyAtCap(
+  limit: number,
+  convertingInvite: boolean | undefined,
+  executor: SeatExecutor
+): Promise<'seat' | 'workspace' | undefined> {
+  const peek = await countSeatUsage(executor)
+  const current = convertingInvite ? peek.members : peek.used
+  if (current < limit) return undefined
+  return resolveSeatBilledPer()
+}
+
+async function resolveSeatBilledPer(): Promise<'seat' | 'workspace' | undefined> {
   try {
     const { getCloudConfig } = await import('@/lib/server/domains/settings/cloud/cloud.service')
     const { catalogueBilledPer } = await import('@/lib/server/domains/billing/projection-overview')
     const cloud = await getCloudConfig()
     if (cloud.enabled && cloud.plan && cloud.plan !== 'free' && !cloud.trialActive) {
-      const billedPer = await catalogueBilledPer(cloud.plan)
-      if (billedPer === 'seat') {
-        return `All ${limit} seats are in use. Add a seat to invite more.`
-      }
+      return await catalogueBilledPer(cloud.plan)
     }
   } catch {
-    // Fall through to the generic upgrade sentence.
+    // Missing catalogue uses the generic upgrade sentence.
+  }
+  return undefined
+}
+
+function seatCapMessage(limit: number, billedPer: 'seat' | 'workspace' | undefined): string {
+  if (billedPer === 'seat') {
+    return `All ${limit} seats are in use. Add a seat to invite more.`
   }
   return `You've reached your plan's team seats limit (${limit}). Upgrade to add more.`
 }

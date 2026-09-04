@@ -32,10 +32,6 @@ export function TrialExpiredBilling(props: {
   const paidSelected = selected && selected.id !== 'free' ? selected : null
   const checkoutQuantity = Math.max(overview.seats?.used ?? 1, 1)
   const trialName = overview.trialPlanName ?? 'your plan'
-  const savingsPlan =
-    catalogue?.plans.find((plan) => plan.recommended) ??
-    catalogue?.plans.find((plan) => plan.id !== 'free') ??
-    null
 
   return (
     <div className="space-y-6">
@@ -56,7 +52,7 @@ export function TrialExpiredBilling(props: {
             <PeriodToggle
               value={period}
               discountMonths={catalogue?.annualDiscountMonths ?? 2}
-              savingsLabel={annualSavingsLabel(savingsPlan)}
+              savingsLabel={annualSavingsLabel(paidSelected)}
               onChange={setPeriod}
             />
           </div>

@@ -26,6 +26,19 @@ vi.mock('@/lib/server/domains/billing/projection-overview', () => ({
 import { enforceSeatLimit } from '../seat-limit'
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
 import { OSS_TIER_LIMITS } from '@/lib/server/domains/settings/tier-limits.types'
+import type { SeatExecutor } from '../seat-usage'
+
+function lockingExecutor(forUpdate: () => Promise<unknown>): SeatExecutor {
+  return {
+    select: () => ({
+      from: () => ({
+        limit: () => ({
+          for: forUpdate,
+        }),
+      }),
+    }),
+  } as unknown as SeatExecutor
+}
 
 describe('enforceSeatLimit', () => {
   beforeEach(() => {
@@ -110,5 +123,48 @@ describe('enforceSeatLimit', () => {
     await expect(enforceSeatLimit({ convertingInvite: true })).rejects.toBeInstanceOf(
       TierLimitError
     )
+  })
+
+  it('resolves catalogue billedPer before taking the settings-row lock', async () => {
+    const order: string[] = []
+    let releaseCatalogue: () => void = () => {}
+    const catalogueGate = new Promise<void>((resolve) => {
+      releaseCatalogue = resolve
+    })
+    hoisted.catalogueBilledPer.mockImplementation(async () => {
+      order.push('catalogue')
+      await catalogueGate
+      return 'seat'
+    })
+    hoisted.getCloudConfig.mockResolvedValue({
+      enabled: true,
+      plan: 'pro',
+      trialActive: false,
+    })
+    hoisted.countSeatUsage.mockResolvedValue({ members: 10, pendingInvites: 0, used: 10 })
+    vi.mocked(getTierLimits).mockResolvedValue({ ...OSS_TIER_LIMITS, maxTeamSeats: 10 })
+
+    const forUpdate = vi.fn(async () => {
+      order.push('lock')
+      return [{ id: 'set_1' }]
+    })
+
+    const pending = enforceSeatLimit({ executor: lockingExecutor(forUpdate) })
+    await vi.waitFor(() => expect(hoisted.catalogueBilledPer).toHaveBeenCalledOnce())
+    expect(forUpdate).not.toHaveBeenCalled()
+    releaseCatalogue()
+    await expect(pending).rejects.toThrow('All 10 seats are in use. Add a seat to invite more.')
+    expect(order).toEqual(['catalogue', 'lock'])
+  })
+
+  it('does not fetch the catalogue when the locked path is under the cap', async () => {
+    vi.mocked(getTierLimits).mockResolvedValue({ ...OSS_TIER_LIMITS, maxTeamSeats: 10 })
+    hoisted.countSeatUsage.mockResolvedValue({ members: 4, pendingInvites: 1, used: 5 })
+    const forUpdate = vi.fn(async () => [{ id: 'set_1' }])
+    await expect(
+      enforceSeatLimit({ executor: lockingExecutor(forUpdate) })
+    ).resolves.toBeUndefined()
+    expect(hoisted.catalogueBilledPer).not.toHaveBeenCalled()
+    expect(forUpdate).toHaveBeenCalledOnce()
   })
 })
