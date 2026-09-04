@@ -437,7 +437,9 @@ function UsageCard(props: {
   if (!hasAi && !hasEmails && !hasApi && inventory.length === 0) return null
 
   const reset = nextMonthResetLabel()
-  const meterUsed = ai ? Math.min(ai.usedCents, ai.includedCents) : 0
+  const aiCap = ai ? (ai.includedCents > 0 ? ai.includedCents : ai.extraCents) : 0
+  const aiUsed = ai ? Math.min(ai.usedCents, aiCap) : 0
+  const aiPercent = aiCap > 0 ? Math.min(100, Math.round((aiUsed / aiCap) * 100)) : 0
   const hasMonthly = hasAi || hasEmails || hasApi
 
   return (
@@ -452,15 +454,15 @@ function UsageCard(props: {
         {hasAi && ai ? (
           <div className="px-6 py-4">
             <UsageMeter
-              label="AI usage"
+              label="Quinn usage"
               description={
                 ai.extraCents > 0
-                  ? `${formatUsd(ai.includedCents, 0)}/mo included, used first. ${formatUsd(ai.extraCents, 2)} extra credit.`
-                  : `${formatUsd(ai.includedCents, 0)}/mo included, used first.`
+                  ? 'Included usage is used first, then extra credit.'
+                  : 'Included usage this period.'
               }
-              valueText={`${formatUsd(meterUsed, 2)} of ${formatUsd(ai.includedCents, 2)}`}
-              used={meterUsed}
-              limit={ai.includedCents}
+              valueText={`${aiPercent}% used this period`}
+              used={aiUsed}
+              limit={aiCap}
               action={
                 canTopUp && hasTopUpPackPrice(props.catalogue?.aiTopUpPackCents) ? (
                   <Button
