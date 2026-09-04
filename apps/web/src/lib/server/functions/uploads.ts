@@ -218,6 +218,16 @@ export const getHeaderLogoUploadUrlFn = createServerFn({ method: 'POST' })
   })
 
 /**
+ * Get a presigned URL for uploading a custom OIDC identity provider's logo.
+ */
+export const getIdentityProviderLogoUploadUrlFn = createServerFn({ method: 'POST' })
+  .validator(imageUploadSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
+    return presignedImageUpload(data, { label: 'idp logo', prefix: 'idp-logos' })
+  })
+
+/**
  * Get a presigned URL for uploading the widget Home hero image.
  */
 export const getWidgetHeroUploadUrlFn = createServerFn({ method: 'POST' })

@@ -116,6 +116,8 @@ function makeProvider(over: Partial<IdentityProvider>): IdentityProvider {
     autoProvisionRole: 'user',
     claimMapping: null,
     showButton: false,
+    logoKey: null,
+    logoUrl: null,
     detailsChangedAt: null,
     lastSuccessfulTestAt: null,
     createdAt: '2026-05-01T00:00:00.000Z',

@@ -797,10 +797,15 @@ export function PortalAuthFormInline({
             <div className="space-y-3">
               {enabledProviders.map((provider) => {
                 const IconComp = AUTH_PROVIDER_ICON_MAP[provider.id]
+                const icon = provider.logoUrl ? (
+                  <img src={provider.logoUrl} alt="" className="h-5 w-5 rounded object-contain" />
+                ) : IconComp ? (
+                  <IconComp className="h-5 w-5" />
+                ) : null
                 return (
                   <OAuthButton
                     key={provider.id}
-                    icon={IconComp ? <IconComp className="h-5 w-5" /> : null}
+                    icon={icon}
                     label={provider.name}
                     mode={mode}
                     loading={loadingAction === provider.id}

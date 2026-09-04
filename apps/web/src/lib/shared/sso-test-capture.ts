@@ -13,7 +13,8 @@ export interface SsoTestCapture {
     id: string
     email?: string
     name?: string
-    sources: Partial<Record<'id' | 'email' | 'name', string>>
+    image?: string
+    sources: Partial<Record<'id' | 'email' | 'name' | 'image', string>>
   }
   claims: Record<string, JsonValue>
 }
@@ -40,6 +41,7 @@ export function parseSsoTestCapture(value: unknown): SsoTestCapture | null {
       id: value.identity.id,
       ...(typeof value.identity.email === 'string' ? { email: value.identity.email } : {}),
       ...(typeof value.identity.name === 'string' ? { name: value.identity.name } : {}),
+      ...(typeof value.identity.image === 'string' ? { image: value.identity.image } : {}),
       sources,
     },
     claims: value.claims as Record<string, JsonValue>,

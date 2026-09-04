@@ -341,6 +341,59 @@ export const deleteIdentityProviderFn = createServerFn({ method: 'POST' })
     )
   })
 
+const saveIdentityProviderLogoInput = z.object({
+  providerId: identityProviderId,
+  key: z.string().min(1).max(512),
+})
+
+/**
+ * Persist the S3 key of a freshly-uploaded provider logo. The client PUTs the
+ * image to the presigned URL from `getIdentityProviderLogoUploadUrlFn` first,
+ * then calls this with the returned key. The service deletes any prior object.
+ */
+export const saveIdentityProviderLogoFn = createServerFn({ method: 'POST' })
+  .validator(saveIdentityProviderLogoInput)
+  .handler(async ({ data }) => {
+    const auth = await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
+    return withAuditEvent(
+      {
+        event: 'idp.updated',
+        actor: actorFromAuth(auth),
+        target: { type: 'identity_provider', id: data.providerId },
+        after: { logo: 'set' },
+        headers: getRequestHeaders(),
+      },
+      async () => {
+        const { saveIdentityProviderLogoKey } =
+          await import('@/lib/server/domains/settings/identity-provider-logo.service')
+        return saveIdentityProviderLogoKey(data.providerId, data.key)
+      }
+    )
+  })
+
+const deleteIdentityProviderLogoInput = z.object({ providerId: identityProviderId })
+
+/** Remove a provider's logo (S3 object + key). */
+export const deleteIdentityProviderLogoFn = createServerFn({ method: 'POST' })
+  .validator(deleteIdentityProviderLogoInput)
+  .handler(async ({ data }) => {
+    const auth = await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
+    return withAuditEvent(
+      {
+        event: 'idp.updated',
+        actor: actorFromAuth(auth),
+        target: { type: 'identity_provider', id: data.providerId },
+        after: { logo: 'cleared' },
+        headers: getRequestHeaders(),
+      },
+      async () => {
+        const { deleteIdentityProviderLogoKey } =
+          await import('@/lib/server/domains/settings/identity-provider-logo.service')
+        return deleteIdentityProviderLogoKey(data.providerId)
+      }
+    )
+  })
+
 const setProviderCredentialsInput = z.object({
   id: identityProviderId,
   // Trim BEFORE min(1) so a whitespace-only secret is rejected, not saved as an

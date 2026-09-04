@@ -12,6 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import { DomainsSection } from './domains-section'
+import { IdentityProviderLogoUploader } from './identity-provider-logo-uploader'
 import { useProviderSave } from './use-provider-save'
 
 export function SignInCard({ provider }: { provider: IdentityProvider }) {
@@ -30,6 +31,13 @@ export function SignInCard({ provider }: { provider: IdentityProvider }) {
         contentClassName="space-y-6"
       >
         <DomainsSection provider={provider} disabled={saving} />
+
+        {/* Logo — self-persisting (its own upload + save round-trip), so it sits
+        outside this card's "Save sign-in" like DomainsSection does. */}
+        <div className="space-y-2 border-t border-border/40 pt-5">
+          <Label className="font-medium">Logo</Label>
+          <IdentityProviderLogoUploader provider={provider} />
+        </div>
 
         {/* Visibility — the single switch for whether this provider shows a
         public sign-in button. Off hides it: a routed provider (verified

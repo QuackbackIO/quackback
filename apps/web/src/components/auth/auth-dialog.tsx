@@ -11,12 +11,13 @@ import { headerForStep, type FormContext } from './auth-step-header'
 import { useAuthPopover } from './auth-popover-context'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { signOut } from '@/lib/client/auth-client'
+import type { OidcSignInButton } from '@/lib/shared/oidc-sign-in-button'
 
 export interface OrgAuthConfig {
   found: boolean
   oauth: Record<string, boolean | undefined>
   openSignup?: boolean
-  oidcProviders?: { id: string; name: string }[]
+  oidcProviders?: OidcSignInButton[]
   /** All registered auth provider ids — lets the form show the email input for
    *  a routed-only IdP that renders no public button. */
   registeredAuthProviders?: string[]

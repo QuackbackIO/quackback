@@ -46,7 +46,8 @@ import {
 } from './signin-device-tracker'
 import { isSyntheticAnonEmail } from '@/lib/shared/anonymous-email'
 import { decodeSsoClaims } from './sso-claims-decode'
-import { takeResolvedClaims } from './resolved-claims-stash'
+import { peekResolvedClaims, takeResolvedClaims } from './resolved-claims-stash'
+import { pickAvatarUrl } from './resolve-identity'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'auth-hooks' })
@@ -753,6 +754,127 @@ async function readSsoClaims(
   return decodeSsoClaims(row?.idToken)
 }
 
+type IdpRows = Awaited<
+  ReturnType<
+    typeof import('@/lib/server/domains/settings/identity-providers.service').listIdentityProviders
+  >
+>
+
+/**
+ * Resolve a provider's userinfo endpoint: the manual URL if set, else the
+ * `userinfo_endpoint` from its discovery document. SSRF-guarded, best-effort.
+ */
+async function resolveUserInfoEndpoint(
+  provider: IdpRows[number] | undefined
+): Promise<string | null> {
+  if (!provider) return null
+  if (provider.userInfoUrl) return provider.userInfoUrl
+  if (!provider.discoveryUrl) return null
+  try {
+    const { safeFetch } = await import('@/lib/server/content/ssrf-guard')
+    const res = await safeFetch(provider.discoveryUrl, { timeoutMs: 5000 })
+    if (!res.ok) return null
+    const doc: unknown = await res.json()
+    const endpoint = (doc as { userinfo_endpoint?: unknown } | null)?.userinfo_endpoint
+    return typeof endpoint === 'string' ? endpoint : null
+  } catch {
+    return null
+  }
+}
+
+/** Fetch a userinfo document with the bearer token. Best-effort. */
+async function fetchUserInfoDoc(
+  url: string,
+  accessToken: string
+): Promise<Record<string, unknown> | null> {
+  try {
+    const { safeFetch } = await import('@/lib/server/content/ssrf-guard')
+    const res = await safeFetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      timeoutMs: 5000,
+    })
+    if (!res.ok) return null
+    const body: unknown = await res.json()
+    return body !== null && typeof body === 'object' ? (body as Record<string, unknown>) : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Fill `user.image` from the SSO `picture` claim — but only when the account
+ * has no avatar yet.
+ *
+ * Better-Auth's genericOAuth writes `image` only when it CREATES the user, and
+ * we deliberately leave `overrideUserInfo` off ("set once, never clobber a
+ * picture the user chose in Quackback"). Neither covers the common case: an
+ * account that already existed before the workspace's IdP started returning a
+ * `picture`, or before this feature shipped. This closes that gap without ever
+ * overwriting a non-empty avatar.
+ *
+ * `picture` is sourced, in order:
+ *   1. the request's resolved claims (peeked, not consumed, so role
+ *      provisioning still takes its copy) — the free path;
+ *   2. the stored ID token;
+ *   3. a live userinfo call with the just-issued access token — the
+ *      deterministic path for an IdP that exposes `picture` only at userinfo,
+ *      where (1) can miss if role provisioning drained the stash first.
+ *
+ * Runs BEFORE `handleAutoProvisionAfter` so the peek in (1) sees the stash.
+ */
+export async function handleAvatarBackfillAfter(
+  ctx: {
+    path?: string
+    params?: Record<string, unknown>
+    context?: { newSession?: { user?: { id?: string } } | null }
+  },
+  registeredOidcIds: Set<string>,
+  providers: IdpRows
+): Promise<void> {
+  if (ctx.path !== '/oauth2/callback/:providerId') return
+  const providerId = ctx.params?.providerId
+  if (typeof providerId !== 'string' || !isRegisteredOidcProvider(providerId, registeredOidcIds))
+    return
+  const userId = ctx.context?.newSession?.user?.id
+  if (typeof userId !== 'string' || userId.length === 0) return
+  type UserId = `user_${string}`
+  const userIdTyped = userId as UserId
+
+  const { db, user: userTable, account, and, eq, desc } = await import('@/lib/server/db')
+
+  const owner = await db.query.user.findFirst({
+    where: eq(userTable.id, userIdTyped),
+    columns: { image: true },
+  })
+  // Only fill an empty avatar — never replace one the user set.
+  if (!owner || (typeof owner.image === 'string' && owner.image.trim() !== '')) return
+
+  const row = await db.query.account.findFirst({
+    where: and(eq(account.userId, userIdTyped), eq(account.providerId, providerId)),
+    columns: { idToken: true, accountId: true, accessToken: true },
+    orderBy: desc(account.createdAt),
+  })
+
+  const stashed = row?.accountId ? peekResolvedClaims(providerId, row.accountId) : null
+  let image = pickAvatarUrl(stashed ?? decodeSsoClaims(row?.idToken))
+
+  // Last resort: ask userinfo directly. `picture` frequently lives only there,
+  // and the stash can be gone by now.
+  if (!image && row?.accessToken) {
+    const endpoint = await resolveUserInfoEndpoint(
+      providers.find((p) => p.registrationId === providerId)
+    )
+    if (endpoint) {
+      image = pickAvatarUrl((await fetchUserInfoDoc(endpoint, row.accessToken)) ?? {})
+    }
+  }
+
+  if (!image) return
+
+  await db.update(userTable).set({ image }).where(eq(userTable.id, userIdTyped))
+  log.info({ user_id: userId, provider_id: providerId }, 'backfilled sso avatar')
+}
+
 /**
  * Layer C — post-session compensating cleanup for OAuth callbacks.
  *
@@ -1340,6 +1462,13 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
   const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
   const workspace = await getWorkspaceSettings()
 
+  // Before auto-provision: this one only PEEKS the resolved-claims stash, and
+  // role provisioning (below) TAKES it — so the avatar has to look first.
+  await handleAvatarBackfillAfter(
+    ctx as Parameters<typeof handleAvatarBackfillAfter>[0],
+    registeredOidcIds,
+    providers
+  )
   await handleAutoProvisionAfter(
     ctx as Parameters<typeof handleAutoProvisionAfter>[0],
     providers,

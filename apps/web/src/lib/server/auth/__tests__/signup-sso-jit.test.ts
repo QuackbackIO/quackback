@@ -102,6 +102,8 @@ function makeProvider(overrides: Partial<IdentityProvider> = {}): IdentityProvid
     autoProvisionRole: 'member',
     claimMapping: null,
     showButton: false,
+    logoKey: null,
+    logoUrl: null,
     detailsChangedAt: null,
     lastSuccessfulTestAt: null,
     lastTestCapture: null,

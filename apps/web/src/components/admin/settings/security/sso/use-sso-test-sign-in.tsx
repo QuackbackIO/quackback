@@ -28,7 +28,12 @@ import {
   type ReactNode,
 } from 'react'
 import { useServerFn } from '@tanstack/react-start'
-import { ArrowPathIcon, CheckCircleIcon, ExclamationTriangleIcon } from '@heroicons/react/24/solid'
+import {
+  ArrowPathIcon,
+  CheckCircleIcon,
+  ExclamationTriangleIcon,
+  MinusCircleIcon,
+} from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -507,12 +512,14 @@ function StepList({ steps }: { steps: WireResult['steps'] }) {
     <ul className="space-y-1 text-xs">
       {steps.map((s, i) => (
         <li key={i} className="flex items-start gap-2">
-          {s.ok ? (
+          {s.severity === 'info' ? (
+            <MinusCircleIcon className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+          ) : s.ok ? (
             <CheckCircleIcon className="h-3.5 w-3.5 text-green-600 mt-0.5 shrink-0" />
           ) : (
             <ExclamationTriangleIcon className="h-3.5 w-3.5 text-destructive mt-0.5 shrink-0" />
           )}
-          <span>
+          <span className={s.severity === 'info' ? 'text-muted-foreground' : undefined}>
             <span className="font-medium">{s.label}</span>
             {s.detail && <span className="text-muted-foreground"> — {s.detail}</span>}
           </span>
