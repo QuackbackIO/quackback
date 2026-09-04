@@ -248,9 +248,7 @@ export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).
       countSeatUsage(),
       getCloudConfig(),
     ])
-    const { catalogueBilledPer } = await import('@/lib/server/domains/billing/projection-overview')
-    const billedPer = await catalogueBilledPer(cloud.plan)
-    const addSeatAvailable =
+    const addSeatEligible =
       cloud.enabled &&
       cloud.canManageBilling &&
       auth.permissions.includes(PERMISSIONS.BILLING_MANAGE) &&
@@ -258,7 +256,14 @@ export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).
       cloud.plan !== 'free' &&
       !cloud.trialActive &&
       limits.maxTeamSeats != null &&
-      billedPer === 'seat'
+      seats.used >= limits.maxTeamSeats
+    let billedPer: 'seat' | 'workspace' | undefined
+    if (addSeatEligible) {
+      const { catalogueBilledPer } =
+        await import('@/lib/server/domains/billing/projection-overview')
+      billedPer = await catalogueBilledPer(cloud.plan)
+    }
+    const addSeatAvailable = addSeatEligible && billedPer === 'seat'
     const seatUsage = {
       used: seats.used,
       members: seats.members,
