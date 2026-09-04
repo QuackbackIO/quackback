@@ -5,7 +5,7 @@ describe('freeDowngradeIssues', () => {
   it('is empty when usage fits Free', () => {
     expect(
       freeDowngradeIssues({
-        maxBoards: 2,
+        maxBoards: 1,
         maxPosts: 10,
         maxTeamSeats: 1,
         maxStatusComponents: 1,
@@ -15,12 +15,12 @@ describe('freeDowngradeIssues', () => {
     ).toEqual([])
   })
 
-  it('asks to remove the extra boards, matching the Free cap of 2', () => {
-    const issues = freeDowngradeIssues({ maxBoards: 3 })
+  it('asks to remove the extra boards, matching the Free cap of 1', () => {
+    const issues = freeDowngradeIssues({ maxBoards: 2 })
     expect(issues).toEqual([
       {
         key: 'maxBoards',
-        message: 'You have 3 boards',
+        message: 'You have 2 boards',
         actionLabel: 'Remove 1 board',
         href: '/admin/settings/boards',
       },

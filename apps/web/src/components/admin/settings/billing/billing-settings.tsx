@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
-import { ArrowTopRightOnSquareIcon, CheckIcon } from '@heroicons/react/24/solid'
+import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/solid'
 import type { BillingProjectionOverview } from '@/lib/server/domains/billing/projection-overview'
 import type { BillingCatalogue, CustomerInvoice } from '@/lib/server/control-plane/client'
 import { billingQueries } from '@/lib/client/queries/billing'
@@ -384,7 +384,7 @@ function SeatsBlock(props: {
   )
 }
 
-/** Seats live on the current-plan card; AI tokens are the dollar AI meter. */
+/** Seats live on the current-plan card; Quinn tokens are the usage meter. */
 const USAGE_CARD_SKIP = new Set(['maxTeamSeats', 'aiTokensPerMonth'])
 
 function usageMeterLabel(line: { key: string; label: string }): string {
@@ -627,6 +627,14 @@ function PlanCard(props: {
             ) : null}
           </div>
           <p className="mt-1 text-[13px] leading-snug text-muted-foreground">{plan.bestFor}</p>
+          <a
+            href="https://quackback.io/pricing"
+            target="_blank"
+            rel="noreferrer"
+            className="mt-1 inline-flex items-center gap-1 text-[13px] text-primary hover:underline"
+          >
+            View & compare features
+          </a>
         </div>
         <p className="shrink-0 text-right">
           <span className="text-lg font-semibold tracking-tight tabular-nums">
@@ -640,14 +648,6 @@ function PlanCard(props: {
           {isAnnual ? `${formatUsd(plan.priceYearlyCents, 0)} billed yearly` : 'billed monthly'}
         </p>
       )}
-      <ul className="mt-4 flex-1 space-y-2">
-        {plan.highlights.map((line) => (
-          <li key={line} className="flex items-start gap-2 text-[13px] leading-snug">
-            <CheckIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
-            <span>{line}</span>
-          </li>
-        ))}
-      </ul>
       <div className="mt-5">
         <PlanActionButton
           action={action}

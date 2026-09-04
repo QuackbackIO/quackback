@@ -2,7 +2,7 @@ import type { PlanUsageLine } from './plan-usage'
 
 /** Numeric Free caps. Must match CP `FREE_TIER_LIMITS`. */
 export const FREE_PLAN_CAPS = {
-  maxBoards: 2,
+  maxBoards: 1,
   maxPosts: 50,
   maxTeamSeats: 1,
   maxStatusComponents: 3,

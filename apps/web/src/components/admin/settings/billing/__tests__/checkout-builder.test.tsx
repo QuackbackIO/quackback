@@ -125,7 +125,7 @@ describe('CheckoutBuilder', () => {
     expect(screen.getByRole('radio', { name: /Yearly/ })).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByRole('radio', { name: /Save \$118\/yr/ })).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: /^Business/ })).toHaveAttribute('aria-checked', 'true')
-    expect(screen.getByText('Workflows & SLAs')).toBeInTheDocument()
+    expect(screen.getAllByText('View & compare features').length).toBeGreaterThan(0)
 
     const summary = screen.getByRole('complementary')
     expect(within(summary).getByText('Business plan')).toBeInTheDocument()
