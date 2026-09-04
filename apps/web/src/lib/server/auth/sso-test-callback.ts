@@ -49,6 +49,11 @@ export interface SsoTestCallbackHandled {
  * persists the wire-safe diagnostic for the polling fallback, and
  * returns the testId + diagnostic so the caller can render the popup
  * HTML.
+ *
+ * Isolation invariant: this path never writes `user.metadata`. The auth
+ * catch-all intercepts the test callback before Better-Auth, so
+ * `hooksAfter` (and `applyClaimAttributesAfter`) never run. A test
+ * sign-in must not copy claims onto the admin's person attributes.
  */
 export async function handleSsoTestCallback(
   input: SsoTestCallbackInput

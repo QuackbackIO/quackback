@@ -72,6 +72,144 @@ describe('resolveIdentity — the fast path', () => {
     expect(fetchUserInfo).toHaveBeenCalledTimes(1)
   })
 
+  it('does not fetch userinfo when requiredClaimPaths are already in a complete ID token', async () => {
+    const fetchUserInfo = vi.fn(async () => ({ department: 'from-userinfo' }))
+    const result = await resolveIdentity({
+      tokens: WORLD_A.tokens,
+      fetchUserInfo,
+      requiredClaimPaths: ['email'],
+    })
+    expect(result.ok).toBe(true)
+    expect(fetchUserInfo).not.toHaveBeenCalled()
+  })
+
+  it('fetches userinfo when a required path is absent from a complete ID token', async () => {
+    const fetchUserInfo = vi.fn(async () => ({
+      sub: WORLD_A.expect.id,
+      email: 'a@example.com',
+      name: 'World A',
+      department: 'Engineering',
+    }))
+    const result = await resolveIdentity({
+      tokens: WORLD_A.tokens,
+      fetchUserInfo,
+      requiredClaimPaths: ['department'],
+    })
+    expect(fetchUserInfo).toHaveBeenCalledTimes(1)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.identity.claims.department).toBe('Engineering')
+    // Earlier source still wins on overlap.
+    expect(result.identity.email).toBe('a@example.com')
+    expect(result.identity.sources.email).toBe('idToken')
+  })
+
+  it('treats a mapped null or empty string as unresolved and still fetches userinfo', async () => {
+    const fetchUserInfo = vi.fn(async () => ({
+      sub: WORLD_A.expect.id,
+      department: 'Engineering',
+    }))
+    const result = await resolveIdentity({
+      tokens: {
+        idToken: fakeJwt({
+          sub: WORLD_A.expect.id,
+          email: 'a@example.com',
+          name: 'World A',
+          department: '',
+        }),
+      },
+      fetchUserInfo,
+      requiredClaimPaths: ['department'],
+    })
+    expect(fetchUserInfo).toHaveBeenCalledTimes(1)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.identity.claims.department).toBe('Engineering')
+  })
+
+  it('gap-fills a nested required path from userinfo without replacing earlier keys', async () => {
+    const fetchUserInfo = vi.fn(async () => ({
+      sub: WORLD_A.expect.id,
+      org: { costCenter: 'cc-9', department: 'from-userinfo' },
+    }))
+    const result = await resolveIdentity({
+      tokens: {
+        idToken: fakeJwt({
+          sub: WORLD_A.expect.id,
+          email: 'a@example.com',
+          name: 'World A',
+          org: { department: 'from-token' },
+        }),
+      },
+      fetchUserInfo,
+      requiredClaimPaths: ['org.costCenter'],
+    })
+    expect(fetchUserInfo).toHaveBeenCalledTimes(1)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.identity.claims.org).toEqual({ department: 'from-token', costCenter: 'cc-9' })
+  })
+
+  it('refuses a required path that would walk onto a prototype', async () => {
+    const fetchUserInfo = vi.fn(async () => ({
+      sub: WORLD_A.expect.id,
+      __proto__: { polluted: 'yes' },
+      constructor: { prototype: { polluted: 'yes' } },
+    }))
+    const result = await resolveIdentity({
+      tokens: WORLD_A.tokens,
+      fetchUserInfo,
+      requiredClaimPaths: ['__proto__.polluted', 'constructor.prototype.polluted'],
+    })
+    expect(result.ok).toBe(true)
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined()
+    expect(Object.prototype).not.toHaveProperty('polluted')
+  })
+
+  it('does not re-key the account when userinfo was fetched only for a mapped claim', async () => {
+    // Before required paths existed a complete ID token never reached
+    // userinfo, so its subject always keyed the account. Adding a mapping must
+    // not change which account a person lands in.
+    const fetchUserInfo = vi.fn(async () => ({
+      sub: 'someone-else',
+      email: 'other@example.com',
+      name: 'Other',
+      department: 'Engineering',
+    }))
+    const result = await resolveIdentity({
+      tokens: WORLD_A.tokens,
+      fetchUserInfo,
+      requiredClaimPaths: ['department'],
+    })
+    expect(fetchUserInfo).toHaveBeenCalledTimes(1)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.identity.id).toBe(WORLD_A.expect.id)
+    expect(result.identity.email).toBe('a@example.com')
+    expect(result.identity.sources.id).toBe('idToken')
+    expect(result.identity.warnings).toContain('subject_mismatch')
+    // The mismatched response is discarded wholesale (OIDC Core 5.3.2), so
+    // the mapped claim is NOT taken from it either.
+    expect(result.identity.claims.department).toBeUndefined()
+  })
+
+  it('exhaustive fetches every source even when identity is complete', async () => {
+    const fetchUserInfo = vi.fn(async () => ({
+      sub: WORLD_A.expect.id,
+      department: 'Engineering',
+    }))
+    const result = await resolveIdentity({
+      tokens: WORLD_A.tokens,
+      fetchUserInfo,
+      exhaustive: true,
+    })
+    expect(fetchUserInfo).toHaveBeenCalledTimes(1)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.identity.claims.department).toBe('Engineering')
+    expect(result.identity.email).toBe('a@example.com')
+  })
+
   it('with wantImage, keeps going to userinfo for a `picture` the ID token lacks', async () => {
     // The reported bug: id + email + name are all in the ID token, so the fast
     // path used to stop before userinfo — where this provider's only `picture`
@@ -91,6 +229,27 @@ describe('resolveIdentity — the fast path', () => {
     expect(result.identity.image).toBe('https://cdn.example.com/x.png')
     expect(result.identity.sources.image).toBe('userinfo')
     expect(result.identity.claims.picture).toBe('https://cdn.example.com/x.png')
+  })
+
+  it('with wantImage, a mismatched userinfo subject is discarded rather than re-keying', async () => {
+    // Same guard as for required claim paths: the avatar fetch happens past a
+    // complete identity, so a different `sub` there must not swap accounts.
+    const fetchUserInfo = vi.fn(async () => ({
+      sub: 'someone-else',
+      email: 'other@example.com',
+      picture: 'https://cdn.example.com/other.png',
+    }))
+    const result = await resolveIdentity({
+      tokens: { idToken: fakeJwt({ sub: 'x', email: 'e@x.com', name: 'N' }) },
+      fetchUserInfo,
+      wantImage: true,
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.identity.id).toBe('x')
+    expect(result.identity.email).toBe('e@x.com')
+    expect(result.identity.image).toBeUndefined()
+    expect(result.identity.warnings).toContain('subject_mismatch')
   })
 
   it('with wantImage, still short-circuits once the picture is in the ID token', async () => {

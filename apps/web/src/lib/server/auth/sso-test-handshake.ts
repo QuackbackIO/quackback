@@ -410,6 +410,7 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
   const resolution = await resolveIdentity({
     tokens: { idToken: tokens.id_token, accessToken: tokens.access_token },
     mapping: input.identityMapping,
+    exhaustive: true,
     // Mirror production, which now resolves the avatar from `picture`.
     wantImage: true,
     fetchUserInfo: async () => {
