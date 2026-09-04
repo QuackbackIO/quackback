@@ -12,6 +12,7 @@ export function billingErrorCode(error: unknown): string {
   if (message === 'seats_below_usage') return 'seats_below_usage'
   if (message === 'seat_cap_exceeded') return 'seat_cap_exceeded'
   if (message === 'over_free_limits') return 'over_free_limits'
+  if (message === 'over_plan_limits') return 'over_plan_limits'
   if (message === 'Authentication required') return 'unauthorized'
   if (message === 'Access denied: Not a team member') return 'not_teammate'
   if (message.startsWith('Access denied:')) return 'forbidden'
@@ -98,8 +99,15 @@ export const Route = createFileRoute('/api/billing/session')({
             return billingFormErrorResponse(null, 'unavailable')
           }
           if (parsed.data.action === 'downgrade') {
-            const { assertFitsFreePlan } = await import('@/lib/server/domains/billing/usage-counts')
-            await assertFitsFreePlan()
+            const { assertFitsPlan } = await import('@/lib/server/domains/billing/usage-counts')
+            await assertFitsPlan(parsed.data.planId)
+          }
+          if (parsed.data.action === 'checkout' && cloud.plan) {
+            const { isPlanDowngrade } = await import('@/lib/shared/billing/plan-action')
+            if (isPlanDowngrade(cloud.plan, parsed.data.planId)) {
+              const { assertFitsPlan } = await import('@/lib/server/domains/billing/usage-counts')
+              await assertFitsPlan(parsed.data.planId)
+            }
           }
           const { createHostedBillingSession } = await import('@/lib/server/control-plane/client')
           const session =
@@ -108,6 +116,11 @@ export const Route = createFileRoute('/api/billing/session')({
               : parsed.data.action === 'checkout'
                 ? await createCheckoutSession(parsed.data)
                 : await createHostedBillingSession(parsed.data)
+          if (parsed.data.action === 'downgrade' || parsed.data.action === 'checkout') {
+            const { clearPendingDowngrade } =
+              await import('@/lib/server/domains/billing/pending-downgrade')
+            await clearPendingDowngrade()
+          }
           const flashSuccess =
             parsed.data.action === 'checkout' || parsed.data.action === 'branding'
           const location =

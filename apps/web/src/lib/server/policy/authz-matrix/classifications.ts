@@ -241,6 +241,9 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/teammate-preferences.ts::setMyLanguagePreferenceFn': END_USER(
     'teammate sets their own language preference'
   ),
+  'lib/server/functions/billing.ts::shouldLockAdminToBillingFn': END_USER(
+    'admin layout lock: any teammate may read it; only billing.manage is redirected'
+  ),
 
   // MCP transport entry: a valid key authenticates; per-tool scopes authorize
   // (see MCP_TOOLS). Not a permission gate on its own.

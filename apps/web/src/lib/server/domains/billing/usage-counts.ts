@@ -1,6 +1,6 @@
 /**
  * Current-usage counters for the plan's finite quotas, keyed by tier-limit
- * name so they line up with `getTierLimits()` and `freeDowngradeIssues()`.
+ * name so they line up with `getTierLimits()` and `planDowngradeIssues()`.
  *
  * Server-only: this talks to the database directly. It deliberately lives
  * outside `lib/server/functions/billing.ts` — anything declared at module
@@ -26,7 +26,12 @@ import { aiTokensThisMonth } from '@/lib/server/domains/ai/usage-counter'
 import { countSeatUsage } from '@/lib/server/domains/principals/seat-usage'
 import { emailsSentThisMonth } from '@/lib/server/email/email-budget'
 import { apiRequestsThisMonth } from '@/lib/server/domains/api/monthly-usage'
-import { freeDowngradeIssues } from '@/lib/shared/billing/free-downgrade'
+import { planDowngradeIssues } from '@/lib/shared/billing/plan-downgrade'
+import {
+  canonicalPlanId,
+  isPlanId,
+  type PlanId,
+} from '@/lib/server/domains/settings/cloud/cloud.types'
 
 export async function loadUsageCounts(): Promise<Record<string, number>> {
   const [
@@ -75,8 +80,21 @@ export async function loadUsageCounts(): Promise<Record<string, number>> {
   }
 }
 
+/** Throws when current usage would not fit `planId`'s numeric caps. */
+export async function assertFitsPlan(planId: string): Promise<void> {
+  const id = parseTargetPlanId(planId)
+  if (!id) throw new Error('invalid')
+  const used = await loadUsageCounts()
+  if (planDowngradeIssues(used, id).length === 0) return
+  throw new Error(id === 'free' ? 'over_free_limits' : 'over_plan_limits')
+}
+
 /** Throws `over_free_limits` when current usage would not fit the free plan. */
 export async function assertFitsFreePlan(): Promise<void> {
-  const used = await loadUsageCounts()
-  if (freeDowngradeIssues(used).length > 0) throw new Error('over_free_limits')
+  await assertFitsPlan('free')
+}
+
+export function parseTargetPlanId(value: string): PlanId | null {
+  const planId = canonicalPlanId(value)
+  return isPlanId(planId) ? planId : null
 }

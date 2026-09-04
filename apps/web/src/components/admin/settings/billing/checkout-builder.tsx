@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowTopRightOnSquareIcon, CheckIcon } from '@heroicons/react/24/solid'
+import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/solid'
 import type { BillingProjectionOverview } from '@/lib/server/domains/billing/projection-overview'
 import type { BillingCatalogue } from '@/lib/server/control-plane/client'
 import { Badge } from '@/components/ui/badge'
@@ -22,7 +22,7 @@ import {
   type BillingPeriod,
 } from '@/lib/shared/billing/checkout-path'
 import { QuantityStepper } from './quantity-stepper'
-import { FreeDowngradeDialog } from './free-downgrade-dialog'
+import { FreeDowngradeDialog, PlanDowngradeDialog } from './free-downgrade-dialog'
 
 type CataloguePlan = BillingCatalogue['plans'][number]
 
@@ -43,6 +43,7 @@ export type CheckoutSelectionChange = Partial<{
 }>
 
 const PLANS_PATH = '/admin/settings/billing'
+const COMPARE_FEATURES_HREF = 'https://quackback.io/pricing'
 
 /**
  * The plan configurator: billing cycle, plan, seats and add-ons on the left,
@@ -265,6 +266,16 @@ function PlanRow(props: {
             ) : null}
           </div>
           <p className="mt-1 text-[13px] text-muted-foreground">{plan.bestFor}</p>
+          <a
+            href={COMPARE_FEATURES_HREF}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-1 inline-flex items-center gap-1 text-[13px] text-primary hover:underline"
+            onClick={(event) => event.stopPropagation()}
+          >
+            View & compare features
+            <ArrowTopRightOnSquareIcon className="size-3.5" />
+          </a>
         </div>
         <p className="shrink-0 text-right">
           <span className="text-lg font-semibold tracking-tight tabular-nums">
@@ -276,16 +287,6 @@ function PlanRow(props: {
           </span>
         </p>
       </div>
-      {props.selected ? (
-        <ul className="mt-3 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
-          {plan.highlights.map((line) => (
-            <li key={line} className="flex items-start gap-2 text-[13px] leading-snug">
-              <CheckIcon className="mt-0.5 size-3.5 shrink-0 text-primary" />
-              <span>{line}</span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
     </div>
   )
 }
@@ -305,6 +306,15 @@ function FreePlanRow(props: { plan: CataloguePlan; action: BillingPlanAction }) 
           ) : null}
         </div>
         <p className="mt-1 text-[13px] text-muted-foreground">{props.plan.bestFor}</p>
+        <a
+          href={COMPARE_FEATURES_HREF}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-1 inline-flex items-center gap-1 text-[13px] text-primary hover:underline"
+        >
+          View & compare features
+          <ArrowTopRightOnSquareIcon className="size-3.5" />
+        </a>
         {props.action.kind === 'downgrade' ? (
           <div className="mt-3">
             <Button type="button" size="sm" variant="outline" onClick={() => setOpen(true)}>
@@ -525,7 +535,18 @@ function SummaryAction(props: {
       </Button>
     )
   }
-  if (!props.canAct || action.kind === 'unavailable' || action.kind === 'downgrade') {
+  if (action.kind === 'downgrade') {
+    return (
+      <PaidDowngradeAction
+        planName={plan.name}
+        planId={action.planId}
+        period={props.period}
+        quantity={props.quantity}
+        branding={props.branding}
+      />
+    )
+  }
+  if (!props.canAct || action.kind === 'unavailable') {
     return (
       <Button type="button" className="w-full" disabled>
         Continue to payment
@@ -548,6 +569,36 @@ function SummaryAction(props: {
         <TrialInstead planId={action.planId} planName={plan.name} trialDays={props.trialDays} />
       ) : null}
     </div>
+  )
+}
+
+function PaidDowngradeAction(props: {
+  planName: string
+  planId: string
+  period: BillingPeriod
+  quantity: number
+  branding: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <Button type="button" className="w-full" variant="outline" onClick={() => setOpen(true)}>
+        Switch to {props.planName}
+      </Button>
+      {open ? (
+        <PlanDowngradeDialog
+          open
+          onOpenChange={setOpen}
+          planId={props.planId}
+          planName={props.planName}
+          checkout={{
+            period: props.period,
+            quantity: props.quantity,
+            branding: props.branding,
+          }}
+        />
+      ) : null}
+    </>
   )
 }
 

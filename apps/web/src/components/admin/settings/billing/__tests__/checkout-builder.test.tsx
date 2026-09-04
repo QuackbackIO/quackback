@@ -8,6 +8,7 @@ import { CheckoutBuilder, type CheckoutSelection } from '../checkout-builder'
 
 vi.mock('../free-downgrade-dialog', () => ({
   FreeDowngradeDialog: () => <p>downgrade dialog</p>,
+  PlanDowngradeDialog: () => <p>downgrade dialog</p>,
 }))
 
 const catalogue: BillingCatalogue = {
@@ -125,7 +126,7 @@ describe('CheckoutBuilder', () => {
     expect(screen.getByRole('radio', { name: /Yearly/ })).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByRole('radio', { name: /Save \$118\/yr/ })).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: /^Business/ })).toHaveAttribute('aria-checked', 'true')
-    expect(screen.getByText('Workflows & SLAs')).toBeInTheDocument()
+    expect(screen.getAllByText('View & compare features').length).toBeGreaterThan(0)
 
     const summary = screen.getByRole('complementary')
     expect(within(summary).getByText('Business plan')).toBeInTheDocument()
@@ -186,6 +187,13 @@ describe('CheckoutBuilder', () => {
     expect(screen.getByText(/Moving up applies now, billed pro-rata/)).toBeInTheDocument()
     renderBuilder(proOverview, { plan: 'growth', seats: 7 })
     expect(screen.getByText(/takes effect at the end of the current period/)).toBeInTheDocument()
+  })
+
+  it('gates a lower paid plan behind the quota dialog instead of posting checkout', () => {
+    renderBuilder(proOverview, { plan: 'growth', seats: 7 })
+    const summary = screen.getByRole('complementary')
+    expect(checkoutForm()).toBeNull()
+    expect(within(summary).getByRole('button', { name: 'Switch to Pro' })).toBeInTheDocument()
   })
 
   it('asks for a plan when none is selected', () => {

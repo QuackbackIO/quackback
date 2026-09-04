@@ -50,6 +50,9 @@ export const Route = createFileRoute('/api/billing/trial')({
           }
           const { startWorkspaceTrial } = await import('@/lib/server/control-plane/client')
           await startWorkspaceTrial(planId)
+          const { clearPendingDowngrade } =
+            await import('@/lib/server/domains/billing/pending-downgrade')
+          await clearPendingDowngrade()
           return new Response(null, {
             status: 303,
             headers: { location: trialReturnPath(parsed.data.returnTo) },

@@ -1,9 +1,10 @@
-import { useState } from 'react'
-import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
-import { ArrowTopRightOnSquareIcon, CheckIcon } from '@heroicons/react/24/solid'
+import { useEffect, useState } from 'react'
+import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
+import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/solid'
 import type { BillingProjectionOverview } from '@/lib/server/domains/billing/projection-overview'
 import type { BillingCatalogue, CustomerInvoice } from '@/lib/server/control-plane/client'
-import { billingQueries } from '@/lib/client/queries/billing'
+import { billingQueries, cancelPlanDowngradeFn } from '@/lib/client/queries/billing'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -28,7 +29,7 @@ import { SubscribeDialog } from './subscribe-dialog'
 import { TopUpDialog } from './topup-dialog'
 import { UsageMeter } from './usage-meter'
 import { TrialExpiredBilling } from './trial-expired-billing'
-import { FreeDowngradeDialog } from './free-downgrade-dialog'
+import { PlanDowngradeDialog } from './free-downgrade-dialog'
 
 /** Workspace-local presentation of the control-plane billing projection. */
 export function BillingSettings() {
@@ -36,6 +37,7 @@ export function BillingSettings() {
   const catalogue = useQuery(billingQueries.catalogue())
   const invoices = useQuery(billingQueries.invoices())
   const usage = useQuery(billingQueries.usage())
+  const pending = useQuery(billingQueries.pendingDowngrade())
   if (!overview) return null
   return (
     <BillingPlansView
@@ -45,6 +47,7 @@ export function BillingSettings() {
       invoices={invoices.data ?? []}
       invoicesError={invoices.error instanceof Error ? invoices.error.message : null}
       usage={usage.data ?? []}
+      pending={pending.data ?? null}
     />
   )
 }
@@ -64,13 +67,19 @@ export function BillingPlansView(props: {
   invoices: CustomerInvoice[]
   invoicesError: string | null
   usage?: Array<{ key: string; label: string; used: number; limit: number | null }>
+  pending?: { planId: string; planName: string } | null
 }) {
   const [period, setPeriod] = useState<'monthly' | 'annual'>('annual')
   const [addSeatsOpen, setAddSeatsOpen] = useState(false)
   const [removeSeatsOpen, setRemoveSeatsOpen] = useState(false)
   const [topupMeter, setTopupMeter] = useState<'ai' | 'email' | null>(null)
   const [subscribePlanId, setSubscribePlanId] = useState<PaidPlanId | null>(null)
+  const [pendingOpen, setPendingOpen] = useState(Boolean(props.pending?.planId))
   const { overview, catalogue } = props
+
+  useEffect(() => {
+    if (props.pending?.planId) setPendingOpen(true)
+  }, [props.pending?.planId])
   const subscribePlan = catalogue?.plans.find((plan) => plan.id === subscribePlanId)
   const trialDays = catalogueTrialDays(catalogue)
   const trialedPlanIds = catalogueTrialedPlanIds(catalogue)
@@ -86,12 +95,19 @@ export function BillingPlansView(props: {
         overview={overview}
         catalogue={catalogue}
         catalogueError={props.catalogueError}
+        pending={props.pending}
       />
     )
   }
 
   return (
     <div className="space-y-6">
+      {props.pending ? (
+        <PendingDowngradeBanner
+          planName={props.pending.planName}
+          onReview={() => setPendingOpen(true)}
+        />
+      ) : null}
       <CurrentPlanCard
         overview={overview}
         catalogue={catalogue}
@@ -197,7 +213,46 @@ export function BillingPlansView(props: {
           }}
         />
       ) : null}
+      {props.pending && pendingOpen ? (
+        <PlanDowngradeDialog
+          open
+          onOpenChange={setPendingOpen}
+          planId={props.pending.planId}
+          planName={props.pending.planName}
+        />
+      ) : null}
     </div>
+  )
+}
+
+function PendingDowngradeBanner(props: { planName: string; onReview: () => void }) {
+  const queryClient = useQueryClient()
+  return (
+    <Alert>
+      <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+        <span>
+          Finish switching to {props.planName}. Delete extra resources so this workspace fits that
+          plan, then confirm.
+        </span>
+        <span className="flex flex-wrap gap-2">
+          <Button type="button" size="sm" variant="outline" onClick={props.onReview}>
+            Review issues
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              void cancelPlanDowngradeFn().then(() =>
+                queryClient.invalidateQueries({ queryKey: billingQueries.all })
+              )
+            }}
+          >
+            Keep current plan
+          </Button>
+        </span>
+      </AlertDescription>
+    </Alert>
   )
 }
 
@@ -384,7 +439,7 @@ function SeatsBlock(props: {
   )
 }
 
-/** Seats live on the current-plan card; AI tokens are the dollar AI meter. */
+/** Seats live on the current-plan card; Quinn tokens are the usage meter. */
 const USAGE_CARD_SKIP = new Set(['maxTeamSeats', 'aiTokensPerMonth'])
 
 function usageMeterLabel(line: { key: string; label: string }): string {
@@ -437,7 +492,9 @@ function UsageCard(props: {
   if (!hasAi && !hasEmails && !hasApi && inventory.length === 0) return null
 
   const reset = nextMonthResetLabel()
-  const meterUsed = ai ? Math.min(ai.usedCents, ai.includedCents) : 0
+  const aiCap = ai ? (ai.includedCents > 0 ? ai.includedCents : ai.extraCents) : 0
+  const aiUsed = ai ? Math.min(ai.usedCents, aiCap) : 0
+  const aiPercent = aiCap > 0 ? Math.min(100, Math.round((aiUsed / aiCap) * 100)) : 0
   const hasMonthly = hasAi || hasEmails || hasApi
 
   return (
@@ -452,15 +509,15 @@ function UsageCard(props: {
         {hasAi && ai ? (
           <div className="px-6 py-4">
             <UsageMeter
-              label="AI usage"
+              label="Quinn usage"
               description={
                 ai.extraCents > 0
-                  ? `${formatUsd(ai.includedCents, 0)}/mo included, used first. ${formatUsd(ai.extraCents, 2)} extra credit.`
-                  : `${formatUsd(ai.includedCents, 0)}/mo included, used first.`
+                  ? 'Included usage is used first, then extra credit.'
+                  : 'Included usage this period.'
               }
-              valueText={`${formatUsd(meterUsed, 2)} of ${formatUsd(ai.includedCents, 2)}`}
-              used={meterUsed}
-              limit={ai.includedCents}
+              valueText={`${aiPercent}% used this period`}
+              used={aiUsed}
+              limit={aiCap}
               action={
                 canTopUp && hasTopUpPackPrice(props.catalogue?.aiTopUpPackCents) ? (
                   <Button
@@ -625,6 +682,14 @@ function PlanCard(props: {
             ) : null}
           </div>
           <p className="mt-1 text-[13px] leading-snug text-muted-foreground">{plan.bestFor}</p>
+          <a
+            href="https://quackback.io/pricing"
+            target="_blank"
+            rel="noreferrer"
+            className="mt-1 inline-flex items-center gap-1 text-[13px] text-primary hover:underline"
+          >
+            View & compare features
+          </a>
         </div>
         <p className="shrink-0 text-right">
           <span className="text-lg font-semibold tracking-tight tabular-nums">
@@ -638,14 +703,6 @@ function PlanCard(props: {
           {isAnnual ? `${formatUsd(plan.priceYearlyCents, 0)} billed yearly` : 'billed monthly'}
         </p>
       )}
-      <ul className="mt-4 flex-1 space-y-2">
-        {plan.highlights.map((line) => (
-          <li key={line} className="flex items-start gap-2 text-[13px] leading-snug">
-            <CheckIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
-            <span>{line}</span>
-          </li>
-        ))}
-      </ul>
       <div className="mt-5">
         <PlanActionButton
           action={action}
@@ -691,7 +748,7 @@ function PlanActionButton(props: {
     )
   }
   if (action.kind === 'downgrade') {
-    return <DowngradeButton />
+    return <DowngradeButton planId={action.planId} planName={props.planName} />
   }
   if (action.kind === 'subscribe') {
     return (
@@ -759,7 +816,7 @@ function TrialButton(props: { planId: PaidPlanId; planName: string; trialDays: n
   )
 }
 
-function DowngradeButton() {
+function DowngradeButton(props: { planId: string; planName: string }) {
   const [open, setOpen] = useState(false)
   return (
     <>
@@ -770,9 +827,16 @@ function DowngradeButton() {
         className="w-full"
         onClick={() => setOpen(true)}
       >
-        Switch to Free
+        Switch to {props.planName}
       </Button>
-      {open ? <FreeDowngradeDialog open onOpenChange={setOpen} /> : null}
+      {open ? (
+        <PlanDowngradeDialog
+          open
+          onOpenChange={setOpen}
+          planId={props.planId}
+          planName={props.planName}
+        />
+      ) : null}
     </>
   )
 }

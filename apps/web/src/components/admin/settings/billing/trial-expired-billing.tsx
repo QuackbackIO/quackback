@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { BillingProjectionOverview } from '@/lib/server/domains/billing/projection-overview'
 import type { BillingCatalogue } from '@/lib/server/control-plane/client'
 import { Button } from '@/components/ui/button'
@@ -18,6 +18,7 @@ export function TrialExpiredBilling(props: {
   overview: BillingProjectionOverview
   catalogue: BillingCatalogue | null
   catalogueError: string | null
+  pending?: { planId: string; planName: string } | null
 }) {
   const [period, setPeriod] = useState<'monthly' | 'annual'>('annual')
   const [selectedId, setSelectedId] = useState<PaidPlanId | 'free'>(
@@ -25,6 +26,10 @@ export function TrialExpiredBilling(props: {
   )
   const [subscribeOpen, setSubscribeOpen] = useState(false)
   const [freeOpen, setFreeOpen] = useState(false)
+
+  useEffect(() => {
+    if (props.pending?.planId === 'free') setFreeOpen(true)
+  }, [props.pending?.planId])
   const { overview, catalogue } = props
   const trialedPlanIds = catalogueTrialedPlanIds(catalogue)
   const plans = catalogue?.plans ?? []
