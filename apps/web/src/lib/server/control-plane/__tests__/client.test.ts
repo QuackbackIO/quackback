@@ -101,7 +101,7 @@ describe('workspace control-plane credential', () => {
     expect(init.body).toBeUndefined()
   })
 
-  it('keeps business/enterprise catalogue slugs and maps pro/scale onto growth/enterprise', () => {
+  it('keeps pro/business/enterprise catalogue slugs and maps leftover growth/scale', () => {
     const normalised = normalizeBillingCatalogue({
       version: 1,
       currency: 'usd',
@@ -147,15 +147,15 @@ describe('workspace control-plane credential', () => {
         },
       ],
     })
-    expect(normalised.recommendedPlanId).toBe('growth')
+    expect(normalised.recommendedPlanId).toBe('pro')
     expect(normalised.lastTrialPlanId).toBe('enterprise')
-    expect(normalised.trialedPlanIds).toEqual(['growth', 'business'])
+    expect(normalised.trialedPlanIds).toEqual(['pro', 'business'])
     expect(normalised.aiIncludedCentsPerMonth).toEqual({
-      growth: 1000,
+      pro: 1000,
       business: 3000,
       enterprise: 10000,
     })
-    expect(normalised.plans.map((plan) => plan.id)).toEqual(['growth', 'business', 'enterprise'])
+    expect(normalised.plans.map((plan) => plan.id)).toEqual(['pro', 'business', 'enterprise'])
   })
 
   it('forwards checkout and trial aliases as canonical plan ids', async () => {
@@ -178,7 +178,14 @@ describe('workspace control-plane credential', () => {
     )
     await startWorkspaceTrial('pro')
     const [, trialInit] = hoisted.fetch.mock.calls[1] as [URL, RequestInit]
-    expect(JSON.parse(String(trialInit.body))).toEqual({ planId: 'growth' })
+    expect(JSON.parse(String(trialInit.body))).toEqual({ planId: 'pro' })
+
+    hoisted.fetch.mockResolvedValue(
+      new Response(JSON.stringify({ status: 'started' }), { status: 200 })
+    )
+    await startWorkspaceTrial('growth')
+    const [, leftoverTrial] = hoisted.fetch.mock.calls[2] as [URL, RequestInit]
+    expect(JSON.parse(String(leftoverTrial.body))).toEqual({ planId: 'pro' })
   })
 
   it('lists owner workspaces over GET without a workspace id', async () => {

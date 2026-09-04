@@ -68,7 +68,7 @@ function seatsRequest(quantity: number): Request {
 function checkoutRequest(quantity?: number): Request {
   const body: Record<string, string> = {
     action: 'checkout',
-    planId: 'growth',
+    planId: 'pro',
     billingPeriod: 'monthly',
   }
   if (quantity !== undefined) body.quantity = String(quantity)
@@ -170,7 +170,7 @@ describe('POST /api/billing/session checkout', () => {
       url: 'https://billing.example.com/checkout',
     })
     hoisted.fetchBillingCatalogue.mockResolvedValue({
-      plans: [{ id: 'growth', billedPer: 'seat' }],
+      plans: [{ id: 'pro', billedPer: 'seat' }],
     })
   })
 
@@ -179,7 +179,7 @@ describe('POST /api/billing/session checkout', () => {
     expect(res.status).toBe(303)
     expect(hoisted.createHostedBillingSession).toHaveBeenCalledWith({
       action: 'checkout',
-      planId: 'growth',
+      planId: 'pro',
       billingPeriod: 'monthly',
       quantity: 7,
     })
@@ -190,7 +190,7 @@ describe('POST /api/billing/session checkout', () => {
     expect(res.status).toBe(303)
     expect(hoisted.createHostedBillingSession).toHaveBeenCalledWith({
       action: 'checkout',
-      planId: 'growth',
+      planId: 'pro',
       billingPeriod: 'monthly',
       quantity: 7,
     })
@@ -205,13 +205,13 @@ describe('POST /api/billing/session checkout', () => {
 
   it('keeps quantity 1 for a workspace-priced plan', async () => {
     hoisted.fetchBillingCatalogue.mockResolvedValue({
-      plans: [{ id: 'growth', billedPer: 'workspace' }],
+      plans: [{ id: 'pro', billedPer: 'workspace' }],
     })
     const res = await POST({ request: checkoutRequest(1) })
     expect(res.status).toBe(303)
     expect(hoisted.createHostedBillingSession).toHaveBeenCalledWith({
       action: 'checkout',
-      planId: 'growth',
+      planId: 'pro',
       billingPeriod: 'monthly',
       quantity: 1,
     })
@@ -259,7 +259,7 @@ describe('POST /api/billing/session checkout', () => {
     expect(res.status).toBe(303)
     expect(hoisted.createHostedBillingSession).toHaveBeenCalledWith({
       action: 'checkout',
-      planId: 'growth',
+      planId: 'pro',
       billingPeriod: 'monthly',
       quantity: 8,
     })
@@ -269,7 +269,7 @@ describe('POST /api/billing/session checkout', () => {
     await POST({
       request: formRequest({
         action: 'checkout',
-        planId: 'growth',
+        planId: 'pro',
         billingPeriod: 'annual',
         quantity: '8',
         brandingRemoval: 'true',
@@ -277,7 +277,7 @@ describe('POST /api/billing/session checkout', () => {
     })
     expect(hoisted.createHostedBillingSession).toHaveBeenCalledWith({
       action: 'checkout',
-      planId: 'growth',
+      planId: 'pro',
       billingPeriod: 'annual',
       quantity: 8,
       brandingRemoval: true,
@@ -287,7 +287,7 @@ describe('POST /api/billing/session checkout', () => {
     const res = await POST({
       request: formRequest({
         action: 'checkout',
-        planId: 'growth',
+        planId: 'pro',
         billingPeriod: 'annual',
         brandingRemoval: 'yes',
       }),

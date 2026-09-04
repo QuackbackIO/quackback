@@ -107,7 +107,7 @@ describe('analyzeSentiment — plan gate', () => {
   })
 
   it('classifies the post on a plan that includes it', async () => {
-    withCloud(storedCloud('growth'))
+    withCloud(storedCloud('pro'))
     await expect(analyzeSentiment('Title', 'Great feature!')).resolves.toMatchObject({
       sentiment: 'positive',
     })

@@ -52,7 +52,7 @@ const PLAN_ONLY_FEATURES: Record<
     customCss: false,
     integrations: false,
   },
-  growth: {
+  pro: {
     analyticsExports: false,
     customColors: true,
     customCss: false,

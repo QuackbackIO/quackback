@@ -18,7 +18,7 @@ const overview: BillingProjectionOverview = {
   canUpgrade: false,
   canManageBilling: true,
   purchasablePlans: [
-    { id: 'growth', name: 'Pro' },
+    { id: 'pro', name: 'Pro' },
     { id: 'business', name: 'Business' },
     { id: 'enterprise', name: 'Enterprise' },
   ],
@@ -31,7 +31,7 @@ const catalogue: BillingCatalogue = {
   version: 1,
   currency: 'usd',
   annualDiscountMonths: 2,
-  recommendedPlanId: 'growth',
+  recommendedPlanId: 'pro',
   brandingRemoval: { monthlyCents: 5900, annualCents: 59000 },
   plans: [
     {

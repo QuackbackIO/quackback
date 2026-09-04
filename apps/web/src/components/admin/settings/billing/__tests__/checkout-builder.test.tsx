@@ -15,7 +15,7 @@ const catalogue: BillingCatalogue = {
   version: 1,
   currency: 'usd',
   annualDiscountMonths: 2,
-  recommendedPlanId: 'growth',
+  recommendedPlanId: 'pro',
   brandingRemoval: { monthlyCents: 5900, annualCents: 59000 },
   trialDays: 14,
   trialedPlanIds: [],
@@ -32,7 +32,7 @@ const catalogue: BillingCatalogue = {
       recommended: false,
     },
     {
-      id: 'growth',
+      id: 'pro',
       name: 'Pro',
       rank: 1,
       priceMonthlyCents: 2900,
@@ -78,7 +78,7 @@ const freeOverview: BillingProjectionOverview = {
   canUpgrade: true,
   canManageBilling: false,
   purchasablePlans: [
-    { id: 'growth', name: 'Pro' },
+    { id: 'pro', name: 'Pro' },
     { id: 'business', name: 'Business' },
     { id: 'enterprise', name: 'Enterprise' },
   ],
@@ -185,12 +185,12 @@ describe('CheckoutBuilder', () => {
   it('explains pro-rata and end-of-period timing when moving between paid plans', () => {
     renderBuilder(proOverview, { plan: 'enterprise', seats: 7 })
     expect(screen.getByText(/Moving up applies now, billed pro-rata/)).toBeInTheDocument()
-    renderBuilder(proOverview, { plan: 'growth', seats: 7 })
+    renderBuilder(proOverview, { plan: 'pro', seats: 7 })
     expect(screen.getByText(/takes effect at the end of the current period/)).toBeInTheDocument()
   })
 
   it('gates a lower paid plan behind the quota dialog instead of posting checkout', () => {
-    renderBuilder(proOverview, { plan: 'growth', seats: 7 })
+    renderBuilder(proOverview, { plan: 'pro', seats: 7 })
     const summary = screen.getByRole('complementary')
     expect(checkoutForm()).toBeNull()
     expect(within(summary).getByRole('button', { name: 'Switch to Pro' })).toBeInTheDocument()

@@ -73,7 +73,7 @@ describe('createWorkflow — plan gate', () => {
   it('refuses on a plan without the entitlement and names the plan that has it', async () => {
     // Pro, not Free: the refusal has to name the cheapest plan that GRANTS
     // workflows (Business), not merely the next plan up from the workspace's own.
-    withCloud(storedCloud('growth'))
+    withCloud(storedCloud('pro'))
 
     const refusal = await createWorkflow(INPUT).catch((error: unknown) => error)
 

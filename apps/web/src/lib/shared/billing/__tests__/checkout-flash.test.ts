@@ -6,7 +6,7 @@ import type { BillingCatalogue } from '@/lib/server/control-plane/client'
 const catalogue = {
   plans: [
     {
-      id: 'growth',
+      id: 'pro',
       name: 'Pro',
       rank: 2,
       priceMonthlyCents: 3000,
@@ -20,7 +20,7 @@ const catalogue = {
 } as unknown as BillingCatalogue
 
 const overview = {
-  plan: 'growth',
+  plan: 'pro',
   planName: 'Pro',
   status: 'active',
   trialActive: false,

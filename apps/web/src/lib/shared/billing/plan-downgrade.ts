@@ -29,10 +29,10 @@ export const PLAN_NUMERIC_CAPS: Record<
     maxCustomRoles: 0,
     maxSendingDomains: 0,
   },
-  growth: {
+  pro: {
     maxBoards: null,
     maxPosts: null,
-    maxTeamSeats: null,
+    maxTeamSeats: 5,
     maxStatusComponents: 10,
     maxCustomRoles: 0,
     maxSendingDomains: 1,
@@ -93,7 +93,7 @@ const RESOURCE: Record<PlanCapKey, { singular: string; plural: string; href: str
 }
 
 export const FREE_DISABLED_FEATURES: Record<string, string[]> = {
-  growth: [
+  pro: [
     'Custom domains will be disabled',
     'AI assistant, drafts and insights will be disabled',
     'API access will be revoked',

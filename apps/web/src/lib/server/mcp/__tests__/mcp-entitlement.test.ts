@@ -113,7 +113,7 @@ describe('handleMcpRequest — plan gate', () => {
       error: 'entitlement_required',
       entitlement: 'mcpServer',
       currentPlan: 'free',
-      requiredPlan: 'growth',
+      requiredPlan: 'pro',
       requiredPlanName: 'Pro',
     })
     // The server was never built, so no tool could run.
@@ -122,7 +122,7 @@ describe('handleMcpRequest — plan gate', () => {
   })
 
   it('serves the request on a plan that includes it', async () => {
-    withCloud(storedCloud('growth'))
+    withCloud(storedCloud('pro'))
     const response = await handleMcpRequest(mcpRequest())
     expect(response.status).toBe(200)
     expect(hoisted.mockCreateMcpServer).toHaveBeenCalledOnce()

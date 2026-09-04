@@ -7,7 +7,7 @@ function cloudOn(overrides: Partial<CloudConfig> = {}): CloudConfig {
   return {
     ...DISABLED_CLOUD_CONFIG,
     enabled: true,
-    plan: 'growth',
+    plan: 'pro',
     ...overrides,
   }
 }

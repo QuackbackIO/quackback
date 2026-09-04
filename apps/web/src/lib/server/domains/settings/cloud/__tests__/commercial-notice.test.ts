@@ -7,7 +7,7 @@ const NOW = new Date('2026-08-20T12:00:00.000Z')
 function config(overrides: Partial<CloudConfig> = {}): CloudConfig {
   return {
     enabled: true,
-    plan: 'growth',
+    plan: 'pro',
     entitlements: {},
     subscriptionStatus: null,
     trialStartedAt: '2026-08-06T00:00:00.000Z',
