@@ -132,7 +132,7 @@ describe('handleMcpRequest — plan gate', () => {
     withCloud(storedCloud('free', { mcpServer: true }))
     expect((await handleMcpRequest(mcpRequest())).status).toBe(200)
 
-    withCloud(storedCloud('scale', { mcpServer: false }))
+    withCloud(storedCloud('enterprise', { mcpServer: false }))
     expect((await handleMcpRequest(mcpRequest())).status).toBe(402)
   })
 

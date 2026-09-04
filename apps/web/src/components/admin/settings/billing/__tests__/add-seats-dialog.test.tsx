@@ -8,7 +8,7 @@ import type { BillingCatalogue } from '@/lib/server/control-plane/client'
 import type { BillingProjectionOverview } from '@/lib/server/domains/billing/projection-overview'
 
 const overview: BillingProjectionOverview = {
-  plan: 'pro',
+  plan: 'business',
   planName: 'Business',
   status: 'active',
   trialActive: false,
@@ -19,8 +19,8 @@ const overview: BillingProjectionOverview = {
   canManageBilling: true,
   purchasablePlans: [
     { id: 'growth', name: 'Pro' },
-    { id: 'pro', name: 'Business' },
-    { id: 'scale', name: 'Enterprise' },
+    { id: 'business', name: 'Business' },
+    { id: 'enterprise', name: 'Enterprise' },
   ],
   seats: { used: 7, pending: 1, members: 6, purchased: 10 },
   ai: { includedCents: 3000, usedCents: 2520, extraCents: 1000 },
@@ -31,11 +31,11 @@ const catalogue: BillingCatalogue = {
   version: 1,
   currency: 'usd',
   annualDiscountMonths: 2,
-  recommendedPlanId: 'pro',
+  recommendedPlanId: 'growth',
   brandingRemoval: { monthlyCents: 5900, annualCents: 59000 },
   plans: [
     {
-      id: 'pro',
+      id: 'business',
       name: 'Business',
       rank: 2,
       priceMonthlyCents: 3000,

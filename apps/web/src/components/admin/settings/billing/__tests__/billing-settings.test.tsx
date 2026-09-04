@@ -10,9 +10,9 @@ const catalogue: BillingCatalogue = {
   version: 1,
   currency: 'usd',
   annualDiscountMonths: 2,
-  recommendedPlanId: 'pro',
+  recommendedPlanId: 'growth',
   brandingRemoval: { monthlyCents: 5900, annualCents: 59000 },
-  aiIncludedCentsPerMonth: { free: 0, growth: 1000, pro: 3000, scale: 10000 },
+  aiIncludedCentsPerMonth: { free: 0, growth: 1000, business: 3000, enterprise: 10000 },
   aiTopUpPackCents: 1000,
   aiBlendedCentsPerMTok: 500,
   emailTopUpPackCents: 1000,
@@ -41,7 +41,7 @@ const catalogue: BillingCatalogue = {
       recommended: false,
     },
     {
-      id: 'pro',
+      id: 'business',
       name: 'Business',
       rank: 2,
       priceMonthlyCents: 3000,
@@ -52,7 +52,7 @@ const catalogue: BillingCatalogue = {
       recommended: true,
     },
     {
-      id: 'scale',
+      id: 'enterprise',
       name: 'Enterprise',
       rank: 3,
       priceMonthlyCents: 5900,
@@ -66,7 +66,7 @@ const catalogue: BillingCatalogue = {
 }
 
 const paidOverview: BillingProjectionOverview = {
-  plan: 'pro',
+  plan: 'business',
   planName: 'Business',
   status: 'active',
   trialActive: false,
@@ -77,8 +77,8 @@ const paidOverview: BillingProjectionOverview = {
   canManageBilling: true,
   purchasablePlans: [
     { id: 'growth', name: 'Pro' },
-    { id: 'pro', name: 'Business' },
-    { id: 'scale', name: 'Enterprise' },
+    { id: 'business', name: 'Business' },
+    { id: 'enterprise', name: 'Enterprise' },
   ],
   seats: { used: 7, pending: 1, members: 6, purchased: 10 },
   ai: { includedCents: 3000, usedCents: 2520, extraCents: 1000 },
@@ -135,7 +135,7 @@ describe('BillingPlansView', () => {
     expect(screen.getByRole('button', { name: 'Switch to Pro' })).toBeInTheDocument()
     const switchLinks = screen.getAllByRole('link', { name: 'Switch to this plan' })
     expect(switchLinks.map((link) => link.getAttribute('href'))).toEqual([
-      '/admin/settings/billing/checkout?plan=scale&period=annual&seats=7',
+      '/admin/settings/billing/checkout?plan=enterprise&period=annual&seats=7',
     ])
     expect(screen.getByText('INV-1001')).toBeInTheDocument()
   })
@@ -183,7 +183,7 @@ describe('BillingPlansView', () => {
       catalogue: {
         ...catalogue,
         plans: catalogue.plans.map((plan) =>
-          plan.id === 'pro' ? { ...plan, billedPer: 'workspace' as const } : plan
+          plan.id === 'business' ? { ...plan, billedPer: 'workspace' as const } : plan
         ),
       },
     })
@@ -265,7 +265,7 @@ describe('BillingPlansView', () => {
         status: null,
         trialActive: false,
         trialEnded: true,
-        trialPlanId: 'pro',
+        trialPlanId: 'growth',
         trialPlanName: 'Pro',
         trialExpiresAt: '2026-08-18T00:00:00.000Z',
         canUpgrade: true,
@@ -350,7 +350,7 @@ describe('BillingPlansView', () => {
         status: null,
         trialActive: false,
         trialEnded: true,
-        trialPlanId: 'pro',
+        trialPlanId: 'business',
         trialPlanName: 'Business',
         trialExpiresAt: '2026-08-18T00:00:00.000Z',
         canUpgrade: true,
@@ -378,7 +378,7 @@ describe('BillingPlansView', () => {
         status: null,
         trialActive: false,
         trialEnded: true,
-        trialPlanId: 'pro',
+        trialPlanId: 'growth',
         trialPlanName: 'Pro',
         trialExpiresAt: '2026-08-18T00:00:00.000Z',
         canUpgrade: true,

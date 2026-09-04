@@ -35,7 +35,7 @@ describe('upgradeContextFor', () => {
       trialActive: true,
       trialEligible: false,
     })
-    expect(upgradeContextFor(cloud({ plan: 'pro' }))?.trialEligible).toBe(false)
+    expect(upgradeContextFor(cloud({ plan: 'business' }))?.trialEligible).toBe(false)
     expect(upgradeContextFor(cloud({ subscriptionStatus: 'active' }))?.trialEligible).toBe(false)
     expect(upgradeContextFor(cloud({ subscriptionStatus: 'past_due' }))?.trialEligible).toBe(false)
     expect(upgradeContextFor(cloud({ canUpgrade: false }))?.trialEligible).toBe(false)

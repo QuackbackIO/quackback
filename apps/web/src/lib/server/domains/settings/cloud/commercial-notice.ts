@@ -8,7 +8,7 @@ export function plansActionUrl(config: Pick<CloudConfig, 'enabled' | 'canUpgrade
 
 function planLabel(config: CloudConfig, trialPlanName?: string | null): string {
   if (trialPlanName) return trialPlanName
-  return config.plan ? PLAN_CATALOGUE[config.plan].name : PLAN_CATALOGUE.pro.name
+  return config.plan ? PLAN_CATALOGUE[config.plan].name : PLAN_CATALOGUE.growth.name
 }
 
 /** Trial countdown derived from the control-plane-owned expiry timestamp. */

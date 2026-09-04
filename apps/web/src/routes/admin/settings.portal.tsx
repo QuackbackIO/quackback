@@ -210,7 +210,10 @@ function PortalPage() {
     } catch (error) {
       if (isPlanRefusal(error)) {
         setUpgrade(
-          describePlanRefusal(error, describePlanUpgrade('Custom colours', 'pro', { plural: true }))
+          describePlanRefusal(
+            error,
+            describePlanUpgrade('Custom colours', 'business', { plural: true })
+          )
         )
       } else {
         toast.error(error instanceof Error ? error.message : "Couldn't save portal. Try again.")
@@ -542,7 +545,7 @@ function PortalPage() {
         onOpenChange={(open) => {
           if (!open) setUpgrade(null)
         }}
-        description={upgrade ?? describePlanUpgrade('Custom colours', 'pro', { plural: true })}
+        description={upgrade ?? describePlanUpgrade('Custom colours', 'business', { plural: true })}
       />
     </div>
   )

@@ -37,7 +37,7 @@ export const PLAN_NUMERIC_CAPS: Record<
     maxCustomRoles: 0,
     maxSendingDomains: 1,
   },
-  pro: {
+  business: {
     maxBoards: null,
     maxPosts: null,
     maxTeamSeats: null,
@@ -45,7 +45,7 @@ export const PLAN_NUMERIC_CAPS: Record<
     maxCustomRoles: 5,
     maxSendingDomains: 3,
   },
-  scale: {
+  enterprise: {
     maxBoards: null,
     maxPosts: null,
     maxTeamSeats: null,
@@ -100,7 +100,7 @@ export const FREE_DISABLED_FEATURES: Record<string, string[]> = {
     'Webhooks will be disabled',
     'MCP access will be revoked',
   ],
-  pro: [
+  business: [
     'Custom domains will be disabled',
     'Workflows and automations will be disabled',
     'AI assistant, drafts and insights will be disabled',
@@ -108,7 +108,7 @@ export const FREE_DISABLED_FEATURES: Record<string, string[]> = {
     'Webhooks will be disabled',
     'MCP access will be revoked',
   ],
-  scale: [
+  enterprise: [
     'Custom domains will be disabled',
     'Workflows and automations will be disabled',
     'Single sign-on will be disabled',
@@ -158,8 +158,8 @@ export function freeDowngradeIssues(used: Record<string, number>): PlanDowngrade
 }
 
 export function featuresDisabledOnFree(planId: string | null | undefined): string[] {
-  if (!planId) return FREE_DISABLED_FEATURES.pro
-  return FREE_DISABLED_FEATURES[canonicalPlanId(planId)] ?? FREE_DISABLED_FEATURES.pro
+  if (!planId) return FREE_DISABLED_FEATURES.business
+  return FREE_DISABLED_FEATURES[canonicalPlanId(planId)] ?? FREE_DISABLED_FEATURES.business
 }
 
 export function featuresDisabledOnDowngrade(

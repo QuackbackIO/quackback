@@ -29,7 +29,7 @@ const LIMITS = {
 
 const PROJECTION: BillingProjection = {
   version: 7,
-  effectivePlan: 'pro',
+  effectivePlan: 'business',
   trialStartedAt: '2026-08-01T00:00:00.000Z',
   trialExpiresAt: '2026-08-15T00:00:00.000Z',
   subscriptionStatus: null,
@@ -92,7 +92,7 @@ describe('billing projection monotonicity', () => {
 
   it('rejects different state under a reused version', () => {
     expect(() =>
-      decideBillingProjectionWrite(PROJECTION, { ...PROJECTION, effectivePlan: 'scale' })
+      decideBillingProjectionWrite(PROJECTION, { ...PROJECTION, effectivePlan: 'enterprise' })
     ).toThrow(new BillingProjectionWriteError('version_conflict'))
   })
 
@@ -118,7 +118,7 @@ describe('projected commercial state', () => {
     )
     expect(cloud).toMatchObject({
       enabled: true,
-      plan: 'pro',
+      plan: 'business',
       trialActive: true,
       canUpgrade: true,
       canManageBilling: false,
@@ -130,22 +130,22 @@ describe('projected commercial state', () => {
     })
   })
 
-  it('does not drop a projection whose effectivePlan is a business/enterprise alias', () => {
+  it('does not drop a projection whose effectivePlan is a pro/scale alias', () => {
     const cloud = resolveCloudConfig(
-      { enabled: true, projection: { ...PROJECTION, effectivePlan: 'business' } },
+      { enabled: true, projection: { ...PROJECTION, effectivePlan: 'pro' } },
       new Date('2026-08-14T23:59:59.999Z')
     )
     expect(cloud).toMatchObject({
       enabled: true,
-      plan: 'pro',
+      plan: 'growth',
       entitlements: { customDomain: true },
     })
     expect(
       resolveCloudConfig(
-        { enabled: true, projection: { ...PROJECTION, effectivePlan: 'enterprise' } },
+        { enabled: true, projection: { ...PROJECTION, effectivePlan: 'scale' } },
         new Date('2026-08-14T23:59:59.999Z')
       ).plan
-    ).toBe('scale')
+    ).toBe('enterprise')
   })
 
   it('falls back to Free at the exact projected expiry instant', () => {
@@ -157,7 +157,7 @@ describe('projected commercial state', () => {
       { enabled: true, projection: PROJECTION },
       new Date('2026-08-15T00:00:00.000Z')
     )
-    expect(before.plan).toBe('pro')
+    expect(before.plan).toBe('business')
     expect(before.entitlements.customDomain).toBe(true)
     expect(atExpiry.plan).toBe('free')
     expect(atExpiry.entitlements).toEqual({})
@@ -174,7 +174,7 @@ describe('projected commercial state', () => {
       new Date('2026-08-14T12:00:00.000Z')
     )
     expect(cloud.trialActive).toBe(false)
-    expect(cloud.plan).toBe('pro')
+    expect(cloud.plan).toBe('business')
   })
 
   it('does not treat a live Stripe subscription as a product trial', () => {
@@ -187,6 +187,6 @@ describe('projected commercial state', () => {
     )
     expect(cloud.trialActive).toBe(false)
     expect(cloud.subscriptionStatus).toBe('trialing')
-    expect(cloud.plan).toBe('pro')
+    expect(cloud.plan).toBe('business')
   })
 })

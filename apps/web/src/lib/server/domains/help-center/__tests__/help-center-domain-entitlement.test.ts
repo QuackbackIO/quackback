@@ -53,7 +53,7 @@ describe('setHelpCenterDomain — unconfigured install', () => {
 })
 
 describe('setHelpCenterDomain — cloud amputates the local writer', () => {
-  it.each(['free', 'growth', 'pro', 'scale'] as const)(
+  it.each(['free', 'growth', 'business', 'enterprise'] as const)(
     'refuses the local reverse-proxy writer on cloud %s',
     async (plan) => {
       withCloud({ enabled: true, plan })
@@ -66,7 +66,7 @@ describe('setHelpCenterDomain — cloud amputates the local writer', () => {
   )
 
   it('names the local writer so the refusal is distinguishable', async () => {
-    withCloud({ enabled: true, plan: 'pro' })
+    withCloud({ enabled: true, plan: 'business' })
     await expect(setHelpCenterDomain('help.acme.com')).rejects.toBeInstanceOf(ForbiddenError)
     await expect(setHelpCenterDomain('help.acme.com')).rejects.toThrow(
       'Cloud workspaces cannot use the local reverse-proxy domain writer.'

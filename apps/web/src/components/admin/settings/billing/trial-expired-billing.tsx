@@ -22,7 +22,7 @@ export function TrialExpiredBilling(props: {
 }) {
   const [period, setPeriod] = useState<'monthly' | 'annual'>('annual')
   const [selectedId, setSelectedId] = useState<PaidPlanId | 'free'>(
-    (props.overview.trialPlanId as PaidPlanId | undefined) ?? 'pro'
+    (props.overview.trialPlanId as PaidPlanId | undefined) ?? 'growth'
   )
   const [subscribeOpen, setSubscribeOpen] = useState(false)
   const [freeOpen, setFreeOpen] = useState(false)

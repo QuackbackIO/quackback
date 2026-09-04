@@ -49,18 +49,18 @@ describe('POST /api/billing/trial', () => {
     hoisted.startWorkspaceTrial.mockResolvedValue('started')
   })
 
-  it('accepts business/enterprise slugs and starts the canonical trial', async () => {
+  it('accepts business/enterprise slugs and starts those trials', async () => {
     const res = await POST({ request: formRequest({ planId: 'business' }) })
     expect(res.status).toBe(303)
-    expect(hoisted.startWorkspaceTrial).toHaveBeenCalledWith('pro')
+    expect(hoisted.startWorkspaceTrial).toHaveBeenCalledWith('business')
 
     hoisted.startWorkspaceTrial.mockClear()
     await POST({ request: formRequest({ planId: 'enterprise' }) })
-    expect(hoisted.startWorkspaceTrial).toHaveBeenCalledWith('scale')
+    expect(hoisted.startWorkspaceTrial).toHaveBeenCalledWith('enterprise')
   })
 
-  it('still starts a canonical paid trial', async () => {
+  it('maps a pro checkout slug onto the entry-tier trial', async () => {
     await POST({ request: formRequest({ planId: 'pro' }) })
-    expect(hoisted.startWorkspaceTrial).toHaveBeenCalledWith('pro')
+    expect(hoisted.startWorkspaceTrial).toHaveBeenCalledWith('growth')
   })
 })

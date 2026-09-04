@@ -7,7 +7,7 @@ import {
   type PlanIdAlias,
 } from '@/lib/server/domains/settings/cloud/cloud.types'
 
-export type PaidPlanId = 'growth' | 'pro' | 'scale'
+export type PaidPlanId = 'growth' | 'business' | 'enterprise'
 export type CataloguePlanId = 'free' | PaidPlanId | PlanIdAlias
 export type DowngradePlanId = 'free' | PaidPlanId
 
@@ -21,7 +21,7 @@ export type BillingPlanAction =
 
 function isPaidPlanId(id: string): id is PaidPlanId {
   const canonical = canonicalPlanId(id)
-  return canonical === 'growth' || canonical === 'pro' || canonical === 'scale'
+  return canonical === 'growth' || canonical === 'business' || canonical === 'enterprise'
 }
 
 function hasLivePaidSub(overview: BillingProjectionOverview): boolean {
