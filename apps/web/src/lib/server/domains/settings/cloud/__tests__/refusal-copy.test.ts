@@ -76,9 +76,8 @@ describe('the defects that shipped', () => {
   })
 
   it('takes the article from the plan it names', () => {
-    // Every plan name in today's catalogue takes "a", so this pins that the
-    // copy carries one at all and carries the right plan. The vowel case is
-    // covered by the consistency check below, which survives a rename.
+    // Pins that the copy carries an article and the right plan. Enterprise is
+    // today's `an` case; the loop below is the invariant that survives a rename.
     expect(buildRefusal(cloud('free'), 'sso').message).toContain('an Enterprise feature')
     expect(buildRefusal(cloud('free'), 'customDomain').message).toContain('a Pro feature')
     expect(buildRefusal(cloud('free'), 'auditLog').message).toContain('an Enterprise feature')

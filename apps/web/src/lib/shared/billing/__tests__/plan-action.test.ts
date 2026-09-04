@@ -87,7 +87,7 @@ describe('billingPlanAction', () => {
       ...unpaidFree,
       trialEnded: true,
       trialPlanId: 'pro',
-      trialPlanName: 'Pro',
+      trialPlanName: 'Business',
       trialExpiresAt: '2026-08-18T00:00:00.000Z',
     }
     expect(billingPlanAction('pro', ended)).toEqual({ kind: 'subscribe', planId: 'pro' })
