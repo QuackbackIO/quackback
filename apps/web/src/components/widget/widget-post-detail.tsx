@@ -37,6 +37,24 @@ interface WidgetPostDetailProps {
   statuses: StatusInfo[]
 }
 
+/**
+ * Verified-identity mode blocks anonymous email capture, but it must not hide
+ * the editor after the host has successfully identified the visitor.
+ */
+export function shouldShowWidgetCommentForm({
+  isCommentsLocked,
+  commentNoAccess,
+  hmacRequired,
+  isIdentified,
+}: {
+  isCommentsLocked: boolean
+  commentNoAccess: boolean
+  hmacRequired: boolean
+  isIdentified: boolean
+}): boolean {
+  return !isCommentsLocked && !commentNoAccess && (!hmacRequired || isIdentified)
+}
+
 export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
   const intl = useIntl()
   const { upload: uploadImage } = useWidgetImageUpload()
@@ -301,7 +319,12 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
 
           {/* Root comment form — unified: textarea + email (when anonymous) + single Post.
               For an anonymous viewer the email field escalates them to a real user. */}
-          {!post.isCommentsLocked && !commentNoAccess && !hmacRequired && (
+          {shouldShowWidgetCommentForm({
+            isCommentsLocked: post.isCommentsLocked,
+            commentNoAccess,
+            hmacRequired,
+            isIdentified,
+          }) && (
             <WidgetCommentForm
               isIdentified={isIdentified}
               user={user}
