@@ -37,7 +37,7 @@ export const Route = createFileRoute('/admin')({
 
     const { shouldLockAdminToBillingFn } = await import('@/lib/server/functions/billing')
     if (await shouldLockAdminToBillingFn({ data: { pathname: location.pathname } })) {
-      throw redirect({ to: '/admin/settings/billing' })
+      throw redirect({ href: '/admin/settings/billing' })
     }
 
     return {
