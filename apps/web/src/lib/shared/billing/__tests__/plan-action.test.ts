@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { billingPlanAction, type CataloguePlanId } from '../plan-action'
+import { billingPlanAction, isPlanDowngrade, type CataloguePlanId } from '../plan-action'
 import type { BillingProjectionOverview } from '@/lib/server/domains/billing/projection-overview'
 
 const unpaidFree: BillingProjectionOverview = {
@@ -65,7 +65,18 @@ describe('billingPlanAction', () => {
     }
     expect(billingPlanAction('growth', paid).kind).toBe('current')
     expect(billingPlanAction('pro', paid)).toEqual({ kind: 'switch', planId: 'pro' })
-    expect(billingPlanAction('free', paid).kind).toBe('downgrade')
+    expect(billingPlanAction('free', paid)).toEqual({ kind: 'downgrade', planId: 'free' })
+    expect(billingPlanAction('growth', { ...paid, plan: 'pro', planName: 'Business' })).toEqual({
+      kind: 'downgrade',
+      planId: 'growth',
+    })
+  })
+
+  it('ranks a lower plan as a downgrade', () => {
+    expect(isPlanDowngrade('scale', 'growth')).toBe(true)
+    expect(isPlanDowngrade('growth', 'pro')).toBe(false)
+    expect(isPlanDowngrade('pro', 'free')).toBe(true)
+    expect(isPlanDowngrade('enterprise', 'business')).toBe(true)
   })
 
   it('does not let a complimentary grant self-downgrade', () => {

@@ -118,16 +118,76 @@ export const fetchPlanUsageFn = createServerFn({ method: 'GET' }).handler(async 
   ])
 })
 
+export const fetchDowngradePreviewFn = createServerFn({ method: 'GET' })
+  .validator((data: { planId: string }) => data)
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.BILLING_MANAGE })
+    const { parseTargetPlanId, loadUsageCounts } =
+      await import('@/lib/server/domains/billing/usage-counts')
+    const planId = parseTargetPlanId(data.planId)
+    if (!planId) throw new Error('invalid')
+    const { getBillingProjectionOverview } =
+      await import('@/lib/server/domains/billing/projection-overview')
+    const { loadDowngradePreview } = await import('@/lib/server/domains/billing/downgrade-preview')
+    const [overview, used] = await Promise.all([getBillingProjectionOverview(), loadUsageCounts()])
+    return loadDowngradePreview({ planId, overview, used })
+  })
+
+/** @deprecated Use {@link fetchDowngradePreviewFn} with `planId: 'free'`. */
 export const fetchFreeDowngradePreviewFn = createServerFn({ method: 'GET' }).handler(async () => {
   await requireAuth({ permission: PERMISSIONS.BILLING_MANAGE })
   const { getBillingProjectionOverview } =
     await import('@/lib/server/domains/billing/projection-overview')
   const { loadUsageCounts } = await import('@/lib/server/domains/billing/usage-counts')
+  const { loadDowngradePreview } = await import('@/lib/server/domains/billing/downgrade-preview')
   const [overview, used] = await Promise.all([getBillingProjectionOverview(), loadUsageCounts()])
-  const { freeDowngradeIssues, featuresDisabledOnFree } =
-    await import('@/lib/shared/billing/free-downgrade')
-  return {
-    issues: freeDowngradeIssues(used),
-    featuresDisabled: featuresDisabledOnFree(overview?.trialPlanId ?? overview?.plan),
-  }
+  return loadDowngradePreview({ planId: 'free', overview, used })
 })
+
+export const fetchPendingDowngradeFn = createServerFn({ method: 'GET' }).handler(async () => {
+  await requireAuth({ permission: PERMISSIONS.BILLING_MANAGE })
+  const { getPendingDowngrade, pendingPlanName } =
+    await import('@/lib/server/domains/billing/pending-downgrade')
+  const pending = await getPendingDowngrade()
+  if (!pending) return null
+  const { fetchBillingCatalogue } = await import('@/lib/server/control-plane/client')
+  const catalogue = await fetchBillingCatalogue().catch(() => null)
+  const catalogueName = catalogue?.plans.find((plan) => plan.id === pending.planId)?.name
+  return { planId: pending.planId, planName: pendingPlanName(pending.planId, catalogueName) }
+})
+
+export const beginPlanDowngradeFn = createServerFn({ method: 'POST' })
+  .validator((data: { planId: string }) => data)
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.BILLING_MANAGE })
+    const { parseTargetPlanId, loadUsageCounts } =
+      await import('@/lib/server/domains/billing/usage-counts')
+    const planId = parseTargetPlanId(data.planId)
+    if (!planId) throw new Error('invalid')
+    const { getBillingProjectionOverview } =
+      await import('@/lib/server/domains/billing/projection-overview')
+    const { loadDowngradePreview } = await import('@/lib/server/domains/billing/downgrade-preview')
+    const { setPendingDowngrade, clearPendingDowngrade } =
+      await import('@/lib/server/domains/billing/pending-downgrade')
+    const [overview, used] = await Promise.all([getBillingProjectionOverview(), loadUsageCounts()])
+    const preview = await loadDowngradePreview({ planId, overview, used })
+    if (preview.issues.length > 0) await setPendingDowngrade(planId)
+    else await clearPendingDowngrade()
+    return { ...preview, locked: preview.issues.length > 0 }
+  })
+
+export const cancelPlanDowngradeFn = createServerFn({ method: 'POST' }).handler(async () => {
+  await requireAuth({ permission: PERMISSIONS.BILLING_MANAGE })
+  const { clearPendingDowngrade } = await import('@/lib/server/domains/billing/pending-downgrade')
+  await clearPendingDowngrade()
+  return { ok: true as const }
+})
+
+export const shouldLockAdminToBillingFn = createServerFn({ method: 'GET' })
+  .validator((data: { pathname: string }) => data)
+  .handler(async ({ data }) => {
+    const { permissions } = await requireAuth()
+    const { shouldLockAdminToBilling } =
+      await import('@/lib/server/domains/billing/pending-downgrade')
+    return shouldLockAdminToBilling(data.pathname, permissions)
+  })

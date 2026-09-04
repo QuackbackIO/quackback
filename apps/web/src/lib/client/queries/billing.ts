@@ -4,9 +4,13 @@ import {
   fetchBillingInvoicesFn,
   fetchBillingOverviewFn,
   fetchPlanUsageFn,
+  fetchDowngradePreviewFn,
   fetchFreeDowngradePreviewFn,
+  fetchPendingDowngradeFn,
   fetchSeatsPreviewFn,
   fetchUpgradeContextFn,
+  beginPlanDowngradeFn,
+  cancelPlanDowngradeFn,
 } from '@/lib/server/functions/billing'
 
 /** Billing state and catalogue from the control plane. */
@@ -48,6 +52,18 @@ export const billingQueries = {
       queryFn: () => fetchFreeDowngradePreviewFn(),
       staleTime: 10_000,
     }),
+  downgradePreview: (planId: string) =>
+    queryOptions({
+      queryKey: ['billing', 'downgrade', planId] as const,
+      queryFn: () => fetchDowngradePreviewFn({ data: { planId } }),
+      staleTime: 10_000,
+    }),
+  pendingDowngrade: () =>
+    queryOptions({
+      queryKey: ['billing', 'pending-downgrade'] as const,
+      queryFn: () => fetchPendingDowngradeFn(),
+      staleTime: 10_000,
+    }),
   seatsPreview: (quantity: number) =>
     queryOptions({
       queryKey: ['billing', 'seats-preview', quantity] as const,
@@ -55,6 +71,8 @@ export const billingQueries = {
       staleTime: 10_000,
     }),
 }
+
+export { beginPlanDowngradeFn, cancelPlanDowngradeFn }
 
 /**
  * Warm everything an upgrade surface reads before it renders: the advertised

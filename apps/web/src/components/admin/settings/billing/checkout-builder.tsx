@@ -22,7 +22,7 @@ import {
   type BillingPeriod,
 } from '@/lib/shared/billing/checkout-path'
 import { QuantityStepper } from './quantity-stepper'
-import { FreeDowngradeDialog } from './free-downgrade-dialog'
+import { FreeDowngradeDialog, PlanDowngradeDialog } from './free-downgrade-dialog'
 
 type CataloguePlan = BillingCatalogue['plans'][number]
 
@@ -535,7 +535,18 @@ function SummaryAction(props: {
       </Button>
     )
   }
-  if (!props.canAct || action.kind === 'unavailable' || action.kind === 'downgrade') {
+  if (action.kind === 'downgrade') {
+    return (
+      <PaidDowngradeAction
+        planName={plan.name}
+        planId={action.planId}
+        period={props.period}
+        quantity={props.quantity}
+        branding={props.branding}
+      />
+    )
+  }
+  if (!props.canAct || action.kind === 'unavailable') {
     return (
       <Button type="button" className="w-full" disabled>
         Continue to payment
@@ -558,6 +569,36 @@ function SummaryAction(props: {
         <TrialInstead planId={action.planId} planName={plan.name} trialDays={props.trialDays} />
       ) : null}
     </div>
+  )
+}
+
+function PaidDowngradeAction(props: {
+  planName: string
+  planId: string
+  period: BillingPeriod
+  quantity: number
+  branding: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <Button type="button" className="w-full" variant="outline" onClick={() => setOpen(true)}>
+        Switch to {props.planName}
+      </Button>
+      {open ? (
+        <PlanDowngradeDialog
+          open
+          onOpenChange={setOpen}
+          planId={props.planId}
+          planName={props.planName}
+          checkout={{
+            period: props.period,
+            quantity: props.quantity,
+            branding: props.branding,
+          }}
+        />
+      ) : null}
+    </>
   )
 }
 

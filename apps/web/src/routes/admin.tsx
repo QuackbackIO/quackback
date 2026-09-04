@@ -1,5 +1,11 @@
 import { Suspense } from 'react'
-import { createFileRoute, Outlet, useRouterState, useRouteContext } from '@tanstack/react-router'
+import {
+  createFileRoute,
+  Outlet,
+  redirect,
+  useRouterState,
+  useRouteContext,
+} from '@tanstack/react-router'
 import { IntlProvider } from 'react-intl'
 import { useAdminPresence } from '@/lib/client/hooks/use-admin-presence'
 import { DEFAULT_LOCALE, loadMessages } from '@/lib/shared/i18n'
@@ -28,6 +34,11 @@ export const Route = createFileRoute('/admin')({
     const { user, principal, permissions } = await requireWorkspaceRole({
       data: { allowedRoles: ['admin', 'member'] },
     })
+
+    const { shouldLockAdminToBillingFn } = await import('@/lib/server/functions/billing')
+    if (await shouldLockAdminToBillingFn({ data: { pathname: location.pathname } })) {
+      throw redirect({ to: '/admin/settings/billing' })
+    }
 
     return {
       user,

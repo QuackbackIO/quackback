@@ -10,6 +10,11 @@ vi.mock('@/lib/server/functions/billing', () => ({
   fetchBillingOverviewFn: vi.fn(),
   fetchPlanUsageFn: vi.fn(),
   fetchFreeDowngradePreviewFn: vi.fn(),
+  fetchDowngradePreviewFn: vi.fn(),
+  fetchPendingDowngradeFn: vi.fn(),
+  beginPlanDowngradeFn: vi.fn(),
+  cancelPlanDowngradeFn: vi.fn(),
+  shouldLockAdminToBillingFn: vi.fn(),
   fetchSeatsPreviewFn: vi.fn(),
 }))
 
