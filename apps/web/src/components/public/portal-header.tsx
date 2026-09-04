@@ -32,7 +32,11 @@ import {
   SunIcon,
 } from '@heroicons/react/24/solid'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
-import { hasAnyPortalAuthMethod, resolveSoleOidcProvider } from '@/components/auth/oauth-buttons'
+import {
+  hasAnyPortalAuthMethod,
+  hasDistinctSignup,
+  resolveSoleOidcProvider,
+} from '@/components/auth/oauth-buttons'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getMyConversationsFn } from '@/lib/server/functions/conversation'
 import { PORTAL_MY_CONVERSATIONS_QUERY_KEY } from '@/lib/client/queries/portal-support'
@@ -109,6 +113,15 @@ export function PortalHeader({
   const portalAuthEnabled = hasAnyPortalAuthMethod(settings?.publicAuthConfig?.oauth ?? {}, {
     registeredAuthProviders,
     oidcProviders: settings?.publicPortalConfig?.oidcProviders,
+  })
+
+  // A separate "Sign up" button only earns its place when sign-up mode actually
+  // differs from login — i.e. password auth is on and self-service signup is
+  // open. Otherwise magic-link / SSO create the account implicitly and the two
+  // buttons do the same thing, so collapse to a single "Log in".
+  const showSignup = hasDistinctSignup({
+    oauth: settings?.publicAuthConfig?.oauth,
+    openSignup: settings?.publicPortalConfig?.openSignup,
   })
 
   // When the ONLY sign-in method is a single OIDC provider, every sign-in goes
@@ -388,10 +401,12 @@ export function PortalHeader({
           </DropdownMenuContent>
         </DropdownMenu>
       ) : openAuthPopover && portalAuthEnabled ? (
-        // Anonymous user with auth popover available - show login/signup buttons
+        // Anonymous user with auth popover available. Show "Sign up" only when it
+        // leads somewhere different from "Log in" (see hasDistinctSignup);
+        // otherwise the sole "Log in" button becomes the primary CTA.
         <div className="flex items-center gap-2">
           <Button
-            variant="ghost"
+            variant={showSignup ? 'ghost' : 'default'}
             size="sm"
             onClick={() =>
               soleOidcProviderId ? redirectToSoleProvider() : openAuthPopover({ mode: 'login' })
@@ -399,14 +414,16 @@ export function PortalHeader({
           >
             <FormattedMessage id="portal.header.auth.logIn" defaultMessage="Log in" />
           </Button>
-          <Button
-            size="sm"
-            onClick={() =>
-              soleOidcProviderId ? redirectToSoleProvider() : openAuthPopover({ mode: 'signup' })
-            }
-          >
-            <FormattedMessage id="portal.header.auth.signUp" defaultMessage="Sign up" />
-          </Button>
+          {showSignup && (
+            <Button
+              size="sm"
+              onClick={() =>
+                soleOidcProviderId ? redirectToSoleProvider() : openAuthPopover({ mode: 'signup' })
+              }
+            >
+              <FormattedMessage id="portal.header.auth.signUp" defaultMessage="Sign up" />
+            </Button>
+          )}
         </div>
       ) : null}
     </div>
