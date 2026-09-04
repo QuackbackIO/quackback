@@ -17,6 +17,7 @@ import { SINGLE_WORKSPACE_KEY } from '@/lib/server/workspaces/after-commit'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
 import { enqueueHookJobsWithIds } from './process'
 import { hydrateEvent, MAX_DEPTH, MAX_STRICT_RESOLVE_ATTEMPTS } from './outbox'
+import { registerAllResolvers } from './resolvers'
 import { resolveTargets } from './resolvers/registry'
 import { toLegacyEvent } from './to-legacy-event'
 import crypto from 'crypto'
@@ -131,6 +132,15 @@ export async function runEventDispatch(
   job: ClaimedJob,
   deps: EventDispatchDeps = {}
 ): Promise<void> {
+  // Fill the sink registry before the first resolve. `resolveTargets` reads a
+  // module-level array that only `registerAllResolvers()` populates, and its
+  // former caller — `getHookTargets()` in targets.ts — lost its last production
+  // call site in the WO-18 cutover. Nothing filled the registry any more, so
+  // every event resolved to zero targets: published, no hook jobs, no error.
+  // Idempotent, and the import above is static on purpose: a call-time
+  // `import()` here would load the resolver graph inside a per-pass workspace
+  // scope (see jobs/__tests__/handler-imports.test.ts).
+  if (!deps.resolve) registerAllResolvers()
   const resolve = deps.resolve ?? resolveTargets
   const enqueue = deps.enqueue ?? enqueueHookJobsWithIds
 
