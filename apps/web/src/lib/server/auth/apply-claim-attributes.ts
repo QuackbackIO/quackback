@@ -12,7 +12,7 @@ import {
   type AttributeDefinition,
 } from '@/lib/shared/plan-claim-attribute-writes'
 import { logger } from '@/lib/server/logger'
-import { readSsoClaims } from './read-sso-claims'
+import { readSsoClaimsWithProvenance, type ClaimRead } from './read-sso-claims'
 
 export { planClaimAttributeWrites }
 export type { AttributeDefinition }
@@ -25,8 +25,8 @@ const log = logger.child({ component: 'claim-attributes' })
  *
  * `readClaims`, when provided, is the shared per-callback reader so a
  * take-once stash is not drained by role provisioning first. Omitted, this
- * falls back to `readSsoClaims` so unit tests that call the writer directly
- * keep passing.
+ * falls back to `readSsoClaimsWithProvenance` so unit tests that call the
+ * writer directly keep passing.
  */
 export async function applyClaimAttributesAfter(
   ctx: {
@@ -42,7 +42,7 @@ export async function applyClaimAttributesAfter(
     >
   >,
   registeredOidcIds: Set<string>,
-  readClaims?: () => Promise<Record<string, unknown>>
+  readClaims?: () => Promise<ClaimRead>
 ): Promise<void> {
   if (ctx.path !== '/oauth2/callback/:providerId') return
   const providerId = ctx.params?.providerId
@@ -69,7 +69,22 @@ export async function applyClaimAttributesAfter(
   })
   if (!owner) return
 
-  const claims = await (readClaims ? readClaims() : readSsoClaims(userIdTyped, providerId))
+  const { claims, fresh } = await (readClaims
+    ? readClaims()
+    : readSsoClaimsWithProvenance(userIdTyped, providerId))
+
+  // Write from a fallback read, never clear on one. The stored ID token can
+  // never carry a userinfo-only claim, so its absence there is not the IdP
+  // withdrawing it — and a stash miss (overlapping callbacks for one subject,
+  // TTL, eviction) must not turn syncOnSignIn into a delete.
+  const syncSuppressed = !fresh && attributes.syncOnSignIn === true
+  const mapping = syncSuppressed ? { ...attributes, syncOnSignIn: false } : attributes
+  if (syncSuppressed) {
+    log.info(
+      { user_id: userId, provider_id: providerId },
+      'claim attribute sync skipped: claims read from stored ID token, not this sign-in'
+    )
+  }
 
   let existing: Record<string, unknown> = {}
   if (owner.metadata) {
@@ -84,7 +99,7 @@ export async function applyClaimAttributesAfter(
   const debug = process.env.AUTH_HOOKS_DEBUG === '1'
   const { valid, removals, skips } = planClaimAttributeWrites({
     claims,
-    mapping: attributes,
+    mapping,
     existing,
     definitions: definitions.map((d) => ({ key: d.key, type: d.type })),
     explain: debug,

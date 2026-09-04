@@ -56,8 +56,13 @@ const applyClaimAttributesAfter = realApply as unknown as (
   },
   providers: ReadonlyArray<Record<string, unknown>>,
   registeredOidcIds: Set<string>,
-  readClaims?: () => Promise<Record<string, unknown>>
+  readClaims?: () => Promise<{ claims: Record<string, unknown>; fresh: boolean }>
 ) => Promise<void>
+
+/** A reader whose claims came from the stash — this sign-in, every source. */
+const fresh = (claims: Record<string, unknown>) => async () => ({ claims, fresh: true })
+/** A reader that fell back to the stored ID token. */
+const stale = (claims: Record<string, unknown>) => async () => ({ claims, fresh: false })
 
 const DEPARTMENT_DEF = { key: 'department', type: 'string' as const }
 
@@ -98,9 +103,12 @@ beforeEach(() => {
 
 describe('applyClaimAttributesAfter', () => {
   it('writes user.metadata with the coerced value for a mapped, defined key', async () => {
-    await applyClaimAttributesAfter(ctxFor(), providersWith(), new Set(['sso']), async () => ({
-      department: 'Engineering',
-    }))
+    await applyClaimAttributesAfter(
+      ctxFor(),
+      providersWith(),
+      new Set(['sso']),
+      fresh({ department: 'Engineering' })
+    )
     expect(mockUpdateSet).toHaveBeenCalledWith({
       metadata: JSON.stringify({ department: 'Engineering' }),
     })
@@ -122,16 +130,19 @@ describe('applyClaimAttributesAfter', () => {
         claimMapping: { attributes: { map: [{ claimPath: 'department', attributeKey: 'nope' }] } },
       }),
       new Set(['sso']),
-      async () => ({ department: 'Engineering' })
+      fresh({ department: 'Engineering' })
     )
     expect(mockUpdateSet).not.toHaveBeenCalled()
   })
 
   it('keeps an existing value when override is off', async () => {
     mockUserFindFirst.mockResolvedValue({ metadata: JSON.stringify({ department: 'Sales' }) })
-    await applyClaimAttributesAfter(ctxFor(), providersWith(), new Set(['sso']), async () => ({
-      department: 'Engineering',
-    }))
+    await applyClaimAttributesAfter(
+      ctxFor(),
+      providersWith(),
+      new Set(['sso']),
+      fresh({ department: 'Engineering' })
+    )
     expect(mockUpdateSet).not.toHaveBeenCalled()
   })
 
@@ -148,7 +159,7 @@ describe('applyClaimAttributesAfter', () => {
         },
       }),
       new Set(['sso']),
-      async () => ({ department: 'Engineering' })
+      fresh({ department: 'Engineering' })
     )
     expect(mockUpdateSet).toHaveBeenCalledWith({
       metadata: JSON.stringify({ department: 'Engineering' }),
@@ -168,14 +179,46 @@ describe('applyClaimAttributesAfter', () => {
         },
       }),
       new Set(['sso']),
-      async () => ({})
+      fresh({})
     )
     expect(mockUpdateSet).toHaveBeenCalledWith({ metadata: JSON.stringify({}) })
   })
 
+  it('a fallback read still writes, but never clears under syncOnSignIn', async () => {
+    // The stored ID token cannot carry a userinfo-only claim, so a stash miss
+    // (overlapping callbacks for one subject, TTL, eviction) must not let
+    // syncOnSignIn read "absent" as "withdrawn" and delete a valid attribute.
+    mockSelectFrom.mockResolvedValue([DEPARTMENT_DEF, { key: 'plan', type: 'string' }])
+    mockUserFindFirst.mockResolvedValue({ metadata: JSON.stringify({ department: 'Sales' }) })
+    const providers = providersWith({
+      claimMapping: {
+        attributes: {
+          map: [
+            { claimPath: 'department', attributeKey: 'department' },
+            { claimPath: 'plan', attributeKey: 'plan' },
+          ],
+          syncOnSignIn: true,
+        },
+      },
+    })
+    await applyClaimAttributesAfter(ctxFor(), providers, new Set(['sso']), stale({ plan: 'pro' }))
+    expect(mockUpdateSet).toHaveBeenCalledWith({
+      metadata: JSON.stringify({ department: 'Sales', plan: 'pro' }),
+    })
+    expect(mockLogInfo).toHaveBeenCalledWith(
+      expect.objectContaining({ user_id: 'user_1', provider_id: 'sso' }),
+      expect.stringMatching(/sync skipped/)
+    )
+
+    // Same read, nothing to add: no write at all rather than a delete.
+    mockUpdateSet.mockClear()
+    await applyClaimAttributesAfter(ctxFor(), providers, new Set(['sso']), stale({}))
+    expect(mockUpdateSet).not.toHaveBeenCalled()
+  })
+
   it('leaves a missing claim alone when sync is off', async () => {
     mockUserFindFirst.mockResolvedValue({ metadata: JSON.stringify({ department: 'Sales' }) })
-    await applyClaimAttributesAfter(ctxFor(), providersWith(), new Set(['sso']), async () => ({}))
+    await applyClaimAttributesAfter(ctxFor(), providersWith(), new Set(['sso']), fresh({}))
     expect(mockUpdateSet).not.toHaveBeenCalled()
   })
 
@@ -183,9 +226,12 @@ describe('applyClaimAttributesAfter', () => {
     mockUserFindFirst.mockResolvedValue({
       metadata: JSON.stringify({ _externalUserId: 'ext_1' }),
     })
-    await applyClaimAttributesAfter(ctxFor(), providersWith(), new Set(['sso']), async () => ({
-      department: 'Engineering',
-    }))
+    await applyClaimAttributesAfter(
+      ctxFor(),
+      providersWith(),
+      new Set(['sso']),
+      fresh({ department: 'Engineering' })
+    )
     expect(mockUpdateSet).toHaveBeenCalledWith({
       metadata: JSON.stringify({ _externalUserId: 'ext_1', department: 'Engineering' }),
     })
@@ -196,7 +242,7 @@ describe('applyClaimAttributesAfter', () => {
       ctxFor({ path: '/sign-in/email' }),
       providersWith(),
       new Set(['sso']),
-      async () => ({ department: 'Engineering' })
+      fresh({ department: 'Engineering' })
     )
     expect(mockUserFindFirst).not.toHaveBeenCalled()
     expect(mockUpdateSet).not.toHaveBeenCalled()
@@ -207,7 +253,7 @@ describe('applyClaimAttributesAfter', () => {
       ctxFor({ providerId: 'google' }),
       providersWith(),
       new Set(['sso']),
-      async () => ({ department: 'Engineering' })
+      fresh({ department: 'Engineering' })
     )
     expect(mockUserFindFirst).not.toHaveBeenCalled()
   })
@@ -217,7 +263,7 @@ describe('applyClaimAttributesAfter', () => {
       ctxFor({ userId: null }),
       providersWith(),
       new Set(['sso']),
-      async () => ({ department: 'Engineering' })
+      fresh({ department: 'Engineering' })
     )
     expect(mockUserFindFirst).not.toHaveBeenCalled()
   })
@@ -225,9 +271,12 @@ describe('applyClaimAttributesAfter', () => {
   it('throws on a DB error so hooksAfter can swallow it without blocking sign-in', async () => {
     mockUpdateWhere.mockRejectedValue(new Error('db down'))
     await expect(
-      applyClaimAttributesAfter(ctxFor(), providersWith(), new Set(['sso']), async () => ({
-        department: 'Engineering',
-      }))
+      applyClaimAttributesAfter(
+        ctxFor(),
+        providersWith(),
+        new Set(['sso']),
+        fresh({ department: 'Engineering' })
+      )
     ).rejects.toThrow('db down')
   })
 
@@ -236,14 +285,14 @@ describe('applyClaimAttributesAfter', () => {
     // builds must hand the same claims to the attribute writer.
     let taken = false
     const stash = { department: 'Engineering' }
-    let cached: Promise<Record<string, unknown>> | undefined
+    let cached: Promise<{ claims: Record<string, unknown>; fresh: boolean }> | undefined
     const readClaims = () => {
       if (!cached) {
         cached = Promise.resolve(
           (() => {
-            if (taken) return {}
+            if (taken) return { claims: {}, fresh: false }
             taken = true
-            return stash
+            return { claims: stash, fresh: true }
           })()
         )
       }

@@ -10,6 +10,17 @@
 import { decodeSsoClaims } from './sso-claims-decode'
 import { takeResolvedClaims } from './resolved-claims-stash'
 
+export interface ClaimRead {
+  claims: Record<string, unknown>
+  /**
+   * True when the claims came from the stash — what the resolver validated in
+   * THIS request, every source included. False when they came from the stored
+   * ID token, which by construction never carries userinfo-only claims, so a
+   * claim missing from it proves nothing about what the IdP released.
+   */
+  fresh: boolean
+}
+
 /**
  * Read the latest stored ID-token claims for a user's OIDC account.
  * Returns an empty object when no token is stored or the token is
@@ -25,6 +36,14 @@ export async function readSsoClaims(
   userId: `user_${string}`,
   providerId: string
 ): Promise<Record<string, unknown>> {
+  return (await readSsoClaimsWithProvenance(userId, providerId)).claims
+}
+
+/** `readSsoClaims`, plus whether the stash hit. See `ClaimRead.fresh`. */
+export async function readSsoClaimsWithProvenance(
+  userId: `user_${string}`,
+  providerId: string
+): Promise<ClaimRead> {
   const { db, account, and, eq, desc } = await import('@/lib/server/db')
   const row = await db.query.account.findFirst({
     where: and(eq(account.userId, userId), eq(account.providerId, providerId)),
@@ -42,11 +61,11 @@ export async function readSsoClaims(
   // access token has none, and would otherwise always land on the default role
   // however its claims are mapped.
   if (row?.accountId) {
-    const fresh = takeResolvedClaims(providerId, row.accountId)
-    if (fresh) return fresh
+    const stashed = takeResolvedClaims(providerId, row.accountId)
+    if (stashed) return { claims: stashed, fresh: true }
   }
 
   // Refuses an expired token; see sso-claims-decode.ts for why freshness is
   // the property that matters when the signature is not verified.
-  return decodeSsoClaims(row?.idToken)
+  return { claims: decodeSsoClaims(row?.idToken), fresh: false }
 }

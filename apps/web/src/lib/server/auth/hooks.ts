@@ -45,7 +45,7 @@ import {
   markDeviceSeen,
 } from './signin-device-tracker'
 import { isSyntheticAnonEmail } from '@/lib/shared/anonymous-email'
-import { readSsoClaims } from './read-sso-claims'
+import { readSsoClaims, readSsoClaimsWithProvenance, type ClaimRead } from './read-sso-claims'
 import { applyClaimAttributesAfter } from './apply-claim-attributes'
 import { logger } from '@/lib/server/logger'
 
@@ -603,7 +603,7 @@ export async function handleAutoProvisionAfter(
   /** OIDC provider ids registered right now (from getRegisteredOidcProviderIds). */
   registeredOidcIds: Set<string>,
   /** Shared per-callback claim reader. Omitted, falls back to `readSsoClaims`. */
-  readClaims?: () => Promise<Record<string, unknown>>
+  readClaims?: () => Promise<ClaimRead>
 ): Promise<void> {
   if (ctx.path !== '/oauth2/callback/:providerId') return
   const providerId = ctx.params?.providerId
@@ -633,7 +633,11 @@ export async function handleAutoProvisionAfter(
   const roleMapping = roleMappingFor(provider.claimMapping)
   let claimRole: Role | null = null
   if (roleMapping) {
-    const claims = await (readClaims ? readClaims() : readSsoClaims(userIdTyped, providerId))
+    // Role resolution is indifferent to provenance: a role claim absent from
+    // the stored token yields the default role either way.
+    const claims = readClaims
+      ? (await readClaims()).claims
+      : await readSsoClaims(userIdTyped, providerId)
     const { resolveSsoRole } = await import('./resolve-sso-role')
     claimRole = resolveSsoRole(claims, roleMapping)
   }
@@ -1308,7 +1312,7 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
   // One claim read per callback. The stash is take-once, so role
   // provisioning and attribute writes must share the result rather than
   // each calling `takeResolvedClaims`.
-  let claimsPromise: Promise<Record<string, unknown>> | undefined
+  let claimsPromise: Promise<ClaimRead> | undefined
   const callbackUserId = ctx.context?.newSession?.user?.id
   const callbackProviderId = ctx.params?.providerId
   const readClaims =
@@ -1317,7 +1321,10 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
     typeof callbackProviderId === 'string'
       ? () => {
           if (!claimsPromise) {
-            claimsPromise = readSsoClaims(callbackUserId as `user_${string}`, callbackProviderId)
+            claimsPromise = readSsoClaimsWithProvenance(
+              callbackUserId as `user_${string}`,
+              callbackProviderId
+            )
           }
           return claimsPromise
         }
