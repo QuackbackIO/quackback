@@ -28,7 +28,7 @@ vi.mock('@/lib/server/functions/workflow-reporting', () => ({
 }))
 vi.mock('@/components/admin/upgrade', () => ({
   UpgradeModal: ({ open }: { open: boolean }) =>
-    open ? <p>Workflows are a Pro feature. Upgrade to Pro to enable it.</p> : null,
+    open ? <p>Workflows are a Business feature. Upgrade to Business to enable it.</p> : null,
 }))
 
 const { WorkflowsManager } = await import('../workflows-manager')
@@ -50,7 +50,7 @@ describe('WorkflowsManager create lock', () => {
     renderManager(false)
     await user.click(await screen.findByRole('button', { name: /New workflow/ }))
     await user.click(await screen.findByText('Create from scratch'))
-    expect(screen.getByText(/Workflows are a Pro feature/)).toBeTruthy()
+    expect(screen.getByText(/Workflows are a Business feature/)).toBeTruthy()
   })
 
   it('does not show the upgrade modal when the plan includes workflows', async () => {
@@ -58,6 +58,6 @@ describe('WorkflowsManager create lock', () => {
     renderManager(true)
     await user.click(await screen.findByRole('button', { name: /New workflow/ }))
     expect(screen.getByText('Create from scratch')).toBeTruthy()
-    expect(screen.queryByText(/Workflows are a Pro feature/)).toBeNull()
+    expect(screen.queryByText(/Workflows are a Business feature/)).toBeNull()
   })
 })

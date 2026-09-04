@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/shared/utils'
 import { formatUsd } from '@/lib/shared/format-usd'
+import { annualSavingsLabel } from '@/lib/shared/billing/checkout-path'
 import {
   billingPlanAction,
   catalogueTrialedPlanIds,
@@ -31,6 +32,10 @@ export function TrialExpiredBilling(props: {
   const paidSelected = selected && selected.id !== 'free' ? selected : null
   const checkoutQuantity = Math.max(overview.seats?.used ?? 1, 1)
   const trialName = overview.trialPlanName ?? 'your plan'
+  const savingsPlan =
+    catalogue?.plans.find((plan) => plan.recommended) ??
+    catalogue?.plans.find((plan) => plan.id !== 'free') ??
+    null
 
   return (
     <div className="space-y-6">
@@ -51,6 +56,7 @@ export function TrialExpiredBilling(props: {
             <PeriodToggle
               value={period}
               discountMonths={catalogue?.annualDiscountMonths ?? 2}
+              savingsLabel={annualSavingsLabel(savingsPlan)}
               onChange={setPeriod}
             />
           </div>
@@ -217,6 +223,7 @@ function OrderSummary(props: {
 function PeriodToggle(props: {
   value: 'monthly' | 'annual'
   discountMonths: number
+  savingsLabel: string | null
   onChange: (next: 'monthly' | 'annual') => void
 }) {
   return (
@@ -242,9 +249,11 @@ function PeriodToggle(props: {
           {option === 'annual' ? (
             <>
               Yearly
-              <span className="ms-1.5 text-[11px] font-semibold text-primary">
-                {props.discountMonths} mo free
-              </span>
+              {props.savingsLabel ? (
+                <span className="ms-1.5 text-[11px] font-semibold text-primary">
+                  {props.savingsLabel}
+                </span>
+              ) : null}
             </>
           ) : (
             'Monthly'

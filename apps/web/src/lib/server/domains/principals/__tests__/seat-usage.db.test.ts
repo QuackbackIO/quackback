@@ -168,7 +168,7 @@ describe.skipIf(!fixture.available)('countSeatUsage', () => {
     await seedInvite('team', inviterId)
     await expect(enforceSeatLimit()).rejects.toBeInstanceOf(TierLimitError)
     await expect(enforceSeatLimit()).rejects.toThrow(
-      /All \d+ seats are in use\. Add a seat to invite more\./
+      /You've reached your plan's team seats limit \(\d+\)\. Upgrade to add more\./
     )
   })
 

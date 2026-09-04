@@ -4,6 +4,7 @@ import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 const hoisted = vi.hoisted(() => ({
   countSeatUsage: vi.fn(),
   getCloudConfig: vi.fn(),
+  catalogueBilledPer: vi.fn(),
 }))
 
 vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
@@ -16,6 +17,10 @@ vi.mock('../seat-usage', () => ({
 
 vi.mock('@/lib/server/domains/settings/cloud/cloud.service', () => ({
   getCloudConfig: () => hoisted.getCloudConfig(),
+}))
+
+vi.mock('@/lib/server/domains/billing/projection-overview', () => ({
+  catalogueBilledPer: (...args: unknown[]) => hoisted.catalogueBilledPer(...args),
 }))
 
 import { enforceSeatLimit } from '../seat-limit'
@@ -31,6 +36,7 @@ describe('enforceSeatLimit', () => {
       plan: null,
       trialActive: false,
     })
+    hoisted.catalogueBilledPer.mockResolvedValue(undefined)
   })
 
   it('does nothing when maxTeamSeats is null (OSS default)', async () => {
@@ -51,7 +57,7 @@ describe('enforceSeatLimit', () => {
     await expect(enforceSeatLimit()).rejects.toBeInstanceOf(TierLimitError)
   })
 
-  it('uses seat-specific copy on a paid plan', async () => {
+  it('uses seat-specific copy on a grandfathered per-seat plan', async () => {
     vi.mocked(getTierLimits).mockResolvedValue({ ...OSS_TIER_LIMITS, maxTeamSeats: 10 })
     hoisted.countSeatUsage.mockResolvedValue({ members: 8, pendingInvites: 2, used: 10 })
     hoisted.getCloudConfig.mockResolvedValue({
@@ -59,8 +65,23 @@ describe('enforceSeatLimit', () => {
       plan: 'pro',
       trialActive: false,
     })
+    hoisted.catalogueBilledPer.mockResolvedValue('seat')
     await expect(enforceSeatLimit()).rejects.toThrow(
       'All 10 seats are in use. Add a seat to invite more.'
+    )
+  })
+
+  it('uses upgrade copy when the catalogue plan is billed per workspace', async () => {
+    vi.mocked(getTierLimits).mockResolvedValue({ ...OSS_TIER_LIMITS, maxTeamSeats: 5 })
+    hoisted.countSeatUsage.mockResolvedValue({ members: 5, pendingInvites: 0, used: 5 })
+    hoisted.getCloudConfig.mockResolvedValue({
+      enabled: true,
+      plan: 'growth',
+      trialActive: false,
+    })
+    hoisted.catalogueBilledPer.mockResolvedValue('workspace')
+    await expect(enforceSeatLimit()).rejects.toThrow(
+      "You've reached your plan's team seats limit (5). Upgrade to add more."
     )
   })
 

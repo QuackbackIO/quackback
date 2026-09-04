@@ -19,7 +19,7 @@ vi.mock('../audit-log-page', () => ({
   AuditLogPage: () => <div>audit-feed</div>,
 }))
 vi.mock('@/components/admin/upgrade', () => ({
-  UpgradeScreen: () => <div>The audit log is a Scale feature</div>,
+  UpgradeScreen: () => <div>The audit log is an Enterprise feature</div>,
 }))
 
 const { AuthSettings } = await import('../auth-settings')
@@ -41,7 +41,7 @@ describe('AuthSettings audit tab', () => {
     )
     expect(screen.getByText('portal-access-body')).toBeDefined()
     expect(screen.queryByText('audit-feed')).toBeNull()
-    expect(screen.queryByText(/The audit log is a Scale feature/)).toBeNull()
+    expect(screen.queryByText(/The audit log is an Enterprise feature/)).toBeNull()
   })
 
   it('shows an upgrade notice on the audit tab instead of the feed', () => {
@@ -55,7 +55,7 @@ describe('AuthSettings audit tab', () => {
         auditEntitled={false}
       />
     )
-    expect(screen.getByText(/The audit log is a Scale feature/)).toBeDefined()
+    expect(screen.getByText(/The audit log is an Enterprise feature/)).toBeDefined()
     expect(screen.queryByText('audit-feed')).toBeNull()
   })
 
@@ -71,7 +71,7 @@ describe('AuthSettings audit tab', () => {
       />
     )
     expect(screen.getByText('audit-feed')).toBeDefined()
-    expect(screen.queryByText(/The audit log is a Scale feature/)).toBeNull()
+    expect(screen.queryByText(/The audit log is an Enterprise feature/)).toBeNull()
   })
 
   it('keeps the audit tab reachable so the upgrade is discoverable', () => {

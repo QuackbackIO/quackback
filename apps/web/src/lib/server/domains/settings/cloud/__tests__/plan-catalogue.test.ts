@@ -82,7 +82,7 @@ describe('the plan ladder', () => {
   it('reads correctly in refusal copy, article and all', () => {
     expect(
       PLAN_IDS.map((id) => `${PLAN_CATALOGUE[id].article} ${PLAN_CATALOGUE[id].name} plan`)
-    ).toEqual(['a Free plan', 'a Growth plan', 'a Pro plan', 'a Scale plan'])
+    ).toEqual(['a Free plan', 'a Pro plan', 'a Business plan', 'an Enterprise plan'])
   })
 })
 
@@ -133,22 +133,22 @@ describe('the levels the price list moved', () => {
   // One test per correction. Each states the level it moved FROM as well as
   // the one it moved to, so a catalogue that simply granted more would fail.
 
-  it('includes the MCP server from Growth, the cheapest paid plan', () => {
+  it('includes the MCP server from Pro, the cheapest paid plan', () => {
     expect(isEntitled(on('free'), 'mcpServer')).toBe(false)
     expect(isEntitled(on('growth'), 'mcpServer')).toBe(true)
   })
 
-  it('includes AI insights from Growth, the cheapest paid plan', () => {
+  it('includes AI insights from Pro, the cheapest paid plan', () => {
     expect(isEntitled(on('free'), 'aiInsights')).toBe(false)
     expect(isEntitled(on('growth'), 'aiInsights')).toBe(true)
   })
 
-  it('starts workflows at Pro, not at Growth', () => {
+  it('starts workflows at Business, not at Pro', () => {
     expect(isEntitled(on('growth'), 'workflows')).toBe(false)
     expect(isEntitled(on('pro'), 'workflows')).toBe(true)
   })
 
-  it('starts the audit log at Scale, not at Pro', () => {
+  it('starts the audit log at Enterprise, not at Business', () => {
     expect(isEntitled(on('pro'), 'auditLog')).toBe(false)
     expect(isEntitled(on('scale'), 'auditLog')).toBe(true)
   })

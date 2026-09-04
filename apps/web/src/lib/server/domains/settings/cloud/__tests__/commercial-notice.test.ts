@@ -25,7 +25,7 @@ describe('trialNotice', () => {
   it('keeps See plans until the last three days', () => {
     const notice = trialNotice(config({ trialExpiresAt: '2026-08-30T00:00:00.000Z' }), NOW)
     expect(notice).toMatchObject({
-      label: 'Growth trial',
+      label: 'Pro trial',
       actionLabel: 'See plans',
       message: expect.stringContaining('pick a paid plan'),
     })
@@ -33,7 +33,7 @@ describe('trialNotice', () => {
 
   it('switches the action to Continue with the plan in the last three days', () => {
     const notice = trialNotice(config({ trialExpiresAt: '2026-08-21T12:00:00.000Z' }), NOW)
-    expect(notice?.actionLabel).toBe('Continue with Growth')
+    expect(notice?.actionLabel).toBe('Continue with Pro')
   })
 })
 
@@ -45,10 +45,10 @@ describe('trialEndedNotice', () => {
         trialActive: false,
         trialExpiresAt: '2026-08-18T00:00:00.000Z',
       }),
-      { trialPlanName: 'Growth', now: NOW }
+      { trialPlanName: 'Pro', now: NOW }
     )
     expect(notice).toMatchObject({
-      label: 'Growth trial ended',
+      label: 'Pro trial ended',
       actionLabel: 'Update billing',
     })
     expect(notice?.message).toMatch(/trial has come to an end/)

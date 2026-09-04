@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { PlanNoticeBanner } from '../plan-notice-banner'
 
 const ENDED = {
-  label: 'Growth trial ended',
+  label: 'Pro trial ended',
   message: 'Your trial has come to an end.',
   expiresAt: '2026-08-18T00:00:00.000Z',
   actionLabel: 'Update billing',
@@ -25,7 +25,7 @@ describe('PlanNoticeBanner', () => {
 
   it('renders an ended-trial strip with no dismiss control', () => {
     render(<PlanNoticeBanner notice={ENDED} />)
-    expect(screen.getByText('Growth trial ended')).toBeInTheDocument()
+    expect(screen.getByText('Pro trial ended')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Update billing/ })).toHaveAttribute(
       'href',
       '/admin/settings/billing'

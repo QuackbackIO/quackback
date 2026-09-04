@@ -31,10 +31,9 @@ export interface PlanDefinition {
   rank: number
   /**
    * Indefinite article for {@link name} in refusal copy ("a Pro feature",
-   * "an Advanced feature"). Declared rather than derived: an initial-vowel
+   * "an Enterprise feature"). Declared rather than derived: an initial-vowel
    * test is wrong for names like "Unlimited" ("an Unlimited plan") and
-   * "One" ("a One plan"), and there are only a handful of plans. Every plan
-   * in today's catalogue happens to take "a".
+   * "One" ("a One plan"), and there are only a handful of plans.
    */
   article: 'a' | 'an'
   /** Entitlements this plan grants by default. */
@@ -216,7 +215,7 @@ export const PLAN_CATALOGUE: Record<PlanId, PlanDefinition> = {
   growth: {
     id: 'growth',
     article: 'a',
-    name: 'Growth',
+    name: 'Pro',
     rank: 1,
     grants: [
       'customDomain',
@@ -231,7 +230,7 @@ export const PLAN_CATALOGUE: Record<PlanId, PlanDefinition> = {
   pro: {
     id: 'pro',
     article: 'a',
-    name: 'Pro',
+    name: 'Business',
     rank: 2,
     grants: [
       'customDomain',
@@ -246,8 +245,8 @@ export const PLAN_CATALOGUE: Record<PlanId, PlanDefinition> = {
   },
   scale: {
     id: 'scale',
-    article: 'a',
-    name: 'Scale',
+    article: 'an',
+    name: 'Enterprise',
     rank: 3,
     grants: [
       'customDomain',

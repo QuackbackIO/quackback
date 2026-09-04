@@ -167,6 +167,7 @@ export type BillingCatalogue = {
     priceMonthlyCents: number
     priceYearlyCents: number
     billedPer: 'seat' | 'workspace'
+    annualSavingsCents?: number
     bestFor: string
     highlights: string[]
     recommended: boolean

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  annualSavingsCents,
+  annualSavingsLabel,
   annualSavingsPercent,
   checkoutPath,
   checkoutSummary,
@@ -74,5 +76,15 @@ describe('annualSavingsPercent', () => {
     expect(annualSavingsPercent(pro)).toBe(17)
     expect(annualSavingsPercent({ priceMonthlyCents: 1000, priceYearlyCents: 12000 })).toBeNull()
     expect(annualSavingsPercent({ priceMonthlyCents: 0, priceYearlyCents: 0 })).toBeNull()
+  })
+})
+
+describe('annualSavingsLabel', () => {
+  it('quotes the yearly dollar saving and prefers a catalogue amount', () => {
+    expect(annualSavingsCents(pro)).toBe(11800)
+    expect(annualSavingsLabel(pro)).toBe('Save $118/yr')
+    expect(annualSavingsLabel({ ...pro, annualSavingsCents: 9600 })).toBe('Save $96/yr')
+    expect(annualSavingsLabel({ priceMonthlyCents: 1000, priceYearlyCents: 12000 })).toBeNull()
+    expect(annualSavingsLabel(null)).toBeNull()
   })
 })

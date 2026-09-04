@@ -9,7 +9,7 @@ import type { BillingProjectionOverview } from '@/lib/server/domains/billing/pro
 
 const overview: BillingProjectionOverview = {
   plan: 'pro',
-  planName: 'Pro',
+  planName: 'Business',
   status: 'active',
   trialActive: false,
   trialExpiresAt: null,
@@ -18,9 +18,9 @@ const overview: BillingProjectionOverview = {
   canUpgrade: false,
   canManageBilling: true,
   purchasablePlans: [
-    { id: 'growth', name: 'Growth' },
-    { id: 'pro', name: 'Pro' },
-    { id: 'scale', name: 'Scale' },
+    { id: 'growth', name: 'Pro' },
+    { id: 'pro', name: 'Business' },
+    { id: 'scale', name: 'Enterprise' },
   ],
   seats: { used: 7, pending: 1, members: 6, purchased: 10 },
   ai: { includedCents: 3000, usedCents: 2520, extraCents: 1000 },
@@ -36,7 +36,7 @@ const catalogue: BillingCatalogue = {
   plans: [
     {
       id: 'pro',
-      name: 'Pro',
+      name: 'Business',
       rank: 2,
       priceMonthlyCents: 3000,
       priceYearlyCents: 28800,
@@ -77,7 +77,7 @@ describe('AddSeatsDialog', () => {
   it('quotes the monthly sticker and due today, not yearly/12 totals', async () => {
     render(<AddSeatsDialog open onOpenChange={() => {}} />, { wrapper })
 
-    expect(await screen.findByText('Your Pro plan is $30/seat.')).toBeInTheDocument()
+    expect(await screen.findByText('Your Business plan is $30/seat.')).toBeInTheDocument()
     expect(screen.getByText('1 seat × $30/seat')).toBeInTheDocument()
     expect(screen.queryByText(/\/yr/)).not.toBeInTheDocument()
     expect(screen.queryByText(/\$24/)).not.toBeInTheDocument()

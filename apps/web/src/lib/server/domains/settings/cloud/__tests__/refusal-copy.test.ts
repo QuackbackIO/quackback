@@ -79,9 +79,9 @@ describe('the defects that shipped', () => {
     // Every plan name in today's catalogue takes "a", so this pins that the
     // copy carries one at all and carries the right plan. The vowel case is
     // covered by the consistency check below, which survives a rename.
-    expect(buildRefusal(cloud('free'), 'sso').message).toContain('a Scale feature')
-    expect(buildRefusal(cloud('free'), 'customDomain').message).toContain('a Growth feature')
-    expect(buildRefusal(cloud('free'), 'auditLog').message).toContain('a Scale feature')
+    expect(buildRefusal(cloud('free'), 'sso').message).toContain('an Enterprise feature')
+    expect(buildRefusal(cloud('free'), 'customDomain').message).toContain('a Pro feature')
+    expect(buildRefusal(cloud('free'), 'auditLog').message).toContain('an Enterprise feature')
   })
 
   it('never emits "a" before a vowel-initial plan name or vice versa', () => {
@@ -100,7 +100,7 @@ describe('the defects that shipped', () => {
     // The "contact us" branch has its own copy path and was equally broken.
     const config = cloud('scale', { entitlements: { customDomain: false } })
     expect(buildRefusal(config, 'customDomain').message).toBe(
-      'Custom domains are not included in your plan. Your workspace is on Scale. Contact us to enable it.'
+      'Custom domains are not included in your plan. Your workspace is on Enterprise. Contact us to enable it.'
     )
   })
 })

@@ -22,7 +22,7 @@ describe('wrapDbError', () => {
       currentPlan: 'free',
       currentPlanName: 'Free',
       requiredPlan: 'growth',
-      requiredPlanName: 'Growth',
+      requiredPlanName: 'Pro',
     })
     expect(() => wrapDbError('update developer config', err)).toThrow(err)
   })

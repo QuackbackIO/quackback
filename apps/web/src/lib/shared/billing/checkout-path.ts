@@ -1,4 +1,5 @@
 import type { BillingCatalogue } from '@/lib/server/control-plane/client'
+import { formatUsd } from '@/lib/shared/format-usd'
 import type { PaidPlanId } from './plan-action'
 
 export const CHECKOUT_PATH = '/admin/settings/billing/checkout'
@@ -79,11 +80,30 @@ export function checkoutSummary(
   }
 }
 
+type PricedPlan = Pick<
+  BillingCatalogue['plans'][number],
+  'priceMonthlyCents' | 'priceYearlyCents'
+> & { annualSavingsCents?: number }
+
 /** Whole-percent saving of paying yearly over twelve monthly payments; null when there is none. */
-export function annualSavingsPercent(
-  plan: Pick<BillingCatalogue['plans'][number], 'priceMonthlyCents' | 'priceYearlyCents'>
-): number | null {
+export function annualSavingsPercent(plan: PricedPlan): number | null {
   const yearOfMonthly = plan.priceMonthlyCents * 12
   if (yearOfMonthly <= 0 || plan.priceYearlyCents >= yearOfMonthly) return null
   return Math.round((1 - plan.priceYearlyCents / yearOfMonthly) * 100)
+}
+
+/** Yearly sticker versus twelve monthly payments. Prefers a catalogue-supplied amount. */
+export function annualSavingsCents(plan: PricedPlan): number {
+  if (typeof plan.annualSavingsCents === 'number' && Number.isFinite(plan.annualSavingsCents)) {
+    return plan.annualSavingsCents
+  }
+  return plan.priceMonthlyCents * 12 - plan.priceYearlyCents
+}
+
+/** Annual-toggle badge. Null when yearly is not cheaper. */
+export function annualSavingsLabel(plan: PricedPlan | null | undefined): string | null {
+  if (!plan) return null
+  const cents = annualSavingsCents(plan)
+  if (cents <= 0) return null
+  return `Save ${formatUsd(cents, 0)}/yr`
 }

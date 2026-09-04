@@ -41,9 +41,13 @@ export async function enforceSeatLimit(opts?: {
 async function seatCapMessage(limit: number): Promise<string> {
   try {
     const { getCloudConfig } = await import('@/lib/server/domains/settings/cloud/cloud.service')
+    const { catalogueBilledPer } = await import('@/lib/server/domains/billing/projection-overview')
     const cloud = await getCloudConfig()
     if (cloud.enabled && cloud.plan && cloud.plan !== 'free' && !cloud.trialActive) {
-      return `All ${limit} seats are in use. Add a seat to invite more.`
+      const billedPer = await catalogueBilledPer(cloud.plan)
+      if (billedPer === 'seat') {
+        return `All ${limit} seats are in use. Add a seat to invite more.`
+      }
     }
   } catch {
     // Fall through to the generic upgrade sentence.
