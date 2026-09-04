@@ -367,7 +367,7 @@ describe('hooksAfter — claim attribute write failure does not block sign-in', 
           },
         ],
       },
-    ])
+    ] as never)
     mockUserFindFirst.mockResolvedValue({
       createdAt: new Date(Date.now() - 60 * 60_000),
       metadata: '{}',

@@ -114,12 +114,54 @@ function asNonEmptyString(value: unknown): string | undefined {
   return undefined
 }
 
+/** Same missing-value rule as `planClaimAttributeWrites`. */
+function claimIsMissing(value: unknown): boolean {
+  return value === undefined || value === null || value === ''
+}
+
 function requiredPathsResolved(
   merged: Record<string, unknown>,
   paths: string[] | undefined
 ): boolean {
   if (!paths?.length) return true
-  return paths.every((path) => getClaimByPath(merged, path) !== undefined)
+  return paths.every((path) => !claimIsMissing(getClaimByPath(merged, path)))
+}
+
+/**
+ * Write a leaf onto `claims` without replacing an already-present parent
+ * object. Used to gap-fill required nested paths (e.g. `org.costCenter`)
+ * after the shallow earlier-source-wins merge has already taken `org`.
+ */
+function setClaimByPath(claims: Record<string, unknown>, path: string, value: unknown): void {
+  if (path in claims || path.includes('://') || !path.includes('.')) {
+    claims[path] = value
+    return
+  }
+  const segments = path.split('.')
+  let current: Record<string, unknown> = claims
+  for (let i = 0; i < segments.length - 1; i++) {
+    const segment = segments[i]
+    const next = current[segment]
+    if (next === null || typeof next !== 'object' || Array.isArray(next)) {
+      current[segment] = {}
+    }
+    current = current[segment] as Record<string, unknown>
+  }
+  current[segments[segments.length - 1]] = value
+}
+
+function fillRequiredLeaves(
+  merged: Record<string, unknown>,
+  source: Record<string, unknown>,
+  paths: string[] | undefined
+): void {
+  if (!paths?.length) return
+  for (const path of paths) {
+    if (!claimIsMissing(getClaimByPath(merged, path))) continue
+    const incoming = getClaimByPath(source, path)
+    if (claimIsMissing(incoming)) continue
+    setClaimByPath(merged, path, incoming)
+  }
 }
 
 export async function resolveIdentity({
@@ -208,6 +250,10 @@ export async function resolveIdentity({
     for (const [key, value] of Object.entries(claims)) {
       if (!(key in merged)) merged[key] = value
     }
+    // Nested required paths are not covered by the shallow merge: an ID token
+    // `org` object without `costCenter` would otherwise block userinfo's
+    // `org.costCenter`. Fill those leaves without rewriting earlier keys.
+    fillRequiredLeaves(merged, claims, requiredClaimPaths)
 
     if (!id && claimedId) {
       id = claimedId

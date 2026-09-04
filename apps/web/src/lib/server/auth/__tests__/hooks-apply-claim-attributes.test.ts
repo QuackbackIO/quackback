@@ -44,7 +44,20 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   },
 }))
 
-const { applyClaimAttributesAfter } = await import('../apply-claim-attributes')
+const { applyClaimAttributesAfter: realApply } = await import('../apply-claim-attributes')
+
+// Loose cast: the real 2nd param is IdentityProvider[]; the synthesized row
+// carries only the fields the writer reads.
+const applyClaimAttributesAfter = realApply as unknown as (
+  ctx: {
+    path?: string
+    params?: Record<string, unknown>
+    context?: { newSession?: { user?: { id?: string } } | null }
+  },
+  providers: ReadonlyArray<Record<string, unknown>>,
+  registeredOidcIds: Set<string>,
+  readClaims?: () => Promise<Record<string, unknown>>
+) => Promise<void>
 
 const DEPARTMENT_DEF = { key: 'department', type: 'string' as const }
 

@@ -38,11 +38,15 @@ export function ClaimMappingCard({ provider }: { provider: IdentityProvider }) {
     provider.claimMapping?.profile?.allowMissingEmail === true
   )
   const { lastSuccess } = useSsoTestSignIn()
+  // In-session lastSuccess is the test that just completed; the persisted
+  // capture is only reloaded with the provider row. Prefer the session copy
+  // so suggestions and preview update without a refresh.
   const capture =
-    provider.lastTestCapture && provider.lastTestCapture.registrationId === provider.registrationId
-      ? provider.lastTestCapture
-      : lastSuccess && lastSuccess.registrationId === provider.registrationId
-        ? lastSuccess
+    lastSuccess && lastSuccess.registrationId === provider.registrationId
+      ? lastSuccess
+      : provider.lastTestCapture &&
+          provider.lastTestCapture.registrationId === provider.registrationId
+        ? provider.lastTestCapture
         : null
 
   const handleSave = () =>

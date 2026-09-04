@@ -58,7 +58,12 @@ const { discoveryScopesSpy } = vi.hoisted(() => ({
 
 const { ssoTestRef } = vi.hoisted(() => ({
   ssoTestRef: {
-    current: null as null | { registrationId: string; claims: Record<string, unknown> },
+    current: null as null | {
+      registrationId: string
+      claims: Record<string, unknown>
+      capturedAt?: string
+      identity?: { id: string; email?: string; sources: Record<string, string> }
+    },
   },
 }))
 
@@ -945,6 +950,26 @@ describe('<ProviderDetailPage> claim → person-attribute mapping', () => {
       expect(screen.queryByText(/“Engineering”/)).not.toBeInTheDocument()
     })
     expect(screen.getAllByText(/skipped: missing claim/).length).toBeGreaterThan(0)
+  })
+
+  it('prefers an in-session test over a persisted capture for the same provider', () => {
+    state.userAttributes = PEOPLE_ATTRS
+    ssoTestRef.current = {
+      registrationId: 'oidc_x',
+      capturedAt: '2026-09-02T00:00:00.000Z',
+      identity: { id: 'sub', email: 'alice@example.com', sources: { email: 'idToken' } },
+      claims: { department: 'From session' },
+    }
+    renderPage(
+      makeProvider({
+        lastTestCapture: matchingCapture,
+        claimMapping: {
+          attributes: { map: [{ claimPath: 'department', attributeKey: 'department' }] },
+        },
+      })
+    )
+    expect(screen.getByText(/“From session”/)).toBeInTheDocument()
+    expect(screen.queryByText(/“Engineering”/)).not.toBeInTheDocument()
   })
 
   it('hides the capture preview when the capture is for a different registrationId', () => {

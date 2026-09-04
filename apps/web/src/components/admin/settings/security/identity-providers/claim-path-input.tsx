@@ -43,7 +43,7 @@ export function ClaimPathInput({
   suggestionsFor?: 'role' | 'attribute'
 }) {
   const { lastSuccess } = useSsoTestSignIn()
-  const fixture = fixtureFor(registrationId, capture) ?? fixtureFor(registrationId, lastSuccess)
+  const fixture = fixtureFor(registrationId, lastSuccess) ?? fixtureFor(registrationId, capture)
   const pathSuggestions = fixture
     ? suggestionsFor === 'attribute'
       ? deriveAttributeClaimPaths(fixture.claims).map((s) => ({
@@ -80,7 +80,7 @@ export function ClaimPathInput({
 
 export function useClaimSuggestions(registrationId: string, capture?: SsoTestCapture | null) {
   const { lastSuccess } = useSsoTestSignIn()
-  const fixture = fixtureFor(registrationId, capture) ?? fixtureFor(registrationId, lastSuccess)
+  const fixture = fixtureFor(registrationId, lastSuccess) ?? fixtureFor(registrationId, capture)
   if (!fixture) return null
   return deriveClaimSuggestions(fixture.claims)
 }

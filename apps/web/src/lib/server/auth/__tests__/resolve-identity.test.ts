@@ -104,6 +104,52 @@ describe('resolveIdentity — the fast path', () => {
     expect(result.identity.sources.email).toBe('idToken')
   })
 
+  it('treats a mapped null or empty string as unresolved and still fetches userinfo', async () => {
+    const fetchUserInfo = vi.fn(async () => ({
+      sub: WORLD_A.expect.id,
+      department: 'Engineering',
+    }))
+    const result = await resolveIdentity({
+      tokens: {
+        idToken: fakeJwt({
+          sub: WORLD_A.expect.id,
+          email: 'a@example.com',
+          name: 'World A',
+          department: '',
+        }),
+      },
+      fetchUserInfo,
+      requiredClaimPaths: ['department'],
+    })
+    expect(fetchUserInfo).toHaveBeenCalledTimes(1)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.identity.claims.department).toBe('Engineering')
+  })
+
+  it('gap-fills a nested required path from userinfo without replacing earlier keys', async () => {
+    const fetchUserInfo = vi.fn(async () => ({
+      sub: WORLD_A.expect.id,
+      org: { costCenter: 'cc-9', department: 'from-userinfo' },
+    }))
+    const result = await resolveIdentity({
+      tokens: {
+        idToken: fakeJwt({
+          sub: WORLD_A.expect.id,
+          email: 'a@example.com',
+          name: 'World A',
+          org: { department: 'from-token' },
+        }),
+      },
+      fetchUserInfo,
+      requiredClaimPaths: ['org.costCenter'],
+    })
+    expect(fetchUserInfo).toHaveBeenCalledTimes(1)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.identity.claims.org).toEqual({ department: 'from-token', costCenter: 'cc-9' })
+  })
+
   it('exhaustive fetches every source even when identity is complete', async () => {
     const fetchUserInfo = vi.fn(async () => ({
       sub: WORLD_A.expect.id,
