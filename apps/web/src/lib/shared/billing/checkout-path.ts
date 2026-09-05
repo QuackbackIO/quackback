@@ -15,9 +15,13 @@ export type CheckoutSearch = {
   branding?: boolean
 }
 
-const PAID_PLAN_IDS: readonly PaidPlanId[] = ['pro', 'business', 'enterprise']
+export const PAID_PLAN_IDS = ['pro', 'business', 'enterprise'] as const
 
-/** Checkout/trial forms accept these; leftover growth/scale alias onto canonical ids. */
+/**
+ * Leftover query/search slugs. Checkout and trial POSTs use {@link PAID_PLAN_IDS};
+ * {@link parsePaidPlanId} still maps these onto canonical ids so old
+ * `?plan=growth` / `?plan=scale` links keep working.
+ */
 export const INCOMING_PAID_PLAN_IDS = ['growth', 'pro', 'scale', 'business', 'enterprise'] as const
 
 export function isPaidPlanId(value: unknown): value is PaidPlanId {

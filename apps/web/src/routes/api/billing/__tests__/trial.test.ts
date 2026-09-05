@@ -63,4 +63,12 @@ describe('POST /api/billing/trial', () => {
     await POST({ request: formRequest({ planId: 'pro' }) })
     expect(hoisted.startWorkspaceTrial).toHaveBeenCalledWith('pro')
   })
+
+  it('rejects leftover growth/scale trial slugs', async () => {
+    const growth = await POST({ request: formRequest({ planId: 'growth' }) })
+    expect(growth.headers.get('location')).toContain('billing_error=invalid')
+    const scale = await POST({ request: formRequest({ planId: 'scale' }) })
+    expect(scale.headers.get('location')).toContain('billing_error=invalid')
+    expect(hoisted.startWorkspaceTrial).not.toHaveBeenCalled()
+  })
 })

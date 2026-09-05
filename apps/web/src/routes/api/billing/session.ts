@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { isSameOriginFormPost } from '@/lib/server/http/same-origin-form'
-import { INCOMING_PAID_PLAN_IDS, parsePaidPlanId } from '@/lib/shared/billing/checkout-path'
+import { PAID_PLAN_IDS, parsePaidPlanId } from '@/lib/shared/billing/checkout-path'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 
 export function billingErrorCode(error: unknown): string {
@@ -45,7 +45,7 @@ const actionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('portal') }),
   z.object({
     action: z.literal('checkout'),
-    planId: z.enum(INCOMING_PAID_PLAN_IDS),
+    planId: z.enum(PAID_PLAN_IDS),
     billingPeriod: z.enum(['monthly', 'annual']),
     quantity: z.coerce.number().int().positive().optional(),
     // A checked checkbox posts "true"; an unchecked one posts nothing.
@@ -172,7 +172,7 @@ async function createSeatChangeSession(quantity: number) {
 /** Floor seat-billed checkout at live usage so a stale form cannot under-seat.
  *  Workspace-priced plans stay quantity 1. */
 async function createCheckoutSession(input: {
-  planId: (typeof INCOMING_PAID_PLAN_IDS)[number]
+  planId: (typeof PAID_PLAN_IDS)[number]
   billingPeriod: 'monthly' | 'annual'
   quantity?: number
   brandingRemoval?: 'true'
