@@ -62,17 +62,23 @@ function isAuthCredentialType(integrationType: string): boolean {
   return integrationType.startsWith(AUTH_CREDENTIAL_PREFIX)
 }
 
-function sourceForType(integrationType: string): CredentialSource {
-  return isAuthCredentialType(integrationType) ? dbSource() : activeSource()
+async function sourceForType(integrationType: string): Promise<CredentialSource> {
+  return (await arePlatformCredentialsManaged(integrationType)) ? activeSource() : dbSource()
 }
 
-/**
- * Whether platform credentials for this type are platform-managed (cloud) and not
- * editable here. auth_* credentials are never platform-managed (always DB-editable).
- */
-export function arePlatformCredentialsManaged(integrationType?: string): boolean {
-  if (integrationType && isAuthCredentialType(integrationType)) return false
-  return config.platformCredentialsSource === 'env'
+/** Only complete provider-specific environment credentials lock the settings UI. */
+export async function arePlatformCredentialsManaged(integrationType?: string): Promise<boolean> {
+  if (
+    !integrationType ||
+    isAuthCredentialType(integrationType) ||
+    config.platformCredentialsSource !== 'env'
+  )
+    return false
+  const credentials = await activeSource().get(integrationType)
+  if (!credentials) return false
+  const { getIntegration } = await import('@/lib/server/integrations')
+  const fields = getIntegration(integrationType)?.platformCredentials ?? []
+  return fields.length > 0 && fields.every((field) => !!credentials[field.key]?.trim())
 }
 
 /**
@@ -84,7 +90,8 @@ export async function savePlatformCredentials({
   credentials,
   principalId,
 }: SavePlatformCredentialsInput): Promise<void> {
-  if (arePlatformCredentialsManaged(integrationType)) throw new PlatformCredentialsManagedError()
+  if (await arePlatformCredentialsManaged(integrationType))
+    throw new PlatformCredentialsManagedError()
 
   const encrypted = encryptPlatformCredentials(credentials)
   const now = new Date()
@@ -140,7 +147,7 @@ export async function savePlatformCredentials({
 export async function getPlatformCredentials(
   integrationType: string
 ): Promise<Record<string, string> | null> {
-  return sourceForType(integrationType).get(integrationType)
+  return (await sourceForType(integrationType)).get(integrationType)
 }
 
 /**
@@ -148,7 +155,7 @@ export async function getPlatformCredentials(
  * Lightweight check — no decryption.
  */
 export async function hasPlatformCredentials(integrationType: string): Promise<boolean> {
-  return sourceForType(integrationType).has(integrationType)
+  return (await sourceForType(integrationType)).has(integrationType)
 }
 
 /**
@@ -179,7 +186,7 @@ async function computeConfiguredIntegrationTypes(): Promise<Set<string>> {
     // union them in so SSO / social-login registration still resolves.
     const dbTypes = await dbSource().listConfigured()
     for (const t of dbTypes) {
-      if (isAuthCredentialType(t) && !types.includes(t)) types.push(t)
+      if (!types.includes(t)) types.push(t)
     }
     return new Set(types)
   }
@@ -197,7 +204,8 @@ async function computeConfiguredIntegrationTypes(): Promise<Set<string>> {
  * Delete platform credentials for an integration type. Refused in managed-cloud mode.
  */
 export async function deletePlatformCredentials(integrationType: string): Promise<void> {
-  if (arePlatformCredentialsManaged(integrationType)) throw new PlatformCredentialsManagedError()
+  if (await arePlatformCredentialsManaged(integrationType))
+    throw new PlatformCredentialsManagedError()
 
   const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
   const { resetAuth } = await import('@/lib/server/auth')

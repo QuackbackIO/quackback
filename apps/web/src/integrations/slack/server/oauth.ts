@@ -8,16 +8,9 @@ import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'slack' })
 
-const SLACK_SCOPES = [
-  'channels:read',
-  'groups:read',
-  'channels:join',
-  'channels:history',
-  'groups:history',
-  'chat:write',
-  'team:read',
-  'commands',
-].join(',')
+import { SLACK_REQUIRED_SCOPES } from '../scopes'
+export { SLACK_REQUIRED_SCOPES, missingSlackScopes } from '../scopes'
+const SLACK_SCOPES = SLACK_REQUIRED_SCOPES.join(',')
 
 /**
  * Generate the Slack OAuth authorization URL.
@@ -89,12 +82,21 @@ export async function exchangeSlackCode(
     throw new Error(`Slack OAuth failed: ${response.error}`)
   }
 
+  if (response.is_enterprise_install || !response.team?.id || !response.access_token) {
+    if (response.access_token) await revokeSlackToken(response.access_token)
+    throw new Error(
+      'Slack workspace install required; Enterprise Grid org installs are not supported'
+    )
+  }
+
   return {
     accessToken: response.access_token!,
     config: {
       workspaceId: response.team!.id!,
       workspaceName: response.team!.name!,
       scopes: response.scope,
+      botUserId: response.bot_user_id,
+      enterpriseId: response.enterprise?.id ?? null,
     },
   }
 }

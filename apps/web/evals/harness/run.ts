@@ -78,6 +78,17 @@ function buildTurnInput(
     involvementId: conversation?.involvementId ?? null,
     latestCustomerMessageId: conversation?.latestCustomerMessageId ?? null,
   }
+  if (role === 'workspace_assistant')
+    return {
+      assistantPrincipalId,
+      db: testDb,
+      role,
+      surface: 'slack',
+      messages,
+      workspaceThreadKey: JSON.stringify(['eval', scenario.id, 'thread']),
+      contextBlock: messages.map((message) => message.content).join('\n'),
+      latestCustomerMessageId: scenario.id,
+    }
   if (role === 'copilot_qa') {
     return { ...common, role, surface: 'copilot', messages }
   }

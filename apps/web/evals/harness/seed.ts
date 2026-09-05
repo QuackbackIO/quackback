@@ -83,6 +83,10 @@ export function buildScenarioAssistantConfig(config: ScenarioConfig = {}): Assis
   return {
     ...base,
     agents: {
+      workspace: {
+        ...base.agents.workspace,
+        slack: { ...base.agents.workspace.slack, enabled: true },
+      },
       agent: {
         ...base.agents.agent,
         voice: {

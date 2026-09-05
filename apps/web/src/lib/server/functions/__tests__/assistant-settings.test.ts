@@ -1,3 +1,4 @@
+import { DEFAULT_WORKSPACE_ASSISTANT } from '@/lib/shared/assistant/config'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AssistantConfig } from '@/lib/shared/assistant/config'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -66,9 +67,10 @@ import {
 } from '../assistant-settings'
 
 const CONFIG: AssistantConfig = {
-  version: 3,
+  version: 4,
   identity: { name: 'Quinn', avatarUrl: null },
   agents: {
+    workspace: structuredClone(DEFAULT_WORKSPACE_ASSISTANT),
     agent: {
       voice: { tone: 'balanced', responseLength: 'balanced', additionalInstructions: '' },
       knowledge: {

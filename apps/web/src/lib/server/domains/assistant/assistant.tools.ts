@@ -90,6 +90,7 @@ export function resolveEffectiveToolMode(
   spec: AssistantToolSpec,
   ctx: AssistantToolContext
 ): ToolExecutionMode {
+  if (ctx.role === 'workspace_assistant' && spec.risk === 'write') return 'propose'
   if (spec.risk === 'control') return 'autonomous'
   if (spec.approvalPolicy === 'always') return 'autonomous'
   if (spec.approvalPolicy === 'approval') return 'propose'
@@ -157,7 +158,7 @@ function resolveIdempotencyKey(
 ): string | undefined {
   if (spec.idempotencyKey) return spec.idempotencyKey(args, ctx)
   if (spec.risk !== 'write') return undefined
-  return `${ctx.conversationId ?? ctx.ticketId}:${ctx.latestCustomerMessageId}:${spec.name}:${hashArgs(args)}`
+  return `${ctx.conversationId ?? ctx.ticketId ?? ctx.workspaceThreadKey}:${ctx.latestCustomerMessageId}:${spec.name}:${hashArgs(args)}`
 }
 
 /**
@@ -196,9 +197,11 @@ async function runWithPipeline(
     // grounded on. `ctx.conversationId` wins when both happen to be set (never
     // true today — a turn grounds on exactly one item), matching every
     // pre-ticket caller's behavior unchanged.
-    const parent = ctx.conversationId
-      ? { conversationId: ctx.conversationId }
-      : { ticketId: ctx.ticketId as TicketId }
+    const parent = ctx.workspaceThreadKey
+      ? { workspaceThreadKey: ctx.workspaceThreadKey }
+      : ctx.conversationId
+        ? { conversationId: ctx.conversationId }
+        : { ticketId: ctx.ticketId as TicketId }
     const pending = await proposePendingAction({
       ...parent,
       involvementId: ctx.involvementId ?? undefined,
@@ -400,11 +403,20 @@ export async function assembleAssistantToolset(
   // ticket-scoped turn. See `parents`'s own doc on AssistantToolSpec.
   const parentKind = turnParentKind(ctx)
   const availableForTurn = (spec: AssistantToolSpec) =>
-    spec.parents.includes(parentKind) && (spec.availableWhen?.(ctx) ?? true)
+    !(
+      ctx.role === 'workspace_assistant' &&
+      ['handoff_to_human', 'end_conversation', 'set_attribute', 'share_post'].includes(spec.name)
+    ) &&
+    spec.parents.includes(parentKind) &&
+    (spec.availableWhen?.(ctx) ?? true)
 
   // Connector specs always ride the execution pipeline — audit and propose
   // stay load-bearing.
-  const connectorActive = connectorSpecs
+  const connectorActive = (
+    ctx.role === 'workspace_assistant'
+      ? connectorSpecs.filter((spec) => spec.risk !== 'write')
+      : connectorSpecs
+  )
     .filter(availableForTurn)
     .map((spec) => ({ spec, mode: resolveEffectiveToolMode(spec, ctx) }))
   const connectorTools = connectorActive.map(({ spec, mode }) =>

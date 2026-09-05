@@ -122,6 +122,9 @@ describe('platform credential source wiring — env (managed cloud)', () => {
   })
 
   it('savePlatformCredentials refuses integration writes (platform-managed)', async () => {
+    process.env.INTEGRATION_SLACK_CLIENT_ID = 'id'
+    process.env.INTEGRATION_SLACK_CLIENT_SECRET = 'secret'
+    process.env.INTEGRATION_SLACK_SIGNING_SECRET = 'signing'
     const { savePlatformCredentials, PlatformCredentialsManagedError } =
       await import('../platform-credential.service')
     await expect(
@@ -134,11 +137,37 @@ describe('platform credential source wiring — env (managed cloud)', () => {
   })
 
   it('deletePlatformCredentials refuses integration writes (platform-managed)', async () => {
+    process.env.INTEGRATION_SLACK_CLIENT_ID = 'id'
+    process.env.INTEGRATION_SLACK_CLIENT_SECRET = 'secret'
+    process.env.INTEGRATION_SLACK_SIGNING_SECRET = 'signing'
     const { deletePlatformCredentials, PlatformCredentialsManagedError } =
       await import('../platform-credential.service')
     await expect(deletePlatformCredentials('slack')).rejects.toBeInstanceOf(
       PlatformCredentialsManagedError
     )
+  })
+
+  it('falls back per provider when env is incomplete and leaves its settings editable', async () => {
+    process.env.INTEGRATION_SLACK_CLIENT_ID = 'partial'
+    mockFindFirst.mockResolvedValue({ secrets: 'enc' })
+    const service = await import('../platform-credential.service')
+    expect(await service.arePlatformCredentialsManaged('slack')).toBe(false)
+    expect(await service.getPlatformCredentials('slack')).toEqual({
+      clientId: 'db-id',
+      clientSecret: 'db-secret',
+    })
+    await service.savePlatformCredentials({
+      integrationType: 'slack',
+      credentials: { clientId: 'new' },
+      principalId: 'principal_1' as PrincipalId,
+    })
+    expect(mockInsert).toHaveBeenCalled()
+  })
+
+  it('includes DB integration providers alongside managed env providers', async () => {
+    mockFindMany.mockResolvedValue([{ integrationType: 'discord' }])
+    const { getConfiguredIntegrationTypes } = await import('../platform-credential.service')
+    expect(await getConfiguredIntegrationTypes()).toContain('discord')
   })
 
   // auth_* credentials are NOT governed by the env switch.

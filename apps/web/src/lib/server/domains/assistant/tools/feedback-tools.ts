@@ -1,0 +1,174 @@
+import { toolDefinition } from '@tanstack/ai'
+import { z } from 'zod'
+import {
+  db,
+  boards,
+  posts,
+  postTags,
+  postTagAssignments,
+  postStatuses,
+  eq,
+  and,
+  isNull,
+  gte,
+  sql,
+} from '@/lib/server/db'
+import { listInboxPosts } from '@/lib/server/domains/posts/post.inbox'
+import { getBaseUrl } from '@/lib/server/config'
+import type { AssistantToolContext } from '../assistant.toolspec'
+import { wrapUntrustedText } from '../injection-guard'
+const listInput = z.object({
+  query: z.string().max(300).optional(),
+  boardSlug: z.string().max(100).optional(),
+  statusSlug: z.string().max(100).optional(),
+  tagSlug: z.string().max(100).optional(),
+  since: z.iso.datetime().optional(),
+  sort: z.enum(['votes', 'recent']).default('votes'),
+  limit: z.number().int().min(1).max(20).default(10),
+})
+export const listFeedbackTool = toolDefinition({
+  name: 'list_feedback',
+  description:
+    'List feedback with filters, ordered by votes or recency. Returns citable post IDs. tagSlug matches the tag name with spaces replaced by hyphens.',
+  inputSchema: listInput,
+  outputSchema: z.object({
+    items: z.array(
+      z.object({
+        id: z.string(),
+        title: z.string(),
+        url: z.string(),
+        votes: z.number(),
+        status: z.string().nullable(),
+        board: z.string(),
+        created: z.string(),
+        summary: z.string(),
+      })
+    ),
+  }),
+})
+export async function executeListFeedback(
+  input: z.input<typeof listInput>,
+  ctx: AssistantToolContext
+) {
+  if (ctx.audience !== 'team' || !ctx.knowledge.sources.has('post')) return { items: [] }
+  const args = listInput.parse(input)
+  const board = args.boardSlug
+    ? await db.query.boards.findFirst({ where: eq(boards.slug, args.boardSlug) })
+    : null
+  if (args.boardSlug && !board) return { items: [] }
+  const tag = args.tagSlug
+    ? await db.query.postTags.findFirst({
+        where: and(
+          sql`lower(replace(${postTags.name}, ' ', '-')) = ${args.tagSlug.toLowerCase()}`,
+          isNull(postTags.deletedAt)
+        ),
+      })
+    : null
+  if (args.tagSlug && !tag) return { items: [] }
+  const result = await listInboxPosts({
+    search: args.query,
+    boardIds: board ? [board.id] : undefined,
+    tagIds: tag ? [tag.id] : undefined,
+    statusSlugs: args.statusSlug ? [args.statusSlug] : undefined,
+    dateFrom: args.since ? new Date(args.since) : undefined,
+    sort: args.sort === 'votes' ? 'votes' : 'newest',
+    limit: args.limit,
+  })
+  const statuses = await db.query.postStatuses.findMany()
+  const names = new Map(statuses.map((status) => [status.id, status.name]))
+  return {
+    items: result.items.map((post) => {
+      const url = `${getBaseUrl()}/b/${encodeURIComponent(post.board.slug)}/posts/${post.id}`
+      ctx.ledger.sources.set(post.id, { type: 'post', id: post.id, title: post.title, url })
+      return {
+        id: post.id,
+        title: wrapUntrustedText('Feedback title', post.title),
+        url,
+        votes: post.voteCount,
+        status: post.statusId ? (names.get(post.statusId) ?? null) : null,
+        board: post.board.name,
+        created: post.createdAt.toISOString(),
+        summary: wrapUntrustedText(
+          'Feedback summary',
+          post.summaryJson?.summary?.slice(0, 300) ?? ''
+        ),
+      }
+    }),
+  }
+}
+const statsInput = z.object({
+  since: z.iso.datetime().optional(),
+  groupBy: z.enum(['status', 'board', 'tag']),
+})
+export const feedbackStatsTool = toolDefinition({
+  name: 'feedback_stats',
+  description:
+    'Count feedback and votes grouped by board, status, or tag. Includes a representative citable post per group. Tag groups may overlap.',
+  inputSchema: statsInput,
+  outputSchema: z.object({
+    groups: z.array(
+      z.object({
+        name: z.string(),
+        count: z.number(),
+        votes: z.number(),
+        postId: z.string(),
+        url: z.string(),
+      })
+    ),
+  }),
+})
+export async function executeFeedbackStats(
+  args: z.infer<typeof statsInput>,
+  ctx: AssistantToolContext
+) {
+  if (ctx.audience !== 'team' || !ctx.knowledge.sources.has('post')) return { groups: [] }
+  const group =
+    args.groupBy === 'board'
+      ? boards.name
+      : args.groupBy === 'status'
+        ? postStatuses.name
+        : postTags.name
+  const groupId =
+    args.groupBy === 'board' ? boards.id : args.groupBy === 'status' ? postStatuses.id : postTags.id
+  const rows = await db
+    .select({
+      name: group,
+      count: sql<number>`count(distinct ${posts.id})::int`,
+      votes: sql<number>`coalesce(sum(${posts.voteCount}), 0)::int`,
+      postId: sql<string>`min(${posts.id}::text)`,
+    })
+    .from(posts)
+    .innerJoin(boards, eq(boards.id, posts.boardId))
+    .leftJoin(postStatuses, eq(postStatuses.id, posts.statusId))
+    .leftJoin(
+      postTagAssignments,
+      args.groupBy === 'tag' ? eq(postTagAssignments.postId, posts.id) : sql`false`
+    )
+    .leftJoin(postTags, and(eq(postTags.id, postTagAssignments.tagId), isNull(postTags.deletedAt)))
+    .where(
+      and(
+        isNull(posts.deletedAt),
+        isNull(boards.deletedAt),
+        isNull(posts.canonicalPostId),
+        args.since ? gte(posts.createdAt, new Date(args.since)) : undefined
+      )
+    )
+    .groupBy(groupId, group)
+  // Post IDs from raw aggregates are UUIDs; preserve the app's TypeID contract.
+  const { fromUuid } = await import('@quackback/ids')
+  return {
+    groups: rows.map((row) => {
+      const id = fromUuid('post', row.postId)
+      const url = `${getBaseUrl()}/admin/feedback?post=${id}`
+      const name = row.name ?? 'Unassigned'
+      ctx.ledger.sources.set(id, { type: 'post', id, title: `${name} feedback`, url })
+      return {
+        name: wrapUntrustedText('Group name', name),
+        count: row.count,
+        votes: row.votes,
+        postId: id,
+        url,
+      }
+    }),
+  }
+}

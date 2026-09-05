@@ -603,6 +603,13 @@ export const config = {
   //   'env' — managed cloud: shared app creds from INTEGRATION_<PROVIDER>_<FIELD> env
   //           (projected from OpenBao via ESO), like the CP's own STRIPE_SECRET_KEY.
   // Direct process.env read (like helpCenterDev) so it works without a full config load.
+  get integrationOAuthGatewayUrl(): string | undefined {
+    return process.env.INTEGRATION_OAUTH_GATEWAY_URL
+  },
+  get integrationGatewayForwardSecret(): string | undefined {
+    return process.env.INTEGRATION_GATEWAY_FORWARD_SECRET
+  },
+
   get platformCredentialsSource(): 'db' | 'env' {
     return process.env.PLATFORM_CREDENTIALS_SOURCE === 'env' ? 'env' : 'db'
   },

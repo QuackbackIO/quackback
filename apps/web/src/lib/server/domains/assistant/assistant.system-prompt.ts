@@ -1,3 +1,4 @@
+import { WORKSPACE_ROLE_PROMPT } from './workspace-prompt'
 /**
  * Production prompt policy for every assistant role.
  *
@@ -136,6 +137,16 @@ export const ASSISTANT_ROLE_POLICIES: Readonly<Record<AssistantPromptRole, Assis
     textAudience: 'customer',
     responseContract: CUSTOMER_RESPONSE_CONTRACT,
     responseExample: CUSTOMER_RESPONSE_EXAMPLE,
+  },
+  workspace_assistant: {
+    customerVoice: false,
+    contentAudience: 'team',
+    writeToolPolicy: 'propose',
+    pipelineStep: 'assistant',
+    inabilitySemantics: 'cannot_answer',
+    textAudience: 'teammate',
+    responseContract: COPILOT_RESPONSE_CONTRACT,
+    responseExample: COPILOT_RESPONSE_EXAMPLE,
   },
   copilot_qa: {
     customerVoice: false,
@@ -311,6 +322,8 @@ human performed an action or made a commitment. Never pretend to be a human.
 # Human support
 ${humanSupport}`
     }
+    case 'workspace_assistant':
+      return WORKSPACE_ROLE_PROMPT
     case 'copilot_qa': {
       // The propose affordance exists only when the turn actually assembled a
       // write tool; a read-only turn keeps the plain honesty rule so the model

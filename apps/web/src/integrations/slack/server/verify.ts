@@ -15,14 +15,15 @@ export function verifySlackSignature(
   body: string,
   timestamp: string | null,
   signature: string | null,
-  signingSecret: string
+  signingSecret: string,
+  verifiedAt = Date.now()
 ): true | Response {
-  if (!timestamp || !signature) {
+  if (!signingSecret || !timestamp || !/^\d+$/.test(timestamp) || !signature) {
     return new Response('Missing signature headers', { status: 401 })
   }
 
   const ts = parseInt(timestamp, 10)
-  if (isNaN(ts) || Math.abs(Math.floor(Date.now() / 1000) - ts) > REPLAY_WINDOW_S) {
+  if (isNaN(ts) || Math.abs(Math.floor(verifiedAt / 1000) - ts) > REPLAY_WINDOW_S) {
     return new Response('Request too old', { status: 401 })
   }
 

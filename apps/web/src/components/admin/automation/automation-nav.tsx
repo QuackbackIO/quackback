@@ -63,6 +63,12 @@ export function buildAutomationNavSections(
           icon: UserGroupIcon,
         },
         {
+          labelId: 'automation.nav.workspace',
+          defaultLabel: 'Workspace assistant',
+          to: '/admin/automation/workspace',
+          icon: UserGroupIcon,
+        },
+        {
           labelId: 'automation.nav.connectors',
           defaultLabel: 'Connectors',
           to: '/admin/automation/connectors',

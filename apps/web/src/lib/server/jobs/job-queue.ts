@@ -554,6 +554,18 @@ export async function heartbeatJob(job: ClaimedJob, leaseMs: number): Promise<bo
 
 /** Mark a job done. False means the lease was lost and nothing was written. */
 export async function completeJob(job: ClaimedJob): Promise<boolean> {
+  if (job.queue === 'slack-hook') {
+    // Discard transient Slack text atomically with fenced completion. Keep only
+    // the receipt/job metadata; a stale worker cannot erase a new owner's input.
+    return db.transaction(async (tx) => {
+      const completed = getExecuteRows(await tx.execute(leaseCompleteSql(TABLE, job)))
+      if (!completed.length) return false
+      await tx.execute(
+        sql`UPDATE job_queue SET payload = '{}'::jsonb WHERE id = ${job.id} AND status = 'succeeded'`
+      )
+      return true
+    })
+  }
   const result = await db.execute(leaseCompleteSql(TABLE, job))
   return getExecuteRows(result).length > 0
 }

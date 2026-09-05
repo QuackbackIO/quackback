@@ -271,9 +271,9 @@ export function summarizeCopilotUsage(
   }
 }
 
-/** `metadata->>'surface' = 'copilot'` for an aiUsageLog row — the one signal
+/** `metadata->>'surface' IN ('copilot', 'slack')` for an aiUsageLog row — the one signal
  *  that distinguishes a Copilot Q&A turn from every other assistant surface. */
-const isCopilotSurface = sql`${aiUsageLog.metadata}->>'surface' = 'copilot'`
+const isCopilotSurface = sql`${aiUsageLog.metadata}->>'surface' IN ('copilot', 'slack')`
 
 /**
  * Query + summarize Copilot usage over [from, to). Seven independent scans
@@ -401,7 +401,7 @@ export async function getCopilotUsageMetrics(from: Date, to: Date): Promise<Copi
           END
         ) AS elem
         WHERE pipeline_step = 'assistant'
-          AND metadata->>'surface' = 'copilot'
+          AND metadata->>'surface' IN ('copilot', 'slack')
           AND elem->>'type' = 'article'
           AND created_at >= ${from.toISOString()}
           AND created_at < ${to.toISOString()}

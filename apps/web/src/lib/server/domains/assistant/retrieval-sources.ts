@@ -152,6 +152,8 @@ export interface AssistantKnowledgeSnapshot {
   sources: ReadonlySet<AssistantCitationType>
   /** Whether the real-time `get_status` tool is registered this turn. */
   status: boolean
+  internalNotes?: boolean
+  pastConversations?: boolean
 }
 
 /**
@@ -199,15 +201,21 @@ export function resolveAssistantKnowledgeSnapshot(
       if (k.documents) sources.add('document')
       return { sources, status: k.status }
     }
+    case 'workspace':
     case 'copilot': {
-      const k = config.agents.copilot.knowledge
+      const k = config.agents[agent].knowledge
       if (k.helpCenter) sources.add('article')
       if (k.posts) sources.add('post')
-      if (k.pastConversations) sources.add('summary')
+      if (k.pastConversations || (agent === 'workspace' && k.internalNotes)) sources.add('summary')
       if (k.tickets) sources.add('ticket')
       if (k.changelog) sources.add('changelog')
       if (k.documents) sources.add('document')
-      return { sources, status: k.status }
+      return {
+        sources,
+        status: k.status,
+        internalNotes: k.internalNotes,
+        pastConversations: k.pastConversations,
+      }
     }
     default: {
       const exhaustive: never = agent
@@ -262,7 +270,10 @@ export function describeEnabledKnowledgeSources(
  * "knowledge base always available" default before per-agent toggles existed.
  */
 export async function resolveKnowledgeSources(
-  enabled?: ReadonlySet<AssistantCitationType>
+  enabled?: ReadonlySet<AssistantCitationType>,
+  workspaceSearch = false,
+  includeInternalNotes = false,
+  notesOnly = false
 ): Promise<KnowledgeSource[]> {
   const enabledSet = enabled ?? new Set<AssistantCitationType>(['article'])
   const sources: KnowledgeSource[] = []
@@ -275,7 +286,12 @@ export async function resolveKnowledgeSources(
   }
   if (enabledSet.has('summary')) {
     sources.push(
-      (await import('./conversation-summary-retrieval')).conversationSummariesKnowledgeSource
+      workspaceSearch
+        ? (await import('./workspace-retrieval')).workspaceConversationSource(
+            includeInternalNotes,
+            notesOnly
+          )
+        : (await import('./conversation-summary-retrieval')).conversationSummariesKnowledgeSource
     )
   }
   if (enabledSet.has('ticket')) {
@@ -334,6 +350,9 @@ export async function retrieveKnowledge(
   ceiling: ContentAudience,
   opts: {
     topK?: number
+    workspaceSearch?: boolean
+    includeInternalNotes?: boolean
+    notesOnly?: boolean
     signal?: AbortSignal
     customerPrincipalId?: PrincipalId
     conversationId?: ConversationId | null
@@ -344,7 +363,12 @@ export async function retrieveKnowledge(
   } = {}
 ): Promise<RetrievedItem[]> {
   const topK = opts.topK ?? KNOWLEDGE_TOP_K
-  const resolved = await resolveKnowledgeSources(opts.enabledSources)
+  const resolved = await resolveKnowledgeSources(
+    opts.enabledSources,
+    ceiling === 'team' && opts.workspaceSearch === true,
+    opts.includeInternalNotes,
+    opts.notesOnly
+  )
   const sources = opts.sourceTypes
     ? resolved.filter((source) => opts.sourceTypes!.includes(source.sourceType))
     : resolved

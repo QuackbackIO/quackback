@@ -1,3 +1,9 @@
+import {
+  listFeedbackTool,
+  feedbackStatsTool,
+  executeListFeedback,
+  executeFeedbackStats,
+} from './tools/feedback-tools'
 /**
  * Quinn's tool catalogue: one spec per tool, describing what it does, who can
  * use it, and how it runs, alongside the model-facing definition and its
@@ -206,6 +212,8 @@ export function makeAssistantToolLedger(): AssistantToolLedger {
  * passed to `chat({ context })` and NEVER serialized into the model prompt.
  */
 export interface AssistantToolContext {
+  workspaceThreadKey?: string
+
   db: Executor
   assistantPrincipalId: PrincipalId
   /** Configured V2 identity for service-authored records created by tools. */
@@ -318,6 +326,7 @@ export function makeAssistantToolContext(init: {
   db: Executor
   assistantPrincipalId: PrincipalId
   assistantName?: string
+  workspaceThreadKey?: string
   role?: AssistantRole
   audience: ContentAudience
   conversationId: ConversationId | null
@@ -337,6 +346,7 @@ export function makeAssistantToolContext(init: {
     db: init.db,
     assistantPrincipalId: init.assistantPrincipalId,
     assistantName: init.assistantName ?? DEFAULT_ASSISTANT_CONFIG.identity.name,
+    workspaceThreadKey: init.workspaceThreadKey,
     role: init.role ?? 'customer_support',
     audience: init.audience,
     conversationId: init.conversationId,
@@ -351,7 +361,7 @@ export function makeAssistantToolContext(init: {
       status: false,
     },
     ledger: makeAssistantToolLedger(),
-    simulate: init.simulate ?? init.conversationId === null,
+    simulate: init.simulate ?? (init.conversationId === null && !init.workspaceThreadKey),
     writeToolPolicy: init.writeToolPolicy,
     skills: init.skills,
     involvementId: init.involvementId ?? null,
@@ -577,6 +587,9 @@ async function executeSearchKnowledge(
     conversationId: ctx.conversationId,
     sourceTypes: narrowing,
     enabledSources: ctx.knowledge.sources,
+    workspaceSearch: ctx.role === 'workspace_assistant',
+    includeInternalNotes: ctx.knowledge.internalNotes,
+    notesOnly: ctx.knowledge.pastConversations === false,
   })
   for (const item of items) {
     // `updatedAt` rides the ledgered citation itself (see its doc on
@@ -1049,6 +1062,18 @@ async function executeCreateTicket(
   args: CreateTicketArgs,
   ctx: AssistantToolContext
 ): Promise<CreateTicketOutput> {
+  if (ctx.role === 'workspace_assistant' && ctx.workspaceThreadKey) {
+    const ticket = await createTicket(
+      {
+        type: 'back_office',
+        title: args.title,
+        description: args.description,
+        priority: args.priority,
+      },
+      ctx.actor
+    )
+    return { created: true, ticketId: ticket.id, reference: ticket.reference, title: ticket.title }
+  }
   const conversationId = ctx.conversationId
   if (!conversationId) {
     return { created: false, note: NO_CONVERSATION_NOTE }
@@ -1144,6 +1169,16 @@ async function executeCaptureFeedback(
   args: CaptureFeedbackArgs,
   ctx: AssistantToolContext
 ): Promise<CaptureFeedbackOutput> {
+  if (ctx.role === 'workspace_assistant' && ctx.workspaceThreadKey) {
+    if (!isTypeId(args.boardId, 'board') || !ctx.actor.principalId)
+      return { created: false, note: 'Invalid board or approver.' }
+    const { createPost } = await import('@/lib/server/domains/posts/post.service')
+    const post = await createPost(
+      { boardId: args.boardId, title: args.title, content: args.content },
+      { principalId: ctx.actor.principalId, actor: ctx.actor }
+    )
+    return { created: true, postId: post.id }
+  }
   const conversationId = ctx.conversationId
   if (!conversationId) {
     return { created: false, note: NO_CONVERSATION_NOTE }
@@ -1299,6 +1334,31 @@ async function executeUseSkill(
 
 const SPECS: readonly AssistantToolSpec[] = [
   defineToolSpec({
+    label: 'List feedback',
+    description: 'Find top or recent feedback.',
+    promptGuidance: 'Use for top requests and feedback lists. Cite the returned post IDs.',
+    risk: 'read',
+    permissions: [],
+    parents: ['conversation', 'ticket'],
+    availableWhen: (ctx) => ctx.role === 'workspace_assistant' && ctx.knowledge.sources.has('post'),
+    definition: listFeedbackTool,
+    execute: executeListFeedback,
+    summarize: () => 'List feedback',
+  }),
+  defineToolSpec({
+    label: 'Feedback statistics',
+    description: 'Aggregate feedback counts and votes.',
+    promptGuidance:
+      'Use for aggregate questions about feedback. Groups may overlap when grouping by tag. Cite the returned representative post IDs.',
+    risk: 'read',
+    permissions: [],
+    parents: ['conversation', 'ticket'],
+    availableWhen: (ctx) => ctx.role === 'workspace_assistant' && ctx.knowledge.sources.has('post'),
+    definition: feedbackStatsTool,
+    execute: executeFeedbackStats,
+    summarize: () => 'Summarize feedback statistics',
+  }),
+  defineToolSpec({
     label: 'Search knowledge',
     description: 'Search the published help center for articles the current viewer can see.',
     promptGuidance:
@@ -1421,7 +1481,8 @@ const SPECS: readonly AssistantToolSpec[] = [
     permissions: [PERMISSIONS.TICKET_CREATE],
     definition: createTicketTool,
     execute: executeCreateTicket,
-    summarize: (args) => `Create a ${args.type} ticket: "${args.title}"`,
+    summarize: (args, ctx) =>
+      `Create a ${ctx?.role === 'workspace_assistant' ? 'back_office' : args.type} ticket: "${args.title}"`,
   }),
   defineToolSpec({
     label: 'Share feedback post',

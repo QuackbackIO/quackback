@@ -9,6 +9,7 @@ import { NotFoundError } from '@/lib/shared/errors'
 
 // createServerFn → directly-callable fns (mirrors assistant-actions.test.ts).
 vi.mock('@tanstack/react-start', () => ({
+  createServerOnlyFn: <T>(fn: T) => fn,
   createServerFn: () => {
     let _handler: ((args: { data: unknown }) => Promise<unknown>) | null = null
     const fn = (args: { data: unknown }) => {

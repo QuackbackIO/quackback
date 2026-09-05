@@ -1,3 +1,4 @@
+import { DEFAULT_WORKSPACE_ASSISTANT } from '@/lib/shared/assistant/config'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { makeKbArticle } from './kb-fixtures'
 
@@ -152,9 +153,10 @@ vi.mock('@/lib/server/domains/boards/board.service', () => ({
 
 const DEFAULT_RUNTIME_CONFIG: AssistantRuntimeConfig = {
   config: {
-    version: 3 as const,
+    version: 4 as const,
     identity: { name: 'Quinn', avatarUrl: null },
     agents: {
+      workspace: structuredClone(DEFAULT_WORKSPACE_ASSISTANT),
       agent: {
         voice: {
           tone: 'balanced' as const,
@@ -360,6 +362,7 @@ describe('mockRuntimeConfig helper', () => {
     mockRuntimeConfig({
       config: {
         agents: {
+          workspace: structuredClone(DEFAULT_WORKSPACE_ASSISTANT),
           agent: {
             voice: DEFAULT_RUNTIME_CONFIG.config.agents.agent.voice,
             knowledge: {
@@ -673,6 +676,18 @@ describe('runAssistantTurn', () => {
     expect(deltas.join('')).toBe('Use the reset link.')
     // Retrieval was called through the tool, audience-scoped.
     expect(mockRetrieve).toHaveBeenCalledWith('reset password', { audience: 'public' })
+  })
+
+  it('rejects workspace assistant on a public surface before inference', async () => {
+    await expect(
+      runAssistantTurn({
+        ...copilotQaInput,
+        role: 'workspace_assistant',
+        surface: 'widget',
+        messages: customerAsks('private notes'),
+      } as unknown as Parameters<typeof runAssistantTurn>[0])
+    ).rejects.toThrow('cannot run with public content')
+    expect(mockChat).not.toHaveBeenCalled()
   })
 
   it('derives a team content audience for the copilot surface (structural leak gate)', async () => {

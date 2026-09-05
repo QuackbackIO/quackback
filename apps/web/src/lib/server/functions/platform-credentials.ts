@@ -129,7 +129,7 @@ export const fetchPlatformCredentialsMaskedFn = createServerFn({ method: 'GET' }
       return {
         configured: false as const,
         fields: null,
-        managed: arePlatformCredentialsManaged(data.integrationType),
+        managed: await arePlatformCredentialsManaged(data.integrationType),
       }
     }
 
@@ -152,6 +152,6 @@ export const fetchPlatformCredentialsMaskedFn = createServerFn({ method: 'GET' }
     return {
       configured: true as const,
       fields: masked,
-      managed: arePlatformCredentialsManaged(data.integrationType),
+      managed: await arePlatformCredentialsManaged(data.integrationType),
     }
   })

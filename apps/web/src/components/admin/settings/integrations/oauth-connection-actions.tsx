@@ -38,6 +38,15 @@ export function OAuthConnectionActions({
 
   useEffect(() => {
     const searchParams = search as Record<string, string | undefined>
+    if (
+      searchParams[searchParamKey] === 'error' &&
+      searchParams.reason === 'already_connected_elsewhere'
+    ) {
+      toast.error(
+        `This ${displayName} account is already connected to another Quackback workspace.`
+      )
+      return
+    }
     if (searchParams[searchParamKey] !== 'connected') return
 
     setShowSuccess(true)

@@ -1758,6 +1758,13 @@
       "when": 1785700000031,
       "tag": "0273_identity_provider_logo_key",
       "breakpoints": true
+    },
+    {
+      "idx": 251,
+      "version": "7",
+      "when": 1788566400000,
+      "tag": "0274_slack_agent_gateway",
+      "breakpoints": true
     }
   ]
 }

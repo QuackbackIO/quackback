@@ -1,3 +1,4 @@
+import { DEFAULT_WORKSPACE_ASSISTANT } from '@/lib/shared/assistant/config'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_ASSISTANT_CONFIG, type AssistantConfig } from '@/lib/shared/assistant/config'
 
@@ -69,12 +70,13 @@ import {
 } from '../settings.assistant'
 
 const CONFIG: AssistantConfig = {
-  version: 3,
+  version: 4,
   identity: {
     name: 'Avery',
     avatarUrl: 'https://cdn.example.test/avery.png',
   },
   agents: {
+    workspace: structuredClone(DEFAULT_WORKSPACE_ASSISTANT),
     agent: {
       voice: {
         tone: 'balanced',

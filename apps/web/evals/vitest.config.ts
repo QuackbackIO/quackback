@@ -67,7 +67,15 @@ export default defineConfig({
     setupFiles: [path.resolve(repoRoot, 'vitest.setup.ts')],
     // Populate the app config inside each worker (see loadDotenv). Real process
     // env still wins for anything already set (CI job env, an explicit export).
-    env: dotenv,
+    env: {
+      ...dotenv,
+      ...Object.fromEntries(
+        Object.keys(dotenv)
+          .filter((key) => process.env[key] !== undefined)
+          .map((key) => [key, process.env[key]!])
+      ),
+      BASE_URL: process.env.BASE_URL ?? dotenv.BASE_URL ?? 'http://localhost:3000',
+    },
   },
   esbuild: {
     tsconfigRaw: {

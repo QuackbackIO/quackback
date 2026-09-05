@@ -148,6 +148,11 @@ export const deleteIntegrationFn = createServerFn({ method: 'POST' })
       }
     }
 
+    const { unregisterInstall } = await import('@/lib/server/integrations/install-registry')
+    await unregisterInstall(
+      integration.integrationType,
+      (integration.config ?? {}) as Record<string, unknown>
+    )
     await db.delete(integrations).where(eq(integrations.id, integrationId))
 
     const { cacheDel, CACHE_KEYS } = await import('@/lib/server/cache')

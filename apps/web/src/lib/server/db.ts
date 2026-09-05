@@ -467,6 +467,8 @@ export {
   ASSISTANT_TOOL_CALL_STATUSES,
   // Schema tables - assistant usage events (Copilot outcome loop)
   assistantEvents,
+  slackUserLinks,
+  integrationDeliveries,
   // Schema tables - RBAC
   roles,
   permissions,
