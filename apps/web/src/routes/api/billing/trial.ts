@@ -1,12 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { isSameOriginFormPost } from '@/lib/server/http/same-origin-form'
-import { INCOMING_PAID_PLAN_IDS, parsePaidPlanId } from '@/lib/shared/billing/checkout-path'
+import { PAID_PLAN_IDS, parsePaidPlanId } from '@/lib/shared/billing/checkout-path'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { billingFormErrorResponse, billingSessionErrorResponse } from './session'
 
 const trialSchema = z.object({
-  planId: z.enum(INCOMING_PAID_PLAN_IDS),
+  planId: z.enum(PAID_PLAN_IDS),
   /** Admin page the prompt was raised on, so the trial lands back on the now-unlocked feature. */
   returnTo: z.string().optional(),
 })

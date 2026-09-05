@@ -254,6 +254,26 @@ describe('POST /api/billing/session checkout', () => {
     })
   })
 
+  it('rejects leftover growth/scale checkout slugs', async () => {
+    const growth = await POST({
+      request: formRequest({
+        action: 'checkout',
+        planId: 'growth',
+        billingPeriod: 'monthly',
+      }),
+    })
+    expect(growth.headers.get('location')).toContain('billing_error=invalid')
+    const scale = await POST({
+      request: formRequest({
+        action: 'checkout',
+        planId: 'scale',
+        billingPeriod: 'annual',
+      }),
+    })
+    expect(scale.headers.get('location')).toContain('billing_error=invalid')
+    expect(hoisted.createHostedBillingSession).not.toHaveBeenCalled()
+  })
+
   it('forwards a quantity at or above live usage', async () => {
     const res = await POST({ request: checkoutRequest(8) })
     expect(res.status).toBe(303)
