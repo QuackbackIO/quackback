@@ -7,7 +7,6 @@ import {
   fetchDowngradePreviewFn,
   fetchFreeDowngradePreviewFn,
   fetchPendingDowngradeFn,
-  fetchSeatsPreviewFn,
   fetchUpgradeContextFn,
   beginPlanDowngradeFn,
   cancelPlanDowngradeFn,
@@ -62,12 +61,6 @@ export const billingQueries = {
     queryOptions({
       queryKey: ['billing', 'pending-downgrade'] as const,
       queryFn: () => fetchPendingDowngradeFn(),
-      staleTime: 10_000,
-    }),
-  seatsPreview: (quantity: number) =>
-    queryOptions({
-      queryKey: ['billing', 'seats-preview', quantity] as const,
-      queryFn: () => fetchSeatsPreviewFn({ data: { quantity } }),
       staleTime: 10_000,
     }),
 }

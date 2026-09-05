@@ -33,9 +33,9 @@ const catalogue: BillingCatalogue = {
       id: 'pro',
       name: 'Pro',
       rank: 1,
-      priceMonthlyCents: 1500,
-      priceYearlyCents: 14400,
-      billedPer: 'seat',
+      priceMonthlyCents: 3700,
+      priceYearlyCents: 34800,
+      billedPer: 'workspace',
       bestFor: 'For small teams getting started',
       highlights: ['Custom domain', 'Standard Quinn usage included'],
       recommended: false,
@@ -44,9 +44,9 @@ const catalogue: BillingCatalogue = {
       id: 'business',
       name: 'Business',
       rank: 2,
-      priceMonthlyCents: 3000,
-      priceYearlyCents: 28800,
-      billedPer: 'seat',
+      priceMonthlyCents: 7500,
+      priceYearlyCents: 70800,
+      billedPer: 'workspace',
       bestFor: 'For teams working the inbox daily',
       highlights: ['Workflows & SLAs', 'Higher Quinn usage'],
       recommended: true,
@@ -55,9 +55,9 @@ const catalogue: BillingCatalogue = {
       id: 'enterprise',
       name: 'Enterprise',
       rank: 3,
-      priceMonthlyCents: 5900,
-      priceYearlyCents: 58800,
-      billedPer: 'seat',
+      priceMonthlyCents: 12900,
+      priceYearlyCents: 118800,
+      billedPer: 'workspace',
       bestFor: 'For orgs with compliance needs',
       highlights: ['SSO (SAML & OIDC)', 'Maximum Quinn usage'],
       recommended: false,
@@ -80,7 +80,7 @@ const paidOverview: BillingProjectionOverview = {
     { id: 'business', name: 'Business' },
     { id: 'enterprise', name: 'Enterprise' },
   ],
-  seats: { used: 7, pending: 1, members: 6, purchased: 10 },
+  seats: { used: 7, pending: 1, members: 6, purchased: null, limit: 20 },
   ai: { includedCents: 3000, usedCents: 2520, extraCents: 1000 },
   hideBranding: false,
 }
@@ -115,27 +115,22 @@ function renderView(
 }
 
 describe('BillingPlansView', () => {
-  it('renders the active paid plan, seat meter, and invoices', () => {
+  it('renders the active paid plan and invoices', () => {
     renderView()
 
     expect(screen.getByRole('heading', { level: 2, name: 'Business' })).toBeInTheDocument()
     expect(screen.getByText('Active')).toBeInTheDocument()
     expect(screen.getByText(/Renews/)).toBeInTheDocument()
-    expect(screen.getByText(/10 seats × \$30\/seat/)).toBeInTheDocument()
-    expect(screen.queryByText(/\$24\/seat/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/billed annually/)).not.toBeInTheDocument()
-    expect(screen.getByText(/7 of 10 used/)).toBeInTheDocument()
-    expect(screen.getByText(/6 members · 1 pending invite · 3 seats available/)).toBeInTheDocument()
-    expect(screen.getByText('Each member or pending invite uses a seat.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Add seats' })).toBeEnabled()
-    expect(screen.getByRole('button', { name: 'Remove seats' })).toBeEnabled()
+    expect(screen.queryByText(/\/seat/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add seats' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Remove seats' })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Plans' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Current plan' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Switch to Free' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Switch to Pro' })).toBeInTheDocument()
     const switchLinks = screen.getAllByRole('link', { name: 'Switch to this plan' })
     expect(switchLinks.map((link) => link.getAttribute('href'))).toEqual([
-      '/admin/settings/billing/checkout?plan=enterprise&period=annual&seats=7',
+      '/admin/settings/billing/checkout?plan=enterprise&period=annual',
     ])
     expect(screen.getByText('INV-1001')).toBeInTheDocument()
   })
@@ -173,21 +168,8 @@ describe('BillingPlansView', () => {
     expect(screen.queryByRole('button', { name: 'Add' })).not.toBeInTheDocument()
   })
 
-  it('hides Add seats on a workspace-billed plan', () => {
-    renderView({
-      overview: {
-        ...paidOverview,
-        seats: { used: 4, pending: 0, members: 4, purchased: null },
-        ai: null,
-      },
-      catalogue: {
-        ...catalogue,
-        plans: catalogue.plans.map((plan) =>
-          plan.id === 'business' ? { ...plan, billedPer: 'workspace' as const } : plan
-        ),
-      },
-    })
-    expect(screen.queryByText(/of \d+ used/)).not.toBeInTheDocument()
+  it('does not offer a per-seat purchase path', () => {
+    renderView()
     expect(screen.queryByRole('button', { name: 'Add seats' })).not.toBeInTheDocument()
     expect(screen.queryByText(/per-seat pricing/)).not.toBeInTheDocument()
   })
@@ -336,9 +318,9 @@ describe('BillingPlansView', () => {
   it('shows annual monthly equivalent from the catalogue', () => {
     renderView()
     expect(screen.getByText(/Moving up applies now/)).toBeInTheDocument()
-    expect(screen.getByText('$24')).toBeInTheDocument()
+    expect(screen.getByText('$59')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('radio', { name: 'Monthly' }))
-    expect(screen.getByText('$30')).toBeInTheDocument()
+    expect(screen.getByText('$75')).toBeInTheDocument()
   })
 
   it('shows annual savings for the selected expired-trial plan, not the recommended one', () => {
@@ -359,11 +341,11 @@ describe('BillingPlansView', () => {
         seats: { used: 3, pending: 0, members: 3, purchased: null },
       },
     })
-    expect(screen.getByRole('radio', { name: /Save \$72\/yr/ })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /Save \$192\/yr/ })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /For small teams getting started/ }))
-    expect(screen.getByRole('radio', { name: /Save \$36\/yr/ })).toBeInTheDocument()
-    expect(screen.queryByRole('radio', { name: /Save \$72\/yr/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /Save \$96\/yr/ })).toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /Save \$192\/yr/ })).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /For trying Quackback out/ }))
     expect(screen.queryByText(/Save \$/)).not.toBeInTheDocument()

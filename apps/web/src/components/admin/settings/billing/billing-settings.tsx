@@ -12,7 +12,6 @@ import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { cn } from '@/lib/shared/utils'
 import { formatUsd } from '@/lib/shared/format-usd'
 import { annualSavingsLabel } from '@/lib/shared/billing/checkout-path'
-import { seatUnitCents } from './seat-price'
 import { hasTopUpPackPrice } from './topup-price'
 import {
   billingPlanAction,
@@ -23,8 +22,6 @@ import {
 } from '@/lib/shared/billing/plan-action'
 import { daysUntil } from '@/lib/shared/billing/trial-state'
 import { checkoutPath } from '@/lib/shared/billing/checkout-path'
-import { AddSeatsDialog } from './add-seats-dialog'
-import { RemoveSeatsDialog } from './remove-seats-dialog'
 import { SubscribeDialog } from './subscribe-dialog'
 import { TopUpDialog } from './topup-dialog'
 import { UsageMeter } from './usage-meter'
@@ -70,8 +67,6 @@ export function BillingPlansView(props: {
   pending?: { planId: string; planName: string } | null
 }) {
   const [period, setPeriod] = useState<'monthly' | 'annual'>('annual')
-  const [addSeatsOpen, setAddSeatsOpen] = useState(false)
-  const [removeSeatsOpen, setRemoveSeatsOpen] = useState(false)
   const [topupMeter, setTopupMeter] = useState<'ai' | 'email' | null>(null)
   const [subscribePlanId, setSubscribePlanId] = useState<PaidPlanId | null>(null)
   const [pendingOpen, setPendingOpen] = useState(Boolean(props.pending?.planId))
@@ -83,7 +78,6 @@ export function BillingPlansView(props: {
   const subscribePlan = catalogue?.plans.find((plan) => plan.id === subscribePlanId)
   const trialDays = catalogueTrialDays(catalogue)
   const trialedPlanIds = catalogueTrialedPlanIds(catalogue)
-  const checkoutQuantity = Math.max(overview.seats?.used ?? 1, 1)
   const savingsPlan =
     catalogue?.plans.find((plan) => plan.recommended) ??
     catalogue?.plans.find((plan) => plan.id !== 'free') ??
@@ -108,13 +102,7 @@ export function BillingPlansView(props: {
           onReview={() => setPendingOpen(true)}
         />
       ) : null}
-      <CurrentPlanCard
-        overview={overview}
-        catalogue={catalogue}
-        onAddSeats={() => setAddSeatsOpen(true)}
-        onRemoveSeats={() => setRemoveSeatsOpen(true)}
-        onSubscribe={setSubscribePlanId}
-      />
+      <CurrentPlanCard overview={overview} catalogue={catalogue} onSubscribe={setSubscribePlanId} />
 
       <UsageCard
         overview={overview}
@@ -134,7 +122,6 @@ export function BillingPlansView(props: {
           </div>
           <PeriodToggle
             value={period}
-            discountMonths={catalogue?.annualDiscountMonths ?? 2}
             savingsLabel={annualSavingsLabel(savingsPlan)}
             onChange={setPeriod}
           />
@@ -157,7 +144,6 @@ export function BillingPlansView(props: {
                 action={billingPlanAction(plan.id, overview, trialedPlanIds)}
                 trialActive={overview.trialActive && overview.plan === plan.id}
                 index={index}
-                checkoutQuantity={checkoutQuantity}
                 subscribeIsContinuation={Boolean(overview.trialActive || overview.trialEnded)}
                 onSubscribe={setSubscribePlanId}
               />
@@ -189,15 +175,11 @@ export function BillingPlansView(props: {
         )}
       </section>
 
-      {addSeatsOpen ? <AddSeatsDialog open onOpenChange={setAddSeatsOpen} /> : null}
-      {removeSeatsOpen ? <RemoveSeatsDialog open onOpenChange={setRemoveSeatsOpen} /> : null}
       {subscribePlan && subscribePlan.id !== 'free' ? (
         <SubscribeDialog
           open
           plan={subscribePlan}
           endsTrial={Boolean(overview.trialActive || overview.trialEnded)}
-          minSeats={checkoutQuantity}
-          discountMonths={catalogue?.annualDiscountMonths ?? 2}
           period={period}
           onOpenChange={(open) => {
             if (!open) setSubscribePlanId(null)
@@ -259,12 +241,9 @@ function PendingDowngradeBanner(props: { planName: string; onReview: () => void 
 function CurrentPlanCard(props: {
   overview: BillingProjectionOverview
   catalogue: BillingCatalogue | null
-  onAddSeats: () => void
-  onRemoveSeats: () => void
   onSubscribe: (planId: PaidPlanId) => void
 }) {
   const { overview, catalogue } = props
-  const plan = catalogue?.plans.find((entry) => entry.id === overview.plan)
   const purchased = overview.seats?.purchased ?? null
   const showSeats = purchased != null
   const trialPlanName =
@@ -285,7 +264,6 @@ function CurrentPlanCard(props: {
       : overview.status
         ? (STATUS_LABELS[overview.status] ?? overview.status)
         : null
-  const perSeat = plan ? seatUnitCents(plan, null) : 0
   const renewalBits: string[] = []
   if (overview.trialActive && overview.trialExpiresAt) {
     const left =
@@ -306,10 +284,6 @@ function CurrentPlanCard(props: {
   } else if (overview.renewalAt) {
     renewalBits.push(`Renews ${formatDate(overview.renewalAt)}`)
   }
-  if (showSeats && plan && plan.billedPer === 'seat') {
-    renewalBits.push(`${purchased} seats × ${formatUsd(perSeat, 0)}/seat`)
-  }
-
   return (
     <section className="overflow-hidden rounded-xl border border-border/50 bg-card">
       <div className="flex items-start justify-between gap-3 px-6 py-5">
@@ -340,12 +314,7 @@ function CurrentPlanCard(props: {
       ) : overview.trialEnded ? (
         <EndedSeatsRow overview={overview} />
       ) : showSeats ? (
-        <SeatsBlock
-          overview={overview}
-          purchased={purchased}
-          onAddSeats={props.onAddSeats}
-          onRemoveSeats={props.onRemoveSeats}
-        />
+        <SeatsBlock overview={overview} purchased={purchased} />
       ) : null}
     </section>
   )
@@ -389,12 +358,7 @@ function EndedSeatsRow(props: { overview: BillingProjectionOverview }) {
   )
 }
 
-function SeatsBlock(props: {
-  overview: BillingProjectionOverview
-  purchased: number
-  onAddSeats: () => void
-  onRemoveSeats: () => void
-}) {
+function SeatsBlock(props: { overview: BillingProjectionOverview; purchased: number }) {
   const seats = props.overview.seats
   const used = seats?.used ?? 0
   const members = seats?.members ?? used
@@ -409,28 +373,10 @@ function SeatsBlock(props: {
         </div>
       </div>
       <Progress value={used} max={Math.max(props.purchased, 1)} />
-      <div className="flex items-center justify-between gap-3">
-        <div className="text-[12px] text-muted-foreground">
-          {members} {members === 1 ? 'member' : 'members'} · {pending} pending{' '}
-          {pending === 1 ? 'invite' : 'invites'} · {available} {available === 1 ? 'seat' : 'seats'}{' '}
-          available
-        </div>
-        {props.overview.canManageBilling ? (
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              disabled={props.purchased <= used}
-              onClick={props.onRemoveSeats}
-            >
-              Remove seats
-            </Button>
-            <Button type="button" size="sm" onClick={props.onAddSeats}>
-              Add seats
-            </Button>
-          </div>
-        ) : null}
+      <div className="text-[12px] text-muted-foreground">
+        {members} {members === 1 ? 'member' : 'members'} · {pending} pending{' '}
+        {pending === 1 ? 'invite' : 'invites'} · {available} {available === 1 ? 'seat' : 'seats'}{' '}
+        available
       </div>
       <p className="text-[12px] text-muted-foreground">
         Each member or pending invite uses a seat.
@@ -650,14 +596,13 @@ function PlanCard(props: {
   action: BillingPlanAction
   trialActive: boolean
   index: number
-  checkoutQuantity: number
   subscribeIsContinuation: boolean
   onSubscribe: (planId: PaidPlanId) => void
 }) {
   const { plan, period, action } = props
   const isAnnual = period === 'annual'
   const monthlyCents = isAnnual ? Math.round(plan.priceYearlyCents / 12) : plan.priceMonthlyCents
-  const unit = plan.billedPer === 'seat' ? '/seat/mo' : '/mo'
+  const unit = '/mo'
   const current = action.kind === 'current'
 
   return (
@@ -709,7 +654,6 @@ function PlanCard(props: {
           planName={plan.name}
           trialDays={props.trialDays}
           period={period}
-          checkoutQuantity={props.checkoutQuantity}
           subscribeIsContinuation={props.subscribeIsContinuation}
           onSubscribe={props.onSubscribe}
         />
@@ -723,7 +667,6 @@ function PlanActionButton(props: {
   planName: string
   trialDays: number
   period: 'monthly' | 'annual'
-  checkoutQuantity: number
   subscribeIsContinuation: boolean
   onSubscribe: (planId: PaidPlanId) => void
 }) {
@@ -771,7 +714,6 @@ function PlanActionButton(props: {
         href={checkoutPath({
           plan: action.planId,
           period: props.period,
-          seats: props.checkoutQuantity,
         })}
       >
         Switch to this plan
@@ -843,7 +785,6 @@ function DowngradeButton(props: { planId: string; planName: string }) {
 
 function PeriodToggle(props: {
   value: 'monthly' | 'annual'
-  discountMonths: number
   savingsLabel: string | null
   onChange: (next: 'monthly' | 'annual') => void
 }) {

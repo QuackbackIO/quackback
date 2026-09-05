@@ -11,25 +11,14 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 
 describe('SeatGatePanel', () => {
-  it('shows Add a seat when the purchase path is available', () => {
-    const onAddSeat = vi.fn()
-    render(
-      <SeatGatePanel
-        usage={{ used: 10, limit: 10, addSeatAvailable: true }}
-        onAddSeat={onAddSeat}
-      />
-    )
+  it('routes to Plans when the seat cap is full', () => {
+    render(<SeatGatePanel usage={{ used: 10, limit: 10 }} />)
     expect(screen.getByText(/All 10 seats are in use/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Add a seat' })).toBeInTheDocument()
-    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '10')
-  })
-
-  it('routes to Plans on Free or without billing permission', () => {
-    render(<SeatGatePanel usage={{ used: 1, limit: 1, addSeatAvailable: false }} />)
     expect(screen.getByRole('link', { name: 'See plans' })).toHaveAttribute(
       'href',
       '/admin/settings/billing'
     )
     expect(screen.queryByRole('button', { name: 'Add a seat' })).not.toBeInTheDocument()
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '10')
   })
 })

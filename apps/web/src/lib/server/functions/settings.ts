@@ -116,7 +116,7 @@ function buildAvatarUrl(p: { avatarKey: string | null; avatarUrl: string | null 
 export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).handler(
   async () => {
     log.debug('fetch team members and invitations')
-    const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
+    await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
 
     // Subquery: latest session timestamp per user. Left-joined so
     // a team member with no sessions still appears (lastSignInAt
@@ -242,34 +242,12 @@ export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).
 
     const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
     const { countSeatUsage } = await import('@/lib/server/domains/principals/seat-usage')
-    const { getCloudConfig } = await import('@/lib/server/domains/settings/cloud/cloud.service')
-    const [limits, seats, cloud] = await Promise.all([
-      getTierLimits(),
-      countSeatUsage(),
-      getCloudConfig(),
-    ])
-    const addSeatEligible =
-      cloud.enabled &&
-      cloud.canManageBilling &&
-      auth.permissions.includes(PERMISSIONS.BILLING_MANAGE) &&
-      cloud.plan != null &&
-      cloud.plan !== 'free' &&
-      !cloud.trialActive &&
-      limits.maxTeamSeats != null &&
-      seats.used >= limits.maxTeamSeats
-    let billedPer: 'seat' | 'workspace' | undefined
-    if (addSeatEligible) {
-      const { catalogueBilledPer } =
-        await import('@/lib/server/domains/billing/projection-overview')
-      billedPer = await catalogueBilledPer(cloud.plan)
-    }
-    const addSeatAvailable = addSeatEligible && billedPer === 'seat'
+    const [limits, seats] = await Promise.all([getTierLimits(), countSeatUsage()])
     const seatUsage = {
       used: seats.used,
       members: seats.members,
       pendingInvites: seats.pendingInvites,
       limit: limits.maxTeamSeats,
-      addSeatAvailable,
     }
 
     return { members, avatarMap, formattedInvitations, seatUsage }

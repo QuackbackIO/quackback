@@ -20,7 +20,6 @@ import type { PlanDowngradeIssue } from '@/lib/shared/billing/plan-downgrade'
 
 export type PlanDowngradeCheckout = {
   period: BillingPeriod
-  quantity: number
   branding?: boolean
 }
 
@@ -150,7 +149,7 @@ export function PlanDowngradeDialog(props: {
               <input type="hidden" name="action" value="checkout" />
               <input type="hidden" name="planId" value={props.planId} />
               <input type="hidden" name="billingPeriod" value={props.checkout.period} />
-              <input type="hidden" name="quantity" value={String(props.checkout.quantity)} />
+              <input type="hidden" name="quantity" value="1" />
               {props.checkout.branding ? (
                 <input type="hidden" name="brandingRemoval" value="true" />
               ) : null}

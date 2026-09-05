@@ -88,15 +88,9 @@ interface InviteMemberDialogProps {
   open: boolean
   onClose: () => void
   onSuccess?: () => void
-  onAddSeat?: () => void
 }
 
-export function InviteMemberDialog({
-  open,
-  onClose,
-  onSuccess,
-  onAddSeat,
-}: InviteMemberDialogProps) {
+export function InviteMemberDialog({ open, onClose, onSuccess }: InviteMemberDialogProps) {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
   const [inviteLink, setInviteLink] = useState<string | null>(null)
@@ -267,17 +261,7 @@ export function InviteMemberDialog({
               />
 
               {seatUsage && inviteBlocked ? (
-                <SeatGatePanel
-                  usage={seatUsage}
-                  onAddSeat={
-                    onAddSeat
-                      ? () => {
-                          onClose()
-                          onAddSeat()
-                        }
-                      : undefined
-                  }
-                />
+                <SeatGatePanel usage={seatUsage} />
               ) : seatUsage ? (
                 <div className="flex items-center gap-3 rounded-lg border border-border/50 bg-muted/30 px-3 py-2 text-[12px] text-muted-foreground">
                   <span className="shrink-0">Team seats</span>

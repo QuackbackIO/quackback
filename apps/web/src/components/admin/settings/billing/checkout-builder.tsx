@@ -21,7 +21,6 @@ import {
   isPaidPlanId,
   type BillingPeriod,
 } from '@/lib/shared/billing/checkout-path'
-import { QuantityStepper } from './quantity-stepper'
 import { FreeDowngradeDialog, PlanDowngradeDialog } from './free-downgrade-dialog'
 
 type CataloguePlan = BillingCatalogue['plans'][number]
@@ -29,7 +28,6 @@ type CataloguePlan = BillingCatalogue['plans'][number]
 export type CheckoutSelection = {
   plan: PaidPlanId | null
   period: BillingPeriod
-  seats: number
   /** Branding removal added to the order. */
   branding: boolean
 }
@@ -38,7 +36,6 @@ export type CheckoutSelection = {
 export type CheckoutSelectionChange = Partial<{
   plan: PaidPlanId
   period: BillingPeriod
-  seats: number
   branding: boolean
 }>
 
@@ -46,7 +43,7 @@ const PLANS_PATH = '/admin/settings/billing'
 const COMPARE_FEATURES_HREF = 'https://quackback.io/pricing'
 
 /**
- * The plan configurator: billing cycle, plan, seats and add-ons on the left,
+ * The plan configurator: billing cycle, plan, and add-ons on the left,
  * a live order summary on the right, then one hand-off to hosted checkout.
  * Selection lives in the URL so an upgrade prompt can deep-link with the plan
  * preselected and a refresh keeps the choice.
@@ -63,8 +60,6 @@ export function CheckoutBuilder(props: {
     .sort((a, b) => a.rank - b.rank)
   const freePlan = catalogue.plans.find((plan) => plan.id === 'free') ?? null
   const selectedPlan = paidPlans.find((plan) => plan.id === selection.plan) ?? null
-  const minSeats = Math.max(overview.seats?.used ?? 1, 1)
-  const seats = Math.max(selection.seats, minSeats)
   const trialedPlanIds = catalogueTrialedPlanIds(catalogue)
   const trialDays = catalogueTrialDays(catalogue)
   const savingsReference =
@@ -85,7 +80,6 @@ export function CheckoutBuilder(props: {
           <CycleToggle
             value={selection.period}
             savingsLabel={savings}
-            discountMonths={catalogue.annualDiscountMonths}
             onChange={(period) => props.onChange({ period })}
           />
         </section>
@@ -121,32 +115,6 @@ export function CheckoutBuilder(props: {
           </div>
         </section>
 
-        {selectedPlan?.billedPer === 'seat' ? (
-          <section className="space-y-3">
-            <SectionTitle>Seats</SectionTitle>
-            <div className="rounded-xl border border-border/50 bg-card px-4 py-3">
-              <div className="flex flex-wrap items-center gap-3">
-                <QuantityStepper
-                  value={seats}
-                  min={minSeats}
-                  onChange={(next) => props.onChange({ seats: next })}
-                  decreaseLabel="Fewer seats"
-                  increaseLabel="More seats"
-                />
-                <span className="text-[13px] text-muted-foreground">
-                  {seats === 1 ? 'seat' : 'seats'} (min. {minSeats} — already in use)
-                </span>
-              </div>
-              <p className="mt-2 text-[12px] text-muted-foreground">
-                Each member or pending invite uses a seat. You have {overview.seats?.members ?? 0}{' '}
-                {(overview.seats?.members ?? 0) === 1 ? 'member' : 'members'} and{' '}
-                {overview.seats?.pending ?? 0} pending{' '}
-                {(overview.seats?.pending ?? 0) === 1 ? 'invite' : 'invites'}.
-              </p>
-            </div>
-          </section>
-        ) : null}
-
         {branding ? (
           <section className="space-y-3">
             <SectionTitle>Add-ons</SectionTitle>
@@ -166,7 +134,6 @@ export function CheckoutBuilder(props: {
         overview={overview}
         plan={selectedPlan}
         period={selection.period}
-        seats={seats}
         branding={brandingInOrder && branding ? branding : null}
         trialDays={trialDays}
         currentPlanRank={catalogue.plans.find((plan) => plan.id === overview.plan)?.rank ?? 0}
@@ -183,7 +150,6 @@ function SectionTitle(props: { children: React.ReactNode }) {
 function CycleToggle(props: {
   value: BillingPeriod
   savingsLabel: string | null
-  discountMonths: number
   onChange: (next: BillingPeriod) => void
 }) {
   return (
@@ -232,7 +198,7 @@ function PlanRow(props: {
   const { plan, period } = props
   const monthlyCents =
     period === 'annual' ? Math.round(plan.priceYearlyCents / 12) : plan.priceMonthlyCents
-  const unit = plan.billedPer === 'seat' ? '/seat/mo' : '/mo'
+  const unit = '/mo'
   const current = props.action.kind === 'current'
   return (
     <div
@@ -389,7 +355,6 @@ function OrderSummary(props: {
   overview: BillingProjectionOverview
   plan: CataloguePlan | null
   period: BillingPeriod
-  seats: number
   branding: BrandingPrice | null
   trialDays: number
   currentPlanRank: number
@@ -397,7 +362,7 @@ function OrderSummary(props: {
 }) {
   const { overview, plan, period } = props
   const canAct = overview.canUpgrade || overview.canManageBilling
-  const summary = plan ? checkoutSummary(plan, period, props.seats) : null
+  const summary = plan ? checkoutSummary(plan, period) : null
   const intervalLabel = period === 'annual' ? 'year' : 'mo'
   const fromPaid = overview.plan !== 'free' && !overview.trialActive
   const movingDown = plan != null && fromPaid && plan.rank < props.currentPlanRank
@@ -429,9 +394,7 @@ function OrderSummary(props: {
               {plan && summary && planCharged ? (
                 <div className="flex items-baseline justify-between gap-3">
                   <span className="text-muted-foreground">
-                    {summary.billedPer === 'seat'
-                      ? `${summary.quantity} ${summary.quantity === 1 ? 'seat' : 'seats'} × ${formatUsd(summary.unitCents, 0)}/${intervalLabel}`
-                      : `Workspace × ${formatUsd(summary.unitCents, 0)}/${intervalLabel}`}
+                    {`Workspace × ${formatUsd(summary.unitCents, 0)}/${intervalLabel}`}
                   </span>
                   <span className="tabular-nums">
                     {formatUsd(summary.totalCents, 0)}/{intervalLabel}
@@ -469,7 +432,6 @@ function OrderSummary(props: {
           <SummaryAction
             plan={plan}
             period={period}
-            quantity={summary?.quantity ?? 1}
             branding={props.branding != null}
             brandingOnly={brandingOnly}
             action={props.action}
@@ -484,7 +446,7 @@ function OrderSummary(props: {
                   ? 'You are already on this plan; only the add-on is charged, pro-rata on your current subscription.'
                   : 'Payment is handled by Stripe. Branding removal renews on its own cycle until you cancel it.'
                 : props.action?.kind === 'current'
-                  ? 'You are already on this plan. Seats can be changed from Plans & billing.'
+                  ? 'You are already on this plan.'
                   : overview.trialActive
                     ? 'Payment is handled by Stripe. Billing starts today and your trial ends when it goes through.'
                     : movingDown
@@ -502,7 +464,6 @@ function OrderSummary(props: {
 function SummaryAction(props: {
   plan: CataloguePlan | null
   period: BillingPeriod
-  quantity: number
   branding: boolean
   brandingOnly: boolean
   action: BillingPlanAction | null
@@ -541,7 +502,6 @@ function SummaryAction(props: {
         planName={plan.name}
         planId={action.planId}
         period={props.period}
-        quantity={props.quantity}
         branding={props.branding}
       />
     )
@@ -559,7 +519,7 @@ function SummaryAction(props: {
         <input type="hidden" name="action" value="checkout" />
         <input type="hidden" name="planId" value={plan.id} />
         <input type="hidden" name="billingPeriod" value={props.period} />
-        <input type="hidden" name="quantity" value={String(props.quantity)} />
+        <input type="hidden" name="quantity" value="1" />
         {props.branding ? <input type="hidden" name="brandingRemoval" value="true" /> : null}
         <Button type="submit" className="w-full">
           Continue to payment
@@ -576,7 +536,6 @@ function PaidDowngradeAction(props: {
   planName: string
   planId: string
   period: BillingPeriod
-  quantity: number
   branding: boolean
 }) {
   const [open, setOpen] = useState(false)
@@ -593,7 +552,6 @@ function PaidDowngradeAction(props: {
           planName={props.planName}
           checkout={{
             period: props.period,
-            quantity: props.quantity,
             branding: props.branding,
           }}
         />
