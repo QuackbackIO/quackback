@@ -153,7 +153,6 @@ function OfferFrame(props: OfferFrameProps) {
         <PriceRow
           plan={plan}
           period={period}
-          discountMonths={catalogue?.annualDiscountMonths ?? 2}
           onPeriodChange={setPeriod}
           trialDays={trialPlanId ? trialDays : null}
         />
@@ -223,7 +222,6 @@ function trialPlanIdFor(
 function PriceRow(props: {
   plan: BillingCatalogue['plans'][number]
   period: BillingPeriod
-  discountMonths: number
   onPeriodChange: (next: BillingPeriod) => void
   trialDays: number | null
 }) {
@@ -231,7 +229,7 @@ function PriceRow(props: {
   const monthlyCents = isAnnual
     ? Math.round(props.plan.priceYearlyCents / 12)
     : props.plan.priceMonthlyCents
-  const unit = props.plan.billedPer === 'seat' ? '/seat/mo' : '/mo'
+  const unit = '/mo'
 
   return (
     <div className="mt-4 rounded-lg border border-border/50 bg-muted/20 px-3 py-2.5">
@@ -249,7 +247,6 @@ function PriceRow(props: {
         </p>
         <PeriodToggle
           value={props.period}
-          discountMonths={props.discountMonths}
           savingsLabel={annualSavingsLabel(props.plan)}
           onChange={props.onPeriodChange}
         />
@@ -266,7 +263,6 @@ function PriceRow(props: {
 
 function PeriodToggle(props: {
   value: BillingPeriod
-  discountMonths: number
   savingsLabel: string | null
   onChange: (next: BillingPeriod) => void
 }) {

@@ -45,18 +45,6 @@ export const fetchBillingInvoicesFn = createServerFn({ method: 'GET' }).handler(
   return fetchBillingInvoices()
 })
 
-export const fetchSeatsPreviewFn = createServerFn({ method: 'GET' })
-  .validator((data: { quantity: number }) => data)
-  .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.BILLING_MANAGE })
-    const { fetchSeatsPreview } = await import('@/lib/server/control-plane/client')
-    try {
-      return await fetchSeatsPreview(data.quantity)
-    } catch {
-      return { amountDueCents: null }
-    }
-  })
-
 // This module is imported by the client for its RPC stubs: only `.handler()`
 // bodies are stripped, and any module-scope helper an export still reaches
 // ships to the browser with its imports. Helpers that touch the database

@@ -47,17 +47,12 @@ const actionSchema = z.discriminatedUnion('action', [
     action: z.literal('checkout'),
     planId: z.enum(PAID_PLAN_IDS),
     billingPeriod: z.enum(['monthly', 'annual']),
-    quantity: z.coerce.number().int().positive().optional(),
     // A checked checkbox posts "true"; an unchecked one posts nothing.
     brandingRemoval: z.enum(['true']).optional(),
   }),
   z.object({
     action: z.literal('downgrade'),
     planId: z.literal('free'),
-  }),
-  z.object({
-    action: z.literal('seats'),
-    quantity: z.coerce.number().int().positive(),
   }),
   z.object({
     action: z.literal('topup'),
@@ -111,11 +106,9 @@ export const Route = createFileRoute('/api/billing/session')({
           }
           const { createHostedBillingSession } = await import('@/lib/server/control-plane/client')
           const session =
-            parsed.data.action === 'seats'
-              ? await createSeatChangeSession(parsed.data.quantity)
-              : parsed.data.action === 'checkout'
-                ? await createCheckoutSession(parsed.data)
-                : await createHostedBillingSession(parsed.data)
+            parsed.data.action === 'checkout'
+              ? await createCheckoutSession(parsed.data)
+              : await createHostedBillingSession(parsed.data)
           if (parsed.data.action === 'downgrade' || parsed.data.action === 'checkout') {
             const { clearPendingDowngrade } =
               await import('@/lib/server/domains/billing/pending-downgrade')
@@ -142,62 +135,19 @@ export const Route = createFileRoute('/api/billing/session')({
   },
 })
 
-/**
- * Same settings-row lock invites take. Hold it across the hosted call so a
- * concurrent invite cannot change the roster after we sampled it.
- */
-async function withSettingsLock<T>(
-  fn: (tx: import('@/lib/server/db').Transaction) => Promise<T>
-): Promise<T> {
-  const { db, settings } = await import('@/lib/server/db')
-  return db.transaction(async (tx) => {
-    const [row] = await tx.select({ id: settings.id }).from(settings).limit(1).for('update')
-    if (!row) throw new Error('Workspace is not set up yet')
-    return fn(tx)
-  })
-}
-
-async function createSeatChangeSession(quantity: number) {
-  const { countSeatUsage } = await import('@/lib/server/domains/principals/seat-usage')
-  const { createHostedBillingSession } = await import('@/lib/server/control-plane/client')
-  return withSettingsLock(async (tx) => {
-    const seats = await countSeatUsage(tx)
-    if (quantity < seats.used) {
-      throw new Error('seats_below_usage')
-    }
-    return createHostedBillingSession({ action: 'seats', quantity })
-  })
-}
-
-/** Floor seat-billed checkout at live usage so a stale form cannot under-seat.
- *  Workspace-priced plans stay quantity 1. */
 async function createCheckoutSession(input: {
   planId: (typeof PAID_PLAN_IDS)[number]
   billingPeriod: 'monthly' | 'annual'
-  quantity?: number
   brandingRemoval?: 'true'
 }) {
   const planId = parsePaidPlanId(input.planId)
   if (!planId) throw new Error('invalid')
-  const { countSeatUsage } = await import('@/lib/server/domains/principals/seat-usage')
-  const { createHostedBillingSession, fetchBillingCatalogue } =
-    await import('@/lib/server/control-plane/client')
-  return withSettingsLock(async (tx) => {
-    const [seats, catalogue] = await Promise.all([
-      countSeatUsage(tx),
-      fetchBillingCatalogue().catch(() => null),
-    ])
-    const billedPer = catalogue?.plans.find(
-      (plan) => parsePaidPlanId(plan.id) === planId
-    )?.billedPer
-    const quantity =
-      billedPer === 'workspace' ? 1 : Math.max(input.quantity ?? seats.used, seats.used, 1)
-    return createHostedBillingSession({
-      action: 'checkout',
-      planId,
-      billingPeriod: input.billingPeriod,
-      quantity,
-      ...(input.brandingRemoval === 'true' ? { brandingRemoval: true } : {}),
-    })
+  const { createHostedBillingSession } = await import('@/lib/server/control-plane/client')
+  return createHostedBillingSession({
+    action: 'checkout',
+    planId,
+    billingPeriod: input.billingPeriod,
+    quantity: 1,
+    ...(input.brandingRemoval === 'true' ? { brandingRemoval: true } : {}),
   })
 }

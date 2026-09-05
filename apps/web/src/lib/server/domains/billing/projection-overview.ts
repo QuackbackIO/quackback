@@ -68,7 +68,8 @@ export function catalogueAiIncludedCents(
  * Purchased seats are the billed projection quantity, not the operator
  * tier_limits overlay that getTierLimits() applies for enforcement.
  * Free, trial, workspace-billed, and missing billedPer (grandfathered /
- * catalogue unavailable) stay null so Add seats cannot target an overlay.
+ * catalogue unavailable) stay null so a workspace plan is never treated as
+ * a purchased-seat overlay.
  */
 /** lastTrialPlanId is catalogue history. Only surface it while a product
  *  trial is running or in the 7-day ended window; a paid workspace must

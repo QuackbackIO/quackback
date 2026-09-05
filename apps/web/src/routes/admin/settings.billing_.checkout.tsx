@@ -37,7 +37,6 @@ function CheckoutPage() {
   const selection = {
     plan: search.plan ?? null,
     period: search.period ?? 'annual',
-    seats: search.seats ?? Math.max(overview?.seats?.used ?? 1, 1),
     branding: search.branding ?? false,
   }
 
@@ -52,7 +51,7 @@ function CheckoutPage() {
       <PageHeader
         icon={CreditCardIcon}
         title="Configure your plan"
-        description="Choose a plan, billing cycle, and seats. Payment happens on the next step."
+        description="Choose a plan and billing cycle. Payment happens on the next step."
       />
       {!billingEnabled || !overview ? (
         <p className="text-sm text-muted-foreground">
