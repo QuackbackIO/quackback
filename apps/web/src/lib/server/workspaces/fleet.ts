@@ -26,6 +26,7 @@
  */
 import { config } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
+import { shouldSkipForDormancy } from './activity'
 import { listActiveWorkspaces, type WorkspaceDescriptor } from './registry'
 import { acquireScopeForWorkspaceId, acquireWorkspaceScope } from './resolver'
 import { runWithWorkspaceScope, type WorkspaceScopeOrigin } from './workspace-context'
@@ -39,6 +40,8 @@ export interface FleetPassResult {
   failed: number
   /** Workspaces that could not be scoped at all (suspended, invalid, refused). */
   skipped: number
+  /** Workspaces not opened because nobody has visited them (`activity.ts`). */
+  dormant: number
 }
 
 /**
@@ -54,7 +57,7 @@ export async function runFleetPass(
 ): Promise<FleetPassResult> {
   if (!config.isPooledTenancy) {
     await body(null)
-    return { succeeded: 1, failed: 0, skipped: 0 }
+    return { succeeded: 1, failed: 0, skipped: 0, dormant: 0 }
   }
 
   const { workspaces, refused } = await listActiveWorkspaces()
@@ -62,9 +65,18 @@ export async function runFleetPass(
     log.error({ refused }, 'fleet pass skipping workspaces with invalid registry records')
   }
 
-  const result: FleetPassResult = { succeeded: 0, failed: 0, skipped: refused.length }
+  const result: FleetPassResult = { succeeded: 0, failed: 0, skipped: refused.length, dormant: 0 }
+  const now = Date.now()
 
   for (const workspace of workspaces) {
+    // A sweep over a workspace nobody has visited in a week is the cost the
+    // dormancy rule exists to remove; opening the scope here would be that cost.
+    if (
+      shouldSkipForDormancy({ ...workspace, lastActiveAt: workspace.lastActiveAt ?? null }, now)
+    ) {
+      result.dormant += 1
+      continue
+    }
     const acquisition = await acquireWorkspaceScope(workspace, origin)
     if (acquisition.kind !== 'ok') {
       result.skipped += 1

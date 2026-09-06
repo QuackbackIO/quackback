@@ -230,6 +230,14 @@ export async function refreshStaleSummaries(): Promise<void> {
   // circuit breaker trips.
   if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !getChatModel('summary'))
     return
+  // Same gate `generateAndSavePostSummary` applies per post, asked once up front.
+  // Without it a workspace on a plan without AI insights queried a batch of stale
+  // posts every sweep and failed each one with TIER_LIMIT_EXCEEDED, for ever.
+  const { hasEntitlement } = await import('@/lib/server/domains/settings/cloud/entitlements')
+  if (!(await hasEntitlement('aiInsights'))) {
+    log.debug('summary sweep skipped: ai insights not entitled')
+    return
+  }
   await withWorkspaceSweepReentrancyGuard('summary_sweep', _doSweep)
 }
 

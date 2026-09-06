@@ -68,7 +68,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   isNull: vi.fn(),
 }))
 
-import { generateAndSavePostSummary } from '../summary.service'
+import { generateAndSavePostSummary, refreshStaleSummaries } from '../summary.service'
 
 const POST_ID = 'post_x' as PostId
 
@@ -137,5 +137,27 @@ describe('generateAndSavePostSummary — plan gate', () => {
     await expect(generateAndSavePostSummary(POST_ID)).rejects.toBeInstanceOf(
       EntitlementRequiredError
     )
+  })
+})
+
+describe('refreshStaleSummaries — plan gate', () => {
+  it('does not query for stale posts on a plan without the entitlement', async () => {
+    withCloud(storedCloud('free'))
+    const { db } = await import('@/lib/server/db')
+    const select = vi.spyOn(db, 'select')
+    await expect(refreshStaleSummaries()).resolves.toBeUndefined()
+    // The whole sweep is skipped: no batch read, no per-post refusal loop.
+    expect(select).not.toHaveBeenCalled()
+    expect(hoisted.mockChat).not.toHaveBeenCalled()
+  })
+
+  it('still reaches the stale-post read on a plan that includes it', async () => {
+    withCloud(storedCloud('pro'))
+    const { db } = await import('@/lib/server/db')
+    const select = vi.spyOn(db, 'select')
+    // The stub `db` cannot carry the full batch query; getting as far as the
+    // read is the assertion, so the downstream failure is deliberately ignored.
+    await refreshStaleSummaries().catch(() => {})
+    expect(select).toHaveBeenCalled()
   })
 })

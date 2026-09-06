@@ -11,8 +11,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { IDENTITY_FAILURE_CODES, KEY_CUSTODY_FAILURE_CODES } from '../fingerprint'
 
 const acquireScopeForHost = vi.fn()
+const noteWorkspaceActivity = vi.fn(() => Promise.resolve())
 
 vi.mock('@/lib/server/workspaces/resolver', () => ({ acquireScopeForHost }))
+vi.mock('../activity', () => ({ noteWorkspaceActivity }))
 
 const silentLog = { warn: vi.fn(), error: vi.fn(), info: vi.fn() }
 
@@ -73,6 +75,15 @@ describe('resolveWorkspaceAndContinue', () => {
     expect(result).toBe('served')
     // The scope must be live INSIDE next(), which is the only place it matters.
     expect(seen).toEqual([handle])
+    // A served request is what keeps the workspace out of dormancy.
+    expect(noteWorkspaceActivity).toHaveBeenCalledWith('inst_a')
+  })
+
+  it('does not stamp activity for a refusal or a fleet path', async () => {
+    acquireScopeForHost.mockResolvedValue({ kind: 'unknown_host', hostname: 'nope.localhost' })
+    await serve('nope.localhost')
+    await serve('t1.localhost', { url: 'http://example.com/api/health' })
+    expect(noteWorkspaceActivity).not.toHaveBeenCalled()
   })
 
   it('resolves a third-party custom host from a signed customer-host header on a trusted origin', async () => {
