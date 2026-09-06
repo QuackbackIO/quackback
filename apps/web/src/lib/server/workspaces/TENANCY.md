@@ -565,6 +565,42 @@ queue row, so a delayed claim costs a poll interval rather than an hour, and a
 pass over every workspace's outbox would be a second drainer racing the
 job claim.
 
+### 5.2a Dormant workspaces get neither
+
+"Always-on" was measured against a fleet where 105 of 111 active registry
+workspaces had no users: every one of them had a poll loop, a dozen cron
+enqueues an hour, and a scope opened by every fleet sweep. `activity.ts` is
+the rule that stops that. A workspace nobody has sent a request to for
+`WORKSPACE_DORMANT_AFTER_HOURS` (default 168) is **dormant**: the worker parks
+its loop and `runFleetPass` skips it. The request path stamps
+`cp_workspace_activity` (a control-plane table this app writes, like
+`cp_workspace_schema_state`; throttled to one write per workspace per five
+minutes), and the worker's next registry refresh — at most 60 s later — sees
+the stamp and starts the loop again. Health probes bypass the hook, so the
+platform cannot wake anything.
+
+Not every served request is a stamp. A wildcard domain is crawled all day
+(`GET /.env`, anonymous `GET /`), and the first rollout showed that "any
+request" would re-wake the fleet in days. `isActivitySignal` counts a
+mutation, or a read carrying a session cookie or bearer token; an anonymous
+read is served exactly as before and simply does not count. An anonymous
+visitor who then posts or votes wakes the loop with that POST, within the
+same minute the loop cadence already implies.
+
+Idle is not the same as nothing to do. Before parking, the worker asks the
+workspace's own database two questions it already knows how to answer —
+`earliestPendingJobAt()` (a delayed hook retry, a scheduled publish) and
+`earliestWorkspaceDeadline()` (a snooze, an SLA due-at) — and keeps the loop
+for any workspace that answers. That exception is shared with the fleet passes
+in the same process. A workspace with no stamp at all is treated as active;
+`WORKSPACE_DORMANT_AFTER_HOURS=0` switches the policy off.
+
+Known trade-off: `usage-report` is one of the parked crons. Its CP snapshot is
+keyed by month and overwritten on every receipt, so a workspace parked across a
+month boundary posts nothing for the new month until it wakes. Zero-usage
+trials — the population this exists for — report zero either way; a paid
+workspace resumes within the hour of its first request.
+
 ### 5.3 `BASE_URL` is the workspace's, not the fleet's
 
 `config.baseUrl` returns `getCurrentWorkspace()?.routing.baseUrl` whenever a workspace
@@ -599,6 +635,7 @@ fire — but the swallow is worth narrowing.
 | `DATABASE_URL`                                          | Required under `single`. **Refused under `pooled`**                                                        |
 | `WORKSPACE_POOL_MAX` / `_MAX_ENTRIES` / `_IDLE_SECONDS` | See §4                                                                                                     |
 | `WORKSPACE_REGISTRY_TTL_MS`                             | Hostname cache TTL                                                                                         |
+| `WORKSPACE_DORMANT_AFTER_HOURS`                         | Hours without a request before a workspace is parked (§5.2a). Default 168; `0` disables                    |
 
 **A pooled fleet refuses to boot with a `DATABASE_URL` set.** That is the
 dangerous shape: a stray fleet-wide DSN means a missing workspace scope would

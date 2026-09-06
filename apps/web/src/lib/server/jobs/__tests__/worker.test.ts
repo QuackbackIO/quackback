@@ -20,21 +20,44 @@ interface ClaimPlan {
   claimed: number
 }
 
-async function bootJobWorker(plan: ClaimPlan) {
+interface DormancyPlan {
+  /** What `listActiveWorkspaces` returns; mutable so a refresh can see change. */
+  workspaces: Array<typeof workspace & { lastActiveAt?: Date | null }>
+  /** What the standing-work probe finds in the workspace database. */
+  pendingJobAt: Date | null
+  deadlineAt: Date | null
+}
+
+async function bootJobWorker(plan: ClaimPlan, dormancy?: DormancyPlan) {
   vi.resetModules()
   const savedPoll = process.env.JOB_POLL_INTERVAL_MS
   process.env.JOB_POLL_INTERVAL_MS = String(POLL_MS)
 
   vi.doMock('@/lib/server/process-role', () => ({ shouldRunWorkers: () => true }))
   vi.doMock('@/lib/server/config', () => ({
-    config: { isPooledTenancy: true, databaseUrl: 'postgres://direct/single' },
+    config: {
+      isPooledTenancy: true,
+      databaseUrl: 'postgres://direct/single',
+      workspaceDormantAfterHours: 168,
+    },
   }))
   vi.doMock('@/lib/server/workspaces/registry', () => ({
-    listActiveWorkspaces: async () => ({ workspaces: [workspace], refused: [] }),
+    listActiveWorkspaces: async () => ({
+      workspaces: dormancy ? dormancy.workspaces : [workspace],
+      refused: [],
+    }),
+    getControlSql: () => ({}),
   }))
   vi.doMock('@/lib/server/workspaces/fleet', () => ({
     withWorkspaceScopeById: async (_id: string, _origin: string, body: () => Promise<unknown>) =>
       body(),
+  }))
+  vi.doMock('../deadlines', () => ({
+    earliestWorkspaceDeadline: async () => dormancy?.deadlineAt ?? null,
+  }))
+  vi.doMock('../job-queue', () => ({
+    earliestPendingJobAt: async () => dormancy?.pendingJobAt ?? null,
+    isMissingJobQueue: () => false,
   }))
   vi.doMock('@/lib/server/events/event-dispatch-queue', () => ({
     convertRelayOwnedEvents: async () => ({ converted: 0, enqueued: 0 }),
@@ -69,6 +92,16 @@ async function bootJobWorker(plan: ClaimPlan) {
       if (!row) throw new Error('job loop missing from status')
       return row
     },
+    loops: () =>
+      mod
+        .getJobWorkerStatus()
+        .workspaces.map((t) => t.workspaceKey)
+        .sort(),
+    dormant: () => mod.getJobWorkerStatus().dormant,
+    /** Advance past the registry refresh so the loop set is reconciled once. */
+    refresh: async () => {
+      await vi.advanceTimersByTimeAsync(60_000)
+    },
     stop: async () => {
       await mod.stopJobWorker()
       vi.resetModules()
@@ -102,6 +135,92 @@ describe('pooled job worker', () => {
     expect(handle.status().claimed).toBeGreaterThanOrEqual(2)
   })
 
+  describe('dormancy', () => {
+    const HOUR = 3_600_000
+    const idle = (key: string) => ({
+      ...workspace,
+      workspaceKey: key,
+      lastActiveAt: new Date(Date.now() - 200 * HOUR),
+    })
+    const live = (key: string) => ({
+      ...workspace,
+      workspaceKey: key,
+      lastActiveAt: new Date(Date.now() - HOUR),
+    })
+
+    it('parks idle workspaces with nothing pending and runs loops for the rest', async () => {
+      vi.useFakeTimers()
+      const dormancy: DormancyPlan = {
+        workspaces: [
+          live(WORKSPACE_KEY),
+          idle('ws_idle'),
+          { ...workspace, workspaceKey: 'ws_unstamped' },
+        ],
+        pendingJobAt: null,
+        deadlineAt: null,
+      }
+      handle = await bootJobWorker({ claimed: 0 }, dormancy)
+      expect(handle.loops()).toEqual([WORKSPACE_KEY, 'ws_unstamped'])
+      expect(handle.dormant()).toBe(1)
+    })
+
+    it('keeps an idle workspace awake while it has a pending job or a deadline', async () => {
+      vi.useFakeTimers()
+      const dormancy: DormancyPlan = {
+        workspaces: [idle('ws_idle')],
+        pendingJobAt: new Date(Date.now() + HOUR),
+        deadlineAt: null,
+      }
+      handle = await bootJobWorker({ claimed: 0 }, dormancy)
+      expect(handle.loops()).toEqual(['ws_idle'])
+      expect(handle.dormant()).toBe(0)
+
+      // The job drains; a deadline still holds it.
+      dormancy.pendingJobAt = null
+      dormancy.deadlineAt = new Date(Date.now() + 2 * HOUR)
+      await handle.refresh()
+      expect(handle.loops()).toEqual(['ws_idle'])
+
+      // Nothing left: the next refresh parks it.
+      dormancy.deadlineAt = null
+      await handle.refresh()
+      expect(handle.loops()).toEqual([])
+      expect(handle.dormant()).toBe(1)
+    })
+
+    it('wakes a parked workspace when a request stamps it', async () => {
+      vi.useFakeTimers()
+      const dormancy: DormancyPlan = {
+        workspaces: [idle('ws_idle')],
+        pendingJobAt: null,
+        deadlineAt: null,
+      }
+      handle = await bootJobWorker({ claimed: 0 }, dormancy)
+      expect(handle.loops()).toEqual([])
+      expect(handle.dormant()).toBe(1)
+
+      dormancy.workspaces = [live('ws_idle')]
+      await handle.refresh()
+      expect(handle.loops()).toEqual(['ws_idle'])
+      expect(handle.dormant()).toBe(0)
+    })
+
+    it('forgets a parked workspace that leaves the registry', async () => {
+      vi.useFakeTimers()
+      const dormancy: DormancyPlan = {
+        workspaces: [idle('ws_idle')],
+        pendingJobAt: null,
+        deadlineAt: null,
+      }
+      handle = await bootJobWorker({ claimed: 0 }, dormancy)
+      expect(handle.dormant()).toBe(1)
+      dormancy.workspaces = []
+      await handle.refresh()
+      expect(handle.dormant()).toBe(0)
+      expect(handle.loops()).toEqual([])
+    })
+  })
+
   it('does not start the job worker on a web replica', async () => {
     vi.resetModules()
     vi.doMock('@/lib/server/process-role', () => ({ shouldRunWorkers: () => false }))
@@ -110,7 +229,7 @@ describe('pooled job worker', () => {
     }))
     const mod = await import('../worker')
     await mod.startJobWorker()
-    expect(mod.getJobWorkerStatus()).toEqual({ running: false, workspaces: [] })
+    expect(mod.getJobWorkerStatus()).toEqual({ running: false, workspaces: [], dormant: 0 })
     vi.resetModules()
   })
 })

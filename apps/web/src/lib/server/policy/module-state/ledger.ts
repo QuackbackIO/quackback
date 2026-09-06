@@ -280,6 +280,39 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'accuses changes.',
   },
   {
+    file: 'apps/web/src/lib/server/workspaces/activity.ts',
+    name: 'lastStampedAt',
+    category: 'workspace-scoped-key',
+    keyedBy: 'workspaceKey',
+    reason:
+      'When this process last wrote a workspace\u2019s activity stamp to the control plane, keyed by ' +
+      'workspaceKey, so a busy workspace costs one UPDATE per five minutes. A cross-workspace hit would ' +
+      'suppress a stamp for the wrong workspace, letting the worker park one that has traffic; the key ' +
+      'is the workspaceKey the request scope already resolved, so there is no other key to hit.',
+  },
+  {
+    file: 'apps/web/src/lib/server/workspaces/activity.ts',
+    name: 'standingWork',
+    category: 'workspace-scoped-key',
+    keyedBy: 'workspaceKey',
+    reason:
+      'Workspaces the job worker found idle but holding a pending job or a deadline, keyed by ' +
+      'workspaceKey, so a fleet pass in the same process keeps visiting them. Written only by the ' +
+      'worker\u2019s refresh from a probe run inside that workspace\u2019s own scope; a wrong entry would ' +
+      'keep an idle workspace awake, never park a busy one.',
+  },
+  {
+    file: 'apps/web/src/lib/server/workspaces/activity.ts',
+    name: 'dormant',
+    category: 'workspace-scoped-key',
+    keyedBy: 'workspaceKey',
+    reason:
+      'Workspaces whose job loop this worker has parked, keyed by workspaceKey. Read for the status ' +
+      'payload and to skip re-probing an already parked workspace; the decision itself is re-derived ' +
+      'every refresh from the registry\u2019s last_active_at, so a stale entry costs at most one refresh ' +
+      'interval.',
+  },
+  {
     file: 'apps/web/src/lib/server/workspaces/resolver.ts',
     name: 'byHostname',
     category: 'workspace-scoped-key',
