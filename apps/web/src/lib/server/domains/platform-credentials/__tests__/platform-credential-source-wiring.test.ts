@@ -14,8 +14,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import type { PrincipalId } from '@quackback/ids'
 
-const cpRequest = vi.hoisted(() => vi.fn())
-vi.mock('@/lib/server/control-plane/client', () => ({ getWorkspaceControlPlane: cpRequest }))
 const mockCacheGet = vi.fn()
 const mockCacheSet = vi.fn()
 const mockCacheDel = vi.fn()
@@ -218,7 +216,7 @@ describe('Cloud CP credential authority', () => {
   })
   afterEach(() => vi.unstubAllEnvs())
   it('locks Cloud providers even when absent and never falls back to tenant credentials', async () => {
-    cpRequest.mockResolvedValue({ credentials: null })
+    vi.stubEnv('INTEGRATION_SLACK_CLIENT_ID', '')
     const service = await import('../platform-credential.service')
     expect(await service.arePlatformCredentialsManaged('slack')).toBe(true)
     expect(await service.getPlatformCredentials('slack')).toBeNull()
@@ -232,14 +230,10 @@ describe('Cloud CP credential authority', () => {
     ).rejects.toThrow('managed')
     await expect(service.deletePlatformCredentials('slack')).rejects.toThrow('managed')
   })
-  it('fails closed on CP outage', async () => {
-    cpRequest.mockRejectedValue(new Error('CP unavailable'))
-    const service = await import('../platform-credential.service')
-    await expect(service.getPlatformCredentials('slack')).rejects.toThrow('CP unavailable')
-    expect(mockFindFirst).not.toHaveBeenCalled()
-  })
   it('excludes stale tenant shared-app credentials from discovery, preserving SSO and local-token integrations', async () => {
-    cpRequest.mockResolvedValue({ providers: ['slack'] })
+    vi.stubEnv('INTEGRATION_SLACK_CLIENT_ID', 'id')
+    vi.stubEnv('INTEGRATION_SLACK_CLIENT_SECRET', 'secret')
+    vi.stubEnv('INTEGRATION_SLACK_SIGNING_SECRET', 'signing')
     mockFindMany.mockResolvedValue([
       { integrationType: 'github' },
       { integrationType: 'auth_sso' },

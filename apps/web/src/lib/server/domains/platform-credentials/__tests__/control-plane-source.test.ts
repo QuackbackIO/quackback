@@ -1,47 +1,26 @@
-import { it, expect, vi } from 'vitest'
-import { ControlPlaneCredentialSource } from '../control-plane-source'
+import { it, expect } from 'vitest'
+import { CloudCredentialSource } from '../cloud-source'
 import { CLOUD_INTEGRATION_FIELDS } from '@/lib/shared/integration-credentials'
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
-it('reads changed credentials again and strips undeclared fields', async () => {
-  const request = vi
-    .fn()
-    .mockResolvedValueOnce({
-      credentials: {
-        clientId: 'one',
-        clientSecret: 'secret',
-        signingSecret: 'signing',
-        extra: 'never',
-      },
-    })
-    .mockResolvedValueOnce({
-      credentials: { clientId: 'two', clientSecret: 'secret', signingSecret: 'signing' },
-    })
-  const source = new ControlPlaneCredentialSource(request)
+it('reads complete credentials from the effective container environment', async () => {
+  const source = new CloudCredentialSource({
+    INTEGRATION_SLACK_CLIENT_ID: 'id',
+    INTEGRATION_SLACK_CLIENT_SECRET: 'secret',
+    INTEGRATION_SLACK_SIGNING_SECRET: 'signing',
+    INTEGRATION_SLACK_EXTRA: 'never',
+  })
   expect(await source.get('slack')).toEqual({
-    clientId: 'one',
+    clientId: 'id',
     clientSecret: 'secret',
     signingSecret: 'signing',
   })
-  expect((await source.get('slack'))?.clientId).toBe('two')
-})
-it('fails closed on outage, missing provider, and malformed credentials', async () => {
-  const request = vi
-    .fn()
-    .mockRejectedValueOnce(new Error('unavailable'))
-    .mockResolvedValueOnce({ credentials: null })
-    .mockResolvedValueOnce({ credentials: { clientId: 'id' } })
-  const source = new ControlPlaneCredentialSource(request)
-  await expect(source.get('slack')).rejects.toThrow('unavailable')
-  expect(await source.get('slack')).toBeNull()
-  await expect(source.get('slack')).rejects.toThrow('Invalid Cloud')
-  expect(await source.get('__proto__')).toBeNull()
-})
-it('discovery accepts only shared app names', async () => {
-  const source = new ControlPlaneCredentialSource(
-    vi.fn().mockResolvedValue({ providers: ['slack', 'auth_sso', '__proto__'] })
-  )
   expect(await source.listConfigured()).toEqual(['slack'])
+})
+it('requires complete settings and never returns unknown fields/providers', async () => {
+  const source = new CloudCredentialSource({ INTEGRATION_SLACK_CLIENT_ID: 'id' })
+  expect(await source.get('slack')).toBeNull()
+  expect(await source.get('__proto__')).toBeNull()
   expect(Object.keys(CLOUD_INTEGRATION_FIELDS)).toHaveLength(16)
 })
 it('pins the CP catalogue contract', () => {
@@ -51,3 +30,5 @@ it('pins the CP catalogue contract', () => {
       .digest('hex')
   ).toBe('d6725ff6d9b8c15a6dfdff915ab3a7f90575008fedd73487593596e27a53b4e1')
 })
+
+it('pins the shared startup settings contract', () => { expect(createHash('sha256').update(readFileSync('apps/web/src/lib/shared/platform-settings.ts')).digest('hex')).toBe('b4b23cd151537bca8ebe581f20506785e3099c4108fdeb3f4b80d3d962357d95') })

@@ -38,10 +38,16 @@ The eval harness now preserves explicit environment overrides and declares fixtu
 
 Production rollout is still gated by [the ordered runbook](./integration-gateway-rollout.md), including real install/reconnect conflicts, internal-tenant Slack interactions, non-Slack OAuth checks, deployment artifact verification and monitoring.
 
-## CP-managed credential settings follow-up
+## General Cloud settings and startup overlay
 
-Cloud OAuth credentials are now one encrypted JSON settings object managed at CP `/admin/integrations`. Migration 0092 adds its storage and metadata-only audit. Pooled tenants always read the 16 shared OAuth apps from CP, including Slack gateway signature verification; single-tenancy DB/env behavior is preserved. The editor loads secrets only on an explicit authenticated operator request and does not serialize them into route/SSR data. Tenant credential APIs return managed/configured status only.
+The credential follow-up is generalized into **CP → Admin → Settings** (`/admin/settings`), one encrypted JSON document using environment variable names. Migration 0093 renames the settings/audit tables while preserving prior data and revisions. Earlier provider-grouped JSON is converted on read.
 
-Validation on 2026-09-06: 72 CP focused tests passed, with the opt-in database test skipped in the default run. The separate database-enabled run passed 66 tests, including the real migration, encrypted persistence, audit records, concurrent revision conflict and removal checks. Tenant credential suites passed 27 tests. Both typechecks and production builds passed, including the CP client bundle audit. Credential-source lint passed. Counts overlap; do not sum them. No production settings were entered or changed.
+The Quackback image launcher loads a single CP snapshot in pooled tenancy before the shell entrypoint, migrations, workers or web server initialize. Saved values override container environment variables, missing keys preserve them, and null unsets them. Running containers retain their snapshot until restart. Self-hosted containers make no CP request. A dedicated fleet bootstrap token is required; customer/per-workspace tokens cannot read the full settings document.
 
-CP must be deployed with `INTEGRATION_CREDENTIALS_ENCRYPTION_KEY` and the shared app JSON populated before deploying the updated tenant fleet. Preserve the encryption key with backups. See the CP `INTEGRATION-CREDENTIALS.md` guide and this repository's rollout runbook.
+Validation on 2026-09-06:
+
+- 57 tenant tests passed, including environment precedence, malformed/unavailable settings, startup refusal, self-hosted bypass, actual child-process initialization and existing Docker entrypoint behavior.
+- 65 CP tests passed with the isolated database enabled, including encrypted persistence, migrations 0092/0093, revision conflicts, audit records, legacy-document conversion and process-lifetime gateway snapshots.
+- Both typechecks and production builds passed, including CP's client bundle audit. The standalone container launcher bundles successfully. Focused tenant lint passed.
+
+CP and fleet need `QUACKBACK_CP_SETTINGS_TOKEN`; CP also needs `PLATFORM_SETTINGS_ENCRYPTION_KEY` (the earlier integration encryption key name remains a fallback). Configure the bootstrap URL/token on the containers, deploy the CP migrations and populate settings before the tenant rollout. Restart CP gateway and fleet processes to apply changes. See CP's `PLATFORM-SETTINGS.md` and the tenant rollout runbook. No live deployment, provider configuration or production settings changes were performed.

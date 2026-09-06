@@ -24,4 +24,4 @@ Only implemented events are subscribed. Native session stop/title controls and c
 
 ## Cloud deployment
 
-See [the integration gateway runbook](./integration-gateway-rollout.md). The shared app uses the manifest's `app.quackback.io` URLs. Every workspace database keeps its own assistant configuration, member links, pending actions and deduplication receipts. The control plane stores installation routing and the encrypted shared OAuth credential settings. Cloud operators manage these in CP under Admin → Integrations; tenant installation tokens remain isolated in workspace databases.
+See [the integration gateway runbook](./integration-gateway-rollout.md). The shared app uses the manifest's `app.quackback.io` URLs. Every workspace database keeps its own assistant configuration, member links, pending actions and deduplication receipts. The control plane stores installation routing and the encrypted shared OAuth credential settings. Cloud operators manage these in CP under Admin → Settings; settings override environment variables at Cloud container startup; tenant installation tokens remain isolated in workspace databases.

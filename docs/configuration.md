@@ -40,6 +40,8 @@ For single-tenancy deployments with `PLATFORM_CREDENTIALS_SOURCE=env`, complete 
 
 See [Slack setup](./integrations/slack-app.md) and [Cloud rollout gates](./integrations/integration-gateway-rollout.md).
 
-### Cloud integration credential management
+### Cloud settings management
 
-For pooled Cloud deployments, manage shared OAuth app credentials in **quackback-cp → Admin → Integrations** as one JSON object grouped by provider. CP encrypts it at rest with `INTEGRATION_CREDENTIALS_ENCRYPTION_KEY` (set only on CP). Cloud runtimes use authenticated CP reads automatically, without provider credential environment variables or tenant database fallback. Self-hosted single-tenancy deployments retain the settings UI and optional `PLATFORM_CREDENTIALS_SOURCE=env` flow. See the [rollout runbook](./integrations/integration-gateway-rollout.md).
+Manage Cloud application settings in **quackback-cp → Admin → Settings** as one JSON object using environment variable names. This covers AI, email, integrations and other application settings. JSON values override container environment values; missing keys preserve the environment and `null` unsets a variable.
+
+Pooled containers fetch one encrypted-at-rest settings snapshot before their existing entrypoint starts migrations, workers or the server. Settings changes require a container restart. The dedicated `QUACKBACK_CP_SETTINGS_TOKEN` and `QUACKBACK_CONTROL_PLANE_URL` remain container bootstrap variables. Cloud refuses startup when settings cannot be loaded; self-hosted containers make no CP call and retain their existing behavior. See the [rollout runbook](./integrations/integration-gateway-rollout.md).

@@ -5,7 +5,7 @@
  * enable integrations at the platform level. These are separate from per-instance
  * tokens stored in the integrations table.
  *
- * Pooled Cloud uses CP's encrypted shared settings for the 16 OAuth apps.
+ * Pooled Cloud reads the environment snapshot populated from CP at container startup.
  * Other integration and auth credentials retain their workspace source.
  * Single-tenancy reads use config.platformCredentialsSource:
  * - 'db'  (self-host, default): the integration_platform_credentials table + admin UI.
@@ -14,7 +14,7 @@
  *   credentials are platform-managed, not editable per-workspace.
  */
 
-import { ControlPlaneCredentialSource } from './control-plane-source'
+import { CloudCredentialSource } from './cloud-source'
 import { CLOUD_INTEGRATION_FIELDS } from '@/lib/shared/integration-credentials'
 import { generateId, type PrincipalId } from '@quackback/ids'
 import { db, integrationPlatformCredentials, eq } from '@/lib/server/db'
@@ -44,7 +44,7 @@ export class PlatformCredentialsManagedError extends Error {
 }
 
 let _dbSource: DbCredentialSource | undefined
-const _controlPlaneSource = new ControlPlaneCredentialSource()
+const _controlPlaneSource = new CloudCredentialSource()
 let _envSource: EnvCredentialSource | undefined
 
 function dbSource(): DbCredentialSource {
