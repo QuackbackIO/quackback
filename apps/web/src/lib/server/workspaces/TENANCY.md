@@ -567,9 +567,10 @@ job claim.
 
 ### 5.2a Dormant workspaces get neither
 
-"Always-on" was measured against a fleet where 105 of 111 active registry
-workspaces had no users: every one of them had a poll loop, a dozen cron
-enqueues an hour, and a scope opened by every fleet sweep. `activity.ts` is
+"Always-on" costs the same for a workspace nobody has visited in weeks as
+for one in daily use: a poll loop, a dozen cron enqueues an hour, and a scope
+opened by every fleet sweep. In a pooled fleet most trials go quiet after
+signup, so that idle majority is most of the background load. `activity.ts` is
 the rule that stops that. A workspace nobody has sent a request to for
 `WORKSPACE_DORMANT_AFTER_HOURS` (default 168) is **dormant**: the worker parks
 its loop and `runFleetPass` skips it. The request path stamps
@@ -580,8 +581,8 @@ the stamp and starts the loop again. Health probes bypass the hook, so the
 platform cannot wake anything.
 
 Not every served request is a stamp. A wildcard domain is crawled all day
-(`GET /.env`, anonymous `GET /`), and the first rollout showed that "any
-request" would re-wake the fleet in days. `isActivitySignal` counts a
+(`GET /.env`, anonymous `GET /`), and that traffic reaches a parked workspace
+within minutes, so "any request" would re-wake the fleet in days. `isActivitySignal` counts a
 mutation, or a read carrying a session cookie or bearer token; an anonymous
 read is served exactly as before and simply does not count. An anonymous
 visitor who then posts or votes wakes the loop with that POST, within the
