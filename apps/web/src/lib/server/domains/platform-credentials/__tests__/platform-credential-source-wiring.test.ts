@@ -70,7 +70,15 @@ vi.mock('@/lib/server/integrations', () => ({
             { key: 'signingSecret' },
           ],
         }
-      : undefined,
+      : type === 'gitlab'
+        ? {
+            platformCredentials: [
+              { key: 'clientId' },
+              { key: 'clientSecret' },
+              { key: 'instanceUrl', required: false },
+            ],
+          }
+        : undefined,
 }))
 
 vi.mock('@/lib/server/auth/config-version', () => ({ bumpAuthConfigVersionInTx: vi.fn() }))
@@ -246,4 +254,19 @@ describe('Cloud CP credential authority', () => {
     expect(await service.arePlatformCredentialsManaged('auth_sso')).toBe(false)
     expect(await service.arePlatformCredentialsManaged('ntfy')).toBe(false)
   })
+})
+
+it('uses complete GitLab env credentials when the optional instance URL is absent', async () => {
+  vi.stubEnv('PLATFORM_CREDENTIALS_SOURCE', 'env')
+  vi.stubEnv('INTEGRATION_GITLAB_CLIENT_ID', 'gitlab-id')
+  vi.stubEnv('INTEGRATION_GITLAB_CLIENT_SECRET', 'gitlab-secret')
+  try {
+    const { getPlatformCredentials } = await import('../platform-credential.service')
+    expect(await getPlatformCredentials('gitlab')).toEqual({
+      clientId: 'gitlab-id',
+      clientSecret: 'gitlab-secret',
+    })
+  } finally {
+    vi.unstubAllEnvs()
+  }
 })

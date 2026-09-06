@@ -86,7 +86,12 @@ export async function arePlatformCredentialsManaged(integrationType?: string): P
   if (!credentials) return false
   const { getIntegration } = await import('@/lib/server/integrations')
   const fields = getIntegration(integrationType)?.platformCredentials ?? []
-  return fields.length > 0 && fields.every((field) => !!credentials[field.key]?.trim())
+  return (
+    fields.length > 0 &&
+    fields
+      .filter((field) => field.required !== false)
+      .every((field) => !!credentials[field.key]?.trim())
+  )
 }
 
 /**

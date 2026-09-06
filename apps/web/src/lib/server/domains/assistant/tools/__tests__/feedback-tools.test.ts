@@ -81,6 +81,43 @@ describe.skipIf(!fixture.available)('workspace reads with real DB', () => {
       await workspaceConversationSource(true).retrieve('billing', 'public', { topK: 5 })
     ).toEqual([])
   })
+  it('limits distinct conversations instead of repeated matching messages', async () => {
+    const [author] = await testDb
+      .insert(principal)
+      .values({ type: 'anonymous', role: 'user', createdAt: new Date() })
+      .returning()
+    const rows = await testDb
+      .insert(conversations)
+      .values([
+        { visitorPrincipalId: author.id, channel: 'messenger', subject: 'Busy billing' },
+        { visitorPrincipalId: author.id, channel: 'messenger', subject: 'Other billing' },
+      ])
+      .returning()
+    await testDb
+      .insert(conversationMessages)
+      .values([
+        ...Array.from({ length: 12 }, (_, i) => ({
+          conversationId: rows[0].id,
+          principalId: author.id,
+          senderType: 'visitor' as const,
+          content: 'billing repeated',
+          createdAt: new Date(Date.now() + i * 1000),
+        })),
+        {
+          conversationId: rows[1].id,
+          principalId: author.id,
+          senderType: 'visitor',
+          content: 'billing other',
+          createdAt: new Date(100_000),
+        },
+      ])
+    const result = await workspaceConversationSource(false, false, context().actor).retrieve(
+      'billing',
+      'team',
+      { topK: 2 }
+    )
+    expect(new Set(result.map((row) => row.id))).toEqual(new Set(rows.map((row) => row.id)))
+  })
   it('searches across customers only on the explicit team adapter and honors internal-note controls', async () => {
     const [author] = await testDb
       .insert(principal)

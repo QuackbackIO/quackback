@@ -23,8 +23,8 @@ export function workspaceConversationSource(
     sourceType: 'summary',
     async retrieve(query, ceiling, { topK }) {
       if (ceiling !== 'team' || !actor) return []
-      const rows = await db
-        .select({
+      const matching = db
+        .selectDistinctOn([conversations.id], {
           id: conversations.id,
           title: conversations.subject,
           content: conversationMessages.content,
@@ -44,31 +44,28 @@ export function workspaceConversationSource(
             sql`${conversationMessages.searchVector} @@ websearch_to_tsquery('english', ${query})`
           )
         )
-        .orderBy(desc(conversationMessages.createdAt))
-        .limit(Math.min(topK * 3, 60))
-      const seen = new Set<string>()
-      return rows
-        .filter((row) => {
-          if (seen.has(row.id)) return false
-          seen.add(row.id)
-          return true
-        })
-        .slice(0, topK)
-        .map((row) => ({
+        .orderBy(conversations.id, desc(conversationMessages.createdAt))
+        .as('matching_conversations')
+      const rows = await db
+        .select()
+        .from(matching)
+        .orderBy(desc(matching.updatedAt))
+        .limit(Math.min(topK, 60))
+      return rows.map((row) => ({
+        id: row.id,
+        sourceType: 'summary' as const,
+        title: row.title ?? 'Support conversation',
+        excerpt: row.content.slice(0, KNOWLEDGE_SNIPPET_CHARS),
+        score: 0,
+        updatedAt: row.updatedAt?.toISOString(),
+        citation: {
+          type: 'summary' as const,
           id: row.id,
-          sourceType: 'summary' as const,
           title: row.title ?? 'Support conversation',
-          excerpt: row.content.slice(0, KNOWLEDGE_SNIPPET_CHARS),
-          score: 0,
-          updatedAt: row.updatedAt?.toISOString(),
-          citation: {
-            type: 'summary' as const,
-            id: row.id,
-            title: row.title ?? 'Support conversation',
-            url: `/admin/inbox?i=${row.id}`,
-            internal: true,
-          },
-        }))
+          url: `/admin/inbox?i=${row.id}`,
+          internal: true,
+        },
+      }))
     },
   }
 }

@@ -51,6 +51,17 @@ export const setSlackAssistantEnabledFn = createServerFn({ method: 'POST' })
         missingSlackScopes((row.config as { scopes?: string })?.scopes).length
       )
         throw new Error('Reconnect Slack before enabling the assistant.')
+      if (config.isPooledTenancy) {
+        const routes = await getInstallRouting('slack')
+        if (
+          !routes.some(
+            (route) =>
+              route.externalId === (row.config as { workspaceId?: string })?.workspaceId &&
+              !route.revokedAt
+          )
+        )
+          throw new Error('Register Slack routing before enabling the assistant.')
+      }
     }
     return updateAssistantConfig(
       data.expectedRevision,

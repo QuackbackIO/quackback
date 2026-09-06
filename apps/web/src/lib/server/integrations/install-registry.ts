@@ -87,6 +87,7 @@ export async function cleanupPreviousInstall(
   type: string,
   oldConfig: Record<string, unknown>
 ): Promise<void> {
+  if (!config.isPooledTenancy) return
   const { db, integrations, eq, sql } = await import('@/lib/server/db')
   await db.transaction(async (tx) => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`integration:${type}`}))`)

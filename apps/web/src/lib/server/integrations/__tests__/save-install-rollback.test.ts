@@ -1,9 +1,13 @@
 import { beforeEach, afterEach, afterAll, describe, expect, it, vi } from 'vitest'
 vi.mock('../encryption', () => ({ encryptSecrets: () => 'encrypted-test-token' }))
 const register = vi.hoisted(() => vi.fn())
+const cleanup = vi.hoisted(() => vi.fn())
 const enqueue = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/server/jobs/job-queue', () => ({ enqueueJob: enqueue }))
-vi.mock('../install-registry', () => ({ registerInstall: register }))
+vi.mock('../install-registry', () => ({
+  registerInstall: register,
+  cleanupPreviousInstall: cleanup,
+}))
 vi.mock('../index', () => ({
   getIntegration: () => ({
     install: { externalId: (config: Record<string, unknown>) => config.workspaceId },
@@ -74,5 +78,29 @@ describe.skipIf(!fixture.available)('install registration transaction', () => {
         executor: expect.anything(),
       })
     )
+  })
+  it('compensates a new CP binding when cleanup enqueue rolls back the local reconnect', async () => {
+    const [person] = await testDb
+      .insert(principal)
+      .values({ type: 'anonymous', role: 'user', createdAt: new Date() })
+      .returning()
+    await saveIntegration('slack', {
+      principalId: person.id,
+      accessToken: 'old',
+      config: { workspaceId: 'T1' },
+    })
+    enqueue.mockRejectedValueOnce(new Error('queue unavailable'))
+    await expect(
+      saveIntegration('slack', {
+        principalId: person.id,
+        accessToken: 'new',
+        config: { workspaceId: 'T2' },
+      })
+    ).rejects.toThrow('queue unavailable')
+    expect(cleanup).toHaveBeenCalledWith('slack', { workspaceId: 'T2' })
+    const row = await testDb.query.integrations.findFirst({
+      where: eq(integrations.integrationType, 'slack'),
+    })
+    expect(row?.config).toMatchObject({ workspaceId: 'T1' })
   })
 })
