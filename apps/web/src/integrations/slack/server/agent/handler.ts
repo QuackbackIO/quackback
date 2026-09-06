@@ -297,7 +297,7 @@ export async function handleSlackHookJob(job: ClaimedJob): Promise<void> {
         Number.isFinite(eventTime) &&
         eventTime > 0 &&
         current.connectedAt &&
-        Math.floor(current.connectedAt.getTime() / 1000) > eventTime
+        current.connectedAt.getTime() > eventTime * 1000
       )
         return
       const { unregisterInstall } = await import('@/lib/server/integrations/install-registry')

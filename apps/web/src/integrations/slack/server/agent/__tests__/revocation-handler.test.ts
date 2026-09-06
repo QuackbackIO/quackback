@@ -89,6 +89,14 @@ it('ignores an old revocation delivered after a same-team reinstall', async () =
   await handleSlackHookJob(job)
   expect(mocks.unregister).not.toHaveBeenCalled()
 })
+it('treats a later install in the same Slack second as newer than the event', async () => {
+  const reinstalled = { ...installed, connectedAt: new Date(200_500) }
+  mocks.read.mockResolvedValue(reinstalled)
+  mocks.lockedRead.mockResolvedValue(reinstalled)
+  await handleSlackHookJob(job)
+  expect(mocks.unregister).not.toHaveBeenCalled()
+  expect(mocks.update).not.toHaveBeenCalled()
+})
 it('preserves retry when unregister fails, without changing local state', async () => {
   mocks.unregister.mockRejectedValue(new Error('CP unavailable'))
   await expect(handleSlackHookJob(job)).rejects.toThrow('CP unavailable')

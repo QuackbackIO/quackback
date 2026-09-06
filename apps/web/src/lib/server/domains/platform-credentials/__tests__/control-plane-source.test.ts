@@ -31,4 +31,4 @@ it('pins the CP catalogue contract', () => {
   ).toBe('d6725ff6d9b8c15a6dfdff915ab3a7f90575008fedd73487593596e27a53b4e1')
 })
 
-it('pins the shared startup settings contract', () => { expect(createHash('sha256').update(readFileSync('apps/web/src/lib/shared/platform-settings.ts')).digest('hex')).toBe('20225d2210fa81a5c2ff7defc092e720f24d3924e99b475ea9a6f740e1fb753f') })
+it('pins the shared startup settings contract', () => { expect(createHash('sha256').update(readFileSync('apps/web/src/lib/shared/platform-settings.ts')).digest('hex')).toBe('802fd1062c44387378b7ed92af8a57192e827f41d691b4ca808d641792e9d5b0') })

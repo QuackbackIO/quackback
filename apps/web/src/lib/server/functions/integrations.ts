@@ -124,36 +124,47 @@ export const deleteIntegrationFn = createServerFn({ method: 'POST' })
       throw new Error('Integration not found')
     }
 
-    // Revoke tokens with the provider before deleting (dynamic import to avoid bundling @slack/web-api client-side)
-    if (integration.secrets) {
-      try {
-        const { getIntegration } = await import('@/lib/server/integrations')
-        const { decryptSecrets } = await import('@/lib/server/integrations/encryption')
-        const { getPlatformCredentials } =
-          await import('@/lib/server/domains/platform-credentials/platform-credential.service')
-        const definition = getIntegration(integration.integrationType)
-        if (definition?.onDisconnect) {
-          const secrets = decryptSecrets(integration.secrets)
-          const credentials =
-            (await getPlatformCredentials(integration.integrationType)) ?? undefined
+    // Resolve platform credentials before acquiring the provider transaction: DB
+    // credential reads must not request a second connection from a one-slot pool.
+    const { getIntegration } = await import('@/lib/server/integrations')
+    const { decryptSecrets } = await import('@/lib/server/integrations/encryption')
+    const { getPlatformCredentials } =
+      await import('@/lib/server/domains/platform-credentials/platform-credential.service')
+    const definition = getIntegration(integration.integrationType)
+    const credentials = definition?.onDisconnect
+      ? ((await getPlatformCredentials(integration.integrationType)) ?? undefined)
+      : undefined
+    await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${`integration:${integration.integrationType}`}))`
+      )
+      const current = await tx.query.integrations.findFirst({
+        where: eq(integrations.id, integrationId),
+      })
+      if (!current) return
+      if (
+        current.secrets !== integration.secrets ||
+        current.connectedAt?.getTime() !== integration.connectedAt?.getTime()
+      )
+        throw new Error('Integration was reconnected. Reload before disconnecting.')
+      if (current.secrets && definition?.onDisconnect) {
+        try {
           await definition.onDisconnect(
-            secrets,
-            (integration.config ?? {}) as Record<string, unknown>,
+            decryptSecrets(current.secrets),
+            (current.config ?? {}) as Record<string, unknown>,
             credentials
           )
+        } catch (err) {
+          log.error({ err, integration_type: current.integrationType }, 'onDisconnect failed')
         }
-      } catch (err) {
-        log.error({ err, integration_type: integration.integrationType }, 'onDisconnect failed')
-        // Continue with deletion even if revocation fails
       }
-    }
-
-    const { unregisterInstall } = await import('@/lib/server/integrations/install-registry')
-    await unregisterInstall(
-      integration.integrationType,
-      (integration.config ?? {}) as Record<string, unknown>
-    )
-    await db.delete(integrations).where(eq(integrations.id, integrationId))
+      const { unregisterInstall } = await import('@/lib/server/integrations/install-registry')
+      await unregisterInstall(
+        current.integrationType,
+        (current.config ?? {}) as Record<string, unknown>
+      )
+      await tx.delete(integrations).where(eq(integrations.id, integrationId))
+    })
 
     const { cacheDel, CACHE_KEYS } = await import('@/lib/server/cache')
     await cacheDel(CACHE_KEYS.INTEGRATION_MAPPINGS)
