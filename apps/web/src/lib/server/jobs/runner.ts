@@ -65,6 +65,13 @@ export interface RunnerConfig {
   batchSize: number
   /** How often expired leases are reclaimed. */
   reapIntervalMs: number
+  /**
+   * How often terminal rows past retention are pruned. Retention is measured
+   * in days, so this is deliberately much slower than `reapIntervalMs`: a lost
+   * lease has to be noticed quickly, an aged row does not, and the prune is a
+   * table scan on every workspace in a pooled fleet.
+   */
+  pruneIntervalMs: number
   /** How long terminal rows are kept. Must exceed any live cron slot key. */
   retentionMs: number
   /**
@@ -89,6 +96,7 @@ export function runnerConfig(): RunnerConfig {
     pollIntervalMs: envInt('JOB_POLL_INTERVAL_MS', 1_000, 50, 600_000),
     batchSize: envInt('JOB_BATCH_SIZE', 5, 1, 100),
     reapIntervalMs: envInt('JOB_REAP_INTERVAL_MS', 15_000, 500, 3_600_000),
+    pruneIntervalMs: envInt('JOB_PRUNE_INTERVAL_MS', 3_600_000, 1_000, 86_400_000),
     retentionMs: envInt('JOB_RETENTION_MS', 7 * 24 * 60 * 60 * 1000, 60_000, 365 * 86_400_000),
     maxConcurrency: envInt('JOB_MAX_CONCURRENCY', totalDeclaredConcurrency(), 1, 512),
   }
@@ -665,9 +673,20 @@ export interface MaintenanceResult extends ReapResult {
   pruned: number
 }
 
-/** Reclaim expired leases, then drop terminal rows past retention. */
-export async function runMaintenanceTick(config: RunnerConfig): Promise<MaintenanceResult> {
+/**
+ * Reclaim expired leases and, when the caller says the prune is due, drop
+ * terminal rows past retention.
+ *
+ * The two run on different clocks (`reapIntervalMs` vs `pruneIntervalMs`); the
+ * loop owns both and tells this function which fired. `prune` defaults to on so
+ * a caller with a single clock keeps the historical "both, every tick" shape.
+ */
+export async function runMaintenanceTick(
+  config: RunnerConfig,
+  opts: { prune?: boolean } = {}
+): Promise<MaintenanceResult> {
   const reaped = await reapExpiredLeases()
-  const pruned = await pruneTerminalJobs(config.retentionMs, retentionOverrides())
+  const pruned =
+    opts.prune === false ? 0 : await pruneTerminalJobs(config.retentionMs, retentionOverrides())
   return { ...reaped, pruned }
 }

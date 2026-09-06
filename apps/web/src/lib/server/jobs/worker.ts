@@ -123,6 +123,7 @@ function startLoop(opts: {
   let waitResolve: (() => void) | null = null
   let nextScheduleAt = 0
   let nextMaintenanceAt = 0
+  let nextPruneAt = 0
   let descriptor: WorkspaceDescriptor | null = opts.workspace
   const schedule = createScheduleState()
   const pool = createJobPool()
@@ -196,10 +197,12 @@ function startLoop(opts: {
             nextScheduleAt = tick.nextSlotAt ? tick.nextSlotAt.getTime() : now + 60_000
           }
           if (now >= nextMaintenanceAt) {
-            const maintenance = await runMaintenanceTick(opts.config)
+            const prune = now >= nextPruneAt
+            const maintenance = await runMaintenanceTick(opts.config, { prune })
             s.requeued += maintenance.requeued
             s.terminated += maintenance.terminated
             nextMaintenanceAt = now + opts.config.reapIntervalMs
+            if (prune) nextPruneAt = now + opts.config.pruneIntervalMs
           }
           return dispatchPass({
             pool,

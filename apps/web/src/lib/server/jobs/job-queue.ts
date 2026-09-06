@@ -658,6 +658,11 @@ export async function pruneTerminalJobs(
   // stays answerable long after the successful traffic has been discarded. One
   // fleet-wide window either bloats the highest-volume queue's table or throws
   // away the diagnostic history the low-volume ones were keeping on purpose.
+  const overrideSecs = Object.values(perQueueMs).flatMap((byStatus) =>
+    Object.values(byStatus)
+      .filter((ms): ms is number => typeof ms === 'number')
+      .map((ms) => ms / 1000)
+  )
   const overrides = JSON.stringify(
     Object.fromEntries(
       Object.entries(perQueueMs).map(([queue, byStatus]) => [
@@ -670,9 +675,17 @@ export async function pruneTerminalJobs(
       ])
     )
   )
+  // The per-row retention below depends on the row's own `queue` and `status`,
+  // so the planner cannot use `job_queue_terminal_idx` for it and would scan
+  // every terminal row on every prune. The shortest retention anywhere is a
+  // plain constant bound that every qualifying row also satisfies, so it goes
+  // first as the index-usable filter; the precise test then runs only on rows
+  // already past that floor.
+  const floorSecs = Math.min(olderThanMs / 1000, ...overrideSecs)
   const result = await db.execute(sql`
     DELETE FROM job_queue
     WHERE status IN ('succeeded', 'failed')
+      AND finished_at < now() - make_interval(secs => ${floorSecs})
       AND finished_at < now() - make_interval(
         secs => COALESCE(
           (${overrides}::jsonb -> queue ->> status)::numeric,
