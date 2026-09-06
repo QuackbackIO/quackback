@@ -81,3 +81,22 @@ it('executes through the shared approval service with the member actor', async (
   expect(mocks.decide).toHaveBeenCalledWith(id, 'approved', member.id, actor)
   expect(client.chat.update).toHaveBeenCalled()
 })
+it('retries a failed Slack update from the settled result without re-executing the write', async () => {
+  const pending = await mocks.pending()
+  client.chat.update.mockRejectedValueOnce(new Error('Slack unavailable'))
+  await expect(handleSlackDecision(payload, client, 'T')).rejects.toThrow('Slack unavailable')
+  expect(mocks.decide).toHaveBeenCalledOnce()
+  expect(client.chat.postEphemeral).not.toHaveBeenCalled()
+  mocks.pending.mockResolvedValue({
+    ...pending,
+    status: 'executed',
+    result: {},
+    decidedById: member.id,
+  })
+  await handleSlackDecision(payload, client, 'T')
+  expect(mocks.decide).toHaveBeenCalledOnce()
+  expect(client.chat.update).toHaveBeenCalledTimes(2)
+  expect(client.chat.update).toHaveBeenLastCalledWith(
+    expect.objectContaining({ text: 'Approved by <@U>' })
+  )
+})

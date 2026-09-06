@@ -144,65 +144,71 @@ export async function handleSlackDecision(
     await ephemeral(client, channel, user, 'You do not have permission to decide this action.')
     return
   }
-  try {
-    const { decideAssistantAction } = await import('@/lib/server/functions/assistant-actions')
-    const result = await decideAssistantAction(
-      pending.id,
-      action.action_id === 'qb_action_approve' ? 'approved' : 'rejected',
-      person.id,
-      actor
-    )
-    const record = result.result ?? {}
-    const link =
-      typeof record.postId === 'string'
-        ? `${getBaseUrl()}/admin/feedback?post=${encodeURIComponent(record.postId)}`
-        : typeof record.ticketId === 'string'
-          ? `${getBaseUrl()}/admin/inbox?i=${encodeURIComponent(record.ticketId)}`
-          : null
-    const status =
-      result.status === 'executed'
-        ? `Approved by <@${user}>${link ? ` → <${link}|Open>` : ''}`
-        : result.status === 'rejected'
-          ? `Rejected by <@${user}>`
-          : 'The action could not be completed. Check Quackback before retrying.'
-    const blocks = (payload.message?.blocks ?? []).map((block: Payload) =>
-      block.type === 'actions' &&
-      block.elements?.some((element: Payload) => element.value === pending.id)
-        ? { type: 'context', elements: [{ type: 'mrkdwn', text: status }] }
-        : block
-    )
-    if (payload.response_url && payload.container?.is_ephemeral) {
-      const target = new URL(payload.response_url)
-      if (
-        target.protocol !== 'https:' ||
-        target.hostname !== 'hooks.slack.com' ||
-        target.username ||
-        target.password ||
-        target.port
+  let result = pending
+  if (!['executed', 'rejected', 'failed'].includes(pending.status)) {
+    try {
+      const { decideAssistantAction } = await import('@/lib/server/functions/assistant-actions')
+      result = await decideAssistantAction(
+        pending.id,
+        action.action_id === 'qb_action_approve' ? 'approved' : 'rejected',
+        person.id,
+        actor
       )
-        throw new Error('Invalid response URL')
-      const response = await fetch(target, {
-        method: 'POST',
-        redirect: 'error',
-        signal: AbortSignal.timeout(10_000),
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ replace_original: true, text: status, blocks }),
-      })
-      if (!response.ok) throw new Error('Slack update failed')
-    } else if (payload.message?.ts) {
-      await client.chat.update({ channel, ts: payload.message.ts, text: status, blocks })
+    } catch (error) {
+      log.warn(
+        { pendingActionId: pending.id, error: error instanceof Error ? error.name : 'Error' },
+        'Slack decision failed'
+      )
+      await ephemeral(
+        client,
+        channel,
+        user,
+        'This proposal could not be decided. It may have expired or already been handled.'
+      )
+      return
     }
-  } catch (error) {
-    log.warn(
-      { pendingActionId: pending.id, error: error instanceof Error ? error.name : 'Error' },
-      'Slack decision failed'
+  }
+  // Presentation failures propagate to the durable job. Its retry reads the settled
+  // proposal and updates Slack without executing the post/ticket write again.
+  const record = result.result ?? {}
+  const link =
+    typeof record.postId === 'string'
+      ? `${getBaseUrl()}/admin/feedback?post=${encodeURIComponent(record.postId)}`
+      : typeof record.ticketId === 'string'
+        ? `${getBaseUrl()}/admin/inbox?i=${encodeURIComponent(record.ticketId)}`
+        : null
+  const status =
+    result.status === 'executed'
+      ? `Approved${result.decidedById && result.decidedById !== person.id ? '' : ` by <@${user}>`}${link ? ` → <${link}|Open>` : ''}`
+      : result.status === 'rejected'
+        ? `Rejected${result.decidedById && result.decidedById !== person.id ? '' : ` by <@${user}>`}`
+        : 'The action could not be completed. Check Quackback before retrying.'
+  const blocks = (payload.message?.blocks ?? []).map((block: Payload) =>
+    block.type === 'actions' &&
+    block.elements?.some((element: Payload) => element.value === pending.id)
+      ? { type: 'context', elements: [{ type: 'mrkdwn', text: status }] }
+      : block
+  )
+  if (payload.response_url && payload.container?.is_ephemeral) {
+    const target = new URL(payload.response_url)
+    if (
+      target.protocol !== 'https:' ||
+      target.hostname !== 'hooks.slack.com' ||
+      target.username ||
+      target.password ||
+      target.port
     )
-    await ephemeral(
-      client,
-      channel,
-      user,
-      'This proposal could not be decided. It may have expired or already been handled.'
-    )
+      throw new Error('Invalid response URL')
+    const response = await fetch(target, {
+      method: 'POST',
+      redirect: 'error',
+      signal: AbortSignal.timeout(10_000),
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ replace_original: true, text: status, blocks }),
+    })
+    if (!response.ok) throw new Error('Slack update failed')
+  } else if (payload.message?.ts) {
+    await client.chat.update({ channel, ts: payload.message.ts, text: status, blocks })
   }
 }
 
@@ -268,34 +274,54 @@ export async function handleSlackHookJob(job: ClaimedJob): Promise<void> {
   if (typeof team !== 'string' || team !== installation.workspaceId) return
   const event = payload.event
   if (kind === 'events' && revokesSlackInstallation(event, installation.botUserId)) {
-    const { unregisterInstall } = await import('@/lib/server/integrations/install-registry')
-    await unregisterInstall('slack', installation)
-    await db
-      .update(integrations)
-      .set({
-        status: 'disconnected',
-        lastError: 'Slack app access was revoked',
-        updatedAt: new Date(),
-      })
-      .where(eq(integrations.id, row.id))
-    // Revision-guarded settings write preserves concurrent administrator edits.
-    const state = await getAssistantRuntimeConfig()
-    if (state.config.agents.workspace.slack.enabled) {
-      await updateAssistantConfig(
-        state.revision,
-        (current) => ({
-          ...current,
-          agents: {
-            ...current.agents,
-            workspace: {
-              ...current.agents.workspace,
-              slack: { ...current.agents.workspace.slack, enabled: false },
-            },
-          },
-        }),
-        { type: 'system' }
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${'integration:slack'}))`)
+      const current = await tx.query.integrations.findFirst({ where: eq(integrations.id, row.id) })
+      // Reconnect serializes on this lock. A changed token/connection stamp means
+      // the revocation belongs to the prior installation, including same-team reinstalls.
+      if (
+        !current ||
+        current.secrets !== row.secrets ||
+        current.connectedAt?.getTime() !== row.connectedAt?.getTime()
       )
-    }
+        return
+      const eventTime = Number(payload.event_time)
+      if (
+        Number.isFinite(eventTime) &&
+        eventTime > 0 &&
+        current.connectedAt &&
+        Math.floor(current.connectedAt.getTime() / 1000) > eventTime
+      )
+        return
+      const { unregisterInstall } = await import('@/lib/server/integrations/install-registry')
+      await unregisterInstall('slack', installation)
+      await tx
+        .update(integrations)
+        .set({
+          status: 'disconnected',
+          lastError: 'Slack app access was revoked',
+          updatedAt: new Date(),
+        })
+        .where(eq(integrations.id, row.id))
+      // Revision-guarded settings write preserves concurrent administrator edits.
+      const state = await getAssistantRuntimeConfig()
+      if (state.config.agents.workspace.slack.enabled) {
+        await updateAssistantConfig(
+          state.revision,
+          (current) => ({
+            ...current,
+            agents: {
+              ...current.agents,
+              workspace: {
+                ...current.agents.workspace,
+                slack: { ...current.agents.workspace.slack, enabled: false },
+              },
+            },
+          }),
+          { type: 'system' }
+        )
+      }
+    })
     return
   }
   if (row.status !== 'active') return
