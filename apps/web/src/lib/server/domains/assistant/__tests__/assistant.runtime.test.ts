@@ -690,6 +690,41 @@ describe('runAssistantTurn', () => {
     expect(mockChat).not.toHaveBeenCalled()
   })
 
+  it('requires a requesting actor for workspace turns instead of falling back to Quinn', async () => {
+    await expect(
+      runAssistantTurn({
+        ...copilotQaInput,
+        role: 'workspace_assistant',
+        surface: 'slack',
+        messages: customerAsks('private notes'),
+      } as unknown as Parameters<typeof runAssistantTurn>[0])
+    ).rejects.toThrow('requires the requesting actor')
+    expect(mockChat).not.toHaveBeenCalled()
+  })
+  it('passes the requesting workspace actor into the tool context unchanged', async () => {
+    const actor = {
+      principalId: 'principal_member' as never,
+      principalType: 'user' as const,
+      role: 'member' as const,
+      permissions: new Set<never>(),
+      segmentIds: new Set<never>(),
+    }
+    let seen: unknown
+    mockChat.mockImplementation((opts: { context: { actor: unknown } }) => {
+      seen = opts.context.actor
+      return (async function* () {
+        yield* completeRun({ text: 'Hello', citations: [] })
+      })()
+    })
+    await runAssistantTurn({
+      ...copilotQaInput,
+      role: 'workspace_assistant',
+      surface: 'slack',
+      actor,
+      messages: customerAsks('hello'),
+    })
+    expect(seen).toBe(actor)
+  })
   it('derives a team content audience for the copilot surface (structural leak gate)', async () => {
     mockRetrieve.mockResolvedValue([makeKbArticle('kb_article_1')])
     mockChat.mockImplementation(

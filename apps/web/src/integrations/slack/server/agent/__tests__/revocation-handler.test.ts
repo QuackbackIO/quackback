@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   update: vi.fn(),
   unregister: vi.fn(),
   runtime: vi.fn(),
+  settings: vi.fn(),
+  invalidate: vi.fn(),
 }))
 vi.mock('@/lib/server/db', async (original) => ({
   ...(await original<typeof import('@/lib/server/db')>()),
@@ -29,6 +31,11 @@ vi.mock('@/lib/server/integrations/install-registry', () => ({
 vi.mock('@/lib/server/domains/settings/settings.assistant', async (original) => ({
   ...(await original<typeof import('@/lib/server/domains/settings/settings.assistant')>()),
   getAssistantRuntimeConfig: mocks.runtime,
+  updateAssistantConfig: mocks.settings,
+}))
+vi.mock('@/lib/server/domains/settings/settings.helpers', async (original) => ({
+  ...(await original<typeof import('@/lib/server/domains/settings/settings.helpers')>()),
+  invalidateSettingsCache: mocks.invalidate,
 }))
 import { handleSlackHookJob } from '../handler'
 const installed = {
@@ -86,4 +93,22 @@ it('preserves retry when unregister fails, without changing local state', async 
   mocks.unregister.mockRejectedValue(new Error('CP unavailable'))
   await expect(handleSlackHookJob(job)).rejects.toThrow('CP unavailable')
   expect(mocks.update).not.toHaveBeenCalled()
+})
+
+it('uses the held transaction for settings and invalidates after the write', async () => {
+  mocks.runtime.mockResolvedValue({
+    revision: 3,
+    config: { agents: { workspace: { slack: { enabled: true } } } },
+  })
+  await handleSlackHookJob(job)
+  expect(mocks.settings).toHaveBeenCalledWith(
+    3,
+    expect.any(Function),
+    { type: 'system' },
+    expect.objectContaining({ execute: mocks.lock })
+  )
+  expect(mocks.invalidate).toHaveBeenCalledOnce()
+  expect(mocks.settings.mock.invocationCallOrder[0]).toBeLessThan(
+    mocks.invalidate.mock.invocationCallOrder[0]
+  )
 })

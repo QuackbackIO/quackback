@@ -1,3 +1,4 @@
+import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
 import { revokesSlackInstallation } from './revocation'
 import { toolPermissions } from '@/lib/server/domains/assistant/tool-permissions'
 import { createHash } from 'node:crypto'
@@ -131,21 +132,25 @@ export async function handleSlackDecision(
     (payload.message?.thread_ts && boundThread !== payload.message.thread_ts)
   )
     return
-  const actor = await slackMemberActor(person)
+  const terminal = ['executed', 'rejected', 'failed'].includes(pending.status)
+  const actor = terminal ? undefined : await slackMemberActor(person)
   const { getToolSpecByName } = await import('@/lib/server/domains/assistant/assistant.toolspec')
   const spec = getToolSpecByName(pending.toolName)
   // v1 only exposes these built-in writes on Slack; no arbitrary connector
   // calls can bypass the same permission check on approve OR reject.
   if (
-    !spec ||
-    !['capture_feedback', 'create_ticket'].includes(spec.name) ||
-    toolPermissions(spec, true).some((permission) => !can(actor, permission))
+    !terminal &&
+    (!spec ||
+      !['capture_feedback', 'create_ticket'].includes(spec.name) ||
+      !actor ||
+      toolPermissions(spec, true).some((permission) => !can(actor, permission)))
   ) {
     await ephemeral(client, channel, user, 'You do not have permission to decide this action.')
     return
   }
   let result = pending
-  if (!['executed', 'rejected', 'failed'].includes(pending.status)) {
+  if (!terminal) {
+    if (!actor) return
     try {
       const { decideAssistantAction } = await import('@/lib/server/functions/assistant-actions')
       result = await decideAssistantAction(
@@ -274,6 +279,8 @@ export async function handleSlackHookJob(job: ClaimedJob): Promise<void> {
   if (typeof team !== 'string' || team !== installation.workspaceId) return
   const event = payload.event
   if (kind === 'events' && revokesSlackInstallation(event, installation.botUserId)) {
+    const state = await getAssistantRuntimeConfig()
+    let changedSettings = false
     await db.transaction(async (tx) => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${'integration:slack'}))`)
       const current = await tx.query.integrations.findFirst({ where: eq(integrations.id, row.id) })
@@ -304,7 +311,6 @@ export async function handleSlackHookJob(job: ClaimedJob): Promise<void> {
         })
         .where(eq(integrations.id, row.id))
       // Revision-guarded settings write preserves concurrent administrator edits.
-      const state = await getAssistantRuntimeConfig()
       if (state.config.agents.workspace.slack.enabled) {
         await updateAssistantConfig(
           state.revision,
@@ -318,10 +324,13 @@ export async function handleSlackHookJob(job: ClaimedJob): Promise<void> {
               },
             },
           }),
-          { type: 'system' }
+          { type: 'system' },
+          tx
         )
+        changedSettings = true
       }
     })
+    if (changedSettings) await invalidateSettingsCache()
     return
   }
   if (row.status !== 'active') return
@@ -482,6 +491,7 @@ async function handleSlackQuestion(input: {
       })
     const result = await runAssistantTurn({
       role: 'workspace_assistant',
+      actor,
       surface: 'slack',
       ...context,
       workspaceThreadKey: slackThreadKey(team, channel, thread),

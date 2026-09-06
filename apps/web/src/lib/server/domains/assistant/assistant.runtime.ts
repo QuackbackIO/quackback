@@ -1,3 +1,4 @@
+import type { Actor } from '@/lib/server/policy/types'
 /**
  * Quinn runtime seam.
  *
@@ -300,6 +301,7 @@ export type AssistantTurnInput = AssistantTurnCommonInput &
       }
     | {
         role: 'workspace_assistant'
+        actor: Actor
         surface: 'slack' | 'workspace'
         messages: AssistantThreadMessage[]
       }
@@ -825,6 +827,8 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
   if (audience !== rolePolicy.contentAudience) {
     throw new Error(`Assistant role ${role} cannot run with ${audience} content`)
   }
+  if (role === 'workspace_assistant' && !input.actor)
+    throw new Error('Workspace assistant requires the requesting actor')
   const conversationId = input.conversationId ?? null
   const ticketId = input.ticketId ?? null
   const execDb = input.db ?? db
@@ -951,6 +955,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     log.warn({ err: error }, 'skill count failed; omitting use_skill this turn')
   }
   const toolContext = makeAssistantToolContext({
+    actor: input.role === 'workspace_assistant' ? input.actor : undefined,
     db: execDb,
     assistantPrincipalId: input.assistantPrincipalId,
     assistantName: runtimeConfig.config.identity.name,

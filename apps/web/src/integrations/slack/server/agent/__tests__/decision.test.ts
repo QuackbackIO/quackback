@@ -100,3 +100,18 @@ it('retries a failed Slack update from the settled result without re-executing t
     expect.objectContaining({ text: 'Approved by <@U>' })
   )
 })
+
+it('repairs a terminal proposal presentation after decision permissions are removed', async () => {
+  const pending = await mocks.pending()
+  mocks.pending.mockResolvedValue({
+    ...pending,
+    status: 'executed',
+    result: {},
+    decidedById: member.id,
+  })
+  mocks.can.mockReturnValue(false)
+  await handleSlackDecision(payload, client, 'T')
+  expect(mocks.decide).not.toHaveBeenCalled()
+  expect(client.chat.update).toHaveBeenCalledOnce()
+  expect(client.chat.postEphemeral).not.toHaveBeenCalled()
+})
