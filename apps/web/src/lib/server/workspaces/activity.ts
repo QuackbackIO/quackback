@@ -23,6 +23,16 @@
  * forever. Health probes never reach the request hook (`request-scope.ts`
  * `FLEET_PATHS`), so the platform's probing cannot wake anything either.
  *
+ * Not every request counts. Measured on the first rollout: ten of the forty
+ * parked workspaces woke within ten minutes of the web deploy, every one from
+ * `GET /.env` scanners or an anonymous `GET /` — a wildcard domain is crawled
+ * continuously, so "any request" would re-wake the whole fleet in days. A
+ * request is evidence of use (`isActivitySignal`) when it is a mutation, or
+ * when it carries a session cookie or bearer token. An anonymous GET is not;
+ * the portal still serves it (the request path is untouched), and if the
+ * visitor then posts or votes, that POST wakes the loop within a minute — the
+ * job it enqueues waits at most that long, which is the existing loop cadence.
+ *
  * ## What idleness is not allowed to skip
  *
  * "Nobody visited" is not the same as "nothing to do". A workspace can be idle
@@ -80,6 +90,26 @@ export function isPastDormancyThreshold(
   const ms = lastActiveAt.getTime()
   if (Number.isNaN(ms)) return false
   return now - ms > thresholdHours * 3_600_000
+}
+
+/** Same marker `auth-helpers.ts` `hasAuthCredentials` uses; matched by substring. */
+const SESSION_COOKIE_MARKER = 'better-auth.session_token'
+
+const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+
+/**
+ * Does this request count as someone using the workspace?
+ *
+ * Mutations always do. Reads do only when a session cookie or bearer token
+ * identifies a caller — an anonymous read is what crawlers and scanners send.
+ */
+export function isActivitySignal(request: {
+  method: string
+  headers: { get(name: string): string | null }
+}): boolean {
+  if (!READ_METHODS.has(request.method.toUpperCase())) return true
+  if ((request.headers.get('cookie') ?? '').includes(SESSION_COOKIE_MARKER)) return true
+  return (request.headers.get('authorization') ?? '').startsWith('Bearer ')
 }
 
 /**

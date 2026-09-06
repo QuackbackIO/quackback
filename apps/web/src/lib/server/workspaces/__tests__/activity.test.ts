@@ -66,6 +66,40 @@ describe('isPastDormancyThreshold', () => {
   })
 })
 
+describe('isActivitySignal', () => {
+  // Not a real `Request`: happy-dom's strips the forbidden `cookie` header,
+  // which is precisely the header under test. The predicate needs only this shape.
+  const req = (method: string, headers: Record<string, string> = {}) => ({
+    method,
+    headers: { get: (name: string) => headers[name.toLowerCase()] ?? null },
+  })
+
+  it('ignores anonymous reads — what crawlers and scanners send', async () => {
+    const { isActivitySignal } = await load()
+    expect(isActivitySignal(req('GET'))).toBe(false)
+    expect(isActivitySignal(req('HEAD'))).toBe(false)
+    expect(isActivitySignal(req('OPTIONS'))).toBe(false)
+    expect(isActivitySignal(req('GET', { cookie: 'theme=dark' }))).toBe(false)
+    expect(isActivitySignal(req('GET', { authorization: 'Basic abc' }))).toBe(false)
+  })
+
+  it('counts every mutation', async () => {
+    const { isActivitySignal } = await load()
+    for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+      expect(isActivitySignal(req(method))).toBe(true)
+    }
+  })
+
+  it('counts a read from a signed-in session or a bearer token', async () => {
+    const { isActivitySignal } = await load()
+    expect(isActivitySignal(req('GET', { cookie: 'a=1; better-auth.session_token=t' }))).toBe(true)
+    expect(isActivitySignal(req('GET', { cookie: '__Secure-better-auth.session_token=t' }))).toBe(
+      true
+    )
+    expect(isActivitySignal(req('GET', { authorization: 'Bearer qb_key' }))).toBe(true)
+  })
+})
+
 describe('noteWorkspaceActivity', () => {
   it('upserts the stamp once, then throttles the same workspace', async () => {
     const { noteWorkspaceActivity, STAMP_INTERVAL_MS } = await load()

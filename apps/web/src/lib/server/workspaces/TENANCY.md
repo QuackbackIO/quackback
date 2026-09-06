@@ -579,6 +579,14 @@ minutes), and the worker's next registry refresh — at most 60 s later — sees
 the stamp and starts the loop again. Health probes bypass the hook, so the
 platform cannot wake anything.
 
+Not every served request is a stamp. A wildcard domain is crawled all day
+(`GET /.env`, anonymous `GET /`), and the first rollout showed that "any
+request" would re-wake the fleet in days. `isActivitySignal` counts a
+mutation, or a read carrying a session cookie or bearer token; an anonymous
+read is served exactly as before and simply does not count. An anonymous
+visitor who then posts or votes wakes the loop with that POST, within the
+same minute the loop cadence already implies.
+
 Idle is not the same as nothing to do. Before parking, the worker asks the
 workspace's own database two questions it already knows how to answer —
 `earliestPendingJobAt()` (a delayed hook retry, a scheduled publish) and

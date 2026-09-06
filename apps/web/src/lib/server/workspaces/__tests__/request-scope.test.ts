@@ -14,21 +14,36 @@ const acquireScopeForHost = vi.fn()
 const noteWorkspaceActivity = vi.fn(() => Promise.resolve())
 
 vi.mock('@/lib/server/workspaces/resolver', () => ({ acquireScopeForHost }))
-vi.mock('../activity', () => ({ noteWorkspaceActivity }))
+vi.mock('../activity', async (importOriginal) => ({
+  // The real predicate decides which requests count; only the write is mocked.
+  isActivitySignal: (await importOriginal<typeof import('../activity')>()).isActivitySignal,
+  noteWorkspaceActivity,
+}))
 
 const silentLog = { warn: vi.fn(), error: vi.fn(), info: vi.fn() }
 
 async function serve(
   host: string | null,
-  options: { url?: string; method?: string } = {}
+  options: { url?: string; method?: string; headers?: Record<string, string> } = {}
 ): Promise<Response | string> {
   const { resolveWorkspaceAndContinue } = await import('../request-scope')
   const request = new Request(options.url ?? 'http://example.com/anything', {
     method: options.method,
     headers: host === null ? {} : { host },
   })
+  // happy-dom's `Request` drops forbidden headers (`cookie`), so extra headers
+  // are layered over the real ones rather than passed through the constructor.
+  const extra = Object.fromEntries(
+    Object.entries(options.headers ?? {}).map(([k, v]) => [k.toLowerCase(), v])
+  )
+  const headers = {
+    get: (name: string) => extra[name.toLowerCase()] ?? request.headers.get(name),
+  }
   return resolveWorkspaceAndContinue({
-    request,
+    request: new Proxy(request, {
+      // Receiver must be the real Request: its accessors read internal slots.
+      get: (target, prop) => (prop === 'headers' ? headers : Reflect.get(target, prop, target)),
+    }),
     next: async () => 'served the workspace',
     log: silentLog as never,
   }) as Promise<Response | string>
@@ -64,7 +79,10 @@ describe('resolveWorkspaceAndContinue', () => {
     const { resolveWorkspaceAndContinue } = await import('../request-scope')
     const seen: unknown[] = []
     const result = await resolveWorkspaceAndContinue({
-      request: new Request('http://example.com/', { headers: { host: 't1.localhost' } }),
+      request: new Request('http://example.com/', {
+        method: 'POST',
+        headers: { host: 't1.localhost' },
+      }),
       next: async () => {
         seen.push(getScopedDatabase())
         return 'served'
@@ -75,15 +93,50 @@ describe('resolveWorkspaceAndContinue', () => {
     expect(result).toBe('served')
     // The scope must be live INSIDE next(), which is the only place it matters.
     expect(seen).toEqual([handle])
-    // A served request is what keeps the workspace out of dormancy.
+    // A served mutation keeps the workspace out of dormancy.
     expect(noteWorkspaceActivity).toHaveBeenCalledWith('inst_a')
   })
 
   it('does not stamp activity for a refusal or a fleet path', async () => {
     acquireScopeForHost.mockResolvedValue({ kind: 'unknown_host', hostname: 'nope.localhost' })
-    await serve('nope.localhost')
-    await serve('t1.localhost', { url: 'http://example.com/api/health' })
+    await serve('nope.localhost', { method: 'POST' })
+    await serve('t1.localhost', { url: 'http://example.com/api/health', method: 'POST' })
     expect(noteWorkspaceActivity).not.toHaveBeenCalled()
+  })
+
+  describe('which served requests count as activity', () => {
+    const okScope = async () => {
+      const { createWorkspaceScope } = await import('../workspace-context')
+      acquireScopeForHost.mockResolvedValue({
+        kind: 'ok',
+        scope: createWorkspaceScope({
+          workspace: { workspaceKey: 'inst_a' },
+          db: {},
+          sql: {},
+          origin: 'request',
+          secrets: { secretKey: 'd'.repeat(64), storage: null, storageProblem: 'not read here' },
+        } as never),
+      })
+    }
+
+    it('serves an anonymous GET without stamping — crawlers must not wake a workspace', async () => {
+      await okScope()
+      expect(await serve('t1.localhost', { url: 'http://example.com/.env' })).toBe(
+        'served the workspace'
+      )
+      expect(await serve('t1.localhost', { url: 'http://example.com/', method: 'HEAD' })).toBe(
+        'served the workspace'
+      )
+      expect(noteWorkspaceActivity).not.toHaveBeenCalled()
+    })
+
+    it('stamps for a mutation, a session cookie, or a bearer token', async () => {
+      await okScope()
+      await serve('t1.localhost', { method: 'POST' })
+      await serve('t1.localhost', { headers: { cookie: 'a=1; better-auth.session_token=x' } })
+      await serve('t1.localhost', { headers: { authorization: 'Bearer qb_widget' } })
+      expect(noteWorkspaceActivity).toHaveBeenCalledTimes(3)
+    })
   })
 
   it('resolves a third-party custom host from a signed customer-host header on a trusted origin', async () => {
