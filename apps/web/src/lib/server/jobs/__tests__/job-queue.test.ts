@@ -689,6 +689,27 @@ describe('per-queue retention', () => {
     const rows = await rowsFor(q)
     expect(rows.map((r) => r.status)).toEqual(['failed'])
   })
+
+  it('keeps a row past the shortest window but inside its own longer one', async () => {
+    // The index-usable floor is the shortest retention anywhere; it must only
+    // ever narrow the scan, never decide the outcome for a queue kept longer.
+    const short = queue('retention-floor-short')
+    const long = queue('retention-floor-long')
+    for (const q of [short, long]) {
+      await enqueueJob({ queue: q, dedupeKey: 'done' })
+      const [job] = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: LEASE }] })
+      await completeJob(job)
+    }
+    await testSql()`
+      UPDATE job_queue SET finished_at = now() - interval '3 days'
+      WHERE queue IN (${short}, ${long})
+    `
+    // Default one day is the floor; the long queue keeps successes thirty.
+    await pruneTerminalJobs(86_400_000, { [long]: { succeeded: 30 * 86_400_000 } })
+
+    expect(await rowsFor(short)).toHaveLength(0)
+    expect((await rowsFor(long)).map((r) => r.status)).toEqual(['succeeded'])
+  })
 })
 
 describe('transactional enqueue', () => {

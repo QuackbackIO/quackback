@@ -522,6 +522,25 @@ describe('maintenance', () => {
     expect(rows[0].status).toBe('failed')
     expect(rows[0].last_error).toMatch(/no attempts remaining/)
   })
+
+  it('leaves aged terminal rows alone when the prune is not due', async () => {
+    const q = queue('maintenance-no-prune')
+    __setJobDefinitionsForTests([{ name: q, maxAttempts: 1, handler: async () => async () => {} }])
+
+    await enqueueJob({ queue: q, dedupeKey: 'stranded', maxAttempts: 1 })
+    await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: 30_000 }] })
+    await expireLease(q)
+    await enqueueJob({ queue: q, dedupeKey: 'ancient', maxAttempts: 1 })
+    await testSql()`
+      UPDATE job_queue SET status = 'succeeded', finished_at = now() - interval '400 days'
+      WHERE queue = ${q} AND dedupe_key = 'ancient'
+    `
+
+    const result = await runMaintenanceTick(CONFIG, { prune: false })
+    expect(result.terminated).toBeGreaterThanOrEqual(1)
+    expect(result.pruned).toBe(0)
+    expect((await rowsFor(q)).map((r) => r.status).sort()).toEqual(['failed', 'succeeded'])
+  })
 })
 
 describe('the bounded pool', () => {
