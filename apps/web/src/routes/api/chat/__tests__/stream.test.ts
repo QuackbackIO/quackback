@@ -473,6 +473,42 @@ describe('GET /api/chat/stream - assistant activity snapshot replay', () => {
   })
 })
 
+describe('GET /api/chat/stream - teardown keeps the workspace scope', () => {
+  it('clears presence inside the request workspace scope when the client disconnects', async () => {
+    const { createWorkspaceScope, getWorkspaceScope, runWithWorkspaceScope } =
+      await import('@/lib/server/workspaces/workspace-context')
+    const scope = createWorkspaceScope({
+      workspace: { workspaceKey: 'inst_stream' },
+      db: {},
+      sql: {},
+      origin: 'request',
+      secrets: { secretKey: 'd'.repeat(64), storage: null, storageProblem: 'not read here' },
+    } as never)
+    tokenPrincipal('member')
+    let scopeSeenByClear: string | null | undefined
+    mockClearPresence.mockImplementation(async () => {
+      scopeSeenByClear = getWorkspaceScope()?.workspace.workspaceKey ?? null
+      return false
+    })
+
+    // Opened inside a workspace scope, exactly as the middleware would run it…
+    const controller = new AbortController()
+    const request = new Request('http://test/api/chat/stream?scope=inbox', {
+      signal: controller.signal,
+    })
+    const res = await runWithWorkspaceScope(scope, () => GET({ request }))
+    expect(res.status).toBe(200)
+    await vi.waitFor(() => expect(mockMarkPresent).toHaveBeenCalled())
+
+    // …and aborted from outside it, which is where the runtime fires the
+    // signal. Teardown must not see an empty scope.
+    expect(getWorkspaceScope()).toBeNull()
+    controller.abort()
+    await vi.waitFor(() => expect(mockClearPresence).toHaveBeenCalled())
+    expect(scopeSeenByClear).toBe('inst_stream')
+  })
+})
+
 describe('GET /api/chat/stream - abandoned heartbeat timeout', () => {
   it('stops polling presence and unsubscribes when pings go unconsumed', async () => {
     vi.useFakeTimers()
