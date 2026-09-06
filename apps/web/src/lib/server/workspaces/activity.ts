@@ -1,14 +1,15 @@
 /**
  * Which pooled workspaces are worth running background work for.
  *
- * ## The measurement
+ * ## The problem
  *
- * A fleet of 111 active registry workspaces had 6 with any users. The job worker
- * ran a poll loop for all 111 — a scope open, a schedule tick and a `job_queue`
- * claim every few seconds, plus a dozen cron enqueues an hour, plus every fleet
- * sweep (`runFleetPass`) opening every database twice an hour — and the 105 that
- * nobody had visited in weeks cost the same as the 6 that were in use. On the
- * primary that was most of the connection churn and most of the hot page cache.
+ * The job worker ran a poll loop for every active registry workspace — a scope
+ * open, a schedule tick and a `job_queue` claim every few seconds, plus a dozen
+ * cron enqueues an hour, plus every fleet sweep (`runFleetPass`) opening every
+ * database twice an hour — so a workspace nobody had visited in weeks cost the
+ * same as one in daily use. In a pooled fleet, where most trials go quiet after
+ * signup, that idle majority is most of the primary's connection churn and hot
+ * page cache.
  *
  * ## The rule
  *
@@ -23,11 +24,10 @@
  * forever. Health probes never reach the request hook (`request-scope.ts`
  * `FLEET_PATHS`), so the platform's probing cannot wake anything either.
  *
- * Not every request counts. Measured on the first rollout: ten of the forty
- * parked workspaces woke within ten minutes of the web deploy, every one from
- * `GET /.env` scanners or an anonymous `GET /` — a wildcard domain is crawled
- * continuously, so "any request" would re-wake the whole fleet in days. A
- * request is evidence of use (`isActivitySignal`) when it is a mutation, or
+ * Not every request counts. A wildcard domain is crawled continuously —
+ * `GET /.env` scanners, anonymous `GET /` — and that traffic reaches parked
+ * workspaces within minutes, so "any request" would re-wake the whole fleet in
+ * days. A request is evidence of use (`isActivitySignal`) when it is a mutation, or
  * when it carries a session cookie or bearer token. An anonymous GET is not;
  * the portal still serves it (the request path is untouched), and if the
  * visitor then posts or votes, that POST wakes the loop within a minute — the

@@ -40,6 +40,7 @@ import { createSseStream, SSE_RESPONSE_HEADERS } from '@/lib/server/utils/sse'
 import { streamLimiter } from '@/lib/server/realtime/stream-connection-limit'
 import { startStreamHeartbeat } from '@/lib/server/realtime/stream-heartbeat'
 import { getClientIp } from '@/lib/server/domains/api/rate-limit'
+import { getWorkspaceScope, runWithWorkspaceScope } from '@/lib/server/workspaces/workspace-context'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'chat-stream' })
@@ -224,7 +225,13 @@ export const Route = createFileRoute('/api/chat/stream')({
         let heartbeat: { stop: () => void } | null = null
         let unsubscribe: (() => Promise<void>) | null = null
 
-        cleanup = async () => {
+        // The abort listener and the stream's cancel hook are invoked by the
+        // runtime, outside the request's AsyncLocalStorage context, so under
+        // pooled tenancy `clearPresence` (and the requeue behind it) would run
+        // with no workspace scope and throw. Capture the scope now and re-enter
+        // it for teardown — the same pattern the auth stash sweeps use.
+        const workspaceScope = getWorkspaceScope()
+        const teardown = async () => {
           if (cleanedUp) return
           cleanedUp = true
           heartbeat?.stop()
@@ -251,6 +258,8 @@ export const Route = createFileRoute('/api/chat/stream')({
           }
           slot.release()
         }
+        cleanup = () =>
+          workspaceScope ? runWithWorkspaceScope(workspaceScope, teardown) : teardown()
 
         const run = async () => {
           try {
