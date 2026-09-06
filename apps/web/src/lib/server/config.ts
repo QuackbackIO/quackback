@@ -117,6 +117,13 @@ const configSchema = z
     /** TTL for the in-process hostname → workspace record cache, milliseconds. */
     workspaceRegistryTtlMs: envInt.pipe(z.number().int().min(0).max(600_000)).default(30_000),
     /**
+     * Hours without an HTTP request before a pooled workspace is dormant: no job
+     * loop, no fleet sweeps, until the next request wakes it. `0` disables the
+     * policy (every active registry workspace gets a loop, the pre-policy shape).
+     * See `workspaces/activity.ts`.
+     */
+    workspaceDormantAfterHours: envInt.pipe(z.number().int().min(0).max(8_760)).default(168),
+    /**
      * The fleet root from which every workspace's `SECRET_KEY` is derived and every
      * workspace's storage credential is sealed (`tenancy/vendor/fleet-secrets.ts`).
      *
@@ -274,6 +281,7 @@ function buildConfigFromEnv(): unknown {
     workspacePoolIdleSeconds: env('WORKSPACE_POOL_IDLE_SECONDS'),
     workspacePoolMaxEntries: env('WORKSPACE_POOL_MAX_ENTRIES'),
     workspaceRegistryTtlMs: env('WORKSPACE_REGISTRY_TTL_MS'),
+    workspaceDormantAfterHours: env('WORKSPACE_DORMANT_AFTER_HOURS'),
     fleetRootKey: env('QUACKBACK_FLEET_ROOT_KEY'),
 
     // Auth
@@ -439,6 +447,9 @@ export const config = {
   },
   get workspacePoolMaxEntries() {
     return loadConfig().workspacePoolMaxEntries
+  },
+  get workspaceDormantAfterHours() {
+    return loadConfig().workspaceDormantAfterHours
   },
   get workspaceRegistryTtlMs() {
     return loadConfig().workspaceRegistryTtlMs

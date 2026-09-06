@@ -36,6 +36,7 @@ import {
   SCHEMA_FLOOR_MISCONFIGURED_CODE,
   SCHEMA_FLOOR_REFUSAL_CODE,
 } from '@/lib/server/fleet/schema-floor'
+import { noteWorkspaceActivity } from './activity'
 import { isIdentityFailureCode, isKeyCustodyFailureCode } from './fingerprint'
 import { acquireScopeForHost } from './resolver'
 import { requestWorkspaceHost } from './saas-edge-host'
@@ -86,6 +87,10 @@ export async function resolveWorkspaceAndContinue<T>({
 
   switch (acquisition.kind) {
     case 'ok':
+      // A served request is what keeps a workspace out of dormancy
+      // (`activity.ts`). Not awaited: the stamp is a throttled control-plane
+      // write the request must neither wait on nor fail because of.
+      void noteWorkspaceActivity(acquisition.scope.workspace.workspaceKey)
       return runWithWorkspaceScope(acquisition.scope, next)
 
     case 'unknown_host':

@@ -24,7 +24,17 @@ import {
   refusalCode,
   reportQuarantine,
 } from '@/lib/server/workspaces/quarantine'
-import { isMissingJobQueue } from './job-queue'
+import {
+  dormantCount,
+  isMarkedDormant,
+  isPastDormancyThreshold,
+  listDormantWorkspaces,
+  markDormant,
+  markStandingWork,
+  resetDormancyMarks,
+} from '@/lib/server/workspaces/activity'
+import { earliestWorkspaceDeadline } from './deadlines'
+import { earliestPendingJobAt, isMissingJobQueue } from './job-queue'
 import {
   awaitPool,
   createJobPool,
@@ -288,26 +298,120 @@ function startWorkspaceLoop(workspace: WorkspaceDescriptor, cfg: RunnerConfig): 
   loops.set(workspace.workspaceKey, loop)
 }
 
+/**
+ * Does this workspace have work a clock will create, whether or not anyone
+ * visits? Pending `job_queue` rows (a hook retry, a scheduled publish) or a
+ * registered deadline (a snooze, an SLA due-at). Asked inside the workspace's
+ * scope, once per refresh, only for workspaces past the idle threshold.
+ *
+ * Fail-safe direction: a scope that cannot be opened, or a query that throws,
+ * answers "yes" — the cost of keeping an idle loop is one loop; the cost of
+ * parking a workspace with a due job is the job.
+ */
+async function probeStandingWork(workspace: WorkspaceDescriptor): Promise<boolean> {
+  try {
+    return await withWorkspaceScopeById(workspace.workspaceKey, 'queue', async () => {
+      const [pendingAt, deadlineAt] = await Promise.all([
+        earliestPendingJobAt(),
+        earliestWorkspaceDeadline(),
+      ])
+      return pendingAt !== null || deadlineAt !== null
+    })
+  } catch (err) {
+    if (isMissingJobQueue(err)) return false
+    log.warn(
+      { err, workspace_key: workspace.workspaceKey },
+      'could not probe a dormancy candidate for standing work; keeping its loop'
+    )
+    return true
+  }
+}
+
+/**
+ * Reconcile the loop set with the registry and the dormancy rule (`activity.ts`).
+ *
+ * Three states per active registry workspace:
+ * - **awake**: recent request, or idle but holding standing work → loop runs;
+ * - **dormant**: idle past the threshold with nothing pending → no loop, no
+ *   scope, nothing until a request stamps it and the next refresh sees that;
+ * - **gone**: no longer active in the registry → loop stopped as before.
+ *
+ * The standing-work probe is the only cost a dormant candidate pays, and it is
+ * paid once per refresh only while the candidate still has a loop (to decide
+ * whether to park it) — a workspace already parked is not reopened to ask again.
+ * That means a job enqueued into a parked workspace by anything other than a
+ * request waits for the wake. Nothing but a request or the worker itself enqueues
+ * under pooled tenancy, so that path does not exist while the loop is stopped.
+ */
 async function refreshWorkspaceLoops(cfg: RunnerConfig): Promise<void> {
   const { workspaces, refused } = await listActiveWorkspaces()
   if (refused.length > 0) {
     log.error({ refused }, 'job worker skipping workspaces with invalid registry records')
   }
   const wanted = new Set(workspaces.map((t) => t.workspaceKey))
+  const now = Date.now()
 
   for (const [workspaceKey, loop] of loops) {
     if (wanted.has(workspaceKey)) continue
     await loop.stop()
     loops.delete(workspaceKey)
+    markStandingWork(workspaceKey, false)
+  }
+  for (const workspaceKey of listDormantWorkspaces()) {
+    if (!wanted.has(workspaceKey)) markDormant(workspaceKey, false)
   }
 
+  let parked = 0
+  let woke = 0
   for (const workspace of workspaces) {
-    const existing = loops.get(workspace.workspaceKey)
-    if (existing) {
-      existing.observe(workspace)
+    const key = workspace.workspaceKey
+    const existing = loops.get(key)
+    const idle = isPastDormancyThreshold(workspace.lastActiveAt ?? null, now)
+
+    if (!idle) {
+      markStandingWork(key, false)
+      if (isMarkedDormant(key)) {
+        markDormant(key, false)
+        woke += 1
+        log.info(
+          { event: 'workspace.woke', workspace_key: key, last_active_at: workspace.lastActiveAt },
+          'dormant workspace saw a request; starting its job loop'
+        )
+      }
+      if (existing) existing.observe(workspace)
+      else startWorkspaceLoop(workspace, cfg)
       continue
     }
-    startWorkspaceLoop(workspace, cfg)
+
+    // Idle past the threshold. Already parked: leave it alone, cost nothing.
+    if (!existing && isMarkedDormant(key)) continue
+
+    // Running (or first sight after a worker boot): ask before parking.
+    const standing = await probeStandingWork(workspace)
+    markStandingWork(key, standing)
+    if (standing) {
+      if (existing) existing.observe(workspace)
+      else startWorkspaceLoop(workspace, cfg)
+      continue
+    }
+
+    if (existing) {
+      await existing.stop()
+      loops.delete(key)
+    }
+    markDormant(key, true)
+    parked += 1
+    log.info(
+      { event: 'workspace.dormant', workspace_key: key, last_active_at: workspace.lastActiveAt },
+      'workspace idle past the dormancy threshold with no standing work; job loop parked'
+    )
+  }
+
+  if (parked > 0 || woke > 0) {
+    log.info(
+      { event: 'job.worker_refresh', loops: loops.size, dormant: dormantCount(), parked, woke },
+      'job worker loop set changed'
+    )
   }
 
   reportQuarantine()
@@ -354,6 +458,8 @@ export async function startJobWorker(): Promise<void> {
     {
       event: 'job.worker_started',
       workspaces: loops.size,
+      dormant: dormantCount(),
+      dormant_after_hours: config.workspaceDormantAfterHours,
       poll_interval_ms: cfg.pollIntervalMs,
     },
     'job worker started (pooled)'
@@ -370,6 +476,7 @@ export async function stopJobWorker(): Promise<void> {
   const all = [...loops.values()]
   loops.clear()
   await Promise.allSettled(all.map((l) => l.stop()))
+  resetDormancyMarks()
   resetJobHandlers()
   if (wasRunning) log.info({ event: 'job.worker_stopped' }, 'job worker stopped')
 }
@@ -377,11 +484,14 @@ export async function stopJobWorker(): Promise<void> {
 export interface JobWorkerStatus {
   running: boolean
   workspaces: Array<{ workspaceKey: string } & LoopStats>
+  /** Active registry workspaces with no loop because nobody has visited them. */
+  dormant: number
 }
 
 export function getJobWorkerStatus(): JobWorkerStatus {
   return {
     running,
     workspaces: [...stats.entries()].map(([workspaceKey, s]) => ({ workspaceKey, ...s })),
+    dormant: dormantCount(),
   }
 }
