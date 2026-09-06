@@ -122,7 +122,7 @@ describe('createWebhook — plan gate', () => {
   })
 
   it('creates the webhook on a plan that includes it', async () => {
-    withCloud(storedCloud('growth'))
+    withCloud(storedCloud('pro'))
     await expect(createWebhook(INPUT, CREATOR)).resolves.toMatchObject({
       webhook: { url: INPUT.url },
     })
@@ -133,7 +133,7 @@ describe('createWebhook — plan gate', () => {
     withCloud(storedCloud('free', { webhooks: true }))
     await expect(createWebhook(INPUT, CREATOR)).resolves.toBeDefined()
 
-    withCloud(storedCloud('scale', { webhooks: false }))
+    withCloud(storedCloud('enterprise', { webhooks: false }))
     await expect(createWebhook(INPUT, CREATOR)).rejects.toBeInstanceOf(EntitlementRequiredError)
   })
 })

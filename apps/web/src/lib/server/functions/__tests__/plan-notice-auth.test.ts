@@ -133,7 +133,7 @@ describe('getPlanNotice — the trial countdown', () => {
     enabled: true,
     projection: {
       version: 1,
-      effectivePlan: 'pro',
+      effectivePlan: 'business',
       trialStartedAt: STARTED,
       trialExpiresAt: ENDS,
       subscriptionStatus: null,
@@ -194,7 +194,7 @@ describe('getPlanNotice — the trial countdown', () => {
 
   it('keeps a persistent ended banner after expiry', async () => {
     vi.setSystemTime(AFTER)
-    hoisted.mockFetchCatalogue.mockResolvedValue({ lastTrialPlanId: 'pro' })
+    hoisted.mockFetchCatalogue.mockResolvedValue({ lastTrialPlanId: 'business' })
     hoisted.mockGetWorkspaceSettings.mockResolvedValue({ settings: { cloud: trialing } })
     await expect(getPlanNoticeHandler()).resolves.toEqual(
       expect.objectContaining({
@@ -207,7 +207,7 @@ describe('getPlanNotice — the trial countdown', () => {
 
   it('still shows the ended banner more than seven days later', async () => {
     vi.setSystemTime(new Date('2026-03-23T00:00:00.000Z'))
-    hoisted.mockFetchCatalogue.mockResolvedValue({ lastTrialPlanId: 'pro' })
+    hoisted.mockFetchCatalogue.mockResolvedValue({ lastTrialPlanId: 'business' })
     hoisted.mockGetWorkspaceSettings.mockResolvedValue({ settings: { cloud: trialing } })
     await expect(getPlanNoticeHandler()).resolves.toEqual(
       expect.objectContaining({

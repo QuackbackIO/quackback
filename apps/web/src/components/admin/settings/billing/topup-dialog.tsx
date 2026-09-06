@@ -26,7 +26,7 @@ export function TopUpDialog(props: {
   const packUnits = props.meter === 'email' ? catalogue.data?.emailTopUpPackUnits : null
   const priced = hasTopUpPackPrice(packCents)
   const total = priced ? packCents * packs : null
-  const title = props.meter === 'email' ? 'Top up emails' : 'Top up AI usage'
+  const title = props.meter === 'email' ? 'Top up emails' : 'Top up Quinn usage'
   const unitHint =
     props.meter === 'email' && packUnits
       ? `${packUnits.toLocaleString()} changelog and status-page emails per pack`

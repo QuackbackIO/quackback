@@ -29,13 +29,13 @@ describe('upgradeContextFor', () => {
   })
 
   it('withholds the trial while one is running, on a paid plan, with a live sub, or without canUpgrade', () => {
-    expect(upgradeContextFor(cloud({ trialActive: true, plan: 'growth' }))).toMatchObject({
-      currentPlan: 'growth',
+    expect(upgradeContextFor(cloud({ trialActive: true, plan: 'pro' }))).toMatchObject({
+      currentPlan: 'pro',
       currentPlanName: 'Pro',
       trialActive: true,
       trialEligible: false,
     })
-    expect(upgradeContextFor(cloud({ plan: 'pro' }))?.trialEligible).toBe(false)
+    expect(upgradeContextFor(cloud({ plan: 'business' }))?.trialEligible).toBe(false)
     expect(upgradeContextFor(cloud({ subscriptionStatus: 'active' }))?.trialEligible).toBe(false)
     expect(upgradeContextFor(cloud({ subscriptionStatus: 'past_due' }))?.trialEligible).toBe(false)
     expect(upgradeContextFor(cloud({ canUpgrade: false }))?.trialEligible).toBe(false)

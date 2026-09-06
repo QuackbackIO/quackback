@@ -97,7 +97,7 @@ describe('the defects that shipped', () => {
 
   it('agrees verb in the no-upgrade-available branch too', () => {
     // The "contact us" branch has its own copy path and was equally broken.
-    const config = cloud('scale', { entitlements: { customDomain: false } })
+    const config = cloud('enterprise', { entitlements: { customDomain: false } })
     expect(buildRefusal(config, 'customDomain').message).toBe(
       'Custom domains are not included in your plan. Your workspace is on Enterprise. Contact us to enable it.'
     )

@@ -79,6 +79,36 @@ describe('PortalAccessGate — inline auth form', () => {
     render(<PortalAccessGate {...baseProps} />)
     expect(formProps.mode).toBe('login')
   })
+
+  it('ignores autoOpenSignin=signup and drops the switch link when password auth is off', () => {
+    render(
+      <PortalAccessGate
+        {...baseProps}
+        authConfig={{ found: true, oauth: { password: false, magicLink: true } }}
+        autoOpenSignin="signup"
+      />
+    )
+    expect(formProps.mode).toBe('login')
+    expect(formProps.onModeSwitch).toBeUndefined()
+  })
+
+  it('also collapses to login when signups are closed', () => {
+    render(
+      <PortalAccessGate
+        {...baseProps}
+        authConfig={{ found: true, oauth: { password: true }, openSignup: false }}
+        autoOpenSignin="signup"
+      />
+    )
+    expect(formProps.mode).toBe('login')
+    expect(formProps.onModeSwitch).toBeUndefined()
+  })
+
+  it('keeps the switch link when sign-up is a distinct flow', () => {
+    render(<PortalAccessGate {...baseProps} autoOpenSignin="signup" />)
+    expect(formProps.mode).toBe('signup')
+    expect(formProps.onModeSwitch).toBeTypeOf('function')
+  })
 })
 
 describe('PortalAccessGate — decorative backdrop', () => {

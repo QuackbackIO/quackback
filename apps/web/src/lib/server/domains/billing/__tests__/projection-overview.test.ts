@@ -37,7 +37,7 @@ describe('composeAiUsage', () => {
 describe('purchasedSeatsFromProjection', () => {
   const billed = {
     billedPer: 'seat' as const,
-    plan: 'pro' as const,
+    plan: 'business' as const,
     trialActive: false,
     planLimitsMaxTeamSeats: 10,
   }
@@ -62,10 +62,10 @@ describe('trialPlanIdForOverview', () => {
       trialPlanIdForOverview({
         trialActive: true,
         trialEnded: false,
-        plan: 'growth',
-        lastTrialPlanId: 'pro',
+        plan: 'pro',
+        lastTrialPlanId: 'business',
       })
-    ).toBe('growth')
+    ).toBe('pro')
   })
 
   it('uses lastTrialPlanId only in the ended window', () => {
@@ -74,9 +74,9 @@ describe('trialPlanIdForOverview', () => {
         trialActive: false,
         trialEnded: true,
         plan: 'free',
-        lastTrialPlanId: 'pro',
+        lastTrialPlanId: 'business',
       })
-    ).toBe('pro')
+    ).toBe('business')
   })
 
   it('ignores historical trial plans on a paid workspace', () => {
@@ -84,8 +84,8 @@ describe('trialPlanIdForOverview', () => {
       trialPlanIdForOverview({
         trialActive: false,
         trialEnded: false,
-        plan: 'scale',
-        lastTrialPlanId: 'growth',
+        plan: 'enterprise',
+        lastTrialPlanId: 'pro',
       })
     ).toBeNull()
   })

@@ -41,6 +41,7 @@ vi.mock('@/components/auth/auth-popover-context', () => ({
 vi.mock('@/components/auth/oauth-buttons', () => ({
   hasAnyPortalAuthMethod: () => false,
   resolveSoleOidcProvider: () => null,
+  hasDistinctSignup: () => true,
 }))
 
 vi.mock('@tanstack/react-query', () => ({

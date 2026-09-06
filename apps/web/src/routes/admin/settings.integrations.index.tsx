@@ -66,6 +66,8 @@ export function IntegrationsSettingsBody(props: {
   return props.enabled ? (
     <IntegrationList catalog={props.catalog} integrations={props.integrations} />
   ) : (
-    <UpgradeScreen description={describePlanUpgrade('Integrations', 'pro', { plural: true })} />
+    <UpgradeScreen
+      description={describePlanUpgrade('Integrations', 'business', { plural: true })}
+    />
   )
 }

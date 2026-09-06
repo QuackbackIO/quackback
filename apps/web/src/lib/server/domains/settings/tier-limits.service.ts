@@ -52,19 +52,19 @@ const PLAN_ONLY_FEATURES: Record<
     customCss: false,
     integrations: false,
   },
-  growth: {
+  pro: {
     analyticsExports: false,
     customColors: true,
     customCss: false,
     integrations: false,
   },
-  pro: {
+  business: {
     analyticsExports: true,
     customColors: true,
     customCss: true,
     integrations: true,
   },
-  scale: {
+  enterprise: {
     analyticsExports: true,
     customColors: true,
     customCss: true,

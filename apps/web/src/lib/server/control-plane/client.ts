@@ -156,9 +156,9 @@ export async function fetchBillingInvoices(): Promise<CustomerInvoice[]> {
   return Array.isArray(result.invoices) ? result.invoices : []
 }
 
-export type CanonicalCataloguePlanId = 'free' | 'growth' | 'pro' | 'scale'
-/** Incoming CP slugs; aliases are normalised to {@link CanonicalCataloguePlanId} on fetch. */
-export type CataloguePlanId = CanonicalCataloguePlanId | 'business' | 'enterprise'
+export type CanonicalCataloguePlanId = 'free' | 'pro' | 'business' | 'enterprise'
+/** Incoming CP slugs; leftover growth/scale are normalised to {@link CanonicalCataloguePlanId} on fetch. */
+export type CataloguePlanId = CanonicalCataloguePlanId | 'growth' | 'scale'
 export type PaidCataloguePlanId = Exclude<CataloguePlanId, 'free'>
 
 export type BillingCatalogue = {
@@ -215,7 +215,7 @@ function remapPlanKeyedRecord<T>(
   return next
 }
 
-/** Maps `business`/`enterprise` onto stored `pro`/`scale` without dropping the payload. */
+/** Maps leftover `growth`/`scale` onto stored `pro`/`enterprise` without dropping the payload. */
 export function normalizeBillingCatalogue(catalogue: BillingCatalogue): BillingCatalogue {
   return {
     ...catalogue,
@@ -264,7 +264,6 @@ export type HostedBillingSessionInput =
       brandingRemoval?: boolean
     }
   | { action: 'downgrade'; planId: 'free' }
-  | { action: 'seats'; quantity: number }
   | { action: 'topup'; meter: 'ai' | 'email'; packs: number }
   | { action: 'branding'; billingPeriod: 'monthly' | 'annual' }
   | { action: 'branding-remove' }
@@ -298,7 +297,6 @@ export async function createHostedBillingSession(
     throw new ControlPlaneUnavailableError()
   }
   if (
-    input.action === 'seats' ||
     input.action === 'branding' ||
     input.action === 'branding-remove' ||
     input.action === 'checkout'
@@ -309,29 +307,6 @@ export async function createHostedBillingSession(
     throw new ControlPlaneUnavailableError()
   }
   throw new ControlPlaneUnavailableError()
-}
-
-export type SeatsPreview = {
-  amountDueCents: number | null
-  currency?: 'usd'
-  periodEnd?: string
-}
-
-export async function fetchSeatsPreview(quantity: number): Promise<SeatsPreview> {
-  const result = await getWorkspaceControlPlane<{
-    amountDueCents?: unknown
-    currency?: unknown
-    periodEnd?: unknown
-  }>(`/api/v1/internal/billing/seats-preview?quantity=${encodeURIComponent(String(quantity))}`)
-  if (result.amountDueCents === null) return { amountDueCents: null }
-  if (typeof result.amountDueCents !== 'number' || !Number.isFinite(result.amountDueCents)) {
-    return { amountDueCents: null }
-  }
-  return {
-    amountDueCents: result.amountDueCents,
-    currency: result.currency === 'usd' ? 'usd' : undefined,
-    periodEnd: typeof result.periodEnd === 'string' ? result.periodEnd : undefined,
-  }
 }
 
 export type WorkspaceUsageReport = {

@@ -73,7 +73,7 @@ describe('createWorkflow — plan gate', () => {
   it('refuses on a plan without the entitlement and names the plan that has it', async () => {
     // Pro, not Free: the refusal has to name the cheapest plan that GRANTS
     // workflows (Business), not merely the next plan up from the workspace's own.
-    withCloud(storedCloud('growth'))
+    withCloud(storedCloud('pro'))
 
     const refusal = await createWorkflow(INPUT).catch((error: unknown) => error)
 
@@ -89,7 +89,7 @@ describe('createWorkflow — plan gate', () => {
   })
 
   it('creates the workflow on a plan that includes it', async () => {
-    withCloud(storedCloud('pro'))
+    withCloud(storedCloud('business'))
     await expect(createWorkflow(INPUT)).resolves.toMatchObject({ id: 'workflow_1' })
     expect(hoisted.mockInsert).toHaveBeenCalledOnce()
   })
@@ -98,7 +98,7 @@ describe('createWorkflow — plan gate', () => {
     withCloud(storedCloud('free', { workflows: true }))
     await expect(createWorkflow(INPUT)).resolves.toBeDefined()
 
-    withCloud(storedCloud('scale', { workflows: false }))
+    withCloud(storedCloud('enterprise', { workflows: false }))
     await expect(createWorkflow(INPUT)).rejects.toBeInstanceOf(EntitlementRequiredError)
   })
 })

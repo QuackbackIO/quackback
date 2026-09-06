@@ -30,7 +30,6 @@ import { CopyButton } from '@/components/shared/copy-button'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { Button } from '@/components/ui/button'
 import { InviteMemberDialog } from '@/components/auth/invite-member-dialog'
-import { AddSeatsDialog } from '@/components/admin/settings/billing/add-seats-dialog'
 import {
   type PendingInvitation,
   getExpiryText,
@@ -40,7 +39,7 @@ import {
 } from '@/components/admin/settings/team/pending-invitations'
 import { MemberActions } from '@/components/admin/settings/team/member-actions'
 import { CloudOwnershipActions } from '@/components/admin/settings/team/cloud-ownership-actions'
-import { seatInviteBlocked, seatAddAvailable } from '@/components/admin/settings/team/seat-usage'
+import { seatInviteBlocked } from '@/components/admin/settings/team/seat-usage'
 import { CUSTOM_ROLE_BADGE } from '@/components/admin/settings/team/role-ui'
 import type { UserId, PrincipalId } from '@quackback/ids'
 import { isAdmin } from '@/lib/shared/roles'
@@ -132,7 +131,6 @@ export function MembersTab({ workspaceName, currentMember }: MembersTabProps) {
 
   const [search, setSearch] = useState('')
   const [showInviteDialog, setShowInviteDialog] = useState(false)
-  const [showAddSeats, setShowAddSeats] = useState(false)
   const queryClient = useQueryClient()
   const [error, setError] = useState<string | null>(null)
   const [inviteLinkMap, setInviteLinkMap] = useState<Record<string, string>>({})
@@ -144,13 +142,10 @@ export function MembersTab({ workspaceName, currentMember }: MembersTabProps) {
   }, [formattedInvitations])
 
   const inviteBlocked = seatInviteBlocked(seatUsage)
-  const canAddSeat = seatAddAvailable(seatUsage)
   const seatLine = seatUsage?.limit != null ? `${seatUsage.used} of ${seatUsage.limit} seats` : null
   const seatDescription = seatLine
     ? inviteBlocked
-      ? canAddSeat
-        ? `${seatLine}. Add a seat to invite more.`
-        : `${seatLine}. Upgrade to invite more.`
+      ? `${seatLine}. Upgrade to invite more.`
       : seatLine
     : `Manage who has access to ${workspaceName}`
 
@@ -544,9 +539,7 @@ export function MembersTab({ workspaceName, currentMember }: MembersTabProps) {
         open={showInviteDialog}
         onClose={() => setShowInviteDialog(false)}
         onSuccess={() => queryClient.invalidateQueries({ queryKey: ['settings', 'team'] })}
-        onAddSeat={canAddSeat ? () => setShowAddSeats(true) : undefined}
       />
-      <AddSeatsDialog open={showAddSeats} onOpenChange={setShowAddSeats} />
     </div>
   )
 }

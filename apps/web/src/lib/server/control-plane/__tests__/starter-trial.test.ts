@@ -106,7 +106,7 @@ describe('reportStarterTrialIfDue', () => {
   it('skips complimentary grants and paid plans that omit trial timestamps', async () => {
     hoisted.getCloudConfig.mockResolvedValueOnce({
       enabled: true,
-      plan: 'scale',
+      plan: 'enterprise',
       trialStartedAt: null,
       trialActive: false,
       subscriptionStatus: null,
@@ -114,7 +114,7 @@ describe('reportStarterTrialIfDue', () => {
     await expect(reportStarterTrialIfDue()).resolves.toBe('skipped')
     hoisted.getCloudConfig.mockResolvedValueOnce({
       enabled: true,
-      plan: 'pro',
+      plan: 'business',
       trialStartedAt: null,
       trialActive: false,
       subscriptionStatus: 'active',

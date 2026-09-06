@@ -168,7 +168,7 @@ describe('POST /api/admin/assistant/transform — plan gate', () => {
       error: 'entitlement_required',
       entitlement: 'aiDrafts',
       currentPlan: 'free',
-      requiredPlan: 'growth',
+      requiredPlan: 'pro',
       requiredPlanName: 'Pro',
     })
     // No model work was started.
@@ -177,7 +177,7 @@ describe('POST /api/admin/assistant/transform — plan gate', () => {
   })
 
   it('runs the transform on a plan that includes it', async () => {
-    withCloud({ enabled: true, plan: 'growth' })
+    withCloud({ enabled: true, plan: 'pro' })
     const res = await handleTransform({ request: makeRequest() })
     expect(res.status).toBe(200)
     expect(mockRunCopilotTransform).toHaveBeenCalledOnce()
@@ -187,7 +187,7 @@ describe('POST /api/admin/assistant/transform — plan gate', () => {
     withCloud({ enabled: true, plan: 'free', entitlements: { aiDrafts: true } })
     expect((await handleTransform({ request: makeRequest() })).status).toBe(200)
 
-    withCloud({ enabled: true, plan: 'scale', entitlements: { aiDrafts: false } })
+    withCloud({ enabled: true, plan: 'enterprise', entitlements: { aiDrafts: false } })
     expect((await handleTransform({ request: makeRequest() })).status).toBe(402)
   })
 })

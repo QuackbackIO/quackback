@@ -35,7 +35,7 @@ export type EntitlementOverrides = Partial<Record<(typeof ENTITLEMENT_KEYS)[numb
  * A cloud-enabled workspace on `plan`.
  *
  * Entitlements default to exactly what the plan catalogue grants, so `'free'`
- * refuses and `'growth'` allows without the caller restating the matrix. Pass
+ * refuses and `'pro'` allows without the caller restating the matrix. Pass
  * `entitlements` to express the override case, where the control plane's
  * projection disagrees with the catalogue and must win.
  */

@@ -310,7 +310,7 @@ describe.skipIf(!fixture.available)('resolveConditionContext (real DB, rolled ba
       .insert(companies)
       .values({
         name: `Acme-${suffix()}`,
-        plan: 'growth',
+        plan: 'pro',
         customAttributes: { tier: 'gold', arr: 120000 },
       })
       .returning()

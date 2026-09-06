@@ -102,7 +102,7 @@ describe('macro library — plan gate', () => {
   })
 
   it('lists and creates macros on a plan that includes it', async () => {
-    withCloud(storedCloud('growth'))
+    withCloud(storedCloud('pro'))
     await expect(listMacros('support')).resolves.toEqual([ROW])
     await expect(createMacro(CREATE_INPUT)).resolves.toEqual(ROW)
     expect(hoisted.mockSelect).toHaveBeenCalledOnce()
@@ -113,7 +113,7 @@ describe('macro library — plan gate', () => {
     withCloud(storedCloud('free', { aiDrafts: true }))
     await expect(listMacros()).resolves.toEqual([ROW])
 
-    withCloud(storedCloud('scale', { aiDrafts: false }))
+    withCloud(storedCloud('enterprise', { aiDrafts: false }))
     await expect(listMacros()).rejects.toBeInstanceOf(EntitlementRequiredError)
   })
 })

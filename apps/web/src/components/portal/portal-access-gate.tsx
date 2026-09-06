@@ -32,6 +32,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { PortalAuthFormInline } from '@/components/auth/portal-auth-form-inline'
 import { headerForStep } from '@/components/auth/auth-step-header'
+import { hasDistinctSignup } from '@/components/auth/oauth-buttons'
 import type { AuthFormStep } from '@/components/auth/email-signin-types'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { signOut } from '@/lib/client/auth-client'
@@ -351,9 +352,15 @@ function GateCard({
   // check — never trust the prop directly at the navigation site.
   const safeCallback = isSafeCallbackUrl(callbackUrl) ? callbackUrl : undefined
 
+  // Sign-up mode only diverges from login when password auth is on and signups
+  // are open; otherwise there is one flow, so pin to login and hide the switch.
+  const distinctSignup = hasDistinctSignup(authConfig)
+
   // The embedded form's mode (login/signup) and current step. Mode seeds from
   // the ?auth prompt; the form drives both via onModeSwitch / onContextChange.
-  const [mode, setMode] = useState<'login' | 'signup'>(autoOpenSignin ?? 'login')
+  const [mode, setMode] = useState<'login' | 'signup'>(
+    distinctSignup ? (autoOpenSignin ?? 'login') : 'login'
+  )
   const [stepCtx, setStepCtx] = useState<{ step: AuthFormStep; email: string }>({
     step: 'credentials',
     email: '',
@@ -476,7 +483,7 @@ function GateCard({
                 authConfig={authConfig}
                 workspaceName={workspaceName}
                 callbackUrl={safeCallback}
-                onModeSwitch={setMode}
+                onModeSwitch={distinctSignup ? setMode : undefined}
                 onContextChange={setStepCtx}
               />
             </div>

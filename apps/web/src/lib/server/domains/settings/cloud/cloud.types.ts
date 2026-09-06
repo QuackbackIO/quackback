@@ -16,19 +16,20 @@ import type { TierFeatureFlags } from '../tier-limits.types'
  * need a bespoke arrangement express it as explicit entitlement overrides on
  * top of a catalogue plan, not as a new plan id.
  *
- * Stored and projected ids stay `growth` / `pro` / `scale` until later remap
- * steps. Incoming CP/checkout slugs `business` and `enterprise` are aliases of
- * today's `pro` (Business) and `scale` (Enterprise); {@link canonicalPlanId}
- * maps them before catalogue lookup or storage.
+ * Canonical ids are `free` / `pro` / `business` / `enterprise`, matching
+ * the control plane after B4. Incoming leftover `growth` is Pro (the
+ * $29 / 5-seat SKU). Incoming `scale` is Enterprise. {@link canonicalPlanId}
+ * maps those aliases before catalogue lookup or storage. `pro` is the
+ * entry tier — do not map it to Business.
  */
-export const PLAN_IDS = ['free', 'growth', 'pro', 'scale'] as const
+export const PLAN_IDS = ['free', 'pro', 'business', 'enterprise'] as const
 
 export type PlanId = (typeof PLAN_IDS)[number]
 
-/** Incoming slugs that mean a canonical {@link PlanId} until later B steps. */
+/** Leftover slugs that still mean a canonical {@link PlanId}. */
 export const PLAN_ID_ALIASES = {
-  business: 'pro',
-  enterprise: 'scale',
+  growth: 'pro',
+  scale: 'enterprise',
 } as const satisfies Record<string, PlanId>
 
 export type PlanIdAlias = keyof typeof PLAN_ID_ALIASES
@@ -38,8 +39,8 @@ export type PlanIdAlias = keyof typeof PLAN_ID_ALIASES
  * Unknown strings are returned as-is; {@link isPlanId} is the closed-set guard.
  */
 export function canonicalPlanId(id: string): PlanId {
-  if (id === 'business') return 'pro'
-  if (id === 'enterprise') return 'scale'
+  if (id === 'growth') return 'pro'
+  if (id === 'scale') return 'enterprise'
   return id as PlanId
 }
 
@@ -235,8 +236,8 @@ export const PLAN_CATALOGUE: Record<PlanId, PlanDefinition> = {
     rank: 0,
     grants: [],
   },
-  growth: {
-    id: 'growth',
+  pro: {
+    id: 'pro',
     article: 'a',
     name: 'Pro',
     rank: 1,
@@ -250,8 +251,8 @@ export const PLAN_CATALOGUE: Record<PlanId, PlanDefinition> = {
       'webhooks',
     ],
   },
-  pro: {
-    id: 'pro',
+  business: {
+    id: 'business',
     article: 'a',
     name: 'Business',
     rank: 2,
@@ -266,8 +267,8 @@ export const PLAN_CATALOGUE: Record<PlanId, PlanDefinition> = {
       'workflows',
     ],
   },
-  scale: {
-    id: 'scale',
+  enterprise: {
+    id: 'enterprise',
     article: 'an',
     name: 'Enterprise',
     rank: 3,

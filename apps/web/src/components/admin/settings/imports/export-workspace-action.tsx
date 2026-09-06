@@ -65,7 +65,7 @@ export function ExportWorkspaceAction() {
       <UpgradeModal
         open={upgradeOpen}
         onOpenChange={setUpgradeOpen}
-        description={describePlanUpgrade('Data export', 'pro')}
+        description={describePlanUpgrade('Data export', 'business')}
       />
     </div>
   )

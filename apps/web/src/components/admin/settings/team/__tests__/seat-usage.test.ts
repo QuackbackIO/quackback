@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { seatAddAvailable, seatInviteBlocked } from '../seat-usage'
+import { seatInviteBlocked } from '../seat-usage'
 
 describe('seatInviteBlocked', () => {
   it('is open when there is no cap', () => {
@@ -14,13 +14,5 @@ describe('seatInviteBlocked', () => {
 
   it('locks when pending invites fill the last purchased seats', () => {
     expect(seatInviteBlocked({ used: 10, limit: 10, members: 8, pendingInvites: 2 })).toBe(true)
-  })
-})
-
-describe('seatAddAvailable', () => {
-  it('is true only when the server marked the seat purchase path', () => {
-    expect(seatAddAvailable({ used: 10, limit: 10, addSeatAvailable: true })).toBe(true)
-    expect(seatAddAvailable({ used: 1, limit: 1, addSeatAvailable: false })).toBe(false)
-    expect(seatAddAvailable(undefined)).toBe(false)
   })
 })

@@ -19,7 +19,7 @@ describe('isTrialEnded', () => {
   it('is false while the trial is still running', () => {
     expect(
       isTrialEnded({
-        plan: 'growth',
+        plan: 'pro',
         trialActive: true,
         trialExpiresAt: '2026-08-22T00:00:00.000Z',
         status: null,

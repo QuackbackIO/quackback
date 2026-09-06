@@ -87,7 +87,7 @@ describe('updateDeveloperConfig — mcpServer entitlement', () => {
         requiredPlanArticle: 'a',
         currentPlan: 'free',
         currentPlanName: 'Free',
-        requiredPlan: 'growth',
+        requiredPlan: 'pro',
         requiredPlanName: 'Pro',
       })
     )

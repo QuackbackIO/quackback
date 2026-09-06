@@ -13,7 +13,6 @@ import {
   deriveControlPlaneCredential,
   fetchBillingCatalogue,
   fetchOwnerWorkspaces,
-  fetchSeatsPreview,
   leaveCloudWorkspace,
   pushWorkspaceMembership,
   wipeCloudWorkspace,
@@ -101,17 +100,28 @@ describe('workspace control-plane credential', () => {
     expect(init.body).toBeUndefined()
   })
 
-  it('normalises business/enterprise catalogue slugs to pro/scale', () => {
+  it('keeps pro/business/enterprise catalogue slugs and maps leftover growth/scale', () => {
     const normalised = normalizeBillingCatalogue({
       version: 1,
       currency: 'usd',
       annualDiscountMonths: 2,
-      recommendedPlanId: 'business',
+      recommendedPlanId: 'pro',
       brandingRemoval: { monthlyCents: 5900, annualCents: 59000 },
-      lastTrialPlanId: 'enterprise',
-      trialedPlanIds: ['business', 'pro'],
-      aiIncludedCentsPerMonth: { business: 3000, enterprise: 10000 },
+      lastTrialPlanId: 'scale',
+      trialedPlanIds: ['pro', 'business'],
+      aiIncludedCentsPerMonth: { pro: 1000, business: 3000, scale: 10000 },
       plans: [
+        {
+          id: 'pro',
+          name: 'Pro',
+          rank: 1,
+          priceMonthlyCents: 3700,
+          priceYearlyCents: 34800,
+          billedPer: 'workspace',
+          bestFor: 'Small teams',
+          highlights: [],
+          recommended: true,
+        },
         {
           id: 'business',
           name: 'Business',
@@ -124,7 +134,7 @@ describe('workspace control-plane credential', () => {
           recommended: false,
         },
         {
-          id: 'enterprise',
+          id: 'scale',
           name: 'Enterprise',
           rank: 3,
           priceMonthlyCents: 12900,
@@ -137,10 +147,14 @@ describe('workspace control-plane credential', () => {
       ],
     })
     expect(normalised.recommendedPlanId).toBe('pro')
-    expect(normalised.lastTrialPlanId).toBe('scale')
-    expect(normalised.trialedPlanIds).toEqual(['pro'])
-    expect(normalised.aiIncludedCentsPerMonth).toEqual({ pro: 3000, scale: 10000 })
-    expect(normalised.plans.map((plan) => plan.id)).toEqual(['pro', 'scale'])
+    expect(normalised.lastTrialPlanId).toBe('enterprise')
+    expect(normalised.trialedPlanIds).toEqual(['pro', 'business'])
+    expect(normalised.aiIncludedCentsPerMonth).toEqual({
+      pro: 1000,
+      business: 3000,
+      enterprise: 10000,
+    })
+    expect(normalised.plans.map((plan) => plan.id)).toEqual(['pro', 'business', 'enterprise'])
   })
 
   it('forwards checkout and trial aliases as canonical plan ids', async () => {
@@ -149,21 +163,28 @@ describe('workspace control-plane credential', () => {
     )
     await createHostedBillingSession({
       action: 'checkout',
-      planId: 'enterprise',
+      planId: 'scale',
       billingPeriod: 'annual',
     })
     const [, checkoutInit] = hoisted.fetch.mock.calls[0] as [URL, RequestInit]
     expect(JSON.parse(String(checkoutInit.body))).toMatchObject({
       action: 'checkout',
-      planId: 'scale',
+      planId: 'enterprise',
     })
 
     hoisted.fetch.mockResolvedValue(
       new Response(JSON.stringify({ status: 'started' }), { status: 200 })
     )
-    await startWorkspaceTrial('business')
+    await startWorkspaceTrial('pro')
     const [, trialInit] = hoisted.fetch.mock.calls[1] as [URL, RequestInit]
     expect(JSON.parse(String(trialInit.body))).toEqual({ planId: 'pro' })
+
+    hoisted.fetch.mockResolvedValue(
+      new Response(JSON.stringify({ status: 'started' }), { status: 200 })
+    )
+    await startWorkspaceTrial('growth')
+    const [, leftoverTrial] = hoisted.fetch.mock.calls[2] as [URL, RequestInit]
+    expect(JSON.parse(String(leftoverTrial.body))).toEqual({ planId: 'pro' })
   })
 
   it('lists owner workspaces over GET without a workspace id', async () => {
@@ -215,39 +236,6 @@ describe('workspace control-plane credential', () => {
       boardCount: 1,
     })
     expect(String(init.body)).not.toContain('workspaceId')
-  })
-
-  it('loads a seats preview over GET', async () => {
-    hoisted.fetch.mockResolvedValue(
-      new Response(
-        JSON.stringify({ amountDueCents: 3156, currency: 'usd', periodEnd: '2026-09-12' }),
-        { status: 200 }
-      )
-    )
-    await expect(fetchSeatsPreview(12)).resolves.toEqual({
-      amountDueCents: 3156,
-      currency: 'usd',
-      periodEnd: '2026-09-12',
-    })
-    const [url, init] = hoisted.fetch.mock.calls[0] as [URL, RequestInit]
-    expect(String(url)).toContain('/api/v1/internal/billing/seats-preview?quantity=12')
-    expect(init.method).toBe('GET')
-  })
-
-  it('treats a null seats preview as omitted due-today', async () => {
-    hoisted.fetch.mockResolvedValue(
-      new Response(JSON.stringify({ amountDueCents: null }), { status: 200 })
-    )
-    await expect(fetchSeatsPreview(12)).resolves.toEqual({ amountDueCents: null })
-  })
-
-  it('returns updated when a seat quantity change does not need checkout', async () => {
-    hoisted.fetch.mockResolvedValue(
-      new Response(JSON.stringify({ status: 'updated' }), { status: 200 })
-    )
-    await expect(createHostedBillingSession({ action: 'seats', quantity: 12 })).resolves.toEqual({
-      status: 'updated',
-    })
   })
 
   it('pushes desired seats without a workspace authority field', async () => {

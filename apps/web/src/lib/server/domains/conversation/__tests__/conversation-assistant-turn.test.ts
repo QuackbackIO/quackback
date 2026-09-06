@@ -350,7 +350,7 @@ describe('runAssistantTurnForConversation gate', () => {
         requiredPlanArticle: 'a',
         currentPlan: 'free',
         currentPlanName: 'Free',
-        requiredPlan: 'growth',
+        requiredPlan: 'pro',
         requiredPlanName: 'Pro',
       })
     )

@@ -111,7 +111,7 @@ const PROJECTED_LIMITS: ProjectedLimits = {
 
 const PROJECTION: BillingProjection = {
   version: 1,
-  effectivePlan: 'pro',
+  effectivePlan: 'business',
   trialStartedAt: '2026-08-01T00:00:00.000Z',
   trialExpiresAt: '2026-08-15T00:00:00.000Z',
   subscriptionStatus: null,
@@ -198,14 +198,26 @@ describe('projected numeric limits', () => {
     expect(parseBillingProjection({ ...PROJECTION, trialExpiresAt: 'August 15' })).toBeNull()
   })
 
-  it('normalises business/enterprise projection slugs to pro/scale', () => {
+  it('keeps pro/business/enterprise projection slugs and maps leftover growth/scale', () => {
     expect(parseBillingProjection({ ...PROJECTION, effectivePlan: 'business' })).toEqual({
       ...PROJECTION,
-      effectivePlan: 'pro',
+      effectivePlan: 'business',
     })
     expect(parseBillingProjection({ ...PROJECTION, effectivePlan: 'enterprise' })).toEqual({
       ...PROJECTION,
-      effectivePlan: 'scale',
+      effectivePlan: 'enterprise',
+    })
+    expect(parseBillingProjection({ ...PROJECTION, effectivePlan: 'pro' })).toEqual({
+      ...PROJECTION,
+      effectivePlan: 'pro',
+    })
+    expect(parseBillingProjection({ ...PROJECTION, effectivePlan: 'growth' })).toEqual({
+      ...PROJECTION,
+      effectivePlan: 'pro',
+    })
+    expect(parseBillingProjection({ ...PROJECTION, effectivePlan: 'scale' })).toEqual({
+      ...PROJECTION,
+      effectivePlan: 'enterprise',
     })
   })
 
@@ -244,25 +256,27 @@ describe('resolveEffectiveTierLimits (cloud, no operator row)', () => {
     expect(effective.features.integrations).toBe(true)
   })
 
-  it('keeps Business/Enterprise aliases on the same PLAN_ONLY_FEATURES as pro/scale', () => {
-    const business = parseBillingProjection({ ...PROJECTION, effectivePlan: 'business' })
+  it('maps leftover growth/scale onto pro/enterprise PLAN_ONLY_FEATURES', () => {
+    const pro = parseBillingProjection({ ...PROJECTION, effectivePlan: 'pro' })
+    const growth = parseBillingProjection({ ...PROJECTION, effectivePlan: 'growth' })
+    const scale = parseBillingProjection({ ...PROJECTION, effectivePlan: 'scale' })
     const enterprise = parseBillingProjection({ ...PROJECTION, effectivePlan: 'enterprise' })
-    expect(business).not.toBeNull()
+    expect(pro).not.toBeNull()
+    expect(growth).not.toBeNull()
+    expect(scale).not.toBeNull()
     expect(enterprise).not.toBeNull()
-    const fromBusiness = resolveEffectiveTierLimits(null, business, beforeExpiry)
-    const fromPro = resolveEffectiveTierLimits(null, PROJECTION, beforeExpiry)
+    const fromPro = resolveEffectiveTierLimits(null, pro, beforeExpiry)
+    const fromGrowth = resolveEffectiveTierLimits(null, growth, beforeExpiry)
+    const fromScale = resolveEffectiveTierLimits(null, scale, beforeExpiry)
     const fromEnterprise = resolveEffectiveTierLimits(null, enterprise, beforeExpiry)
-    const fromScale = resolveEffectiveTierLimits(
-      null,
-      { ...PROJECTION, effectivePlan: 'scale' },
-      beforeExpiry
-    )
-    expect(fromBusiness.features).toEqual(fromPro.features)
-    expect(fromEnterprise.features).toEqual(fromScale.features)
+    expect(fromPro.features).toEqual(fromGrowth.features)
+    expect(fromScale.features).toEqual(fromEnterprise.features)
+    expect(fromPro.features.integrations).toBe(false)
+    expect(fromEnterprise.features.integrations).toBe(true)
   })
 
   it('keeps Growth feature flags closed for keys that are not entitlements', () => {
-    const growth: BillingProjection = { ...PROJECTION, effectivePlan: 'growth' }
+    const growth: BillingProjection = { ...PROJECTION, effectivePlan: 'pro' }
     const effective = resolveEffectiveTierLimits(null, growth, beforeExpiry)
     expect(effective.features.analyticsExports).toBe(false)
     expect(effective.features.integrations).toBe(false)

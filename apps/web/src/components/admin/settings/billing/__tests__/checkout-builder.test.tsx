@@ -8,6 +8,7 @@ import { CheckoutBuilder, type CheckoutSelection } from '../checkout-builder'
 
 vi.mock('../free-downgrade-dialog', () => ({
   FreeDowngradeDialog: () => <p>downgrade dialog</p>,
+  PlanDowngradeDialog: () => <p>downgrade dialog</p>,
 }))
 
 const catalogue: BillingCatalogue = {
@@ -31,34 +32,34 @@ const catalogue: BillingCatalogue = {
       recommended: false,
     },
     {
-      id: 'growth',
+      id: 'pro',
       name: 'Pro',
       rank: 1,
-      priceMonthlyCents: 2900,
-      priceYearlyCents: 29000,
-      billedPer: 'seat',
+      priceMonthlyCents: 3700,
+      priceYearlyCents: 34800,
+      billedPer: 'workspace',
       bestFor: 'For small teams',
       highlights: ['Custom domain'],
       recommended: false,
     },
     {
-      id: 'pro',
+      id: 'business',
       name: 'Business',
       rank: 2,
-      priceMonthlyCents: 5900,
-      priceYearlyCents: 59000,
-      billedPer: 'seat',
+      priceMonthlyCents: 7500,
+      priceYearlyCents: 70800,
+      billedPer: 'workspace',
       bestFor: 'For inbox teams',
       highlights: ['Workflows & SLAs', 'Moderation'],
       recommended: true,
     },
     {
-      id: 'scale',
+      id: 'enterprise',
       name: 'Enterprise',
       rank: 3,
-      priceMonthlyCents: 11500,
-      priceYearlyCents: 106800,
-      billedPer: 'seat',
+      priceMonthlyCents: 12900,
+      priceYearlyCents: 118800,
+      billedPer: 'workspace',
       bestFor: 'For compliance needs',
       highlights: ['SSO', 'Audit log'],
       recommended: false,
@@ -77,9 +78,9 @@ const freeOverview: BillingProjectionOverview = {
   canUpgrade: true,
   canManageBilling: false,
   purchasablePlans: [
-    { id: 'growth', name: 'Pro' },
-    { id: 'pro', name: 'Business' },
-    { id: 'scale', name: 'Enterprise' },
+    { id: 'pro', name: 'Pro' },
+    { id: 'business', name: 'Business' },
+    { id: 'enterprise', name: 'Enterprise' },
   ],
   seats: { used: 3, pending: 1, members: 2, purchased: null },
   ai: null,
@@ -88,11 +89,11 @@ const freeOverview: BillingProjectionOverview = {
 
 const proOverview: BillingProjectionOverview = {
   ...freeOverview,
-  plan: 'pro',
+  plan: 'business',
   planName: 'Business',
   status: 'active',
   canManageBilling: true,
-  seats: { used: 7, pending: 1, members: 6, purchased: 10 },
+  seats: { used: 7, pending: 1, members: 6, purchased: null },
 }
 
 function renderBuilder(
@@ -104,7 +105,7 @@ function renderBuilder(
     <CheckoutBuilder
       overview={overview}
       catalogue={catalogue}
-      selection={{ plan: 'pro', period: 'annual', seats: 3, branding: false, ...selection }}
+      selection={{ plan: 'business', period: 'annual', branding: false, ...selection }}
       onChange={onChange}
     />
   )
@@ -119,24 +120,24 @@ function checkoutForm(): HTMLFormElement | null {
 }
 
 describe('CheckoutBuilder', () => {
-  it('summarises the preselected plan, cycle and seats and hands off to checkout', () => {
+  it('summarises the preselected plan and cycle and hands off to checkout', () => {
     renderBuilder(freeOverview)
 
     expect(screen.getByRole('radio', { name: /Yearly/ })).toHaveAttribute('aria-checked', 'true')
-    expect(screen.getByRole('radio', { name: /Save \$118\/yr/ })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /Save \$192\/yr/ })).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: /^Business/ })).toHaveAttribute('aria-checked', 'true')
-    expect(screen.getByText('Workflows & SLAs')).toBeInTheDocument()
+    expect(screen.getAllByText('View & compare features').length).toBeGreaterThan(0)
 
     const summary = screen.getByRole('complementary')
     expect(within(summary).getByText('Business plan')).toBeInTheDocument()
-    expect(within(summary).getByText('3 seats × $590/year')).toBeInTheDocument()
-    expect(within(summary).getAllByText('$1,770/year')).toHaveLength(2)
-    expect(within(summary).getByText('$148/mo')).toBeInTheDocument()
+    expect(within(summary).getByText('Workspace × $708/year')).toBeInTheDocument()
+    expect(within(summary).getAllByText('$708/year')).toHaveLength(2)
+    expect(within(summary).getByText('$59/mo')).toBeInTheDocument()
 
     const form = checkoutForm()
-    expect(form?.querySelector('input[name="planId"]')).toHaveValue('pro')
+    expect(form?.querySelector('input[name="planId"]')).toHaveValue('business')
     expect(form?.querySelector('input[name="billingPeriod"]')).toHaveValue('annual')
-    expect(form?.querySelector('input[name="quantity"]')).toHaveValue('3')
+    expect(form?.querySelector('input[name="quantity"]')).toHaveValue('1')
     expect(within(summary).getByRole('button', { name: 'Continue to payment' })).toBeEnabled()
   })
 
@@ -152,29 +153,19 @@ describe('CheckoutBuilder', () => {
     fireEvent.click(screen.getByRole('radio', { name: /Monthly/ }))
     expect(onChange).toHaveBeenCalledWith({ period: 'monthly' })
     fireEvent.click(screen.getByRole('radio', { name: /^Enterprise/ }))
-    expect(onChange).toHaveBeenCalledWith({ plan: 'scale' })
-    fireEvent.click(screen.getByRole('button', { name: 'More seats' }))
-    expect(onChange).toHaveBeenCalledWith({ seats: 4 })
-  })
-
-  it('floors seats at live usage and says why', () => {
-    renderBuilder(freeOverview, { seats: 1 })
-    expect(screen.getByRole('button', { name: 'Fewer seats' })).toBeDisabled()
-    expect(screen.getByText(/min\. 3 — already in use/)).toBeInTheDocument()
-    expect(screen.getByText(/You have 2 members and 1 pending invite/)).toBeInTheDocument()
-    expect(checkoutForm()?.querySelector('input[name="quantity"]')).toHaveValue('3')
+    expect(onChange).toHaveBeenCalledWith({ plan: 'enterprise' })
   })
 
   it('prices monthly without a monthly-equivalent line', () => {
     renderBuilder(freeOverview, { period: 'monthly' })
     const summary = screen.getByRole('complementary')
-    expect(within(summary).getByText('3 seats × $59/mo')).toBeInTheDocument()
-    expect(within(summary).getAllByText('$177/mo')).toHaveLength(2)
+    expect(within(summary).getByText('Workspace × $75/mo')).toBeInTheDocument()
+    expect(within(summary).getAllByText('$75/mo')).toHaveLength(2)
     expect(within(summary).queryByText('Monthly equivalent')).not.toBeInTheDocument()
   })
 
   it('marks the current plan and disables checkout for it', () => {
-    renderBuilder(proOverview, { plan: 'pro', seats: 7 })
+    renderBuilder(proOverview, { plan: 'business' })
     expect(screen.getAllByText('Current').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: 'Current plan' })).toBeDisabled()
     expect(checkoutForm()).toBeNull()
@@ -182,17 +173,23 @@ describe('CheckoutBuilder', () => {
   })
 
   it('explains pro-rata and end-of-period timing when moving between paid plans', () => {
-    renderBuilder(proOverview, { plan: 'scale', seats: 7 })
+    renderBuilder(proOverview, { plan: 'enterprise' })
     expect(screen.getByText(/Moving up applies now, billed pro-rata/)).toBeInTheDocument()
-    renderBuilder(proOverview, { plan: 'growth', seats: 7 })
+    renderBuilder(proOverview, { plan: 'pro' })
     expect(screen.getByText(/takes effect at the end of the current period/)).toBeInTheDocument()
+  })
+
+  it('gates a lower paid plan behind the quota dialog instead of posting checkout', () => {
+    renderBuilder(proOverview, { plan: 'pro' })
+    const summary = screen.getByRole('complementary')
+    expect(checkoutForm()).toBeNull()
+    expect(within(summary).getByRole('button', { name: 'Switch to Pro' })).toBeInTheDocument()
   })
 
   it('asks for a plan when none is selected', () => {
     renderBuilder(freeOverview, { plan: null })
     expect(screen.getByText('Pick a plan to see your total.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Continue to payment' })).toBeDisabled()
-    expect(screen.queryByRole('heading', { name: 'Seats' })).not.toBeInTheDocument()
   })
 
   it('adds branding removal to the same checkout when ticked', () => {
@@ -210,17 +207,17 @@ describe('CheckoutBuilder', () => {
     const summary = screen.getByRole('complementary')
     expect(within(summary).getByText('Remove branding')).toBeInTheDocument()
     expect(within(summary).getByText('$590/year')).toBeInTheDocument()
-    expect(within(summary).getByText('$2,360/year')).toBeInTheDocument()
-    expect(within(summary).getByText('$197/mo')).toBeInTheDocument()
+    expect(within(summary).getByText('$1,298/year')).toBeInTheDocument()
+    expect(within(summary).getByText('$108/mo')).toBeInTheDocument()
     const form = checkoutForm()
-    expect(form?.querySelector('input[name="planId"]')).toHaveValue('pro')
+    expect(form?.querySelector('input[name="planId"]')).toHaveValue('business')
     expect(form?.querySelector('input[name="brandingRemoval"]')).toHaveValue('true')
   })
 
   it('sells the add-on on its own when the plan is the current one', () => {
-    renderBuilder(proOverview, { plan: 'pro', seats: 7, branding: true })
+    renderBuilder(proOverview, { plan: 'business', branding: true })
     const summary = screen.getByRole('complementary')
-    expect(within(summary).queryByText(/7 seats ×/)).not.toBeInTheDocument()
+    expect(within(summary).queryByText(/Workspace ×/)).not.toBeInTheDocument()
     expect(within(summary).getAllByText('$590/year')).toHaveLength(2)
     expect(checkoutForm()).toBeNull()
     const button = within(summary).getByRole('button', { name: 'Continue to payment' })
