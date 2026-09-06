@@ -91,20 +91,24 @@ export interface MergeAssessment {
 
 const CONFIDENCE_THRESHOLD = 0.75
 
-// Item fields are intentionally loose (not typed/required) rather than a
-// strict `z.object`: the old code tolerated individual malformed items by
-// skipping just that item (the typeof guards in the filter loop below), and
-// a strict per-item schema would instead fail the WHOLE batched response —
-// and thus the whole `chat()` call — over one bad item. `results` itself
-// gets `.catch([])` so a present-but-wrong-shaped `results` field degrades
-// to "no assessments" rather than failing the request; a genuinely missing
-// or non-object top level (e.g. a bare array, which older prompts/providers
-// could still emit) is treated as a parse failure by the catch in
-// `assessMergeCandidates`, matching the old code's parse-fail → `[]` branch.
-const MergeAssessmentResponseSchema = z.object({
-  results: z.array(z.record(z.string(), z.unknown())).catch([]),
+// Items are a strict object rather than a loose `z.record`. The loose form
+// tolerated a single malformed item without failing the whole batch, but zod
+// renders it with a `propertyNames` keyword that OpenAI's Structured Outputs
+// reject, so the request 400s before the model ever runs (#505). Under
+// structured outputs that tolerance is moot: the provider guarantees the shape.
+// `results` keeps `.catch([])`, so a present-but-wrong-shaped top level still
+// degrades to "no assessments" rather than failing the request. The `typeof`
+// guards in the filter loop below stay, they simply stop being load-bearing.
+const MergeAssessmentItemSchema = z.strictObject({
+  candidatePostId: z.string(),
+  isDuplicate: z.boolean(),
+  confidence: z.number(),
+  reasoning: z.string(),
 })
 
+const MergeAssessmentResponseSchema = z.object({
+  results: z.array(MergeAssessmentItemSchema).catch([]),
+})
 /**
  * Assess merge candidates using LLM verification.
  * Returns only confirmed duplicates above confidence threshold.
