@@ -1,3 +1,4 @@
+import { revokesSlackInstallation } from './revocation'
 import { toolPermissions } from '@/lib/server/domains/assistant/tool-permissions'
 import { createHash } from 'node:crypto'
 import { WebClient } from '@slack/web-api'
@@ -266,7 +267,7 @@ export async function handleSlackHookJob(job: ClaimedJob): Promise<void> {
   // event into this workspace, even though the provider signature is valid.
   if (typeof team !== 'string' || team !== installation.workspaceId) return
   const event = payload.event
-  if (kind === 'events' && ['app_uninstalled', 'tokens_revoked'].includes(event?.type)) {
+  if (kind === 'events' && revokesSlackInstallation(event, installation.botUserId)) {
     const { unregisterInstall } = await import('@/lib/server/integrations/install-registry')
     await unregisterInstall('slack', installation)
     await db
