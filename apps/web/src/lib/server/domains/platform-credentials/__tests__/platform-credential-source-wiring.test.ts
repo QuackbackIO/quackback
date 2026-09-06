@@ -14,6 +14,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import type { PrincipalId } from '@quackback/ids'
 
+const cpRequest = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/server/control-plane/client', () => ({ getWorkspaceControlPlane: cpRequest }))
 const mockCacheGet = vi.fn()
 const mockCacheSet = vi.fn()
 const mockCacheDel = vi.fn()
@@ -205,5 +207,49 @@ describe('platform credential source wiring — env (managed cloud)', () => {
     const { getConfiguredIntegrationTypes } = await import('../platform-credential.service')
     const result = await getConfiguredIntegrationTypes()
     expect([...result].sort()).toEqual(['auth_github', 'auth_sso', 'slack'])
+  })
+})
+
+describe('Cloud CP credential authority', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.stubEnv('QUACKBACK_TENANCY', 'pooled')
+    mockFindMany.mockResolvedValue([])
+  })
+  afterEach(() => vi.unstubAllEnvs())
+  it('locks Cloud providers even when absent and never falls back to tenant credentials', async () => {
+    cpRequest.mockResolvedValue({ credentials: null })
+    const service = await import('../platform-credential.service')
+    expect(await service.arePlatformCredentialsManaged('slack')).toBe(true)
+    expect(await service.getPlatformCredentials('slack')).toBeNull()
+    expect(mockFindFirst).not.toHaveBeenCalled()
+    await expect(
+      service.savePlatformCredentials({
+        integrationType: 'slack',
+        credentials: {},
+        principalId: 'principal_1' as PrincipalId,
+      })
+    ).rejects.toThrow('managed')
+    await expect(service.deletePlatformCredentials('slack')).rejects.toThrow('managed')
+  })
+  it('fails closed on CP outage', async () => {
+    cpRequest.mockRejectedValue(new Error('CP unavailable'))
+    const service = await import('../platform-credential.service')
+    await expect(service.getPlatformCredentials('slack')).rejects.toThrow('CP unavailable')
+    expect(mockFindFirst).not.toHaveBeenCalled()
+  })
+  it('excludes stale tenant shared-app credentials from discovery, preserving SSO and local-token integrations', async () => {
+    cpRequest.mockResolvedValue({ providers: ['slack'] })
+    mockFindMany.mockResolvedValue([
+      { integrationType: 'github' },
+      { integrationType: 'auth_sso' },
+      { integrationType: 'ntfy' },
+    ])
+    const service = await import('../platform-credential.service')
+    expect(await service.getConfiguredIntegrationTypes()).toEqual(
+      new Set(['slack', 'auth_sso', 'ntfy'])
+    )
+    expect(await service.arePlatformCredentialsManaged('auth_sso')).toBe(false)
+    expect(await service.arePlatformCredentialsManaged('ntfy')).toBe(false)
   })
 })

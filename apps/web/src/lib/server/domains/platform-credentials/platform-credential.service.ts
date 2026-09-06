@@ -5,13 +5,17 @@
  * enable integrations at the platform level. These are separate from per-instance
  * tokens stored in the integrations table.
  *
- * Reads are delegated to a CredentialSource chosen by config.platformCredentialsSource:
+ * Pooled Cloud uses CP's encrypted shared settings for the 16 OAuth apps.
+ * Other integration and auth credentials retain their workspace source.
+ * Single-tenancy reads use config.platformCredentialsSource:
  * - 'db'  (self-host, default): the integration_platform_credentials table + admin UI.
  * - 'env' (managed cloud): shared app creds from INTEGRATION_<PROVIDER>_<FIELD> env
  *   (projected from OpenBao via ESO). In 'env' mode writes are refused — the
  *   credentials are platform-managed, not editable per-workspace.
  */
 
+import { ControlPlaneCredentialSource } from './control-plane-source'
+import { CLOUD_INTEGRATION_FIELDS } from '@/lib/shared/integration-credentials'
 import { generateId, type PrincipalId } from '@quackback/ids'
 import { db, integrationPlatformCredentials, eq } from '@/lib/server/db'
 import { cacheGet, cacheSet, cacheDel, CACHE_KEYS } from '@/lib/server/cache'
@@ -40,6 +44,7 @@ export class PlatformCredentialsManagedError extends Error {
 }
 
 let _dbSource: DbCredentialSource | undefined
+const _controlPlaneSource = new ControlPlaneCredentialSource()
 let _envSource: EnvCredentialSource | undefined
 
 function dbSource(): DbCredentialSource {
@@ -48,6 +53,7 @@ function dbSource(): DbCredentialSource {
 
 /** The active source for *integration* credentials, per config.platformCredentialsSource. */
 function activeSource(): CredentialSource {
+  if (config.platformCredentialsSource === 'control-plane') return _controlPlaneSource
   if (config.platformCredentialsSource === 'env') {
     return (_envSource ??= new EnvCredentialSource())
   }
@@ -68,6 +74,8 @@ async function sourceForType(integrationType: string): Promise<CredentialSource>
 
 /** Only complete provider-specific environment credentials lock the settings UI. */
 export async function arePlatformCredentialsManaged(integrationType?: string): Promise<boolean> {
+  if (integrationType && config.platformCredentialsSource === 'control-plane')
+    return Object.hasOwn(CLOUD_INTEGRATION_FIELDS, integrationType)
   if (
     !integrationType ||
     isAuthCredentialType(integrationType) ||
@@ -180,13 +188,23 @@ async function computeConfiguredIntegrationTypes(): Promise<Set<string>> {
   // list from before a provider was added, or a removed one). The cost is an env scan
   // plus one auth_* DB lookup — cheap, and already gated by the getWorkspaceSettings
   // cache upstream.
-  if (config.platformCredentialsSource === 'env') {
+  if (
+    config.platformCredentialsSource === 'env' ||
+    config.platformCredentialsSource === 'control-plane'
+  ) {
     const types = await activeSource().listConfigured()
     // auth_* credentials are always DB-backed (the env source can't enumerate them);
     // union them in so SSO / social-login registration still resolves.
     const dbTypes = await dbSource().listConfigured()
     for (const t of dbTypes) {
-      if (!types.includes(t)) types.push(t)
+      if (
+        !types.includes(t) &&
+        !(
+          config.platformCredentialsSource === 'control-plane' &&
+          Object.hasOwn(CLOUD_INTEGRATION_FIELDS, t)
+        )
+      )
+        types.push(t)
     }
     return new Set(types)
   }

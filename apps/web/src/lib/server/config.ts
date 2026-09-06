@@ -599,9 +599,10 @@ export const config = {
   },
 
   // Platform (OAuth-app) credential source.
+  //   'control-plane' — pooled Cloud: shared app settings managed by CP.
   //   'db'  (default) — self-host: the integration_platform_credentials table + admin UI.
-  //   'env' — managed cloud: shared app creds from INTEGRATION_<PROVIDER>_<FIELD> env
-  //           (projected from OpenBao via ESO), like the CP's own STRIPE_SECRET_KEY.
+  //   'env' — optional single-tenancy: app creds from INTEGRATION_<PROVIDER>_<FIELD> env
+  //           supplied by the deployment environment.
   // Direct process.env read (like helpCenterDev) so it works without a full config load.
   get integrationOAuthGatewayUrl(): string | undefined {
     return process.env.INTEGRATION_OAUTH_GATEWAY_URL
@@ -610,7 +611,8 @@ export const config = {
     return process.env.INTEGRATION_GATEWAY_FORWARD_SECRET
   },
 
-  get platformCredentialsSource(): 'db' | 'env' {
+  get platformCredentialsSource(): 'db' | 'env' | 'control-plane' {
+    if (process.env.QUACKBACK_TENANCY === 'pooled') return 'control-plane'
     return process.env.PLATFORM_CREDENTIALS_SOURCE === 'env' ? 'env' : 'db'
   },
 

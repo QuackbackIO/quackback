@@ -4,19 +4,19 @@ This branch contains local implementation across tenant and control-plane worktr
 
 ## Environment and topology
 
-| Process                  | Variables                                                                                                                                                                                                                               |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| CP web/worker            | `REDIS_URL`, `INTEGRATION_GATEWAY_FORWARD_SECRET` (same random 32+ character secret as fleet), `HOOKS_SLACK_SIGNING_SECRET`                                                                                                             |
-| Fleet web **and** worker | `PLATFORM_CREDENTIALS_SOURCE=env`, `INTEGRATION_SLACK_CLIENT_ID`, `INTEGRATION_SLACK_CLIENT_SECRET`, `INTEGRATION_SLACK_SIGNING_SECRET`, `INTEGRATION_OAUTH_GATEWAY_URL=https://app.quackback.io`, `INTEGRATION_GATEWAY_FORWARD_SECRET` |
-| Self-hosted tenant       | Gateway variables unset; platform credentials entered in settings or environment                                                                                                                                                        |
+| Process                  | Variables                                                                                                                               |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| CP web/worker            | `REDIS_URL`, `INTEGRATION_GATEWAY_FORWARD_SECRET` (same random 32+ character secret as fleet), `INTEGRATION_CREDENTIALS_ENCRYPTION_KEY` |
+| Fleet web **and** worker | `INTEGRATION_OAUTH_GATEWAY_URL=https://app.quackback.io`, `INTEGRATION_GATEWAY_FORWARD_SECRET`                                          |
+| Self-hosted tenant       | Gateway variables unset; platform credentials entered in settings or environment                                                        |
 
-CP `CP_ROLE=all` runs the HTTP gateway and forwarder. If roles are split, run a `CP_ROLE=worker` process in addition to `web`; the web process alone only enqueues. Redis must be durable and reachable before enabling the provider hooks. OAuth bounce rate limiting also depends on Redis and fails closed on an outage. Client secrets belong only on the fleet, never CP.
+CP `CP_ROLE=all` runs the HTTP gateway and forwarder. If roles are split, run a `CP_ROLE=worker` process in addition to `web`; the web process alone only enqueues. Redis must be durable and reachable before enabling the provider hooks. OAuth bounce rate limiting also depends on Redis and fails closed on an outage. Shared client/signing credentials are managed in CP at Admin → Integrations as one encrypted JSON settings object. Pooled tenants read them through the authenticated internal API; only runtime processes receive provider values.
 
-Provider-specific complete environment credentials take precedence in `env` mode. Providers without complete environment credentials fall back to database credentials and remain editable. Auth-provider credentials retain their existing database source.
+Pooled tenants always use CP for the 16 shared OAuth apps, with no environment or tenant-DB fallback, including when CP is unavailable or a provider is removed. Self-hosted instances retain DB/env credentials. Workspace-specific API-token integrations and auth-provider credentials retain their existing source.
 
 ## Ordered gates
 
-1. Apply CP migration `0091_integration_installs.sql`, deploy the internal install API and OAuth bounce. Test real active and unknown hostnames, platform redirect aliases, unchanged callback queries and no-store responses. Compare the final deployed source SHA and image digest to this change.
+1. Apply CP migrations `0091_integration_installs.sql` and `0092_integration_credentials.sql`, configure the CP encryption key and populate the shared credential JSON object before tenant rollout, then deploy the internal install API and OAuth bounce. Test real active and unknown hostnames, platform redirect aliases, unchanged callback queries and no-store responses. Compare the final deployed source SHA and image digest to this change.
 2. Apply tenant migration `0274_slack_agent_gateway.sql`, deploy gateway-aware OAuth, credential fallback and registration. Verify Slack install/reconnect, notifications, and a second workspace's conflict response. Run the explicit backfill from a configured fleet process: `bun --tsconfig-override apps/web/tsconfig.json apps/web/scripts/backfill-integration-installs.ts`. It uses `runFleetPass`, prints succeeded/failed/skipped counts, and logs conflicts without stealing bindings. Reconcile conflicts manually. No backfill runs automatically on startup.
 3. Deploy CP receivers and forwarder. Confirm invalid Slack signatures return 401, a real signed challenge succeeds, and `hook-forward` is registered. Verify enqueue failure returns 503 and retries use current workspace routing. Verify dead letters are monitored.
 4. Apply the Slack manifest, keeping existing tenant OAuth redirect URLs during transition. Confirm request URL verification, command and shortcut registration, distribution settings and agent scopes in the Slack console.

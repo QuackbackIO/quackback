@@ -36,6 +36,10 @@ Validate representative workspaces with `EXPLAIN (ANALYZE, BUFFERS)`: nearest-ne
 
 Cloud fleets can set `INTEGRATION_OAUTH_GATEWAY_URL=https://app.quackback.io` to use a single OAuth callback origin for shared integration apps. Leave it unset for self-hosted installations. `INTEGRATION_GATEWAY_FORWARD_SECRET` authenticates app-level hooks forwarded by the control plane and is required for these hooks in pooled tenancy. Configure it on both fleet web and worker processes.
 
-With `PLATFORM_CREDENTIALS_SOURCE=env`, complete credentials for an individual provider are managed from environment variables; other providers fall back to database credentials. Slack uses `INTEGRATION_SLACK_CLIENT_ID`, `INTEGRATION_SLACK_CLIENT_SECRET`, and `INTEGRATION_SLACK_SIGNING_SECRET`. Existing tenant-registered resource webhooks retain their current routes and secrets.
+For single-tenancy deployments with `PLATFORM_CREDENTIALS_SOURCE=env`, complete credentials for an individual provider are managed from environment variables; other providers fall back to database credentials. Slack uses `INTEGRATION_SLACK_CLIENT_ID`, `INTEGRATION_SLACK_CLIENT_SECRET`, and `INTEGRATION_SLACK_SIGNING_SECRET`. Existing tenant-registered resource webhooks retain their current routes and secrets.
 
 See [Slack setup](./integrations/slack-app.md) and [Cloud rollout gates](./integrations/integration-gateway-rollout.md).
+
+### Cloud integration credential management
+
+For pooled Cloud deployments, manage shared OAuth app credentials in **quackback-cp → Admin → Integrations** as one JSON object grouped by provider. CP encrypts it at rest with `INTEGRATION_CREDENTIALS_ENCRYPTION_KEY` (set only on CP). Cloud runtimes use authenticated CP reads automatically, without provider credential environment variables or tenant database fallback. Self-hosted single-tenancy deployments retain the settings UI and optional `PLATFORM_CREDENTIALS_SOURCE=env` flow. See the [rollout runbook](./integrations/integration-gateway-rollout.md).
