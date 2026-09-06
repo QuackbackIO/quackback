@@ -6,6 +6,7 @@ export const SLACK_REQUIRED_SCOPES = [
   'channels:history',
   'groups:history',
   'chat:write',
+  'assistant:write',
   'team:read',
   'commands',
   'app_mentions:read',

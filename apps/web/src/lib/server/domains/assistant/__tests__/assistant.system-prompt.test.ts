@@ -110,6 +110,14 @@ describe('assistant production system prompt', () => {
         inabilitySemantics: 'cannot_answer',
         textAudience: 'teammate',
       }),
+      workspace_assistant: expect.objectContaining({
+        customerVoice: false,
+        contentAudience: 'team',
+        writeToolPolicy: 'propose',
+        pipelineStep: 'assistant',
+        inabilitySemantics: 'cannot_answer',
+        textAudience: 'teammate',
+      }),
     })
   })
 

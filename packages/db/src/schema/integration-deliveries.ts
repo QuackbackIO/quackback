@@ -7,7 +7,10 @@ export const integrationDeliveries = pgTable(
     receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    primaryKey({ columns: [table.provider, table.deliveryId] }),
+    primaryKey({
+      name: 'integration_deliveries_pkey',
+      columns: [table.provider, table.deliveryId],
+    }),
     index('integration_deliveries_received_idx').on(table.receivedAt),
   ]
 )

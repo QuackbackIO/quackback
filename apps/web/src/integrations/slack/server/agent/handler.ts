@@ -1,3 +1,4 @@
+import { toolPermissions } from '@/lib/server/domains/assistant/tool-permissions'
 import { createHash } from 'node:crypto'
 import { WebClient } from '@slack/web-api'
 import type { ChatStopStreamArguments } from '@slack/web-api'
@@ -137,7 +138,7 @@ export async function handleSlackDecision(
   if (
     !spec ||
     !['capture_feedback', 'create_ticket'].includes(spec.name) ||
-    spec.permissions.some((permission) => !can(actor, permission))
+    toolPermissions(spec, true).some((permission) => !can(actor, permission))
   ) {
     await ephemeral(client, channel, user, 'You do not have permission to decide this action.')
     return
@@ -266,6 +267,8 @@ export async function handleSlackHookJob(job: ClaimedJob): Promise<void> {
   if (typeof team !== 'string' || team !== installation.workspaceId) return
   const event = payload.event
   if (kind === 'events' && ['app_uninstalled', 'tokens_revoked'].includes(event?.type)) {
+    const { unregisterInstall } = await import('@/lib/server/integrations/install-registry')
+    await unregisterInstall('slack', installation)
     await db
       .update(integrations)
       .set({
@@ -475,7 +478,6 @@ async function handleSlackQuestion(input: {
         await stream.stop({
           markdown_text: `I don’t have a reply for that message.\n_AI-generated · ${escapeSlack(state.config.identity.name)} for ${escapeSlack(state.workspaceName)}_`,
         })
-        stopped = true
       }
       return
     }

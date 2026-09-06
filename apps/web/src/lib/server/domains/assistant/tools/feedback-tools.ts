@@ -1,3 +1,6 @@
+import { withGateEnvelope } from '../tool-output'
+import { can } from '@/lib/server/policy/authorize'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { toolDefinition } from '@tanstack/ai'
 import { z } from 'zod'
 import {
@@ -31,26 +34,33 @@ export const listFeedbackTool = toolDefinition({
   description:
     'List feedback with filters, ordered by votes or recency. Returns citable post IDs. tagSlug matches the tag name with spaces replaced by hyphens.',
   inputSchema: listInput,
-  outputSchema: z.object({
-    items: z.array(
-      z.object({
-        id: z.string(),
-        title: z.string(),
-        url: z.string(),
-        votes: z.number(),
-        status: z.string().nullable(),
-        board: z.string(),
-        created: z.string(),
-        summary: z.string(),
-      })
-    ),
-  }),
+  outputSchema: withGateEnvelope(
+    z.object({
+      items: z.array(
+        z.object({
+          id: z.string(),
+          title: z.string(),
+          url: z.string(),
+          votes: z.number(),
+          status: z.string().nullable(),
+          board: z.string(),
+          created: z.string(),
+          summary: z.string(),
+        })
+      ),
+    })
+  ),
 })
 export async function executeListFeedback(
   input: z.input<typeof listInput>,
   ctx: AssistantToolContext
 ) {
-  if (ctx.audience !== 'team' || !ctx.knowledge.sources.has('post')) return { items: [] }
+  if (
+    ctx.audience !== 'team' ||
+    !ctx.knowledge.sources.has('post') ||
+    !can(ctx.actor, PERMISSIONS.POST_VIEW_PRIVATE)
+  )
+    return { items: [] }
   const args = listInput.parse(input)
   const board = args.boardSlug
     ? await db.query.boards.findFirst({ where: eq(boards.slug, args.boardSlug) })
@@ -105,23 +115,30 @@ export const feedbackStatsTool = toolDefinition({
   description:
     'Count feedback and votes grouped by board, status, or tag. Includes a representative citable post per group. Tag groups may overlap.',
   inputSchema: statsInput,
-  outputSchema: z.object({
-    groups: z.array(
-      z.object({
-        name: z.string(),
-        count: z.number(),
-        votes: z.number(),
-        postId: z.string(),
-        url: z.string(),
-      })
-    ),
-  }),
+  outputSchema: withGateEnvelope(
+    z.object({
+      groups: z.array(
+        z.object({
+          name: z.string(),
+          count: z.number(),
+          votes: z.number(),
+          postId: z.string(),
+          url: z.string(),
+        })
+      ),
+    })
+  ),
 })
 export async function executeFeedbackStats(
   args: z.infer<typeof statsInput>,
   ctx: AssistantToolContext
 ) {
-  if (ctx.audience !== 'team' || !ctx.knowledge.sources.has('post')) return { groups: [] }
+  if (
+    ctx.audience !== 'team' ||
+    !ctx.knowledge.sources.has('post') ||
+    !can(ctx.actor, PERMISSIONS.POST_VIEW_PRIVATE)
+  )
+    return { groups: [] }
   const group =
     args.groupBy === 'board'
       ? boards.name

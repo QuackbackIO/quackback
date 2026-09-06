@@ -1,3 +1,4 @@
+import { toolPermissions } from '@/lib/server/domains/assistant/tool-permissions'
 /**
  * Approve/reject server fns for Quinn's pending write-tool proposals.
  *
@@ -188,7 +189,7 @@ export const decideAssistantAction = createServerOnlyFn(async function decideAss
     )
   }
 
-  for (const permission of spec.permissions) {
+  for (const permission of toolPermissions(spec, !!pending.workspaceThreadKey)) {
     if (!can(actor, permission)) {
       throw new ForbiddenError(
         'ASSISTANT_ACTION_PERMISSION_DENIED',

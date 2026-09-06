@@ -276,6 +276,8 @@ describe('the real corpus', () => {
     // 0269 wraps two WHERE-null-or-empty UPDATEs in a DO block so a stored blob
     // makes the second run write zero rows. A bare UPDATE at the tip would
     // collapse that same window.
+    // 0274 checks the installed constraint definitions and updates only version 3 configs.
+    // A replay preserves widened constraints, workspace customizations and revisions.
     const vouching = files.filter(
       (f) => assessReplaySafety(f, readFileSync(join(MIGRATIONS_DIR, f), 'utf8')).vouched.length > 0
     )
@@ -286,6 +288,7 @@ describe('the real corpus', () => {
       '0260_channel_threads_conversation_fk.sql',
       '0261_connectors.sql',
       '0269_messenger_ai_default_on.sql',
+      '0274_slack_agent_gateway.sql',
     ])
   })
 

@@ -1,3 +1,5 @@
+import type { Actor } from '@/lib/server/policy/types'
+import { conversationFilter } from '@/lib/server/policy/conversations'
 import {
   db,
   conversations,
@@ -14,12 +16,13 @@ import { KNOWLEDGE_SNIPPET_CHARS } from './retrieval-sources'
 /** Explicit member-only adapter; never relax the customer-scoped summary adapter. */
 export function workspaceConversationSource(
   includeInternalNotes = false,
-  notesOnly = false
+  notesOnly = false,
+  actor?: Actor
 ): KnowledgeSource {
   return {
     sourceType: 'summary',
     async retrieve(query, ceiling, { topK }) {
-      if (ceiling !== 'team') return []
+      if (ceiling !== 'team' || !actor) return []
       const rows = await db
         .select({
           id: conversations.id,
@@ -32,6 +35,7 @@ export function workspaceConversationSource(
         .where(
           and(
             isNull(conversationMessages.deletedAt),
+            conversationFilter(actor),
             notesOnly
               ? eq(conversationMessages.isInternal, true)
               : includeInternalNotes

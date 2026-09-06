@@ -48,6 +48,7 @@ describe('REPOINT_STEPS registry', () => {
     await repointPrincipalActivity(tx, FROM, TO)
 
     for (const table of [
+      'slack_user_links',
       'post_votes',
       'post_comment_reactions',
       'post_comments',

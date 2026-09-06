@@ -66,6 +66,13 @@ export interface LedgerEntry {
 
 export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
   {
+    file: 'apps/web/src/lib/server/domains/platform-credentials/platform-credential.service.ts',
+    name: '_controlPlaneSource',
+    category: 'fleet-wide',
+    reason:
+      'CloudCredentialSource reads only the process environment populated before startup. Cross-workspace calls return the same centrally managed OAuth application credentials; per-workspace installation tokens remain in workspace databases.',
+  },
+  {
     file: 'apps/web/src/lib/server/auth/index.ts',
     name: 'authConfigVersions',
     category: 'workspace-keyed',

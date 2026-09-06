@@ -16,7 +16,8 @@ export class InstallBoundElsewhereError extends Error {
 }
 export async function registerInstall(
   type: string,
-  integrationConfig: Record<string, unknown>
+  integrationConfig: Record<string, unknown>,
+  accessToken?: string
 ): Promise<void> {
   if (!config.isPooledTenancy) return
   const install = getIntegration(type)?.install
@@ -25,6 +26,7 @@ export async function registerInstall(
   try {
     await putWorkspaceControlPlane('/api/v1/internal/integration-installs', {
       provider: type,
+      accessToken,
       externalId,
       metadata: install?.metadata?.(integrationConfig) ?? {},
     })
@@ -46,7 +48,8 @@ export async function unregisterInstall(
       `/api/v1/internal/integration-installs/${encodeURIComponent(type)}/${encodeURIComponent(externalId)}`
     )
   } catch (error) {
-    logger.warn({ err: error, integration_type: type }, 'integration routing unregister failed')
+    logger.warn({ integration_type: type }, 'integration routing unregister failed')
+    throw error
   }
 }
 export async function getInstallRouting(
@@ -61,10 +64,15 @@ export async function getInstallRouting(
 /** Explicit one-shot per-workspace job, never scheduled on boot. */
 export async function backfillIntegrationInstalls(): Promise<void> {
   const { db, integrations, eq } = await import('@/lib/server/db')
+  const { decryptSecrets } = await import('./encryption')
   const rows = await db.query.integrations.findMany({ where: eq(integrations.status, 'active') })
   for (const row of rows) {
     try {
-      await registerInstall(row.integrationType, (row.config ?? {}) as Record<string, unknown>)
+      await registerInstall(
+        row.integrationType,
+        (row.config ?? {}) as Record<string, unknown>,
+        row.secrets ? decryptSecrets<{ accessToken?: string }>(row.secrets).accessToken : undefined
+      )
     } catch (error) {
       if (!(error instanceof InstallBoundElsewhereError)) throw error
       logger.warn(
@@ -73,4 +81,24 @@ export async function backfillIntegrationInstalls(): Promise<void> {
       )
     }
   }
+}
+
+export async function cleanupPreviousInstall(
+  type: string,
+  oldConfig: Record<string, unknown>
+): Promise<void> {
+  const { db, integrations, eq, sql } = await import('@/lib/server/db')
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`integration:${type}`}))`)
+    const current = await tx.query.integrations.findFirst({
+      where: eq(integrations.integrationType, type),
+    })
+    const identity = getIntegration(type)?.install?.externalId
+    if (
+      current?.status === 'active' &&
+      identity?.((current.config ?? {}) as Record<string, unknown>) === identity?.(oldConfig)
+    )
+      return
+    await unregisterInstall(type, oldConfig)
+  })
 }

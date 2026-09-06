@@ -1,3 +1,4 @@
+import { toolPermissions } from './tool-permissions'
 /**
  * Quinn's tool-execution pipeline: assembles the tool catalogue
  * (assistant.toolspec.ts) into TanStack AI server tools bound to a runtime
@@ -241,7 +242,7 @@ async function runWithPipeline(
   }
 
   // mode === 'autonomous' from here: simulate and propose both returned above.
-  for (const permission of spec.permissions) {
+  for (const permission of toolPermissions(spec, !!ctx.workspaceThreadKey)) {
     if (can(ctx.actor, permission)) continue
     await recordDeniedToolCall({
       conversationId: ctx.conversationId ?? undefined,

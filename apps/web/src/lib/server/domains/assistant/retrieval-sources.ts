@@ -1,3 +1,6 @@
+import { can } from '@/lib/server/policy/authorize'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import type { Actor } from '@/lib/server/policy/types'
 /**
  * Source-adapter seam for Quinn's grounding retrieval.
  *
@@ -273,12 +276,16 @@ export async function resolveKnowledgeSources(
   enabled?: ReadonlySet<AssistantCitationType>,
   workspaceSearch = false,
   includeInternalNotes = false,
-  notesOnly = false
+  notesOnly = false,
+  actor?: Actor
 ): Promise<KnowledgeSource[]> {
   const enabledSet = enabled ?? new Set<AssistantCitationType>(['article'])
   const sources: KnowledgeSource[] = []
   if (enabledSet.has('article')) sources.push(kbKnowledgeSource)
-  if (enabledSet.has('post')) {
+  if (
+    enabledSet.has('post') &&
+    (!workspaceSearch || (actor && can(actor, PERMISSIONS.POST_VIEW_PRIVATE)))
+  ) {
     sources.push((await import('./posts-retrieval')).postsKnowledgeSource)
   }
   if (enabledSet.has('snippet')) {
@@ -289,12 +296,16 @@ export async function resolveKnowledgeSources(
       workspaceSearch
         ? (await import('./workspace-retrieval')).workspaceConversationSource(
             includeInternalNotes,
-            notesOnly
+            notesOnly,
+            actor
           )
         : (await import('./conversation-summary-retrieval')).conversationSummariesKnowledgeSource
     )
   }
-  if (enabledSet.has('ticket')) {
+  if (
+    enabledSet.has('ticket') &&
+    (!workspaceSearch || (actor && can(actor, PERMISSIONS.TICKET_VIEW_ALL)))
+  ) {
     sources.push((await import('./tickets-retrieval')).ticketsKnowledgeSource)
   }
   if (enabledSet.has('changelog')) {
@@ -350,6 +361,7 @@ export async function retrieveKnowledge(
   ceiling: ContentAudience,
   opts: {
     topK?: number
+    actor?: Actor
     workspaceSearch?: boolean
     includeInternalNotes?: boolean
     notesOnly?: boolean
@@ -367,7 +379,8 @@ export async function retrieveKnowledge(
     opts.enabledSources,
     ceiling === 'team' && opts.workspaceSearch === true,
     opts.includeInternalNotes,
-    opts.notesOnly
+    opts.notesOnly,
+    opts.actor
   )
   const sources = opts.sourceTypes
     ? resolved.filter((source) => opts.sourceTypes!.includes(source.sourceType))

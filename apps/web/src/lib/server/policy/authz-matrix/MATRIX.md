@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 675 surfaces
+### Server functions (`requireAuth`) — 678 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -141,6 +141,8 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `integrations/salesforce/server/functions.ts`::getSalesforceConnectUrl | integration.manage |
 | `integrations/shortcut/server/functions.ts`::saveShortcutTokenFn | integration.manage |
 | `integrations/shortcut/server/functions.ts`::fetchShortcutProjectsFn | integration.manage |
+| `integrations/slack/server/agent/settings.ts`::getSlackAgentSettingsFn | assistant.manage |
+| `integrations/slack/server/agent/settings.ts`::setSlackAssistantEnabledFn | assistant.manage |
 | `integrations/slack/server/functions.ts`::getSlackConnectUrl | integration.manage |
 | `integrations/slack/server/functions.ts`::fetchSlackChannelsFn | integration.manage |
 | `integrations/stripe/server/functions.ts`::saveStripeKeyFn | integration.manage |
@@ -241,6 +243,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/assistant-settings.ts`::updateAssistantCopilotCapabilitiesFn | assistant.manage |
 | `lib/server/functions/assistant-settings.ts`::updateAssistantToolRulesFn | assistant.manage |
 | `lib/server/functions/assistant-settings.ts`::updateWidgetAssistantDeploymentFn | assistant.manage |
+| `lib/server/functions/assistant-settings.ts`::updateWorkspaceAssistantFn | assistant.manage |
 | `lib/server/functions/assistant-skills.ts`::listSkillsFn | assistant.manage |
 | `lib/server/functions/assistant-skills.ts`::createSkillFn | assistant.manage |
 | `lib/server/functions/assistant-skills.ts`::updateSkillFn | assistant.manage |
@@ -986,7 +989,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-191 of 978 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+192 of 982 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -1123,6 +1126,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `routes/api/import/index.ts`::POST | route |
 | `routes/api/import/runs.$runId.ts`::GET | route |
 | `routes/api/import/runs.ts`::GET | route |
+| `routes/api/integrations/$type/hooks/$kind.ts`::POST | route |
 | `routes/api/integrations/$type/identify.ts`::POST | route |
 | `routes/api/integrations/$type/webhook.ts`::POST | route |
 | `routes/api/internal/billing-projection.ts`::POST | route |

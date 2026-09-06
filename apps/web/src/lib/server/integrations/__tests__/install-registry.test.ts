@@ -52,6 +52,7 @@ describe('install registry', () => {
     await registerInstall('slack', { workspaceId: 'T1', botUserId: 'B1' })
     expect(mocks.put).toHaveBeenCalledWith('/api/v1/internal/integration-installs', {
       provider: 'slack',
+      accessToken: undefined,
       externalId: 'T1',
       metadata: { bot_user_id: 'B1' },
     })
@@ -67,10 +68,10 @@ describe('install registry', () => {
     mocks.put.mockRejectedValueOnce(new Error('unavailable'))
     await expect(registerInstall('slack', { workspaceId: 'T1' })).rejects.toThrow('unavailable')
   })
-  it('tolerates disconnect routing outages', async () => {
+  it('preserves retryable disconnect failures', async () => {
     mocks.pooled = true
     mocks.remove.mockRejectedValueOnce(new Error('unavailable'))
-    await expect(unregisterInstall('slack', { workspaceId: 'T1' })).resolves.toBeUndefined()
+    await expect(unregisterInstall('slack', { workspaceId: 'T1' })).rejects.toThrow('unavailable')
   })
   it('reports missing scopes with exact membership', () => {
     expect(missingSlackScopes(SLACK_REQUIRED_SCOPES.join(','))).toEqual([])

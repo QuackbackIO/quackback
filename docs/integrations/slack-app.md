@@ -16,7 +16,7 @@ The **Approve** and **Reject** buttons check the acting member's permissions. Wr
 
 ## Slack platform configuration
 
-The manifest uses `features.agent_view.agent_description`; the current manifest reference does not list an `enabled` field. Enable the agent experience in the Slack console and confirm the app has `assistant:write`. OAuth requests include the explicit bot scopes; Slack adds the assistant scope for agent apps.
+The manifest uses `features.agent_view.agent_description`; the current manifest reference does not list an `enabled` field. Enable the agent experience in the Slack console and confirm the app has `assistant:write`. OAuth requests explicitly include and validate `assistant:write` alongside the other required bot scopes.
 
 Status calls use `agents.sessions.setStatus` with `channel_id`. Suggested prompts use `assistant.threads.setSuggestedPrompts` without `thread_ts` for the agent view. Feedback buttons use `context_actions`. References checked 2026-09-05: [manifest](https://docs.slack.dev/reference/app-manifest/), [agent sessions](https://docs.slack.dev/ai/agent-sessions/), [suggested prompts](https://docs.slack.dev/reference/methods/assistant.threads.setSuggestedPrompts/), [feedback buttons](https://docs.slack.dev/reference/block-kit/block-elements/feedback-buttons-element/).
 

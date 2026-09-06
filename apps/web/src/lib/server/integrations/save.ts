@@ -113,7 +113,19 @@ export async function saveIntegration(
       .returning({ id: integrations.id })
 
     const { registerInstall } = await import('./install-registry')
-    await registerInstall(integrationType, config)
+    await registerInstall(integrationType, config, accessToken)
+    const install = getIntegration(integrationType)?.install
+    const oldConfig = existing?.config as Record<string, unknown> | undefined
+    const oldId = oldConfig && install?.externalId(oldConfig)
+    if (oldId && oldId !== install?.externalId(config)) {
+      const { enqueueJob } = await import('@/lib/server/jobs/job-queue')
+      await enqueueJob({
+        queue: 'integration-install-cleanup',
+        payload: { type: integrationType, config: oldConfig },
+        executor: tx,
+        maxAttempts: 10,
+      })
+    }
     return row.id as IntegrationId
   })
 

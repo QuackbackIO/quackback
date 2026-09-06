@@ -1,4 +1,5 @@
 import { beforeEach, afterEach, afterAll, describe, it, expect, vi } from 'vitest'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { generateId } from '@quackback/ids'
 vi.mock('@/lib/server/db', async (original) => ({
   ...(await original<typeof import('@/lib/server/db')>()),
@@ -20,6 +21,13 @@ describe.skipIf(!fixture.available)('workspace reads with real DB', () => {
   afterAll(fixture.close)
   const context = () =>
     makeAssistantToolContext({
+      actor: {
+        principalId: generateId('principal'),
+        principalType: 'user',
+        role: 'admin',
+        segmentIds: new Set(),
+        permissions: new Set([PERMISSIONS.POST_VIEW_PRIVATE, PERMISSIONS.CONVERSATION_VIEW_ALL]),
+      },
       db: testDb,
       assistantPrincipalId: generateId('principal'),
       audience: 'team',
@@ -97,14 +105,51 @@ describe.skipIf(!fixture.available)('workspace reads with real DB', () => {
       isInternal: true,
     })
     expect(
-      await workspaceConversationSource(false).retrieve('confidential', 'team', { topK: 5 })
+      await workspaceConversationSource(false, false, context().actor).retrieve(
+        'confidential',
+        'team',
+        { topK: 5 }
+      )
     ).toEqual([])
-    const items = await workspaceConversationSource(true, true).retrieve(
+    const items = await workspaceConversationSource(true, true, context().actor).retrieve(
       'confidential billing',
       'team',
       { topK: 5 }
     )
     expect(items[0]).toMatchObject({ id: conversation.id, citation: { internal: true } })
     expect(items[0]?.citation.url).toContain(`?i=${conversation.id}`)
+    const restrictedActor = {
+      ...context().actor,
+      role: 'member' as const,
+      permissions: new Set([PERMISSIONS.CONVERSATION_VIEW]),
+    }
+    expect(
+      await workspaceConversationSource(true, false, restrictedActor).retrieve('billing', 'team', {
+        topK: 5,
+      })
+    ).toEqual([])
+    expect(
+      await workspaceConversationSource(true).retrieve('billing', 'team', { topK: 5 })
+    ).toEqual([])
   })
+})
+
+it('denies private feedback to a custom role without the administrative read permission', async () => {
+  const ctx = makeAssistantToolContext({
+    conversationId: null,
+    db: testDb,
+    assistantPrincipalId: generateId('principal'),
+    audience: 'team',
+    role: 'workspace_assistant',
+    knowledge: { sources: new Set(['post']), status: false },
+    actor: {
+      principalId: generateId('principal'),
+      principalType: 'user',
+      role: 'member',
+      segmentIds: new Set(),
+      permissions: new Set([PERMISSIONS.COPILOT_USE]),
+    },
+  })
+  expect(await executeListFeedback({}, ctx)).toEqual({ items: [] })
+  expect(await executeFeedbackStats({ groupBy: 'board' }, ctx)).toEqual({ groups: [] })
 })

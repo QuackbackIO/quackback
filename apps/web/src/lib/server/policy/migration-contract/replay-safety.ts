@@ -209,6 +209,12 @@ export interface ReplayOverride {
  */
 export const REPLAY_OVERRIDES: readonly ReplayOverride[] = [
   {
+    tag: '0269_messenger_ai_default_on',
+    verdict: 'mutates',
+    why: '0274_slack_agent_gateway upgrades the assistant_config default to version 4. Replaying 0269 succeeds but downgrades that default to version 3, losing workspace assistant defaults for new settings rows.',
+    stillFailsWith: /catalogue changed/,
+  },
+  {
     tag: '0091_drop_conversation_tags',
     verdict: 'mutates',
     why:
