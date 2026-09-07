@@ -109,6 +109,18 @@
         "kind": "tristate",
         "group": "advanced",
         "sensitive": false
+      },
+      {
+        "key": "AI_REASONING_EFFORT",
+        "kind": "text",
+        "group": "connection",
+        "sensitive": false
+      },
+      {
+        "key": "AI_COMBINED_TOOLS_AND_SCHEMA",
+        "kind": "tristate",
+        "group": "advanced",
+        "sensitive": false
       }
     ]
   },

@@ -17,7 +17,6 @@ import {
   type ApiKeyScope,
 } from '@/lib/shared/api-key-scopes'
 import { toolGroupFromAnnotations } from '@/lib/shared/assistant/connectors'
-import { createMcpServer } from '@/lib/server/mcp/server'
 import type { McpAuthContext } from '@/lib/server/mcp/types'
 import {
   withGateEnvelope,
@@ -137,6 +136,7 @@ export async function openWorkspaceMcp(auth: McpAuthContext): Promise<{
   specs: AssistantToolSpec[]
   close: () => Promise<void>
 }> {
+  const { createMcpServer } = await import('@/lib/server/mcp/server')
   const server = createMcpServer(auth)
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
   await server.connect(serverTransport)

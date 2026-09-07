@@ -67,6 +67,7 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
 // Mock config so baseUrl is available (used in WWW-Authenticate header)
 vi.mock('@/lib/server/config', () => ({
   config: { baseUrl: 'https://example.com' },
+  getBaseUrl: () => 'https://example.com',
 }))
 
 // Mock all domain services called by tools/resources

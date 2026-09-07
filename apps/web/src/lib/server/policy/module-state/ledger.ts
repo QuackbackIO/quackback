@@ -1051,6 +1051,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'bytes the requesting workspace would have fetched.',
   },
   {
+    file: 'apps/web/src/integrations/slack/server/agent/turns.ts',
+    name: 'inflight',
+    category: 'workspace-scoped-key',
+    keyedBy: 'slackInflightTurnKey',
+    reason:
+      'AbortControllers for in-flight Slack turns, keyed by Slack team, channel and thread. A Slack ' +
+      'team is bound to one workspace install, so a cross-workspace hit misses (different team id) ' +
+      'rather than cancelling another tenant’s turn.',
+  },
+  {
     file: 'packages/email/src/index.ts',
     name: 'emailLogSink',
     category: 'process-lifetime',
