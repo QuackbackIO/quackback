@@ -8,6 +8,7 @@ import { finalizeProfileOutcome } from '@/lib/shared/sso-profile-outcome'
 import { resolveSsoRoleMatch } from '@/lib/shared/resolve-sso-role'
 import { planClaimAttributeWrites } from '@/lib/shared/plan-claim-attribute-writes'
 import { isReplayableCapture } from '@/lib/shared/sso-test-capture'
+import { previewClaimMapping } from '@/lib/shared/sso-mapping-preview'
 import {
   MAPPING_WORLDS,
   type MappingWorld,
@@ -160,6 +161,24 @@ describe('production test and preview agree on identity role and People mappings
         definitions: world.definitions,
       })
       expect(plan.valid).toEqual(world.expect.people)
+    }
+
+    const helper = previewClaimMapping({
+      draft: world.mapping,
+      capture: handshake.capture!,
+      definitions: world.definitions,
+      providerPolicy: {
+        autoCreateUsers: true,
+        autoProvisionRole: 'member',
+        registrationId: 'oidc_abc',
+      },
+    })
+    expect(helper.status === 'ready' || helper.status === 'mapping_failed').toBe(true)
+    expect(helper.identity?.id).toBe(world.expect.id)
+    expect(helper.identity?.email).toBe(world.expect.email)
+    expect(helper.roleMatch).toEqual(world.expect.role ?? null)
+    if (world.expect.people) {
+      expect(helper.peoplePlan?.valid).toEqual(world.expect.people)
     }
   })
 })

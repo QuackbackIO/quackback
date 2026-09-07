@@ -47,7 +47,7 @@ const SECTIONS = [
   { id: 'connection', label: 'Connection' },
   { id: 'signin', label: 'Sign-in' },
   { id: 'accounts', label: 'Accounts' },
-  { id: 'mapping', label: 'Claim mapping' },
+  { id: 'mapping', label: 'Attributes & Claims' },
   { id: 'danger', label: 'Remove' },
 ] as const
 

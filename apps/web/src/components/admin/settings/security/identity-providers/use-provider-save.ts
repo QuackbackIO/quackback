@@ -64,10 +64,10 @@ export function useProviderSave(provider: IdentityProvider) {
       acknowledgeAdminRules?: boolean
     },
     successMessage = 'Claim mapping saved.'
-  ): Promise<boolean> => {
+  ): Promise<IdentityProvider | false> => {
     setSaving(true)
     try {
-      await saveMappingFn({
+      const saved = (await saveMappingFn({
         data: {
           id: provider.id,
           expectedClaimMapping: provider.claimMapping,
@@ -75,10 +75,10 @@ export function useProviderSave(provider: IdentityProvider) {
           acknowledgeIdentifierChange: args.acknowledgeIdentifierChange,
           acknowledgeAdminRules: args.acknowledgeAdminRules,
         },
-      })
+      })) as IdentityProvider | undefined
       await queryClient.invalidateQueries({ queryKey: IDENTITY_PROVIDERS_KEY })
       toast.success(successMessage)
-      return true
+      return saved ?? (provider as IdentityProvider)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not save the identity provider.')
       return false

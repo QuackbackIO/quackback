@@ -22,6 +22,9 @@ export function AttributeWritesPreview({
   overrideExisting,
   syncOnSignIn,
   canTest,
+  claims: claimsOverride,
+  plan: planOverride,
+  hideCaptureChrome,
 }: {
   capture: SsoTestCapture | null
   registrationId: string
@@ -30,6 +33,10 @@ export function AttributeWritesPreview({
   overrideExisting: boolean
   syncOnSignIn: boolean
   canTest: boolean
+  /** Accepted claims from replay. Diagnostic-only bags must not be passed. */
+  claims?: Record<string, unknown>
+  plan?: ReturnType<typeof planClaimAttributeWrites> | null
+  hideCaptureChrome?: boolean
 }) {
   const { data: attributes } = useUserAttributes()
   const defs = (attributes ?? []).map((d) => ({
@@ -53,38 +60,43 @@ export function AttributeWritesPreview({
     !!detailsChangedAt &&
     new Date(detailsChangedAt).getTime() > new Date(capture.capturedAt).getTime()
 
-  const claims = capture.claims as Record<string, unknown>
+  const claims = (claimsOverride ?? capture.claims) as Record<string, unknown>
   const plan =
-    attributeRows.length > 0
-      ? planClaimAttributeWrites({
-          claims,
-          mapping: {
-            map: attributeRows.filter((r) => r.claimPath && r.attributeKey),
-            ...(overrideExisting ? { overrideExisting: true } : {}),
-            ...(syncOnSignIn ? { syncOnSignIn: true } : {}),
-          },
-          existing: {},
-          definitions: defs,
-          explain: true,
-        })
-      : null
+    planOverride !== undefined
+      ? planOverride
+      : attributeRows.length > 0
+        ? planClaimAttributeWrites({
+            claims,
+            mapping: {
+              map: attributeRows.filter((r) => r.claimPath && r.attributeKey),
+              ...(overrideExisting ? { overrideExisting: true } : {}),
+              ...(syncOnSignIn ? { syncOnSignIn: true } : {}),
+            },
+            existing: {},
+            definitions: defs,
+            explain: true,
+          })
+        : null
 
   return (
     <div className="space-y-2 rounded-md border border-border/40 bg-muted/20 px-3 py-3 text-[12.5px]">
-      <div>
-        <div className="font-medium">Attribute writes from your last test sign-in</div>
-        <div className="mt-0.5 text-muted-foreground">
-          {captureIdentityCaption(capture)} · <TimeAgo date={capture.capturedAt} /> ·{' '}
-          <TestSignInButton
-            registrationId={registrationId}
-            variant="link"
-            size="sm"
-            disabled={!canTest}
-          >
-            Re-test
-          </TestSignInButton>
+      {!hideCaptureChrome && (
+        <div>
+          <div className="font-medium">Attribute writes from your last test sign-in</div>
+          <div className="mt-0.5 text-muted-foreground">
+            {captureIdentityCaption(capture)} · <TimeAgo date={capture.capturedAt} /> ·{' '}
+            <TestSignInButton
+              registrationId={registrationId}
+              variant="link"
+              size="sm"
+              disabled={!canTest}
+            >
+              Re-test
+            </TestSignInButton>
+          </div>
         </div>
-      </div>
+      )}
+      {hideCaptureChrome && <div className="font-medium">People attributes</div>}
 
       {plan && (Object.keys(plan.valid).length > 0 || (plan.skips?.length ?? 0) > 0) ? (
         <dl className="grid grid-cols-[6.6em_1fr] gap-x-2.5 gap-y-1 text-[12px]">

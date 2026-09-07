@@ -21,6 +21,7 @@ import type { IdentityProvider } from '@/lib/server/domains/settings/identity-pr
 import type { VerifiedDomain } from '@/lib/server/domains/settings/settings.types'
 import { ProviderDetailPage } from '../provider-detail-page'
 import { applyClaimMappingEdits } from '@/lib/shared/sso-claim-mapping-edit'
+import type { SsoTestCapture } from '@/lib/shared/sso-test-capture'
 
 beforeAll(() => {
   Element.prototype.scrollIntoView = vi.fn()
@@ -67,17 +68,9 @@ const { discoveryScopesSpy } = vi.hoisted(() => ({
   discoveryScopesSpy: vi.fn(async () => ({ scopesSupported: null as string[] | null })),
 }))
 
-type SessionCapture = {
-  registrationId: string
-  claims: Record<string, unknown>
-  capturedAt?: string
-  identity?: { id: string; email?: string; sources: Record<string, string> }
-}
-
 const { ssoTestRef } = vi.hoisted(() => ({
   ssoTestRef: {
-    current: null as null | SessionCapture,
-    lastCapture: undefined as undefined | null | SessionCapture,
+    current: null as null | import('@/lib/shared/sso-test-capture').SsoTestCapture,
   },
 }))
 
@@ -108,7 +101,7 @@ vi.mock('../../sso/use-sso-test-sign-in', () => ({
   useSsoTestSignIn: () => ({
     open: vi.fn(),
     lastSuccess: ssoTestRef.current,
-    lastCapture: ssoTestRef.lastCapture !== undefined ? ssoTestRef.lastCapture : ssoTestRef.current,
+    lastCapture: ssoTestRef.current,
   }),
   SsoTestSignInProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
@@ -279,7 +272,10 @@ function renderPage(provider: IdentityProvider) {
 const saveConnection = () =>
   fireEvent.click(screen.getByRole('button', { name: 'Save connection' }))
 const saveMapping = () => {
-  fireEvent.click(screen.getByRole('button', { name: 'Save claim mapping' }))
+  const save =
+    screen.queryByRole('button', { name: 'Save claim mapping' }) ??
+    screen.getByRole('button', { name: 'Save' })
+  fireEvent.click(save)
   const confirm = screen.queryByRole('button', { name: 'Save mappings' })
   if (confirm) fireEvent.click(confirm)
 }
@@ -300,7 +296,6 @@ beforeEach(() => {
   discoveryScopesSpy.mockClear()
   discoveryScopesSpy.mockResolvedValue({ scopesSupported: null })
   ssoTestRef.current = null
-  ssoTestRef.lastCapture = undefined
   state.userAttributes = []
   state.authConfig = { oauth: { password: true } }
   state.credentialStatus = { _emailConfigured: true }
@@ -316,7 +311,7 @@ describe('<ProviderDetailPage> page shell', () => {
       ['Connection', '#connection'],
       ['Sign-in', '#signin'],
       ['Accounts', '#accounts'],
-      ['Claim mapping', '#mapping'],
+      ['Attributes & Claims', '#mapping'],
       ['Remove', '#danger'],
     ]) {
       expect(within(nav).getByRole('link', { name: label })).toHaveAttribute('href', hash)
@@ -372,29 +367,21 @@ describe('<ProviderDetailPage> enabled toggle', () => {
 })
 
 describe('<ProviderDetailPage> provisioning consolidation', () => {
-  it('shows a single Default role and a collapsed claim-mapping disclosure when no rules', () => {
+  it('shows a single Default role and required mapping rows when no rules', () => {
     renderPage(
       makeProvider({ autoCreateUsers: true, autoProvisionRole: 'user', claimMapping: null })
     )
-    // One default-role control, bound to autoProvisionRole.
     expect(screen.getByLabelText('Default role')).toBeInTheDocument()
-    // The claim-mapping section is present but the rules are collapsed.
-    expect(screen.getByRole('button', { name: /Map roles from claims/ })).toHaveAttribute(
-      'aria-expanded',
-      'false'
-    )
-    // No nested "default role" duplicate inside the mapping.
+    expect(screen.getByText('Unique user identifier')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add claim' })).toBeInTheDocument()
     expect(screen.queryByText('No rules. Everyone gets the default role.')).not.toBeInTheDocument()
   })
 
   it('keeps claim mapping reachable when auto-create is off', () => {
-    // Only the default role is creation-only. Identity resolution runs on every
-    // sign-in, including for people who already have accounts, so hiding its
-    // configuration behind "create accounts for new people" would hide a live
-    // control from exactly the workspaces most likely to need it.
     renderPage(makeProvider({ autoCreateUsers: false }))
     expect(screen.queryByLabelText('Default role')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Map roles from claims/ })).toBeInTheDocument()
+    expect(screen.getByText('Unique user identifier')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add claim' })).toBeInTheDocument()
   })
 
   it('persists claimMapping=null when saved with no rules and sync off', async () => {
@@ -478,7 +465,11 @@ describe('<ProviderDetailPage> connection-test status', () => {
     // startSsoTestFn resolves the provider by registrationId and stamps that
     // provider's own lastSuccessfulTestAt, so the legacy "sso" id is no
     // different from a generated one.
-    expect(screen.getByRole('button', { name: /test sign-in/i })).not.toBeDisabled()
+    expect(
+      screen
+        .getAllByRole('button', { name: /test sign-in/i })
+        .every((btn) => !btn.hasAttribute('disabled'))
+    ).toBe(true)
   })
 })
 
@@ -555,26 +546,35 @@ describe('<ProviderDetailPage> sign-in card', () => {
 describe('<ProviderDetailPage> claim-mapping autocomplete', () => {
   it('names the observed claims inline and drops the old assist block', () => {
     ssoTestRef.current = {
-      registrationId: 'oidc_x', // matches makeProvider().registrationId
+      registrationId: 'oidc_x',
+      capturedAt: '2026-09-01T00:00:00.000Z',
+      identity: { id: 's', sources: { id: 'idToken' } },
       claims: { groups: ['11111111-2222'], roles: ['admin'] },
     }
     renderPage(makeProvider({ autoCreateUsers: true, claimMapping: null }))
-    // Inline hint names the observed claims (disclosure auto-opens on suggestions).
-    expect(screen.getByText('From your test sign-in: groups, roles')).toBeInTheDocument()
-    // The old batch-add block's caption is gone.
     expect(screen.queryByText(/Run a test as another user/)).not.toBeInTheDocument()
-    // Claim path is now an autocomplete (combobox), not a plain textbox.
-    expect(screen.getByRole('combobox', { name: 'Claim path' })).toBeInTheDocument()
+    expect(screen.getByText('Unique user identifier')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add claim' })).toBeInTheDocument()
   })
 
-  it('auto-fills the claim path when the test returned exactly one array claim', () => {
-    ssoTestRef.current = { registrationId: 'oidc_x', claims: { roles: ['admin'] } }
+  it('does not auto-write a Role mapping from a test capture', () => {
+    ssoTestRef.current = {
+      registrationId: 'oidc_x',
+      capturedAt: '2026-09-01T00:00:00.000Z',
+      identity: { id: 's', sources: { id: 'idToken' } },
+      claims: { roles: ['admin'] },
+    }
     renderPage(makeProvider({ autoCreateUsers: true, claimMapping: null }))
-    expect(screen.getByRole('combobox', { name: 'Claim path' })).toHaveTextContent('roles')
+    expect(screen.queryByText('Role')).not.toBeInTheDocument()
   })
 
   it('shows no inline suggestions for a test of a different provider', () => {
-    ssoTestRef.current = { registrationId: 'oidc_other', claims: { roles: ['admin'] } }
+    ssoTestRef.current = {
+      registrationId: 'oidc_other',
+      capturedAt: '2026-09-01T00:00:00.000Z',
+      identity: { id: 's', sources: { id: 'idToken' } },
+      claims: { roles: ['admin'] },
+    }
     renderPage(
       makeProvider({
         autoCreateUsers: true,
@@ -862,26 +862,38 @@ const PEOPLE_ATTRS = [
   },
 ]
 
-const matchingCapture = {
+const matchingCapture: SsoTestCapture = {
+  version: 2 as const,
   registrationId: 'oidc_x',
   capturedAt: '2026-09-01T00:00:00.000Z',
+  detailsChangedAtAtStart: null,
+  outcome: 'success' as const,
   identity: { id: 'sub', email: 'alice@example.com', sources: { email: 'idToken' as const } },
-  claims: { department: 'Engineering' },
+  claims: { sub: 's', email: 'alice@example.com', department: 'Engineering' },
+  replay: {
+    sources: [
+      {
+        source: 'idToken' as const,
+        claims: { sub: 's', email: 'alice@example.com', department: 'Engineering' },
+      },
+      { source: 'userinfo' as const, claims: { sub: 's' } as Record<string, string> },
+    ],
+  },
 }
 
 describe('<ProviderDetailPage> claim → person-attribute mapping', () => {
   it('adds a row, picks a claim path and attribute, and saves without touching role/profile', async () => {
     state.userAttributes = PEOPLE_ATTRS
     renderPage(makeProvider({ claimMapping: null }))
-    fireEvent.click(screen.getByRole('button', { name: /Copy claims into person attributes/ }))
-    fireEvent.click(screen.getByRole('button', { name: /Add mapping/ }))
-    fireEvent.click(screen.getByRole('combobox', { name: /Claim path \(mapping 1\)/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add claim' }))
+    fireEvent.click(screen.getByRole('combobox', { name: 'Quackback attribute' }))
+    fireEvent.click(screen.getByRole('option', { name: /Department/ }))
+    fireEvent.click(screen.getByRole('combobox', { name: 'IdP claim path' }))
     fireEvent.change(screen.getByPlaceholderText('Search or type…'), {
       target: { value: 'department' },
     })
     fireEvent.click(screen.getByText(/Use ["“]department["”]/))
-    fireEvent.click(screen.getByRole('combobox', { name: /Person attribute \(mapping 1\)/ }))
-    fireEvent.click(screen.getByRole('option', { name: /Department/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add to draft' }))
     saveMapping()
     await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
     const sent = lastSavedMapping() as {
@@ -903,7 +915,8 @@ describe('<ProviderDetailPage> claim → person-attribute mapping', () => {
         },
       })
     )
-    fireEvent.click(screen.getByRole('button', { name: /Remove mapping 1/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Department mapping' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove mapping' }))
     saveMapping()
     await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
     expect(lastSavedMapping()).toBeNull()
@@ -940,9 +953,14 @@ describe('<ProviderDetailPage> claim → person-attribute mapping', () => {
 
   it('shows the People empty state and no Add button when there are no definitions', () => {
     state.userAttributes = []
-    renderPage(makeProvider({ claimMapping: null }))
-    fireEvent.click(screen.getByRole('button', { name: /Copy claims into person attributes/ }))
-    expect(screen.getByText(/No person attributes yet/)).toBeInTheDocument()
+    renderPage(
+      makeProvider({
+        claimMapping: {
+          role: { claimPath: 'groups', rules: [{ whenContains: 'eng', role: 'member' }] },
+        },
+      })
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Add claim' }))
     expect(screen.getByRole('link', { name: 'Open People settings' })).toHaveAttribute(
       'href',
       '/admin/settings/people'
@@ -959,12 +977,9 @@ describe('<ProviderDetailPage> claim → person-attribute mapping', () => {
         },
       })
     )
-    // The row, not the empty state: hiding it would leave the stale mapping
-    // unremovable and still forcing a userinfo fetch on every sign-in.
-    expect(screen.queryByText(/No person attributes yet/)).not.toBeInTheDocument()
     expect(screen.getByText('attribute no longer exists')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Add mapping/ })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /Remove mapping 1/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove cost_center mapping' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove mapping' }))
     saveMapping()
     await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
     expect(lastSavedMapping()).toBeNull()
@@ -998,29 +1013,26 @@ describe('<ProviderDetailPage> claim → person-attribute mapping', () => {
         },
       })
     )
-    expect(screen.getByText('Attribute writes from your last test sign-in')).toBeInTheDocument()
     expect(screen.getByText(/“Engineering”/)).toBeInTheDocument()
     expect(screen.getByText(/skipped: missing claim/)).toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('combobox', { name: /Claim path \(mapping 1\)/ }))
-    fireEvent.change(screen.getByPlaceholderText('Search or type…'), {
-      target: { value: 'nope' },
-    })
-    fireEvent.click(screen.getByText(/Use ["“]nope["”]/))
-    await waitFor(() => {
-      expect(screen.queryByText(/“Engineering”/)).not.toBeInTheDocument()
-    })
-    expect(screen.getAllByText(/skipped: missing claim/).length).toBeGreaterThan(0)
   })
 
   it('prefers an in-session test over a persisted capture for the same provider', () => {
     state.userAttributes = PEOPLE_ATTRS
     ssoTestRef.current = {
-      registrationId: 'oidc_x',
+      ...matchingCapture,
       capturedAt: '2026-09-02T00:00:00.000Z',
-      identity: { id: 'sub', email: 'alice@example.com', sources: { email: 'idToken' } },
-      claims: { department: 'From session' },
-    }
+      claims: { sub: 's', email: 'alice@example.com', department: 'From session' },
+      replay: {
+        sources: [
+          {
+            source: 'idToken',
+            claims: { sub: 's', email: 'alice@example.com', department: 'From session' },
+          },
+          { source: 'userinfo', claims: { sub: 's' } },
+        ],
+      },
+    } as SsoTestCapture
     renderPage(
       makeProvider({
         lastTestCapture: matchingCapture,
@@ -1030,32 +1042,6 @@ describe('<ProviderDetailPage> claim → person-attribute mapping', () => {
       })
     )
     expect(screen.getByText(/“From session”/)).toBeInTheDocument()
-    expect(screen.queryByText(/“Engineering”/)).not.toBeInTheDocument()
-  })
-
-  it('feeds a mapping-failure capture into the editor over an earlier success', () => {
-    state.userAttributes = PEOPLE_ATTRS
-    ssoTestRef.current = {
-      registrationId: 'oidc_x',
-      capturedAt: '2026-09-01T00:00:00.000Z',
-      identity: { id: 'sub', email: 'alice@example.com', sources: { email: 'idToken' } },
-      claims: { department: 'From success' },
-    }
-    ssoTestRef.lastCapture = {
-      registrationId: 'oidc_x',
-      capturedAt: '2026-09-03T00:00:00.000Z',
-      claims: { department: 'From failed mapping' },
-    }
-    renderPage(
-      makeProvider({
-        lastTestCapture: matchingCapture,
-        claimMapping: {
-          attributes: { map: [{ claimPath: 'department', attributeKey: 'department' }] },
-        },
-      })
-    )
-    expect(screen.getByText(/“From failed mapping”/)).toBeInTheDocument()
-    expect(screen.queryByText(/“From success”/)).not.toBeInTheDocument()
     expect(screen.queryByText(/“Engineering”/)).not.toBeInTheDocument()
   })
 
@@ -1069,12 +1055,7 @@ describe('<ProviderDetailPage> claim → person-attribute mapping', () => {
         },
       })
     )
-    expect(
-      screen.queryByText('Attribute writes from your last test sign-in')
-    ).not.toBeInTheDocument()
-    expect(
-      screen.getByText(/Run a test sign-in to preview what these mappings would write/)
-    ).toBeInTheDocument()
+    expect(screen.getByText(/Run a test sign-in to inspect this IdP's claims/)).toBeInTheDocument()
   })
 })
 
