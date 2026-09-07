@@ -58,7 +58,12 @@ import type {
   AssistantToolSpec,
 } from './assistant.toolspec'
 import { listConnectorToolSpecsForAgent } from './connectors/connector-tools'
-import { mcpAuthFromActor, openWorkspaceMcp } from './mcp-workspace-tools'
+import {
+  loadAskingTeammateIdentity,
+  mcpAuthFromActor,
+  openWorkspaceMcp,
+} from './mcp-workspace-tools'
+import { formatAskingTeammateContext } from './workspace-prompt'
 import { compileSkillCatalogue, countAssignedSkills } from './skills.service'
 import { resolveAssistantKnowledgeSnapshot, type RetrievedItem } from './retrieval-sources'
 import { listEnabledGuidanceCandidates, type AssistantGuidanceRule } from './guidance.service'
@@ -1130,6 +1135,36 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
 
     const trustedContextParts: string[] = []
     if (role === 'workspace_assistant') {
+      try {
+        const identity = await loadAskingTeammateIdentity(input.actor)
+        if (identity) {
+          trustedContextParts.push(
+            formatAskingTeammateContext({
+              principalId: identity.principalId,
+              displayName: identity.displayName
+                ? sanitizeFactValue(identity.displayName, 80)
+                : null,
+              email: identity.email ? sanitizeFactValue(identity.email, 160) : null,
+              role: identity.role,
+            })
+          )
+        }
+      } catch (error) {
+        log.warn({ err: error }, 'asking teammate identity load failed')
+        if (
+          input.actor.principalId &&
+          (input.actor.role === 'admin' || input.actor.role === 'member')
+        ) {
+          trustedContextParts.push(
+            formatAskingTeammateContext({
+              principalId: input.actor.principalId,
+              displayName: null,
+              email: null,
+              role: input.actor.role,
+            })
+          )
+        }
+      }
       try {
         const [boards, statuses, tags] = await Promise.all([
           listBoards(),
