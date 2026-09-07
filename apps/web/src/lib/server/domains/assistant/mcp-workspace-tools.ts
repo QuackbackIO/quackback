@@ -156,7 +156,9 @@ function buildWorkspaceMcpSpec(tool: DiscoveredMcpTool): AssistantToolSpec {
     description,
     promptGuidance: writeAsUser
       ? workspaceWriteGuidance(tool.name, description)
-      : `${description} When a row includes url, link it as [title](url) copied verbatim. Paginate with nextCursor from the previous result. Leave citations empty for these lists.`,
+      : tool.name === 'search'
+        ? `${description} When a row includes url, link it as [title](url) copied verbatim. Paginate with nextCursor from the previous result. Leave citations empty for these lists. For "my posts" or "created by me", pass authorPrincipalId "me" or authorEmail "me".`
+        : `${description} When a row includes url, link it as [title](url) copied verbatim. Paginate with nextCursor from the previous result. Leave citations empty for these lists.`,
     risk: group === 'read' ? 'read' : 'write',
     permissions: [],
     parents: ['conversation', 'ticket'],

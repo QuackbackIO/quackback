@@ -379,12 +379,12 @@ describe('assistant production system prompt', () => {
     expect(other).not.toContain('# Slack surface')
   })
 
-  it('tells the workspace assistant to answer who-am-I from trusted identity and treat assign-to-me as the asker', () => {
+  it('tells the workspace assistant that me/I/my is the asking teammate for every lookup', () => {
     const prompt = joined({ role: 'workspace_assistant' })
     expect(prompt).toContain("asking teammate's name, email, role, and principal id")
-    expect(prompt).toContain('When they ask who they are, answer from those facts')
-    expect(prompt).toContain('"Assign to me" means their principal id')
-    expect(joined()).not.toContain('When they ask who they are')
+    expect(prompt).toContain('Treat "me", "I", "my", and "myself" as this teammate')
+    expect(prompt).toContain('including "posts created by me"')
+    expect(joined()).not.toContain('Treat "me", "I", "my", and "myself"')
   })
 
   it('injects the board catalogue only when capture_feedback is assembled', () => {

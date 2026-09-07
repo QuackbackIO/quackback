@@ -766,8 +766,9 @@ describe('runAssistantTurn', () => {
     ).systemPrompts.join('\n')
     expect(prompt).toContain('Asking teammate: James (principal id principal_member, role member).')
     expect(prompt).toContain('Email: james@quackback.io.')
-    expect(prompt).toContain('When they say "me" or "assign to me"')
-    expect(prompt).toContain('answer from those facts; do not search or guess')
+    expect(prompt).toContain('"Me"/"I"/"my" always means this person')
+    expect(prompt).toContain('posts created by me')
+    expect(prompt).toContain('Treat "me", "I", "my", and "myself" as this teammate')
   })
   it('neutralizes control characters in the asking teammate display name', async () => {
     const actor = {

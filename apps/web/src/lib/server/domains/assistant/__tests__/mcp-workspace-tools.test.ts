@@ -41,6 +41,9 @@ describe('workspace MCP tools', () => {
     expect(opened.specs.find((spec) => spec.name === 'triage_post')?.promptGuidance).toContain(
       'ownerPrincipalId "me"'
     )
+    expect(opened.specs.find((spec) => spec.name === 'search')?.promptGuidance).toContain(
+      'authorPrincipalId "me"'
+    )
     expect(opened.specs.find((spec) => spec.name === 'delete_post')?.approvalPolicy).toBe(
       'approval'
     )

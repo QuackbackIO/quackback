@@ -11,7 +11,7 @@ describe('formatAskingTeammateContext', () => {
         role: 'admin',
       })
     ).toBe(
-      'Asking teammate: James (principal id principal_1, role admin). Email: james@quackback.io. When they ask who they are, answer from these facts. When they say "me" or "assign to me", use this principal id as ownerPrincipalId, or pass the token "me". Never invent a different person.'
+      'Asking teammate: James (principal id principal_1, role admin). Email: james@quackback.io. "Me"/"I"/"my" always means this person. Use this principal id (or the token "me") for member TypeIDs, and this email for author/email lookups (for example posts created by me). Never invent a different person.'
     )
   })
 
