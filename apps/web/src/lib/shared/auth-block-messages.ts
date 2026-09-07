@@ -41,6 +41,7 @@ export type AuthBlockCode =
   | 'account_already_linked_to_different_user'
   | 'unable_to_link_account'
   | 'email_is_missing'
+  | 'user_info_is_missing'
   | 'email_not_found'
   | 'state_mismatch'
   | 'please_restart_the_process'
@@ -89,6 +90,8 @@ export const AUTH_BLOCK_MESSAGES: Record<AuthBlockCode, string> = {
   unable_to_link_account: 'Something went wrong while connecting your sign-in. Please try again.',
   email_is_missing:
     "Your identity provider didn't share an email address. Ask your administrator to enable the email scope for this app.",
+  user_info_is_missing:
+    "Your identity provider didn't share a usable profile. Ask your administrator to release an email address, or to map the claim that carries it.",
   email_not_found:
     "Your identity provider didn't share an email address. Ask your administrator to enable the email scope for this app.",
   state_mismatch: 'That sign-in attempt expired or was already used. Please try again.',

@@ -16,6 +16,7 @@
  */
 
 import type { JsonValue } from '@/lib/server/audit/log'
+import { claimMappingFor, type ClaimRoleMapping } from '@/lib/shared/oidc-claim-mapping'
 
 /** Every field worth an audit trace. The client secret is deliberately absent:
  *  it never travels through this DTO (it has its own credential function), so
@@ -56,6 +57,70 @@ function sameValue(a: unknown, b: unknown): boolean {
   return false
 }
 
+function roleValuesChanged(left: ClaimRoleMapping, right: ClaimRoleMapping): boolean {
+  const longest = Math.max(left.rules.length, right.rules.length)
+  for (let i = 0; i < longest; i++) {
+    if (left.rules[i]?.whenContains !== right.rules[i]?.whenContains) return true
+  }
+  return false
+}
+
+/**
+ * Configuration-only view of claim mapping. Paths, role targets, rule indices,
+ * and sync flags stay; match values, unknown subtrees, and raw snapshots do not.
+ */
+function projectClaimMapping(stored: unknown, comparedTo?: unknown): JsonValue | null {
+  if (stored == null) return null
+  const mapping = claimMappingFor(stored)
+  if (Object.keys(mapping).length === 0) return {}
+
+  const projected: Record<string, JsonValue> = {}
+
+  if (mapping.profile) {
+    const profile: Record<string, JsonValue> = {}
+    if (mapping.profile.sources) profile.sources = [...mapping.profile.sources]
+    if (mapping.profile.claims) profile.claims = { ...mapping.profile.claims }
+    if (mapping.profile.allowMissingEmail === true) profile.allowMissingEmail = true
+    projected.profile = profile
+  }
+
+  if (mapping.role) {
+    const role: Record<string, JsonValue> = {
+      claimPath: mapping.role.claimPath,
+      ruleCount: mapping.role.rules.length,
+      rules: mapping.role.rules.map((rule, index) => ({ index, role: rule.role })),
+    }
+    if (mapping.role.syncOnEverySignIn === true) role.syncOnEverySignIn = true
+    if (comparedTo != null) {
+      const other = claimMappingFor(comparedTo).role
+      if (other && roleValuesChanged(mapping.role, other)) {
+        role.ruleValuesChanged = true
+      }
+    }
+    projected.role = role
+  }
+
+  if (mapping.attributes) {
+    const attributes: Record<string, JsonValue> = {}
+    if (mapping.attributes.map) {
+      attributes.map = mapping.attributes.map.map((entry) => ({
+        claimPath: entry.claimPath,
+        attributeKey: entry.attributeKey,
+      }))
+    }
+    if (mapping.attributes.overrideExisting === true) attributes.overrideExisting = true
+    if (mapping.attributes.syncOnSignIn === true) attributes.syncOnSignIn = true
+    projected.attributes = attributes
+  }
+
+  return projected
+}
+
+function auditedValue(field: AuditedField, value: unknown, comparedTo?: unknown): JsonValue {
+  if (field === 'claimMapping') return projectClaimMapping(value, comparedTo)
+  return (value ?? null) as JsonValue
+}
+
 export interface ProviderAuditDiff {
   /** Null on create; otherwise the prior value of each changed field. */
   before: Record<string, JsonValue> | null
@@ -76,7 +141,7 @@ export function diffProviderAudit(
   if (!prior) {
     const after: Record<string, JsonValue> = {}
     for (const field of AUDITED_FIELDS) {
-      if (next[field] !== undefined) after[field] = next[field] as JsonValue
+      if (next[field] !== undefined) after[field] = auditedValue(field, next[field])
     }
     return { before: null, after }
   }
@@ -86,9 +151,11 @@ export function diffProviderAudit(
   for (const field of AUDITED_FIELDS) {
     const proposed = next[field]
     if (proposed === undefined) continue
-    if (sameValue(prior[field], proposed)) continue
-    before[field] = (prior[field] ?? null) as JsonValue
-    after[field] = proposed as JsonValue
+    const previous = auditedValue(field, prior[field] ?? null)
+    const nextValue = auditedValue(field, proposed, prior[field] ?? null)
+    if (sameValue(previous, nextValue)) continue
+    before[field] = previous
+    after[field] = nextValue
   }
   return { before, after }
 }

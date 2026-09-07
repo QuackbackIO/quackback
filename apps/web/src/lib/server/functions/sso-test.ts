@@ -28,11 +28,7 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { DiagnosticStep, HandshakeStage } from '@/lib/server/auth/sso-test-handshake'
 import type { JsonValue } from '@/lib/server/audit/log'
 import { authorizeRequestFor } from '@/lib/shared/oidc-request'
-import {
-  allowsMissingEmail,
-  identitySourcesFor,
-  profileClaimFor,
-} from '@/lib/shared/oidc-claim-mapping'
+import { allowsMissingEmail, identityMappingFor } from '@/lib/shared/oidc-claim-mapping'
 import { ssoTestResultKey, ssoTestSessionKey } from '@/lib/shared/sso-test-keys'
 import type { IdentityMapping } from '@/lib/server/auth/resolve-identity'
 
@@ -191,12 +187,7 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
       requestedScopes,
       tokenAuth: request.tokenAuth,
       requestedPrompt: request.prompt,
-      identityMapping: {
-        sources: identitySourcesFor(provider.claimMapping),
-        idClaim: profileClaimFor(provider.claimMapping, 'id'),
-        emailClaim: profileClaimFor(provider.claimMapping, 'email'),
-        nameClaim: profileClaimFor(provider.claimMapping, 'name'),
-      },
+      identityMapping: identityMappingFor(provider.claimMapping),
       adminUserId: user.id,
       startedAt: Date.now(),
       detailsChangedAt: provider.detailsChangedAt,

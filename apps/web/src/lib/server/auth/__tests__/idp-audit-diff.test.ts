@@ -65,7 +65,9 @@ describe('diffProviderAudit — update', () => {
     const mapping = { role: { claimPath: 'groups', rules: [], syncOnEverySignIn: false } }
     const changed = diffProviderAudit(prior, { ...next, claimMapping: mapping })
     expect(changed.before).toEqual({ claimMapping: null })
-    expect(changed.after.claimMapping).toEqual(mapping)
+    expect(changed.after.claimMapping).toEqual({
+      role: { claimPath: 'groups', ruleCount: 0, rules: [] },
+    })
 
     const unchanged = diffProviderAudit(
       { ...prior, claimMapping: mapping },
@@ -73,6 +75,69 @@ describe('diffProviderAudit — update', () => {
     )
     expect(unchanged.before).toEqual({})
     expect(unchanged.after).toEqual({})
+  })
+
+  it('audit never records captured role match values', () => {
+    const SENTINEL = 'CAPTURED_ROLE_VALUE_DO_NOT_AUDIT'
+    const mapping = {
+      profile: {
+        claims: { email: 'upn', id: 'oid' },
+        extraSecret: SENTINEL,
+      },
+      role: {
+        claimPath: 'groups',
+        rules: [{ whenContains: SENTINEL, role: 'admin' as const }],
+        syncOnEverySignIn: true,
+      },
+      attributes: {
+        map: [{ claimPath: 'department', attributeKey: 'dept' }],
+      },
+      unknownSection: { nested: { value: SENTINEL } },
+    }
+
+    const created = diffProviderAudit(null, { ...next, claimMapping: mapping })
+    const createdSerialized = JSON.stringify({ before: created.before, after: created.after })
+    expect(createdSerialized).not.toContain(SENTINEL)
+    expect(createdSerialized).not.toContain('whenContains')
+    expect(created.after.claimMapping).toEqual({
+      profile: { claims: { email: 'upn', id: 'oid' } },
+      role: {
+        claimPath: 'groups',
+        ruleCount: 1,
+        rules: [{ index: 0, role: 'admin' }],
+        syncOnEverySignIn: true,
+      },
+      attributes: { map: [{ claimPath: 'department', attributeKey: 'dept' }] },
+    })
+
+    const updated = diffProviderAudit(
+      { ...prior, claimMapping: mapping },
+      {
+        ...next,
+        claimMapping: {
+          ...mapping,
+          role: {
+            ...mapping.role,
+            rules: [{ whenContains: 'CHANGED_VALUE', role: 'admin' as const }],
+          },
+        },
+      }
+    )
+    const updatedSerialized = JSON.stringify({ before: updated.before, after: updated.after })
+    expect(updatedSerialized).not.toContain(SENTINEL)
+    expect(updatedSerialized).not.toContain('CHANGED_VALUE')
+    expect(updatedSerialized).not.toContain('whenContains')
+    expect(updated.after.claimMapping).toEqual({
+      profile: { claims: { email: 'upn', id: 'oid' } },
+      role: {
+        claimPath: 'groups',
+        ruleCount: 1,
+        rules: [{ index: 0, role: 'admin' }],
+        syncOnEverySignIn: true,
+        ruleValuesChanged: true,
+      },
+      attributes: { map: [{ claimPath: 'department', attributeKey: 'dept' }] },
+    })
   })
 
   it('records nothing when nothing changed', () => {

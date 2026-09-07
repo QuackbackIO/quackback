@@ -289,6 +289,7 @@ describe('handleAutoProvisionAfter -- audit on role change', () => {
     expect(mockRecordAuditEvent).toHaveBeenCalledTimes(1)
     const call = mockRecordAuditEvent.mock.calls[0][0] as {
       event: string
+      actor: Record<string, unknown>
       before: { role: string }
       after: { role: string }
       metadata: Record<string, unknown>
@@ -297,6 +298,8 @@ describe('handleAutoProvisionAfter -- audit on role change', () => {
     expect(call.before.role).toBe('user')
     expect(call.after.role).toBe('member')
     expect(call.metadata.source).toBe('auto_provision')
+    expect(call.actor).toEqual({ userId: 'user_abc' })
+    expect(call.actor).not.toHaveProperty('email')
   })
 
   it('readSsoClaims queries the account by the CALLBACK provider id (not a hardcoded "sso")', async () => {

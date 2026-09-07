@@ -18,6 +18,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { identityMappingFor } from '@/lib/shared/oidc-claim-mapping'
 
 type AnyHandler = (args: { data: Record<string, unknown> }) => Promise<unknown>
 
@@ -318,6 +319,50 @@ describe('startSsoTestFn', () => {
     // Session must carry the correct registrationId.
     const [, session] = hoisted.cacheSet.mock.calls[0] as [string, { registrationId: string }]
     expect(session.registrationId).toBe('oidc_abc123')
+  })
+
+  it('forwards stored profile paths through the shared identity mapping adapter', async () => {
+    const claimMapping = {
+      profile: {
+        sources: ['accessTokenJwt', 'idToken'],
+        claims: { id: 'oid', email: 'upn', name: 'preferred_username' },
+      },
+    }
+    hoisted.listIdentityProviders.mockResolvedValue([{ ...ssoProvider, claimMapping }])
+    hoisted.getIdentityProviderCredentials.mockResolvedValue({ clientSecret: 'secret' })
+    hoisted.safeFetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          issuer: 'https://idp',
+          authorization_endpoint: 'https://idp/auth',
+          token_endpoint: 'https://idp/token',
+          jwks_uri: 'https://idp/jwks',
+        }),
+        { status: 200 }
+      )
+    )
+    hoisted.cacheSet.mockResolvedValue(undefined)
+
+    await startSsoTest({ data: { registrationId: 'sso' } })
+
+    const [, session] = hoisted.cacheSet.mock.calls[0] as [
+      string,
+      {
+        identityMapping?: {
+          sources?: string[]
+          idClaim?: string
+          emailClaim?: string
+          nameClaim?: string
+        }
+      },
+    ]
+    expect(session.identityMapping).toEqual(identityMappingFor(claimMapping))
+    expect(session.identityMapping).toEqual({
+      sources: ['accessTokenJwt', 'idToken'],
+      idClaim: 'oid',
+      emailClaim: 'upn',
+      nameClaim: 'preferred_username',
+    })
   })
 })
 
