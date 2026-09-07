@@ -91,18 +91,16 @@ export interface MergeAssessment {
 
 const CONFIDENCE_THRESHOLD = 0.75
 
-// Item fields are intentionally loose (not typed/required) rather than a
-// strict `z.object`: the old code tolerated individual malformed items by
-// skipping just that item (the typeof guards in the filter loop below), and
-// a strict per-item schema would instead fail the WHOLE batched response —
-// and thus the whole `chat()` call — over one bad item. `results` itself
-// gets `.catch([])` so a present-but-wrong-shaped `results` field degrades
-// to "no assessments" rather than failing the request; a genuinely missing
-// or non-object top level (e.g. a bare array, which older prompts/providers
-// could still emit) is treated as a parse failure by the catch in
-// `assessMergeCandidates`, matching the old code's parse-fail → `[]` branch.
+// Avoid z.record() — Zod emits `propertyNames`, which OpenAI Structured Outputs reject.
+const MergeAssessmentItemSchema = z.strictObject({
+  candidatePostId: z.string(),
+  isDuplicate: z.boolean(),
+  confidence: z.number(),
+  reasoning: z.string(),
+})
+
 const MergeAssessmentResponseSchema = z.object({
-  results: z.array(z.record(z.string(), z.unknown())).catch([]),
+  results: z.array(MergeAssessmentItemSchema).catch([]),
 })
 
 /**
