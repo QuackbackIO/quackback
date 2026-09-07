@@ -499,7 +499,6 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
     registrationId: input.registrationId ?? '',
     detailsChangedAtAtStart: input.detailsChangedAtAtStart ?? null,
     snapshots,
-    diagnosticClaims,
     bound,
     mappingOutcome,
   })
@@ -689,14 +688,12 @@ function buildTestCapture({
   registrationId,
   detailsChangedAtAtStart,
   snapshots,
-  diagnosticClaims,
   bound,
   mappingOutcome,
 }: {
   registrationId: string
   detailsChangedAtAtStart: string | null
   snapshots: SourceSnapshot[]
-  diagnosticClaims: Record<string, unknown>
   bound: ReturnType<typeof finishBinding>
   mappingOutcome: ProfileOutcome
 }): SsoTestCaptureV2 {
@@ -730,7 +727,7 @@ function buildTestCapture({
     detailsChangedAtAtStart,
     outcome: success && !bound.failed ? 'success' : 'mapping_failed',
     ...(identity ? { identity } : {}),
-    claims: diagnosticClaims as Record<string, JsonValue>,
+    claims: bound.acceptedClaims as Record<string, JsonValue>,
     replay: { sources: snapshots },
   }
 }

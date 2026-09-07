@@ -548,4 +548,132 @@ describe('runHandshake — capture and production replay', () => {
     expect(JSON.stringify(result.capture)).not.toMatch(/id_token|access_token/)
     expect(JSON.stringify(result.capture)).not.toContain(idToken)
   })
+
+  it('stores binder-accepted claims so nested mapped leaves survive source merge', async () => {
+    const { publicKey, privateKey } = await generateKeyPair('RS256', { extractable: true })
+    const publicJwk = await exportJWK(publicKey)
+    publicJwk.kid = 'test-key'
+    publicJwk.alg = 'RS256'
+    const issuer = 'https://idp.example'
+    const idToken = await new SignJWT({
+      nonce: 'nonce789',
+      email: 'from-token@x.com',
+      name: 'From Token',
+      org: { department: 'from-token' },
+    })
+      .setProtectedHeader({ alg: 'RS256', kid: 'test-key' })
+      .setIssuer(issuer)
+      .setAudience('cid')
+      .setSubject('from-token')
+      .setIssuedAt()
+      .setExpirationTime('5m')
+      .sign(privateKey)
+
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          issuer,
+          token_endpoint: `${issuer}/token`,
+          jwks_uri: `${issuer}/jwks`,
+          userinfo_endpoint: `${issuer}/userinfo`,
+        }),
+        { status: 200 }
+      )
+    )
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ id_token: idToken, access_token: 'at', token_type: 'Bearer' }),
+        { status: 200 }
+      )
+    )
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ keys: [publicJwk] }), { status: 200 })
+    )
+    safeFetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          sub: 'from-token',
+          org: { costCenter: 'cc-9', department: 'from-userinfo' },
+          extra: 'only-userinfo',
+        }),
+        { status: 200 }
+      )
+    )
+
+    const result = await runHandshake({
+      ...baseInput,
+      registrationId: 'oidc_x',
+      claimMapping: {
+        attributes: { map: [{ claimPath: 'org.costCenter', attributeKey: 'cost_center' }] },
+      },
+    })
+    if (!result.ok) throw new Error(`expected success, got ${result.stage}: ${result.hint}`)
+    expect(result.capture?.claims.org).toEqual({ department: 'from-token', costCenter: 'cc-9' })
+    expect(result.allClaims?.org).toEqual({ department: 'from-token' })
+  })
+
+  it('omits userinfo claims the binder discarded for a subject mismatch', async () => {
+    const { publicKey, privateKey } = await generateKeyPair('RS256', { extractable: true })
+    const publicJwk = await exportJWK(publicKey)
+    publicJwk.kid = 'test-key'
+    publicJwk.alg = 'RS256'
+    const issuer = 'https://idp.example'
+    const idToken = await new SignJWT({
+      nonce: 'nonce789',
+      email: 'from-token@x.com',
+      name: 'From Token',
+      org: { department: 'from-token' },
+    })
+      .setProtectedHeader({ alg: 'RS256', kid: 'test-key' })
+      .setIssuer(issuer)
+      .setAudience('cid')
+      .setSubject('from-token')
+      .setIssuedAt()
+      .setExpirationTime('5m')
+      .sign(privateKey)
+
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          issuer,
+          token_endpoint: `${issuer}/token`,
+          jwks_uri: `${issuer}/jwks`,
+          userinfo_endpoint: `${issuer}/userinfo`,
+        }),
+        { status: 200 }
+      )
+    )
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ id_token: idToken, access_token: 'at', token_type: 'Bearer' }),
+        { status: 200 }
+      )
+    )
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ keys: [publicJwk] }), { status: 200 })
+    )
+    safeFetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          sub: 'other-subject',
+          org: { costCenter: 'cc-9' },
+          extra: 'only-userinfo',
+        }),
+        { status: 200 }
+      )
+    )
+
+    const result = await runHandshake({
+      ...baseInput,
+      registrationId: 'oidc_x',
+      claimMapping: {
+        attributes: { map: [{ claimPath: 'org.costCenter', attributeKey: 'cost_center' }] },
+      },
+    })
+    if (!result.ok) throw new Error(`expected success, got ${result.stage}: ${result.hint}`)
+    expect(result.capture?.claims.org).toEqual({ department: 'from-token' })
+    expect(result.capture?.claims.extra).toBeUndefined()
+    expect(result.allClaims?.extra).toBe('only-userinfo')
+    expect(result.mappingOutcome?.warnings).toContain('subject_mismatch')
+  })
 })

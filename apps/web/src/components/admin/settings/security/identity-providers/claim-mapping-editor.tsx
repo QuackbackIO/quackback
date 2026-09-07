@@ -23,6 +23,7 @@ import { Autocomplete } from '@/components/ui/autocomplete'
 import { deriveClaimSuggestions } from '@/lib/shared/claim-suggestions'
 import { TestSignInButton } from '../sso/test-sign-in-button'
 import { useSsoTestSignIn } from '../sso/use-sso-test-sign-in'
+import { matchingSessionCapture } from './claim-path-input'
 import { ROLES, type RoleMapping } from './provider-shared'
 
 export function ClaimMappingEditor({
@@ -44,11 +45,9 @@ export function ClaimMappingEditor({
   const current: RoleMapping = mapping ?? { claimPath: 'groups', rules: [] }
   const update = (patch: Partial<RoleMapping>) => onChange({ ...current, ...patch })
 
-  const { lastSuccess } = useSsoTestSignIn()
-  const suggestions =
-    lastSuccess && lastSuccess.registrationId === registrationId
-      ? deriveClaimSuggestions(lastSuccess.claims)
-      : null
+  const { lastSuccess, lastCapture } = useSsoTestSignIn()
+  const session = matchingSessionCapture(registrationId, lastCapture, lastSuccess)
+  const suggestions = session ? deriveClaimSuggestions(session.claims) : null
   const hasSuggestions = (suggestions?.paths.length ?? 0) > 0
   const pathSuggestions = (suggestions?.paths ?? []).map((p) => ({ value: p }))
   const valueSuggestions = (suggestions?.valuesByPath[current.claimPath] ?? []).map((v) => ({

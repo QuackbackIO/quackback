@@ -67,14 +67,17 @@ const { discoveryScopesSpy } = vi.hoisted(() => ({
   discoveryScopesSpy: vi.fn(async () => ({ scopesSupported: null as string[] | null })),
 }))
 
+type SessionCapture = {
+  registrationId: string
+  claims: Record<string, unknown>
+  capturedAt?: string
+  identity?: { id: string; email?: string; sources: Record<string, string> }
+}
+
 const { ssoTestRef } = vi.hoisted(() => ({
   ssoTestRef: {
-    current: null as null | {
-      registrationId: string
-      claims: Record<string, unknown>
-      capturedAt?: string
-      identity?: { id: string; email?: string; sources: Record<string, string> }
-    },
+    current: null as null | SessionCapture,
+    lastCapture: undefined as undefined | null | SessionCapture,
   },
 }))
 
@@ -105,7 +108,7 @@ vi.mock('../../sso/use-sso-test-sign-in', () => ({
   useSsoTestSignIn: () => ({
     open: vi.fn(),
     lastSuccess: ssoTestRef.current,
-    lastCapture: ssoTestRef.current,
+    lastCapture: ssoTestRef.lastCapture !== undefined ? ssoTestRef.lastCapture : ssoTestRef.current,
   }),
   SsoTestSignInProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
@@ -297,6 +300,7 @@ beforeEach(() => {
   discoveryScopesSpy.mockClear()
   discoveryScopesSpy.mockResolvedValue({ scopesSupported: null })
   ssoTestRef.current = null
+  ssoTestRef.lastCapture = undefined
   state.userAttributes = []
   state.authConfig = { oauth: { password: true } }
   state.credentialStatus = { _emailConfigured: true }
@@ -1026,6 +1030,32 @@ describe('<ProviderDetailPage> claim → person-attribute mapping', () => {
       })
     )
     expect(screen.getByText(/“From session”/)).toBeInTheDocument()
+    expect(screen.queryByText(/“Engineering”/)).not.toBeInTheDocument()
+  })
+
+  it('feeds a mapping-failure capture into the editor over an earlier success', () => {
+    state.userAttributes = PEOPLE_ATTRS
+    ssoTestRef.current = {
+      registrationId: 'oidc_x',
+      capturedAt: '2026-09-01T00:00:00.000Z',
+      identity: { id: 'sub', email: 'alice@example.com', sources: { email: 'idToken' } },
+      claims: { department: 'From success' },
+    }
+    ssoTestRef.lastCapture = {
+      registrationId: 'oidc_x',
+      capturedAt: '2026-09-03T00:00:00.000Z',
+      claims: { department: 'From failed mapping' },
+    }
+    renderPage(
+      makeProvider({
+        lastTestCapture: matchingCapture,
+        claimMapping: {
+          attributes: { map: [{ claimPath: 'department', attributeKey: 'department' }] },
+        },
+      })
+    )
+    expect(screen.getByText(/“From failed mapping”/)).toBeInTheDocument()
+    expect(screen.queryByText(/“From success”/)).not.toBeInTheDocument()
     expect(screen.queryByText(/“Engineering”/)).not.toBeInTheDocument()
   })
 

@@ -18,6 +18,15 @@ function fixtureFor(
   return null
 }
 
+/** Prefer a mapping-failure capture over an earlier success for the same provider. */
+export function matchingSessionCapture(
+  registrationId: string,
+  lastCapture: SsoTestCapture | null | undefined,
+  lastSuccess: SsoTestCapture | null | undefined
+): SsoTestCapture | null {
+  return fixtureFor(registrationId, lastCapture) ?? fixtureFor(registrationId, lastSuccess)
+}
+
 export function ClaimPathInput({
   value,
   onChange,
@@ -36,14 +45,16 @@ export function ClaimPathInput({
   placeholder?: string
   ariaLabel: string
   disabled?: boolean
-  /** Session or persisted fixture. Falls back to the sitting's lastSuccess. */
+  /** Session or persisted fixture. Falls back to the sitting's lastCapture. */
   capture?: SsoTestCapture | null
   /** Role suggestions are array-of-string paths; attribute suggestions are
    *  scalar and array leaves, including profile claims. */
   suggestionsFor?: 'role' | 'attribute'
 }) {
-  const { lastSuccess } = useSsoTestSignIn()
-  const fixture = fixtureFor(registrationId, lastSuccess) ?? fixtureFor(registrationId, capture)
+  const { lastSuccess, lastCapture } = useSsoTestSignIn()
+  const fixture =
+    matchingSessionCapture(registrationId, lastCapture, lastSuccess) ??
+    fixtureFor(registrationId, capture)
   const pathSuggestions = fixture
     ? suggestionsFor === 'attribute'
       ? deriveAttributeClaimPaths(fixture.claims).map((s) => ({
@@ -79,8 +90,10 @@ export function ClaimPathInput({
 }
 
 export function useClaimSuggestions(registrationId: string, capture?: SsoTestCapture | null) {
-  const { lastSuccess } = useSsoTestSignIn()
-  const fixture = fixtureFor(registrationId, lastSuccess) ?? fixtureFor(registrationId, capture)
+  const { lastSuccess, lastCapture } = useSsoTestSignIn()
+  const fixture =
+    matchingSessionCapture(registrationId, lastCapture, lastSuccess) ??
+    fixtureFor(registrationId, capture)
   if (!fixture) return null
   return deriveClaimSuggestions(fixture.claims)
 }

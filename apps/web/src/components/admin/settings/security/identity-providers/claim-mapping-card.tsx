@@ -19,6 +19,7 @@ import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import { ClaimMappingEditor } from './claim-mapping-editor'
 import { ClaimAttributeMappingEditor } from './claim-attribute-mapping-editor'
+import { matchingSessionCapture } from './claim-path-input'
 import { useSsoTestSignIn } from '../sso/use-sso-test-sign-in'
 import {
   mergeClaimMapping,
@@ -45,17 +46,15 @@ export function ClaimMappingCard({ provider }: { provider: IdentityProvider }) {
   const [allowMissingEmail, setAllowMissingEmail] = useState(
     provider.claimMapping?.profile?.allowMissingEmail === true
   )
-  const { lastSuccess } = useSsoTestSignIn()
-  // In-session lastSuccess is the test that just completed; the persisted
-  // capture is only reloaded with the provider row. Prefer the session copy
-  // so suggestions and preview update without a refresh.
+  const { lastSuccess, lastCapture } = useSsoTestSignIn()
+  // In-session lastCapture includes mapping failures from this sitting; the
+  // persisted capture is only reloaded with the provider row. Prefer the
+  // session copy so suggestions and preview update without a refresh.
   const capture =
-    lastSuccess && lastSuccess.registrationId === provider.registrationId
-      ? lastSuccess
-      : provider.lastTestCapture &&
-          provider.lastTestCapture.registrationId === provider.registrationId
-        ? provider.lastTestCapture
-        : null
+    matchingSessionCapture(provider.registrationId, lastCapture, lastSuccess) ??
+    (provider.lastTestCapture && provider.lastTestCapture.registrationId === provider.registrationId
+      ? provider.lastTestCapture
+      : null)
 
   const proposed = mergeClaimMapping(provider.claimMapping, {
     role: normalizeRoleMapping(mapping),
