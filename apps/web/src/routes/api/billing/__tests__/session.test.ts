@@ -179,4 +179,25 @@ describe('POST /api/billing/session checkout', () => {
     expect(res.status).toBe(303)
     expect(res.headers.get('location')).toBe('/admin/settings/billing')
   })
+
+  it('rejects a foreign Origin before talking to Stripe', async () => {
+    const res = await POST({
+      request: new Request('https://app.example.com/api/billing/session', {
+        method: 'POST',
+        headers: {
+          origin: 'https://attacker.test',
+          host: 'app.example.com',
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          action: 'checkout',
+          planId: 'pro',
+          billingPeriod: 'monthly',
+        }),
+      }),
+    })
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({ error: 'invalid_origin' })
+    expect(hoisted.createHostedBillingSession).not.toHaveBeenCalled()
+  })
 })
