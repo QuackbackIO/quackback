@@ -13,11 +13,7 @@ import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { useUserAttributes } from '@/lib/client/hooks/use-user-attributes-queries'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import type { IdentitySource } from '@/lib/shared/oidc-claim-mapping'
-import {
-  applyClaimMappingEdits,
-  diffClaimMappingOperations,
-  mappingSaveRisks,
-} from '@/lib/shared/sso-claim-mapping-edit'
+import { diffClaimMappingOperations, mappingSaveRisks } from '@/lib/shared/sso-claim-mapping-edit'
 import { ClaimMappingEditor } from './claim-mapping-editor'
 import { ClaimAttributeMappingEditor } from './claim-attribute-mapping-editor'
 import {
@@ -125,8 +121,7 @@ export function ClaimMappingCard({
     attributes: normalizeAttributeMapping(attributes),
   })
   const operations = diffClaimMappingOperations(provider.claimMapping, proposed)
-  const nextMapping = applyClaimMappingEdits(provider.claimMapping, operations)
-  const risks = mappingSaveRisks(provider.claimMapping, nextMapping)
+  const risks = mappingSaveRisks(provider.claimMapping, proposed)
   const dirty = operations.length > 0
 
   const rebaseFrom = (next: IdentityProvider) => {

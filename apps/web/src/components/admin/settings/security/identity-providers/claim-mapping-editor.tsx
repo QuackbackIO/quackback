@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/select'
 import { Autocomplete } from '@/components/ui/autocomplete'
 import { deriveClaimSuggestions } from '@/lib/shared/claim-suggestions'
-import type { SsoTestCapture } from '@/lib/shared/sso-test-capture'
+import { captureSuggestionClaims, type SsoTestCapture } from '@/lib/shared/sso-test-capture'
 import { TestSignInButton } from '../sso/test-sign-in-button'
 import { useSsoTestSignIn } from '../sso/use-sso-test-sign-in'
 import { ClaimPathInput } from './claim-path-input'
@@ -56,7 +56,7 @@ export function RoleMappingRulesBody({
     (lastCapture && lastCapture.registrationId === registrationId ? lastCapture : null) ??
     (lastSuccess && lastSuccess.registrationId === registrationId ? lastSuccess : null) ??
     (capture && capture.registrationId === registrationId ? capture : null)
-  const suggestions = fixture ? deriveClaimSuggestions(fixture.claims) : null
+  const suggestions = fixture ? deriveClaimSuggestions(captureSuggestionClaims(fixture)) : null
   const valueSuggestions = (suggestions?.valuesByPath[mapping.claimPath] ?? []).map((v) => ({
     value: v,
   }))
@@ -234,7 +234,7 @@ export function ClaimMappingEditor({
   const session =
     (lastCapture && lastCapture.registrationId === registrationId ? lastCapture : null) ??
     (lastSuccess && lastSuccess.registrationId === registrationId ? lastSuccess : null)
-  const suggestions = session ? deriveClaimSuggestions(session.claims) : null
+  const suggestions = session ? deriveClaimSuggestions(captureSuggestionClaims(session)) : null
   const hasSuggestions = (suggestions?.paths.length ?? 0) > 0
   const pathSuggestions = (suggestions?.paths ?? []).map((p) => ({ value: p }))
   const valueSuggestions = (suggestions?.valuesByPath[current.claimPath] ?? []).map((v) => ({

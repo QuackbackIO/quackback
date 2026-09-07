@@ -10,7 +10,7 @@ import {
   deriveClaimSuggestions,
   deriveIdentityClaimPaths,
 } from '@/lib/shared/claim-suggestions'
-import type { SsoTestCapture } from '@/lib/shared/sso-test-capture'
+import { captureSuggestionClaims, type SsoTestCapture } from '@/lib/shared/sso-test-capture'
 import { TestSignInButton } from '../sso/test-sign-in-button'
 import { useSsoTestSignIn } from '../sso/use-sso-test-sign-in'
 
@@ -58,7 +58,7 @@ export function ClaimPathInput({
     fixtureFor(registrationId, lastSuccess)
   const pathSuggestions = (() => {
     if (suggestionsFor === 'identity') {
-      const claims = fixture?.claims ?? {}
+      const claims = fixture ? captureSuggestionClaims(fixture) : {}
       return deriveIdentityClaimPaths(claims, {
         kind: providerKind,
         field: identityField,
@@ -70,13 +70,14 @@ export function ClaimPathInput({
       }))
     }
     if (!fixture) return []
+    const claims = captureSuggestionClaims(fixture)
     if (suggestionsFor === 'attribute') {
-      return deriveAttributeClaimPaths(fixture.claims).map((s) => ({
+      return deriveAttributeClaimPaths(claims).map((s) => ({
         value: s.path,
         description: s.description,
       }))
     }
-    return deriveClaimSuggestions(fixture.claims).paths.map((p) => ({ value: p }))
+    return deriveClaimSuggestions(claims).paths.map((p) => ({ value: p }))
   })()
 
   return (
@@ -111,5 +112,5 @@ export function useClaimSuggestions(registrationId: string, capture?: SsoTestCap
     fixtureFor(registrationId, lastSuccess) ??
     fixtureFor(registrationId, capture)
   if (!fixture) return null
-  return deriveClaimSuggestions(fixture.claims)
+  return deriveClaimSuggestions(captureSuggestionClaims(fixture))
 }
