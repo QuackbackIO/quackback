@@ -20,6 +20,7 @@ import type { IdentityProviderId } from '@quackback/ids'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import type { VerifiedDomain } from '@/lib/server/domains/settings/settings.types'
 import { ProviderDetailPage } from '../provider-detail-page'
+import { applyClaimMappingEdits } from '@/lib/shared/sso-claim-mapping-edit'
 
 beforeAll(() => {
   Element.prototype.scrollIntoView = vi.fn()
@@ -28,7 +29,17 @@ beforeAll(() => {
   Element.prototype.releasePointerCapture = vi.fn()
 })
 
-const { upsertSpy, deleteSpy, credentialsSpy } = vi.hoisted(() => ({
+const { upsertSpy, mappingSpy, deleteSpy, credentialsSpy } = vi.hoisted(() => ({
+  mappingSpy: vi.fn(
+    async (_args: {
+      data: {
+        expectedClaimMapping: unknown
+        operations: unknown[]
+        acknowledgeIdentifierChange?: boolean
+        acknowledgeAdminRules?: boolean
+      }
+    }) => undefined
+  ),
   upsertSpy: vi.fn(
     async (_args: {
       data: {
@@ -56,14 +67,17 @@ const { discoveryScopesSpy } = vi.hoisted(() => ({
   discoveryScopesSpy: vi.fn(async () => ({ scopesSupported: null as string[] | null })),
 }))
 
+type SessionCapture = {
+  registrationId: string
+  claims: Record<string, unknown>
+  capturedAt?: string
+  identity?: { id: string; email?: string; sources: Record<string, string> }
+}
+
 const { ssoTestRef } = vi.hoisted(() => ({
   ssoTestRef: {
-    current: null as null | {
-      registrationId: string
-      claims: Record<string, unknown>
-      capturedAt?: string
-      identity?: { id: string; email?: string; sources: Record<string, string> }
-    },
+    current: null as null | SessionCapture,
+    lastCapture: undefined as undefined | null | SessionCapture,
   },
 }))
 
@@ -91,7 +105,11 @@ const { state } = vi.hoisted(() => ({
 }))
 
 vi.mock('../../sso/use-sso-test-sign-in', () => ({
-  useSsoTestSignIn: () => ({ open: vi.fn(), lastSuccess: ssoTestRef.current }),
+  useSsoTestSignIn: () => ({
+    open: vi.fn(),
+    lastSuccess: ssoTestRef.current,
+    lastCapture: ssoTestRef.lastCapture !== undefined ? ssoTestRef.lastCapture : ssoTestRef.current,
+  }),
   SsoTestSignInProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
 
@@ -122,6 +140,7 @@ vi.mock('@tanstack/react-router', () => ({
 
 vi.mock('@/lib/server/functions/sso', () => ({
   upsertIdentityProviderFn: upsertSpy,
+  saveIdentityProviderClaimMappingFn: mappingSpy,
   setProviderCredentialsFn: credentialsSpy,
   deleteIdentityProviderFn: deleteSpy,
   addProviderDomainFn: vi.fn(),
@@ -259,17 +278,29 @@ function renderPage(provider: IdentityProvider) {
 
 const saveConnection = () =>
   fireEvent.click(screen.getByRole('button', { name: 'Save connection' }))
-const saveMapping = () =>
+const saveMapping = () => {
   fireEvent.click(screen.getByRole('button', { name: 'Save claim mapping' }))
+  const confirm = screen.queryByRole('button', { name: 'Save mappings' })
+  if (confirm) fireEvent.click(confirm)
+}
 const lastUpsert = () => upsertSpy.mock.calls.at(-1)![0].data
+const lastMapping = () => mappingSpy.mock.calls.at(-1)![0].data
+const lastSavedMapping = () =>
+  applyClaimMappingEdits(
+    lastMapping().expectedClaimMapping,
+    lastMapping()
+      .operations as import('@/lib/shared/sso-claim-mapping-edit').ClaimMappingOperation[]
+  )
 
 beforeEach(() => {
   upsertSpy.mockClear()
+  mappingSpy.mockClear()
   deleteSpy.mockClear()
   credentialsSpy.mockClear()
   discoveryScopesSpy.mockClear()
   discoveryScopesSpy.mockResolvedValue({ scopesSupported: null })
   ssoTestRef.current = null
+  ssoTestRef.lastCapture = undefined
   state.userAttributes = []
   state.authConfig = { oauth: { password: true } }
   state.credentialStatus = { _emailConfigured: true }
@@ -369,8 +400,8 @@ describe('<ProviderDetailPage> provisioning consolidation', () => {
   it('persists claimMapping=null when saved with no rules and sync off', async () => {
     renderPage(makeProvider({ autoCreateUsers: true, claimMapping: null }))
     saveMapping()
-    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
-    expect(lastUpsert().claimMapping).toBeNull()
+    await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
+    expect(lastSavedMapping()).toBeNull()
   })
 
   it('nulls the default role when auto-create is turned off', async () => {
@@ -771,8 +802,8 @@ describe('<ProviderDetailPage> identity fields', () => {
     )
     await userEvent.click(screen.getByLabelText(/allow accounts without an email/i))
     saveMapping()
-    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
-    const sent = lastUpsert().claimMapping as {
+    await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
+    const sent = lastSavedMapping() as {
       profile?: { allowMissingEmail?: boolean }
       role?: { claimPath?: string }
     }
@@ -785,8 +816,8 @@ describe('<ProviderDetailPage> identity fields', () => {
     // would make an untouched provider look deliberately configured.
     renderPage(makeProvider({ claimMapping: null }))
     saveMapping()
-    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
-    expect(lastUpsert().claimMapping).toBeNull()
+    await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
+    expect(lastSavedMapping()).toBeNull()
   })
 
   it('carries the attributes section through a mapping save verbatim', async () => {
@@ -796,8 +827,8 @@ describe('<ProviderDetailPage> identity fields', () => {
     renderPage(makeProvider({ claimMapping: { attributes } }))
     await userEvent.click(screen.getByLabelText(/allow accounts without an email/i))
     saveMapping()
-    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
-    expect((lastUpsert().claimMapping as { attributes?: unknown }).attributes).toEqual(attributes)
+    await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
+    expect((lastSavedMapping() as { attributes?: unknown }).attributes).toEqual(attributes)
   })
 })
 
@@ -852,8 +883,8 @@ describe('<ProviderDetailPage> claim → person-attribute mapping', () => {
     fireEvent.click(screen.getByRole('combobox', { name: /Person attribute \(mapping 1\)/ }))
     fireEvent.click(screen.getByRole('option', { name: /Department/ }))
     saveMapping()
-    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
-    const sent = lastUpsert().claimMapping as {
+    await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
+    const sent = lastSavedMapping() as {
       attributes?: { map?: Array<{ claimPath: string; attributeKey: string }> }
       role?: unknown
       profile?: unknown
@@ -874,8 +905,8 @@ describe('<ProviderDetailPage> claim → person-attribute mapping', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: /Remove mapping 1/ }))
     saveMapping()
-    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
-    expect(lastUpsert().claimMapping).toBeNull()
+    await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
+    expect(lastSavedMapping()).toBeNull()
   })
 
   it('persists overrideExisting and syncOnSignIn independently', async () => {
@@ -889,18 +920,18 @@ describe('<ProviderDetailPage> claim → person-attribute mapping', () => {
     )
     await userEvent.click(screen.getByLabelText('Overwrite values that are already set'))
     saveMapping()
-    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
-    const first = lastUpsert().claimMapping as {
+    await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
+    const first = lastSavedMapping() as {
       attributes?: { overrideExisting?: boolean; syncOnSignIn?: boolean }
     }
     expect(first.attributes?.overrideExisting).toBe(true)
     expect(first.attributes?.syncOnSignIn).toBeUndefined()
 
-    upsertSpy.mockClear()
+    mappingSpy.mockClear()
     await userEvent.click(screen.getByLabelText('Clear an attribute when its claim is missing'))
     saveMapping()
-    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
-    const second = lastUpsert().claimMapping as {
+    await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
+    const second = lastSavedMapping() as {
       attributes?: { overrideExisting?: boolean; syncOnSignIn?: boolean }
     }
     expect(second.attributes?.overrideExisting).toBe(true)
@@ -935,8 +966,8 @@ describe('<ProviderDetailPage> claim → person-attribute mapping', () => {
     expect(screen.queryByRole('button', { name: /Add mapping/ })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /Remove mapping 1/ }))
     saveMapping()
-    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
-    expect(lastUpsert().claimMapping).toBeNull()
+    await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
+    expect(lastSavedMapping()).toBeNull()
   })
 
   it('renders an orphan-row warning when the attribute no longer exists', () => {
@@ -999,6 +1030,32 @@ describe('<ProviderDetailPage> claim → person-attribute mapping', () => {
       })
     )
     expect(screen.getByText(/“From session”/)).toBeInTheDocument()
+    expect(screen.queryByText(/“Engineering”/)).not.toBeInTheDocument()
+  })
+
+  it('feeds a mapping-failure capture into the editor over an earlier success', () => {
+    state.userAttributes = PEOPLE_ATTRS
+    ssoTestRef.current = {
+      registrationId: 'oidc_x',
+      capturedAt: '2026-09-01T00:00:00.000Z',
+      identity: { id: 'sub', email: 'alice@example.com', sources: { email: 'idToken' } },
+      claims: { department: 'From success' },
+    }
+    ssoTestRef.lastCapture = {
+      registrationId: 'oidc_x',
+      capturedAt: '2026-09-03T00:00:00.000Z',
+      claims: { department: 'From failed mapping' },
+    }
+    renderPage(
+      makeProvider({
+        lastTestCapture: matchingCapture,
+        claimMapping: {
+          attributes: { map: [{ claimPath: 'department', attributeKey: 'department' }] },
+        },
+      })
+    )
+    expect(screen.getByText(/“From failed mapping”/)).toBeInTheDocument()
+    expect(screen.queryByText(/“From success”/)).not.toBeInTheDocument()
     expect(screen.queryByText(/“Engineering”/)).not.toBeInTheDocument()
   })
 

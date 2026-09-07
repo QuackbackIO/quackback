@@ -54,7 +54,7 @@ import {
   type WireResult,
   type SsoTestState,
 } from './sso-test-state'
-import type { SsoTestCapture } from '@/lib/shared/sso-test-capture'
+import { isV2Capture, type SsoTestCapture } from '@/lib/shared/sso-test-capture'
 
 export type { SsoTestCapture }
 
@@ -87,6 +87,8 @@ interface SsoTestSignInContextValue {
   /** The most recent successful test sign-in, tagged with the provider it ran
    *  against so a consumer only uses claims from a test of THAT provider. */
   lastSuccess: SsoTestCapture | null
+  /** Latest usable diagnostic capture, including mapping failures. */
+  lastCapture: SsoTestCapture | null
 }
 
 const SsoTestSignInContext = createContext<SsoTestSignInContextValue | null>(null)
@@ -106,6 +108,7 @@ export function SsoTestSignInProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(ssoTestReducer, initialSsoTestState)
   const [applying, setApplying] = useState(false)
   const [lastSuccess, setLastSuccess] = useState<SsoTestCapture | null>(null)
+  const [lastCapture, setLastCapture] = useState<SsoTestCapture | null>(null)
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const onSuccessRef = useRef<OnSuccess | null>(null)
@@ -172,7 +175,13 @@ export function SsoTestSignInProvider({ children }: { children: ReactNode }) {
       clearPoll()
       clearPopup()
       dispatch({ type: 'resolved', result, identityMatched })
-      if (result.ok) {
+      const capture = 'capture' in result ? result.capture : undefined
+      if (capture) {
+        setLastCapture(capture)
+        if (!isV2Capture(capture) || capture.outcome === 'success') {
+          setLastSuccess(capture)
+        }
+      } else if (result.ok) {
         setLastSuccess({
           registrationId: registrationIdRef.current,
           capturedAt: new Date().toISOString(),
@@ -184,6 +193,8 @@ export function SsoTestSignInProvider({ children }: { children: ReactNode }) {
           },
           claims: result.allClaims ?? {},
         })
+      }
+      if (result.ok) {
         void runAutoApply()
       }
     },
@@ -283,7 +294,7 @@ export function SsoTestSignInProvider({ children }: { children: ReactNode }) {
   }, [startTest, pollResult, trackPopup, clearPoll, clearPopup, resolveTest])
 
   return (
-    <SsoTestSignInContext.Provider value={{ open, lastSuccess }}>
+    <SsoTestSignInContext.Provider value={{ open, lastSuccess, lastCapture }}>
       {children}
       <SsoTestSignInModal
         state={state}

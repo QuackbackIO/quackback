@@ -22,7 +22,7 @@
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import { authorizeRequestFor, supportsPrompt } from '@/lib/shared/oidc-request'
 import { resolveIdentity, pickAvatarUrl } from './resolve-identity'
-import { synthesizeName } from './placeholder-identity'
+import { finalizeProfileOutcome } from '@/lib/shared/sso-profile-outcome'
 import {
   allowsMissingEmail,
   claimMappingFor,
@@ -264,17 +264,27 @@ export async function buildGenericOAuthConfigs({
       // that resolves identity from userinfo or an access token.
       onResolved?.(provider.registrationId, id, claims)
 
+      const outcome = finalizeProfileOutcome(
+        {
+          identity: { id, email, name, emailVerified },
+          acceptedClaims: claims,
+          warnings: warnings ?? [],
+          provenance: {},
+        },
+        { allowMissingEmail: allowsMissingEmail(provider.claimMapping) }
+      )
+
       // Gap-fill runs LAST, after every real source has been tried, so it can
       // never shadow something the provider actually sent.
       //
       // A synthesized name needs no opt-in: it only ever rescues a sign-in that
       // would fail outright, and a display name creates nothing irreversible.
       // A minted address does, so it stays behind `allowMissingEmail`, which is
-      // off unless an admin turned it on.
-      const resolvedName = name ?? synthesizeName(claims, id)
+      // off unless an admin turned it on. Production alone materializes it.
+      const resolvedName = outcome.name
       let resolvedEmail = email
       let resolvedEmailVerified = emailVerified
-      if (!resolvedEmail && allowsMissingEmail(provider.claimMapping) && placeholderEmailFor) {
+      if (outcome.kind === 'placeholder_required' && placeholderEmailFor) {
         resolvedEmail = await placeholderEmailFor(provider.registrationId, id)
         resolvedEmailVerified = false
       }

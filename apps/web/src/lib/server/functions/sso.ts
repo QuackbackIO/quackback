@@ -28,6 +28,7 @@ import { httpsUrl } from '@/lib/shared/schemas/auth'
 import { actorFromAuth, withAuditEvent } from '@/lib/server/audit/log'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { diffProviderAudit } from '@/lib/server/auth/idp-audit-diff'
+import { applyClaimMappingEdits } from '@/lib/shared/sso-claim-mapping-edit'
 import { requireAuth } from './auth-helpers'
 
 const verifiedDomainId = z.string().regex(/^domain_/) as z.ZodType<`domain_${string}`>
@@ -159,33 +160,40 @@ const idpRole = z.enum(['admin', 'member', 'user'])
 /** Mirror of `IdentityProviderClaimMapping`, section by section. */
 const claimRoleSchema = z.object({
   claimPath: z.string(),
-  rules: z.array(z.object({ whenContains: z.string(), role: idpRole })),
+  rules: z.array(z.object({ whenContains: z.string(), role: idpRole }).passthrough()),
   syncOnEverySignIn: z.boolean().optional(),
 })
 
-const claimMappingSchema = z.object({
-  profile: z
-    .object({
-      sources: z.array(z.enum(['idToken', 'userinfo', 'accessTokenJwt'])).optional(),
-      claims: z
-        .object({
-          id: z.string().optional(),
-          email: z.string().optional(),
-          name: z.string().optional(),
-        })
-        .optional(),
-      allowMissingEmail: z.boolean().optional(),
-    })
-    .optional(),
-  role: claimRoleSchema.optional(),
-  attributes: z
-    .object({
-      map: z.array(z.object({ claimPath: z.string(), attributeKey: z.string() })).optional(),
-      overrideExisting: z.boolean().optional(),
-      syncOnSignIn: z.boolean().optional(),
-    })
-    .optional(),
-})
+const claimMappingSchema = z
+  .object({
+    profile: z
+      .object({
+        sources: z.array(z.enum(['idToken', 'userinfo', 'accessTokenJwt'])).optional(),
+        claims: z
+          .object({
+            id: z.string().optional(),
+            email: z.string().optional(),
+            name: z.string().optional(),
+          })
+          .passthrough()
+          .optional(),
+        allowMissingEmail: z.boolean().optional(),
+      })
+      .passthrough()
+      .optional(),
+    role: claimRoleSchema.passthrough().optional(),
+    attributes: z
+      .object({
+        map: z
+          .array(z.object({ claimPath: z.string(), attributeKey: z.string() }).passthrough())
+          .optional(),
+        overrideExisting: z.boolean().optional(),
+        syncOnSignIn: z.boolean().optional(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough()
 
 /**
  * Identity-provider registrationIds are restricted to the generated `oidc_`
@@ -225,6 +233,8 @@ const upsertIdentityProviderInput = z.object({
   autoProvisionRole: idpRole.nullable().optional(),
   claimMapping: claimMappingSchema.nullable().optional(),
   showButton: z.boolean().optional(),
+  acknowledgeIdentifierChange: z.boolean().optional(),
+  acknowledgeAdminRules: z.boolean().optional(),
 })
 
 /** Read-only listing of every identity provider with its linked domains. */
@@ -299,6 +309,104 @@ export const upsertIdentityProviderFn = createServerFn({ method: 'POST' })
         headers: getRequestHeaders(),
       },
       async () => upsertIdentityProvider(data)
+    )
+  })
+
+const claimMappingOperationSchema = z.discriminatedUnion('op', [
+  z.object({
+    op: z.literal('setProfileClaim'),
+    field: z.enum(['id', 'email', 'name']),
+    path: z.string(),
+  }),
+  z.object({ op: z.literal('resetProfileClaim'), field: z.enum(['id', 'email', 'name']) }),
+  z.object({
+    op: z.literal('setSources'),
+    sources: z.array(z.enum(['idToken', 'userinfo', 'accessTokenJwt'])),
+  }),
+  z.object({ op: z.literal('resetSources') }),
+  z.object({ op: z.literal('setAllowMissingEmail'), allow: z.boolean() }),
+  z.object({ op: z.literal('setRolePath'), claimPath: z.string() }),
+  z.object({
+    op: z.literal('insertRoleRule'),
+    index: z.number().int().nonnegative(),
+    rule: z.object({ whenContains: z.string(), role: idpRole }),
+  }),
+  z.object({
+    op: z.literal('editRoleRule'),
+    index: z.number().int().nonnegative(),
+    rule: z.object({ whenContains: z.string(), role: idpRole }),
+  }),
+  z.object({ op: z.literal('removeRoleRule'), index: z.number().int().nonnegative() }),
+  z.object({
+    op: z.literal('reorderRoleRule'),
+    from: z.number().int().nonnegative(),
+    to: z.number().int().nonnegative(),
+  }),
+  z.object({ op: z.literal('setRoleSync'), syncOnEverySignIn: z.boolean() }),
+  z.object({ op: z.literal('removeRole') }),
+  z.object({
+    op: z.literal('insertPeopleMapping'),
+    index: z.number().int().nonnegative(),
+    entry: z.object({ claimPath: z.string(), attributeKey: z.string() }),
+  }),
+  z.object({
+    op: z.literal('editPeopleMapping'),
+    index: z.number().int().nonnegative(),
+    entry: z.object({ claimPath: z.string(), attributeKey: z.string() }),
+  }),
+  z.object({ op: z.literal('removePeopleMapping'), index: z.number().int().nonnegative() }),
+  z.object({
+    op: z.literal('setPeopleFlags'),
+    overrideExisting: z.boolean().optional(),
+    syncOnSignIn: z.boolean().optional(),
+  }),
+])
+
+const saveClaimMappingInput = z.object({
+  id: identityProviderId,
+  expectedClaimMapping: z.unknown(),
+  operations: z.array(claimMappingOperationSchema),
+  acknowledgeIdentifierChange: z.boolean().optional(),
+  acknowledgeAdminRules: z.boolean().optional(),
+})
+
+export const saveIdentityProviderClaimMappingFn = createServerFn({ method: 'POST' })
+  .validator(saveClaimMappingInput)
+  .handler(async ({ data }) => {
+    const auth = await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
+    const { requireEntitlement } = await import('@/lib/server/domains/settings/cloud/entitlements')
+    await requireEntitlement('sso')
+
+    const { listIdentityProviders, saveIdentityProviderClaimMapping } =
+      await import('@/lib/server/domains/settings/identity-providers.service')
+    const existing = await listIdentityProviders()
+    const prior = existing.find((p) => p.id === data.id)
+    if (!prior) {
+      throw new ValidationError('IDP_NOT_FOUND', 'Identity provider not found.')
+    }
+
+    const nextMapping = applyClaimMappingEdits(prior.claimMapping, data.operations)
+    const { before, after } = diffProviderAudit(prior, {
+      ...prior,
+      claimMapping: nextMapping as typeof prior.claimMapping,
+    })
+
+    return withAuditEvent(
+      {
+        event: 'idp.updated',
+        actor: actorFromAuth(auth),
+        target: { type: 'identity_provider', id: data.id },
+        before,
+        after,
+        headers: getRequestHeaders(),
+      },
+      async () =>
+        saveIdentityProviderClaimMapping(data.id, {
+          expectedClaimMapping: data.expectedClaimMapping,
+          operations: data.operations,
+          acknowledgeIdentifierChange: data.acknowledgeIdentifierChange,
+          acknowledgeAdminRules: data.acknowledgeAdminRules,
+        })
     )
   })
 

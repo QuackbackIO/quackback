@@ -60,6 +60,16 @@ export type {
   UseCaseType,
   OnboardingOutcome,
   SetupState,
+  IdentitySource,
+  ProfileField,
+  ClaimRoleMapping,
+  IdentityProviderClaimMapping,
+  SourceSnapshot,
+  SourceUnavailableReason,
+  CapturedIdentity,
+  IdentityProviderTestCapture,
+  IdentityProviderTestCaptureV1,
+  IdentityProviderTestCaptureV2,
 } from '@quackback/db/types'
 
 // Schema types needed by client components (type-only = no side effects)

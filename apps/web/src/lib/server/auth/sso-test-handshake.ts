@@ -14,6 +14,24 @@
 import { jwtVerify, createLocalJWKSet, decodeProtectedHeader, decodeJwt } from 'jose'
 import type { JsonValue } from '@/lib/server/audit/log'
 import { explainAuthorizeError, explainTokenError } from './oidc-error-explain'
+import {
+  DEFAULT_IDENTITY_SOURCES,
+  claimMappingFor,
+  type IdentityProviderClaimMapping,
+  type IdentitySource,
+  type SourceUnavailableReason,
+} from '@/lib/shared/oidc-claim-mapping'
+import {
+  finishBinding,
+  replayClaimMapping,
+  type IdentityMapping,
+} from '@/lib/shared/sso-claim-binder'
+import { finalizeProfileOutcome, type ProfileOutcome } from '@/lib/shared/sso-profile-outcome'
+import type {
+  CapturedIdentity,
+  SourceSnapshot,
+  SsoTestCaptureV2,
+} from '@/lib/shared/sso-test-capture'
 
 export type HandshakeStage =
   | 'state-validation'
@@ -55,7 +73,14 @@ export interface HandshakeInput {
    */
   allowMissingEmail?: boolean
   /** Identity sources and claim paths — the same mapping production uses. */
-  identityMapping?: import('./resolve-identity').IdentityMapping
+  identityMapping?: IdentityMapping
+  /**
+   * Full stored mapping snapshotted at test start. Pre-deploy sessions may omit
+   * this and carry only `identityMapping` for the existing 600-second TTL.
+   */
+  claimMapping?: IdentityProviderClaimMapping
+  registrationId?: string
+  detailsChangedAtAtStart?: string | null
   /** IdP-returned `error` query parameter, if the authorize step failed. */
   idpError?: string | null
   idpErrorDescription?: string | null
@@ -107,6 +132,8 @@ export type HandshakeResult =
         image?: string
         sources: Partial<Record<'id' | 'email' | 'name' | 'image', string>>
       }
+      mappingOutcome?: ProfileOutcome
+      capture?: SsoTestCaptureV2
     }
   | {
       ok: false
@@ -115,6 +142,9 @@ export type HandshakeResult =
       hint: string
       raw?: unknown
       steps: DiagnosticStep[]
+      mappingOutcome?: ProfileOutcome
+      capture?: SsoTestCaptureV2
+      allClaims?: Record<string, JsonValue>
     }
 
 export async function runHandshake(input: HandshakeInput): Promise<HandshakeResult> {
@@ -312,19 +342,7 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
   }
   steps.push({ ok: true, stage: 'token-exchange', label: 'Token exchange succeeded' })
 
-  const sources = input.identityMapping?.sources
-  const accessTokenOnly =
-    Array.isArray(sources) && sources.includes('accessTokenJwt') && !sources.includes('idToken')
   const hasIdToken = typeof tokens.id_token === 'string' && tokens.id_token.length > 0
-
-  if (!hasIdToken && !accessTokenOnly) {
-    return {
-      ok: false,
-      stage: 'token-exchange',
-      hint: "No id_token returned. Make sure 'openid' is in the requested scopes and your IdP is configured to issue ID tokens, or set identity sources to access-token JWT only.",
-      steps,
-    }
-  }
 
   let header: ReturnType<typeof decodeProtectedHeader> | undefined
   let verifiedPayload: ReturnType<typeof decodeJwt> | undefined
@@ -406,57 +424,113 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
     steps.push({ ok: true, stage: 'claim-check', label: 'Nonce matched' })
   }
 
-  const { resolveIdentity } = await import('./resolve-identity')
-  const resolution = await resolveIdentity({
-    tokens: { idToken: tokens.id_token, accessToken: tokens.access_token },
-    mapping: input.identityMapping,
-    exhaustive: true,
-    // Mirror production, which now resolves the avatar from `picture`.
-    wantImage: true,
-    fetchUserInfo: async () => {
-      if (!discovery.userinfo_endpoint || !tokens.access_token) return null
-      try {
-        const uiRes = await safeFetch(discovery.userinfo_endpoint, {
-          headers: { Authorization: `Bearer ${tokens.access_token}` },
-          timeoutMs: 5000,
-        })
-        if (!uiRes.ok) {
-          steps.push({
-            ok: false,
-            stage: 'userinfo',
-            label: `Userinfo failed (${uiRes.status})`,
-          })
-          return null
-        }
-        steps.push({ ok: true, stage: 'userinfo', label: 'Userinfo endpoint reachable' })
-        const body: unknown = await uiRes.json()
-        return body !== null && typeof body === 'object' ? (body as Record<string, unknown>) : null
-      } catch {
+  const identityMapping = input.identityMapping
+  const storedMapping = claimMappingFor(input.claimMapping)
+  const requiredClaimPaths = [
+    ...(storedMapping.attributes?.map ?? []).map((entry) => entry.claimPath),
+    ...(storedMapping.role?.claimPath ? [storedMapping.role.claimPath] : []),
+  ]
+  const configuredSources = identityMapping?.sources ?? DEFAULT_IDENTITY_SOURCES
+
+  let userinfoMemo:
+    { claims: Record<string, unknown> } | { unavailable: SourceUnavailableReason } | undefined
+  const loadUserinfo = async (): Promise<
+    { claims: Record<string, unknown> } | { unavailable: SourceUnavailableReason }
+  > => {
+    if (userinfoMemo) return userinfoMemo
+    if (!discovery.userinfo_endpoint || !tokens.access_token) {
+      userinfoMemo = { unavailable: 'absent' }
+      return userinfoMemo
+    }
+    try {
+      const uiRes = await safeFetch(discovery.userinfo_endpoint, {
+        headers: { Authorization: `Bearer ${tokens.access_token}` },
+        timeoutMs: 5000,
+      })
+      if (!uiRes.ok) {
         steps.push({
           ok: false,
           stage: 'userinfo',
-          label: 'Userinfo unreachable or unsafe to fetch',
+          label: `Userinfo failed (${uiRes.status})`,
         })
-        return null
+        userinfoMemo = { unavailable: 'fetch_failed' }
+        return userinfoMemo
       }
-    },
-  })
-
-  if (!resolution.ok) {
-    return {
-      ok: false,
-      stage: 'claim-check',
-      hint:
-        resolution.reason === 'subject_mismatch'
-          ? "Your IdP's userinfo endpoint reported a different 'sub' than its ID token. OIDC requires these to match, and mixing them could attach the wrong account, so sign-in is refused."
-          : "Couldn't resolve an account identifier. The IdP must return a stable subject in the ID token, userinfo, or (when configured) the access token.",
-      steps,
+      steps.push({ ok: true, stage: 'userinfo', label: 'Userinfo endpoint reachable' })
+      const body: unknown = await uiRes.json()
+      userinfoMemo =
+        body !== null && typeof body === 'object' && !Array.isArray(body)
+          ? { claims: body as Record<string, unknown> }
+          : { unavailable: 'absent' }
+      return userinfoMemo
+    } catch {
+      steps.push({
+        ok: false,
+        stage: 'userinfo',
+        label: 'Userinfo unreachable or unsafe to fetch',
+      })
+      userinfoMemo = { unavailable: 'fetch_failed' }
+      return userinfoMemo
     }
   }
 
-  const { identity } = resolution
+  const snapshots: SourceSnapshot[] = []
+  for (const source of configuredSources) {
+    snapshots.push(
+      await snapshotForSource(source, { hasIdToken, verifiedPayload, tokens, loadUserinfo })
+    )
+  }
+
+  const bound = finishBinding(
+    replayClaimMapping(
+      {
+        mapping: identityMapping,
+        requiredClaimPaths: requiredClaimPaths.length > 0 ? requiredClaimPaths : undefined,
+        wantImage: true,
+      },
+      snapshots
+    )
+  )
+  const mappingOutcome = finalizeProfileOutcome(bound, {
+    allowMissingEmail: input.allowMissingEmail === true,
+  })
+  const diagnosticClaims = mergeSnapshotClaims(snapshots)
+  const capture = buildTestCapture({
+    registrationId: input.registrationId ?? '',
+    detailsChangedAtAtStart: input.detailsChangedAtAtStart ?? null,
+    snapshots,
+    bound,
+    mappingOutcome,
+  })
+
+  if (bound.failed === 'subject_mismatch') {
+    return {
+      ok: false,
+      stage: 'claim-check',
+      hint: "Your IdP's userinfo endpoint reported a different 'sub' than its ID token. OIDC requires these to match, and mixing them could attach the wrong account, so sign-in is refused.",
+      steps,
+      mappingOutcome,
+      capture,
+      allClaims: diagnosticClaims as Record<string, JsonValue>,
+    }
+  }
+
+  if (mappingOutcome.kind === 'missing_id') {
+    return {
+      ok: false,
+      stage: 'claim-check',
+      hint: "Couldn't resolve an account identifier. The IdP must return a stable subject in the ID token, userinfo, or (when configured) the access token.",
+      steps,
+      mappingOutcome,
+      capture,
+      allClaims: diagnosticClaims as Record<string, JsonValue>,
+    }
+  }
+
+  const identity = capture.identity
+
   for (const field of ['id', 'email', 'name'] as const) {
-    const source = identity.sources[field]
+    const source = bound.provenance[field]?.source
     if (!source) continue
     steps.push({
       ok: true,
@@ -466,17 +540,15 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
     })
   }
 
-  // Avatar is optional: report it, but a missing `picture` is informational,
-  // not a failed connection.
-  if (identity.image) {
+  if (bound.identity.image) {
     steps.push({
       ok: true,
       stage: 'claim-check',
       label: 'Avatar resolved',
       detail:
-        identity.sources.image === 'idToken'
+        bound.provenance.image?.source === 'idToken'
           ? 'from the ID token'
-          : `from ${identity.sources.image}`,
+          : `from ${bound.provenance.image?.source}`,
     })
   } else {
     steps.push({
@@ -489,10 +561,7 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
     })
   }
 
-  // Observed, not enforced. Surfacing it here is how an admin learns about the
-  // discrepancy while sign-in still works, rather than discovering it on the
-  // release that starts refusing.
-  if (identity.warnings?.includes('subject_mismatch')) {
+  if (bound.warnings.includes('subject_mismatch')) {
     steps.push({
       ok: false,
       stage: 'claim-check',
@@ -502,15 +571,19 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
     })
   }
 
-  if (!identity.email) {
-    if (!input.allowMissingEmail) {
-      return {
-        ok: false,
-        stage: 'claim-check',
-        hint: "No email address was released, in the ID token or from the userinfo endpoint. Either configure your IdP's claim mapper to release it, or — if this provider has no email addresses to give — enable the placeholder-address option on the provider.",
-        steps,
-      }
+  if (mappingOutcome.kind === 'missing_email') {
+    return {
+      ok: false,
+      stage: 'claim-check',
+      hint: "No email address was released, in the ID token or from the userinfo endpoint. Either configure your IdP's claim mapper to release it, or — if this provider has no email addresses to give — enable the placeholder-address option on the provider.",
+      steps,
+      mappingOutcome,
+      capture,
+      allClaims: diagnosticClaims as Record<string, JsonValue>,
     }
+  }
+
+  if (mappingOutcome.kind === 'placeholder_required') {
     steps.push({
       ok: true,
       stage: 'claim-check',
@@ -529,14 +602,14 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
         (verifiedPayload?.iss as string | undefined) ??
         (accessPayload?.iss as string | undefined) ??
         '',
-      sub: identity.id,
+      sub: bound.identity.id ?? '',
       aud:
         (verifiedPayload?.aud as string | string[] | undefined) ??
         (accessPayload?.aud as string | string[] | undefined) ??
         input.clientId,
-      email: identity.email,
-      email_verified: identity.emailVerified,
-      name: identity.name,
+      email: bound.identity.email,
+      email_verified: bound.identity.emailVerified,
+      name: mappingOutcome.name,
       preferred_username: verifiedPayload?.preferred_username as string | undefined,
     },
     tokenInfo: {
@@ -545,14 +618,18 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
       hasRefreshToken: !!tokens.refresh_token,
       expiresIn: tokens.expires_in,
     },
-    allClaims: identity.claims as unknown as Record<string, JsonValue>,
-    identity: {
-      id: identity.id,
-      email: identity.email,
-      name: identity.name,
-      image: identity.image,
-      sources: identity.sources,
-    },
+    allClaims: diagnosticClaims as Record<string, JsonValue>,
+    identity: identity
+      ? {
+          id: identity.id,
+          email: identity.email,
+          name: identity.name,
+          image: identity.image,
+          sources: identity.sources,
+        }
+      : undefined,
+    mappingOutcome,
+    capture,
   }
 }
 
@@ -562,5 +639,95 @@ function decodeJwtSafe(token: string): Record<string, unknown> | null {
     return payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : null
   } catch {
     return null
+  }
+}
+
+function jsonClaims(value: Record<string, unknown>): Record<string, JsonValue> {
+  return JSON.parse(JSON.stringify(value)) as Record<string, JsonValue>
+}
+
+async function snapshotForSource(
+  source: IdentitySource,
+  ctx: {
+    hasIdToken: boolean
+    verifiedPayload: ReturnType<typeof decodeJwt> | undefined
+    tokens: { id_token?: string; access_token?: string }
+    loadUserinfo: () => Promise<
+      { claims: Record<string, unknown> } | { unavailable: SourceUnavailableReason }
+    >
+  }
+): Promise<SourceSnapshot> {
+  if (source === 'idToken') {
+    if (!ctx.hasIdToken) return { source, unavailable: 'absent' }
+    if (!ctx.verifiedPayload) return { source, unavailable: 'unreadable' }
+    return { source, claims: jsonClaims(ctx.verifiedPayload as Record<string, unknown>) }
+  }
+  if (source === 'accessTokenJwt') {
+    if (!ctx.tokens.access_token) return { source, unavailable: 'absent' }
+    const decoded = decodeJwtSafe(ctx.tokens.access_token)
+    if (!decoded) return { source, unavailable: 'unreadable' }
+    return { source, claims: jsonClaims(decoded) }
+  }
+  const loaded = await ctx.loadUserinfo()
+  if ('unavailable' in loaded) return { source, unavailable: loaded.unavailable }
+  return { source, claims: jsonClaims(loaded.claims) }
+}
+
+function mergeSnapshotClaims(snapshots: SourceSnapshot[]): Record<string, unknown> {
+  const merged: Record<string, unknown> = {}
+  for (const snapshot of snapshots) {
+    if (!('claims' in snapshot) || !snapshot.claims) continue
+    for (const [key, value] of Object.entries(snapshot.claims)) {
+      if (!Object.hasOwn(merged, key)) merged[key] = value
+    }
+  }
+  return merged
+}
+
+function buildTestCapture({
+  registrationId,
+  detailsChangedAtAtStart,
+  snapshots,
+  bound,
+  mappingOutcome,
+}: {
+  registrationId: string
+  detailsChangedAtAtStart: string | null
+  snapshots: SourceSnapshot[]
+  bound: ReturnType<typeof finishBinding>
+  mappingOutcome: ProfileOutcome
+}): SsoTestCaptureV2 {
+  const success =
+    mappingOutcome.kind === 'identity' || mappingOutcome.kind === 'placeholder_required'
+  const id = bound.identity.id
+  const identity: CapturedIdentity | undefined = id
+    ? {
+        id,
+        ...(mappingOutcome.email ? { email: mappingOutcome.email } : {}),
+        ...(mappingOutcome.name ? { name: mappingOutcome.name } : {}),
+        ...(bound.identity.image ? { image: bound.identity.image } : {}),
+        sources: {
+          ...(bound.provenance.id ? { id: bound.provenance.id.source } : {}),
+          ...(bound.provenance.email ? { email: bound.provenance.email.source } : {}),
+          ...(bound.provenance.name ? { name: bound.provenance.name.source } : {}),
+          ...(bound.provenance.image ? { image: bound.provenance.image.source } : {}),
+        },
+        paths: {
+          ...(bound.provenance.id ? { id: bound.provenance.id.path } : {}),
+          ...(bound.provenance.email ? { email: bound.provenance.email.path } : {}),
+          ...(bound.provenance.name ? { name: bound.provenance.name.path } : {}),
+          ...(bound.provenance.image ? { image: bound.provenance.image.path } : {}),
+        },
+      }
+    : undefined
+  return {
+    version: 2,
+    registrationId,
+    capturedAt: new Date().toISOString(),
+    detailsChangedAtAtStart,
+    outcome: success && !bound.failed ? 'success' : 'mapping_failed',
+    ...(identity ? { identity } : {}),
+    claims: bound.acceptedClaims as Record<string, JsonValue>,
+    replay: { sources: snapshots },
   }
 }

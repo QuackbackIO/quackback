@@ -1,13 +1,41 @@
 import { describe, it, expect } from 'vitest'
+import type {
+  ClaimRoleMapping as DbClaimRoleMapping,
+  IdentityProviderClaimMapping as DbIdentityProviderClaimMapping,
+  IdentitySource as DbIdentitySource,
+  ProfileField as DbProfileField,
+} from '@/lib/shared/db-types'
 import {
   DEFAULT_IDENTITY_SOURCES,
+  IDENTITY_SOURCES,
   claimMappingFor,
   profileClaimFor,
   roleMappingFor,
   allowsMissingEmail,
   getClaimByPath,
+  type ClaimRoleMapping,
   type IdentityProviderClaimMapping,
+  type IdentitySource,
+  type ProfileField,
 } from '../oidc-claim-mapping'
+
+type Equal<X, Y> =
+  (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2 ? true : false
+type Expect<T extends true> = T
+
+type _MappingTypesAgree = Expect<
+  Equal<DbIdentityProviderClaimMapping, IdentityProviderClaimMapping>
+>
+type _RoleTypesAgree = Expect<Equal<DbClaimRoleMapping, ClaimRoleMapping>>
+type _SourceTypesAgree = Expect<Equal<DbIdentitySource, IdentitySource>>
+type _FieldTypesAgree = Expect<Equal<DbProfileField, ProfileField>>
+type _SourceConstAgrees = Expect<Equal<IdentitySource, (typeof IDENTITY_SOURCES)[number]>>
+
+const _mappingTypesAgree: _MappingTypesAgree = true
+const _roleTypesAgree: _RoleTypesAgree = true
+const _sourceTypesAgree: _SourceTypesAgree = true
+const _fieldTypesAgree: _FieldTypesAgree = true
+const _sourceConstAgrees: _SourceConstAgrees = true
 
 /**
  * The sectioned `claim_mapping` column, read the same way by sign-in and by the
@@ -15,6 +43,16 @@ import {
  * name; it is now the `role` section here, so there is one place a claim is
  * turned into meaning rather than three.
  */
+describe('canonical mapping types', () => {
+  it('keeps the DB and shared exported mapping types assigned to each other', () => {
+    expect(_mappingTypesAgree).toBe(true)
+    expect(_roleTypesAgree).toBe(true)
+    expect(_sourceTypesAgree).toBe(true)
+    expect(_fieldTypesAgree).toBe(true)
+    expect(_sourceConstAgrees).toBe(true)
+  })
+})
+
 describe('claimMappingFor', () => {
   it('treats an absent column as "no configuration", not as an error', () => {
     const m = claimMappingFor(null)

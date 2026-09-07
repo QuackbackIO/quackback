@@ -6,17 +6,20 @@
  * accounts, so packaging it under "create accounts for new people" would hide
  * a live control from exactly the workspaces most likely to need it.
  *
- * It writes three sections of the shared `claim_mapping` column (`profile`,
- * `role`, and `attributes`) through `mergeClaimMapping`, which carries the
- * parts of `profile` that have no UI through verbatim.
+ * It diffs the three sections of the shared `claim_mapping` column (`profile`,
+ * `role`, and `attributes`) into closed operations and persists through
+ * `saveClaimMapping`. `mergeClaimMapping` only builds the proposed editor
+ * state for that diff; unedited stored JSON is not rewritten.
  */
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
+import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import { ClaimMappingEditor } from './claim-mapping-editor'
 import { ClaimAttributeMappingEditor } from './claim-attribute-mapping-editor'
+import { matchingSessionCapture } from './claim-path-input'
 import { useSsoTestSignIn } from '../sso/use-sso-test-sign-in'
 import {
   mergeClaimMapping,
@@ -27,9 +30,11 @@ import {
   type RoleMapping,
 } from './provider-shared'
 import { useProviderSave } from './use-provider-save'
+import { diffClaimMappingOperations, mappingSaveRisks } from '@/lib/shared/sso-claim-mapping-edit'
 
 export function ClaimMappingCard({ provider }: { provider: IdentityProvider }) {
-  const { saving, save } = useProviderSave(provider)
+  const { saving, saveClaimMapping } = useProviderSave(provider)
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const [mapping, setMapping] = useState<RoleMapping | null>(provider.claimMapping?.role ?? null)
   const [attributes, setAttributes] = useState<AttributeMapping | null>(
     provider.claimMapping?.attributes ?? null
@@ -37,29 +42,44 @@ export function ClaimMappingCard({ provider }: { provider: IdentityProvider }) {
   const [allowMissingEmail, setAllowMissingEmail] = useState(
     provider.claimMapping?.profile?.allowMissingEmail === true
   )
-  const { lastSuccess } = useSsoTestSignIn()
-  // In-session lastSuccess is the test that just completed; the persisted
-  // capture is only reloaded with the provider row. Prefer the session copy
-  // so suggestions and preview update without a refresh.
+  const { lastSuccess, lastCapture } = useSsoTestSignIn()
+  // In-session lastCapture includes mapping failures from this sitting; the
+  // persisted capture is only reloaded with the provider row. Prefer the
+  // session copy so suggestions and preview update without a refresh.
   const capture =
-    lastSuccess && lastSuccess.registrationId === provider.registrationId
-      ? lastSuccess
-      : provider.lastTestCapture &&
-          provider.lastTestCapture.registrationId === provider.registrationId
-        ? provider.lastTestCapture
-        : null
+    matchingSessionCapture(provider.registrationId, lastCapture, lastSuccess) ??
+    (provider.lastTestCapture && provider.lastTestCapture.registrationId === provider.registrationId
+      ? provider.lastTestCapture
+      : null)
 
-  const handleSave = () =>
-    void save(
+  const proposed = mergeClaimMapping(provider.claimMapping, {
+    role: normalizeRoleMapping(mapping),
+    profile: withAllowMissingEmail(provider.claimMapping?.profile, allowMissingEmail),
+    attributes: normalizeAttributeMapping(attributes),
+  })
+  const operations = diffClaimMappingOperations(provider.claimMapping, proposed)
+  const risks = mappingSaveRisks(provider.claimMapping, proposed)
+
+  const persist = (acks?: {
+    acknowledgeIdentifierChange?: boolean
+    acknowledgeAdminRules?: boolean
+  }) =>
+    void saveClaimMapping(
       {
-        claimMapping: mergeClaimMapping(provider.claimMapping, {
-          role: normalizeRoleMapping(mapping),
-          profile: withAllowMissingEmail(provider.claimMapping?.profile, allowMissingEmail),
-          attributes: normalizeAttributeMapping(attributes),
-        }),
+        operations,
+        acknowledgeIdentifierChange: acks?.acknowledgeIdentifierChange,
+        acknowledgeAdminRules: acks?.acknowledgeAdminRules,
       },
       'Claim mapping saved.'
     )
+
+  const handleSave = () => {
+    if (operations.length > 0 && (risks.identifierChanged || risks.hasAdminRules)) {
+      setConfirmOpen(true)
+      return
+    }
+    persist()
+  }
 
   return (
     <div id="mapping" className="scroll-mt-6">
@@ -114,6 +134,36 @@ export function ClaimMappingCard({ provider }: { provider: IdentityProvider }) {
           </Button>
         </div>
       </SettingsCard>
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title="Confirm mapping changes"
+        confirmLabel="Save mappings"
+        description={
+          <div className="space-y-2 text-sm">
+            {risks.identifierChanged ? (
+              <p>
+                Changing the identifier can stop existing account matches and create another
+                account. Existing accounts will not be migrated. This invalidates the connection
+                test.
+              </p>
+            ) : null}
+            {risks.hasAdminRules ? (
+              <p>
+                This can grant admin access even when the person&apos;s email is outside this
+                provider&apos;s verified domains.
+              </p>
+            ) : null}
+          </div>
+        }
+        onConfirm={() => {
+          setConfirmOpen(false)
+          persist({
+            acknowledgeIdentifierChange: risks.identifierChanged,
+            acknowledgeAdminRules: risks.hasAdminRules,
+          })
+        }}
+      />
     </div>
   )
 }

@@ -27,6 +27,19 @@ import type { ticketTypes } from './schema/ticket-types'
 import type { ticketActivity } from './schema/ticket-activity'
 import type { principal } from './schema/auth'
 
+export type {
+  IdentitySource,
+  ProfileField,
+  ClaimRoleMapping,
+  IdentityProviderClaimMapping,
+  SourceSnapshot,
+  SourceUnavailableReason,
+  CapturedIdentity,
+  IdentityProviderTestCapture,
+  IdentityProviderTestCaptureV1,
+  IdentityProviderTestCaptureV2,
+} from './schema/auth'
+
 // Status categories (defined here to avoid circular imports in tests)
 export const STATUS_CATEGORIES = ['active', 'complete', 'closed'] as const
 export type StatusCategory = (typeof STATUS_CATEGORIES)[number]

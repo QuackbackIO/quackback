@@ -560,6 +560,12 @@ export const settings = pgTable('settings', {
   authConfigVersion: integer('auth_config_version').notNull().default(0),
 })
 
+/** Where identity may be read from, in resolver order. */
+export type IdentitySource = 'idToken' | 'userinfo' | 'accessTokenJwt'
+
+/** Profile fields a claim can be bound to. */
+export type ProfileField = 'id' | 'email' | 'name'
+
 /**
  * Role-mapping rules applied to an OIDC claim at sign-in. Now the `role`
  * section of {@link IdentityProviderClaimMapping}; the shape is unchanged from
@@ -587,7 +593,7 @@ export type ClaimRoleMapping = {
 export type IdentityProviderClaimMapping = {
   /** Which claim carries the account id, the email, the display name. */
   profile?: {
-    sources?: Array<'idToken' | 'userinfo' | 'accessTokenJwt'>
+    sources?: IdentitySource[]
     claims?: { id?: string; email?: string; name?: string }
     /** Mint a placeholder address when the provider supplies no email. */
     allowMissingEmail?: boolean
@@ -602,6 +608,19 @@ export type IdentityProviderClaimMapping = {
   }
 }
 
+/** Why a captured identity source contributed no claims. */
+export type SourceUnavailableReason = 'absent' | 'unreadable' | 'fetch_failed'
+
+/**
+ * JSON-only snapshot of one identity source from an SSO test. Either a decoded
+ * claims object or a closed reason the source could not be loaded.
+ */
+export type SourceSnapshot = {
+  source: IdentitySource
+  claims?: Record<string, unknown>
+  unavailable?: SourceUnavailableReason
+}
+
 /**
  * Identity provider — the single source of truth for an OIDC IdP.
  *
@@ -613,16 +632,41 @@ export type IdentityProviderClaimMapping = {
  * migration. Discovery-doc installs leave the manual endpoint columns
  * null; manual installs leave `discoveryUrl` null.
  */
+export type CapturedIdentity = {
+  id: string
+  email?: string
+  name?: string
+  image?: string
+  sources: Partial<Record<'id' | 'email' | 'name' | 'image', string>>
+  paths?: Partial<Record<'id' | 'email' | 'name' | 'image', string>>
+}
+
+/**
+ * Stored SSO test capture. V1 rows omit `version`/`replay`. V2 rows set
+ * `version: 2` and include source snapshots for exact replay.
+ */
 export type IdentityProviderTestCapture = {
+  version?: 2
   registrationId: string
   capturedAt: string
-  identity: {
-    id: string
-    email?: string
-    name?: string
-    sources: Partial<Record<'id' | 'email' | 'name', string>>
-  }
+  detailsChangedAtAtStart?: string | null
+  outcome?: 'success' | 'mapping_failed'
+  identity?: CapturedIdentity
   claims: Record<string, unknown>
+  replay?: { sources: SourceSnapshot[] }
+}
+
+export type IdentityProviderTestCaptureV1 = IdentityProviderTestCapture & {
+  identity: CapturedIdentity
+  version?: never
+  replay?: never
+}
+
+export type IdentityProviderTestCaptureV2 = IdentityProviderTestCapture & {
+  version: 2
+  detailsChangedAtAtStart: string | null
+  outcome: 'success' | 'mapping_failed'
+  replay: { sources: SourceSnapshot[] }
 }
 
 export const identityProvider = pgTable(

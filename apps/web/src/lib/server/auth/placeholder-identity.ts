@@ -24,6 +24,8 @@
 import { randomBytes } from 'crypto'
 import { ANON_EMAIL_DOMAIN } from '@/lib/shared/anonymous-email'
 
+export { synthesizeName } from '@/lib/shared/sso-profile-outcome'
+
 /**
  * The anonymous plugin owns `temp-` in this domain. A separate prefix keeps the
  * two populations distinguishable: one is a visitor who never signed in, the
@@ -50,44 +52,4 @@ export function mintPlaceholderEmail(registrationId: string): string {
   const provider = sanitiseForLocalPart(registrationId) || 'idp'
   const unique = randomBytes(12).toString('hex')
   return `${SSO_PLACEHOLDER_PREFIX}${provider}-${unique}@${ANON_EMAIL_DOMAIN}`
-}
-
-function usableClaim(value: unknown): string | undefined {
-  if (typeof value !== 'string') return undefined
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : undefined
-}
-
-/**
- * Turn a subject into something printable. Subjects are opaque and often
- * structured (`ACCOUNT:REGION:2119123456`), and some providers put an email
- * address there — which must not become a display name, because display names
- * are published on posts and comments.
- */
-function readableFromSubject(subject: string): string {
-  const withoutAddress = subject.includes('@') ? subject.split('@')[0] : subject
-  // Hyphens survive: they are legitimate in handles and names, and turning
-  // `some-handle` into `some handle` is a worse result than the structure it
-  // removes. Everything else separating the parts becomes a space.
-  const cleaned = withoutAddress
-    .replace(/[^\p{L}\p{N}-]+/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .replace(/^[-\s]+|[-\s]+$/g, '')
-    .slice(0, 60)
-  // Never empty: a name is required to create the account, and returning ''
-  // would move the failure to a database constraint at the worst moment.
-  return cleaned || 'Member'
-}
-
-/**
- * A display name from the claims, falling back to the subject. Ordered by how
- * deliberately the person chose it: a handle they set, then a nickname, then
- * whatever can be read out of the identifier.
- */
-export function synthesizeName(claims: Record<string, unknown>, subject: string): string {
-  return (
-    usableClaim(claims.preferred_username) ??
-    usableClaim(claims.nickname) ??
-    readableFromSubject(usableClaim(subject) ?? '')
-  )
 }

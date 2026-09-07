@@ -10,7 +10,7 @@ import { TimeAgo } from '@/components/ui/time-ago'
 import { Badge } from '@/components/ui/badge'
 import { getClaimByPath } from '@/lib/shared/oidc-claim-mapping'
 import { planClaimAttributeWrites } from '@/lib/shared/plan-claim-attribute-writes'
-import type { SsoTestCapture } from '@/lib/shared/sso-test-capture'
+import { captureIdentityCaption, type SsoTestCapture } from '@/lib/shared/sso-test-capture'
 import { TestSignInButton } from '../sso/test-sign-in-button'
 import { useUserAttributes } from '@/lib/client/hooks/use-user-attributes-queries'
 
@@ -74,7 +74,7 @@ export function AttributeWritesPreview({
       <div>
         <div className="font-medium">Attribute writes from your last test sign-in</div>
         <div className="mt-0.5 text-muted-foreground">
-          {capture.identity.email ?? capture.identity.id} · <TimeAgo date={capture.capturedAt} /> ·{' '}
+          {captureIdentityCaption(capture)} · <TimeAgo date={capture.capturedAt} /> ·{' '}
           <TestSignInButton
             registrationId={registrationId}
             variant="link"

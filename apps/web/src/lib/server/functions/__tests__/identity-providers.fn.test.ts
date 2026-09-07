@@ -57,6 +57,7 @@ vi.mock('@/lib/server/audit/log', () => ({
 vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
   listIdentityProviders: hoisted.listIdentityProviders,
   upsertIdentityProvider: hoisted.upsertIdentityProvider,
+  saveIdentityProviderClaimMapping: vi.fn(),
   deleteIdentityProvider: vi.fn(),
   stampDetailsChanged: vi.fn(),
 }))

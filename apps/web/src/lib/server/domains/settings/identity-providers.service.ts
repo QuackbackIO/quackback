@@ -18,14 +18,24 @@ import type { Role } from '@/lib/shared/roles'
 import {
   db,
   account,
+  and,
   count,
   eq,
   identityProvider,
+  isNull,
   ssoVerifiedDomain,
   type IdentityProviderClaimMapping,
 } from '@/lib/server/db'
 import type { IdentityProviderId } from '@quackback/ids'
 import { parseSsoTestCapture, type SsoTestCapture } from '@/lib/shared/sso-test-capture'
+import {
+  applyClaimMappingEdits,
+  effectiveProfileSignature,
+  mappingSaveRisks,
+  mappingWouldStripUnsupported,
+  storedJsonEqual,
+  type ClaimMappingOperation,
+} from '@/lib/shared/sso-claim-mapping-edit'
 import { logger } from '@/lib/server/logger'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { absolutizeOffHostAssetUrl } from '@/lib/server/storage/asset-url'
@@ -39,7 +49,7 @@ import { AUTH_CREDENTIAL_PREFIX } from '@/lib/server/auth/auth-providers'
 import { verifiedDomainCount, shouldRenderPublicButton } from '@/lib/server/auth/provider-ids'
 import type { VerifiedDomain } from './settings.types'
 import { invalidateSettingsCache, wrapDbError } from './settings.helpers'
-import { ValidationError } from '@/lib/shared/errors'
+import { ConflictError, ValidationError } from '@/lib/shared/errors'
 
 const log = logger.child({ component: 'identity-providers' })
 
@@ -94,7 +104,7 @@ export interface IdentityProvider {
   detailsChangedAt: string | null
   /** ISO-8601 UTC; null until a test sign-in succeeds. */
   lastSuccessfulTestAt: string | null
-  /** Last successful Test fixture, as captured. Null until a test succeeds. */
+  /** Last usable Test fixture, including mapping failures. Null until a test. */
   lastTestCapture: SsoTestCapture | null
   createdAt: string
   domains: VerifiedDomain[]
@@ -130,6 +140,8 @@ export interface UpsertIdentityProviderInput {
   autoProvisionRole?: Role | null
   claimMapping?: IdentityProviderClaimMapping | null
   showButton?: boolean
+  acknowledgeIdentifierChange?: boolean
+  acknowledgeAdminRules?: boolean
 }
 
 // ============================================================================
@@ -197,7 +209,8 @@ export function connectionAffectingChange(
   // missing-email) does, so a prior stamp cannot vouch for it.
   if (input.claimMapping === undefined) return false
   return (
-    JSON.stringify(input.claimMapping?.profile) !== JSON.stringify(existing.claimMapping?.profile)
+    effectiveProfileSignature(input.claimMapping) !==
+    effectiveProfileSignature(existing.claimMapping)
   )
 }
 
@@ -447,7 +460,30 @@ export async function upsertIdentityProvider(
         if (input.enabled !== undefined) patch.enabled = input.enabled
         if (input.autoCreateUsers !== undefined) patch.autoCreateUsers = input.autoCreateUsers
         if (input.autoProvisionRole !== undefined) patch.autoProvisionRole = input.autoProvisionRole
-        if (input.claimMapping !== undefined) patch.claimMapping = input.claimMapping
+        if (input.claimMapping !== undefined) {
+          if (mappingWouldStripUnsupported(existing.claimMapping, input.claimMapping)) {
+            throw new ValidationError(
+              'MAPPING_UNSUPPORTED_STRIPPED',
+              'This save would drop unsupported mapping data. Reload and use the mapping editor.'
+            )
+          }
+          if (!storedJsonEqual(existing.claimMapping, input.claimMapping)) {
+            const risks = mappingSaveRisks(existing.claimMapping, input.claimMapping)
+            if (risks.identifierChanged && !input.acknowledgeIdentifierChange) {
+              throw new ValidationError(
+                'MAPPING_IDENTIFIER_ACK_REQUIRED',
+                'Changing the identifier requires explicit acknowledgement.'
+              )
+            }
+            if (risks.hasAdminRules && !input.acknowledgeAdminRules) {
+              throw new ValidationError(
+                'MAPPING_ADMIN_ACK_REQUIRED',
+                'Saving admin role rules requires explicit acknowledgement.'
+              )
+            }
+          }
+          patch.claimMapping = input.claimMapping
+        }
         if (input.showButton !== undefined) patch.showButton = input.showButton
 
         // Restamp the freshness baseline when a connection-affecting field
@@ -612,20 +648,126 @@ export async function stampDetailsChanged(id: IdentityProviderId): Promise<void>
   }
 }
 
-/** Stamp `last_successful_test_at = now()` and persist the test fixture. */
-export async function markTestSucceeded(
+/**
+ * Persist a test capture against the configuration the test started with.
+ * Success stamps `lastSuccessfulTestAt`; mapping failure replaces diagnostic
+ * capture only. A zero-row conditional update is stale, not success.
+ */
+export async function persistTestResult(
   id: IdentityProviderId,
-  capture?: SsoTestCapture
-): Promise<void> {
-  log.info({ id }, 'mark identity provider test succeeded')
+  args: {
+    expectedDetailsChangedAt: string | null
+    outcome: 'success' | 'mapping_failed'
+    capture: SsoTestCapture
+  }
+): Promise<'stamped' | 'stale'> {
+  const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
+  const { resetAuth } = await import('@/lib/server/auth')
+
+  log.info({ id, outcome: args.outcome }, 'persist identity provider test result')
   try {
-    await stampTimestamp(id, {
-      lastSuccessfulTestAt: new Date(),
-      ...(capture ? { lastTestCapture: capture } : {}),
+    const detailsMatch =
+      args.expectedDetailsChangedAt === null
+        ? isNull(identityProvider.detailsChangedAt)
+        : eq(identityProvider.detailsChangedAt, new Date(args.expectedDetailsChangedAt))
+
+    const result = await db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(identityProvider)
+        .set({
+          lastTestCapture: args.capture,
+          ...(args.outcome === 'success' ? { lastSuccessfulTestAt: new Date() } : {}),
+        })
+        .where(and(eq(identityProvider.id, id), detailsMatch))
+        .returning({ id: identityProvider.id })
+      if (!row) return 'stale' as const
+      if (args.outcome === 'success') {
+        await bumpAuthConfigVersionInTx(tx)
+      }
+      return 'stamped' as const
     })
+
+    if (result === 'stamped') {
+      if (args.outcome === 'success') resetAuth()
+      await invalidateSettingsCache()
+    }
+    return result
   } catch (error) {
-    log.error({ err: error }, 'mark identity provider test succeeded failed')
-    wrapDbError('mark identity provider test succeeded', error)
+    log.error({ err: error }, 'persist identity provider test result failed')
+    wrapDbError('persist identity provider test result', error)
+    throw error
+  }
+}
+
+export async function saveIdentityProviderClaimMapping(
+  id: IdentityProviderId,
+  args: {
+    expectedClaimMapping: unknown
+    operations: ClaimMappingOperation[]
+    acknowledgeIdentifierChange?: boolean
+    acknowledgeAdminRules?: boolean
+  }
+): Promise<IdentityProvider> {
+  const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
+  const { resetAuth } = await import('@/lib/server/auth')
+
+  log.info({ id }, 'save identity provider claim mapping')
+  try {
+    const saved = await db.transaction(async (tx) => {
+      const [existing] = await tx
+        .select()
+        .from(identityProvider)
+        .where(eq(identityProvider.id, id))
+        .for('update')
+      if (!existing) {
+        throw new ValidationError('IDP_NOT_FOUND', 'Identity provider not found.')
+      }
+      if (!storedJsonEqual(existing.claimMapping ?? null, args.expectedClaimMapping ?? null)) {
+        throw new ConflictError(
+          'MAPPING_CONFLICT',
+          'This mapping was updated elsewhere. Reload and try again.'
+        )
+      }
+      const next = applyClaimMappingEdits(existing.claimMapping, args.operations)
+      const risks = mappingSaveRisks(existing.claimMapping, next)
+      if (risks.identifierChanged && !args.acknowledgeIdentifierChange) {
+        throw new ValidationError(
+          'MAPPING_IDENTIFIER_ACK_REQUIRED',
+          'Changing the identifier requires explicit acknowledgement.'
+        )
+      }
+      if (risks.hasAdminRules && args.operations.length > 0 && !args.acknowledgeAdminRules) {
+        throw new ValidationError(
+          'MAPPING_ADMIN_ACK_REQUIRED',
+          'Saving admin role rules requires explicit acknowledgement.'
+        )
+      }
+      const restamp =
+        effectiveProfileSignature(existing.claimMapping) !== effectiveProfileSignature(next)
+      const [row] = await tx
+        .update(identityProvider)
+        .set({
+          claimMapping: next as IdentityProviderClaimMapping | null,
+          ...(restamp ? { detailsChangedAt: new Date() } : {}),
+        })
+        .where(eq(identityProvider.id, id))
+        .returning()
+      await bumpAuthConfigVersionInTx(tx)
+      return row
+    })
+
+    resetAuth()
+    await invalidateSettingsCache()
+    const [domains, configured] = await Promise.all([
+      listDomainsForProvider(saved.id),
+      hasPlatformCredentials(`${AUTH_CREDENTIAL_PREFIX}${saved.registrationId}`),
+    ])
+    return rowToIdentityProvider(saved, domains, configured)
+  } catch (error) {
+    if (error instanceof ValidationError || error instanceof ConflictError) throw error
+    log.error({ err: error }, 'save identity provider claim mapping failed')
+    wrapDbError('save identity provider claim mapping', error)
+    throw error
   }
 }
 
