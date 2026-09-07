@@ -381,25 +381,39 @@ function roleRuleIdentity(rule: unknown): string | null {
   return `${rule.whenContains}\0${rule.role}`
 }
 
-/** When after is a permutation of before, emit whole-object moves instead of index edits. */
-function reorderRoleRuleOps(
-  beforeRules: unknown[],
-  afterRules: unknown[]
+/** After identities are a submultiset of before: remove extras, then permute survivors. */
+function subsetPermuteOps(
+  beforeRows: unknown[],
+  afterRows: unknown[],
+  identity: (row: unknown) => string | null,
+  removeOp: (index: number) => ClaimMappingOperation,
+  reorderOp?: (from: number, to: number) => ClaimMappingOperation
 ): ClaimMappingOperation[] | null {
-  if (beforeRules.length === 0 || beforeRules.length !== afterRules.length) return null
-  const beforeKeys = beforeRules.map(roleRuleIdentity)
-  const afterKeys = afterRules.map(roleRuleIdentity)
+  if (afterRows.length > beforeRows.length) return null
+  const beforeKeys = beforeRows.map(identity)
+  const afterKeys = afterRows.map(identity)
   if (beforeKeys.some((key) => key == null) || afterKeys.some((key) => key == null)) return null
-  const remaining = new Map<string, number>()
-  for (const key of beforeKeys) remaining.set(key!, (remaining.get(key!) ?? 0) + 1)
-  for (const key of afterKeys) {
-    const count = remaining.get(key!) ?? 0
-    if (count === 0) return null
-    remaining.set(key!, count - 1)
+  const need = new Map<string, number>()
+  for (const key of afterKeys) need.set(key!, (need.get(key!) ?? 0) + 1)
+  const have = new Map<string, number>()
+  for (const key of beforeKeys) have.set(key!, (have.get(key!) ?? 0) + 1)
+  for (const [key, count] of need) {
+    if ((have.get(key) ?? 0) < count) return null
   }
-  if (beforeKeys.every((key, i) => key === afterKeys[i])) return []
   const ops: ClaimMappingOperation[] = []
   const working = [...beforeKeys] as string[]
+  for (let i = working.length - 1; i >= 0; i--) {
+    const key = working[i]
+    if ((have.get(key) ?? 0) > (need.get(key) ?? 0)) {
+      ops.push(removeOp(i))
+      working.splice(i, 1)
+      have.set(key, (have.get(key) ?? 1) - 1)
+    }
+  }
+  if (working.length !== afterKeys.length) return null
+  if (!reorderOp) {
+    return working.every((key, i) => key === afterKeys[i]) ? ops : null
+  }
   for (let i = 0; i < afterKeys.length; i++) {
     const want = afterKeys[i]!
     if (working[i] === want) continue
@@ -407,33 +421,9 @@ function reorderRoleRuleOps(
     if (from < 0) return null
     working.splice(from, 1)
     working.splice(i, 0, want)
-    ops.push({ op: 'reorderRoleRule', from, to: i })
+    ops.push(reorderOp(from, i))
   }
   return ops
-}
-
-/** When after is a subsequence of before, emit whole-row removals instead of index edits. */
-function subsequenceRemoveOps(
-  beforeRows: unknown[],
-  afterRows: unknown[],
-  identity: (row: unknown) => string | null,
-  removeOp: (index: number) => ClaimMappingOperation
-): ClaimMappingOperation[] | null {
-  if (afterRows.length >= beforeRows.length) return null
-  const beforeKeys = beforeRows.map(identity)
-  const afterKeys = afterRows.map(identity)
-  if (beforeKeys.some((key) => key == null) || afterKeys.some((key) => key == null)) return null
-  let afterIndex = 0
-  const removed: number[] = []
-  for (let i = 0; i < beforeKeys.length; i++) {
-    if (afterIndex < afterKeys.length && beforeKeys[i] === afterKeys[afterIndex]) {
-      afterIndex += 1
-    } else {
-      removed.push(i)
-    }
-  }
-  if (afterIndex !== afterKeys.length) return null
-  return removed.reverse().map(removeOp)
 }
 
 /** Diff supported editor state against stored JSON into closed operations. */
@@ -474,15 +464,15 @@ export function diffClaimMappingOperations(
     if (beforeSync !== afterSync) ops.push({ op: 'setRoleSync', syncOnEverySignIn: afterSync })
     const beforeRules = Array.isArray(beforeRole?.rules) ? beforeRole.rules : []
     const afterRules = afterRole.rules ?? []
-    const reorders = reorderRoleRuleOps(beforeRules, afterRules)
-    const removals = subsequenceRemoveOps(beforeRules, afterRules, roleRuleIdentity, (index) => ({
-      op: 'removeRoleRule',
-      index,
-    }))
-    if (reorders) {
-      ops.push(...reorders)
-    } else if (removals) {
-      ops.push(...removals)
+    const aligned = subsetPermuteOps(
+      beforeRules,
+      afterRules,
+      roleRuleIdentity,
+      (index) => ({ op: 'removeRoleRule', index }),
+      (from, to) => ({ op: 'reorderRoleRule', from, to })
+    )
+    if (aligned) {
+      ops.push(...aligned)
     } else {
       const commonRules = Math.min(beforeRules.length, afterRules.length)
       for (let i = 0; i < commonRules; i++) {
@@ -514,12 +504,12 @@ export function diffClaimMappingOperations(
     if (typeof row.claimPath !== 'string' || typeof row.attributeKey !== 'string') return null
     return `${row.claimPath}\0${row.attributeKey}`
   }
-  const peopleRemovals = subsequenceRemoveOps(beforeMap, afterMap, peopleIdentity, (index) => ({
+  const peopleAligned = subsetPermuteOps(beforeMap, afterMap, peopleIdentity, (index) => ({
     op: 'removePeopleMapping',
     index,
   }))
-  if (peopleRemovals) {
-    ops.push(...peopleRemovals)
+  if (peopleAligned) {
+    ops.push(...peopleAligned)
   } else {
     const commonMap = Math.min(beforeMap.length, afterMap.length)
     for (let i = 0; i < commonMap; i++) {

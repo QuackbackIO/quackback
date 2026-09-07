@@ -220,6 +220,34 @@ describe('ClaimRowDialog', () => {
     expect(screen.getAllByText('sub').length).toBeGreaterThan(1)
   })
 
+  it('does not let an admin select a non-bindable identity suggestion', async () => {
+    ssoTestRef.lastSuccess = {
+      ...defaultCapture,
+      claims: { sub: 'person-123', email_verified: true, groups: ['engineering'] },
+    }
+    ssoTestRef.lastCapture = ssoTestRef.lastSuccess
+    const onCommit = vi.fn()
+    render(
+      <ClaimRowDialog
+        open
+        mode="edit"
+        lockedTarget={{ type: 'profile', field: 'id' }}
+        availableTargets={[]}
+        definitions={DEFS}
+        initialPath="sub"
+        registrationId="oidc_x"
+        canTest
+        onOpenChange={vi.fn()}
+        onCommit={onCommit}
+      />
+    )
+    await userEvent.click(screen.getByRole('combobox', { name: 'IdP claim path' }))
+    const groups = screen.getByRole('option', { name: /groups/i })
+    expect(groups).toHaveAttribute('aria-disabled', 'true')
+    await userEvent.click(groups)
+    expect(screen.getByRole('combobox', { name: 'IdP claim path' })).toHaveTextContent('sub')
+  })
+
   it('does not reset in-progress edits when the parent re-renders', () => {
     const targets = availableAddTargets({ mapping: null, definitions: DEFS })
     const { rerender } = render(

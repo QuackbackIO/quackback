@@ -67,6 +67,7 @@ export function ClaimPathInput({
         description: s.unsuitable
           ? [s.description, 'Not a scalar identity claim'].filter(Boolean).join(' · ')
           : s.description,
+        disabled: s.unsuitable === true,
       }))
     }
     if (!fixture) return []

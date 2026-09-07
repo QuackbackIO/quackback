@@ -180,6 +180,41 @@ describe('diffClaimMappingOperations', () => {
       },
     })
   })
+
+  it('reorder+remove keeps extra fields on the surviving objects', () => {
+    const stored = {
+      role: {
+        claimPath: 'groups',
+        rules: [
+          { whenContains: 'a', role: 'member', note: 'a-note' },
+          { whenContains: 'b', role: 'member', note: 'b-note' },
+          { whenContains: 'c', role: 'admin', note: 'c-note' },
+        ],
+      },
+    }
+    const ops = diffClaimMappingOperations(stored, {
+      role: {
+        claimPath: 'groups',
+        rules: [
+          { whenContains: 'c', role: 'admin' },
+          { whenContains: 'a', role: 'member' },
+        ],
+      },
+    })
+    expect(ops).toEqual([
+      { op: 'removeRoleRule', index: 1 },
+      { op: 'reorderRoleRule', from: 1, to: 0 },
+    ])
+    expect(applyClaimMappingEdits(stored, ops)).toEqual({
+      role: {
+        claimPath: 'groups',
+        rules: [
+          { whenContains: 'c', role: 'admin', note: 'c-note' },
+          { whenContains: 'a', role: 'member', note: 'a-note' },
+        ],
+      },
+    })
+  })
 })
 
 describe('storedJsonEqual', () => {
