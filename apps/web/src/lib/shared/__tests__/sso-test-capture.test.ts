@@ -114,4 +114,29 @@ describe('captureSuggestionClaims', () => {
     expect(claims.groups).toEqual(['engineering'])
     expect(claims.email).toBe('a@x.com')
   })
+
+  it('omits discarded mismatched userinfo from suggestion candidates', () => {
+    const claims = captureSuggestionClaims({
+      version: 2,
+      registrationId: 'oidc_x',
+      capturedAt: '2026-09-07T12:00:00.000Z',
+      detailsChangedAtAtStart: null,
+      outcome: 'success',
+      claims: { sub: 'from-token', email: 'a@x.com', name: 'A', groups: ['eng'] },
+      replay: {
+        sources: [
+          {
+            source: 'idToken',
+            claims: { sub: 'from-token', email: 'a@x.com', name: 'A', groups: ['eng'] },
+          },
+          {
+            source: 'userinfo',
+            claims: { sub: 'other-subject', groups: ['ops'], extra: 'only-userinfo' },
+          },
+        ],
+      },
+    })
+    expect(claims.groups).toEqual(['eng'])
+    expect(claims.extra).toBeUndefined()
+  })
 })

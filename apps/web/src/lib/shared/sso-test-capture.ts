@@ -7,6 +7,7 @@
 import type { JsonValue } from './json'
 import { IDENTITY_SOURCES } from './oidc-claim-mapping'
 import type { CapturedIdentity, IdentitySource, SourceUnavailableReason } from './db-types'
+import { finishBinding, replayClaimMapping } from './sso-claim-binder'
 
 /** Wire-safe snapshot: JSON values only, no token strings. */
 export type SourceSnapshot = {
@@ -83,18 +84,15 @@ export function isReplayableCapture(capture: SsoTestCapture): capture is SsoTest
   return isV2Capture(capture) && capture.detailsChangedAtAtStart !== undefined
 }
 
-/** Union of recorded source claims for editor suggestions. Production-shaped
- *  `capture.claims` can omit later-source keys the binder did not need. */
+/** Claims the binder would accept from this capture, including later sources
+ *  that share the bound subject. Exhaustive replay still discards a userinfo
+ *  document whose `sub` does not match. */
 export function captureSuggestionClaims(capture: SsoTestCapture): Record<string, JsonValue> {
   if (!isV2Capture(capture)) return capture.claims
-  const merged: Record<string, JsonValue> = { ...capture.claims }
-  for (const snapshot of capture.replay.sources) {
-    if (!('claims' in snapshot) || !snapshot.claims) continue
-    for (const [key, value] of Object.entries(snapshot.claims)) {
-      if (!Object.hasOwn(merged, key)) merged[key] = value
-    }
-  }
-  return merged
+  const bound = finishBinding(
+    replayClaimMapping({ exhaustive: true, wantImage: true }, capture.replay.sources)
+  )
+  return bound.acceptedClaims as Record<string, JsonValue>
 }
 
 /** Caption for a capture that may have no resolved identifier. */
