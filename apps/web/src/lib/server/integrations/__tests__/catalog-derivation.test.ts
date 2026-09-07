@@ -4,13 +4,19 @@
  * Regression anchor: Monday/Notion historically claimed "Two-way status
  * sync" with no inbound handler.
  */
-import { describe, it, expect, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
+const mockAreManaged = vi.fn().mockResolvedValue(false)
 vi.mock('@/lib/server/domains/platform-credentials/platform-credential.service', () => ({
   getConfiguredIntegrationTypes: vi.fn().mockResolvedValue(new Set<string>()),
+  arePlatformCredentialsManaged: (type: string) => mockAreManaged(type),
 }))
 
 import { getIntegrationCatalog } from '../index'
+
+afterEach(() => {
+  mockAreManaged.mockResolvedValue(false)
+})
 
 describe('getIntegrationCatalog capability derivation', () => {
   it('monday and notion no longer advertise two-way status sync', async () => {
@@ -67,5 +73,16 @@ describe('getIntegrationCatalog capability derivation', () => {
         expect(cap.description.length, entry.id).toBeGreaterThan(0)
       }
     }
+  })
+
+  it('lets tenants connect platform-managed apps without pasting credentials', async () => {
+    mockAreManaged.mockImplementation(async (type: string) => type === 'slack')
+    const catalog = await getIntegrationCatalog()
+    const slack = catalog.find((e) => e.id === 'slack')!
+    expect(slack.managed).toBe(true)
+    expect(slack.available).toBe(true)
+    const github = catalog.find((e) => e.id === 'github')!
+    expect(github.managed).toBe(false)
+    expect(github.available).toBe(false)
   })
 })

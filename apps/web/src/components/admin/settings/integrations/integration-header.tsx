@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { BackLink } from '@/components/ui/back-link'
 import { Badge } from '@/components/ui/badge'
 import { DocsLink } from '@/components/ui/docs-link'
+import { canInstallIntegration } from '@/lib/shared/integration-connect'
 import type { IntegrationCatalogEntry } from '@/lib/shared/integration-types'
 
 interface IntegrationHeaderProps {
@@ -46,12 +47,12 @@ export function IntegrationHeader({
                   Paused
                 </Badge>
               )}
-              {!status && !catalog.available && catalog.configurable && (
+              {!status && !canInstallIntegration(catalog) && catalog.configurable && (
                 <Badge variant="outline" className="text-muted-foreground/60 border-border/40">
                   Not configured
                 </Badge>
               )}
-              {!status && !catalog.available && !catalog.configurable && (
+              {!status && !canInstallIntegration(catalog) && !catalog.configurable && (
                 <Badge variant="outline" className="text-muted-foreground/60 border-border/40">
                   Coming soon
                 </Badge>

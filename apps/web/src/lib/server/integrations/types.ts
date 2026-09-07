@@ -129,6 +129,11 @@ export interface IntegrationCatalogEntry {
   iconBg: string
   settingsPath: string
   available: boolean
+  /**
+   * Platform (env / control-plane) owns the OAuth app credentials. Tenants
+   * connect the workspace install; they do not paste client secrets.
+   */
+  managed?: boolean
   /** true if the integration requires platform credentials to be configured */
   configurable: boolean
   /** Field definitions for platform credentials. Present in catalog API response, empty array if none needed. */

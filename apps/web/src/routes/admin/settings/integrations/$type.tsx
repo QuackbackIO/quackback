@@ -12,6 +12,7 @@ import {
 } from '@/components/admin/settings/integrations/integration-settings-registry'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { canEditPlatformCredentials, showOAuthConnect } from '@/lib/shared/integration-connect'
 
 /** URL segments use hyphens (e.g. `azure-devops`); registry keys use the
  * underscore integration type (`azure_devops`). Every other provider is a
@@ -38,7 +39,11 @@ function IntegrationSettingsPage() {
 
   const { data } = useSuspenseQuery(adminQueries.integrationByType(type))
   const integration = data.integration as IntegrationSettingsData | null
-  const { platformCredentialFields, platformCredentialsConfigured } = data
+  const {
+    platformCredentialFields,
+    platformCredentialsConfigured,
+    platformCredentialsManaged = false,
+  } = data
   const [credentialsOpen, setCredentialsOpen] = useState(false)
 
   const { catalog, Icon, ConnectionActions, setup } = entry
@@ -46,6 +51,12 @@ function IntegrationSettingsPage() {
   const isConnected = status === 'active'
   const isPaused = status === 'paused'
   const hasCredentials = platformCredentialFields.length > 0
+  const canEditCredentials = canEditPlatformCredentials(platformCredentialsManaged)
+  const canConnect = showOAuthConnect({
+    hasPlatformCredentialFields: hasCredentials,
+    platformCredentialsConfigured,
+    platformCredentialsManaged,
+  })
   const workspaceName = integration
     ? (entry.getWorkspaceName?.(integration) ?? integration.workspaceName)
     : undefined
@@ -60,7 +71,7 @@ function IntegrationSettingsPage() {
         actions={
           isConnected || isPaused ? (
             <div className="flex items-center gap-2">
-              {hasCredentials && (
+              {hasCredentials && canEditCredentials && (
                 <Button variant="outline" size="sm" onClick={() => setCredentialsOpen(true)}>
                   Configure credentials
                 </Button>
@@ -102,12 +113,12 @@ function IntegrationSettingsPage() {
           steps={setup.steps}
           connectionForm={
             <div className="flex flex-col items-end gap-2">
-              {hasCredentials && !platformCredentialsConfigured && (
+              {hasCredentials && !canConnect && (
                 <Button onClick={() => setCredentialsOpen(true)}>Configure credentials</Button>
               )}
-              {(!hasCredentials || platformCredentialsConfigured) && (
+              {canConnect && (
                 <div className="flex items-center gap-2">
-                  {hasCredentials && (
+                  {hasCredentials && canEditCredentials && (
                     <Button variant="outline" size="sm" onClick={() => setCredentialsOpen(true)}>
                       Configure credentials
                     </Button>
@@ -122,7 +133,7 @@ function IntegrationSettingsPage() {
         />
       )}
 
-      {hasCredentials && (
+      {hasCredentials && canEditCredentials && (
         <PlatformCredentialsDialog
           integrationType={type}
           integrationName={catalog.name}
