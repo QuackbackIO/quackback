@@ -119,14 +119,14 @@ export function inboxFilterConditions(params: InboxPostListParams, omit?: InboxF
   }
 
   if (authorId) {
-    conditions.push(eq(posts.authorPrincipalId, authorId))
+    conditions.push(eq(posts.principalId, authorId))
   } else if (authorEmail) {
     const email = authorEmail.toLowerCase()
     conditions.push(
       sql`exists (
         select 1 from ${principal}
         inner join ${user} on ${user.id} = ${principal.userId}
-        where ${principal.id} = ${posts.authorPrincipalId}
+        where ${principal.id} = ${posts.principalId}
           and lower(${user.email}) = ${email}
       )`
     )
