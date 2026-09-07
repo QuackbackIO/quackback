@@ -64,6 +64,27 @@ describe('connectionAffectingChange', () => {
     ).toBe(true)
   })
 
+  it('default Save with Advanced sources mounted does not invalidate a passing connection test', () => {
+    expect(
+      connectionAffectingChange(
+        { claimMapping: { profile: { sources: ['idToken', 'userinfo'] } } },
+        { ...existing, claimMapping: null }
+      )
+    ).toBe(false)
+    expect(
+      connectionAffectingChange(
+        { claimMapping: { profile: { sources: ['userinfo', 'idToken'] } } },
+        { ...existing, claimMapping: { profile: { sources: ['idToken', 'userinfo'] } } }
+      )
+    ).toBe(true)
+    expect(
+      connectionAffectingChange(
+        { claimMapping: { profile: { claims: { id: 'sub' } } } },
+        { ...existing, claimMapping: null }
+      )
+    ).toBe(true)
+  })
+
   it('is false when only claimMapping.role or attributes change', () => {
     expect(
       connectionAffectingChange(

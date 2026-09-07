@@ -14,6 +14,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
+import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import { ClaimMappingEditor } from './claim-mapping-editor'
 import { ClaimAttributeMappingEditor } from './claim-attribute-mapping-editor'
@@ -27,9 +28,15 @@ import {
   type RoleMapping,
 } from './provider-shared'
 import { useProviderSave } from './use-provider-save'
+import {
+  applyClaimMappingEdits,
+  diffClaimMappingOperations,
+  mappingSaveRisks,
+} from '@/lib/shared/sso-claim-mapping-edit'
 
 export function ClaimMappingCard({ provider }: { provider: IdentityProvider }) {
-  const { saving, save } = useProviderSave(provider)
+  const { saving, saveClaimMapping } = useProviderSave(provider)
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const [mapping, setMapping] = useState<RoleMapping | null>(provider.claimMapping?.role ?? null)
   const [attributes, setAttributes] = useState<AttributeMapping | null>(
     provider.claimMapping?.attributes ?? null
@@ -49,17 +56,35 @@ export function ClaimMappingCard({ provider }: { provider: IdentityProvider }) {
         ? provider.lastTestCapture
         : null
 
-  const handleSave = () =>
-    void save(
+  const proposed = mergeClaimMapping(provider.claimMapping, {
+    role: normalizeRoleMapping(mapping),
+    profile: withAllowMissingEmail(provider.claimMapping?.profile, allowMissingEmail),
+    attributes: normalizeAttributeMapping(attributes),
+  })
+  const operations = diffClaimMappingOperations(provider.claimMapping, proposed)
+  const nextMapping = applyClaimMappingEdits(provider.claimMapping, operations)
+  const risks = mappingSaveRisks(provider.claimMapping, nextMapping)
+
+  const persist = (acks?: {
+    acknowledgeIdentifierChange?: boolean
+    acknowledgeAdminRules?: boolean
+  }) =>
+    void saveClaimMapping(
       {
-        claimMapping: mergeClaimMapping(provider.claimMapping, {
-          role: normalizeRoleMapping(mapping),
-          profile: withAllowMissingEmail(provider.claimMapping?.profile, allowMissingEmail),
-          attributes: normalizeAttributeMapping(attributes),
-        }),
+        operations,
+        acknowledgeIdentifierChange: acks?.acknowledgeIdentifierChange,
+        acknowledgeAdminRules: acks?.acknowledgeAdminRules,
       },
       'Claim mapping saved.'
     )
+
+  const handleSave = () => {
+    if (operations.length > 0 && (risks.identifierChanged || risks.hasAdminRules)) {
+      setConfirmOpen(true)
+      return
+    }
+    persist()
+  }
 
   return (
     <div id="mapping" className="scroll-mt-6">
@@ -114,6 +139,36 @@ export function ClaimMappingCard({ provider }: { provider: IdentityProvider }) {
           </Button>
         </div>
       </SettingsCard>
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title="Confirm mapping changes"
+        confirmLabel="Save mappings"
+        description={
+          <div className="space-y-2 text-sm">
+            {risks.identifierChanged ? (
+              <p>
+                Changing the identifier can stop existing account matches and create another
+                account. Existing accounts will not be migrated. This invalidates the connection
+                test.
+              </p>
+            ) : null}
+            {risks.hasAdminRules ? (
+              <p>
+                This can grant admin access even when the person&apos;s email is outside this
+                provider&apos;s verified domains.
+              </p>
+            ) : null}
+          </div>
+        }
+        onConfirm={() => {
+          setConfirmOpen(false)
+          persist({
+            acknowledgeIdentifierChange: risks.identifierChanged,
+            acknowledgeAdminRules: risks.hasAdminRules,
+          })
+        }}
+      />
     </div>
   )
 }

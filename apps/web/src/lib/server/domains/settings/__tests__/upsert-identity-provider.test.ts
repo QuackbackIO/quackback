@@ -327,6 +327,7 @@ describe('upsertIdentityProvider — detailsChangedAt restamp (Fix 6)', () => {
     await upsertIdentityProvider({
       ...BASE_INPUT,
       id: 'idp_existing' as `idp_${string}`,
+      acknowledgeAdminRules: true,
       claimMapping: {
         role: { claimPath: 'groups', rules: [{ whenContains: 'admins', role: 'admin' }] },
       },

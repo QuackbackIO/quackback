@@ -14,7 +14,11 @@ import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { toast } from 'sonner'
-import { upsertIdentityProviderFn } from '@/lib/server/functions/sso'
+import {
+  saveIdentityProviderClaimMappingFn,
+  upsertIdentityProviderFn,
+} from '@/lib/server/functions/sso'
+import type { ClaimMappingOperation } from '@/lib/shared/sso-claim-mapping-edit'
 import type {
   IdentityProvider,
   UpsertIdentityProviderInput,
@@ -26,6 +30,7 @@ export type ProviderPatch = Partial<Omit<UpsertIdentityProviderInput, 'id' | 're
 export function useProviderSave(provider: IdentityProvider) {
   const queryClient = useQueryClient()
   const upsert = useServerFn(upsertIdentityProviderFn)
+  const saveMappingFn = useServerFn(saveIdentityProviderClaimMappingFn)
   const [saving, setSaving] = useState(false)
 
   /** Returns true when the write landed, so a card can clear its drafts. */
@@ -52,5 +57,35 @@ export function useProviderSave(provider: IdentityProvider) {
     }
   }
 
-  return { saving, save }
+  const saveClaimMapping = async (
+    args: {
+      operations: ClaimMappingOperation[]
+      acknowledgeIdentifierChange?: boolean
+      acknowledgeAdminRules?: boolean
+    },
+    successMessage = 'Claim mapping saved.'
+  ): Promise<boolean> => {
+    setSaving(true)
+    try {
+      await saveMappingFn({
+        data: {
+          id: provider.id,
+          expectedClaimMapping: provider.claimMapping,
+          operations: args.operations,
+          acknowledgeIdentifierChange: args.acknowledgeIdentifierChange,
+          acknowledgeAdminRules: args.acknowledgeAdminRules,
+        },
+      })
+      await queryClient.invalidateQueries({ queryKey: IDENTITY_PROVIDERS_KEY })
+      toast.success(successMessage)
+      return true
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not save the identity provider.')
+      return false
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return { saving, save, saveClaimMapping }
 }
