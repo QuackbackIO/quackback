@@ -32,9 +32,21 @@ export type MappedProfileClaims = {
 }
 
 export function mapProfileClaims(profile: unknown): MappedProfileClaims {
-  const p = profile as { locale?: unknown; email_verified?: unknown } | null | undefined
+  const p = profile as
+    | {
+        locale?: unknown
+        email_verified?: unknown
+        emailVerified?: unknown
+      }
+    | null
+    | undefined
   return {
     locale: typeof p?.locale === 'string' && p.locale.length > 0 ? p.locale : null,
-    emailVerified: isAffirmativeClaim(p?.email_verified),
+    // Prefer the adapter's resolved flag so a leftover raw `email_verified`
+    // from a different source cannot re-verify the bound address.
+    emailVerified:
+      typeof p?.emailVerified === 'boolean'
+        ? p.emailVerified
+        : isAffirmativeClaim(p?.email_verified),
   }
 }

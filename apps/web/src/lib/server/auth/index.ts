@@ -279,6 +279,9 @@ async function createAuth() {
     onResolutionWarning: (registrationId, warnings) => {
       log.warn({ registrationId, warnings }, 'identity resolution discrepancy observed')
     },
+    onIdentityFailure: (registrationId, reason) => {
+      log.warn({ registrationId, reason }, 'identity profile resolution failed')
+    },
     placeholderEmailFor: resolvePlaceholderEmail,
     mapProfileToUser: mapProfileClaims,
     buildLoginHintParams,

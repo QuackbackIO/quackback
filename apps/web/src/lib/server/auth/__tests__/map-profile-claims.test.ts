@@ -46,4 +46,21 @@ describe('mapProfileClaims — emailVerified', () => {
     expect(mapProfileClaims({ email_verified: false }).emailVerified).toBe(false)
     expect(mapProfileClaims({ email_verified: null }).emailVerified).toBe(false)
   })
+
+  it('profile hook preserves resolved email verification provenance', () => {
+    // getUserInfo sets emailVerified from the source of the resolved address.
+    // A leftover raw email_verified from a different source must not win.
+    expect(
+      mapProfileClaims({
+        email_verified: true,
+        emailVerified: false,
+      }).emailVerified
+    ).toBe(false)
+    expect(
+      mapProfileClaims({
+        email_verified: false,
+        emailVerified: true,
+      }).emailVerified
+    ).toBe(true)
+  })
 })

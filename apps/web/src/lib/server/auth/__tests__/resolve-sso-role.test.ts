@@ -6,8 +6,20 @@
  * values, etc.).
  */
 import { describe, it, expect } from 'vitest'
-import { getNestedClaim, resolveSsoRole } from '../resolve-sso-role'
+import {
+  getNestedClaim as serverGetNestedClaim,
+  resolveSsoRole as serverResolveSsoRole,
+  resolveSsoRoleMatch as serverResolveSsoRoleMatch,
+} from '../resolve-sso-role'
+import {
+  getNestedClaim as previewGetNestedClaim,
+  resolveSsoRole as previewResolveSsoRole,
+  resolveSsoRoleMatch as previewResolveSsoRoleMatch,
+} from '@/lib/shared/resolve-sso-role'
 import type { ClaimRoleMapping } from '@/lib/server/db'
+
+const getNestedClaim = serverGetNestedClaim
+const resolveSsoRole = serverResolveSsoRole
 
 describe('getNestedClaim', () => {
   it('reads a dotted path', () => {
@@ -101,5 +113,48 @@ describe('resolveSsoRole', () => {
 
   it('returns null when no mapping is provided', () => {
     expect(resolveSsoRole({ groups: ['admin'] }, undefined)).toBeNull()
+  })
+
+  it('does not split CSV strings or match substrings', () => {
+    expect(
+      resolveSsoRole(
+        { groups: 'platform-admins,analysts' },
+        mapping([{ whenContains: 'analysts', role: 'member' }])
+      )
+    ).toBeNull()
+    expect(
+      resolveSsoRole(
+        { groups: 'platform-admins' },
+        mapping([{ whenContains: 'admin', role: 'admin' }])
+      )
+    ).toBeNull()
+    expect(
+      resolveSsoRole(
+        { groups: ['platform-admins'] },
+        mapping([{ whenContains: 'admin', role: 'admin' }])
+      )
+    ).toBeNull()
+  })
+
+  it('server and preview match literal dotted role claims identically', () => {
+    const claims = {
+      'realm_access.roles': ['nested-admin'],
+      realm_access: { roles: ['dotted-member'] },
+    }
+    const mappingFor = (whenContains: string, role: 'admin' | 'member'): ClaimRoleMapping => ({
+      claimPath: 'realm_access.roles',
+      rules: [{ whenContains, role }],
+    })
+    const literal = mappingFor('nested-admin', 'admin')
+    const nested = mappingFor('dotted-member', 'member')
+
+    expect(serverGetNestedClaim(claims, 'realm_access.roles')).toEqual(['nested-admin'])
+    expect(previewGetNestedClaim(claims, 'realm_access.roles')).toEqual(['nested-admin'])
+    expect(serverResolveSsoRole(claims, literal)).toBe('admin')
+    expect(previewResolveSsoRole(claims, literal)).toBe('admin')
+    expect(serverResolveSsoRole(claims, nested)).toBeNull()
+    expect(previewResolveSsoRole(claims, nested)).toBeNull()
+    expect(serverResolveSsoRoleMatch(claims, literal)).toEqual({ role: 'admin', ruleIndex: 0 })
+    expect(previewResolveSsoRoleMatch(claims, literal)).toEqual({ role: 'admin', ruleIndex: 0 })
   })
 })

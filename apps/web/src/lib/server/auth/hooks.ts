@@ -710,7 +710,7 @@ export async function handleAutoProvisionAfter(
     await recordAuditEvent({
       event: 'user.role.changed',
       outcome: 'success',
-      actor: { email: email ?? null }, // SSO callback — no authenticated admin actor
+      actor: { userId: userIdTyped },
       target: { type: 'user', id: userIdTyped },
       before: { role: p.role },
       after: { role: targetRole },
@@ -1480,9 +1480,13 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
       registeredOidcIds,
       readClaims
     )
-  } catch (err) {
+  } catch {
     log.error(
-      { err, user_id: callbackUserId, provider_id: callbackProviderId },
+      {
+        code: 'claim_attribute_write_failed',
+        user_id: callbackUserId,
+        provider_id: callbackProviderId,
+      },
       'claim attribute write failed'
     )
   }

@@ -169,6 +169,28 @@ export function identitySourcesFor(stored: unknown): IdentitySource[] {
   return claimMappingFor(stored).profile?.sources ?? DEFAULT_IDENTITY_SOURCES
 }
 
+/** String-only identity mapping shared by production sign-in and the SSO test. */
+export function identityMappingFor(stored: unknown): {
+  sources: IdentitySource[]
+  idClaim?: string
+  emailClaim?: string
+  nameClaim?: string
+} {
+  const mapping: {
+    sources: IdentitySource[]
+    idClaim?: string
+    emailClaim?: string
+    nameClaim?: string
+  } = { sources: identitySourcesFor(stored) }
+  const idClaim = profileClaimFor(stored, 'id')
+  const emailClaim = profileClaimFor(stored, 'email')
+  const nameClaim = profileClaimFor(stored, 'name')
+  if (idClaim) mapping.idClaim = idClaim
+  if (emailClaim) mapping.emailClaim = emailClaim
+  if (nameClaim) mapping.nameClaim = nameClaim
+  return mapping
+}
+
 /**
  * Resolve a claim path. An exact key match is tried first so namespaced claims
  * like `https://acme.com/email`, whose dots are not separators, still work.
