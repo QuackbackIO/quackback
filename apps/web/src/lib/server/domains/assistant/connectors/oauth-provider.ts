@@ -244,17 +244,17 @@ export async function finishConnectorOAuth(request: Request): Promise<Response> 
   const origin = `${url.protocol}//${url.host}`
   if (error) {
     log.warn({ error }, 'connector oauth callback error')
-    return Response.redirect(`${origin}/admin/automation`, 302)
+    return Response.redirect(`${origin}/admin/automation/connectors?oauth=error`, 302)
   }
   const state = url.searchParams.get('state')
   const code = url.searchParams.get('code')
   const parsed = state ? verifyOAuthState<{ connectorId?: string }>(state) : null
   if (!parsed?.connectorId || !code) {
-    return Response.redirect(`${origin}/admin/automation`, 302)
+    return Response.redirect(`${origin}/admin/automation/connectors?oauth=error`, 302)
   }
   const row = await getConnector(parsed.connectorId as ConnectorId)
   if (!row) {
-    return Response.redirect(`${origin}/admin/automation`, 302)
+    return Response.redirect(`${origin}/admin/automation/connectors?oauth=error`, 302)
   }
   const provider = createConnectorOAuthProvider(row, request)
   try {
@@ -265,9 +265,9 @@ export async function finishConnectorOAuth(request: Request): Promise<Response> 
     await transport.finishAuth(code)
     const { refreshConnector } = await import('./connectors.health')
     await refreshConnector(row.id)
-    return Response.redirect(`${origin}/admin/automation`, 302)
+    return Response.redirect(`${origin}/admin/automation/connectors/${row.id}?oauth=connected`, 302)
   } catch (err) {
     log.warn({ err, id: row.id }, 'connector oauth finish failed')
-    return Response.redirect(`${origin}/admin/automation`, 302)
+    return Response.redirect(`${origin}/admin/automation/connectors/${row.id}?oauth=error`, 302)
   }
 }

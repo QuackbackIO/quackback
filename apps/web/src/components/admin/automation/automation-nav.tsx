@@ -1,6 +1,13 @@
 import { Link, useRouteContext, useRouterState } from '@tanstack/react-router'
 import { useIntl } from 'react-intl'
-import { BoltIcon, ChartBarIcon, SparklesIcon, UserGroupIcon } from '@heroicons/react/24/solid'
+import {
+  BoltIcon,
+  BookOpenIcon,
+  ChartBarIcon,
+  LinkIcon,
+  SparklesIcon,
+  UserGroupIcon,
+} from '@heroicons/react/24/solid'
 import { MENU_ICON, MENU_LABEL, MENU_ROW } from '@/components/ui/menu'
 import { usePermission } from '@/lib/client/hooks/use-permission'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -15,8 +22,9 @@ interface NavItem {
 }
 
 /**
- * A titled cluster of nav rows. The Agents group holds the two peer agents;
- * the trailing untitled group holds standalone tools (Workflows, Performance).
+ * A titled cluster of nav rows. The Agents group holds the two peer agents
+ * plus their shared catalog (Connectors, Skills); the trailing untitled group
+ * holds standalone tools (Workflows, Performance).
  */
 interface NavSection {
   labelId?: string
@@ -51,6 +59,18 @@ export function buildAutomationNavSections(
           defaultLabel: 'Copilot',
           to: '/admin/automation/copilot',
           icon: UserGroupIcon,
+        },
+        {
+          labelId: 'automation.nav.connectors',
+          defaultLabel: 'Connectors',
+          to: '/admin/automation/connectors',
+          icon: LinkIcon,
+        },
+        {
+          labelId: 'automation.nav.skills',
+          defaultLabel: 'Skills',
+          to: '/admin/automation/skills',
+          icon: BookOpenIcon,
         },
       ]
     : []
