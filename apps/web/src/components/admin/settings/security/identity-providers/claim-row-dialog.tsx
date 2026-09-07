@@ -136,11 +136,19 @@ export function ClaimRowDialog({
     if (resolvedTarget.type === 'profile') {
       const trimmed = path.trim()
       const defaultPath = OIDC_PROFILE_DEFAULTS[resolvedTarget.field]
-      const startedBlank = !(initialPath ?? '').trim()
+      // Identifier: empty Apply keeps the implicit default (userinfo `id` fallback).
+      // Explicitly choosing `sub` must persist `id: 'sub'`. Email/name defaults
+      // stay display-only and are not written.
+      const pathToCommit =
+        resolvedTarget.field === 'id'
+          ? trimmed || null
+          : !trimmed || trimmed === defaultPath
+            ? null
+            : trimmed
       onCommit({
         type: 'profile',
         field: resolvedTarget.field,
-        path: !trimmed || (startedBlank && trimmed === defaultPath) ? null : trimmed,
+        path: pathToCommit,
       })
     } else if (resolvedTarget.type === 'role') {
       onCommit({ type: 'role', mapping: role })

@@ -124,6 +124,35 @@ describe('previewClaimMapping', () => {
     expect(preview.identity).toBeNull()
   })
 
+  it('marks a session capture stale when details changed after the handshake started', () => {
+    const preview = previewClaimMapping({
+      draft: null,
+      capture: v2Capture({
+        detailsChangedAtAtStart: '2026-09-01T00:00:00.000Z',
+        capturedAt: '2026-09-01T00:02:00.000Z',
+      }),
+      definitions: defs,
+      providerPolicy: { ...policy, detailsChangedAt: '2026-09-01T00:01:00.000Z' },
+    })
+    expect(preview.stale).toBe(true)
+    expect(preview.capture).not.toBeNull()
+    expect(preview.limitations.join(' ')).toMatch(/re-test/i)
+  })
+
+  it('does not mark stale when current details match the handshake start', () => {
+    const preview = previewClaimMapping({
+      draft: null,
+      capture: v2Capture({
+        detailsChangedAtAtStart: '2026-09-01T00:00:00.000Z',
+        capturedAt: '2026-09-01T00:02:00.000Z',
+      }),
+      definitions: defs,
+      providerPolicy: { ...policy, detailsChangedAt: '2026-09-01T00:00:00.000Z' },
+    })
+    expect(preview.stale).toBe(false)
+    expect(preview.limitations.join(' ')).not.toMatch(/re-test/i)
+  })
+
   it('legacy capture asks for retest', () => {
     const capture: SsoTestCapture = {
       registrationId: REG,

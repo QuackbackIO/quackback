@@ -69,6 +69,23 @@ function requiredClaimPathsFor(stored: unknown): string[] {
   ]
 }
 
+/** True when current provider details are newer than the config the handshake used. */
+export function captureConfigIsStale(
+  detailsChangedAt: string | null | undefined,
+  capture: SsoTestCapture
+): boolean {
+  if (!detailsChangedAt) return false
+  const currentMs = new Date(detailsChangedAt).getTime()
+  if (!Number.isFinite(currentMs)) return false
+  if (isReplayableCapture(capture)) {
+    if (capture.detailsChangedAtAtStart == null) return true
+    const startMs = new Date(capture.detailsChangedAtAtStart).getTime()
+    return Number.isFinite(startMs) && currentMs > startMs
+  }
+  const capturedMs = new Date(capture.capturedAt).getTime()
+  return Number.isFinite(capturedMs) && currentMs > capturedMs
+}
+
 function sourceMissingFromCapture(draft: unknown, capture: SsoTestCapture): IdentitySource | null {
   if (!isReplayableCapture(capture)) return null
   const captured = new Set(capture.replay.sources.map((s) => s.source))
@@ -102,9 +119,7 @@ export function previewClaimMapping({
     }
   }
 
-  const stale =
-    !!providerPolicy.detailsChangedAt &&
-    new Date(providerPolicy.detailsChangedAt).getTime() > new Date(capture.capturedAt).getTime()
+  const stale = captureConfigIsStale(providerPolicy.detailsChangedAt, capture)
 
   if (!isReplayableCapture(capture)) {
     return {

@@ -98,6 +98,46 @@ describe('ClaimRowDialog', () => {
     expect(onCommit).toHaveBeenCalledWith({ type: 'profile', field: 'name', path: null })
   })
 
+  it('empty Apply on a default identifier commits path null', async () => {
+    const onCommit = vi.fn()
+    render(
+      <ClaimRowDialog
+        open
+        mode="edit"
+        lockedTarget={{ type: 'profile', field: 'id' }}
+        availableTargets={[]}
+        definitions={DEFS}
+        registrationId="oidc_x"
+        canTest
+        onOpenChange={vi.fn()}
+        onCommit={onCommit}
+      />
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Apply to draft' }))
+    expect(onCommit).toHaveBeenCalledWith({ type: 'profile', field: 'id', path: null })
+  })
+
+  it('selecting sub from an empty identifier dialog persists explicit sub', async () => {
+    const onCommit = vi.fn()
+    render(
+      <ClaimRowDialog
+        open
+        mode="edit"
+        lockedTarget={{ type: 'profile', field: 'id' }}
+        availableTargets={[]}
+        definitions={DEFS}
+        registrationId="oidc_x"
+        canTest
+        onOpenChange={vi.fn()}
+        onCommit={onCommit}
+      />
+    )
+    await userEvent.click(screen.getByRole('combobox', { name: 'IdP claim path' }))
+    await userEvent.click(screen.getByRole('option', { name: /^sub\b/i }))
+    await userEvent.click(screen.getByRole('button', { name: 'Apply to draft' }))
+    expect(onCommit).toHaveBeenCalledWith({ type: 'profile', field: 'id', path: 'sub' })
+  })
+
   it('locks the target when editing and has no metadata-key field', () => {
     render(
       <ClaimRowDialog

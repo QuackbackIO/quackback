@@ -199,6 +199,22 @@ describe('ClaimMappingCard save coordination', () => {
     expect(saved?.profile?.claims?.id).toBeUndefined()
   })
 
+  it('selecting sub from the default identifier dialog persists explicit id and requires acknowledgement', async () => {
+    renderCard(makeProvider({ claimMapping: null }))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Unique user identifier mapping' }))
+    await userEvent.click(screen.getByRole('combobox', { name: 'IdP claim path' }))
+    await userEvent.click(screen.getByRole('option', { name: /^sub\b/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Apply to draft' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(screen.getByText(/stop existing account matches/)).toBeInTheDocument()
+    expect(mappingSpy).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Save mappings' }))
+    await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
+    expect(lastMapping().acknowledgeIdentifierChange).toBe(true)
+    const saved = lastSaved() as { profile?: { claims?: { id?: string } } }
+    expect(saved.profile?.claims?.id).toBe('sub')
+  })
+
   it('keeps provider A session success when lastCapture is a mapping failure for B', () => {
     const captureA = {
       version: 2 as const,
