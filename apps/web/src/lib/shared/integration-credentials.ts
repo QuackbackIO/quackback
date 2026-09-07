@@ -17,3 +17,12 @@ export const CLOUD_INTEGRATION_FIELDS: Record<string, string[]> = {
   teams: ['clientId', 'clientSecret'],
   discord: ['clientId', 'clientSecret', 'botToken'],
 }
+
+export function integrationEnvironmentKey(provider: string, field: string): string {
+  return (
+    'INTEGRATION_' +
+    provider.toUpperCase().replaceAll('-', '_') +
+    '_' +
+    field.replace(/([A-Z])/g, '_$1').toUpperCase()
+  )
+}

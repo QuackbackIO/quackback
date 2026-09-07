@@ -29,6 +29,7 @@ const hoisted = vi.hoisted(() => ({
   getAssistantSettings: vi.fn(),
   updateAssistantIdentity: vi.fn(),
   updateAssistantVoice: vi.fn(),
+  updateAssistantConfig: vi.fn(),
   updateWidgetAssistantDeployment: vi.fn(),
   requestHeaders: new Headers({
     'user-agent': 'assistant-settings-test',
@@ -45,6 +46,7 @@ vi.mock('@/lib/server/domains/settings/settings.assistant', async (importOrigina
   getAssistantSettings: hoisted.getAssistantSettings,
   updateAssistantIdentity: hoisted.updateAssistantIdentity,
   updateAssistantVoice: hoisted.updateAssistantVoice,
+  updateAssistantConfig: hoisted.updateAssistantConfig,
 }))
 
 vi.mock('@/lib/server/domains/settings/settings.widget', () => ({
@@ -64,6 +66,7 @@ import {
   updateAssistantIdentityFn,
   updateAssistantVoiceFn,
   updateWidgetAssistantDeploymentFn,
+  updateWorkspaceAssistantFn,
 } from '../assistant-settings'
 
 const CONFIG: AssistantConfig = {
@@ -268,6 +271,29 @@ describe('assistant settings V2 boundary', () => {
       },
       expect.objectContaining(AUDIT_ACTOR)
     )
+  })
+
+  it('cannot flip the Slack deployment bit through the workspace settings mutation', async () => {
+    hoisted.updateAssistantConfig.mockResolvedValue(CONFIG_RESULT)
+    const workspace = {
+      ...CONFIG.agents.workspace,
+      instructions: 'Answer briefly.',
+      slack: { ...CONFIG.agents.workspace.slack, enabled: true },
+    }
+    await updateWorkspaceAssistantFn({ data: { expectedRevision: 41, workspace } })
+
+    expect(hoisted.updateAssistantConfig).toHaveBeenCalledWith(
+      41,
+      expect.any(Function),
+      expect.objectContaining(AUDIT_ACTOR)
+    )
+    const mutate = hoisted.updateAssistantConfig.mock.calls[0]![1] as (
+      current: AssistantConfig
+    ) => AssistantConfig
+    const next = mutate(CONFIG)
+    expect(next.agents.workspace.instructions).toBe('Answer briefly.')
+    expect(next.agents.workspace.slack).toEqual(CONFIG.agents.workspace.slack)
+    expect(next.agents.workspace.slack.enabled).toBe(false)
   })
 
   it('keeps widget deployment separate and forwards the authenticated audit actor', async () => {

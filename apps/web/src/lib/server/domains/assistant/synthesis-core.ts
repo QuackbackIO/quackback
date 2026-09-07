@@ -34,6 +34,7 @@ import {
   stripCodeFences,
   structuredOutputProviderOptions,
   reasoningExcludeProviderOptions,
+  reasoningEffortProviderOptions,
 } from '@/lib/server/domains/ai/config'
 import { withRetry } from '@/lib/server/domains/ai/retry'
 import { withUsageLogging, type AiAnswerKind } from '@/lib/server/domains/ai/usage-log'
@@ -252,7 +253,7 @@ async function streamOnce<TContext>(
   // structured finalization request) restores reliable tool calling; the
   // finalization emits the same structured-output.* events, one extra model
   // call per tool-using turn. Tool-less calls keep the single-request stream.
-  if (opts.tools) {
+  if (opts.tools && !config.aiCombinedToolsAndSchema) {
     ;(
       adapter as { supportsCombinedToolsAndSchema?: (modelOptions?: unknown) => boolean }
     ).supportsCombinedToolsAndSchema = () => false
@@ -269,7 +270,14 @@ async function streamOnce<TContext>(
     // Tool-less only: Quinn's tool loop still needs reasoning_details on the
     // wire. AI_REASONING_EXCLUDE is opt-in because require_parameters 404s
     // models whose providers do not advertise `reasoning`.
-    ...(opts.tools ? {} : reasoningExcludeProviderOptions()),
+    // Effort is safe on the tool loop: it shortens thinking, it does not
+    // strip reasoning_details. GLM-5.3-Flash cannot disable thinking and
+    // defaults to `max` (~30s Slack turns) unless AI_REASONING_EFFORT is set.
+    ...(() => {
+      const effort = reasoningEffortProviderOptions().reasoning
+      const exclude = opts.tools ? undefined : reasoningExcludeProviderOptions().reasoning
+      return effort || exclude ? { reasoning: { ...effort, ...exclude } } : {}
+    })(),
   }
 
   const tools = opts.tools

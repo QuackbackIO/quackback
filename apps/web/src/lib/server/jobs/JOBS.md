@@ -255,12 +255,13 @@ Read from `process.env` directly rather than through the zod config, matching
 `process-role.ts`: these must work in any context, including a worker process that
 has not loaded the full application config.
 
-| Variable               | Default | Meaning                                                             |
-| ---------------------- | ------- | ------------------------------------------------------------------- |
-| `JOB_POLL_INTERVAL_MS` | 1000    | How often each workspace loop claims work                           |
-| `JOB_BATCH_SIZE`       | 5       | Jobs claimed per drain pass                                         |
-| `JOB_REAP_INTERVAL_MS` | 15000   | How often expired leases are adjudicated                            |
-| `JOB_RETENTION_MS`     | 7 days  | How long terminal rows are kept. Must exceed any live cron slot key |
+| Variable                | Default | Meaning                                                                                       |
+| ----------------------- | ------- | --------------------------------------------------------------------------------------------- |
+| `JOB_POLL_INTERVAL_MS`  | 1000    | How often each workspace loop claims work                                                     |
+| `JOB_BATCH_SIZE`        | 5       | Jobs claimed per drain pass                                                                   |
+| `JOB_REAP_INTERVAL_MS`  | 15000   | How often expired leases are adjudicated                                                      |
+| `JOB_PRUNE_INTERVAL_MS` | 1 hour  | How often terminal rows past retention are dropped (a per-workspace table scan; keep it slow) |
+| `JOB_RETENTION_MS`      | 7 days  | How long terminal rows are kept. Must exceed any live cron slot key                           |
 
 ### Worker job logs
 

@@ -3,8 +3,11 @@ import { generateId } from '@quackback/ids'
 import {
   mapSlackThread,
   toSlackMrkdwn,
-  SlackMarkdownStream,
   buildProposalBlocks,
+  formatSlackAnswer,
+  takeSafeMarkdownPrefix,
+  SlackReplyStream,
+  isSlackStoppedByUser,
 } from '../presentation'
 describe('Slack presentation', () => {
   it('maps the bot and collapses adjacent human history, keeping the trigger last', () => {
@@ -48,20 +51,108 @@ describe('Slack presentation', () => {
     expect(text).toContain('• A · B')
     expect(text).not.toContain('|---|')
   })
-  it('streams ordinary words before a paragraph ends', () => {
-    const stream = new SlackMarkdownStream()
-    expect(stream.append('Here are the top ')).toBe('Here are the top ')
-    expect(stream.append('requests')).toBe('')
-    expect(stream.finish()).toBe('requests')
+  it('keeps a bulleted feedback list intact', () => {
+    const text = toSlackMrkdwn(
+      'Here are the items:\n\n• **Roadmap timeline (10)** (146 votes)\n• **Mobile notifications (6)** (53 votes)\n'
+    )
+    expect(text).toContain('• *Roadmap timeline (10)* (146 votes)')
+    expect(text).toContain('• *Mobile notifications (6)* (53 votes)')
   })
 
-  it('holds split markup until it can be converted correctly', () => {
-    const stream = new SlackMarkdownStream()
-    expect(stream.append('**bo')).toBe('')
-    expect(stream.append('ld**\n')).toBe('*bold*\n')
-    expect(stream.append('[label](https://example.com)')).toBe('')
-    expect(stream.finish()).toBe('<https://example.com|label>')
+  it('leaves standard markdown links for chatStream and only strips mention injection', () => {
+    const formatted = formatSlackAnswer(
+      [
+        '• [Linear integration (10)](https://example.com/p3) · 291 votes',
+        '• Gantt chart view (341 votes)',
+        'cc <@U123>',
+      ].join('\n')
+    )
+    expect(formatted).toContain('• [Linear integration (10)](https://example.com/p3) · 291 votes')
+    expect(formatted).toContain('• Gantt chart view (341 votes)')
+    expect(formatted).toContain('cc &lt;@U123>')
+    expect(formatted).not.toContain('<@U123>')
   })
+
+  it('holds incomplete markdown links and bold until they close', () => {
+    expect(takeSafeMarkdownPrefix('The next ')).toBe('The next ')
+    expect(takeSafeMarkdownPrefix('[Import from CSV (3)](https://example.com/p')).toBe('')
+    expect(takeSafeMarkdownPrefix('[Import from CSV (3)](https://example.com/p1) more ')).toBe(
+      '[Import from CSV (3)](https://example.com/p1) more '
+    )
+    expect(takeSafeMarkdownPrefix('**bo')).toBe('')
+    expect(takeSafeMarkdownPrefix('**bold** done ')).toBe('**bold** done ')
+  })
+
+  it('serializes Slack stream appends so overlapping flushes cannot start two streams', async () => {
+    let inflight = 0
+    let max = 0
+    const chunks: string[] = []
+    const stream = new SlackReplyStream({
+      async append({ markdown_text }) {
+        inflight += 1
+        max = Math.max(max, inflight)
+        await new Promise((resolve) => setTimeout(resolve, 15))
+        chunks.push(markdown_text)
+        inflight -= 1
+      },
+      async stop() {
+        inflight += 1
+        max = Math.max(max, inflight)
+        await new Promise((resolve) => setTimeout(resolve, 5))
+        inflight -= 1
+      },
+    })
+    stream.push('The highest-voted ')
+    stream.push('feedback is ')
+    stream.push('[Import from CSV (3)](https://example.com/')
+    stream.push('post_01abc) ')
+    stream.push('done.\n')
+    await stream.finish({ blocks: [] })
+    expect(max).toBe(1)
+    expect(chunks.join('')).toContain('[Import from CSV (3)](https://example.com/post_01abc)')
+    expect(chunks.join('')).toContain('done.')
+  })
+
+  it('treats Slack stopped_by_user as a user stop', () => {
+    expect(isSlackStoppedByUser({ data: { error: 'stopped_by_user' } })).toBe(true)
+    expect(isSlackStoppedByUser(new Error('stopped_by_user'))).toBe(true)
+    expect(isSlackStoppedByUser({ data: { error: 'channel_not_found' } })).toBe(false)
+  })
+
+  it('stops appending after cancel and does not start a stream on abandon if nothing was sent', async () => {
+    const appends: string[] = []
+    let stops = 0
+    const stream = new SlackReplyStream({
+      async append({ markdown_text }) {
+        appends.push(markdown_text)
+      },
+      async stop() {
+        stops += 1
+      },
+    })
+    stream.cancel()
+    stream.push('hello world\n')
+    await stream.abandon()
+    expect(appends).toEqual([])
+    expect(stops).toBe(0)
+  })
+
+  it('aborts the turn when Slack reports the stream was stopped by the user', async () => {
+    const stopped = new Promise<void>((resolve) => {
+      const stream = new SlackReplyStream(
+        {
+          async append() {
+            throw { data: { error: 'stopped_by_user' } }
+          },
+          async stop() {},
+        },
+        resolve
+      )
+      stream.push('hello world\n')
+    })
+    await stopped
+  })
+
   it('buttons contain only the pending-action id', () => {
     const id = generateId('assistant_action')
     const blocks = buildProposalBlocks({ id, summary: 'Create feedback <@all>' }) as any[]

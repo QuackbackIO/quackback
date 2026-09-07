@@ -37,6 +37,7 @@ import {
 } from '@/lib/server/domains/assistant/assistant.toolspec'
 import { resolveContentAudience } from '@/lib/server/domains/assistant/audience'
 import { getConnectorSpecByToolName } from '@/lib/server/domains/assistant/connectors/connector-tools'
+import { getWorkspaceMcpSpecByName } from '@/lib/server/domains/assistant/mcp-workspace-tools'
 import { roleToAgent } from '@/lib/shared/assistant/config'
 import { executeApprovedPendingAction } from '@/lib/server/domains/assistant/assistant.tools'
 import { ensureAssistantPrincipal } from '@/lib/server/domains/assistant/assistant.principal'
@@ -172,7 +173,10 @@ export const decideAssistantAction = createServerOnlyFn(async function decideAss
   // exactly like a gone built-in.
   const spec =
     (await getToolSpecByName(pending.toolName)) ??
-    (await getConnectorSpecByToolName(pending.toolName, roleToAgent(pending.originRole)))
+    (await getConnectorSpecByToolName(pending.toolName, roleToAgent(pending.originRole))) ??
+    (pending.originRole === 'workspace_assistant'
+      ? await getWorkspaceMcpSpecByName(pending.toolName, actor, 'Quinn')
+      : null)
   if (!spec) throw new ToolSpecGoneError(pending.toolName)
   const parentKind = pending.ticketId ? 'ticket' : 'conversation'
   if (spec.risk !== 'write' || !spec.parents.includes(parentKind)) {

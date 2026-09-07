@@ -27,13 +27,23 @@ import {
   mapSlackThread,
   replyBlocks,
   slackThreadKey,
-  SlackMarkdownStream,
+  formatSlackAnswer,
   toSlackMrkdwn,
   escapeSlack,
+  SlackReplyStream,
+  isSlackStoppedByUser,
 } from './presentation'
 import { missingSlackScopes } from '../../scopes'
 import { can } from '@/lib/server/policy/authorize'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { isDuplicateSlackMentionEvent } from './addressing'
+import {
+  slackThreadSessionIsActive,
+  stopSlackThreadSession,
+  touchSlackThreadSession,
+  markSlackThreadHeard,
+} from './sessions'
+import { beginSlackTurn, endSlackTurn } from './turns'
 
 const log = logger.child({ component: 'slack-agent' })
 type Payload = Record<string, any>
@@ -135,13 +145,20 @@ export async function handleSlackDecision(
   const terminal = ['executed', 'rejected', 'failed'].includes(pending.status)
   const actor = terminal ? undefined : await slackMemberActor(person)
   const { getToolSpecByName } = await import('@/lib/server/domains/assistant/assistant.toolspec')
-  const spec = getToolSpecByName(pending.toolName)
-  // v1 only exposes these built-in writes on Slack; no arbitrary connector
-  // calls can bypass the same permission check on approve OR reject.
+  const { getConnectorSpecByToolName } =
+    await import('@/lib/server/domains/assistant/connectors/connector-tools')
+  const { getWorkspaceMcpSpecByName } =
+    await import('@/lib/server/domains/assistant/mcp-workspace-tools')
+  const spec =
+    getToolSpecByName(pending.toolName) ??
+    (actor
+      ? ((await getConnectorSpecByToolName(pending.toolName, 'workspace')) ??
+        (await getWorkspaceMcpSpecByName(pending.toolName, actor, 'Quinn')))
+      : null)
   if (
     !terminal &&
     (!spec ||
-      !['capture_feedback', 'create_ticket'].includes(spec.name) ||
+      spec.risk !== 'write' ||
       !actor ||
       toolPermissions(spec, true).some((permission) => !can(actor, permission)))
   ) {
@@ -333,7 +350,10 @@ export async function handleSlackHookJob(job: ClaimedJob): Promise<void> {
     if (changedSettings) await invalidateSettingsCache()
     return
   }
-  if (row.status !== 'active') return
+  if (row.status !== 'active') {
+    log.warn({ status: row.status }, 'slack hook ignored because the integration is not active')
+    return
+  }
   const secrets = decryptSecrets<{ accessToken: string }>(row.secrets)
   const client = new WebClient(secrets.accessToken, {
     retryConfig: { retries: 2 },
@@ -347,6 +367,23 @@ export async function handleSlackHookJob(job: ClaimedJob): Promise<void> {
   }
   if (event?.type === 'reaction_added') {
     await recordFeedback(payload, client, team)
+    return
+  }
+  if (event?.type === 'agent_session_stopped') {
+    const channel = event.channel
+    const thread = event.thread_ts
+    const user = event.user
+    if (typeof channel === 'string' && typeof thread === 'string') {
+      await client
+        .apiCall('agents.sessions.setStatus', {
+          channel_id: channel,
+          thread_ts: thread,
+          status: 'active',
+        })
+        .catch(() => {})
+      if (typeof user === 'string')
+        await ephemeral(client, channel, user, 'Okay — I stopped.').catch(() => {})
+    }
     return
   }
   if (event?.type === 'app_home_opened' && event.tab === 'messages') {
@@ -369,18 +406,53 @@ export async function handleSlackHookJob(job: ClaimedJob): Promise<void> {
       .where(and(eq(slackUserLinks.slackTeamId, team), eq(slackUserLinks.slackUserId, event.user)))
     return
   }
-  const command = kind === 'commands' && payload.command === '/quackback'
+  const command =
+    kind === 'commands' &&
+    typeof payload.command === 'string' &&
+    (payload.command === '/quackback' || payload.command === '/qbdev')
   const shortcut =
     kind === 'interactions' &&
     payload.type === 'message_action' &&
     payload.callback_id === 'send_to_quackback'
+  const isMention = event?.type === 'app_mention'
+  const isDm = event?.type === 'message' && event.channel_type === 'im'
+  // Slack emits both `app_mention` and `message` for the same @mention. DMs
+  // only get `message`, so those stay on the question path.
+  if (isDuplicateSlackMentionEvent(event, installation.botUserId)) return
+  const threadTs =
+    typeof event?.thread_ts === 'string'
+      ? event.thread_ts
+      : typeof event?.ts === 'string'
+        ? event.ts
+        : null
+  const channelId = typeof event?.channel === 'string' ? event.channel : null
+  const session =
+    kind === 'events' && channelId && threadTs
+      ? await slackThreadSessionIsActive(team, channelId, threadTs)
+      : { active: false, lastSpeaker: 'none' as const }
   const question =
     kind === 'events' &&
-    (event?.type === 'app_mention' || (event?.type === 'message' && event.channel_type === 'im')) &&
+    (isMention || isDm) &&
     !event.bot_id &&
     !event.subtype &&
     event.user !== installation.botUserId
-  if (!command && !shortcut && !question) return
+  const followUp =
+    kind === 'events' &&
+    event?.type === 'message' &&
+    typeof event.thread_ts === 'string' &&
+    session.active &&
+    !isMention &&
+    !isDm &&
+    !event.bot_id &&
+    !event.subtype &&
+    event.user !== installation.botUserId
+  if (!command && !shortcut && !question && !followUp) {
+    log.info(
+      { kind, eventType: event?.type, channelType: event?.channel_type, subtype: event?.subtype },
+      'slack hook ignored; not a handled question'
+    )
+    return
+  }
   await handleSlackQuestion({
     payload,
     event: shortcut ? payload.message : event,
@@ -400,6 +472,7 @@ async function handleSlackQuestion(input: {
   installation: Payload
   command: boolean
   shortcut: boolean
+  threadHistory?: Array<{ user?: string; text?: string; ts?: string }>
 }): Promise<void> {
   const { payload, event, team, client, installation, command, shortcut } = input
   const channel = command ? payload.channel_id : shortcut ? payload.channel?.id : event?.channel
@@ -456,14 +529,18 @@ async function handleSlackQuestion(input: {
       : event.text
   let history: Array<{ user?: string; text?: string; ts?: string }> = []
   if (!command) {
-    const response = await client.conversations.replies({
-      channel,
-      ts: thread,
-      limit: 12,
-      latest: event.ts,
-      inclusive: true,
-    })
-    history = response.messages ?? []
+    history =
+      input.threadHistory ??
+      (
+        await client.conversations.replies({
+          channel,
+          ts: thread,
+          limit: 12,
+          latest: event.ts,
+          inclusive: true,
+        })
+      ).messages ??
+      []
   }
   const context = mapSlackThread(
     history,
@@ -478,8 +555,10 @@ async function handleSlackQuestion(input: {
         recipient_team_id: team,
         recipient_user_id: user,
       })
-  const markdown = new SlackMarkdownStream()
-  let writes = Promise.resolve()
+  const turnAbort = command ? new AbortController() : beginSlackTurn(team, channel, thread)
+  const replyStream = stream ? new SlackReplyStream(stream, () => turnAbort.abort()) : null
+  if (replyStream)
+    turnAbort.signal.addEventListener('abort', () => replyStream.cancel(), { once: true })
   let stopped = false
   try {
     if (!command)
@@ -499,25 +578,38 @@ async function handleSlackQuestion(input: {
       assistantPrincipalId: assistant.id,
       actorPrincipalId: person.id,
       telemetryTurnId: turnId,
-      onTextDelta: (delta) => {
-        const chunk = markdown.append(delta)
-        if (stream && chunk) {
-          writes = writes.then(async () => {
-            await stream.append({ markdown_text: chunk })
-          })
-          void writes.catch(() => {})
-        }
-      },
+      signal: turnAbort.signal,
+      onTextDelta: replyStream ? (delta) => replyStream.push(delta) : undefined,
     })
-    await writes
+    if (turnAbort.signal.aborted) {
+      await replyStream?.abandon()
+      return
+    }
     if (result.status === 'suppressed') {
+      if (result.reason === 'not_addressed') {
+        if (result.listen === 'leave') {
+          await stopSlackThreadSession(team, channel, thread)
+          if (typeof user === 'string')
+            await ephemeral(
+              client,
+              channel,
+              user,
+              'Okay — I’ll sit this one out. Mention me if you need me again.'
+            )
+        } else if (!command) {
+          await markSlackThreadHeard(team, channel, thread)
+        }
+        return
+      }
       if (stream) {
         await stream.stop({
           markdown_text: `I don’t have a reply for that message.\n_AI-generated · ${escapeSlack(state.config.identity.name)} for ${escapeSlack(state.workspaceName)}_`,
         })
       }
+      if (!command) await touchSlackThreadSession(team, channel, thread, 'bot')
       return
     }
+    const formatted = formatSlackAnswer(result.text)
     const blocks = replyBlocks(
       result.citations,
       result.proposedActions,
@@ -526,9 +618,9 @@ async function handleSlackQuestion(input: {
       state.workspaceName,
       getBaseUrl()
     )
-    if (command) await respondViaUrl(responseUrl, toSlackMrkdwn(result.text), blocks)
-    else if (stream) {
-      await stream.stop({ markdown_text: markdown.finish(), blocks })
+    if (command) await respondViaUrl(responseUrl, toSlackMrkdwn(formatted), blocks)
+    else if (replyStream) {
+      await replyStream.finish({ fallbackText: formatted, blocks })
       stopped = true
     }
     await db.insert(assistantEvents).values({
@@ -543,10 +635,25 @@ async function handleSlackQuestion(input: {
         messageTs: stream?.ts ?? null,
       },
     })
+    if (!command) {
+      if (result.listen === 'leave') await stopSlackThreadSession(team, channel, thread)
+      else await touchSlackThreadSession(team, channel, thread, 'bot')
+    }
   } catch (error) {
+    if (turnAbort.signal.aborted || isSlackStoppedByUser(error)) {
+      await replyStream?.abandon()
+      return
+    }
     // Never log SDK request objects, Slack messages, or model text.
+    const message = error instanceof Error ? error.message : ''
     log.error(
-      { error: error instanceof Error ? error.name : 'Error', turnId },
+      {
+        error: error instanceof Error ? error.name : 'Error',
+        kind: message.startsWith('Failed to parse structured output')
+          ? 'structured_output'
+          : 'unknown',
+        turnId,
+      },
       'Slack assistant turn failed'
     )
     if (stream && !stopped)
@@ -557,6 +664,7 @@ async function handleSlackQuestion(input: {
         .catch(() => {})
     else if (command) await replyError('Something went wrong on my side. Try again in a moment.')
   } finally {
+    if (!command) endSlackTurn(team, channel, thread, turnAbort)
     if (!command)
       await client
         .apiCall('agents.sessions.setStatus', {

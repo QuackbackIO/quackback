@@ -5,6 +5,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const POLL_MS = 50
+const REAP_MS = POLL_MS * 4
+const PRUNE_MS = REAP_MS * 10
 const WORKSPACE_KEY = 'job_loop_ws'
 
 const workspace = {
@@ -18,6 +20,8 @@ const workspace = {
 
 interface ClaimPlan {
   claimed: number
+  /** `prune` flag of every `runMaintenanceTick` call, in order, when provided. */
+  maintenance?: boolean[]
 }
 
 interface DormancyPlan {
@@ -68,7 +72,8 @@ async function bootJobWorker(plan: ClaimPlan, dormancy?: DormancyPlan) {
     runnerConfig: () => ({
       pollIntervalMs: POLL_MS,
       batchSize: 5,
-      reapIntervalMs: 15_000,
+      reapIntervalMs: REAP_MS,
+      pruneIntervalMs: PRUNE_MS,
       retentionMs: 7 * 24 * 60 * 60 * 1000,
       maxConcurrency: 4,
     }),
@@ -76,7 +81,10 @@ async function bootJobWorker(plan: ClaimPlan, dormancy?: DormancyPlan) {
     poolSize: () => 0,
     createScheduleState: () => ({}),
     runScheduleTick: async () => ({ enqueued: 0, attempted: 0, nextSlotAt: null }),
-    runMaintenanceTick: async () => ({ requeued: 0, terminated: 0 }),
+    runMaintenanceTick: async (_config: unknown, opts: { prune?: boolean } = {}) => {
+      plan.maintenance?.push(opts.prune !== false)
+      return { requeued: 0, terminated: 0, pruned: 0 }
+    },
     dispatchPass: async () => ({ claimed: plan.claimed, saturated: true }),
     runJob: async () => 'succeeded',
     awaitPool: async () => {},
@@ -133,6 +141,24 @@ describe('pooled job worker', () => {
     await vi.advanceTimersByTimeAsync(POLL_MS * 2)
     expect(handle.status().passes).toBeGreaterThan(before)
     expect(handle.status().claimed).toBeGreaterThanOrEqual(2)
+  })
+
+  it('reaps leases on the reap clock and prunes only on the slower prune clock', async () => {
+    // Retention is measured in days; pruning on every reap tick scans every
+    // workspace's terminal rows for nothing. Only the first tick of each prune
+    // window carries the flag.
+    vi.useFakeTimers()
+    const plan: ClaimPlan = { claimed: 0, maintenance: [] }
+    handle = await bootJobWorker(plan)
+    expect(plan.maintenance).toEqual([true])
+
+    await vi.advanceTimersByTimeAsync(PRUNE_MS - REAP_MS)
+    const withinWindow = plan.maintenance!.slice(1)
+    expect(withinWindow.length).toBeGreaterThanOrEqual(2)
+    expect(withinWindow.every((prune) => prune === false)).toBe(true)
+
+    await vi.advanceTimersByTimeAsync(REAP_MS * 2)
+    expect(plan.maintenance!.filter(Boolean)).toHaveLength(2)
   })
 
   describe('dormancy', () => {

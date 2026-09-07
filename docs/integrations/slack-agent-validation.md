@@ -38,16 +38,6 @@ The eval harness now preserves explicit environment overrides and declares fixtu
 
 Production rollout is still gated by [the ordered runbook](./integration-gateway-rollout.md), including real install/reconnect conflicts, internal-tenant Slack interactions, non-Slack OAuth checks, deployment artifact verification and monitoring.
 
-## General Cloud settings and startup overlay
+## Cloud credentials
 
-The credential follow-up is generalized into **CP → Admin → Settings** (`/admin/settings`), one encrypted JSON document using environment variable names. Migration 0093 renames the settings/audit tables while preserving prior data and revisions. Earlier provider-grouped JSON is converted on read.
-
-The Quackback image launcher loads a single CP snapshot in pooled tenancy before the shell entrypoint, migrations, workers or web server initialize. Saved values override container environment variables, missing keys preserve them, and null unsets them. Running containers retain their snapshot until restart. Self-hosted containers make no CP request. A dedicated fleet bootstrap token is required; customer/per-workspace tokens cannot read the full settings document.
-
-Validation on 2026-09-06:
-
-- 57 tenant tests passed, including environment precedence, malformed/unavailable settings, startup refusal, self-hosted bypass, actual child-process initialization and existing Docker entrypoint behavior.
-- 65 CP tests passed with the isolated database enabled, including encrypted persistence, migrations 0092/0093, revision conflicts, audit records, legacy-document conversion and process-lifetime gateway snapshots.
-- Both typechecks and production builds passed, including CP's client bundle audit. The standalone container launcher bundles successfully. Focused tenant lint passed.
-
-CP and fleet need `QUACKBACK_CP_SETTINGS_TOKEN`; CP also needs `PLATFORM_SETTINGS_ENCRYPTION_KEY` (the earlier integration encryption key name remains a fallback). Configure the bootstrap URL/token on the containers, deploy the CP migrations and populate settings before the tenant rollout. Restart CP gateway and fleet processes to apply changes. See CP's `PLATFORM-SETTINGS.md` and the tenant rollout runbook. No live deployment, provider configuration or production settings changes were performed.
+Shared OAuth client and signing secrets are Railway environment variables on CP and the fleet (`INTEGRATION_<PROVIDER>_*`). There is no control-plane settings overlay or container-start fetch.

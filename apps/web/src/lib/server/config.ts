@@ -207,6 +207,8 @@ const configSchema = z
     aiClassificationModel: z.string().optional(),
     aiRequireParameters: envBoolean,
     aiReasoningExclude: envBoolean,
+    aiReasoningEffort: z.string().optional(),
+    aiCombinedToolsAndSchema: envBoolean,
 
     // Telemetry (optional)
     disableTelemetry: envBoolean,
@@ -334,6 +336,8 @@ function buildConfigFromEnv(): unknown {
     aiClassificationModel: env('AI_CLASSIFICATION_MODEL'),
     aiRequireParameters: env('AI_REQUIRE_PARAMETERS'),
     aiReasoningExclude: env('AI_REASONING_EXCLUDE'),
+    aiReasoningEffort: env('AI_REASONING_EFFORT'),
+    aiCombinedToolsAndSchema: env('AI_COMBINED_TOOLS_AND_SCHEMA'),
 
     // Telemetry
     disableTelemetry: env('DISABLE_TELEMETRY'),
@@ -597,6 +601,12 @@ export const config = {
   },
   get aiReasoningExclude() {
     return loadConfig().aiReasoningExclude
+  },
+  get aiReasoningEffort() {
+    return loadConfig().aiReasoningEffort
+  },
+  get aiCombinedToolsAndSchema() {
+    return loadConfig().aiCombinedToolsAndSchema
   },
 
   // Telemetry

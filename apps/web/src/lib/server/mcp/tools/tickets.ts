@@ -17,6 +17,7 @@ import type {
 } from '@/lib/server/db'
 import type { TicketSort } from '@/lib/server/domains/tickets/ticket.types'
 import type { McpAuthContext } from '../types'
+import { getBaseUrl } from '@/lib/server/config'
 import { markdownToTiptapJson, contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import {
@@ -115,9 +116,11 @@ Examples:
         },
         mcpAgentActor(auth)
       )
+      const origin = getBaseUrl()
       return compactJsonResult({
         tickets: tickets.map((t) => ({
           id: t.id,
+          url: `${origin}/admin/inbox?i=${t.id}`,
           number: t.number,
           reference: t.reference,
           type: t.type,

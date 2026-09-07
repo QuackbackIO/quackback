@@ -91,12 +91,14 @@ export function resolveEffectiveToolMode(
   spec: AssistantToolSpec,
   ctx: AssistantToolContext
 ): ToolExecutionMode {
-  if (ctx.role === 'workspace_assistant' && spec.risk === 'write') return 'propose'
   if (spec.risk === 'control') return 'autonomous'
   if (spec.approvalPolicy === 'always') return 'autonomous'
   if (spec.approvalPolicy === 'approval') return 'propose'
   if (spec.risk !== 'write') return 'autonomous'
-  // Write-risk from here.
+  // Workspace writes without an explicit dial still propose (connectors,
+  // destructive MCP). Feedback create/assign stamp approvalPolicy: 'always'
+  // so they execute as the asking teammate, like Linear Agent.
+  if (ctx.role === 'workspace_assistant') return 'propose'
   if (ctx.writeToolPolicy === 'propose') return 'propose'
   if (ctx.simulate && (ctx.writeToolPolicy ?? 'simulate') === 'simulate') return 'simulate'
   return 'autonomous'
@@ -396,36 +398,31 @@ type AssembledServerTool = ReturnType<AssistantToolSpec['definition']['server']>
 export async function assembleAssistantToolset(
   ctx: AssistantToolContext,
   specs?: readonly AssistantToolSpec[],
-  connectorSpecs: readonly AssistantToolSpec[] = []
+  extraSpecs: readonly AssistantToolSpec[] = []
 ): Promise<{ tools: AssembledServerTool[]; activeSpecs: AssistantToolSpec[] }> {
   // Unified inbox §2.9/§3.3: never even consider a spec whose `parents`
   // excludes this turn's actual parent kind: a conversation-only write tool
   // must not reach mode resolution, proposal, or the model at all on a
   // ticket-scoped turn. See `parents`'s own doc on AssistantToolSpec.
   const parentKind = turnParentKind(ctx)
-  const availableForTurn = (spec: AssistantToolSpec) =>
-    !(
-      ctx.role === 'workspace_assistant' &&
-      ['handoff_to_human', 'end_conversation', 'set_attribute', 'share_post'].includes(spec.name)
-    ) &&
-    spec.parents.includes(parentKind) &&
-    (spec.availableWhen?.(ctx) ?? true)
+  const workspaceKeepBuiltins = new Set(['get_status', 'report_inability', 'use_skill'])
+  const fitsParent = (spec: AssistantToolSpec) =>
+    spec.parents.includes(parentKind) && (spec.availableWhen?.(ctx) ?? true)
+  const availableBuiltin = (spec: AssistantToolSpec) =>
+    fitsParent(spec) && (ctx.role !== 'workspace_assistant' || workspaceKeepBuiltins.has(spec.name))
 
-  // Connector specs always ride the execution pipeline — audit and propose
-  // stay load-bearing.
-  const connectorActive = (
-    ctx.role === 'workspace_assistant'
-      ? connectorSpecs.filter((spec) => spec.risk !== 'write')
-      : connectorSpecs
-  )
-    .filter(availableForTurn)
+  // Extra specs (first-party MCP + remote connectors) always ride the
+  // execution pipeline — audit and propose stay load-bearing. Workspace writes
+  // resolve to proposals via resolveEffectiveToolMode.
+  const connectorActive = extraSpecs
+    .filter(fitsParent)
     .map((spec) => ({ spec, mode: resolveEffectiveToolMode(spec, ctx) }))
   const connectorTools = connectorActive.map(({ spec, mode }) =>
     spec.definition.server<AssistantToolContext>((args) => runWithPipeline(spec, mode, args, ctx))
   )
   const connectorActiveSpecs = connectorActive.map((entry) => entry.spec)
 
-  const resolvedSpecs = (specs ?? resolveToolSpecs()).filter(availableForTurn)
+  const resolvedSpecs = (specs ?? resolveToolSpecs()).filter(availableBuiltin)
   const builtInTools = resolvedSpecs.map((spec) => {
     const mode = resolveEffectiveToolMode(spec, ctx)
     return spec.definition.server<AssistantToolContext>((args) =>

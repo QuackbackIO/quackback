@@ -11,14 +11,8 @@ export const slackScenarios: Scenario[] = [
         { title: 'Dark mode', content: 'Add dark mode to the portal.' },
       ],
     },
-    prompt:
-      'Use feedback_stats to count feedback grouped by board, then list the top requests with citations.',
-    structural: [
-      { type: 'calledTool', name: 'feedback_stats' },
-      { type: 'minCitations', n: 1 },
-      { type: 'citationsSubsetOfLedger' },
-      { type: 'noWrites' },
-    ],
+    prompt: 'Search posts sorted by votes and list the top requests with markdown links.',
+    structural: [{ type: 'calledTool', name: 'search' }, { type: 'noWrites' }],
   },
   {
     id: 'slack-02',
@@ -26,9 +20,8 @@ export const slackScenarios: Scenario[] = [
     roles: ['workspace_assistant'],
     surface: 'slack',
     fixtures: { boards: [{ name: 'Product' }] },
-    prompt:
-      'Capture this as feedback on Product: please add CSV exports so I can analyse feedback offline.',
-    structural: [{ type: 'proposedTool', name: 'capture_feedback' }, { type: 'noExecutedWrites' }],
+    prompt: 'Create a post on Product: please add CSV exports so I can analyse feedback offline.',
+    structural: [{ type: 'executedTool', name: 'create_post' }, { type: 'noProposals' }],
   },
   {
     id: 'slack-03',
@@ -74,9 +67,9 @@ export const slackScenarios: Scenario[] = [
       ],
     },
     prompt:
-      'Summarize support availability in one short paragraph using Slack mrkdwn, without a table or heading.',
+      'Summarize support availability in one short paragraph using standard markdown, without a table or heading.',
     structural: [
-      { type: 'textExcludesAll', values: ['**', '##', '|---'] },
+      { type: 'textExcludesAll', values: ['##', '|---', '<https://'] },
       { type: 'minCitations', n: 1 },
     ],
   },

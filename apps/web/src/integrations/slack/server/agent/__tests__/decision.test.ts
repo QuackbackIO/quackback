@@ -19,6 +19,12 @@ vi.mock('@/lib/server/functions/assistant-actions', () => ({ decideAssistantActi
 vi.mock('@/lib/server/domains/assistant/assistant.toolspec', () => ({
   getToolSpecByName: mocks.spec,
 }))
+vi.mock('@/lib/server/domains/assistant/connectors/connector-tools', () => ({
+  getConnectorSpecByToolName: async () => null,
+}))
+vi.mock('@/lib/server/domains/assistant/mcp-workspace-tools', () => ({
+  getWorkspaceMcpSpecByName: async () => null,
+}))
 vi.mock('@/lib/server/policy/authorize', () => ({ can: mocks.can }))
 vi.mock('@/lib/server/domains/settings/settings.assistant', () => ({
   getAssistantRuntimeConfig: async () => ({
@@ -45,9 +51,13 @@ beforeEach(() => {
     id,
     originRole: 'workspace_assistant',
     workspaceThreadKey: JSON.stringify(['T', 'C', '1']),
-    toolName: 'capture_feedback',
+    toolName: 'create_post',
   })
-  mocks.spec.mockReturnValue({ name: 'capture_feedback', permissions: ['post:create'] })
+  mocks.spec.mockReturnValue({
+    name: 'create_post',
+    risk: 'write',
+    permissions: ['post.create'],
+  })
   mocks.can.mockReturnValue(true)
   mocks.decide.mockResolvedValue({ status: 'executed', result: {} })
 })

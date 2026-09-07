@@ -23,33 +23,127 @@ export function toSlackMrkdwn(value: string): string {
           .join(' · ')
     )
 }
-/** Stream complete words; hold unfinished Markdown constructs across deltas. */
-export class SlackMarkdownStream {
-  private pending = ''
-  append(delta: string): string {
-    this.pending += delta
-    let end = this.pending.lastIndexOf('\n')
-    if (end < 0) {
-      // Headings/tables require a whole line. Ordinary paragraphs should stream
-      // immediately rather than waiting for the model to emit a newline.
-      if (/^\s*[#|]/.test(this.pending)) return ''
-      end = this.pending.lastIndexOf(' ')
-      if (end < 0) return ''
-      const candidate = this.pending.slice(0, end + 1)
-      if (
-        (candidate.match(/\*\*/g)?.length ?? 0) % 2 ||
-        (candidate.match(/\[/g)?.length ?? 0) !== (candidate.match(/\]\([^)]*\)/g)?.length ?? 0)
-      )
-        return ''
-    }
-    const text = this.pending.slice(0, end + 1)
-    this.pending = this.pending.slice(end + 1)
-    return toSlackMrkdwn(text)
+
+/** Neutralize @-injection; leave standard markdown for chatStream.markdown_text. */
+export function formatSlackAnswer(text: string): string {
+  return text.replace(/<@/g, '&lt;@').trim()
+}
+
+function markdownIsOpen(text: string): boolean {
+  if ((text.match(/\*\*/g)?.length ?? 0) % 2) return true
+  const link = text.lastIndexOf('](')
+  if (link >= 0 && !text.slice(link).includes(')')) return true
+  return (text.match(/\[/g)?.length ?? 0) > (text.match(/\]/g)?.length ?? 0)
+}
+
+/** Prefix that can be flushed without splitting a markdown construct. */
+export function takeSafeMarkdownPrefix(pending: string): string {
+  if (!pending) return ''
+  let end = pending.lastIndexOf('\n')
+  if (end < 0) {
+    if (/^\s*[#|]/.test(pending)) return ''
+    end = pending.lastIndexOf(' ')
+    if (end < 0) return ''
   }
-  finish(): string {
-    const text = this.pending
+  let candidate = pending.slice(0, end + 1)
+  while (candidate && markdownIsOpen(candidate)) {
+    const cut = Math.max(
+      candidate.lastIndexOf('\n', candidate.length - 2),
+      candidate.lastIndexOf(' ', candidate.length - 2)
+    )
+    if (cut < 0) return ''
+    candidate = pending.slice(0, cut + 1)
+  }
+  return candidate
+}
+
+type SlackStreamSink = {
+  append(args: { markdown_text: string }): Promise<unknown>
+  stop(args?: { markdown_text?: string; blocks?: KnownBlock[] }): Promise<unknown>
+}
+
+export function isSlackStoppedByUser(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const data = 'data' in error ? (error as { data?: { error?: string } }).data : undefined
+  if (data?.error === 'stopped_by_user') return true
+  return error instanceof Error && error.message.includes('stopped_by_user')
+}
+
+/**
+ * One Slack chatStream, serialized. ChatStreamer is not concurrency-safe:
+ * overlapping append() both call startStream and post duplicate messages.
+ */
+export class SlackReplyStream {
+  private pending = ''
+  private chain = Promise.resolve()
+  private sent = false
+  private cancelled = false
+  constructor(
+    private readonly sink: SlackStreamSink,
+    private readonly onStopped?: () => void
+  ) {}
+
+  cancel(): void {
+    this.cancelled = true
     this.pending = ''
-    return toSlackMrkdwn(text)
+  }
+
+  private noteStopped(): void {
+    if (this.cancelled) return
+    this.cancel()
+    this.onStopped?.()
+  }
+
+  private enqueue(work: () => Promise<void>): Promise<void> {
+    const run = this.chain.then(work, work)
+    this.chain = run.catch(() => undefined)
+    return run
+  }
+
+  push(delta: string): void {
+    if (this.cancelled) return
+    this.pending += delta.replace(/<@/g, '&lt;@')
+    const safe = takeSafeMarkdownPrefix(this.pending)
+    if (!safe) return
+    this.pending = this.pending.slice(safe.length)
+    this.sent = true
+    void this.enqueue(async () => {
+      if (this.cancelled) return
+      try {
+        await this.sink.append({ markdown_text: safe })
+      } catch (error) {
+        if (isSlackStoppedByUser(error)) {
+          this.noteStopped()
+          return
+        }
+        throw error
+      }
+    })
+  }
+
+  async finish(opts: { fallbackText?: string; blocks?: KnownBlock[] }): Promise<void> {
+    await this.enqueue(async () => {
+      if (this.cancelled) return
+      if (this.pending) {
+        await this.sink.append({ markdown_text: this.pending })
+        this.pending = ''
+        this.sent = true
+      }
+      if (!this.sent && opts.fallbackText) {
+        await this.sink.append({ markdown_text: formatSlackAnswer(opts.fallbackText) })
+        this.sent = true
+      }
+      await this.sink.stop({ blocks: opts.blocks })
+    })
+  }
+
+  /** Drop remaining deltas. Slack already stopped an in-progress stream. */
+  async abandon(): Promise<void> {
+    this.cancel()
+    await this.enqueue(async () => {
+      if (!this.sent) return
+      await this.sink.stop().catch(() => {})
+    })
   }
 }
 export function mapSlackThread(

@@ -120,7 +120,15 @@ export const updateWorkspaceAssistantFn = createServerFn({ method: 'POST' })
       await import('@/lib/server/domains/settings/settings.assistant')
     return updateAssistantConfig(
       data.expectedRevision,
-      (current) => ({ ...current, agents: { ...current.agents, workspace: data.workspace } }),
+      // `slack` is the deployment bit; only setSlackAssistantEnabledFn may flip
+      // it, behind the active-install, scope and Cloud-routing checks.
+      (current) => ({
+        ...current,
+        agents: {
+          ...current.agents,
+          workspace: { ...data.workspace, slack: current.agents.workspace.slack },
+        },
+      }),
       configActor(ctx)
     )
   })

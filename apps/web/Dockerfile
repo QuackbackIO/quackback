@@ -89,11 +89,6 @@ RUN bun build apps/web/scripts/fleet-migrator.ts \
     --bundle \
     --outfile=/tmp/fleet-migrator.mjs
 
-RUN bun build apps/web/scripts/container-start.ts \
-    --target=bun \
-    --bundle \
-    --outfile=/tmp/container-start.mjs
-
 # ============================================================================
 # Production runner
 # ============================================================================
@@ -116,7 +111,6 @@ COPY --from=builder --chown=quackback:nodejs /app/apps/web/.output ./.output
 COPY --from=builder --chown=quackback:nodejs /tmp/migrate.mjs ./migrate.mjs
 COPY --from=builder --chown=quackback:nodejs /tmp/seed.mjs ./seed.mjs
 COPY --from=builder --chown=quackback:nodejs /tmp/fleet-migrator.mjs ./fleet-migrator.mjs
-COPY --from=builder --chown=quackback:nodejs /tmp/container-start.mjs ./container-start.mjs
 COPY --from=builder --chown=quackback:nodejs /app/packages/db/drizzle ./drizzle
 
 # Copy entrypoint script
@@ -142,4 +136,4 @@ ENV HOSTNAME="0.0.0.0"
 # Default behavior: run migrations on startup. K8s deployments should set
 # SKIP_MIGRATIONS=true and run migrations from a pre-upgrade Helm hook Job
 # instead — that way cold starts don't wait on a DB round-trip.
-ENTRYPOINT ["bun", "./container-start.mjs"]
+ENTRYPOINT ["./docker-entrypoint.sh"]

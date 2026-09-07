@@ -1,7 +1,9 @@
-import { CLOUD_INTEGRATION_FIELDS } from '@/lib/shared/integration-credentials'
-import { integrationEnvironmentKey } from '@/lib/shared/platform-settings'
+import {
+  CLOUD_INTEGRATION_FIELDS,
+  integrationEnvironmentKey,
+} from '@/lib/shared/integration-credentials'
 import type { CredentialSource } from './credential-source'
-/** Reads the immutable container-start snapshot; never calls CP during requests. */
+/** Reads process environment. Cloud sets INTEGRATION_* on the Railway service. */
 export class CloudCredentialSource implements CredentialSource {
   constructor(private readonly environment: Record<string, string | undefined> = process.env) {}
   async get(type: string): Promise<Record<string, string> | null> {

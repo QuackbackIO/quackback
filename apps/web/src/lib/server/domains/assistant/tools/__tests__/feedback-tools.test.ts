@@ -66,6 +66,9 @@ describe.skipIf(!fixture.available)('workspace reads with real DB', () => {
     const ctx = context()
     const list = await executeListFeedback({ boardSlug: board.slug }, ctx)
     expect(list.items.map((item) => item.id)).toEqual([post.id])
+    expect(list.items[0]?.title).toBe('CSV request')
+    expect(list.items[0]?.title).not.toContain('"""')
+    expect(list.note).toBeTruthy()
     expect(ctx.ledger.sources.get(post.id)?.url).toContain(post.id)
     const stats = await executeFeedbackStats({ groupBy: 'board' }, ctx)
     const group = stats.groups.find((group) => group.postId === post.id)
@@ -93,24 +96,22 @@ describe.skipIf(!fixture.available)('workspace reads with real DB', () => {
         { visitorPrincipalId: author.id, channel: 'messenger', subject: 'Other billing' },
       ])
       .returning()
-    await testDb
-      .insert(conversationMessages)
-      .values([
-        ...Array.from({ length: 12 }, (_, i) => ({
-          conversationId: rows[0].id,
-          principalId: author.id,
-          senderType: 'visitor' as const,
-          content: 'billing repeated',
-          createdAt: new Date(Date.now() + i * 1000),
-        })),
-        {
-          conversationId: rows[1].id,
-          principalId: author.id,
-          senderType: 'visitor',
-          content: 'billing other',
-          createdAt: new Date(100_000),
-        },
-      ])
+    await testDb.insert(conversationMessages).values([
+      ...Array.from({ length: 12 }, (_, i) => ({
+        conversationId: rows[0].id,
+        principalId: author.id,
+        senderType: 'visitor' as const,
+        content: 'billing repeated',
+        createdAt: new Date(Date.now() + i * 1000),
+      })),
+      {
+        conversationId: rows[1].id,
+        principalId: author.id,
+        senderType: 'visitor',
+        content: 'billing other',
+        createdAt: new Date(100_000),
+      },
+    ])
     const result = await workspaceConversationSource(false, false, context().actor).retrieve(
       'billing',
       'team',

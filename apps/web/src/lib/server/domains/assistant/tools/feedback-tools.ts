@@ -19,7 +19,7 @@ import {
 import { listInboxPosts } from '@/lib/server/domains/posts/post.inbox'
 import { getBaseUrl } from '@/lib/server/config'
 import type { AssistantToolContext } from '../assistant.toolspec'
-import { wrapUntrustedText } from '../injection-guard'
+import { RETRIEVED_CONTENT_NOTE } from '../injection-guard'
 const listInput = z.object({
   query: z.string().max(300).optional(),
   boardSlug: z.string().max(100).optional(),
@@ -38,16 +38,21 @@ export const listFeedbackTool = toolDefinition({
     z.object({
       items: z.array(
         z.object({
-          id: z.string(),
-          title: z.string(),
-          url: z.string(),
-          votes: z.number(),
+          id: z.string().describe('Citation id — put this in the citations array.'),
+          title: z
+            .string()
+            .describe('Exact post title. Copy verbatim, including any parenthetical in the title.'),
+          url: z.string().describe('Canonical link. Use as the markdown link target.'),
+          votes: z
+            .number()
+            .describe('Vote count. Separate from the title; do not fold into the title.'),
           status: z.string().nullable(),
           board: z.string(),
           created: z.string(),
           summary: z.string(),
         })
       ),
+      note: z.string().optional(),
     })
   ),
 })
@@ -86,25 +91,21 @@ export async function executeListFeedback(
   })
   const statuses = await db.query.postStatuses.findMany()
   const names = new Map(statuses.map((status) => [status.id, status.name]))
-  return {
-    items: result.items.map((post) => {
-      const url = `${getBaseUrl()}/b/${encodeURIComponent(post.board.slug)}/posts/${post.id}`
-      ctx.ledger.sources.set(post.id, { type: 'post', id: post.id, title: post.title, url })
-      return {
-        id: post.id,
-        title: wrapUntrustedText('Feedback title', post.title),
-        url,
-        votes: post.voteCount,
-        status: post.statusId ? (names.get(post.statusId) ?? null) : null,
-        board: post.board.name,
-        created: post.createdAt.toISOString(),
-        summary: wrapUntrustedText(
-          'Feedback summary',
-          post.summaryJson?.summary?.slice(0, 300) ?? ''
-        ),
-      }
-    }),
-  }
+  const items = result.items.map((post) => {
+    const url = `${getBaseUrl()}/b/${encodeURIComponent(post.board.slug)}/posts/${post.id}`
+    ctx.ledger.sources.set(post.id, { type: 'post', id: post.id, title: post.title, url })
+    return {
+      id: post.id,
+      title: post.title,
+      url,
+      votes: post.voteCount,
+      status: post.statusId ? (names.get(post.statusId) ?? null) : null,
+      board: post.board.name,
+      created: post.createdAt.toISOString(),
+      summary: post.summaryJson?.summary?.slice(0, 300) ?? '',
+    }
+  })
+  return items.length > 0 ? { items, note: RETRIEVED_CONTENT_NOTE } : { items }
 }
 const statsInput = z.object({
   since: z.iso.datetime().optional(),
@@ -126,6 +127,7 @@ export const feedbackStatsTool = toolDefinition({
           url: z.string(),
         })
       ),
+      note: z.string().optional(),
     })
   ),
 })
@@ -173,19 +175,18 @@ export async function executeFeedbackStats(
     .groupBy(groupId, group)
   // Post IDs from raw aggregates are UUIDs; preserve the app's TypeID contract.
   const { fromUuid } = await import('@quackback/ids')
-  return {
-    groups: rows.map((row) => {
-      const id = fromUuid('post', row.postId)
-      const url = `${getBaseUrl()}/admin/feedback?post=${id}`
-      const name = row.name ?? 'Unassigned'
-      ctx.ledger.sources.set(id, { type: 'post', id, title: `${name} feedback`, url })
-      return {
-        name: wrapUntrustedText('Group name', name),
-        count: row.count,
-        votes: row.votes,
-        postId: id,
-        url,
-      }
-    }),
-  }
+  const groups = rows.map((row) => {
+    const id = fromUuid('post', row.postId)
+    const url = `${getBaseUrl()}/admin/feedback?post=${id}`
+    const name = row.name ?? 'Unassigned'
+    ctx.ledger.sources.set(id, { type: 'post', id, title: `${name} feedback`, url })
+    return {
+      name,
+      count: row.count,
+      votes: row.votes,
+      postId: id,
+      url,
+    }
+  })
+  return groups.length > 0 ? { groups, note: RETRIEVED_CONTENT_NOTE } : { groups }
 }

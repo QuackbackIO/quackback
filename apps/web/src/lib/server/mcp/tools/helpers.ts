@@ -56,6 +56,33 @@ export function errorResult(err: unknown): CallToolResult {
 // Cursor codecs
 // ============================================================================
 
+/** Parse an ISO datetime or a relative window (`7d`, `this_month`) into a Date. */
+export function parseFlexibleDate(value?: string): Date | undefined {
+  if (!value) return undefined
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+  const iso = Date.parse(trimmed)
+  if (!Number.isNaN(iso)) return new Date(iso)
+  const rel = trimmed.toLowerCase().replace(/\s+/g, '_')
+  const now = new Date()
+  if (rel === 'today') {
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  }
+  if (rel === 'this_week') {
+    const day = now.getUTCDay() || 7
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - day + 1))
+  }
+  if (rel === 'this_month') {
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+  }
+  const match = rel.match(/^(\d+)(_)?(d|day|days|h|hr|hour|hours)$/)
+  if (!match) return undefined
+  const amount = Number(match[1])
+  const unit = match[3]
+  const ms = unit.startsWith('h') ? amount * 60 * 60 * 1000 : amount * 24 * 60 * 60 * 1000
+  return new Date(now.getTime() - ms)
+}
+
 /** Encode a search cursor with entity type to prevent cross-entity misuse. */
 export function encodeSearchCursor(entity: string, value: number | string): string {
   return Buffer.from(JSON.stringify({ entity, value })).toString('base64url')

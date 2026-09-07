@@ -203,6 +203,7 @@ describe('search', () => {
       id: 'kb_article_1',
       kind: 'article',
       title: 'Title kb_article_1',
+      url: '/hc/en/articles/1-slug-kb_article_1',
       snippet: expect.any(String),
     })
     expect(out.results[0].snippet.length).toBeLessThanOrEqual(1200)

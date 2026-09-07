@@ -1765,6 +1765,13 @@
       "when": 1788566400000,
       "tag": "0274_slack_agent_gateway",
       "breakpoints": true
+    },
+    {
+      "idx": 252,
+      "version": "7",
+      "when": 1788732000000,
+      "tag": "0275_slack_thread_sessions",
+      "breakpoints": true
     }
   ]
 }

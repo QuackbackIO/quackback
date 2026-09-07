@@ -3,6 +3,8 @@ import { verifySlackSignature } from './verify'
 import { enqueueJob } from '@/lib/server/jobs/job-queue'
 import { encryptSecrets } from '@/lib/server/integrations/encryption'
 import type { IntegrationDefinition } from '@/lib/server/integrations/types'
+import { shouldEnqueueSlackEvent } from './agent/addressing'
+import { abortSlackTurnFromPayload } from './agent/turns'
 
 export function parseSlackPayload(kind: string, raw: string): Record<string, any> {
   if (kind === 'events') return JSON.parse(raw)
@@ -33,13 +35,10 @@ export const slackAppHooks: NonNullable<IntegrationDefinition['appHooks']> = {
       return Response.json({ challenge: payload.challenge })
     if (kind === 'options') return Response.json({ options: [] })
     const event = payload.event
-    if (
-      kind === 'events' &&
-      (!event ||
-        event.bot_id ||
-        event.subtype ||
-        (event.type === 'message' && event.channel_type !== 'im'))
-    )
+    // Abort before enqueue: slack-hook is serial, so a Stop job would otherwise
+    // wait until the in-flight turn finished.
+    if (kind === 'events') abortSlackTurnFromPayload(payload)
+    if (kind === 'events' && !shouldEnqueueSlackEvent(event))
       return new Response(null, { status: 200 })
     // Transport payloads are encrypted, short-lived, and never written to
     // assistant logs. Full thread context is fetched in memory by the worker.

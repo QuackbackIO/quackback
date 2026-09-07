@@ -40,8 +40,4 @@ For single-tenancy deployments with `PLATFORM_CREDENTIALS_SOURCE=env`, complete 
 
 See [Slack setup](./integrations/slack-app.md) and [Cloud rollout gates](./integrations/integration-gateway-rollout.md).
 
-### Cloud settings management
-
-Manage Cloud application settings in **quackback-cp → Admin → Settings** as one JSON object using environment variable names. This covers AI, email, integrations and other application settings. JSON values override container environment values; missing keys preserve the environment and `null` unsets a variable.
-
-Pooled containers fetch one encrypted-at-rest settings snapshot before their existing entrypoint starts migrations, workers or the server. Settings changes require a container restart. The dedicated `QUACKBACK_CP_SETTINGS_TOKEN` and `QUACKBACK_CONTROL_PLANE_URL` remain container bootstrap variables. Cloud refuses startup when settings cannot be loaded; self-hosted containers make no CP call and retain their existing behavior. See the [rollout runbook](./integrations/integration-gateway-rollout.md).
+Cloud application settings (AI, email, shared OAuth apps) are ordinary Railway environment variables on the CP and fleet services. Self-hosted instances use `.env` / `PLATFORM_CREDENTIALS_SOURCE` as before.

@@ -1,10 +1,5 @@
 import { assistantGateEnvelopeSchema, withGateEnvelope } from './tool-output'
-import {
-  listFeedbackTool,
-  feedbackStatsTool,
-  executeListFeedback,
-  executeFeedbackStats,
-} from './tools/feedback-tools'
+
 /**
  * Quinn's tool catalogue: one spec per tool, describing what it does, who can
  * use it, and how it runs, alongside the model-facing definition and its
@@ -315,6 +310,10 @@ export interface AssistantToolContext {
    * executor) — the summary then falls back to the raw key.
    */
   attributeCatalogue?: readonly AssistantAttributeCatalogueEntry[]
+  /** In-process first-party MCP session for this turn (workspace assistant). */
+  mcpSession?: import('./connectors/mcp-client').ConnectorMcpSession
+  /** Connector MCP sessions reused across tool calls this turn, keyed by connector id. */
+  mcpConnectorSessions?: Map<string, import('./connectors/mcp-client').ConnectorMcpSession>
 }
 
 /**
@@ -342,6 +341,8 @@ export function makeAssistantToolContext(init: {
   skills?: { count: number; loads: number }
   actor?: Actor
   attributeCatalogue?: readonly AssistantAttributeCatalogueEntry[]
+  mcpSession?: import('./connectors/mcp-client').ConnectorMcpSession
+  mcpConnectorSessions?: Map<string, import('./connectors/mcp-client').ConnectorMcpSession>
 }): AssistantToolContext {
   return {
     db: init.db,
@@ -369,6 +370,8 @@ export function makeAssistantToolContext(init: {
     latestCustomerMessageId: init.latestCustomerMessageId ?? null,
     actor: init.actor ?? quinnActor(init.assistantPrincipalId),
     attributeCatalogue: init.attributeCatalogue,
+    mcpSession: init.mcpSession,
+    mcpConnectorSessions: init.mcpConnectorSessions,
   }
 }
 
@@ -463,11 +466,14 @@ export interface AssistantToolSpec<In = unknown, Out = unknown> {
 const searchKnowledgeOutputSchema = z.object({
   results: z.array(
     z.object({
-      id: z.string(),
+      id: z.string().describe('Citation id — put this in the citations array.'),
       /** Which entity the result is, so the model can reason per-kind (share a
        *  'post', link an 'article') without decoding TypeID prefixes. */
       kind: z.enum(ASSISTANT_CITATION_TYPES),
-      title: z.string(),
+      title: z.string().describe('Exact source title. Copy verbatim.'),
+      url: z
+        .string()
+        .describe('Canonical link. Use as the markdown link target when listing this result.'),
       snippet: z.string(),
     })
   ),
@@ -577,6 +583,7 @@ async function executeSearchKnowledge(
       id: item.id,
       kind: item.sourceType,
       title: item.title,
+      url: item.citation.url,
       snippet: item.excerpt,
     })),
     // Retrieved excerpts are attacker-reachable text (visitor-authored posts,
@@ -1305,31 +1312,6 @@ async function executeUseSkill(
 }
 
 const SPECS: readonly AssistantToolSpec[] = [
-  defineToolSpec({
-    label: 'List feedback',
-    description: 'Find top or recent feedback.',
-    promptGuidance: 'Use for top requests and feedback lists. Cite the returned post IDs.',
-    risk: 'read',
-    permissions: [],
-    parents: ['conversation', 'ticket'],
-    availableWhen: (ctx) => ctx.role === 'workspace_assistant' && ctx.knowledge.sources.has('post'),
-    definition: listFeedbackTool,
-    execute: executeListFeedback,
-    summarize: () => 'List feedback',
-  }),
-  defineToolSpec({
-    label: 'Feedback statistics',
-    description: 'Aggregate feedback counts and votes.',
-    promptGuidance:
-      'Use for aggregate questions about feedback. Groups may overlap when grouping by tag. Cite the returned representative post IDs.',
-    risk: 'read',
-    permissions: [],
-    parents: ['conversation', 'ticket'],
-    availableWhen: (ctx) => ctx.role === 'workspace_assistant' && ctx.knowledge.sources.has('post'),
-    definition: feedbackStatsTool,
-    execute: executeFeedbackStats,
-    summarize: () => 'Summarize feedback statistics',
-  }),
   defineToolSpec({
     label: 'Search knowledge',
     description: 'Search the published help center for articles the current viewer can see.',
