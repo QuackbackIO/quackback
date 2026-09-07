@@ -32,12 +32,14 @@ const DIAL_TO_RULE: Record<ConnectorToolPolicy, AssistantToolRule> = {
   never: 'deny',
 }
 
+type TenantEditableAgent = Exclude<AssistantAgentKind, 'workspace'>
+
 /** What role policy does when no rule is saved (D14). */
-function roleDefault(agent: AssistantAgentKind): AssistantToolRule {
+function roleDefault(agent: TenantEditableAgent): AssistantToolRule {
   return agent === 'copilot' ? 'ask' : 'allow'
 }
 
-export function BuiltInToolsCard({ agent }: { agent: AssistantAgentKind }) {
+export function BuiltInToolsCard({ agent }: { agent: TenantEditableAgent }) {
   const intl = useIntl()
   const settingsQuery = useQuery(assistantQueries.settings())
   const toolsQuery = useQuery(assistantQueries.tools())

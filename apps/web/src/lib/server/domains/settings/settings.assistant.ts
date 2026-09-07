@@ -4,7 +4,7 @@ import { and, db, eq, principal, settings, sql, type Transaction } from '@/lib/s
 import { isPathManaged } from '@/lib/server/config-file/managed-paths'
 import { logger } from '@/lib/server/logger'
 import {
-  assistantAgentSchema,
+  applyInternalWorkspaceAssistantDefaults,
   migrateAssistantConfig,
   assistantConfigSchema,
   assistantCopilotCapabilitiesSchema,
@@ -57,7 +57,7 @@ export const assistantCopilotCapabilitiesUpdateSchema = z.object({
 
 export const assistantToolRulesUpdateSchema = z.object({
   expectedRevision: z.number().int().positive(),
-  agent: assistantAgentSchema,
+  agent: z.enum(['agent', 'copilot']),
   toolRules: assistantToolRulesSchema,
 })
 
@@ -112,7 +112,12 @@ export async function getAssistantRuntimeConfig(): Promise<AssistantRuntimeConfi
     revision: row.assistantConfigRevision,
     workspaceName: row.name,
   }
-  if (parsed.success) return { config: parsed.data, ...runtimeFields }
+  if (parsed.success) {
+    return {
+      config: applyInternalWorkspaceAssistantDefaults(parsed.data),
+      ...runtimeFields,
+    }
+  }
 
   log.error({ issues: parsed.error.issues }, 'using default assistant config for invalid V2 JSON')
   return {
@@ -377,7 +382,7 @@ export function updateAssistantCopilotCapabilities(
  */
 export function updateAssistantToolRules(
   expectedRevision: number,
-  update: { agent: AssistantAgentKind; toolRules: AssistantToolRules },
+  update: { agent: Exclude<AssistantAgentKind, 'workspace'>; toolRules: AssistantToolRules },
   actor: AssistantConfigAuditActor
 ): Promise<AssistantConfigState> {
   return updateAssistantConfig(

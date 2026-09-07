@@ -166,7 +166,7 @@ function ConnectorDetailPage() {
   }
   if (!connector) {
     return (
-      <div className="mx-auto w-full max-w-3xl space-y-4">
+      <div className="max-w-3xl space-y-4">
         <BackLink to="/admin/automation/connectors">
           {intl.formatMessage({ id: 'automation.connectors.title', defaultMessage: 'Connectors' })}
         </BackLink>
@@ -201,7 +201,7 @@ function ConnectorDetailPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-6">
+    <div className="max-w-3xl space-y-6">
       <BackLink to="/admin/automation/connectors">
         {intl.formatMessage({ id: 'automation.connectors.title', defaultMessage: 'Connectors' })}
       </BackLink>

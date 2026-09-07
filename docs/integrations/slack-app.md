@@ -1,6 +1,6 @@
 # Slack workspace assistant
 
-Quackback answers linked teammates in channel threads and DMs, and proposes feedback posts or internal tickets for a teammate to approve. It uses the workspace assistant configuration under **AI & Automation → Workspace assistant**. Customer support and Copilot settings remain separate. The Slack deployment is off by default.
+Quackback answers linked teammates in channel threads and DMs, and proposes feedback posts or internal tickets for a teammate to approve. Workspace assistant knowledge, tools, and instructions are internally managed defaults; the only tenant control is **AI assistant in Slack** on the Slack integration card. Customer support and Copilot settings remain separate. The Slack deployment is off by default.
 
 ## Self-hosted setup
 

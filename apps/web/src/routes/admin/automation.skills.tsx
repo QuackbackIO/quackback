@@ -123,7 +123,7 @@ function SkillsPage() {
   const skills = list.data?.skills ?? []
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-6">
+    <div className="max-w-3xl space-y-6">
       <div className="lg:hidden">
         <BackLink to="/admin/automation">
           {intl.formatMessage({ id: 'automation.nav.label', defaultMessage: 'AI & Automation' })}
