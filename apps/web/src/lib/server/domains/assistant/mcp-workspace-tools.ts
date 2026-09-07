@@ -37,13 +37,8 @@ function scopesFromActor(actor: Actor): ApiKeyScope[] {
   return orderScopes([...actor.permissions].map(scopeForPermission))
 }
 
-export async function mcpAuthFromActor(
-  actor: Actor,
-  displayName: string
-): Promise<McpAuthContext | null> {
-  if (!actor.principalId || !isTeamMember(actor.role) || !actor.role) return null
-  const scopes = scopesFromActor(actor)
-  if (scopes.length === 0) return null
+async function teammateProfile(principalId: Actor['principalId']) {
+  if (!principalId) return undefined
   const [row] = await db
     .select({
       userId: principal.userId,
@@ -52,8 +47,49 @@ export async function mcpAuthFromActor(
     })
     .from(principal)
     .leftJoin(user, eq(user.id, principal.userId))
-    .where(eq(principal.id, actor.principalId))
+    .where(eq(principal.id, principalId))
     .limit(1)
+  return row
+}
+
+export type AskingTeammateIdentity = {
+  principalId: NonNullable<Actor['principalId']>
+  displayName: string | null
+  email: string | null
+  role: 'admin' | 'member'
+}
+
+/** Name/email/role for the teammate who asked this workspace turn. */
+export async function loadAskingTeammateIdentity(
+  actor: Actor
+): Promise<AskingTeammateIdentity | null> {
+  if (!actor.principalId || (actor.role !== 'admin' && actor.role !== 'member')) return null
+  try {
+    const row = await teammateProfile(actor.principalId)
+    return {
+      principalId: actor.principalId,
+      displayName: row?.displayName ?? null,
+      email: row?.email ?? null,
+      role: actor.role,
+    }
+  } catch {
+    return {
+      principalId: actor.principalId,
+      displayName: null,
+      email: null,
+      role: actor.role,
+    }
+  }
+}
+
+export async function mcpAuthFromActor(
+  actor: Actor,
+  displayName: string
+): Promise<McpAuthContext | null> {
+  if (!actor.principalId || !isTeamMember(actor.role) || !actor.role) return null
+  const scopes = scopesFromActor(actor)
+  if (scopes.length === 0) return null
+  const row = await teammateProfile(actor.principalId)
   return {
     principalId: actor.principalId,
     userId: row?.userId ?? undefined,
@@ -101,6 +137,14 @@ const WORKSPACE_USER_WRITES = new Set([
   'react_to_comment',
 ])
 
+function workspaceWriteGuidance(name: string, description: string): string {
+  const asUser = `${description} Runs as the teammate who asked — they are the author/actor, not you. Do not claim a proposal is required.`
+  if (name === 'triage_post') {
+    return `${asUser} When they say assign to me, pass ownerPrincipalId "me" or their principal id from trusted runtime context.`
+  }
+  return asUser
+}
+
 function buildWorkspaceMcpSpec(tool: DiscoveredMcpTool): AssistantToolSpec {
   const group = toolGroupFromAnnotations(tool.annotations)
   const title = tool.title || tool.name
@@ -111,8 +155,10 @@ function buildWorkspaceMcpSpec(tool: DiscoveredMcpTool): AssistantToolSpec {
     label: title,
     description,
     promptGuidance: writeAsUser
-      ? `${description} Runs as the teammate who asked — they are the author/actor, not you. Do not claim a proposal is required.`
-      : `${description} When a row includes url, link it as [title](url) copied verbatim. Paginate with nextCursor from the previous result. Leave citations empty for these lists.`,
+      ? workspaceWriteGuidance(tool.name, description)
+      : tool.name === 'search'
+        ? `${description} When a row includes url, link it as [title](url) copied verbatim. Paginate with nextCursor from the previous result. Leave citations empty for these lists. For "my posts" or "created by me", pass authorPrincipalId "me" or authorEmail "me".`
+        : `${description} When a row includes url, link it as [title](url) copied verbatim. Paginate with nextCursor from the previous result. Leave citations empty for these lists.`,
     risk: group === 'read' ? 'read' : 'write',
     permissions: [],
     parents: ['conversation', 'ticket'],

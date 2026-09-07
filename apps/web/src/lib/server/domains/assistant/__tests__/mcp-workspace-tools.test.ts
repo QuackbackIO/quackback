@@ -38,6 +38,12 @@ describe('workspace MCP tools', () => {
     expect(opened.specs.find((spec) => spec.name === 'create_post')?.risk).toBe('write')
     expect(opened.specs.find((spec) => spec.name === 'create_post')?.approvalPolicy).toBe('always')
     expect(opened.specs.find((spec) => spec.name === 'triage_post')?.approvalPolicy).toBe('always')
+    expect(opened.specs.find((spec) => spec.name === 'triage_post')?.promptGuidance).toContain(
+      'ownerPrincipalId "me"'
+    )
+    expect(opened.specs.find((spec) => spec.name === 'search')?.promptGuidance).toContain(
+      'authorPrincipalId "me"'
+    )
     expect(opened.specs.find((spec) => spec.name === 'delete_post')?.approvalPolicy).toBe(
       'approval'
     )

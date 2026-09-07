@@ -379,6 +379,14 @@ describe('assistant production system prompt', () => {
     expect(other).not.toContain('# Slack surface')
   })
 
+  it('tells the workspace assistant that me/I/my is the asking teammate for every lookup', () => {
+    const prompt = joined({ role: 'workspace_assistant' })
+    expect(prompt).toContain("asking teammate's name, email, role, and principal id")
+    expect(prompt).toContain('Treat "me", "I", "my", and "myself" as this teammate')
+    expect(prompt).toContain('including "posts created by me"')
+    expect(joined()).not.toContain('Treat "me", "I", "my", and "myself"')
+  })
+
   it('injects the board catalogue only when capture_feedback is assembled', () => {
     const boardCatalogue = [
       { id: 'board_features', name: 'Feature Requests', description: 'Ideas & suggestions' },

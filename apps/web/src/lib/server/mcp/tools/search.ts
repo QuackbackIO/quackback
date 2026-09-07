@@ -30,6 +30,7 @@ import type {
   ChangelogId,
   KbArticleId,
   KbCategoryId,
+  PrincipalId,
 } from '@quackback/ids'
 import type { McpAuthContext } from '../types'
 import { getBaseUrl } from '@/lib/server/config'
@@ -96,6 +97,14 @@ const searchSchema = {
     ),
   limit: z.number().min(1).max(100).default(20).describe('Max results per page'),
   cursor: z.string().optional().describe('Pagination cursor from previous response'),
+  authorPrincipalId: z
+    .string()
+    .optional()
+    .describe('Filter posts by author TypeID, or "me" for the authenticated teammate'),
+  authorEmail: z
+    .string()
+    .optional()
+    .describe('Filter posts by author email, or "me" for the authenticated teammate'),
 }
 
 const getDetailsSchema = {
@@ -125,6 +134,8 @@ type SearchArgs = {
   sort: 'newest' | 'oldest' | 'votes'
   limit: number
   cursor?: string
+  authorPrincipalId?: string
+  authorEmail?: string
 }
 
 type GetDetailsArgs = { id: string }
@@ -145,7 +156,9 @@ Examples:
 - Search changelogs: search({ entity: "changelogs", status: "published" })
 - Search articles: search({ entity: "articles", query: "getting started" })
 - Filter articles by category: search({ entity: "articles", categoryId: "kb_category_01abc..." })
-- Sort by votes: search({ sort: "votes", limit: 10 })`,
+- Sort by votes: search({ sort: "votes", limit: 10 })
+- Posts created by the authenticated teammate: search({ authorPrincipalId: "me" })
+- Posts created by an email: search({ authorEmail: "ada@acme.com" })`,
     schema: searchSchema,
     annotations: READ_ONLY,
     handler: async (args) => {
@@ -175,7 +188,7 @@ Examples:
       if (args.entity === 'changelogs') {
         return searchChangelogs(args)
       }
-      return searchPosts(args)
+      return searchPosts(args, auth)
     },
   })
 
@@ -264,7 +277,22 @@ Examples:
 // Search dispatchers
 // ============================================================================
 
-async function searchPosts(args: SearchArgs): Promise<CallToolResult> {
+/** Map "me" to the authenticated teammate; pass through TypeIDs and emails. */
+export function resolvePostAuthorFilter(
+  args: Pick<SearchArgs, 'authorPrincipalId' | 'authorEmail'>,
+  auth: Pick<McpAuthContext, 'principalId'>
+): { authorId?: PrincipalId; authorEmail?: string } {
+  if (args.authorPrincipalId === 'me' || args.authorEmail === 'me') {
+    return { authorId: auth.principalId }
+  }
+  if (args.authorPrincipalId) {
+    return { authorId: args.authorPrincipalId as PrincipalId }
+  }
+  if (args.authorEmail) return { authorEmail: args.authorEmail }
+  return {}
+}
+
+async function searchPosts(args: SearchArgs, auth: McpAuthContext): Promise<CallToolResult> {
   const decoded = decodeSearchCursor(args.cursor)
   // Reject cursors from a different entity
   if (args.cursor && decoded.entity && decoded.entity !== 'posts') {
@@ -274,6 +302,7 @@ async function searchPosts(args: SearchArgs): Promise<CallToolResult> {
   }
   // The cursor value is a PostId string from the previous page's last item
   const cursorValue = typeof decoded.value === 'string' ? decoded.value : undefined
+  const author = resolvePostAuthorFilter(args, auth)
 
   const result = await listInboxPosts({
     search: args.query,
@@ -292,6 +321,7 @@ async function searchPosts(args: SearchArgs): Promise<CallToolResult> {
     sort: args.sort,
     cursor: cursorValue,
     limit: args.limit,
+    ...author,
   })
 
   // Encode nextCursor with entity type to prevent cross-entity misuse
