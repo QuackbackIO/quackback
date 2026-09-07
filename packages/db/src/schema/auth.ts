@@ -560,6 +560,12 @@ export const settings = pgTable('settings', {
   authConfigVersion: integer('auth_config_version').notNull().default(0),
 })
 
+/** Where identity may be read from, in resolver order. */
+export type IdentitySource = 'idToken' | 'userinfo' | 'accessTokenJwt'
+
+/** Profile fields a claim can be bound to. */
+export type ProfileField = 'id' | 'email' | 'name'
+
 /**
  * Role-mapping rules applied to an OIDC claim at sign-in. Now the `role`
  * section of {@link IdentityProviderClaimMapping}; the shape is unchanged from
@@ -587,7 +593,7 @@ export type ClaimRoleMapping = {
 export type IdentityProviderClaimMapping = {
   /** Which claim carries the account id, the email, the display name. */
   profile?: {
-    sources?: Array<'idToken' | 'userinfo' | 'accessTokenJwt'>
+    sources?: IdentitySource[]
     claims?: { id?: string; email?: string; name?: string }
     /** Mint a placeholder address when the provider supplies no email. */
     allowMissingEmail?: boolean
@@ -601,6 +607,17 @@ export type IdentityProviderClaimMapping = {
     syncOnSignIn?: boolean
   }
 }
+
+/** Why a captured identity source contributed no claims. */
+export type SourceUnavailableReason = 'absent' | 'unreadable' | 'fetch_failed'
+
+/**
+ * JSON-only snapshot of one identity source from an SSO test. Either a decoded
+ * claims object or a closed reason the source could not be loaded.
+ */
+export type SourceSnapshot =
+  | { source: IdentitySource; claims: Record<string, unknown> }
+  | { source: IdentitySource; unavailable: SourceUnavailableReason }
 
 /**
  * Identity provider — the single source of truth for an OIDC IdP.

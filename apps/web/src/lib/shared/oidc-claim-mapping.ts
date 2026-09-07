@@ -19,10 +19,26 @@
  */
 
 import type { Role } from './roles'
+import type {
+  ClaimRoleMapping,
+  IdentityProviderClaimMapping,
+  IdentitySource,
+  ProfileField,
+  SourceSnapshot,
+  SourceUnavailableReason,
+} from './db-types'
+
+export type {
+  ClaimRoleMapping,
+  IdentityProviderClaimMapping,
+  IdentitySource,
+  ProfileField,
+  SourceSnapshot,
+  SourceUnavailableReason,
+}
 
 /** Where identity may be read from, in the order the resolver tries them. */
 export const IDENTITY_SOURCES = ['idToken', 'userinfo', 'accessTokenJwt'] as const
-export type IdentitySource = (typeof IDENTITY_SOURCES)[number]
 
 /**
  * The id token first because it is the only source the provider signed, then
@@ -31,35 +47,13 @@ export type IdentitySource = (typeof IDENTITY_SOURCES)[number]
  */
 export const DEFAULT_IDENTITY_SOURCES: IdentitySource[] = ['idToken', 'userinfo']
 
-/** Profile fields a claim can be bound to. */
-export type ProfileField = 'id' | 'email' | 'name'
-
 const KNOWN_ROLES: readonly string[] = ['admin', 'member', 'user']
 
-export interface ClaimRoleMapping {
-  /** Dotted path, or a URL-shaped namespaced claim used as a single key. */
-  claimPath: string
-  /** First-match-wins. */
-  rules: Array<{ whenContains: string; role: Role }>
-  /** Re-apply on every sign-in, so a role can be promoted or demoted. */
-  syncOnEverySignIn?: boolean
-}
+/** Segments that would walk onto or rewrite a prototype rather than a claim. */
+const UNSAFE_SEGMENTS = new Set(['__proto__', 'constructor', 'prototype'])
 
-export interface IdentityProviderClaimMapping {
-  profile?: {
-    sources?: IdentitySource[]
-    claims?: Partial<Record<ProfileField, string>>
-    /** Mint a placeholder address when the provider supplies no email. */
-    allowMissingEmail?: boolean
-  }
-  role?: ClaimRoleMapping
-  attributes?: {
-    map?: Array<{ claimPath: string; attributeKey: string }>
-    /** Off: a claim only fills an attribute that is empty. */
-    overrideExisting?: boolean
-    /** When true, a disappeared claim clears the stored attribute. */
-    syncOnSignIn?: boolean
-  }
+export function claimPathIsUnsafe(path: string): boolean {
+  return path.split('.').some((segment) => UNSAFE_SEGMENTS.has(segment))
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -196,10 +190,12 @@ export function identityMappingFor(stored: unknown): {
  * like `https://acme.com/email`, whose dots are not separators, still work.
  */
 export function getClaimByPath(claims: Record<string, unknown>, path: string): unknown {
-  if (path in claims) return claims[path]
+  if (Object.hasOwn(claims, path)) return claims[path]
+  if (claimPathIsUnsafe(path)) return undefined
   let current: unknown = claims
   for (const segment of path.split('.')) {
     if (current === null || typeof current !== 'object') return undefined
+    if (!Object.hasOwn(current, segment)) return undefined
     current = (current as Record<string, unknown>)[segment]
   }
   return current

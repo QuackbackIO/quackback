@@ -359,6 +359,32 @@ describe('resolveIdentity — subject consistency (OIDC Core 5.3.2)', () => {
     expect(result.identity.sources.id).toBe('userinfo')
   })
 
+  it('incomplete subject replacement discards prior subject role and People claims', async () => {
+    const result = await resolveIdentity({
+      tokens: {
+        idToken: fakeJwt({
+          sub: 'from-token',
+          groups: ['eng'],
+          org: { department: 'TokenDept' },
+        }),
+        accessToken: 'at',
+      },
+      fetchUserInfo: async () => ({
+        sub: 'from-userinfo',
+        email: 'e@x.com',
+        name: 'N',
+        groups: ['ops'],
+        org: { department: 'UserinfoDept' },
+      }),
+      requiredClaimPaths: ['groups', 'org.department'],
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.identity.id).toBe('from-userinfo')
+    expect(result.identity.claims.groups).toEqual(['ops'])
+    expect(result.identity.claims.org).toEqual({ department: 'UserinfoDept' })
+  })
+
   it('does NOT apply the rule to the access token, whose subject may differ', async () => {
     // 5.3.2 is scoped to the userinfo response. An access token is
     // audience-scoped and pairwise subjects legitimately differ, so enforcing
