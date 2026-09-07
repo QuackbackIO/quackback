@@ -1,4 +1,4 @@
-import { createFileRoute, redirect, useBlocker } from '@tanstack/react-router'
+import { createFileRoute, useBlocker } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { useIntl } from 'react-intl'
 import { UserGroupIcon } from '@heroicons/react/24/solid'
@@ -28,10 +28,7 @@ const searchSchema = z.object({
 
 export const Route = createFileRoute('/admin/automation/copilot')({
   validateSearch: searchSchema,
-  beforeLoad: ({ context, search }) => {
-    if (search.tab === 'actions') {
-      throw redirect({ to: '/admin/automation/connectors' })
-    }
+  beforeLoad: ({ context }) => {
     const permissions = (context as { permissions?: PermissionKey[] }).permissions ?? []
     if (!permissions.includes(PERMISSIONS.ASSISTANT_MANAGE)) {
       throw new Error('Access denied: requires assistant.manage')

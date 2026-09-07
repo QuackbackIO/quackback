@@ -67,9 +67,6 @@ export function SlackAgentCard() {
           {(save.error ?? query.error)?.message}
         </p>
       )}
-      <a href="/admin/automation/workspace" className="text-sm underline">
-        Configure knowledge and instructions
-      </a>
     </section>
   )
 }

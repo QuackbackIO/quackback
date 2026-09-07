@@ -164,6 +164,11 @@ export const assistantWorkspaceConfigSchema = assistantCopilotConfigSchema.exten
   }),
 })
 export type AssistantWorkspaceConfig = z.infer<typeof assistantWorkspaceConfigSchema>
+/**
+ * Internally managed workspace-assistant defaults. Knowledge, tool rules,
+ * capabilities, and instructions are not tenant-editable; only `slack.enabled`
+ * is a user toggle (Settings → Integrations → Slack).
+ */
 export const DEFAULT_WORKSPACE_ASSISTANT: AssistantWorkspaceConfig = {
   capabilities: { qa: true },
   knowledge: {
@@ -179,6 +184,20 @@ export const DEFAULT_WORKSPACE_ASSISTANT: AssistantWorkspaceConfig = {
   toolRules: {},
   instructions: '',
   slack: { enabled: false, respondTo: 'mentions_and_dms', allowUnlinkedPublicQa: false },
+}
+
+/** Overlay code-managed workspace defaults, keeping the tenant Slack toggle. */
+export function applyInternalWorkspaceAssistantDefaults(config: AssistantConfig): AssistantConfig {
+  return {
+    ...config,
+    agents: {
+      ...config.agents,
+      workspace: {
+        ...structuredClone(DEFAULT_WORKSPACE_ASSISTANT),
+        slack: config.agents.workspace.slack,
+      },
+    },
+  }
 }
 
 /** Add the disabled workspace agent to v3 while preserving all existing choices. */

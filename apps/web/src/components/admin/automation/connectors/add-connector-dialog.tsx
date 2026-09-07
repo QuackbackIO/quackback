@@ -73,10 +73,7 @@ export function AddConnectorDialog({
         )
         onOpenChange(false)
         reset()
-        void navigate({
-          to: '/admin/automation/connectors/$connectorId',
-          params: { connectorId: row.id },
-        })
+        void navigate({ to: '/admin/automation' })
       },
       onError: (err) => {
         setError(err instanceof Error ? err.message : 'Could not connect')

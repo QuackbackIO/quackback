@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_ASSISTANT_CONFIG,
+  DEFAULT_WORKSPACE_ASSISTANT,
+  applyInternalWorkspaceAssistantDefaults,
   migrateAssistantConfig,
   roleToAgent,
   assistantConfigSchema,
@@ -31,5 +33,17 @@ describe('workspace assistant configuration and trust boundary', () => {
     const config = structuredClone(DEFAULT_ASSISTANT_CONFIG)
     config.agents.workspace.slack.allowUnlinkedPublicQa = true as any
     expect(assistantConfigSchema.safeParse(config).success).toBe(false)
+  })
+
+  it('overlays internal workspace defaults while keeping the Slack toggle', () => {
+    const config = structuredClone(DEFAULT_ASSISTANT_CONFIG)
+    config.agents.workspace.instructions = 'Tenant-authored guidance'
+    config.agents.workspace.knowledge.tickets = false
+    config.agents.workspace.slack.enabled = true
+    const applied = applyInternalWorkspaceAssistantDefaults(config)
+    expect(applied.agents.workspace.instructions).toBe(DEFAULT_WORKSPACE_ASSISTANT.instructions)
+    expect(applied.agents.workspace.knowledge).toEqual(DEFAULT_WORKSPACE_ASSISTANT.knowledge)
+    expect(applied.agents.workspace.slack.enabled).toBe(true)
+    expect(config.agents.workspace.instructions).toBe('Tenant-authored guidance')
   })
 })

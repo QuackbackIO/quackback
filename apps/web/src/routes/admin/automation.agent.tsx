@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { createFileRoute, redirect, useBlocker } from '@tanstack/react-router'
+import { createFileRoute, useBlocker } from '@tanstack/react-router'
 import { useIntl } from 'react-intl'
 import { SparklesIcon } from '@heroicons/react/24/solid'
 import { z } from 'zod'
@@ -36,10 +36,7 @@ const searchSchema = z.object({
 
 export const Route = createFileRoute('/admin/automation/agent')({
   validateSearch: searchSchema,
-  beforeLoad: ({ context, search }) => {
-    if (search.tab === 'actions') {
-      throw redirect({ to: '/admin/automation/connectors' })
-    }
+  beforeLoad: ({ context }) => {
     const permissions = (context as { permissions?: PermissionKey[] }).permissions ?? []
     if (!permissions.includes(PERMISSIONS.ASSISTANT_MANAGE)) {
       throw new Error('Access denied: requires assistant.manage')
