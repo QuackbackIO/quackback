@@ -375,6 +375,43 @@ export function sourcesAreDefault(sources: IdentitySource[] | undefined): boolea
   return JSON.stringify(sources) === JSON.stringify(DEFAULT_IDENTITY_SOURCES)
 }
 
+function roleRuleIdentity(rule: unknown): string | null {
+  if (!isRecord(rule)) return null
+  if (typeof rule.whenContains !== 'string' || typeof rule.role !== 'string') return null
+  return `${rule.whenContains}\0${rule.role}`
+}
+
+/** When after is a permutation of before, emit whole-object moves instead of index edits. */
+function reorderRoleRuleOps(
+  beforeRules: unknown[],
+  afterRules: unknown[]
+): ClaimMappingOperation[] | null {
+  if (beforeRules.length === 0 || beforeRules.length !== afterRules.length) return null
+  const beforeKeys = beforeRules.map(roleRuleIdentity)
+  const afterKeys = afterRules.map(roleRuleIdentity)
+  if (beforeKeys.some((key) => key == null) || afterKeys.some((key) => key == null)) return null
+  const remaining = new Map<string, number>()
+  for (const key of beforeKeys) remaining.set(key!, (remaining.get(key!) ?? 0) + 1)
+  for (const key of afterKeys) {
+    const count = remaining.get(key!) ?? 0
+    if (count === 0) return null
+    remaining.set(key!, count - 1)
+  }
+  if (beforeKeys.every((key, i) => key === afterKeys[i])) return []
+  const ops: ClaimMappingOperation[] = []
+  const working = [...beforeKeys] as string[]
+  for (let i = 0; i < afterKeys.length; i++) {
+    const want = afterKeys[i]!
+    if (working[i] === want) continue
+    const from = working.indexOf(want, i)
+    if (from < 0) return null
+    working.splice(from, 1)
+    working.splice(i, 0, want)
+    ops.push({ op: 'reorderRoleRule', from, to: i })
+  }
+  return ops
+}
+
 /** Diff supported editor state against stored JSON into closed operations. */
 export function diffClaimMappingOperations(
   before: unknown,
@@ -413,19 +450,28 @@ export function diffClaimMappingOperations(
     if (beforeSync !== afterSync) ops.push({ op: 'setRoleSync', syncOnEverySignIn: afterSync })
     const beforeRules = Array.isArray(beforeRole?.rules) ? beforeRole.rules : []
     const afterRules = afterRole.rules ?? []
-    const commonRules = Math.min(beforeRules.length, afterRules.length)
-    for (let i = 0; i < commonRules; i++) {
-      const left = beforeRules[i]
-      const right = afterRules[i]
-      if (!isRecord(left) || left.whenContains !== right.whenContains || left.role !== right.role) {
-        ops.push({ op: 'editRoleRule', index: i, rule: right })
+    const reorders = reorderRoleRuleOps(beforeRules, afterRules)
+    if (reorders) {
+      ops.push(...reorders)
+    } else {
+      const commonRules = Math.min(beforeRules.length, afterRules.length)
+      for (let i = 0; i < commonRules; i++) {
+        const left = beforeRules[i]
+        const right = afterRules[i]
+        if (
+          !isRecord(left) ||
+          left.whenContains !== right.whenContains ||
+          left.role !== right.role
+        ) {
+          ops.push({ op: 'editRoleRule', index: i, rule: right })
+        }
       }
-    }
-    for (let i = beforeRules.length - 1; i >= commonRules; i--) {
-      ops.push({ op: 'removeRoleRule', index: i })
-    }
-    for (let i = commonRules; i < afterRules.length; i++) {
-      ops.push({ op: 'insertRoleRule', index: i, rule: afterRules[i] })
+      for (let i = beforeRules.length - 1; i >= commonRules; i--) {
+        ops.push({ op: 'removeRoleRule', index: i })
+      }
+      for (let i = commonRules; i < afterRules.length; i++) {
+        ops.push({ op: 'insertRoleRule', index: i, rule: afterRules[i] })
+      }
     }
   }
 

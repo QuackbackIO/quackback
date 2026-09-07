@@ -124,6 +124,37 @@ describe('diffClaimMappingOperations', () => {
     const after = applyClaimMappingEdits(null, ops)
     expect(effectiveProfileSignature(after)).toBe(effectiveProfileSignature(null))
   })
+
+  it('reordering rules emits reorderRoleRule so extra fields move with the rule', () => {
+    const stored = {
+      role: {
+        claimPath: 'groups',
+        rules: [
+          { whenContains: 'eng', role: 'member', note: 'eng-note' },
+          { whenContains: 'admins', role: 'admin', note: 'admin-note' },
+        ],
+      },
+    }
+    const ops = diffClaimMappingOperations(stored, {
+      role: {
+        claimPath: 'groups',
+        rules: [
+          { whenContains: 'admins', role: 'admin' },
+          { whenContains: 'eng', role: 'member' },
+        ],
+      },
+    })
+    expect(ops).toEqual([{ op: 'reorderRoleRule', from: 1, to: 0 }])
+    expect(applyClaimMappingEdits(stored, ops)).toEqual({
+      role: {
+        claimPath: 'groups',
+        rules: [
+          { whenContains: 'admins', role: 'admin', note: 'admin-note' },
+          { whenContains: 'eng', role: 'member', note: 'eng-note' },
+        ],
+      },
+    })
+  })
 })
 
 describe('storedJsonEqual', () => {

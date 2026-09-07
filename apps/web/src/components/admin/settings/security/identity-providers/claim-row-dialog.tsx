@@ -123,11 +123,14 @@ export function ClaimRowDialog({
     if (resolvedTarget.type === 'people') {
       return path.trim().length > 0 && resolvedTarget.attributeKey.trim().length > 0
     }
-    return role.claimPath.trim().length > 0
+    return (
+      role.claimPath.trim().length > 0 &&
+      role.rules.every((rule) => rule.whenContains.trim().length > 0)
+    )
   })()
 
   const apply = () => {
-    if (!resolvedTarget) return
+    if (!resolvedTarget || !canSubmit) return
     if (resolvedTarget.type === 'profile') {
       onCommit({ type: 'profile', field: resolvedTarget.field, path: path.trim() })
     } else if (resolvedTarget.type === 'role') {

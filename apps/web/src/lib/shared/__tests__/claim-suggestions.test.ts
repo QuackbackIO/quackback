@@ -119,6 +119,18 @@ describe('deriveIdentityClaimPaths', () => {
     expect(identity.map((s) => s.path)).not.toContain('groups.0')
   })
 
+  it('marks boolean and null identity leaves as unsuitable', () => {
+    const identity = deriveIdentityClaimPaths({
+      sub: 'person-123',
+      email_verified: true,
+      department: null,
+      employee_id: 42,
+    })
+    expect(identity.find((s) => s.path === 'email_verified')?.unsuitable).toBe(true)
+    expect(identity.find((s) => s.path === 'department')?.unsuitable).toBe(true)
+    expect(identity.find((s) => s.path === 'employee_id')?.unsuitable).toBeUndefined()
+  })
+
   it('offers entra aliases as suggestions without rewriting captured paths', () => {
     const identity = deriveIdentityClaimPaths({ sub: 's-1', email: 'a@b.test' }, { kind: 'entra' })
     const paths = identity.map((s) => s.path)

@@ -109,6 +109,31 @@ describe('ClaimRowDialog', () => {
     expect(screen.queryByPlaceholderText(/metadata/i)).not.toBeInTheDocument()
   })
 
+  it('disables Apply to draft when a new role rule has no value', async () => {
+    const onCommit = vi.fn()
+    render(
+      <ClaimRowDialog
+        open
+        mode="edit"
+        lockedTarget={{ type: 'role' }}
+        availableTargets={[]}
+        definitions={DEFS}
+        initialRole={{
+          claimPath: 'groups',
+          rules: [{ whenContains: 'engineering', role: 'member' }],
+        }}
+        registrationId="oidc_x"
+        canTest
+        onOpenChange={vi.fn()}
+        onCommit={onCommit}
+      />
+    )
+    expect(screen.getByRole('button', { name: 'Apply to draft' })).not.toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Add rule' }))
+    expect(screen.getByRole('button', { name: 'Apply to draft' })).toBeDisabled()
+    expect(onCommit).not.toHaveBeenCalled()
+  })
+
   it('offers Role and unused People targets only', async () => {
     const targets = availableAddTargets({
       mapping: { attributes: { map: [{ claimPath: 'dept', attributeKey: 'department' }] } },

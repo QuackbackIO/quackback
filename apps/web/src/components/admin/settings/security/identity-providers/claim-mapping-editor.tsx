@@ -51,8 +51,9 @@ export function RoleMappingRulesBody({
   autoCreateUsers?: boolean
   onChange: (mapping: RoleMapping) => void
 }) {
-  const { lastSuccess } = useSsoTestSignIn()
+  const { lastSuccess, lastCapture } = useSsoTestSignIn()
   const fixture =
+    (lastCapture && lastCapture.registrationId === registrationId ? lastCapture : null) ??
     (lastSuccess && lastSuccess.registrationId === registrationId ? lastSuccess : null) ??
     (capture && capture.registrationId === registrationId ? capture : null)
   const suggestions = fixture ? deriveClaimSuggestions(fixture.claims) : null
@@ -229,11 +230,11 @@ export function ClaimMappingEditor({
   const current: RoleMapping = mapping ?? { claimPath: 'groups', rules: [] }
   const update = (patch: Partial<RoleMapping>) => onChange({ ...current, ...patch })
 
-  const { lastSuccess } = useSsoTestSignIn()
-  const suggestions =
-    lastSuccess && lastSuccess.registrationId === registrationId
-      ? deriveClaimSuggestions(lastSuccess.claims)
-      : null
+  const { lastSuccess, lastCapture } = useSsoTestSignIn()
+  const session =
+    (lastCapture && lastCapture.registrationId === registrationId ? lastCapture : null) ??
+    (lastSuccess && lastSuccess.registrationId === registrationId ? lastSuccess : null)
+  const suggestions = session ? deriveClaimSuggestions(session.claims) : null
   const hasSuggestions = (suggestions?.paths.length ?? 0) > 0
   const pathSuggestions = (suggestions?.paths ?? []).map((p) => ({ value: p }))
   const valueSuggestions = (suggestions?.valuesByPath[current.claimPath] ?? []).map((v) => ({

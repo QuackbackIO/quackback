@@ -105,8 +105,11 @@ export function ClaimPathInput({
 }
 
 export function useClaimSuggestions(registrationId: string, capture?: SsoTestCapture | null) {
-  const { lastSuccess } = useSsoTestSignIn()
-  const fixture = fixtureFor(registrationId, lastSuccess) ?? fixtureFor(registrationId, capture)
+  const { lastSuccess, lastCapture } = useSsoTestSignIn()
+  const fixture =
+    fixtureFor(registrationId, lastCapture) ??
+    fixtureFor(registrationId, lastSuccess) ??
+    fixtureFor(registrationId, capture)
   if (!fixture) return null
   return deriveClaimSuggestions(fixture.claims)
 }

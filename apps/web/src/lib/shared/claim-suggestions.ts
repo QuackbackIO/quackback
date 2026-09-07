@@ -125,7 +125,7 @@ export type AttributeClaimPathSuggestion = {
 export type IdentityClaimPathSuggestion = {
   path: string
   description?: string
-  /** Array-valued claims cannot bind identity scalars. Shown, never unwrapped. */
+  /** Arrays, booleans, and null cannot bind identity scalars. Shown, never unwrapped. */
   unsuitable?: boolean
 }
 
@@ -276,6 +276,14 @@ export function deriveIdentityClaimPaths(
       return
     }
     if (!isLeaf(value)) return
+    if (typeof value === 'boolean' || value === null) {
+      out.push({
+        path,
+        description: truncatePreview(value),
+        unsuitable: true,
+      })
+      return
+    }
     out.push({ path, description: truncatePreview(value) })
   }
 
