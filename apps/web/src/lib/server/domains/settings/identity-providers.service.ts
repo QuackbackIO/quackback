@@ -18,9 +18,11 @@ import type { Role } from '@/lib/shared/roles'
 import {
   db,
   account,
+  and,
   count,
   eq,
   identityProvider,
+  isNull,
   ssoVerifiedDomain,
   type IdentityProviderClaimMapping,
 } from '@/lib/server/db'
@@ -94,7 +96,7 @@ export interface IdentityProvider {
   detailsChangedAt: string | null
   /** ISO-8601 UTC; null until a test sign-in succeeds. */
   lastSuccessfulTestAt: string | null
-  /** Last successful Test fixture, as captured. Null until a test succeeds. */
+  /** Last usable Test fixture, including mapping failures. Null until a test. */
   lastTestCapture: SsoTestCapture | null
   createdAt: string
   domains: VerifiedDomain[]
@@ -612,20 +614,54 @@ export async function stampDetailsChanged(id: IdentityProviderId): Promise<void>
   }
 }
 
-/** Stamp `last_successful_test_at = now()` and persist the test fixture. */
-export async function markTestSucceeded(
+/**
+ * Persist a test capture against the configuration the test started with.
+ * Success stamps `lastSuccessfulTestAt`; mapping failure replaces diagnostic
+ * capture only. A zero-row conditional update is stale, not success.
+ */
+export async function persistTestResult(
   id: IdentityProviderId,
-  capture?: SsoTestCapture
-): Promise<void> {
-  log.info({ id }, 'mark identity provider test succeeded')
+  args: {
+    expectedDetailsChangedAt: string | null
+    outcome: 'success' | 'mapping_failed'
+    capture: SsoTestCapture
+  }
+): Promise<'stamped' | 'stale'> {
+  const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
+  const { resetAuth } = await import('@/lib/server/auth')
+
+  log.info({ id, outcome: args.outcome }, 'persist identity provider test result')
   try {
-    await stampTimestamp(id, {
-      lastSuccessfulTestAt: new Date(),
-      ...(capture ? { lastTestCapture: capture } : {}),
+    const detailsMatch =
+      args.expectedDetailsChangedAt === null
+        ? isNull(identityProvider.detailsChangedAt)
+        : eq(identityProvider.detailsChangedAt, new Date(args.expectedDetailsChangedAt))
+
+    const result = await db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(identityProvider)
+        .set({
+          lastTestCapture: args.capture,
+          ...(args.outcome === 'success' ? { lastSuccessfulTestAt: new Date() } : {}),
+        })
+        .where(and(eq(identityProvider.id, id), detailsMatch))
+        .returning({ id: identityProvider.id })
+      if (!row) return 'stale' as const
+      if (args.outcome === 'success') {
+        await bumpAuthConfigVersionInTx(tx)
+      }
+      return 'stamped' as const
     })
+
+    if (result === 'stamped') {
+      if (args.outcome === 'success') resetAuth()
+      await invalidateSettingsCache()
+    }
+    return result
   } catch (error) {
-    log.error({ err: error }, 'mark identity provider test succeeded failed')
-    wrapDbError('mark identity provider test succeeded', error)
+    log.error({ err: error }, 'persist identity provider test result failed')
+    wrapDbError('persist identity provider test result', error)
+    throw error
   }
 }
 

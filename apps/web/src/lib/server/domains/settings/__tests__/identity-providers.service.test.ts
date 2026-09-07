@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   connectionAffectingChange,
   deriveVisibility,
+  persistTestResult,
   shouldRenderPublicButton,
   verifiedDomainCount,
 } from '../identity-providers.service'
@@ -113,5 +114,11 @@ describe('identity providers visibility', () => {
         domains: [{ verifiedAt: null }, { verifiedAt: 'x' }, { verifiedAt: 'y' }] as any,
       })
     ).toBe(2)
+  })
+})
+
+describe('persistTestResult', () => {
+  it('is the atomic capture persistence API', () => {
+    expect(typeof persistTestResult).toBe('function')
   })
 })

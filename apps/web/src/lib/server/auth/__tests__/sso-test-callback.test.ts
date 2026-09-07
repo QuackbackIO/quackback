@@ -18,7 +18,7 @@ const hoisted = vi.hoisted(() => ({
   userUpdate: vi.fn(),
   markSsoTestSucceeded: vi.fn(),
   listIdentityProviders: vi.fn(),
-  markTestSucceeded: vi.fn(),
+  persistTestResult: vi.fn(),
 }))
 
 vi.mock('@/lib/server/cache', () => ({
@@ -53,7 +53,7 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
 
 vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
   listIdentityProviders: hoisted.listIdentityProviders,
-  markTestSucceeded: hoisted.markTestSucceeded,
+  persistTestResult: hoisted.persistTestResult,
 }))
 
 import { handleSsoTestCallback, renderSsoTestCallbackHtml } from '../sso-test-callback'
@@ -85,11 +85,34 @@ const customProviderSession = {
   redirectUri: 'https://qb.test/api/auth/oauth2/callback/oidc_custom',
 }
 
+function v2Capture(over: Record<string, unknown> = {}): {
+  version: 2
+  registrationId: string
+  capturedAt: string
+  detailsChangedAtAtStart: string | null
+  outcome: 'success' | 'mapping_failed'
+  identity?: { id: string; email?: string; name?: string; sources: Record<string, string> }
+  claims: Record<string, unknown>
+  replay: { sources: Array<{ source: 'idToken'; claims: Record<string, unknown> }> }
+} {
+  return {
+    version: 2,
+    registrationId: 'sso',
+    capturedAt: '2026-09-07T12:00:00.000Z',
+    detailsChangedAtAtStart: null,
+    outcome: 'success',
+    identity: { id: 'u1', sources: {} },
+    claims: { sub: 'u1' },
+    replay: { sources: [{ source: 'idToken', claims: { sub: 'u1' } }] },
+    ...over,
+  }
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   hoisted.markSsoTestSucceeded.mockResolvedValue(undefined)
   hoisted.listIdentityProviders.mockResolvedValue([])
-  hoisted.markTestSucceeded.mockResolvedValue(undefined)
+  hoisted.persistTestResult.mockResolvedValue('stamped')
 })
 
 describe('handleSsoTestCallback', () => {
@@ -143,21 +166,24 @@ describe('handleSsoTestCallback', () => {
       hoisted.runHandshake.mock.invocationCallOrder[0]
     )
 
-    expect(hoisted.runHandshake).toHaveBeenCalledWith({
-      state: 'state-xyz',
-      code: 'authcode',
-      idpError: null,
-      idpErrorDescription: null,
-      expectedState: 'state-xyz',
-      expectedNonce: 'nonce-xyz',
-      discoveryUrl: 'https://idp/.well-known',
-      tokenEndpoint: 'https://idp/token',
-      jwksUri: 'https://idp/jwks',
-      issuer: 'https://idp',
-      clientId: 'cid',
-      clientSecret: 'csecret',
-      redirectUri: 'https://qb.test/api/auth/oauth2/callback/sso',
-    })
+    expect(hoisted.runHandshake).toHaveBeenCalledWith(
+      expect.objectContaining({
+        state: 'state-xyz',
+        code: 'authcode',
+        idpError: null,
+        idpErrorDescription: null,
+        expectedState: 'state-xyz',
+        expectedNonce: 'nonce-xyz',
+        discoveryUrl: 'https://idp/.well-known',
+        tokenEndpoint: 'https://idp/token',
+        jwksUri: 'https://idp/jwks',
+        issuer: 'https://idp',
+        clientId: 'cid',
+        clientSecret: 'csecret',
+        redirectUri: 'https://qb.test/api/auth/oauth2/callback/sso',
+        registrationId: 'sso',
+      })
+    )
 
     expect(hoisted.cacheSet).toHaveBeenCalledWith(
       'sso-test:result:ssotest_abc',
@@ -214,6 +240,7 @@ describe('handleSsoTestCallback', () => {
       // case-insensitive trim normalization.
       claims: { iss: 'https://idp', sub: 'u1', aud: 'cid', email: '  Admin@ACME.com  ' },
       tokenInfo: { idTokenAlg: 'RS256', hasAccessToken: true, hasRefreshToken: false },
+      capture: v2Capture(),
     }
     hoisted.listIdentityProviders.mockResolvedValueOnce([
       { id: 'idp_sso', registrationId: 'sso', domains: [] },
@@ -248,6 +275,7 @@ describe('handleSsoTestCallback', () => {
       steps: [],
       claims: { iss: 'https://idp', sub: 'u1', aud: 'cid', email: 'someone-else@acme.com' },
       tokenInfo: { idTokenAlg: 'RS256', hasAccessToken: true, hasRefreshToken: false },
+      capture: v2Capture(),
     }
     hoisted.listIdentityProviders.mockResolvedValueOnce([
       { id: 'idp_sso', registrationId: 'sso', domains: [] },
@@ -287,6 +315,7 @@ describe('handleSsoTestCallback', () => {
         department: 'Engineering',
       },
       tokenInfo: { idTokenAlg: 'RS256', hasAccessToken: true, hasRefreshToken: false },
+      capture: v2Capture(),
     })
     hoisted.userFindFirst.mockResolvedValueOnce({ email: 'alice@example.com' })
 
@@ -307,6 +336,7 @@ describe('handleSsoTestCallback', () => {
       steps: [],
       claims: { iss: 'https://idp', sub: 'u1', aud: 'cid' },
       tokenInfo: { idTokenAlg: 'RS256', hasAccessToken: true, hasRefreshToken: false },
+      capture: v2Capture(),
     }
     hoisted.listIdentityProviders.mockResolvedValueOnce([
       { id: 'idp_sso', registrationId: 'sso', domains: [] },
@@ -338,6 +368,7 @@ describe('handleSsoTestCallback', () => {
       steps: [],
       claims: { iss: 'https://idp', sub: 'u1', aud: 'cid' },
       tokenInfo: { idTokenAlg: 'RS256', hasAccessToken: true, hasRefreshToken: false },
+      capture: v2Capture(),
     })
 
     await handleSsoTestCallback({
@@ -347,16 +378,16 @@ describe('handleSsoTestCallback', () => {
       errorDescription: null,
     })
 
-    expect(hoisted.markTestSucceeded).toHaveBeenCalledTimes(1)
-    expect(hoisted.markTestSucceeded.mock.calls[0]![0]).toBe('idp_sso')
-    const capture = hoisted.markTestSucceeded.mock.calls[0]![1] as {
-      registrationId: string
-      identity: { id: string }
-      claims: Record<string, unknown>
+    expect(hoisted.persistTestResult).toHaveBeenCalledTimes(1)
+    expect(hoisted.persistTestResult.mock.calls[0]![0]).toBe('idp_sso')
+    const persist = hoisted.persistTestResult.mock.calls[0]![1] as {
+      outcome: string
+      capture: { registrationId: string; identity?: { id: string } }
     }
-    expect(capture.registrationId).toBe('sso')
-    expect(capture.identity.id).toBe('u1')
-    // Legacy blob stamp MUST fire for 'sso'.
+    expect(persist.outcome).toBe('success')
+    expect(persist.capture.registrationId).toBe('sso')
+    expect(persist.capture.identity?.id).toBe('u1')
+    // Legacy blob stamp MUST fire for 'sso' only after the provider stamp succeeds.
     expect(hoisted.markSsoTestSucceeded).toHaveBeenCalledTimes(1)
   })
 
@@ -377,11 +408,13 @@ describe('handleSsoTestCallback', () => {
         detailsChangedAt: '2026-06-24T10:05:00.000Z', // edited after the test started
       },
     ])
+    hoisted.persistTestResult.mockResolvedValueOnce('stale')
     hoisted.runHandshake.mockResolvedValueOnce({
       ok: true,
       steps: [],
       claims: { iss: 'https://idp', sub: 'u1', aud: 'cid' },
       tokenInfo: { idTokenAlg: 'RS256', hasAccessToken: true, hasRefreshToken: false },
+      capture: v2Capture({ detailsChangedAtAtStart: '2026-06-24T10:00:00.000Z' }),
     })
 
     await handleSsoTestCallback({
@@ -391,7 +424,13 @@ describe('handleSsoTestCallback', () => {
       errorDescription: null,
     })
 
-    expect(hoisted.markTestSucceeded).not.toHaveBeenCalled()
+    expect(hoisted.persistTestResult).toHaveBeenCalledWith(
+      'idp_sso',
+      expect.objectContaining({
+        expectedDetailsChangedAt: '2026-06-24T10:00:00.000Z',
+        outcome: 'success',
+      })
+    )
     expect(hoisted.markSsoTestSucceeded).not.toHaveBeenCalled()
   })
 
@@ -423,6 +462,20 @@ describe('handleSsoTestCallback', () => {
         sources: { id: 'idToken', email: 'idToken', name: 'userinfo' },
       },
       tokenInfo: { idTokenAlg: 'RS256', hasAccessToken: true, hasRefreshToken: false },
+      capture: v2Capture({
+        identity: {
+          id: 'u1',
+          email: 'jane@acme.com',
+          name: 'Jane Diaz',
+          sources: { id: 'idToken', email: 'idToken', name: 'userinfo' },
+        },
+        claims: {
+          sub: 'u1',
+          email: 'jane@acme.com',
+          name: 'Jane Diaz',
+          groups: ['feedback-admins', 'eng'],
+        },
+      }),
     })
 
     await handleSsoTestCallback({
@@ -432,14 +485,13 @@ describe('handleSsoTestCallback', () => {
       errorDescription: null,
     })
 
-    const capture = hoisted.markTestSucceeded.mock.calls[0]![1] as {
-      identity: { email?: string; name?: string }
-      claims: Record<string, unknown>
+    const persist = hoisted.persistTestResult.mock.calls[0]![1] as {
+      capture: { identity?: { email?: string; name?: string }; claims: Record<string, unknown> }
     }
-    expect(capture.identity.email).toBe('jane@acme.com')
-    expect(capture.identity.name).toBe('Jane Diaz')
-    expect(capture.claims.groups).toEqual(['feedback-admins', 'eng'])
-    expect(capture.claims.email).toBe('jane@acme.com')
+    expect(persist.capture.identity?.email).toBe('jane@acme.com')
+    expect(persist.capture.identity?.name).toBe('Jane Diaz')
+    expect(persist.capture.claims.groups).toEqual(['feedback-admins', 'eng'])
+    expect(persist.capture.claims.email).toBe('jane@acme.com')
   })
 
   it('stamps only the provider row (not the legacy blob) for a non-sso registrationId', async () => {
@@ -455,6 +507,7 @@ describe('handleSsoTestCallback', () => {
       steps: [],
       claims: { iss: 'https://idp', sub: 'u2', aud: 'cid' },
       tokenInfo: { idTokenAlg: 'RS256', hasAccessToken: true, hasRefreshToken: false },
+      capture: v2Capture({ registrationId: 'oidc_custom', identity: { id: 'u2', sources: {} } }),
     })
 
     await handleSsoTestCallback({
@@ -465,8 +518,8 @@ describe('handleSsoTestCallback', () => {
     })
 
     // Only the custom provider's row is stamped.
-    expect(hoisted.markTestSucceeded).toHaveBeenCalledTimes(1)
-    expect(hoisted.markTestSucceeded.mock.calls[0]![0]).toBe('idp_custom')
+    expect(hoisted.persistTestResult).toHaveBeenCalledTimes(1)
+    expect(hoisted.persistTestResult.mock.calls[0]![0]).toBe('idp_custom')
     // Legacy blob stamp must NOT fire for a non-sso provider.
     expect(hoisted.markSsoTestSucceeded).not.toHaveBeenCalled()
   })
@@ -491,9 +544,40 @@ describe('handleSsoTestCallback', () => {
     expect(handled?.identityMatched).toBe(false)
     expect(hoisted.userFindFirst).not.toHaveBeenCalled()
     expect(hoisted.markSsoTestSucceeded).not.toHaveBeenCalled()
-    // Neither stamp may fire on failure (guards the stamp block staying inside
-    // `if (result.ok)` — moving it out would unlock enforcement without a pass).
-    expect(hoisted.markTestSucceeded).not.toHaveBeenCalled()
+    // Handshake validation failures cannot become trusted preview captures.
+    expect(hoisted.persistTestResult).not.toHaveBeenCalled()
+  })
+
+  it('mapping failure captures claims without unlocking enforcement', async () => {
+    hoisted.cacheGet.mockResolvedValueOnce(validSession)
+    hoisted.listIdentityProviders.mockResolvedValueOnce([
+      { id: 'idp_sso', registrationId: 'sso', domains: [] },
+    ])
+    const failedCapture = v2Capture({
+      outcome: 'mapping_failed',
+      identity: { id: 'u1', sources: { id: 'idToken' } },
+      claims: { sub: 'u1', upn: 'jane@acme.com' },
+    })
+    hoisted.runHandshake.mockResolvedValueOnce({
+      ok: false,
+      stage: 'claim-check',
+      hint: 'No email address was released',
+      steps: [],
+      capture: failedCapture,
+    })
+
+    await handleSsoTestCallback({
+      state: 'state-xyz',
+      code: 'authcode',
+      error: null,
+      errorDescription: null,
+    })
+
+    expect(hoisted.persistTestResult).toHaveBeenCalledWith(
+      'idp_sso',
+      expect.objectContaining({ outcome: 'mapping_failed', capture: failedCapture })
+    )
+    expect(hoisted.markSsoTestSucceeded).not.toHaveBeenCalled()
   })
 
   it('forwards IdP-side error params to the handshake', async () => {

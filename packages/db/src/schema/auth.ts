@@ -615,9 +615,11 @@ export type SourceUnavailableReason = 'absent' | 'unreadable' | 'fetch_failed'
  * JSON-only snapshot of one identity source from an SSO test. Either a decoded
  * claims object or a closed reason the source could not be loaded.
  */
-export type SourceSnapshot =
-  | { source: IdentitySource; claims: Record<string, unknown> }
-  | { source: IdentitySource; unavailable: SourceUnavailableReason }
+export type SourceSnapshot = {
+  source: IdentitySource
+  claims?: Record<string, unknown>
+  unavailable?: SourceUnavailableReason
+}
 
 /**
  * Identity provider — the single source of truth for an OIDC IdP.
@@ -630,16 +632,41 @@ export type SourceSnapshot =
  * migration. Discovery-doc installs leave the manual endpoint columns
  * null; manual installs leave `discoveryUrl` null.
  */
+export type CapturedIdentity = {
+  id: string
+  email?: string
+  name?: string
+  image?: string
+  sources: Partial<Record<'id' | 'email' | 'name' | 'image', string>>
+  paths?: Partial<Record<'id' | 'email' | 'name' | 'image', string>>
+}
+
+/**
+ * Stored SSO test capture. V1 rows omit `version`/`replay`. V2 rows set
+ * `version: 2` and include source snapshots for exact replay.
+ */
 export type IdentityProviderTestCapture = {
+  version?: 2
   registrationId: string
   capturedAt: string
-  identity: {
-    id: string
-    email?: string
-    name?: string
-    sources: Partial<Record<'id' | 'email' | 'name', string>>
-  }
+  detailsChangedAtAtStart?: string | null
+  outcome?: 'success' | 'mapping_failed'
+  identity?: CapturedIdentity
   claims: Record<string, unknown>
+  replay?: { sources: SourceSnapshot[] }
+}
+
+export type IdentityProviderTestCaptureV1 = IdentityProviderTestCapture & {
+  identity: CapturedIdentity
+  version?: never
+  replay?: never
+}
+
+export type IdentityProviderTestCaptureV2 = IdentityProviderTestCapture & {
+  version: 2
+  detailsChangedAtAtStart: string | null
+  outcome: 'success' | 'mapping_failed'
+  replay: { sources: SourceSnapshot[] }
 }
 
 export const identityProvider = pgTable(

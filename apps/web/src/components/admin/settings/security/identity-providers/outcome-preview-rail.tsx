@@ -10,7 +10,7 @@ import { MENU_LABEL } from '@/components/ui/menu'
 import { cn } from '@/lib/shared/utils'
 import { getClaimByPath } from '@/lib/shared/oidc-claim-mapping'
 import { resolveSsoRoleMatch } from '@/lib/shared/resolve-sso-role'
-import type { SsoTestCapture } from '../sso/use-sso-test-sign-in'
+import { captureIdentityCaption, type SsoTestCapture } from '@/lib/shared/sso-test-capture'
 import { TestSignInButton } from '../sso/test-sign-in-button'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import { AttributeWritesPreview } from './attribute-writes-preview'
@@ -63,7 +63,7 @@ export function OutcomePreviewRail({
   const match = resolveSsoRoleMatch(claims, roleMapping ?? undefined)
   const matchedRule = match && roleMapping ? roleMapping.rules[match.ruleIndex] : undefined
 
-  const provenance = formatProvenance(capture.identity.sources)
+  const provenance = formatProvenance(capture.identity?.sources ?? {})
 
   return (
     <aside className="flex flex-col gap-4 border-t border-border/40 bg-muted/20 px-4 py-5 text-[12.5px] lg:border-t-0 lg:border-l">
@@ -71,7 +71,7 @@ export function OutcomePreviewRail({
         <h3 className={cn(MENU_LABEL, 'font-mono')}>Outcome preview</h3>
         <div className="mt-2 font-medium">Last test sign-in</div>
         <div className="mt-0.5 text-muted-foreground">
-          {capture.identity.email ?? capture.identity.id} · <TimeAgo date={capture.capturedAt} /> ·{' '}
+          {captureIdentityCaption(capture)} · <TimeAgo date={capture.capturedAt} /> ·{' '}
           <TestSignInButton
             registrationId={registrationId}
             variant="link"
@@ -158,7 +158,9 @@ function formatValue(value: unknown): string {
   return String(value)
 }
 
-function formatProvenance(sources: SsoTestCapture['identity']['sources']): string | null {
+function formatProvenance(
+  sources: NonNullable<SsoTestCapture['identity']>['sources']
+): string | null {
   const seen: string[] = []
   for (const key of ['id', 'email', 'name'] as const) {
     const src = sources[key]

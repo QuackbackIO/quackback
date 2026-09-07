@@ -26,9 +26,16 @@ import { z } from 'zod'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { DiagnosticStep, HandshakeStage } from '@/lib/server/auth/sso-test-handshake'
+import type { ProfileOutcome } from '@/lib/shared/sso-profile-outcome'
+import type { SsoTestCaptureV2 } from '@/lib/shared/sso-test-capture'
 import type { JsonValue } from '@/lib/server/audit/log'
 import { authorizeRequestFor } from '@/lib/shared/oidc-request'
-import { allowsMissingEmail, identityMappingFor } from '@/lib/shared/oidc-claim-mapping'
+import {
+  allowsMissingEmail,
+  claimMappingFor,
+  identityMappingFor,
+  type IdentityProviderClaimMapping,
+} from '@/lib/shared/oidc-claim-mapping'
 import { ssoTestResultKey, ssoTestSessionKey } from '@/lib/shared/sso-test-keys'
 import type { IdentityMapping } from '@/lib/server/auth/resolve-identity'
 
@@ -65,6 +72,8 @@ type TestSession = {
   requestedPrompt?: string
   /** Identity sources and claim paths — the same mapping production uses. */
   identityMapping?: IdentityMapping
+  /** Full mapping snapshotted at start. Pre-deploy sessions may omit this. */
+  claimMapping?: IdentityProviderClaimMapping
   /** The provider's `detailsChangedAt` at test-start. The callback only stamps
    *  `lastSuccessfulTestAt` when this still matches — so a mid-test edit to the
    *  provider can't let a stale test unlock enforcement for the new config. */
@@ -188,6 +197,7 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
       tokenAuth: request.tokenAuth,
       requestedPrompt: request.prompt,
       identityMapping: identityMappingFor(provider.claimMapping),
+      claimMapping: claimMappingFor(provider.claimMapping),
       adminUserId: user.id,
       startedAt: Date.now(),
       detailsChangedAt: provider.detailsChangedAt,
@@ -256,6 +266,8 @@ export type SsoTestDiagnostic = {
           image?: string
           sources: Partial<Record<'id' | 'email' | 'name' | 'image', string>>
         }
+        mappingOutcome?: ProfileOutcome
+        capture?: SsoTestCaptureV2
       }
     | {
         ok: false
@@ -263,13 +275,14 @@ export type SsoTestDiagnostic = {
         errorCode?: string
         hint: string
         steps: DiagnosticStep[]
+        mappingOutcome?: ProfileOutcome
+        capture?: SsoTestCaptureV2
+        allClaims?: Record<string, JsonValue>
       }
   /**
-   * Set when result.ok and the IdP-returned `email` claim
-   * case-insensitively matches the admin who started the test.
-   * When true, `principal.last_sso_sign_in_at` has been updated
-   * for that admin and the per-domain SSO enforcement bootstrap
-   * gate is satisfied for the standard 7-day window.
+   * Informational only. True when the IdP-returned email matches the admin
+   * who started the test. It does not write `principal.last_sso_sign_in_at`
+   * and is not a bootstrap or enforcement gate.
    */
   identityMatched?: boolean
 }

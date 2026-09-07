@@ -3,6 +3,7 @@
  * and the missing-email / placeholder outcome. Random minting stays server-only.
  */
 
+import type { JsonValue } from './json'
 import type { BindingState, FieldProvenance, ResolveWarning } from './sso-claim-binder'
 
 export type ProfileOutcomeKind =
@@ -17,7 +18,7 @@ export type ProfileOutcome = {
   emailVerified: boolean
   placeholderEmail: boolean
   provenance: Partial<Record<'id' | 'email' | 'name' | 'image', FieldProvenance>>
-  acceptedClaims: Record<string, unknown>
+  acceptedClaims: Record<string, JsonValue>
   warnings: readonly ResolveWarning[]
 }
 
@@ -73,7 +74,7 @@ export function finalizeProfileOutcome(
   const { identity, acceptedClaims, warnings, provenance } = bound
   const base = {
     provenance: provenance ?? {},
-    acceptedClaims,
+    acceptedClaims: acceptedClaims as Record<string, JsonValue>,
     warnings: warnings ?? [],
   }
   if (!identity.id) {

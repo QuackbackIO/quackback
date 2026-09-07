@@ -66,6 +66,10 @@ export type {
   IdentityProviderClaimMapping,
   SourceSnapshot,
   SourceUnavailableReason,
+  CapturedIdentity,
+  IdentityProviderTestCapture,
+  IdentityProviderTestCaptureV1,
+  IdentityProviderTestCaptureV2,
 } from '@quackback/db/types'
 
 // Schema types needed by client components (type-only = no side effects)

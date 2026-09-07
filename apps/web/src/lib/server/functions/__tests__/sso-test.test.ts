@@ -18,7 +18,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { identityMappingFor } from '@/lib/shared/oidc-claim-mapping'
+import { claimMappingFor, identityMappingFor } from '@/lib/shared/oidc-claim-mapping'
 
 type AnyHandler = (args: { data: Record<string, unknown> }) => Promise<unknown>
 
@@ -354,6 +354,7 @@ describe('startSsoTestFn', () => {
           emailClaim?: string
           nameClaim?: string
         }
+        claimMapping?: unknown
       },
     ]
     expect(session.identityMapping).toEqual(identityMappingFor(claimMapping))
@@ -363,6 +364,7 @@ describe('startSsoTestFn', () => {
       emailClaim: 'upn',
       nameClaim: 'preferred_username',
     })
+    expect(session.claimMapping).toEqual(claimMappingFor(claimMapping))
   })
 })
 

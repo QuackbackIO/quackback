@@ -34,6 +34,10 @@ export type {
   IdentityProviderClaimMapping,
   SourceSnapshot,
   SourceUnavailableReason,
+  CapturedIdentity,
+  IdentityProviderTestCapture,
+  IdentityProviderTestCaptureV1,
+  IdentityProviderTestCaptureV2,
 } from './schema/auth'
 
 // Status categories (defined here to avoid circular imports in tests)
