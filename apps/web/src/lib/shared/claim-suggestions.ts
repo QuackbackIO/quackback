@@ -122,6 +122,80 @@ export type AttributeClaimPathSuggestion = {
   description?: string
 }
 
+export type IdentityClaimPathSuggestion = {
+  path: string
+  description?: string
+  /** Arrays, booleans, and null cannot bind identity scalars. Shown, never unwrapped. */
+  unsuitable?: boolean
+}
+
+/** Protocol claims that are never identity paths. `sub` is kept. */
+const IDENTITY_PROTOCOL_CLAIMS = new Set([
+  'iss',
+  'aud',
+  'exp',
+  'iat',
+  'nbf',
+  'jti',
+  'nonce',
+  'azp',
+  'at_hash',
+  'c_hash',
+  'sid',
+  'rh',
+  'uti',
+  'aio',
+  'ver',
+  'amr',
+  'acr',
+])
+
+const IDENTITY_KIND_HINTS: Record<string, { id: string[]; email: string[]; name: string[] }> = {
+  entra: {
+    id: ['oid', 'sub'],
+    email: ['email', 'upn', 'preferred_username'],
+    name: ['name'],
+  },
+  okta: {
+    id: ['sub'],
+    email: ['email', 'preferred_username'],
+    name: ['name'],
+  },
+  auth0: {
+    id: ['sub'],
+    email: ['email'],
+    name: ['name'],
+  },
+  keycloak: {
+    id: ['sub'],
+    email: ['email'],
+    name: ['name', 'preferred_username'],
+  },
+  google: {
+    id: ['sub'],
+    email: ['email'],
+    name: ['name'],
+  },
+  other: {
+    id: ['sub'],
+    email: ['email', 'mail', 'upn'],
+    name: ['name', 'preferred_username'],
+  },
+}
+
+/** Kind-specific aliases only. Never written automatically. */
+export function identityClaimHints(
+  kind?: string | null,
+  field?: 'id' | 'email' | 'name'
+): string[] {
+  const hints = IDENTITY_KIND_HINTS[kind ?? ''] ?? IDENTITY_KIND_HINTS.other
+  if (!hints) return field === 'id' || !field ? ['sub'] : []
+  if (field === 'id') return hints.id
+  if (field === 'email') return hints.email
+  if (field === 'name') return hints.name
+  return [...new Set([...hints.id, ...hints.email, ...hints.name])]
+}
+
 function truncatePreview(value: JsonValue, max = 48): string {
   let text: string
   if (Array.isArray(value)) {
@@ -169,6 +243,74 @@ export function deriveAttributeClaimPaths(
         record(`${key}.${childKey}`, childValue as JsonValue)
       }
     }
+  }
+
+  return out
+}
+
+/**
+ * Scalar claim paths for Unique user identifier / Email / Display name.
+ * Always includes `sub` (attribute suggestions exclude it). Array leaves are
+ * returned as unsuitable rather than unwrapped.
+ */
+export function deriveIdentityClaimPaths(
+  allClaims: Record<string, JsonValue>,
+  opts?: { kind?: string | null; field?: 'id' | 'email' | 'name' }
+): IdentityClaimPathSuggestion[] {
+  const out: IdentityClaimPathSuggestion[] = []
+  const seen = new Set<string>()
+
+  const record = (path: string, value: JsonValue | undefined) => {
+    if (seen.has(path)) return
+    seen.add(path)
+    if (value === undefined) {
+      out.push({ path })
+      return
+    }
+    if (Array.isArray(value)) {
+      out.push({
+        path,
+        description: truncatePreview(value),
+        unsuitable: true,
+      })
+      return
+    }
+    if (!isLeaf(value)) return
+    if (typeof value === 'boolean' || value === null) {
+      out.push({
+        path,
+        description: truncatePreview(value),
+        unsuitable: true,
+      })
+      return
+    }
+    out.push({ path, description: truncatePreview(value) })
+  }
+
+  for (const [key, value] of Object.entries(allClaims)) {
+    if (IDENTITY_PROTOCOL_CLAIMS.has(key)) continue
+    if (key.includes('://')) {
+      record(key, value)
+      continue
+    }
+    if (isLeaf(value)) {
+      record(key, value)
+    } else if (value !== null && typeof value === 'object') {
+      for (const [childKey, childValue] of Object.entries(value)) {
+        if (childKey.includes('://')) continue
+        record(`${key}.${childKey}`, childValue as JsonValue)
+      }
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(allClaims, 'sub')) {
+    record('sub', allClaims.sub)
+  } else {
+    record('sub', undefined)
+  }
+
+  for (const hint of identityClaimHints(opts?.kind, opts?.field)) {
+    if (!seen.has(hint)) record(hint, undefined)
   }
 
   return out

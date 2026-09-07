@@ -7,9 +7,13 @@
  */
 import { describe, it, expect } from 'vitest'
 import {
+  availableAddTargets,
+  buildClaimsTableModel,
+  hasCustomProfileClaims,
   identityMappingIssue,
   mergeClaimMapping,
   normalizeAttributeMapping,
+  normalizeProfileClaims,
   normalizeRoleMapping,
   withAllowMissingEmail,
 } from '../provider-shared'
@@ -159,5 +163,135 @@ describe('identityMappingIssue', () => {
     expect(
       identityMappingIssue({ role: { claimPath: 'groups', rules: [], syncOnEverySignIn: true } })
     ).toMatch(/no rules/i)
+  })
+
+  it('healthy default providers have no mapping warning pill', () => {
+    expect(identityMappingIssue(null)).toBeNull()
+    expect(identityMappingIssue({})).toBeNull()
+    expect(identityMappingIssue({ profile: { claims: { id: 'sub', email: 'email' } } })).toBeNull()
+    expect(identityMappingIssue({ profile: { sources: ['idToken', 'userinfo'] } })).toBeNull()
+    expect(identityMappingIssue({ profile: { allowMissingEmail: true } })).toBeNull()
+  })
+
+  it('flags an explicitly blank supported path', () => {
+    expect(identityMappingIssue({ profile: { claims: { email: '  ' } } })).toMatch(/email/i)
+    expect(identityMappingIssue({ profile: { claims: { id: ' ' } } })).toMatch(/identifier/i)
+  })
+
+  it('flags sources that contain no valid identity source', () => {
+    expect(
+      identityMappingIssue({
+        profile: { sources: ['nope' as unknown as 'idToken'] },
+      })
+    ).toMatch(/sources/i)
+  })
+})
+
+describe('normalizeProfileClaims', () => {
+  it('omits default email, name, and default sources', () => {
+    expect(
+      normalizeProfileClaims({
+        claims: { email: 'email', name: 'name' },
+        sources: ['idToken', 'userinfo'],
+      })
+    ).toBeUndefined()
+  })
+
+  it('keeps explicit id: sub because it disables userinfo id fallback', () => {
+    expect(normalizeProfileClaims({ claims: { id: 'sub' } })).toEqual({
+      claims: { id: 'sub' },
+    })
+  })
+
+  it('keeps a custom email path and missing-email policy', () => {
+    expect(
+      normalizeProfileClaims({
+        allowMissingEmail: true,
+        claims: { email: 'upn' },
+      })
+    ).toEqual({ allowMissingEmail: true, claims: { email: 'upn' } })
+  })
+})
+
+describe('hasCustomProfileClaims', () => {
+  it('is false for missing-email or default display values', () => {
+    expect(hasCustomProfileClaims(null)).toBe(false)
+    expect(hasCustomProfileClaims({ profile: { allowMissingEmail: true } })).toBe(false)
+    expect(hasCustomProfileClaims({ profile: { claims: { email: 'email' } } })).toBe(false)
+  })
+
+  it('is true for explicit identifier or a custom email/name path', () => {
+    expect(hasCustomProfileClaims({ profile: { claims: { id: 'sub' } } })).toBe(true)
+    expect(hasCustomProfileClaims({ profile: { claims: { email: 'upn' } } })).toBe(true)
+  })
+})
+
+describe('buildClaimsTableModel', () => {
+  const defs = [
+    { key: 'department', label: 'Department', type: 'string' },
+    { key: 'plan', label: 'Plan', type: 'string' },
+  ]
+
+  it('always shows required identifier/email and default name rows', () => {
+    const model = buildClaimsTableModel({ mapping: null, definitions: defs })
+    expect(model.required.map((r) => r.field)).toEqual(['id', 'email'])
+    expect(model.required.every((r) => r.isDefault)).toBe(true)
+    const name = model.additional.find((r) => r.kind === 'profile' && r.field === 'name')
+    expect(name).toMatchObject({ path: 'name', isDefault: true })
+  })
+
+  it('pins explicit sub as a custom identifier', () => {
+    const model = buildClaimsTableModel({
+      mapping: { profile: { claims: { id: 'sub' } } },
+      definitions: [],
+    })
+    expect(model.required[0]).toMatchObject({ field: 'id', path: 'sub', isDefault: false })
+  })
+
+  it('preserves orphaned and duplicate People rows by baseline index', () => {
+    const model = buildClaimsTableModel({
+      mapping: {
+        attributes: {
+          map: [
+            { claimPath: 'dept', attributeKey: 'department' },
+            { claimPath: 'org.department', attributeKey: 'department' },
+            { claimPath: 'cc', attributeKey: 'cost_center' },
+          ],
+        },
+      },
+      definitions: defs,
+    })
+    const people = model.additional.filter((r) => r.kind === 'people')
+    expect(people).toHaveLength(3)
+    expect(people[0]).toMatchObject({ baselineIndex: 0, duplicate: true, orphaned: false })
+    expect(people[1]).toMatchObject({ baselineIndex: 1, duplicate: true })
+    expect(people[2]).toMatchObject({
+      baselineIndex: 2,
+      attributeKey: 'cost_center',
+      orphaned: true,
+    })
+  })
+})
+
+describe('availableAddTargets', () => {
+  it('offers Role when absent and unused People keys only', () => {
+    const defs = [
+      { key: 'department', label: 'Department', type: 'string' },
+      { key: 'plan', label: 'Plan', type: 'string' },
+    ]
+    expect(availableAddTargets({ mapping: null, definitions: defs })).toEqual([
+      { kind: 'role' },
+      { kind: 'people', key: 'department', label: 'Department', attrType: 'string' },
+      { kind: 'people', key: 'plan', label: 'Plan', attrType: 'string' },
+    ])
+    expect(
+      availableAddTargets({
+        mapping: {
+          role: { claimPath: 'groups', rules: [{ whenContains: 'eng', role: 'member' }] },
+          attributes: { map: [{ claimPath: 'dept', attributeKey: 'department' }] },
+        },
+        definitions: defs,
+      })
+    ).toEqual([{ kind: 'people', key: 'plan', label: 'Plan', attrType: 'string' }])
   })
 })

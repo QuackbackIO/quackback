@@ -16,6 +16,8 @@ export interface AutocompleteSuggestion {
   value: string
   label?: string
   description?: string
+  /** Shown but not selectable (e.g. non-bindable identity claims). */
+  disabled?: boolean
 }
 
 interface AutocompleteProps {
@@ -112,7 +114,11 @@ export function Autocomplete({
                     <CommandItem
                       key={s.value}
                       value={[s.value, s.label, s.description].filter(Boolean).join(' ')}
-                      onSelect={() => commit(s.value)}
+                      disabled={s.disabled}
+                      onSelect={() => {
+                        if (s.disabled) return
+                        commit(s.value)
+                      }}
                     >
                       <CheckIcon
                         className={cn(

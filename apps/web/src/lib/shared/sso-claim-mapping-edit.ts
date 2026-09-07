@@ -375,6 +375,57 @@ export function sourcesAreDefault(sources: IdentitySource[] | undefined): boolea
   return JSON.stringify(sources) === JSON.stringify(DEFAULT_IDENTITY_SOURCES)
 }
 
+function roleRuleIdentity(rule: unknown): string | null {
+  if (!isRecord(rule)) return null
+  if (typeof rule.whenContains !== 'string' || typeof rule.role !== 'string') return null
+  return `${rule.whenContains}\0${rule.role}`
+}
+
+/** After identities are a submultiset of before: remove extras, then permute survivors. */
+function subsetPermuteOps(
+  beforeRows: unknown[],
+  afterRows: unknown[],
+  identity: (row: unknown) => string | null,
+  removeOp: (index: number) => ClaimMappingOperation,
+  reorderOp?: (from: number, to: number) => ClaimMappingOperation
+): ClaimMappingOperation[] | null {
+  if (afterRows.length > beforeRows.length) return null
+  const beforeKeys = beforeRows.map(identity)
+  const afterKeys = afterRows.map(identity)
+  if (beforeKeys.some((key) => key == null) || afterKeys.some((key) => key == null)) return null
+  const need = new Map<string, number>()
+  for (const key of afterKeys) need.set(key!, (need.get(key!) ?? 0) + 1)
+  const have = new Map<string, number>()
+  for (const key of beforeKeys) have.set(key!, (have.get(key!) ?? 0) + 1)
+  for (const [key, count] of need) {
+    if ((have.get(key) ?? 0) < count) return null
+  }
+  const ops: ClaimMappingOperation[] = []
+  const working = [...beforeKeys] as string[]
+  for (let i = working.length - 1; i >= 0; i--) {
+    const key = working[i]
+    if ((have.get(key) ?? 0) > (need.get(key) ?? 0)) {
+      ops.push(removeOp(i))
+      working.splice(i, 1)
+      have.set(key, (have.get(key) ?? 1) - 1)
+    }
+  }
+  if (working.length !== afterKeys.length) return null
+  if (!reorderOp) {
+    return working.every((key, i) => key === afterKeys[i]) ? ops : null
+  }
+  for (let i = 0; i < afterKeys.length; i++) {
+    const want = afterKeys[i]!
+    if (working[i] === want) continue
+    const from = working.indexOf(want, i)
+    if (from < 0) return null
+    working.splice(from, 1)
+    working.splice(i, 0, want)
+    ops.push(reorderOp(from, i))
+  }
+  return ops
+}
+
 /** Diff supported editor state against stored JSON into closed operations. */
 export function diffClaimMappingOperations(
   before: unknown,
@@ -413,19 +464,34 @@ export function diffClaimMappingOperations(
     if (beforeSync !== afterSync) ops.push({ op: 'setRoleSync', syncOnEverySignIn: afterSync })
     const beforeRules = Array.isArray(beforeRole?.rules) ? beforeRole.rules : []
     const afterRules = afterRole.rules ?? []
-    const commonRules = Math.min(beforeRules.length, afterRules.length)
-    for (let i = 0; i < commonRules; i++) {
-      const left = beforeRules[i]
-      const right = afterRules[i]
-      if (!isRecord(left) || left.whenContains !== right.whenContains || left.role !== right.role) {
-        ops.push({ op: 'editRoleRule', index: i, rule: right })
+    const aligned = subsetPermuteOps(
+      beforeRules,
+      afterRules,
+      roleRuleIdentity,
+      (index) => ({ op: 'removeRoleRule', index }),
+      (from, to) => ({ op: 'reorderRoleRule', from, to })
+    )
+    if (aligned) {
+      ops.push(...aligned)
+    } else {
+      const commonRules = Math.min(beforeRules.length, afterRules.length)
+      for (let i = 0; i < commonRules; i++) {
+        const left = beforeRules[i]
+        const right = afterRules[i]
+        if (
+          !isRecord(left) ||
+          left.whenContains !== right.whenContains ||
+          left.role !== right.role
+        ) {
+          ops.push({ op: 'editRoleRule', index: i, rule: right })
+        }
       }
-    }
-    for (let i = beforeRules.length - 1; i >= commonRules; i--) {
-      ops.push({ op: 'removeRoleRule', index: i })
-    }
-    for (let i = commonRules; i < afterRules.length; i++) {
-      ops.push({ op: 'insertRoleRule', index: i, rule: afterRules[i] })
+      for (let i = beforeRules.length - 1; i >= commonRules; i--) {
+        ops.push({ op: 'removeRoleRule', index: i })
+      }
+      for (let i = commonRules; i < afterRules.length; i++) {
+        ops.push({ op: 'insertRoleRule', index: i, rule: afterRules[i] })
+      }
     }
   }
 
@@ -433,23 +499,36 @@ export function diffClaimMappingOperations(
   const afterAttrs = proposed?.attributes ?? null
   const beforeMap = Array.isArray(beforeAttrs?.map) ? beforeAttrs.map : []
   const afterMap = afterAttrs?.map ?? []
-  const commonMap = Math.min(beforeMap.length, afterMap.length)
-  for (let i = 0; i < commonMap; i++) {
-    const left = beforeMap[i]
-    const right = afterMap[i]
-    if (
-      !isRecord(left) ||
-      left.claimPath !== right.claimPath ||
-      left.attributeKey !== right.attributeKey
-    ) {
-      ops.push({ op: 'editPeopleMapping', index: i, entry: right })
+  const peopleIdentity = (row: unknown) => {
+    if (!isRecord(row)) return null
+    if (typeof row.claimPath !== 'string' || typeof row.attributeKey !== 'string') return null
+    return `${row.claimPath}\0${row.attributeKey}`
+  }
+  const peopleAligned = subsetPermuteOps(beforeMap, afterMap, peopleIdentity, (index) => ({
+    op: 'removePeopleMapping',
+    index,
+  }))
+  if (peopleAligned) {
+    ops.push(...peopleAligned)
+  } else {
+    const commonMap = Math.min(beforeMap.length, afterMap.length)
+    for (let i = 0; i < commonMap; i++) {
+      const left = beforeMap[i]
+      const right = afterMap[i]
+      if (
+        !isRecord(left) ||
+        left.claimPath !== right.claimPath ||
+        left.attributeKey !== right.attributeKey
+      ) {
+        ops.push({ op: 'editPeopleMapping', index: i, entry: right })
+      }
     }
-  }
-  for (let i = beforeMap.length - 1; i >= commonMap; i--) {
-    ops.push({ op: 'removePeopleMapping', index: i })
-  }
-  for (let i = commonMap; i < afterMap.length; i++) {
-    ops.push({ op: 'insertPeopleMapping', index: i, entry: afterMap[i] })
+    for (let i = beforeMap.length - 1; i >= commonMap; i--) {
+      ops.push({ op: 'removePeopleMapping', index: i })
+    }
+    for (let i = commonMap; i < afterMap.length; i++) {
+      ops.push({ op: 'insertPeopleMapping', index: i, entry: afterMap[i] })
+    }
   }
   const beforeOverride = beforeAttrs?.overrideExisting === true
   const afterOverride = afterAttrs?.overrideExisting === true

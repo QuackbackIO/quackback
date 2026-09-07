@@ -5,8 +5,12 @@
  */
 
 import { Autocomplete } from '@/components/ui/autocomplete'
-import { deriveAttributeClaimPaths, deriveClaimSuggestions } from '@/lib/shared/claim-suggestions'
-import type { SsoTestCapture } from '@/lib/shared/sso-test-capture'
+import {
+  deriveAttributeClaimPaths,
+  deriveClaimSuggestions,
+  deriveIdentityClaimPaths,
+} from '@/lib/shared/claim-suggestions'
+import { captureSuggestionClaims, type SsoTestCapture } from '@/lib/shared/sso-test-capture'
 import { TestSignInButton } from '../sso/test-sign-in-button'
 import { useSsoTestSignIn } from '../sso/use-sso-test-sign-in'
 
@@ -16,15 +20,6 @@ function fixtureFor(
 ): SsoTestCapture | null {
   if (capture && capture.registrationId === registrationId) return capture
   return null
-}
-
-/** Prefer a mapping-failure capture over an earlier success for the same provider. */
-export function matchingSessionCapture(
-  registrationId: string,
-  lastCapture: SsoTestCapture | null | undefined,
-  lastSuccess: SsoTestCapture | null | undefined
-): SsoTestCapture | null {
-  return fixtureFor(registrationId, lastCapture) ?? fixtureFor(registrationId, lastSuccess)
 }
 
 export function ClaimPathInput({
@@ -37,6 +32,8 @@ export function ClaimPathInput({
   disabled,
   capture,
   suggestionsFor = 'role',
+  providerKind,
+  identityField,
 }: {
   value: string
   onChange: (next: string) => void
@@ -45,24 +42,44 @@ export function ClaimPathInput({
   placeholder?: string
   ariaLabel: string
   disabled?: boolean
-  /** Session or persisted fixture. Falls back to the sitting's lastCapture. */
+  /** Session or persisted fixture. Shared with the preview rail. */
   capture?: SsoTestCapture | null
   /** Role suggestions are array-of-string paths; attribute suggestions are
-   *  scalar and array leaves, including profile claims. */
-  suggestionsFor?: 'role' | 'attribute'
+   *  scalar and array leaves, including profile claims. Identity includes
+   *  `sub` and may mark array candidates unsuitable. */
+  suggestionsFor?: 'role' | 'attribute' | 'identity'
+  providerKind?: string | null
+  identityField?: 'id' | 'email' | 'name'
 }) {
   const { lastSuccess, lastCapture } = useSsoTestSignIn()
   const fixture =
-    matchingSessionCapture(registrationId, lastCapture, lastSuccess) ??
-    fixtureFor(registrationId, capture)
-  const pathSuggestions = fixture
-    ? suggestionsFor === 'attribute'
-      ? deriveAttributeClaimPaths(fixture.claims).map((s) => ({
-          value: s.path,
-          description: s.description,
-        }))
-      : deriveClaimSuggestions(fixture.claims).paths.map((p) => ({ value: p }))
-    : []
+    fixtureFor(registrationId, capture) ??
+    fixtureFor(registrationId, lastCapture) ??
+    fixtureFor(registrationId, lastSuccess)
+  const pathSuggestions = (() => {
+    if (suggestionsFor === 'identity') {
+      const claims = fixture ? captureSuggestionClaims(fixture) : {}
+      return deriveIdentityClaimPaths(claims, {
+        kind: providerKind,
+        field: identityField,
+      }).map((s) => ({
+        value: s.path,
+        description: s.unsuitable
+          ? [s.description, 'Not a scalar identity claim'].filter(Boolean).join(' · ')
+          : s.description,
+        disabled: s.unsuitable === true,
+      }))
+    }
+    if (!fixture) return []
+    const claims = captureSuggestionClaims(fixture)
+    if (suggestionsFor === 'attribute') {
+      return deriveAttributeClaimPaths(claims).map((s) => ({
+        value: s.path,
+        description: s.description,
+      }))
+    }
+    return deriveClaimSuggestions(claims).paths.map((p) => ({ value: p }))
+  })()
 
   return (
     <Autocomplete
@@ -92,8 +109,9 @@ export function ClaimPathInput({
 export function useClaimSuggestions(registrationId: string, capture?: SsoTestCapture | null) {
   const { lastSuccess, lastCapture } = useSsoTestSignIn()
   const fixture =
-    matchingSessionCapture(registrationId, lastCapture, lastSuccess) ??
+    fixtureFor(registrationId, lastCapture) ??
+    fixtureFor(registrationId, lastSuccess) ??
     fixtureFor(registrationId, capture)
   if (!fixture) return null
-  return deriveClaimSuggestions(fixture.claims)
+  return deriveClaimSuggestions(captureSuggestionClaims(fixture))
 }
