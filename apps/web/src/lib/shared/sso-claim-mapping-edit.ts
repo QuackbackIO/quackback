@@ -412,6 +412,30 @@ function reorderRoleRuleOps(
   return ops
 }
 
+/** When after is a subsequence of before, emit whole-row removals instead of index edits. */
+function subsequenceRemoveOps(
+  beforeRows: unknown[],
+  afterRows: unknown[],
+  identity: (row: unknown) => string | null,
+  removeOp: (index: number) => ClaimMappingOperation
+): ClaimMappingOperation[] | null {
+  if (afterRows.length >= beforeRows.length) return null
+  const beforeKeys = beforeRows.map(identity)
+  const afterKeys = afterRows.map(identity)
+  if (beforeKeys.some((key) => key == null) || afterKeys.some((key) => key == null)) return null
+  let afterIndex = 0
+  const removed: number[] = []
+  for (let i = 0; i < beforeKeys.length; i++) {
+    if (afterIndex < afterKeys.length && beforeKeys[i] === afterKeys[afterIndex]) {
+      afterIndex += 1
+    } else {
+      removed.push(i)
+    }
+  }
+  if (afterIndex !== afterKeys.length) return null
+  return removed.reverse().map(removeOp)
+}
+
 /** Diff supported editor state against stored JSON into closed operations. */
 export function diffClaimMappingOperations(
   before: unknown,
@@ -451,8 +475,14 @@ export function diffClaimMappingOperations(
     const beforeRules = Array.isArray(beforeRole?.rules) ? beforeRole.rules : []
     const afterRules = afterRole.rules ?? []
     const reorders = reorderRoleRuleOps(beforeRules, afterRules)
+    const removals = subsequenceRemoveOps(beforeRules, afterRules, roleRuleIdentity, (index) => ({
+      op: 'removeRoleRule',
+      index,
+    }))
     if (reorders) {
       ops.push(...reorders)
+    } else if (removals) {
+      ops.push(...removals)
     } else {
       const commonRules = Math.min(beforeRules.length, afterRules.length)
       for (let i = 0; i < commonRules; i++) {
@@ -479,23 +509,36 @@ export function diffClaimMappingOperations(
   const afterAttrs = proposed?.attributes ?? null
   const beforeMap = Array.isArray(beforeAttrs?.map) ? beforeAttrs.map : []
   const afterMap = afterAttrs?.map ?? []
-  const commonMap = Math.min(beforeMap.length, afterMap.length)
-  for (let i = 0; i < commonMap; i++) {
-    const left = beforeMap[i]
-    const right = afterMap[i]
-    if (
-      !isRecord(left) ||
-      left.claimPath !== right.claimPath ||
-      left.attributeKey !== right.attributeKey
-    ) {
-      ops.push({ op: 'editPeopleMapping', index: i, entry: right })
+  const peopleIdentity = (row: unknown) => {
+    if (!isRecord(row)) return null
+    if (typeof row.claimPath !== 'string' || typeof row.attributeKey !== 'string') return null
+    return `${row.claimPath}\0${row.attributeKey}`
+  }
+  const peopleRemovals = subsequenceRemoveOps(beforeMap, afterMap, peopleIdentity, (index) => ({
+    op: 'removePeopleMapping',
+    index,
+  }))
+  if (peopleRemovals) {
+    ops.push(...peopleRemovals)
+  } else {
+    const commonMap = Math.min(beforeMap.length, afterMap.length)
+    for (let i = 0; i < commonMap; i++) {
+      const left = beforeMap[i]
+      const right = afterMap[i]
+      if (
+        !isRecord(left) ||
+        left.claimPath !== right.claimPath ||
+        left.attributeKey !== right.attributeKey
+      ) {
+        ops.push({ op: 'editPeopleMapping', index: i, entry: right })
+      }
     }
-  }
-  for (let i = beforeMap.length - 1; i >= commonMap; i--) {
-    ops.push({ op: 'removePeopleMapping', index: i })
-  }
-  for (let i = commonMap; i < afterMap.length; i++) {
-    ops.push({ op: 'insertPeopleMapping', index: i, entry: afterMap[i] })
+    for (let i = beforeMap.length - 1; i >= commonMap; i--) {
+      ops.push({ op: 'removePeopleMapping', index: i })
+    }
+    for (let i = commonMap; i < afterMap.length; i++) {
+      ops.push({ op: 'insertPeopleMapping', index: i, entry: afterMap[i] })
+    }
   }
   const beforeOverride = beforeAttrs?.overrideExisting === true
   const afterOverride = afterAttrs?.overrideExisting === true

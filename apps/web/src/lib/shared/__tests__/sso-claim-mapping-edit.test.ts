@@ -155,6 +155,31 @@ describe('diffClaimMappingOperations', () => {
       },
     })
   })
+
+  it('deleting a non-tail rule removes that row so extra fields stay with survivors', () => {
+    const stored = {
+      role: {
+        claimPath: 'groups',
+        rules: [
+          { whenContains: 'eng', role: 'member', note: 'eng-note' },
+          { whenContains: 'admins', role: 'admin', note: 'admin-note' },
+        ],
+      },
+    }
+    const ops = diffClaimMappingOperations(stored, {
+      role: {
+        claimPath: 'groups',
+        rules: [{ whenContains: 'admins', role: 'admin' }],
+      },
+    })
+    expect(ops).toEqual([{ op: 'removeRoleRule', index: 0 }])
+    expect(applyClaimMappingEdits(stored, ops)).toEqual({
+      role: {
+        claimPath: 'groups',
+        rules: [{ whenContains: 'admins', role: 'admin', note: 'admin-note' }],
+      },
+    })
+  })
 })
 
 describe('storedJsonEqual', () => {
