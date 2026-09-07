@@ -4,6 +4,7 @@ import {
   diffClaimMappingOperations,
   effectiveProfileSignature,
   mappingSaveRisks,
+  mappingWouldStripUnsupported,
   storedJsonEqual,
 } from '../sso-claim-mapping-edit'
 
@@ -128,5 +129,83 @@ describe('diffClaimMappingOperations', () => {
 describe('storedJsonEqual', () => {
   it('ignores object key reorder', () => {
     expect(storedJsonEqual({ a: 1, b: 2 }, { b: 2, a: 1 })).toBe(true)
+  })
+})
+
+describe('mappingWouldStripUnsupported', () => {
+  const stored = {
+    profile: { claims: { email: 'upn' }, extra: true },
+    role: {
+      claimPath: 'groups',
+      rules: [{ whenContains: 'eng', role: 'member', note: 'keep' }],
+      custom: 1,
+    },
+    attributes: {
+      map: [{ claimPath: 'dept', attributeKey: 'department', extra: 'row' }],
+      label: 'people',
+    },
+    unknownSection: { keep: true },
+  }
+
+  it('rejects a typed mapping DTO that would drop nested unknown siblings', () => {
+    const typed = {
+      profile: { claims: { email: 'upn' } },
+      role: {
+        claimPath: 'groups',
+        rules: [{ whenContains: 'eng', role: 'member' }],
+      },
+      attributes: {
+        map: [{ claimPath: 'dept', attributeKey: 'department' }],
+      },
+    }
+    expect(mappingWouldStripUnsupported(stored, typed)).toBe(true)
+    expect(
+      mappingWouldStripUnsupported(stored, {
+        ...stored,
+        role: { claimPath: 'groups', rules: stored.role.rules },
+      })
+    ).toBe(true)
+    expect(
+      mappingWouldStripUnsupported(stored, {
+        ...stored,
+        role: { ...stored.role, rules: [{ whenContains: 'eng', role: 'member' }] },
+      })
+    ).toBe(true)
+    expect(
+      mappingWouldStripUnsupported(stored, {
+        ...stored,
+        attributes: { map: stored.attributes.map },
+      })
+    ).toBe(true)
+    expect(
+      mappingWouldStripUnsupported(stored, {
+        ...stored,
+        attributes: {
+          ...stored.attributes,
+          map: [{ claimPath: 'dept', attributeKey: 'department' }],
+        },
+      })
+    ).toBe(true)
+  })
+
+  it('lets an unchanged mapping with extras round-trip', () => {
+    expect(mappingWouldStripUnsupported(stored, { ...stored })).toBe(false)
+    expect(
+      mappingWouldStripUnsupported(stored, {
+        unknownSection: { keep: true },
+        attributes: stored.attributes,
+        role: stored.role,
+        profile: stored.profile,
+      })
+    ).toBe(false)
+  })
+
+  it('does not treat deleting a fully supported section as stripping extras', () => {
+    expect(
+      mappingWouldStripUnsupported(
+        { role: { claimPath: 'groups', rules: [{ whenContains: 'eng', role: 'member' }] } },
+        { profile: { allowMissingEmail: true } }
+      )
+    ).toBe(false)
   })
 })

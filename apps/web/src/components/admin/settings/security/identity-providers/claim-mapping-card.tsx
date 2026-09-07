@@ -6,9 +6,10 @@
  * accounts, so packaging it under "create accounts for new people" would hide
  * a live control from exactly the workspaces most likely to need it.
  *
- * It writes three sections of the shared `claim_mapping` column (`profile`,
- * `role`, and `attributes`) through `mergeClaimMapping`, which carries the
- * parts of `profile` that have no UI through verbatim.
+ * It diffs the three sections of the shared `claim_mapping` column (`profile`,
+ * `role`, and `attributes`) into closed operations and persists through
+ * `saveClaimMapping`. `mergeClaimMapping` only builds the proposed editor
+ * state for that diff; unedited stored JSON is not rewritten.
  */
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'

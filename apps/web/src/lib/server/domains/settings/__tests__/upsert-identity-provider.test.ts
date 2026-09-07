@@ -335,6 +335,32 @@ describe('upsertIdentityProvider — detailsChangedAt restamp (Fix 6)', () => {
     expect(hoisted.capturedSetPatch!.detailsChangedAt).toBeUndefined()
   })
 
+  it('rejects a typed mapping DTO that would drop nested unknown role extras', async () => {
+    hoisted.txSelectResult = [
+      {
+        ...EXISTING_ROW,
+        claimMapping: {
+          role: {
+            claimPath: 'groups',
+            rules: [{ whenContains: 'admins', role: 'admin', note: 'keep' }],
+            custom: 1,
+          },
+        },
+      },
+    ]
+    await expect(
+      upsertIdentityProvider({
+        ...BASE_INPUT,
+        id: 'idp_existing' as `idp_${string}`,
+        acknowledgeAdminRules: true,
+        claimMapping: {
+          role: { claimPath: 'groups', rules: [{ whenContains: 'admins', role: 'admin' }] },
+        },
+      })
+    ).rejects.toMatchObject({ code: 'MAPPING_UNSUPPORTED_STRIPPED' })
+    expect(hoisted.capturedSetPatch).toBeNull()
+  })
+
   it('does NOT restamp detailsChangedAt when only claimMapping.attributes change', async () => {
     await upsertIdentityProvider({
       ...BASE_INPUT,

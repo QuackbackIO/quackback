@@ -160,7 +160,7 @@ const idpRole = z.enum(['admin', 'member', 'user'])
 /** Mirror of `IdentityProviderClaimMapping`, section by section. */
 const claimRoleSchema = z.object({
   claimPath: z.string(),
-  rules: z.array(z.object({ whenContains: z.string(), role: idpRole })),
+  rules: z.array(z.object({ whenContains: z.string(), role: idpRole }).passthrough()),
   syncOnEverySignIn: z.boolean().optional(),
 })
 

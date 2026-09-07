@@ -482,6 +482,10 @@ export function storedJsonEqual(a: unknown, b: unknown): boolean {
 const SUPPORTED_TOP = new Set(['profile', 'role', 'attributes'])
 const SUPPORTED_PROFILE = new Set(['sources', 'claims', 'allowMissingEmail'])
 const SUPPORTED_CLAIMS = new Set(['id', 'email', 'name'])
+const SUPPORTED_ROLE = new Set(['claimPath', 'rules', 'syncOnEverySignIn'])
+const SUPPORTED_ROLE_RULE = new Set(['whenContains', 'role'])
+const SUPPORTED_ATTRIBUTES = new Set(['map', 'overrideExisting', 'syncOnSignIn'])
+const SUPPORTED_PEOPLE_ROW = new Set(['claimPath', 'attributeKey'])
 
 function hasLostKeys(stored: unknown, submitted: unknown, supported: Set<string>): boolean {
   if (!isRecord(stored)) return false
@@ -493,6 +497,20 @@ function hasLostKeys(stored: unknown, submitted: unknown, supported: Set<string>
   return false
 }
 
+function hasLostRowExtras(
+  storedRows: unknown,
+  submittedRows: unknown,
+  supported: Set<string>
+): boolean {
+  if (!Array.isArray(storedRows)) return false
+  const dest = Array.isArray(submittedRows) ? submittedRows : []
+  const n = Math.min(storedRows.length, dest.length)
+  for (let i = 0; i < n; i++) {
+    if (hasLostKeys(storedRows[i], dest[i], supported)) return true
+  }
+  return false
+}
+
 /** True when a whole-column submit would drop unknown stored JSON. */
 export function mappingWouldStripUnsupported(stored: unknown, submitted: unknown): boolean {
   if (!isRecord(stored)) return false
@@ -500,8 +518,16 @@ export function mappingWouldStripUnsupported(stored: unknown, submitted: unknown
   if (!isRecord(submitted)) return true
   if (hasLostKeys(stored, submitted, SUPPORTED_TOP)) return true
   if (hasLostKeys(stored.profile, submitted.profile, SUPPORTED_PROFILE)) return true
-  const storedClaims = isRecord(stored.profile) ? stored.profile.claims : undefined
-  const submittedClaims = isRecord(submitted.profile) ? submitted.profile.claims : undefined
-  if (hasLostKeys(storedClaims, submittedClaims, SUPPORTED_CLAIMS)) return true
+  const storedProfile = isRecord(stored.profile) ? stored.profile : undefined
+  const submittedProfile = isRecord(submitted.profile) ? submitted.profile : undefined
+  if (hasLostKeys(storedProfile?.claims, submittedProfile?.claims, SUPPORTED_CLAIMS)) return true
+  if (hasLostKeys(stored.role, submitted.role, SUPPORTED_ROLE)) return true
+  const storedRole = isRecord(stored.role) ? stored.role : undefined
+  const submittedRole = isRecord(submitted.role) ? submitted.role : undefined
+  if (hasLostRowExtras(storedRole?.rules, submittedRole?.rules, SUPPORTED_ROLE_RULE)) return true
+  if (hasLostKeys(stored.attributes, submitted.attributes, SUPPORTED_ATTRIBUTES)) return true
+  const storedAttrs = isRecord(stored.attributes) ? stored.attributes : undefined
+  const submittedAttrs = isRecord(submitted.attributes) ? submitted.attributes : undefined
+  if (hasLostRowExtras(storedAttrs?.map, submittedAttrs?.map, SUPPORTED_PEOPLE_ROW)) return true
   return false
 }
