@@ -152,4 +152,63 @@ describe('ClaimRowDialog', () => {
     await userEvent.click(screen.getByRole('combobox', { name: 'IdP claim path' }))
     expect(screen.getAllByText('sub').length).toBeGreaterThan(1)
   })
+
+  it('does not reset in-progress edits when the parent re-renders', () => {
+    const targets = availableAddTargets({ mapping: null, definitions: DEFS })
+    const { rerender } = render(
+      <ClaimRowDialog
+        open
+        mode="edit"
+        lockedTarget={{ type: 'profile', field: 'email' }}
+        availableTargets={targets}
+        definitions={DEFS}
+        initialPath="upn"
+        registrationId="oidc_x"
+        canTest
+        onOpenChange={vi.fn()}
+        onCommit={vi.fn()}
+      />
+    )
+    expect(screen.getByRole('combobox', { name: 'IdP claim path' })).toHaveTextContent('upn')
+    rerender(
+      <ClaimRowDialog
+        open
+        mode="edit"
+        lockedTarget={{ type: 'profile', field: 'email' }}
+        availableTargets={[...targets]}
+        definitions={[...DEFS]}
+        initialPath="email"
+        registrationId="oidc_x"
+        canTest
+        onOpenChange={vi.fn()}
+        onCommit={vi.fn()}
+      />
+    )
+    expect(screen.getByRole('combobox', { name: 'IdP claim path' })).toHaveTextContent('upn')
+  })
+
+  it('commits a People edit with the row baseline index', async () => {
+    const onCommit = vi.fn()
+    render(
+      <ClaimRowDialog
+        open
+        mode="edit"
+        lockedTarget={{ type: 'people', attributeKey: 'department', baselineIndex: 1 }}
+        availableTargets={[]}
+        definitions={DEFS}
+        initialPath="org.department"
+        registrationId="oidc_x"
+        canTest
+        onOpenChange={vi.fn()}
+        onCommit={onCommit}
+      />
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Apply to draft' }))
+    expect(onCommit).toHaveBeenCalledWith({
+      type: 'people',
+      attributeKey: 'department',
+      claimPath: 'org.department',
+      baselineIndex: 1,
+    })
+  })
 })

@@ -28,6 +28,7 @@ import {
 import { AdvancedSourcesEditor, ClaimsTable } from './claims-table'
 import { OutcomePreviewRail } from './outcome-preview-rail'
 import { useSsoTestSignIn } from '../sso/use-sso-test-sign-in'
+import { selectMappingCapture } from '@/lib/shared/sso-mapping-preview'
 import {
   CLAIMS_TABLE,
   availableAddTargets,
@@ -84,21 +85,21 @@ export function ClaimMappingCard({
   const pendingOps = useRef<typeof operations>([])
   const pendingTest = useRef(false)
   const { data: attributeDefs } = useUserAttributes()
-  const definitions = (attributeDefs ?? []).map((d) => ({
-    key: d.key,
-    label: d.label,
-    type: d.type,
-  }))
+  const definitions = useMemo(
+    () =>
+      (attributeDefs ?? []).map((d) => ({
+        key: d.key,
+        label: d.label,
+        type: d.type,
+      })),
+    [attributeDefs]
+  )
 
-  const capture =
-    lastCapture && lastCapture.registrationId === provider.registrationId
-      ? lastCapture
-      : lastSuccess && lastSuccess.registrationId === provider.registrationId
-        ? lastSuccess
-        : provider.lastTestCapture &&
-            provider.lastTestCapture.registrationId === provider.registrationId
-          ? provider.lastTestCapture
-          : null
+  const capture = selectMappingCapture({
+    registrationId: provider.registrationId,
+    sessionCapture: lastCapture ?? lastSuccess,
+    persistedCapture: provider.lastTestCapture,
+  })
 
   const draftMapping = useMemo(
     () =>
@@ -185,9 +186,15 @@ export function ClaimMappingCard({
     }
     setAttributes((prev) => {
       const map = [...(prev?.map ?? [])]
-      const existing = map.findIndex((row) => row.attributeKey === commit.attributeKey)
-      if (existing >= 0) map[existing] = { ...map[existing], claimPath: commit.claimPath }
-      else map.push({ claimPath: commit.claimPath, attributeKey: commit.attributeKey })
+      if (typeof commit.baselineIndex === 'number' && map[commit.baselineIndex]) {
+        map[commit.baselineIndex] = {
+          ...map[commit.baselineIndex],
+          claimPath: commit.claimPath,
+          attributeKey: commit.attributeKey,
+        }
+      } else {
+        map.push({ claimPath: commit.claimPath, attributeKey: commit.attributeKey })
+      }
       return { ...(prev ?? { map: [] }), map }
     })
   }
@@ -397,7 +404,11 @@ export function ClaimMappingCard({
                 if (row.kind === 'people') {
                   setDialog({
                     mode: 'edit',
-                    target: { type: 'people', attributeKey: row.attributeKey },
+                    target: {
+                      type: 'people',
+                      attributeKey: row.attributeKey,
+                      baselineIndex: row.baselineIndex,
+                    },
                     path: row.claimPath,
                   })
                 }

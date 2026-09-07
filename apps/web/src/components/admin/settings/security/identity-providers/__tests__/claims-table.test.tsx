@@ -133,6 +133,15 @@ describe('ClaimsTable', () => {
     expect(screen.queryByRole('textbox', { name: /key/i })).not.toBeInTheDocument()
   })
 
+  it('does not offer Remove on an unsupported saved profile claim', () => {
+    renderTable({
+      profile: { claims: { email: 'upn', locale: 'locale' } },
+    } as IdentityProviderClaimMapping)
+    expect(screen.getByText('locale')).toBeInTheDocument()
+    expect(screen.getByText(/not editable here/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Remove locale/ })).not.toBeInTheDocument()
+  })
+
   it('lists every role target and the off-domain warning', () => {
     renderTable({
       role: {

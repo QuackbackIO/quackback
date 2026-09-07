@@ -36,12 +36,12 @@ import {
 export type ClaimRowDialogTarget =
   | { type: 'profile'; field: 'id' | 'email' | 'name' }
   | { type: 'role' }
-  | { type: 'people'; attributeKey: string }
+  | { type: 'people'; attributeKey: string; baselineIndex?: number }
 
 export type ClaimRowDialogCommit =
   | { type: 'profile'; field: 'id' | 'email' | 'name'; path: string | null }
   | { type: 'role'; mapping: RoleMapping }
-  | { type: 'people'; attributeKey: string; claimPath: string }
+  | { type: 'people'; attributeKey: string; claimPath: string; baselineIndex?: number }
 
 const PROFILE_FALLBACK_NOTE: Record<'id' | 'email' | 'name', string> = {
   id: 'Default uses sub, then a userinfo id compatibility fallback. An explicit sub path disables that fallback. Preview cannot check account collisions.',
@@ -95,7 +95,8 @@ export function ClaimRowDialog({
     setTarget(lockedTarget ?? firstAvailable(availableTargets[0]))
     setPath(initialPath ?? '')
     setRole(initialRole ?? { claimPath: 'groups', rules: [] })
-  }, [open, lockedTarget, initialPath, initialRole, availableTargets])
+    // Reset only when the dialog opens. Parent re-renders rebuild availableTargets.
+  }, [open])
 
   const resolvedTarget: ClaimRowDialogTarget | null =
     lockedTarget ??
@@ -136,6 +137,7 @@ export function ClaimRowDialog({
         type: 'people',
         attributeKey: resolvedTarget.attributeKey,
         claimPath: path.trim(),
+        baselineIndex: resolvedTarget.baselineIndex,
       })
     }
     onOpenChange(false)

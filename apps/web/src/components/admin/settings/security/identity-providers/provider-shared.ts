@@ -116,11 +116,10 @@ export function getConnectionTestState(provider: IdentityProvider | null): Conne
  * other section exactly as it was found.
  *
  * `claim_mapping` is a single jsonb column with named sections (`profile`,
- * `role`, `attributes`) but the UI now writes it from two different cards, and
- * `attributes` has no UI at all. A card that rebuilt the whole object would
- * silently drop whatever it does not render — including the parts of `profile`
- * (`sources`, `claims`) that only the mapping reader knows about. So sections
- * are patched, never rebuilt.
+ * `role`, `attributes`). The mapping card now edits all three, but persist is
+ * ops-based so unknown siblings survive. A card that rebuilt the whole object
+ * would still drop whatever it does not render, so sections are patched, never
+ * rebuilt.
  *
  * An empty section is dropped and an empty object becomes `null`, so a
  * provider with nothing configured persists as `null` rather than `{}` — the
@@ -405,7 +404,7 @@ export function buildClaimsTableModel({
       kind: 'unsupported',
       id: `profile.claims.${key}`,
       label: key,
-      detail: 'This saved mapping is not editable here.',
+      detail: 'Stored on this provider and not editable here. Saving other rows keeps it.',
     })
   }
   return { required, additional }

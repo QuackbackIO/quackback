@@ -368,4 +368,35 @@ describe('ClaimMappingCard save coordination', () => {
     expect(saved.profile?.allowMissingEmail).toBe(true)
     expect(lastMapping().acknowledgeAdminRules).toBe(true)
   })
+
+  it('editing the second duplicate People row updates that row', async () => {
+    renderCard(
+      makeProvider({
+        claimMapping: {
+          attributes: {
+            map: [
+              { claimPath: 'dept', attributeKey: 'department' },
+              { claimPath: 'org.department', attributeKey: 'department' },
+            ],
+          },
+        },
+      })
+    )
+    fireEvent.click(screen.getAllByRole('button', { name: 'Edit Department mapping' })[1])
+    fireEvent.click(screen.getByRole('combobox', { name: 'IdP claim path' }))
+    fireEvent.change(screen.getByPlaceholderText('Search or type…'), {
+      target: { value: 'costCenter' },
+    })
+    fireEvent.click(screen.getByText(/Use ["“]costCenter["”]/))
+    fireEvent.click(screen.getByRole('button', { name: 'Apply to draft' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
+    expect(
+      (lastSaved() as { attributes?: { map?: Array<{ claimPath: string; attributeKey: string }> } })
+        .attributes?.map
+    ).toEqual([
+      { claimPath: 'dept', attributeKey: 'department' },
+      { claimPath: 'costCenter', attributeKey: 'department' },
+    ])
+  })
 })

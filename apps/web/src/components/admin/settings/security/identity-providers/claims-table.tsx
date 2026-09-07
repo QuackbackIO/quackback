@@ -129,14 +129,7 @@ export function ClaimsTable({
                 />
               )
             }
-            return (
-              <UnsupportedRowView
-                key={row.id}
-                row={row}
-                disabled={disabled}
-                onRemove={() => onRemove(row)}
-              />
-            )
+            return <UnsupportedRowView key={row.id} row={row} />
           })}
         </MappingTable>
         {extraHint && (
@@ -448,15 +441,7 @@ function PeopleRowView({
   )
 }
 
-function UnsupportedRowView({
-  row,
-  disabled,
-  onRemove,
-}: {
-  row: ClaimsUnsupportedRow
-  disabled?: boolean
-  onRemove: () => void
-}) {
+function UnsupportedRowView({ row }: { row: ClaimsUnsupportedRow }) {
   return (
     <tr className="border-b border-border/50 last:border-0 align-top">
       <td className="py-3 pr-3">
@@ -464,18 +449,7 @@ function UnsupportedRowView({
         <p className="mt-0.5 text-xs text-muted-foreground">{row.detail}</p>
       </td>
       <td className="py-3 pr-3 text-xs text-muted-foreground">Unsupported</td>
-      <td className="py-3">
-        <RowActions>
-          <IconButton
-            label={`Remove ${row.label} mapping`}
-            onClick={onRemove}
-            disabled={disabled}
-            destructive
-          >
-            <TrashIcon className="h-3.5 w-3.5" />
-          </IconButton>
-        </RowActions>
-      </td>
+      <td className="py-3" />
     </tr>
   )
 }
