@@ -563,13 +563,16 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
 
     const { integrations } = await import('@/lib/server/db')
     const { getIntegration } = await import('@/lib/server/integrations')
-    const { hasPlatformCredentials } =
+    const { hasPlatformCredentials, arePlatformCredentialsManaged } =
       await import('@/lib/server/domains/platform-credentials/platform-credential.service')
 
     const definition = getIntegration(data.type)
     const platformCredentialFields = definition?.platformCredentials ?? []
+    const platformCredentialsManaged = await arePlatformCredentialsManaged(data.type)
     const platformCredentialsConfigured =
-      platformCredentialFields.length === 0 || (await hasPlatformCredentials(data.type))
+      platformCredentialFields.length === 0 ||
+      (await hasPlatformCredentials(data.type)) ||
+      platformCredentialsManaged
 
     const integration = await db.query.integrations.findFirst({
       where: eq(integrations.integrationType, data.type),
@@ -584,6 +587,7 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
         integration: null,
         platformCredentialFields,
         platformCredentialsConfigured,
+        platformCredentialsManaged,
       }
     }
 
@@ -649,6 +653,7 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
       },
       platformCredentialFields,
       platformCredentialsConfigured,
+      platformCredentialsManaged,
     }
   })
 

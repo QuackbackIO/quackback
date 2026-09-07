@@ -9,6 +9,7 @@ import {
   type IntegrationCategory,
   type PlatformCredentialField,
 } from '@/lib/shared/integration-types'
+import { canInstallIntegration } from '@/lib/shared/integration-connect'
 import { cn } from '@/lib/shared/utils'
 
 const PlatformCredentialsDialog = lazy(() =>
@@ -137,14 +138,14 @@ export function IntegrationList({ catalog, integrations }: IntegrationListProps)
             >
               Paused
             </Badge>
-          ) : !entry.available && !entry.configurable ? (
+          ) : !canInstallIntegration(entry) && !entry.configurable ? (
             <Badge
               variant="outline"
               className="text-[11px] px-1.5 py-0 text-muted-foreground/60 border-border/40"
             >
               Coming soon
             </Badge>
-          ) : !entry.available && entry.configurable ? (
+          ) : !canInstallIntegration(entry) && entry.configurable ? (
             <Badge
               variant="outline"
               className="text-[11px] px-1.5 py-0 text-muted-foreground/60 border-border/40"
@@ -153,8 +154,8 @@ export function IntegrationList({ catalog, integrations }: IntegrationListProps)
             </Badge>
           ) : null
 
-          // Available (connected) integration — link to settings
-          if (entry.available) {
+          // Platform-managed or already configured — open the install/settings page
+          if (canInstallIntegration(entry)) {
             return (
               <Link
                 key={entry.id}

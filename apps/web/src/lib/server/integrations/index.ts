@@ -135,19 +135,25 @@ function deriveCapabilities(i: IntegrationDefinition): IntegrationCapability[] {
 }
 
 export async function getIntegrationCatalog(): Promise<IntegrationCatalogEntry[]> {
-  const { getConfiguredIntegrationTypes } =
+  const { getConfiguredIntegrationTypes, arePlatformCredentialsManaged } =
     await import('@/lib/server/domains/platform-credentials/platform-credential.service')
   const configuredTypes = await getConfiguredIntegrationTypes()
-  return Array.from(registry.values()).map((i) => {
-    const derived = deriveCapabilities(i)
-    return {
-      ...i.catalog,
-      capabilities: derived.length > 0 ? derived : (i.catalog.capabilities ?? []),
-      available: i.platformCredentials.length === 0 || configuredTypes.has(i.id),
-      configurable: i.platformCredentials.length > 0,
-      platformCredentialFields: i.platformCredentials,
-    }
-  })
+  return Promise.all(
+    Array.from(registry.values()).map(async (i) => {
+      const derived = deriveCapabilities(i)
+      const managed = await arePlatformCredentialsManaged(i.id)
+      const hasPlatformApp =
+        i.platformCredentials.length === 0 || configuredTypes.has(i.id) || managed
+      return {
+        ...i.catalog,
+        capabilities: derived.length > 0 ? derived : (i.catalog.capabilities ?? []),
+        available: hasPlatformApp,
+        managed,
+        configurable: i.platformCredentials.length > 0,
+        platformCredentialFields: i.platformCredentials,
+      }
+    })
+  )
 }
 
 export function getIntegrationHook(type: string): HookHandler | undefined {
