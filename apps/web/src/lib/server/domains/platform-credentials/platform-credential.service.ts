@@ -5,13 +5,17 @@
  * enable integrations at the platform level. These are separate from per-instance
  * tokens stored in the integrations table.
  *
- * Reads are delegated to a CredentialSource chosen by config.platformCredentialsSource:
+ * Pooled Cloud reads the environment snapshot populated from CP at container startup.
+ * Other integration and auth credentials retain their workspace source.
+ * Single-tenancy reads use config.platformCredentialsSource:
  * - 'db'  (self-host, default): the integration_platform_credentials table + admin UI.
  * - 'env' (managed cloud): shared app creds from INTEGRATION_<PROVIDER>_<FIELD> env
  *   (projected from OpenBao via ESO). In 'env' mode writes are refused — the
  *   credentials are platform-managed, not editable per-workspace.
  */
 
+import { CloudCredentialSource } from './cloud-source'
+import { CLOUD_INTEGRATION_FIELDS } from '@/lib/shared/integration-credentials'
 import { generateId, type PrincipalId } from '@quackback/ids'
 import { db, integrationPlatformCredentials, eq } from '@/lib/server/db'
 import { cacheGet, cacheSet, cacheDel, CACHE_KEYS } from '@/lib/server/cache'
@@ -40,6 +44,7 @@ export class PlatformCredentialsManagedError extends Error {
 }
 
 let _dbSource: DbCredentialSource | undefined
+const _controlPlaneSource = new CloudCredentialSource()
 let _envSource: EnvCredentialSource | undefined
 
 function dbSource(): DbCredentialSource {
@@ -48,6 +53,7 @@ function dbSource(): DbCredentialSource {
 
 /** The active source for *integration* credentials, per config.platformCredentialsSource. */
 function activeSource(): CredentialSource {
+  if (config.platformCredentialsSource === 'control-plane') return _controlPlaneSource
   if (config.platformCredentialsSource === 'env') {
     return (_envSource ??= new EnvCredentialSource())
   }
@@ -62,17 +68,30 @@ function isAuthCredentialType(integrationType: string): boolean {
   return integrationType.startsWith(AUTH_CREDENTIAL_PREFIX)
 }
 
-function sourceForType(integrationType: string): CredentialSource {
-  return isAuthCredentialType(integrationType) ? dbSource() : activeSource()
+async function sourceForType(integrationType: string): Promise<CredentialSource> {
+  return (await arePlatformCredentialsManaged(integrationType)) ? activeSource() : dbSource()
 }
 
-/**
- * Whether platform credentials for this type are platform-managed (cloud) and not
- * editable here. auth_* credentials are never platform-managed (always DB-editable).
- */
-export function arePlatformCredentialsManaged(integrationType?: string): boolean {
-  if (integrationType && isAuthCredentialType(integrationType)) return false
-  return config.platformCredentialsSource === 'env'
+/** Only complete provider-specific environment credentials lock the settings UI. */
+export async function arePlatformCredentialsManaged(integrationType?: string): Promise<boolean> {
+  if (integrationType && config.platformCredentialsSource === 'control-plane')
+    return Object.hasOwn(CLOUD_INTEGRATION_FIELDS, integrationType)
+  if (
+    !integrationType ||
+    isAuthCredentialType(integrationType) ||
+    config.platformCredentialsSource !== 'env'
+  )
+    return false
+  const credentials = await activeSource().get(integrationType)
+  if (!credentials) return false
+  const { getIntegration } = await import('@/lib/server/integrations')
+  const fields = getIntegration(integrationType)?.platformCredentials ?? []
+  return (
+    fields.length > 0 &&
+    fields
+      .filter((field) => field.required !== false)
+      .every((field) => !!credentials[field.key]?.trim())
+  )
 }
 
 /**
@@ -84,7 +103,8 @@ export async function savePlatformCredentials({
   credentials,
   principalId,
 }: SavePlatformCredentialsInput): Promise<void> {
-  if (arePlatformCredentialsManaged(integrationType)) throw new PlatformCredentialsManagedError()
+  if (await arePlatformCredentialsManaged(integrationType))
+    throw new PlatformCredentialsManagedError()
 
   const encrypted = encryptPlatformCredentials(credentials)
   const now = new Date()
@@ -140,7 +160,7 @@ export async function savePlatformCredentials({
 export async function getPlatformCredentials(
   integrationType: string
 ): Promise<Record<string, string> | null> {
-  return sourceForType(integrationType).get(integrationType)
+  return (await sourceForType(integrationType)).get(integrationType)
 }
 
 /**
@@ -148,7 +168,7 @@ export async function getPlatformCredentials(
  * Lightweight check — no decryption.
  */
 export async function hasPlatformCredentials(integrationType: string): Promise<boolean> {
-  return sourceForType(integrationType).has(integrationType)
+  return (await sourceForType(integrationType)).has(integrationType)
 }
 
 /**
@@ -173,13 +193,23 @@ async function computeConfiguredIntegrationTypes(): Promise<Set<string>> {
   // list from before a provider was added, or a removed one). The cost is an env scan
   // plus one auth_* DB lookup — cheap, and already gated by the getWorkspaceSettings
   // cache upstream.
-  if (config.platformCredentialsSource === 'env') {
+  if (
+    config.platformCredentialsSource === 'env' ||
+    config.platformCredentialsSource === 'control-plane'
+  ) {
     const types = await activeSource().listConfigured()
     // auth_* credentials are always DB-backed (the env source can't enumerate them);
     // union them in so SSO / social-login registration still resolves.
     const dbTypes = await dbSource().listConfigured()
     for (const t of dbTypes) {
-      if (isAuthCredentialType(t) && !types.includes(t)) types.push(t)
+      if (
+        !types.includes(t) &&
+        !(
+          config.platformCredentialsSource === 'control-plane' &&
+          Object.hasOwn(CLOUD_INTEGRATION_FIELDS, t)
+        )
+      )
+        types.push(t)
     }
     return new Set(types)
   }
@@ -197,7 +227,8 @@ async function computeConfiguredIntegrationTypes(): Promise<Set<string>> {
  * Delete platform credentials for an integration type. Refused in managed-cloud mode.
  */
 export async function deletePlatformCredentials(integrationType: string): Promise<void> {
-  if (arePlatformCredentialsManaged(integrationType)) throw new PlatformCredentialsManagedError()
+  if (await arePlatformCredentialsManaged(integrationType))
+    throw new PlatformCredentialsManagedError()
 
   const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
   const { resetAuth } = await import('@/lib/server/auth')

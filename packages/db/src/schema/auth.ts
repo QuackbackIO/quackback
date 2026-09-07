@@ -43,6 +43,13 @@ export interface StoredAssistantConfig {
   version: number
   identity: { name: string; avatarUrl: string | null }
   agents: {
+    workspace: {
+      capabilities: { qa: boolean }
+      knowledge: StoredAssistantConfig['agents']['copilot']['knowledge']
+      toolRules: Record<string, string>
+      instructions: string
+      slack: { enabled: boolean; respondTo: string; allowUnlinkedPublicQa: boolean }
+    }
     agent: {
       voice: StoredAssistantVoice
       knowledge: {
@@ -408,9 +415,25 @@ export const settings = pgTable('settings', {
     .$type<StoredAssistantConfig>()
     .notNull()
     .default({
-      version: 3,
+      version: 4,
       identity: { name: 'Quinn', avatarUrl: null },
       agents: {
+        workspace: {
+          capabilities: { qa: true },
+          knowledge: {
+            helpCenter: true,
+            posts: true,
+            pastConversations: true,
+            internalNotes: true,
+            tickets: true,
+            changelog: true,
+            documents: true,
+            status: true,
+          },
+          toolRules: {},
+          instructions: '',
+          slack: { enabled: false, respondTo: 'mentions_and_dms', allowUnlinkedPublicQa: false },
+        },
         agent: {
           voice: { tone: 'balanced', responseLength: 'balanced', additionalInstructions: '' },
           knowledge: {

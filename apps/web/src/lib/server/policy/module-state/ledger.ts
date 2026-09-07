@@ -66,6 +66,13 @@ export interface LedgerEntry {
 
 export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
   {
+    file: 'apps/web/src/lib/server/domains/platform-credentials/platform-credential.service.ts',
+    name: '_controlPlaneSource',
+    category: 'fleet-wide',
+    reason:
+      'CloudCredentialSource reads only the process environment populated before startup. Cross-workspace calls return the same centrally managed OAuth application credentials; per-workspace installation tokens remain in workspace databases.',
+  },
+  {
     file: 'apps/web/src/lib/server/auth/index.ts',
     name: 'authConfigVersions',
     category: 'workspace-keyed',
@@ -1042,6 +1049,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     reason:
       'SNS signing cert PEM keyed by the certificate URL. A cross-workspace hit returns the same ' +
       'bytes the requesting workspace would have fetched.',
+  },
+  {
+    file: 'apps/web/src/integrations/slack/server/agent/turns.ts',
+    name: 'inflight',
+    category: 'workspace-scoped-key',
+    keyedBy: 'slackInflightTurnKey',
+    reason:
+      'AbortControllers for in-flight Slack turns, keyed by Slack team, channel and thread. A Slack ' +
+      'team is bound to one workspace install, so a cross-workspace hit misses (different team id) ' +
+      'rather than cancelling another tenant’s turn.',
   },
   {
     file: 'packages/email/src/index.ts',

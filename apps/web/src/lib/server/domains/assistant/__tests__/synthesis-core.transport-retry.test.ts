@@ -25,6 +25,7 @@ const mockConfig = vi.hoisted(() => ({
   openaiApiKey: 'test-key' as string | undefined,
   openaiBaseUrl: 'http://localhost:9999/v1' as string | undefined,
   aiReasoningExclude: undefined as boolean | undefined,
+  aiReasoningEffort: undefined as string | undefined,
 }))
 
 vi.mock('@/lib/server/config', () => ({ config: mockConfig }))
@@ -156,6 +157,7 @@ beforeEach(() => {
   mockConfig.openaiApiKey = 'test-key'
   mockConfig.openaiBaseUrl = 'http://localhost:9999/v1'
   mockConfig.aiReasoningExclude = undefined
+  mockConfig.aiReasoningEffort = undefined
   mockWithUsageLogging.mockImplementation(
     async (
       _params: unknown,
@@ -278,6 +280,31 @@ describe('transport retry — pristine RUN_ERROR (real adapter shape)', () => {
 
     const call = mockChat.mock.calls[0]![0] as { modelOptions?: { reasoning?: unknown } }
     expect(call.modelOptions?.reasoning).toBeUndefined()
+  })
+
+  it('sends OpenRouter reasoning effort on tool-using streams', async () => {
+    mockConfig.openaiBaseUrl = 'https://openrouter.ai/api/v1'
+    mockConfig.aiReasoningEffort = 'low'
+    mockChat.mockReturnValueOnce(goodStream('ok'))
+
+    await settle(
+      runSynthesis(
+        baseOptions({
+          transportRetries: 0,
+          tools: {
+            specs: [],
+            context: {},
+            agentLoopStrategy: {} as never,
+            names: new Set(),
+          },
+        })
+      )
+    )
+
+    const call = mockChat.mock.calls[0]![0] as {
+      modelOptions?: { reasoning?: { effort?: string; exclude?: boolean } }
+    }
+    expect(call.modelOptions?.reasoning).toEqual({ effort: 'low' })
   })
 
   it('retries a pristine RUN_ERROR in strict mode too', async () => {

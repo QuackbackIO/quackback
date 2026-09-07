@@ -22,7 +22,13 @@ import { resolveAssistantRolePolicy } from '@/lib/server/domains/assistant/assis
 import { resolveContentAudience } from '@/lib/server/domains/assistant/audience'
 import { resolveAssistantKnowledgeSnapshot } from '@/lib/server/domains/assistant/retrieval-sources'
 import { roleToAgent } from '@/lib/shared/assistant/config'
-import { seedFixtures, buildScenarioAssistantConfig, type SeededConversation } from './seed'
+import { slackMemberActor, type SlackMember } from '@/integrations/slack/server/agent/identity'
+import {
+  seedFixtures,
+  seedTeammate,
+  buildScenarioAssistantConfig,
+  type SeededConversation,
+} from './seed'
 import { gradeStructural, type TurnCapture } from './grade'
 import { judgeSingle, judgeContrast } from './judge'
 import {
@@ -63,12 +69,13 @@ function sourcesForJudge(scenario: TurnScenario): { title: string; excerpt: stri
   }))
 }
 
-function buildTurnInput(
+async function buildTurnInput(
   scenario: TurnScenario,
   role: AssistantRole,
   assistantPrincipalId: PrincipalId,
-  conversation: SeededConversation | undefined
-): AssistantTurnInput {
+  conversation: SeededConversation | undefined,
+  teammate: SlackMember | undefined
+): Promise<AssistantTurnInput> {
   const surface = surfaceForRole(scenario, role)
   const messages = threadFor(scenario)
   const common = {
@@ -77,6 +84,22 @@ function buildTurnInput(
     conversationId: conversation?.conversationId ?? null,
     involvementId: conversation?.involvementId ?? null,
     latestCustomerMessageId: conversation?.latestCustomerMessageId ?? null,
+  }
+  if (role === 'workspace_assistant') {
+    if (!teammate) throw new Error('workspace_assistant scenarios need a seeded teammate')
+    return {
+      assistantPrincipalId,
+      db: testDb,
+      role,
+      // Same on-behalf-of shape the Slack handler builds for a linked member.
+      actor: await slackMemberActor(teammate),
+      actorPrincipalId: teammate.id,
+      surface: 'slack',
+      messages,
+      workspaceThreadKey: JSON.stringify(['eval', scenario.id, 'thread']),
+      contextBlock: messages.map((message) => message.content).join('\n'),
+      latestCustomerMessageId: scenario.id,
+    }
   }
   if (role === 'copilot_qa') {
     return { ...common, role, surface: 'copilot', messages }
@@ -126,18 +149,26 @@ function captureFrom(
 /** One turn attempt: seed, run, capture, grade, judge. */
 async function runTurnOnce(scenario: TurnScenario, role: AssistantRole): Promise<RunOutcome> {
   let seeded
+  let teammate: SlackMember | undefined
   try {
     seeded = await seedFixtures(scenario.config, scenario.fixtures)
+    if (role === 'workspace_assistant') teammate = await seedTeammate()
   } catch (err) {
     return { failures: [String(err)], detail: { seedError: String(err) }, errored: true }
   }
 
-  const input = buildTurnInput(scenario, role, seeded.assistantPrincipalId, seeded.conversation)
   const activities: AssistantActivity[] = []
   const deltas: string[] = []
 
   let result: AssistantTurnResult
   try {
+    const input = await buildTurnInput(
+      scenario,
+      role,
+      seeded.assistantPrincipalId,
+      seeded.conversation,
+      teammate
+    )
     result = await runAssistantTurn({
       ...input,
       onActivity: (a) => activities.push(a),

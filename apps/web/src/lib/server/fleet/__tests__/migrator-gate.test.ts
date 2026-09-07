@@ -348,6 +348,8 @@ describe('replayGateVerdict', () => {
       '0271_widget_installed_sdk_version',
       '0272_kb_url_id',
       '0273_identity_provider_logo_key',
+      '0274_slack_agent_gateway',
+      '0275_slack_thread_sessions',
     ])
     const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
     expect(verdict.ok).toBe(false)

@@ -54,6 +54,7 @@ export interface ConnectorToolPolicies {
 export interface ConnectorAssignments {
   agent: boolean
   copilot: boolean
+  workspace?: boolean
 }
 
 // Key order is jsonb-canonical (length, then bytewise) so the serialized

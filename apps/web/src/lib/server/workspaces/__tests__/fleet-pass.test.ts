@@ -67,3 +67,25 @@ describe('runFleetPass', () => {
     expect(result).toEqual({ succeeded: 1, failed: 0, skipped: 0, dormant: 0 })
   })
 })
+
+it('explicit maintenance scripts include dormant workspaces without changing sweep defaults', async () => {
+  listActiveWorkspaces.mockResolvedValue({
+    workspaces: [ws('inst_idle', new Date(Date.now() - 200 * HOUR))],
+    refused: [],
+  })
+  const { runFleetPass } = await import('../fleet')
+  const body = vi.fn()
+  expect(await runFleetPass('script', body, { includeDormant: true })).toEqual({
+    succeeded: 1,
+    failed: 0,
+    skipped: 0,
+    dormant: 0,
+  })
+  expect(body).toHaveBeenCalledOnce()
+  expect(await runFleetPass('sweep', body, { includeDormant: true })).toEqual({
+    succeeded: 0,
+    failed: 0,
+    skipped: 0,
+    dormant: 1,
+  })
+})

@@ -4,6 +4,7 @@
  * (26–29) enabled via per-agent config v3 knowledge maps, and the real-time
  * get_status tool (30, Phase 3).
  */
+import { slackScenarios } from './slack'
 import type { Scenario } from '../types'
 import { groundingScenarios } from './grounding'
 import { escalationScenarios } from './escalation'
@@ -16,6 +17,7 @@ import { connectorScenarios } from './connectors'
 import { skillScenarios } from './skills'
 
 export const scenarios: Scenario[] = [
+  ...slackScenarios,
   ...groundingScenarios,
   ...escalationScenarios,
   ...safetyScenarios,

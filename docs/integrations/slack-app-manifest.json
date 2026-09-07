@@ -1,0 +1,87 @@
+{
+  "display_information": {
+    "name": "Quackback",
+    "description": "Ask about feedback, support and help-center knowledge. Mention @Quackback in any channel.",
+    "long_description": "Quackback's AI assistant for your team. Mention @Quackback in a thread or DM it to search feedback, summarise what customers are asking for, look up support conversations and tickets, and capture new feedback or tickets with a teammate's approval."
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "Quackback",
+      "always_online": true
+    },
+    "app_home": {
+      "messages_tab_enabled": true,
+      "messages_tab_read_only_enabled": false
+    },
+    "agent_view": {
+      "agent_description": "Answers questions about your Quackback workspace: feedback, support conversations, tickets, help center and changelog."
+    },
+    "slash_commands": [
+      {
+        "command": "/quackback",
+        "url": "https://app.quackback.io/api/hooks/slack/commands",
+        "description": "Ask Quackback or capture feedback",
+        "usage_hint": "what are the top requests this month?",
+        "should_escape": false
+      }
+    ],
+    "shortcuts": [
+      {
+        "name": "Send to Quackback",
+        "type": "message",
+        "callback_id": "send_to_quackback",
+        "description": "Capture this message as feedback"
+      }
+    ]
+  },
+  "oauth_config": {
+    "redirect_urls": ["https://app.quackback.io/oauth/slack/callback"],
+    "scopes": {
+      "bot": [
+        "chat:write",
+        "channels:read",
+        "groups:read",
+        "channels:join",
+        "channels:history",
+        "groups:history",
+        "team:read",
+        "commands",
+        "app_mentions:read",
+        "im:history",
+        "im:read",
+        "im:write",
+        "mpim:history",
+        "mpim:read",
+        "users:read",
+        "users:read.email",
+        "reactions:read",
+        "assistant:write"
+      ]
+    }
+  },
+  "settings": {
+    "event_subscriptions": {
+      "request_url": "https://app.quackback.io/api/hooks/slack/events",
+      "bot_events": [
+        "app_mention",
+        "message.im",
+        "message.mpim",
+        "message.channels",
+        "message.groups",
+        "app_home_opened",
+        "app_uninstalled",
+        "tokens_revoked",
+        "reaction_added",
+        "agent_session_stopped"
+      ]
+    },
+    "interactivity": {
+      "is_enabled": true,
+      "request_url": "https://app.quackback.io/api/hooks/slack/interactions",
+      "message_menu_options_url": "https://app.quackback.io/api/hooks/slack/options"
+    },
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false
+  }
+}

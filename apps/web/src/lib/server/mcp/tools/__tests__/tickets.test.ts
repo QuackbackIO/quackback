@@ -106,6 +106,7 @@ describe('ticket MCP tools', () => {
     const body = parse(out)
     expect(body.tickets[0]).toEqual({
       id: 'ticket_1',
+      url: '/admin/inbox?i=ticket_1',
       number: 42,
       reference: '#42',
       type: 'customer',

@@ -1,3 +1,4 @@
+import { toolPermissions } from '@/lib/server/domains/assistant/tool-permissions'
 /**
  * Approve/reject server fns for Quinn's pending write-tool proposals.
  *
@@ -12,7 +13,7 @@
  * uses.
  */
 import { z } from 'zod'
-import { createServerFn } from '@tanstack/react-start'
+import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
 import { db } from '@/lib/server/db'
 import type { AssistantPendingActionId, PrincipalId } from '@quackback/ids'
 import { requireAuth, policyActorFromAuth } from './auth-helpers'
@@ -36,6 +37,7 @@ import {
 } from '@/lib/server/domains/assistant/assistant.toolspec'
 import { resolveContentAudience } from '@/lib/server/domains/assistant/audience'
 import { getConnectorSpecByToolName } from '@/lib/server/domains/assistant/connectors/connector-tools'
+import { getWorkspaceMcpSpecByName } from '@/lib/server/domains/assistant/mcp-workspace-tools'
 import { roleToAgent } from '@/lib/shared/assistant/config'
 import { executeApprovedPendingAction } from '@/lib/server/domains/assistant/assistant.tools'
 import { ensureAssistantPrincipal } from '@/lib/server/domains/assistant/assistant.principal'
@@ -118,6 +120,7 @@ async function buildExecutionContext(
     conversationId: pending.conversationId,
     ticketId: pending.ticketId,
     involvementId: pending.involvementId,
+    workspaceThreadKey: pending.workspaceThreadKey ?? undefined,
     simulate: false,
     actor: approver,
   })
@@ -129,7 +132,7 @@ async function buildExecutionContext(
  * exactly one place. `actor` is the approver's own resolved policy actor —
  * the permission check below can never authorize more than they already hold.
  */
-async function decideAssistantAction(
+export const decideAssistantAction = createServerOnlyFn(async function decideAssistantAction(
   pendingActionId: AssistantPendingActionId,
   decision: 'approved' | 'rejected',
   approverPrincipalId: PrincipalId,
@@ -170,9 +173,12 @@ async function decideAssistantAction(
   // exactly like a gone built-in.
   const spec =
     (await getToolSpecByName(pending.toolName)) ??
-    (await getConnectorSpecByToolName(pending.toolName, roleToAgent(pending.originRole)))
+    (await getConnectorSpecByToolName(pending.toolName, roleToAgent(pending.originRole))) ??
+    (pending.originRole === 'workspace_assistant'
+      ? await getWorkspaceMcpSpecByName(pending.toolName, actor, 'Quinn')
+      : null)
   if (!spec) throw new ToolSpecGoneError(pending.toolName)
-  const parentKind = pending.conversationId ? 'conversation' : 'ticket'
+  const parentKind = pending.ticketId ? 'ticket' : 'conversation'
   if (spec.risk !== 'write' || !spec.parents.includes(parentKind)) {
     throw new ConflictError(
       'ASSISTANT_ACTION_POLICY_CHANGED',
@@ -187,7 +193,7 @@ async function decideAssistantAction(
     )
   }
 
-  for (const permission of spec.permissions) {
+  for (const permission of toolPermissions(spec, !!pending.workspaceThreadKey)) {
     if (!can(actor, permission)) {
       throw new ForbiddenError(
         'ASSISTANT_ACTION_PERMISSION_DENIED',
@@ -219,7 +225,7 @@ async function decideAssistantAction(
   }
   // skipped_duplicate: a racing call already executed this proposal.
   return decided
-}
+})
 
 export const approveAssistantActionFn = createServerFn({ method: 'POST' })
   .validator(PendingActionInput)

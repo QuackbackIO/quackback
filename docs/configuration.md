@@ -31,3 +31,13 @@ Budget connections across every replica: `web replicas × web DB_POOL_MAX + work
 Migrations create large search indexes with `CREATE INDEX CONCURRENTLY` after the transactional Drizzle ledger completes. This includes cosine HNSW indexes for every production embedding column, trigram inbox search indexes, and the partial page-view principal index. If a concurrent build is interrupted, rerun `bun run db:migrate`; every statement is idempotent. To roll one back without blocking writes, use `DROP INDEX CONCURRENTLY <index_name>` and rerun migrations when ready to rebuild it.
 
 Validate representative workspaces with `EXPLAIN (ANALYZE, BUFFERS)`: nearest-neighbour queries should order by the bare cosine-distance operator ascending and select an HNSW index scan. Tune session-local `hnsw.ef_search` only after measuring recall against an exact scan; increasing it improves recall at the cost of latency.
+
+## Integration gateway and Slack assistant
+
+Cloud fleets can set `INTEGRATION_OAUTH_GATEWAY_URL=https://app.quackback.io` to use a single OAuth callback origin for shared integration apps. Leave it unset for self-hosted installations. `INTEGRATION_GATEWAY_FORWARD_SECRET` authenticates app-level hooks forwarded by the control plane and is required for these hooks in pooled tenancy. Configure it on both fleet web and worker processes.
+
+For single-tenancy deployments with `PLATFORM_CREDENTIALS_SOURCE=env`, complete credentials for an individual provider are managed from environment variables; other providers fall back to database credentials. Slack uses `INTEGRATION_SLACK_CLIENT_ID`, `INTEGRATION_SLACK_CLIENT_SECRET`, and `INTEGRATION_SLACK_SIGNING_SECRET`. Existing tenant-registered resource webhooks retain their current routes and secrets.
+
+See [Slack setup](./integrations/slack-app.md) and [Cloud rollout gates](./integrations/integration-gateway-rollout.md).
+
+Cloud application settings (AI, email, shared OAuth apps) are ordinary Railway environment variables on the CP and fleet services. Self-hosted instances use `.env` / `PLATFORM_CREDENTIALS_SOURCE` as before.

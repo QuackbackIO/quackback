@@ -66,10 +66,11 @@ export interface RunnerConfig {
   /** How often expired leases are reclaimed. */
   reapIntervalMs: number
   /**
-   * How often terminal rows past retention are pruned. Retention is measured
-   * in days, so this is deliberately much slower than `reapIntervalMs`: a lost
-   * lease has to be noticed quickly, an aged row does not, and the prune is a
-   * table scan on every workspace in a pooled fleet.
+   * How often terminal rows past retention are pruned. Deliberately much slower
+   * than `reapIntervalMs`: a lost lease has to be noticed quickly, an aged row
+   * does not, and the prune is a table scan on every workspace in a pooled
+   * fleet. Slack payload privacy does not ride on this clock — `completeJob`
+   * scrubs a `slack-hook` payload the moment the job succeeds.
    */
   pruneIntervalMs: number
   /** How long terminal rows are kept. Must exceed any live cron slot key. */

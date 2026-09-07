@@ -126,6 +126,10 @@ function gradeOne(a: Structural, cap: Capture): string | null {
       return cap.internalSourced === a.value
         ? null
         : `expected internalSourced=${a.value}, got ${cap.internalSourced}`
+    case 'noExecutedWrites':
+      return toolOutcomes.some((outcome) => outcome.outcome === 'executed')
+        ? 'expected no executed writes'
+        : null
     case 'noWrites': {
       const writes = toolOutcomes.filter(
         (o) => o.outcome === 'executed' || o.outcome === 'proposed'

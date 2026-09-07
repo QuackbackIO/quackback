@@ -331,6 +331,19 @@ describe('the reaper and the no-retry flag', () => {
 })
 
 describe('the fencing token', () => {
+  it('scrubs Slack payloads on completion without letting a stale lease erase input', async () => {
+    const q = queue('slack-payload')
+    await enqueueJob({ queue: q, payload: { encryptedPayload: 'ciphertext' }, maxAttempts: 3 })
+    const [ghost] = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: LEASE }] })
+    await expireLease(q)
+    await reapExpiredLeases()
+    const [heir] = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: LEASE }] })
+    expect(await completeJob({ ...ghost, queue: 'slack-hook' })).toBe(false)
+    expect((await rowsFor(q))[0].payload).toEqual({ encryptedPayload: 'ciphertext' })
+    expect(await completeJob({ ...heir, queue: 'slack-hook' })).toBe(true)
+    expect((await rowsFor(q))[0].payload).toEqual({})
+  })
+
   it('stops a reaped owner from recording a result over its successor', async () => {
     const q = queue('fencing')
     await enqueueJob({ queue: q, maxAttempts: 3 })

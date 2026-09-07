@@ -1,3 +1,4 @@
+import { toolPermissions } from './tool-permissions'
 /**
  * Quinn's tool-execution pipeline: assembles the tool catalogue
  * (assistant.toolspec.ts) into TanStack AI server tools bound to a runtime
@@ -94,7 +95,10 @@ export function resolveEffectiveToolMode(
   if (spec.approvalPolicy === 'always') return 'autonomous'
   if (spec.approvalPolicy === 'approval') return 'propose'
   if (spec.risk !== 'write') return 'autonomous'
-  // Write-risk from here.
+  // Workspace writes without an explicit dial still propose (connectors,
+  // destructive MCP). Feedback create/assign stamp approvalPolicy: 'always'
+  // so they execute as the asking teammate, like Linear Agent.
+  if (ctx.role === 'workspace_assistant') return 'propose'
   if (ctx.writeToolPolicy === 'propose') return 'propose'
   if (ctx.simulate && (ctx.writeToolPolicy ?? 'simulate') === 'simulate') return 'simulate'
   return 'autonomous'
@@ -157,7 +161,7 @@ function resolveIdempotencyKey(
 ): string | undefined {
   if (spec.idempotencyKey) return spec.idempotencyKey(args, ctx)
   if (spec.risk !== 'write') return undefined
-  return `${ctx.conversationId ?? ctx.ticketId}:${ctx.latestCustomerMessageId}:${spec.name}:${hashArgs(args)}`
+  return `${ctx.conversationId ?? ctx.ticketId ?? ctx.workspaceThreadKey}:${ctx.latestCustomerMessageId}:${spec.name}:${hashArgs(args)}`
 }
 
 /**
@@ -196,9 +200,11 @@ async function runWithPipeline(
     // grounded on. `ctx.conversationId` wins when both happen to be set (never
     // true today — a turn grounds on exactly one item), matching every
     // pre-ticket caller's behavior unchanged.
-    const parent = ctx.conversationId
-      ? { conversationId: ctx.conversationId }
-      : { ticketId: ctx.ticketId as TicketId }
+    const parent = ctx.workspaceThreadKey
+      ? { workspaceThreadKey: ctx.workspaceThreadKey }
+      : ctx.conversationId
+        ? { conversationId: ctx.conversationId }
+        : { ticketId: ctx.ticketId as TicketId }
     const pending = await proposePendingAction({
       ...parent,
       involvementId: ctx.involvementId ?? undefined,
@@ -238,7 +244,7 @@ async function runWithPipeline(
   }
 
   // mode === 'autonomous' from here: simulate and propose both returned above.
-  for (const permission of spec.permissions) {
+  for (const permission of toolPermissions(spec, !!ctx.workspaceThreadKey)) {
     if (can(ctx.actor, permission)) continue
     await recordDeniedToolCall({
       conversationId: ctx.conversationId ?? undefined,
@@ -392,27 +398,31 @@ type AssembledServerTool = ReturnType<AssistantToolSpec['definition']['server']>
 export async function assembleAssistantToolset(
   ctx: AssistantToolContext,
   specs?: readonly AssistantToolSpec[],
-  connectorSpecs: readonly AssistantToolSpec[] = []
+  extraSpecs: readonly AssistantToolSpec[] = []
 ): Promise<{ tools: AssembledServerTool[]; activeSpecs: AssistantToolSpec[] }> {
   // Unified inbox §2.9/§3.3: never even consider a spec whose `parents`
   // excludes this turn's actual parent kind: a conversation-only write tool
   // must not reach mode resolution, proposal, or the model at all on a
   // ticket-scoped turn. See `parents`'s own doc on AssistantToolSpec.
   const parentKind = turnParentKind(ctx)
-  const availableForTurn = (spec: AssistantToolSpec) =>
+  const workspaceKeepBuiltins = new Set(['get_status', 'report_inability', 'use_skill'])
+  const fitsParent = (spec: AssistantToolSpec) =>
     spec.parents.includes(parentKind) && (spec.availableWhen?.(ctx) ?? true)
+  const availableBuiltin = (spec: AssistantToolSpec) =>
+    fitsParent(spec) && (ctx.role !== 'workspace_assistant' || workspaceKeepBuiltins.has(spec.name))
 
-  // Connector specs always ride the execution pipeline — audit and propose
-  // stay load-bearing.
-  const connectorActive = connectorSpecs
-    .filter(availableForTurn)
+  // Extra specs (first-party MCP + remote connectors) always ride the
+  // execution pipeline — audit and propose stay load-bearing. Workspace writes
+  // resolve to proposals via resolveEffectiveToolMode.
+  const connectorActive = extraSpecs
+    .filter(fitsParent)
     .map((spec) => ({ spec, mode: resolveEffectiveToolMode(spec, ctx) }))
   const connectorTools = connectorActive.map(({ spec, mode }) =>
     spec.definition.server<AssistantToolContext>((args) => runWithPipeline(spec, mode, args, ctx))
   )
   const connectorActiveSpecs = connectorActive.map((entry) => entry.spec)
 
-  const resolvedSpecs = (specs ?? resolveToolSpecs()).filter(availableForTurn)
+  const resolvedSpecs = (specs ?? resolveToolSpecs()).filter(availableBuiltin)
   const builtInTools = resolvedSpecs.map((spec) => {
     const mode = resolveEffectiveToolMode(spec, ctx)
     return spec.definition.server<AssistantToolContext>((args) =>

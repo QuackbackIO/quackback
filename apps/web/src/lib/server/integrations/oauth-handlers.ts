@@ -225,6 +225,13 @@ export async function handleOAuthCallback(
       }
     }
 
-    return redirectResponse(fail('exchange_failed'))
+    const { InstallBoundElsewhereError } = await import('./install-registry')
+    return redirectResponse(
+      fail(
+        err instanceof InstallBoundElsewhereError
+          ? 'already_connected_elsewhere'
+          : 'exchange_failed'
+      )
+    )
   }
 }

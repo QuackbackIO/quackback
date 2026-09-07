@@ -53,7 +53,8 @@ export interface FleetPassResult {
  */
 export async function runFleetPass(
   origin: WorkspaceScopeOrigin,
-  body: (workspace: WorkspaceDescriptor | null) => Promise<void>
+  body: (workspace: WorkspaceDescriptor | null) => Promise<void>,
+  options: { includeDormant?: boolean } = {}
 ): Promise<FleetPassResult> {
   if (!config.isPooledTenancy) {
     await body(null)
@@ -72,6 +73,7 @@ export async function runFleetPass(
     // A sweep over a workspace nobody has visited in a week is the cost the
     // dormancy rule exists to remove; opening the scope here would be that cost.
     if (
+      !(origin === 'script' && options.includeDormant) &&
       shouldSkipForDormancy({ ...workspace, lastActiveAt: workspace.lastActiveAt ?? null }, now)
     ) {
       result.dormant += 1

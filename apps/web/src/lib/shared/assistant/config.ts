@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export const ASSISTANT_CONFIG_VERSION = 3 as const
+export const ASSISTANT_CONFIG_VERSION = 4 as const
 export const ASSISTANT_NAME_MAX_LENGTH = 80
 export const ASSISTANT_AVATAR_URL_MAX_LENGTH = 2_000
 export const ASSISTANT_ADDITIONAL_INSTRUCTIONS_MAX_LENGTH = 2_000
@@ -63,7 +63,7 @@ export const assistantVoiceSchema = z.object({
  * below is the single, exhaustive mint point that maps a pipeline role onto
  * one of these — callers never re-derive it from a role literal (C3).
  */
-export const ASSISTANT_AGENTS = ['agent', 'copilot'] as const
+export const ASSISTANT_AGENTS = ['agent', 'copilot', 'workspace'] as const
 export const assistantAgentSchema = z.enum(ASSISTANT_AGENTS)
 export type AssistantAgentKind = z.infer<typeof assistantAgentSchema>
 
@@ -155,6 +155,44 @@ export const assistantCopilotConfigSchema = z.object({
   toolRules: assistantToolRulesSchema.default({}),
 })
 
+export const assistantWorkspaceConfigSchema = assistantCopilotConfigSchema.extend({
+  instructions: z.string().max(2_000).default(''),
+  slack: z.object({
+    enabled: z.boolean().default(false),
+    respondTo: z.literal('mentions_and_dms').default('mentions_and_dms'),
+    allowUnlinkedPublicQa: z.literal(false).default(false),
+  }),
+})
+export type AssistantWorkspaceConfig = z.infer<typeof assistantWorkspaceConfigSchema>
+export const DEFAULT_WORKSPACE_ASSISTANT: AssistantWorkspaceConfig = {
+  capabilities: { qa: true },
+  knowledge: {
+    helpCenter: true,
+    posts: true,
+    pastConversations: true,
+    internalNotes: true,
+    tickets: true,
+    changelog: true,
+    documents: true,
+    status: true,
+  },
+  toolRules: {},
+  instructions: '',
+  slack: { enabled: false, respondTo: 'mentions_and_dms', allowUnlinkedPublicQa: false },
+}
+
+/** Add the disabled workspace agent to v3 while preserving all existing choices. */
+export function migrateAssistantConfig(input: unknown): unknown {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return input
+  const value = input as Record<string, unknown>
+  if (value.version !== 3 || !value.agents || typeof value.agents !== 'object') return input
+  return {
+    ...value,
+    version: 4,
+    agents: { ...value.agents, workspace: structuredClone(DEFAULT_WORKSPACE_ASSISTANT) },
+  }
+}
+
 // The z.infer of this schema (`AssistantConfig`) has a hand-written structural
 // twin, `StoredAssistantConfig`, in packages/db `schema/auth.ts` (that package
 // can't import this one). A drift tripwire in `__tests__/config.test.ts` fails
@@ -165,6 +203,7 @@ export const assistantConfigSchema = z.object({
   agents: z.object({
     agent: assistantAgentConfigSchema,
     copilot: assistantCopilotConfigSchema,
+    workspace: assistantWorkspaceConfigSchema,
   }),
 })
 
@@ -184,6 +223,7 @@ export const DEFAULT_ASSISTANT_CONFIG: AssistantConfig = {
     avatarUrl: null,
   },
   agents: {
+    workspace: structuredClone(DEFAULT_WORKSPACE_ASSISTANT),
     agent: {
       voice: {
         tone: 'balanced',
@@ -289,7 +329,7 @@ export const ASSISTANT_RESPONSE_LENGTH_DIRECTIVES: Record<AssistantResponseLengt
   detailed: ASSISTANT_RESPONSE_LENGTH_CATALOGUE.detailed.directive,
 }
 
-export const ASSISTANT_ROLES = ['customer_support', 'copilot_qa'] as const
+export const ASSISTANT_ROLES = ['customer_support', 'copilot_qa', 'workspace_assistant'] as const
 export const assistantRoleSchema = z.enum(ASSISTANT_ROLES)
 export type AssistantRole = z.infer<typeof assistantRoleSchema>
 
@@ -316,6 +356,11 @@ export const ASSISTANT_ROLE_CATALOGUE = {
     labelMessageId: 'assistant.role.copilotQa.label',
     descriptionMessageId: 'assistant.role.copilotQa.description',
   },
+  workspace_assistant: {
+    id: 'workspace_assistant',
+    labelMessageId: 'assistant.role.workspace.label',
+    descriptionMessageId: 'assistant.role.workspace.description',
+  },
 } as const satisfies AssistantRoleCatalogue
 
 /**
@@ -331,6 +376,8 @@ export function roleToAgent(role: AssistantRole): AssistantAgentKind {
       return 'agent'
     case 'copilot_qa':
       return 'copilot'
+    case 'workspace_assistant':
+      return 'workspace'
     default: {
       const exhaustive: never = role
       throw new Error(`roleToAgent: unhandled assistant role "${exhaustive}"`)
@@ -358,6 +405,7 @@ const assistantConfigInputSchema = z.object({
     avatarUrl: z.string().nullable(),
   }),
   agents: z.object({
+    workspace: assistantWorkspaceConfigSchema,
     agent: z.object({
       voice: z.object({
         tone: assistantToneSchema,

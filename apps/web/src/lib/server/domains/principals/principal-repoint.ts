@@ -27,6 +27,7 @@
  */
 import { toUuid, type PrincipalId } from '@quackback/ids'
 import {
+  slackUserLinks,
   postVotes,
   postCommentReactions,
   postComments,
@@ -200,6 +201,12 @@ function fillIfEmpty(column: string, description: string): RepointStep {
  *   CASCADE tables would silently lose rows.
  */
 export const REPOINT_STEPS: RepointStep[] = [
+  simpleRepoint(
+    'slack_user_links',
+    slackUserLinks,
+    'principal_id',
+    'Preserve Slack identity links when a principal is absorbed; uniqueness is on Slack team and user, not principal.'
+  ),
   collisionRepoint(
     'post_votes',
     postVotes,

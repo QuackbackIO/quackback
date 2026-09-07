@@ -153,6 +153,32 @@ const DAY_MS = 86_400_000
  */
 export const JOB_DEFINITIONS: readonly JobDefinition[] = [
   {
+    name: 'slack-hook',
+    maxAttempts: 3,
+    concurrency: 1,
+    retentionMs: 0,
+    failedRetentionMs: 60 * 60_000,
+    handler: async () =>
+      (await import('@/lib/server/integrations/slack-hook-queue')).handleSlackHookJob,
+  },
+  {
+    name: 'integration-deliveries-sweep',
+    cron: '0 3 * * *',
+    handler: async () =>
+      (await import('@/lib/server/integrations/deliveries-sweep-queue')).runDeliveriesSweep,
+  },
+  {
+    name: 'integration-install-cleanup',
+    concurrency: 1,
+    handler: async () =>
+      (await import('@/lib/server/integrations/install-cleanup-queue')).runInstallCleanup,
+  },
+  {
+    name: 'integration-installs-backfill',
+    handler: async () =>
+      (await import('@/lib/server/integrations/installs-backfill-queue')).runInstallsBackfill,
+  },
+  {
     name: 'anon-sweep',
     cron: '0 3 * * *',
     maxAttempts: 3,

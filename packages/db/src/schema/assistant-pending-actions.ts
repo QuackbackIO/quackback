@@ -58,7 +58,11 @@ export const ASSISTANT_PENDING_ACTION_STATUSES = [
 
 export type AssistantPendingActionStatus = (typeof ASSISTANT_PENDING_ACTION_STATUSES)[number]
 
-export const ASSISTANT_PENDING_ACTION_ORIGIN_ROLES = ['customer_support', 'copilot_qa'] as const
+export const ASSISTANT_PENDING_ACTION_ORIGIN_ROLES = [
+  'customer_support',
+  'copilot_qa',
+  'workspace_assistant',
+] as const
 
 export const assistantPendingActions = pgTable(
   'assistant_pending_actions',
@@ -78,6 +82,7 @@ export const assistantPendingActions = pgTable(
     // Postgres's 63-byte identifier limit and gets silently truncated, so the
     // TS schema must spell out the truncated name for the drift check to match.
     involvementId: typeIdColumnNullable('assistant_involvement')('involvement_id'),
+    workspaceThreadKey: text('workspace_thread_key'),
     toolName: text('tool_name').notNull(),
     args: jsonb('args').$type<Record<string, unknown>>().notNull(),
     summary: text('summary').notNull(),
@@ -134,7 +139,7 @@ export const assistantPendingActions = pgTable(
     // Exactly one parent: a pending action belongs to a conversation XOR a ticket.
     check(
       'assistant_pending_actions_parent_check',
-      sql`num_nonnulls(${table.conversationId}, ${table.ticketId}) = 1`
+      sql`num_nonnulls(${table.conversationId}, ${table.ticketId}, ${table.workspaceThreadKey}) = 1`
     ),
   ]
 )

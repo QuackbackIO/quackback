@@ -228,7 +228,7 @@ const V2_IDENTITY: DeliveredFields['identity'] = {
 // Durable trace fixtures contain only bounded config metadata and tool names/outcomes,
 // never prompts, customer text, tool arguments, or tool results.
 const PRIVACY_SAFE_TRACE: DeliveredFields['trace'] = {
-  promptVersion: 'support-agent-v4',
+  promptVersion: 'support-agent-v6',
   configRevision: 12,
   role: 'customer_support',
   tone: 'balanced',

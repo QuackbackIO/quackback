@@ -2,7 +2,7 @@
  * Shared integration save logic.
  * Replaces the per-integration save.ts files with a single function.
  */
-import { db, integrations, eq } from '@/lib/server/db'
+import { db, integrations, eq, sql } from '@/lib/server/db'
 import { encryptSecrets } from './encryption'
 import { getIntegration } from './index'
 import type { IntegrationId, PrincipalId } from '@quackback/ids'
@@ -50,61 +50,113 @@ export async function saveIntegration(
   const now = new Date()
   const tokenExpiresAt = expiresIn ? new Date(now.getTime() + expiresIn * 1000) : undefined
 
-  // Check if integration already exists (for reconnect — keep existing service
-  // principal AND overlay OAuth config onto stored config so reconnect cannot
-  // wipe channelId / webhook ids).
-  const existing = await db.query.integrations.findFirst({
-    where: eq(integrations.integrationType, integrationType),
-    columns: { principalId: true, config: true },
-  })
+  let registeredConfig: Record<string, unknown> | undefined
+  let integrationId: IntegrationId
+  try {
+    integrationId = await db.transaction(async (tx) => {
+      // Serialize connect/reconnect for this provider before reading the old config.
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${`integration:${integrationType}`}))`
+      )
+      // Check if integration already exists (for reconnect — keep existing service
+      // principal AND overlay OAuth config onto stored config so reconnect cannot
+      // wipe channelId / webhook ids).
+      const existing = await tx.query.integrations.findFirst({
+        where: eq(integrations.integrationType, integrationType),
+        columns: { principalId: true, config: true },
+      })
 
-  const config = mergeIntegrationConfig(
-    existing?.config as Record<string, unknown> | undefined,
-    oauthConfig,
-    tokenExpiresAt
-  )
+      const config = mergeIntegrationConfig(
+        existing?.config as Record<string, unknown> | undefined,
+        oauthConfig,
+        tokenExpiresAt
+      )
 
-  // Create service principal if this is a new integration or missing one
-  let integrationPrincipalId = existing?.principalId ?? null
-  if (!integrationPrincipalId) {
-    const displayName = `${integrationType.charAt(0).toUpperCase()}${integrationType.slice(1)} Integration`
-    const servicePrincipal = await createServicePrincipal({
-      role: 'member',
-      displayName,
-      serviceMetadata: { kind: 'integration', integrationType },
+      // Create service principal if this is a new integration or missing one
+      let integrationPrincipalId = existing?.principalId ?? null
+      if (!integrationPrincipalId) {
+        const displayName = `${integrationType.charAt(0).toUpperCase()}${integrationType.slice(1)} Integration`
+        const servicePrincipal = await createServicePrincipal(
+          {
+            role: 'member',
+            displayName,
+            serviceMetadata: { kind: 'integration', integrationType },
+          },
+          tx
+        )
+        integrationPrincipalId = servicePrincipal.id
+      }
+
+      const [row] = await tx
+        .insert(integrations)
+        .values({
+          integrationType,
+          status: 'active',
+          secrets: encryptedSecrets,
+          connectedByPrincipalId: principalId,
+          principalId: integrationPrincipalId,
+          connectedAt: now,
+          config,
+        })
+        .onConflictDoUpdate({
+          target: [integrations.integrationType],
+          set: {
+            status: 'active',
+            secrets: encryptedSecrets,
+            connectedByPrincipalId: principalId,
+            principalId: integrationPrincipalId,
+            connectedAt: now,
+            config,
+            lastError: null,
+            lastErrorAt: null,
+            errorCount: 0,
+            updatedAt: now,
+          },
+        })
+        .returning({ id: integrations.id })
+
+      const { registerInstall } = await import('./install-registry')
+      await registerInstall(integrationType, config, accessToken)
+      registeredConfig = config
+      const install = getIntegration(integrationType)?.install
+      const oldConfig = existing?.config as Record<string, unknown> | undefined
+      const oldId = oldConfig && install?.externalId(oldConfig)
+      if (oldId && oldId !== install?.externalId(config)) {
+        const { enqueueJob } = await import('@/lib/server/jobs/job-queue')
+        await enqueueJob({
+          queue: 'integration-install-cleanup',
+          payload: { type: integrationType, config: oldConfig },
+          executor: tx,
+          maxAttempts: 10,
+        })
+      }
+      return row.id as IntegrationId
     })
-    integrationPrincipalId = servicePrincipal.id
+  } catch (error) {
+    if (registeredConfig) {
+      try {
+        // Reacquire the provider lock and check the committed install so this
+        // compensation cannot remove a concurrent successful reconnect.
+        const { cleanupPreviousInstall } = await import('./install-registry')
+        await cleanupPreviousInstall(integrationType, registeredConfig)
+      } catch (cleanupError) {
+        try {
+          const { enqueueJob } = await import('@/lib/server/jobs/job-queue')
+          await enqueueJob({
+            queue: 'integration-install-cleanup',
+            payload: { type: integrationType, config: registeredConfig },
+            maxAttempts: 10,
+          })
+        } catch (retryError) {
+          throw new AggregateError(
+            [error, cleanupError, retryError],
+            'Integration save and routing cleanup failed'
+          )
+        }
+      }
+    }
+    throw error
   }
-
-  const [row] = await db
-    .insert(integrations)
-    .values({
-      integrationType,
-      status: 'active',
-      secrets: encryptedSecrets,
-      connectedByPrincipalId: principalId,
-      principalId: integrationPrincipalId,
-      connectedAt: now,
-      config,
-    })
-    .onConflictDoUpdate({
-      target: [integrations.integrationType],
-      set: {
-        status: 'active',
-        secrets: encryptedSecrets,
-        connectedByPrincipalId: principalId,
-        principalId: integrationPrincipalId,
-        connectedAt: now,
-        config,
-        lastError: null,
-        lastErrorAt: null,
-        errorCount: 0,
-        updatedAt: now,
-      },
-    })
-    .returning({ id: integrations.id })
-
-  const integrationId = row.id as IntegrationId
 
   // Run integration-specific post-connect hook (e.g. provision feedback source)
   const definition = getIntegration(integrationType)

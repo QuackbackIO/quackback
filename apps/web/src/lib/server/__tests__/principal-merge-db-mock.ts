@@ -66,6 +66,7 @@ export function mockDbModule(): Record<string, unknown> {
     db: {
       transaction: (fn: unknown) => mockTransaction(fn),
     },
+    slackUserLinks: { principalId: 'slackUserLinks.principalId', __name: 'slack_user_links' },
     postVotes: {
       principalId: 'postVotes.principalId',
       postId: 'postVotes.postId',

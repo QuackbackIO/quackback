@@ -6,7 +6,10 @@ import {
 } from '@/lib/server/workspaces/workspace-context'
 
 export class ControlPlaneUnavailableError extends Error {
-  constructor(message = 'Quackback Cloud is temporarily unavailable. Please try again.') {
+  constructor(
+    message = 'Quackback Cloud is temporarily unavailable. Please try again.',
+    public readonly status?: number
+  ) {
     super(message)
     this.name = 'ControlPlaneUnavailableError'
   }
@@ -100,6 +103,18 @@ export async function getWorkspaceControlPlane<T>(path: string): Promise<T> {
   return requestWorkspaceControlPlane<T>(path, { method: 'GET' })
 }
 
+export async function putWorkspaceControlPlane<T>(path: string, body: unknown): Promise<T> {
+  return requestWorkspaceControlPlane<T>(path, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+export async function deleteWorkspaceControlPlane<T>(path: string): Promise<T> {
+  return requestWorkspaceControlPlane<T>(path, { method: 'DELETE' })
+}
+
 async function requestWorkspaceControlPlane<T>(
   path: string,
   init: RequestInit,
@@ -122,7 +137,7 @@ async function requestWorkspaceControlPlane<T>(
   const payload = (await response.json().catch(() => null)) as { error?: unknown } | null
   if (!response.ok) {
     const message = typeof payload?.error === 'string' ? payload.error : undefined
-    throw new ControlPlaneUnavailableError(message)
+    throw new ControlPlaneUnavailableError(message, response.status)
   }
   return payload as T
 }

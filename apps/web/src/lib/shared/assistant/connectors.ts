@@ -43,6 +43,7 @@ export type ConnectorToolGroup = (typeof CONNECTOR_TOOL_GROUPS)[number]
 export const connectorAssignmentsSchema = z.object({
   agent: z.boolean(),
   copilot: z.boolean(),
+  workspace: z.boolean().optional(),
 })
 export type ConnectorAssignments = z.infer<typeof connectorAssignmentsSchema>
 

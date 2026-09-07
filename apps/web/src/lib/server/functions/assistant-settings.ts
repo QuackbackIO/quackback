@@ -1,3 +1,4 @@
+import { assistantWorkspaceConfigSchema } from '@/lib/shared/assistant/config'
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { actorFromAuth } from '@/lib/server/audit/log'
@@ -104,4 +105,30 @@ export const updateWidgetAssistantDeploymentFn = createServerFn({ method: 'POST'
     const { updateWidgetAssistantDeployment } =
       await import('@/lib/server/domains/settings/settings.widget')
     return updateWidgetAssistantDeployment(data, configActor(ctx))
+  })
+
+export const updateWorkspaceAssistantFn = createServerFn({ method: 'POST' })
+  .validator(
+    z.object({
+      expectedRevision: z.number().int().positive(),
+      workspace: assistantWorkspaceConfigSchema,
+    })
+  )
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
+    const { updateAssistantConfig } =
+      await import('@/lib/server/domains/settings/settings.assistant')
+    return updateAssistantConfig(
+      data.expectedRevision,
+      // `slack` is the deployment bit; only setSlackAssistantEnabledFn may flip
+      // it, behind the active-install, scope and Cloud-routing checks.
+      (current) => ({
+        ...current,
+        agents: {
+          ...current.agents,
+          workspace: { ...data.workspace, slack: current.agents.workspace.slack },
+        },
+      }),
+      configActor(ctx)
+    )
   })

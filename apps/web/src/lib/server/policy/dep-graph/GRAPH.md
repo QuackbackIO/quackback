@@ -57,7 +57,7 @@ Edges (26):
 ## 3. Server domains (lib/server/domains)
 
 Nodes (49): activity, ai, analytics, api, api-keys, assistant, billing, boards, changelog, channel-accounts, channels, comments, companies, company-attributes, conversation, conversation-attributes, conversation-views, embeddings, export, help-center, import, inbox, macros, merge-suggestions, moderation, notifications, office-hours, platform-credentials, post-tags, post-views, posts, principals, push-devices, roadmaps, roles, segments, sentiment, settings, sla, status, statuses, subscriptions, summary, teams, tickets, user-attributes, users, webhooks, workflows
-Edges (115):
+Edges (118):
 
 - analytics -> api
 - analytics -> assistant
@@ -74,9 +74,12 @@ Edges (115):
 - assistant -> conversation-attributes
 - assistant -> embeddings
 - assistant -> help-center
+- assistant -> post-tags
+- assistant -> posts
 - assistant -> principals
 - assistant -> settings
 - assistant -> status
+- assistant -> statuses
 - assistant -> tickets
 - assistant -> workflows
 - billing -> ai

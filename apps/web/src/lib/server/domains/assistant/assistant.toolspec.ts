@@ -1,3 +1,5 @@
+import { assistantGateEnvelopeSchema, withGateEnvelope } from './tool-output'
+
 /**
  * Quinn's tool catalogue: one spec per tool, describing what it does, who can
  * use it, and how it runs, alongside the model-facing definition and its
@@ -206,6 +208,8 @@ export function makeAssistantToolLedger(): AssistantToolLedger {
  * passed to `chat({ context })` and NEVER serialized into the model prompt.
  */
 export interface AssistantToolContext {
+  workspaceThreadKey?: string
+
   db: Executor
   assistantPrincipalId: PrincipalId
   /** Configured V2 identity for service-authored records created by tools. */
@@ -306,6 +310,10 @@ export interface AssistantToolContext {
    * executor) — the summary then falls back to the raw key.
    */
   attributeCatalogue?: readonly AssistantAttributeCatalogueEntry[]
+  /** In-process first-party MCP session for this turn (workspace assistant). */
+  mcpSession?: import('./connectors/mcp-client').ConnectorMcpSession
+  /** Connector MCP sessions reused across tool calls this turn, keyed by connector id. */
+  mcpConnectorSessions?: Map<string, import('./connectors/mcp-client').ConnectorMcpSession>
 }
 
 /**
@@ -318,6 +326,7 @@ export function makeAssistantToolContext(init: {
   db: Executor
   assistantPrincipalId: PrincipalId
   assistantName?: string
+  workspaceThreadKey?: string
   role?: AssistantRole
   audience: ContentAudience
   conversationId: ConversationId | null
@@ -332,11 +341,14 @@ export function makeAssistantToolContext(init: {
   skills?: { count: number; loads: number }
   actor?: Actor
   attributeCatalogue?: readonly AssistantAttributeCatalogueEntry[]
+  mcpSession?: import('./connectors/mcp-client').ConnectorMcpSession
+  mcpConnectorSessions?: Map<string, import('./connectors/mcp-client').ConnectorMcpSession>
 }): AssistantToolContext {
   return {
     db: init.db,
     assistantPrincipalId: init.assistantPrincipalId,
     assistantName: init.assistantName ?? DEFAULT_ASSISTANT_CONFIG.identity.name,
+    workspaceThreadKey: init.workspaceThreadKey,
     role: init.role ?? 'customer_support',
     audience: init.audience,
     conversationId: init.conversationId,
@@ -351,13 +363,15 @@ export function makeAssistantToolContext(init: {
       status: false,
     },
     ledger: makeAssistantToolLedger(),
-    simulate: init.simulate ?? init.conversationId === null,
+    simulate: init.simulate ?? (init.conversationId === null && !init.workspaceThreadKey),
     writeToolPolicy: init.writeToolPolicy,
     skills: init.skills,
     involvementId: init.involvementId ?? null,
     latestCustomerMessageId: init.latestCustomerMessageId ?? null,
     actor: init.actor ?? quinnActor(init.assistantPrincipalId),
     attributeCatalogue: init.attributeCatalogue,
+    mcpSession: init.mcpSession,
+    mcpConnectorSessions: init.mcpConnectorSessions,
   }
 }
 
@@ -377,37 +391,7 @@ export const SEARCH_BUDGET_PER_TURN = 3
  */
 export type ToolRiskClass = 'read' | 'write' | 'control'
 
-/**
- * The pipeline's gate results. Every tool's declared output must also admit
- * these: the model runtime validates execute results against outputSchema
- * AFTER the pipeline wrapper runs, so a pending-approval / denied / duplicate
- * / failed / simulated result must parse or the model sees a generic
- * validation error instead of the note it should relay to the customer.
- * Compose every definition's outputSchema through `withGateEnvelope`.
- */
-export const assistantGateEnvelopeSchema = z.union([
-  z.object({
-    status: z.enum(['pending_approval', 'denied', 'skipped_duplicate', 'failed']),
-    note: z.string(),
-  }),
-  z.object({ simulated: z.literal(true), summary: z.string() }),
-])
-
-/**
- * Compose a tool's outputSchema so it also admits the pipeline's gate
- * envelopes (pending-approval/denied/duplicate/failed/simulated).
- *
- * This deliberately does NOT use TanStack's `needsApproval` tool option.
- * Approval here is a PERSISTED queue — a pending-action row with a TTL, a
- * summary card a teammate reviews, and later execution as a bounded
- * teammate-actor (see `proposePendingAction` / `executeApprovedPendingAction`)
- * — not the in-stream client-side approval prompt `needsApproval` triggers. The
- * gate result is a normal tool output the model must be able to relay to the
- * customer, so it rides the outputSchema; do not migrate this to `needsApproval`.
- */
-export function withGateEnvelope<T extends z.ZodTypeAny>(schema: T) {
-  return z.union([schema, assistantGateEnvelopeSchema])
-}
+export { assistantGateEnvelopeSchema, withGateEnvelope } from './tool-output'
 
 /**
  * A tool's own SUCCESS output — everything its declared outputSchema admits
@@ -482,11 +466,14 @@ export interface AssistantToolSpec<In = unknown, Out = unknown> {
 const searchKnowledgeOutputSchema = z.object({
   results: z.array(
     z.object({
-      id: z.string(),
+      id: z.string().describe('Citation id — put this in the citations array.'),
       /** Which entity the result is, so the model can reason per-kind (share a
        *  'post', link an 'article') without decoding TypeID prefixes. */
       kind: z.enum(ASSISTANT_CITATION_TYPES),
-      title: z.string(),
+      title: z.string().describe('Exact source title. Copy verbatim.'),
+      url: z
+        .string()
+        .describe('Canonical link. Use as the markdown link target when listing this result.'),
       snippet: z.string(),
     })
   ),
@@ -577,6 +564,10 @@ async function executeSearchKnowledge(
     conversationId: ctx.conversationId,
     sourceTypes: narrowing,
     enabledSources: ctx.knowledge.sources,
+    actor: ctx.actor,
+    workspaceSearch: ctx.role === 'workspace_assistant',
+    includeInternalNotes: ctx.knowledge.internalNotes,
+    notesOnly: ctx.knowledge.pastConversations === false,
   })
   for (const item of items) {
     // `updatedAt` rides the ledgered citation itself (see its doc on
@@ -592,6 +583,7 @@ async function executeSearchKnowledge(
       id: item.id,
       kind: item.sourceType,
       title: item.title,
+      url: item.citation.url,
       snippet: item.excerpt,
     })),
     // Retrieved excerpts are attacker-reachable text (visitor-authored posts,
@@ -1049,6 +1041,18 @@ async function executeCreateTicket(
   args: CreateTicketArgs,
   ctx: AssistantToolContext
 ): Promise<CreateTicketOutput> {
+  if (ctx.role === 'workspace_assistant' && ctx.workspaceThreadKey) {
+    const ticket = await createTicket(
+      {
+        type: 'back_office',
+        title: args.title,
+        description: args.description,
+        priority: args.priority,
+      },
+      ctx.actor
+    )
+    return { created: true, ticketId: ticket.id, reference: ticket.reference, title: ticket.title }
+  }
   const conversationId = ctx.conversationId
   if (!conversationId) {
     return { created: false, note: NO_CONVERSATION_NOTE }
@@ -1144,6 +1148,16 @@ async function executeCaptureFeedback(
   args: CaptureFeedbackArgs,
   ctx: AssistantToolContext
 ): Promise<CaptureFeedbackOutput> {
+  if (ctx.role === 'workspace_assistant' && ctx.workspaceThreadKey) {
+    if (!isTypeId(args.boardId, 'board') || !ctx.actor.principalId)
+      return { created: false, note: 'Invalid board or approver.' }
+    const { createPost } = await import('@/lib/server/domains/posts/post.service')
+    const post = await createPost(
+      { boardId: args.boardId, title: args.title, content: args.content },
+      { principalId: ctx.actor.principalId, actor: ctx.actor }
+    )
+    return { created: true, postId: post.id }
+  }
   const conversationId = ctx.conversationId
   if (!conversationId) {
     return { created: false, note: NO_CONVERSATION_NOTE }
@@ -1421,7 +1435,8 @@ const SPECS: readonly AssistantToolSpec[] = [
     permissions: [PERMISSIONS.TICKET_CREATE],
     definition: createTicketTool,
     execute: executeCreateTicket,
-    summarize: (args) => `Create a ${args.type} ticket: "${args.title}"`,
+    summarize: (args, ctx) =>
+      `Create a ${ctx?.role === 'workspace_assistant' ? 'back_office' : args.type} ticket: "${args.title}"`,
   }),
   defineToolSpec({
     label: 'Share feedback post',

@@ -79,6 +79,8 @@ export function resolveContentAudience(surface: AssistantSurface): ContentAudien
     case 'email':
     case 'workflow_step':
       return 'public'
+    case 'slack':
+    case 'workspace':
     case 'copilot':
       return 'team'
     default: {

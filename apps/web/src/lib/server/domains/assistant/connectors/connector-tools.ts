@@ -19,7 +19,11 @@ import {
   toolGroupFromAnnotations,
   type ConnectorToolPolicy,
 } from '@/lib/shared/assistant/connectors'
-import { withGateEnvelope, type AssistantToolSpec } from '../assistant.toolspec'
+import {
+  withGateEnvelope,
+  type AssistantToolContext,
+  type AssistantToolSpec,
+} from '../assistant.toolspec'
 import { openConnectorSession } from './mcp-client'
 import type { ConnectorRow } from './connectors.service'
 import { recordConnectorCall } from './connectors.health'
@@ -31,7 +35,7 @@ export const connectorToolOutputSchema = z.object({
   note: z.string().optional(),
 })
 
-function jsonSchemaToZod(schema: Record<string, unknown> | undefined): z.ZodTypeAny {
+export function jsonSchemaToZod(schema: Record<string, unknown> | undefined): z.ZodTypeAny {
   if (!schema || typeof schema !== 'object') return z.record(z.string(), z.unknown())
   if (schema.type === 'object' && schema.properties && typeof schema.properties === 'object') {
     const properties = schema.properties as Record<string, Record<string, unknown>>
@@ -105,20 +109,25 @@ export function buildConnectorToolSpec(
     parents: ['conversation', 'ticket'],
     approvalPolicy: policy,
     definition,
-    execute: async (args: unknown) => {
+    execute: async (args: unknown, ctx: AssistantToolContext) => {
       const { createConnectorOAuthProvider, ConnectorOAuthRedirect } =
         await import('./oauth-provider')
       const token = await getValidConnectorAccessToken(row)
       try {
-        const session = await openConnectorSession({
-          url: row.url,
-          auth: {
-            mode: row.authMode,
-            bearerToken: row.authMode === 'bearer' ? (token ?? undefined) : undefined,
-            accessToken: row.authMode === 'oauth' ? (token ?? undefined) : undefined,
-          },
-          authProvider: row.authMode === 'oauth' ? createConnectorOAuthProvider(row) : undefined,
-        })
+        let session = ctx.mcpConnectorSessions?.get(row.id)
+        const owned = !session
+        if (!session) {
+          session = await openConnectorSession({
+            url: row.url,
+            auth: {
+              mode: row.authMode,
+              bearerToken: row.authMode === 'bearer' ? (token ?? undefined) : undefined,
+              accessToken: row.authMode === 'oauth' ? (token ?? undefined) : undefined,
+            },
+            authProvider: row.authMode === 'oauth' ? createConnectorOAuthProvider(row) : undefined,
+          })
+          ctx.mcpConnectorSessions?.set(row.id, session)
+        }
         try {
           const result = await session.callTool(tool.name, (args ?? {}) as Record<string, unknown>)
           await recordConnectorCall(row.id, {
@@ -127,7 +136,7 @@ export function buildConnectorToolSpec(
           })
           return result
         } finally {
-          await session.close()
+          if (owned && !ctx.mcpConnectorSessions) await session.close()
         }
       } catch (err) {
         if (err instanceof ConnectorOAuthRedirect) {

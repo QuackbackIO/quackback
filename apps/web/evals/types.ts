@@ -27,6 +27,21 @@ export interface ThreadMessage {
   content: string
 }
 
+/** Fixtures for connector and skill assignment gates. */
+export interface SeedConnector {
+  name: string
+  enabled?: boolean
+  assignments: { agent: boolean; copilot: boolean; workspace?: boolean }
+  tools: Array<{ name: string; readOnly?: boolean; policy?: 'always' | 'approval' | 'never' }>
+}
+export interface SeedSkill {
+  name: string
+  whenToUse: string
+  instructions: string
+  enabled?: boolean
+  assignments: { agent: boolean; copilot: boolean; workspace?: boolean }
+}
+
 /** A KB article seeded (with a real embedding) for grounding scenarios. */
 export interface SeedKbArticle {
   title: string
@@ -203,6 +218,7 @@ export type Structural =
   | { type: 'inability'; reasonOneOf?: string[] }
   | { type: 'internalSourced'; value: boolean }
   | { type: 'noWrites' }
+  | { type: 'noExecutedWrites' }
   | { type: 'noProposals' }
   | { type: 'executedTool'; name: string }
   | { type: 'proposedTool'; name: string }
@@ -264,6 +280,7 @@ export type Scenario = TurnScenario | ToolsetScenario | ContrastScenario
 
 /** Resolve the surface a given role runs on. */
 export function surfaceForRole(scenario: BaseScenario, role: AssistantRole): AssistantSurface {
+  if (role === 'workspace_assistant') return 'slack'
   if (role === 'copilot_qa') return 'copilot'
   return scenario.surface ?? 'widget'
 }

@@ -146,3 +146,16 @@ export function reasoningExcludeProviderOptions(): { reasoning?: { exclude: true
     ? { reasoning: { exclude: true } }
     : {}
 }
+
+const REASONING_EFFORTS = new Set(['low', 'high', 'max', 'medium', 'minimal'])
+
+/**
+ * OpenRouter `reasoning.effort` for models that cannot disable thinking.
+ * Unset leaves the provider default.
+ */
+export function reasoningEffortProviderOptions(): { reasoning?: { effort: string } } {
+  const effort = config.aiReasoningEffort?.trim().toLowerCase()
+  if (!effort || !REASONING_EFFORTS.has(effort) || !config.openaiBaseUrl?.includes('openrouter.ai'))
+    return {}
+  return { reasoning: { effort } }
+}

@@ -32,6 +32,7 @@ import type {
   KbCategoryId,
 } from '@quackback/ids'
 import type { McpAuthContext } from '../types'
+import { getBaseUrl } from '@/lib/server/config'
 import {
   registerTool,
   requireScope,
@@ -42,6 +43,7 @@ import {
   errorResult,
   encodeSearchCursor,
   decodeSearchCursor,
+  parseFlexibleDate,
   articleResult,
   categoryResult,
   READ_ONLY,
@@ -84,7 +86,7 @@ const searchSchema = {
     .string()
     .optional()
     .describe(
-      'ISO 8601 date string for filtering posts created on or after this date (e.g. "2024-06-01")'
+      'Created on or after this time. ISO 8601 (e.g. "2024-06-01") or a relative window: 7d, 30d, 24h, this_week, this_month, today.'
     ),
   dateTo: z
     .string()
@@ -278,7 +280,7 @@ async function searchPosts(args: SearchArgs): Promise<CallToolResult> {
     boardIds: args.boardId ? [args.boardId as BoardId] : undefined,
     statusSlugs: args.status ? [args.status] : undefined,
     tagIds: args.tagIds as PostTagId[] | undefined,
-    dateFrom: args.dateFrom ? new Date(args.dateFrom) : undefined,
+    dateFrom: parseFlexibleDate(args.dateFrom),
     dateTo: (() => {
       if (!args.dateTo) return undefined
       const d = new Date(args.dateTo)
@@ -296,10 +298,12 @@ async function searchPosts(args: SearchArgs): Promise<CallToolResult> {
   const lastItem = result.items[result.items.length - 1]
   const nextCursor = result.hasMore && lastItem ? encodeSearchCursor('posts', lastItem.id) : null
 
+  const origin = getBaseUrl()
   return compactJsonResult({
     posts: result.items.map((p) => ({
       id: p.id,
       title: p.title,
+      url: `${origin}/b/${encodeURIComponent(p.board.slug)}/posts/${p.id}`,
       excerpt: p.content ? truncate(p.content, 200) : '',
       voteCount: p.voteCount,
       commentCount: p.commentCount,

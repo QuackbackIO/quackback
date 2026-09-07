@@ -1,3 +1,4 @@
+import { DEFAULT_WORKSPACE_ASSISTANT } from '@/lib/shared/assistant/config'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { makeKbArticle } from './kb-fixtures'
 
@@ -152,9 +153,10 @@ vi.mock('@/lib/server/domains/boards/board.service', () => ({
 
 const DEFAULT_RUNTIME_CONFIG: AssistantRuntimeConfig = {
   config: {
-    version: 3 as const,
+    version: 4 as const,
     identity: { name: 'Quinn', avatarUrl: null },
     agents: {
+      workspace: structuredClone(DEFAULT_WORKSPACE_ASSISTANT),
       agent: {
         voice: {
           tone: 'balanced' as const,
@@ -247,6 +249,13 @@ vi.mock('../guidance-selector', async (importOriginal) => {
 const mockAssembleAssistantToolset = vi.hoisted(() => vi.fn())
 const realAssembleAssistantToolsetRef = vi.hoisted(() => ({
   current: undefined as unknown as (...args: unknown[]) => unknown,
+}))
+vi.mock('../mcp-workspace-tools', () => ({
+  mcpAuthFromActor: async () => null,
+  openWorkspaceMcp: async () => {
+    throw new Error('workspace MCP should be mocked in runtime tests')
+  },
+  getWorkspaceMcpSpecByName: async () => null,
 }))
 vi.mock('../assistant.tools', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../assistant.tools')>()
@@ -360,6 +369,7 @@ describe('mockRuntimeConfig helper', () => {
     mockRuntimeConfig({
       config: {
         agents: {
+          workspace: structuredClone(DEFAULT_WORKSPACE_ASSISTANT),
           agent: {
             voice: DEFAULT_RUNTIME_CONFIG.config.agents.agent.voice,
             knowledge: {
@@ -662,7 +672,7 @@ describe('runAssistantTurn', () => {
       proposedActions: [],
       identity: DEFAULT_RUNTIME_CONFIG.config.identity,
       trace: {
-        promptVersion: 'support-agent-v4',
+        promptVersion: 'support-agent-v6',
         configRevision: 1,
         role: 'customer_support',
         tone: 'balanced',
@@ -675,6 +685,53 @@ describe('runAssistantTurn', () => {
     expect(mockRetrieve).toHaveBeenCalledWith('reset password', { audience: 'public' })
   })
 
+  it('rejects workspace assistant on a public surface before inference', async () => {
+    await expect(
+      runAssistantTurn({
+        ...copilotQaInput,
+        role: 'workspace_assistant',
+        surface: 'widget',
+        messages: customerAsks('private notes'),
+      } as unknown as Parameters<typeof runAssistantTurn>[0])
+    ).rejects.toThrow('cannot run with public content')
+    expect(mockChat).not.toHaveBeenCalled()
+  })
+
+  it('requires a requesting actor for workspace turns instead of falling back to Quinn', async () => {
+    await expect(
+      runAssistantTurn({
+        ...copilotQaInput,
+        role: 'workspace_assistant',
+        surface: 'slack',
+        messages: customerAsks('private notes'),
+      } as unknown as Parameters<typeof runAssistantTurn>[0])
+    ).rejects.toThrow('requires the requesting actor')
+    expect(mockChat).not.toHaveBeenCalled()
+  })
+  it('passes the requesting workspace actor into the tool context unchanged', async () => {
+    const actor = {
+      principalId: 'principal_member' as never,
+      principalType: 'user' as const,
+      role: 'member' as const,
+      permissions: new Set<never>(),
+      segmentIds: new Set<never>(),
+    }
+    let seen: unknown
+    mockChat.mockImplementation((opts: { context: { actor: unknown } }) => {
+      seen = opts.context.actor
+      return (async function* () {
+        yield* completeRun({ text: 'Hello', citations: [] })
+      })()
+    })
+    await runAssistantTurn({
+      ...copilotQaInput,
+      role: 'workspace_assistant',
+      surface: 'slack',
+      actor,
+      messages: customerAsks('hello'),
+    })
+    expect(seen).toBe(actor)
+  })
   it('derives a team content audience for the copilot surface (structural leak gate)', async () => {
     mockRetrieve.mockResolvedValue([makeKbArticle('kb_article_1')])
     mockChat.mockImplementation(
@@ -1393,7 +1450,7 @@ describe('runAssistantTurn', () => {
       ticketId: null,
       surface: 'widget',
       role: 'customer_support',
-      promptVersion: 'support-agent-v4',
+      promptVersion: 'support-agent-v6',
       configRevision: 1,
       tone: 'balanced',
       responseLength: 'balanced',
@@ -1482,7 +1539,7 @@ describe('runAssistantTurn', () => {
       internalSourced: false,
       proposedActions: [],
       identity: DEFAULT_RUNTIME_CONFIG.config.identity,
-      trace: expect.objectContaining({ promptVersion: 'support-agent-v4', configRevision: 1 }),
+      trace: expect.objectContaining({ promptVersion: 'support-agent-v6', configRevision: 1 }),
     })
     // Salvaged on the first attempt; no retry needed.
     expect(mockChat).toHaveBeenCalledTimes(1)
@@ -2105,7 +2162,7 @@ describe('runAssistantTurn: V2 prompt and config snapshot', () => {
     expect(result).toMatchObject({
       identity,
       trace: {
-        promptVersion: 'support-agent-v4',
+        promptVersion: 'support-agent-v6',
         configRevision: 12,
         role: 'customer_support',
         tone: 'warm',
@@ -2114,7 +2171,7 @@ describe('runAssistantTurn: V2 prompt and config snapshot', () => {
       },
     })
     expect(lastLoggedMetadata).toMatchObject({
-      promptVersion: 'support-agent-v4',
+      promptVersion: 'support-agent-v6',
       configRevision: 12,
       role: 'customer_support',
       tone: 'warm',
@@ -2426,8 +2483,22 @@ describe('salvageAssistantOutput', () => {
     expect(parsed?.citations).toEqual([])
   })
 
-  it('returns null for prose with no JSON at all (caller falls back)', () => {
-    expect(salvageAssistantOutput('I was just greeting you, no JSON here.')).toBeNull()
+  it('recovers a markdown answer when the model skipped the JSON envelope', () => {
+    const prose =
+      'Based on all feedback, *Analytics dashboard* has **185 votes**.\n\n• *Roadmap timeline (10)* (146 votes)'
+    expect(salvageAssistantOutput(prose)).toEqual(answer(prose))
+  })
+
+  it('returns null for tool-call dumps so the turn can retry', () => {
+    expect(
+      salvageAssistantOutput(
+        'Let me check.\n\n<｜DSML｜tool_calls>\n<｜DSML｜invoke name="list_feedback">'
+      )
+    ).toBeNull()
+  })
+
+  it('returns null for a short stall so the turn can retry', () => {
+    expect(salvageAssistantOutput('Let me check what we have for the last day.')).toBeNull()
   })
 
   it('returns null for empty output', () => {

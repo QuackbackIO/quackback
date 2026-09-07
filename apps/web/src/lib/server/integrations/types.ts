@@ -244,6 +244,30 @@ export interface EnrichmentCard {
 }
 
 export interface IntegrationDefinition {
+  appHooks?: {
+    kinds: readonly string[]
+    verify: (input: {
+      headers: Headers
+      rawBody: string
+      credentials: Record<string, string>
+      /** Authenticated gateway receipt time; omitted for direct provider requests. */
+      verifiedAt?: number
+    }) => boolean
+    deliveryId: (kind: string, rawBody: string, contentType: string | null) => string | null
+    // Optional transaction keeps receipt and durable enqueue atomic.
+    handle: (
+      kind: string,
+      rawBody: string,
+      contentType: string | null,
+      executor?: import('@/lib/server/jobs/job-queue').JobSqlExecutor
+    ) => Promise<Response>
+  }
+
+  install?: {
+    externalId: (config: Record<string, unknown>) => string | null
+    metadata?: (config: Record<string, unknown>) => Record<string, unknown>
+  }
+
   id: string
   catalog: IntegrationCatalogEntry
   oauth?: IntegrationOAuthConfig

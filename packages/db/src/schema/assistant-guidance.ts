@@ -37,7 +37,10 @@ export const assistantGuidanceRules = pgTable(
       'assistant_guidance_rules_instruction_length_check',
       sql`char_length(${table.instruction}) BETWEEN 1 AND 1000`
     ),
-    check('assistant_guidance_rules_agent_check', sql`${table.agent} IN ('agent', 'copilot')`),
+    check(
+      'assistant_guidance_rules_agent_check',
+      sql`${table.agent} IN ('agent', 'copilot', 'workspace')`
+    ),
   ]
 )
 

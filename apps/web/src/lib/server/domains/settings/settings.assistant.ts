@@ -1,10 +1,11 @@
 import type { AuditActor, AuditEventType } from '@/lib/server/audit/log'
 import { recordAuditEventInTransaction } from '@/lib/server/audit/log'
-import { and, db, eq, principal, settings, sql } from '@/lib/server/db'
+import { and, db, eq, principal, settings, sql, type Transaction } from '@/lib/server/db'
 import { isPathManaged } from '@/lib/server/config-file/managed-paths'
 import { logger } from '@/lib/server/logger'
 import {
   assistantAgentSchema,
+  migrateAssistantConfig,
   assistantConfigSchema,
   assistantCopilotCapabilitiesSchema,
   assistantAgentKnowledgeSchema,
@@ -81,7 +82,7 @@ export type AssistantConfigAuditActor = AuditActor & { headers?: Headers }
 /** Strict settings-page read. Invalid persisted JSON is a load failure, never an invented UI default. */
 export async function getAssistantConfig(): Promise<AssistantConfigState> {
   const row = await requireSettings()
-  const parsed = assistantConfigSchema.safeParse(row.assistantConfig)
+  const parsed = assistantConfigSchema.safeParse(migrateAssistantConfig(row.assistantConfig))
   if (!parsed.success) {
     log.error({ issues: parsed.error.issues }, 'stored assistant config is invalid')
     throw new InternalError('ASSISTANT_CONFIG_INVALID', 'Stored AI agent settings are invalid')
@@ -91,7 +92,7 @@ export async function getAssistantConfig(): Promise<AssistantConfigState> {
 
 export async function getAssistantSettings(): Promise<AssistantSettingsState> {
   const row = await requireSettings()
-  const parsed = assistantConfigSchema.safeParse(row.assistantConfig)
+  const parsed = assistantConfigSchema.safeParse(migrateAssistantConfig(row.assistantConfig))
   if (!parsed.success) {
     log.error({ issues: parsed.error.issues }, 'stored assistant config is invalid')
     throw new InternalError('ASSISTANT_CONFIG_INVALID', 'Stored AI agent settings are invalid')
@@ -106,7 +107,7 @@ export async function getAssistantSettings(): Promise<AssistantSettingsState> {
 /** Runtime read posture: invalid behavior JSON falls back without reintroducing a V1 reader. */
 export async function getAssistantRuntimeConfig(): Promise<AssistantRuntimeConfigState> {
   const row = await requireSettings()
-  const parsed = assistantConfigSchema.safeParse(row.assistantConfig)
+  const parsed = assistantConfigSchema.safeParse(migrateAssistantConfig(row.assistantConfig))
   const runtimeFields = {
     revision: row.assistantConfigRevision,
     workspaceName: row.name,
@@ -196,9 +197,10 @@ function safeTransitions(before: AssistantConfig, after: AssistantConfig, paths:
 export async function updateAssistantConfig(
   expectedRevision: number,
   mutate: (current: AssistantConfig) => AssistantConfig,
-  actor: AssistantConfigAuditActor
+  actor: AssistantConfigAuditActor,
+  transaction?: Transaction
 ): Promise<AssistantConfigState> {
-  const result = await db.transaction(async (tx) => {
+  const write = async (tx: Transaction) => {
     const [row] = await tx
       .select({
         id: settings.id,
@@ -212,7 +214,7 @@ export async function updateAssistantConfig(
 
     if (!row) throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
 
-    const current = assistantConfigSchema.safeParse(row.assistantConfig)
+    const current = assistantConfigSchema.safeParse(migrateAssistantConfig(row.assistantConfig))
     if (!current.success) {
       throw new InternalError('ASSISTANT_CONFIG_INVALID', 'Stored AI agent settings are invalid')
     }
@@ -275,9 +277,11 @@ export async function updateAssistantConfig(
     })
 
     return { config: next, revision, changed: true }
-  })
+  }
+  const result = transaction ? await write(transaction) : await db.transaction(write)
 
-  if (result.changed) await invalidateSettingsCache()
+  // An outer transaction caller invalidates only after its own commit.
+  if (result.changed && !transaction) await invalidateSettingsCache()
   return { config: result.config, revision: result.revision }
 }
 

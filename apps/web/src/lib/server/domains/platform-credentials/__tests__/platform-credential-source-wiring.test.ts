@@ -70,7 +70,15 @@ vi.mock('@/lib/server/integrations', () => ({
             { key: 'signingSecret' },
           ],
         }
-      : undefined,
+      : type === 'gitlab'
+        ? {
+            platformCredentials: [
+              { key: 'clientId' },
+              { key: 'clientSecret' },
+              { key: 'instanceUrl', required: false },
+            ],
+          }
+        : undefined,
 }))
 
 vi.mock('@/lib/server/auth/config-version', () => ({ bumpAuthConfigVersionInTx: vi.fn() }))
@@ -122,6 +130,9 @@ describe('platform credential source wiring — env (managed cloud)', () => {
   })
 
   it('savePlatformCredentials refuses integration writes (platform-managed)', async () => {
+    process.env.INTEGRATION_SLACK_CLIENT_ID = 'id'
+    process.env.INTEGRATION_SLACK_CLIENT_SECRET = 'secret'
+    process.env.INTEGRATION_SLACK_SIGNING_SECRET = 'signing'
     const { savePlatformCredentials, PlatformCredentialsManagedError } =
       await import('../platform-credential.service')
     await expect(
@@ -134,11 +145,37 @@ describe('platform credential source wiring — env (managed cloud)', () => {
   })
 
   it('deletePlatformCredentials refuses integration writes (platform-managed)', async () => {
+    process.env.INTEGRATION_SLACK_CLIENT_ID = 'id'
+    process.env.INTEGRATION_SLACK_CLIENT_SECRET = 'secret'
+    process.env.INTEGRATION_SLACK_SIGNING_SECRET = 'signing'
     const { deletePlatformCredentials, PlatformCredentialsManagedError } =
       await import('../platform-credential.service')
     await expect(deletePlatformCredentials('slack')).rejects.toBeInstanceOf(
       PlatformCredentialsManagedError
     )
+  })
+
+  it('falls back per provider when env is incomplete and leaves its settings editable', async () => {
+    process.env.INTEGRATION_SLACK_CLIENT_ID = 'partial'
+    mockFindFirst.mockResolvedValue({ secrets: 'enc' })
+    const service = await import('../platform-credential.service')
+    expect(await service.arePlatformCredentialsManaged('slack')).toBe(false)
+    expect(await service.getPlatformCredentials('slack')).toEqual({
+      clientId: 'db-id',
+      clientSecret: 'db-secret',
+    })
+    await service.savePlatformCredentials({
+      integrationType: 'slack',
+      credentials: { clientId: 'new' },
+      principalId: 'principal_1' as PrincipalId,
+    })
+    expect(mockInsert).toHaveBeenCalled()
+  })
+
+  it('includes DB integration providers alongside managed env providers', async () => {
+    mockFindMany.mockResolvedValue([{ integrationType: 'discord' }])
+    const { getConfiguredIntegrationTypes } = await import('../platform-credential.service')
+    expect(await getConfiguredIntegrationTypes()).toContain('discord')
   })
 
   // auth_* credentials are NOT governed by the env switch.
@@ -177,4 +214,59 @@ describe('platform credential source wiring — env (managed cloud)', () => {
     const result = await getConfiguredIntegrationTypes()
     expect([...result].sort()).toEqual(['auth_github', 'auth_sso', 'slack'])
   })
+})
+
+describe('Cloud CP credential authority', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.stubEnv('QUACKBACK_TENANCY', 'pooled')
+    mockFindMany.mockResolvedValue([])
+  })
+  afterEach(() => vi.unstubAllEnvs())
+  it('locks Cloud providers even when absent and never falls back to tenant credentials', async () => {
+    vi.stubEnv('INTEGRATION_SLACK_CLIENT_ID', '')
+    const service = await import('../platform-credential.service')
+    expect(await service.arePlatformCredentialsManaged('slack')).toBe(true)
+    expect(await service.getPlatformCredentials('slack')).toBeNull()
+    expect(mockFindFirst).not.toHaveBeenCalled()
+    await expect(
+      service.savePlatformCredentials({
+        integrationType: 'slack',
+        credentials: {},
+        principalId: 'principal_1' as PrincipalId,
+      })
+    ).rejects.toThrow('managed')
+    await expect(service.deletePlatformCredentials('slack')).rejects.toThrow('managed')
+  })
+  it('excludes stale tenant shared-app credentials from discovery, preserving SSO and local-token integrations', async () => {
+    vi.stubEnv('INTEGRATION_SLACK_CLIENT_ID', 'id')
+    vi.stubEnv('INTEGRATION_SLACK_CLIENT_SECRET', 'secret')
+    vi.stubEnv('INTEGRATION_SLACK_SIGNING_SECRET', 'signing')
+    mockFindMany.mockResolvedValue([
+      { integrationType: 'github' },
+      { integrationType: 'auth_sso' },
+      { integrationType: 'ntfy' },
+    ])
+    const service = await import('../platform-credential.service')
+    expect(await service.getConfiguredIntegrationTypes()).toEqual(
+      new Set(['slack', 'auth_sso', 'ntfy'])
+    )
+    expect(await service.arePlatformCredentialsManaged('auth_sso')).toBe(false)
+    expect(await service.arePlatformCredentialsManaged('ntfy')).toBe(false)
+  })
+})
+
+it('uses complete GitLab env credentials when the optional instance URL is absent', async () => {
+  vi.stubEnv('PLATFORM_CREDENTIALS_SOURCE', 'env')
+  vi.stubEnv('INTEGRATION_GITLAB_CLIENT_ID', 'gitlab-id')
+  vi.stubEnv('INTEGRATION_GITLAB_CLIENT_SECRET', 'gitlab-secret')
+  try {
+    const { getPlatformCredentials } = await import('../platform-credential.service')
+    expect(await getPlatformCredentials('gitlab')).toEqual({
+      clientId: 'gitlab-id',
+      clientSecret: 'gitlab-secret',
+    })
+  } finally {
+    vi.unstubAllEnvs()
+  }
 })
