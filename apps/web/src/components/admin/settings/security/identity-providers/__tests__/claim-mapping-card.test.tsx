@@ -19,7 +19,7 @@ beforeAll(() => {
   Element.prototype.releasePointerCapture = vi.fn()
 })
 
-const { mappingSpy, openTest } = vi.hoisted(() => ({
+const { mappingSpy, openTest, ssoTestRef } = vi.hoisted(() => ({
   mappingSpy: vi.fn(
     async (_args: {
       data: {
@@ -31,13 +31,17 @@ const { mappingSpy, openTest } = vi.hoisted(() => ({
     }) => undefined
   ),
   openTest: vi.fn(),
+  ssoTestRef: {
+    lastSuccess: null as null | import('@/lib/shared/sso-test-capture').SsoTestCapture,
+    lastCapture: null as null | import('@/lib/shared/sso-test-capture').SsoTestCapture,
+  },
 }))
 
 vi.mock('../../sso/use-sso-test-sign-in', () => ({
   useSsoTestSignIn: () => ({
     open: openTest,
-    lastSuccess: null,
-    lastCapture: null,
+    lastSuccess: ssoTestRef.lastSuccess,
+    lastCapture: ssoTestRef.lastCapture,
   }),
   SsoTestSignInProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
@@ -178,9 +182,56 @@ beforeEach(() => {
   mappingSpy.mockClear()
   mappingSpy.mockResolvedValue(undefined)
   openTest.mockClear()
+  ssoTestRef.lastSuccess = null
+  ssoTestRef.lastCapture = null
 })
 
 describe('ClaimMappingCard save coordination', () => {
+  it('Edit+Apply on the default identifier does not persist claims.id', async () => {
+    renderCard(makeProvider({ claimMapping: null }))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Unique user identifier mapping' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Apply to draft' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
+    expect(lastMapping().acknowledgeIdentifierChange).toBeUndefined()
+    expect(lastMapping().operations).toEqual([])
+    const saved = lastSaved() as { profile?: { claims?: { id?: string } } } | null
+    expect(saved?.profile?.claims?.id).toBeUndefined()
+  })
+
+  it('keeps provider A session success when lastCapture is a mapping failure for B', () => {
+    const captureA = {
+      version: 2 as const,
+      registrationId: 'oidc_x',
+      capturedAt: '2026-09-03T00:00:00.000Z',
+      detailsChangedAtAtStart: null,
+      outcome: 'success' as const,
+      identity: {
+        id: 'alice',
+        email: 'alice@a.test',
+        sources: { id: 'idToken' as const, email: 'idToken' as const },
+      },
+      claims: { sub: 'alice', email: 'alice@a.test' },
+      replay: {
+        sources: [{ source: 'idToken' as const, claims: { sub: 'alice', email: 'alice@a.test' } }],
+      },
+    }
+    ssoTestRef.lastSuccess = captureA
+    ssoTestRef.lastCapture = {
+      version: 2,
+      registrationId: 'oidc_b',
+      capturedAt: '2026-09-04T00:00:00.000Z',
+      detailsChangedAtAtStart: null,
+      outcome: 'mapping_failed',
+      claims: { sub: 'bob' },
+      replay: { sources: [{ source: 'idToken', claims: { sub: 'bob' } }] },
+    }
+    renderCard(makeProvider({ lastTestCapture: makeProvider().lastTestCapture }))
+    expect(screen.getAllByText('alice@a.test').length).toBeGreaterThan(0)
+    expect(screen.queryByText('jane@example.test')).not.toBeInTheDocument()
+    expect(screen.queryByText('bob')).not.toBeInTheDocument()
+  })
+
   it('id-path change requires explicit user-facing confirmation', async () => {
     renderCard(makeProvider({ claimMapping: { profile: { claims: { id: 'oid' } } } }))
     fireEvent.click(screen.getByRole('button', { name: 'Edit Unique user identifier mapping' }))

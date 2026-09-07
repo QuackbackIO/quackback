@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, vi, beforeAll } from 'vitest'
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ClaimRowDialog } from '../claim-row-dialog'
 import { availableAddTargets } from '../provider-shared'
+import type { SsoTestCapture } from '@/lib/shared/sso-test-capture'
 
 beforeAll(() => {
   Element.prototype.scrollIntoView = vi.fn()
@@ -12,21 +13,25 @@ beforeAll(() => {
   Element.prototype.releasePointerCapture = vi.fn()
 })
 
+const defaultCapture: SsoTestCapture = {
+  registrationId: 'oidc_x',
+  capturedAt: '2026-09-01T00:00:00.000Z',
+  identity: { id: 'sub', sources: {} },
+  claims: { sub: 'person-123', upn: 'jane@example.test', groups: ['engineering'] },
+}
+
+const { ssoTestRef } = vi.hoisted(() => ({
+  ssoTestRef: {
+    lastSuccess: null as null | SsoTestCapture,
+    lastCapture: null as null | SsoTestCapture,
+  },
+}))
+
 vi.mock('../../sso/use-sso-test-sign-in', () => ({
   useSsoTestSignIn: () => ({
     open: vi.fn(),
-    lastSuccess: {
-      registrationId: 'oidc_x',
-      capturedAt: '2026-09-01T00:00:00.000Z',
-      identity: { id: 'sub', sources: {} },
-      claims: { sub: 'person-123', upn: 'jane@example.test', groups: ['engineering'] },
-    },
-    lastCapture: {
-      registrationId: 'oidc_x',
-      capturedAt: '2026-09-01T00:00:00.000Z',
-      identity: { id: 'sub', sources: {} },
-      claims: { sub: 'person-123', upn: 'jane@example.test', groups: ['engineering'] },
-    },
+    lastSuccess: ssoTestRef.lastSuccess,
+    lastCapture: ssoTestRef.lastCapture,
   }),
 }))
 
@@ -44,6 +49,11 @@ const DEFS = [
   { key: 'department', label: 'Department', type: 'string' },
   { key: 'plan', label: 'Plan', type: 'string' },
 ]
+
+beforeEach(() => {
+  ssoTestRef.lastSuccess = defaultCapture
+  ssoTestRef.lastCapture = defaultCapture
+})
 
 describe('ClaimRowDialog', () => {
   it('discards local edits on Cancel without committing', async () => {
@@ -132,6 +142,38 @@ describe('ClaimRowDialog', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Add rule' }))
     expect(screen.getByRole('button', { name: 'Apply to draft' })).toBeDisabled()
     expect(onCommit).not.toHaveBeenCalled()
+  })
+
+  it('prefers the capture prop over lastSuccess for role value suggestions', async () => {
+    ssoTestRef.lastSuccess = {
+      ...defaultCapture,
+      claims: { sub: 'person-123', groups: ['from-success'] },
+    }
+    ssoTestRef.lastCapture = ssoTestRef.lastSuccess
+    render(
+      <ClaimRowDialog
+        open
+        mode="edit"
+        lockedTarget={{ type: 'role' }}
+        availableTargets={[]}
+        definitions={DEFS}
+        initialRole={{
+          claimPath: 'groups',
+          rules: [{ whenContains: 'engineering', role: 'member' }],
+        }}
+        registrationId="oidc_x"
+        canTest
+        capture={{
+          ...defaultCapture,
+          claims: { sub: 'person-123', groups: ['from-capture'] },
+        }}
+        onOpenChange={vi.fn()}
+        onCommit={vi.fn()}
+      />
+    )
+    await userEvent.click(screen.getByRole('combobox', { name: 'Claim value to match (rule 1)' }))
+    expect(screen.getByText('from-capture')).toBeInTheDocument()
+    expect(screen.queryByText('from-success')).not.toBeInTheDocument()
   })
 
   it('offers Role and unused People targets only', async () => {

@@ -119,7 +119,9 @@ export function ClaimRowDialog({
 
   const canSubmit = (() => {
     if (!resolvedTarget) return false
-    if (resolvedTarget.type === 'profile') return path.trim().length > 0
+    if (resolvedTarget.type === 'profile') {
+      return mode === 'edit' || path.trim().length > 0
+    }
     if (resolvedTarget.type === 'people') {
       return path.trim().length > 0 && resolvedTarget.attributeKey.trim().length > 0
     }
@@ -132,7 +134,14 @@ export function ClaimRowDialog({
   const apply = () => {
     if (!resolvedTarget || !canSubmit) return
     if (resolvedTarget.type === 'profile') {
-      onCommit({ type: 'profile', field: resolvedTarget.field, path: path.trim() })
+      const trimmed = path.trim()
+      const defaultPath = OIDC_PROFILE_DEFAULTS[resolvedTarget.field]
+      const startedBlank = !(initialPath ?? '').trim()
+      onCommit({
+        type: 'profile',
+        field: resolvedTarget.field,
+        path: !trimmed || (startedBlank && trimmed === defaultPath) ? null : trimmed,
+      })
     } else if (resolvedTarget.type === 'role') {
       onCommit({ type: 'role', mapping: role })
     } else {

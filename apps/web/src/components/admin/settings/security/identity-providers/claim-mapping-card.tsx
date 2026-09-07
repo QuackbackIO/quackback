@@ -93,7 +93,12 @@ export function ClaimMappingCard({
 
   const capture = selectMappingCapture({
     registrationId: provider.registrationId,
-    sessionCapture: lastCapture ?? lastSuccess,
+    sessionCapture:
+      lastCapture?.registrationId === provider.registrationId
+        ? lastCapture
+        : lastSuccess?.registrationId === provider.registrationId
+          ? lastSuccess
+          : null,
     persistedCapture: provider.lastTestCapture,
   })
 
@@ -388,7 +393,7 @@ export function ClaimMappingCard({
                   setDialog({
                     mode: 'edit',
                     target: { type: 'profile', field: row.field },
-                    path: row.isDefault && row.field !== 'id' ? undefined : row.path,
+                    path: row.isDefault ? undefined : row.path,
                   })
                   return
                 }

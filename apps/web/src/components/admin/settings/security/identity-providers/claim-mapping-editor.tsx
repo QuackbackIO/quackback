@@ -53,9 +53,9 @@ export function RoleMappingRulesBody({
 }) {
   const { lastSuccess, lastCapture } = useSsoTestSignIn()
   const fixture =
+    (capture && capture.registrationId === registrationId ? capture : null) ??
     (lastCapture && lastCapture.registrationId === registrationId ? lastCapture : null) ??
-    (lastSuccess && lastSuccess.registrationId === registrationId ? lastSuccess : null) ??
-    (capture && capture.registrationId === registrationId ? capture : null)
+    (lastSuccess && lastSuccess.registrationId === registrationId ? lastSuccess : null)
   const suggestions = fixture ? deriveClaimSuggestions(captureSuggestionClaims(fixture)) : null
   const valueSuggestions = (suggestions?.valuesByPath[mapping.claimPath] ?? []).map((v) => ({
     value: v,
