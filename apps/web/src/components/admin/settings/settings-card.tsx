@@ -25,7 +25,7 @@ export function SettingsCard({
       )}
     >
       {(title || description || action) && (
-        <div className="px-4 py-3 sm:px-6 sm:py-4 border-b border-border/50 flex items-center justify-between">
+        <div className="flex flex-wrap items-start justify-between gap-2 px-4 py-3 sm:px-6 sm:py-4 border-b border-border/50">
           <div>
             {title && (
               <h2

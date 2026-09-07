@@ -77,7 +77,7 @@ export function OutcomePreviewRail({
 
   if (!preview.capture) {
     return (
-      <aside className="flex flex-col gap-4 border-t border-border/40 bg-muted/20 px-4 py-5 text-[12.5px] lg:border-t-0 lg:border-l">
+      <aside className="flex flex-col gap-4 rounded-lg border border-border/40 bg-muted/20 px-4 py-5 text-[12.5px]">
         <h3 className={cn(MENU_LABEL, 'font-mono')}>Preview</h3>
         <p className="text-xs text-muted-foreground">
           Run a test sign-in to inspect this IdP&apos;s claims and preview mappings.
@@ -98,7 +98,7 @@ export function OutcomePreviewRail({
   const hasAdminRule = roleRules.some((r) => r.role === 'admin')
 
   return (
-    <aside className="flex flex-col gap-4 border-t border-border/40 bg-muted/20 px-4 py-5 text-[12.5px] lg:border-t-0 lg:border-l">
+    <aside className="flex min-w-0 flex-col gap-4 rounded-lg border border-border/40 bg-muted/20 px-4 py-5 text-[12.5px]">
       <div>
         <h3 className={cn(MENU_LABEL, 'font-mono')}>Last test sign-in</h3>
         <div className="mt-2 font-medium">{captureIdentityCaption(preview.capture)}</div>
@@ -221,52 +221,58 @@ function IdentityLines({
   const emailPath = effectiveEmailPath(draft)
   const namePath = effectiveNamePath(draft)
   return (
-    <dl className="grid grid-cols-[6.2em_1fr] gap-x-2.5 gap-y-1 font-mono text-[11.5px]">
-      <dt className="font-sans text-muted-foreground">Identifier</dt>
-      <dd className="break-all">
-        {identity.id ?? 'Not supplied'}
-        {identity.provenance.id && (
-          <span className="text-muted-foreground">
-            {' '}
-            {'<-'} {identity.provenance.id.path}, {SOURCE_WORDS[identity.provenance.id.source]}
-          </span>
-        )}
-      </dd>
-      <dt className="font-sans text-muted-foreground">Email</dt>
-      <dd className="break-all">
-        {identity.kind === 'placeholder_required'
-          ? 'A placeholder address will be used.'
-          : identity.kind === 'missing_email'
-            ? `Not supplied by the configured path ${emailPath}`
-            : (identity.email ?? 'Not supplied')}
-        {identity.provenance.email && identity.kind === 'identity' && (
-          <span className="text-muted-foreground">
-            {' '}
-            {'<-'} {identity.provenance.email.path},{' '}
-            {SOURCE_WORDS[identity.provenance.email.source]}
-          </span>
-        )}
-      </dd>
-      <dt className="font-sans text-muted-foreground">Name</dt>
-      <dd className="break-all">
-        {identity.name ?? 'Not supplied'}
-        {identity.nameSynthesized
-          ? ' (generated)'
-          : identity.provenance.name
-            ? ` <- ${identity.provenance.name.path}, ${SOURCE_WORDS[identity.provenance.name.source]}`
-            : !identity.name
-              ? ` <- ${namePath}`
-              : ''}
-      </dd>
-      {identity.warnings.includes('subject_mismatch') && (
-        <dd className="col-span-2 font-sans text-xs text-muted-foreground">
-          A mismatched source was kept for diagnostics and is excluded from the sign-in outcome.
+    <dl className="space-y-2 text-[12.5px]">
+      <div>
+        <dt className="text-xs text-muted-foreground">Identifier</dt>
+        <dd className="min-w-0 break-all font-mono text-[11.5px]">
+          {identity.id ?? 'Not supplied'}
+          {identity.provenance.id && (
+            <span className="text-muted-foreground">
+              {' '}
+              {'<-'} {identity.provenance.id.path}, {SOURCE_WORDS[identity.provenance.id.source]}
+            </span>
+          )}
         </dd>
+      </div>
+      <div>
+        <dt className="text-xs text-muted-foreground">Email</dt>
+        <dd className="min-w-0 break-all font-mono text-[11.5px]">
+          {identity.kind === 'placeholder_required'
+            ? 'A placeholder address will be used.'
+            : identity.kind === 'missing_email'
+              ? `Not supplied by the configured path ${emailPath}`
+              : (identity.email ?? 'Not supplied')}
+          {identity.provenance.email && identity.kind === 'identity' && (
+            <span className="text-muted-foreground">
+              {' '}
+              {'<-'} {identity.provenance.email.path},{' '}
+              {SOURCE_WORDS[identity.provenance.email.source]}
+            </span>
+          )}
+        </dd>
+      </div>
+      <div>
+        <dt className="text-xs text-muted-foreground">Name</dt>
+        <dd className="min-w-0 break-all font-mono text-[11.5px]">
+          {identity.name ?? 'Not supplied'}
+          {identity.nameSynthesized
+            ? ' (generated)'
+            : identity.provenance.name
+              ? ` <- ${identity.provenance.name.path}, ${SOURCE_WORDS[identity.provenance.name.source]}`
+              : !identity.name
+                ? ` <- ${namePath}`
+                : ''}
+        </dd>
+      </div>
+      {identity.warnings.includes('subject_mismatch') && (
+        <p className="text-xs text-muted-foreground">
+          A mismatched source was kept for diagnostics and is excluded from the sign-in outcome.
+        </p>
       )}
       {identity.id === undefined && (
-        <dd className="col-span-2 font-sans text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Not supplied by the configured path {idPath}.
-        </dd>
+        </p>
       )}
     </dl>
   )
@@ -324,9 +330,9 @@ function ClaimsDisclosure({ capture }: { capture: SsoTestCapture }) {
         />
         Show protocol claims
       </label>
-      <dl className="mt-2 grid grid-cols-[7em_1fr] gap-x-2.5 gap-y-1 font-mono text-[11px]">
+      <dl className="mt-2 space-y-1.5 font-mono text-[11px]">
         {keys.map((key) => (
-          <div key={key} className="contents">
+          <div key={key} className="min-w-0">
             <dt className="text-muted-foreground break-all">{key}</dt>
             <dd className="min-w-0 break-all">{escapeClaimValue(claims[key])}</dd>
           </div>

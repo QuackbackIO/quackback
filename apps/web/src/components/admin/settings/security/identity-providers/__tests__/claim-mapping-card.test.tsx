@@ -187,6 +187,17 @@ beforeEach(() => {
 })
 
 describe('ClaimMappingCard save coordination', () => {
+  it('keeps the mapping table above the test preview instead of a side column', () => {
+    renderCard(makeProvider())
+    const table = screen.getAllByRole('table')[0]
+    const preview = document.querySelector('[data-preview-slot]')
+    expect(preview).toBeTruthy()
+    expect(table.compareDocumentPosition(preview!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(preview!.className).not.toMatch(/lg:w-\[22rem\]/)
+    expect(preview!.parentElement?.className).not.toMatch(/lg:flex-row/)
+    expect(screen.getByRole('heading', { name: 'Last test sign-in' })).toBeInTheDocument()
+  })
+
   it('Edit+Apply on the default identifier does not persist claims.id', async () => {
     renderCard(makeProvider({ claimMapping: null }))
     fireEvent.click(screen.getByRole('button', { name: 'Edit Unique user identifier mapping' }))

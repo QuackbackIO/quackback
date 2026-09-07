@@ -346,7 +346,7 @@ export function ClaimMappingCard({
         description="Configure how Quackback identifies accounts and reads this provider's claims. Email and name are set at account creation. Role and People updates depend on the settings below."
         contentClassName="space-y-4"
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <Button
               type="button"
               variant="ghost"
@@ -370,8 +370,8 @@ export function ClaimMappingCard({
           </div>
         }
       >
-        <div className="flex flex-col gap-6 lg:flex-row">
-          <div className="min-w-0 flex-1 space-y-4">
+        <div className="flex flex-col gap-6">
+          <div className="min-w-0 space-y-4">
             <ClaimsTable
               requiredRows={tableModel.required}
               additionalRows={tableModel.additional}
@@ -432,7 +432,7 @@ export function ClaimMappingCard({
               </Button>
             </div>
           </div>
-          <div className="lg:w-[22rem] lg:shrink-0" data-preview-slot>
+          <div className="min-w-0" data-preview-slot>
             <OutcomePreviewRail
               capture={capture}
               draft={draftMapping}
