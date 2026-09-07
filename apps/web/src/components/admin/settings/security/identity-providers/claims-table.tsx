@@ -193,13 +193,13 @@ function MappingTable({ children }: { children: React.ReactNode }) {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-border/50 text-left text-xs text-muted-foreground">
-            <th scope="col" className="py-2 pr-3 font-medium">
+            <th scope="col" className="py-2 pr-3 font-medium whitespace-nowrap">
               Quackback attribute
             </th>
-            <th scope="col" className="py-2 pr-3 font-medium">
+            <th scope="col" className="min-w-0 py-2 pr-3 font-medium">
               IdP claim
             </th>
-            <th scope="col" className="py-2 font-medium">
+            <th scope="col" className="w-px py-2 font-medium">
               <span className="sr-only">Actions</span>
             </th>
           </tr>
