@@ -30,11 +30,7 @@ import {
   type RoleMapping,
 } from './provider-shared'
 import { useProviderSave } from './use-provider-save'
-import {
-  applyClaimMappingEdits,
-  diffClaimMappingOperations,
-  mappingSaveRisks,
-} from '@/lib/shared/sso-claim-mapping-edit'
+import { diffClaimMappingOperations, mappingSaveRisks } from '@/lib/shared/sso-claim-mapping-edit'
 
 export function ClaimMappingCard({ provider }: { provider: IdentityProvider }) {
   const { saving, saveClaimMapping } = useProviderSave(provider)
@@ -62,8 +58,7 @@ export function ClaimMappingCard({ provider }: { provider: IdentityProvider }) {
     attributes: normalizeAttributeMapping(attributes),
   })
   const operations = diffClaimMappingOperations(provider.claimMapping, proposed)
-  const nextMapping = applyClaimMappingEdits(provider.claimMapping, operations)
-  const risks = mappingSaveRisks(provider.claimMapping, nextMapping)
+  const risks = mappingSaveRisks(provider.claimMapping, proposed)
 
   const persist = (acks?: {
     acknowledgeIdentifierChange?: boolean

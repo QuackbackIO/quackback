@@ -83,6 +83,20 @@ export function isReplayableCapture(capture: SsoTestCapture): capture is SsoTest
   return isV2Capture(capture) && capture.detailsChangedAtAtStart !== undefined
 }
 
+/** Union of recorded source claims for editor suggestions. Production-shaped
+ *  `capture.claims` can omit later-source keys the binder did not need. */
+export function captureSuggestionClaims(capture: SsoTestCapture): Record<string, JsonValue> {
+  if (!isV2Capture(capture)) return capture.claims
+  const merged: Record<string, JsonValue> = { ...capture.claims }
+  for (const snapshot of capture.replay.sources) {
+    if (!('claims' in snapshot) || !snapshot.claims) continue
+    for (const [key, value] of Object.entries(snapshot.claims)) {
+      if (!Object.hasOwn(merged, key)) merged[key] = value
+    }
+  }
+  return merged
+}
+
 /** Caption for a capture that may have no resolved identifier. */
 export function captureIdentityCaption(capture: SsoTestCapture): string {
   const identity = capture.identity

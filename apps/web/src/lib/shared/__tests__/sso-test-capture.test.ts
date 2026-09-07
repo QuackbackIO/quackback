@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   captureIdentityCaption,
+  captureSuggestionClaims,
   isReplayableCapture,
   parseSsoTestCapture,
 } from '../sso-test-capture'
@@ -91,5 +92,26 @@ describe('parseSsoTestCapture', () => {
         replay: { sources: [{ source: 'scim', claims: {} }] },
       })
     ).toBeNull()
+  })
+})
+
+describe('captureSuggestionClaims', () => {
+  it('includes later-source claims the binder omitted from capture.claims', () => {
+    const claims = captureSuggestionClaims({
+      version: 2,
+      registrationId: 'oidc_x',
+      capturedAt: '2026-09-07T12:00:00.000Z',
+      detailsChangedAtAtStart: null,
+      outcome: 'success',
+      claims: { sub: 'u1', email: 'a@x.com', name: 'A' },
+      replay: {
+        sources: [
+          { source: 'idToken', claims: { sub: 'u1', email: 'a@x.com', name: 'A' } },
+          { source: 'userinfo', claims: { sub: 'u1', groups: ['engineering'] } },
+        ],
+      },
+    })
+    expect(claims.groups).toEqual(['engineering'])
+    expect(claims.email).toBe('a@x.com')
   })
 })

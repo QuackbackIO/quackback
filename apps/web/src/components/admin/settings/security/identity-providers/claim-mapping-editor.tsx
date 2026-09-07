@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/select'
 import { Autocomplete } from '@/components/ui/autocomplete'
 import { deriveClaimSuggestions } from '@/lib/shared/claim-suggestions'
+import { captureSuggestionClaims } from '@/lib/shared/sso-test-capture'
 import { TestSignInButton } from '../sso/test-sign-in-button'
 import { useSsoTestSignIn } from '../sso/use-sso-test-sign-in'
 import { matchingSessionCapture } from './claim-path-input'
@@ -47,7 +48,7 @@ export function ClaimMappingEditor({
 
   const { lastSuccess, lastCapture } = useSsoTestSignIn()
   const session = matchingSessionCapture(registrationId, lastCapture, lastSuccess)
-  const suggestions = session ? deriveClaimSuggestions(session.claims) : null
+  const suggestions = session ? deriveClaimSuggestions(captureSuggestionClaims(session)) : null
   const hasSuggestions = (suggestions?.paths.length ?? 0) > 0
   const pathSuggestions = (suggestions?.paths ?? []).map((p) => ({ value: p }))
   const valueSuggestions = (suggestions?.valuesByPath[current.claimPath] ?? []).map((v) => ({
