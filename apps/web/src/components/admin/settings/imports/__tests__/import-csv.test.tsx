@@ -115,6 +115,12 @@ afterEach(() => {
 })
 
 describe('<ImportCsv>', () => {
+  it('explains how author_email and author_name are applied', () => {
+    renderCsv()
+    expect(screen.getByText(/Every row needs author_email or author_name/)).toBeTruthy()
+    expect(screen.getByText(/name-only contact/)).toBeTruthy()
+  })
+
   it('walks upload -> dry-run review -> commit -> done', async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url

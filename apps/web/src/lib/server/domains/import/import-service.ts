@@ -118,7 +118,6 @@ export async function processBatch(
   defaultBoardId: BoardId,
   startIndex: number,
   userResolver: ImportUserResolver,
-  fallbackPrincipalId: PrincipalId,
   batchTagId?: PostTagId | null,
   voters?: Record<string, ImportVoterRecord[]>
 ): Promise<BatchResult> {
@@ -142,7 +141,6 @@ export async function processBatch(
     defaultBoardId,
     startIndex,
     userResolver,
-    fallbackPrincipalId,
     ctx,
     tagsToCreate,
     statusesToCreate,
@@ -246,11 +244,8 @@ export async function processBatch(
       const seen = new Set<PrincipalId>()
       const resolved: { principalId: PrincipalId; createdAt: Date | null }[] = []
       for (const voter of rowVoters) {
-        const principalId = await userResolver.resolve(
-          voter.email,
-          voter.name ?? null,
-          fallbackPrincipalId
-        )
+        if (!voter.email?.trim() && !voter.name?.trim()) continue
+        const principalId = await userResolver.resolve(voter.email, voter.name ?? null)
         if (seen.has(principalId)) continue
         seen.add(principalId)
         resolved.push({
@@ -444,7 +439,6 @@ export async function processImport(data: ImportInput): Promise<ImportResult> {
       data.boardId,
       i,
       userResolver,
-      data.initiatedByPrincipalId,
       data.batchTagId,
       data.voters
     )

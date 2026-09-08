@@ -39,41 +39,52 @@ export function parseCsvEmailVerified(value: string | undefined): boolean {
 /**
  * CSV row validation schema
  */
-export const csvRowSchema = z.object({
-  title: z.string().min(1, 'Title is required').max(200, 'Title must be 200 characters or less'),
-  content: z.string().max(10000, 'Content must be 10000 characters or less'),
-  status: z.string().optional(),
-  tags: z.string().optional(),
-  board: z.string().optional(),
-  author_name: z.string().optional(),
-  author_email: z.string().email().optional().or(z.literal('')),
-  // Whether the author's email is verified when this row CREATES the user
-  // (default true — claimable shell). Existing users are never flipped.
-  email_verified: z
-    .string()
-    .optional()
-    .transform((val) => parseCsvEmailVerified(val)),
-  vote_count: z
-    .string()
-    .optional()
-    .transform((val) => {
-      if (!val) return 0
-      const num = parseInt(val, 10)
-      return isNaN(num) || num < 0 ? 0 : num
-    }),
-  created_at: z
-    .string()
-    .optional()
-    .transform((val) => {
-      if (!val) return new Date()
-      const date = new Date(val)
-      return isNaN(date.getTime()) ? new Date() : date
-    }),
-  // Optional stable identifier from the source system (§I2). When present,
-  // re-importing the same row updates the post it previously created instead
-  // of creating a duplicate.
-  source_id: z.string().max(200).optional(),
-})
+export const AUTHOR_REQUIRED_MESSAGE = 'Author name or email is required'
+
+export const csvRowSchema = z
+  .object({
+    title: z.string().min(1, 'Title is required').max(200, 'Title must be 200 characters or less'),
+    content: z.string().max(10000, 'Content must be 10000 characters or less'),
+    status: z.string().optional(),
+    tags: z.string().optional(),
+    board: z.string().optional(),
+    author_name: z.string().optional(),
+    author_email: z.string().email().optional().or(z.literal('')),
+    // Whether the author's email is verified when this row CREATES the user
+    // (default true — claimable shell). Existing users are never flipped.
+    email_verified: z
+      .string()
+      .optional()
+      .transform((val) => parseCsvEmailVerified(val)),
+    vote_count: z
+      .string()
+      .optional()
+      .transform((val) => {
+        if (!val) return 0
+        const num = parseInt(val, 10)
+        return isNaN(num) || num < 0 ? 0 : num
+      }),
+    created_at: z
+      .string()
+      .optional()
+      .transform((val) => {
+        if (!val) return new Date()
+        const date = new Date(val)
+        return isNaN(date.getTime()) ? new Date() : date
+      }),
+    // Optional stable identifier from the source system (§I2). When present,
+    // re-importing the same row updates the post it previously created instead
+    // of creating a duplicate.
+    source_id: z.string().max(200).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.author_name?.trim() || data.author_email?.trim()) return
+    ctx.addIssue({
+      code: 'custom',
+      message: AUTHOR_REQUIRED_MESSAGE,
+      path: ['author_name'],
+    })
+  })
 
 export interface ProcessedRow {
   title: string
@@ -197,7 +208,6 @@ export async function resolveRows(
   defaultBoardId: BoardId,
   startIndex: number,
   userResolver: ImportUserResolver,
-  fallbackPrincipalId: PrincipalId,
   ctx: RowContext,
   tagsToCreate: Set<string>,
   statusesToCreate: Map<string, string>,
@@ -291,7 +301,6 @@ export async function resolveRows(
     const principalId = await userResolver.resolve(
       row.author_email || null,
       row.author_name || null,
-      fallbackPrincipalId,
       row.email_verified
     )
     const isNewAuthor = userResolver.pendingCount > pendingBefore

@@ -358,22 +358,17 @@ function escapeCSV(value: string): string {
 // ============================================================================
 
 function generateRow(): string[] {
-  // Author: 75% have author, 25% anonymous
-  const hasAuthor = Math.random() > 0.25
-  let authorName = ''
-  let authorEmail = ''
-
-  if (hasAuthor) {
-    if (Math.random() < 0.6) {
-      const persona = pick(userPersonas)
-      authorName = `${persona.firstName} ${persona.lastName}`
-      authorEmail = `${persona.firstName.toLowerCase()}.${persona.lastName.toLowerCase()}@example.com`
-    } else {
-      const firstName = faker.person.firstName()
-      const lastName = faker.person.lastName()
-      authorName = `${firstName} ${lastName}`
-      authorEmail = faker.internet.email({ firstName, lastName }).toLowerCase()
-    }
+  let authorName: string
+  let authorEmail: string
+  if (Math.random() < 0.6) {
+    const persona = pick(userPersonas)
+    authorName = `${persona.firstName} ${persona.lastName}`
+    authorEmail = `${persona.firstName.toLowerCase()}.${persona.lastName.toLowerCase()}@example.com`
+  } else {
+    const firstName = faker.person.firstName()
+    const lastName = faker.person.lastName()
+    authorName = `${firstName} ${lastName}`
+    authorEmail = faker.internet.email({ firstName, lastName }).toLowerCase()
   }
 
   // Tags: 0-3 with weighted selection

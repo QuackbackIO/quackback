@@ -202,7 +202,8 @@ export function ImportCsv() {
           </span>
           <span className="text-xs text-muted-foreground">
             Must use the template columns — title and content are required. Up to 10MB / 10,000
-            rows.
+            rows. Every row needs author_email or author_name: email matches or creates a person;
+            name without an email creates a name-only contact.
           </span>
           <input
             ref={fileInputRef}

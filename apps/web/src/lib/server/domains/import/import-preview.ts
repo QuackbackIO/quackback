@@ -47,7 +47,6 @@ export async function previewImport(data: ImportInput): Promise<ImportPreview> {
       data.boardId,
       i,
       userResolver,
-      data.initiatedByPrincipalId,
       ctx,
       tagsToCreate,
       statusesToCreate,
@@ -60,7 +59,7 @@ export async function previewImport(data: ImportInput): Promise<ImportPreview> {
       byBoard[boardKey] = (byBoard[boardKey] ?? 0) + 1
       const statusKey = row.statusLabel ?? 'default'
       byStatus[statusKey] = (byStatus[statusKey] ?? 0) + 1
-      const authorKey = row.authorEmail ?? row.authorName ?? 'Imported user'
+      const authorKey = row.authorEmail ?? row.authorName ?? 'unknown'
       byAuthor[authorKey] = (byAuthor[authorKey] ?? 0) + 1
       if (row.sourceId) {
         allSourceIds.push(row.sourceId)
@@ -73,7 +72,7 @@ export async function previewImport(data: ImportInput): Promise<ImportPreview> {
           title: row.title,
           board: row.boardSlug,
           status: row.statusLabel,
-          author: row.authorEmail ?? row.authorName ?? 'Imported user',
+          author: row.authorEmail ?? row.authorName ?? 'unknown',
           isNewAuthor: row.isNewAuthor,
           voteCount: row.voteCount,
           action: 'create',
@@ -97,8 +96,7 @@ export async function previewImport(data: ImportInput): Promise<ImportPreview> {
   const finalSample = sample.map(({ sourceId, ...rest }) => ({
     ...rest,
     action: (sourceId && matchedSourceIds.has(sourceId) ? 'update' : 'create') as
-      | 'create'
-      | 'update',
+      'create' | 'update',
   }))
 
   return {

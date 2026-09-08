@@ -32,7 +32,6 @@ const fixture = await createDbTestFixture({
 })
 
 const runSuffix = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-const FALLBACK = createId('principal') as PrincipalId
 
 async function seedExistingUser(email: string): Promise<UserId> {
   const userId = createId('user') as UserId
@@ -58,8 +57,8 @@ describe.skipIf(!fixture.available)('ImportUserResolver emailVerified', () => {
     const verifiedEmail = `import-v-${runSuffix()}@example.com`
     const plainEmail = `import-p-${runSuffix()}@example.com`
 
-    await resolver.resolve(verifiedEmail, 'Verified Vic', FALLBACK, true)
-    await resolver.resolve(plainEmail, 'Plain Pat', FALLBACK, false)
+    await resolver.resolve(verifiedEmail, 'Verified Vic', true)
+    await resolver.resolve(plainEmail, 'Plain Pat', false)
 
     await resolver.flushPendingCreates()
 
@@ -74,7 +73,7 @@ describe.skipIf(!fixture.available)('ImportUserResolver emailVerified', () => {
     const existingId = await seedExistingUser(email)
 
     const resolver = new ImportUserResolver()
-    await resolver.resolve(email, 'Someone', FALLBACK, true)
+    await resolver.resolve(email, 'Someone', true)
 
     expect(resolver.pendingCount).toBe(0)
     await resolver.flushPendingCreates()
@@ -87,8 +86,8 @@ describe.skipIf(!fixture.available)('ImportUserResolver emailVerified', () => {
     const email = `import-first-${runSuffix()}@example.com`
     const resolver = new ImportUserResolver()
 
-    await resolver.resolve(email, 'First Row', FALLBACK, false)
-    await resolver.resolve(email.toUpperCase(), 'Second Row', FALLBACK, true)
+    await resolver.resolve(email, 'First Row', false)
+    await resolver.resolve(email.toUpperCase(), 'Second Row', true)
 
     expect(resolver.pendingCount).toBe(1)
     await resolver.flushPendingCreates()
