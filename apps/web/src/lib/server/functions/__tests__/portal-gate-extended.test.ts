@@ -40,6 +40,7 @@
  *   8  topViewedChangelogsFn
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { policyActorFromAuth } from '@/lib/server/functions/auth-helpers'
 
 // ---------------------------------------------------------------------------
 // Shared handler registry
@@ -335,6 +336,22 @@ describe('portal.ts fetchPortalData — portal-visibility gate', () => {
     await h[FETCH_PORTAL_DATA]({ data: { sort: 'top' } })
     expect(mockListPublicBoardsWithStats).toHaveBeenCalledTimes(1)
   })
+
+  it('scopes the tag list to the resolved actor so internal tags stay team-only', async () => {
+    mockResolvePortalAccess.mockResolvedValue({ granted: true, reason: 'public' })
+    mockListPublicBoardsWithStats.mockResolvedValue([])
+    mockListPublicPostsWithVotesAndAvatars.mockResolvedValue({ items: [], hasMore: false })
+    mockListPublicStatuses.mockResolvedValue([])
+    mockListPublicTags.mockResolvedValue([])
+    mockGetVotedPostIdsByUserId.mockResolvedValue(new Set())
+    const actor = { principalId: null, role: null, principalType: 'anonymous' }
+    vi.mocked(policyActorFromAuth).mockResolvedValueOnce(actor as never)
+
+    const h = await loadModule(PORTAL)
+    await h[FETCH_PORTAL_DATA]({ data: { sort: 'top' } })
+    expect(mockListPublicTags).toHaveBeenCalledTimes(1)
+    expect(mockListPublicTags).toHaveBeenCalledWith(actor)
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -582,6 +599,17 @@ describe('portal.ts fetchPublicTags — portal-visibility gate', () => {
     const result = (await h[FETCH_PUBLIC_TAGS]({ data: {} })) as { id: string }[]
     expect(result).toHaveLength(1)
     expect(result[0].id).toBe('tag_1')
+  })
+
+  it('passes the resolved actor so the service can hide internal tags from non-team viewers', async () => {
+    mockResolvePortalAccess.mockResolvedValue({ granted: true, reason: 'public' })
+    mockListPublicTags.mockResolvedValue([])
+    const actor = { principalId: 'principal_1', role: 'member', principalType: 'user' }
+    vi.mocked(policyActorFromAuth).mockResolvedValueOnce(actor as never)
+
+    const h = await loadModule(PORTAL)
+    await h[FETCH_PUBLIC_TAGS]({ data: {} })
+    expect(mockListPublicTags).toHaveBeenCalledWith(actor)
   })
 })
 

@@ -80,7 +80,7 @@ async function fetchTags(offset: number, limit: number) {
     orderBy: asc(postTags.createdAt),
     offset,
     limit,
-    columns: { id: true, name: true, color: true, description: true },
+    columns: { id: true, name: true, color: true, description: true, isPublic: true },
   })
 }
 type TagRow = Awaited<ReturnType<typeof fetchTags>>[number]
@@ -89,7 +89,10 @@ export const tagsExporter: EntityExporter<TagRow> = {
   key: 'tags',
   fileName: 'tags.csv',
   pageSize: 5000,
-  header: 'id,name,color,description',
+  header: 'id,name,color,description,is_public',
   fetchPage: fetchTags,
-  serialize: (t) => [t.id, escapeCSV(t.name), t.color, escapeCSV(t.description ?? '')].join(','),
+  serialize: (t) =>
+    [t.id, escapeCSV(t.name), t.color, escapeCSV(t.description ?? ''), String(t.isPublic)].join(
+      ','
+    ),
 }

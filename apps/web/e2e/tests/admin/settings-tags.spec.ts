@@ -73,6 +73,11 @@ test.describe('Admin Tags Settings', () => {
     // Color section label
     await expect(dialog.getByText('Color')).toBeVisible()
 
+    // Portal visibility switch, on by default for new tags
+    const portalSwitch = dialog.getByRole('switch', { name: /show on portal/i })
+    await expect(portalSwitch).toBeVisible()
+    await expect(portalSwitch).toHaveAttribute('aria-checked', 'true')
+
     // Create and Cancel buttons
     await expect(dialog.getByRole('button', { name: /cancel/i })).toBeVisible()
     await expect(dialog.getByRole('button', { name: /create tag/i })).toBeVisible()

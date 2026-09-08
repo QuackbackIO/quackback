@@ -202,7 +202,8 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
           segmentIds,
         }),
         listPublicStatuses(),
-        listPublicPostTags(),
+        // Actor-scoped: internal tags are only listed for team viewers.
+        listPublicPostTags(actor),
         // Get ALL voted post IDs for this user (runs in parallel, we'll filter to displayed posts)
         data.userId
           ? getVotedPostIdsByUserId(data.userId as UserId)
@@ -449,7 +450,12 @@ export const fetchPublicTags = createServerFn({ method: 'GET' }).handler(async (
     log.debug('portal access denied, returning empty')
     return []
   }
-  return await listPublicPostTags()
+
+  // Team viewers assign tags from the portal, so they need the full catalog;
+  // everyone else only gets tags marked public.
+  const auth = await getOptionalAuth()
+  const actor = await policyActorFromAuth(auth)
+  return await listPublicPostTags(actor)
 })
 
 export const fetchUserAvatar = createServerFn({ method: 'GET' })

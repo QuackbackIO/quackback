@@ -28,9 +28,28 @@ import {
 } from '@quackback/ids'
 import type { PublicPostListResult } from './post.types'
 import type { RespondedFilter } from '@/lib/shared/types/filters'
-import { postViewFilter, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
+import { postViewFilter, isTeamActor, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
 
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
+
+/**
+ * Portal tag visibility. Non-team viewers only see tags marked public —
+ * both in filter lists and attached to posts — so an internal tag never
+ * reaches a customer. Team actors see every tag (they assign internal tags
+ * from the portal too). Returns undefined for team actors so it can be
+ * dropped into `and(...)` without a branch.
+ */
+export function publicTagCondition(actor: Actor) {
+  return isTeamActor(actor) ? undefined : eq(postTags.isPublic, true)
+}
+
+/**
+ * Raw-SQL twin of {@link publicTagCondition} for the `json_agg` tag
+ * subqueries, which alias `post_tags` as `t`. Empty for team actors.
+ */
+export function publicTagSqlFilter(actor: Actor) {
+  return isTeamActor(actor) ? sql`` : sql`AND t.is_public = true`
+}
 
 /** Resolve avatar URL — uploaded key first, then OAuth/external URL. */
 export function resolveAvatarUrl(source: {
@@ -156,10 +175,14 @@ function buildPostFilterConditions(params: PostListParams, actor: Actor) {
   }
 
   if (tagIds && tagIds.length > 0) {
+    // Join the tag catalog so an internal tag id in a crafted URL is inert
+    // for non-team callers — otherwise the filter would reveal which posts
+    // carry a tag the viewer is never shown.
     const postIdsWithTagsSubquery = db
       .selectDistinct({ postId: postTagAssignments.postId })
       .from(postTagAssignments)
-      .where(inArray(postTagAssignments.tagId, tagIds))
+      .innerJoin(postTags, eq(postTags.id, postTagAssignments.tagId))
+      .where(and(inArray(postTagAssignments.tagId, tagIds), publicTagCondition(actor)))
     conditions.push(inArray(posts.id, postIdsWithTagsSubquery))
   }
 
@@ -277,7 +300,7 @@ export async function listPublicPostsWithVotesAndAvatars(
           })
           .from(postTagAssignments)
           .innerJoin(postTags, eq(postTags.id, postTagAssignments.tagId))
-          .where(inArray(postTagAssignments.postId, pagePostIds))
+          .where(and(inArray(postTagAssignments.postId, pagePostIds), publicTagCondition(actor)))
       : Promise.resolve([]),
     pageAuthorIds.length > 0
       ? db
@@ -359,7 +382,7 @@ export async function listPublicPosts(
         (SELECT json_agg(json_build_object('id', t.id, 'name', t.name, 'color', t.color))
          FROM ${postTagAssignments} pt
          INNER JOIN ${postTags} t ON t.id = pt.tag_id
-         WHERE pt.post_id = ${posts.id}),
+         WHERE pt.post_id = ${posts.id} ${publicTagSqlFilter(actor)}),
         '[]'
       )`.as('tags_json'),
       authorName: sql<string | null>`(

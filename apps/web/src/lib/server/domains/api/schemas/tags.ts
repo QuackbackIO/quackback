@@ -19,10 +19,17 @@ import {
 } from './common'
 
 // PostTag schema
+const IsPublicSchema = z.boolean().meta({
+  description:
+    'Whether customers can see this tag on the public portal. False keeps the tag internal to your team.',
+  example: true,
+})
+
 const TagSchema = z.object({
   id: TypeIdSchema.meta({ example: 'post_tag_01h455vb4pex5vsknk084sn02q' }),
   name: z.string().meta({ example: 'Bug' }),
   color: HexColorSchema.meta({ example: '#ef4444' }),
+  isPublic: IsPublicSchema,
   createdAt: TimestampSchema,
 })
 
@@ -31,6 +38,7 @@ const CreateTagSchema = z
   .object({
     name: z.string().min(1).max(50).meta({ description: 'PostTag name', example: 'Bug' }),
     color: HexColorSchema.optional().meta({ description: 'PostTag color', default: '#6b7280' }),
+    isPublic: IsPublicSchema.optional().meta({ default: true }),
   })
   .meta({ description: 'Create tag request body' })
 
@@ -38,6 +46,7 @@ const UpdateTagSchema = z
   .object({
     name: z.string().min(1).max(50).optional(),
     color: HexColorSchema.optional(),
+    isPublic: IsPublicSchema.optional(),
   })
   .meta({ description: 'Update tag request body' })
 

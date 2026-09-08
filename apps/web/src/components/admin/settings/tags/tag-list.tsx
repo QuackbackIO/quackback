@@ -1,9 +1,16 @@
 import { useState, useEffect, useTransition } from 'react'
 import { useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
-import { PlusIcon, TrashIcon, PencilSquareIcon, ArrowPathIcon } from '@heroicons/react/24/solid'
+import {
+  PlusIcon,
+  TrashIcon,
+  PencilSquareIcon,
+  ArrowPathIcon,
+  EyeSlashIcon,
+} from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
   DialogContent,
@@ -164,6 +171,7 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [color, setColor] = useState('#6b7280')
+  const [isPublic, setIsPublic] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
 
@@ -175,10 +183,12 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
         setName(tag.name)
         setDescription(tag.description ?? '')
         setColor(tag.color)
+        setIsPublic(tag.isPublic)
       } else {
         setName('')
         setDescription('')
         setColor(randomColor())
+        setIsPublic(true)
       }
       setError(null)
     }
@@ -211,6 +221,7 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
             name: trimmedName,
             color,
             description: description.trim() || null,
+            isPublic,
           },
         })
       } else {
@@ -219,6 +230,7 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
             name: trimmedName,
             color,
             description: description.trim() || undefined,
+            isPublic,
           },
         })
       }
@@ -278,6 +290,17 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
           <Label>Color</Label>
           <ColorPickerGrid selectedColor={color} onColorChange={setColor} />
           <ColorHexInput color={color} onColorChange={setColor} />
+        </div>
+
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <Label htmlFor="tag-is-public">Show on portal</Label>
+            <p className="text-xs text-muted-foreground">
+              Customers can see this tag on posts and filter by it in the public portal. Turn off to
+              keep it internal to your team.
+            </p>
+          </div>
+          <Switch id="tag-is-public" checked={isPublic} onCheckedChange={setIsPublic} />
         </div>
 
         {error && <p className="text-sm text-destructive">{error}</p>}
@@ -365,7 +388,7 @@ export function TagList({ initialTags }: TagListProps) {
     <div className="space-y-8">
       <SettingsCard
         title="Tags"
-        description="Label posts across boards for filtering and organization. Tags appear as colored badges throughout the app."
+        description="Label posts across boards for filtering and organization. Tags appear as colored badges throughout the app, and on the public portal unless marked internal."
         contentClassName="p-4"
       >
         <div className="space-y-1">
@@ -402,6 +425,16 @@ export function TagList({ initialTags }: TagListProps) {
 
               {/* Name */}
               <span className="text-sm font-medium">{tag.name}</span>
+
+              {!tag.isPublic && (
+                <span
+                  className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground shrink-0"
+                  title="Hidden from the public portal"
+                >
+                  <EyeSlashIcon className="h-3 w-3" />
+                  Internal
+                </span>
+              )}
 
               {/* Description */}
               <span className="text-xs text-muted-foreground truncate flex-1">

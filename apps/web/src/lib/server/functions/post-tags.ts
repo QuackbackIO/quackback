@@ -31,6 +31,7 @@ const createTagSchema = z.object({
     .default('#6b7280'),
   description: z.string().max(200).optional(),
   aiPrompt: z.string().max(500).optional(),
+  isPublic: z.boolean().optional(),
 })
 
 const getTagSchema = z.object({
@@ -46,6 +47,7 @@ const updateTagSchema = z.object({
     .optional(),
   description: z.string().max(200).optional().nullable(),
   aiPrompt: z.string().max(500).optional().nullable(),
+  isPublic: z.boolean().optional(),
 })
 
 const deleteTagSchema = z.object({
@@ -114,6 +116,7 @@ export const createPostTagFn = createServerFn({ method: 'POST' })
       color: data.color,
       description: data.description,
       aiPrompt: data.aiPrompt,
+      isPublic: data.isPublic,
     })
     log.info({ tag_id: tag.id }, 'tag created')
     return tag
@@ -134,6 +137,7 @@ export const updatePostTagFn = createServerFn({ method: 'POST' })
       color: data.color,
       description: data.description,
       aiPrompt: data.aiPrompt,
+      isPublic: data.isPublic,
     })
     log.info({ tag_id: tag.id }, 'tag updated')
 
