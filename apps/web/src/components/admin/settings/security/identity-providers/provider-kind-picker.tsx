@@ -14,28 +14,22 @@ export function ProviderKindPicker({
   kind,
   disabled,
   onKindChange,
-  onDiscoveryUrlChange,
 }: {
   kind: IdpKind
   disabled: boolean
-  onKindChange: (next: IdpKind) => void
-  /** Seeded when the chosen kind has a fixed discovery URL and no input. */
-  onDiscoveryUrlChange: (url: string) => void
+  /** `discoveryUrl` is set when the chosen kind has a fixed discovery URL
+   *  and no input of its own (Google). Delivered with the kind in one call
+   *  so the caller applies both in a single state update. */
+  onKindChange: (next: IdpKind, discoveryUrl?: string) => void
 }) {
   return (
     <RadioGroup
       value={kind}
       onValueChange={(v) => {
         const next = v as IdpKind
-        onKindChange(next)
-        // Fixed-discovery kinds (Google) have no shortcut input — seed the
-        // canonical URL now so the saved row is well-formed without a
-        // render-time state write.
         const def = getIdpShortcut(next)
-        if (next !== 'other' && def.fields.length === 0) {
-          const url = def.build({})
-          if (url) onDiscoveryUrlChange(url)
-        }
+        const fixedUrl = next !== 'other' && def.fields.length === 0 ? def.build({}) : ''
+        onKindChange(next, fixedUrl || undefined)
       }}
       className="grid grid-cols-2 gap-2.5 sm:grid-cols-3"
     >

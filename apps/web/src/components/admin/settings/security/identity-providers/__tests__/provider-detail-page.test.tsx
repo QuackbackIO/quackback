@@ -1,16 +1,14 @@
 // @vitest-environment happy-dom
 /**
- * <ProviderDetailPage> — the routed successor to the tabbed provider dialog.
+ * <ProviderDetailPage> — one page per provider, three sections.
  *
- * Everything the dialog was asserted on still has to hold: the IdP family
- * round-trips through the persisted `kind` column rather than URL inference,
- * the scopes / prompt / client-auth controls save their normalized values, the
- * connection-test status is readable, and claim mapping stays reachable
- * independently of account provisioning.
- *
- * What the page adds on top is what the dialog structurally could not do:
- * `enabled` is settable here, each card commits only its own fields, and
- * removal is a card of its own that states what it would orphan.
+ * Connection is a summary with Edit; Sign-in & access holds the explicit
+ * access decisions; User details rests on "Uses standard profile fields" and
+ * opens a compact editor under Customize. Everything the old form asserted
+ * still has to hold underneath: the IdP family round-trips through the
+ * persisted `kind`, scopes / prompt / client-auth save their normalized
+ * values, the connection-test state is readable, and each section commits
+ * only its own fields.
  */
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
@@ -68,10 +66,15 @@ const { discoveryScopesSpy } = vi.hoisted(() => ({
   discoveryScopesSpy: vi.fn(async () => ({ scopesSupported: null as string[] | null })),
 }))
 
-const { ssoTestRef } = vi.hoisted(() => ({
+const { ssoTestRef, openTestSpy } = vi.hoisted(() => ({
   ssoTestRef: {
     current: null as null | import('@/lib/shared/sso-test-capture').SsoTestCapture,
   },
+  openTestSpy: vi.fn(),
+}))
+
+const { toastSpy } = vi.hoisted(() => ({
+  toastSpy: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }),
 }))
 
 const { state } = vi.hoisted(() => ({
@@ -99,7 +102,7 @@ const { state } = vi.hoisted(() => ({
 
 vi.mock('../../sso/use-sso-test-sign-in', () => ({
   useSsoTestSignIn: () => ({
-    open: vi.fn(),
+    open: openTestSpy,
     lastSuccess: ssoTestRef.current,
     lastCapture: ssoTestRef.current,
   }),
@@ -145,8 +148,8 @@ vi.mock('@/lib/server/functions/sso', () => ({
   deleteIdentityProviderLogoFn: vi.fn(),
 }))
 
-// The Sign-in card's logo uploader pulls in this server-fn module; stub it so
-// the real `createServerFn` never loads under jsdom.
+// The logo uploader pulls in this server-fn module; stub it so the real
+// `createServerFn` never loads under the DOM environment.
 vi.mock('@/lib/server/functions/uploads', () => ({
   getIdentityProviderLogoUploadUrlFn: vi.fn(),
 }))
@@ -186,10 +189,10 @@ vi.mock('@/lib/client/queries/admin', () => ({
   },
 }))
 
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
+vi.mock('sonner', () => ({ toast: toastSpy }))
 
-// Stub the Test sign-in button so the page doesn't pull in the test-flow
-// server fns / context. Pass `disabled` through so tests can assert state.
+// Stub the Test sign-in button used inside the preview rail so the page does
+// not pull in the test-flow server fns. Pass `disabled` through.
 vi.mock('../../sso/test-sign-in-button', () => ({
   TestSignInButton: ({
     disabled,
@@ -252,7 +255,7 @@ const verifiedDomain: VerifiedDomain = {
   createdAt: '2026-05-01T00:00:00.000Z',
 }
 
-function renderPage(provider: IdentityProvider) {
+function renderPage(provider: IdentityProvider, props: { autoTest?: boolean } = {}) {
   state.providers = [provider]
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   qc.setQueryData(['settings', 'identityProviders'], [provider])
@@ -264,20 +267,26 @@ function renderPage(provider: IdentityProvider) {
   qc.setQueryData(['admin', 'userAttributes'], state.userAttributes)
   return render(
     <QueryClientProvider client={qc}>
-      <ProviderDetailPage providerId={provider.id} />
+      <ProviderDetailPage providerId={provider.id} {...props} />
     </QueryClientProvider>
   )
 }
 
-const saveConnection = () =>
-  fireEvent.click(screen.getByRole('button', { name: 'Save connection' }))
-const saveMapping = () => {
-  const save =
-    screen.queryByRole('button', { name: 'Save claim mapping' }) ??
-    screen.getByRole('button', { name: 'Save' })
-  fireEvent.click(save)
-  const confirm = screen.queryByRole('button', { name: 'Save mappings' })
-  if (confirm) fireEvent.click(confirm)
+/** The connection form is behind Edit on a configured provider. */
+const editConnection = () => fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+const saveConnection = () => fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+const openConnectionOptions = () =>
+  fireEvent.click(screen.getByRole('button', { name: /Connection options/ }))
+/** Sign-in & access and the User details editor both end in Save changes. */
+const section = (id: 'signin' | 'mapping') => within(document.getElementById(id)!)
+const saveSignIn = () =>
+  fireEvent.click(section('signin').getByRole('button', { name: 'Save changes' }))
+/** User details is a sentence until Customize opens the editor. */
+const customize = () => fireEvent.click(screen.getByRole('button', { name: 'Customize' }))
+const saveUserDetails = () => {
+  fireEvent.click(section('mapping').getByRole('button', { name: 'Save changes' }))
+  const confirm = screen.queryByRole('alertdialog')
+  if (confirm) fireEvent.click(within(confirm).getByRole('button', { name: 'Save changes' }))
 }
 const lastUpsert = () => upsertSpy.mock.calls.at(-1)![0].data
 const lastMapping = () => mappingSpy.mock.calls.at(-1)![0].data
@@ -295,6 +304,8 @@ beforeEach(() => {
   credentialsSpy.mockClear()
   discoveryScopesSpy.mockClear()
   discoveryScopesSpy.mockResolvedValue({ scopesSupported: null })
+  openTestSpy.mockClear()
+  toastSpy.mockClear()
   ssoTestRef.current = null
   state.userAttributes = []
   state.authConfig = { oauth: { password: true } }
@@ -304,24 +315,19 @@ beforeEach(() => {
 })
 
 describe('<ProviderDetailPage> page shell', () => {
-  it('offers every section in the anchored nav', () => {
+  it('renders the three sections and nothing else', () => {
     renderPage(makeProvider({}))
-    const nav = screen.getByRole('navigation', { name: 'Provider settings' })
-    for (const [label, hash] of [
-      ['Connection', '#connection'],
-      ['Sign-in', '#signin'],
-      ['Accounts', '#accounts'],
-      ['Attributes & Claims', '#mapping'],
-      ['Remove', '#danger'],
-    ]) {
-      expect(within(nav).getByRole('link', { name: label })).toHaveAttribute('href', hash)
-    }
+    expect(screen.getByRole('heading', { name: 'Connection' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Sign-in & access' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'User details' })).toBeInTheDocument()
+    expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /Remove/ })).not.toBeInTheDocument()
   })
 
-  it('names the provider and its protocol in the header', () => {
-    renderPage(makeProvider({ kind: 'okta', label: 'Acme SSO' }))
+  it('names the provider and its family in the header', () => {
+    renderPage(makeProvider({ kind: 'entra', label: 'Acme SSO' }))
     expect(screen.getByRole('heading', { name: 'Acme SSO' })).toBeInTheDocument()
-    expect(screen.getByText(/OpenID Connect/)).toBeInTheDocument()
+    expect(screen.getByText('Microsoft Entra ID')).toBeInTheDocument()
   })
 
   it('says so when the provider id does not resolve', () => {
@@ -335,12 +341,42 @@ describe('<ProviderDetailPage> page shell', () => {
     )
     expect(screen.getByText(/not found/i)).toBeInTheDocument()
   })
+
+  it('opens the connection test once when arriving from Save and test', async () => {
+    const consumed = vi.fn()
+    state.providers = [makeProvider({ enabled: false })]
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const provider = state.providers[0] as IdentityProvider
+    qc.setQueryData(['settings', 'identityProviders'], [provider])
+    qc.setQueryData(['settings', 'authConfig'], state.authConfig)
+    qc.setQueryData(['admin', 'authProviderStatus'], state.credentialStatus)
+    qc.setQueryData(['settings', 'identityProviders', provider.id, 'accountCount'], { count: 0 })
+    qc.setQueryData(['admin', 'userAttributes'], [])
+    render(
+      <QueryClientProvider client={qc}>
+        <ProviderDetailPage providerId={provider.id} autoTest onAutoTestConsumed={consumed} />
+      </QueryClientProvider>
+    )
+    await waitFor(() => expect(openTestSpy).toHaveBeenCalledTimes(1))
+    // A passing test on a disabled provider offers Enable sign-in as the
+    // completion step.
+    expect(openTestSpy.mock.calls[0][0]).toMatchObject({
+      registrationId: 'oidc_x',
+      successAction: { label: 'Enable sign-in' },
+    })
+    expect(consumed).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not offer Enable sign-in after a test on an already enabled provider', () => {
+    renderPage(makeProvider({ enabled: true }))
+    fireEvent.click(screen.getByRole('button', { name: 'Test sign-in' }))
+    expect(openTestSpy.mock.calls[0][0].successAction).toBeUndefined()
+  })
 })
 
 /**
- * The dialog could only read `enabled`; it was settable from the list row
- * alone. That let an admin configure a provider, test it, save and close with
- * nobody able to sign in through it.
+ * `enabled` is a real control on the page. That let an admin configure a
+ * provider, test it, save and close with nobody able to sign in through it.
  */
 describe('<ProviderDetailPage> enabled toggle', () => {
   it('shows a disabled provider as disabled', () => {
@@ -366,47 +402,61 @@ describe('<ProviderDetailPage> enabled toggle', () => {
   })
 })
 
-describe('<ProviderDetailPage> provisioning consolidation', () => {
-  it('shows a single Default role and required mapping rows when no rules', () => {
+/**
+ * Connection: a summary while it works, a form only behind Edit. A provider
+ * with no saved secret has nothing to summarise and opens on the form.
+ */
+describe('<ProviderDetailPage> connection', () => {
+  it('summarises a working connection instead of showing the form', () => {
     renderPage(
-      makeProvider({ autoCreateUsers: true, autoProvisionRole: 'user', claimMapping: null })
+      makeProvider({
+        kind: 'okta',
+        lastSuccessfulTestAt: '2026-05-02T00:00:00.000Z',
+        lastTestCapture: {
+          registrationId: 'oidc_x',
+          capturedAt: '2026-05-02T00:00:00.000Z',
+          identity: { id: 's', name: 'Jane Smith', email: 'jane@acme.com', sources: {} },
+          claims: { sub: 's' },
+        },
+      })
     )
-    expect(screen.getByLabelText('Default role')).toBeInTheDocument()
-    expect(screen.getByText('Unique user identifier')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Add claim' })).toBeInTheDocument()
-    expect(screen.queryByText('No rules. Everyone gets the default role.')).not.toBeInTheDocument()
+    expect(screen.getByText(/Connected as Jane Smith/)).toBeInTheDocument()
+    expect(screen.getByText('jane@acme.com')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Test again' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Client ID')).not.toBeInTheDocument()
+    // Provenance and raw claims stay reachable for troubleshooting.
+    expect(screen.getByText('View test details')).toBeInTheDocument()
   })
 
-  it('keeps claim mapping reachable when auto-create is off', () => {
-    renderPage(makeProvider({ autoCreateUsers: false }))
-    expect(screen.queryByLabelText('Default role')).not.toBeInTheDocument()
-    expect(screen.getByText('Unique user identifier')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Add claim' })).toBeInTheDocument()
+  it('shows "Not tested yet" when the provider has no successful test', () => {
+    renderPage(makeProvider({ lastSuccessfulTestAt: null }))
+    expect(screen.getByText(/Not tested yet/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Test sign-in' })).not.toBeDisabled()
   })
 
-  it('persists claimMapping=null when saved with no rules and sync off', async () => {
-    renderPage(makeProvider({ autoCreateUsers: true, claimMapping: null }))
-    saveMapping()
-    await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
-    expect(lastSavedMapping()).toBeNull()
-  })
-
-  it('nulls the default role when auto-create is turned off', async () => {
-    renderPage(makeProvider({ autoCreateUsers: true, autoProvisionRole: 'member' }))
-    await userEvent.click(
-      screen.getByRole('switch', { name: 'Auto-create accounts on first sign-in' })
+  it('shows the stale state when the connection changed since the last test', () => {
+    renderPage(
+      makeProvider({
+        lastSuccessfulTestAt: '2026-05-01T00:00:00.000Z',
+        detailsChangedAt: '2026-05-02T00:00:00.000Z',
+      })
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Save accounts' }))
-    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
-    expect(lastUpsert()).toMatchObject({ autoCreateUsers: false, autoProvisionRole: null })
+    expect(screen.getByText(/changed since the last test/)).toBeInTheDocument()
   })
-})
 
-describe('<ProviderDetailPage> IdP shortcut persistence', () => {
-  it('selects the persisted family on open, even when the discovery URL infers a different one', () => {
+  it('opens on the form when no client secret is saved', () => {
+    renderPage(makeProvider({ configured: false }))
+    expect(screen.getByLabelText('Client ID')).toBeInTheDocument()
+    expect(screen.getByText('No client secret')).toBeInTheDocument()
+  })
+
+  it('shows the selected provider with a Change action rather than the tiles', () => {
     renderPage(makeProvider({ kind: 'okta' }))
+    editConnection()
+    expect(within(document.getElementById('connection')!).getByText('Okta')).toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: 'Okta' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Change' }))
     expect(screen.getByRole('radio', { name: 'Okta' })).toBeChecked()
-    expect(screen.getByRole('radio', { name: 'Custom OIDC' })).not.toBeChecked()
   })
 
   it('falls back to URL inference when kind is null (legacy row on a known domain)', () => {
@@ -416,107 +466,256 @@ describe('<ProviderDetailPage> IdP shortcut persistence', () => {
         discoveryUrl: 'https://acme.okta.com/.well-known/openid-configuration',
       })
     )
+    editConnection()
+    fireEvent.click(screen.getByRole('button', { name: 'Change' }))
     expect(screen.getByRole('radio', { name: 'Okta' })).toBeChecked()
   })
 
-  it('carries the persisted kind to the server on save', async () => {
+  it('carries the persisted kind to the server on save and returns to the summary', async () => {
     renderPage(makeProvider({ kind: 'okta' }))
+    editConnection()
     saveConnection()
     await waitFor(() => expect(upsertSpy).toHaveBeenCalledTimes(1))
     expect(lastUpsert().kind).toBe('okta')
+    // Identity columns are resent unchanged; nothing from another section is.
+    expect(lastUpsert().label).toBe('Acme SSO')
+    expect(lastUpsert()).not.toHaveProperty('showButton')
+    expect(lastUpsert()).not.toHaveProperty('autoCreateUsers')
+    await waitFor(() => expect(screen.queryByLabelText('Client ID')).not.toBeInTheDocument())
   })
 
   it('persists a newly selected tile', async () => {
     renderPage(makeProvider({ kind: 'okta' }))
+    editConnection()
+    fireEvent.click(screen.getByRole('button', { name: 'Change' }))
     fireEvent.click(screen.getByRole('radio', { name: 'Auth0' }))
     saveConnection()
     await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
     expect(lastUpsert().kind).toBe('auth0')
   })
-})
 
-describe('<ProviderDetailPage> connection-test status', () => {
-  it('shows "Not tested yet" when the provider has no successful test', () => {
-    renderPage(makeProvider({ lastSuccessfulTestAt: null }))
-    expect(screen.getByText(/Not tested yet/)).toBeInTheDocument()
-  })
-
-  it('shows the verified status (ready to enforce) for a fresh successful test', () => {
-    renderPage(
-      makeProvider({ lastSuccessfulTestAt: '2026-05-02T00:00:00.000Z', detailsChangedAt: null })
-    )
-    expect(screen.getByText(/ready to enforce SSO/)).toBeInTheDocument()
-  })
-
-  it('shows the stale status when the connection changed since the last test', () => {
-    renderPage(
-      makeProvider({
-        lastSuccessfulTestAt: '2026-05-01T00:00:00.000Z',
-        detailsChangedAt: '2026-05-02T00:00:00.000Z',
-      })
-    )
-    expect(screen.getByText(/changed since the last test/)).toBeInTheDocument()
-    // The same state is legible from the header without scrolling to the card.
-    expect(screen.getByText('Re-test needed')).toBeInTheDocument()
-  })
-
-  it('enables the Test sign-in button for a saved provider', () => {
-    renderPage(makeProvider({ registrationId: 'sso' }))
-    // startSsoTestFn resolves the provider by registrationId and stamps that
-    // provider's own lastSuccessfulTestAt, so the legacy "sso" id is no
-    // different from a generated one.
-    expect(
-      screen
-        .getAllByRole('button', { name: /test sign-in/i })
-        .every((btn) => !btn.hasAttribute('disabled'))
-    ).toBe(true)
-  })
-})
-
-/**
- * Required-field validation. Both required fields live on the connection card,
- * so a failed save scrolls to the offending input and focuses it — the tabbed
- * dialog needed tab routing for this, a page does not.
- */
-describe('<ProviderDetailPage> required fields', () => {
-  it('refuses to save a blank display name and focuses the field', async () => {
+  it('saves a typed secret after the connection and then opens the test', async () => {
     renderPage(makeProvider({}))
-    await userEvent.clear(screen.getByLabelText('Display name'))
-    saveConnection()
-    await waitFor(() => expect(screen.getByLabelText('Display name')).toHaveFocus())
-    expect(upsertSpy).not.toHaveBeenCalled()
+    editConnection()
+    fireEvent.change(screen.getByLabelText('Client secret'), { target: { value: 's3cret' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save and test' }))
+    await waitFor(() => expect(credentialsSpy).toHaveBeenCalled())
+    expect(credentialsSpy.mock.calls[0][0].data).toEqual({ id: 'idp_x', clientSecret: 's3cret' })
+    await waitFor(() => expect(openTestSpy).toHaveBeenCalledTimes(1))
   })
 
   it('refuses to save a blank client ID and focuses the field', async () => {
     renderPage(makeProvider({}))
+    editConnection()
     await userEvent.clear(screen.getByLabelText('Client ID'))
     saveConnection()
     await waitFor(() => expect(screen.getByLabelText('Client ID')).toHaveFocus())
     expect(upsertSpy).not.toHaveBeenCalled()
   })
+
+  const noEmailCapture = {
+    version: 2 as const,
+    registrationId: 'oidc_x',
+    capturedAt: '2026-05-02T00:00:00.000Z',
+    detailsChangedAtAtStart: null,
+    outcome: 'mapping_failed' as const,
+    claims: { sub: 's', name: 'No Email' },
+    replay: {
+      sources: [
+        { source: 'idToken' as const, claims: { sub: 's', name: 'No Email' } },
+        { source: 'userinfo' as const, unavailable: 'fetch_failed' as const },
+      ],
+    },
+  }
+  const allowWithoutEmail = () =>
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Let people sign in without an email address' })
+    )
+
+  it('offers to allow sign-in without email when the test account had none', async () => {
+    // An earlier test passed, but the newest capture failed: the failure is
+    // the summary, not "Connected as" the account that could not sign in.
+    renderPage(
+      makeProvider({
+        lastSuccessfulTestAt: '2026-05-01T00:00:00.000Z',
+        lastTestCapture: noEmailCapture,
+      })
+    )
+    expect(screen.getByText(/test account has no email address/)).toBeInTheDocument()
+    expect(screen.queryByText(/Connected/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/changed since the last test/)).not.toBeInTheDocument()
+    allowWithoutEmail()
+    await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
+    expect(lastSavedMapping()).toEqual({ profile: { allowMissingEmail: true } })
+    expect(lastMapping().acknowledgeAdminRules).toBeFalsy()
+  })
+
+  it('acknowledges pre-existing admin rules when allowing sign-in without email', async () => {
+    const claimMapping = {
+      role: {
+        claimPath: 'groups',
+        rules: [{ whenContains: 'platform-admins', role: 'admin' as const }],
+      },
+    }
+    renderPage(makeProvider({ claimMapping, lastTestCapture: noEmailCapture }))
+    allowWithoutEmail()
+    await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
+    // The server rejects any mapping write that leaves admin rules in place
+    // unless they are acknowledged; the rules themselves are untouched.
+    expect(lastMapping().acknowledgeAdminRules).toBe(true)
+    expect(lastSavedMapping()).toEqual({ ...claimMapping, profile: { allowMissingEmail: true } })
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
 })
 
 /**
- * Visibility and per-domain routing, both of which live on the Sign-in card.
+ * Connection options — scopes, prompt and client authentication — live in a
+ * disclosure that is closed unless a value is off its default.
  */
-describe('<ProviderDetailPage> sign-in card', () => {
-  it('shows the visibility toggle but hides the enforcement control for a no-domain provider', () => {
+describe('<ProviderDetailPage> connection options', () => {
+  it('collapses the options for a provider on the defaults', () => {
+    renderPage(makeProvider({ scopes: null }))
+    editConnection()
+    expect(screen.getByRole('button', { name: /Connection options/ })).toHaveAttribute(
+      'aria-expanded',
+      'false'
+    )
+  })
+
+  it('auto-expands when the provider has a custom scope set', () => {
+    // Otherwise a non-default configuration is invisible behind a closed panel.
+    renderPage(makeProvider({ scopes: 'openid public' }))
+    editConnection()
+    expect(screen.getByRole('button', { name: /Connection options/ })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    )
+  })
+
+  it('auto-expands when a non-default prompt is set', () => {
+    renderPage(makeProvider({ prompt: 'omit' }))
+    editConnection()
+    expect(screen.getByRole('button', { name: /Connection options/ })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    )
+  })
+
+  it('prefills the effective scopes and does not offer to remove openid', () => {
+    renderPage(makeProvider({ scopes: null }))
+    editConnection()
+    openConnectionOptions()
+    for (const scope of ['openid', 'email', 'profile']) {
+      expect(screen.getByTestId(`scope-token-${scope}`)).toBeInTheDocument()
+    }
+    expect(screen.queryByRole('button', { name: 'Remove scope openid' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove scope email' })).toBeInTheDocument()
+  })
+
+  it('saves null for scopes, prompt and client auth when the defaults are untouched', async () => {
+    renderPage(makeProvider({ scopes: null, prompt: null, tokenEndpointAuthMethod: null }))
+    editConnection()
+    saveConnection()
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    expect(lastUpsert().scopes).toBeNull()
+    expect(lastUpsert().prompt).toBeNull()
+    expect(lastUpsert().tokenEndpointAuthMethod).toBeNull()
+  })
+
+  it('saves the reduced set after removing scopes', async () => {
+    renderPage(makeProvider({ scopes: null }))
+    editConnection()
+    openConnectionOptions()
+    fireEvent.click(screen.getByRole('button', { name: 'Remove scope email' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove scope profile' }))
+    saveConnection()
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    expect(lastUpsert().scopes).toBe('openid')
+  })
+
+  it('adds a scope typed by the admin', async () => {
+    renderPage(makeProvider({ scopes: null }))
+    editConnection()
+    openConnectionOptions()
+    fireEvent.change(screen.getByLabelText('Add a scope'), { target: { value: 'public' } })
+    fireEvent.submit(screen.getByTestId('scope-add-form'))
+    saveConnection()
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    expect(lastUpsert().scopes).toBe('openid email profile public')
+  })
+
+  it('round-trips a custom set and prompt without rewriting them', async () => {
+    renderPage(makeProvider({ scopes: 'openid public', prompt: 'omit' }))
+    editConnection()
+    saveConnection()
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    expect(lastUpsert().scopes).toBe('openid public')
+    expect(lastUpsert().prompt).toBe('omit')
+  })
+
+  it('warns about scopes the IdP does not advertise and can reduce to them', async () => {
+    discoveryScopesSpy.mockResolvedValueOnce({ scopesSupported: ['public', 'openid'] })
+    renderPage(makeProvider({ scopes: null }))
+    editConnection()
+    openConnectionOptions()
+    await waitFor(() => {
+      expect(screen.getByTestId('scope-mismatch-warning')).toHaveTextContent('email')
+    })
+    expect(screen.getByTestId('scope-mismatch-warning')).toHaveTextContent('profile')
+    fireEvent.click(screen.getByRole('button', { name: 'Use advertised scopes' }))
+    saveConnection()
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    expect(lastUpsert().scopes).toBe('openid')
+  })
+
+  it('says nothing when the IdP advertises no scope list', async () => {
+    // Absent means unknown, not unsupported — the field is only RECOMMENDED.
+    discoveryScopesSpy.mockResolvedValueOnce({ scopesSupported: null })
+    renderPage(makeProvider({ scopes: null }))
+    editConnection()
+    openConnectionOptions()
+    await waitFor(() => expect(discoveryScopesSpy).toHaveBeenCalled())
+    expect(screen.queryByTestId('scope-mismatch-warning')).not.toBeInTheDocument()
+  })
+
+  it('offers omit and none as separate prompt choices and exposes client auth', async () => {
+    renderPage(makeProvider({}))
+    editConnection()
+    openConnectionOptions()
+    expect(screen.getByLabelText('Client authentication')).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('Sign-in prompt'))
+    await waitFor(() => expect(screen.getByTestId('prompt-choice-omit')).toBeInTheDocument())
+    expect(screen.getByTestId('prompt-choice-none')).toBeInTheDocument()
+  })
+
+  it('offers manual endpoints only for a custom provider', () => {
+    renderPage(makeProvider({ kind: 'okta' }))
+    editConnection()
+    openConnectionOptions()
+    expect(screen.queryByText('Manual endpoints')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Change' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Custom OIDC' }))
+    expect(screen.getByText('Manual endpoints')).toBeInTheDocument()
+  })
+})
+
+/**
+ * Sign-in & access: the explicit access decisions, saved together. Domains
+ * save themselves.
+ */
+describe('<ProviderDetailPage> sign-in & access', () => {
+  it('shows the button switch and hides the enforcement control for a no-domain provider', () => {
     renderPage(makeProvider({ domains: [] }))
-    // Always available so the admin can hide the button even without a domain.
-    expect(screen.getByLabelText(/show a sign-in button/i)).toBeInTheDocument()
-    // Enforcement is domain-scoped, so it stays hidden without a verified domain.
+    expect(screen.getByRole('switch', { name: 'Show sign-in button' })).toBeInTheDocument()
     expect(screen.queryByLabelText(/require sso/i)).toBeNull()
   })
 
-  it('shows the visibility toggle and enforcement control for a verified-domain provider', () => {
+  it('shows the enforcement control for a verified-domain provider', () => {
     renderPage(makeProvider({ domains: [verifiedDomain] }))
-    expect(screen.getByLabelText(/show a sign-in button/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/require sso for acme\.com/i)).toBeInTheDocument()
   })
 
   it('leaves enforcement locked until the connection carries a fresh test', () => {
-    // The enforcement gate is the only control here that can lock a workspace
-    // out, so it stays disabled without a test that postdates the last change.
     renderPage(makeProvider({ domains: [verifiedDomain], lastSuccessfulTestAt: null }))
     expect(screen.getByLabelText(/require sso for acme\.com/i)).toBeDisabled()
   })
@@ -530,269 +729,82 @@ describe('<ProviderDetailPage> sign-in card', () => {
       })
     )
     expect(screen.getByLabelText(/require sso for acme\.com/i)).not.toBeDisabled()
-    expect(screen.getByText(/Before you enforce/)).toBeInTheDocument()
+    expect(screen.getByText(/Before you require SSO/)).toBeInTheDocument()
   })
 
-  it('saves only the visibility choice', async () => {
-    renderPage(makeProvider({ showButton: false }))
-    await userEvent.click(screen.getByLabelText(/show a sign-in button/i))
-    fireEvent.click(screen.getByRole('button', { name: 'Save sign-in' }))
+  it('saves the button, creation and role choices together and nothing else', async () => {
+    renderPage(makeProvider({ showButton: false, autoCreateUsers: true }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Show sign-in button' }))
+    saveSignIn()
     await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
-    expect(lastUpsert().showButton).toBe(true)
+    expect(lastUpsert()).toMatchObject({
+      showButton: true,
+      autoCreateUsers: true,
+      autoProvisionRole: 'user',
+      label: 'Acme SSO',
+    })
     expect(lastUpsert()).not.toHaveProperty('claimMapping')
-  })
-})
-
-describe('<ProviderDetailPage> claim-mapping autocomplete', () => {
-  it('names the observed claims inline and drops the old assist block', () => {
-    ssoTestRef.current = {
-      registrationId: 'oidc_x',
-      capturedAt: '2026-09-01T00:00:00.000Z',
-      identity: { id: 's', sources: { id: 'idToken' } },
-      claims: { groups: ['11111111-2222'], roles: ['admin'] },
-    }
-    renderPage(makeProvider({ autoCreateUsers: true, claimMapping: null }))
-    expect(screen.queryByText(/Run a test as another user/)).not.toBeInTheDocument()
-    expect(screen.getByText('Unique user identifier')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Add claim' })).toBeInTheDocument()
+    expect(lastUpsert()).not.toHaveProperty('scopes')
+    expect(mappingSpy).not.toHaveBeenCalled()
   })
 
-  it('does not auto-write a Role mapping from a test capture', () => {
-    ssoTestRef.current = {
-      registrationId: 'oidc_x',
-      capturedAt: '2026-09-01T00:00:00.000Z',
-      identity: { id: 's', sources: { id: 'idToken' } },
-      claims: { roles: ['admin'] },
-    }
-    renderPage(makeProvider({ autoCreateUsers: true, claimMapping: null }))
-    expect(screen.queryByText('Role')).not.toBeInTheDocument()
+  it('nulls the new account role when creation is turned off', async () => {
+    renderPage(makeProvider({ autoCreateUsers: true, autoProvisionRole: 'member' }))
+    expect(screen.getByLabelText('New account role')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('switch', { name: 'Create accounts on first sign-in' }))
+    expect(screen.queryByLabelText('New account role')).not.toBeInTheDocument()
+    saveSignIn()
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    expect(lastUpsert()).toMatchObject({ autoCreateUsers: false, autoProvisionRole: null })
   })
 
-  it('shows no inline suggestions for a test of a different provider', () => {
-    ssoTestRef.current = {
-      registrationId: 'oidc_other',
-      capturedAt: '2026-09-01T00:00:00.000Z',
-      identity: { id: 's', sources: { id: 'idToken' } },
-      claims: { roles: ['admin'] },
-    }
-    renderPage(
-      makeProvider({
-        autoCreateUsers: true,
-        claimMapping: { role: { claimPath: 'groups', rules: [] } },
-      })
-    )
-    // Disclosure auto-opens because a mapping object exists; no "from your test" hint.
-    expect(screen.queryByText(/From your test sign-in:/)).not.toBeInTheDocument()
+  it('keeps the display name and logo under Sign-in appearance', async () => {
+    renderPage(makeProvider({ label: 'Acme SSO' }))
+    expect(screen.queryByLabelText('Display name')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Sign-in appearance/ }))
+    expect(screen.getByText('Logo')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Acme Login' } })
+    saveSignIn()
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    expect(lastUpsert().label).toBe('Acme Login')
+  })
+
+  it('refuses to save a blank display name and focuses the field', async () => {
+    renderPage(makeProvider({}))
+    fireEvent.click(screen.getByRole('button', { name: /Sign-in appearance/ }))
+    await userEvent.clear(screen.getByLabelText('Display name'))
+    saveSignIn()
+    await waitFor(() => expect(screen.getByLabelText('Display name')).toHaveFocus())
+    expect(upsertSpy).not.toHaveBeenCalled()
   })
 })
 
 /**
- * Scopes control.
- *
- * The column was wired end to end — service, server function, registration
- * builder, connection test — but the editor rendered no input, so an admin
- * whose IdP does not define `email`/`profile` had no way to see or change what
- * was being requested. That is the whole reported failure.
+ * Signing in without an email address: explicit, off by default, under
+ * Account options. Minting a placeholder is one-way, so the copy says so.
  */
-describe('<ProviderDetailPage> scopes', () => {
-  const openAdvanced = () => {
-    fireEvent.click(screen.getByRole('button', { name: /Advanced/ }))
-  }
+describe('<ProviderDetailPage> account options', () => {
+  const openAccountOptions = () =>
+    fireEvent.click(screen.getByRole('button', { name: /Account options/ }))
+  const missingEmail = () => screen.getByLabelText('Let people sign in without an email address')
 
-  it('collapses Advanced by default for a provider on the default scopes', () => {
-    renderPage(makeProvider({ scopes: null }))
-    expect(screen.getByRole('button', { name: /Advanced/ })).toHaveAttribute(
+  it('is off and collapsed for a provider that has never been configured', () => {
+    renderPage(makeProvider({ claimMapping: null }))
+    expect(screen.getByRole('button', { name: /Account options/ })).toHaveAttribute(
       'aria-expanded',
       'false'
     )
+    openAccountOptions()
+    expect(missingEmail()).not.toBeChecked()
   })
 
-  it('auto-expands Advanced when the provider has a custom scope set', () => {
-    // Otherwise a non-default configuration is invisible behind a closed panel.
-    renderPage(makeProvider({ scopes: 'openid public' }))
-    expect(screen.getByRole('button', { name: /Advanced/ })).toHaveAttribute(
-      'aria-expanded',
-      'true'
-    )
-  })
-
-  it('prefills the effective scopes rather than an empty field', () => {
-    renderPage(makeProvider({ scopes: null }))
-    openAdvanced()
-    for (const scope of ['openid', 'email', 'profile']) {
-      expect(screen.getByTestId(`scope-token-${scope}`)).toBeInTheDocument()
-    }
-  })
-
-  it('does not offer to remove openid', () => {
-    renderPage(makeProvider({ scopes: null }))
-    openAdvanced()
-    expect(screen.queryByRole('button', { name: 'Remove scope openid' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Remove scope email' })).toBeInTheDocument()
-  })
-
-  it('saves null when the admin leaves the defaults untouched', async () => {
-    renderPage(makeProvider({ scopes: null }))
-    saveConnection()
-    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
-    expect(lastUpsert().scopes).toBeNull()
-  })
-
-  it('saves the reduced set after removing a scope the IdP does not support', async () => {
-    // An IdP that advertises only `public` and `openid`, so the default set
-    // is rejected outright.
-    renderPage(makeProvider({ scopes: null }))
-    openAdvanced()
-    fireEvent.click(screen.getByRole('button', { name: 'Remove scope email' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Remove scope profile' }))
-    saveConnection()
-    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
-    expect(lastUpsert().scopes).toBe('openid')
-  })
-
-  it('adds a scope typed by the admin', async () => {
-    renderPage(makeProvider({ scopes: null }))
-    openAdvanced()
-    fireEvent.change(screen.getByLabelText('Add a scope'), { target: { value: 'public' } })
-    fireEvent.submit(screen.getByTestId('scope-add-form'))
-    saveConnection()
-    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
-    expect(lastUpsert().scopes).toBe('openid email profile public')
-  })
-
-  it('round-trips a custom set without rewriting it', async () => {
-    renderPage(makeProvider({ scopes: 'openid public' }))
-    saveConnection()
-    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
-    expect(lastUpsert().scopes).toBe('openid public')
-  })
-})
-
-/**
- * Inline scope validation against the discovery document.
- *
- * This is the check that would have caught the reported failure at
- * configuration time rather than as an opaque `invalid_scope` after a round
- * trip through the IdP.
- */
-describe('<ProviderDetailPage> scope validation', () => {
-  const openAdvanced = () => fireEvent.click(screen.getByRole('button', { name: /Advanced/ }))
-
-  it('warns about scopes the IdP does not advertise', async () => {
-    discoveryScopesSpy.mockResolvedValueOnce({ scopesSupported: ['public', 'openid'] })
-    renderPage(makeProvider({ scopes: null }))
-    openAdvanced()
-    await waitFor(() => {
-      expect(screen.getByTestId('scope-mismatch-warning')).toHaveTextContent('email')
-    })
-    expect(screen.getByTestId('scope-mismatch-warning')).toHaveTextContent('profile')
-  })
-
-  it('reduces the set to what the IdP advertises on one click', async () => {
-    discoveryScopesSpy.mockResolvedValueOnce({ scopesSupported: ['public', 'openid'] })
-    renderPage(makeProvider({ scopes: null }))
-    openAdvanced()
-    await waitFor(() => expect(screen.getByTestId('scope-mismatch-warning')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: 'Use supported scopes' }))
-    saveConnection()
-    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
-    expect(lastUpsert().scopes).toBe('openid')
-  })
-
-  it('says nothing when the IdP advertises no scope list', async () => {
-    // Absent means unknown, not unsupported — the field is only RECOMMENDED.
-    discoveryScopesSpy.mockResolvedValueOnce({ scopesSupported: null })
-    renderPage(makeProvider({ scopes: null }))
-    openAdvanced()
-    await waitFor(() => expect(discoveryScopesSpy).toHaveBeenCalled())
-    expect(screen.queryByTestId('scope-mismatch-warning')).not.toBeInTheDocument()
-  })
-
-  it('says nothing when every scope is advertised', async () => {
-    discoveryScopesSpy.mockResolvedValueOnce({
-      scopesSupported: ['openid', 'email', 'profile'],
-    })
-    renderPage(makeProvider({ scopes: null }))
-    openAdvanced()
-    await waitFor(() => expect(discoveryScopesSpy).toHaveBeenCalled())
-    expect(screen.queryByTestId('scope-mismatch-warning')).not.toBeInTheDocument()
-  })
-})
-
-/**
- * Prompt and client authentication.
- *
- * The other two authorize-request parameters that were fixed in code. Both sit
- * in the same Advanced section as scopes, because they are the same kind of
- * thing and splitting them would suggest otherwise.
- */
-describe('<ProviderDetailPage> request options', () => {
-  const openAdvanced = () => fireEvent.click(screen.getByRole('button', { name: /Advanced/ }))
-
-  it('saves null for an untouched provider on the defaults', async () => {
-    renderPage(makeProvider({ prompt: null, tokenEndpointAuthMethod: null }))
-    saveConnection()
-    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
-    expect(lastUpsert().prompt).toBeNull()
-    expect(lastUpsert().tokenEndpointAuthMethod).toBeNull()
-  })
-
-  it('round-trips a configured prompt without rewriting it', async () => {
-    renderPage(makeProvider({ prompt: 'omit' }))
-    saveConnection()
-    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
-    expect(lastUpsert().prompt).toBe('omit')
-  })
-
-  it('auto-expands Advanced when a non-default prompt is set', () => {
-    // A non-default configuration must never sit hidden behind a closed panel.
-    renderPage(makeProvider({ prompt: 'omit' }))
-    expect(screen.getByRole('button', { name: /Advanced/ })).toHaveAttribute(
-      'aria-expanded',
-      'true'
-    )
-  })
-
-  it('offers omit and none as separate choices', async () => {
-    // Collapsing them would read as a tidy-up and would break sign-in for
-    // anyone who picked the wrong one.
-    renderPage(makeProvider({}))
-    openAdvanced()
-    fireEvent.click(screen.getByLabelText('Sign-in prompt'))
-    await waitFor(() => expect(screen.getByTestId('prompt-choice-omit')).toBeInTheDocument())
-    expect(screen.getByTestId('prompt-choice-none')).toBeInTheDocument()
-  })
-
-  it('exposes the client authentication method', () => {
-    renderPage(makeProvider({}))
-    openAdvanced()
-    expect(screen.getByLabelText('Client authentication')).toBeInTheDocument()
-  })
-})
-
-/**
- * The switch that lets a provider releasing no email create accounts anyway.
- * Minting is one-way, so the packaging matters as much as the behaviour.
- */
-describe('<ProviderDetailPage> identity fields', () => {
-  it('is off for a provider that has never been configured', () => {
-    renderPage(makeProvider({ claimMapping: null }))
-    expect(screen.getByLabelText(/allow accounts without an email/i)).not.toBeChecked()
-  })
-
-  it('reflects a provider that has opted in', () => {
+  it('is open and checked for a provider that has opted in, and explains the placeholder', () => {
     renderPage(makeProvider({ claimMapping: { profile: { allowMissingEmail: true } } }))
-    expect(screen.getByLabelText(/allow accounts without an email/i)).toBeChecked()
-  })
-
-  it('warns that placeholders are permanent and that off blocks sign-in entirely', () => {
-    renderPage(makeProvider({ claimMapping: null }))
-    expect(screen.getByText(/Placeholders are\s+permanent/i)).toBeInTheDocument()
-    expect(screen.getByText(/these people cannot sign in at all/i)).toBeInTheDocument()
+    expect(missingEmail()).toBeChecked()
+    expect(screen.getByText(/permanent placeholder address/)).toBeInTheDocument()
   })
 
   it('persists the opt-in without disturbing the role section', async () => {
-    // The sections share one column, so writing one must not blank the other.
     renderPage(
       makeProvider({
         claimMapping: {
@@ -800,8 +812,9 @@ describe('<ProviderDetailPage> identity fields', () => {
         },
       })
     )
-    await userEvent.click(screen.getByLabelText(/allow accounts without an email/i))
-    saveMapping()
+    openAccountOptions()
+    await userEvent.click(missingEmail())
+    saveSignIn()
     await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
     const sent = lastSavedMapping() as {
       profile?: { allowMissingEmail?: boolean }
@@ -809,34 +822,154 @@ describe('<ProviderDetailPage> identity fields', () => {
     }
     expect(sent.profile?.allowMissingEmail).toBe(true)
     expect(sent.role?.claimPath).toBe('groups')
+    // The admin rule pre-exists and is untouched: acknowledged, not re-confirmed.
+    expect(lastMapping().acknowledgeAdminRules).toBe(true)
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
   })
 
-  it('sends no profile section when the opt-in is left off', async () => {
-    // Absent means "not configured" everywhere else; writing an explicit false
-    // would make an untouched provider look deliberately configured.
-    renderPage(makeProvider({ claimMapping: null }))
-    saveMapping()
-    await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
-    expect(lastSavedMapping()).toBeNull()
-  })
-
-  it('carries the attributes section through a mapping save verbatim', async () => {
-    // `attributes` has no UI at all, so the card that owns the other two
-    // sections is the one place it can silently disappear.
+  it('carries the attributes section through the write verbatim', async () => {
     const attributes = { map: [{ claimPath: 'dept', attributeKey: 'department' }] }
     renderPage(makeProvider({ claimMapping: { attributes } }))
-    await userEvent.click(screen.getByLabelText(/allow accounts without an email/i))
-    saveMapping()
+    openAccountOptions()
+    await userEvent.click(missingEmail())
+    saveSignIn()
     await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
     expect((lastSavedMapping() as { attributes?: unknown }).attributes).toEqual(attributes)
   })
 })
 
 /**
- * Removal. Its own card rather than a ghost button beside Save, and it states
- * what it would cost before offering it — both refusals mirror server-side
- * invariants rather than being UI politeness.
+ * User details rests on one sentence. Customize opens the editor; existing
+ * custom mappings show directly.
  */
+describe('<ProviderDetailPage> user details', () => {
+  it('shows the standard summary with no table for an unconfigured mapping', () => {
+    renderPage(makeProvider({ claimMapping: null }))
+    expect(screen.getByText('Uses standard profile fields')).toBeInTheDocument()
+    expect(screen.getByText('No role rules or custom attributes.')).toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Customize' })).toBeInTheDocument()
+  })
+
+  it('shows custom mappings directly and marks only the exception', () => {
+    renderPage(
+      makeProvider({
+        claimMapping: {
+          profile: { claims: { email: 'upn' } },
+          role: { claimPath: 'groups', rules: [{ whenContains: 'eng', role: 'member' }] },
+        },
+      })
+    )
+    expect(screen.queryByText('Uses standard profile fields')).not.toBeInTheDocument()
+    expect(screen.getByText('upn')).toBeInTheDocument()
+    expect(screen.getAllByText('Custom')).toHaveLength(1)
+    expect(screen.queryByText('Default')).not.toBeInTheDocument()
+    expect(screen.getByText('groups')).toBeInTheDocument()
+  })
+
+  it('shows a stored profile claim this UI cannot edit instead of calling the mapping standard', () => {
+    renderPage(
+      makeProvider({
+        claimMapping: {
+          profile: { claims: { username: 'preferred_username' } as Record<string, string> },
+        },
+      })
+    )
+    // id / email / name are still standard, but the resting view must not
+    // collapse to the one-sentence summary and hide the stored row.
+    expect(screen.getByRole('table')).toBeInTheDocument()
+    expect(screen.getByText('username')).toBeInTheDocument()
+    expect(screen.getByText(/not editable here/)).toBeInTheDocument()
+  })
+
+  it('names a non-standard source list as a compatibility exception', () => {
+    renderPage(
+      makeProvider({
+        claimMapping: { profile: { sources: ['idToken', 'userinfo', 'accessTokenJwt'] } },
+      })
+    )
+    expect(screen.getByTestId('compatibility-sources')).toHaveTextContent('Access-token JWT')
+  })
+
+  it('opens the compact editor with the three profile fields and no Default badges', () => {
+    renderPage(makeProvider({ claimMapping: null }))
+    customize()
+    for (const [label, path] of [
+      ['Account ID', 'sub'],
+      ['Email', 'email'],
+      ['Name', 'name'],
+    ]) {
+      expect(screen.getByText(label)).toBeInTheDocument()
+      expect(screen.getByText(path)).toBeInTheDocument()
+    }
+    expect(screen.queryByText('Default')).not.toBeInTheDocument()
+    expect(
+      screen.getByText('Email and name are set when an account is created.')
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add mapping' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Customize' })).not.toBeInTheDocument()
+  })
+
+  it('keeps the source controls inside Compatibility, closed for standard sources', () => {
+    renderPage(makeProvider({ claimMapping: null }))
+    customize()
+    expect(screen.queryByTestId('identity-sources-editor')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Compatibility/ }))
+    expect(screen.getByTestId('identity-sources-editor')).toBeInTheDocument()
+    expect(screen.getByLabelText('Access-token JWT')).not.toBeChecked()
+  })
+
+  it('opens Compatibility when the stored sources are non-standard', () => {
+    renderPage(
+      makeProvider({
+        claimMapping: { profile: { sources: ['idToken', 'userinfo', 'accessTokenJwt'] } },
+      })
+    )
+    customize()
+    expect(screen.getByLabelText('Access-token JWT')).toBeChecked()
+  })
+
+  it('does not write anything for an untouched standard mapping', async () => {
+    renderPage(makeProvider({ claimMapping: null }))
+    customize()
+    saveUserDetails()
+    await waitFor(() =>
+      expect(screen.getByText('Uses standard profile fields')).toBeInTheDocument()
+    )
+    expect(mappingSpy).not.toHaveBeenCalled()
+  })
+
+  it('does not suggest a mapping from a test capture', () => {
+    ssoTestRef.current = {
+      registrationId: 'oidc_x',
+      capturedAt: '2026-09-01T00:00:00.000Z',
+      identity: { id: 's', sources: { id: 'idToken' } },
+      claims: { roles: ['admin'] },
+    }
+    renderPage(makeProvider({ autoCreateUsers: true, claimMapping: null }))
+    expect(screen.getByText('Uses standard profile fields')).toBeInTheDocument()
+    customize()
+    expect(screen.queryByText('Role')).not.toBeInTheDocument()
+  })
+
+  it('confirms an Account ID change before saving', async () => {
+    renderPage(makeProvider({ claimMapping: null }))
+    customize()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Account ID mapping' }))
+    fireEvent.click(screen.getByRole('combobox', { name: 'Provider claim' }))
+    fireEvent.change(screen.getByPlaceholderText('Search or type…'), { target: { value: 'oid' } })
+    fireEvent.click(screen.getByText(/Use ["“]oid["”]/))
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+    fireEvent.click(section('mapping').getByRole('button', { name: 'Save changes' }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(dialog).toHaveTextContent(/Changing the Account ID/)
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
+    expect(lastMapping().acknowledgeIdentifierChange).toBe(true)
+    expect(lastSavedMapping()).toEqual({ profile: { claims: { id: 'oid' } } })
+  })
+})
+
 const PEOPLE_ATTRS = [
   {
     id: 'ua_1',
@@ -885,16 +1018,17 @@ describe('<ProviderDetailPage> claim → person-attribute mapping', () => {
   it('adds a row, picks a claim path and attribute, and saves without touching role/profile', async () => {
     state.userAttributes = PEOPLE_ATTRS
     renderPage(makeProvider({ claimMapping: null }))
-    fireEvent.click(screen.getByRole('button', { name: 'Add claim' }))
-    fireEvent.click(screen.getByRole('combobox', { name: 'Quackback attribute' }))
+    customize()
+    fireEvent.click(screen.getByRole('button', { name: 'Add mapping' }))
+    fireEvent.click(screen.getByRole('combobox', { name: 'Set from this provider' }))
     fireEvent.click(screen.getByRole('option', { name: /Department/ }))
-    fireEvent.click(screen.getByRole('combobox', { name: 'IdP claim path' }))
+    fireEvent.click(screen.getByRole('combobox', { name: 'Provider claim' }))
     fireEvent.change(screen.getByPlaceholderText('Search or type…'), {
       target: { value: 'department' },
     })
     fireEvent.click(screen.getByText(/Use ["“]department["”]/))
-    fireEvent.click(screen.getByRole('button', { name: 'Add to draft' }))
-    saveMapping()
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    saveUserDetails()
     await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
     const sent = lastSavedMapping() as {
       attributes?: { map?: Array<{ claimPath: string; attributeKey: string }> }
@@ -906,6 +1040,31 @@ describe('<ProviderDetailPage> claim → person-attribute mapping', () => {
     expect(sent).not.toHaveProperty('profile')
   })
 
+  it('removes a draft row with Undo instead of a confirmation', async () => {
+    state.userAttributes = PEOPLE_ATTRS
+    renderPage(
+      makeProvider({
+        claimMapping: {
+          attributes: { map: [{ claimPath: 'department', attributeKey: 'department' }] },
+        },
+      })
+    )
+    customize()
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Department mapping' }))
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(screen.queryByText('Department')).not.toBeInTheDocument()
+    const [message, options] = toastSpy.mock.calls.at(-1)! as [
+      string,
+      { action: { label: string; onClick: () => void } },
+    ]
+    expect(message).toMatch(/Removed the Department mapping/)
+    expect(options.action.label).toBe('Undo')
+    // Undo restores the row before anything is written.
+    options.action.onClick()
+    await waitFor(() => expect(screen.getByText('Department')).toBeInTheDocument())
+    expect(mappingSpy).not.toHaveBeenCalled()
+  })
+
   it('removes the only row on save so attributes is absent from the payload', async () => {
     state.userAttributes = PEOPLE_ATTRS
     renderPage(
@@ -915,14 +1074,14 @@ describe('<ProviderDetailPage> claim → person-attribute mapping', () => {
         },
       })
     )
+    customize()
     fireEvent.click(screen.getByRole('button', { name: 'Remove Department mapping' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Remove mapping' }))
-    saveMapping()
+    saveUserDetails()
     await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
     expect(lastSavedMapping()).toBeNull()
   })
 
-  it('persists overrideExisting and syncOnSignIn independently', async () => {
+  it('persists overrideExisting and syncOnSignIn', async () => {
     state.userAttributes = PEOPLE_ATTRS
     renderPage(
       makeProvider({
@@ -931,27 +1090,19 @@ describe('<ProviderDetailPage> claim → person-attribute mapping', () => {
         },
       })
     )
-    await userEvent.click(screen.getByLabelText('Overwrite values that are already set'))
-    saveMapping()
-    await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
-    const first = lastSavedMapping() as {
-      attributes?: { overrideExisting?: boolean; syncOnSignIn?: boolean }
-    }
-    expect(first.attributes?.overrideExisting).toBe(true)
-    expect(first.attributes?.syncOnSignIn).toBeUndefined()
-
-    mappingSpy.mockClear()
+    customize()
+    await userEvent.click(screen.getByLabelText('Overwrite attribute values that are already set'))
     await userEvent.click(screen.getByLabelText('Clear an attribute when its claim is missing'))
-    saveMapping()
+    saveUserDetails()
     await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
-    const second = lastSavedMapping() as {
+    const sent = lastSavedMapping() as {
       attributes?: { overrideExisting?: boolean; syncOnSignIn?: boolean }
     }
-    expect(second.attributes?.overrideExisting).toBe(true)
-    expect(second.attributes?.syncOnSignIn).toBe(true)
+    expect(sent.attributes?.overrideExisting).toBe(true)
+    expect(sent.attributes?.syncOnSignIn).toBe(true)
   })
 
-  it('shows the People empty state and no Add button when there are no definitions', () => {
+  it('points at People settings when there are no definitions left to map', () => {
     state.userAttributes = []
     renderPage(
       makeProvider({
@@ -960,15 +1111,15 @@ describe('<ProviderDetailPage> claim → person-attribute mapping', () => {
         },
       })
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Add claim' }))
+    customize()
+    fireEvent.click(screen.getByRole('button', { name: 'Add mapping' }))
     expect(screen.getByRole('link', { name: 'Open People settings' })).toHaveAttribute(
       'href',
       '/admin/settings/people'
     )
-    expect(screen.queryByRole('button', { name: /Add mapping/ })).not.toBeInTheDocument()
   })
 
-  it('keeps an orphan row removable when the last definition is gone', async () => {
+  it('keeps an orphan row visible and removable when its definition is gone', async () => {
     state.userAttributes = []
     renderPage(
       makeProvider({
@@ -977,28 +1128,15 @@ describe('<ProviderDetailPage> claim → person-attribute mapping', () => {
         },
       })
     )
-    expect(screen.getByText('attribute no longer exists')).toBeInTheDocument()
+    expect(screen.getByText('Attribute no longer exists')).toBeInTheDocument()
+    customize()
     fireEvent.click(screen.getByRole('button', { name: 'Remove cost_center mapping' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Remove mapping' }))
-    saveMapping()
+    saveUserDetails()
     await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
     expect(lastSavedMapping()).toBeNull()
   })
 
-  it('renders an orphan-row warning when the attribute no longer exists', () => {
-    state.userAttributes = PEOPLE_ATTRS
-    renderPage(
-      makeProvider({
-        claimMapping: {
-          attributes: { map: [{ claimPath: 'cc', attributeKey: 'cost_center' }] },
-        },
-      })
-    )
-    expect(screen.getByText('attribute no longer exists')).toBeInTheDocument()
-    expect(screen.getByText('cost_center')).toBeInTheDocument()
-  })
-
-  it('previews a written value and a missing-claim skip from a matching capture', async () => {
+  it('previews a written value and a missing-claim skip from a matching capture', () => {
     state.userAttributes = PEOPLE_ATTRS
     renderPage(
       makeProvider({
@@ -1013,6 +1151,7 @@ describe('<ProviderDetailPage> claim → person-attribute mapping', () => {
         },
       })
     )
+    customize()
     expect(screen.getByText(/“Engineering”/)).toBeInTheDocument()
     expect(screen.getByText(/skipped: missing claim/)).toBeInTheDocument()
   })
@@ -1041,6 +1180,7 @@ describe('<ProviderDetailPage> claim → person-attribute mapping', () => {
         },
       })
     )
+    customize()
     expect(screen.getByText(/“From session”/)).toBeInTheDocument()
     expect(screen.queryByText(/“Engineering”/)).not.toBeInTheDocument()
   })
@@ -1055,44 +1195,49 @@ describe('<ProviderDetailPage> claim → person-attribute mapping', () => {
         },
       })
     )
+    customize()
     expect(screen.getByText(/Run a test sign-in to inspect this IdP's claims/)).toBeInTheDocument()
   })
 })
 
+/**
+ * Removal lives in the header menu. Both refusals mirror server-side
+ * invariants rather than being UI politeness.
+ */
 describe('<ProviderDetailPage> remove', () => {
-  it('states that nobody is linked yet and allows removal', () => {
-    state.accountCount = 0
-    renderPage(makeProvider({}))
-    expect(screen.getByText(/Nobody signs in through this provider yet/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^Remove$/ })).not.toBeDisabled()
-  })
-
-  it('states the affected account count and blocks removal while identities exist', () => {
-    state.accountCount = 4
-    renderPage(makeProvider({}))
-    expect(screen.getByText(/4 accounts are linked to this provider/)).toBeInTheDocument()
-    expect(screen.getByText(/would orphan their accounts/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^Remove$/ })).toBeDisabled()
-  })
-
-  it('blocks removing a provider that is the only working method', () => {
-    state.authConfig = { oauth: { password: false } }
-    renderPage(makeProvider({ enabled: true, configured: true }))
-    expect(screen.getByRole('button', { name: /^Remove$/ })).toBeDisabled()
-    expect(screen.getByText(/only enabled sign-in method/i)).toBeInTheDocument()
-  })
-
-  it('allows removing a provider when other methods remain', () => {
-    renderPage(makeProvider({ enabled: true, configured: true }))
-    expect(screen.getByRole('button', { name: /^Remove$/ })).not.toBeDisabled()
-  })
+  const openMenu = async () => {
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Provider actions' }))
+    return user
+  }
 
   it('deletes and returns to the provider list once confirmed', async () => {
+    state.accountCount = 0
     renderPage(makeProvider({}))
-    fireEvent.click(screen.getByRole('button', { name: /^Remove$/ }))
+    const user = await openMenu()
+    await user.click(await screen.findByRole('menuitem', { name: 'Remove provider' }))
     const dialog = await screen.findByRole('alertdialog')
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Remove' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Remove' }))
     await waitFor(() => expect(deleteSpy).toHaveBeenCalledWith({ data: { id: 'idp_x' } }))
     await waitFor(() => expect(state.navigate).toHaveBeenCalled())
+  })
+
+  it('refuses while identities are linked and says how many', async () => {
+    state.accountCount = 4
+    renderPage(makeProvider({}))
+    const user = await openMenu()
+    await user.click(await screen.findByRole('menuitem', { name: 'Remove provider' }))
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(toastSpy.error).toHaveBeenCalledWith(expect.stringMatching(/4 people sign in/))
+    expect(deleteSpy).not.toHaveBeenCalled()
+  })
+
+  it('refuses to remove the only working sign-in method', async () => {
+    state.authConfig = { oauth: { password: false } }
+    renderPage(makeProvider({ enabled: true, configured: true }))
+    const user = await openMenu()
+    await user.click(await screen.findByRole('menuitem', { name: 'Remove provider' }))
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(toastSpy.error).toHaveBeenCalledWith(expect.stringMatching(/only enabled sign-in/i))
   })
 })

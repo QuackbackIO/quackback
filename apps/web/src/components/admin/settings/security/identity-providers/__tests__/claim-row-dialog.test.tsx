@@ -94,7 +94,7 @@ describe('ClaimRowDialog', () => {
         onCommit={onCommit}
       />
     )
-    await userEvent.click(screen.getByRole('button', { name: 'Reset to name' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Use name' }))
     expect(onCommit).toHaveBeenCalledWith({ type: 'profile', field: 'name', path: null })
   })
 
@@ -113,7 +113,7 @@ describe('ClaimRowDialog', () => {
         onCommit={onCommit}
       />
     )
-    await userEvent.click(screen.getByRole('button', { name: 'Apply to draft' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }))
     expect(onCommit).toHaveBeenCalledWith({ type: 'profile', field: 'id', path: null })
   })
 
@@ -132,13 +132,13 @@ describe('ClaimRowDialog', () => {
         onCommit={onCommit}
       />
     )
-    await userEvent.click(screen.getByRole('combobox', { name: 'IdP claim path' }))
+    await userEvent.click(screen.getByRole('combobox', { name: 'Provider claim' }))
     await userEvent.click(screen.getByRole('option', { name: /^sub\b/i }))
-    await userEvent.click(screen.getByRole('button', { name: 'Apply to draft' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }))
     expect(onCommit).toHaveBeenCalledWith({ type: 'profile', field: 'id', path: 'sub' })
   })
 
-  it('locks the target when editing and has no metadata-key field', () => {
+  it('names the target in the title when editing, with no picker and no metadata-key field', () => {
     render(
       <ClaimRowDialog
         open
@@ -153,13 +153,14 @@ describe('ClaimRowDialog', () => {
         onCommit={vi.fn()}
       />
     )
-    expect(screen.getByText('Email (fixed target)')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Quackback attribute')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Edit Email mapping' })).toBeInTheDocument()
+    expect(screen.queryByText(/fixed target/)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Set from this provider')).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/metadata/i)).not.toBeInTheDocument()
     expect(screen.queryByPlaceholderText(/metadata/i)).not.toBeInTheDocument()
   })
 
-  it('disables Apply to draft when a new role rule has no value', async () => {
+  it('disables Apply when a new role rule has no value', async () => {
     const onCommit = vi.fn()
     render(
       <ClaimRowDialog
@@ -178,9 +179,9 @@ describe('ClaimRowDialog', () => {
         onCommit={onCommit}
       />
     )
-    expect(screen.getByRole('button', { name: 'Apply to draft' })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Apply' })).not.toBeDisabled()
     await userEvent.click(screen.getByRole('button', { name: 'Add rule' }))
-    expect(screen.getByRole('button', { name: 'Apply to draft' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Apply' })).toBeDisabled()
     expect(onCommit).not.toHaveBeenCalled()
   })
 
@@ -233,11 +234,11 @@ describe('ClaimRowDialog', () => {
         onCommit={vi.fn()}
       />
     )
-    await userEvent.click(screen.getByRole('combobox', { name: 'Quackback attribute' }))
-    expect(screen.getByRole('option', { name: /Role/ })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('combobox', { name: 'Set from this provider' }))
+    expect(screen.getByRole('option', { name: /Role rules/ })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: /Plan/ })).toBeInTheDocument()
     expect(screen.queryByRole('option', { name: /Department/ })).not.toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: /Unique user identifier/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /Account ID/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('option', { name: /^Email/ })).not.toBeInTheDocument()
   })
 
@@ -256,7 +257,7 @@ describe('ClaimRowDialog', () => {
         onCommit={vi.fn()}
       />
     )
-    await userEvent.click(screen.getByRole('combobox', { name: 'IdP claim path' }))
+    await userEvent.click(screen.getByRole('combobox', { name: 'Provider claim' }))
     expect(screen.getAllByText('sub').length).toBeGreaterThan(1)
   })
 
@@ -281,11 +282,11 @@ describe('ClaimRowDialog', () => {
         onCommit={onCommit}
       />
     )
-    await userEvent.click(screen.getByRole('combobox', { name: 'IdP claim path' }))
+    await userEvent.click(screen.getByRole('combobox', { name: 'Provider claim' }))
     const groups = screen.getByRole('option', { name: /groups/i })
     expect(groups).toHaveAttribute('aria-disabled', 'true')
     await userEvent.click(groups)
-    expect(screen.getByRole('combobox', { name: 'IdP claim path' })).toHaveTextContent('sub')
+    expect(screen.getByRole('combobox', { name: 'Provider claim' })).toHaveTextContent('sub')
   })
 
   it('does not reset in-progress edits when the parent re-renders', () => {
@@ -304,7 +305,7 @@ describe('ClaimRowDialog', () => {
         onCommit={vi.fn()}
       />
     )
-    expect(screen.getByRole('combobox', { name: 'IdP claim path' })).toHaveTextContent('upn')
+    expect(screen.getByRole('combobox', { name: 'Provider claim' })).toHaveTextContent('upn')
     rerender(
       <ClaimRowDialog
         open
@@ -319,7 +320,7 @@ describe('ClaimRowDialog', () => {
         onCommit={vi.fn()}
       />
     )
-    expect(screen.getByRole('combobox', { name: 'IdP claim path' })).toHaveTextContent('upn')
+    expect(screen.getByRole('combobox', { name: 'Provider claim' })).toHaveTextContent('upn')
   })
 
   it('commits a People edit with the row baseline index', async () => {
@@ -338,7 +339,7 @@ describe('ClaimRowDialog', () => {
         onCommit={onCommit}
       />
     )
-    await userEvent.click(screen.getByRole('button', { name: 'Apply to draft' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }))
     expect(onCommit).toHaveBeenCalledWith({
       type: 'people',
       attributeKey: 'department',

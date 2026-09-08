@@ -21,29 +21,28 @@ import type { IdentityProvider } from '@/lib/server/domains/settings/identity-pr
 import type { IdpKind } from '../idp-shortcuts'
 import { sourcesAreDefault } from '@/lib/shared/sso-claim-mapping-edit'
 
-/**
- * Flip to false to render the pre-table disclosures without a revert.
- * Both presentations share the same save coordinator.
- */
-export const CLAIMS_TABLE = true
-
 export const OIDC_PROFILE_DEFAULTS = {
   id: 'sub',
   email: 'email',
   name: 'name',
 } as const
 
-export const PROFILE_ROW_LABELS = {
-  id: 'Unique user identifier',
-  email: 'Email',
-  name: 'Display name',
-} as const
+export const PROFILE_FIELDS = ['id', 'email', 'name'] as const
+export type ProfileFieldKey = (typeof PROFILE_FIELDS)[number]
 
-export const PROFILE_ROW_HELPERS = {
-  id: "Used to match this person's account on every sign-in. Choose a stable, unique value.",
-  email: 'Set when the account is created. Later sign-ins do not overwrite it.',
-  name: 'If absent, Quackback generates a display name from a username or identifier.',
-} as const
+export const PROFILE_ROW_LABELS: Record<ProfileFieldKey, string> = {
+  id: 'Account ID',
+  email: 'Email',
+  name: 'Name',
+}
+
+/** Shown only in the edit dialog, where the choice is being made. The table
+ *  itself carries no per-row explanation. */
+export const PROFILE_DIALOG_HELPERS: Record<ProfileFieldKey, string> = {
+  id: 'Matches accounts on every sign-in. Choose a stable, unique value.',
+  email: 'Set when the account is created.',
+  name: 'Set when the account is created. If missing, a name is generated from a username or the account ID.',
+}
 
 export const PEOPLE_TYPE_LABEL: Record<string, string> = {
   string: 'Text',
@@ -207,9 +206,9 @@ export function identityMappingIssue(
   if (profile && isRecord(profile)) {
     const claims = isRecord(profile.claims) ? profile.claims : null
     if (claims) {
-      if (blankSupportedPath(claims.id)) return 'Identifier mapping has no claim path'
+      if (blankSupportedPath(claims.id)) return 'Account ID mapping has no claim path'
       if (blankSupportedPath(claims.email)) return 'Email mapping has no claim path'
-      if (blankSupportedPath(claims.name)) return 'Display name mapping has no claim path'
+      if (blankSupportedPath(claims.name)) return 'Name mapping has no claim path'
     }
     if (Array.isArray(profile.sources)) {
       const kept = profile.sources.filter((s) =>
@@ -273,16 +272,25 @@ export function hasCustomProfileClaims(
   )
 }
 
+/** Profile claim keys beyond id / email / name: legacy or forward-compatible
+ *  entries this UI cannot edit but must keep showing so they are not
+ *  mistaken for a standard mapping. */
+export function extraProfileClaimKeys(
+  mapping: IdentityProviderClaimMapping | null | undefined
+): string[] {
+  const claims = mapping?.profile?.claims
+  if (!claims) return []
+  return Object.keys(claims).filter((key) => key !== 'id' && key !== 'email' && key !== 'name')
+}
+
 export type PeopleDefinition = { key: string; label: string; type: string }
 
 export type ClaimsProfileRow = {
   kind: 'profile'
-  field: 'id' | 'email' | 'name'
+  field: ProfileFieldKey
   label: string
   path: string
   isDefault: boolean
-  required: boolean
-  helper: string
 }
 
 export type ClaimsRoleRow = {
@@ -324,47 +332,39 @@ function profilePath(
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
 }
 
+/**
+ * The three profile fields, always present. Account ID is "custom" whenever a
+ * path is stored — even an explicit `sub` — because an explicit path disables
+ * the userinfo `id` compatibility fallback. Email and name are custom only
+ * when the stored path differs from the standard claim.
+ */
+export function buildProfileRows(
+  mapping: IdentityProviderClaimMapping | null | undefined
+): ClaimsProfileRow[] {
+  return PROFILE_FIELDS.map((field) => {
+    const path = profilePath(mapping, field)
+    return {
+      kind: 'profile',
+      field,
+      label: PROFILE_ROW_LABELS[field],
+      path: path ?? OIDC_PROFILE_DEFAULTS[field],
+      isDefault:
+        field === 'id'
+          ? path === undefined
+          : path === undefined || path === OIDC_PROFILE_DEFAULTS[field],
+    }
+  })
+}
+
 export function buildClaimsTableModel({
   mapping,
   definitions,
 }: {
   mapping: IdentityProviderClaimMapping | null | undefined
   definitions: PeopleDefinition[]
-}): { required: ClaimsProfileRow[]; additional: ClaimsTableRow[] } {
-  const idPath = profilePath(mapping, 'id')
-  const emailPath = profilePath(mapping, 'email')
-  const namePath = profilePath(mapping, 'name')
-  const required: ClaimsProfileRow[] = [
-    {
-      kind: 'profile',
-      field: 'id',
-      label: PROFILE_ROW_LABELS.id,
-      path: idPath ?? OIDC_PROFILE_DEFAULTS.id,
-      isDefault: idPath === undefined,
-      required: true,
-      helper: PROFILE_ROW_HELPERS.id,
-    },
-    {
-      kind: 'profile',
-      field: 'email',
-      label: PROFILE_ROW_LABELS.email,
-      path: emailPath ?? OIDC_PROFILE_DEFAULTS.email,
-      isDefault: emailPath === undefined || emailPath === OIDC_PROFILE_DEFAULTS.email,
-      required: true,
-      helper: PROFILE_ROW_HELPERS.email,
-    },
-  ]
-  const additional: ClaimsTableRow[] = [
-    {
-      kind: 'profile',
-      field: 'name',
-      label: PROFILE_ROW_LABELS.name,
-      path: namePath ?? OIDC_PROFILE_DEFAULTS.name,
-      isDefault: namePath === undefined || namePath === OIDC_PROFILE_DEFAULTS.name,
-      required: false,
-      helper: PROFILE_ROW_HELPERS.name,
-    },
-  ]
+}): { profile: ClaimsProfileRow[]; additional: ClaimsTableRow[] } {
+  const profile = buildProfileRows(mapping)
+  const additional: ClaimsTableRow[] = []
   const role = mapping?.role
   if (role && (role.claimPath || (role.rules?.length ?? 0) > 0 || role.syncOnEverySignIn)) {
     additional.push({
@@ -394,12 +394,7 @@ export function buildClaimsTableModel({
       duplicate: Boolean(row.attributeKey) && (keyCounts.get(row.attributeKey) ?? 0) > 1,
     })
   })
-  const extraClaims = mapping?.profile?.claims
-    ? Object.keys(mapping.profile.claims).filter(
-        (key) => key !== 'id' && key !== 'email' && key !== 'name'
-      )
-    : []
-  for (const key of extraClaims) {
+  for (const key of extraProfileClaimKeys(mapping)) {
     additional.push({
       kind: 'unsupported',
       id: `profile.claims.${key}`,
@@ -407,7 +402,29 @@ export function buildClaimsTableModel({
       detail: 'Stored on this provider and not editable here. Saving other rows keeps it.',
     })
   }
-  return { required, additional }
+  return { profile, additional }
+}
+
+/**
+ * Whether the provider reads identity from a non-standard source list. Shown
+ * as a compatibility exception; the controls live under Customize.
+ */
+export function hasCustomSources(
+  mapping: IdentityProviderClaimMapping | null | undefined
+): boolean {
+  return !sourcesAreDefault(mapping?.profile?.sources)
+}
+
+/** The number of things User details shows beyond the standard profile. */
+export function userDetailsAreStandard(
+  mapping: IdentityProviderClaimMapping | null | undefined
+): boolean {
+  if (hasCustomProfileClaims(mapping)) return false
+  if (extraProfileClaimKeys(mapping).length > 0) return false
+  if (mapping?.role) return false
+  if ((mapping?.attributes?.map?.length ?? 0) > 0) return false
+  if (hasCustomSources(mapping)) return false
+  return true
 }
 
 export function availableAddTargets({
@@ -444,17 +461,22 @@ export function draftSources(
 }
 
 /**
- * Guard the two fields a provider cannot be saved without, from either the
- * create page or the connection card.
+ * Guard the fields a provider cannot be saved without. The create page checks
+ * both; on the detail page the connection form owns the client ID and the
+ * sign-in appearance form owns the display name, so each passes only what it
+ * renders.
  *
- * Returns true when the caller should stop. Both entry points edit the same
- * pair, so the rule and the way it is reported live here rather than being
- * copied — a new required field is then one edit, not two that can disagree.
- * The offending input is scrolled to and focused because both forms are long
- * enough for the field to be off-screen when the toast fires.
+ * Returns true when the caller should stop. The offending input is scrolled
+ * to and focused because the forms are long enough for the field to be
+ * off-screen when the toast fires.
  */
-export function reportMissingIdpFields(label: string, clientId: string): boolean {
-  const missing = !label.trim() ? 'idp-label' : !clientId.trim() ? 'idp-client-id' : null
+export function reportMissingIdpFields(fields: { label?: string; clientId?: string }): boolean {
+  const missing =
+    fields.clientId !== undefined && !fields.clientId.trim()
+      ? 'idp-client-id'
+      : fields.label !== undefined && !fields.label.trim()
+        ? 'idp-label'
+        : null
   if (!missing) return false
   toast.error(missing === 'idp-label' ? 'Display name is required.' : 'Client ID is required.')
   const field = document.getElementById(missing)

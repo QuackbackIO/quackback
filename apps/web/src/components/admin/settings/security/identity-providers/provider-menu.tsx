@@ -1,31 +1,32 @@
 /**
- * #danger — removing the provider.
+ * The header's overflow menu — where Remove lives.
  *
- * Its own card rather than a ghost button next to Save, because it is not the
- * same class of action as the four saves above it and does not undo. It states
- * what a removal would cost before offering it: sign-in through the provider
- * stops, its verified domains are released, and every identity already linked
- * to it is orphaned.
- *
- * Both refusals here are mirrors of server-side invariants, not UI politeness:
- * the service refuses to delete a provider with linked accounts, and the "keep
- * one sign-in method" guard refuses to remove the last working one.
+ * Removing does not need a card of its own: it is one action, taken rarely,
+ * and the confirmation dialog states what it costs before offering it. Both
+ * refusals here mirror server-side invariants, not UI politeness: the service
+ * refuses to delete a provider with linked accounts, and the "keep one sign-in
+ * method" guard refuses to remove the last working one.
  */
 import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { TrashIcon } from '@heroicons/react/24/solid'
+import { EllipsisHorizontalIcon, TrashIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
-import { SettingsCard } from '@/components/admin/settings/settings-card'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { deleteIdentityProviderFn } from '@/lib/server/functions/sso'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
-import { IDENTITY_PROVIDERS_KEY } from './provider-shared'
+import { IDENTITY_PROVIDERS_KEY, SIGN_IN_TAB } from './provider-shared'
 
-export function DangerCard({
+export function ProviderMenu({
   provider,
   isOnlyMethod,
 }: {
@@ -46,7 +47,7 @@ export function DangerCard({
   const blockedReason = isOnlyMethod
     ? 'This is the only enabled sign-in method. Enable another before removing it.'
     : accountCount > 0
-      ? `${accountCount} ${accountCount === 1 ? 'person signs' : 'people sign'} in through this provider. Removing it would orphan ${accountCount === 1 ? 'their account' : 'their accounts'}. Disable it instead, or remove those accounts first.`
+      ? `${accountCount} ${accountCount === 1 ? 'person signs' : 'people sign'} in through this provider. Disable it instead, or remove those accounts first.`
       : null
 
   const handleDelete = async () => {
@@ -55,10 +56,7 @@ export function DangerCard({
       await remove({ data: { id: provider.id } })
       await queryClient.invalidateQueries({ queryKey: IDENTITY_PROVIDERS_KEY })
       toast.success('Identity provider removed.')
-      await navigate({
-        to: '/admin/settings/security/authentication',
-        search: { tab: 'sign-in' },
-      })
+      await navigate(SIGN_IN_TAB)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not remove the identity provider.')
       setPending(false)
@@ -67,32 +65,25 @@ export function DangerCard({
   }
 
   return (
-    <div id="danger" className="scroll-mt-6">
-      <SettingsCard
-        title="Remove this provider"
-        description="Sign-in through this provider stops working and its verified domains are released."
-        variant="danger"
-        contentClassName="space-y-4"
-      >
-        <p className="text-sm text-muted-foreground">
-          {accountCount === 0
-            ? 'Nobody signs in through this provider yet.'
-            : `${accountCount} ${accountCount === 1 ? 'account is' : 'accounts are'} linked to this provider.`}
-        </p>
-        {blockedReason && <p className="text-xs text-muted-foreground">{blockedReason}</p>}
-        <div>
-          <Button
-            type="button"
-            variant="destructive"
-            size="sm"
-            onClick={() => setConfirmOpen(true)}
-            disabled={pending || !!blockedReason}
-          >
-            <TrashIcon className="mr-1.5 h-4 w-4" />
-            Remove
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" aria-label="Provider actions">
+            <EllipsisHorizontalIcon className="h-4 w-4" />
           </Button>
-        </div>
-      </SettingsCard>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem
+            onClick={() => (blockedReason ? toast.error(blockedReason) : setConfirmOpen(true))}
+            disabled={pending}
+            variant="destructive"
+            className="gap-2"
+          >
+            <TrashIcon className="h-4 w-4" />
+            Remove provider
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       <ConfirmDialog
         open={confirmOpen}
@@ -104,6 +95,6 @@ export function DangerCard({
         isPending={pending}
         onConfirm={handleDelete}
       />
-    </div>
+    </>
   )
 }

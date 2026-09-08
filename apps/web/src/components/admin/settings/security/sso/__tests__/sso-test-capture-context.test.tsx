@@ -1,8 +1,21 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, act } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { SsoTestSignInProvider, useSsoTestSignIn } from '../use-sso-test-sign-in'
 import { SSO_TEST_POSTMESSAGE_SOURCE } from '@/lib/shared/sso-test-keys'
+
+/** A passing test refetches the providers query, so the hook needs a client. */
+function renderProbe() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(
+    <QueryClientProvider client={qc}>
+      <SsoTestSignInProvider>
+        <Probe />
+      </SsoTestSignInProvider>
+    </QueryClientProvider>
+  )
+}
 
 vi.mock('@tanstack/react-start', () => ({
   useServerFn: () =>
@@ -51,11 +64,7 @@ describe('SSO test capture context', () => {
   })
 
   it('carries server capture metadata instead of rebuilding it with browser time', async () => {
-    render(
-      <SsoTestSignInProvider>
-        <Probe />
-      </SsoTestSignInProvider>
-    )
+    renderProbe()
     await act(async () => {
       screen.getByText('open-test').click()
     })
@@ -88,11 +97,7 @@ describe('SSO test capture context', () => {
   })
 
   it('keeps mapping-failure captures on lastCapture without treating them as lastSuccess', async () => {
-    render(
-      <SsoTestSignInProvider>
-        <Probe />
-      </SsoTestSignInProvider>
-    )
+    renderProbe()
     await act(async () => {
       screen.getByText('open-test').click()
     })

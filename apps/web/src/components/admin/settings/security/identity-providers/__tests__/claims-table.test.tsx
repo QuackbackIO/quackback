@@ -2,7 +2,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { AdvancedSourcesEditor, ClaimsTable } from '../claims-table'
+import { IdentitySourcesEditor, ClaimsTable } from '../claims-table'
 import { buildClaimsTableModel } from '../provider-shared'
 import type { IdentityProviderClaimMapping } from '@/lib/shared/oidc-claim-mapping'
 
@@ -18,15 +18,11 @@ function renderTable(
   const model = buildClaimsTableModel({ mapping, definitions: DEFS })
   const onEdit = vi.fn()
   const onRemove = vi.fn()
-  const onResetName = vi.fn()
-  const onAllow = vi.fn()
   const onFlags = vi.fn()
   render(
     <ClaimsTable
-      requiredRows={model.required}
+      profileRows={model.profile}
       additionalRows={model.additional}
-      allowMissingEmail={mapping?.profile?.allowMissingEmail === true}
-      onAllowMissingEmailChange={onAllow}
       peopleFlags={{
         overrideExisting: mapping?.attributes?.overrideExisting === true,
         syncOnSignIn: mapping?.attributes?.syncOnSignIn === true,
@@ -34,46 +30,42 @@ function renderTable(
       onPeopleFlagsChange={onFlags}
       onEdit={onEdit}
       onRemove={onRemove}
-      onResetName={onResetName}
-      autoCreateUsers
-      autoProvisionRole="user"
+      editable
       {...over}
     />
   )
-  return { onEdit, onRemove, onResetName, onAllow, onFlags }
+  return { onEdit, onRemove, onFlags }
 }
 
 describe('ClaimsTable', () => {
-  it('uses Quackback attribute then IdP claim column headers', () => {
+  it('uses Profile field then Provider claim column headers', () => {
     renderTable(null)
     const headers = screen.getAllByRole('columnheader')
-    expect(headers[0]).toHaveTextContent('Quackback attribute')
-    expect(headers[1]).toHaveTextContent('IdP claim')
+    expect(headers[0]).toHaveTextContent('Profile field')
+    expect(headers[1]).toHaveTextContent('Provider claim')
   })
 
-  it('always shows required identifier/email and default display name', () => {
+  it('shows the three profile fields in one table with no Default badges', () => {
     renderTable(null)
-    expect(screen.getByText('Unique user identifier')).toBeInTheDocument()
+    expect(screen.getByText('Account ID')).toBeInTheDocument()
     expect(screen.getByText('Email')).toBeInTheDocument()
-    expect(screen.getByText('Display name')).toBeInTheDocument()
-    expect(screen.getAllByText('Default').length).toBeGreaterThanOrEqual(3)
+    expect(screen.getByText('Name')).toBeInTheDocument()
     expect(screen.getByText('sub')).toBeInTheDocument()
     expect(screen.getByText('email')).toBeInTheDocument()
     expect(screen.getByText('name')).toBeInTheDocument()
+    expect(screen.queryByText('Default')).not.toBeInTheDocument()
+    expect(screen.queryByText('Custom')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Additional attributes/)).not.toBeInTheDocument()
   })
 
-  it('pins explicit sub as a custom identifier', () => {
+  it('marks an explicit sub as the one Custom exception and never offers to remove it', () => {
     renderTable({ profile: { claims: { id: 'sub' } } })
-    expect(screen.getByText('Custom')).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: 'Edit Unique user identifier mapping' })
-    ).toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: /Remove Unique user identifier/ })
-    ).not.toBeInTheDocument()
+    expect(screen.getAllByText('Custom')).toHaveLength(1)
+    expect(screen.getByRole('button', { name: 'Edit Account ID mapping' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Remove Account ID/ })).not.toBeInTheDocument()
   })
 
-  it('labels edit and delete actions accessibly and never deletes a required row', () => {
+  it('labels edit and remove actions accessibly and never removes a profile row', () => {
     renderTable({
       role: {
         claimPath: 'groups',
@@ -81,27 +73,24 @@ describe('ClaimsTable', () => {
       },
       attributes: { map: [{ claimPath: 'org.department', attributeKey: 'department' }] },
     })
-    expect(
-      screen.getByRole('button', { name: 'Edit Unique user identifier mapping' })
-    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit Account ID mapping' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Edit Email mapping' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Edit Display name mapping' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Edit Role mapping' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Remove Role mapping' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit Name mapping' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit role rules' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove role rules' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Edit Department mapping' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Remove Department mapping' })).toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: /Remove Unique user identifier/ })
-    ).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Remove Email/ })).not.toBeInTheDocument()
   })
 
-  it('restores the default name row through Reset mapping', async () => {
-    const { onResetName } = renderTable({
-      profile: { claims: { name: 'preferred_username' } },
-    })
-    await userEvent.click(screen.getByRole('button', { name: 'Reset mapping' }))
-    expect(onResetName).toHaveBeenCalledTimes(1)
+  it('renders read-only with no action column or flag checkboxes', () => {
+    renderTable(
+      { attributes: { map: [{ claimPath: 'dept', attributeKey: 'department' }] } },
+      { editable: false }
+    )
+    expect(screen.getAllByRole('columnheader')).toHaveLength(2)
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
   })
 
   it('preserves orphaned and duplicate People rows', () => {
@@ -114,8 +103,8 @@ describe('ClaimsTable', () => {
         ],
       },
     })
-    expect(screen.getAllByText('Duplicate mapping')).toHaveLength(2)
-    expect(screen.getByText('attribute no longer exists')).toBeInTheDocument()
+    expect(screen.getAllByText('Duplicate')).toHaveLength(2)
+    expect(screen.getByText('Attribute no longer exists')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Remove cost_center mapping' })).toBeInTheDocument()
   })
 
@@ -123,13 +112,13 @@ describe('ClaimsTable', () => {
     renderTable({
       attributes: { map: [{ claimPath: 'dept', attributeKey: 'department' }] },
     })
-    expect(screen.getByText('Applies to all mapped People attributes')).toBeInTheDocument()
-    expect(screen.getByLabelText('Overwrite values that are already set')).toBeInTheDocument()
+    expect(
+      screen.getByLabelText('Overwrite attribute values that are already set')
+    ).toBeInTheDocument()
     expect(
       screen.getByLabelText('Clear an attribute when its claim is missing')
     ).toBeInTheDocument()
     expect(screen.queryByLabelText(/metadata/i)).not.toBeInTheDocument()
-    expect(screen.queryByPlaceholderText(/metadata/i)).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: /key/i })).not.toBeInTheDocument()
   })
 
@@ -138,11 +127,11 @@ describe('ClaimsTable', () => {
       profile: { claims: { email: 'upn', locale: 'locale' } },
     } as IdentityProviderClaimMapping)
     expect(screen.getByText('locale')).toBeInTheDocument()
-    expect(screen.getByText(/not editable here/)).toBeInTheDocument()
+    expect(screen.getByText(/Not editable here/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Remove locale/ })).not.toBeInTheDocument()
   })
 
-  it('lists every role target and the off-domain warning', () => {
+  it('lists the role rules without repeating the domain warning', () => {
     renderTable({
       role: {
         claimPath: 'groups',
@@ -152,22 +141,27 @@ describe('ClaimsTable', () => {
         ],
       },
     })
-    expect(screen.getByText(/platform-admins/)).toBeInTheDocument()
-    expect(screen.getByText(/engineering/)).toBeInTheDocument()
-    expect(screen.getByText(/even outside this provider's verified domains/)).toBeInTheDocument()
+    expect(screen.getByText('platform-admins')).toBeInTheDocument()
+    expect(screen.getByText('engineering')).toBeInTheDocument()
+    expect(screen.queryByText(/verified domains/)).not.toBeInTheDocument()
   })
 })
 
-describe('AdvancedSourcesEditor', () => {
-  it('shows default sources and the access-token warning', () => {
+describe('IdentitySourcesEditor', () => {
+  it('shows the standard sources checked and the access token off with its caveat', () => {
     const onChange = vi.fn()
-    render(<AdvancedSourcesEditor sources={['idToken', 'userinfo']} onChange={onChange} />)
-    const details = screen.getByText('Advanced sources').closest('details')
-    expect(details).toBeTruthy()
-    if (details) details.open = true
+    render(<IdentitySourcesEditor sources={['idToken', 'userinfo']} onChange={onChange} />)
     expect(screen.getByLabelText('ID token')).toBeChecked()
     expect(screen.getByLabelText('Userinfo')).toBeChecked()
     expect(screen.getByLabelText('Access-token JWT')).not.toBeChecked()
-    expect(screen.getByText(/audience-scoped and its subject may differ/)).toBeInTheDocument()
+    expect(screen.getByText(/may be issued for another API/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Use standard sources' })).not.toBeInTheDocument()
+  })
+
+  it('offers to return to the standard sources only when they differ', async () => {
+    const onChange = vi.fn()
+    render(<IdentitySourcesEditor sources={['userinfo', 'idToken']} onChange={onChange} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Use standard sources' }))
+    expect(onChange).toHaveBeenCalledWith(['idToken', 'userinfo'])
   })
 })

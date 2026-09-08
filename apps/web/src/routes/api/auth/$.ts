@@ -55,10 +55,16 @@ export const Route = createFileRoute('/api/auth/$')({
             errorDescription: url.searchParams.get('error_description'),
           })
           if (handled) {
+            // The opener is the admin tab at BASE_URL, which is also where
+            // the test's redirect URI was built from. Behind a TLS-terminating
+            // proxy `request.url` can be plain http, and postMessage to that
+            // origin is rejected, leaving only the slower poll to finish.
+            const { getBaseUrl } = await import('@/lib/server/config')
+            const baseUrl = getBaseUrl()
             return renderSsoTestCallbackHtml({
               testId: handled.testId,
               result: handled.result,
-              origin: url.origin,
+              origin: baseUrl ? new URL(baseUrl).origin : url.origin,
               identityMatched: handled.identityMatched,
             })
           }

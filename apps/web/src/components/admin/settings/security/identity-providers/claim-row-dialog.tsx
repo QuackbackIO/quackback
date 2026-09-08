@@ -26,7 +26,7 @@ import { RoleMappingRulesBody } from './claim-mapping-editor'
 import {
   OIDC_PROFILE_DEFAULTS,
   PEOPLE_TYPE_LABEL,
-  PROFILE_ROW_HELPERS,
+  PROFILE_DIALOG_HELPERS,
   PROFILE_ROW_LABELS,
   type AddClaimTarget,
   type PeopleDefinition,
@@ -44,8 +44,8 @@ export type ClaimRowDialogCommit =
   | { type: 'people'; attributeKey: string; claimPath: string; baselineIndex?: number }
 
 const PROFILE_FALLBACK_NOTE: Record<'id' | 'email' | 'name', string> = {
-  id: 'Default uses sub, then a userinfo id compatibility fallback. An explicit sub path disables that fallback. Preview cannot check account collisions.',
-  email: 'Preview cannot check account collisions.',
+  id: 'Leave blank for the standard behaviour: sub, then a userinfo id fallback for older providers. Setting sub explicitly turns that fallback off.',
+  email: '',
   name: '',
 }
 
@@ -108,14 +108,19 @@ export function ClaimRowDialog({
           ? target
           : firstAvailable(availableTargets[0]))
 
+  const peopleDef =
+    resolvedTarget?.type === 'people'
+      ? definitions.find((d) => d.key === resolvedTarget.attributeKey)
+      : undefined
+
   const title =
     mode === 'add'
-      ? 'Add claim'
+      ? 'Add mapping'
       : resolvedTarget?.type === 'profile'
         ? `Edit ${PROFILE_ROW_LABELS[resolvedTarget.field]} mapping`
         : resolvedTarget?.type === 'role'
-          ? 'Edit Role mapping'
-          : 'Edit mapping'
+          ? 'Edit role rules'
+          : `Edit ${peopleDef?.label ?? 'attribute'} mapping`
 
   const canSubmit = (() => {
     if (!resolvedTarget) return false
@@ -169,11 +174,6 @@ export function ClaimRowDialog({
     onOpenChange(false)
   }
 
-  const peopleDef =
-    resolvedTarget?.type === 'people'
-      ? definitions.find((d) => d.key === resolvedTarget.attributeKey)
-      : undefined
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
@@ -182,71 +182,67 @@ export function ClaimRowDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="space-y-1.5">
-            <Label>Quackback attribute</Label>
-            {lockedTarget?.type === 'profile' ? (
-              <p className="text-sm">{PROFILE_ROW_LABELS[lockedTarget.field]} (fixed target)</p>
-            ) : lockedTarget?.type === 'role' ? (
-              <p className="text-sm">Role (fixed target)</p>
-            ) : lockedTarget?.type === 'people' ? (
-              <p className="text-sm">
-                {peopleDef?.label ?? lockedTarget.attributeKey}
-                {peopleDef ? `, ${PEOPLE_TYPE_LABEL[peopleDef.type] ?? peopleDef.type}` : ''}
-              </p>
-            ) : availableTargets.length === 0 ? (
-              <div className="space-y-2 text-sm">
-                <p className="text-muted-foreground">
-                  No remaining targets. Define an attribute under People to map another claim.
-                </p>
-                <Link
-                  to="/admin/settings/people"
-                  className="font-medium text-primary underline-offset-4 hover:underline"
-                >
-                  Open People settings
-                </Link>
-              </div>
-            ) : (
-              <Select
-                value={
-                  resolvedTarget?.type === 'role'
-                    ? 'role'
-                    : resolvedTarget?.type === 'people'
-                      ? `people:${resolvedTarget.attributeKey}`
-                      : ''
-                }
-                onValueChange={(value) => {
-                  if (value === 'role') {
-                    setTarget({ type: 'role' })
-                    return
+          {/* The title already names the target in edit mode; only Add needs
+              the picker. */}
+          {!lockedTarget && (
+            <div className="space-y-1.5">
+              <Label>Set from this provider</Label>
+              {availableTargets.length === 0 ? (
+                <div className="space-y-2 text-sm">
+                  <p className="text-muted-foreground">
+                    Role rules are already mapped. Define an attribute under People to map another
+                    claim.
+                  </p>
+                  <Link
+                    to="/admin/settings/people"
+                    className="font-medium text-primary underline-offset-4 hover:underline"
+                  >
+                    Open People settings
+                  </Link>
+                </div>
+              ) : (
+                <Select
+                  value={
+                    resolvedTarget?.type === 'role'
+                      ? 'role'
+                      : resolvedTarget?.type === 'people'
+                        ? `people:${resolvedTarget.attributeKey}`
+                        : ''
                   }
-                  const key = value.replace(/^people:/, '')
-                  setTarget({ type: 'people', attributeKey: key })
-                }}
-              >
-                <SelectTrigger aria-label="Quackback attribute">
-                  <SelectValue placeholder="Choose an attribute" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableTargets.map((item) =>
-                    item.kind === 'role' ? (
-                      <SelectItem key="role" value="role">
-                        Role
-                      </SelectItem>
-                    ) : (
-                      <SelectItem key={item.key} value={`people:${item.key}`}>
-                        <span className="flex flex-col text-left">
-                          <span>{item.label}</span>
-                          <span className="text-xs font-normal text-muted-foreground">
-                            {item.key}, {PEOPLE_TYPE_LABEL[item.attrType] ?? item.attrType}
+                  onValueChange={(value) => {
+                    if (value === 'role') {
+                      setTarget({ type: 'role' })
+                      return
+                    }
+                    const key = value.replace(/^people:/, '')
+                    setTarget({ type: 'people', attributeKey: key })
+                  }}
+                >
+                  <SelectTrigger aria-label="Set from this provider">
+                    <SelectValue placeholder="Choose what to set" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableTargets.map((item) =>
+                      item.kind === 'role' ? (
+                        <SelectItem key="role" value="role">
+                          Role rules
+                        </SelectItem>
+                      ) : (
+                        <SelectItem key={item.key} value={`people:${item.key}`}>
+                          <span className="flex flex-col text-left">
+                            <span>{item.label}</span>
+                            <span className="text-xs font-normal text-muted-foreground">
+                              {item.key}, {PEOPLE_TYPE_LABEL[item.attrType] ?? item.attrType}
+                            </span>
                           </span>
-                        </span>
-                      </SelectItem>
-                    )
-                  )}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
+                        </SelectItem>
+                      )
+                    )}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+          )}
 
           {resolvedTarget?.type === 'role' ? (
             <RoleMappingRulesBody
@@ -260,30 +256,29 @@ export function ClaimRowDialog({
             />
           ) : resolvedTarget ? (
             <div className="space-y-1.5">
-              <Label>IdP claim path</Label>
+              <Label>Provider claim</Label>
               <ClaimPathInput
                 value={path}
                 onChange={setPath}
                 registrationId={registrationId}
                 canTest={canTest}
-                placeholder="email, upn, org.department"
-                ariaLabel="IdP claim path"
+                placeholder={
+                  resolvedTarget.type === 'profile'
+                    ? OIDC_PROFILE_DEFAULTS[resolvedTarget.field]
+                    : 'org.department'
+                }
+                ariaLabel="Provider claim"
                 capture={capture}
                 suggestionsFor={resolvedTarget.type === 'profile' ? 'identity' : 'attribute'}
                 providerKind={providerKind}
                 identityField={resolvedTarget.type === 'profile' ? resolvedTarget.field : undefined}
               />
               {resolvedTarget.type === 'profile' && (
-                <p className="text-xs text-muted-foreground">
-                  {PROFILE_ROW_HELPERS[resolvedTarget.field]}
+                <p className="text-sm text-muted-foreground">
+                  {PROFILE_DIALOG_HELPERS[resolvedTarget.field]}
                   {PROFILE_FALLBACK_NOTE[resolvedTarget.field]
                     ? ` ${PROFILE_FALLBACK_NOTE[resolvedTarget.field]}`
                     : ''}
-                </p>
-              )}
-              {resolvedTarget.type === 'people' && (
-                <p className="text-xs text-muted-foreground">
-                  The People update switches apply to all People mappings.
                 </p>
               )}
             </div>
@@ -293,14 +288,14 @@ export function ClaimRowDialog({
         <DialogFooter>
           {mode === 'edit' && resolvedTarget?.type === 'profile' && (
             <Button type="button" variant="outline" className="mr-auto" onClick={resetProfile}>
-              Reset to {OIDC_PROFILE_DEFAULTS[resolvedTarget.field]}
+              Use {OIDC_PROFILE_DEFAULTS[resolvedTarget.field]}
             </Button>
           )}
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button type="button" onClick={apply} disabled={!canSubmit}>
-            {mode === 'add' ? 'Add to draft' : 'Apply to draft'}
+            {mode === 'add' ? 'Add' : 'Apply'}
           </Button>
         </DialogFooter>
       </DialogContent>

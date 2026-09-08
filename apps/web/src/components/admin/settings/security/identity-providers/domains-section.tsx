@@ -21,7 +21,6 @@ import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { WarningBox } from '@/components/shared/warning-box'
-import { TimeAgo } from '@/components/ui/time-ago'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import {
   addProviderDomainFn,
@@ -86,23 +85,20 @@ export function DomainsSection({
   return (
     <div className="space-y-3">
       <div>
-        <Label className="font-medium">Verified domains</Label>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {hasVerified
-            ? 'Users at a verified domain are routed to this provider. Enforce a domain to require its users to sign in with SSO.'
-            : 'Verify a domain to route its users to this provider, and enforce SSO so they can only sign in this way.'}
+        <Label className="font-medium">Domains</Label>
+        <p className="mt-1 text-sm text-muted-foreground">
+          People at a verified domain are sent to this provider. Require SSO to make it their only
+          way in.
         </p>
       </div>
 
       {!provider ? (
-        <p className="rounded-md border border-dashed border-border/50 bg-muted/20 p-3 text-xs text-muted-foreground">
-          Save the provider first to add a domain to route or enforce by email.
+        <p className="rounded-md border border-dashed border-border/50 bg-muted/20 p-3 text-sm text-muted-foreground">
+          Save the provider first to add a domain.
         </p>
       ) : (
         <>
-          {domains.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No domains attached.</p>
-          ) : (
+          {domains.length > 0 && (
             <div className="divide-y divide-border/50 rounded-md border border-border/50">
               {domains.map((d) => (
                 <DomainRow
@@ -116,11 +112,11 @@ export function DomainsSection({
             </div>
           )}
 
-          {hasVerified && enforceable && (
+          {hasVerified && enforceable && !domains.some((d) => d.enforced) && (
             <WarningBox
               variant="warning"
-              title="Before you enforce"
-              description="Run a successful test sign-in and generate recovery codes first. They're your break-glass if SSO ever breaks."
+              title="Before you require SSO"
+              description="Generate recovery codes first. They are the only way back in if SSO breaks."
             />
           )}
 
@@ -238,26 +234,23 @@ function DomainRow({
             <ClockIcon className="h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" />
           )}
           <span className="truncate text-sm font-medium">{domain.name}</span>
-          <span className="text-xs text-muted-foreground">
-            {isVerified ? (
-              <>
-                verified <TimeAgo date={domain.verifiedAt!} />
-              </>
-            ) : (
-              'DNS pending'
-            )}
+          <span className="text-sm text-muted-foreground">
+            {isVerified ? 'Verified' : 'Pending verification'}
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-3">
           {isVerified && (
-            <label className="flex items-center gap-1.5 text-xs">
+            <label
+              className="flex items-center gap-1.5 text-sm"
+              title={enforceable ? undefined : 'Pass a connection test first.'}
+            >
               <Checkbox
                 checked={domain.enforced}
                 onCheckedChange={(v) => void handleEnforce(v === true)}
                 disabled={pending || disabled || !enforceable}
                 aria-label={`Require SSO for ${domain.name}`}
               />
-              Enforce SSO
+              Require SSO
             </label>
           )}
           {!isVerified && (
