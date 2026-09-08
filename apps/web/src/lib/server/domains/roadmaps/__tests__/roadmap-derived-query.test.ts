@@ -33,6 +33,7 @@ import {
 import { DEFAULT_BOARD_ACCESS, type BoardAccess } from '@/lib/shared/db-types'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
 import { getPublicRoadmapPosts, getRoadmapPosts } from '../roadmap.query'
+import { listPublicRoadmaps } from '../roadmap.service'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -352,6 +353,41 @@ describe.skipIf(!fixture.available)('roadmap derived membership (real DB)', () =
       ANONYMOUS_ACTOR
     )
     expect(viaBase.items.map((post) => post.id)).toEqual([tagged])
+  })
+
+  it('redacts internal tag ids from public roadmap base filters for non-team viewers', async () => {
+    const seeded = await seedBase()
+    const [internalTag] = await testDb
+      .insert(postTags)
+      .values({ name: `Internal curation tag ${suffix()}`, isPublic: false })
+      .returning()
+    const mixed = await seedRoadmap(seeded, {
+      baseFilter: { boardIds: [seeded.boardA], tagIds: [seeded.tagA, internalTag.id] },
+    })
+    const onlyInternal = await seedRoadmap(seeded, { baseFilter: { tagIds: [internalTag.id] } })
+    const tagged = await seedPost(seeded)
+    await testDb.insert(postTagAssignments).values({ postId: tagged, tagId: internalTag.id })
+
+    const anonymous = await listPublicRoadmaps(ANONYMOUS_ACTOR)
+    const anonMixed = anonymous.find((r) => r.id === mixed)!
+    const anonOnlyInternal = anonymous.find((r) => r.id === onlyInternal)!
+    expect(anonMixed.baseFilter).toEqual({ boardIds: [seeded.boardA], tagIds: [seeded.tagA] })
+    expect(anonOnlyInternal.baseFilter).toEqual({})
+    expect(JSON.stringify(anonymous)).not.toContain(internalTag.id)
+
+    // Redaction is payload-only: the curation still defines membership.
+    const posts = await getPublicRoadmapPosts(
+      onlyInternal,
+      { statusId: seeded.statusA },
+      ANONYMOUS_ACTOR
+    )
+    expect(posts.items.map((post) => post.id)).toEqual([tagged])
+
+    const team = await listPublicRoadmaps(actor({ role: 'member', principalId: seeded.authorA }))
+    expect(team.find((r) => r.id === mixed)!.baseFilter.tagIds).toEqual([
+      seeded.tagA,
+      internalTag.id,
+    ])
   })
 
   it('enforces public, team, and matching-segment roadmap visibility', async () => {
