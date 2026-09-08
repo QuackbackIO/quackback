@@ -72,6 +72,11 @@ const SINGLE = '__single__'
 
 interface WorkspaceLoop {
   workspaceKey: string
+  /**
+   * Flip `stopped` and wake the poll wait so this handle will not claim again.
+   * Call under `withLoopSet` before `loops.delete`; `stop()` drains the pool.
+   */
+  deactivate(): void
   stop(): Promise<void>
   /** Latest registry view, so a revision change is seen without a restart. */
   observe(workspace: WorkspaceDescriptor): void
@@ -191,9 +196,13 @@ function startLoop(opts: {
         })
       )
     },
-    async stop() {
+    deactivate() {
+      if (stopped) return
       stopped = true
       handle.nudge()
+    },
+    async stop() {
+      handle.deactivate()
       await awaitPool(pool)
       const current = loops.get(opts.workspaceKey)
       if (!current || current === handle) stats.delete(opts.workspaceKey)
@@ -405,8 +414,9 @@ async function probeStandingWork(workspace: WorkspaceDescriptor): Promise<boolea
  * paid once per refresh only while the candidate still has a loop (to decide
  * whether to park it) — a workspace already parked is not reopened to ask again.
  * A job-wake HTTP call starts a parked loop immediately; refresh only
- * reconciles. Park deletes the handle from `loops` under the lock, then
- * `stop()`s outside. A concurrent wake sees missing and starts.
+ * reconciles. Park deactivates and deletes the handle from `loops` under
+ * the lock, then `stop()`s outside. A concurrent wake sees missing and
+ * starts; the old loop will not claim again.
  */
 async function refreshWorkspaceLoops(cfg: RunnerConfig): Promise<void> {
   const { workspaces, refused } = await listActiveWorkspaces()
@@ -420,6 +430,7 @@ async function refreshWorkspaceLoops(cfg: RunnerConfig): Promise<void> {
   await withLoopSet(() => {
     for (const [workspaceKey, loop] of loops) {
       if (wanted.has(workspaceKey)) continue
+      loop.deactivate()
       loops.delete(workspaceKey)
       toStop.push(loop)
       markStandingWork(workspaceKey, false)
@@ -472,6 +483,7 @@ async function refreshWorkspaceLoops(cfg: RunnerConfig): Promise<void> {
         return
       }
       if (existing) {
+        existing.deactivate()
         loops.delete(key)
         toStop.push(existing)
       }
@@ -565,6 +577,7 @@ export async function stopJobWorker(): Promise<void> {
     refreshTimer = null
   }
   const all = [...loops.values()]
+  for (const loop of all) loop.deactivate()
   loops.clear()
   await Promise.allSettled(all.map((l) => l.stop()))
   resetDormancyMarks()

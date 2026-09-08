@@ -22,6 +22,8 @@ interface ClaimPlan {
   claimed: number
   /** `prune` flag of every `runMaintenanceTick` call, in order, when provided. */
   maintenance?: boolean[]
+  dispatchCalls?: number
+  startByIdCalls?: number
 }
 
 interface DormancyPlan {
@@ -32,7 +34,11 @@ interface DormancyPlan {
   deadlineAt: Date | null
 }
 
-async function bootJobWorker(plan: ClaimPlan, dormancy?: DormancyPlan) {
+async function bootJobWorker(
+  plan: ClaimPlan,
+  dormancy?: DormancyPlan,
+  opts?: { hangStop?: Promise<void> }
+) {
   vi.resetModules()
   const savedPoll = process.env.JOB_POLL_INTERVAL_MS
   process.env.JOB_POLL_INTERVAL_MS = String(POLL_MS)
@@ -89,10 +95,18 @@ async function bootJobWorker(plan: ClaimPlan, dormancy?: DormancyPlan) {
       plan.maintenance?.push(opts.prune !== false)
       return { requeued: 0, terminated: 0, pruned: 0 }
     },
-    dispatchPass: async () => ({ claimed: plan.claimed, saturated: true }),
-    startJobsById: async () => 0,
+    dispatchPass: async () => {
+      plan.dispatchCalls = (plan.dispatchCalls ?? 0) + 1
+      return { claimed: plan.claimed, saturated: true }
+    },
+    startJobsById: async () => {
+      plan.startByIdCalls = (plan.startByIdCalls ?? 0) + 1
+      return 0
+    },
     runJob: async () => 'succeeded',
-    awaitPool: async () => {},
+    awaitPool: async () => {
+      if (opts?.hangStop) await opts.hangStop
+    },
   }))
 
   const mod = await import('../worker')
@@ -251,6 +265,43 @@ describe('pooled job worker', () => {
       await handle.wake('ws_idle', ['job_01h00000000000000000000000'])
       expect(handle.loops()).toEqual(['ws_idle'])
       expect(handle.dormant()).toBe(0)
+    })
+
+    it('deactivates a parked loop before a concurrent wake starts a replacement', async () => {
+      vi.useFakeTimers()
+      let releaseStop!: () => void
+      const hangStop = new Promise<void>((resolve) => {
+        releaseStop = resolve
+      })
+      const dormancy: DormancyPlan = {
+        workspaces: [live('ws_idle')],
+        pendingJobAt: null,
+        deadlineAt: null,
+      }
+      const plan: ClaimPlan = { claimed: 0, dispatchCalls: 0, startByIdCalls: 0 }
+      handle = await bootJobWorker(plan, dormancy, { hangStop })
+      expect(handle.loops()).toEqual(['ws_idle'])
+
+      dormancy.workspaces = [idle('ws_idle')]
+      try {
+        vi.advanceTimersByTime(60_000)
+        await vi.advanceTimersByTimeAsync(0)
+        await vi.waitFor(() => {
+          expect(handle!.dormant()).toBe(1)
+        })
+
+        const dispatchesAtPark = plan.dispatchCalls ?? 0
+        vi.advanceTimersByTime(POLL_MS * 4)
+        await Promise.resolve()
+        expect(plan.dispatchCalls).toBe(dispatchesAtPark)
+
+        await handle.wake('ws_idle', ['job_01h00000000000000000000000'])
+        expect(handle.loops()).toEqual(['ws_idle'])
+        expect(handle.dormant()).toBe(0)
+        expect(plan.startByIdCalls).toBe(1)
+      } finally {
+        releaseStop()
+      }
     })
 
     it('forgets a parked workspace that leaves the registry', async () => {
