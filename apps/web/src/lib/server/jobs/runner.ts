@@ -351,10 +351,37 @@ export interface JobPool {
   readonly inFlight: Map<string, number>
   /** Every running job's promise, so a caller can wait the pool out. */
   readonly active: Set<Promise<void>>
+  /**
+   * Serialises `dispatchPass` and `startJobsById` so they cannot claim at once.
+   * The poller does not reserve before `claimJobs`; without this lock a wake
+   * can start a second job on a concurrency-1 queue while that claim is in flight.
+   */
+  claimChain: Promise<void>
 }
 
 export function createJobPool(): JobPool {
-  return { inFlight: new Map(), active: new Set() }
+  return { inFlight: new Map(), active: new Set(), claimChain: Promise.resolve() }
+}
+
+async function withClaimLock<T>(pool: JobPool, work: () => Promise<T>): Promise<T> {
+  let release!: () => void
+  const next = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const prev = pool.claimChain
+  pool.claimChain = next
+  await prev
+  try {
+    return await work()
+  } finally {
+    release()
+  }
+}
+
+function releaseReservation(pool: JobPool, queue: string): void {
+  const held = pool.inFlight.get(queue) ?? 1
+  if (held <= 1) pool.inFlight.delete(queue)
+  else pool.inFlight.set(queue, held - 1)
 }
 
 export function poolSize(pool: JobPool): number {
@@ -403,12 +430,14 @@ export async function dispatchPass(opts: {
   onSettled?: (queue: string, outcome: 'succeeded' | 'failed' | 'retrying') => void
 }): Promise<DispatchResult> {
   const { pool } = opts
-  const specs = claimSpecsFor(pool, opts.config)
-  if (specs.length === 0) return { claimed: 0, saturated: true }
+  return withClaimLock(pool, async () => {
+    const specs = claimSpecsFor(pool, opts.config)
+    if (specs.length === 0) return { claimed: 0, saturated: true }
 
-  const jobs = await claimJobs({ specs })
-  for (const job of jobs) startClaimedJob({ pool, job, run: opts.run, onSettled: opts.onSettled })
-  return { claimed: jobs.length, saturated: false }
+    const jobs = await claimJobs({ specs })
+    for (const job of jobs) startClaimedJob({ pool, job, run: opts.run, onSettled: opts.onSettled })
+    return { claimed: jobs.length, saturated: false }
+  })
 }
 
 /**
@@ -435,9 +464,7 @@ export function startClaimedJob(opts: {
       return 'failed'
     })
     .then((outcome) => {
-      const held = pool.inFlight.get(job.queue) ?? 1
-      if (held <= 1) pool.inFlight.delete(job.queue)
-      else pool.inFlight.set(job.queue, held - 1)
+      releaseReservation(pool, job.queue)
       pool.active.delete(promise)
       opts.onSettled?.(job.queue, outcome)
     })
@@ -455,35 +482,37 @@ export async function startJobsById(opts: {
   run: (job: ClaimedJob) => Promise<'succeeded' | 'failed' | 'retrying'>
   onSettled?: (queue: string, outcome: 'succeeded' | 'failed' | 'retrying') => void
 }): Promise<number> {
-  let claimed = 0
-  for (const jobId of opts.jobIds) {
-    const peek = await peekRunnableJob(jobId)
-    if (!peek) continue
-    const def = findJobDefinition(peek.queue)
-    if (!def) continue
-    const free = Math.min(
-      concurrencyFor(def) - (opts.pool.inFlight.get(peek.queue) ?? 0),
-      opts.config.maxConcurrency - poolSize(opts.pool)
-    )
-    if (free < 1) continue
-    opts.pool.inFlight.set(peek.queue, (opts.pool.inFlight.get(peek.queue) ?? 0) + 1)
-    const job = await claimById(jobId, leaseMsFor(def))
-    if (!job) {
-      const held = opts.pool.inFlight.get(peek.queue) ?? 1
-      if (held <= 1) opts.pool.inFlight.delete(peek.queue)
-      else opts.pool.inFlight.set(peek.queue, held - 1)
-      continue
+  return withClaimLock(opts.pool, async () => {
+    let claimed = 0
+    for (const jobId of opts.jobIds) {
+      const peek = await peekRunnableJob(jobId)
+      if (!peek) continue
+      const def = findJobDefinition(peek.queue)
+      if (!def) continue
+      const free = Math.min(
+        concurrencyFor(def) - (opts.pool.inFlight.get(peek.queue) ?? 0),
+        opts.config.maxConcurrency - poolSize(opts.pool)
+      )
+      if (free < 1) continue
+      opts.pool.inFlight.set(peek.queue, (opts.pool.inFlight.get(peek.queue) ?? 0) + 1)
+      let job: ClaimedJob | null = null
+      try {
+        job = await claimById(jobId, leaseMsFor(def))
+      } finally {
+        if (!job) releaseReservation(opts.pool, peek.queue)
+      }
+      if (!job) continue
+      startClaimedJob({
+        pool: opts.pool,
+        job,
+        run: opts.run,
+        onSettled: opts.onSettled,
+        counted: true,
+      })
+      claimed += 1
     }
-    startClaimedJob({
-      pool: opts.pool,
-      job,
-      run: opts.run,
-      onSettled: opts.onSettled,
-      counted: true,
-    })
-    claimed += 1
-  }
-  return claimed
+    return claimed
+  })
 }
 
 /** Wait for every job the pool is running. */
