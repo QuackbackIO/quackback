@@ -13,6 +13,7 @@ const {
   mockHasAny,
   mockHasDistinctSignup,
   mockInvalidateQueries,
+  mockResetQueries,
   mockSignOut,
 } = vi.hoisted(() => ({
   mockGetRouteContext: vi.fn(),
@@ -22,6 +23,7 @@ const {
   mockHasAny: vi.fn((): boolean => false),
   mockHasDistinctSignup: vi.fn((): boolean => true),
   mockInvalidateQueries: vi.fn(() => Promise.resolve()),
+  mockResetQueries: vi.fn(() => Promise.resolve()),
   mockSignOut: vi.fn(() => Promise.resolve()),
 }))
 
@@ -63,7 +65,10 @@ vi.mock('@/components/auth/oauth-buttons', () => ({
 
 vi.mock('@tanstack/react-query', () => ({
   useQuery: () => ({ data: null }),
-  useQueryClient: () => ({ invalidateQueries: mockInvalidateQueries }),
+  useQueryClient: () => ({
+    invalidateQueries: mockInvalidateQueries,
+    resetQueries: mockResetQueries,
+  }),
 }))
 
 vi.mock('@/lib/server/functions/conversation', () => ({
@@ -88,6 +93,7 @@ vi.mock('@/components/shared/user-stats', () => ({
 }))
 
 import { PortalHeader } from '../portal-header'
+import { VIEWER_SCOPED_PORTAL_QUERY_KEYS } from '@/lib/client/queries/portal'
 
 const loggedInSession = {
   user: {
@@ -148,27 +154,33 @@ describe('PortalHeader — Admin dropdown item', () => {
 describe('PortalHeader — sign-out cache hygiene', () => {
   beforeEach(() => {
     mockInvalidateQueries.mockClear()
+    mockResetQueries.mockClear()
     mockSignOut.mockClear()
   })
   afterEach(() => cleanup())
 
-  it('drops the viewer-scoped tag catalog so internal tags do not outlive a team session', async () => {
+  it('resets (not merely invalidates) every viewer-scoped cache so internal tags do not outlive a team session', async () => {
     renderHeader({ userRole: 'admin', isLoggedIn: true })
     fireEvent.pointerDown(screen.getByRole('button'), { button: 0, ctrlKey: false })
     fireEvent.click(await screen.findByRole('menuitem', { name: /log out|sign out/i }))
     await vi.waitFor(() => expect(mockSignOut).toHaveBeenCalled())
 
+    // Loaders read through ensureQueryData, which serves retained-but-stale
+    // data; only a reset actually drops the team-scoped payloads.
     await vi.waitFor(() => {
-      const keys = mockInvalidateQueries.mock.calls.map(
+      const resetKeys = mockResetQueries.mock.calls.map(
         (call) => (call as unknown as [{ queryKey: unknown[] }])[0].queryKey
       )
-      expect(keys).toEqual(
-        expect.arrayContaining([
-          ['portal', 'tags'],
-          ['portal', 'data'],
-        ])
-      )
+      expect(resetKeys).toEqual(expect.arrayContaining([...VIEWER_SCOPED_PORTAL_QUERY_KEYS]))
     })
+    expect(VIEWER_SCOPED_PORTAL_QUERY_KEYS).toEqual(
+      expect.arrayContaining([
+        ['portal', 'tags'],
+        ['portal', 'data'],
+        ['portal', 'post'],
+        ['portal', 'roadmapPosts'],
+      ])
+    )
   })
 })
 

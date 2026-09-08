@@ -10,7 +10,7 @@ vi.mock('@tanstack/react-router', async (orig) => ({
 }))
 
 vi.mock('@tanstack/react-query', () => ({
-  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
+  useQueryClient: () => ({ invalidateQueries: vi.fn(), resetQueries: vi.fn() }),
 }))
 
 // Hoisted so the spy exists when the (hoisted) mock factory runs.

@@ -13,18 +13,37 @@ import {
 } from '@/lib/server/functions/portal'
 
 /**
- * Drop portal caches whose payload depends on who the viewer is. The tag
- * catalog (`['portal','tags']`) hides internal tags from non-team viewers, and
- * `['portal','data']` embeds that same catalog, so neither may survive an auth
- * transition: a team member signing out must not keep seeing internal tags,
- * and a team member signing in must gain them. Call on every portal sign-in
- * success and sign-out alongside the existing user-scoped invalidations.
+ * Query families whose payload depends on who the viewer is: the tag catalog
+ * hides internal tags from non-team viewers; portal data, post lists and post
+ * detail embed that filtered catalog; public roadmap results honour the same
+ * guard for caller-supplied tag filters.
  */
-export function invalidateViewerScopedPortalQueries(queryClient: QueryClient): Promise<void[]> {
-  return Promise.all([
-    queryClient.invalidateQueries({ queryKey: ['portal', 'tags'] }),
-    queryClient.invalidateQueries({ queryKey: ['portal', 'data'] }),
-  ])
+export const VIEWER_SCOPED_PORTAL_QUERY_KEYS: readonly (readonly string[])[] = [
+  ['portal', 'tags'],
+  ['portal', 'data'],
+  ['portal', 'posts'],
+  ['portal', 'post'],
+  ['portal', 'roadmapPosts'],
+]
+
+/**
+ * Drop every viewer-scoped portal cache entry on an auth transition, so a team
+ * member signing out does not keep seeing internal tags and a team member
+ * signing in gains them.
+ *
+ * This must *reset*, not invalidate: `invalidateQueries` only marks entries
+ * stale and keeps their data, and route loaders read through
+ * `ensureQueryData`, which returns retained data without waiting for a refetch
+ * — so a stale team-scoped catalog would still render for the next anonymous
+ * view. `resetQueries` clears the data (inactive entries are fetched fresh on
+ * next use; active observers refetch immediately).
+ *
+ * Call from every portal sign-out control and sign-in success handler.
+ */
+export function resetViewerScopedPortalQueries(queryClient: QueryClient): Promise<void[]> {
+  return Promise.all(
+    VIEWER_SCOPED_PORTAL_QUERY_KEYS.map((queryKey) => queryClient.resetQueries({ queryKey }))
+  )
 }
 
 /**
