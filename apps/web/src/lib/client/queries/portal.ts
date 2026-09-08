@@ -16,13 +16,15 @@ import {
  * Query families whose payload depends on who the viewer is: the tag catalog
  * hides internal tags from non-team viewers; portal data, post lists and post
  * detail embed that filtered catalog; public roadmap results honour the same
- * guard for caller-supplied tag filters.
+ * guard for caller-supplied tag filters; and the roadmap catalog's
+ * `baseFilter` has internal tag ids redacted for non-team viewers.
  */
 export const VIEWER_SCOPED_PORTAL_QUERY_KEYS: readonly (readonly string[])[] = [
   ['portal', 'tags'],
   ['portal', 'data'],
   ['portal', 'posts'],
   ['portal', 'post'],
+  ['portal', 'roadmaps'],
   ['portal', 'roadmapPosts'],
 ]
 

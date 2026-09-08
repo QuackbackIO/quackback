@@ -178,6 +178,7 @@ describe('PortalHeader — sign-out cache hygiene', () => {
         ['portal', 'tags'],
         ['portal', 'data'],
         ['portal', 'post'],
+        ['portal', 'roadmaps'],
         ['portal', 'roadmapPosts'],
       ])
     )
