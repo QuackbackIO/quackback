@@ -2,8 +2,9 @@
  * Cloud web → worker job-wake publisher.
  *
  * After-commit on ROLE=web POSTs `{ workspaceKey, jobIds }` to the worker
- * private URL. Fail-open: unset URL, network error, or 5xx leaves the row
- * for the sweeper. Never awaited from `handleAppHook`.
+ * private URL. Fail-open: unset URL, or POST still failing after retries,
+ * leaves the row until a later wake or an activity refresh that starts the
+ * loop. Never awaited from `handleAppHook`.
  */
 import { getProcessRole } from '@/lib/server/process-role'
 import { logger } from '@/lib/server/logger'
@@ -16,6 +17,15 @@ const log = logger.child({ component: 'job-wake' })
 
 const COALESCE_MS = 10
 const WAKE_TIMEOUT_MS = 2_000
+const WAKE_ATTEMPTS = 3
+const WAKE_RETRY_BACKOFF_MS = [200, 400] as const
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms)
+    timer.unref?.()
+  })
+}
 
 interface PendingWake {
   workspaceKey: string
@@ -58,27 +68,35 @@ async function postWake(body: JobWakeRequest): Promise<void> {
     },
     'job wake sent'
   )
-  try {
-    const response = await fetch(`${origin}/api/internal/job-wake`, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${secret}`,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify(body),
-      redirect: 'error',
-      signal: AbortSignal.timeout(WAKE_TIMEOUT_MS),
-    })
-    await response.body?.cancel()
-    if (!response.ok) {
-      log.warn(
-        { workspace_key: body.workspaceKey, status: response.status },
-        'job-wake POST was not 2xx; sweeper will claim'
-      )
+  let lastStatus: number | undefined
+  let lastErr: unknown
+  for (let attempt = 0; attempt < WAKE_ATTEMPTS; attempt++) {
+    try {
+      const response = await fetch(`${origin}/api/internal/job-wake`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${secret}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(body),
+        redirect: 'error',
+        signal: AbortSignal.timeout(WAKE_TIMEOUT_MS),
+      })
+      await response.body?.cancel()
+      if (response.ok) return
+      lastStatus = response.status
+      lastErr = undefined
+    } catch (err) {
+      lastErr = err
+      lastStatus = undefined
     }
-  } catch (err) {
-    log.warn({ err, workspace_key: body.workspaceKey }, 'job-wake POST failed; sweeper will claim')
+    const backoff = WAKE_RETRY_BACKOFF_MS[attempt]
+    if (backoff !== undefined) await delay(backoff)
   }
+  log.warn(
+    { err: lastErr, workspace_key: body.workspaceKey, status: lastStatus, attempts: WAKE_ATTEMPTS },
+    'job-wake POST failed after retries; a later wake or an activity refresh that starts the loop will claim'
+  )
 }
 
 function flush(workspaceKey: string): void {

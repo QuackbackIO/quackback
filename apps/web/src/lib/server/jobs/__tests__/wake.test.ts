@@ -56,4 +56,40 @@ describe('job-wake publisher', () => {
       'job_01bbbbbbbbbbbbbbbbbbbbbbbb',
     ])
   })
+
+  it('retries a failed POST and succeeds without throwing', async () => {
+    vi.useFakeTimers()
+    process.env.QUACKBACK_JOB_WORKER_URL = 'http://worker.railway.internal:3000'
+    process.env.QUACKBACK_FLEET_INTERNAL_TOKEN = 'fleet-token'
+    fetchMock
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockResolvedValue(new Response(null, { status: 202 }))
+    const { startJobWakePublisher } = await import('../wake')
+    const { noteDurableWork } = await import('@/lib/server/workspaces/after-commit')
+    startJobWakePublisher()
+    noteDurableWork('inst_a', { jobId: 'job_01aaaaaaaaaaaaaaaaaaaaaaaa' })
+    await vi.advanceTimersByTimeAsync(15)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(200)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('retries a failing POST three times and does not throw', async () => {
+    vi.useFakeTimers()
+    process.env.QUACKBACK_JOB_WORKER_URL = 'http://worker.railway.internal:3000'
+    process.env.QUACKBACK_FLEET_INTERNAL_TOKEN = 'fleet-token'
+    fetchMock.mockRejectedValue(new Error('network down'))
+    const { startJobWakePublisher } = await import('../wake')
+    const { noteDurableWork } = await import('@/lib/server/workspaces/after-commit')
+    startJobWakePublisher()
+    noteDurableWork('inst_a', { jobId: 'job_01aaaaaaaaaaaaaaaaaaaaaaaa' })
+    await vi.advanceTimersByTimeAsync(15)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(200)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    await vi.advanceTimersByTimeAsync(400)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
 })
