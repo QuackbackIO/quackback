@@ -80,7 +80,13 @@ interface OpenOptions {
    *  to `'sso'` for the legacy single-provider gate prompts (Enable /
    *  Require-SSO), which have no per-provider context. */
   registrationId?: string
+  /** An optional next step offered on the result view once the test passes
+   *  (e.g. "Enable sign-in" for a provider that is still off). Unlike
+   *  `onSuccess` it is a button, not an auto-apply: the admin chooses. */
+  successAction?: { label: string; run: () => void | Promise<void>; doneMessage: string }
 }
+
+export type SsoTestSuccessAction = NonNullable<OpenOptions['successAction']>
 
 interface SsoTestSignInContextValue {
   open: (opts?: OpenOptions) => void
@@ -113,6 +119,7 @@ export function SsoTestSignInProvider({ children }: { children: ReactNode }) {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const onSuccessRef = useRef<OnSuccess | null>(null)
   const successMessageRef = useRef<string | null>(null)
+  const [successAction, setSuccessAction] = useState<SsoTestSuccessAction | null>(null)
   // Default to 'sso' for legacy gate prompts (Enable / Require-SSO) that
   // open the modal without per-provider context.
   const registrationIdRef = useRef<string>('sso')
@@ -228,6 +235,7 @@ export function SsoTestSignInProvider({ children }: { children: ReactNode }) {
     clearPopup()
     onSuccessRef.current = null
     successMessageRef.current = null
+    setSuccessAction(null)
     dispatch({ type: 'close' })
   }, [clearPoll, clearPopup])
 
@@ -235,8 +243,25 @@ export function SsoTestSignInProvider({ children }: { children: ReactNode }) {
     onSuccessRef.current = opts?.onSuccess ?? null
     successMessageRef.current = opts?.successMessage ?? null
     registrationIdRef.current = opts?.registrationId ?? 'sso'
+    setSuccessAction(opts?.successAction ?? null)
     dispatch({ type: 'open', reason: opts?.reason })
   }, [])
+
+  const runSuccessAction = useCallback(async () => {
+    if (!successAction) return
+    setApplying(true)
+    try {
+      await successAction.run()
+      dispatch({ type: 'applied', message: successAction.doneMessage })
+    } catch (err) {
+      dispatch({
+        type: 'failed',
+        error: err instanceof Error ? err.message : 'Could not apply the change.',
+      })
+    } finally {
+      setApplying(false)
+    }
+  }, [successAction])
 
   const handleStart = useCallback(async () => {
     dispatch({ type: 'start' })
@@ -299,6 +324,8 @@ export function SsoTestSignInProvider({ children }: { children: ReactNode }) {
       <SsoTestSignInModal
         state={state}
         applying={applying}
+        successAction={successAction}
+        onSuccessAction={() => void runSuccessAction()}
         onStart={handleStart}
         onClose={handleClose}
       />
@@ -309,11 +336,15 @@ export function SsoTestSignInProvider({ children }: { children: ReactNode }) {
 function SsoTestSignInModal({
   state,
   applying,
+  successAction,
+  onSuccessAction,
   onStart,
   onClose,
 }: {
   state: ReturnType<typeof ssoTestReducer>
   applying: boolean
+  successAction: SsoTestSuccessAction | null
+  onSuccessAction: () => void
   onStart: () => void
   onClose: () => void
 }) {
@@ -349,6 +380,8 @@ function SsoTestSignInModal({
             applying={applying}
             hasResultOrError={!!(result || error)}
             applied={appliedMessage !== null}
+            successAction={result?.ok && appliedMessage === null ? successAction : null}
+            onSuccessAction={onSuccessAction}
             onStart={onStart}
             onClose={onClose}
           />
@@ -404,6 +437,8 @@ function ModalFooter({
   applying,
   hasResultOrError,
   applied,
+  successAction,
+  onSuccessAction,
   onStart,
   onClose,
 }: {
@@ -413,6 +448,9 @@ function ModalFooter({
   /** A gate action was applied — the test passed AND its action ran, so
    *  there's nothing left to retry. Close is the only move. */
   applied: boolean
+  /** Offered only on a passing result that has not yet been acted on. */
+  successAction: SsoTestSuccessAction | null
+  onSuccessAction: () => void
   onStart: () => void
   onClose: () => void
 }) {
@@ -441,8 +479,13 @@ function ModalFooter({
         Close
       </Button>
       {hasResultOrError && !applying && !applied && (
-        <Button size="sm" onClick={onStart}>
+        <Button size="sm" variant={successAction ? 'outline' : 'default'} onClick={onStart}>
           Try again
+        </Button>
+      )}
+      {successAction && !applied && (
+        <Button size="sm" onClick={onSuccessAction} disabled={applying}>
+          {applying ? 'Applying…' : successAction.label}
         </Button>
       )}
     </>

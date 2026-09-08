@@ -113,7 +113,7 @@ describe('OutcomePreviewRail', () => {
         },
       }),
     })
-    expect(screen.getByText('Preview of unsaved mappings')).toBeInTheDocument()
+    expect(screen.getByText('Preview of unsaved changes')).toBeInTheDocument()
     expect(screen.getByText('jane@idp.example')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save and test' })).toBeInTheDocument()
   })
@@ -156,8 +156,10 @@ describe('OutcomePreviewRail', () => {
         },
       },
     })
-    expect(screen.getByText(/Rule 2 matched/)).toBeInTheDocument()
-    expect(screen.getByText(/platform-admins/)).toBeInTheDocument()
+    // Only the matched rule is shown; the editor holds the full list.
+    expect(screen.getByText(/rule 2 matched/)).toBeInTheDocument()
+    expect(screen.getByText('engineering')).toBeInTheDocument()
+    expect(screen.queryByText('platform-admins')).not.toBeInTheDocument()
     expect(screen.getByText(/even outside this provider's verified domains/)).toBeInTheDocument()
     expect(screen.getByText(/does not limit this admin rule/)).toBeInTheDocument()
   })
@@ -170,7 +172,7 @@ describe('OutcomePreviewRail', () => {
         attributes: { map: [{ claimPath: 'department', attributeKey: 'department' }] },
       },
     })
-    expect(screen.getByText(/Role application is disabled/)).toBeInTheDocument()
+    expect(screen.getByText(/Roles are not applied/)).toBeInTheDocument()
     expect(screen.getByText(/Engineering/)).toBeInTheDocument()
   })
 

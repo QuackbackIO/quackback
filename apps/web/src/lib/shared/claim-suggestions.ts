@@ -249,7 +249,7 @@ export function deriveAttributeClaimPaths(
 }
 
 /**
- * Scalar claim paths for Unique user identifier / Email / Display name.
+ * Scalar claim paths for Account ID / Email / Name.
  * Always includes `sub` (attribute suggestions exclude it). Array leaves are
  * returned as unsuitable rather than unwrapped.
  */

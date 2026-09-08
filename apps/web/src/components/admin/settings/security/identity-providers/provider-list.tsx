@@ -44,7 +44,7 @@ export function IdentityProvidersSection({
   return (
     <SettingsCard
       title="Single sign-on (OIDC)"
-      description="Okta, Auth0, Microsoft Entra, Keycloak, or any OpenID Connect IdP."
+      description="Okta, Auth0, Microsoft Entra ID, Keycloak, or any OpenID Connect IdP."
       action={
         tierEnabled ? (
           <Button type="button" size="sm" asChild>

@@ -18,8 +18,7 @@ import type { HandshakeResult } from '@/lib/server/auth/sso-test-handshake'
  * so what the modal ever sees is structurally this narrower type.
  */
 export type WireResult =
-  | Extract<HandshakeResult, { ok: true }>
-  | Omit<Extract<HandshakeResult, { ok: false }>, 'raw'>
+  Extract<HandshakeResult, { ok: true }> | Omit<Extract<HandshakeResult, { ok: false }>, 'raw'>
 
 export type SsoTestPhase = 'closed' | 'prompt' | 'testing' | 'result'
 

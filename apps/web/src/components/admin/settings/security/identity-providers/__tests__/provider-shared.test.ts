@@ -175,7 +175,7 @@ describe('identityMappingIssue', () => {
 
   it('flags an explicitly blank supported path', () => {
     expect(identityMappingIssue({ profile: { claims: { email: '  ' } } })).toMatch(/email/i)
-    expect(identityMappingIssue({ profile: { claims: { id: ' ' } } })).toMatch(/identifier/i)
+    expect(identityMappingIssue({ profile: { claims: { id: ' ' } } })).toMatch(/account id/i)
   })
 
   it('flags sources that contain no valid identity source', () => {
@@ -232,12 +232,12 @@ describe('buildClaimsTableModel', () => {
     { key: 'plan', label: 'Plan', type: 'string' },
   ]
 
-  it('always shows required identifier/email and default name rows', () => {
+  it('always lists the three profile fields together, all standard by default', () => {
     const model = buildClaimsTableModel({ mapping: null, definitions: defs })
-    expect(model.required.map((r) => r.field)).toEqual(['id', 'email'])
-    expect(model.required.every((r) => r.isDefault)).toBe(true)
-    const name = model.additional.find((r) => r.kind === 'profile' && r.field === 'name')
-    expect(name).toMatchObject({ path: 'name', isDefault: true })
+    expect(model.profile.map((r) => r.field)).toEqual(['id', 'email', 'name'])
+    expect(model.profile.every((r) => r.isDefault)).toBe(true)
+    expect(model.profile.map((r) => r.path)).toEqual(['sub', 'email', 'name'])
+    expect(model.additional).toEqual([])
   })
 
   it('pins explicit sub as a custom identifier', () => {
@@ -245,7 +245,7 @@ describe('buildClaimsTableModel', () => {
       mapping: { profile: { claims: { id: 'sub' } } },
       definitions: [],
     })
-    expect(model.required[0]).toMatchObject({ field: 'id', path: 'sub', isDefault: false })
+    expect(model.profile[0]).toMatchObject({ field: 'id', path: 'sub', isDefault: false })
   })
 
   it('preserves orphaned and duplicate People rows by baseline index', () => {
