@@ -67,7 +67,12 @@ function refusal(status: number, body: string, extra?: Record<string, string>): 
  * pooled tenancy asserts only that the process can reach the control store, so
  * it needs no workspace either.
  */
-const FLEET_PATHS = ['/api/health', '/api/health/live', '/api/health/ready']
+const FLEET_PATHS = [
+  '/api/health',
+  '/api/health/live',
+  '/api/health/ready',
+  '/api/internal/job-wake',
+]
 
 export { requestWorkspaceHost } from './saas-edge-host'
 
@@ -80,7 +85,8 @@ export async function resolveWorkspaceAndContinue<T>({
   next: () => Promise<T>
   log?: Pick<typeof logger, 'warn' | 'error' | 'info'>
 }): Promise<T | Response> {
-  if (FLEET_PATHS.includes(new URL(request.url).pathname)) return next()
+  const pathname = new URL(request.url).pathname.replace(/\/$/, '') || '/'
+  if (FLEET_PATHS.includes(pathname)) return next()
 
   const host = requestWorkspaceHost(request)
   const acquisition = await acquireScopeForHost(host, 'request')

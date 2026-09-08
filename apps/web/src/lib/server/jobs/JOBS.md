@@ -118,43 +118,27 @@ job REFUSED: row workspace does not match the workspace scope that claimed it
 last_error = workspace mismatch: row is stamped inst_…bravo, scope is inst_…alpha
 ```
 
-## 5. The wake, and the connection it needs
+## 5. Start-by-id, and the sweeper
 
-A trigger NOTIFYs `quackback_job_wake` on any write that leaves a row runnable
-now. A listener on a session-mode connection wakes in milliseconds instead of
-waiting out the poll interval.
+Happy-path dispatch is **claim this `job_id` now**. After a `job_queue` insert
+commits, `noteDurableWork` carries the id. Self-host `ROLE=all` / the worker
+calls `claimById` (same lease stamp as `claimJobs`) and `runJob`. Cloud
+`ROLE=web` POSTs `{ workspaceKey, jobIds }` to
+`QUACKBACK_JOB_WORKER_URL/api/internal/job-wake`; the worker does the same
+claim. A parked workspace's loop is started, then the id is claimed.
 
-**`LISTEN` does not survive a transaction-mode pooler, and the obvious health
-check lies about it.** Measured on the fleet for this channel, on two workspaces:
+The poll loop is the **sweeper**, not how Slack work starts. Lost HTTP, a
+full concurrency slot, a future `run_at`, or a worker restart still drain on
+`JOB_POLL_INTERVAL_MS`. There is no second scheduler.
 
-| endpoint | notify actually delivered | `pg_listening_channels()` says |
-| -------- | ------------------------- | ------------------------------ |
-| direct   | **yes**                   | no                             |
-| pooled   | **no**                    | **yes**                        |
+**LISTEN/NOTIFY is not the doorbell.** It does not survive a transaction-mode
+pooler (measured: pooled endpoint delivered 0/N while `pg_listening_channels()`
+lied green), and a parked loop has nothing listening. HTTP can both nudge an
+awake loop and start a dormant one. The historical `WakeListener` / `job_queue_wake_trg`
+path is not shipped on the pooled worker.
 
-The catalogue view is not merely a false green here — on this measurement it is
-_inverted_, reporting the registration on the connection that never delivers and
-not on the one that does. (The mechanism is connection multiplexing:
-`postgres.js` puts `LISTEN` on its own connection, which the pooler may or may
-not share with the query asking the question.) So:
-
-- the listener is built from the workspace's **direct** DSN, never from the pool
-  cache;
-- `WakeListener.verify()` sends a real NOTIFY from a _second_ connection and
-  waits for it. Nothing here asks the catalogue whether it is registered, and
-  nothing should.
-
-**The poll interval is the correctness floor, not a fallback nobody exercises.**
-If the doorbell is lost — a dropped connection, a pooled DSN, a NOTIFY that
-raced the LISTEN — the poll still fires, so a lost wake costs latency and never
-correctness.
-
-Measured wake latency, local Postgres, `JOB_POLL_INTERVAL_MS=1000`:
-
-| doorbell             | n   | min     | p50      | p95      | max      |
-| -------------------- | --- | ------- | -------- | -------- | -------- |
-| NOTIFY               | 20  | 3 ms    | 4 ms     | 8 ms     | 33 ms    |
-| disabled (poll only) | 20  | ~900 ms | ~1000 ms | ~1000 ms | ~1000 ms |
+`queued_ms` on `job.started` is `claim_instant - run_at`. That is the SLO field
+for enqueue → begin processing.
 
 ## 6. Scheduling
 
@@ -255,13 +239,14 @@ Read from `process.env` directly rather than through the zod config, matching
 `process-role.ts`: these must work in any context, including a worker process that
 has not loaded the full application config.
 
-| Variable                | Default | Meaning                                                                                       |
-| ----------------------- | ------- | --------------------------------------------------------------------------------------------- |
-| `JOB_POLL_INTERVAL_MS`  | 1000    | How often each workspace loop claims work                                                     |
-| `JOB_BATCH_SIZE`        | 5       | Jobs claimed per drain pass                                                                   |
-| `JOB_REAP_INTERVAL_MS`  | 15000   | How often expired leases are adjudicated                                                      |
-| `JOB_PRUNE_INTERVAL_MS` | 1 hour  | How often terminal rows past retention are dropped (a per-workspace table scan; keep it slow) |
-| `JOB_RETENTION_MS`      | 7 days  | How long terminal rows are kept. Must exceed any live cron slot key                           |
+| Variable                   | Default | Meaning                                                                                           |
+| -------------------------- | ------- | ------------------------------------------------------------------------------------------------- |
+| `JOB_POLL_INTERVAL_MS`     | 1000    | How often each workspace loop claims work                                                         |
+| `JOB_BATCH_SIZE`           | 5       | Jobs claimed per drain pass                                                                       |
+| `JOB_REAP_INTERVAL_MS`     | 15000   | How often expired leases are adjudicated                                                          |
+| `JOB_PRUNE_INTERVAL_MS`    | 1 hour  | How often terminal rows past retention are dropped (a per-workspace table scan; keep it slow)     |
+| `JOB_RETENTION_MS`         | 7 days  | How long terminal rows are kept. Must exceed any live cron slot key                               |
+| `QUACKBACK_JOB_WORKER_URL` | unset   | Cloud web only: origin of the worker (`http://worker.railway.internal:3000`). Unset = poll floor. |
 
 ### Worker job logs
 

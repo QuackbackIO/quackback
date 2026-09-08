@@ -50,6 +50,10 @@ async function bootJobWorker(plan: ClaimPlan, dormancy?: DormancyPlan) {
       workspaces: dormancy ? dormancy.workspaces : [workspace],
       refused: [],
     }),
+    resolveWorkspaceById: async (id: string) => ({
+      kind: 'ok',
+      workspace: { ...workspace, workspaceKey: id },
+    }),
     getControlSql: () => ({}),
   }))
   vi.doMock('@/lib/server/workspaces/fleet', () => ({
@@ -86,6 +90,7 @@ async function bootJobWorker(plan: ClaimPlan, dormancy?: DormancyPlan) {
       return { requeued: 0, terminated: 0, pruned: 0 }
     },
     dispatchPass: async () => ({ claimed: plan.claimed, saturated: true }),
+    startJobsById: async () => 0,
     runJob: async () => 'succeeded',
     awaitPool: async () => {},
   }))
@@ -109,6 +114,9 @@ async function bootJobWorker(plan: ClaimPlan, dormancy?: DormancyPlan) {
     /** Advance past the registry refresh so the loop set is reconciled once. */
     refresh: async () => {
       await vi.advanceTimersByTimeAsync(60_000)
+    },
+    wake: async (workspaceKey: string, jobIds: string[] = []) => {
+      await mod.handleJobWake({ workspaceKey, jobIds })
     },
     stop: async () => {
       await mod.stopJobWorker()
@@ -227,6 +235,20 @@ describe('pooled job worker', () => {
 
       dormancy.workspaces = [live('ws_idle')]
       await handle.refresh()
+      expect(handle.loops()).toEqual(['ws_idle'])
+      expect(handle.dormant()).toBe(0)
+    })
+
+    it('starts a parked workspace from job-wake without waiting for refresh', async () => {
+      vi.useFakeTimers()
+      const dormancy: DormancyPlan = {
+        workspaces: [idle('ws_idle')],
+        pendingJobAt: null,
+        deadlineAt: null,
+      }
+      handle = await bootJobWorker({ claimed: 0 }, dormancy)
+      expect(handle.loops()).toEqual([])
+      await handle.wake('ws_idle', ['job_01h00000000000000000000000'])
       expect(handle.loops()).toEqual(['ws_idle'])
       expect(handle.dormant()).toBe(0)
     })

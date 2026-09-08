@@ -98,6 +98,7 @@ function makeJob(overrides: Partial<ClaimedJob> = {}): ClaimedJob {
     maxAttempts: 6,
     leaseToken: '00000000-0000-0000-0000-000000000000',
     lockedUntil: new Date(),
+    runAt: new Date(),
     ...overrides,
   }
 }

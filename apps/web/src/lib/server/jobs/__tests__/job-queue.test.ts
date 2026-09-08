@@ -54,6 +54,7 @@ import {
 
 import {
   cancelJob,
+  claimById,
   claimJobs,
   completeJob,
   enqueueJob,
@@ -62,6 +63,7 @@ import {
   findJobByDedupeKey,
   heartbeatJob,
   jobQueueDepth,
+  peekRunnableJob,
   pruneTerminalJobs,
   reapExpiredLeases,
   type ClaimedJob,
@@ -83,7 +85,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   signaled.length = 0
-  unsubCommit = onDurableWorkCommitted((key) => signaled.push(key))
+  unsubCommit = onDurableWorkCommitted((work) => signaled.push(work.workspaceKey))
 })
 
 afterEach(() => {
@@ -129,8 +131,10 @@ describe('enqueue', () => {
     // stay spent — otherwise a scheduler restart re-runs the slot it already ran.
     const [job] = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: LEASE }] })
     await completeJob(job)
+    signaled.length = 0
     const third = await enqueueJob({ queue: q, dedupeKey: 'slot-1' })
     expect(third.inserted).toBe(false)
+    expect(signaled).toEqual([])
     expect(await rowsFor(q)).toHaveLength(1)
   })
 
@@ -164,6 +168,27 @@ describe('claim', () => {
     const q = queue('delayed')
     await enqueueJob({ queue: q, runAt: new Date(Date.now() + 60_000) })
     expect(await claimJobs({ specs: [{ queue: q, limit: 5, leaseMs: LEASE }] })).toHaveLength(0)
+  })
+
+  it('claimById takes a due row and misses future or already-claimed ones', async () => {
+    const q = queue('by-id')
+    currentWorkspaceKey = 'ws_by_id'
+    const due = await enqueueJob({ queue: q, maxAttempts: 3 })
+    const later = await enqueueJob({
+      queue: q,
+      runAt: new Date(Date.now() + 60_000),
+      maxAttempts: 3,
+    })
+    expect(await peekRunnableJob(due.jobId)).toEqual({ queue: q })
+    expect(await peekRunnableJob(later.jobId)).toBeNull()
+
+    const claimed = await claimById(due.jobId, LEASE)
+    expect(claimed?.jobId).toBe(due.jobId)
+    expect(claimed?.attempts).toBe(1)
+    expect(claimed?.runAt).toBeInstanceOf(Date)
+    expect(await claimById(due.jobId, LEASE)).toBeNull()
+    expect(await claimById(later.jobId, LEASE)).toBeNull()
+    expect(await peekRunnableJob(due.jobId)).toBeNull()
   })
 
   it('skips a row another claimer is holding rather than blocking behind it', async () => {

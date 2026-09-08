@@ -19,10 +19,12 @@
 import { logger } from '@/lib/server/logger'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
 import {
+  claimById,
   claimJobs,
   completeJob,
   failJob,
   heartbeatJob,
+  peekRunnableJob,
   pruneTerminalJobs,
   reapExpiredLeases,
   type ClaimedJob,
@@ -238,7 +240,13 @@ export async function runJob(job: ClaimedJob): Promise<'succeeded' | 'failed' | 
   heartbeat.unref?.()
 
   const startedAt = Date.now()
-  log.info(jobFields(job, { event: 'job.started' }), 'job started')
+  log.info(
+    jobFields(job, {
+      event: 'job.started',
+      queued_ms: Math.max(0, startedAt - job.runAt.getTime()),
+    }),
+    'job started'
+  )
   try {
     const handler = await resolveHandler(def)
     await handler(job)
@@ -399,30 +407,83 @@ export async function dispatchPass(opts: {
   if (specs.length === 0) return { claimed: 0, saturated: true }
 
   const jobs = await claimJobs({ specs })
-  for (const job of jobs) {
-    pool.inFlight.set(job.queue, (pool.inFlight.get(job.queue) ?? 0) + 1)
-    const promise = opts
-      .run(job)
-      .catch((err): 'failed' => {
-        // runJob already records every handler failure on the row; reaching
-        // here means the queue machinery itself threw, which must still free
-        // the slot rather than wedge the pool at its cap forever.
-        log.error(
-          jobFields(job, { event: 'job.runner_threw', err }),
-          'job runner threw outside runJob'
-        )
-        return 'failed'
-      })
-      .then((outcome) => {
-        const held = pool.inFlight.get(job.queue) ?? 1
-        if (held <= 1) pool.inFlight.delete(job.queue)
-        else pool.inFlight.set(job.queue, held - 1)
-        pool.active.delete(promise)
-        opts.onSettled?.(job.queue, outcome)
-      })
-    pool.active.add(promise)
-  }
+  for (const job of jobs) startClaimedJob({ pool, job, run: opts.run, onSettled: opts.onSettled })
   return { claimed: jobs.length, saturated: false }
+}
+
+/**
+ * Put an already-claimed row on the pool. `counted` means the caller already
+ * reserved the inFlight slot (start-by-id does this before `claimById` so a
+ * failed claim does not leave a running row with no runner).
+ */
+export function startClaimedJob(opts: {
+  pool: JobPool
+  job: ClaimedJob
+  run: (job: ClaimedJob) => Promise<'succeeded' | 'failed' | 'retrying'>
+  onSettled?: (queue: string, outcome: 'succeeded' | 'failed' | 'retrying') => void
+  counted?: boolean
+}): void {
+  const { pool, job } = opts
+  if (!opts.counted) pool.inFlight.set(job.queue, (pool.inFlight.get(job.queue) ?? 0) + 1)
+  const promise = opts
+    .run(job)
+    .catch((err): 'failed' => {
+      log.error(
+        jobFields(job, { event: 'job.runner_threw', err }),
+        'job runner threw outside runJob'
+      )
+      return 'failed'
+    })
+    .then((outcome) => {
+      const held = pool.inFlight.get(job.queue) ?? 1
+      if (held <= 1) pool.inFlight.delete(job.queue)
+      else pool.inFlight.set(job.queue, held - 1)
+      pool.active.delete(promise)
+      opts.onSettled?.(job.queue, outcome)
+    })
+  pool.active.add(promise)
+}
+
+/**
+ * Try to claim `jobIds` now, honouring the same pool caps as `dispatchPass`.
+ * Returns how many jobs were claimed. A miss is success — the sweeper still runs.
+ */
+export async function startJobsById(opts: {
+  pool: JobPool
+  config: RunnerConfig
+  jobIds: readonly string[]
+  run: (job: ClaimedJob) => Promise<'succeeded' | 'failed' | 'retrying'>
+  onSettled?: (queue: string, outcome: 'succeeded' | 'failed' | 'retrying') => void
+}): Promise<number> {
+  let claimed = 0
+  for (const jobId of opts.jobIds) {
+    const peek = await peekRunnableJob(jobId)
+    if (!peek) continue
+    const def = findJobDefinition(peek.queue)
+    if (!def) continue
+    const free = Math.min(
+      concurrencyFor(def) - (opts.pool.inFlight.get(peek.queue) ?? 0),
+      opts.config.maxConcurrency - poolSize(opts.pool)
+    )
+    if (free < 1) continue
+    opts.pool.inFlight.set(peek.queue, (opts.pool.inFlight.get(peek.queue) ?? 0) + 1)
+    const job = await claimById(jobId, leaseMsFor(def))
+    if (!job) {
+      const held = opts.pool.inFlight.get(peek.queue) ?? 1
+      if (held <= 1) opts.pool.inFlight.delete(peek.queue)
+      else opts.pool.inFlight.set(peek.queue, held - 1)
+      continue
+    }
+    startClaimedJob({
+      pool: opts.pool,
+      job,
+      run: opts.run,
+      onSettled: opts.onSettled,
+      counted: true,
+    })
+    claimed += 1
+  }
+  return claimed
 }
 
 /** Wait for every job the pool is running. */

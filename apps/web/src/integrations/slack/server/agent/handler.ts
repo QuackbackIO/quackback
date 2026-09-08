@@ -527,6 +527,15 @@ async function handleSlackQuestion(input: {
     : shortcut
       ? `Capture this message as feedback: ${event.text ?? ''}`
       : event.text
+  const turnAbort = command ? new AbortController() : beginSlackTurn(team, channel, thread)
+  if (!command)
+    await client.apiCall('agents.sessions.setStatus', {
+      channel_id: channel,
+      thread_ts: thread,
+      status: 'processing',
+      initiator_user_id: user,
+    })
+  if (turnAbort.signal.aborted) return
   let history: Array<{ user?: string; text?: string; ts?: string }> = []
   if (!command) {
     history =
@@ -542,6 +551,7 @@ async function handleSlackQuestion(input: {
       ).messages ??
       []
   }
+  if (turnAbort.signal.aborted) return
   const context = mapSlackThread(
     history,
     { text, ts: event?.ts, user },
@@ -555,19 +565,11 @@ async function handleSlackQuestion(input: {
         recipient_team_id: team,
         recipient_user_id: user,
       })
-  const turnAbort = command ? new AbortController() : beginSlackTurn(team, channel, thread)
   const replyStream = stream ? new SlackReplyStream(stream, () => turnAbort.abort()) : null
   if (replyStream)
     turnAbort.signal.addEventListener('abort', () => replyStream.cancel(), { once: true })
   let stopped = false
   try {
-    if (!command)
-      await client.apiCall('agents.sessions.setStatus', {
-        channel_id: channel,
-        thread_ts: thread,
-        status: 'processing',
-        initiator_user_id: user,
-      })
     const result = await runAssistantTurn({
       role: 'workspace_assistant',
       actor,

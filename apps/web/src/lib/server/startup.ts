@@ -45,6 +45,7 @@ function wireGracefulShutdown(): void {
         // dies is NOT re-run blindly — its lease lapses and the reaper
         // adjudicates it, which for a no-retry job means terminal rather than
         // a second run.
+        await import('./jobs/wake').then(({ stopJobWakePublisher }) => stopJobWakePublisher())
         await import('./jobs/worker').then(({ stopJobWorker }) => stopJobWorker())
 
         // Drain the conversation pub/sub subscriber connection before the
@@ -220,6 +221,10 @@ export function logStartupBanner(): void {
 
   // Background processing is role-gated: QUACKBACK_ROLE=web replicas serve
   // HTTP and enqueue only. Cloud runs a dedicated worker replica.
+  import('./jobs/wake')
+    .then(({ startJobWakePublisher }) => startJobWakePublisher())
+    .catch((err) => log.error({ err }, 'failed to start job-wake publisher'))
+
   if (shouldRunWorkers()) {
     startBackgroundProcessing()
   } else {

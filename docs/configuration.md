@@ -36,6 +36,8 @@ Validate representative workspaces with `EXPLAIN (ANALYZE, BUFFERS)`: nearest-ne
 
 Cloud fleets can set `INTEGRATION_OAUTH_GATEWAY_URL=https://app.quackback.io` to use a single OAuth callback origin for shared integration apps. Leave it unset for self-hosted installations. `INTEGRATION_GATEWAY_FORWARD_SECRET` authenticates app-level hooks forwarded by the control plane and is required for these hooks in pooled tenancy. Configure it on both fleet web and worker processes.
 
+On Cloud, set `QUACKBACK_JOB_WORKER_URL` on the **web** service to the worker's private origin (for example `http://${{worker.RAILWAY_PRIVATE_DOMAIN}}:3000`) so Slack and other on-demand jobs start by id instead of waiting for the worker poll. Leave it unset to keep today's poll-only behaviour. The worker authenticates `POST /api/internal/job-wake` with `QUACKBACK_FLEET_INTERNAL_TOKEN`. Self-host `QUACKBACK_ROLE=all` does not need the URL: after-commit claims in-process.
+
 For single-tenancy deployments with `PLATFORM_CREDENTIALS_SOURCE=env`, complete credentials for an individual provider are managed from environment variables; other providers fall back to database credentials. Slack uses `INTEGRATION_SLACK_CLIENT_ID`, `INTEGRATION_SLACK_CLIENT_SECRET`, and `INTEGRATION_SLACK_SIGNING_SECRET`. Existing tenant-registered resource webhooks retain their current routes and secrets.
 
 See [Slack setup](./integrations/slack-app.md) and [Cloud rollout gates](./integrations/integration-gateway-rollout.md).
