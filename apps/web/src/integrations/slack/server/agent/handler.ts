@@ -528,48 +528,53 @@ async function handleSlackQuestion(input: {
       ? `Capture this message as feedback: ${event.text ?? ''}`
       : event.text
   const turnAbort = command ? new AbortController() : beginSlackTurn(team, channel, thread)
-  if (!command)
-    await client.apiCall('agents.sessions.setStatus', {
-      channel_id: channel,
-      thread_ts: thread,
-      status: 'processing',
-      initiator_user_id: user,
-    })
-  if (turnAbort.signal.aborted) return
-  let history: Array<{ user?: string; text?: string; ts?: string }> = []
-  if (!command) {
-    history =
-      input.threadHistory ??
-      (
-        await client.conversations.replies({
-          channel,
-          ts: thread,
-          limit: 12,
-          latest: event.ts,
-          inclusive: true,
-        })
-      ).messages ??
-      []
-  }
-  if (turnAbort.signal.aborted) return
-  const context = mapSlackThread(
-    history,
-    { text, ts: event?.ts, user },
-    installation.botUserId ?? ''
-  )
-  const stream = command
-    ? null
-    : client.chatStream({
-        channel,
-        thread_ts: thread,
-        recipient_team_id: team,
-        recipient_user_id: user,
-      })
-  const replyStream = stream ? new SlackReplyStream(stream, () => turnAbort.abort()) : null
-  if (replyStream)
-    turnAbort.signal.addEventListener('abort', () => replyStream.cancel(), { once: true })
+  let stream: ReturnType<WebClient['chatStream']> | null = null
+  let replyStream: SlackReplyStream | null = null
   let stopped = false
   try {
+    if (!command)
+      await client.apiCall('agents.sessions.setStatus', {
+        channel_id: channel,
+        thread_ts: thread,
+        status: 'processing',
+        initiator_user_id: user,
+      })
+    if (turnAbort.signal.aborted) return
+    let history: Array<{ user?: string; text?: string; ts?: string }> = []
+    if (!command) {
+      history =
+        input.threadHistory ??
+        (
+          await client.conversations.replies({
+            channel,
+            ts: thread,
+            limit: 12,
+            latest: event.ts,
+            inclusive: true,
+          })
+        ).messages ??
+        []
+    }
+    if (turnAbort.signal.aborted) return
+    const context = mapSlackThread(
+      history,
+      { text, ts: event?.ts, user },
+      installation.botUserId ?? ''
+    )
+    stream = command
+      ? null
+      : client.chatStream({
+          channel,
+          thread_ts: thread,
+          recipient_team_id: team,
+          recipient_user_id: user,
+        })
+    replyStream = stream ? new SlackReplyStream(stream, () => turnAbort.abort()) : null
+    if (replyStream) {
+      const live = replyStream
+      turnAbort.signal.addEventListener('abort', () => live.cancel(), { once: true })
+    }
+    const streaming = replyStream
     const result = await runAssistantTurn({
       role: 'workspace_assistant',
       actor,
@@ -581,7 +586,7 @@ async function handleSlackQuestion(input: {
       actorPrincipalId: person.id,
       telemetryTurnId: turnId,
       signal: turnAbort.signal,
-      onTextDelta: replyStream ? (delta) => replyStream.push(delta) : undefined,
+      onTextDelta: streaming ? (delta) => streaming.push(delta) : undefined,
     })
     if (turnAbort.signal.aborted) {
       await replyStream?.abandon()
