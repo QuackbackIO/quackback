@@ -83,12 +83,21 @@ function ConnectionSummary({
       })
     : null
   const who = capture?.identity?.name ?? capture?.identity?.email ?? capture?.identity?.id ?? null
+  // When the newest capture is a failure, that failure is the summary:
+  // neither "Connected as <the account that failed>" (the row's earlier
+  // success) nor the generic "changed since the last test" applies.
+  const failure = preview?.status === 'mapping_failed' ? preview.identity : undefined
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 space-y-1 text-sm">
-          {state.kind === 'verified' && who ? (
+          {failure !== undefined ? (
+            <p className="flex items-start gap-1.5 font-medium text-amber-700 dark:text-amber-400">
+              <ExclamationTriangleIcon className="mt-0.5 size-4 shrink-0" />
+              {failureSummary(failure)}
+            </p>
+          ) : state.kind === 'verified' && who ? (
             <>
               <p className="flex flex-wrap items-center gap-x-1.5 font-medium">
                 <CheckCircleIcon className="size-4 shrink-0 text-green-600 dark:text-green-400" />
@@ -127,13 +136,24 @@ function ConnectionSummary({
         </div>
       </div>
 
-      {preview?.status === 'mapping_failed' && (
-        <TestFailureException provider={provider} identity={preview.identity} />
-      )}
+      {failure?.kind === 'missing_email' && <AllowMissingEmailOffer provider={provider} />}
 
       {capture && <TestDetails capture={capture} identity={preview?.identity ?? null} />}
     </div>
   )
+}
+
+/** One line on why the newest test failed, replayed against the saved
+ *  settings: the same account would now resolve (settings were fixed since),
+ *  has no email, or cannot be identified at all. */
+function failureSummary(identity: ProfileOutcome | null): string {
+  if (identity?.kind === 'missing_email') {
+    return 'The test account has no email address, so it could not sign in.'
+  }
+  if (identity?.kind === 'identity' || identity?.kind === 'placeholder_required') {
+    return 'The last test failed with the previous settings. Test again to confirm the fix.'
+  }
+  return 'The last test could not identify the account. Check the profile fields under User details, then test again.'
 }
 
 /**
@@ -141,25 +161,8 @@ function ConnectionSummary({
  * and the provider does not allow that. Everything else (wrong claim path,
  * missing identifier) is a User details problem and is explained there.
  */
-function TestFailureException({
-  provider,
-  identity,
-}: {
-  provider: IdentityProvider
-  identity: ProfileOutcome | null
-}) {
+function AllowMissingEmailOffer({ provider }: { provider: IdentityProvider }) {
   const { saving, saveClaimMapping } = useProviderSave(provider)
-  if (identity?.kind !== 'missing_email') {
-    const fixed = identity?.kind === 'identity' || identity?.kind === 'placeholder_required'
-    return (
-      <p className="flex items-start gap-1.5 text-sm text-amber-700 dark:text-amber-400">
-        <ExclamationTriangleIcon className="mt-0.5 size-4 shrink-0" />
-        {fixed
-          ? 'The last test failed with the previous settings. Test again to confirm the fix.'
-          : 'The last test could not identify the account. Check the profile fields under User details, then test again.'}
-      </p>
-    )
-  }
 
   const allow = async () => {
     const proposed = mergeClaimMapping(provider.claimMapping, {
@@ -178,10 +181,6 @@ function TestFailureException({
 
   return (
     <div className="space-y-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 text-sm">
-      <p className="flex items-start gap-1.5 font-medium text-amber-700 dark:text-amber-400">
-        <ExclamationTriangleIcon className="mt-0.5 size-4 shrink-0" />
-        The test account has no email address, so it could not sign in.
-      </p>
       <p>
         If your provider does not release email addresses, you can let people sign in without one.
         They get a permanent placeholder address and are asked for a real one afterwards.

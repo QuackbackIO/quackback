@@ -28,6 +28,7 @@ import {
   type ReactNode,
 } from 'react'
 import { useServerFn } from '@tanstack/react-start'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   ArrowPathIcon,
   CheckCircleIcon,
@@ -111,6 +112,7 @@ export function useSsoTestSignIn(): SsoTestSignInContextValue {
 export function SsoTestSignInProvider({ children }: { children: ReactNode }) {
   const startTest = useServerFn(startSsoTestFn)
   const pollResult = useServerFn(getSsoTestResultFn)
+  const queryClient = useQueryClient()
   const [state, dispatch] = useReducer(ssoTestReducer, initialSsoTestState)
   const [applying, setApplying] = useState(false)
   const [lastSuccess, setLastSuccess] = useState<SsoTestCapture | null>(null)
@@ -182,6 +184,10 @@ export function SsoTestSignInProvider({ children }: { children: ReactNode }) {
       clearPoll()
       clearPopup()
       dispatch({ type: 'resolved', result, identityMatched })
+      // The server stamped lastSuccessfulTestAt / lastTestCapture on the row;
+      // the Connection summary reads those, so refetch rather than show the
+      // previous test's time next to this one's result.
+      void queryClient.invalidateQueries({ queryKey: ['settings', 'identityProviders'] })
       const capture = 'capture' in result ? result.capture : undefined
       if (capture) {
         setLastCapture(capture)
@@ -205,7 +211,7 @@ export function SsoTestSignInProvider({ children }: { children: ReactNode }) {
         void runAutoApply()
       }
     },
-    [clearPoll, clearPopup, runAutoApply]
+    [clearPoll, clearPopup, runAutoApply, queryClient]
   )
 
   // postMessage listener — origin + source checks keep stray messages

@@ -145,6 +145,20 @@ describe('<ProviderCreatePage>', () => {
     expect(lastUpsert().label).toBe('Acme SSO')
   })
 
+  it('uses the registrationId the route generated so SSR and hydration show one redirect URI', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={qc}>
+        <ProviderCreatePage registrationId="oidc_fromroute" />
+      </QueryClientProvider>
+    )
+    expect(screen.getByText(/\/api\/auth\/oauth2\/callback\/oidc_fromroute$/)).toBeInTheDocument()
+    await userEvent.type(screen.getByLabelText('Client ID'), 'client-123')
+    saveAndTest()
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    expect(lastUpsert().registrationId).toBe('oidc_fromroute')
+  })
+
   it('saves under a generated oidc_ registrationId and opens the detail page with the test', async () => {
     renderPage()
     await userEvent.type(screen.getByLabelText('Client ID'), 'client-123')

@@ -40,16 +40,23 @@ import {
   SIGN_IN_TAB,
 } from './provider-shared'
 
-export function ProviderCreatePage() {
+export function ProviderCreatePage({
+  registrationId: initialRegistrationId,
+}: {
+  /** Supplied by the route loader so SSR and hydration render the same
+   *  redirect URI. Generated here only when rendered outside the route. */
+  registrationId?: string
+}) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const upsert = useServerFn(upsertIdentityProviderFn)
   const setCreds = useServerFn(setProviderCredentialsFn)
   const { baseUrl } = useRouteContext({ from: '__root__' })
 
-  // Generated once so the redirect URI shown below is the exact value that
-  // gets saved (and registered at the IdP), not a placeholder.
-  const [registrationId] = useState(newRegistrationId)
+  // Fixed for the life of the form so the redirect URI shown below is the
+  // exact value that gets saved (and registered at the IdP), even if the
+  // loader re-runs.
+  const [registrationId] = useState(() => initialRegistrationId ?? newRegistrationId())
   const [draft, setDraft] = useState<ConnectionDraft>(emptyConnectionDraft)
   // The provider supplies the display name; an admin can override it under
   // Connection options. Blank falls back to the provider name at save time.

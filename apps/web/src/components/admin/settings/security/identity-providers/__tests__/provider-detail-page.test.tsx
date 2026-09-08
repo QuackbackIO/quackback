@@ -533,8 +533,17 @@ describe('<ProviderDetailPage> connection', () => {
     )
 
   it('offers to allow sign-in without email when the test account had none', async () => {
-    renderPage(makeProvider({ lastTestCapture: noEmailCapture }))
+    // An earlier test passed, but the newest capture failed: the failure is
+    // the summary, not "Connected as" the account that could not sign in.
+    renderPage(
+      makeProvider({
+        lastSuccessfulTestAt: '2026-05-01T00:00:00.000Z',
+        lastTestCapture: noEmailCapture,
+      })
+    )
     expect(screen.getByText(/test account has no email address/)).toBeInTheDocument()
+    expect(screen.queryByText(/Connected/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/changed since the last test/)).not.toBeInTheDocument()
     allowWithoutEmail()
     await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
     expect(lastSavedMapping()).toEqual({ profile: { allowMissingEmail: true } })
@@ -543,7 +552,10 @@ describe('<ProviderDetailPage> connection', () => {
 
   it('acknowledges pre-existing admin rules when allowing sign-in without email', async () => {
     const claimMapping = {
-      role: { claimPath: 'groups', rules: [{ whenContains: 'platform-admins', role: 'admin' }] },
+      role: {
+        claimPath: 'groups',
+        rules: [{ whenContains: 'platform-admins', role: 'admin' as const }],
+      },
     }
     renderPage(makeProvider({ claimMapping, lastTestCapture: noEmailCapture }))
     allowWithoutEmail()
