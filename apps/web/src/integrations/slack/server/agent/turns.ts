@@ -1,3 +1,5 @@
+import { getProcessRole } from '@/lib/server/process-role'
+
 /** Process-local in-flight Slack turns. Abort from the HTTP ack so Stop
  *  does not wait behind the serial `slack-hook` queue. */
 const inflight = new Map<string, AbortController>()
@@ -9,11 +11,18 @@ export function slackInflightTurnKey(team: string, channel: string, thread: stri
   return `${team}\0${channel}\0${thread}`
 }
 
+function sweepPendingAborts(now = Date.now()): void {
+  for (const [key, at] of pendingAbort) {
+    if (now - at >= PENDING_ABORT_TTL_MS) pendingAbort.delete(key)
+  }
+}
+
 export function beginSlackTurn(team: string, channel: string, thread: string): AbortController {
   const key = slackInflightTurnKey(team, channel, thread)
   inflight.get(key)?.abort()
   const controller = new AbortController()
   inflight.set(key, controller)
+  sweepPendingAborts()
   const at = pendingAbort.get(key)
   if (at !== undefined) {
     pendingAbort.delete(key)
@@ -30,6 +39,9 @@ export function abortSlackTurn(team: string, channel: string, thread: string): b
     return true
   }
   if (controller?.signal.aborted) return false
+  sweepPendingAborts()
+  // Cloud web has no in-flight turns; postJobWakeAbort already forwards Stop.
+  if (getProcessRole() === 'web') return false
   pendingAbort.set(key, Date.now())
   return true
 }
