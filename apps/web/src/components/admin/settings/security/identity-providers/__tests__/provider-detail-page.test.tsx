@@ -513,31 +513,46 @@ describe('<ProviderDetailPage> connection', () => {
     expect(upsertSpy).not.toHaveBeenCalled()
   })
 
-  it('offers to allow sign-in without email when the test account had none', async () => {
-    renderPage(
-      makeProvider({
-        lastTestCapture: {
-          version: 2,
-          registrationId: 'oidc_x',
-          capturedAt: '2026-05-02T00:00:00.000Z',
-          detailsChangedAtAtStart: null,
-          outcome: 'mapping_failed',
-          claims: { sub: 's', name: 'No Email' },
-          replay: {
-            sources: [
-              { source: 'idToken', claims: { sub: 's', name: 'No Email' } },
-              { source: 'userinfo', unavailable: 'fetch_failed' },
-            ],
-          },
-        },
-      })
-    )
-    expect(screen.getByText(/test account has no email address/)).toBeInTheDocument()
+  const noEmailCapture = {
+    version: 2 as const,
+    registrationId: 'oidc_x',
+    capturedAt: '2026-05-02T00:00:00.000Z',
+    detailsChangedAtAtStart: null,
+    outcome: 'mapping_failed' as const,
+    claims: { sub: 's', name: 'No Email' },
+    replay: {
+      sources: [
+        { source: 'idToken' as const, claims: { sub: 's', name: 'No Email' } },
+        { source: 'userinfo' as const, unavailable: 'fetch_failed' as const },
+      ],
+    },
+  }
+  const allowWithoutEmail = () =>
     fireEvent.click(
       screen.getByRole('button', { name: 'Let people sign in without an email address' })
     )
+
+  it('offers to allow sign-in without email when the test account had none', async () => {
+    renderPage(makeProvider({ lastTestCapture: noEmailCapture }))
+    expect(screen.getByText(/test account has no email address/)).toBeInTheDocument()
+    allowWithoutEmail()
     await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
     expect(lastSavedMapping()).toEqual({ profile: { allowMissingEmail: true } })
+    expect(lastMapping().acknowledgeAdminRules).toBeFalsy()
+  })
+
+  it('acknowledges pre-existing admin rules when allowing sign-in without email', async () => {
+    const claimMapping = {
+      role: { claimPath: 'groups', rules: [{ whenContains: 'platform-admins', role: 'admin' }] },
+    }
+    renderPage(makeProvider({ claimMapping, lastTestCapture: noEmailCapture }))
+    allowWithoutEmail()
+    await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
+    // The server rejects any mapping write that leaves admin rules in place
+    // unless they are acknowledged; the rules themselves are untouched.
+    expect(lastMapping().acknowledgeAdminRules).toBe(true)
+    expect(lastSavedMapping()).toEqual({ ...claimMapping, profile: { allowMissingEmail: true } })
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
   })
 })
 

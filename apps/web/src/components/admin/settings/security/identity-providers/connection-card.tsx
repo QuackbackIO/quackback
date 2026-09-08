@@ -23,7 +23,7 @@ import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { setProviderCredentialsFn } from '@/lib/server/functions/sso'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import { previewClaimMapping } from '@/lib/shared/sso-mapping-preview'
-import { diffClaimMappingOperations } from '@/lib/shared/sso-claim-mapping-edit'
+import { diffClaimMappingOperations, mappingSaveRisks } from '@/lib/shared/sso-claim-mapping-edit'
 import type { ProfileOutcome } from '@/lib/shared/sso-profile-outcome'
 import {
   ConnectionFields,
@@ -165,8 +165,13 @@ function TestFailureException({
     const proposed = mergeClaimMapping(provider.claimMapping, {
       profile: withAllowMissingEmail(provider.claimMapping?.profile, true),
     })
+    // Pre-existing admin rules are untouched by this change but the server
+    // still requires them to be acknowledged on every mapping write.
     await saveClaimMapping(
-      { operations: diffClaimMappingOperations(provider.claimMapping, proposed) },
+      {
+        operations: diffClaimMappingOperations(provider.claimMapping, proposed),
+        acknowledgeAdminRules: mappingSaveRisks(provider.claimMapping, proposed).hasAdminRules,
+      },
       'People can now sign in without an email address.'
     )
   }
