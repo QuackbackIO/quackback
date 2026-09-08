@@ -34,6 +34,10 @@ describe('resetViewerScopedPortalQueries', () => {
       ['portal', 'roadmaps'],
       [{ id: 'rm_1', baseFilter: { tagIds: ['tag_internal'] } }]
     )
+    queryClient.setQueryData(['publicPosts', 'list', { sort: 'trending' }], {
+      pages: [{ items: [{ id: 'post_1', tags: teamCatalog }] }],
+      pageParams: [1],
+    })
 
     await resetViewerScopedPortalQueries(queryClient)
 
@@ -71,6 +75,7 @@ describe('resetViewerScopedPortalQueries', () => {
         ['portal', 'post'],
         ['portal', 'roadmaps'],
         ['portal', 'roadmapPosts'],
+        ['publicPosts'],
       ])
     )
   })
