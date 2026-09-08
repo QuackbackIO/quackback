@@ -191,6 +191,16 @@ describe('claim', () => {
     expect(await peekRunnableJob(due.jobId)).toBeNull()
   })
 
+  it('claimById does not overtake an older runnable row on the same queue', async () => {
+    const q = queue('by-id-fifo')
+    const older = await enqueueJob({ queue: q, runAt: new Date(Date.now() - 2_000) })
+    const newer = await enqueueJob({ queue: q, runAt: new Date(Date.now() - 1_000) })
+
+    expect(await claimById(newer.jobId, LEASE)).toBeNull()
+    const claimed = await claimById(older.jobId, LEASE)
+    expect(claimed?.jobId).toBe(older.jobId)
+  })
+
   it('skips a row another claimer is holding rather than blocking behind it', async () => {
     // Deterministic, unlike racing two claims: a first attempt at this test
     // asserted that two concurrent claims yielded one job, and it passed with

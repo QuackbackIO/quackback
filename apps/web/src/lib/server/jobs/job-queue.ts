@@ -498,15 +498,27 @@ export async function peekRunnableJob(jobId: string): Promise<{ queue: string } 
 /**
  * Claim one pending due row by `job_id`. Same lease stamp as `claimJobs`.
  *
- * Returns null when the row is not runnable, `run_at` is in the future, or
- * another claimer holds `FOR UPDATE SKIP LOCKED`. That is success for a hint:
- * the sweeper will take it if it is still due.
+ * Returns null when the row is not runnable, `run_at` is in the future,
+ * another claimer holds `FOR UPDATE SKIP LOCKED`, or an older runnable
+ * predecessor sits on the same queue (`ORDER BY run_at, id`). A miss is
+ * success for a hint: the poller claims the head in FIFO order. That is
+ * load-bearing for `workflow-dispatch`, which is a global FIFO.
  */
 export async function claimById(jobId: string, leaseMs: number): Promise<ClaimedJob | null> {
+  const table = sql.identifier(TABLE)
   const result = await db.execute(
     leaseClaimSql({
       table: TABLE,
-      where: sql`job_id = ${jobId}`,
+      where: sql`job_id = ${jobId}
+        AND NOT EXISTS (
+          SELECT 1
+          FROM ${table} older
+          WHERE older.queue = ${table}.queue
+            AND older.status = 'pending'
+            AND older.run_at <= now()
+            AND older.attempts < older.max_attempts
+            AND (older.run_at, older.id) < (${table}.run_at, ${table}.id)
+        )`,
       limit: 1,
       leaseMs,
       workerId: jobWorkerId(),
