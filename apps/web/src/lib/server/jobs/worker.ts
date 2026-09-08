@@ -181,8 +181,9 @@ function startLoop(opts: {
     },
     async tryStartByIds(jobIds) {
       if (jobIds.length === 0 || stopped) return 0
-      return opts.scoped(() =>
-        startJobsById({
+      return opts.scoped(async () => {
+        if (stopped) return 0
+        return startJobsById({
           pool,
           config: opts.config,
           jobIds,
@@ -194,7 +195,7 @@ function startLoop(opts: {
             handle.nudge()
           },
         })
-      )
+      })
     },
     deactivate() {
       if (stopped) return
