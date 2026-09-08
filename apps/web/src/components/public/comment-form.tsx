@@ -18,7 +18,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { StatusBadge } from '@/components/ui/status-badge'
 import { CheckIcon, LockClosedIcon } from '@heroicons/react/24/solid'
 import { signOut } from '@/lib/client/auth-client'
-import { resetViewerScopedPortalQueries } from '@/lib/client/queries/portal'
+import { removeViewerScopedPortalQueries } from '@/lib/client/queries/portal'
 import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { cn } from '@/lib/shared/utils'
@@ -507,7 +507,7 @@ export function CommentForm({
                     signOut({
                       fetchOptions: {
                         onSuccess: () => {
-                          void resetViewerScopedPortalQueries(queryClient)
+                          removeViewerScopedPortalQueries(queryClient)
                           router.invalidate()
                         },
                       },

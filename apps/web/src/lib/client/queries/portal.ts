@@ -31,23 +31,25 @@ export const VIEWER_SCOPED_PORTAL_QUERY_KEYS: readonly (readonly string[])[] = [
 ]
 
 /**
- * Drop every viewer-scoped portal cache entry on an auth transition, so a team
- * member signing out does not keep seeing internal tags and a team member
+ * Remove every viewer-scoped portal cache entry on an auth transition, so a
+ * team member signing out does not keep seeing internal tags and a team member
  * signing in gains them.
  *
- * This must *reset*, not invalidate: `invalidateQueries` only marks entries
- * stale and keeps their data, and route loaders read through
- * `ensureQueryData`, which returns retained data without waiting for a refetch
- * — so a stale team-scoped catalog would still render for the next anonymous
- * view. `resetQueries` clears the data (inactive entries are fetched fresh on
- * next use; active observers refetch immediately).
+ * This must *remove*, not invalidate or reset: `invalidateQueries` keeps the
+ * data and route loaders read it back through `ensureQueryData` without
+ * waiting for a refetch; `resetQueries` restores a query's `initialData`, and
+ * the feed (`usePublicPosts`) seeds its pages from the SSR payload that way, so
+ * a reset would put the team-scoped page straight back. `removeQueries` drops
+ * the entries outright. Callers follow up with `router.invalidate()`, which
+ * re-runs loaders and re-renders observers so they rebuild against fresh
+ * queries as the new viewer.
  *
  * Call from every portal sign-out control and sign-in success handler.
  */
-export function resetViewerScopedPortalQueries(queryClient: QueryClient): Promise<void[]> {
-  return Promise.all(
-    VIEWER_SCOPED_PORTAL_QUERY_KEYS.map((queryKey) => queryClient.resetQueries({ queryKey }))
-  )
+export function removeViewerScopedPortalQueries(queryClient: QueryClient): void {
+  for (const queryKey of VIEWER_SCOPED_PORTAL_QUERY_KEYS) {
+    queryClient.removeQueries({ queryKey })
+  }
 }
 
 /**

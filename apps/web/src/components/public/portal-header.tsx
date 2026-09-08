@@ -40,7 +40,7 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getMyConversationsFn } from '@/lib/server/functions/conversation'
 import { PORTAL_MY_CONVERSATIONS_QUERY_KEY } from '@/lib/client/queries/portal-support'
-import { resetViewerScopedPortalQueries } from '@/lib/client/queries/portal'
+import { removeViewerScopedPortalQueries } from '@/lib/client/queries/portal'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { NotificationBell } from '@/components/notifications'
 
@@ -150,7 +150,7 @@ export function PortalHeader({
       // Refresh vote highlights and drop viewer-scoped data (post detail,
       // feed, tag catalog) so a team sign-in gains internal tags.
       queryClient.invalidateQueries({ queryKey: ['votedPosts'] })
-      void resetViewerScopedPortalQueries(queryClient)
+      removeViewerScopedPortalQueries(queryClient)
       // Refetch loaders (includes session and userRole) for the new session.
       void router.invalidate()
     },
@@ -206,7 +206,7 @@ export function PortalHeader({
     // Clear user-scoped caches: vote highlights, and every viewer-scoped
     // payload (a team member's internal tags must not outlive their session).
     queryClient.invalidateQueries({ queryKey: ['votedPosts'] })
-    void resetViewerScopedPortalQueries(queryClient)
+    removeViewerScopedPortalQueries(queryClient)
     router.invalidate() // Refetch session
     router.navigate({ to: '/' })
   }

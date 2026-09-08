@@ -21,7 +21,7 @@ import { PostingToBoard } from '@/components/public/feedback/posting-to-board'
 import { validatePostCustomFieldValues } from '@/lib/shared/post-custom-fields'
 import type { BoardSettings } from '@/lib/shared/db-types'
 import { signOut } from '@/lib/client/auth-client'
-import { resetViewerScopedPortalQueries } from '@/lib/client/queries/portal'
+import { removeViewerScopedPortalQueries } from '@/lib/client/queries/portal'
 import { resolveSubmitState } from '@/components/public/feedback/submit-permission'
 import type { JSONContent } from '@tiptap/react'
 
@@ -442,7 +442,7 @@ export function FeedbackHeaderAnimated({
                     className="text-primary hover:underline"
                     onClick={async () => {
                       await signOut()
-                      void resetViewerScopedPortalQueries(queryClient)
+                      removeViewerScopedPortalQueries(queryClient)
                       router.invalidate()
                     }}
                   >
