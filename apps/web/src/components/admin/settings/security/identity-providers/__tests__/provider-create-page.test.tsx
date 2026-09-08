@@ -205,7 +205,10 @@ describe('<ProviderCreatePage>', () => {
     fireEvent.click(screen.getByRole('radio', { name: 'Google Workspace' }))
     saveAndTest()
     await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
-    const sent = lastUpsert() as { discoveryUrl?: string | null }
+    const sent = lastUpsert() as { discoveryUrl?: string | null; kind?: string; label?: string }
     expect(sent.discoveryUrl).toContain('accounts.google.com')
+    // Kind and URL are applied in one update; the URL must not clobber the kind.
+    expect(sent.kind).toBe('google')
+    expect(sent.label).toBe('Google Workspace')
   })
 })

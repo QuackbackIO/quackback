@@ -134,8 +134,9 @@ export function ConnectionFields({
           <ProviderKindPicker
             kind={draft.kind}
             disabled={disabled}
-            onKindChange={(kind) => patch({ kind })}
-            onDiscoveryUrlChange={(discoveryUrl) => patch({ discoveryUrl })}
+            onKindChange={(kind, discoveryUrl) =>
+              patch(discoveryUrl ? { kind, discoveryUrl } : { kind })
+            }
           />
         ) : (
           <div className="flex items-center justify-between gap-3 rounded-lg border border-border/50 bg-card p-3">

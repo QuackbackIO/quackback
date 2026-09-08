@@ -867,6 +867,21 @@ describe('<ProviderDetailPage> user details', () => {
     expect(screen.getByText('groups')).toBeInTheDocument()
   })
 
+  it('shows a stored profile claim this UI cannot edit instead of calling the mapping standard', () => {
+    renderPage(
+      makeProvider({
+        claimMapping: {
+          profile: { claims: { username: 'preferred_username' } as Record<string, string> },
+        },
+      })
+    )
+    // id / email / name are still standard, but the resting view must not
+    // collapse to the one-sentence summary and hide the stored row.
+    expect(screen.getByRole('table')).toBeInTheDocument()
+    expect(screen.getByText('username')).toBeInTheDocument()
+    expect(screen.getByText(/not editable here/)).toBeInTheDocument()
+  })
+
   it('names a non-standard source list as a compatibility exception', () => {
     renderPage(
       makeProvider({

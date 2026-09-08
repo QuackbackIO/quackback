@@ -272,6 +272,17 @@ export function hasCustomProfileClaims(
   )
 }
 
+/** Profile claim keys beyond id / email / name: legacy or forward-compatible
+ *  entries this UI cannot edit but must keep showing so they are not
+ *  mistaken for a standard mapping. */
+export function extraProfileClaimKeys(
+  mapping: IdentityProviderClaimMapping | null | undefined
+): string[] {
+  const claims = mapping?.profile?.claims
+  if (!claims) return []
+  return Object.keys(claims).filter((key) => key !== 'id' && key !== 'email' && key !== 'name')
+}
+
 export type PeopleDefinition = { key: string; label: string; type: string }
 
 export type ClaimsProfileRow = {
@@ -383,12 +394,7 @@ export function buildClaimsTableModel({
       duplicate: Boolean(row.attributeKey) && (keyCounts.get(row.attributeKey) ?? 0) > 1,
     })
   })
-  const extraClaims = mapping?.profile?.claims
-    ? Object.keys(mapping.profile.claims).filter(
-        (key) => key !== 'id' && key !== 'email' && key !== 'name'
-      )
-    : []
-  for (const key of extraClaims) {
+  for (const key of extraProfileClaimKeys(mapping)) {
     additional.push({
       kind: 'unsupported',
       id: `profile.claims.${key}`,
@@ -414,6 +420,7 @@ export function userDetailsAreStandard(
   mapping: IdentityProviderClaimMapping | null | undefined
 ): boolean {
   if (hasCustomProfileClaims(mapping)) return false
+  if (extraProfileClaimKeys(mapping).length > 0) return false
   if (mapping?.role) return false
   if ((mapping?.attributes?.map?.length ?? 0) > 0) return false
   if (hasCustomSources(mapping)) return false
