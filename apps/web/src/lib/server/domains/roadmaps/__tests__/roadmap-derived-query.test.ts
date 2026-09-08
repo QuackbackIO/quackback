@@ -303,6 +303,57 @@ describe.skipIf(!fixture.available)('roadmap derived membership (real DB)', () =
     expect(admin.items.some((post) => post.id === merged)).toBe(false)
   })
 
+  it('makes an internal tag inert in caller-supplied public roadmap filters, but not for team', async () => {
+    const seeded = await seedBase()
+    const roadmapId = await seedRoadmap(seeded, {})
+    const [internalTag] = await testDb
+      .insert(postTags)
+      .values({ name: `Internal roadmap tag ${suffix()}`, isPublic: false })
+      .returning()
+    const tagged = await seedPost(seeded)
+    await seedPost(seeded)
+    await testDb.insert(postTagAssignments).values({ postId: tagged, tagId: internalTag.id })
+
+    // A non-team viewer filtering by the internal tag's id must not learn
+    // which posts carry it: the filter matches nothing rather than leaking.
+    const anonymous = await getPublicRoadmapPosts(
+      roadmapId,
+      { statusId: seeded.statusA, tagIds: [internalTag.id] },
+      ANONYMOUS_ACTOR
+    )
+    expect(anonymous.items).toEqual([])
+    expect(anonymous.total).toBe(0)
+
+    // Public tags still filter normally for the same viewer.
+    await testDb.insert(postTagAssignments).values({ postId: tagged, tagId: seeded.tagA })
+    const byPublicTag = await getPublicRoadmapPosts(
+      roadmapId,
+      { statusId: seeded.statusA, tagIds: [seeded.tagA] },
+      ANONYMOUS_ACTOR
+    )
+    expect(byPublicTag.items.map((post) => post.id)).toEqual([tagged])
+
+    // Team viewers see and filter by internal tags.
+    const team = await getPublicRoadmapPosts(
+      roadmapId,
+      { statusId: seeded.statusA, tagIds: [internalTag.id] },
+      actor({ role: 'member', principalId: seeded.authorA })
+    )
+    expect(team.items.map((post) => post.id)).toEqual([tagged])
+
+    // The admin-configured base filter is not caller-controlled and keeps
+    // defining membership even when it names an internal tag.
+    const internalBaseRoadmap = await seedRoadmap(seeded, {
+      baseFilter: { tagIds: [internalTag.id] },
+    })
+    const viaBase = await getPublicRoadmapPosts(
+      internalBaseRoadmap,
+      { statusId: seeded.statusA },
+      ANONYMOUS_ACTOR
+    )
+    expect(viaBase.items.map((post) => post.id)).toEqual([tagged])
+  })
+
   it('enforces public, team, and matching-segment roadmap visibility', async () => {
     const seeded = await seedBase()
     const publicRoadmap = await seedRoadmap(seeded, { visibility: 'public' })

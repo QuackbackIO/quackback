@@ -18,6 +18,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { FormattedMessage } from 'react-intl'
 import { toast } from 'sonner'
 import { escapeInlineStyle } from '@/lib/shared/safe-inline-content'
+import { invalidateViewerScopedPortalQueries } from '@/lib/client/queries/portal'
 import {
   ArrowPathIcon,
   ChevronUpIcon,
@@ -439,6 +440,7 @@ function GateCard({
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['portal', 'post'] }),
         queryClient.invalidateQueries({ queryKey: ['votedPosts'] }),
+        invalidateViewerScopedPortalQueries(queryClient),
         router.invalidate(),
       ])
     } catch (err) {

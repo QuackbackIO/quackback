@@ -13,6 +13,7 @@ import {
   roadmapColumns,
   posts,
   postTagAssignments,
+  postTags,
   boards,
   userSegments,
   type Roadmap,
@@ -20,6 +21,7 @@ import {
 import { type RoadmapId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { ANONYMOUS_ACTOR, boardViewFilter, canViewRoadmap, type Actor } from '@/lib/server/policy'
+import { publicTagCondition } from '@/lib/server/domains/posts/post.public'
 import {
   parseRoadmapDateBucket,
   roadmapBaseFilterSchema,
@@ -42,19 +44,32 @@ function parseBaseFilter(roadmap: Roadmap): RoadmapBaseFilter {
   return parsed.data as RoadmapBaseFilter
 }
 
-function addDimensionConditions(conditions: SQL[], filter: RoadmapBaseFilter): void {
+/**
+ * `viewer` is set only for caller-supplied (runtime) filters on the public
+ * roadmap: an internal tag id in a crafted URL must then be inert for
+ * non-team viewers, or the filter would reveal which posts carry a tag they
+ * are never shown. Admin-configured base filters define the roadmap's
+ * membership and are not caller-controlled, so they pass no viewer.
+ */
+function addDimensionConditions(
+  conditions: SQL[],
+  filter: RoadmapBaseFilter,
+  viewer?: Actor
+): void {
   if (filter.statusIds?.length) conditions.push(inArray(posts.statusId, filter.statusIds))
   if (filter.boardIds?.length) conditions.push(inArray(posts.boardId, filter.boardIds))
   if (filter.tagIds?.length) {
-    conditions.push(
-      inArray(
-        posts.id,
-        db
+    const tagSubquery = viewer
+      ? db
+          .selectDistinct({ postId: postTagAssignments.postId })
+          .from(postTagAssignments)
+          .innerJoin(postTags, eq(postTags.id, postTagAssignments.tagId))
+          .where(and(inArray(postTagAssignments.tagId, filter.tagIds), publicTagCondition(viewer)))
+      : db
           .selectDistinct({ postId: postTagAssignments.postId })
           .from(postTagAssignments)
           .where(inArray(postTagAssignments.tagId, filter.tagIds))
-      )
-    )
+    conditions.push(inArray(posts.id, tagSubquery))
   }
   if (filter.segmentIds?.length) {
     conditions.push(
@@ -105,18 +120,22 @@ function membershipConditions(
   return conditions
 }
 
-function runtimeFilterConditions(options: RoadmapPostsQueryOptions): SQL[] {
+function runtimeFilterConditions(options: RoadmapPostsQueryOptions, viewer?: Actor): SQL[] {
   const conditions: SQL[] = []
   if (options.search) {
     conditions.push(
       sql`${posts.searchVector} @@ websearch_to_tsquery('english', ${options.search})`
     )
   }
-  addDimensionConditions(conditions, {
-    boardIds: options.boardIds,
-    tagIds: options.tagIds,
-    segmentIds: options.segmentIds,
-  })
+  addDimensionConditions(
+    conditions,
+    {
+      boardIds: options.boardIds,
+      tagIds: options.tagIds,
+      segmentIds: options.segmentIds,
+    },
+    viewer
+  )
   return conditions
 }
 
@@ -149,7 +168,10 @@ async function queryRoadmapPosts(
   } else {
     conditions.push(isNull(boards.deletedAt))
   }
-  conditions.push(...membershipConditions(roadmap, options), ...runtimeFilterConditions(options))
+  conditions.push(
+    ...membershipConditions(roadmap, options),
+    ...runtimeFilterConditions(options, publicActor)
+  )
   const orderBy = sortFor(options)
 
   const [results, countResult] = await Promise.all([

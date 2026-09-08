@@ -12,6 +12,8 @@ const {
   mockResolveSole,
   mockHasAny,
   mockHasDistinctSignup,
+  mockInvalidateQueries,
+  mockSignOut,
 } = vi.hoisted(() => ({
   mockGetRouteContext: vi.fn(),
   mockOpenAuthPopover: vi.fn(),
@@ -19,6 +21,8 @@ const {
   mockResolveSole: vi.fn((): string | null => null),
   mockHasAny: vi.fn((): boolean => false),
   mockHasDistinctSignup: vi.fn((): boolean => true),
+  mockInvalidateQueries: vi.fn(() => Promise.resolve()),
+  mockSignOut: vi.fn(() => Promise.resolve()),
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -59,7 +63,7 @@ vi.mock('@/components/auth/oauth-buttons', () => ({
 
 vi.mock('@tanstack/react-query', () => ({
   useQuery: () => ({ data: null }),
-  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
+  useQueryClient: () => ({ invalidateQueries: mockInvalidateQueries }),
 }))
 
 vi.mock('@/lib/server/functions/conversation', () => ({
@@ -71,7 +75,7 @@ vi.mock('@/lib/client/hooks/use-auth-broadcast', () => ({
 }))
 
 vi.mock('@/lib/client/auth-client', () => ({
-  signOut: vi.fn(),
+  signOut: mockSignOut,
   authClient: { signIn: { oauth2: mockOauth2 } },
 }))
 
@@ -138,6 +142,33 @@ describe('PortalHeader — Admin dropdown item', () => {
     // no Admin menuitem is present.
     await screen.findByRole('menuitem', { name: /settings/i })
     expect(screen.queryByRole('menuitem', { name: /admin/i })).toBeNull()
+  })
+})
+
+describe('PortalHeader — sign-out cache hygiene', () => {
+  beforeEach(() => {
+    mockInvalidateQueries.mockClear()
+    mockSignOut.mockClear()
+  })
+  afterEach(() => cleanup())
+
+  it('drops the viewer-scoped tag catalog so internal tags do not outlive a team session', async () => {
+    renderHeader({ userRole: 'admin', isLoggedIn: true })
+    fireEvent.pointerDown(screen.getByRole('button'), { button: 0, ctrlKey: false })
+    fireEvent.click(await screen.findByRole('menuitem', { name: /log out|sign out/i }))
+    await vi.waitFor(() => expect(mockSignOut).toHaveBeenCalled())
+
+    await vi.waitFor(() => {
+      const keys = mockInvalidateQueries.mock.calls.map(
+        (call) => (call as unknown as [{ queryKey: unknown[] }])[0].queryKey
+      )
+      expect(keys).toEqual(
+        expect.arrayContaining([
+          ['portal', 'tags'],
+          ['portal', 'data'],
+        ])
+      )
+    })
   })
 })
 

@@ -1,4 +1,4 @@
-import { queryOptions } from '@tanstack/react-query'
+import { queryOptions, type QueryClient } from '@tanstack/react-query'
 import type { PrincipalId, RoadmapId, PostStatusId, BoardId } from '@quackback/ids'
 import type { RespondedFilter } from '@/lib/shared/types/filters'
 import {
@@ -11,6 +11,21 @@ import {
   fetchPublicRoadmapPosts,
   fetchPortalData,
 } from '@/lib/server/functions/portal'
+
+/**
+ * Drop portal caches whose payload depends on who the viewer is. The tag
+ * catalog (`['portal','tags']`) hides internal tags from non-team viewers, and
+ * `['portal','data']` embeds that same catalog, so neither may survive an auth
+ * transition: a team member signing out must not keep seeing internal tags,
+ * and a team member signing in must gain them. Call on every portal sign-in
+ * success and sign-out alongside the existing user-scoped invalidations.
+ */
+export function invalidateViewerScopedPortalQueries(queryClient: QueryClient): Promise<void[]> {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: ['portal', 'tags'] }),
+    queryClient.invalidateQueries({ queryKey: ['portal', 'data'] }),
+  ])
+}
 
 /**
  * Query options factory for portal/public routes.
