@@ -285,6 +285,7 @@ function startLoop(opts: {
             nextMaintenanceAt = now + opts.config.reapIntervalMs
             if (prune) nextPruneAt = now + opts.config.pruneIntervalMs
           }
+          if (stopped) return { claimed: 0, saturated: true }
           return dispatchPass({
             pool,
             config: opts.config,
@@ -297,6 +298,7 @@ function startLoop(opts: {
             },
           })
         })
+        if (!running || stopped) break
 
         s.passes += 1
         s.claimed += result.claimed
