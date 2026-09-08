@@ -10,6 +10,7 @@ import {
   parseCsvEmailVerified,
   csvRowSchema,
   resolveRows,
+  AUTHOR_REQUIRED_MESSAGE,
   type RowContext,
 } from '../import-row-resolver'
 import type { ImportUserResolver } from '../user-resolver'
@@ -28,7 +29,7 @@ describe('parseCsvEmailVerified', () => {
 })
 
 describe('csvRowSchema email_verified', () => {
-  const baseRow = { title: 'A title', content: 'Some content' }
+  const baseRow = { title: 'A title', content: 'Some content', author_name: 'Ada' }
 
   it('defaults to true when the column is absent', () => {
     const parsed = csvRowSchema.parse(baseRow)
@@ -48,9 +49,39 @@ describe('csvRowSchema email_verified', () => {
   })
 })
 
-describe('resolveRows email_verified plumb', () => {
-  const FALLBACK = 'principal_fallback' as PrincipalId
+describe('csvRowSchema author', () => {
+  it('rejects a row with neither author_name nor author_email', () => {
+    const parsed = csvRowSchema.safeParse({ title: 'A title', content: 'Some content' })
+    expect(parsed.success).toBe(false)
+    if (parsed.success) return
+    expect(parsed.error.issues[0].message).toBe(AUTHOR_REQUIRED_MESSAGE)
+  })
 
+  it('rejects whitespace-only author_name without an email', () => {
+    const parsed = csvRowSchema.safeParse({
+      title: 'A title',
+      content: 'Some content',
+      author_name: '   ',
+    })
+    expect(parsed.success).toBe(false)
+  })
+
+  it('accepts author_name alone or author_email alone', () => {
+    expect(
+      csvRowSchema.safeParse({ title: 'A title', content: 'Some content', author_name: 'Ada' })
+        .success
+    ).toBe(true)
+    expect(
+      csvRowSchema.safeParse({
+        title: 'A title',
+        content: 'Some content',
+        author_email: 'ada@example.com',
+      }).success
+    ).toBe(true)
+  })
+})
+
+describe('resolveRows email_verified plumb', () => {
   function stubCtx(): RowContext {
     return {
       defaultStatusId: 'post_status_default' as PostStatusId,
@@ -87,7 +118,6 @@ describe('resolveRows email_verified plumb', () => {
       'board_1' as never,
       0,
       resolver,
-      FALLBACK,
       stubCtx(),
       new Set(),
       new Map(),
@@ -96,8 +126,8 @@ describe('resolveRows email_verified plumb', () => {
 
     expect(errors).toEqual([])
     expect(validRows).toHaveLength(3)
-    expect(resolve).toHaveBeenNthCalledWith(1, 'a@example.com', null, FALLBACK, true)
-    expect(resolve).toHaveBeenNthCalledWith(2, 'b@example.com', null, FALLBACK, false)
-    expect(resolve).toHaveBeenNthCalledWith(3, 'c@example.com', null, FALLBACK, true)
+    expect(resolve).toHaveBeenNthCalledWith(1, 'a@example.com', null, true)
+    expect(resolve).toHaveBeenNthCalledWith(2, 'b@example.com', null, false)
+    expect(resolve).toHaveBeenNthCalledWith(3, 'c@example.com', null, true)
   })
 })

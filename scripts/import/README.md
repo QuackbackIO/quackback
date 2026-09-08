@@ -27,6 +27,9 @@ Generic CSV files (posts, comments, votes, notes)
 To migrate from another tool (Canny, UserVoice, ...), export your data there and
 map it onto the intermediate CSV columns below. If you only need posts, the
 in-app CSV import under **Admin → Settings → Imports & exports** is simpler.
+There, every row needs `author_name` or `author_email` (`author_name` without
+an email creates a name-only contact). The CLI path below still identifies
+authors by email.
 
 ## Quick Start
 
