@@ -1273,7 +1273,8 @@ function RichTextEditorBase({
       handleDrop: features.images && onImageUpload ? handleImageDrop(onImageUpload) : undefined,
       handlePaste: features.images && onImageUpload ? handleImagePaste(onImageUpload) : undefined,
       handleDOMEvents: {
-        keydown: (_view, event) => stopEnterFromReachingParentForm(event),
+        keydown: (_view: import('@tiptap/pm/view').EditorView, event: KeyboardEvent) =>
+          stopEnterFromReachingParentForm(event),
       },
     }),
 
