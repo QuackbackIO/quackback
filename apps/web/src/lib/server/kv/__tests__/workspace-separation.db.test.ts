@@ -175,6 +175,16 @@ describe('workspace separation — device sets', () => {
       liveCount: 2,
     })
   })
+
+  it('concurrent first fingerprints: exactly one is the silent seed', async () => {
+    const setKey = uniqueKey('user:devices')
+    const results = await Promise.all([
+      withRealWorkspace(A, () => kvSetMemberClaimCounted(setKey, 'a', 60)),
+      withRealWorkspace(A, () => kvSetMemberClaimCounted(setKey, 'b', 60)),
+    ])
+    expect(results.every((r) => r.claimed)).toBe(true)
+    expect(results.map((r) => r.liveCount).sort()).toEqual([1, 2])
+  })
 })
 
 describe('workspace separation — presence', () => {

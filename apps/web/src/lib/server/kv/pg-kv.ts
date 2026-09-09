@@ -172,6 +172,12 @@ function asBool(value: unknown): boolean {
  * `kv_set_member` cannot see the row this statement just inserted.
  * UNION the `RETURNING` member in so cardinality includes a just-claimed
  * row whether or not the snapshot has it; UNION also dedupes if it has.
+ *
+ * Two concurrent first-claims on an empty set would otherwise both see
+ * liveCount 1 and both skip the alert. An advisory xact lock on
+ * (workspace, set) serializes those statements so the second snapshot
+ * includes the first insert. The INSERT…SELECT FROM lock is what forces
+ * the lock CTE to run; an unreferenced SELECT CTE can be skipped.
  */
 export async function kvSetMemberClaimCounted(
   setKey: string,
@@ -181,14 +187,17 @@ export async function kvSetMemberClaimCounted(
   const ttl = ttlSeconds(seconds)
   const workspaceKey = currentWorkspaceNamespace()
   const result = await db.execute(sql`
-    WITH claimed AS (
+    WITH lock AS (
+      SELECT pg_advisory_xact_lock(hashtext(${workspaceKey}), hashtext(${setKey}))
+    ),
+    claimed AS (
       INSERT INTO kv_set_member (workspace_key, set_key, member, expires_at)
-      VALUES (
+      SELECT
         ${workspaceKey},
         ${setKey},
         ${member},
         now() + make_interval(secs => ${ttl})
-      )
+      FROM lock
       ON CONFLICT (workspace_key, set_key, member) DO UPDATE
         SET expires_at = EXCLUDED.expires_at
         WHERE kv_set_member.expires_at <= now()
