@@ -28,20 +28,14 @@ test.describe('Admin Tags Settings', () => {
     }
   })
 
-  test('tags show color indicator and name', async ({ page }) => {
+  test('tags show as colored chips with a visibility label', async ({ page }) => {
     await page.waitForTimeout(500)
 
-    // Color indicator is a button with inline background-color style
-    const colorDots = page.locator('button[style*="background-color"]').filter({
-      hasNot: page.locator('[data-radix-popover-trigger]'),
-    })
+    const chips = page.locator('button[style*="background-color"]')
 
-    if ((await colorDots.count()) > 0) {
-      await expect(colorDots.first()).toBeVisible()
-
-      // Each tag row should also have a name span (text in a <span> next to the dot)
-      const tagNameSpans = page.locator('span.text-sm.font-medium')
-      await expect(tagNameSpans.first()).toBeVisible()
+    if ((await chips.count()) > 0) {
+      await expect(chips.first()).toBeVisible()
+      await expect(page.getByText(/portal|internal/i).first()).toBeVisible()
     }
   })
 
@@ -70,13 +64,16 @@ test.describe('Admin Tags Settings', () => {
     // Description textarea
     await expect(dialog.getByRole('textbox', { name: /description/i })).toBeVisible()
 
-    // Color section label
-    await expect(dialog.getByText('Color')).toBeVisible()
+    await expect(dialog.getByRole('button', { name: /^color$/i })).toBeVisible()
 
-    // Portal visibility switch, on by default for new tags
-    const portalSwitch = dialog.getByRole('switch', { name: /show on portal/i })
-    await expect(portalSwitch).toBeVisible()
-    await expect(portalSwitch).toHaveAttribute('aria-checked', 'true')
+    // Portal visibility, on by default for new tags
+    const portalRadio = dialog.getByRole('radio', { name: /^portal$/i })
+    await expect(portalRadio).toBeVisible()
+    await expect(portalRadio).toHaveAttribute('aria-checked', 'true')
+    await expect(dialog.getByRole('radio', { name: /^internal$/i })).toHaveAttribute(
+      'aria-checked',
+      'false'
+    )
 
     // Create and Cancel buttons
     await expect(dialog.getByRole('button', { name: /cancel/i })).toBeVisible()
