@@ -39,6 +39,7 @@ vi.mock('@/lib/server/db', () => ({
   },
   eq: (...args: unknown[]) => ({ op: 'eq', args }),
   and: (...args: unknown[]) => ({ op: 'and', args }),
+  inArray: (...args: unknown[]) => ({ op: 'inArray', args }),
   desc: (...args: unknown[]) => ({ op: 'desc', args }),
   helpCenterRedirectRules: {
     path: 'path',
@@ -199,6 +200,16 @@ describe('deleteRedirectRule / deleteRedirectRulesForTarget', () => {
   it('deletes every rule pointing at a target', async () => {
     await deleteRedirectRulesForTarget('article', 'article_1')
     expect(mockDeleteWhere).toHaveBeenCalled()
+  })
+
+  it('matches redirect targets stored as kb_article_ when deleting an article_ id', async () => {
+    const { generateId } = await import('@quackback/ids')
+    const canonical = generateId('article')
+    const legacy = `kb_article_${canonical.slice('article_'.length)}`
+    await deleteRedirectRulesForTarget('article', canonical)
+    const clause = JSON.stringify(mockDeleteWhere.mock.calls[0]?.[0])
+    expect(clause).toContain(canonical)
+    expect(clause).toContain(legacy)
   })
 })
 

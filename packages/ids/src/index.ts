@@ -50,6 +50,7 @@ export {
   // Flexible handling
   normalizeToUuid,
   ensureTypeId,
+  typeIdLookupKeys,
 } from './core'
 
 // ============================================

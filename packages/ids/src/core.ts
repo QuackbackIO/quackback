@@ -12,7 +12,13 @@
  */
 
 import { typeid, TypeID } from 'typeid-js'
-import { ID_PREFIXES, prefixMatches, type IdPrefix, type EntityType } from './prefixes'
+import {
+  ID_PREFIXES,
+  ID_PREFIX_ALIASES,
+  prefixMatches,
+  type IdPrefix,
+  type EntityType,
+} from './prefixes'
 import type { TypeId, EntityIdMap } from './types'
 
 /**
@@ -278,4 +284,18 @@ export function ensureTypeId<P extends IdPrefix>(id: string, prefix: P): TypeId<
   }
 
   return id as TypeId<P>
+}
+
+/**
+ * Canonical TypeID plus retired serialized forms of the same UUID.
+ * Use when comparing against text columns or JSON that may still store
+ * an alias prefix (e.g. `kb_article_…` after articles emit `article_…`).
+ */
+export function typeIdLookupKeys(id: string, prefix: IdPrefix): string[] {
+  const canonical = ensureTypeId(id, prefix)
+  const uuid = toUuid(canonical)
+  const aliases = Object.entries(ID_PREFIX_ALIASES)
+    .filter(([, mapped]) => mapped === prefix)
+    .map(([alias]) => TypeID.fromUUID(alias, uuid).toString())
+  return [canonical, ...aliases]
 }

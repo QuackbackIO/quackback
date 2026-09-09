@@ -13,6 +13,7 @@ import {
   batchToUuid,
   normalizeToUuid,
   ensureTypeId,
+  typeIdLookupKeys,
 } from '../core'
 import { ID_PREFIXES } from '../prefixes'
 
@@ -290,6 +291,13 @@ describe('TypeID Core', () => {
       expect(toUuid(legacy)).toBe(toUuid(canonical))
       expect(ensureTypeId(legacy, 'article')).toBe(canonical)
       expect(normalizeToUuid(legacy, 'article')).toBe(toUuid(canonical))
+      expect(typeIdLookupKeys(legacy, 'article')).toEqual([canonical, legacy])
+      expect(typeIdLookupKeys(canonical, 'article')).toEqual([canonical, legacy])
+    })
+
+    it('typeIdLookupKeys is only the canonical form when there is no alias', () => {
+      const postId = generateId('post')
+      expect(typeIdLookupKeys(postId, 'post')).toEqual([postId])
     })
   })
 })
