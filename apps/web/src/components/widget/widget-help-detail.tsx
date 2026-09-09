@@ -38,7 +38,9 @@ export function WidgetHelpDetail({
         headers: getWidgetAuthHeaders(),
       }),
     placeholderData: (prev, prevQuery) =>
-      prevQuery?.queryKey[2] === articleRef ? prev : undefined,
+      prevQuery?.queryKey[2] === articleRef && prevQuery?.queryKey[3] === sessionVersion
+        ? prev
+        : undefined,
     staleTime: 30 * 1000,
   })
 
