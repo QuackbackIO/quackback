@@ -45,6 +45,16 @@ export async function resolveTargets(
   event: DomainEvent,
   opts: { bestEffort?: boolean } = {}
 ): Promise<HookTarget[]> {
+  // An empty registry means nothing ever called registerAllResolvers(). Every
+  // event then resolves to zero targets and is stamped published without firing
+  // a single sink — the exact silent outage this log exists to name.
+  if (resolvers.length === 0) {
+    log.error(
+      { type: event.type, event_id: event.eventId },
+      'sink registry is empty — no resolver registered, this event fans out to nothing'
+    )
+  }
+
   const interested = resolvers.filter((r) => r.interestedIn(event.type))
   // One fan-out for both modes; only the rejection handling differs. allSettled
   // is equivalent to Promise.all here (all doesn't cancel siblings either) and
