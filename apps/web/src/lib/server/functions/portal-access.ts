@@ -144,13 +144,35 @@ export const resolvePortalAccessForRequest = createServerOnlyFn(
     // Fail CLOSED on DB error: a lookup failure never grants widget access.
     let hasViaWidgetMarker = false
     if (isAuthenticated && session?.session?.id) {
-      const { widgetOriginSession } = await import('@/lib/server/db')
+      const {
+        widgetOriginSession,
+        widgetIdentifiedSession,
+        and: dbAnd,
+      } = await import('@/lib/server/db')
+      const sessionId = session.session.id
       try {
         const markerRow = await db.query.widgetOriginSession.findFirst({
-          where: eq(widgetOriginSession.sessionId, session.session.id),
+          where: eq(widgetOriginSession.sessionId, sessionId),
           columns: { sessionId: true },
         })
         hasViaWidgetMarker = !!markerRow
+        // The widget's own Bearer session. Identify records its provenance in
+        // widget_identified_session, and the handoff route consults that very
+        // row before it writes the origin marker — so an hmac_verified=true
+        // row carries exactly the trust the marker is derived from. Without
+        // this branch every SDK data refetch (boards, feed, capabilities) ran
+        // as a denied caller on a private portal, and an identified visitor
+        // got an empty widget: no board to post to, no ideas to vote on.
+        if (!hasViaWidgetMarker) {
+          const identifiedRow = await db.query.widgetIdentifiedSession.findFirst({
+            where: dbAnd(
+              eq(widgetIdentifiedSession.sessionId, sessionId),
+              eq(widgetIdentifiedSession.hmacVerified, true)
+            ),
+            columns: { sessionId: true },
+          })
+          hasViaWidgetMarker = !!identifiedRow
+        }
       } catch {
         // DB error — fail closed (no widget marker).
         hasViaWidgetMarker = false

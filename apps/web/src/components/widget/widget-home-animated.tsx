@@ -22,7 +22,9 @@ import { listPublicPostsFn } from '@/lib/server/functions/public-posts'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { WidgetVoteButton } from './widget-vote-button'
 import { WidgetPostListSkeleton } from './widget-skeletons'
-import { widgetQueryKeys } from '@/lib/client/hooks/use-widget-vote'
+import { widgetQueryKeys, INITIAL_SESSION_VERSION } from '@/lib/client/hooks/use-widget-vote'
+import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
+import { reconcileBoardSelection, resolveDefaultBoardId } from './widget-board-selection'
 import { cn } from '@/lib/shared/utils'
 import { useWidgetAuth } from './widget-auth-provider'
 import { sendToHost } from '@/lib/client/widget-bridge'
@@ -231,22 +233,24 @@ export function WidgetHomeAnimated({
     emitEvent,
     metadata,
     getSessionVersion,
+    sessionVersion,
   } = useWidgetAuth()
   const queryClient = useQueryClient()
   const inputRef = useRef<HTMLInputElement>(null)
 
   const [title, setTitle] = useState('')
   const [expanded, setExpanded] = useState(false)
-  const [selectedBoardId, setSelectedBoardId] = useState(() => {
-    if (defaultBoard) {
-      const match = boards.find((b) => b.slug === defaultBoard)
-      if (match) return match.id
-    }
-    // Single board: auto-select (selector is hidden anyway). Multiple boards with no
-    // default: leave empty so the user is prompted to pick one.
-    if (boards.length === 1) return boards[0].id
-    return ''
-  })
+  const [selectedBoardId, setSelectedBoardId] = useState(() =>
+    resolveDefaultBoardId(boards, defaultBoard)
+  )
+  // The list can change after mount: on a private portal the SSR seed is
+  // empty and the boards only land with the post-identify Bearer refetch. A
+  // selection the visitor made survives as long as its board is listed; an
+  // empty or stale one follows the list, or the composer keeps pointing at
+  // nothing and submit stays dead under a "Posting as …" footer.
+  useEffect(() => {
+    setSelectedBoardId((current) => reconcileBoardSelection(current, boards, defaultBoard))
+  }, [boards, defaultBoard])
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
   const [contentHtml, setContentHtml] = useState('')
   const handleEditorChange = useCallback((json: JSONContent, html: string) => {
@@ -317,7 +321,10 @@ export function WidgetHomeAnimated({
     isFetchingNextPage,
     isFetching: isFetchingPosts,
   } = useInfiniteQuery({
-    queryKey: ['widget', 'posts', 'popular', 'top', activeBoardSlug ?? 'all'],
+    // Keyed on sessionVersion and sent with the Bearer, like every other
+    // widget query: the SSR seed is the anonymous baseline, and on a private
+    // portal that is an empty feed even for a visitor who is about to identify.
+    queryKey: ['widget', 'posts', 'popular', 'top', activeBoardSlug ?? 'all', sessionVersion],
     queryFn: async ({ pageParam }) => {
       const page = await listPublicPostsFn({
         data: {
@@ -326,19 +333,25 @@ export function WidgetHomeAnimated({
           limit: 20,
           boardSlug: activeBoardSlug ?? undefined,
         },
+        headers: getWidgetAuthHeaders(),
       })
       return { ...page, items: page.items.map(toWidgetPost) }
     },
     initialPageParam: 1,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length + 1 : undefined),
-    // Only seed from SSR data on the initial unfiltered view
+    // Only seed from SSR data on the initial unfiltered view, and only for the
+    // SSR session version — after identify the key changes, carries no seed,
+    // and page 1 is fetched again for the real actor.
     initialData:
-      activeBoardSlug === null
+      activeBoardSlug === null && sessionVersion === INITIAL_SESSION_VERSION
         ? {
             pages: [{ items: initialPosts, total: undefined, hasMore: initialHasMore }],
             pageParams: [1],
           }
         : undefined,
+    // Hold the previous pages while the re-keyed fetch runs instead of
+    // flashing the skeleton between "anonymous" and "identified".
+    placeholderData: keepPreviousData,
   })
 
   const allPopularPosts: WidgetPost[] = useMemo(

@@ -36,7 +36,7 @@ import { useWidgetAuth } from '@/components/widget/widget-auth-provider'
 import { portalQueries } from '@/lib/client/queries/portal'
 import { publicChangelogQueries } from '@/lib/client/queries/changelog'
 import { publicHelpCenterQueries } from '@/lib/client/queries/help-center'
-import { fetchBoardCapabilitiesFn } from '@/lib/server/functions/portal'
+import { fetchBoardCapabilitiesFn, fetchPortalData } from '@/lib/server/functions/portal'
 import { getShowPoweredByFn } from '@/lib/server/functions/powered-by'
 import { listPublicArticlesFn } from '@/lib/server/functions/help-center'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
@@ -380,8 +380,8 @@ function WidgetPage() {
   const {
     posts,
     postsHasMore,
-    statuses,
-    boards,
+    statuses: loaderStatuses,
+    boards: loaderBoards,
     orgSlug,
     boardPermissions,
     tabs,
@@ -422,7 +422,40 @@ function WidgetPage() {
     enabled: !!tabs.feedback,
   })
 
-  const { c: resumeConversationId } = Route.useSearch()
+  const { c: resumeConversationId, board: boardSlug } = Route.useSearch()
+
+  // Boards and statuses come from the same anonymous SSR baseline as the
+  // permissions above — and on a private portal that baseline is EMPTY: the
+  // portal gate admits the widget's Bearer session, never the cookie-less SSR
+  // request. An identified visitor therefore kept the empty board list the
+  // loader handed over: the composer had no board to post to and the feed
+  // nothing to show, while the footer still said "Posting as …". Refetch the
+  // pair for the real actor once the session moves past the SSR version, the
+  // way livePermissions does; until then the loader data is the seed.
+  const { data: livePortal } = useQuery({
+    queryKey: ['widget', 'portalData', sessionVersion, boardSlug ?? 'all'],
+    queryFn: () =>
+      fetchPortalData({
+        data: { boardSlug, sort: 'top' },
+        headers: getWidgetAuthHeaders(),
+      }),
+    staleTime: 30 * 1000,
+    enabled: !!tabs.feedback && sessionVersion !== INITIAL_SESSION_VERSION,
+  })
+  const boards = useMemo(
+    () =>
+      livePortal
+        ? livePortal.boards.map((b) => ({ id: b.id as string, name: b.name, slug: b.slug }))
+        : loaderBoards,
+    [livePortal, loaderBoards]
+  )
+  const statuses = useMemo(
+    () =>
+      livePortal
+        ? livePortal.statuses.map((s) => ({ id: s.id as string, name: s.name, color: s.color }))
+        : loaderStatuses,
+    [livePortal, loaderStatuses]
+  )
   const { hasTickets } = useTicketStageBadge(!!tabs.tickets)
   const threadTab: WidgetTab | null = tabs.messages ? 'messages' : tabs.tickets ? 'tickets' : null
   const initialTab = resolveInitialTab(tabs)

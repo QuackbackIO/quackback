@@ -46,6 +46,7 @@ vi.mock('@/lib/server/auth/index', () => ({
 const mockPrincipalFindFirst = vi.fn()
 const mockInvitationFindFirst = vi.fn()
 const mockWidgetOriginSessionFindFirst = vi.fn()
+const mockWidgetIdentifiedSessionFindFirst = vi.fn()
 
 vi.mock('@/lib/server/db', () => ({
   db: {
@@ -55,11 +56,15 @@ vi.mock('@/lib/server/db', () => ({
       widgetOriginSession: {
         findFirst: (...args: unknown[]) => mockWidgetOriginSessionFindFirst(...args),
       },
+      widgetIdentifiedSession: {
+        findFirst: (...args: unknown[]) => mockWidgetIdentifiedSessionFindFirst(...args),
+      },
     },
   },
   principal: { userId: 'userId', id: 'id' },
   invitation: { email: 'email', kind: 'kind', status: 'status' },
   widgetOriginSession: { sessionId: 'sessionId' },
+  widgetIdentifiedSession: { sessionId: 'sessionId', hmacVerified: 'hmacVerified' },
   eq: vi.fn(),
   and: vi.fn((...args: unknown[]) => args),
   inArray: vi.fn(),
@@ -107,6 +112,8 @@ beforeEach(() => {
   mockInvitationFindFirst.mockResolvedValue(null)
   // Default: no widget origin marker.
   mockWidgetOriginSessionFindFirst.mockResolvedValue(null)
+  // Default: no hmac-verified identify provenance for the session either.
+  mockWidgetIdentifiedSessionFindFirst.mockResolvedValue(null)
   // Default: identifyVerification off (email-capture mode).
   mockGetWidgetConfig.mockResolvedValue({ identifyVerification: false })
   // Default: no segment memberships.
@@ -642,5 +649,84 @@ describe('resolvePortalAccessForRequest — segment lookup', () => {
     await resolvePortalAccessForRequest()
 
     expect(mockSegmentIdsForPrincipal).not.toHaveBeenCalled()
+  })
+})
+
+describe('resolvePortalAccessForRequest — widget Bearer session (hmac-verified identify)', () => {
+  // The session the SDK identify minted and the widget sends as Bearer on
+  // every data refetch. It never passes through the handoff route, so it has
+  // no widget_origin_session row — only the provenance row identify wrote.
+  const BEARER_SESSION = {
+    user: { id: 'user_sdk', email: 'sdk@example.com', emailVerified: false },
+    session: { id: 'sess_sdk_1' },
+  }
+  const PRIVATE_WIDGET_SIGN_IN = {
+    access: { visibility: 'private', allowedDomains: [], widgetSignIn: true },
+  }
+
+  it('grants the widget branch when identify recorded the session as hmac-verified', async () => {
+    mockGetSession.mockResolvedValue(BEARER_SESSION)
+    mockPrincipalFindFirst.mockResolvedValue({ type: 'user', role: 'user' })
+    mockWidgetOriginSessionFindFirst.mockResolvedValue(null)
+    mockWidgetIdentifiedSessionFindFirst.mockResolvedValue({ sessionId: 'sess_sdk_1' })
+    mockGetPortalConfig.mockResolvedValue(PRIVATE_WIDGET_SIGN_IN)
+
+    const result = await resolvePortalAccessForRequest()
+
+    expect(result).toEqual({ granted: true, reason: 'widget' })
+  })
+
+  it('does not consult the provenance row when the origin marker already grants', async () => {
+    mockGetSession.mockResolvedValue(BEARER_SESSION)
+    mockPrincipalFindFirst.mockResolvedValue({ type: 'user', role: 'user' })
+    mockWidgetOriginSessionFindFirst.mockResolvedValue({ sessionId: 'sess_sdk_1' })
+    mockGetPortalConfig.mockResolvedValue(PRIVATE_WIDGET_SIGN_IN)
+
+    const result = await resolvePortalAccessForRequest()
+
+    expect(result).toEqual({ granted: true, reason: 'widget' })
+    expect(mockWidgetIdentifiedSessionFindFirst).not.toHaveBeenCalled()
+  })
+
+  it('denies when neither the origin marker nor hmac-verified provenance exists', async () => {
+    mockGetSession.mockResolvedValue(BEARER_SESSION)
+    mockPrincipalFindFirst.mockResolvedValue({ type: 'user', role: 'user' })
+    mockWidgetOriginSessionFindFirst.mockResolvedValue(null)
+    // The provenance lookup filters on hmac_verified=true, so an unverified
+    // identify (or none at all) answers null here.
+    mockWidgetIdentifiedSessionFindFirst.mockResolvedValue(null)
+    mockGetPortalConfig.mockResolvedValue(PRIVATE_WIDGET_SIGN_IN)
+
+    const result = await resolvePortalAccessForRequest()
+
+    expect(result.granted).toBe(false)
+    if (!result.granted) expect(result.reason).toBe('unauthorized')
+  })
+
+  it('still requires widgetSignIn: hmac-verified provenance alone does not open a private portal', async () => {
+    mockGetSession.mockResolvedValue(BEARER_SESSION)
+    mockPrincipalFindFirst.mockResolvedValue({ type: 'user', role: 'user' })
+    mockWidgetOriginSessionFindFirst.mockResolvedValue(null)
+    mockWidgetIdentifiedSessionFindFirst.mockResolvedValue({ sessionId: 'sess_sdk_1' })
+    mockGetPortalConfig.mockResolvedValue({
+      access: { visibility: 'private', allowedDomains: [], widgetSignIn: false },
+    })
+
+    const result = await resolvePortalAccessForRequest()
+
+    expect(result.granted).toBe(false)
+  })
+
+  it('fails CLOSED on a widget_identified_session DB error', async () => {
+    mockGetSession.mockResolvedValue(BEARER_SESSION)
+    mockPrincipalFindFirst.mockResolvedValue({ type: 'user', role: 'user' })
+    mockWidgetOriginSessionFindFirst.mockResolvedValue(null)
+    mockWidgetIdentifiedSessionFindFirst.mockRejectedValue(new Error('DB_ERROR'))
+    mockGetPortalConfig.mockResolvedValue(PRIVATE_WIDGET_SIGN_IN)
+
+    const result = await resolvePortalAccessForRequest()
+
+    expect(result.granted).toBe(false)
+    if (!result.granted) expect(result.reason).toBe('unauthorized')
   })
 })
