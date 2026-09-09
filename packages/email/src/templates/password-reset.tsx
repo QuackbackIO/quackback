@@ -5,11 +5,16 @@ import { typography, button, utils } from './shared-styles'
 interface PasswordResetEmailProps {
   resetLink: string
   logoUrl?: string
+  brandName?: string
 }
 
-export function PasswordResetEmail({ resetLink, logoUrl }: PasswordResetEmailProps) {
+export function PasswordResetEmail({
+  resetLink,
+  logoUrl,
+  brandName = 'Quackback',
+}: PasswordResetEmailProps) {
   return (
-    <EmailLayout preview="Reset your Quackback password" logoUrl={logoUrl}>
+    <EmailLayout preview={`Reset your ${brandName} password`} logoUrl={logoUrl} logoAlt={brandName}>
       {/* Content */}
       <Heading style={{ ...typography.h1, textAlign: 'center' }}>Reset your password</Heading>
       <Text style={{ ...typography.text, textAlign: 'center' }}>
