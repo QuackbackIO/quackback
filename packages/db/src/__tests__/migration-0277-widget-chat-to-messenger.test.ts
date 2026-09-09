@@ -60,6 +60,15 @@ const MESSENGER_WINS = JSON.stringify({
   },
 })
 
+const MESSENGER_ONLY = JSON.stringify({
+  enabled: true,
+  tabs: { feedback: true, messenger: true },
+  messenger: {
+    enabled: true,
+    cannedReplies: [{ title: 'Already imported', body: 'Do not recreate' }],
+  },
+})
+
 async function withScratch(
   run: (tx: Parameters<Parameters<Database['transaction']>[0]>[0]) => Promise<void>
 ) {
@@ -100,7 +109,8 @@ describe.skipIf(!dbAvailable)('migration 0277 widget chat to messenger', () => {
         INSERT INTO "_m0277_settings" (id, widget_config) VALUES
           (gen_random_uuid(), ${LEGACY_CHAT}),
           (gen_random_uuid(), ${MESSENGER_WINS}),
-          (gen_random_uuid(), '{"enabled":true,"tabs":{"feedback":true}}')
+          (gen_random_uuid(), '{"enabled":true,"tabs":{"feedback":true}}'),
+          (gen_random_uuid(), ${MESSENGER_ONLY})
         RETURNING id
       `)
       const ids = (inserted as unknown as { id: string }[]).map((r) => r.id)
@@ -150,11 +160,14 @@ describe.skipIf(!dbAvailable)('migration 0277 widget chat to messenger', () => {
       const untouched = byId.get(ids[2]!)!
       expect(untouched).toEqual({ enabled: true, tabs: { feedback: true } })
 
+      const messengerOnly = byId.get(ids[3]!)!
+      expect(messengerOnly).toEqual(JSON.parse(MESSENGER_ONLY))
+
       const macros = await tx.execute<{ name: string; body: string }>(
         sql`SELECT name, body FROM "_m0277_macros" ORDER BY name, body`
       )
       expect(macros as unknown as { name: string; body: string }[]).toEqual([
-        { name: 'New', body: 'From messenger' },
+        { name: 'Old', body: 'From chat' },
         { name: 'Thanks', body: 'Thanks for writing in.' },
       ])
     })
