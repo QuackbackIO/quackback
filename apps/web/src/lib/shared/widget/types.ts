@@ -50,7 +50,7 @@ export interface WidgetInboundMessages {
         query?: string
         entryId?: string
         postId?: string
-        articleId?: string // `kb_article_…` TypeID or public slug
+        articleId?: string // `article_…` TypeID or public slug
       }
     | undefined
 }

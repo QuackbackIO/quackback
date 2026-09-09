@@ -27,11 +27,7 @@ import {
   isExpandedView,
   visibleTabsForVisitor,
 } from '@/components/widget/widget-nav'
-import {
-  isKbArticleTypeId,
-  resolveOpenCommand,
-  type WidgetComposeRequest,
-} from '@/components/widget/widget-compose'
+import { resolveOpenCommand, type WidgetComposeRequest } from '@/components/widget/widget-compose'
 import { WidgetHome } from '@/components/widget/widget-home'
 import { WidgetOverview } from '@/components/widget/widget-overview'
 import { WidgetHeroBackdrop } from '@/components/widget/widget-hero-backdrop'
@@ -42,7 +38,7 @@ import { publicChangelogQueries } from '@/lib/client/queries/changelog'
 import { publicHelpCenterQueries } from '@/lib/client/queries/help-center'
 import { fetchBoardCapabilitiesFn } from '@/lib/server/functions/portal'
 import { getShowPoweredByFn } from '@/lib/server/functions/powered-by'
-import { listPublicArticlesFn, resolvePublicArticleRefFn } from '@/lib/server/functions/help-center'
+import { listPublicArticlesFn } from '@/lib/server/functions/help-center'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { sendToHost } from '@/lib/client/widget-bridge'
 import { widgetQueryKeys, INITIAL_SESSION_VERSION } from '@/lib/client/hooks/use-widget-vote'
@@ -617,39 +613,16 @@ function WidgetPage() {
           setSelectedPostId(command.postId)
           setView('post-detail')
           break
-        case 'article': {
-          const openArticle = (slug: string) => {
-            setSelectedCategory(null)
-            setHelpSearch('')
-            setSelectedHelpSlug(slug)
-            setActiveTab('help')
-            setView('help-detail')
-          }
-          // WidgetHelpDetail loads by slug. A `kb_article_…` TypeID must
-          // resolve first; slugs pass through for in-widget navigation.
-          if (isKbArticleTypeId(command.articleId)) {
-            void resolvePublicArticleRefFn({
-              data: { ref: command.articleId },
-              headers: getWidgetAuthHeaders(),
-            })
-              .then((resolved) => {
-                if (resolved?.slug) openArticle(resolved.slug)
-                else {
-                  setSelectedHelpSlug(null)
-                  setActiveTab('help')
-                  setView('help')
-                }
-              })
-              .catch(() => {
-                setSelectedHelpSlug(null)
-                setActiveTab('help')
-                setView('help')
-              })
-          } else {
-            openArticle(command.articleId)
-          }
+        case 'article':
+          // Same as postId: store the ref and let the detail view fetch it
+          // with Bearer + sessionVersion. TypeIDs (`article_` / `kb_article_`)
+          // and slugs both resolve server-side; no client hop.
+          setSelectedCategory(null)
+          setHelpSearch('')
+          setSelectedHelpSlug(command.articleId)
+          setActiveTab('help')
+          setView('help-detail')
           break
-        }
         case 'changelog':
           setActiveTab('changelog')
           if (command.entryId) {
@@ -1081,7 +1054,7 @@ function WidgetPage() {
           fallback={<WidgetArticleSkeleton />}
         >
           <WidgetHelpDetail
-            articleSlug={selectedHelpSlug}
+            articleRef={selectedHelpSlug}
             onCategorySelect={(id, name) => handleHelpCategorySelect(id, name, null)}
             onAskQuestion={
               messengerEnabled

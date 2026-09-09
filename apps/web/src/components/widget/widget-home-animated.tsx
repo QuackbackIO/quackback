@@ -22,7 +22,8 @@ import { listPublicPostsFn } from '@/lib/server/functions/public-posts'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { WidgetVoteButton } from './widget-vote-button'
 import { WidgetPostListSkeleton } from './widget-skeletons'
-import { widgetQueryKeys } from '@/lib/client/hooks/use-widget-vote'
+import { widgetQueryKeys, INITIAL_SESSION_VERSION } from '@/lib/client/hooks/use-widget-vote'
+import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { cn } from '@/lib/shared/utils'
 import { useWidgetAuth } from './widget-auth-provider'
 import { sendToHost } from '@/lib/client/widget-bridge'
@@ -239,6 +240,7 @@ export function WidgetHomeAnimated({
     emitEvent,
     metadata,
     getSessionVersion,
+    sessionVersion,
   } = useWidgetAuth()
   const queryClient = useQueryClient()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -344,7 +346,7 @@ export function WidgetHomeAnimated({
     isFetchingNextPage,
     isFetching: isFetchingPosts,
   } = useInfiniteQuery({
-    queryKey: ['widget', 'posts', 'popular', 'top', activeBoardSlug ?? 'all'],
+    queryKey: widgetQueryKeys.popularPosts.list(activeBoardSlug, sessionVersion),
     queryFn: async ({ pageParam }) => {
       const page = await listPublicPostsFn({
         data: {
@@ -353,14 +355,16 @@ export function WidgetHomeAnimated({
           limit: 20,
           boardSlug: activeBoardSlug ?? undefined,
         },
+        headers: getWidgetAuthHeaders(),
       })
       return { ...page, items: page.items.map(toWidgetPost) }
     },
     initialPageParam: 1,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length + 1 : undefined),
-    // Only seed from SSR data on the initial unfiltered view
+    // Seed from SSR only on the anonymous first paint. Identify re-keys
+    // this query so members-only boards refetch with the Bearer actor.
     initialData:
-      activeBoardSlug === null
+      activeBoardSlug === null && sessionVersion === INITIAL_SESSION_VERSION
         ? {
             pages: [{ items: initialPosts, total: undefined, hasMore: initialHasMore }],
             pageParams: [1],
@@ -385,11 +389,17 @@ export function WidgetHomeAnimated({
     isFetching: isPopularSearchFetching,
     isPlaceholderData: isPopularSearchStale,
   } = useQuery({
-    queryKey: ['widget', 'search', 'popular', debouncedPopularSearch, activeBoardSlug ?? 'all'],
+    queryKey: widgetQueryKeys.popularSearch.query(
+      debouncedPopularSearch,
+      activeBoardSlug,
+      sessionVersion
+    ),
     queryFn: async () => {
       const params = new URLSearchParams({ q: debouncedPopularSearch, limit: '20' })
       if (activeBoardSlug) params.set('board', activeBoardSlug)
-      const res = await fetch(`/api/widget/search?${params}`)
+      const res = await fetch(`/api/widget/search?${params}`, {
+        headers: getWidgetAuthHeaders(),
+      })
       const json = await res.json()
       return { posts: (json.data?.posts ?? []) as WidgetPost[] }
     },
@@ -445,7 +455,10 @@ export function WidgetHomeAnimated({
     similarDebounceRef.current = setTimeout(async () => {
       try {
         const params = new URLSearchParams({ q, limit: '5' })
-        const res = await fetch(`/api/widget/search?${params}`, { signal: controller.signal })
+        const res = await fetch(`/api/widget/search?${params}`, {
+          signal: controller.signal,
+          headers: getWidgetAuthHeaders(),
+        })
         const json = await res.json()
         const result: SearchResult = { posts: json.data?.posts ?? [] }
         similarSearchCache.set(q, result)

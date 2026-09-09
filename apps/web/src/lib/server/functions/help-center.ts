@@ -585,25 +585,28 @@ export const searchPublicArticlesFn = createServerFn({ method: 'GET' })
   })
 
 /**
- * Resolve a widget `open({ articleId })` ref to the public article slug.
- * TypeIDs (`kb_article_…`) look up by id; anything else is treated as a slug.
- * Missing or gated articles return null (fail closed — do not invent access).
+ * Public article by widget `open({ articleId })` ref — same shape as
+ * getPublicArticleBySlugFn. `article_` and `kb_article_` TypeIDs look up by
+ * id (same UUID); anything else is a slug. Missing or gated → null.
  * Appended so existing help-center handler indices stay put.
  */
 export const resolvePublicArticleRefFn = createServerFn({ method: 'GET' })
-  .validator(z.object({ ref: z.string().min(1) }))
+  .validator(z.object({ ref: z.string().min(1), locale: z.string().optional() }))
   .handler(async ({ data }) => {
-    const { isTypeId } = await import('@quackback/ids')
+    const { articleTypeIdToKbArticleId } = await import('@/lib/shared/widget/article-ref')
     const { getPublicArticleByIdForLocale, getPublicArticleBySlugForLocale } =
       await import('@/lib/server/domains/help-center/help-center-locale.query')
     const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
     const { NotFoundError } = await import('@/lib/shared/errors')
     const viewer = await publicViewer()
+    const locale = data.locale ?? DEFAULT_LOCALE
     try {
-      const article = isTypeId(data.ref, 'kb_article')
-        ? await getPublicArticleByIdForLocale(data.ref as KbArticleId, DEFAULT_LOCALE, viewer)
-        : await getPublicArticleBySlugForLocale(data.ref, DEFAULT_LOCALE, viewer)
-      return { slug: article.slug }
+      const kbId = articleTypeIdToKbArticleId(data.ref)
+      const article = kbId
+        ? await getPublicArticleByIdForLocale(kbId, locale, viewer)
+        : await getPublicArticleBySlugForLocale(data.ref, locale, viewer)
+      const { helpfulCount: _h, notHelpfulCount: _n, ...publicArticle } = serializeArticle(article)
+      return publicArticle
     } catch (err) {
       if (err instanceof NotFoundError) return null
       throw err

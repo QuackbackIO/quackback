@@ -27,6 +27,18 @@ export const widgetQueryKeys = {
     all: ['widget', 'post'] as const,
     byId: (postId: string, version: number) => ['widget', 'post', postId, version] as const,
   },
+  articleDetail: {
+    all: ['widget', 'article'] as const,
+    byRef: (ref: string, version: number) => ['widget', 'article', ref, version] as const,
+  },
+  popularPosts: {
+    list: (boardSlug: string | null, version: number) =>
+      ['widget', 'posts', 'popular', 'top', boardSlug ?? 'all', version] as const,
+  },
+  popularSearch: {
+    query: (q: string, boardSlug: string | null, version: number) =>
+      ['widget', 'search', 'popular', q, boardSlug ?? 'all', version] as const,
+  },
 }
 
 interface UseWidgetVoteOptions {

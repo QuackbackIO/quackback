@@ -46,6 +46,38 @@ describe('widgetQueryKeys', () => {
     })
   })
 
+  describe('articleDetail', () => {
+    it('byRef includes ref and version', () => {
+      expect(widgetQueryKeys.articleDetail.byRef('article_1', 0)).toEqual([
+        'widget',
+        'article',
+        'article_1',
+        0,
+      ])
+    })
+  })
+
+  describe('popularPosts', () => {
+    it('list includes board slug and version', () => {
+      expect(widgetQueryKeys.popularPosts.list(null, 0)).toEqual([
+        'widget',
+        'posts',
+        'popular',
+        'top',
+        'all',
+        0,
+      ])
+      expect(widgetQueryKeys.popularPosts.list('bugs', 1)).toEqual([
+        'widget',
+        'posts',
+        'popular',
+        'top',
+        'bugs',
+        1,
+      ])
+    })
+  })
+
   it('INITIAL_SESSION_VERSION is 0', () => {
     expect(INITIAL_SESSION_VERSION).toBe(0)
   })

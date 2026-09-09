@@ -117,7 +117,7 @@ Quackback.open({ view: 'new-post', title: 'Bug:', body: '...' }) // pre-filled f
 Quackback.open({ view: 'changelog' }) // changelog feed
 Quackback.open({ view: 'help', query: 'pricing' }) // help search
 Quackback.open({ postId: 'post_01h...' }) // specific post
-Quackback.open({ articleId: 'kb_article_01h...' }) // help article TypeID or slug
+Quackback.open({ articleId: 'article_01h...' }) // help article TypeID or slug
 ```
 
 Every `open` field is live. A disabled surface or an unseen board fails closed — the panel still opens, but the widget does not invent access.

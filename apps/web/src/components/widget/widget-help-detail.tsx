@@ -3,16 +3,20 @@ import { useQuery } from '@tanstack/react-query'
 import { FormattedMessage } from 'react-intl'
 import { ChevronRightIcon } from '@heroicons/react/24/outline'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { publicHelpCenterQueries } from '@/lib/client/queries/help-center'
+import { resolvePublicArticleRefFn } from '@/lib/server/functions/help-center'
+import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
+import { widgetQueryKeys } from '@/lib/client/hooks/use-widget-vote'
 import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-content'
 import type { JSONContent } from '@tiptap/react'
 import { WidgetPortalTitle } from './widget-portal-title'
 import { WidgetArticleFooter } from './widget-article-footer'
 import { sendToHost } from '@/lib/client/widget-bridge'
 import { WidgetArticleSkeleton } from './widget-skeletons'
+import { useWidgetAuth } from './widget-auth-provider'
 
 interface WidgetHelpDetailProps {
-  articleSlug: string
+  /** `article_` / `kb_article_` TypeID or public slug — same as `open({ articleId })`. */
+  articleRef: string
   /** Tapping the category eyebrow browses the rest of that collection. */
   onCategorySelect?: (categoryId: string, categoryName: string) => void
   /** "Still stuck?" exit ramp — opens a new conversation. Omitted when the
@@ -21,11 +25,22 @@ interface WidgetHelpDetailProps {
 }
 
 export function WidgetHelpDetail({
-  articleSlug,
+  articleRef,
   onCategorySelect,
   onAskQuestion,
 }: WidgetHelpDetailProps) {
-  const { data: article, isLoading } = useQuery(publicHelpCenterQueries.articleBySlug(articleSlug))
+  const { sessionVersion } = useWidgetAuth()
+  const { data: article, isLoading } = useQuery({
+    queryKey: widgetQueryKeys.articleDetail.byRef(articleRef, sessionVersion),
+    queryFn: () =>
+      resolvePublicArticleRefFn({
+        data: { ref: articleRef },
+        headers: getWidgetAuthHeaders(),
+      }),
+    placeholderData: (prev, prevQuery) =>
+      prevQuery?.queryKey[2] === articleRef ? prev : undefined,
+    staleTime: 30 * 1000,
+  })
 
   const handleViewOnPortal = useCallback(() => {
     if (!article) return
