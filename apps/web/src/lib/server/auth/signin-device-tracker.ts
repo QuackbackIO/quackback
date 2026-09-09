@@ -1,6 +1,8 @@
 /**
- * Per-user device-fingerprint tracker. The set `user:devices:{userId}` holds
- * the recent (browser + OS + platform) hashes seen for the user.
+ * Per-user device-fingerprint tracker. The set `user:devices:v2:{userId}`
+ * holds the recent (browser + OS + platform) hashes seen for the user.
+ * `v2` is a new key so leftover UA+/24 hashes from the previous format
+ * cannot make the first normalised browser look like an additional device.
  *
  * Identity is the normalised user-agent, not the IP. IP belongs in the
  * new-sign-in email as forensic context; hashing it in treats 5G / CGNAT /
@@ -71,7 +73,7 @@ export function computeDeviceFingerprint(userAgent: string): string {
 // notification whose entire job is to be the first sign of a stolen credential.
 // `pg-kv.ts` writes the workspace into the row's key; under pooled tenancy the row
 // is additionally in that workspace's own database.
-const key = (userId: string) => `user:devices:${userId}`
+const key = (userId: string) => `user:devices:v2:${userId}`
 
 /**
  * Atomic claim. Returns true iff this is an *additional* unseen device

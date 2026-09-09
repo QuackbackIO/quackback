@@ -1317,7 +1317,7 @@ export async function handleNewDeviceNotification(
     const device = formatSignInDevice(userAgent)
     const location = captureCountryFromHeaders(headers)
     const base = getBaseUrl().replace(/\/$/, '')
-    const settingsUrl = base ? `${base}/admin/settings/security/authentication` : undefined
+    const settingsUrl = base ? `${base}/settings/profile` : undefined
     // Account class, and deliberately no contact-address fallback: this alert
     // discloses IP, user agent and sign-in timing, and a contact address can be
     // one an agent typed into the inbox. An account with no deliverable address

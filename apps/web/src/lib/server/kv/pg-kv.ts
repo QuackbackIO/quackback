@@ -143,7 +143,7 @@ export async function kvGetOrCreate<T>(key: string, create: T, seconds: number):
 }
 
 // ============================================================================
-// Sets — the one Redis SET we used, `user:devices:<userId>`
+// Sets — the one Redis SET we used, `user:devices:v2:<userId>`
 // ============================================================================
 
 export interface SetMemberClaim {
@@ -167,6 +167,11 @@ function asBool(value: unknown): boolean {
  * `liveCount` is counted in the same statement as the insert so a
  * caller can tell first-member (seed, no alert) from an additional
  * unseen member (alert) without a second round trip.
+ *
+ * Data-modifying CTEs share the main query's snapshot, so a scan of
+ * `kv_set_member` cannot see the row this statement just inserted.
+ * UNION the `RETURNING` member in so cardinality includes a just-claimed
+ * row whether or not the snapshot has it; UNION also dedupes if it has.
  */
 export async function kvSetMemberClaimCounted(
   setKey: string,
@@ -188,16 +193,18 @@ export async function kvSetMemberClaimCounted(
         SET expires_at = EXCLUDED.expires_at
         WHERE kv_set_member.expires_at <= now()
       RETURNING member
+    ),
+    live AS (
+      SELECT member FROM kv_set_member
+      WHERE workspace_key = ${workspaceKey}
+        AND set_key = ${setKey}
+        AND expires_at > now()
+      UNION
+      SELECT member FROM claimed
     )
     SELECT
       EXISTS (SELECT 1 FROM claimed) AS claimed,
-      (
-        SELECT count(*)::int
-        FROM kv_set_member
-        WHERE workspace_key = ${workspaceKey}
-          AND set_key = ${setKey}
-          AND expires_at > now()
-      ) AS live_count
+      (SELECT count(*)::int FROM live) AS live_count
   `)
   const row = getExecuteRows<{ claimed: unknown; live_count: unknown }>(result)[0]
   return {

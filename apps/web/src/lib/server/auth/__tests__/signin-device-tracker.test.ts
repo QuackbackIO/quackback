@@ -105,7 +105,7 @@ describe('isDeviceUnseen', () => {
     mockClaimCounted.mockResolvedValueOnce({ claimed: true, liveCount: 2 })
     await isDeviceUnseen('user_abc', 'fp')
     expect(mockClaimCounted).toHaveBeenCalledTimes(1)
-    expect(mockClaimCounted).toHaveBeenCalledWith('user:devices:user_abc', 'fp', 7_776_000)
+    expect(mockClaimCounted).toHaveBeenCalledWith('user:devices:v2:user_abc', 'fp', 7_776_000)
   })
 
   it('atomic across concurrent first-sights — only one caller gets a claim', async () => {
@@ -129,7 +129,7 @@ describe('markDeviceSeen', () => {
   it('slides the 90-day TTL forward', async () => {
     mockTouch.mockResolvedValueOnce(undefined)
     await markDeviceSeen('user_abc')
-    expect(mockTouch).toHaveBeenCalledWith('user:devices:user_abc', 7_776_000)
+    expect(mockTouch).toHaveBeenCalledWith('user:devices:v2:user_abc', 7_776_000)
   })
 
   it('swallows store errors', async () => {
@@ -142,7 +142,7 @@ describe('forgetDevice', () => {
   it('removes the fingerprint from the user set', async () => {
     mockRemove.mockResolvedValueOnce(undefined)
     await forgetDevice('user_abc', 'fp')
-    expect(mockRemove).toHaveBeenCalledWith('user:devices:user_abc', 'fp')
+    expect(mockRemove).toHaveBeenCalledWith('user:devices:v2:user_abc', 'fp')
   })
 
   it('swallows store errors', async () => {

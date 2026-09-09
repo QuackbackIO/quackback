@@ -67,10 +67,10 @@ export function NewSignInEmail({
             <Link href={settingsUrl} style={utils.link}>
               change your password
             </Link>{' '}
-            from Security settings.
+            from your profile settings.
           </>
         ) : (
-          'change your password from Security settings.'
+          'change your password from your profile settings.'
         )}
       </Text>
 

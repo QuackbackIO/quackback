@@ -113,9 +113,7 @@ describe('handleNewDeviceNotification — happy path', () => {
     expect(emailArgs.workspaceName).toBe('Acme')
     expect(emailArgs.ipAddress).toBe('203.0.113.42')
     expect(emailArgs.userAgent).toBe('Chrome on Windows')
-    expect(emailArgs.settingsUrl).toBe(
-      'https://acme.example/admin/settings/security/authentication'
-    )
+    expect(emailArgs.settingsUrl).toBe('https://acme.example/settings/profile')
 
     expect(mockRecordAuditEvent).toHaveBeenCalledTimes(1)
     const auditArgs = mockRecordAuditEvent.mock.calls[0][0] as { event: string }
