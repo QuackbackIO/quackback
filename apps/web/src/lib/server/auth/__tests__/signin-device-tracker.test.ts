@@ -54,6 +54,15 @@ describe('computeDeviceFingerprint', () => {
     )
   })
 
+  it('unmaps IPv4-mapped IPv6 and still collapses /24', () => {
+    const a = computeDeviceFingerprint('Mozilla/5.0', '::ffff:203.0.113.42')
+    const b = computeDeviceFingerprint('Mozilla/5.0', '::ffff:203.0.113.99')
+    const c = computeDeviceFingerprint('Mozilla/5.0', '203.0.113.7')
+    expect(a).toBe(b)
+    expect(a).toBe(c)
+    expect(a).not.toBe(computeDeviceFingerprint('Mozilla/5.0', '::ffff:203.0.114.42'))
+  })
+
   it('returns 32-char hex', () => {
     expect(computeDeviceFingerprint('UA', '203.0.113.42')).toMatch(/^[0-9a-f]{32}$/)
   })

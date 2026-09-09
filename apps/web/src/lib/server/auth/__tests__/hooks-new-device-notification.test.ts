@@ -135,6 +135,20 @@ describe('handleNewDeviceNotification — guards', () => {
     await handleNewDeviceNotification(ctx, workspace())
     expect(mockIsDeviceUnseen).not.toHaveBeenCalled()
   })
+
+  it('does not treat a session-cookie refresh as a sign-in', async () => {
+    mockIsDeviceUnseen.mockResolvedValueOnce(true)
+    await handleNewDeviceNotification(buildCtx({ path: '/get-session' }), workspace())
+    expect(mockIsDeviceUnseen).not.toHaveBeenCalled()
+    expect(mockSendNewSignInEmail).not.toHaveBeenCalled()
+  })
+
+  it('does not notify on an anonymous widget mint', async () => {
+    mockIsDeviceUnseen.mockResolvedValueOnce(true)
+    await handleNewDeviceNotification(buildCtx({ path: '/sign-in/anonymous' }), workspace())
+    expect(mockIsDeviceUnseen).not.toHaveBeenCalled()
+    expect(mockSendNewSignInEmail).not.toHaveBeenCalled()
+  })
 })
 
 describe('handleNewDeviceNotification — failure tolerance', () => {

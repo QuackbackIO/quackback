@@ -1261,16 +1261,22 @@ export async function handleSignInSuccessAudit(ctx: {
 }
 
 /**
- * First-sight new-device notification. Atomic SADD claims the
- * fingerprint; on success we fire the email + audit row in parallel
- * and refresh the SET's 90-day TTL. On failure we roll back the
- * claim so the next sign-in re-fires the alert rather than losing
- * it to a transient SMTP outage. All errors swallowed — Redis/SMTP
- * outages must not break sign-in.
+ * First-sight new-device notification. Atomic claim of the fingerprint;
+ * on success we fire the email + audit row in parallel and refresh the
+ * 90-day TTL. On failure we roll back the claim so the next sign-in
+ * re-fires the alert rather than losing it to a transient SMTP outage.
+ * All errors swallowed — store/SMTP outages must not break sign-in.
+ *
+ * Better Auth sets `newSession` whenever it writes a session cookie,
+ * including `/get-session` sliding the 24h `updateAge`. That is not a
+ * sign-in. Gate on `inferProvider` the same way `handleSignInSuccessAudit`
+ * does, and skip anonymous widget mints.
  */
 export async function handleNewDeviceNotification(
   ctx: {
     path?: string
+    params?: Record<string, unknown>
+    body?: Record<string, unknown>
     context?: {
       newSession?: {
         user?: { id?: string; email?: string }
@@ -1286,6 +1292,9 @@ export async function handleNewDeviceNotification(
   const email = ctx.context?.newSession?.user?.email
   const token = ctx.context?.newSession?.session?.token
   if (typeof userId !== 'string' || typeof email !== 'string' || typeof token !== 'string') return
+
+  const provider = inferProvider(ctx)
+  if (!provider || provider === 'anonymous') return
 
   const headers = getRequestHeaders()
   const userAgent = headers.get('user-agent') ?? ''
@@ -1499,8 +1508,7 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
   await handleSignInSuccessAudit(ctx as Parameters<typeof handleSignInSuccessAudit>[0])
   // Geo-IP country from CDN headers; written best-effort, never blocks.
   await handleCountryCapture(ctx as Parameters<typeof handleCountryCapture>[0])
-  // Fires only when a new device fingerprint (UA + /24) for this user
-  // is observed; default-on but workspace can opt out.
+  // Fires only on a real sign-in path when the UA + /24 is unseen.
   await handleNewDeviceNotification(
     ctx as Parameters<typeof handleNewDeviceNotification>[0],
     workspace
