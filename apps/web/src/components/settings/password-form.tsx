@@ -56,8 +56,8 @@ export function PasswordForm({ hasPassword, onSaved }: PasswordFormProps) {
         }
         toast.success('Password changed. Other devices have been signed out.')
       } else {
-        await setPasswordFn({ data: { newPassword } })
-        toast.success('Password set')
+        await setPasswordFn({ data: { newPassword, revokeOtherSessions: true } })
+        toast.success('Password set. Other devices have been signed out.')
       }
       setCurrentPassword('')
       setNewPassword('')
@@ -77,7 +77,7 @@ export function PasswordForm({ hasPassword, onSaved }: PasswordFormProps) {
         <p className="text-sm text-muted-foreground mb-4">
           {hasPassword
             ? 'Update your current password. Other signed-in devices will be signed out.'
-            : 'Add a password to sign in with email and password'}
+            : 'Add a password to sign in with email and password. Other signed-in devices will be signed out.'}
         </p>
 
         <div className="space-y-4">
