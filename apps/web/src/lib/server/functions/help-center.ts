@@ -598,13 +598,21 @@ export const resolvePublicArticleRefFn = createServerFn({ method: 'GET' })
       await import('@/lib/server/domains/help-center/help-center-locale.query')
     const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
     const { NotFoundError } = await import('@/lib/shared/errors')
+    const { withDefaultLocaleFallback } = await import('@/lib/shared/widget/article-locale')
     const viewer = await publicViewer()
     const locale = data.locale ?? DEFAULT_LOCALE
     try {
       const kbId = articleTypeIdToKbArticleId(data.ref)
-      const article = kbId
-        ? await getPublicArticleByIdForLocale(kbId, locale, viewer)
-        : await getPublicArticleBySlugForLocale(data.ref, locale, viewer)
+      const load = (loc: string) =>
+        kbId
+          ? getPublicArticleByIdForLocale(kbId, loc, viewer)
+          : getPublicArticleBySlugForLocale(data.ref, loc, viewer)
+      const article = await withDefaultLocaleFallback(
+        locale,
+        DEFAULT_LOCALE,
+        load,
+        (err) => err instanceof NotFoundError
+      )
       const { helpfulCount: _h, notHelpfulCount: _n, ...publicArticle } = serializeArticle(article)
       return publicArticle
     } catch (err) {

@@ -38,6 +38,9 @@ export type WidgetOpenCommand =
 /**
  * Map an SDK `open(...)` payload to an iframe command. Unknown or unauthorized
  * targets return null — the panel is already open; do not invent a surface.
+ *
+ * `postId` and `articleId` win over `view` so a deep-link is never swallowed
+ * by a leftover compose/home view on the same payload.
  */
 export function resolveOpenCommand(
   opts: WidgetOpenPayload,
@@ -103,6 +106,16 @@ export function resolveComposeBoardId(
   }
   if (boards.length === 1) return boards[0].id
   return ''
+}
+
+/** Re-apply `open({ board })` only when identify just granted that slug. */
+export function shouldReapplyComposeBoard(
+  requestedSlug: string | undefined,
+  previousSlugs: ReadonlySet<string>,
+  nextSlugs: ReadonlySet<string>
+): boolean {
+  if (!requestedSlug) return false
+  return nextSlugs.has(requestedSlug) && !previousSlugs.has(requestedSlug)
 }
 
 /** Plain-text `body` from the host → a one-paragraph-per-line TipTap doc. */

@@ -4,7 +4,7 @@ import { FormattedMessage } from 'react-intl'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { getPublicChangelogFn } from '@/lib/server/functions/changelog'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
-import { widgetQueryKeys } from '@/lib/client/hooks/use-widget-vote'
+import { widgetQueryKeys, widgetQueryKeyEquals } from '@/lib/client/hooks/use-widget-vote'
 import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-content'
 import { EmbedHydration } from '@/components/shared/embed-hydration'
 import type { ChangelogId } from '@quackback/ids'
@@ -29,7 +29,10 @@ export function WidgetChangelogDetail({ entryId }: WidgetChangelogDetailProps) {
         headers: getWidgetAuthHeaders(),
       }),
     placeholderData: (prev, prevQuery) =>
-      prevQuery?.queryKey[2] === entryId && prevQuery?.queryKey[3] === sessionVersion
+      widgetQueryKeyEquals(
+        widgetQueryKeys.changelogDetail.byId(entryId, sessionVersion),
+        prevQuery?.queryKey
+      )
         ? prev
         : undefined,
     staleTime: 30 * 1000,

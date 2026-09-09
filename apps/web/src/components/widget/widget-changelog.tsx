@@ -4,7 +4,9 @@ import { FormattedMessage } from 'react-intl'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { contentPreview } from '@/lib/shared/utils/string'
 import { cn } from '@/lib/shared/utils'
-import { publicChangelogQueries, changelogCategoryQueries } from '@/lib/client/queries/changelog'
+import { changelogCategoryQueries } from '@/lib/client/queries/changelog'
+import { widgetChangelogListQuery } from './widget-changelog-query'
+import { useWidgetAuth } from './widget-auth-provider'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { getChangelogSeenAt, markChangelogSeen } from './changelog-unread'
 import { NewspaperIcon } from '@heroicons/react/24/outline'
@@ -42,8 +44,9 @@ const lastVisit: {
 const FILTER_LOOKAHEAD_MIN_ROWS = 3
 
 export function WidgetChangelog({ teamName, onEntrySelect }: WidgetChangelogProps) {
+  const { sessionVersion } = useWidgetAuth()
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isFetchNextPageError, isLoading } =
-    useInfiniteQuery(publicChangelogQueries.list())
+    useInfiniteQuery(widgetChangelogListQuery(sessionVersion))
   const { data: categories = [] } = useQuery(changelogCategoryQueries.list())
   const [activeCategoryId, setActiveCategoryId] = useState<ChangelogCategoryId | null>(
     lastVisit.categoryId

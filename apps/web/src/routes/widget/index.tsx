@@ -34,8 +34,8 @@ import { WidgetHeroBackdrop } from '@/components/widget/widget-hero-backdrop'
 import type { ConversationId } from '@quackback/ids'
 import { useWidgetAuth } from '@/components/widget/widget-auth-provider'
 import { portalQueries } from '@/lib/client/queries/portal'
-import { publicChangelogQueries } from '@/lib/client/queries/changelog'
 import { publicHelpCenterQueries } from '@/lib/client/queries/help-center'
+import { widgetChangelogListQuery } from '@/components/widget/widget-changelog-query'
 import { fetchBoardCapabilitiesFn } from '@/lib/server/functions/portal'
 import { getShowPoweredByFn } from '@/lib/server/functions/powered-by'
 import { listPublicArticlesFn } from '@/lib/server/functions/help-center'
@@ -189,7 +189,9 @@ export const Route = createFileRoute('/widget/')({
             .catch(() => {})
         : Promise.resolve(),
       changelogTabEnabled
-        ? queryClient.ensureInfiniteQueryData(publicChangelogQueries.list()).catch(() => {})
+        ? queryClient
+            .ensureInfiniteQueryData(widgetChangelogListQuery(INITIAL_SESSION_VERSION))
+            .catch(() => {})
         : Promise.resolve(),
       helpTabEnabled
         ? queryClient.ensureQueryData(publicHelpCenterQueries.categories()).catch(() => {})

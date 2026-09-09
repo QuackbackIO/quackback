@@ -53,7 +53,7 @@ export type Identity =
 
 /**
  * Arguments to `Quackback.open(...)`. Discriminated on the target:
- * - omit the payload to open the home view
+ * - omit the payload or `{ view: 'home' }` to open the home view
  * - `{ view: 'new-post', title?, body?, board? }` pre-fills the new-post form
  * - `{ view: 'changelog', entryId? }` opens the changelog, optionally to one entry
  * - `{ view: 'help', query? }` opens help, optionally with search prefilled
@@ -62,13 +62,16 @@ export type Identity =
  * - `{ articleId }` deep-links to a help article (`article_…` TypeID or slug;
  *   stored `kb_article_…` ids also resolve)
  *
+ * `postId` and `articleId` win over `view` when both are set. `board` applies
+ * only to `new-post` — Home filtering uses `init({ defaultBoard })` or `?board=`.
+ *
  * The iframe handles every field on this type. A target whose surface is
  * disabled (or a board the visitor cannot see) fails closed — the panel
  * still opens, but the widget does not invent access.
  */
 export type OpenOptions =
   | undefined
-  | { view?: 'home'; board?: string }
+  | { view?: 'home' }
   | { view: 'new-post'; title?: string; body?: string; board?: string }
   | { view: 'changelog'; entryId?: string }
   | { view: 'help'; query?: string }
