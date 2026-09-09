@@ -49,6 +49,7 @@ const LEGACY_CHAT = JSON.stringify({
     cannedReplies: [
       { title: 'Thanks', body: 'Thanks for writing in.' },
       { title: 'Thanks', body: 'Thanks for writing in.' },
+      { title: 'Dropped', body: 'Chat only then deleted' },
       { title: 'Missing body', body: '' },
     ],
   },
@@ -138,7 +139,8 @@ describe.skipIf(!dbAvailable)('migration 0277 widget chat to messenger', () => {
         VALUES
           (gen_random_uuid(), 'Old', 'From chat', 'feedback', NULL),
           (gen_random_uuid(), 'Shared', 'Edited after import', 'support', NULL),
-          (gen_random_uuid(), 'Gone', 'Soft deleted after 0146', 'support', now())
+          (gen_random_uuid(), 'Gone', 'Soft deleted after 0146', 'support', now()),
+          (gen_random_uuid(), 'Dropped', 'Chat only then deleted', 'support', now())
       `)
 
       for (const statement of STATEMENTS) {
@@ -191,6 +193,7 @@ describe.skipIf(!dbAvailable)('migration 0277 widget chat to messenger', () => {
       expect(messenger.cannedReplies).toEqual([
         { title: 'Thanks', body: 'Thanks for writing in.' },
         { title: 'Thanks', body: 'Thanks for writing in.' },
+        { title: 'Dropped', body: 'Chat only then deleted' },
         { title: 'Missing body', body: '' },
       ])
 
@@ -223,6 +226,7 @@ describe.skipIf(!dbAvailable)('migration 0277 widget chat to messenger', () => {
       expect(
         macros as unknown as { name: string; body: string; scope: string; deleted: boolean }[]
       ).toEqual([
+        { name: 'Dropped', body: 'Chat only then deleted', scope: 'support', deleted: true },
         { name: 'Gone', body: 'Soft deleted after 0146', scope: 'support', deleted: true },
         { name: 'Old', body: 'From chat', scope: 'feedback', deleted: false },
         { name: 'Shared', body: 'Edited after import', scope: 'support', deleted: false },

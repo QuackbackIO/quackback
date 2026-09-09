@@ -4,9 +4,10 @@
 -- chat array and skips any reply that is also listed under messenger. A
 -- live-macro name+body check cannot prove that: if an admin later edited
 -- or soft-deleted the 0146 row, the stale chat copy would look new.
--- Chat-only replies still skip a live name+body match, including one later
--- scoped to feedback or both. Repeated title+body pairs in one chat array
--- are inserted once; NOT EXISTS cannot see sibling rows in the same SELECT.
+-- Chat-only replies still skip a name+body match, including a later
+-- retarget to feedback or both, or a later soft-delete. Repeated
+-- title+body pairs in one chat array are inserted once; NOT EXISTS
+-- cannot see sibling rows in the same SELECT.
 --
 -- Messenger keys win on conflict; chat fills gaps. tabs.messenger is copied
 -- from tabs.chat only when it was never stored. The leftover chat keys are
@@ -69,8 +70,7 @@ BEGIN
       AND NOT EXISTS (
         SELECT 1
         FROM "macros" m
-        WHERE m.deleted_at IS NULL
-          AND m.name = cr->>'title'
+        WHERE m.name = cr->>'title'
           AND m.body = cr->>'body'
       )
   ) unique_replies;
