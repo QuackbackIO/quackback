@@ -217,14 +217,12 @@ describe('workspace separation — device sets', () => {
       WHERE workspace_key = ${A} AND set_key = ${setKey} AND member = 'firefox'
     `
     await withRealWorkspace(A, () => kvSetMemberTouch(setKey, 'chrome', 60))
-    const rows = await testSql()`
+    const rows = await testSql()<{ member: string; secs: number | string }[]>`
       SELECT member, EXTRACT(EPOCH FROM (expires_at - now()))::int AS secs
       FROM kv_set_member
       WHERE workspace_key = ${A} AND set_key = ${setKey}
     `
-    const secs = Object.fromEntries(
-      (rows as { member: string; secs: number | string }[]).map((r) => [r.member, Number(r.secs)])
-    )
+    const secs = Object.fromEntries(rows.map((r) => [r.member, Number(r.secs)]))
     expect(secs.chrome).toBeGreaterThan(30)
     expect(secs.firefox).toBeLessThan(20)
     expect(secs.stale).toBeLessThan(0)
