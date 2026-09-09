@@ -10,6 +10,28 @@
 -- Messenger keys win on conflict; chat fills gaps. tabs.messenger is copied
 -- from tabs.chat only when it was never stored. The leftover chat keys are
 -- dropped so a second run matches zero rows.
+--
+-- widget_config is text and a corrupt row is tolerated by parseWidgetConfig
+-- and by 0196. A hard ::jsonb cast on every settings row would abort the
+-- whole upgrade for one bad blob, even when that row has no leftover chat
+-- keys. This reader returns NULL on empty or invalid JSON so those rows
+-- are skipped.
+
+CREATE OR REPLACE FUNCTION pg_temp._m0277_widget_json(settings_id uuid, raw text)
+RETURNS jsonb
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF raw IS NULL OR btrim(raw) IN ('', 'null') THEN
+    RETURN NULL;
+  END IF;
+  RETURN raw::jsonb;
+EXCEPTION WHEN OTHERS THEN
+  RAISE WARNING 'settings row % has invalid widget_config JSON; skipping chat-to-messenger rewrite', settings_id;
+  RETURN NULL;
+END;
+$$;
+--> statement-breakpoint
 
 -- @replay: guarded-by leftover widget_config chat keys and macros of the same name and body
 DO $$
@@ -17,11 +39,13 @@ BEGIN
   INSERT INTO "macros" ("id", "name", "body", "scope", "actions", "created_at", "updated_at")
   SELECT gen_random_uuid(), cr->>'title', cr->>'body', 'support', '[]'::jsonb, now(), now()
   FROM "settings" s
+  CROSS JOIN LATERAL (
+    SELECT pg_temp._m0277_widget_json(s.id, s.widget_config) AS cfg
+  ) parsed
   CROSS JOIN LATERAL jsonb_array_elements(
     CASE
-      WHEN s.widget_config IS NULL OR btrim(s.widget_config) IN ('', 'null') THEN '[]'::jsonb
-      WHEN jsonb_typeof((s.widget_config::jsonb)#>'{chat,cannedReplies}') = 'array'
-        THEN (s.widget_config::jsonb)#>'{chat,cannedReplies}'
+      WHEN jsonb_typeof(parsed.cfg#>'{chat,cannedReplies}') = 'array'
+        THEN parsed.cfg#>'{chat,cannedReplies}'
       ELSE '[]'::jsonb
     END
   ) AS cr
@@ -31,8 +55,8 @@ BEGIN
       SELECT 1
       FROM jsonb_array_elements(
         CASE
-          WHEN jsonb_typeof((s.widget_config::jsonb)#>'{messenger,cannedReplies}') = 'array'
-            THEN (s.widget_config::jsonb)#>'{messenger,cannedReplies}'
+          WHEN jsonb_typeof(parsed.cfg#>'{messenger,cannedReplies}') = 'array'
+            THEN parsed.cfg#>'{messenger,cannedReplies}'
           ELSE '[]'::jsonb
         END
       ) AS mr
@@ -92,15 +116,14 @@ BEGIN
             ELSE coalesce(cfg->'messenger', '{}'::jsonb)
           END AS merged
         FROM (
-          SELECT id, widget_config::jsonb AS cfg
+          SELECT id, pg_temp._m0277_widget_json(id, widget_config) AS cfg
           FROM "settings"
-          WHERE widget_config IS NOT NULL
-            AND btrim(widget_config) NOT IN ('', 'null')
-            AND (
-              widget_config::jsonb ? 'chat'
-              OR (widget_config::jsonb)#>'{tabs,chat}' IS NOT NULL
-            )
         ) parsed
+        WHERE jsonb_typeof(parsed.cfg) = 'object'
+          AND (
+            parsed.cfg ? 'chat'
+            OR parsed.cfg#>'{tabs,chat}' IS NOT NULL
+          )
       ) built
     ) src
   ) r

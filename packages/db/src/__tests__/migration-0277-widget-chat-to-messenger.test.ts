@@ -7,18 +7,24 @@ import { createDb, type Database } from '../client'
 /**
  * 0277 copies leftover 0.13.x widget `chat` keys onto `messenger` and turns
  * chat-only canned replies into macros. Replies also listed under messenger
- * were already imported by 0146 and must not be recreated. The file is
- * applied verbatim against scratch tables so a rewrite that dropped welcome
- * copy or double-inserted macros fails here rather than on a self-host upgrade.
+ * were already imported by 0146 and must not be recreated. Invalid
+ * widget_config JSON is skipped so one corrupt row cannot abort the upgrade.
+ * The file is applied verbatim against scratch tables so a rewrite that
+ * dropped welcome copy or double-inserted macros fails here rather than on
+ * a self-host upgrade.
  */
-const MIGRATION_SQL = readFileSync(
+const STATEMENTS = readFileSync(
   join(__dirname, '../../drizzle/0277_widget_chat_to_messenger.sql'),
   'utf8'
 )
-const SCRATCH_SQL = MIGRATION_SQL.replace(/"settings"/g, '"_m0277_settings"').replace(
-  /"macros"/g,
-  '"_m0277_macros"'
-)
+  .split('--> statement-breakpoint')
+  .map((s) =>
+    s
+      .replace(/"settings"/g, '"_m0277_settings"')
+      .replace(/"macros"/g, '"_m0277_macros"')
+      .trim()
+  )
+  .filter(Boolean)
 
 const DB_URL = process.env.DATABASE_URL
 let db: Database | null = null
@@ -119,7 +125,9 @@ describe.skipIf(!dbAvailable)('migration 0277 widget chat to messenger', () => {
           (gen_random_uuid(), ${LEGACY_CHAT}),
           (gen_random_uuid(), ${MESSENGER_WINS}),
           (gen_random_uuid(), '{"enabled":true,"tabs":{"feedback":true}}'),
-          (gen_random_uuid(), ${MESSENGER_ONLY})
+          (gen_random_uuid(), ${MESSENGER_ONLY}),
+          (gen_random_uuid(), '{not json'),
+          (gen_random_uuid(), '"not-an-object"')
         RETURNING id
       `)
       const ids = (inserted as unknown as { id: string }[]).map((r) => r.id)
@@ -132,17 +140,34 @@ describe.skipIf(!dbAvailable)('migration 0277 widget chat to messenger', () => {
           (gen_random_uuid(), 'Gone', 'Soft deleted after 0146', 'support', now())
       `)
 
-      await tx.execute(sql.raw(SCRATCH_SQL))
-      await tx.execute(sql.raw(SCRATCH_SQL))
+      for (const statement of STATEMENTS) {
+        await tx.execute(sql.raw(statement))
+      }
+      for (const statement of STATEMENTS) {
+        await tx.execute(sql.raw(statement))
+      }
 
       const rows = await tx.execute<{ id: string; widget_config: string }>(
         sql`SELECT id, widget_config FROM "_m0277_settings"`
       )
-      const byId = new Map(
+      const rawById = new Map(
         (rows as unknown as { id: string; widget_config: string }[]).map((r) => [
           r.id,
-          JSON.parse(r.widget_config) as Record<string, unknown>,
+          r.widget_config,
         ])
+      )
+      const byId = new Map(
+        [...rawById.entries()].flatMap(([id, raw]) => {
+          try {
+            const parsed = JSON.parse(raw) as unknown
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+              return [[id, parsed as Record<string, unknown>]] as const
+            }
+          } catch {
+            // Corrupt rows stay raw and are asserted separately.
+          }
+          return []
+        })
       )
 
       const legacy = byId.get(ids[0]!)!
@@ -179,6 +204,9 @@ describe.skipIf(!dbAvailable)('migration 0277 widget chat to messenger', () => {
 
       const messengerOnly = byId.get(ids[3]!)!
       expect(messengerOnly).toEqual(JSON.parse(MESSENGER_ONLY))
+
+      expect(rawById.get(ids[4]!)).toBe('{not json')
+      expect(rawById.get(ids[5]!)).toBe('"not-an-object"')
 
       const macros = await tx.execute<{
         name: string
