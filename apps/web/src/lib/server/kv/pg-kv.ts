@@ -145,7 +145,7 @@ export async function kvGetOrCreate<T>(key: string, create: T, seconds: number):
 }
 
 // ============================================================================
-// Sets — the one Redis SET we used, `user:devices:v2:<userId>`
+// Sets — the one Redis SET we used, `user:devices:v3:<userId>`
 // ============================================================================
 
 export interface SetMemberClaim {
@@ -245,6 +245,24 @@ export async function kvSetTouch(setKey: string, seconds: number): Promise<void>
     SET expires_at = now() + make_interval(secs => ${ttlSeconds(seconds)})
     WHERE workspace_key = ${currentWorkspaceNamespace()}
       AND set_key = ${setKey}
+      AND expires_at > now()
+  `)
+}
+
+/** Slide one live member's window. Unused siblings keep their own expiry
+ *  so a daily sign-in from Chrome does not keep a leftover Firefox id
+ *  alive forever. Expired rows stay dead, same as `kvSetTouch`. */
+export async function kvSetMemberTouch(
+  setKey: string,
+  member: string,
+  seconds: number
+): Promise<void> {
+  await db.execute(sql`
+    UPDATE kv_set_member
+    SET expires_at = now() + make_interval(secs => ${ttlSeconds(seconds)})
+    WHERE workspace_key = ${currentWorkspaceNamespace()}
+      AND set_key = ${setKey}
+      AND member = ${member}
       AND expires_at > now()
   `)
 }
