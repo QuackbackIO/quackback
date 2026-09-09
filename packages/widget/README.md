@@ -113,12 +113,14 @@ See the [Identify users guide](https://quackback.io/docs/widget/identify-users) 
 
 ```ts
 Quackback.open() // home
-Quackback.open({ view: 'new-post', title: 'Bug:', body: '...' }) // pre-filled form
+Quackback.open({ view: 'new-post', title: 'Bug:', body: '...', board: 'bugs' }) // pre-filled form
 Quackback.open({ view: 'changelog' }) // changelog feed
 Quackback.open({ view: 'help', query: 'pricing' }) // help search
 Quackback.open({ postId: 'post_01h...' }) // specific post
 Quackback.open({ articleId: 'article_01h...' }) // help article TypeID or slug
 ```
+
+`postId` and `articleId` win over `view` if both are set. `board` on `open` only applies to `view: 'new-post'`. Home / Popular Ideas filtering uses `init({ defaultBoard })` or the iframe `?board=` param.
 
 Every `open` field is live. A disabled surface or an unseen board fails closed — the panel still opens, but the widget does not invent access.
 

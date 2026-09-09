@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { widgetQueryKeys, INITIAL_SESSION_VERSION } from '../use-widget-vote'
+import { widgetQueryKeys, widgetQueryKeyEquals, INITIAL_SESSION_VERSION } from '../use-widget-vote'
 
 describe('widgetQueryKeys', () => {
   describe('votedPosts', () => {
@@ -72,6 +72,27 @@ describe('widgetQueryKeys', () => {
         'changelog_1',
         2,
       ])
+    })
+  })
+
+  describe('changelogList', () => {
+    it('bySession includes version', () => {
+      expect(widgetQueryKeys.changelogList.all).toEqual(['widget', 'changelogs'])
+      expect(widgetQueryKeys.changelogList.bySession(0)).toEqual(['widget', 'changelogs', 0])
+      expect(widgetQueryKeys.changelogList.bySession(2)).toEqual(['widget', 'changelogs', 2])
+    })
+  })
+
+  describe('widgetQueryKeyEquals', () => {
+    it('matches a factory key without depending on slot indexes', () => {
+      const key = widgetQueryKeys.articleDetail.byRef('article_1', 3, 'de')
+      expect(
+        widgetQueryKeyEquals(widgetQueryKeys.articleDetail.byRef('article_1', 3, 'de'), key)
+      ).toBe(true)
+      expect(
+        widgetQueryKeyEquals(widgetQueryKeys.articleDetail.byRef('article_1', 4, 'de'), key)
+      ).toBe(false)
+      expect(widgetQueryKeyEquals(key, undefined)).toBe(false)
     })
   })
 

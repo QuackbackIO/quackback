@@ -5,7 +5,7 @@ import { ChevronRightIcon } from '@heroicons/react/24/outline'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { resolvePublicArticleRefFn } from '@/lib/server/functions/help-center'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
-import { widgetQueryKeys } from '@/lib/client/hooks/use-widget-vote'
+import { widgetQueryKeys, widgetQueryKeyEquals } from '@/lib/client/hooks/use-widget-vote'
 import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-content'
 import type { JSONContent } from '@tiptap/react'
 import { WidgetPortalTitle } from './widget-portal-title'
@@ -39,9 +39,10 @@ export function WidgetHelpDetail({
         headers: getWidgetAuthHeaders(),
       }),
     placeholderData: (prev, prevQuery) =>
-      prevQuery?.queryKey[2] === articleRef &&
-      prevQuery?.queryKey[3] === locale &&
-      prevQuery?.queryKey[4] === sessionVersion
+      widgetQueryKeyEquals(
+        widgetQueryKeys.articleDetail.byRef(articleRef, sessionVersion, locale),
+        prevQuery?.queryKey
+      )
         ? prev
         : undefined,
     staleTime: 30 * 1000,

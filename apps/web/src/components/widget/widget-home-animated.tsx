@@ -35,6 +35,7 @@ import type { TiptapContent } from '@/lib/shared/schemas/posts'
 import {
   composeBodyFromPlainText,
   resolveComposeBoardId,
+  shouldReapplyComposeBoard,
   type WidgetComposeRequest,
 } from './widget-compose'
 
@@ -103,7 +104,31 @@ interface SearchResult {
   posts: WidgetPost[]
 }
 
+const SIMILAR_SEARCH_CACHE_LIMIT = 40
+let similarSearchCacheVersion = INITIAL_SESSION_VERSION
 const similarSearchCache = new Map<string, SearchResult>()
+
+function similarSearchCacheGet(sessionVersion: number, q: string): SearchResult | undefined {
+  if (similarSearchCacheVersion !== sessionVersion) {
+    similarSearchCache.clear()
+    similarSearchCacheVersion = sessionVersion
+  }
+  return similarSearchCache.get(q)
+}
+
+function similarSearchCacheSet(sessionVersion: number, q: string, result: SearchResult) {
+  if (similarSearchCacheVersion !== sessionVersion) {
+    similarSearchCache.clear()
+    similarSearchCacheVersion = sessionVersion
+  }
+  if (similarSearchCache.has(q)) similarSearchCache.delete(q)
+  similarSearchCache.set(q, result)
+  while (similarSearchCache.size > SIMILAR_SEARCH_CACHE_LIMIT) {
+    const oldest = similarSearchCache.keys().next().value
+    if (oldest === undefined) break
+    similarSearchCache.delete(oldest)
+  }
+}
 
 // ── Shared post row used in both similar-posts and popular-ideas lists ──
 
@@ -277,14 +302,19 @@ export function WidgetHomeAnimated({
   }, [composeRequest?.nonce])
 
   // Identify can grow the visitor-visible list (members-only slugs). Re-apply
-  // a requested slug when it appears; do not reset a user-chosen board when
-  // open() did not name one.
+  // a requested slug only when it just appeared — not when the visitor already
+  // picked another board after open().
+  const visibleBoardSlugs = useMemo(() => new Set(boards.map((b) => b.slug)), [boards])
+  const prevVisibleBoardSlugsRef = useRef<Set<string>>(new Set())
   useEffect(() => {
+    const next = visibleBoardSlugs
+    const prev = prevVisibleBoardSlugsRef.current
+    prevVisibleBoardSlugsRef.current = next
     const slug = composeRequest?.boardSlug
-    if (!slug) return
+    if (!shouldReapplyComposeBoard(slug, prev, next)) return
     const match = boards.find((b) => b.slug === slug)
     if (match) setSelectedBoardId(match.id)
-  }, [boards, composeRequest?.boardSlug, composeRequest?.nonce])
+  }, [visibleBoardSlugs, boards, composeRequest?.boardSlug, composeRequest?.nonce])
 
   // Per-board capability, server-computed for the request actor. The widget
   // route refetches boardPermissions with the Bearer identity (keyed on
@@ -450,8 +480,7 @@ export function WidgetHomeAnimated({
       setIsSimilarSearching(false)
       return
     }
-    const cacheKey = `${sessionVersion}:${q}`
-    const cached = similarSearchCache.get(cacheKey)
+    const cached = similarSearchCacheGet(sessionVersion, q)
     if (cached) {
       setSimilarPostResults(cached)
       setIsSimilarSearching(false)
@@ -468,9 +497,13 @@ export function WidgetHomeAnimated({
           signal: controller.signal,
           headers: getWidgetAuthHeaders(),
         })
+        if (!res.ok) {
+          setSimilarPostResults({ posts: [] })
+          return
+        }
         const json = await res.json()
         const result: SearchResult = { posts: json.data?.posts ?? [] }
-        similarSearchCache.set(cacheKey, result)
+        similarSearchCacheSet(sessionVersion, q, result)
         setSimilarPostResults(result)
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') return

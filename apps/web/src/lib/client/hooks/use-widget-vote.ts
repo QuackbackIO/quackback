@@ -36,6 +36,10 @@ export const widgetQueryKeys = {
     all: ['widget', 'changelog'] as const,
     byId: (entryId: string, version: number) => ['widget', 'changelog', entryId, version] as const,
   },
+  changelogList: {
+    all: ['widget', 'changelogs'] as const,
+    bySession: (version: number) => ['widget', 'changelogs', version] as const,
+  },
   popularPosts: {
     list: (boardSlug: string | null, version: number) =>
       ['widget', 'posts', 'popular', 'top', boardSlug ?? 'all', version] as const,
@@ -44,6 +48,16 @@ export const widgetQueryKeys = {
     query: (q: string, boardSlug: string | null, version: number) =>
       ['widget', 'search', 'popular', q, boardSlug ?? 'all', version] as const,
   },
+}
+
+/** True when `actual` is the same factory key (avoids placeholder index coupling). */
+export function widgetQueryKeyEquals(
+  expected: readonly unknown[],
+  actual: readonly unknown[] | undefined
+): boolean {
+  return (
+    !!actual && expected.length === actual.length && expected.every((part, i) => part === actual[i])
+  )
 }
 
 interface UseWidgetVoteOptions {

@@ -5,6 +5,7 @@ import {
   isArticleTypeId,
   resolveComposeBoardId,
   resolveOpenCommand,
+  shouldReapplyComposeBoard,
 } from '../widget-compose'
 import type { EnabledTabs } from '../widget-nav'
 
@@ -133,6 +134,31 @@ describe('resolveOpenCommand', () => {
     expect(resolveOpenCommand({}, allTabs)).toEqual({ type: 'home' })
     expect(resolveOpenCommand({ view: 'home' }, allTabs)).toEqual({ type: 'home' })
     expect(resolveOpenCommand({}, { feedback: true })).toBeNull()
+  })
+
+  it('lets postId and articleId win over view', () => {
+    expect(
+      resolveOpenCommand({ view: 'new-post', postId: 'post_01h', title: 'Bug:' }, allTabs)
+    ).toEqual({ type: 'post', postId: 'post_01h' })
+    expect(
+      resolveOpenCommand({ view: 'new-post', articleId: 'pricing', title: 'Bug:' }, allTabs)
+    ).toEqual({ type: 'article', articleId: 'pricing' })
+    expect(
+      resolveOpenCommand({ view: 'help', postId: 'post_01h', articleId: 'pricing' }, allTabs)
+    ).toEqual({ type: 'post', postId: 'post_01h' })
+  })
+})
+
+describe('shouldReapplyComposeBoard', () => {
+  it('re-applies only when identify newly grants the requested slug', () => {
+    expect(shouldReapplyComposeBoard('bugs', new Set(), new Set(['bugs', 'ideas']))).toBe(true)
+    expect(shouldReapplyComposeBoard('bugs', new Set(['bugs']), new Set(['bugs', 'ideas']))).toBe(
+      false
+    )
+    expect(shouldReapplyComposeBoard('secret', new Set(['bugs']), new Set(['bugs', 'ideas']))).toBe(
+      false
+    )
+    expect(shouldReapplyComposeBoard(undefined, new Set(), new Set(['bugs']))).toBe(false)
   })
 })
 
