@@ -147,7 +147,7 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
           <div className="space-y-5 py-4">
             <div className="space-y-2">
               <Label htmlFor="tag-name">Name</Label>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
                 <Input
                   id="tag-name"
                   value={name}
@@ -158,7 +158,7 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
                   className="flex-1 min-w-0"
                 />
                 <span
-                  className="inline-flex items-center px-2.5 py-0.5 rounded-md text-sm font-medium shrink-0 max-w-[8.5rem] truncate"
+                  className="inline-flex self-start items-center px-2.5 py-0.5 rounded-md text-sm font-medium shrink-0 max-w-[8.5rem] truncate"
                   style={{ backgroundColor: color + '20', color }}
                 >
                   {previewName}
