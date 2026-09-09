@@ -165,10 +165,19 @@ export function isValidTypeId(value: string, expectedPrefix?: IdPrefix): boolean
 }
 
 /**
- * Type guard for checking if a string is a valid TypeID with specific prefix
+ * Type guard for a TypeID whose serialized prefix is exactly `prefix`.
+ * Retired aliases (`kb_article_…`) are valid inbound article ids via
+ * `isValidTypeId` / `ensureTypeId`, but they are not `TypeId<'article'>`.
  */
 export function isTypeId<P extends IdPrefix>(value: string, prefix: P): value is TypeId<P> {
-  return isValidTypeId(value, prefix)
+  try {
+    const tid = TypeID.fromString(value)
+    if (tid.getType() !== prefix) return false
+    tid.toUUID()
+    return true
+  } catch {
+    return false
+  }
 }
 
 /**

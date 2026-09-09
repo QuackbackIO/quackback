@@ -7,6 +7,7 @@ import {
   parseTypeId,
   getTypeIdPrefix,
   isValidTypeId,
+  isTypeId,
   isUuid,
   isTypeIdFormat,
   batchFromUuid,
@@ -288,6 +289,8 @@ describe('TypeID Core', () => {
       const legacy = `kb_article_${canonical.slice('article_'.length)}`
       expect(isValidTypeId(legacy, 'article')).toBe(true)
       expect(isValidTypeId(canonical, 'article')).toBe(true)
+      expect(isTypeId(legacy, 'article')).toBe(false)
+      expect(isTypeId(canonical, 'article')).toBe(true)
       expect(toUuid(legacy)).toBe(toUuid(canonical))
       expect(ensureTypeId(legacy, 'article')).toBe(canonical)
       expect(normalizeToUuid(legacy, 'article')).toBe(toUuid(canonical))
