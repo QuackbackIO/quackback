@@ -28,7 +28,14 @@ import {
   closeHarness,
   testSql,
 } from './harness'
-import { kvGet, kvSet, kvSetNx, kvGetOrCreate, kvSetMemberClaim } from '../pg-kv'
+import {
+  kvGet,
+  kvSet,
+  kvSetNx,
+  kvGetOrCreate,
+  kvSetMemberClaim,
+  kvSetMemberClaimCounted,
+} from '../pg-kv'
 import {
   currentWorkspaceNamespace,
   SINGLE_WORKSPACE_NAMESPACE,
@@ -128,10 +135,16 @@ describe('workspace separation — device sets', () => {
     const userId = 'user_01collision'
     const fingerprint = 'ffffffffffffffffffffffffffffffff'
 
-    expect(await withRealWorkspace(A, () => isDeviceUnseen(userId, fingerprint))).toBe(true)
-    // Same workspace, second sighting: known. The positive control for the line below.
+    // First live member is a silent seed (the user's own sign-in).
     expect(await withRealWorkspace(A, () => isDeviceUnseen(userId, fingerprint))).toBe(false)
-    expect(await withRealWorkspace(B, () => isDeviceUnseen(userId, fingerprint))).toBe(true)
+    // Same workspace, second sighting of the same fingerprint: known.
+    expect(await withRealWorkspace(A, () => isDeviceUnseen(userId, fingerprint))).toBe(false)
+    // An additional fingerprint in A is a new device and should notify.
+    expect(
+      await withRealWorkspace(A, () => isDeviceUnseen(userId, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'))
+    ).toBe(true)
+    // B is a different workspace: first member there is also a silent seed.
+    expect(await withRealWorkspace(B, () => isDeviceUnseen(userId, fingerprint))).toBe(false)
 
     await testSql()`DELETE FROM kv_set_member WHERE workspace_key IN (${A}, ${B})`
   })
@@ -145,6 +158,22 @@ describe('workspace separation — device sets', () => {
       WHERE workspace_key = ${A} AND set_key = ${setKey}
     `
     expect(await withRealWorkspace(A, () => kvSetMemberClaim(setKey, 'm', 60))).toBe(true)
+  })
+
+  it('liveCount distinguishes first member from an additional one', async () => {
+    const setKey = uniqueKey('user:devices')
+    expect(await withRealWorkspace(A, () => kvSetMemberClaimCounted(setKey, 'a', 60))).toEqual({
+      claimed: true,
+      liveCount: 1,
+    })
+    expect(await withRealWorkspace(A, () => kvSetMemberClaimCounted(setKey, 'a', 60))).toEqual({
+      claimed: false,
+      liveCount: 1,
+    })
+    expect(await withRealWorkspace(A, () => kvSetMemberClaimCounted(setKey, 'b', 60))).toEqual({
+      claimed: true,
+      liveCount: 2,
+    })
   })
 })
 

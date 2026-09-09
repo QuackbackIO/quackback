@@ -1,4 +1,4 @@
-import { Heading, Hr, Section, Text } from '@react-email/components'
+import { Heading, Hr, Link, Section, Text } from '@react-email/components'
 import { EmailLayout, TransactionalFooter } from './email-layout'
 import { typography, utils } from './shared-styles'
 
@@ -7,12 +7,15 @@ interface NewSignInEmailProps {
   occurredAt: string
   ipAddress?: string | null
   userAgent?: string | null
+  location?: string | null
+  settingsUrl?: string | null
   logoUrl?: string
 }
 
 /**
- * "New device" sign-in notification — sent only on first-sight of a
- * (UA, /24 IP) combination for the recipient's account. The user is
+ * "New device" sign-in notification — sent when an additional
+ * (browser, OS) is seen for the recipient's account. IP and location
+ * are shown as context; they are not the device identity. The user is
  * already signed in by the time this lands; the alert is purely
  * informational with a recovery path if it wasn't them.
  */
@@ -21,6 +24,8 @@ export function NewSignInEmail({
   occurredAt,
   ipAddress,
   userAgent,
+  location,
+  settingsUrl,
   logoUrl,
 }: NewSignInEmailProps) {
   return (
@@ -41,6 +46,11 @@ export function NewSignInEmail({
             <strong>IP:</strong> {ipAddress}
           </Text>
         ) : null}
+        {location ? (
+          <Text style={typography.text}>
+            <strong>Location:</strong> {location}
+          </Text>
+        ) : null}
         {userAgent ? (
           <Text style={typography.text}>
             <strong>Device:</strong> {userAgent}
@@ -51,8 +61,17 @@ export function NewSignInEmail({
       <Hr style={{ margin: '24px 0', borderColor: '#e5e7eb' }} />
 
       <Text style={typography.text}>
-        If that was you, no action needed. If it wasn’t, change your password and revoke any other
-        active sessions.
+        If that was you, no action needed. If it wasn’t,{' '}
+        {settingsUrl ? (
+          <>
+            <Link href={settingsUrl} style={utils.link}>
+              change your password
+            </Link>{' '}
+            from Security settings.
+          </>
+        ) : (
+          'change your password from Security settings.'
+        )}
       </Text>
 
       <TransactionalFooter>

@@ -1,7 +1,10 @@
 /**
- * Per-user device-fingerprint tracker. The set `user:devices:{userId}` holds the
- * recent (UA + /24 IP) hashes seen for the user; new-device notifications fire
- * only on first-sight.
+ * Per-user device-fingerprint tracker. The set `user:devices:{userId}` holds
+ * the recent (browser + OS + platform) hashes seen for the user.
+ *
+ * Identity is the normalised user-agent, not the IP. IP belongs in the
+ * new-sign-in email as forensic context; hashing it in treats 5G / CGNAT /
+ * VPN / travel as a new device.
  *
  * Two-phase API so notification failures don't silently lose the
  * alert: `isDeviceUnseen` atomically claims the fingerprint in one
@@ -9,39 +12,58 @@
  * `forgetDevice` on failure. Errors fail closed (treat as known
  * device) so a store outage suppresses notifications rather than
  * spamming users.
+ *
+ * The first live member in a user's set is seeded silently — that is
+ * the sign-in they just made. Mail fires only on an additional unseen
+ * browser/OS.
  */
 import { createHash } from 'node:crypto'
-import { kvSetMemberClaim, kvSetTouch, kvSetMemberRemove } from '@/lib/server/kv/pg-kv'
+import Bowser from 'bowser'
+import { kvSetMemberClaimCounted, kvSetTouch, kvSetMemberRemove } from '@/lib/server/kv/pg-kv'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'signin-device-tracker' })
 
 const DEVICE_SET_TTL_SECONDS = 90 * 24 * 60 * 60
 
+/** Stable hash input when the UA is empty or unparseable. */
+const UNKNOWN_DEVICE_KEY = 'unknown||'
+
 /**
- * SHA-256 of (UA + /24 IPv4 subnet) truncated to 128 bits / 32 hex
- * chars. /24 keeps dynamic-IP users on the same network from tripping
- * on every connection; IPv6 is hashed whole (most carriers hand out
- * stable /64s, but we don't bias on carrier data here).
- *
- * IPv4-mapped IPv6 (`::ffff:a.b.c.d`) is unmapped before the /24 cut.
- * `ip.includes(':')` would otherwise treat those as IPv6 and hash the
- * last octet, so a rotating CGNAT/mesh hop on the same /24 looks like a
- * new device every sign-in.
+ * Browser + OS + platform, with versions stripped so an auto-update does
+ * not look like a new device. Empty / unparseable UAs share one sentinel
+ * rather than hashing each garbage string.
  */
-export function computeDeviceFingerprint(userAgent: string, ip: string): string {
-  return createHash('sha256')
-    .update(`${userAgent}|${normaliseIpForFingerprint(ip)}`)
-    .digest('hex')
-    .slice(0, 32)
+export function signInDeviceKey(userAgent: string): string {
+  const trimmed = userAgent.trim()
+  if (!trimmed) return UNKNOWN_DEVICE_KEY
+  try {
+    const parser = Bowser.getParser(trimmed)
+    const browser = parser.getBrowserName() || ''
+    const os = parser.getOSName() || ''
+    const platform = parser.getPlatformType() || ''
+    if (!browser && !os && !platform) return UNKNOWN_DEVICE_KEY
+    return `${browser}|${os}|${platform}`
+  } catch {
+    return UNKNOWN_DEVICE_KEY
+  }
 }
 
-/** /24 for IPv4 (including :ffff: mapped); whole address for real IPv6. */
-export function normaliseIpForFingerprint(ip: string): string {
-  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(ip.trim())
-  const v4 = mapped?.[1] ?? (ip.includes(':') ? null : ip.trim())
-  if (v4 && /^\d{1,3}(?:\.\d{1,3}){3}$/.test(v4)) return v4.split('.').slice(0, 3).join('.')
-  return ip.trim()
+/** Human-readable line for the new-sign-in email, e.g. `Chrome on Windows`. */
+export function formatSignInDevice(userAgent: string): string {
+  const key = signInDeviceKey(userAgent)
+  if (key === UNKNOWN_DEVICE_KEY) return 'Unknown device'
+  const [browser, os] = key.split('|')
+  if (browser && os) return `${browser} on ${os}`
+  return browser || os || 'Unknown device'
+}
+
+/**
+ * SHA-256 of the normalised device key, truncated to 128 bits / 32 hex
+ * chars. IP is deliberately not part of the hash.
+ */
+export function computeDeviceFingerprint(userAgent: string): string {
+  return createHash('sha256').update(signInDeviceKey(userAgent)).digest('hex').slice(0, 32)
 }
 
 // User ids are only unique within a workspace database, so an undiscriminated
@@ -52,13 +74,24 @@ export function normaliseIpForFingerprint(ip: string): string {
 const key = (userId: string) => `user:devices:${userId}`
 
 /**
- * Atomic claim: returns true iff this is the first sighting. One statement, so
- * the claim and the expiry cannot separate — even if the caller crashes before
- * `markDeviceSeen` runs, the member still expires after 90 days.
+ * Atomic claim. Returns true iff this is an *additional* unseen device
+ * (the set already had at least one live member). The first recorded
+ * device is claimed and given the 90-day TTL but does not notify — that
+ * is the user's own sign-in, and it also absorbs a hash-format change
+ * without a one-time mail burst.
+ *
+ * One statement, so the claim and the expiry cannot separate — even if
+ * the caller crashes before `markDeviceSeen` runs, the member still
+ * expires after 90 days.
  */
 export async function isDeviceUnseen(userId: string, fingerprint: string): Promise<boolean> {
   try {
-    return await kvSetMemberClaim(key(userId), fingerprint, DEVICE_SET_TTL_SECONDS)
+    const { claimed, liveCount } = await kvSetMemberClaimCounted(
+      key(userId),
+      fingerprint,
+      DEVICE_SET_TTL_SECONDS
+    )
+    return claimed && liveCount > 1
   } catch (error) {
     log.error({ err: error }, 'isDeviceUnseen failed; treating device as known')
     return false

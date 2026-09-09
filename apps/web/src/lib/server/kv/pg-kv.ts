@@ -146,33 +146,73 @@ export async function kvGetOrCreate<T>(key: string, create: T, seconds: number):
 // Sets — the one Redis SET we used, `user:devices:<userId>`
 // ============================================================================
 
+export interface SetMemberClaim {
+  /** True iff this caller inserted (or revived an expired) member. */
+  claimed: boolean
+  /** Live members in the set after this statement, including a just-claimed one. */
+  liveCount: number
+}
+
+function asBool(value: unknown): boolean {
+  return value === true || value === 't' || value === 'true'
+}
+
 /**
- * SADD + EXPIRE NX, as one statement. True iff the member was not already
- * present and live — i.e. Redis's `SADD` reply of 1.
+ * SADD + EXPIRE NX plus live cardinality, as one statement.
  *
- * An expired member is not present, so it is re-claimed and its expiry
- * refreshed. That matches Redis, where the whole set would already have been
- * dropped by its TTL.
+ * `claimed` is Redis's `SADD` reply of 1: the member was not already
+ * present and live. An expired member is not present, so it is
+ * re-claimed and its expiry refreshed.
+ *
+ * `liveCount` is counted in the same statement as the insert so a
+ * caller can tell first-member (seed, no alert) from an additional
+ * unseen member (alert) without a second round trip.
  */
+export async function kvSetMemberClaimCounted(
+  setKey: string,
+  member: string,
+  seconds: number
+): Promise<SetMemberClaim> {
+  const ttl = ttlSeconds(seconds)
+  const workspaceKey = currentWorkspaceNamespace()
+  const result = await db.execute(sql`
+    WITH claimed AS (
+      INSERT INTO kv_set_member (workspace_key, set_key, member, expires_at)
+      VALUES (
+        ${workspaceKey},
+        ${setKey},
+        ${member},
+        now() + make_interval(secs => ${ttl})
+      )
+      ON CONFLICT (workspace_key, set_key, member) DO UPDATE
+        SET expires_at = EXCLUDED.expires_at
+        WHERE kv_set_member.expires_at <= now()
+      RETURNING member
+    )
+    SELECT
+      EXISTS (SELECT 1 FROM claimed) AS claimed,
+      (
+        SELECT count(*)::int
+        FROM kv_set_member
+        WHERE workspace_key = ${workspaceKey}
+          AND set_key = ${setKey}
+          AND expires_at > now()
+      ) AS live_count
+  `)
+  const row = getExecuteRows<{ claimed: unknown; live_count: unknown }>(result)[0]
+  return {
+    claimed: asBool(row?.claimed),
+    liveCount: Number(row?.live_count ?? 0),
+  }
+}
+
+/** SADD + EXPIRE NX, as one statement. True iff the member was not already live. */
 export async function kvSetMemberClaim(
   setKey: string,
   member: string,
   seconds: number
 ): Promise<boolean> {
-  const result = await db.execute(sql`
-    INSERT INTO kv_set_member (workspace_key, set_key, member, expires_at)
-    VALUES (
-      ${currentWorkspaceNamespace()},
-      ${setKey},
-      ${member},
-      now() + make_interval(secs => ${ttlSeconds(seconds)})
-    )
-    ON CONFLICT (workspace_key, set_key, member) DO UPDATE
-      SET expires_at = EXCLUDED.expires_at
-      WHERE kv_set_member.expires_at <= now()
-    RETURNING member
-  `)
-  return getExecuteRows<{ member: string }>(result).length > 0
+  return (await kvSetMemberClaimCounted(setKey, member, seconds)).claimed
 }
 
 /** EXPIRE on the whole set: slide every live member's window forward. */
