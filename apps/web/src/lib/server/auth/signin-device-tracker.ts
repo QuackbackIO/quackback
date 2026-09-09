@@ -23,10 +23,25 @@ const DEVICE_SET_TTL_SECONDS = 90 * 24 * 60 * 60
  * chars. /24 keeps dynamic-IP users on the same network from tripping
  * on every connection; IPv6 is hashed whole (most carriers hand out
  * stable /64s, but we don't bias on carrier data here).
+ *
+ * IPv4-mapped IPv6 (`::ffff:a.b.c.d`) is unmapped before the /24 cut.
+ * `ip.includes(':')` would otherwise treat those as IPv6 and hash the
+ * last octet, so a rotating CGNAT/mesh hop on the same /24 looks like a
+ * new device every sign-in.
  */
 export function computeDeviceFingerprint(userAgent: string, ip: string): string {
-  const normalisedIp = ip.includes(':') ? ip : ip.split('.').slice(0, 3).join('.')
-  return createHash('sha256').update(`${userAgent}|${normalisedIp}`).digest('hex').slice(0, 32)
+  return createHash('sha256')
+    .update(`${userAgent}|${normaliseIpForFingerprint(ip)}`)
+    .digest('hex')
+    .slice(0, 32)
+}
+
+/** /24 for IPv4 (including :ffff: mapped); whole address for real IPv6. */
+export function normaliseIpForFingerprint(ip: string): string {
+  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(ip.trim())
+  const v4 = mapped?.[1] ?? (ip.includes(':') ? null : ip.trim())
+  if (v4 && /^\d{1,3}(?:\.\d{1,3}){3}$/.test(v4)) return v4.split('.').slice(0, 3).join('.')
+  return ip.trim()
 }
 
 // User ids are only unique within a workspace database, so an undiscriminated
