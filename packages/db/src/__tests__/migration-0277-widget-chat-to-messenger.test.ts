@@ -115,6 +115,11 @@ describe.skipIf(!dbAvailable)('migration 0277 widget chat to messenger', () => {
       `)
       const ids = (inserted as unknown as { id: string }[]).map((r) => r.id)
 
+      await tx.execute(sql`
+        INSERT INTO "_m0277_macros" (id, name, body, scope)
+        VALUES (gen_random_uuid(), 'Old', 'From chat', 'feedback')
+      `)
+
       await tx.execute(sql.raw(SCRATCH_SQL))
       await tx.execute(sql.raw(SCRATCH_SQL))
 
@@ -163,12 +168,12 @@ describe.skipIf(!dbAvailable)('migration 0277 widget chat to messenger', () => {
       const messengerOnly = byId.get(ids[3]!)!
       expect(messengerOnly).toEqual(JSON.parse(MESSENGER_ONLY))
 
-      const macros = await tx.execute<{ name: string; body: string }>(
-        sql`SELECT name, body FROM "_m0277_macros" ORDER BY name, body`
+      const macros = await tx.execute<{ name: string; body: string; scope: string }>(
+        sql`SELECT name, body, scope FROM "_m0277_macros" ORDER BY name, body, scope`
       )
-      expect(macros as unknown as { name: string; body: string }[]).toEqual([
-        { name: 'Old', body: 'From chat' },
-        { name: 'Thanks', body: 'Thanks for writing in.' },
+      expect(macros as unknown as { name: string; body: string; scope: string }[]).toEqual([
+        { name: 'Old', body: 'From chat', scope: 'feedback' },
+        { name: 'Thanks', body: 'Thanks for writing in.', scope: 'support' },
       ])
     })
   })

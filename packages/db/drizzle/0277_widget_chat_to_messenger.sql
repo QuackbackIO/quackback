@@ -7,7 +7,8 @@
 -- Messenger keys win on conflict; chat fills gaps. tabs.messenger is copied
 -- from tabs.chat only when it was never stored. The leftover chat keys are
 -- dropped so a second run matches zero rows. The INSERT skips a name+body
--- that already exists as a live support macro.
+-- that already exists as a live macro, including one later scoped to
+-- feedback or both.
 
 -- @replay: guarded-by leftover widget_config chat keys and macros of the same name and body
 DO $$
@@ -31,7 +32,6 @@ BEGIN
       WHERE m.deleted_at IS NULL
         AND m.name = cr->>'title'
         AND m.body = cr->>'body'
-        AND m.scope = 'support'
     );
 
   UPDATE "settings" AS s
