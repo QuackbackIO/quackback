@@ -171,23 +171,49 @@ describe('createRedirectRule', () => {
 })
 
 describe('listRedirectRules', () => {
-  it('resolves target labels for each rule', async () => {
-    mockSelectFrom.mockReturnValue({
-      orderBy: vi.fn().mockResolvedValue([
-        {
-          id: 'hc_redirect_rule_1' as HcRedirectRuleId,
-          path: '/old',
-          targetType: 'article',
-          targetId: 'article_1',
-          createdAt: new Date('2026-01-01'),
-        },
-      ]),
-    })
-    mockArticleFindFirst.mockResolvedValue({ title: 'Getting started' })
+  it('resolves target labels in two batched lookups, not per row', async () => {
+    mockSelectFrom
+      .mockReturnValueOnce({
+        orderBy: vi.fn().mockResolvedValue([
+          {
+            id: 'hc_redirect_rule_1' as HcRedirectRuleId,
+            path: '/old',
+            targetType: 'article',
+            targetId: 'article_1',
+            createdAt: new Date('2026-01-01'),
+          },
+          {
+            id: 'hc_redirect_rule_2' as HcRedirectRuleId,
+            path: '/older',
+            targetType: 'article',
+            targetId: 'article_2',
+            createdAt: new Date('2026-01-02'),
+          },
+          {
+            id: 'hc_redirect_rule_3' as HcRedirectRuleId,
+            path: '/old-cat',
+            targetType: 'category',
+            targetId: 'kb_category_1',
+            createdAt: new Date('2026-01-03'),
+          },
+        ]),
+      })
+      .mockReturnValueOnce({
+        where: vi.fn().mockResolvedValue([
+          { id: 'article_1', title: 'Getting started' },
+          { id: 'article_2', title: 'Billing' },
+        ]),
+      })
+      .mockReturnValueOnce({
+        where: vi.fn().mockResolvedValue([{ id: 'kb_category_1', name: 'Guides' }]),
+      })
 
     const rules = await listRedirectRules()
-    expect(rules).toHaveLength(1)
-    expect(rules[0].targetLabel).toBe('Getting started')
+    expect(rules).toHaveLength(3)
+    expect(rules.map((rule) => rule.targetLabel)).toEqual(['Getting started', 'Billing', 'Guides'])
+    expect(mockSelectFrom).toHaveBeenCalledTimes(3)
+    expect(mockArticleFindFirst).not.toHaveBeenCalled()
+    expect(mockCategoryFindFirst).not.toHaveBeenCalled()
   })
 })
 

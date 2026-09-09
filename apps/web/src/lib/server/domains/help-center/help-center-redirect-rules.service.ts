@@ -108,45 +108,57 @@ async function requirePublishedTarget(
   return category.name
 }
 
-/** Best-effort label lookup for the settings-card list; null if the target vanished. */
-async function lookupTargetLabel(
-  targetType: RedirectTargetType,
-  targetId: string
-): Promise<string | null> {
-  if (targetType === 'article') {
-    const article = await db.query.helpCenterArticles.findFirst({
-      where: eq(helpCenterArticles.id, canonicalArticleTargetId(targetId)),
-      columns: { title: true },
-    })
-    return article?.title ?? null
-  }
-  const category = await db.query.helpCenterCategories.findFirst({
-    where: eq(helpCenterCategories.id, targetId as KbCategoryId),
-    columns: { name: true },
-  })
-  return category?.name ?? null
-}
-
 export async function listRedirectRules(): Promise<HelpCenterRedirectRule[]> {
   const rows = await db
     .select()
     .from(helpCenterRedirectRules)
     .orderBy(desc(helpCenterRedirectRules.createdAt))
 
-  const withLabels = await Promise.all(
-    rows.map(async (row) => {
-      const targetLabel = await lookupTargetLabel(row.targetType, row.targetId).catch(() => null)
-      return {
-        id: row.id,
-        path: row.path,
-        targetType: row.targetType,
-        targetId: row.targetId,
-        targetLabel,
-        createdAt: row.createdAt,
-      }
-    })
-  )
-  return withLabels
+  const articleIds = [
+    ...new Set(
+      rows
+        .filter((row) => row.targetType === 'article')
+        .map((row) => canonicalArticleTargetId(row.targetId))
+    ),
+  ]
+  const categoryIds = [
+    ...new Set(
+      rows.filter((row) => row.targetType === 'category').map((row) => row.targetId as KbCategoryId)
+    ),
+  ]
+
+  const [articles, categories] = await Promise.all([
+    articleIds.length === 0
+      ? Promise.resolve([] as Array<{ id: KbArticleId; title: string }>)
+      : db
+          .select({ id: helpCenterArticles.id, title: helpCenterArticles.title })
+          .from(helpCenterArticles)
+          .where(inArray(helpCenterArticles.id, articleIds)),
+    categoryIds.length === 0
+      ? Promise.resolve([] as Array<{ id: KbCategoryId; name: string }>)
+      : db
+          .select({ id: helpCenterCategories.id, name: helpCenterCategories.name })
+          .from(helpCenterCategories)
+          .where(inArray(helpCenterCategories.id, categoryIds)),
+  ])
+
+  const articleTitleById = new Map(articles.map((article) => [article.id, article.title]))
+  const categoryNameById = new Map(categories.map((category) => [category.id, category.name]))
+
+  return rows.map((row) => {
+    const targetLabel =
+      row.targetType === 'article'
+        ? (articleTitleById.get(canonicalArticleTargetId(row.targetId)) ?? null)
+        : (categoryNameById.get(row.targetId as KbCategoryId) ?? null)
+    return {
+      id: row.id,
+      path: row.path,
+      targetType: row.targetType,
+      targetId: row.targetId,
+      targetLabel,
+      createdAt: row.createdAt,
+    }
+  })
 }
 
 export async function createRedirectRule(

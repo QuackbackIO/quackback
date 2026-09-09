@@ -12,7 +12,7 @@ export function isArticleTypeId(ref: string): boolean {
  * Canonical `article_…` TypeID for a public or stored article ref.
  * Same UUID either way — so a retired `kb_article_…` id looks up the row.
  */
-export function articleTypeIdToKbArticleId(ref: string): ArticleId | null {
+export function canonicalArticleTypeId(ref: string): ArticleId | null {
   if (!isValidTypeId(ref, 'article')) return null
   return ensureTypeId(ref, 'article')
 }
