@@ -21,6 +21,8 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { RadioGroup } from '@/components/ui/radio-group'
+import * as RadioGroupPrimitive from '@radix-ui/react-radio-group'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { ColorPickerGrid, ColorHexInput, randomColor } from '@/components/shared/color-picker'
@@ -139,7 +141,7 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md" aria-describedby="tag-dialog-desc">
         <form
           onSubmit={(e) => {
             e.preventDefault()
@@ -148,7 +150,7 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
         >
           <DialogHeader>
             <DialogTitle>{isEdit ? 'Edit tag' : 'New tag'}</DialogTitle>
-            <DialogDescription>
+            <DialogDescription id="tag-dialog-desc">
               Label posts for filtering. Visible on the portal unless marked internal.
             </DialogDescription>
           </DialogHeader>
@@ -184,26 +186,25 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
 
             <div className="space-y-2">
               <Label id="tag-visibility-label">Visibility</Label>
-              <div
-                role="radiogroup"
+              <RadioGroup
+                value={isPublic ? 'portal' : 'internal'}
+                onValueChange={(value) => setIsPublic(value === 'portal')}
                 aria-labelledby="tag-visibility-label"
                 className="grid grid-cols-1 gap-2 sm:grid-cols-2"
               >
                 <VisibilityCard
-                  active={isPublic}
+                  value="portal"
                   label="Portal"
                   description="Shown on the public portal"
                   icon={<GlobeAltIcon className="h-3.5 w-3.5" />}
-                  onClick={() => setIsPublic(true)}
                 />
                 <VisibilityCard
-                  active={!isPublic}
+                  value="internal"
                   label="Internal"
                   description="Hidden from the portal"
                   icon={<EyeSlashIcon className="h-3.5 w-3.5" />}
-                  onClick={() => setIsPublic(false)}
                 />
-              </div>
+              </RadioGroup>
             </div>
 
             <div className="space-y-2">
@@ -243,38 +244,37 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
 }
 
 function VisibilityCard({
-  active,
+  value,
   label,
   description,
   icon,
-  onClick,
 }: {
-  active: boolean
+  value: string
   label: string
   description: string
   icon: ReactNode
-  onClick: () => void
 }) {
   return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={active}
+    <RadioGroupPrimitive.Item
+      value={value}
       aria-label={label}
-      onClick={onClick}
       className={cn(
-        'flex flex-col items-stretch gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors',
-        active
-          ? 'border-primary bg-primary/10'
-          : 'border-border bg-muted/30 hover:bg-muted/60 cursor-pointer'
+        'group flex flex-col items-stretch gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors outline-none',
+        'border-border bg-muted/30 hover:bg-muted/60 cursor-pointer',
+        'focus-visible:ring-2 focus-visible:ring-ring/50',
+        'data-[state=checked]:border-primary data-[state=checked]:bg-primary/10'
       )}
     >
       <div className="flex items-center gap-2">
-        <span className={active ? 'text-primary' : 'text-muted-foreground'}>{icon}</span>
-        <span className={cn('text-sm font-semibold', active && 'text-primary')}>{label}</span>
+        <span className="text-muted-foreground group-data-[state=checked]:text-primary">
+          {icon}
+        </span>
+        <span className="text-sm font-semibold group-data-[state=checked]:text-primary">
+          {label}
+        </span>
       </div>
       <span className="text-xs text-muted-foreground leading-snug">{description}</span>
-    </button>
+    </RadioGroupPrimitive.Item>
   )
 }
 
