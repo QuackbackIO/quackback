@@ -34,3 +34,10 @@ it('aborts from an agent_session_stopped envelope and ignores other events', asy
   expect(turn.signal.aborted).toBe(true)
   endSlackTurn('T1', 'C1', '1.2', turn)
 })
+
+it('does not abort a later turn when Stop arrived before registration', () => {
+  expect(abortSlackTurn('T1', 'C1', 'pending')).toBe(false)
+  const turn = beginSlackTurn('T1', 'C1', 'pending')
+  expect(turn.signal.aborted).toBe(false)
+  endSlackTurn('T1', 'C1', 'pending', turn)
+})

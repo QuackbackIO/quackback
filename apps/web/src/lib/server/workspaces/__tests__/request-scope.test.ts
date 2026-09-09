@@ -478,28 +478,31 @@ describe('resolveWorkspaceAndContinue', () => {
     }
   })
 
-  it.each(['/api/health', '/api/health/live', '/api/health/ready'])(
-    'serves %s without resolving a workspace at all',
-    async (path) => {
-      // The platform hits these every couple of seconds, and on a wildcard
-      // domain they arrive on a workspace hostname like everything else. Resolving
-      // a workspace would open a pool and therefore WAKE A SUSPENDED COMPUTE, once
-      // per probe, forever — silently destroying the idle-cost model that pool
-      // eviction exists to protect. There is no functional symptom, which is
-      // why it needs a test rather than an observation.
-      acquireScopeForHost.mockResolvedValue({ kind: 'unknown_host', hostname: 'x' })
-      const { resolveWorkspaceAndContinue } = await import('../request-scope')
-      const result = await resolveWorkspaceAndContinue({
-        request: new Request(`http://example.com${path}`, {
-          headers: { host: 't1.localhost' },
-        }),
-        next: async () => 'probed',
-        log: silentLog as never,
-      })
-      expect(result).toBe('probed')
-      expect(acquireScopeForHost).not.toHaveBeenCalled()
-    }
-  )
+  it.each([
+    '/api/health',
+    '/api/health/live',
+    '/api/health/ready',
+    '/api/internal/job-wake',
+    '/api/internal/job-wake/',
+  ])('serves %s without resolving a workspace at all', async (path) => {
+    // The platform hits these every couple of seconds, and on a wildcard
+    // domain they arrive on a workspace hostname like everything else. Resolving
+    // a workspace would open a pool and therefore WAKE A SUSPENDED COMPUTE, once
+    // per probe, forever — silently destroying the idle-cost model that pool
+    // eviction exists to protect. There is no functional symptom, which is
+    // why it needs a test rather than an observation.
+    acquireScopeForHost.mockResolvedValue({ kind: 'unknown_host', hostname: 'x' })
+    const { resolveWorkspaceAndContinue } = await import('../request-scope')
+    const result = await resolveWorkspaceAndContinue({
+      request: new Request(`http://example.com${path}`, {
+        headers: { host: 't1.localhost' },
+      }),
+      next: async () => 'probed',
+      log: silentLog as never,
+    })
+    expect(result).toBe('probed')
+    expect(acquireScopeForHost).not.toHaveBeenCalled()
+  })
 
   it('does NOT skip a path that merely starts like a health path', async () => {
     // A prefix match here would exempt `/api/healthcheck-for-workspace` — and an

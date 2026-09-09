@@ -64,6 +64,7 @@ function job(payload: Record<string, unknown>, dedupeKey = 'usage-report:2026-07
     maxAttempts: 10,
     leaseToken: 'tok',
     lockedUntil: new Date(),
+    runAt: new Date(),
   }
 }
 

@@ -37,7 +37,18 @@ export const slackAppHooks: NonNullable<IntegrationDefinition['appHooks']> = {
     const event = payload.event
     // Abort before enqueue: slack-hook is serial, so a Stop job would otherwise
     // wait until the in-flight turn finished.
-    if (kind === 'events') abortSlackTurnFromPayload(payload)
+    if (kind === 'events') {
+      abortSlackTurnFromPayload(payload)
+      if (event?.type === 'agent_session_stopped') {
+        const team = payload.team_id ?? payload.team?.id
+        const channel = event.channel
+        const thread = event.thread_ts
+        if (typeof team === 'string' && typeof channel === 'string' && typeof thread === 'string') {
+          const { postJobWakeAbort } = await import('@/lib/server/jobs/wake')
+          postJobWakeAbort({ team, channel, thread })
+        }
+      }
+    }
     if (kind === 'events' && !shouldEnqueueSlackEvent(event))
       return new Response(null, { status: 200 })
     // Transport payloads are encrypted, short-lived, and never written to

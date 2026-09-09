@@ -480,87 +480,66 @@ async function handleSlackQuestion(input: {
   if (typeof channel !== 'string' || typeof user !== 'string') return
   const responseUrl = command ? payload.response_url : undefined
   const replyError = (text: string) => ephemeral(client, channel, user, text, responseUrl)
-  const state = await getAssistantRuntimeConfig()
-  if (
-    !state.config.agents.workspace.slack.enabled ||
-    !state.config.agents.workspace.capabilities.qa
-  ) {
-    await replyError('Enable the AI assistant in Quackback’s Slack settings first.')
-    return
-  }
-  if (!isAssistantConfigured()) {
-    await replyError('Configure an AI model in Quackback first.')
-    return
-  }
-  if (!(await hasEntitlement('aiDrafts'))) {
-    await replyError('Your Quackback plan does not include teammate AI.')
-    return
-  }
-  try {
-    await enforceAiTokenBudget()
-  } catch {
-    await replyError('This workspace has reached its AI usage limit.')
-    return
-  }
-  if (missingSlackScopes(installation.scopes).length) {
-    await replyError('Reconnect Slack in Quackback to grant the assistant permissions.')
-    return
-  }
-  const person = await resolveSlackPrincipal(team, user, client)
-  if (!person) {
-    await replyError(
-      `I can only answer for Quackback team members. Sign in at ${getBaseUrl()}/admin with the email you use in Slack, then mention me again.`
-    )
-    return
-  }
-  const actor = await slackMemberActor(person)
-  if (!can(actor, PERMISSIONS.COPILOT_USE)) {
-    await replyError('You do not have permission to use Quackback’s AI assistant.')
-    return
-  }
   const thread = command ? payload.trigger_id : (event.thread_ts ?? event.ts)
   if (typeof thread !== 'string') return
-  const turnId = generateId('assistant_event')
-  const assistant = await ensureAssistantPrincipal()
-  const text = command
-    ? payload.text
-    : shortcut
-      ? `Capture this message as feedback: ${event.text ?? ''}`
-      : event.text
-  let history: Array<{ user?: string; text?: string; ts?: string }> = []
-  if (!command) {
-    history =
-      input.threadHistory ??
-      (
-        await client.conversations.replies({
-          channel,
-          ts: thread,
-          limit: 12,
-          latest: event.ts,
-          inclusive: true,
-        })
-      ).messages ??
-      []
-  }
-  const context = mapSlackThread(
-    history,
-    { text, ts: event?.ts, user },
-    installation.botUserId ?? ''
-  )
-  const stream = command
-    ? null
-    : client.chatStream({
-        channel,
-        thread_ts: thread,
-        recipient_team_id: team,
-        recipient_user_id: user,
-      })
   const turnAbort = command ? new AbortController() : beginSlackTurn(team, channel, thread)
-  const replyStream = stream ? new SlackReplyStream(stream, () => turnAbort.abort()) : null
-  if (replyStream)
-    turnAbort.signal.addEventListener('abort', () => replyStream.cancel(), { once: true })
+  const turnId = generateId('assistant_event')
+  let stream: ReturnType<WebClient['chatStream']> | null = null
+  let replyStream: SlackReplyStream | null = null
   let stopped = false
+  let state: Awaited<ReturnType<typeof getAssistantRuntimeConfig>> | undefined
   try {
+    const runtime = await getAssistantRuntimeConfig()
+    state = runtime
+    if (turnAbort.signal.aborted) return
+    if (
+      !runtime.config.agents.workspace.slack.enabled ||
+      !runtime.config.agents.workspace.capabilities.qa
+    ) {
+      await replyError('Enable the AI assistant in Quackback’s Slack settings first.')
+      return
+    }
+    if (!isAssistantConfigured()) {
+      await replyError('Configure an AI model in Quackback first.')
+      return
+    }
+    if (!(await hasEntitlement('aiDrafts'))) {
+      await replyError('Your Quackback plan does not include teammate AI.')
+      return
+    }
+    if (turnAbort.signal.aborted) return
+    try {
+      await enforceAiTokenBudget()
+    } catch {
+      await replyError('This workspace has reached its AI usage limit.')
+      return
+    }
+    if (turnAbort.signal.aborted) return
+    if (missingSlackScopes(installation.scopes).length) {
+      await replyError('Reconnect Slack in Quackback to grant the assistant permissions.')
+      return
+    }
+    const person = await resolveSlackPrincipal(team, user, client)
+    if (turnAbort.signal.aborted) return
+    if (!person) {
+      await replyError(
+        `I can only answer for Quackback team members. Sign in at ${getBaseUrl()}/admin with the email you use in Slack, then mention me again.`
+      )
+      return
+    }
+    const actor = await slackMemberActor(person)
+    if (!can(actor, PERMISSIONS.COPILOT_USE)) {
+      await replyError('You do not have permission to use Quackback’s AI assistant.')
+      return
+    }
+    if (turnAbort.signal.aborted) return
+    const assistant = await ensureAssistantPrincipal()
+    if (turnAbort.signal.aborted) return
+    const text = command
+      ? payload.text
+      : shortcut
+        ? `Capture this message as feedback: ${event.text ?? ''}`
+        : event.text
     if (!command)
       await client.apiCall('agents.sessions.setStatus', {
         channel_id: channel,
@@ -568,6 +547,42 @@ async function handleSlackQuestion(input: {
         status: 'processing',
         initiator_user_id: user,
       })
+    if (turnAbort.signal.aborted) return
+    let history: Array<{ user?: string; text?: string; ts?: string }> = []
+    if (!command) {
+      history =
+        input.threadHistory ??
+        (
+          await client.conversations.replies({
+            channel,
+            ts: thread,
+            limit: 12,
+            latest: event.ts,
+            inclusive: true,
+          })
+        ).messages ??
+        []
+    }
+    if (turnAbort.signal.aborted) return
+    const context = mapSlackThread(
+      history,
+      { text, ts: event?.ts, user },
+      installation.botUserId ?? ''
+    )
+    stream = command
+      ? null
+      : client.chatStream({
+          channel,
+          thread_ts: thread,
+          recipient_team_id: team,
+          recipient_user_id: user,
+        })
+    replyStream = stream ? new SlackReplyStream(stream, () => turnAbort.abort()) : null
+    if (replyStream) {
+      const live = replyStream
+      turnAbort.signal.addEventListener('abort', () => live.cancel(), { once: true })
+    }
+    const streaming = replyStream
     const result = await runAssistantTurn({
       role: 'workspace_assistant',
       actor,
@@ -579,7 +594,7 @@ async function handleSlackQuestion(input: {
       actorPrincipalId: person.id,
       telemetryTurnId: turnId,
       signal: turnAbort.signal,
-      onTextDelta: replyStream ? (delta) => replyStream.push(delta) : undefined,
+      onTextDelta: streaming ? (delta) => streaming.push(delta) : undefined,
     })
     if (turnAbort.signal.aborted) {
       await replyStream?.abandon()
@@ -603,7 +618,7 @@ async function handleSlackQuestion(input: {
       }
       if (stream) {
         await stream.stop({
-          markdown_text: `I don’t have a reply for that message.\n_AI-generated · ${escapeSlack(state.config.identity.name)} for ${escapeSlack(state.workspaceName)}_`,
+          markdown_text: `I don’t have a reply for that message.\n_AI-generated · ${escapeSlack(runtime.config.identity.name)} for ${escapeSlack(runtime.workspaceName)}_`,
         })
       }
       if (!command) await touchSlackThreadSession(team, channel, thread, 'bot')
@@ -615,7 +630,7 @@ async function handleSlackQuestion(input: {
       result.proposedActions,
       turnId,
       result.identity.name,
-      state.workspaceName,
+      runtime.workspaceName,
       getBaseUrl()
     )
     if (command) await respondViaUrl(responseUrl, toSlackMrkdwn(formatted), blocks)
@@ -659,7 +674,7 @@ async function handleSlackQuestion(input: {
     if (stream && !stopped)
       await stream
         .stop({
-          markdown_text: `Something went wrong on my side. Try again in a moment.\n_AI-generated · ${escapeSlack(state.config.identity.name)} for ${escapeSlack(state.workspaceName)}_`,
+          markdown_text: `Something went wrong on my side. Try again in a moment.\n_AI-generated · ${escapeSlack(state?.config.identity.name ?? 'Quackback')} for ${escapeSlack(state?.workspaceName ?? '')}_`,
         })
         .catch(() => {})
     else if (command) await replyError('Something went wrong on my side. Try again in a moment.')

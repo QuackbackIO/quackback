@@ -914,6 +914,49 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'loops it maintains, not in the handle.',
   },
   {
+    file: 'apps/web/src/lib/server/jobs/worker.ts',
+    name: 'storedConfig',
+    category: 'process-lifetime',
+    owner: 'Piece 6 (saas/queue-lease)',
+    reason:
+      'RunnerConfig captured at startJobWorker so a job-wake can start a parked loop with the same ' +
+      'poll/batch/cap numbers. A fact about this process, not a workspace.',
+  },
+  {
+    file: 'apps/web/src/lib/server/jobs/worker.ts',
+    name: 'unsubscribeCommit',
+    category: 'process-lifetime',
+    owner: 'Piece 6 (saas/queue-lease)',
+    reason:
+      'Handle for the after-commit start-by-id sink registered from startJobWorker. Cleared on stop ' +
+      'so a restarted worker does not double-subscribe.',
+  },
+  {
+    file: 'apps/web/src/lib/server/jobs/worker.ts',
+    name: 'loopSetTail',
+    category: 'process-lifetime',
+    owner: 'Piece 6 (saas/queue-lease)',
+    reason:
+      'Promise chain that serializes loops Map mutations (wake vs refresh). Process-local; the ' +
+      'workspace key lives in the map entries, not in this tail.',
+  },
+  {
+    file: 'apps/web/src/lib/server/jobs/wake.ts',
+    name: 'pending',
+    category: 'process-lifetime',
+    owner: 'Piece 6 (saas/queue-lease)',
+    reason:
+      'Coalesce buffer for Cloud web job-wake POSTs, keyed by workspaceKey. Lives on ROLE=web only; ' +
+      'values are ids, not workspace-derived secrets, and flush in 10ms.',
+  },
+  {
+    file: 'apps/web/src/lib/server/jobs/wake.ts',
+    name: 'unsubscribe',
+    category: 'process-lifetime',
+    owner: 'Piece 6 (saas/queue-lease)',
+    reason: 'Start-once latch for the HTTP job-wake publisher on ROLE=web.',
+  },
+  {
     file: 'apps/web/src/lib/server/jobs/runner.ts',
     name: 'handlerMemo',
     category: 'process-lifetime',

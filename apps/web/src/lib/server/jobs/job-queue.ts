@@ -81,6 +81,7 @@ import { isPooledTenancy } from '@/lib/server/workspaces/mode'
 import { noteDurableWork, SINGLE_WORKSPACE_KEY } from '@/lib/server/workspaces/after-commit'
 import {
   leaseClaimGroupedSql,
+  leaseClaimSql,
   leaseCompleteSql,
   leaseFailSql,
   leaseHeartbeatSql,
@@ -212,6 +213,8 @@ export interface ClaimedJob {
   maxAttempts: number
   leaseToken: string
   lockedUntil: Date
+  /** When this row became runnable. `queued_ms` is claim instant minus this. */
+  runAt: Date
 }
 
 interface ClaimRow {
@@ -225,7 +228,11 @@ interface ClaimRow {
   max_attempts: number
   lease_token: string
   locked_until: Date | string
+  run_at: Date | string
 }
+
+const CLAIM_RETURNING = sql`j.id, j.job_id, j.queue, j.dedupe_key, j.payload, j.workspace_key,
+              j.attempts, j.max_attempts, j.lease_token, j.locked_until, j.run_at`
 
 /** Stable per-process identity, for `locked_by` and for reading logs. */
 let workerIdMemo: string | null = null
@@ -248,8 +255,14 @@ function workKeyForSignal(): string | null {
   return currentWorkspaceKey() ?? (isPooledTenancy() ? null : SINGLE_WORKSPACE_KEY)
 }
 
-function noteInsertedWork(executor?: JobSqlExecutor): void {
-  noteDurableWork(workKeyForSignal(), { committed: !executor })
+function noteInsertedWork(executor: JobSqlExecutor | undefined, jobIds: readonly string[]): void {
+  const key = workKeyForSignal()
+  const committed = !executor
+  if (jobIds.length === 0) {
+    noteDurableWork(key, { committed })
+    return
+  }
+  for (const jobId of jobIds) noteDurableWork(key, { committed, jobId })
 }
 
 function asDate(value: Date | string): Date {
@@ -291,8 +304,9 @@ export async function enqueueJob(input: EnqueueJobInput): Promise<EnqueueJobResu
   const inserted = rows.length > 0
   // Transactional inserts record the workspace and flush only after the
   // outer commit. Auto-commit inserts are already visible, so they signal now.
-  if (inserted) noteInsertedWork(input.executor)
-  return { jobId, inserted }
+  // Only hint when a row was written — a dedupe hit must not start-by-id.
+  if (inserted) noteInsertedWork(input.executor, [rows[0]!.job_id])
+  return { jobId: inserted ? rows[0]!.job_id : jobId, inserted }
 }
 
 /** How many rows one queue may have claimed in a pass, and for how long. */
@@ -346,10 +360,14 @@ export async function enqueueJobs(
       run_at timestamptz, max_attempts int
     )
     ON CONFLICT (queue, dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING
-    RETURNING dedupe_key
+    RETURNING job_id, dedupe_key
   `)
-  const written = getExecuteRows<{ dedupe_key: string | null }>(result)
-  if (written.length > 0) noteInsertedWork(opts?.executor)
+  const written = getExecuteRows<{ job_id: string; dedupe_key: string | null }>(result)
+  if (written.length > 0)
+    noteInsertedWork(
+      opts?.executor,
+      written.map((r) => r.job_id)
+    )
   return {
     inserted: written.length,
     insertedDedupeKeys: written.map((r) => r.dedupe_key).filter((k): k is string => k !== null),
@@ -442,6 +460,95 @@ export async function findJobByDedupeKey(
   }
 }
 
+function claimedFromRow(row: ClaimRow): ClaimedJob {
+  return {
+    id: String(row.id),
+    jobId: row.job_id,
+    queue: row.queue,
+    dedupeKey: row.dedupe_key,
+    payload: row.payload ?? {},
+    workspaceKey: row.workspace_key,
+    attempts: row.attempts,
+    maxAttempts: row.max_attempts,
+    leaseToken: row.lease_token,
+    lockedUntil: asDate(row.locked_until),
+    runAt: asDate(row.run_at),
+  }
+}
+
+/**
+ * Queue of a pending, due row, or null if it is not runnable.
+ *
+ * Used to check per-queue free slots *before* `claimById`, so a start-by-id
+ * cannot increment `attempts` and then drop the lease because the pool is full.
+ */
+export async function peekRunnableJob(jobId: string): Promise<{ queue: string } | null> {
+  const result = await db.execute(sql`
+    SELECT queue FROM job_queue
+    WHERE job_id = ${jobId}
+      AND status = 'pending'
+      AND run_at <= now()
+      AND attempts < max_attempts
+    LIMIT 1
+  `)
+  const row = getExecuteRows<{ queue: string }>(result)[0]
+  return row ? { queue: row.queue } : null
+}
+
+/**
+ * Claim one pending due row by `job_id`. Same lease stamp as `claimJobs`.
+ *
+ * Returns null when the row is not runnable, `run_at` is in the future,
+ * another claimer holds `FOR UPDATE SKIP LOCKED`, or an older runnable
+ * predecessor sits on the same queue (`ORDER BY run_at, id`). A miss is
+ * success for a hint: the poller claims the head in FIFO order. That is
+ * load-bearing for `workflow-dispatch`, which is a global FIFO.
+ */
+export async function claimById(jobId: string, leaseMs: number): Promise<ClaimedJob | null> {
+  const table = sql.identifier(TABLE)
+  const result = await db.execute(
+    leaseClaimSql({
+      table: TABLE,
+      where: sql`job_id = ${jobId}
+        AND NOT EXISTS (
+          SELECT 1
+          FROM ${table} older
+          WHERE older.queue = ${table}.queue
+            AND older.status = 'pending'
+            AND older.run_at <= now()
+            AND older.attempts < older.max_attempts
+            AND (older.run_at, older.id) < (${table}.run_at, ${table}.id)
+        )`,
+      limit: 1,
+      leaseMs,
+      workerId: jobWorkerId(),
+      returning: CLAIM_RETURNING,
+    })
+  )
+  const row = getExecuteRows<ClaimRow>(result)[0]
+  if (!row) return null
+  const job = claimedFromRow(row)
+  const expected = currentWorkspaceKey()
+  if (job.workspaceKey !== expected) {
+    log.error(
+      {
+        event: 'job.refused',
+        job_id: job.jobId,
+        queue: job.queue,
+        row_workspace_key: job.workspaceKey,
+        scope_workspace_key: expected,
+      },
+      'job REFUSED: row workspace does not match the workspace scope that claimed it'
+    )
+    await terminate(
+      job,
+      `workspace mismatch: row is stamped ${job.workspaceKey ?? 'null'}, scope is ${expected ?? 'null'}`
+    )
+    return null
+  }
+  return job
+}
+
 export interface ClaimJobsInput {
   specs: readonly QueueClaimSpec[]
 }
@@ -478,8 +585,7 @@ export async function claimJobs(input: ClaimJobsInput): Promise<ClaimedJob[]> {
         runnable.map((s) => [s.queue, { limit: s.limit, leaseMs: s.leaseMs }])
       ),
       workerId: jobWorkerId(),
-      returning: sql`j.id, j.job_id, j.queue, j.dedupe_key, j.payload, j.workspace_key,
-              j.attempts, j.max_attempts, j.lease_token, j.locked_until`,
+      returning: CLAIM_RETURNING,
     })
   )
 
@@ -494,18 +600,7 @@ export async function claimJobs(input: ClaimJobsInput): Promise<ClaimedJob[]> {
   const claimed: ClaimedJob[] = []
 
   for (const row of rows) {
-    const job: ClaimedJob = {
-      id: String(row.id),
-      jobId: row.job_id,
-      queue: row.queue,
-      dedupeKey: row.dedupe_key,
-      payload: row.payload ?? {},
-      workspaceKey: row.workspace_key,
-      attempts: row.attempts,
-      maxAttempts: row.max_attempts,
-      leaseToken: row.lease_token,
-      lockedUntil: asDate(row.locked_until),
-    }
+    const job = claimedFromRow(row)
 
     if (job.workspaceKey !== expected) {
       // Refuse loudly and terminally. This row is not another workspace's job —

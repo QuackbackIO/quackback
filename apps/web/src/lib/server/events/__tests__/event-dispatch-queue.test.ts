@@ -38,6 +38,7 @@ function job(eventId: string, attempts = 1): ClaimedJob {
     maxAttempts: 10,
     leaseToken: 'test',
     lockedUntil: new Date(),
+    runAt: new Date(),
   }
 }
 
