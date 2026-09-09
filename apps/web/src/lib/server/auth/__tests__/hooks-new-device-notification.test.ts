@@ -37,14 +37,15 @@ vi.mock('@quackback/email', () => ({
   sendNewSignInEmail: (params: unknown) => mockSendNewSignInEmail(params),
 }))
 
-const mockListIdentityProviders = vi.fn(async () => [])
+const mockListIdentityProviders = vi.fn()
 vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
   listIdentityProviders: () => mockListIdentityProviders(),
 }))
 
-const mockGetRegisteredOidcProviderIds = vi.fn(async () => new Set<string>())
+const mockGetRegisteredOidcProviderIds = vi.fn()
 vi.mock('@/lib/server/auth/registered-providers', () => ({
-  getRegisteredOidcProviderIds: (...args: unknown[]) => mockGetRegisteredOidcProviderIds(...args),
+  getRegisteredOidcProviderIds: (providers?: unknown) =>
+    mockGetRegisteredOidcProviderIds(providers),
 }))
 
 vi.mock('@/lib/server/audit/log', () => ({
@@ -104,7 +105,7 @@ beforeEach(() => {
   mockSendNewSignInEmail.mockReset().mockResolvedValue({ sent: true })
   mockRecordAuditEvent.mockReset().mockResolvedValue(undefined)
   mockListIdentityProviders.mockReset().mockResolvedValue([])
-  mockGetRegisteredOidcProviderIds.mockReset().mockResolvedValue(new Set<string>())
+  mockGetRegisteredOidcProviderIds.mockReset().mockResolvedValue(new Set())
 })
 
 describe('handleNewDeviceNotification — happy path', () => {
