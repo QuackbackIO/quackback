@@ -16,7 +16,9 @@
  *
  * **One round trip.** The round trip, not the statement, is the whole cost of
  * moving these paths onto Postgres (measured in `KV.md`), and it is why none of
- * these is expressed as a transaction with two statements in it.
+ * these is expressed as a transaction with two statements in it — except
+ * `kvSetMemberClaimCounted`, which must lock in a prior statement so the
+ * counted insert takes a snapshot that includes concurrent commits.
  *
  * **The workspace is in the key.** `currentWorkspaceNamespace()` is the same function
  * that built the `t:<workspaceKey>:` prefix on the Redis wire key, so the
@@ -174,10 +176,11 @@ function asBool(value: unknown): boolean {
  * row whether or not the snapshot has it; UNION also dedupes if it has.
  *
  * Two concurrent first-claims on an empty set would otherwise both see
- * liveCount 1 and both skip the alert. An advisory xact lock on
- * (workspace, set) serializes those statements so the second snapshot
- * includes the first insert. The INSERT…SELECT FROM lock is what forces
- * the lock CTE to run; an unreferenced SELECT CTE can be skipped.
+ * liveCount 1 and both skip the alert. READ COMMITTED takes the snapshot
+ * at statement start, so a lock CTE in the *same* statement is too late
+ * — the waiter resumes with the empty snapshot it already took. Lock in
+ * a prior statement of the same transaction; the counted insert then
+ * snapshots after the first claim has committed.
  */
 export async function kvSetMemberClaimCounted(
   setKey: string,
@@ -186,40 +189,42 @@ export async function kvSetMemberClaimCounted(
 ): Promise<SetMemberClaim> {
   const ttl = ttlSeconds(seconds)
   const workspaceKey = currentWorkspaceNamespace()
-  const result = await db.execute(sql`
-    WITH lock AS (
+  return await db.transaction(async (tx) => {
+    await tx.execute(sql`
       SELECT pg_advisory_xact_lock(hashtext(${workspaceKey}), hashtext(${setKey}))
-    ),
-    claimed AS (
-      INSERT INTO kv_set_member (workspace_key, set_key, member, expires_at)
+    `)
+    const result = await tx.execute(sql`
+      WITH claimed AS (
+        INSERT INTO kv_set_member (workspace_key, set_key, member, expires_at)
+        VALUES (
+          ${workspaceKey},
+          ${setKey},
+          ${member},
+          now() + make_interval(secs => ${ttl})
+        )
+        ON CONFLICT (workspace_key, set_key, member) DO UPDATE
+          SET expires_at = EXCLUDED.expires_at
+          WHERE kv_set_member.expires_at <= now()
+        RETURNING member
+      ),
+      live AS (
+        SELECT member FROM kv_set_member
+        WHERE workspace_key = ${workspaceKey}
+          AND set_key = ${setKey}
+          AND expires_at > now()
+        UNION
+        SELECT member FROM claimed
+      )
       SELECT
-        ${workspaceKey},
-        ${setKey},
-        ${member},
-        now() + make_interval(secs => ${ttl})
-      FROM lock
-      ON CONFLICT (workspace_key, set_key, member) DO UPDATE
-        SET expires_at = EXCLUDED.expires_at
-        WHERE kv_set_member.expires_at <= now()
-      RETURNING member
-    ),
-    live AS (
-      SELECT member FROM kv_set_member
-      WHERE workspace_key = ${workspaceKey}
-        AND set_key = ${setKey}
-        AND expires_at > now()
-      UNION
-      SELECT member FROM claimed
-    )
-    SELECT
-      EXISTS (SELECT 1 FROM claimed) AS claimed,
-      (SELECT count(*)::int FROM live) AS live_count
-  `)
-  const row = getExecuteRows<{ claimed: unknown; live_count: unknown }>(result)[0]
-  return {
-    claimed: asBool(row?.claimed),
-    liveCount: Number(row?.live_count ?? 0),
-  }
+        EXISTS (SELECT 1 FROM claimed) AS claimed,
+        (SELECT count(*)::int FROM live) AS live_count
+    `)
+    const row = getExecuteRows<{ claimed: unknown; live_count: unknown }>(result)[0]
+    return {
+      claimed: asBool(row?.claimed),
+      liveCount: Number(row?.live_count ?? 0),
+    }
+  })
 }
 
 /** SADD + EXPIRE NX, as one statement. True iff the member was not already live. */
