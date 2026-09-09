@@ -4,7 +4,8 @@
  * body supports {firstName}-style variables rendered against the live
  * conversation, and it can carry a list of actions (assign, tag, set priority,
  * snooze, close, ...) applied when an agent uses it. Supersedes the old
- * settings-JSON `cannedReplies`; the 0146 migration copies those in.
+ * settings-JSON `cannedReplies`; 0146 copies `messenger.cannedReplies`, and
+ * 0277 copies leftover 0.13.x `chat.cannedReplies` after rewriting that key.
  *
  * `created_by_principal_id` is a team actor (macros are authored by staff), so
  * it is exempt from the anonymous-to-identified principal re-point.

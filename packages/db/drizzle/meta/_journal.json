@@ -1779,6 +1779,13 @@
       "when": 1788818400000,
       "tag": "0276_post_tags_is_public",
       "breakpoints": true
+    },
+    {
+      "idx": 254,
+      "version": "7",
+      "when": 1788991200000,
+      "tag": "0277_widget_chat_to_messenger",
+      "breakpoints": true
     }
   ]
 }

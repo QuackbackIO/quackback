@@ -1143,10 +1143,10 @@ export function resolveFeatureFlags(storedJson: string | null | undefined): Feat
  * onboarding goal turns them on.
  *
  * Existing workspaces with an explicit `featureFlags` JSON row keep stored
- * values. A one-time SQL stamp wrote today's previous all-on object onto
- * null rows before this default flipped, so already-running installs do
- * not lose surfaces. Only missing keys and new null rows pick up these
- * defaults (merged in settings.service).
+ * values. A one-time SQL stamp writes this same core-only object onto null
+ * rows so a 0.13.x upgrade does not turn Support, Help Center, or Status on.
+ * Only missing keys and new null rows pick up these defaults (merged in
+ * settings.service).
  */
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   feedback: true,
