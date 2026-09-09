@@ -85,6 +85,8 @@ export interface WidgetHomeProps {
    */
   boardPermissions?: Record<string, { canSubmit: boolean; canVote: boolean }>
   defaultBoard?: string
+  /** SDK `?board=` / `defaultBoard` — seed the Popular Ideas filter. */
+  initialBoardSlug?: string
   /** Programmatic `open({ view: 'new-post' })` — expand and prefill. */
   composeRequest?: WidgetComposeRequest | null
   onPostSelect?: (postId: string) => void
@@ -226,6 +228,7 @@ export function WidgetHomeAnimated({
   boards,
   boardPermissions,
   defaultBoard,
+  initialBoardSlug,
   composeRequest,
   onPostSelect,
   onPostCreated,
@@ -328,7 +331,9 @@ export function WidgetHomeAnimated({
   const [similarPostResults, setSimilarPostResults] = useState<SearchResult | null>(null)
   const [isSimilarSearching, setIsSimilarSearching] = useState(false)
   const similarDebounceRef = useRef<ReturnType<typeof setTimeout>>(null)
-  const [activeBoardSlug, setActiveBoardSlug] = useState<string | null>(null)
+  const [activeBoardSlug, setActiveBoardSlug] = useState<string | null>(
+    () => initialBoardSlug ?? null
+  )
   const pills = usePillsScroll()
   const [popularSearch, setPopularSearch] = useState('')
   const [debouncedPopularSearch, setDebouncedPopularSearch] = useState('')
@@ -361,10 +366,11 @@ export function WidgetHomeAnimated({
     },
     initialPageParam: 1,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length + 1 : undefined),
-    // Seed from SSR only on the anonymous first paint. Identify re-keys
-    // this query so members-only boards refetch with the Bearer actor.
+    // Seed from SSR only on the anonymous first paint for the same board
+    // filter the loader used (`?board=` or All). Identify re-keys this
+    // query so members-only boards refetch with the Bearer actor.
     initialData:
-      activeBoardSlug === null && sessionVersion === INITIAL_SESSION_VERSION
+      activeBoardSlug === (initialBoardSlug ?? null) && sessionVersion === INITIAL_SESSION_VERSION
         ? {
             pages: [{ items: initialPosts, total: undefined, hasMore: initialHasMore }],
             pageParams: [1],
@@ -444,12 +450,15 @@ export function WidgetHomeAnimated({
       setIsSimilarSearching(false)
       return
     }
-    const cached = similarSearchCache.get(q)
+    const cacheKey = `${sessionVersion}:${q}`
+    const cached = similarSearchCache.get(cacheKey)
     if (cached) {
       setSimilarPostResults(cached)
       setIsSimilarSearching(false)
       return
     }
+    // Drop the previous identity's hits before the new request lands.
+    setSimilarPostResults(null)
     setIsSimilarSearching(true)
     const controller = new AbortController()
     similarDebounceRef.current = setTimeout(async () => {
@@ -461,7 +470,7 @@ export function WidgetHomeAnimated({
         })
         const json = await res.json()
         const result: SearchResult = { posts: json.data?.posts ?? [] }
-        similarSearchCache.set(q, result)
+        similarSearchCache.set(cacheKey, result)
         setSimilarPostResults(result)
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') return
@@ -474,7 +483,7 @@ export function WidgetHomeAnimated({
       if (similarDebounceRef.current) clearTimeout(similarDebounceRef.current)
       controller.abort()
     }
-  }, [title])
+  }, [title, sessionVersion])
 
   // Debounce popular ideas search
   useEffect(() => {

@@ -2,7 +2,9 @@ import { useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { FormattedMessage } from 'react-intl'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { publicChangelogQueries } from '@/lib/client/queries/changelog'
+import { getPublicChangelogFn } from '@/lib/server/functions/changelog'
+import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
+import { widgetQueryKeys } from '@/lib/client/hooks/use-widget-vote'
 import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-content'
 import { EmbedHydration } from '@/components/shared/embed-hydration'
 import type { ChangelogId } from '@quackback/ids'
@@ -11,13 +13,27 @@ import { WidgetPortalTitle } from './widget-portal-title'
 import { sendToHost } from '@/lib/client/widget-bridge'
 import { WidgetArticleSkeleton } from './widget-skeletons'
 import { ChangelogMetaRow } from './widget-changelog-meta'
+import { useWidgetAuth } from './widget-auth-provider'
 
 interface WidgetChangelogDetailProps {
   entryId: string
 }
 
 export function WidgetChangelogDetail({ entryId }: WidgetChangelogDetailProps) {
-  const { data: entry, isLoading } = useQuery(publicChangelogQueries.detail(entryId as ChangelogId))
+  const { sessionVersion } = useWidgetAuth()
+  const { data: entry, isLoading } = useQuery({
+    queryKey: widgetQueryKeys.changelogDetail.byId(entryId, sessionVersion),
+    queryFn: () =>
+      getPublicChangelogFn({
+        data: { id: entryId as ChangelogId },
+        headers: getWidgetAuthHeaders(),
+      }),
+    placeholderData: (prev, prevQuery) =>
+      prevQuery?.queryKey[2] === entryId && prevQuery?.queryKey[3] === sessionVersion
+        ? prev
+        : undefined,
+    staleTime: 30 * 1000,
+  })
 
   const changelogEntryId = entry?.id
   const handleViewOnPortal = useCallback(() => {

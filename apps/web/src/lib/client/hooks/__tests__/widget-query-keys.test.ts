@@ -47,12 +47,30 @@ describe('widgetQueryKeys', () => {
   })
 
   describe('articleDetail', () => {
-    it('byRef includes ref and version', () => {
-      expect(widgetQueryKeys.articleDetail.byRef('article_1', 0)).toEqual([
+    it('byRef includes ref, locale, and version', () => {
+      expect(widgetQueryKeys.articleDetail.byRef('article_1', 0, 'en')).toEqual([
         'widget',
         'article',
         'article_1',
+        'en',
         0,
+      ])
+    })
+
+    it('same ref with different locales produce different keys', () => {
+      const en = widgetQueryKeys.articleDetail.byRef('article_1', 0, 'en')
+      const de = widgetQueryKeys.articleDetail.byRef('article_1', 0, 'de')
+      expect(en).not.toEqual(de)
+    })
+  })
+
+  describe('changelogDetail', () => {
+    it('byId includes entryId and version', () => {
+      expect(widgetQueryKeys.changelogDetail.byId('changelog_1', 2)).toEqual([
+        'widget',
+        'changelog',
+        'changelog_1',
+        2,
       ])
     })
   })

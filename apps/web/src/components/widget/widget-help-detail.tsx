@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { FormattedMessage } from 'react-intl'
+import { FormattedMessage, useIntl } from 'react-intl'
 import { ChevronRightIcon } from '@heroicons/react/24/outline'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { resolvePublicArticleRefFn } from '@/lib/server/functions/help-center'
@@ -30,15 +30,20 @@ export function WidgetHelpDetail({
   onAskQuestion,
 }: WidgetHelpDetailProps) {
   const { sessionVersion } = useWidgetAuth()
+  const { locale } = useIntl()
   const { data: article, isLoading } = useQuery({
-    queryKey: widgetQueryKeys.articleDetail.byRef(articleRef, sessionVersion),
+    queryKey: widgetQueryKeys.articleDetail.byRef(articleRef, sessionVersion, locale),
     queryFn: () =>
       resolvePublicArticleRefFn({
-        data: { ref: articleRef },
+        data: { ref: articleRef, locale },
         headers: getWidgetAuthHeaders(),
       }),
     placeholderData: (prev, prevQuery) =>
-      prevQuery?.queryKey[2] === articleRef ? prev : undefined,
+      prevQuery?.queryKey[2] === articleRef &&
+      prevQuery?.queryKey[3] === locale &&
+      prevQuery?.queryKey[4] === sessionVersion
+        ? prev
+        : undefined,
     staleTime: 30 * 1000,
   })
 

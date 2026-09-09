@@ -398,6 +398,7 @@ function WidgetPage() {
     messengerEnabled,
     showPoweredBy,
   } = Route.useLoaderData()
+  const { board: initialBoardSlug } = Route.useSearch()
   const { ensureSession, sessionVersion } = useWidgetAuth()
   const intl = useIntl()
 
@@ -1096,6 +1097,7 @@ function WidgetPage() {
             boards={liveBoards}
             boardPermissions={livePermissions}
             defaultBoard={defaultBoard}
+            initialBoardSlug={initialBoardSlug}
             composeRequest={composeRequest}
             onPostSelect={handlePostSelect}
             onPostCreated={handlePostCreated}

@@ -29,7 +29,12 @@ export const widgetQueryKeys = {
   },
   articleDetail: {
     all: ['widget', 'article'] as const,
-    byRef: (ref: string, version: number) => ['widget', 'article', ref, version] as const,
+    byRef: (ref: string, version: number, locale: string) =>
+      ['widget', 'article', ref, locale, version] as const,
+  },
+  changelogDetail: {
+    all: ['widget', 'changelog'] as const,
+    byId: (entryId: string, version: number) => ['widget', 'changelog', entryId, version] as const,
   },
   popularPosts: {
     list: (boardSlug: string | null, version: number) =>
