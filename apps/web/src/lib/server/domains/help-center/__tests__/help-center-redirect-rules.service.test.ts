@@ -19,7 +19,7 @@ function createInsertChain() {
       id: 'hc_redirect_rule_new1' as HcRedirectRuleId,
       path: '/old-slug',
       targetType: 'article',
-      targetId: 'kb_article_1',
+      targetId: 'article_1',
       createdAt: new Date('2026-01-01'),
     },
   ])
@@ -78,13 +78,13 @@ describe('createRedirectRule', () => {
     const rule = await createRedirectRule({
       path: 'old-slug',
       targetType: 'article',
-      targetId: 'kb_article_1' as KbArticleId,
+      targetId: 'article_1' as KbArticleId,
     })
 
     expect(insertValuesCalls[0][0]).toMatchObject({
       path: '/old-slug',
       targetType: 'article',
-      targetId: 'kb_article_1',
+      targetId: 'article_1',
     })
     expect(rule.targetLabel).toBe('Getting started')
   })
@@ -99,7 +99,7 @@ describe('createRedirectRule', () => {
     await createRedirectRule({
       path: 'foo//bar/',
       targetType: 'article',
-      targetId: 'kb_article_1' as KbArticleId,
+      targetId: 'article_1' as KbArticleId,
     })
 
     expect(insertValuesCalls[0][0]).toMatchObject({ path: '/foo/bar' })
@@ -116,7 +116,7 @@ describe('createRedirectRule', () => {
       createRedirectRule({
         path: '/foo',
         targetType: 'article',
-        targetId: 'kb_article_1' as KbArticleId,
+        targetId: 'article_1' as KbArticleId,
       })
     ).rejects.toThrow(/published/i)
     expect(insertValuesCalls).toHaveLength(0)
@@ -129,7 +129,7 @@ describe('createRedirectRule', () => {
       createRedirectRule({
         path: '/foo',
         targetType: 'article',
-        targetId: 'kb_article_missing' as KbArticleId,
+        targetId: 'article_missing' as KbArticleId,
       })
     ).rejects.toThrow()
   })
@@ -163,7 +163,7 @@ describe('createRedirectRule', () => {
       createRedirectRule({
         path: '/foo',
         targetType: 'article',
-        targetId: 'kb_article_1' as KbArticleId,
+        targetId: 'article_1' as KbArticleId,
       })
     ).rejects.toThrow(/already exists/i)
   })
@@ -177,7 +177,7 @@ describe('listRedirectRules', () => {
           id: 'hc_redirect_rule_1' as HcRedirectRuleId,
           path: '/old',
           targetType: 'article',
-          targetId: 'kb_article_1',
+          targetId: 'article_1',
           createdAt: new Date('2026-01-01'),
         },
       ]),
@@ -197,7 +197,7 @@ describe('deleteRedirectRule / deleteRedirectRulesForTarget', () => {
   })
 
   it('deletes every rule pointing at a target', async () => {
-    await deleteRedirectRulesForTarget('article', 'kb_article_1')
+    await deleteRedirectRulesForTarget('article', 'article_1')
     expect(mockDeleteWhere).toHaveBeenCalled()
   })
 })
@@ -211,7 +211,7 @@ describe('resolveRedirectRule', () => {
   it('resolves an article rule to its canonical /hc path', async () => {
     mockRuleFindFirst.mockResolvedValue({
       targetType: 'article',
-      targetId: 'kb_article_1',
+      targetId: 'article_1',
     })
     mockArticleFindFirst.mockResolvedValue({
       slug: 'getting-started',
@@ -224,7 +224,7 @@ describe('resolveRedirectRule', () => {
   })
 
   it('returns null when the article target is no longer published', async () => {
-    mockRuleFindFirst.mockResolvedValue({ targetType: 'article', targetId: 'kb_article_1' })
+    mockRuleFindFirst.mockResolvedValue({ targetType: 'article', targetId: 'article_1' })
     mockArticleFindFirst.mockResolvedValue({
       slug: 'getting-started',
       publishedAt: null,

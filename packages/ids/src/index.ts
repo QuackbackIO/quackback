@@ -56,7 +56,16 @@ export {
 // Prefixes
 // ============================================
 
-export { ID_PREFIXES, getPrefix, isValidPrefix, type IdPrefix, type EntityType } from './prefixes'
+export {
+  ID_PREFIXES,
+  ID_PREFIX_ALIASES,
+  getPrefix,
+  isValidPrefix,
+  prefixMatches,
+  resolvePrefix,
+  type IdPrefix,
+  type EntityType,
+} from './prefixes'
 
 // ============================================
 // Types
@@ -155,6 +164,7 @@ export type {
   PostMergeSuggestionId,
   // Help center entities
   KbCategoryId,
+  ArticleId,
   KbArticleId,
   KbArticleFeedbackId,
   HcRedirectRuleId,
@@ -210,6 +220,7 @@ export {
   // Pre-built strict schemas
   postIdSchema,
   boardIdSchema,
+  articleIdSchema,
   commentIdSchema,
   voteIdSchema,
   tagIdSchema,

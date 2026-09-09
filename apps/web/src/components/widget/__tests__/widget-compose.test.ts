@@ -96,14 +96,14 @@ describe('resolveOpenCommand', () => {
   })
 
   it('forwards an article TypeID the same way as a post TypeID', () => {
-    const articleId = generateId('kb_article')
-    const publicId = `article_${articleId.slice('kb_article_'.length)}`
-    expect(resolveOpenCommand({ articleId: publicId }, allTabs)).toEqual({
+    const articleId = generateId('article')
+    const legacyId = `kb_article_${articleId.slice('article_'.length)}`
+    expect(resolveOpenCommand({ articleId }, allTabs)).toEqual({
       type: 'article',
-      articleId: publicId,
+      articleId,
     })
-    expect(isArticleTypeId(publicId)).toBe(true)
     expect(isArticleTypeId(articleId)).toBe(true)
+    expect(isArticleTypeId(legacyId)).toBe(true)
     expect(isArticleTypeId('art_01h...')).toBe(false)
     expect(isArticleTypeId('pricing')).toBe(false)
   })

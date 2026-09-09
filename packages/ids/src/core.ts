@@ -12,7 +12,7 @@
  */
 
 import { typeid, TypeID } from 'typeid-js'
-import { ID_PREFIXES, type IdPrefix, type EntityType } from './prefixes'
+import { ID_PREFIXES, prefixMatches, type IdPrefix, type EntityType } from './prefixes'
 import type { TypeId, EntityIdMap } from './types'
 
 /**
@@ -147,7 +147,7 @@ export function getTypeIdPrefix(typeIdString: string): string {
 export function isValidTypeId(value: string, expectedPrefix?: IdPrefix): boolean {
   try {
     const tid = TypeID.fromString(value)
-    if (expectedPrefix && tid.getType() !== expectedPrefix) {
+    if (expectedPrefix && !prefixMatches(tid.getType(), expectedPrefix)) {
       return false
     }
     // Also verify the suffix is valid base32 by attempting UUID conversion
@@ -242,8 +242,8 @@ export function normalizeToUuid(id: string, expectedPrefix?: IdPrefix): string {
   // Parse as TypeID
   const parsed = parseTypeId(id)
 
-  // Validate prefix if specified
-  if (expectedPrefix && parsed.prefix !== expectedPrefix) {
+  // Validate prefix if specified (aliases of the expected prefix are ok)
+  if (expectedPrefix && !prefixMatches(parsed.prefix, expectedPrefix)) {
     throw new Error(`Expected ${expectedPrefix} ID, got ${parsed.prefix}`)
   }
 
@@ -267,9 +267,14 @@ export function ensureTypeId<P extends IdPrefix>(id: string, prefix: P): TypeId<
     return fromUuid(prefix, id)
   }
 
-  // Validate it's a TypeID with correct prefix
+  // Validate it's a TypeID with the correct prefix (or a retired alias)
   if (!isValidTypeId(id, prefix)) {
     throw new Error(`Invalid ${prefix} ID: ${id}`)
+  }
+
+  const parsed = parseTypeId(id)
+  if (parsed.prefix !== prefix) {
+    return fromUuid(prefix, parsed.uuid)
   }
 
   return id as TypeId<P>

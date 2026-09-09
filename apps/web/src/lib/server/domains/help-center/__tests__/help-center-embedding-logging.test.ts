@@ -52,7 +52,7 @@ describe('generateKbEmbedding usage logging', () => {
   it('routes the embedding call through withUsageLogging with the given context', async () => {
     const result = await generateKbEmbedding('some text', {
       pipelineStep: 'kb_article_embedding',
-      metadata: { kbArticleId: 'kb_article_1' },
+      metadata: { kbArticleId: 'article_1' },
     })
 
     expect(result).toEqual([0.1, 0.2])
@@ -62,7 +62,7 @@ describe('generateKbEmbedding usage logging', () => {
       pipelineStep: 'kb_article_embedding',
       callType: 'embedding',
       model: 'text-embedding-3-small',
-      metadata: { kbArticleId: 'kb_article_1' },
+      metadata: { kbArticleId: 'article_1' },
     })
   })
 

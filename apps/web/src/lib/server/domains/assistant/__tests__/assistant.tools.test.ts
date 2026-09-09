@@ -189,7 +189,7 @@ beforeEach(() => {
 
 describe('search', () => {
   it('retrieves audience-scoped, records sources in the ledger, and allowlists output', async () => {
-    mockRetrieve.mockResolvedValue([makeKbArticle('kb_article_1', { content: 'X'.repeat(5000) })])
+    mockRetrieve.mockResolvedValue([makeKbArticle('article_1', { content: 'X'.repeat(5000) })])
     const c = ctx({ audience: 'team' })
     const search = await findTool(c, 'search')
 
@@ -200,18 +200,18 @@ describe('search', () => {
     expect(mockRetrieve).toHaveBeenCalledWith('billing', { audience: 'team' })
     expect(out.results).toHaveLength(1)
     expect(out.results[0]).toEqual({
-      id: 'kb_article_1',
+      id: 'article_1',
       kind: 'article',
-      title: 'Title kb_article_1',
-      url: '/hc/en/articles/1-slug-kb_article_1',
+      title: 'Title article_1',
+      url: '/hc/en/articles/1-slug-article_1',
       snippet: expect.any(String),
     })
     expect(out.results[0].snippet.length).toBeLessThanOrEqual(1200)
-    expect(c.ledger.sources.get('kb_article_1')).toEqual({
+    expect(c.ledger.sources.get('article_1')).toEqual({
       type: 'article',
-      id: 'kb_article_1',
-      title: 'Title kb_article_1',
-      url: '/hc/en/articles/1-slug-kb_article_1',
+      id: 'article_1',
+      title: 'Title article_1',
+      url: '/hc/en/articles/1-slug-article_1',
       updatedAt: '2026-06-01T00:00:00.000Z',
     })
   })
@@ -226,7 +226,7 @@ describe('search', () => {
   })
 
   it('frames a non-empty result with the shared content-not-instructions note (retrieval is the fourth guard surface)', async () => {
-    mockRetrieve.mockResolvedValue([makeKbArticle('kb_article_1')])
+    mockRetrieve.mockResolvedValue([makeKbArticle('article_1')])
     const c = ctx()
     const search = await findTool(c, 'search')
 
@@ -250,17 +250,17 @@ describe('search', () => {
   })
 
   it("records each surfaced source's updatedAt on the ledgered citation itself (stripped only at persistence)", async () => {
-    mockRetrieve.mockResolvedValue([makeKbArticle('kb_article_1')])
+    mockRetrieve.mockResolvedValue([makeKbArticle('article_1')])
     const c = ctx()
     const search = await findTool(c, 'search')
 
     await search.execute({ query: 'billing' }, toolCtx(c))
 
-    expect(c.ledger.sources.get('kb_article_1')?.updatedAt).toBe('2026-06-01T00:00:00.000Z')
+    expect(c.ledger.sources.get('article_1')?.updatedAt).toBe('2026-06-01T00:00:00.000Z')
   })
 
   it('ends exploration past the per-turn search budget with an answer-now note', async () => {
-    mockRetrieve.mockResolvedValue([makeKbArticle('kb_article_1')])
+    mockRetrieve.mockResolvedValue([makeKbArticle('article_1')])
     const c = ctx()
     const search = await findTool(c, 'search')
     for (let i = 0; i < 3; i++) await search.execute({ query: `q${i}` }, toolCtx(c))
@@ -273,11 +273,11 @@ describe('search', () => {
     expect(mockRetrieve).toHaveBeenCalledTimes(3)
     expect(out.results).toEqual([])
     expect(out.note).toMatch(/answer/i)
-    expect(c.ledger.sources.has('kb_article_1')).toBe(true)
+    expect(c.ledger.sources.has('article_1')).toBe(true)
   })
 
   it("forwards the context's sourceTypes into retrieveKnowledge, narrowing away the knowledge base", async () => {
-    mockRetrieve.mockResolvedValue([makeKbArticle('kb_article_1')])
+    mockRetrieve.mockResolvedValue([makeKbArticle('article_1')])
     // sourceTypes excludes 'article': the only registered source (flags off)
     // gets filtered out entirely, so retrieveKbArticles is never called.
     const c = ctx({ sourceTypes: ['post'] })
@@ -700,7 +700,7 @@ describe('assembleAssistantToolset: sandbox simulate mode', () => {
   })
 
   it('still executes a read tool normally in simulate mode', async () => {
-    mockRetrieve.mockResolvedValue([makeKbArticle('kb_article_1')])
+    mockRetrieve.mockResolvedValue([makeKbArticle('article_1')])
 
     const c = ctx({ conversationId: null, simulate: true })
     const tool = await findTool(c, 'search')

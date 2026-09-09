@@ -83,16 +83,16 @@ beforeEach(() => {
 describe('retrieveKbArticles', () => {
   it('uses the semantic path when a query embedding is available', async () => {
     mockGenerateKbEmbedding.mockResolvedValue([0.1, 0.2, 0.3])
-    mockLimit.mockResolvedValue([row('kb_article_1')])
+    mockLimit.mockResolvedValue([row('article_1')])
 
     const result = await retrieveKbArticles('how do I invite teammates')
 
     expect(mockGenerateKbEmbedding).toHaveBeenCalledOnce()
     expect(result).toHaveLength(1)
     expect(result[0]).toMatchObject({
-      id: 'kb_article_1',
-      slug: 'slug-kb_article_1',
-      title: 'Title kb_article_1',
+      id: 'article_1',
+      slug: 'slug-article_1',
+      title: 'Title article_1',
       categorySlug: 'general',
       categoryName: 'General',
     })
@@ -101,12 +101,12 @@ describe('retrieveKbArticles', () => {
 
   it('falls back to keyword retrieval when embeddings are unavailable', async () => {
     mockGenerateKbEmbedding.mockResolvedValue(null)
-    mockLimit.mockResolvedValue([row('kb_article_2')])
+    mockLimit.mockResolvedValue([row('article_2')])
 
     const result = await retrieveKbArticles('billing')
 
     expect(result).toHaveLength(1)
-    expect(result[0].id).toBe('kb_article_2')
+    expect(result[0].id).toBe('article_2')
   })
 
   it('returns an empty list when nothing clears the similarity floor', async () => {

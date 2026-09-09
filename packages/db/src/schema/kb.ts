@@ -118,7 +118,7 @@ export const helpCenterCategories = pgTable(
 export const helpCenterArticles = pgTable(
   'kb_articles',
   {
-    id: typeIdWithDefault('kb_article')('id').primaryKey(),
+    id: typeIdWithDefault('article')('id').primaryKey(),
     categoryId: typeIdColumn('kb_category')('category_id')
       .notNull()
       .references(() => helpCenterCategories.id, { onDelete: 'cascade' }),
@@ -173,7 +173,7 @@ export const helpCenterArticleFeedback = pgTable(
   'kb_article_feedback',
   {
     id: typeIdWithDefault('kb_article_feedback')('id').primaryKey(),
-    articleId: typeIdColumn('kb_article')('article_id')
+    articleId: typeIdColumn('article')('article_id')
       .notNull()
       .references(() => helpCenterArticles.id, { onDelete: 'cascade' }),
     principalId: typeIdColumnNullable('principal')('principal_id').references(() => principal.id, {
@@ -265,7 +265,7 @@ export const helpCenterArticleTranslations = pgTable(
   'kb_article_translations',
   {
     id: typeIdWithDefault('kb_article_translation')('id').primaryKey(),
-    articleId: typeIdColumn('kb_article')('article_id')
+    articleId: typeIdColumn('article')('article_id')
       .notNull()
       .references(() => helpCenterArticles.id, { onDelete: 'cascade' }),
     locale: text('locale').notNull(),

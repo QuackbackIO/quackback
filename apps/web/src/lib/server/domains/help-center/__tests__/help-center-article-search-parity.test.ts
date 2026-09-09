@@ -78,8 +78,8 @@ beforeEach(() => {
 
 describe('listArticles hybrid search parity', () => {
   it('routes search through the ranked hybrid with team visibility', async () => {
-    mockSearchArticleIdsRanked.mockResolvedValue(['kb_article_1'])
-    mockArticleFindMany.mockResolvedValue([dbRow('kb_article_1')])
+    mockSearchArticleIdsRanked.mockResolvedValue(['article_1'])
+    mockArticleFindMany.mockResolvedValue([dbRow('article_1')])
 
     const result = await listArticles({ search: 'dark mode', status: 'all' })
 
@@ -90,32 +90,32 @@ describe('listArticles hybrid search parity', () => {
       status: 'all',
       limit: 50,
     })
-    expect(result.items.map((i) => i.id)).toEqual(['kb_article_1'])
+    expect(result.items.map((i) => i.id)).toEqual(['article_1'])
   })
 
   it('preserves rank order over db row order', async () => {
-    mockSearchArticleIdsRanked.mockResolvedValue(['kb_article_2', 'kb_article_1'])
+    mockSearchArticleIdsRanked.mockResolvedValue(['article_2', 'article_1'])
     // db returns rows in a different order than the ranking
-    mockArticleFindMany.mockResolvedValue([dbRow('kb_article_1'), dbRow('kb_article_2')])
+    mockArticleFindMany.mockResolvedValue([dbRow('article_1'), dbRow('article_2')])
 
     const result = await listArticles({ search: 'q' })
-    expect(result.items.map((i) => i.id)).toEqual(['kb_article_2', 'kb_article_1'])
+    expect(result.items.map((i) => i.id)).toEqual(['article_2', 'article_1'])
   })
 
   it('paginates by slicing the ranked pool after the cursor', async () => {
-    mockSearchArticleIdsRanked.mockResolvedValue(['kb_article_1', 'kb_article_2', 'kb_article_3'])
-    mockArticleFindMany.mockResolvedValue([dbRow('kb_article_2')])
+    mockSearchArticleIdsRanked.mockResolvedValue(['article_1', 'article_2', 'article_3'])
+    mockArticleFindMany.mockResolvedValue([dbRow('article_2')])
 
-    const result = await listArticles({ search: 'q', cursor: 'kb_article_1', limit: 1 })
+    const result = await listArticles({ search: 'q', cursor: 'article_1', limit: 1 })
 
-    expect(result.items.map((i) => i.id)).toEqual(['kb_article_2'])
+    expect(result.items.map((i) => i.id)).toEqual(['article_2'])
     expect(result.hasMore).toBe(true)
-    expect(result.nextCursor).toBe('kb_article_2')
+    expect(result.nextCursor).toBe('article_2')
   })
 
   it('returns an empty page for an unknown cursor', async () => {
-    mockSearchArticleIdsRanked.mockResolvedValue(['kb_article_1'])
-    const result = await listArticles({ search: 'q', cursor: 'kb_article_gone' })
+    mockSearchArticleIdsRanked.mockResolvedValue(['article_1'])
+    const result = await listArticles({ search: 'q', cursor: 'article_gone' })
     expect(result.items).toEqual([])
     expect(result.hasMore).toBe(false)
   })

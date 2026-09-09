@@ -44,6 +44,14 @@ describe('Zod TypeID Schemas', () => {
       expect(() => schema.parse('')).toThrow()
       expect(() => schema.parse('post_invalid')).toThrow()
     })
+
+    it('accepts the retired kb_article_ alias for article ids', () => {
+      const schema = typeIdSchema('article')
+      const canonical = generateId('article')
+      const legacy = `kb_article_${canonical.slice('article_'.length)}`
+      expect(schema.parse(canonical)).toBe(canonical)
+      expect(schema.parse(legacy)).toBe(legacy)
+    })
   })
 
   describe('flexibleIdSchema', () => {

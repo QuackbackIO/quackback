@@ -165,7 +165,7 @@ describe('conversationsExporter.serialize', () => {
 describe('kbArticlesExporter.serialize', () => {
   it('renders the category slug', () => {
     const line = kbArticlesExporter.serialize({
-      id: 'kb_article_1',
+      id: 'article_1',
       category: { slug: 'getting-started' },
       slug: 'install',
       title: 'Install the widget',
@@ -177,7 +177,7 @@ describe('kbArticlesExporter.serialize', () => {
       notHelpfulCount: 1,
       createdAt: d('2026-07-06T00:00:00Z'),
     } as never)
-    expect(line).toContain('kb_article_1,"getting-started","install","Install the widget"')
+    expect(line).toContain('article_1,"getting-started","install","Install the widget"')
   })
 })
 

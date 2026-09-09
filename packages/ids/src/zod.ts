@@ -7,7 +7,7 @@
 
 import { z } from 'zod'
 import { TypeID } from 'typeid-js'
-import { ID_PREFIXES, type IdPrefix } from './prefixes'
+import { ID_PREFIXES, prefixMatches, type IdPrefix } from './prefixes'
 import type { TypeId } from './types'
 
 /**
@@ -38,7 +38,7 @@ export function typeIdSchema<P extends IdPrefix>(prefix: P) {
     (val) => {
       try {
         const tid = TypeID.fromString(val)
-        return tid.getType() === prefix
+        return prefixMatches(tid.getType(), prefix)
       } catch {
         return false
       }
@@ -74,8 +74,8 @@ export function flexibleIdSchema<P extends IdPrefix>(prefix: P) {
     try {
       const tid = TypeID.fromString(val)
 
-      // Validate prefix matches
-      if (tid.getType() !== prefix) {
+      // Validate prefix matches (aliases of the expected prefix are ok)
+      if (!prefixMatches(tid.getType(), prefix)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: `Expected ${prefix} ID, got ${tid.getType()} ID`,
@@ -113,12 +113,15 @@ export function flexibleToTypeIdSchema<P extends IdPrefix>(prefix: P) {
     if (val.includes('_')) {
       try {
         const tid = TypeID.fromString(val)
-        if (tid.getType() !== prefix) {
+        if (!prefixMatches(tid.getType(), prefix)) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             message: `Expected ${prefix} ID, got ${tid.getType()} ID`,
           })
           return z.NEVER
+        }
+        if (tid.getType() !== prefix) {
+          return TypeID.fromUUID(prefix, tid.toUUID()).toString() as TypeId<P>
         }
         return val as TypeId<P>
       } catch {
@@ -170,6 +173,7 @@ export const uuidSchema = z.string().regex(UUID_REGEX, 'Invalid UUID format')
 // Strict TypeID schemas (only accept TypeID format)
 export const postIdSchema = typeIdSchema(ID_PREFIXES.post)
 export const boardIdSchema = typeIdSchema(ID_PREFIXES.board)
+export const articleIdSchema = typeIdSchema(ID_PREFIXES.kb_article)
 export const commentIdSchema = typeIdSchema(ID_PREFIXES.post_comment)
 export const voteIdSchema = typeIdSchema(ID_PREFIXES.post_vote)
 export const tagIdSchema = typeIdSchema(ID_PREFIXES.post_tag)

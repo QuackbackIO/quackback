@@ -1,10 +1,11 @@
-import { isValidTypeId, type IdPrefix } from '@quackback/ids'
+import { ensureTypeId, isValidTypeId, type IdPrefix } from '@quackback/ids'
 import { ValidationError } from '@/lib/shared/errors'
 
 /**
  * Validate a required TypeID parameter.
  * Throws ValidationError if the format is invalid.
- * Returns the value cast to T so callers don't need a separate `as TypeId` cast.
+ * Alias prefixes (e.g. `kb_article_` → `article_`) are rewritten to the
+ * canonical prefix so callers always see the catalogue form.
  */
 export function parseTypeId<T extends string>(
   value: string,
@@ -14,7 +15,7 @@ export function parseTypeId<T extends string>(
   if (!isValidTypeId(value, prefix)) {
     throw new ValidationError('VALIDATION_ERROR', `Invalid ${paramName} format`)
   }
-  return value as T
+  return ensureTypeId(value, prefix) as T
 }
 
 /**
@@ -31,7 +32,7 @@ export function parseOptionalTypeId<T extends string>(
   if (!isValidTypeId(value, prefix)) {
     throw new ValidationError('VALIDATION_ERROR', `Invalid ${paramName} format`)
   }
-  return value as T
+  return ensureTypeId(value, prefix) as T
 }
 
 /**
@@ -46,10 +47,10 @@ export function parseTypeIdArray<T extends string>(
   paramName = 'IDs'
 ): T[] | undefined {
   if (values === undefined) return undefined
-  for (const value of values) {
+  return values.map((value) => {
     if (!isValidTypeId(value, prefix)) {
       throw new ValidationError('VALIDATION_ERROR', `Invalid ${paramName} format`)
     }
-  }
-  return values as T[]
+    return ensureTypeId(value, prefix) as T
+  })
 }

@@ -32,7 +32,7 @@ afterEach(() => {
 function renderFeedback() {
   return render(
     <IntlProvider locale="en" messages={{}} onError={() => {}}>
-      <HelpCenterArticleFeedback articleId="kb_article_1" />
+      <HelpCenterArticleFeedback articleId="article_1" />
     </IntlProvider>
   )
 }

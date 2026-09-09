@@ -75,14 +75,14 @@ vi.mock('@/lib/server/db', () => ({
 import { getRelatedArticles } from '../help-center-related.service'
 
 const SOURCE = {
-  id: 'kb_article_1',
+  id: 'article_1',
   title: 'Invite your teammates',
   categoryId: 'kb_category_1',
   embedding: null as number[] | null,
 }
 
 const CANDIDATE = {
-  id: 'kb_article_2',
+  id: 'article_2',
   slug: 'manage-team-roles',
   title: 'Manage team roles',
   description: 'Roles and permissions',
@@ -97,7 +97,7 @@ beforeEach(() => {
 describe('getRelatedArticles', () => {
   it('returns an empty list when the source article does not exist', async () => {
     resultsQueue.push([])
-    await expect(getRelatedArticles('kb_article_missing')).resolves.toEqual([])
+    await expect(getRelatedArticles('article_missing')).resolves.toEqual([])
   })
 
   it('ranks candidates by the source article embedding when one is stored', async () => {
@@ -118,7 +118,7 @@ describe('getRelatedArticles', () => {
 
   it('pads scarce matches with recent articles from the same category', async () => {
     const pad = {
-      id: 'kb_article_3',
+      id: 'article_3',
       slug: 'set-up-your-workspace',
       title: 'Set up your workspace',
       description: null,
@@ -134,7 +134,7 @@ describe('getRelatedArticles', () => {
 
   it('never repeats a candidate already ranked into the list', async () => {
     const other = {
-      id: 'kb_article_4',
+      id: 'article_4',
       slug: 'import-your-data',
       title: 'Import your data',
       description: null,

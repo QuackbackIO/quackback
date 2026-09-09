@@ -100,7 +100,7 @@ beforeEach(() => {
 describe('kbKnowledgeSource', () => {
   it('maps a retrieved article onto a RetrievedItem with an article citation', async () => {
     mockRetrieveKbArticles.mockResolvedValue([
-      makeKbArticle('kb_article_1', { content: 'X'.repeat(5000), score: 0.87 }),
+      makeKbArticle('article_1', { content: 'X'.repeat(5000), score: 0.87 }),
     ])
 
     const items = await kbKnowledgeSource.retrieve('reset password', 'public', {
@@ -110,9 +110,9 @@ describe('kbKnowledgeSource', () => {
     expect(mockRetrieveKbArticles).toHaveBeenCalledWith('reset password', { audience: 'public' })
     expect(items).toHaveLength(1)
     expect(items[0]).toEqual({
-      id: 'kb_article_1',
+      id: 'article_1',
       sourceType: 'article',
-      title: 'Title kb_article_1',
+      title: 'Title article_1',
       excerpt: 'X'.repeat(KNOWLEDGE_SNIPPET_CHARS),
       score: 0.87,
       // The row's own updated_at, ISO-encoded for the copilot freshness line —
@@ -121,9 +121,9 @@ describe('kbKnowledgeSource', () => {
       updatedAt: '2026-06-01T00:00:00.000Z',
       citation: {
         type: 'article',
-        id: 'kb_article_1',
-        title: 'Title kb_article_1',
-        url: '/hc/en/articles/1-slug-kb_article_1',
+        id: 'article_1',
+        title: 'Title article_1',
+        url: '/hc/en/articles/1-slug-article_1',
       },
     })
   })
@@ -262,7 +262,7 @@ describe('resolveKnowledgeSources', () => {
 
 describe('retrieveKnowledge', () => {
   it('consults only the knowledge base when no enabled set is passed (KB-only default)', async () => {
-    mockRetrieveKbArticles.mockResolvedValue([makeKbArticle('kb_article_1', { score: 0.9 })])
+    mockRetrieveKbArticles.mockResolvedValue([makeKbArticle('article_1', { score: 0.9 })])
 
     const items = await retrieveKnowledge('q', 'public')
 
@@ -404,7 +404,7 @@ describe('retrieveKnowledge', () => {
   })
 
   it('sourceTypes undefined consults every registered source (default, unchanged)', async () => {
-    mockRetrieveKbArticles.mockResolvedValue([makeKbArticle('kb_article_1', { score: 0.5 })])
+    mockRetrieveKbArticles.mockResolvedValue([makeKbArticle('article_1', { score: 0.5 })])
     mockPostsRetrieve.mockResolvedValue([])
     mockSnippetsRetrieve.mockResolvedValue([])
     mockConversationSummariesRetrieve.mockResolvedValue([])
@@ -420,7 +420,7 @@ describe('retrieveKnowledge', () => {
   })
 
   it('sourceTypes narrows to the given subset, skipping every other registered source', async () => {
-    mockRetrieveKbArticles.mockResolvedValue([makeKbArticle('kb_article_1', { score: 0.5 })])
+    mockRetrieveKbArticles.mockResolvedValue([makeKbArticle('article_1', { score: 0.5 })])
     mockSnippetsRetrieve.mockResolvedValue([
       {
         id: 'assistant_snippet_1',
@@ -447,7 +447,7 @@ describe('retrieveKnowledge', () => {
   it('cannot re-enable an unregistered source: sourceTypes only narrows what the snapshot already registered', async () => {
     // Only the knowledge base is enabled, even though the request asks for
     // posts too — narrowing can drop, never add.
-    mockRetrieveKbArticles.mockResolvedValue([makeKbArticle('kb_article_1', { score: 0.5 })])
+    mockRetrieveKbArticles.mockResolvedValue([makeKbArticle('article_1', { score: 0.5 })])
 
     const items = await retrieveKnowledge('q', 'public', {
       enabledSources: new Set(['article']),
@@ -455,7 +455,7 @@ describe('retrieveKnowledge', () => {
     })
 
     expect(mockPostsRetrieve).not.toHaveBeenCalled()
-    expect(items.map((i) => i.id)).toEqual(['kb_article_1'])
+    expect(items.map((i) => i.id)).toEqual(['article_1'])
   })
 
   it('forwards customerPrincipalId and conversationId to every source (only the summaries source reads them)', async () => {

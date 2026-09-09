@@ -19,7 +19,7 @@ import {
   getArticleById,
   getCategoryById,
 } from '@/lib/server/domains/help-center/help-center.service'
-import { getTypeIdPrefix } from '@quackback/ids'
+import { ensureTypeId, getTypeIdPrefix } from '@quackback/ids'
 import { truncate } from '@/lib/shared/utils/string'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import type { CommentTreeNode } from '@/lib/shared/comment-tree'
@@ -199,7 +199,7 @@ Examples:
 Examples:
 - Get a post: get_details({ id: "post_01abc..." })
 - Get a changelog: get_details({ id: "changelog_01xyz..." })
-- Get an article: get_details({ id: "kb_article_01abc..." })
+- Get an article: get_details({ id: "article_01abc..." })
 - Get a category: get_details({ id: "kb_category_01abc..." })`,
     schema: getDetailsSchema,
     annotations: READ_ONLY,
@@ -212,7 +212,7 @@ Examples:
       } catch {
         return errorResult(
           new Error(
-            `Invalid TypeID format: "${args.id}". Expected format: prefix_base32suffix (e.g., post_01abc..., kb_article_01abc...)`
+            `Invalid TypeID format: "${args.id}". Expected format: prefix_base32suffix (e.g., post_01abc..., article_01abc...)`
           )
         )
       }
@@ -237,6 +237,7 @@ Examples:
           if (roleDenied) return roleDenied
           return getChangelogDetails(args.id as ChangelogId)
         }
+        case 'article':
         case 'kb_article': {
           const flagDenied = await requireHelpCenter()
           if (flagDenied) return flagDenied
@@ -249,7 +250,7 @@ Examples:
           // unauthenticated path for the published slice.
           const roleDenied = requireTeamRole(auth)
           if (roleDenied) return roleDenied
-          return getArticleDetails(args.id as KbArticleId)
+          return getArticleDetails(ensureTypeId(args.id, 'article'))
         }
         case 'kb_category': {
           const flagDenied = await requireHelpCenter()
@@ -265,7 +266,7 @@ Examples:
         default:
           return errorResult(
             new Error(
-              `Unsupported entity type: "${prefix}". Supported: post, changelog, kb_article, kb_category`
+              `Unsupported entity type: "${prefix}". Supported: post, changelog, article, kb_category`
             )
           )
       }
