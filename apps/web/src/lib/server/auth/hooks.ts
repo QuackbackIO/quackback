@@ -1327,6 +1327,23 @@ export async function handleNewDeviceNotification(
     if (!to) {
       log.warn({ user_id: userId }, 'new-device alert skipped: no deliverable account address')
     }
+    // Same predicate the profile page uses to hide PasswordForm. Fail open
+    // so a registry miss still sends the alert (password copy) rather than
+    // skipping it or blocking sign-in.
+    let ssoEnforced = false
+    if (to) {
+      try {
+        const { isHardBound } = await import('./auth-restrictions')
+        const { listIdentityProviders } =
+          await import('@/lib/server/domains/settings/identity-providers.service')
+        const { getRegisteredOidcProviderIds } = await import('./registered-providers')
+        const providers = await listIdentityProviders()
+        const registeredOidcIds = await getRegisteredOidcProviderIds(providers)
+        ssoEnforced = isHardBound('credential', email, providers, registeredOidcIds)
+      } catch (error) {
+        log.warn({ err: error }, 'sso-enforced lookup failed; sending password recovery copy')
+      }
+    }
     await Promise.all([
       to
         ? sendNewSignInEmail({
@@ -1336,7 +1353,8 @@ export async function handleNewDeviceNotification(
             ipAddress: ip,
             userAgent: device,
             location,
-            settingsUrl,
+            settingsUrl: ssoEnforced ? undefined : settingsUrl,
+            ssoEnforced,
             logoUrl: workspace?.brandingData?.logoUrl ?? undefined,
           })
         : Promise.resolve(),

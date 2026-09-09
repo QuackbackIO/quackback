@@ -9,6 +9,8 @@ interface NewSignInEmailProps {
   userAgent?: string | null
   location?: string | null
   settingsUrl?: string | null
+  /** When true, skip the password CTA — the profile page hides PasswordForm. */
+  ssoEnforced?: boolean
   logoUrl?: string
 }
 
@@ -26,6 +28,7 @@ export function NewSignInEmail({
   userAgent,
   location,
   settingsUrl,
+  ssoEnforced,
   logoUrl,
 }: NewSignInEmailProps) {
   return (
@@ -61,16 +64,22 @@ export function NewSignInEmail({
       <Hr style={{ margin: '24px 0', borderColor: '#e5e7eb' }} />
 
       <Text style={typography.text}>
-        If that was you, no action needed. If it wasn’t,{' '}
-        {settingsUrl ? (
-          <>
-            <Link href={settingsUrl} style={utils.link}>
-              change your password
-            </Link>{' '}
-            from your profile settings.
-          </>
+        {ssoEnforced ? (
+          'If that was you, no action needed. If it wasn’t, sign in through your organization’s identity provider and review or revoke sessions there.'
         ) : (
-          'change your password from your profile settings.'
+          <>
+            If that was you, no action needed. If it wasn’t,{' '}
+            {settingsUrl ? (
+              <>
+                <Link href={settingsUrl} style={utils.link}>
+                  change your password
+                </Link>{' '}
+                from your profile settings — this signs out other sessions.
+              </>
+            ) : (
+              'change your password from your profile settings — this signs out other sessions.'
+            )}
+          </>
         )}
       </Text>
 

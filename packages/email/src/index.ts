@@ -750,6 +750,7 @@ interface SendNewSignInParams {
   userAgent?: string | null
   location?: string | null
   settingsUrl?: string | null
+  ssoEnforced?: boolean
   logoUrl?: string
 }
 
@@ -757,8 +758,17 @@ interface SendNewSignInParams {
  * `handleNewDeviceNotification` after a successful sign-in lands on
  * an unseen (browser, OS) for that account. IP is shown, not hashed. */
 export async function sendNewSignInEmail(params: SendNewSignInParams): Promise<EmailResult> {
-  const { to, workspaceName, occurredAt, ipAddress, userAgent, location, settingsUrl, logoUrl } =
-    params
+  const {
+    to,
+    workspaceName,
+    occurredAt,
+    ipAddress,
+    userAgent,
+    location,
+    settingsUrl,
+    ssoEnforced,
+    logoUrl,
+  } = params
 
   log.debug('sending new-sign-in alert')
   return sendEmail({
@@ -770,7 +780,8 @@ export async function sendNewSignInEmail(params: SendNewSignInParams): Promise<E
       ipAddress,
       userAgent,
       location,
-      settingsUrl,
+      settingsUrl: ssoEnforced ? undefined : settingsUrl,
+      ssoEnforced,
       logoUrl,
     }),
     emailType: 'NewSignInEmail',
