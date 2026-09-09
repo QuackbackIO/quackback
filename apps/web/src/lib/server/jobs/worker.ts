@@ -81,6 +81,8 @@ interface WorkspaceLoop {
   /** Latest registry view, so a revision change is seen without a restart. */
   observe(workspace: WorkspaceDescriptor): void
   nudge(): void
+  /** True after `deactivate()` — the handle must not claim again. */
+  isStopped(): boolean
   inFlightCount(): number
   recentWakeAt: number
   tryStartByIds(jobIds: readonly string[]): Promise<number>
@@ -201,6 +203,9 @@ function startLoop(opts: {
       if (stopped) return
       stopped = true
       handle.nudge()
+    },
+    isStopped() {
+      return stopped
     },
     async stop() {
       handle.deactivate()
@@ -616,11 +621,15 @@ export async function wakeWorkspace(
   const cfg = storedConfig
   if (!cfg) return
 
-  let loop = await withLoopSet(
-    () => loops.get(workspaceKey) ?? (config.isPooledTenancy ? undefined : loops.get(SINGLE))
-  )
+  let loop = await withLoopSet(() => {
+    const existing =
+      loops.get(workspaceKey) ?? (config.isPooledTenancy ? undefined : loops.get(SINGLE))
+    if (!existing || existing.isStopped()) return undefined
+    existing.nudge()
+    return existing
+  })
 
-  if (!loop && config.isPooledTenancy) {
+  if ((!loop || loop.isStopped()) && config.isPooledTenancy) {
     const lookup = await resolveWorkspaceById(workspaceKey)
     if (lookup.kind !== 'ok') {
       log.warn({ workspace_key: workspaceKey }, 'job-wake for unknown workspace')
@@ -628,7 +637,10 @@ export async function wakeWorkspace(
     }
     loop = await withLoopSet(() => {
       const existing = loops.get(workspaceKey)
-      if (existing) return existing
+      if (existing && !existing.isStopped()) {
+        existing.nudge()
+        return existing
+      }
       startWorkspaceLoop(lookup.workspace, cfg)
       markDormant(workspaceKey, false)
       markStandingWork(workspaceKey, true)
@@ -636,11 +648,13 @@ export async function wakeWorkspace(
         { event: 'workspace.woke', workspace_key: workspaceKey, via: 'job-wake' },
         'dormant workspace started from job-wake'
       )
-      return loops.get(workspaceKey)
+      const started = loops.get(workspaceKey)
+      started?.nudge()
+      return started
     })
   }
 
-  if (!loop) return
+  if (!loop || loop.isStopped()) return
   loop.nudge()
   if (jobIds.length > 0) {
     const claimed = await loop.tryStartByIds(jobIds)
