@@ -349,9 +349,10 @@ export function WidgetHomeAnimated({
             pageParams: [1],
           }
         : undefined,
-    // Hold the previous pages while the re-keyed fetch runs instead of
-    // flashing the skeleton between "anonymous" and "identified".
-    placeholderData: keepPreviousData,
+    // Deliberately no placeholderData across the re-key: the previous pages
+    // belong to the previous actor, and after a logout or re-identify their
+    // audience-filtered titles must not linger while the new request is
+    // pending. A brief skeleton is the correct state in between.
   })
 
   const allPopularPosts: WidgetPost[] = useMemo(
