@@ -199,6 +199,19 @@ describe('sdk', () => {
       { type: 'quackback:open', data: { postId: 'post_01h' } },
       ORIGIN
     )
+    sdk.dispatch('open', {
+      view: 'new-post',
+      title: 'Bug:',
+      body: 'steps',
+      board: 'bug-reports',
+    })
+    expect(postMessage).toHaveBeenLastCalledWith(
+      {
+        type: 'quackback:open',
+        data: { view: 'new-post', title: 'Bug:', body: 'steps', board: 'bug-reports' },
+      },
+      ORIGIN
+    )
     spy.mockRestore()
   })
 

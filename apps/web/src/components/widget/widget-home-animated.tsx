@@ -31,6 +31,11 @@ import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { useWidgetImageUpload, WidgetSessionError } from './use-widget-image-upload'
 import type { JSONContent } from '@tiptap/react'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
+import {
+  composeBodyFromPlainText,
+  resolveComposeBoardId,
+  type WidgetComposeRequest,
+} from './widget-compose'
 
 interface WidgetPost {
   id: string
@@ -79,6 +84,8 @@ export interface WidgetHomeProps {
    */
   boardPermissions?: Record<string, { canSubmit: boolean; canVote: boolean }>
   defaultBoard?: string
+  /** Programmatic `open({ view: 'new-post' })` — expand and prefill. */
+  composeRequest?: WidgetComposeRequest | null
   onPostSelect?: (postId: string) => void
   onPostCreated?: (post: {
     id: string
@@ -218,6 +225,7 @@ export function WidgetHomeAnimated({
   boards,
   boardPermissions,
   defaultBoard,
+  composeRequest,
   onPostSelect,
   onPostCreated,
 }: WidgetHomeProps) {
@@ -237,22 +245,31 @@ export function WidgetHomeAnimated({
 
   const [title, setTitle] = useState('')
   const [expanded, setExpanded] = useState(false)
-  const [selectedBoardId, setSelectedBoardId] = useState(() => {
-    if (defaultBoard) {
-      const match = boards.find((b) => b.slug === defaultBoard)
-      if (match) return match.id
-    }
-    // Single board: auto-select (selector is hidden anyway). Multiple boards with no
-    // default: leave empty so the user is prompted to pick one.
-    if (boards.length === 1) return boards[0].id
-    return ''
-  })
+  const [selectedBoardId, setSelectedBoardId] = useState(() =>
+    resolveComposeBoardId(boards, undefined, defaultBoard)
+  )
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
   const [contentHtml, setContentHtml] = useState('')
   const handleEditorChange = useCallback((json: JSONContent, html: string) => {
     setContentJson(json)
     setContentHtml(html)
   }, [])
+
+  // Host `open({ view: 'new-post' })` lands here. Nonce (not title/board) is
+  // the trigger so a second identical command still expands and reapplies.
+  useEffect(() => {
+    if (!composeRequest) return
+    setExpanded(true)
+    if (composeRequest.title) setTitle(composeRequest.title)
+    if (composeRequest.body) {
+      const next = composeBodyFromPlainText(composeRequest.body)
+      setContentJson(next.json)
+      setContentHtml(next.html)
+    }
+    setSelectedBoardId(resolveComposeBoardId(boards, composeRequest.boardSlug, defaultBoard))
+    inputRef.current?.focus({ preventScroll: true })
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- nonce is the command identity
+  }, [composeRequest?.nonce])
 
   // Per-board capability, server-computed for the request actor. The widget
   // route refetches boardPermissions with the Bearer identity (keyed on

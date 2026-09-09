@@ -23,11 +23,11 @@ import {
   type WidgetView,
   resolveInitialTab,
   resolveInitialView,
-  homeEnabled,
   contentSurfaceCount,
   isExpandedView,
   visibleTabsForVisitor,
 } from '@/components/widget/widget-nav'
+import { resolveOpenCommand, type WidgetComposeRequest } from '@/components/widget/widget-compose'
 import { WidgetHome } from '@/components/widget/widget-home'
 import { WidgetOverview } from '@/components/widget/widget-overview'
 import { WidgetHeroBackdrop } from '@/components/widget/widget-hero-backdrop'
@@ -504,6 +504,8 @@ function WidgetPage() {
     name: string
     icon: string | null
   } | null>(null)
+  const [composeRequest, setComposeRequest] = useState<WidgetComposeRequest | null>(null)
+  const composeNonceRef = useRef(0)
   const [createdPosts, setCreatedPosts] = useState<typeof posts>([])
 
   const allPosts = useMemo(() => {
@@ -570,41 +572,81 @@ function WidgetPage() {
         setHostIsMobile(!!msg.data)
         return
       }
-      if (msg.type !== 'quackback:open' || !msg.data) return
+      if (msg.type !== 'quackback:open') return
 
-      const opts = msg.data as { view?: string }
+      const opts = (msg.data ?? {}) as {
+        view?: string
+        title?: string
+        body?: string
+        board?: string
+        query?: string
+        entryId?: string
+        postId?: string
+        articleId?: string
+      }
+      const command = resolveOpenCommand(opts, tabs)
+      if (!command) return
+
       // SDK-driven opens are tab-level landings: no back-chevron origin.
       setBackTarget(null)
       lastNavRef.current = 'tab'
-      if (opts.view === 'changelog' && tabs.changelog) {
-        setActiveTab('changelog')
-        setView('changelog')
-      } else if (opts.view === 'help' && tabs.help) {
-        // Same fresh start as navigateToTab('help'): the lifted search
-        // would otherwise resurface an old query on a programmatic open.
-        setSelectedHelpSlug(null)
-        setSelectedCategory(null)
-        setHelpSearch('')
-        setActiveTab('help')
-        setView('help')
-      } else if (
-        (opts.view === 'messages' || opts.view === 'chat' || opts.view === 'live-chat') &&
-        tabs.messages
-      ) {
-        openMessenger()
-      } else if (opts.view === 'tickets') {
-        // The requester's own-tickets list lives on the Tickets tab; on
-        // workspaces without it, ticket threads are listed in Messages.
-        if (tabs.tickets) {
+      switch (command.type) {
+        case 'new-post':
+          composeNonceRef.current += 1
+          setComposeRequest({
+            nonce: composeNonceRef.current,
+            title: command.title,
+            body: command.body,
+            boardSlug: command.boardSlug,
+          })
+          setSelectedPostId(null)
+          setActiveTab('feedback')
+          setView('feedback')
+          break
+        case 'post':
+          setActiveTab('feedback')
+          setSelectedPostId(command.postId)
+          setView('post-detail')
+          break
+        case 'article':
+          setSelectedCategory(null)
+          setHelpSearch('')
+          setSelectedHelpSlug(command.articleId)
+          setActiveTab('help')
+          setView('help-detail')
+          break
+        case 'changelog':
+          setActiveTab('changelog')
+          if (command.entryId) {
+            setSelectedChangelogId(command.entryId)
+            setView('changelog-detail')
+          } else {
+            setSelectedChangelogId(null)
+            setView('changelog')
+          }
+          break
+        case 'help':
+          setSelectedHelpSlug(null)
+          setSelectedCategory(null)
+          setHelpSearch(command.query ?? '')
+          setActiveTab('help')
+          setView('help')
+          break
+        case 'messenger':
+          openMessenger()
+          break
+        case 'tickets':
           setActiveTab('tickets')
           setView('tickets')
-        } else if (tabs.messages) {
+          break
+        case 'messages':
           setActiveTab('messages')
           setView('messages')
-        }
-      } else if ((opts.view === 'home' || opts.view === 'overview') && homeEnabled(tabs)) {
-        setActiveTab('home')
-        setView('overview')
+          break
+        case 'home':
+          setActiveTab('home')
+          setView('overview')
+          break
       }
     }
     window.addEventListener('message', handleMessage)
@@ -1046,6 +1088,7 @@ function WidgetPage() {
             boards={boards}
             boardPermissions={livePermissions}
             defaultBoard={defaultBoard}
+            composeRequest={composeRequest}
             onPostSelect={handlePostSelect}
             onPostCreated={handlePostCreated}
           />

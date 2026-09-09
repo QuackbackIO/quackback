@@ -120,7 +120,7 @@ Quackback.open({ postId: 'post_01h...' }) // specific post
 Quackback.open({ articleId: 'art_01h...' }) // help article
 ```
 
-`view`, `title`, and `board` are live. `body`, `query`, `postId`, `articleId`, `entryId` pass through today and render in a follow-up release.
+Every `open` field is live. A disabled surface or an unseen board fails closed — the panel still opens, but the widget does not invent access.
 
 ### Events
 

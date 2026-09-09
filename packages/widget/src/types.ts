@@ -61,9 +61,9 @@ export type Identity =
  * - `{ postId }` deep-links to a specific post
  * - `{ articleId }` deep-links to a help article
  *
- * Fields `view` / `title` / `board` are handled by the iframe today.
- * `body`, `query`, `postId`, `articleId`, `entryId` pass through the postMessage
- * protocol; full iframe-side handling lands in follow-up iframe work.
+ * The iframe handles every field on this type. A target whose surface is
+ * disabled (or a board the visitor cannot see) fails closed — the panel
+ * still opens, but the widget does not invent access.
  */
 export type OpenOptions =
   | undefined
