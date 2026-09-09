@@ -95,8 +95,19 @@ const hoisted = vi.hoisted(() => {
     mockRevokeMagicLinkTokens: vi.fn(),
     mockCacheDel: vi.fn(),
     mockEnforceSeatLimit: vi.fn(),
+    mockSetPassword: vi.fn(),
+    mockRevokeOtherSessions: vi.fn(),
   }
 })
+
+vi.mock('@/lib/server/auth', () => ({
+  auth: {
+    api: {
+      setPassword: hoisted.mockSetPassword,
+      revokeOtherSessions: hoisted.mockRevokeOtherSessions,
+    },
+  },
+}))
 
 vi.mock('@/lib/server/db', () => ({
   db: {
@@ -148,6 +159,7 @@ vi.mock('@/lib/server/domains/principals/seat-limit', () => ({
 // ---------------------------------------------------------------------------
 
 const ACCEPT_IDX = 1
+const SET_PASSWORD_IDX = 2
 
 const FUTURE = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
 const PAST = new Date(Date.now() - 1000)
@@ -202,6 +214,8 @@ beforeEach(async () => {
   hoisted.mockRevokeMagicLinkTokens.mockResolvedValue(undefined)
   hoisted.mockCacheDel.mockResolvedValue(undefined)
   hoisted.mockEnforceSeatLimit.mockResolvedValue(undefined)
+  hoisted.mockSetPassword.mockResolvedValue({ status: true })
+  hoisted.mockRevokeOtherSessions.mockResolvedValue({ status: true })
 })
 
 // ---------------------------------------------------------------------------
@@ -530,5 +544,43 @@ describe('acceptInvitationFn — seat cap', () => {
       convertingInvite: true,
       executor: hoisted.tx,
     })
+  })
+})
+
+describe('setPasswordFn', () => {
+  let setPasswordHandler: AnyHandler
+
+  beforeEach(() => {
+    setPasswordHandler = handlers[SET_PASSWORD_IDX]
+  })
+
+  it('sets a password without revoking other sessions by default', async () => {
+    const result = await setPasswordHandler({ data: { newPassword: 'password1' } })
+
+    expect(result).toEqual({ status: true })
+    expect(hoisted.mockSetPassword).toHaveBeenCalledWith({
+      body: { newPassword: 'password1' },
+      headers: expect.any(Headers),
+    })
+    expect(hoisted.mockRevokeOtherSessions).not.toHaveBeenCalled()
+  })
+
+  it('revokes other sessions after setPassword when the profile form asks', async () => {
+    await setPasswordHandler({ data: { newPassword: 'password1', revokeOtherSessions: true } })
+
+    expect(hoisted.mockSetPassword).toHaveBeenCalledOnce()
+    expect(hoisted.mockRevokeOtherSessions).toHaveBeenCalledWith({
+      headers: expect.any(Headers),
+    })
+    expect(hoisted.mockSetPassword.mock.invocationCallOrder[0]).toBeLessThan(
+      hoisted.mockRevokeOtherSessions.mock.invocationCallOrder[0]
+    )
+  })
+
+  it('does not revoke when the flag is false', async () => {
+    await setPasswordHandler({ data: { newPassword: 'password1', revokeOtherSessions: false } })
+
+    expect(hoisted.mockSetPassword).toHaveBeenCalledOnce()
+    expect(hoisted.mockRevokeOtherSessions).not.toHaveBeenCalled()
   })
 })

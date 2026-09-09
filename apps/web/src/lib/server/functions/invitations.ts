@@ -352,15 +352,7 @@ export const setPasswordFn = createServerFn({ method: 'POST' })
       headers,
     })
     if (data.revokeOtherSessions) {
-      const current = await auth.api.getSession({ headers })
-      const token = current?.session?.token
-      const userId = current?.user?.id
-      if (typeof token === 'string' && typeof userId === 'string') {
-        const { db, session: sessionTable, and, eq, ne } = await import('@/lib/server/db')
-        await db
-          .delete(sessionTable)
-          .where(and(eq(sessionTable.userId, userId as UserId), ne(sessionTable.token, token)))
-      }
+      await auth.api.revokeOtherSessions({ headers })
     }
     return { status: true }
   })
