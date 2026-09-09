@@ -67,11 +67,11 @@ describe('<TagList> — portal visibility', () => {
   it('renders each tag as a colored chip and labels Portal vs Internal', () => {
     render(<TagList initialTags={[PUBLIC_TAG, INTERNAL_TAG]} />)
 
-    const publicRow = screen.getByText('Bug').closest('div')!
+    const publicRow = screen.getByRole('button', { name: 'Bug' }).closest('.group')!
     expect(within(publicRow).getByText('Portal')).toBeTruthy()
     expect(within(publicRow).queryByText('Internal')).toBeNull()
 
-    const internalRow = screen.getByText('Churn risk').closest('div')!
+    const internalRow = screen.getByRole('button', { name: 'Churn risk' }).closest('.group')!
     expect(within(internalRow).getByText('Internal')).toBeTruthy()
     expect(within(internalRow).queryByText('Portal')).toBeNull()
   })
