@@ -59,7 +59,7 @@ export type Identity =
  * - `{ view: 'help', query? }` opens help, optionally with search prefilled
  * - `{ view: 'chat' }` opens the live chat view
  * - `{ postId }` deep-links to a specific post
- * - `{ articleId }` deep-links to a help article
+ * - `{ articleId }` deep-links to a help article (`kb_article_…` TypeID or slug)
  *
  * The iframe handles every field on this type. A target whose surface is
  * disabled (or a board the visitor cannot see) fails closed — the panel

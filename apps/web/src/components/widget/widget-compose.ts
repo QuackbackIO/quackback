@@ -1,6 +1,12 @@
 import type { JSONContent } from '@tiptap/core'
+import { isTypeId } from '@quackback/ids'
 import { generateContentHTML } from '@/lib/shared/content-html'
 import { homeEnabled, type EnabledTabs } from './widget-nav'
+
+/** True for a `kb_article_…` TypeID. Slugs and the old `art_` prefix are not. */
+export function isKbArticleTypeId(ref: string): boolean {
+  return isTypeId(ref, 'kb_article')
+}
 
 export interface WidgetComposeRequest {
   /** Bumped on every programmatic open so the same title/board can re-apply. */
@@ -24,7 +30,7 @@ export type WidgetOpenPayload = {
 export type WidgetOpenCommand =
   | { type: 'new-post'; title?: string; body?: string; boardSlug?: string }
   | { type: 'post'; postId: string }
-  | { type: 'article'; articleId: string }
+  | { type: 'article'; articleId: string } // slug or `kb_article_…` TypeID
   | { type: 'changelog'; entryId?: string }
   | { type: 'help'; query?: string }
   | { type: 'messenger' }

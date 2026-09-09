@@ -583,3 +583,29 @@ export const searchPublicArticlesFn = createServerFn({ method: 'GET' })
     )
     return hybridSearchForLocale(data.query, locale, data.limit ?? 10, await publicViewer())
   })
+
+/**
+ * Resolve a widget `open({ articleId })` ref to the public article slug.
+ * TypeIDs (`kb_article_…`) look up by id; anything else is treated as a slug.
+ * Missing or gated articles return null (fail closed — do not invent access).
+ * Appended so existing help-center handler indices stay put.
+ */
+export const resolvePublicArticleRefFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ ref: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    const { isTypeId } = await import('@quackback/ids')
+    const { getPublicArticleByIdForLocale, getPublicArticleBySlugForLocale } =
+      await import('@/lib/server/domains/help-center/help-center-locale.query')
+    const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
+    const { NotFoundError } = await import('@/lib/shared/errors')
+    const viewer = await publicViewer()
+    try {
+      const article = isTypeId(data.ref, 'kb_article')
+        ? await getPublicArticleByIdForLocale(data.ref as KbArticleId, DEFAULT_LOCALE, viewer)
+        : await getPublicArticleBySlugForLocale(data.ref, DEFAULT_LOCALE, viewer)
+      return { slug: article.slug }
+    } catch (err) {
+      if (err instanceof NotFoundError) return null
+      throw err
+    }
+  })

@@ -271,6 +271,16 @@ export function WidgetHomeAnimated({
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- nonce is the command identity
   }, [composeRequest?.nonce])
 
+  // Identify can grow the visitor-visible list (members-only slugs). Re-apply
+  // a requested slug when it appears; do not reset a user-chosen board when
+  // open() did not name one.
+  useEffect(() => {
+    const slug = composeRequest?.boardSlug
+    if (!slug) return
+    const match = boards.find((b) => b.slug === slug)
+    if (match) setSelectedBoardId(match.id)
+  }, [boards, composeRequest?.boardSlug, composeRequest?.nonce])
+
   // Per-board capability, server-computed for the request actor. The widget
   // route refetches boardPermissions with the Bearer identity (keyed on
   // sessionVersion), so for an identified viewer this already reflects the real

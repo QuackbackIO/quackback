@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
+import { generateId } from '@quackback/ids'
 import {
   composeBodyFromPlainText,
+  isKbArticleTypeId,
   resolveComposeBoardId,
   resolveOpenCommand,
 } from '../widget-compose'
@@ -91,6 +93,17 @@ describe('resolveOpenCommand', () => {
       type: 'article',
       articleId: 'pricing',
     })
+  })
+
+  it('forwards a kb_article TypeID for the iframe to resolve to a slug', () => {
+    const articleId = generateId('kb_article')
+    expect(resolveOpenCommand({ articleId }, allTabs)).toEqual({
+      type: 'article',
+      articleId,
+    })
+    expect(isKbArticleTypeId(articleId)).toBe(true)
+    expect(isKbArticleTypeId('art_01h...')).toBe(false)
+    expect(isKbArticleTypeId('pricing')).toBe(false)
   })
 
   it('prefills help search and opens a changelog entry', () => {

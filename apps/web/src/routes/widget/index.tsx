@@ -27,7 +27,11 @@ import {
   isExpandedView,
   visibleTabsForVisitor,
 } from '@/components/widget/widget-nav'
-import { resolveOpenCommand, type WidgetComposeRequest } from '@/components/widget/widget-compose'
+import {
+  isKbArticleTypeId,
+  resolveOpenCommand,
+  type WidgetComposeRequest,
+} from '@/components/widget/widget-compose'
 import { WidgetHome } from '@/components/widget/widget-home'
 import { WidgetOverview } from '@/components/widget/widget-overview'
 import { WidgetHeroBackdrop } from '@/components/widget/widget-hero-backdrop'
@@ -38,7 +42,7 @@ import { publicChangelogQueries } from '@/lib/client/queries/changelog'
 import { publicHelpCenterQueries } from '@/lib/client/queries/help-center'
 import { fetchBoardCapabilitiesFn } from '@/lib/server/functions/portal'
 import { getShowPoweredByFn } from '@/lib/server/functions/powered-by'
-import { listPublicArticlesFn } from '@/lib/server/functions/help-center'
+import { listPublicArticlesFn, resolvePublicArticleRefFn } from '@/lib/server/functions/help-center'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { sendToHost } from '@/lib/client/widget-bridge'
 import { widgetQueryKeys, INITIAL_SESSION_VERSION } from '@/lib/client/hooks/use-widget-vote'
@@ -407,8 +411,8 @@ function WidgetPage() {
   // feed gates votes/submission per the actual actor instead of OR-ing in a
   // blanket isIdentified (which advertised CTAs on segments/team boards the
   // actor cannot act on). Seeded with the loader map so SSR + first paint match.
-  const { data: livePermissions } = useQuery({
-    queryKey: ['widget', 'boardPermissions', sessionVersion],
+  const { data: liveCapabilities } = useQuery({
+    queryKey: ['widget', 'boardCapabilities', sessionVersion],
     queryFn: () => fetchBoardCapabilitiesFn({ headers: getWidgetAuthHeaders() }),
     // Seed ONLY the initial (anonymous, SSR) key from the loader. initialData
     // stamps an entry fresh as of now, so seeding it on every key would also
@@ -416,11 +420,16 @@ function WidgetPage() {
     // staleTime — leaving an identified viewer stuck on the anonymous baseline.
     // After identify the key changes, carries no initialData, and refetches with
     // the Bearer while keepPreviousData shows the prior map meanwhile.
-    initialData: sessionVersion === INITIAL_SESSION_VERSION ? boardPermissions : undefined,
+    initialData:
+      sessionVersion === INITIAL_SESSION_VERSION
+        ? { permissions: boardPermissions, boards }
+        : undefined,
     placeholderData: keepPreviousData,
     staleTime: 30 * 1000,
     enabled: !!tabs.feedback,
   })
+  const livePermissions = liveCapabilities?.permissions
+  const liveBoards = liveCapabilities?.boards ?? boards
 
   const { c: resumeConversationId } = Route.useSearch()
   const { hasTickets } = useTicketStageBadge(!!tabs.tickets)
@@ -608,13 +617,39 @@ function WidgetPage() {
           setSelectedPostId(command.postId)
           setView('post-detail')
           break
-        case 'article':
-          setSelectedCategory(null)
-          setHelpSearch('')
-          setSelectedHelpSlug(command.articleId)
-          setActiveTab('help')
-          setView('help-detail')
+        case 'article': {
+          const openArticle = (slug: string) => {
+            setSelectedCategory(null)
+            setHelpSearch('')
+            setSelectedHelpSlug(slug)
+            setActiveTab('help')
+            setView('help-detail')
+          }
+          // WidgetHelpDetail loads by slug. A `kb_article_…` TypeID must
+          // resolve first; slugs pass through for in-widget navigation.
+          if (isKbArticleTypeId(command.articleId)) {
+            void resolvePublicArticleRefFn({
+              data: { ref: command.articleId },
+              headers: getWidgetAuthHeaders(),
+            })
+              .then((resolved) => {
+                if (resolved?.slug) openArticle(resolved.slug)
+                else {
+                  setSelectedHelpSlug(null)
+                  setActiveTab('help')
+                  setView('help')
+                }
+              })
+              .catch(() => {
+                setSelectedHelpSlug(null)
+                setActiveTab('help')
+                setView('help')
+              })
+          } else {
+            openArticle(command.articleId)
+          }
           break
+        }
         case 'changelog':
           setActiveTab('changelog')
           if (command.entryId) {
@@ -1085,7 +1120,7 @@ function WidgetPage() {
             initialPosts={allPosts}
             initialHasMore={postsHasMore}
             statuses={statuses}
-            boards={boards}
+            boards={liveBoards}
             boardPermissions={livePermissions}
             defaultBoard={defaultBoard}
             composeRequest={composeRequest}
