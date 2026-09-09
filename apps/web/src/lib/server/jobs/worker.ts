@@ -655,6 +655,11 @@ export async function wakeWorkspace(
   }
 }
 
+/** True when this process can claim. The HTTP route 503s otherwise. */
+export function isJobWorkerRunning(): boolean {
+  return running && shouldRunWorkers()
+}
+
 export async function handleJobWake(request: JobWakeRequest): Promise<void> {
   log.info(
     {
@@ -667,7 +672,15 @@ export async function handleJobWake(request: JobWakeRequest): Promise<void> {
   )
   if (request.abort) {
     const { abortSlackTurn } = await import('@/integrations/slack/server/agent/turns')
-    abortSlackTurn(request.abort.team, request.abort.channel, request.abort.thread)
+    if (!abortSlackTurn(request.abort.team, request.abort.channel, request.abort.thread)) {
+      log.info(
+        {
+          event: 'job.wake_abort_missed',
+          workspace_key: request.workspaceKey,
+        },
+        'job-wake abort found no in-flight turn'
+      )
+    }
   }
   await wakeWorkspace(request.workspaceKey, request.jobIds ?? [])
 }

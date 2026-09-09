@@ -1,6 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { authorizeFleetInternal } from '@/lib/server/fleet/internal-auth'
-import { handleJobWake, type JobWakeAbort, type JobWakeRequest } from '@/lib/server/jobs/worker'
+import {
+  handleJobWake,
+  isJobWorkerRunning,
+  type JobWakeAbort,
+  type JobWakeRequest,
+} from '@/lib/server/jobs/worker'
 
 const MAX_BODY_BYTES = 16 * 1024
 const MAX_JOB_IDS = 50
@@ -52,6 +57,9 @@ export async function handleJobWakeRequest(request: Request): Promise<Response> 
     workspaceKey: body.workspaceKey,
     jobIds,
     abort: asAbort(body.abort),
+  }
+  if (!isJobWorkerRunning()) {
+    return new Response(null, { status: 503 })
   }
   await handleJobWake(payload)
   return new Response(null, { status: 202 })

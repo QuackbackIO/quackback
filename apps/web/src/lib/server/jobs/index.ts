@@ -85,6 +85,7 @@ export {
 export {
   getJobWorkerStatus,
   handleJobWake,
+  isJobWorkerRunning,
   startJobWorker,
   stopJobWorker,
   wakeWorkspace,

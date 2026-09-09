@@ -2,9 +2,11 @@
  * Cloud web → worker job-wake publisher.
  *
  * After-commit on ROLE=web POSTs `{ workspaceKey, jobIds }` to the worker
- * private URL. Fail-open: unset URL, or POST still failing after retries,
- * leaves the row until a later wake or an activity refresh that starts the
- * loop. Never awaited from `handleAppHook`.
+ * private URL. Subscribes only when both the origin and
+ * `QUACKBACK_FLEET_INTERNAL_TOKEN` are present. Fail-open: unset/rejected URL,
+ * missing token, or POST still failing after retries, leaves the row until a
+ * later wake or an activity refresh that starts the loop. Never awaited from
+ * `handleAppHook`.
  */
 import { getProcessRole } from '@/lib/server/process-role'
 import { logger } from '@/lib/server/logger'
@@ -37,22 +39,36 @@ interface PendingWake {
 const pending = new Map<string, PendingWake>()
 let unsubscribe: (() => void) | null = null
 
-export function jobWorkerUrl(): string | undefined {
+type JobWorkerUrlParse =
+  | { ok: true; origin: string }
+  | { ok: false; reason: 'unset' | 'protocol' | 'credentials' | 'parse' }
+
+function parseJobWorkerUrl(): JobWorkerUrlParse {
   const raw = process.env.QUACKBACK_JOB_WORKER_URL?.trim()
-  if (!raw) return undefined
+  if (!raw) return { ok: false, reason: 'unset' }
   try {
     const url = new URL(raw)
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined
-    if (url.username || url.password) return undefined
-    return `${url.protocol}//${url.host}`
+    if (url.protocol !== 'http:' && url.protocol !== 'https:')
+      return { ok: false, reason: 'protocol' }
+    if (url.username || url.password) return { ok: false, reason: 'credentials' }
+    return { ok: true, origin: `${url.protocol}//${url.host}` }
   } catch {
-    return undefined
+    return { ok: false, reason: 'parse' }
   }
+}
+
+export function jobWorkerUrl(): string | undefined {
+  const parsed = parseJobWorkerUrl()
+  return parsed.ok ? parsed.origin : undefined
 }
 
 function token(): string | undefined {
   const value = process.env[FLEET_INTERNAL_TOKEN_ENV]
   return value && value.length > 0 ? value : undefined
+}
+
+function canPublishJobWake(): boolean {
+  return Boolean(jobWorkerUrl() && token())
 }
 
 async function postWake(body: JobWakeRequest): Promise<void> {
@@ -130,7 +146,7 @@ function schedule(work: DurableWork, abort?: JobWakeAbort, immediate = false): v
 
 /** Abort payloads bypass debounce so a later after-commit wake cannot drop them. */
 export function postJobWakeAbort(abort: JobWakeAbort): void {
-  if (getProcessRole() !== 'web' || !jobWorkerUrl()) return
+  if (getProcessRole() !== 'web' || !canPublishJobWake()) return
   const workspaceKey = getCurrentWorkspace()?.workspaceKey
   if (!workspaceKey) return
   schedule({ workspaceKey, jobIds: [] }, abort, true)
@@ -139,8 +155,20 @@ export function postJobWakeAbort(abort: JobWakeAbort): void {
 export function startJobWakePublisher(): void {
   if (unsubscribe) return
   if (getProcessRole() !== 'web') return
-  if (!jobWorkerUrl()) {
-    log.info('QUACKBACK_JOB_WORKER_URL unset — job-wake publisher idle; poll is the floor')
+  const parsed = parseJobWorkerUrl()
+  if (!parsed.ok) {
+    if (parsed.reason === 'unset') {
+      log.info('QUACKBACK_JOB_WORKER_URL unset — job-wake publisher idle; poll is the floor')
+    } else {
+      log.warn(
+        { reason: parsed.reason },
+        'QUACKBACK_JOB_WORKER_URL rejected — job-wake publisher idle; poll is the floor'
+      )
+    }
+    return
+  }
+  if (!token()) {
+    log.warn('QUACKBACK_FLEET_INTERNAL_TOKEN unset — job-wake publisher idle; poll is the floor')
     return
   }
   unsubscribe = onDurableWorkCommitted((work) => schedule(work))
