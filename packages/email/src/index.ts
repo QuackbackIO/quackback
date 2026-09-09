@@ -756,7 +756,8 @@ interface SendNewSignInParams {
 
 /** Additional-device sign-in alert. Triggered by
  * `handleNewDeviceNotification` after a successful sign-in lands on
- * an unseen (browser, OS) for that account. IP is shown, not hashed. */
+ * an unseen signed device cookie for that account. IP and browser/OS
+ * are shown, not used as the claim key. */
 export async function sendNewSignInEmail(params: SendNewSignInParams): Promise<EmailResult> {
   const {
     to,

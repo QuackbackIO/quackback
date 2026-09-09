@@ -15,11 +15,11 @@ interface NewSignInEmailProps {
 }
 
 /**
- * "New device" sign-in notification — sent when an additional
- * (browser, OS) is seen for the recipient's account. IP and location
- * are shown as context; they are not the device identity. The user is
- * already signed in by the time this lands; the alert is purely
- * informational with a recovery path if it wasn't them.
+ * "New device" sign-in notification — sent when an additional signed
+ * device cookie is seen for the recipient's account. Browser/OS, IP
+ * and location are shown as context; they are not the device identity.
+ * The user is already signed in by the time this lands; the alert is
+ * purely informational with a recovery path if it wasn't them.
  */
 export function NewSignInEmail({
   workspaceName,

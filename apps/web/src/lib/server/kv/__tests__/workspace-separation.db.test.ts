@@ -36,6 +36,7 @@ import {
   kvSetMemberClaim,
   kvSetMemberClaimCounted,
   kvSetTouch,
+  kvSetMemberTouch,
 } from '../pg-kv'
 import {
   currentWorkspaceNamespace,
@@ -199,6 +200,35 @@ describe('workspace separation — device sets', () => {
     expect(await withRealWorkspace(A, () => kvSetMemberClaimCounted(setKey, 'stale', 60))).toEqual({
       claimed: true,
       liveCount: 2,
+    })
+  })
+
+  it('member touch slides only the named live row', async () => {
+    const setKey = uniqueKey('user:devices')
+    await withRealWorkspace(A, () => kvSetMemberClaimCounted(setKey, 'chrome', 60))
+    await withRealWorkspace(A, () => kvSetMemberClaimCounted(setKey, 'firefox', 60))
+    await withRealWorkspace(A, () => kvSetMemberClaimCounted(setKey, 'stale', 60))
+    await testSql()`
+      UPDATE kv_set_member SET expires_at = now() - interval '1 second'
+      WHERE workspace_key = ${A} AND set_key = ${setKey} AND member = 'stale'
+    `
+    await testSql()`
+      UPDATE kv_set_member SET expires_at = now() + interval '10 seconds'
+      WHERE workspace_key = ${A} AND set_key = ${setKey} AND member = 'firefox'
+    `
+    await withRealWorkspace(A, () => kvSetMemberTouch(setKey, 'chrome', 60))
+    const rows = await testSql()<{ member: string; secs: number | string }[]>`
+      SELECT member, EXTRACT(EPOCH FROM (expires_at - now()))::int AS secs
+      FROM kv_set_member
+      WHERE workspace_key = ${A} AND set_key = ${setKey}
+    `
+    const secs = Object.fromEntries(rows.map((r) => [r.member, Number(r.secs)]))
+    expect(secs.chrome).toBeGreaterThan(30)
+    expect(secs.firefox).toBeLessThan(20)
+    expect(secs.stale).toBeLessThan(0)
+    expect(await withRealWorkspace(A, () => kvSetMemberClaimCounted(setKey, 'stale', 60))).toEqual({
+      claimed: true,
+      liveCount: 3,
     })
   })
 })
