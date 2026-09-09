@@ -278,6 +278,8 @@ describe('the real corpus', () => {
     // collapse that same window.
     // 0274 checks the installed constraint definitions and updates only version 3 configs.
     // A replay preserves widened constraints, workspace customizations and revisions.
+    // 0277 rewrites leftover widget `chat` keys and inserts macros only when a
+    // name+body pair is missing, so a second run writes zero rows.
     const vouching = files.filter(
       (f) => assessReplaySafety(f, readFileSync(join(MIGRATIONS_DIR, f), 'utf8')).vouched.length > 0
     )
@@ -289,6 +291,7 @@ describe('the real corpus', () => {
       '0261_connectors.sql',
       '0269_messenger_ai_default_on.sql',
       '0274_slack_agent_gateway.sql',
+      '0277_widget_chat_to_messenger.sql',
     ])
   })
 
