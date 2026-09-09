@@ -19,7 +19,7 @@ vi.mock('@/lib/client/hooks/use-auth-broadcast', () => ({
 }))
 
 vi.mock('@tanstack/react-query', () => ({
-  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
+  useQueryClient: () => ({ invalidateQueries: vi.fn(), removeQueries: vi.fn() }),
 }))
 
 vi.mock('@/lib/client/auth-client', () => ({ signOut: vi.fn() }))

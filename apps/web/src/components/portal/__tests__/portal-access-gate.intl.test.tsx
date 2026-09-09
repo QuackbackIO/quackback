@@ -9,7 +9,7 @@ vi.mock('@tanstack/react-router', () => ({
 
 // GateCard invalidates portal queries on sign-out.
 vi.mock('@tanstack/react-query', () => ({
-  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
+  useQueryClient: () => ({ invalidateQueries: vi.fn(), removeQueries: vi.fn() }),
 }))
 
 // GateCard listens for cross-tab auth broadcasts.

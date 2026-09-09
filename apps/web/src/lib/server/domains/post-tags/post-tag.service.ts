@@ -25,6 +25,7 @@ import {
 import type { PostTagId, BoardId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError, InternalError } from '@/lib/shared/errors'
 import type { CreateTagInput, UpdateTagInput } from './post-tag.types'
+import { isTeamActor, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'tags' })
@@ -76,6 +77,7 @@ export async function createPostTag(input: CreateTagInput): Promise<PostTag> {
       color,
       description: input.description?.trim() || null,
       aiPrompt: input.aiPrompt?.trim() || null,
+      isPublic: input.isPublic ?? true,
     })
     .returning()
 
@@ -141,6 +143,7 @@ export async function updatePostTag(id: PostTagId, input: UpdateTagInput): Promi
   if (input.color !== undefined) updateData.color = input.color
   if (input.description !== undefined) updateData.description = input.description?.trim() || null
   if (input.aiPrompt !== undefined) updateData.aiPrompt = input.aiPrompt?.trim() || null
+  if (input.isPublic !== undefined) updateData.isPublic = input.isPublic
 
   // Update the tag
   const [updatedTag] = await db
@@ -245,16 +248,19 @@ export async function getPostTagsByBoard(boardId: BoardId): Promise<PostTag[]> {
 }
 
 /**
- * List all tags (public, no authentication required)
+ * List tags visible to a portal viewer.
  *
- * Returns tags ordered by name.
- * This method is used for public endpoints like feedback portal filtering.
+ * Team actors see every non-deleted tag (they assign internal tags from the
+ * portal too); everyone else only sees tags marked `isPublic`. Ordered by name.
+ * Used for public endpoints like feedback portal filtering.
  */
-export async function listPublicPostTags(): Promise<PostTag[]> {
+export async function listPublicPostTags(actor: Actor = ANONYMOUS_ACTOR): Promise<PostTag[]> {
   log.debug('list public tags')
   try {
     return await db.query.postTags.findMany({
-      where: isNull(postTags.deletedAt),
+      where: isTeamActor(actor)
+        ? isNull(postTags.deletedAt)
+        : and(isNull(postTags.deletedAt), eq(postTags.isPublic, true)),
       orderBy: [asc(postTags.name)],
     })
   } catch (error) {

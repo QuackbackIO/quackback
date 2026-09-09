@@ -46,7 +46,7 @@ vi.mock('@/components/auth/oauth-buttons', () => ({
 
 vi.mock('@tanstack/react-query', () => ({
   useQuery: () => ({ data: null }),
-  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
+  useQueryClient: () => ({ invalidateQueries: vi.fn(), removeQueries: vi.fn() }),
 }))
 
 vi.mock('@/lib/server/functions/conversation', () => ({

@@ -18,6 +18,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { FormattedMessage } from 'react-intl'
 import { toast } from 'sonner'
 import { escapeInlineStyle } from '@/lib/shared/safe-inline-content'
+import { removeViewerScopedPortalQueries } from '@/lib/client/queries/portal'
 import {
   ArrowPathIcon,
   ChevronUpIcon,
@@ -407,6 +408,8 @@ function GateCard({
   useAuthBroadcast({
     onSuccess: () => {
       setSigningIn(true)
+      // Anything cached while gated was fetched as the previous viewer.
+      removeViewerScopedPortalQueries(queryClient)
       if (safeCallback) {
         // Team surfaces full-navigate (re-bootstrap the admin shell); a
         // portal-local destination invalidates so the gate clears, then routes.
@@ -436,8 +439,8 @@ function GateCard({
     setSigningOut(true)
     try {
       await signOut()
+      removeViewerScopedPortalQueries(queryClient)
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['portal', 'post'] }),
         queryClient.invalidateQueries({ queryKey: ['votedPosts'] }),
         router.invalidate(),
       ])

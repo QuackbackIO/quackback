@@ -9,15 +9,16 @@ import {
   roadmaps,
   roadmapColumns,
   postStatuses,
+  postTags,
   type Roadmap,
   type RoadmapColumn,
   type Transaction,
 } from '@/lib/server/db'
-import type { RoadmapId, RoadmapColumnId } from '@quackback/ids'
+import type { PostTagId, RoadmapId, RoadmapColumnId } from '@quackback/ids'
 import { positionCaseSql } from '@/lib/server/utils'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
 import { roadmapBaseFilterSchema } from '@/lib/shared/roadmap-config'
-import { roadmapViewFilter, type Actor, ANONYMOUS_ACTOR } from '@/lib/server/policy'
+import { roadmapViewFilter, isTeamActor, type Actor, ANONYMOUS_ACTOR } from '@/lib/server/policy'
 import type {
   CreateRoadmapColumnInput,
   CreateRoadmapInput,
@@ -281,13 +282,53 @@ export async function listRoadmaps(): Promise<RoadmapWithColumns[]> {
   })
 }
 
+/**
+ * Roadmaps visible to `actor`, with internal tag ids redacted from each
+ * `baseFilter` for non-team viewers.
+ *
+ * An admin may curate a public roadmap by an internal tag; the curation still
+ * applies (membership is admin-defined, see roadmap.query), but the tag id
+ * itself must not reach the portal payload, or a viewer could correlate it
+ * with the returned posts and learn which of them carry a tag they are never
+ * shown. Team actors receive the filter unredacted.
+ */
 export async function listPublicRoadmaps(
   actor: Actor = ANONYMOUS_ACTOR
 ): Promise<RoadmapWithColumns[]> {
-  return db.query.roadmaps.findMany({
+  const result = await db.query.roadmaps.findMany({
     where: roadmapViewFilter(actor),
     orderBy: [asc(roadmaps.position)],
     with: { columns: { orderBy: [asc(roadmapColumns.position)] } },
+  })
+  if (isTeamActor(actor)) return result
+
+  const referenced = new Set<PostTagId>()
+  for (const roadmap of result) {
+    for (const tagId of roadmap.baseFilter.tagIds ?? []) referenced.add(tagId)
+  }
+  if (referenced.size === 0) return result
+
+  const publicRows = await db
+    .select({ id: postTags.id })
+    .from(postTags)
+    .where(
+      and(
+        inArray(postTags.id, [...referenced]),
+        eq(postTags.isPublic, true),
+        isNull(postTags.deletedAt)
+      )
+    )
+  const publicIds = new Set<PostTagId>(publicRows.map((row) => row.id))
+
+  return result.map((roadmap) => {
+    const tagIds = roadmap.baseFilter.tagIds
+    if (!tagIds?.length) return roadmap
+    const visible = tagIds.filter((id) => publicIds.has(id))
+    if (visible.length === tagIds.length) return roadmap
+    const baseFilter = { ...roadmap.baseFilter }
+    if (visible.length) baseFilter.tagIds = visible
+    else delete baseFilter.tagIds
+    return { ...roadmap, baseFilter }
   })
 }
 

@@ -3,6 +3,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { useRouter, useRouteContext } from '@tanstack/react-router'
+import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
 import { PencilIcon } from '@heroicons/react/24/solid'
@@ -20,6 +21,7 @@ import { PostingToBoard } from '@/components/public/feedback/posting-to-board'
 import { validatePostCustomFieldValues } from '@/lib/shared/post-custom-fields'
 import type { BoardSettings } from '@/lib/shared/db-types'
 import { signOut } from '@/lib/client/auth-client'
+import { removeViewerScopedPortalQueries } from '@/lib/client/queries/portal'
 import { resolveSubmitState } from '@/components/public/feedback/submit-permission'
 import type { JSONContent } from '@tiptap/react'
 
@@ -60,6 +62,7 @@ export function FeedbackHeaderAnimated({
 }: FeedbackHeaderProps) {
   const intl = useIntl()
   const router = useRouter()
+  const queryClient = useQueryClient()
   const { session } = useRouteContext({ from: '__root__' })
   const [expanded, setExpanded] = useState(false)
   const [error, setError] = useState('')
@@ -439,6 +442,7 @@ export function FeedbackHeaderAnimated({
                     className="text-primary hover:underline"
                     onClick={async () => {
                       await signOut()
+                      removeViewerScopedPortalQueries(queryClient)
                       router.invalidate()
                     }}
                   >

@@ -40,6 +40,7 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getMyConversationsFn } from '@/lib/server/functions/conversation'
 import { PORTAL_MY_CONVERSATIONS_QUERY_KEY } from '@/lib/client/queries/portal-support'
+import { removeViewerScopedPortalQueries } from '@/lib/client/queries/portal'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { NotificationBell } from '@/components/notifications'
 
@@ -146,9 +147,10 @@ export function PortalHeader({
   // Listen for auth success to refetch session and role via router invalidation
   useAuthBroadcast({
     onSuccess: () => {
-      // Invalidate user-scoped queries so reaction highlights and vote data refresh
-      queryClient.invalidateQueries({ queryKey: ['portal', 'post'] })
+      // Refresh vote highlights and drop viewer-scoped data (post detail,
+      // feed, tag catalog) so a team sign-in gains internal tags.
       queryClient.invalidateQueries({ queryKey: ['votedPosts'] })
+      removeViewerScopedPortalQueries(queryClient)
       // Refetch loaders (includes session and userRole) for the new session.
       void router.invalidate()
     },
@@ -201,9 +203,10 @@ export function PortalHeader({
 
   const handleSignOut = async () => {
     await signOut()
-    // Clear user-scoped caches so stale reaction/vote highlights don't persist
-    queryClient.invalidateQueries({ queryKey: ['portal', 'post'] })
+    // Clear user-scoped caches: vote highlights, and every viewer-scoped
+    // payload (a team member's internal tags must not outlive their session).
     queryClient.invalidateQueries({ queryKey: ['votedPosts'] })
+    removeViewerScopedPortalQueries(queryClient)
     router.invalidate() // Refetch session
     router.navigate({ to: '/' })
   }

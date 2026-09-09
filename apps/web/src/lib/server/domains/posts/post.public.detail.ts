@@ -18,7 +18,7 @@ import { toUuid, fromUuid, type PostId, type PostCommentId, type PrincipalId } f
 import { buildCommentTree, toStatusChange } from '@/lib/shared'
 import type { PublicPostDetail, PublicComment, PinnedComment } from './post.types'
 import { DEFAULT_COMMENT_PAGE_SIZE, encodeCommentCursor, decodeCommentCursor } from './comment-page'
-import { resolveAvatarUrl, parseJson } from './post.public'
+import { resolveAvatarUrl, parseJson, publicTagSqlFilter } from './post.public'
 import { getExecuteRows } from '@/lib/server/utils'
 import {
   canViewPost,
@@ -149,7 +149,7 @@ export async function getPublicPostDetail(
           (SELECT json_agg(json_build_object('id', t.id, 'name', t.name, 'color', t.color))
            FROM ${postTagAssignments} pt
            INNER JOIN ${postTags} t ON t.id = pt.tag_id
-           WHERE pt.post_id = ${posts.id}),
+           WHERE pt.post_id = ${posts.id} ${publicTagSqlFilter(actor)}),
           '[]'
         )`.as('tags_json'),
         authorName: sql<string | null>`(

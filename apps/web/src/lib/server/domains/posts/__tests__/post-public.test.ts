@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PostStatusId } from '@quackback/ids'
+import type { PostStatusId, PostTagId, PrincipalId } from '@quackback/ids'
+import type { Actor } from '@/lib/server/policy'
 
 const mockEq = vi.fn((col, val) => ({ _tag: 'eq', col, val }))
 const mockOr = vi.fn((...args) => ({ _tag: 'or', args }))
@@ -48,6 +49,23 @@ const mockMainOrderBy = vi.fn().mockReturnValue({ limit: mockMainLimit })
 const mockMainWhere = vi.fn().mockReturnValue({ orderBy: mockMainOrderBy })
 const mockMainInnerJoin = vi.fn().mockReturnValue({ where: mockMainWhere })
 
+const mockPostTagAssignments = {
+  postId: Symbol('postTagAssignments.postId'),
+  tagId: Symbol('postTagAssignments.tagId'),
+}
+
+const mockPostTags = {
+  id: Symbol('postTags.id'),
+  name: Symbol('postTags.name'),
+  color: Symbol('postTags.color'),
+  isPublic: Symbol('postTags.isPublic'),
+}
+
+// tagIds filter subquery: selectDistinct(...).from(postTagAssignments).innerJoin(postTags).where(...)
+const TAG_SUBQUERY_MARKER = Symbol('tag_subquery')
+const mockTagSubWhere = vi.fn().mockReturnValue(TAG_SUBQUERY_MARKER)
+const mockTagSubInnerJoin = vi.fn().mockReturnValue({ where: mockTagSubWhere })
+
 // Route based on which table is passed to .from(): postStatuses = subquery chain, posts = main chain
 const mockDbSelect = vi.fn().mockImplementation(() => ({
   from: vi.fn().mockImplementation((table) => {
@@ -58,8 +76,17 @@ const mockDbSelect = vi.fn().mockImplementation(() => ({
   }),
 }))
 
+const mockDbSelectDistinct = vi.fn().mockImplementation(() => ({
+  from: vi.fn().mockImplementation((table) => {
+    if (table === mockPostTagAssignments) {
+      return { innerJoin: mockTagSubInnerJoin }
+    }
+    throw new Error('unexpected selectDistinct table')
+  }),
+}))
+
 vi.mock('@/lib/server/db', () => ({
-  db: { select: mockDbSelect },
+  db: { select: mockDbSelect, selectDistinct: mockDbSelectDistinct },
   eq: mockEq,
   and: mockAnd,
   or: mockOr,
@@ -71,15 +98,8 @@ vi.mock('@/lib/server/db', () => ({
   posts: mockPosts,
   boards: mockBoards,
   postStatuses: mockPostStatuses,
-  postTagAssignments: {
-    postId: Symbol('postTagAssignments.postId'),
-    tagId: Symbol('postTagAssignments.tagId'),
-  },
-  postTags: {
-    id: Symbol('postTags.id'),
-    name: Symbol('postTags.name'),
-    color: Symbol('postTags.color'),
-  },
+  postTagAssignments: mockPostTagAssignments,
+  postTags: mockPostTags,
   postVotes: { postId: Symbol('postVotes.postId'), principalId: Symbol('postVotes.principalId') },
   principal: { id: Symbol('principal.id') },
 }))
@@ -260,5 +280,107 @@ describe('listPublicPostsWithVotesAndAvatars — pinned posts lead every sort', 
 
     const args = mockMainOrderBy.mock.calls[0]
     expect(args[1]).toEqual({ _tag: 'desc', col: mockPosts.createdAt })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Tag portal visibility — internal (is_public=false) tags never reach a
+// non-team viewer, neither as a filter nor attached to a post.
+// ---------------------------------------------------------------------------
+
+const TEAM_ACTOR: Actor = {
+  principalId: 'principal_team' as PrincipalId,
+  role: 'member',
+  principalType: 'user',
+  segmentIds: new Set(),
+  permissions: new Set(),
+}
+
+function isPublicFilterApplied() {
+  return mockEq.mock.calls.some(([col, val]) => col === mockPostTags.isPublic && val === true)
+}
+
+/** Whether any raw-SQL template contains the `t.is_public` guard. */
+function isPublicSqlFragmentEmitted() {
+  return mockSql.mock.calls.some((call) => {
+    const [fragments] = call as unknown as [TemplateStringsArray | undefined]
+    return fragments ? fragments.join('?').includes('t.is_public = true') : false
+  })
+}
+
+describe('tag portal visibility — tagIds filter subquery', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockSubWhere.mockReturnValue(SUBQUERY_MARKER)
+    mockTagSubWhere.mockReturnValue(TAG_SUBQUERY_MARKER)
+    mockTagSubInnerJoin.mockReturnValue({ where: mockTagSubWhere })
+    mockMainOffset.mockResolvedValue([])
+    mockMainLimit.mockReturnValue({ offset: mockMainOffset })
+    mockMainOrderBy.mockReturnValue({ limit: mockMainLimit })
+    mockMainWhere.mockReturnValue({ orderBy: mockMainOrderBy })
+    mockMainInnerJoin.mockReturnValue({ where: mockMainWhere })
+  })
+
+  it('joins the tag catalog and requires is_public for an anonymous viewer', async () => {
+    const { listPublicPostsWithVotesAndAvatars } = await import('../post.public')
+
+    await listPublicPostsWithVotesAndAvatars({ tagIds: ['post_tag_1' as PostTagId] })
+
+    expect(mockTagSubInnerJoin).toHaveBeenCalledWith(mockPostTags, expect.anything())
+    expect(mockInArray).toHaveBeenCalledWith(mockPostTagAssignments.tagId, ['post_tag_1'])
+    expect(isPublicFilterApplied()).toBe(true)
+    expect(mockInArray).toHaveBeenCalledWith(mockPosts.id, TAG_SUBQUERY_MARKER)
+  })
+
+  it('does not restrict the tag filter for a team viewer', async () => {
+    const { listPublicPostsWithVotesAndAvatars } = await import('../post.public')
+
+    await listPublicPostsWithVotesAndAvatars({
+      tagIds: ['post_tag_1' as PostTagId],
+      actor: TEAM_ACTOR,
+    })
+
+    expect(mockInArray).toHaveBeenCalledWith(mockPostTagAssignments.tagId, ['post_tag_1'])
+    expect(isPublicFilterApplied()).toBe(false)
+  })
+})
+
+describe('tag portal visibility — tags embedded on listed posts', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockSubWhere.mockReturnValue(SUBQUERY_MARKER)
+    mockMainOffset.mockResolvedValue([])
+    mockMainLimit.mockReturnValue({ offset: mockMainOffset })
+    mockMainOrderBy.mockReturnValue({ limit: mockMainLimit })
+    mockMainWhere.mockReturnValue({ orderBy: mockMainOrderBy })
+    mockMainInnerJoin.mockReturnValue({ where: mockMainWhere })
+  })
+
+  it('listPublicPosts guards the json_agg tag subquery with is_public for an anonymous viewer', async () => {
+    const { listPublicPosts } = await import('../post.public')
+
+    await listPublicPosts({})
+
+    expect(isPublicSqlFragmentEmitted()).toBe(true)
+  })
+
+  it('listPublicPosts leaves the json_agg tag subquery unguarded for a team viewer', async () => {
+    const { listPublicPosts } = await import('../post.public')
+
+    await listPublicPosts({ actor: TEAM_ACTOR })
+
+    expect(isPublicSqlFragmentEmitted()).toBe(false)
+  })
+
+  it('publicTagCondition is undefined for team actors and an is_public predicate otherwise', async () => {
+    const { publicTagCondition } = await import('../post.public')
+    const { ANONYMOUS_ACTOR } = await import('@/lib/server/policy')
+
+    expect(publicTagCondition(TEAM_ACTOR)).toBeUndefined()
+    expect(publicTagCondition(ANONYMOUS_ACTOR)).toEqual({
+      _tag: 'eq',
+      col: mockPostTags.isPublic,
+      val: true,
+    })
   })
 })

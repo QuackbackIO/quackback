@@ -11,6 +11,8 @@ export interface CreateTagInput {
   description?: string
   /** Matching rule for AI auto-tagging of new posts; unset disables it. */
   aiPrompt?: string
+  /** Show on the public portal (default true). False = internal, team-only. */
+  isPublic?: boolean
 }
 
 /**
@@ -21,4 +23,5 @@ export interface UpdateTagInput {
   color?: string
   description?: string | null
   aiPrompt?: string | null
+  isPublic?: boolean
 }

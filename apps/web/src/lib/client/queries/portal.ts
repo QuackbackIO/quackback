@@ -1,4 +1,4 @@
-import { queryOptions } from '@tanstack/react-query'
+import { queryOptions, type QueryClient } from '@tanstack/react-query'
 import type { PrincipalId, RoadmapId, PostStatusId, BoardId } from '@quackback/ids'
 import type { RespondedFilter } from '@/lib/shared/types/filters'
 import {
@@ -11,6 +11,46 @@ import {
   fetchPublicRoadmapPosts,
   fetchPortalData,
 } from '@/lib/server/functions/portal'
+
+/**
+ * Query families whose payload depends on who the viewer is: the tag catalog
+ * hides internal tags from non-team viewers; portal data, the infinite feed
+ * (`publicPostsKeys`, see use-portal-posts-query), post lists and post detail
+ * embed that filtered catalog; public roadmap results honour the same guard
+ * for caller-supplied tag filters; and the roadmap catalog's `baseFilter` has
+ * internal tag ids redacted for non-team viewers.
+ */
+export const VIEWER_SCOPED_PORTAL_QUERY_KEYS: readonly (readonly string[])[] = [
+  ['portal', 'tags'],
+  ['portal', 'data'],
+  ['portal', 'posts'],
+  ['portal', 'post'],
+  ['portal', 'roadmaps'],
+  ['portal', 'roadmapPosts'],
+  ['publicPosts'],
+]
+
+/**
+ * Remove every viewer-scoped portal cache entry on an auth transition, so a
+ * team member signing out does not keep seeing internal tags and a team member
+ * signing in gains them.
+ *
+ * This must *remove*, not invalidate or reset: `invalidateQueries` keeps the
+ * data and route loaders read it back through `ensureQueryData` without
+ * waiting for a refetch; `resetQueries` restores a query's `initialData`, and
+ * the feed (`usePublicPosts`) seeds its pages from the SSR payload that way, so
+ * a reset would put the team-scoped page straight back. `removeQueries` drops
+ * the entries outright. Callers follow up with `router.invalidate()`, which
+ * re-runs loaders and re-renders observers so they rebuild against fresh
+ * queries as the new viewer.
+ *
+ * Call from every portal sign-out control and sign-in success handler.
+ */
+export function removeViewerScopedPortalQueries(queryClient: QueryClient): void {
+  for (const queryKey of VIEWER_SCOPED_PORTAL_QUERY_KEYS) {
+    queryClient.removeQueries({ queryKey })
+  }
+}
 
 /**
  * Query options factory for portal/public routes.

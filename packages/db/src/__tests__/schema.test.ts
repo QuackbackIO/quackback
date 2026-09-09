@@ -95,7 +95,15 @@ describe('Schema definitions', () => {
       expect(columns).toContain('id')
       expect(columns).toContain('name')
       expect(columns).toContain('color')
+      expect(columns).toContain('isPublic')
       expect(columns).toContain('createdAt')
+    })
+
+    it('defaults isPublic to true so existing tags stay visible on the portal', () => {
+      const { isPublic } = getTableColumns(postTags)
+      expect(isPublic.notNull).toBe(true)
+      expect(isPublic.hasDefault).toBe(true)
+      expect(isPublic.default).toBe(true)
     })
   })
 

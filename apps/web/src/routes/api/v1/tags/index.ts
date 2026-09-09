@@ -18,6 +18,7 @@ const createTagSchema = z.object({
     .optional()
     .default('#6b7280'),
   description: z.string().max(200).optional(),
+  isPublic: z.boolean().optional(),
 })
 
 export const Route = createFileRoute('/api/v1/tags/')({
@@ -42,6 +43,7 @@ export const Route = createFileRoute('/api/v1/tags/')({
               name: tag.name,
               color: tag.color,
               description: tag.description,
+              isPublic: tag.isPublic,
               createdAt: tag.createdAt.toISOString(),
             }))
           )
@@ -75,6 +77,7 @@ export const Route = createFileRoute('/api/v1/tags/')({
             name: parsed.data.name,
             color: parsed.data.color,
             description: parsed.data.description,
+            isPublic: parsed.data.isPublic,
           })
 
           return createdResponse({
@@ -82,6 +85,7 @@ export const Route = createFileRoute('/api/v1/tags/')({
             name: tag.name,
             color: tag.color,
             description: tag.description,
+            isPublic: tag.isPublic,
             createdAt: tag.createdAt.toISOString(),
           })
         } catch (error) {
