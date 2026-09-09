@@ -278,8 +278,8 @@ describe('the real corpus', () => {
     // collapse that same window.
     // 0274 checks the installed constraint definitions and updates only version 3 configs.
     // A replay preserves widened constraints, workspace customizations and revisions.
-    // 0277 rewrites leftover widget `chat` keys and inserts macros only when a
-    // name+body pair is missing, so a second run writes zero rows.
+    // 0277 rewrites leftover widget `chat` keys and inserts chat-only macros
+    // that are not already live, so a second run writes zero rows.
     const vouching = files.filter(
       (f) => assessReplaySafety(f, readFileSync(join(MIGRATIONS_DIR, f), 'utf8')).vouched.length > 0
     )

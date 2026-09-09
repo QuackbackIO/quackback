@@ -6,9 +6,10 @@ import { createDb, type Database } from '../client'
 
 /**
  * 0277 copies leftover 0.13.x widget `chat` keys onto `messenger` and turns
- * canned replies into macros. The file is applied verbatim against scratch
- * tables so a rewrite that dropped welcome copy or double-inserted macros
- * fails here rather than on a self-host upgrade.
+ * chat-only canned replies into macros. Replies also listed under messenger
+ * were already imported by 0146 and must not be recreated. The file is
+ * applied verbatim against scratch tables so a rewrite that dropped welcome
+ * copy or double-inserted macros fails here rather than on a self-host upgrade.
  */
 const MIGRATION_SQL = readFileSync(
   join(__dirname, '../../drizzle/0277_widget_chat_to_messenger.sql'),
@@ -51,12 +52,20 @@ const MESSENGER_WINS = JSON.stringify({
   tabs: { feedback: true, chat: true, messenger: false },
   chat: {
     welcomeMessage: 'Legacy welcome',
-    cannedReplies: [{ title: 'Old', body: 'From chat' }],
+    cannedReplies: [
+      { title: 'Old', body: 'From chat' },
+      { title: 'Shared', body: 'Same in both' },
+      { title: 'Gone', body: 'Soft deleted after 0146' },
+    ],
   },
   messenger: {
     enabled: true,
     welcomeMessage: 'Already migrated',
-    cannedReplies: [{ title: 'New', body: 'From messenger' }],
+    cannedReplies: [
+      { title: 'New', body: 'From messenger' },
+      { title: 'Shared', body: 'Same in both' },
+      { title: 'Gone', body: 'Soft deleted after 0146' },
+    ],
   },
 })
 
@@ -116,8 +125,11 @@ describe.skipIf(!dbAvailable)('migration 0277 widget chat to messenger', () => {
       const ids = (inserted as unknown as { id: string }[]).map((r) => r.id)
 
       await tx.execute(sql`
-        INSERT INTO "_m0277_macros" (id, name, body, scope)
-        VALUES (gen_random_uuid(), 'Old', 'From chat', 'feedback')
+        INSERT INTO "_m0277_macros" (id, name, body, scope, deleted_at)
+        VALUES
+          (gen_random_uuid(), 'Old', 'From chat', 'feedback', NULL),
+          (gen_random_uuid(), 'Shared', 'Edited after import', 'support', NULL),
+          (gen_random_uuid(), 'Gone', 'Soft deleted after 0146', 'support', now())
       `)
 
       await tx.execute(sql.raw(SCRATCH_SQL))
@@ -168,12 +180,23 @@ describe.skipIf(!dbAvailable)('migration 0277 widget chat to messenger', () => {
       const messengerOnly = byId.get(ids[3]!)!
       expect(messengerOnly).toEqual(JSON.parse(MESSENGER_ONLY))
 
-      const macros = await tx.execute<{ name: string; body: string; scope: string }>(
-        sql`SELECT name, body, scope FROM "_m0277_macros" ORDER BY name, body, scope`
-      )
-      expect(macros as unknown as { name: string; body: string; scope: string }[]).toEqual([
-        { name: 'Old', body: 'From chat', scope: 'feedback' },
-        { name: 'Thanks', body: 'Thanks for writing in.', scope: 'support' },
+      const macros = await tx.execute<{
+        name: string
+        body: string
+        scope: string
+        deleted: boolean
+      }>(sql`
+        SELECT name, body, scope, (deleted_at IS NOT NULL) AS deleted
+        FROM "_m0277_macros"
+        ORDER BY name, body, scope
+      `)
+      expect(
+        macros as unknown as { name: string; body: string; scope: string; deleted: boolean }[]
+      ).toEqual([
+        { name: 'Gone', body: 'Soft deleted after 0146', scope: 'support', deleted: true },
+        { name: 'Old', body: 'From chat', scope: 'feedback', deleted: false },
+        { name: 'Shared', body: 'Edited after import', scope: 'support', deleted: false },
+        { name: 'Thanks', body: 'Thanks for writing in.', scope: 'support', deleted: false },
       ])
     })
   })

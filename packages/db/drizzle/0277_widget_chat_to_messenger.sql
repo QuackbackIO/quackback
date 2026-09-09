@@ -1,14 +1,15 @@
 -- Rewrite leftover 0.13.x widget `chat` keys onto `messenger`, and copy
 -- canned replies that still live under `chat` into macros. 0146 already
--- imported messenger.cannedReplies, so this INSERT reads only the legacy
--- chat array. Scanning messenger after the rewrite would recreate a
--- support macro that an admin later edited, retargeted, or soft-deleted.
+-- imported messenger.cannedReplies, so this INSERT reads only the leftover
+-- chat array and skips any reply that is also listed under messenger. A
+-- live-macro name+body check cannot prove that: if an admin later edited
+-- or soft-deleted the 0146 row, the stale chat copy would look new.
+-- Chat-only replies still skip a live name+body match, including one later
+-- scoped to feedback or both.
 --
 -- Messenger keys win on conflict; chat fills gaps. tabs.messenger is copied
 -- from tabs.chat only when it was never stored. The leftover chat keys are
--- dropped so a second run matches zero rows. The INSERT skips a name+body
--- that already exists as a live macro, including one later scoped to
--- feedback or both.
+-- dropped so a second run matches zero rows.
 
 -- @replay: guarded-by leftover widget_config chat keys and macros of the same name and body
 DO $$
@@ -26,6 +27,18 @@ BEGIN
   ) AS cr
   WHERE coalesce(cr->>'title', '') <> ''
     AND coalesce(cr->>'body', '') <> ''
+    AND NOT EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(
+        CASE
+          WHEN jsonb_typeof((s.widget_config::jsonb)#>'{messenger,cannedReplies}') = 'array'
+            THEN (s.widget_config::jsonb)#>'{messenger,cannedReplies}'
+          ELSE '[]'::jsonb
+        END
+      ) AS mr
+      WHERE mr->>'title' = cr->>'title'
+        AND mr->>'body' = cr->>'body'
+    )
     AND NOT EXISTS (
       SELECT 1
       FROM "macros" m
