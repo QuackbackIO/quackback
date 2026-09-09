@@ -99,6 +99,13 @@ describe('isDeviceUnseen', () => {
   it('returns false when the member was already present', async () => {
     mockClaimCounted.mockResolvedValueOnce({ claimed: false, liveCount: 2 })
     expect(await isDeviceUnseen('user_abc', 'fp')).toBe(false)
+    expect(mockTouch).toHaveBeenCalledWith('user:devices:v2:user_abc', 7_776_000)
+  })
+
+  it('does not slide TTL on a first-device silent seed', async () => {
+    mockClaimCounted.mockResolvedValueOnce({ claimed: true, liveCount: 1 })
+    expect(await isDeviceUnseen('user_abc', 'fp')).toBe(false)
+    expect(mockTouch).not.toHaveBeenCalled()
   })
 
   it('claims the fingerprint under the user set key with the 90-day TTL', async () => {

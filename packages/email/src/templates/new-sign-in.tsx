@@ -65,7 +65,7 @@ export function NewSignInEmail({
 
       <Text style={typography.text}>
         {ssoEnforced ? (
-          'If that was you, no action needed. If it wasn’t, sign in through your organization’s identity provider and review or revoke sessions there.'
+          'If that was you, no action needed. If it wasn’t, change your password at your identity provider and ask a workspace admin to sign out other sessions.'
         ) : (
           <>
             If that was you, no action needed. If it wasn’t,{' '}

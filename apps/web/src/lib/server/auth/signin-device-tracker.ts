@@ -82,9 +82,9 @@ const key = (userId: string) => `user:devices:v2:${userId}`
  * is the user's own sign-in, and it also absorbs a hash-format change
  * without a one-time mail burst.
  *
- * One statement, so the claim and the expiry cannot separate — even if
- * the caller crashes before `markDeviceSeen` runs, the member still
- * expires after 90 days.
+ * Known devices slide the set's 90-day window here. Otherwise a daily
+ * sign-in never calls `markDeviceSeen`, the member expires, and the next
+ * distinct browser is treated as a silent first seed.
  */
 export async function isDeviceUnseen(userId: string, fingerprint: string): Promise<boolean> {
   try {
@@ -93,7 +93,11 @@ export async function isDeviceUnseen(userId: string, fingerprint: string): Promi
       fingerprint,
       DEVICE_SET_TTL_SECONDS
     )
-    return claimed && liveCount > 1
+    if (!claimed) {
+      await kvSetTouch(key(userId), DEVICE_SET_TTL_SECONDS)
+      return false
+    }
+    return liveCount > 1
   } catch (error) {
     log.error({ err: error }, 'isDeviceUnseen failed; treating device as known')
     return false
