@@ -361,9 +361,9 @@ export function TagList({ initialTags }: TagListProps) {
           {tags.map((tag) => (
             <div
               key={tag.id}
-              className="flex items-center gap-3 py-1.5 px-2 rounded-md hover:bg-muted/50 group"
+              className="flex items-center gap-2 sm:gap-3 py-1.5 px-2 rounded-md hover:bg-muted/50 group min-w-0"
             >
-              <div className="w-40 shrink-0">
+              <div className="min-w-0 max-w-[8rem] sm:w-40 sm:max-w-none sm:shrink-0">
                 <ColorPickerPopover
                   color={tag.color}
                   onColorChange={(c) => handleColorChange(tag, c)}
@@ -394,7 +394,7 @@ export function TagList({ initialTags }: TagListProps) {
                 {tag.isPublic ? 'Portal' : 'Internal'}
               </span>
 
-              <span className="text-xs text-muted-foreground truncate flex-1">
+              <span className="hidden sm:block text-xs text-muted-foreground truncate flex-1 min-w-0">
                 {tag.description ?? ''}
               </span>
 
@@ -407,7 +407,7 @@ export function TagList({ initialTags }: TagListProps) {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7 text-muted-foreground opacity-0 group-hover:opacity-100"
+                className="h-7 w-7 shrink-0 text-muted-foreground opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                 onClick={() => openEdit(tag)}
                 title="Edit tag"
               >
@@ -418,7 +418,7 @@ export function TagList({ initialTags }: TagListProps) {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"
+                className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                 onClick={() => setDeletingTag(tag)}
                 title="Delete tag"
               >
