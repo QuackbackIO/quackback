@@ -1,4 +1,4 @@
-import { useState, useEffect, useTransition } from 'react'
+import { useState, useEffect, useTransition, type ReactNode } from 'react'
 import { useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import {
@@ -7,13 +7,14 @@ import {
   PencilSquareIcon,
   ArrowPathIcon,
   EyeSlashIcon,
+  GlobeAltIcon,
 } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -22,139 +23,19 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
+import {
+  ColorPickerGrid,
+  ColorHexInput,
+  PRESET_COLORS,
+  randomColor,
+} from '@/components/shared/color-picker'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { cn } from '@/lib/shared/utils'
 import type { PostTag } from '@/lib/shared/db-types'
 import { createPostTagFn, updatePostTagFn, deletePostTagFn } from '@/lib/server/functions/post-tags'
 
-// ============================================================================
-// Constants
-// ============================================================================
-
-const PRESET_COLORS = [
-  '#ef4444',
-  '#f97316',
-  '#eab308',
-  '#22c55e',
-  '#14b8a6',
-  '#3b82f6',
-  '#8b5cf6',
-  '#ec4899',
-  '#f87171',
-  '#fb923c',
-  '#facc15',
-  '#4ade80',
-  '#2dd4bf',
-  '#60a5fa',
-  '#a78bfa',
-  '#f472b6',
-  '#b91c1c',
-  '#c2410c',
-  '#a16207',
-  '#15803d',
-  '#0f766e',
-  '#1d4ed8',
-  '#6d28d9',
-  '#be185d',
-  '#0f172a',
-  '#334155',
-  '#64748b',
-  '#94a3b8',
-  '#475569',
-  '#1e293b',
-  '#78716c',
-  '#a8a29e',
-]
-
-function randomColor(): string {
-  return (
-    '#' +
-    Math.floor(Math.random() * 0xffffff)
-      .toString(16)
-      .padStart(6, '0')
-  )
-}
-
-// ============================================================================
-// Color Picker Components
-// ============================================================================
-
-function ColorPickerGrid({
-  selectedColor,
-  onColorChange,
-}: {
-  selectedColor: string
-  onColorChange: (color: string) => void
-}) {
-  return (
-    <div className="grid grid-cols-8 gap-1.5">
-      {PRESET_COLORS.map((c) => (
-        <button
-          key={c}
-          type="button"
-          className={cn(
-            'h-6 w-6 rounded-full border-2 transition-colors',
-            selectedColor.toLowerCase() === c.toLowerCase()
-              ? 'border-foreground'
-              : 'border-transparent'
-          )}
-          style={{ backgroundColor: c }}
-          onClick={() => onColorChange(c)}
-        />
-      ))}
-    </div>
-  )
-}
-
-function ColorHexInput({
-  color,
-  onColorChange,
-}: {
-  color: string
-  onColorChange: (color: string) => void
-}) {
-  const [hexInput, setHexInput] = useState(color)
-
-  useEffect(() => {
-    setHexInput(color)
-  }, [color])
-
-  function handleHexChange(value: string) {
-    setHexInput(value)
-    if (/^#[0-9A-Fa-f]{6}$/.test(value)) {
-      onColorChange(value)
-    }
-  }
-
-  return (
-    <div className="flex items-center gap-2">
-      <span
-        className="h-6 w-6 rounded-md border border-border shrink-0"
-        style={{ backgroundColor: color }}
-      />
-      <Input
-        value={hexInput}
-        onChange={(e) => handleHexChange(e.target.value)}
-        className="font-mono text-xs h-7"
-        placeholder="#000000"
-      />
-      <Button
-        type="button"
-        variant="outline"
-        size="icon"
-        className="h-7 w-7 shrink-0"
-        onClick={() => {
-          const c = randomColor()
-          setHexInput(c)
-          onColorChange(c)
-        }}
-        title="Random color"
-      >
-        <ArrowPathIcon className="h-3.5 w-3.5" />
-      </Button>
-    </div>
-  )
-}
+const COMPACT_COLORS = PRESET_COLORS.slice(0, 8)
+const MORE_COLORS = PRESET_COLORS.slice(8)
 
 // ============================================================================
 // PostTag Dialog (Create + Edit)
@@ -172,10 +53,12 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
   const [description, setDescription] = useState('')
   const [color, setColor] = useState('#6b7280')
   const [isPublic, setIsPublic] = useState(true)
+  const [showMoreColors, setShowMoreColors] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
 
   const isEdit = tag !== null
+  const previewName = name.trim() || 'Tag name'
 
   useEffect(() => {
     if (open) {
@@ -190,6 +73,7 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
         setColor(randomColor())
         setIsPublic(true)
       }
+      setShowMoreColors(false)
       setError(null)
     }
   }, [open, tag])
@@ -246,75 +130,160 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{isEdit ? 'Edit tag' : 'New tag'}</DialogTitle>
-        </DialogHeader>
+      <DialogContent className="sm:max-w-lg">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            void handleSave()
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>{isEdit ? 'Edit tag' : 'New tag'}</DialogTitle>
+            <DialogDescription>
+              Label posts for filtering. Visible on the portal unless marked internal.
+            </DialogDescription>
+          </DialogHeader>
 
-        {/* Live preview */}
-        <div className="flex justify-center py-3 bg-muted/30 rounded-lg">
-          <span
-            className="inline-flex items-center px-3 py-0.5 rounded-md text-sm font-medium"
-            style={{ backgroundColor: color + '20', color }}
-          >
-            {name.trim() || 'PostTag name'}
-          </span>
-        </div>
+          <div className="space-y-5 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="tag-name">Name</Label>
+              <div className="flex items-center gap-3">
+                <Input
+                  id="tag-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. bug, enhancement, design"
+                  maxLength={50}
+                  autoFocus
+                  className="flex-1 min-w-0"
+                />
+                <span
+                  className="inline-flex items-center px-2.5 py-0.5 rounded-md text-sm font-medium shrink-0 max-w-[8.5rem] truncate"
+                  style={{ backgroundColor: color + '20', color }}
+                >
+                  {previewName}
+                </span>
+              </div>
+            </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="tag-name">Name</Label>
-          <Input
-            id="tag-name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. bug, enhancement, design"
-            maxLength={50}
-          />
-        </div>
+            <div className="space-y-2">
+              <Label>Color</Label>
+              <ColorPickerGrid
+                selectedColor={color}
+                onColorChange={setColor}
+                colors={COMPACT_COLORS}
+              />
+              <ColorHexInput color={color} onColorChange={setColor} />
+              <button
+                type="button"
+                className="text-xs text-muted-foreground hover:text-foreground"
+                aria-expanded={showMoreColors}
+                onClick={() => setShowMoreColors((visible) => !visible)}
+              >
+                {showMoreColors ? 'Show less' : 'More colors'}
+              </button>
+              {showMoreColors && (
+                <ColorPickerGrid
+                  selectedColor={color}
+                  onColorChange={setColor}
+                  colors={MORE_COLORS}
+                />
+              )}
+            </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="tag-desc">
-            Description <span className="text-muted-foreground font-normal">(optional)</span>
-          </Label>
-          <Textarea
-            id="tag-desc"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Brief description of when to use this tag"
-            rows={2}
-            maxLength={200}
-          />
-        </div>
+            <div className="space-y-2">
+              <Label id="tag-visibility-label">Visibility</Label>
+              <div
+                role="radiogroup"
+                aria-labelledby="tag-visibility-label"
+                className="grid grid-cols-1 gap-2 sm:grid-cols-2"
+              >
+                <VisibilityCard
+                  active={isPublic}
+                  label="Portal"
+                  description="Shown on the public portal"
+                  icon={<GlobeAltIcon className="h-3.5 w-3.5" />}
+                  onClick={() => setIsPublic(true)}
+                />
+                <VisibilityCard
+                  active={!isPublic}
+                  label="Internal"
+                  description="Hidden from the portal"
+                  icon={<EyeSlashIcon className="h-3.5 w-3.5" />}
+                  onClick={() => setIsPublic(false)}
+                />
+              </div>
+            </div>
 
-        <div className="space-y-2">
-          <Label>Color</Label>
-          <ColorPickerGrid selectedColor={color} onColorChange={setColor} />
-          <ColorHexInput color={color} onColorChange={setColor} />
-        </div>
+            <div className="space-y-2">
+              <Label htmlFor="tag-desc">
+                Description <span className="text-muted-foreground font-normal">(optional)</span>
+              </Label>
+              <Textarea
+                id="tag-desc"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="When to use this tag"
+                rows={2}
+                maxLength={200}
+              />
+            </div>
 
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <Label htmlFor="tag-is-public">Show on portal</Label>
-            <p className="text-xs text-muted-foreground">
-              Customers can see this tag on posts and filter by it in the public portal. Turn off to
-              keep it internal to your team.
-            </p>
+            {error && <p className="text-sm text-destructive">{error}</p>}
           </div>
-          <Switch id="tag-is-public" checked={isPublic} onCheckedChange={setIsPublic} />
-        </div>
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={isSaving}>
-            {isSaving ? 'Saving...' : isEdit ? 'Save changes' : 'Create tag'}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={isSaving}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isSaving || !name.trim()}>
+              {isSaving ? 'Saving...' : isEdit ? 'Save changes' : 'Create tag'}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function VisibilityCard({
+  active,
+  label,
+  description,
+  icon,
+  onClick,
+}: {
+  active: boolean
+  label: string
+  description: string
+  icon: ReactNode
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={active}
+      aria-label={label}
+      onClick={onClick}
+      className={cn(
+        'flex flex-col items-stretch gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors',
+        active
+          ? 'border-primary bg-primary/10'
+          : 'border-border bg-muted/30 hover:bg-muted/60 cursor-pointer'
+      )}
+    >
+      <div className="flex items-center gap-2">
+        <span className={active ? 'text-primary' : 'text-muted-foreground'}>{icon}</span>
+        <span className={cn('text-sm font-semibold', active && 'text-primary')}>{label}</span>
+      </div>
+      <span className="text-xs text-muted-foreground leading-snug">{description}</span>
+    </button>
   )
 }
 
