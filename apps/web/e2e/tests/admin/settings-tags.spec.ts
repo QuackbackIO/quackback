@@ -70,8 +70,7 @@ test.describe('Admin Tags Settings', () => {
     // Description textarea
     await expect(dialog.getByRole('textbox', { name: /description/i })).toBeVisible()
 
-    // Color section label
-    await expect(dialog.getByText('Color')).toBeVisible()
+    await expect(dialog.getByRole('button', { name: /^color$/i })).toBeVisible()
 
     // Portal visibility, on by default for new tags
     const portalRadio = dialog.getByRole('radio', { name: /^portal$/i })

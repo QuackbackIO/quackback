@@ -137,31 +137,18 @@ describe('<TagList> — create dialog layout', () => {
     expect(screen.getByRole('button', { name: /create tag/i })).toBeEnabled()
   })
 
-  it('previews the typed name next to the field, not a PostTag placeholder', () => {
+  it('does not leak the PostTag type name as a placeholder', () => {
     render(<TagList initialTags={[]} />)
 
     fireEvent.click(screen.getByRole('button', { name: /add new tag/i }))
-    expect(screen.getByText('Tag name')).toBeTruthy()
     expect(screen.queryByText('PostTag name')).toBeNull()
-
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Design' } })
-    expect(screen.getByText('Design')).toBeTruthy()
-    expect(screen.queryByText('Tag name')).toBeNull()
   })
 
-  it('hides the extra color palette until More colors is opened', () => {
+  it('opens the color palette from a single swatch', () => {
     render(<TagList initialTags={[]} />)
 
     fireEvent.click(screen.getByRole('button', { name: /add new tag/i }))
-    expect(screen.getByRole('button', { name: /more colors/i })).toHaveAttribute(
-      'aria-expanded',
-      'false'
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: /more colors/i }))
-    expect(screen.getByRole('button', { name: /show less/i })).toHaveAttribute(
-      'aria-expanded',
-      'true'
-    )
+    fireEvent.click(screen.getByRole('button', { name: /^color$/i }))
+    expect(screen.getByPlaceholderText('#000000')).toBeTruthy()
   })
 })

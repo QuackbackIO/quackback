@@ -23,19 +23,31 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
-import {
-  ColorPickerGrid,
-  ColorHexInput,
-  PRESET_COLORS,
-  randomColor,
-} from '@/components/shared/color-picker'
+import { ColorPickerGrid, ColorHexInput, randomColor } from '@/components/shared/color-picker'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { cn } from '@/lib/shared/utils'
 import type { PostTag } from '@/lib/shared/db-types'
 import { createPostTagFn, updatePostTagFn, deletePostTagFn } from '@/lib/server/functions/post-tags'
 
-const COMPACT_COLORS = PRESET_COLORS.slice(0, 8)
-const MORE_COLORS = PRESET_COLORS.slice(8)
+function ColorPickerPopover({
+  color,
+  onColorChange,
+  trigger,
+}: {
+  color: string
+  onColorChange: (color: string) => void
+  trigger: ReactNode
+}) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      <PopoverContent className="w-auto p-2 space-y-2" align="start">
+        <ColorPickerGrid selectedColor={color} onColorChange={onColorChange} />
+        <ColorHexInput color={color} onColorChange={onColorChange} />
+      </PopoverContent>
+    </Popover>
+  )
+}
 
 // ============================================================================
 // PostTag Dialog (Create + Edit)
@@ -53,12 +65,10 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
   const [description, setDescription] = useState('')
   const [color, setColor] = useState('#6b7280')
   const [isPublic, setIsPublic] = useState(true)
-  const [showMoreColors, setShowMoreColors] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
 
   const isEdit = tag !== null
-  const previewName = name.trim() || 'Tag name'
 
   useEffect(() => {
     if (open) {
@@ -73,7 +83,6 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
         setColor(randomColor())
         setIsPublic(true)
       }
-      setShowMoreColors(false)
       setError(null)
     }
   }, [open, tag])
@@ -130,7 +139,7 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-md">
         <form
           onSubmit={(e) => {
             e.preventDefault()
@@ -144,10 +153,23 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-5 py-4">
+          <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label htmlFor="tag-name">Name</Label>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+              <div className="flex items-center gap-2">
+                <ColorPickerPopover
+                  color={color}
+                  onColorChange={setColor}
+                  trigger={
+                    <button
+                      type="button"
+                      className="h-9 w-9 rounded-full border border-border shrink-0 hover:ring-2 hover:ring-offset-1 hover:ring-muted-foreground/50 focus-visible:ring-2 focus-visible:ring-ring"
+                      style={{ backgroundColor: color }}
+                      aria-label="Color"
+                      title="Change color"
+                    />
+                  }
+                />
                 <Input
                   id="tag-name"
                   value={name}
@@ -157,38 +179,7 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
                   autoFocus
                   className="flex-1 min-w-0"
                 />
-                <span
-                  className="inline-flex self-start items-center px-2.5 py-0.5 rounded-md text-sm font-medium shrink-0 max-w-[8.5rem] truncate"
-                  style={{ backgroundColor: color + '20', color }}
-                >
-                  {previewName}
-                </span>
               </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Color</Label>
-              <ColorPickerGrid
-                selectedColor={color}
-                onColorChange={setColor}
-                colors={COMPACT_COLORS}
-              />
-              <ColorHexInput color={color} onColorChange={setColor} />
-              <button
-                type="button"
-                className="text-xs text-muted-foreground hover:text-foreground"
-                aria-expanded={showMoreColors}
-                onClick={() => setShowMoreColors((visible) => !visible)}
-              >
-                {showMoreColors ? 'Show less' : 'More colors'}
-              </button>
-              {showMoreColors && (
-                <ColorPickerGrid
-                  selectedColor={color}
-                  onColorChange={setColor}
-                  colors={MORE_COLORS}
-                />
-              )}
             </div>
 
             <div className="space-y-2">
@@ -372,25 +363,16 @@ export function TagList({ initialTags }: TagListProps) {
               key={tag.id}
               className="flex items-center gap-2 py-1.5 px-2 rounded-md hover:bg-muted/50 group"
             >
-              {/* Color dot with popover */}
-              <Popover>
-                <PopoverTrigger asChild>
+              <ColorPickerPopover
+                color={tag.color}
+                onColorChange={(c) => handleColorChange(tag, c)}
+                trigger={
                   <button
                     className="h-3 w-3 rounded-full shrink-0 cursor-pointer hover:ring-2 hover:ring-offset-1 hover:ring-muted-foreground/50"
                     style={{ backgroundColor: tag.color }}
                   />
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-2 space-y-2" align="start">
-                  <ColorPickerGrid
-                    selectedColor={tag.color}
-                    onColorChange={(c) => handleColorChange(tag, c)}
-                  />
-                  <ColorHexInput
-                    color={tag.color}
-                    onColorChange={(c) => handleColorChange(tag, c)}
-                  />
-                </PopoverContent>
-              </Popover>
+                }
+              />
 
               {/* Name */}
               <span className="text-sm font-medium">{tag.name}</span>
