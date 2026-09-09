@@ -5,7 +5,8 @@
 -- live-macro name+body check cannot prove that: if an admin later edited
 -- or soft-deleted the 0146 row, the stale chat copy would look new.
 -- Chat-only replies still skip a live name+body match, including one later
--- scoped to feedback or both.
+-- scoped to feedback or both. Repeated title+body pairs in one chat array
+-- are inserted once; NOT EXISTS cannot see sibling rows in the same SELECT.
 --
 -- Messenger keys win on conflict; chat fills gaps. tabs.messenger is copied
 -- from tabs.chat only when it was never stored. The leftover chat keys are
@@ -37,39 +38,42 @@ $$;
 DO $$
 BEGIN
   INSERT INTO "macros" ("id", "name", "body", "scope", "actions", "created_at", "updated_at")
-  SELECT gen_random_uuid(), cr->>'title', cr->>'body', 'support', '[]'::jsonb, now(), now()
-  FROM "settings" s
-  CROSS JOIN LATERAL (
-    SELECT pg_temp._m0277_widget_json(s.id, s.widget_config) AS cfg
-  ) parsed
-  CROSS JOIN LATERAL jsonb_array_elements(
-    CASE
-      WHEN jsonb_typeof(parsed.cfg#>'{chat,cannedReplies}') = 'array'
-        THEN parsed.cfg#>'{chat,cannedReplies}'
-      ELSE '[]'::jsonb
-    END
-  ) AS cr
-  WHERE coalesce(cr->>'title', '') <> ''
-    AND coalesce(cr->>'body', '') <> ''
-    AND NOT EXISTS (
-      SELECT 1
-      FROM jsonb_array_elements(
-        CASE
-          WHEN jsonb_typeof(parsed.cfg#>'{messenger,cannedReplies}') = 'array'
-            THEN parsed.cfg#>'{messenger,cannedReplies}'
-          ELSE '[]'::jsonb
-        END
-      ) AS mr
-      WHERE mr->>'title' = cr->>'title'
-        AND mr->>'body' = cr->>'body'
-    )
-    AND NOT EXISTS (
-      SELECT 1
-      FROM "macros" m
-      WHERE m.deleted_at IS NULL
-        AND m.name = cr->>'title'
-        AND m.body = cr->>'body'
-    );
+  SELECT gen_random_uuid(), title, body, 'support', '[]'::jsonb, now(), now()
+  FROM (
+    SELECT DISTINCT cr->>'title' AS title, cr->>'body' AS body
+    FROM "settings" s
+    CROSS JOIN LATERAL (
+      SELECT pg_temp._m0277_widget_json(s.id, s.widget_config) AS cfg
+    ) parsed
+    CROSS JOIN LATERAL jsonb_array_elements(
+      CASE
+        WHEN jsonb_typeof(parsed.cfg#>'{chat,cannedReplies}') = 'array'
+          THEN parsed.cfg#>'{chat,cannedReplies}'
+        ELSE '[]'::jsonb
+      END
+    ) AS cr
+    WHERE coalesce(cr->>'title', '') <> ''
+      AND coalesce(cr->>'body', '') <> ''
+      AND NOT EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements(
+          CASE
+            WHEN jsonb_typeof(parsed.cfg#>'{messenger,cannedReplies}') = 'array'
+              THEN parsed.cfg#>'{messenger,cannedReplies}'
+            ELSE '[]'::jsonb
+          END
+        ) AS mr
+        WHERE mr->>'title' = cr->>'title'
+          AND mr->>'body' = cr->>'body'
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM "macros" m
+        WHERE m.deleted_at IS NULL
+          AND m.name = cr->>'title'
+          AND m.body = cr->>'body'
+      )
+  ) unique_replies;
 
   UPDATE "settings" AS s
   SET "widget_config" = r.rewritten

@@ -48,6 +48,7 @@ const LEGACY_CHAT = JSON.stringify({
     officeHours: { enabled: true, timezone: 'Europe/London', days: [] },
     cannedReplies: [
       { title: 'Thanks', body: 'Thanks for writing in.' },
+      { title: 'Thanks', body: 'Thanks for writing in.' },
       { title: 'Missing body', body: '' },
     ],
   },
@@ -188,6 +189,7 @@ describe.skipIf(!dbAvailable)('migration 0277 widget chat to messenger', () => {
       expect(messenger.preChatEmail).toBeUndefined()
       expect(messenger.officeHours.timezone).toBe('Europe/London')
       expect(messenger.cannedReplies).toEqual([
+        { title: 'Thanks', body: 'Thanks for writing in.' },
         { title: 'Thanks', body: 'Thanks for writing in.' },
         { title: 'Missing body', body: '' },
       ])
