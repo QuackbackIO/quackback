@@ -335,13 +335,25 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
  * so we must call auth.api.setPassword() from a server function.
  */
 export const setPasswordFn = createServerFn({ method: 'POST' })
-  .validator(z.object({ newPassword: z.string().min(8) }))
+  .validator(
+    z.object({
+      newPassword: z.string().min(8),
+      /** Drop every session except the current one. Off by default so
+       *  complete-signup can set a first password without kicking the
+       *  just-minted session; the profile recovery form turns it on. */
+      revokeOtherSessions: z.boolean().optional(),
+    })
+  )
   .handler(async ({ data }) => {
+    const headers = getRequestHeaders()
     const { auth } = await import('@/lib/server/auth')
     await auth.api.setPassword({
       body: { newPassword: data.newPassword },
-      headers: getRequestHeaders(),
+      headers,
     })
+    if (data.revokeOtherSessions) {
+      await auth.api.revokeOtherSessions({ headers })
+    }
     return { status: true }
   })
 

@@ -60,7 +60,7 @@ export const rateBucket = pgTable(
   ]
 )
 
-/** Members of a keyed set — today only `user:devices:<userId>`. */
+/** Members of a keyed set — today only `user:devices:v2:<userId>`. */
 export const kvSetMember = pgTable(
   'kv_set_member',
   {

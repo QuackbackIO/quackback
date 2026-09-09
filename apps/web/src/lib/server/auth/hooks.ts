@@ -40,6 +40,7 @@ import {
 import { checkAnonMintRateLimit } from './widget-rate-limit'
 import {
   computeDeviceFingerprint,
+  formatSignInDevice,
   forgetDevice,
   isDeviceUnseen,
   markDeviceSeen,
@@ -1299,7 +1300,7 @@ export async function handleNewDeviceNotification(
   const headers = getRequestHeaders()
   const userAgent = headers.get('user-agent') ?? ''
   const ip = getClientIp(headers)
-  const fingerprint = computeDeviceFingerprint(userAgent, ip)
+  const fingerprint = computeDeviceFingerprint(userAgent)
 
   const unseen = await isDeviceUnseen(userId, fingerprint).catch(() => false)
   if (!unseen) return
@@ -1311,7 +1312,12 @@ export async function handleNewDeviceNotification(
     const { sendNewSignInEmail } = await import('@quackback/email')
     const { recordAuditEvent } = await import('@/lib/server/audit/log')
     const { resolveAccountRecipient } = await import('@/lib/server/email/recipient')
+    const { getBaseUrl } = await import('@/lib/server/config')
     const occurredAt = new Date().toISOString()
+    const device = formatSignInDevice(userAgent)
+    const location = captureCountryFromHeaders(headers)
+    const base = getBaseUrl().replace(/\/$/, '')
+    const settingsUrl = base ? `${base}/settings/profile` : undefined
     // Account class, and deliberately no contact-address fallback: this alert
     // discloses IP, user agent and sign-in timing, and a contact address can be
     // one an agent typed into the inbox. An account with no deliverable address
@@ -1321,6 +1327,23 @@ export async function handleNewDeviceNotification(
     if (!to) {
       log.warn({ user_id: userId }, 'new-device alert skipped: no deliverable account address')
     }
+    // Same predicate the profile page uses to hide PasswordForm. Fail open
+    // so a registry miss still sends the alert (password copy) rather than
+    // skipping it or blocking sign-in.
+    let ssoEnforced = false
+    if (to) {
+      try {
+        const { isHardBound } = await import('./auth-restrictions')
+        const { listIdentityProviders } =
+          await import('@/lib/server/domains/settings/identity-providers.service')
+        const { getRegisteredOidcProviderIds } = await import('./registered-providers')
+        const providers = await listIdentityProviders()
+        const registeredOidcIds = await getRegisteredOidcProviderIds(providers)
+        ssoEnforced = isHardBound('credential', email, providers, registeredOidcIds)
+      } catch (error) {
+        log.warn({ err: error }, 'sso-enforced lookup failed; sending password recovery copy')
+      }
+    }
     await Promise.all([
       to
         ? sendNewSignInEmail({
@@ -1328,7 +1351,10 @@ export async function handleNewDeviceNotification(
             workspaceName: workspace?.name,
             occurredAt,
             ipAddress: ip,
-            userAgent,
+            userAgent: device,
+            location,
+            settingsUrl: ssoEnforced ? undefined : settingsUrl,
+            ssoEnforced,
             logoUrl: workspace?.brandingData?.logoUrl ?? undefined,
           })
         : Promise.resolve(),
@@ -1337,7 +1363,7 @@ export async function handleNewDeviceNotification(
         outcome: 'success',
         actor: { userId: userId as `user_${string}`, email },
         headers,
-        metadata: { ip, userAgent },
+        metadata: { ip, userAgent, device, location },
       }),
     ])
     await markDeviceSeen(userId)
@@ -1403,8 +1429,9 @@ export async function handleCountryCapture(ctx: {
  *     prior steps). Runs after the gates so it only records sign-ins
  *     that actually stuck.
  *  6. `handleNewDeviceNotification` — sends a "new device" email +
- *     records an audit row when the user's UA + /24-IP combination
- *     hasn't been seen for them within the last 90 days.
+ *     records an audit row when an additional (browser, OS) for this
+ *     user hasn't been seen within the last 90 days. The first
+ *     recorded device is seeded silently. Alerts cannot be disabled.
  */
 export const hooksAfter = createAuthMiddleware(async (ctx) => {
   if (process.env.AUTH_HOOKS_DEBUG === '1') {
@@ -1508,7 +1535,7 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
   await handleSignInSuccessAudit(ctx as Parameters<typeof handleSignInSuccessAudit>[0])
   // Geo-IP country from CDN headers; written best-effort, never blocks.
   await handleCountryCapture(ctx as Parameters<typeof handleCountryCapture>[0])
-  // Fires only on a real sign-in path when the UA + /24 is unseen.
+  // Fires only on a real sign-in path when an additional device is unseen.
   await handleNewDeviceNotification(
     ctx as Parameters<typeof handleNewDeviceNotification>[0],
     workspace

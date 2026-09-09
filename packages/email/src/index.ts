@@ -748,20 +748,42 @@ interface SendNewSignInParams {
   occurredAt: string
   ipAddress?: string | null
   userAgent?: string | null
+  location?: string | null
+  settingsUrl?: string | null
+  ssoEnforced?: boolean
   logoUrl?: string
 }
 
-/** First-sight new-device sign-in alert. Triggered by
+/** Additional-device sign-in alert. Triggered by
  * `handleNewDeviceNotification` after a successful sign-in lands on
- * an unseen (UA, /24 IP) combination. */
+ * an unseen (browser, OS) for that account. IP is shown, not hashed. */
 export async function sendNewSignInEmail(params: SendNewSignInParams): Promise<EmailResult> {
-  const { to, workspaceName, occurredAt, ipAddress, userAgent, logoUrl } = params
+  const {
+    to,
+    workspaceName,
+    occurredAt,
+    ipAddress,
+    userAgent,
+    location,
+    settingsUrl,
+    ssoEnforced,
+    logoUrl,
+  } = params
 
   log.debug('sending new-sign-in alert')
   return sendEmail({
     to,
     subject: 'New sign-in to your account',
-    react: NewSignInEmail({ workspaceName, occurredAt, ipAddress, userAgent, logoUrl }),
+    react: NewSignInEmail({
+      workspaceName,
+      occurredAt,
+      ipAddress,
+      userAgent,
+      location,
+      settingsUrl: ssoEnforced ? undefined : settingsUrl,
+      ssoEnforced,
+      logoUrl,
+    }),
     emailType: 'NewSignInEmail',
     preview: { occurredAt },
   })

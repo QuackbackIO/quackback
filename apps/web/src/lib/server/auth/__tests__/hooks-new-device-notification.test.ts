@@ -11,7 +11,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { makeAuthConfig, makeWorkspace } from './_helpers'
 
-vi.mock('@/lib/server/config', () => ({ config: { trustedProxyHops: 1 } }))
+vi.mock('@/lib/server/config', () => ({
+  config: { trustedProxyHops: 1 },
+  getBaseUrl: () => 'https://acme.example',
+}))
 
 const mockIsDeviceUnseen = vi.fn()
 const mockMarkDeviceSeen = vi.fn(async (_userId: string) => undefined)
@@ -19,15 +22,30 @@ const mockForgetDevice = vi.fn(async (_userId: string, _fp: string) => undefined
 const mockSendNewSignInEmail = vi.fn(async (_params: unknown) => ({ sent: true }))
 const mockRecordAuditEvent = vi.fn(async (_spec: unknown) => undefined)
 
-vi.mock('../signin-device-tracker', () => ({
-  computeDeviceFingerprint: (ua: string, ip: string) => `fp-${ua}-${ip}`,
-  isDeviceUnseen: (userId: string, fp: string) => mockIsDeviceUnseen(userId, fp),
-  markDeviceSeen: (userId: string) => mockMarkDeviceSeen(userId),
-  forgetDevice: (userId: string, fp: string) => mockForgetDevice(userId, fp),
-}))
+vi.mock('../signin-device-tracker', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../signin-device-tracker')>()
+  return {
+    ...actual,
+    computeDeviceFingerprint: (ua: string) => `fp-${ua}`,
+    isDeviceUnseen: (userId: string, fp: string) => mockIsDeviceUnseen(userId, fp),
+    markDeviceSeen: (userId: string) => mockMarkDeviceSeen(userId),
+    forgetDevice: (userId: string, fp: string) => mockForgetDevice(userId, fp),
+  }
+})
 
 vi.mock('@quackback/email', () => ({
   sendNewSignInEmail: (params: unknown) => mockSendNewSignInEmail(params),
+}))
+
+const mockListIdentityProviders = vi.fn()
+vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
+  listIdentityProviders: () => mockListIdentityProviders(),
+}))
+
+const mockGetRegisteredOidcProviderIds = vi.fn()
+vi.mock('@/lib/server/auth/registered-providers', () => ({
+  getRegisteredOidcProviderIds: (providers?: unknown) =>
+    mockGetRegisteredOidcProviderIds(providers),
 }))
 
 vi.mock('@/lib/server/audit/log', () => ({
@@ -47,7 +65,11 @@ vi.mock('@/lib/server/db', async (orig) => {
 
 vi.mock('@tanstack/react-start/server', () => ({
   getRequestHeaders: () =>
-    new Headers({ 'user-agent': 'Mozilla/5.0 Test', 'x-forwarded-for': '203.0.113.42' }),
+    new Headers({
+      'user-agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
+      'x-forwarded-for': '203.0.113.42',
+    }),
 }))
 
 const { handleNewDeviceNotification } = await import('../hooks')
@@ -82,10 +104,12 @@ beforeEach(() => {
   mockForgetDevice.mockReset().mockResolvedValue(undefined)
   mockSendNewSignInEmail.mockReset().mockResolvedValue({ sent: true })
   mockRecordAuditEvent.mockReset().mockResolvedValue(undefined)
+  mockListIdentityProviders.mockReset().mockResolvedValue([])
+  mockGetRegisteredOidcProviderIds.mockReset().mockResolvedValue(new Set())
 })
 
 describe('handleNewDeviceNotification — happy path', () => {
-  it('sends email + audits + markDeviceSeen on first-seen device', async () => {
+  it('sends email + audits + markDeviceSeen on an additional unseen device', async () => {
     mockIsDeviceUnseen.mockResolvedValueOnce(true)
     await handleNewDeviceNotification(buildCtx(), workspace())
 
@@ -95,11 +119,16 @@ describe('handleNewDeviceNotification — happy path', () => {
       workspaceName: string
       ipAddress: string
       userAgent: string
+      settingsUrl?: string
+      location?: string | null
+      ssoEnforced?: boolean
     }
     expect(emailArgs.to).toBe('a@b.com')
     expect(emailArgs.workspaceName).toBe('Acme')
     expect(emailArgs.ipAddress).toBe('203.0.113.42')
-    expect(emailArgs.userAgent).toBe('Mozilla/5.0 Test')
+    expect(emailArgs.userAgent).toBe('Chrome on Windows')
+    expect(emailArgs.settingsUrl).toBe('https://acme.example/settings/profile')
+    expect(emailArgs.ssoEnforced).toBe(false)
 
     expect(mockRecordAuditEvent).toHaveBeenCalledTimes(1)
     const auditArgs = mockRecordAuditEvent.mock.calls[0][0] as { event: string }
@@ -107,6 +136,41 @@ describe('handleNewDeviceNotification — happy path', () => {
 
     // TTL refreshed only on the success path.
     expect(mockMarkDeviceSeen).toHaveBeenCalledWith('user_abc')
+    expect(mockForgetDevice).not.toHaveBeenCalled()
+  })
+
+  it('passes ssoEnforced: true when the recipient is SSO-bound', async () => {
+    mockIsDeviceUnseen.mockResolvedValueOnce(true)
+    mockListIdentityProviders.mockResolvedValueOnce([
+      {
+        id: 'idp_sso',
+        registrationId: 'sso',
+        showButton: false,
+        domains: [{ name: 'b.com', verifiedAt: '2026-05-01T00:00:00.000Z', enforced: true }],
+      },
+    ])
+    mockGetRegisteredOidcProviderIds.mockResolvedValueOnce(new Set(['sso']))
+
+    await handleNewDeviceNotification(buildCtx(), workspace())
+
+    expect(mockSendNewSignInEmail).toHaveBeenCalledTimes(1)
+    const emailArgs = mockSendNewSignInEmail.mock.calls[0][0] as {
+      ssoEnforced?: boolean
+      settingsUrl?: string
+    }
+    expect(emailArgs.ssoEnforced).toBe(true)
+    expect(emailArgs.settingsUrl).toBeUndefined()
+  })
+
+  it('still sends the alert when the SSO lookup throws', async () => {
+    mockIsDeviceUnseen.mockResolvedValueOnce(true)
+    mockListIdentityProviders.mockRejectedValueOnce(new Error('idp down'))
+
+    await expect(handleNewDeviceNotification(buildCtx(), workspace())).resolves.toBeUndefined()
+
+    expect(mockSendNewSignInEmail).toHaveBeenCalledTimes(1)
+    const emailArgs = mockSendNewSignInEmail.mock.calls[0][0] as { ssoEnforced?: boolean }
+    expect(emailArgs.ssoEnforced).toBe(false)
     expect(mockForgetDevice).not.toHaveBeenCalled()
   })
 

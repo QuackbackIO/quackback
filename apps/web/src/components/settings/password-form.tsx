@@ -49,15 +49,15 @@ export function PasswordForm({ hasPassword, onSaved }: PasswordFormProps) {
         const result = await authClient.changePassword({
           currentPassword,
           newPassword,
-          revokeOtherSessions: false,
+          revokeOtherSessions: true,
         })
         if (result.error) {
           throw new Error(result.error.message || 'Failed to change password')
         }
-        toast.success('Password changed')
+        toast.success('Password changed. Other devices have been signed out.')
       } else {
-        await setPasswordFn({ data: { newPassword } })
-        toast.success('Password set')
+        await setPasswordFn({ data: { newPassword, revokeOtherSessions: true } })
+        toast.success('Password set. Other devices have been signed out.')
       }
       setCurrentPassword('')
       setNewPassword('')
@@ -76,8 +76,8 @@ export function PasswordForm({ hasPassword, onSaved }: PasswordFormProps) {
         <h2 className="font-medium mb-1">{hasPassword ? 'Change password' : 'Set password'}</h2>
         <p className="text-sm text-muted-foreground mb-4">
           {hasPassword
-            ? 'Update your current password'
-            : 'Add a password to sign in with email and password'}
+            ? 'Update your current password. Other signed-in devices will be signed out.'
+            : 'Add a password to sign in with email and password. Other signed-in devices will be signed out.'}
         </p>
 
         <div className="space-y-4">
