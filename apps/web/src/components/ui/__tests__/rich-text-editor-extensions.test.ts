@@ -13,7 +13,13 @@
 
 import { describe, it, expect, vi } from 'vitest'
 import type { EditorFeatures } from '../rich-text-editor'
-import { buildExtensions, generateContentHTML, hasActiveSuggestion } from '../rich-text-editor'
+import {
+  buildExtensions,
+  generateContentHTML,
+  hasActiveSuggestion,
+  stopEnterFromReachingParentForm,
+} from '../rich-text-editor'
+import { COMMENT_EDITOR_FEATURES } from '@/components/public/comment-editor-features'
 
 // Full widget feature set (worst-case for duplicates)
 const WIDGET_FEATURES: EditorFeatures = {
@@ -117,6 +123,14 @@ describe('buildExtensions', () => {
     const exts = buildExtensions({ enterAsHardBreak: true }, { placeholder: '' })
     const names = exts.map((e) => (e as { name: string }).name)
     expect(names).toContain('enterAsHardBreak')
+  })
+
+  it('COMMENT_EDITOR_FEATURES registers enterAsHardBreak (plain Enter is a newline)', () => {
+    const names = buildExtensions(COMMENT_EDITOR_FEATURES, { placeholder: '' }).map(
+      (e) => (e as { name: string }).name
+    )
+    expect(names).toContain('enterAsHardBreak')
+    expect(names).not.toContain('submitOnEnter')
   })
 
   // P2.1 — mentions feature flag (default TRUE; undefined must mean enabled so
@@ -270,6 +284,50 @@ describe('submitOnEnter (onSubmit)', () => {
     const submitPriority = byName.get('submitOnEnter')!.config.priority ?? 100
     const hardBreakPriority = byName.get('enterAsHardBreak')!.config.priority ?? 100
     expect(submitPriority).toBeGreaterThan(hardBreakPriority)
+  })
+})
+
+describe('stopEnterFromReachingParentForm', () => {
+  function keyEvent(key: string, mods: { metaKey?: boolean; ctrlKey?: boolean } = {}) {
+    return {
+      key,
+      metaKey: !!mods.metaKey,
+      ctrlKey: !!mods.ctrlKey,
+      stopPropagation: vi.fn(),
+    } as unknown as KeyboardEvent
+  }
+
+  it('stops plain Enter so a parent form cannot implicitly submit', () => {
+    const event = keyEvent('Enter')
+    expect(stopEnterFromReachingParentForm(event)).toBe(false)
+    expect(event.stopPropagation).toHaveBeenCalledOnce()
+  })
+
+  it('stops Shift+Enter the same way (newline, not submit)', () => {
+    const event = {
+      key: 'Enter',
+      metaKey: false,
+      ctrlKey: false,
+      shiftKey: true,
+      stopPropagation: vi.fn(),
+    } as unknown as KeyboardEvent
+    expect(stopEnterFromReachingParentForm(event)).toBe(false)
+    expect(event.stopPropagation).toHaveBeenCalledOnce()
+  })
+
+  it('leaves Cmd/Ctrl+Enter alone for wrapper keyboard-submit handlers', () => {
+    const meta = keyEvent('Enter', { metaKey: true })
+    const ctrl = keyEvent('Enter', { ctrlKey: true })
+    expect(stopEnterFromReachingParentForm(meta)).toBe(false)
+    expect(stopEnterFromReachingParentForm(ctrl)).toBe(false)
+    expect(meta.stopPropagation).not.toHaveBeenCalled()
+    expect(ctrl.stopPropagation).not.toHaveBeenCalled()
+  })
+
+  it('ignores keys other than Enter', () => {
+    const event = keyEvent('Escape')
+    expect(stopEnterFromReachingParentForm(event)).toBe(false)
+    expect(event.stopPropagation).not.toHaveBeenCalled()
   })
 })
 

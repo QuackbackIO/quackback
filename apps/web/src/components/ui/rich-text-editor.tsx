@@ -349,6 +349,19 @@ function createSubmitOnEnter(onSubmit: () => void) {
 // every plugin generically rather than importing each PluginKey because
 // MentionExtension constructs an anonymous key per instance and isn't reachable
 // from here. Non-object states are skipped — those are unrelated plugins.
+/**
+ * Stop Enter (and Shift+Enter) bubbling out of the editor so a parent <form>
+ * cannot treat it as implicit submit. Cmd/Ctrl+Enter is left alone — comment
+ * composers listen for that chord in capture on the wrapper. Returns false so
+ * TipTap keymaps still insert the break / split the block / send (onSubmit).
+ */
+export function stopEnterFromReachingParentForm(event: KeyboardEvent): boolean {
+  if (event.key === 'Enter' && !event.metaKey && !event.ctrlKey) {
+    event.stopPropagation()
+  }
+  return false
+}
+
 export function hasActiveSuggestion(editor: Pick<Editor, 'state'>): boolean {
   for (const plugin of editor.state.plugins) {
     const state = plugin.getState(editor.state) as { active?: unknown } | null | undefined
@@ -1259,6 +1272,9 @@ function RichTextEditorBase({
       },
       handleDrop: features.images && onImageUpload ? handleImageDrop(onImageUpload) : undefined,
       handlePaste: features.images && onImageUpload ? handleImagePaste(onImageUpload) : undefined,
+      handleDOMEvents: {
+        keydown: (_view, event) => stopEnterFromReachingParentForm(event),
+      },
     }),
 
     [features.images, onImageUpload, borderless, minHeight]
