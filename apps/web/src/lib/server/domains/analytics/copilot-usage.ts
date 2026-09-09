@@ -410,7 +410,8 @@ export async function getCopilotUsageMetrics(from: Date, to: Date): Promise<Copi
     // both a content owner and a stable admin fix-it URL (see
     // CopilotUsageMetrics.topCitedSources).
     db.execute(sql`
-        SELECT elem->>'id' AS id, count(DISTINCT ai_usage_log.id)::int AS n
+        SELECT regexp_replace(elem->>'id', '^kb_article_', 'article_') AS id,
+               count(DISTINCT ai_usage_log.id)::int AS n
         FROM ai_usage_log
         CROSS JOIN LATERAL jsonb_array_elements(
           CASE WHEN jsonb_typeof(metadata->'citedSources') = 'array'
@@ -423,8 +424,8 @@ export async function getCopilotUsageMetrics(from: Date, to: Date): Promise<Copi
           AND elem->>'type' = 'article'
           AND created_at >= ${from.toISOString()}
           AND created_at < ${to.toISOString()}
-        GROUP BY elem->>'id'
-        ORDER BY count(DISTINCT ai_usage_log.id) DESC, elem->>'id' ASC
+        GROUP BY 1
+        ORDER BY 2 DESC, 1 ASC
         LIMIT ${TOP_CITED_SOURCES_LIMIT}
       `) as unknown as Promise<Array<{ id: string; n: number }>>,
   ])

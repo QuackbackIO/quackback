@@ -487,6 +487,35 @@ describe.skipIf(!fixture.available)('getCopilotUsageMetrics (real DB)', () => {
   })
 
   describe('topCitedSources', () => {
+    it('ranks an article cited under both prefixes above a single-prefix rival', async () => {
+      const popular = await seedArticle('Split across prefixes')
+      const rival = await seedArticle('Single prefix rival')
+      const legacy = `kb_article_${popular.slice('article_'.length)}`
+      await seedUsageLog('assistant', {
+        surface: 'copilot',
+        citedSources: [{ type: 'article', id: popular }],
+      })
+      await seedUsageLog('assistant', {
+        surface: 'copilot',
+        citedSources: [{ type: 'article', id: legacy }],
+      })
+      await seedUsageLog('assistant', {
+        surface: 'copilot',
+        citedSources: [{ type: 'article', id: rival }],
+      })
+
+      const metrics = await getCopilotUsageMetrics(FROM, TO)
+      expect(metrics.topCitedSources[0]).toMatchObject({
+        id: popular,
+        title: 'Split across prefixes',
+        questions: 2,
+      })
+      expect(metrics.topCitedSources[1]).toMatchObject({
+        id: rival,
+        questions: 1,
+      })
+    })
+
     it('joins historical kb_article_ citation ids to the live article_ row', async () => {
       const article = await seedArticle('Legacy citation')
       const legacy = `kb_article_${article.slice('article_'.length)}`
