@@ -28,20 +28,14 @@ test.describe('Admin Tags Settings', () => {
     }
   })
 
-  test('tags show color indicator and name', async ({ page }) => {
+  test('tags show as colored chips with a visibility label', async ({ page }) => {
     await page.waitForTimeout(500)
 
-    // Color indicator is a button with inline background-color style
-    const colorDots = page.locator('button[style*="background-color"]').filter({
-      hasNot: page.locator('[data-radix-popover-trigger]'),
-    })
+    const chips = page.locator('button[style*="background-color"]')
 
-    if ((await colorDots.count()) > 0) {
-      await expect(colorDots.first()).toBeVisible()
-
-      // Each tag row should also have a name span (text in a <span> next to the dot)
-      const tagNameSpans = page.locator('span.text-sm.font-medium')
-      await expect(tagNameSpans.first()).toBeVisible()
+    if ((await chips.count()) > 0) {
+      await expect(chips.first()).toBeVisible()
+      await expect(page.getByText(/portal|internal/i).first()).toBeVisible()
     }
   })
 

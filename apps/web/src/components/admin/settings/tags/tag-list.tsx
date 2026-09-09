@@ -361,33 +361,39 @@ export function TagList({ initialTags }: TagListProps) {
           {tags.map((tag) => (
             <div
               key={tag.id}
-              className="flex items-center gap-2 py-1.5 px-2 rounded-md hover:bg-muted/50 group"
+              className="flex items-center gap-3 py-1.5 px-2 rounded-md hover:bg-muted/50 group"
             >
-              <ColorPickerPopover
-                color={tag.color}
-                onColorChange={(c) => handleColorChange(tag, c)}
-                trigger={
-                  <button
-                    className="h-3 w-3 rounded-full shrink-0 cursor-pointer hover:ring-2 hover:ring-offset-1 hover:ring-muted-foreground/50"
-                    style={{ backgroundColor: tag.color }}
-                  />
+              <div className="w-40 shrink-0">
+                <ColorPickerPopover
+                  color={tag.color}
+                  onColorChange={(c) => handleColorChange(tag, c)}
+                  trigger={
+                    <button
+                      type="button"
+                      className="inline-flex items-center px-2 py-0.5 rounded-md text-sm font-medium max-w-full truncate hover:ring-2 hover:ring-offset-1 hover:ring-muted-foreground/40"
+                      style={{ backgroundColor: tag.color + '20', color: tag.color }}
+                      title="Change color"
+                    >
+                      {tag.name}
+                    </button>
+                  }
+                />
+              </div>
+
+              <span
+                className="inline-flex items-center gap-1 text-xs text-muted-foreground shrink-0 w-[4.75rem]"
+                title={
+                  tag.isPublic ? 'Shown on the public portal' : 'Hidden from the public portal'
                 }
-              />
-
-              {/* Name */}
-              <span className="text-sm font-medium">{tag.name}</span>
-
-              {!tag.isPublic && (
-                <span
-                  className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground shrink-0"
-                  title="Hidden from the public portal"
-                >
+              >
+                {tag.isPublic ? (
+                  <GlobeAltIcon className="h-3 w-3" />
+                ) : (
                   <EyeSlashIcon className="h-3 w-3" />
-                  Internal
-                </span>
-              )}
+                )}
+                {tag.isPublic ? 'Portal' : 'Internal'}
+              </span>
 
-              {/* Description */}
               <span className="text-xs text-muted-foreground truncate flex-1">
                 {tag.description ?? ''}
               </span>

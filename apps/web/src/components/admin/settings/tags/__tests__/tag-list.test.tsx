@@ -64,14 +64,16 @@ function internalRadio() {
 }
 
 describe('<TagList> — portal visibility', () => {
-  it('marks internal tags in the list and leaves public tags unmarked', () => {
+  it('renders each tag as a colored chip and labels Portal vs Internal', () => {
     render(<TagList initialTags={[PUBLIC_TAG, INTERNAL_TAG]} />)
+
+    const publicRow = screen.getByText('Bug').closest('div')!
+    expect(within(publicRow).getByText('Portal')).toBeTruthy()
+    expect(within(publicRow).queryByText('Internal')).toBeNull()
 
     const internalRow = screen.getByText('Churn risk').closest('div')!
     expect(within(internalRow).getByText('Internal')).toBeTruthy()
-
-    const publicRow = screen.getByText('Bug').closest('div')!
-    expect(within(publicRow).queryByText('Internal')).toBeNull()
+    expect(within(internalRow).queryByText('Portal')).toBeNull()
   })
 
   it('defaults a new tag to public and sends isPublic on create', async () => {
