@@ -35,6 +35,7 @@ import {
   kvGetOrCreate,
   kvSetMemberClaim,
   kvSetMemberClaimCounted,
+  kvSetTouch,
 } from '../pg-kv'
 import {
   currentWorkspaceNamespace,
@@ -184,6 +185,21 @@ describe('workspace separation — device sets', () => {
     ])
     expect(results.every((r) => r.claimed)).toBe(true)
     expect(results.map((r) => r.liveCount).sort()).toEqual([1, 2])
+  })
+
+  it('touch does not revive an expired member', async () => {
+    const setKey = uniqueKey('user:devices')
+    await withRealWorkspace(A, () => kvSetMemberClaimCounted(setKey, 'live', 60))
+    await withRealWorkspace(A, () => kvSetMemberClaimCounted(setKey, 'stale', 60))
+    await testSql()`
+      UPDATE kv_set_member SET expires_at = now() - interval '1 second'
+      WHERE workspace_key = ${A} AND set_key = ${setKey} AND member = 'stale'
+    `
+    await withRealWorkspace(A, () => kvSetTouch(setKey, 60))
+    expect(await withRealWorkspace(A, () => kvSetMemberClaimCounted(setKey, 'stale', 60))).toEqual({
+      claimed: true,
+      liveCount: 2,
+    })
   })
 })
 

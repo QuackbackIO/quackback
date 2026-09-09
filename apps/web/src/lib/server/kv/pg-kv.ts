@@ -236,12 +236,16 @@ export async function kvSetMemberClaim(
   return (await kvSetMemberClaimCounted(setKey, member, seconds)).claimed
 }
 
-/** EXPIRE on the whole set: slide every live member's window forward. */
+/** EXPIRE on the whole set: slide every *live* member's window forward.
+ *  Expired rows stay expired — otherwise a known-device touch would
+ *  resurrect stale fingerprints and suppress a later new-device alert. */
 export async function kvSetTouch(setKey: string, seconds: number): Promise<void> {
   await db.execute(sql`
     UPDATE kv_set_member
     SET expires_at = now() + make_interval(secs => ${ttlSeconds(seconds)})
-    WHERE workspace_key = ${currentWorkspaceNamespace()} AND set_key = ${setKey}
+    WHERE workspace_key = ${currentWorkspaceNamespace()}
+      AND set_key = ${setKey}
+      AND expires_at > now()
   `)
 }
 
