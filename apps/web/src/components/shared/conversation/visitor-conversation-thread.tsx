@@ -671,6 +671,9 @@ export function VisitorConversationThread({
   const helpSearchFn = helpSearch?.search
   const messageText = composer.text
   useEffect(() => {
+    setHelpResults([])
+  }, [helpSearchFn, sessionVersion])
+  useEffect(() => {
     if (!helpSearchFn || conversationId || messages.length > 0) {
       setHelpResults([])
       return

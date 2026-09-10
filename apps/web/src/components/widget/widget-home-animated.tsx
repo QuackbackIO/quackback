@@ -40,6 +40,7 @@ import {
   composeBodyFromPlainText,
   resolveComposeBoardId,
   shouldClearInvisibleBoardFilter,
+  shouldResetComposeBoard,
   shouldReapplyComposeBoard,
   type WidgetComposeRequest,
 } from './widget-compose'
@@ -327,6 +328,15 @@ export function WidgetHomeAnimated({
     const match = boards.find((b) => b.slug === slug)
     if (match) setSelectedBoardId(match.id)
   }, [visibleBoardSlugs, boards, composeRequest?.boardSlug, composeRequest?.nonce])
+
+  // After identify/logout the live list is authoritative. Keep a stale
+  // members-only selection through the anonymous first paint (identify may
+  // grant it); once this session's fetch lands, fall back to the default.
+  useEffect(() => {
+    if (sessionVersion === INITIAL_SESSION_VERSION) return
+    if (!shouldResetComposeBoard(selectedBoardId, boards, confirmedBoardSlugs)) return
+    setSelectedBoardId(resolveComposeBoardId(boards, undefined, defaultBoard))
+  }, [sessionVersion, selectedBoardId, boards, confirmedBoardSlugs, defaultBoard])
 
   // Per-board capability, server-computed for the request actor. The widget
   // route refetches boardPermissions with the Bearer identity (keyed on

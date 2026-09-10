@@ -59,7 +59,7 @@ export function WidgetMessenger({
       },
       onSelect: onArticleSelect,
     }
-  }, [helpEnabled, onArticleSelect])
+  }, [helpEnabled, onArticleSelect, sessionVersion])
 
   return (
     <VisitorConversationThread

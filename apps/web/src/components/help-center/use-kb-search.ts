@@ -48,6 +48,8 @@ export function useKbSearch({
   onResultsRef.current = onResults
   const getHeadersRef = useRef(getHeaders)
   getHeadersRef.current = getHeaders
+  const sessionVersionRef = useRef(sessionVersion)
+  sessionVersionRef.current = sessionVersion
 
   const doSearch = useCallback(
     async (q: string, loc: string | undefined, version: number | undefined) => {
@@ -82,6 +84,7 @@ export function useKbSearch({
           headers: getHeadersRef.current?.(),
         })
         if (!res.ok) return
+        if (version !== sessionVersionRef.current) return
         const data = await res.json()
         const articles: KbSearchArticle[] = data.data?.articles ?? []
         cacheRef.current.set(cacheKey, articles)
@@ -97,8 +100,11 @@ export function useKbSearch({
   )
 
   useEffect(() => {
+    abortRef.current?.abort()
+    abortRef.current = null
     cacheRef.current.clear()
     setResults([])
+    setIsSearching(false)
   }, [sessionVersion])
 
   useEffect(() => {
