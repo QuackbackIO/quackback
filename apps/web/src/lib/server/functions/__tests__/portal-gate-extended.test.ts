@@ -373,27 +373,31 @@ describe('portal.ts fetchBoardCapabilitiesFn — per-board capability map', () =
     mockResolvePortalAccess.mockResolvedValue({ granted: false, reason: 'unauthorized' })
     const handler = await loadExportedHandler(PORTAL, 'fetchBoardCapabilitiesFn')
     const result = await handler({ data: {} })
-    expect(result).toEqual({})
+    expect(result).toEqual({ permissions: {}, boards: [] })
     expect(mockListPublicBoardsWithStats).not.toHaveBeenCalled()
   })
 
   it('maps each visible board to its submit/vote capability for the actor', async () => {
     mockResolvePortalAccess.mockResolvedValue({ granted: true, reason: 'public' })
     mockListPublicBoardsWithStats.mockResolvedValue([
-      { id: 'board_pub', access: anonAccess },
-      { id: 'board_auth', access: authAccess },
+      { id: 'board_pub', name: 'Public', slug: 'public', access: anonAccess },
+      { id: 'board_auth', name: 'Auth', slug: 'auth', access: authAccess },
     ])
     const handler = await loadExportedHandler(PORTAL, 'fetchBoardCapabilitiesFn')
-    const result = (await handler({ data: {} })) as Record<
-      string,
-      { canSubmit: boolean; canVote: boolean }
-    >
+    const result = (await handler({ data: {} })) as {
+      permissions: Record<string, { canSubmit: boolean; canVote: boolean }>
+      boards: { id: string; name: string; slug: string }[]
+    }
     // Anonymous actor (mocked) + workspace allowAnonymous=true: the all-anonymous
     // board is actionable, the sign-in-required board is not.
-    expect(result).toEqual({
+    expect(result.permissions).toEqual({
       board_pub: { canSubmit: true, canVote: true },
       board_auth: { canSubmit: false, canVote: false },
     })
+    expect(result.boards).toEqual([
+      { id: 'board_pub', name: 'Public', slug: 'public' },
+      { id: 'board_auth', name: 'Auth', slug: 'auth' },
+    ])
   })
 })
 

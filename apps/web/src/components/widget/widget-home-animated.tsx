@@ -9,7 +9,7 @@ import {
   ChevronRightIcon,
 } from '@heroicons/react/24/outline'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useInfiniteQuery, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useIntl, FormattedMessage } from 'react-intl'
 import {
   Select,
@@ -22,7 +22,12 @@ import { listPublicPostsFn } from '@/lib/server/functions/public-posts'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { WidgetVoteButton } from './widget-vote-button'
 import { WidgetPostListSkeleton } from './widget-skeletons'
-import { widgetQueryKeys } from '@/lib/client/hooks/use-widget-vote'
+import {
+  widgetQueryKeys,
+  widgetQueryKeySameSession,
+  INITIAL_SESSION_VERSION,
+} from '@/lib/client/hooks/use-widget-vote'
+import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { cn } from '@/lib/shared/utils'
 import { useWidgetAuth } from './widget-auth-provider'
 import { sendToHost } from '@/lib/client/widget-bridge'
@@ -31,6 +36,14 @@ import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { useWidgetImageUpload, WidgetSessionError } from './use-widget-image-upload'
 import type { JSONContent } from '@tiptap/react'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
+import {
+  composeBodyFromPlainText,
+  resolveComposeBoardId,
+  shouldClearInvisibleBoardFilter,
+  shouldResetComposeBoard,
+  shouldReapplyComposeBoard,
+  type WidgetComposeRequest,
+} from './widget-compose'
 
 interface WidgetPost {
   id: string
@@ -79,6 +92,15 @@ export interface WidgetHomeProps {
    */
   boardPermissions?: Record<string, { canSubmit: boolean; canVote: boolean }>
   defaultBoard?: string
+  /** SDK `?board=` / `defaultBoard` — seed the Popular Ideas filter. */
+  initialBoardSlug?: string
+  /**
+   * Board slugs from the current session's capability fetch. `null` while that
+   * query has no data yet — do not treat the anonymous SSR fallback as final.
+   */
+  confirmedBoardSlugs?: string[] | null
+  /** Programmatic `open({ view: 'new-post' })` — expand and prefill. */
+  composeRequest?: WidgetComposeRequest | null
   onPostSelect?: (postId: string) => void
   onPostCreated?: (post: {
     id: string
@@ -93,7 +115,32 @@ interface SearchResult {
   posts: WidgetPost[]
 }
 
+const SIMILAR_SEARCH_CACHE_LIMIT = 40
+let similarSearchCacheVersion = INITIAL_SESSION_VERSION
 const similarSearchCache = new Map<string, SearchResult>()
+
+function similarSearchCacheFor(sessionVersion: number) {
+  if (similarSearchCacheVersion !== sessionVersion) {
+    similarSearchCache.clear()
+    similarSearchCacheVersion = sessionVersion
+  }
+  return similarSearchCache
+}
+
+function similarSearchCacheGet(sessionVersion: number, q: string): SearchResult | undefined {
+  return similarSearchCacheFor(sessionVersion).get(q)
+}
+
+function similarSearchCacheSet(sessionVersion: number, q: string, result: SearchResult) {
+  const cache = similarSearchCacheFor(sessionVersion)
+  if (cache.has(q)) cache.delete(q)
+  cache.set(q, result)
+  while (cache.size > SIMILAR_SEARCH_CACHE_LIMIT) {
+    const oldest = cache.keys().next().value
+    if (oldest === undefined) break
+    cache.delete(oldest)
+  }
+}
 
 // ── Shared post row used in both similar-posts and popular-ideas lists ──
 
@@ -218,6 +265,9 @@ export function WidgetHomeAnimated({
   boards,
   boardPermissions,
   defaultBoard,
+  initialBoardSlug,
+  confirmedBoardSlugs,
+  composeRequest,
   onPostSelect,
   onPostCreated,
 }: WidgetHomeProps) {
@@ -231,28 +281,68 @@ export function WidgetHomeAnimated({
     emitEvent,
     metadata,
     getSessionVersion,
+    sessionVersion,
   } = useWidgetAuth()
   const queryClient = useQueryClient()
   const inputRef = useRef<HTMLInputElement>(null)
 
   const [title, setTitle] = useState('')
   const [expanded, setExpanded] = useState(false)
-  const [selectedBoardId, setSelectedBoardId] = useState(() => {
-    if (defaultBoard) {
-      const match = boards.find((b) => b.slug === defaultBoard)
-      if (match) return match.id
-    }
-    // Single board: auto-select (selector is hidden anyway). Multiple boards with no
-    // default: leave empty so the user is prompted to pick one.
-    if (boards.length === 1) return boards[0].id
-    return ''
-  })
+  const [selectedBoardId, setSelectedBoardId] = useState(() =>
+    resolveComposeBoardId(boards, undefined, defaultBoard)
+  )
+  const composeBoardDirtyRef = useRef(false)
+  const handleComposeBoardChange = useCallback((id: string) => {
+    composeBoardDirtyRef.current = true
+    setSelectedBoardId(id)
+  }, [])
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
   const [contentHtml, setContentHtml] = useState('')
   const handleEditorChange = useCallback((json: JSONContent, html: string) => {
     setContentJson(json)
     setContentHtml(html)
   }, [])
+
+  // Host `open({ view: 'new-post' })` lands here. Nonce (not title/board) is
+  // the trigger so a second identical command still expands and reapplies.
+  useEffect(() => {
+    if (!composeRequest) return
+    composeBoardDirtyRef.current = false
+    setExpanded(true)
+    if (composeRequest.title) setTitle(composeRequest.title)
+    if (composeRequest.body) {
+      const next = composeBodyFromPlainText(composeRequest.body)
+      setContentJson(next.json)
+      setContentHtml(next.html)
+    }
+    setSelectedBoardId(resolveComposeBoardId(boards, composeRequest.boardSlug, defaultBoard))
+    inputRef.current?.focus({ preventScroll: true })
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- nonce is the command identity
+  }, [composeRequest?.nonce])
+
+  // Identify can grow the visitor-visible list (members-only slugs). Re-apply
+  // a requested slug only when it just appeared — not when the visitor already
+  // picked another board after open().
+  const visibleBoardSlugs = useMemo(() => new Set(boards.map((b) => b.slug)), [boards])
+  const prevVisibleBoardSlugsRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    const next = visibleBoardSlugs
+    const prev = prevVisibleBoardSlugsRef.current
+    prevVisibleBoardSlugsRef.current = next
+    const slug = composeRequest?.boardSlug
+    if (!shouldReapplyComposeBoard(slug, prev, next, composeBoardDirtyRef.current)) return
+    const match = boards.find((b) => b.slug === slug)
+    if (match) setSelectedBoardId(match.id)
+  }, [visibleBoardSlugs, boards, composeRequest?.boardSlug, composeRequest?.nonce])
+
+  // After identify/logout the live list is authoritative. Keep a stale
+  // members-only selection through the anonymous first paint (identify may
+  // grant it); once this session's fetch lands, fall back to the default.
+  useEffect(() => {
+    if (sessionVersion === INITIAL_SESSION_VERSION) return
+    if (!shouldResetComposeBoard(selectedBoardId, boards, confirmedBoardSlugs)) return
+    setSelectedBoardId(resolveComposeBoardId(boards, undefined, defaultBoard))
+  }, [sessionVersion, selectedBoardId, boards, confirmedBoardSlugs, defaultBoard])
 
   // Per-board capability, server-computed for the request actor. The widget
   // route refetches boardPermissions with the Bearer identity (keyed on
@@ -299,7 +389,16 @@ export function WidgetHomeAnimated({
   const [similarPostResults, setSimilarPostResults] = useState<SearchResult | null>(null)
   const [isSimilarSearching, setIsSimilarSearching] = useState(false)
   const similarDebounceRef = useRef<ReturnType<typeof setTimeout>>(null)
-  const [activeBoardSlug, setActiveBoardSlug] = useState<string | null>(null)
+  const [activeBoardSlug, setActiveBoardSlug] = useState<string | null>(
+    () => initialBoardSlug ?? null
+  )
+  // After identify/logout the live board list is authoritative. Keep the SDK
+  // `?board=` filter through the anonymous first paint (identify may grant it).
+  useEffect(() => {
+    if (sessionVersion === INITIAL_SESSION_VERSION) return
+    if (!shouldClearInvisibleBoardFilter(activeBoardSlug, confirmedBoardSlugs)) return
+    setActiveBoardSlug(null)
+  }, [sessionVersion, activeBoardSlug, confirmedBoardSlugs])
   const pills = usePillsScroll()
   const [popularSearch, setPopularSearch] = useState('')
   const [debouncedPopularSearch, setDebouncedPopularSearch] = useState('')
@@ -317,7 +416,7 @@ export function WidgetHomeAnimated({
     isFetchingNextPage,
     isFetching: isFetchingPosts,
   } = useInfiniteQuery({
-    queryKey: ['widget', 'posts', 'popular', 'top', activeBoardSlug ?? 'all'],
+    queryKey: widgetQueryKeys.popularPosts.list(activeBoardSlug, sessionVersion),
     queryFn: async ({ pageParam }) => {
       const page = await listPublicPostsFn({
         data: {
@@ -326,14 +425,17 @@ export function WidgetHomeAnimated({
           limit: 20,
           boardSlug: activeBoardSlug ?? undefined,
         },
+        headers: getWidgetAuthHeaders(),
       })
       return { ...page, items: page.items.map(toWidgetPost) }
     },
     initialPageParam: 1,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length + 1 : undefined),
-    // Only seed from SSR data on the initial unfiltered view
+    // Seed from SSR only on the anonymous first paint for the same board
+    // filter the loader used (`?board=` or All). Identify re-keys this
+    // query so members-only boards refetch with the Bearer actor.
     initialData:
-      activeBoardSlug === null
+      activeBoardSlug === (initialBoardSlug ?? null) && sessionVersion === INITIAL_SESSION_VERSION
         ? {
             pages: [{ items: initialPosts, total: undefined, hasMore: initialHasMore }],
             pageParams: [1],
@@ -358,19 +460,26 @@ export function WidgetHomeAnimated({
     isFetching: isPopularSearchFetching,
     isPlaceholderData: isPopularSearchStale,
   } = useQuery({
-    queryKey: ['widget', 'search', 'popular', debouncedPopularSearch, activeBoardSlug ?? 'all'],
+    queryKey: widgetQueryKeys.popularSearch.query(
+      debouncedPopularSearch,
+      activeBoardSlug,
+      sessionVersion
+    ),
     queryFn: async () => {
       const params = new URLSearchParams({ q: debouncedPopularSearch, limit: '20' })
       if (activeBoardSlug) params.set('board', activeBoardSlug)
-      const res = await fetch(`/api/widget/search?${params}`)
+      const res = await fetch(`/api/widget/search?${params}`, {
+        headers: getWidgetAuthHeaders(),
+      })
       const json = await res.json()
       return { posts: (json.data?.posts ?? []) as WidgetPost[] }
     },
     enabled: debouncedPopularSearch.length > 0,
     // Refining a query keeps the previous hits on screen (dimmed) instead of
-    // blinking the list empty between keystrokes; only the very first search
-    // has nothing to hold and shows the row skeleton.
-    placeholderData: keepPreviousData,
+    // blinking the list empty between keystrokes. Drop them when the session
+    // changes so a later identity never sees the previous visitor's titles.
+    placeholderData: (prev, prevQuery) =>
+      widgetQueryKeySameSession(prevQuery?.queryKey, sessionVersion) ? prev : undefined,
   })
   // Typed-but-unsettled (debounce window), or fetching, or showing hits that
   // belong to the previous query.
@@ -407,21 +516,30 @@ export function WidgetHomeAnimated({
       setIsSimilarSearching(false)
       return
     }
-    const cached = similarSearchCache.get(q)
+    const cached = similarSearchCacheGet(sessionVersion, q)
     if (cached) {
       setSimilarPostResults(cached)
       setIsSimilarSearching(false)
       return
     }
+    // Drop the previous identity's hits before the new request lands.
+    setSimilarPostResults(null)
     setIsSimilarSearching(true)
     const controller = new AbortController()
     similarDebounceRef.current = setTimeout(async () => {
       try {
         const params = new URLSearchParams({ q, limit: '5' })
-        const res = await fetch(`/api/widget/search?${params}`, { signal: controller.signal })
+        const res = await fetch(`/api/widget/search?${params}`, {
+          signal: controller.signal,
+          headers: getWidgetAuthHeaders(),
+        })
+        if (!res.ok) {
+          setSimilarPostResults({ posts: [] })
+          return
+        }
         const json = await res.json()
         const result: SearchResult = { posts: json.data?.posts ?? [] }
-        similarSearchCache.set(q, result)
+        similarSearchCacheSet(sessionVersion, q, result)
         setSimilarPostResults(result)
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') return
@@ -434,7 +552,7 @@ export function WidgetHomeAnimated({
       if (similarDebounceRef.current) clearTimeout(similarDebounceRef.current)
       controller.abort()
     }
-  }, [title])
+  }, [title, sessionVersion])
 
   // Debounce popular ideas search
   useEffect(() => {
@@ -601,7 +719,7 @@ export function WidgetHomeAnimated({
                         defaultMessage="Posting to"
                       />
                     </span>
-                    <Select value={selectedBoardId} onValueChange={setSelectedBoardId}>
+                    <Select value={selectedBoardId} onValueChange={handleComposeBoardChange}>
                       <SelectTrigger
                         size="xs"
                         className="border-0 bg-transparent shadow-none font-medium text-foreground hover:text-foreground/80 focus-visible:ring-0"

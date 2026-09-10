@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useQuery, keepPreviousData } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { z } from 'zod'
 import {
   lazy,
@@ -23,25 +23,26 @@ import {
   type WidgetView,
   resolveInitialTab,
   resolveInitialView,
-  homeEnabled,
   contentSurfaceCount,
   isExpandedView,
   visibleTabsForVisitor,
 } from '@/components/widget/widget-nav'
+import { resolveOpenCommand, type WidgetComposeRequest } from '@/components/widget/widget-compose'
 import { WidgetHome } from '@/components/widget/widget-home'
 import { WidgetOverview } from '@/components/widget/widget-overview'
 import { WidgetHeroBackdrop } from '@/components/widget/widget-hero-backdrop'
 import type { ConversationId } from '@quackback/ids'
 import { useWidgetAuth } from '@/components/widget/widget-auth-provider'
 import { portalQueries } from '@/lib/client/queries/portal'
-import { publicChangelogQueries } from '@/lib/client/queries/changelog'
-import { publicHelpCenterQueries } from '@/lib/client/queries/help-center'
+import { widgetChangelogListQuery } from '@/components/widget/widget-changelog-query'
+import { widgetHelpCategoriesQuery } from '@/components/widget/widget-help-query'
 import { fetchBoardCapabilitiesFn } from '@/lib/server/functions/portal'
 import { getShowPoweredByFn } from '@/lib/server/functions/powered-by'
 import { listPublicArticlesFn } from '@/lib/server/functions/help-center'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { sendToHost } from '@/lib/client/widget-bridge'
 import { widgetQueryKeys, INITIAL_SESSION_VERSION } from '@/lib/client/hooks/use-widget-vote'
+import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import {
   CONVERSATION_PRESENCE_QUERY_KEY,
   useConversationPresence,
@@ -189,10 +190,14 @@ export const Route = createFileRoute('/widget/')({
             .catch(() => {})
         : Promise.resolve(),
       changelogTabEnabled
-        ? queryClient.ensureInfiniteQueryData(publicChangelogQueries.list()).catch(() => {})
+        ? queryClient
+            .ensureInfiniteQueryData(widgetChangelogListQuery(INITIAL_SESSION_VERSION))
+            .catch(() => {})
         : Promise.resolve(),
       helpTabEnabled
-        ? queryClient.ensureQueryData(publicHelpCenterQueries.categories()).catch(() => {})
+        ? queryClient
+            .ensureQueryData(widgetHelpCategoriesQuery(INITIAL_SESSION_VERSION, DEFAULT_LOCALE))
+            .catch(() => {})
         : Promise.resolve(),
       helpTabEnabled
         ? listPublicArticlesFn({ data: { limit: 4 } })
@@ -398,6 +403,7 @@ function WidgetPage() {
     messengerEnabled,
     showPoweredBy,
   } = Route.useLoaderData()
+  const { board: initialBoardSlug } = Route.useSearch()
   const { ensureSession, sessionVersion } = useWidgetAuth()
   const intl = useIntl()
 
@@ -407,20 +413,26 @@ function WidgetPage() {
   // feed gates votes/submission per the actual actor instead of OR-ing in a
   // blanket isIdentified (which advertised CTAs on segments/team boards the
   // actor cannot act on). Seeded with the loader map so SSR + first paint match.
-  const { data: livePermissions } = useQuery({
-    queryKey: ['widget', 'boardPermissions', sessionVersion],
+  const { data: liveCapabilities } = useQuery({
+    queryKey: ['widget', 'boardCapabilities', sessionVersion],
     queryFn: () => fetchBoardCapabilitiesFn({ headers: getWidgetAuthHeaders() }),
     // Seed ONLY the initial (anonymous, SSR) key from the loader. initialData
     // stamps an entry fresh as of now, so seeding it on every key would also
     // mark the post-identify key fresh and suppress the Bearer refetch within
     // staleTime — leaving an identified viewer stuck on the anonymous baseline.
-    // After identify the key changes, carries no initialData, and refetches with
-    // the Bearer while keepPreviousData shows the prior map meanwhile.
-    initialData: sessionVersion === INITIAL_SESSION_VERSION ? boardPermissions : undefined,
-    placeholderData: keepPreviousData,
+    // After identify the key changes, carries no initialData, and refetches
+    // with the Bearer. Do not keepPreviousData — logout/switch would otherwise
+    // show the prior visitor's members-only boards until the new fetch lands.
+    // Missing data falls back to the anonymous SSR `boards` list.
+    initialData:
+      sessionVersion === INITIAL_SESSION_VERSION
+        ? { permissions: boardPermissions, boards }
+        : undefined,
     staleTime: 30 * 1000,
     enabled: !!tabs.feedback,
   })
+  const livePermissions = liveCapabilities?.permissions
+  const liveBoards = liveCapabilities?.boards ?? boards
 
   const { c: resumeConversationId } = Route.useSearch()
   const { hasTickets } = useTicketStageBadge(!!tabs.tickets)
@@ -504,6 +516,8 @@ function WidgetPage() {
     name: string
     icon: string | null
   } | null>(null)
+  const [composeRequest, setComposeRequest] = useState<WidgetComposeRequest | null>(null)
+  const composeNonceRef = useRef(0)
   const [createdPosts, setCreatedPosts] = useState<typeof posts>([])
 
   const allPosts = useMemo(() => {
@@ -570,41 +584,84 @@ function WidgetPage() {
         setHostIsMobile(!!msg.data)
         return
       }
-      if (msg.type !== 'quackback:open' || !msg.data) return
+      if (msg.type !== 'quackback:open') return
 
-      const opts = msg.data as { view?: string }
+      const opts = (msg.data ?? {}) as {
+        view?: string
+        title?: string
+        body?: string
+        board?: string
+        query?: string
+        entryId?: string
+        postId?: string
+        articleId?: string
+      }
+      const command = resolveOpenCommand(opts, tabs)
+      if (!command) return
+
       // SDK-driven opens are tab-level landings: no back-chevron origin.
       setBackTarget(null)
       lastNavRef.current = 'tab'
-      if (opts.view === 'changelog' && tabs.changelog) {
-        setActiveTab('changelog')
-        setView('changelog')
-      } else if (opts.view === 'help' && tabs.help) {
-        // Same fresh start as navigateToTab('help'): the lifted search
-        // would otherwise resurface an old query on a programmatic open.
-        setSelectedHelpSlug(null)
-        setSelectedCategory(null)
-        setHelpSearch('')
-        setActiveTab('help')
-        setView('help')
-      } else if (
-        (opts.view === 'messages' || opts.view === 'chat' || opts.view === 'live-chat') &&
-        tabs.messages
-      ) {
-        openMessenger()
-      } else if (opts.view === 'tickets') {
-        // The requester's own-tickets list lives on the Tickets tab; on
-        // workspaces without it, ticket threads are listed in Messages.
-        if (tabs.tickets) {
+      switch (command.type) {
+        case 'new-post':
+          composeNonceRef.current += 1
+          setComposeRequest({
+            nonce: composeNonceRef.current,
+            title: command.title,
+            body: command.body,
+            boardSlug: command.boardSlug,
+          })
+          setSelectedPostId(null)
+          setActiveTab('feedback')
+          setView('feedback')
+          break
+        case 'post':
+          setActiveTab('feedback')
+          setSelectedPostId(command.postId)
+          setView('post-detail')
+          break
+        case 'article':
+          // Same as postId: store the ref and let the detail view fetch it
+          // with Bearer + sessionVersion. TypeIDs (`article_` / `kb_article_`)
+          // and slugs both resolve server-side; no client hop.
+          setSelectedCategory(null)
+          setHelpSearch('')
+          setSelectedHelpSlug(command.articleId)
+          setActiveTab('help')
+          setView('help-detail')
+          break
+        case 'changelog':
+          setActiveTab('changelog')
+          if (command.entryId) {
+            setSelectedChangelogId(command.entryId)
+            setView('changelog-detail')
+          } else {
+            setSelectedChangelogId(null)
+            setView('changelog')
+          }
+          break
+        case 'help':
+          setSelectedHelpSlug(null)
+          setSelectedCategory(null)
+          setHelpSearch(command.query ?? '')
+          setActiveTab('help')
+          setView('help')
+          break
+        case 'messenger':
+          openMessenger()
+          break
+        case 'tickets':
           setActiveTab('tickets')
           setView('tickets')
-        } else if (tabs.messages) {
+          break
+        case 'messages':
           setActiveTab('messages')
           setView('messages')
-        }
-      } else if ((opts.view === 'home' || opts.view === 'overview') && homeEnabled(tabs)) {
-        setActiveTab('home')
-        setView('overview')
+          break
+        case 'home':
+          setActiveTab('home')
+          setView('overview')
+          break
       }
     }
     window.addEventListener('message', handleMessage)
@@ -760,6 +817,12 @@ function WidgetPage() {
     lastNavRef.current = 'move'
     setSelectedHelpSlug(articleSlug)
     setView('help-detail')
+  }, [])
+
+  const handleHelpCategoryUnavailable = useCallback(() => {
+    lastNavRef.current = 'move'
+    setSelectedCategory(null)
+    setView('help')
   }, [])
 
   // The feedback view stays mounted (form state survives a detail round-trip),
@@ -992,6 +1055,7 @@ function WidgetPage() {
             categoryName={selectedCategory.name}
             categoryIcon={selectedCategory.icon}
             onArticleSelect={handleHelpCategoryArticleSelect}
+            onCategoryUnavailable={handleHelpCategoryUnavailable}
           />
         </ViewTransition>
       )}
@@ -1004,7 +1068,7 @@ function WidgetPage() {
           fallback={<WidgetArticleSkeleton />}
         >
           <WidgetHelpDetail
-            articleSlug={selectedHelpSlug}
+            articleRef={selectedHelpSlug}
             onCategorySelect={(id, name) => handleHelpCategorySelect(id, name, null)}
             onAskQuestion={
               messengerEnabled
@@ -1043,9 +1107,12 @@ function WidgetPage() {
             initialPosts={allPosts}
             initialHasMore={postsHasMore}
             statuses={statuses}
-            boards={boards}
+            boards={liveBoards}
             boardPermissions={livePermissions}
             defaultBoard={defaultBoard}
+            initialBoardSlug={initialBoardSlug}
+            confirmedBoardSlugs={liveCapabilities?.boards.map((b) => b.slug) ?? null}
+            composeRequest={composeRequest}
             onPostSelect={handlePostSelect}
             onPostCreated={handlePostCreated}
           />

@@ -1,18 +1,24 @@
 import { useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { FormattedMessage } from 'react-intl'
+import { FormattedMessage, useIntl } from 'react-intl'
 import { ChevronRightIcon } from '@heroicons/react/24/outline'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { publicHelpCenterQueries } from '@/lib/client/queries/help-center'
+import { resolvePublicArticleRefFn } from '@/lib/server/functions/help-center'
+import { generateOneTimeToken, getWidgetAuthHeaders } from '@/lib/client/widget-auth'
+import { appendWidgetOtt } from './build-portal-url'
+import { hcArticlePath } from '@/lib/shared/help-center-url'
+import { widgetQueryKeys, widgetQueryKeyEquals } from '@/lib/client/hooks/use-widget-vote'
 import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-content'
 import type { JSONContent } from '@tiptap/react'
 import { WidgetPortalTitle } from './widget-portal-title'
 import { WidgetArticleFooter } from './widget-article-footer'
 import { sendToHost } from '@/lib/client/widget-bridge'
 import { WidgetArticleSkeleton } from './widget-skeletons'
+import { useWidgetAuth } from './widget-auth-provider'
 
 interface WidgetHelpDetailProps {
-  articleSlug: string
+  /** `article_` / `kb_article_` TypeID or public slug — same as `open({ articleId })`. */
+  articleRef: string
   /** Tapping the category eyebrow browses the rest of that collection. */
   onCategorySelect?: (categoryId: string, categoryName: string) => void
   /** "Still stuck?" exit ramp — opens a new conversation. Omitted when the
@@ -21,17 +27,43 @@ interface WidgetHelpDetailProps {
 }
 
 export function WidgetHelpDetail({
-  articleSlug,
+  articleRef,
   onCategorySelect,
   onAskQuestion,
 }: WidgetHelpDetailProps) {
-  const { data: article, isLoading } = useQuery(publicHelpCenterQueries.articleBySlug(articleSlug))
+  const { isIdentified, sessionVersion } = useWidgetAuth()
+  const { locale } = useIntl()
+  const { data: article, isLoading } = useQuery({
+    queryKey: widgetQueryKeys.articleDetail.byRef(articleRef, sessionVersion, locale),
+    queryFn: () =>
+      resolvePublicArticleRefFn({
+        data: { ref: articleRef, locale },
+        headers: getWidgetAuthHeaders(),
+      }),
+    placeholderData: (prev, prevQuery) =>
+      widgetQueryKeyEquals(
+        widgetQueryKeys.articleDetail.byRef(articleRef, sessionVersion, locale),
+        prevQuery?.queryKey
+      )
+        ? prev
+        : undefined,
+    staleTime: 30 * 1000,
+  })
 
-  const handleViewOnPortal = useCallback(() => {
+  const handleViewOnPortal = useCallback(async () => {
     if (!article) return
-    const url = `${window.location.origin}/hc/articles/${article.category.slug}/${article.slug}`
+    const ott = isIdentified ? await generateOneTimeToken() : null
+    const url = appendWidgetOtt(
+      `${window.location.origin}${hcArticlePath({
+        locale: article.resolvedLocale,
+        urlId: article.urlId,
+        slug: article.slug,
+      })}`,
+      isIdentified,
+      ott
+    )
     sendToHost({ type: 'quackback:navigate', url })
-  }, [article])
+  }, [article, isIdentified])
 
   if (isLoading) {
     return <WidgetArticleSkeleton />

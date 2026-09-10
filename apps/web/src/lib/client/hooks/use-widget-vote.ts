@@ -27,6 +27,61 @@ export const widgetQueryKeys = {
     all: ['widget', 'post'] as const,
     byId: (postId: string, version: number) => ['widget', 'post', postId, version] as const,
   },
+  articleDetail: {
+    all: ['widget', 'article'] as const,
+    byRef: (ref: string, version: number, locale: string) =>
+      ['widget', 'article', ref, locale, version] as const,
+  },
+  changelogDetail: {
+    all: ['widget', 'changelog'] as const,
+    byId: (entryId: string, version: number) => ['widget', 'changelog', entryId, version] as const,
+  },
+  changelogList: {
+    all: ['widget', 'changelogs'] as const,
+    bySession: (version: number) => ['widget', 'changelogs', version] as const,
+  },
+  popularPosts: {
+    list: (boardSlug: string | null, version: number) =>
+      ['widget', 'posts', 'popular', 'top', boardSlug ?? 'all', version] as const,
+  },
+  popularSearch: {
+    query: (q: string, boardSlug: string | null, version: number) =>
+      ['widget', 'search', 'popular', q, boardSlug ?? 'all', version] as const,
+  },
+  helpCategories: {
+    bySession: (version: number, locale: string) =>
+      ['widget', 'help', 'categories', locale, version] as const,
+  },
+  helpCategoryArticles: {
+    byCategory: (categoryId: string, version: number, locale: string) =>
+      ['widget', 'help', 'category-articles', categoryId, locale, version] as const,
+  },
+}
+
+/** True when the last key slot is this session (popular search dim-hold). */
+export function widgetQueryKeySameSession(
+  actual: readonly unknown[] | undefined,
+  sessionVersion: number
+): boolean {
+  return !!actual && actual[actual.length - 1] === sessionVersion
+}
+
+/** True when `actual` is the same factory key (avoids placeholder index coupling). */
+export function widgetQueryKeyEquals(
+  expected: readonly unknown[],
+  actual: readonly unknown[] | undefined
+): boolean {
+  return (
+    !!actual && actual.length === expected.length && widgetQueryKeyPrefixEquals(expected, actual)
+  )
+}
+
+/** True when `actual` starts with `prefix` — same entity, any trailing key slots. */
+export function widgetQueryKeyPrefixEquals(
+  prefix: readonly unknown[],
+  actual: readonly unknown[] | undefined
+): boolean {
+  return !!actual && prefix.every((part, i) => actual[i] === part)
 }
 
 interface UseWidgetVoteOptions {

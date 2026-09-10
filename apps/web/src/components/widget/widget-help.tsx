@@ -10,7 +10,9 @@ import {
   ChevronRightIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
-import { publicHelpCenterQueries } from '@/lib/client/queries/help-center'
+import { widgetHelpCategoriesQuery } from './widget-help-query'
+import { useWidgetAuth } from './widget-auth-provider'
+import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { getTopLevelCategories } from '@/components/help-center/help-center-utils'
 import { CategoryIcon } from '@/components/help-center/category-icon'
 import {
@@ -44,17 +46,27 @@ export function WidgetHelp({
   onSearchChange,
 }: WidgetHelpProps) {
   const intl = useIntl()
+  const { sessionVersion } = useWidgetAuth()
   const [localSearch, setLocalSearch] = useState('')
   const search = controlledSearch ?? localSearch
   const setSearch = onSearchChange ?? setLocalSearch
 
-  const categoriesQuery = useQuery(publicHelpCenterQueries.categories())
+  const categoriesQuery = useQuery(widgetHelpCategoriesQuery(sessionVersion, intl.locale))
   const topLevelCategories = categoriesQuery.data ? getTopLevelCategories(categoriesQuery.data) : []
 
-  const askAiAvailable = useAskAiAvailable()
+  const askAiAvailable = useAskAiAvailable(true, {
+    getHeaders: getWidgetAuthHeaders,
+    sessionVersion,
+  })
   // Widget locale passthrough (domains/languages §2): the search API falls
   // back to the default locale server-side if this locale isn't enabled.
-  const { results, isSearching } = useKbSearch({ query: search, limit: 10, locale: intl.locale })
+  const { results, isSearching } = useKbSearch({
+    query: search,
+    limit: 10,
+    locale: intl.locale,
+    sessionVersion,
+    getHeaders: getWidgetAuthHeaders,
+  })
   // The search hook debounces 300ms before it even starts fetching; during
   // that window `isSearching` is still false and `results` still belong to
   // the previous query. Treat "typed but not yet settled" as pending too, so
@@ -79,6 +91,8 @@ export function WidgetHelp({
       if (article) onArticleSelect?.(article.slug)
     },
     onClearQuery: () => setSearch(''),
+    getHeaders: getWidgetAuthHeaders,
+    sessionVersion,
   })
 
   const showCategories = !search && !isSearching

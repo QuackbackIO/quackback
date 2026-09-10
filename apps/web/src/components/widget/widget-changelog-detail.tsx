@@ -2,7 +2,10 @@ import { useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { FormattedMessage } from 'react-intl'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { publicChangelogQueries } from '@/lib/client/queries/changelog'
+import { getPublicChangelogFn } from '@/lib/server/functions/changelog'
+import { generateOneTimeToken, getWidgetAuthHeaders } from '@/lib/client/widget-auth'
+import { appendWidgetOtt } from './build-portal-url'
+import { widgetQueryKeys, widgetQueryKeyEquals } from '@/lib/client/hooks/use-widget-vote'
 import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-content'
 import { EmbedHydration } from '@/components/shared/embed-hydration'
 import type { ChangelogId } from '@quackback/ids'
@@ -11,20 +14,42 @@ import { WidgetPortalTitle } from './widget-portal-title'
 import { sendToHost } from '@/lib/client/widget-bridge'
 import { WidgetArticleSkeleton } from './widget-skeletons'
 import { ChangelogMetaRow } from './widget-changelog-meta'
+import { useWidgetAuth } from './widget-auth-provider'
 
 interface WidgetChangelogDetailProps {
   entryId: string
 }
 
 export function WidgetChangelogDetail({ entryId }: WidgetChangelogDetailProps) {
-  const { data: entry, isLoading } = useQuery(publicChangelogQueries.detail(entryId as ChangelogId))
+  const { isIdentified, sessionVersion } = useWidgetAuth()
+  const { data: entry, isLoading } = useQuery({
+    queryKey: widgetQueryKeys.changelogDetail.byId(entryId, sessionVersion),
+    queryFn: () =>
+      getPublicChangelogFn({
+        data: { id: entryId as ChangelogId },
+        headers: getWidgetAuthHeaders(),
+      }),
+    placeholderData: (prev, prevQuery) =>
+      widgetQueryKeyEquals(
+        widgetQueryKeys.changelogDetail.byId(entryId, sessionVersion),
+        prevQuery?.queryKey
+      )
+        ? prev
+        : undefined,
+    staleTime: 30 * 1000,
+  })
 
   const changelogEntryId = entry?.id
-  const handleViewOnPortal = useCallback(() => {
+  const handleViewOnPortal = useCallback(async () => {
     if (!changelogEntryId) return
-    const url = `${window.location.origin}/changelog/${changelogEntryId}`
+    const ott = isIdentified ? await generateOneTimeToken() : null
+    const url = appendWidgetOtt(
+      `${window.location.origin}/changelog/${changelogEntryId}`,
+      isIdentified,
+      ott
+    )
     sendToHost({ type: 'quackback:navigate', url })
-  }, [changelogEntryId])
+  }, [changelogEntryId, isIdentified])
 
   if (isLoading) {
     return <WidgetArticleSkeleton />

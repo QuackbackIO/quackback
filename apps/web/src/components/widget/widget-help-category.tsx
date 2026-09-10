@@ -1,16 +1,24 @@
+import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { FormattedMessage } from 'react-intl'
+import { FormattedMessage, useIntl } from 'react-intl'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { ChevronRightIcon } from '@heroicons/react/24/solid'
-import { publicHelpCenterQueries } from '@/lib/client/queries/help-center'
 import { CategoryIcon } from '@/components/help-center/category-icon'
 import { WidgetHelpArticleListSkeleton } from './widget-skeletons'
+import {
+  shouldLeaveUnavailableHelpCategory,
+  widgetHelpCategoriesQuery,
+  widgetHelpCategoryArticlesQuery,
+} from './widget-help-query'
+import { useWidgetAuth } from './widget-auth-provider'
 
 interface WidgetHelpCategoryProps {
   categoryId: string
   categoryName: string
   categoryIcon: string | null
   onArticleSelect: (articleSlug: string) => void
+  /** Identity change dropped this collection — return to Help. */
+  onCategoryUnavailable?: () => void
 }
 
 export function WidgetHelpCategory({
@@ -18,13 +26,32 @@ export function WidgetHelpCategory({
   categoryName,
   categoryIcon,
   onArticleSelect,
+  onCategoryUnavailable,
 }: WidgetHelpCategoryProps) {
-  const articlesQuery = useQuery(publicHelpCenterQueries.articlesForCategory(categoryId))
+  const { locale } = useIntl()
+  const { sessionVersion } = useWidgetAuth()
+  const articlesQuery = useQuery(
+    widgetHelpCategoryArticlesQuery(categoryId, sessionVersion, locale)
+  )
   // The collection list already has every category's description and icon;
   // read them from that cache so the header carries context (and an icon even
   // when we arrived from an article's eyebrow, which only knows id + name).
-  const categoriesQuery = useQuery(publicHelpCenterQueries.categories())
+  const categoriesQuery = useQuery(widgetHelpCategoriesQuery(sessionVersion, locale))
   const category = categoriesQuery.data?.find((c) => c.id === categoryId)
+
+  useEffect(() => {
+    if (!onCategoryUnavailable || !categoriesQuery.isSuccess) return
+    if (!shouldLeaveUnavailableHelpCategory(categoryId, categoriesQuery.data, sessionVersion)) {
+      return
+    }
+    onCategoryUnavailable()
+  }, [
+    categoriesQuery.data,
+    categoriesQuery.isSuccess,
+    categoryId,
+    onCategoryUnavailable,
+    sessionVersion,
+  ])
   const icon = categoryIcon ?? category?.icon ?? null
   const articleCount = articlesQuery.data?.length ?? category?.articleCount
 

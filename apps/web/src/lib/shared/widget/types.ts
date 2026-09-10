@@ -43,9 +43,14 @@ export interface WidgetInboundMessages {
   'quackback:locale': string
   'quackback:open':
     | {
-        view?: 'home' | 'new-post'
+        view?: 'home' | 'new-post' | 'changelog' | 'help' | 'chat' | 'messages' | 'tickets'
         title?: string
+        body?: string
         board?: string
+        query?: string
+        entryId?: string
+        postId?: string
+        articleId?: string // `article_…` TypeID or public slug
       }
     | undefined
 }

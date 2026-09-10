@@ -9,7 +9,7 @@ import { fetchPublicPostDetail } from '@/lib/server/functions/portal'
 import { createCommentFn } from '@/lib/server/functions/comments'
 import { getWidgetAuthHeaders, generateOneTimeToken } from '@/lib/client/widget-auth'
 import { buildPortalUrl } from './build-portal-url'
-import { widgetQueryKeys } from '@/lib/client/hooks/use-widget-vote'
+import { widgetQueryKeys, widgetQueryKeyPrefixEquals } from '@/lib/client/hooks/use-widget-vote'
 import type { PublicPostDetailView } from '@/lib/client/queries/portal-detail'
 import { WidgetVoteButton } from './widget-vote-button'
 import { WidgetCommentList } from './widget-comment-list'
@@ -70,7 +70,10 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
     // chips stay mounted for the in-flight request to land in — a skeleton
     // here would tear them down. Only for the same post: switching posts
     // still shows the skeleton rather than the previous post.
-    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey[2] === postId ? prev : undefined),
+    placeholderData: (prev, prevQuery) =>
+      widgetQueryKeyPrefixEquals([...widgetQueryKeys.postDetail.all, postId], prevQuery?.queryKey)
+        ? prev
+        : undefined,
     staleTime: 30 * 1000,
   })
 
