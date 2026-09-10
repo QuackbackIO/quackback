@@ -54,7 +54,10 @@ export function WidgetHelp({
   const categoriesQuery = useQuery(widgetHelpCategoriesQuery(sessionVersion, intl.locale))
   const topLevelCategories = categoriesQuery.data ? getTopLevelCategories(categoriesQuery.data) : []
 
-  const askAiAvailable = useAskAiAvailable()
+  const askAiAvailable = useAskAiAvailable(true, {
+    getHeaders: getWidgetAuthHeaders,
+    sessionVersion,
+  })
   // Widget locale passthrough (domains/languages §2): the search API falls
   // back to the default locale server-side if this locale isn't enabled.
   const { results, isSearching } = useKbSearch({
@@ -88,6 +91,8 @@ export function WidgetHelp({
       if (article) onArticleSelect?.(article.slug)
     },
     onClearQuery: () => setSearch(''),
+    getHeaders: getWidgetAuthHeaders,
+    sessionVersion,
   })
 
   const showCategories = !search && !isSearching

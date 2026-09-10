@@ -4,7 +4,7 @@ import {
   listPublicCategoriesFn,
 } from '@/lib/server/functions/help-center'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
-import { widgetQueryKeys } from '@/lib/client/hooks/use-widget-vote'
+import { INITIAL_SESSION_VERSION, widgetQueryKeys } from '@/lib/client/hooks/use-widget-vote'
 
 const STALE_TIME_MEDIUM = 60 * 1000
 
@@ -36,4 +36,18 @@ export function widgetHelpCategoryArticlesQuery(
       }),
     staleTime: STALE_TIME_MEDIUM,
   })
+}
+
+/**
+ * Leave a stored collection once this session's list is in and no longer
+ * contains it. Skip the anonymous first paint so identify can still grant
+ * a members-only category the visitor arrived on.
+ */
+export function shouldLeaveUnavailableHelpCategory(
+  categoryId: string,
+  categories: ReadonlyArray<{ id: string }> | undefined,
+  sessionVersion: number
+): boolean {
+  if (sessionVersion === INITIAL_SESSION_VERSION) return false
+  return !!categories && !categories.some((c) => c.id === categoryId)
 }
