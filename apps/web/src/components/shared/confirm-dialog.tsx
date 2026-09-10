@@ -67,7 +67,17 @@ export function ConfirmDialog({
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isPending}>{cancelLabel}</AlertDialogCancel>
           <AlertDialogAction
-            onClick={onConfirm}
+            onClick={(event) => {
+              if (isPending) {
+                event.preventDefault()
+                return
+              }
+              const result = onConfirm()
+              if (result && typeof result.then === 'function') {
+                event.preventDefault()
+                void result
+              }
+            }}
             disabled={isPending}
             className={cn(variant === 'destructive' && buttonVariants({ variant: 'destructive' }))}
           >

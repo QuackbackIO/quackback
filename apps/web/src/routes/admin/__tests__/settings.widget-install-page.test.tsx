@@ -13,7 +13,10 @@ vi.mock('@tanstack/react-router', async () => {
 })
 
 vi.mock('@tanstack/react-query', () => ({
-  useSuspenseQuery: () => ({ data: 'wgt_testsecret' }),
+  useSuspenseQuery: (opts: { queryKey?: string[] }) => {
+    if (opts?.queryKey?.[1] === 'widgetConfig') return { data: { enabled: false } }
+    return { data: 'wgt_testsecret' }
+  },
   useQuery: () => ({
     data: {
       useCase: 'product_feedback',
@@ -26,6 +29,7 @@ vi.mock('@tanstack/react-query', () => ({
 vi.mock('@/lib/client/queries/settings', () => ({
   settingsQueries: {
     widgetSecret: () => ({ queryKey: ['settings', 'widgetSecret'] }),
+    widgetConfig: () => ({ queryKey: ['settings', 'widgetConfig'] }),
   },
 }))
 
@@ -37,6 +41,10 @@ vi.mock('@/lib/client/queries/admin', () => ({
 
 vi.mock('@/lib/client/mutations/settings', () => ({
   useRegenerateWidgetSecret: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
+  useUpdateWidgetConfig: () => ({
     mutateAsync: vi.fn(),
     isPending: false,
   }),
@@ -56,7 +64,7 @@ describe('WidgetInstallPage', () => {
     render(<WidgetInstallPage />)
 
     expect(
-      screen.getByRole('switch', { name: 'Include identify in the snippet and agent prompt' })
+      screen.getByRole('switch', { name: 'Add identify steps to the snippet and prompt' })
     ).not.toBeChecked()
     expect(screen.getByText(/Add the launcher/)).toBeInTheDocument()
     expect(screen.getByText(/Identify signed-in users/)).toBeInTheDocument()

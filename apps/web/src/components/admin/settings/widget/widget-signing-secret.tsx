@@ -33,8 +33,8 @@ export function WidgetSigningSecret({ secret }: { secret: string }) {
       <div>
         <p className="text-sm font-medium">Signing secret</p>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Store this in your product&apos;s server-side secret store. It is not a Quackback Cloud or
-          self-host setting.
+          Paste this into your app&apos;s server env (any name). Do not add it to Quackback Cloud or
+          your Quackback host. Some older notes called it QUACKBACK_WIDGET_SECRET — same value.
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/50 bg-muted/30 px-3 py-2">
@@ -64,7 +64,13 @@ export function WidgetSigningSecret({ secret }: { secret: string }) {
           </Button>
         </div>
       </div>
-      <Button type="button" variant="ghost" size="sm" onClick={() => setConfirmOpen(true)}>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        disabled={regenerate.isPending}
+        onClick={() => setConfirmOpen(true)}
+      >
         Regenerate…
       </Button>
       <ConfirmDialog

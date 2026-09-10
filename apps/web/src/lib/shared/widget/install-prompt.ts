@@ -24,17 +24,20 @@ export function buildWidgetInstallPrompt(input: WidgetInstallPromptInput): strin
   if (!identify) {
     return `# Install the Quackback widget
 
-Add the launcher so anonymous visitors can use the widget after init. Identifying signed-in users is optional — skip it unless the user asked.
+Launcher only. Anonymous visitors should see the widget after init.
+
+Do not ask the user for QUACKBACK_WIDGET_SECRET. Do not invent a signing secret. Do not implement identify. Quackback Cloud and self-host do not define a widget secret env var.
 
 ## Workspace
 - Instance URL: ${instanceUrl}
 - SDK script: ${instanceUrl}/api/widget/sdk.js
 
 ## What to do
-1. Fetch and follow the \`install-widget\` skill:
-   - ${WIDGET_SKILL_RAW}
-2. Install the launcher only. Do not invent a signing secret. Do not implement identify unless the user provided the signing secret from Admin → Settings → Widget → Install.
-3. Use the credentials above. Do not invent APIs.
+1. Add the snippet or npm package and call init. Use the URL above.
+2. Remind the user to turn on Show on your website in Admin → Settings → Widget.
+3. Stop. If they later want identify, they will copy the signing secret from Admin → Settings → Widget → Install.
+
+Optional skill (launcher steps only): ${WIDGET_SKILL_RAW}
 
 Repo: ${WIDGET_SKILL_REPO}
 `
