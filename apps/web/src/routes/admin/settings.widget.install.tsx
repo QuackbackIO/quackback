@@ -135,9 +135,17 @@ export function WidgetInstallPage() {
             onCheckedChange={(checked) => {
               const previous = enabled
               setEnabled(checked)
-              void updateWidgetConfig.mutateAsync({ enabled: checked }).catch(() => {
-                setEnabled(previous)
-              })
+              void updateWidgetConfig
+                .mutateAsync({ enabled: checked })
+                .then(() => {
+                  toast.success(
+                    checked ? 'Widget is visible on your site' : 'Widget hidden from visitors'
+                  )
+                })
+                .catch(() => {
+                  setEnabled(previous)
+                  toast.error('Could not update widget visibility')
+                })
             }}
             aria-label="Show on your website"
           />
@@ -229,14 +237,9 @@ export function WidgetInstallPage() {
           </div>
         ) : presence.tone === 'detected' ? (
           <div className="space-y-2">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm text-muted-foreground">
-                The SDK is installed. Turn on Show on your website so visitors can see it.
-              </p>
-              <Button asChild size="sm" variant="outline">
-                <Link to="/admin/settings/widget">Widget settings</Link>
-              </Button>
-            </div>
+            <p className="text-sm text-muted-foreground">
+              The SDK is installed. Turn on Show on your website above so visitors can see it.
+            </p>
             <WidgetLastDetected at={status.widgetLastDetectedAt} />
           </div>
         ) : (

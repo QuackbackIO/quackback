@@ -438,7 +438,7 @@ export async function getWidgetSecret(): Promise<string | null> {
  * Identify and other public paths must keep using {@link getWidgetSecret}.
  */
 export async function ensureWidgetSecret(): Promise<string> {
-  log.info('ensure widget secret')
+  log.debug('ensure widget secret')
   try {
     const org = await requireSettings()
     if (org.widgetSecret) return org.widgetSecret
@@ -450,6 +450,7 @@ export async function ensureWidgetSecret(): Promise<string> {
       .where(and(eq(settings.id, org.id), isNull(settings.widgetSecret)))
       .returning({ widgetSecret: settings.widgetSecret })
     if (updated?.widgetSecret) {
+      log.info('minted widget secret')
       await invalidateSettingsCache()
       return updated.widgetSecret
     }

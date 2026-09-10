@@ -1,3 +1,4 @@
+import { useRef, useState } from 'react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,8 +40,23 @@ export function ConfirmDialog({
   onConfirm,
   children,
 }: ConfirmDialogProps) {
+  const startedRef = useRef(false)
+  const [started, setStarted] = useState(false)
+  const busy = Boolean(isPending) || started
+
+  function resetStarted() {
+    startedRef.current = false
+    setStarted(false)
+  }
+
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) resetStarted()
+        onOpenChange(next)
+      }}
+    >
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
@@ -65,20 +81,27 @@ export function ConfirmDialog({
         )}
 
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isPending}>{cancelLabel}</AlertDialogCancel>
+          <AlertDialogCancel disabled={busy}>{cancelLabel}</AlertDialogCancel>
           <AlertDialogAction
             onClick={(event) => {
-              if (isPending) {
+              if (busy || startedRef.current) {
                 event.preventDefault()
                 return
               }
-              const result = onConfirm()
+              let result: void | Promise<void>
+              try {
+                result = onConfirm()
+              } catch {
+                return
+              }
               if (result && typeof result.then === 'function') {
                 event.preventDefault()
-                void result
+                startedRef.current = true
+                setStarted(true)
+                void result.catch(() => undefined).finally(resetStarted)
               }
             }}
-            disabled={isPending}
+            disabled={busy}
             className={cn(variant === 'destructive' && buttonVariants({ variant: 'destructive' }))}
           >
             {confirmLabel}
