@@ -114,32 +114,26 @@ export async function listRedirectRules(): Promise<HelpCenterRedirectRule[]> {
     .from(helpCenterRedirectRules)
     .orderBy(desc(helpCenterRedirectRules.createdAt))
 
-  const articleIds = [
-    ...new Set(
-      rows
-        .filter((row) => row.targetType === 'article')
-        .map((row) => canonicalArticleTargetId(row.targetId))
-    ),
-  ]
-  const categoryIds = [
-    ...new Set(
-      rows.filter((row) => row.targetType === 'category').map((row) => row.targetId as KbCategoryId)
-    ),
-  ]
+  const articleIds = new Set<KbArticleId>()
+  const categoryIds = new Set<KbCategoryId>()
+  for (const row of rows) {
+    if (row.targetType === 'article') articleIds.add(canonicalArticleTargetId(row.targetId))
+    else categoryIds.add(row.targetId as KbCategoryId)
+  }
 
   const [articles, categories] = await Promise.all([
-    articleIds.length === 0
+    articleIds.size === 0
       ? Promise.resolve([] as Array<{ id: KbArticleId; title: string }>)
       : db
           .select({ id: helpCenterArticles.id, title: helpCenterArticles.title })
           .from(helpCenterArticles)
-          .where(inArray(helpCenterArticles.id, articleIds)),
-    categoryIds.length === 0
+          .where(inArray(helpCenterArticles.id, [...articleIds])),
+    categoryIds.size === 0
       ? Promise.resolve([] as Array<{ id: KbCategoryId; name: string }>)
       : db
           .select({ id: helpCenterCategories.id, name: helpCenterCategories.name })
           .from(helpCenterCategories)
-          .where(inArray(helpCenterCategories.id, categoryIds)),
+          .where(inArray(helpCenterCategories.id, [...categoryIds])),
   ])
 
   const articleTitleById = new Map(articles.map((article) => [article.id, article.title]))

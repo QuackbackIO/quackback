@@ -170,14 +170,7 @@ export function isValidTypeId(value: string, expectedPrefix?: IdPrefix): boolean
  * `isValidTypeId` / `ensureTypeId`, but they are not `TypeId<'article'>`.
  */
 export function isTypeId<P extends IdPrefix>(value: string, prefix: P): value is TypeId<P> {
-  try {
-    const tid = TypeID.fromString(value)
-    if (tid.getType() !== prefix) return false
-    tid.toUUID()
-    return true
-  } catch {
-    return false
-  }
+  return isValidTypeId(value) && getTypeIdPrefix(value) === prefix
 }
 
 /**

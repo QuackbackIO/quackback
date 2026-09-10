@@ -8,6 +8,7 @@
 import { z } from 'zod'
 import { TypeID } from 'typeid-js'
 import { ID_PREFIXES, prefixMatches, type IdPrefix } from './prefixes'
+import { ensureTypeId, isValidTypeId } from './core'
 import type { TypeId } from './types'
 
 /**
@@ -34,24 +35,16 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 export function typeIdSchema<P extends IdPrefix>(prefix: P) {
   // Simplified for TanStack Start compatibility
   // Returns ZodEffects<ZodString> without branded types for better type inference
-  return z
-    .string()
-    .refine(
-      (val) => {
-        try {
-          const tid = TypeID.fromString(val)
-          return prefixMatches(tid.getType(), prefix)
-        } catch {
-          return false
-        }
-      },
-      { message: `Invalid ${prefix} ID format. Expected: ${prefix}_<base32>` }
-    )
-    .transform((val) => {
-      const tid = TypeID.fromString(val)
-      if (tid.getType() === prefix) return val
-      return TypeID.fromUUID(prefix, tid.toUUID()).toString()
-    })
+  return z.string().transform((val, ctx) => {
+    if (!isValidTypeId(val, prefix)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Invalid ${prefix} ID format. Expected: ${prefix}_<base32>`,
+      })
+      return z.NEVER
+    }
+    return ensureTypeId(val, prefix)
+  })
 }
 
 // ============================================
