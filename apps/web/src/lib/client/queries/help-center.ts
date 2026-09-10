@@ -6,6 +6,7 @@
 
 import { queryOptions, infiniteQueryOptions, keepPreviousData } from '@tanstack/react-query'
 import type { KbArticleId } from '@quackback/ids'
+import { canonicalArticleTypeId } from '@/lib/shared/widget/article-ref'
 import {
   listCategoriesFn,
   listPublicCategoriesFn,
@@ -39,7 +40,8 @@ export const helpCenterKeys = {
   articlePerformance: () => [...helpCenterKeys.articles(), 'performance'] as const,
   searchTerms: () => [...helpCenterKeys.all, 'search-terms'] as const,
   articleDetails: () => [...helpCenterKeys.articles(), 'detail'] as const,
-  articleDetail: (id: KbArticleId) => [...helpCenterKeys.articleDetails(), id] as const,
+  articleDetail: (id: KbArticleId) =>
+    [...helpCenterKeys.articleDetails(), canonicalArticleTypeId(id) ?? id] as const,
   articleFeedbackReasons: (id: KbArticleId) =>
     [...helpCenterKeys.articleDetail(id), 'feedback-reasons'] as const,
   public: () => [...helpCenterKeys.all, 'public'] as const,
