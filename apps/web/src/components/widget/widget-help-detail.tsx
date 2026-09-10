@@ -4,7 +4,8 @@ import { FormattedMessage, useIntl } from 'react-intl'
 import { ChevronRightIcon } from '@heroicons/react/24/outline'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { resolvePublicArticleRefFn } from '@/lib/server/functions/help-center'
-import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
+import { generateOneTimeToken, getWidgetAuthHeaders } from '@/lib/client/widget-auth'
+import { appendWidgetOtt } from './build-portal-url'
 import { widgetQueryKeys, widgetQueryKeyEquals } from '@/lib/client/hooks/use-widget-vote'
 import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-content'
 import type { JSONContent } from '@tiptap/react'
@@ -29,7 +30,7 @@ export function WidgetHelpDetail({
   onCategorySelect,
   onAskQuestion,
 }: WidgetHelpDetailProps) {
-  const { sessionVersion } = useWidgetAuth()
+  const { isIdentified, sessionVersion } = useWidgetAuth()
   const { locale } = useIntl()
   const { data: article, isLoading } = useQuery({
     queryKey: widgetQueryKeys.articleDetail.byRef(articleRef, sessionVersion, locale),
@@ -48,11 +49,16 @@ export function WidgetHelpDetail({
     staleTime: 30 * 1000,
   })
 
-  const handleViewOnPortal = useCallback(() => {
+  const handleViewOnPortal = useCallback(async () => {
     if (!article) return
-    const url = `${window.location.origin}/hc/articles/${article.category.slug}/${article.slug}`
+    const ott = isIdentified ? await generateOneTimeToken() : null
+    const url = appendWidgetOtt(
+      `${window.location.origin}/hc/articles/${article.category.slug}/${article.slug}`,
+      isIdentified,
+      ott
+    )
     sendToHost({ type: 'quackback:navigate', url })
-  }, [article])
+  }, [article, isIdentified])
 
   if (isLoading) {
     return <WidgetArticleSkeleton />

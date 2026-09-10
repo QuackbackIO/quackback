@@ -10,7 +10,8 @@ import {
   ChevronRightIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
-import { publicHelpCenterQueries } from '@/lib/client/queries/help-center'
+import { widgetHelpCategoriesQuery } from './widget-help-query'
+import { useWidgetAuth } from './widget-auth-provider'
 import { getTopLevelCategories } from '@/components/help-center/help-center-utils'
 import { CategoryIcon } from '@/components/help-center/category-icon'
 import {
@@ -44,11 +45,12 @@ export function WidgetHelp({
   onSearchChange,
 }: WidgetHelpProps) {
   const intl = useIntl()
+  const { sessionVersion } = useWidgetAuth()
   const [localSearch, setLocalSearch] = useState('')
   const search = controlledSearch ?? localSearch
   const setSearch = onSearchChange ?? setLocalSearch
 
-  const categoriesQuery = useQuery(publicHelpCenterQueries.categories())
+  const categoriesQuery = useQuery(widgetHelpCategoriesQuery(sessionVersion, intl.locale))
   const topLevelCategories = categoriesQuery.data ? getTopLevelCategories(categoriesQuery.data) : []
 
   const askAiAvailable = useAskAiAvailable()

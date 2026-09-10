@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useQuery, keepPreviousData } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { z } from 'zod'
 import {
   lazy,
@@ -34,14 +34,15 @@ import { WidgetHeroBackdrop } from '@/components/widget/widget-hero-backdrop'
 import type { ConversationId } from '@quackback/ids'
 import { useWidgetAuth } from '@/components/widget/widget-auth-provider'
 import { portalQueries } from '@/lib/client/queries/portal'
-import { publicHelpCenterQueries } from '@/lib/client/queries/help-center'
 import { widgetChangelogListQuery } from '@/components/widget/widget-changelog-query'
+import { widgetHelpCategoriesQuery } from '@/components/widget/widget-help-query'
 import { fetchBoardCapabilitiesFn } from '@/lib/server/functions/portal'
 import { getShowPoweredByFn } from '@/lib/server/functions/powered-by'
 import { listPublicArticlesFn } from '@/lib/server/functions/help-center'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { sendToHost } from '@/lib/client/widget-bridge'
 import { widgetQueryKeys, INITIAL_SESSION_VERSION } from '@/lib/client/hooks/use-widget-vote'
+import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import {
   CONVERSATION_PRESENCE_QUERY_KEY,
   useConversationPresence,
@@ -194,7 +195,9 @@ export const Route = createFileRoute('/widget/')({
             .catch(() => {})
         : Promise.resolve(),
       helpTabEnabled
-        ? queryClient.ensureQueryData(publicHelpCenterQueries.categories()).catch(() => {})
+        ? queryClient
+            .ensureQueryData(widgetHelpCategoriesQuery(INITIAL_SESSION_VERSION, DEFAULT_LOCALE))
+            .catch(() => {})
         : Promise.resolve(),
       helpTabEnabled
         ? listPublicArticlesFn({ data: { limit: 4 } })
@@ -417,13 +420,14 @@ function WidgetPage() {
     // stamps an entry fresh as of now, so seeding it on every key would also
     // mark the post-identify key fresh and suppress the Bearer refetch within
     // staleTime — leaving an identified viewer stuck on the anonymous baseline.
-    // After identify the key changes, carries no initialData, and refetches with
-    // the Bearer while keepPreviousData shows the prior map meanwhile.
+    // After identify the key changes, carries no initialData, and refetches
+    // with the Bearer. Do not keepPreviousData — logout/switch would otherwise
+    // show the prior visitor's members-only boards until the new fetch lands.
+    // Missing data falls back to the anonymous SSR `boards` list.
     initialData:
       sessionVersion === INITIAL_SESSION_VERSION
         ? { permissions: boardPermissions, boards }
         : undefined,
-    placeholderData: keepPreviousData,
     staleTime: 30 * 1000,
     enabled: !!tabs.feedback,
   })
