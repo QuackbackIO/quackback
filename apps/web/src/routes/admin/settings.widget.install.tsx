@@ -17,13 +17,13 @@ import { PageHeader } from '@/components/shared/page-header'
 import { WarningBox } from '@/components/shared/warning-box'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { WidgetLastDetected } from '@/components/admin/settings/widget/widget-last-detected'
+import { WidgetSigningSecret } from '@/components/admin/settings/widget/widget-signing-secret'
 import { copyWithFallback } from '@/components/admin/activation-action-button'
 import { CopyAgentPromptButton } from '@/components/admin/settings/widget/copy-agent-prompt-button'
 import {
   WIDGET_SKILL_REPO,
   buildWidgetInstallPrompt,
   buildWidgetInstallSnippet,
-  maskWidgetSecretInPrompt,
 } from '@/lib/shared/widget/install-prompt'
 import { widgetInstallPresence, widgetOriginVerifiedLabel } from '@/lib/shared/widget/widget-origin'
 import {
@@ -46,7 +46,7 @@ export const Route = createFileRoute('/admin/settings/widget/install')({
   component: WidgetInstallPage,
 })
 
-function WidgetInstallPage() {
+export function WidgetInstallPage() {
   const { baseUrl } = useRouteContext({ from: '__root__' })
   const secretQuery = useSuspenseQuery(settingsQueries.widgetSecret())
   const statusQuery = useQuery({
@@ -65,8 +65,8 @@ function WidgetInstallPage() {
     enabled: Boolean(status.hasWidgetEnabled),
     originHost: status.widgetOriginHost,
   })
-  const [copying, setCopying] = useState<'snippet' | 'secret' | null>(null)
-  const [identifyUsers, setIdentifyUsers] = useState(true)
+  const [copyingSnippet, setCopyingSnippet] = useState(false)
+  const [identifyUsers, setIdentifyUsers] = useState(false)
   const snippet = useMemo(
     () =>
       buildWidgetInstallSnippet({
@@ -80,23 +80,20 @@ function WidgetInstallPage() {
       buildWidgetInstallPrompt({
         instanceUrl: baseUrl ?? '',
         widgetSecret: secretQuery.data,
+        identify: identifyUsers,
       }),
-    [baseUrl, secretQuery.data]
-  )
-  const previewPrompt = useMemo(
-    () => maskWidgetSecretInPrompt(agentPrompt, secretQuery.data),
-    [agentPrompt, secretQuery.data]
+    [baseUrl, secretQuery.data, identifyUsers]
   )
 
-  async function copy(kind: 'snippet' | 'secret', text: string) {
-    setCopying(kind)
+  async function copySnippet() {
+    setCopyingSnippet(true)
     try {
-      await copyWithFallback(text)
+      await copyWithFallback(snippet)
       toast.success('Copied')
     } catch {
       toast.error('Copy failed. Select the text and copy it manually.')
     } finally {
-      setCopying(null)
+      setCopyingSnippet(false)
     }
   }
 
@@ -111,14 +108,30 @@ function WidgetInstallPage() {
       <PageHeader
         icon={CodeBracketIcon}
         title={mode === 'messenger' ? 'Connect Messenger' : 'Install feedback widget'}
-        description="Copy a prompt that installs the Quackback skill and wires the widget into your codebase."
+        description="Get the launcher on your site. Identifying signed-in users is optional."
       />
 
       <SettingsCard
-        title="Ask your agent"
-        description="Paste this into Claude, Cursor, Codex, or Copilot. It fetches the install-widget skill, detects your stack, and identifies signed-in users."
+        title="1. Add the launcher"
+        description="Paste this before the closing body tag. Anonymous visitors see the widget as soon as init runs. No secret needed."
       >
-        <CopyAgentPromptButton prompt={agentPrompt} />
+        <p className="mb-3 text-xs text-muted-foreground">
+          Also turn on{' '}
+          <Link to="/admin/settings/widget" className="underline underline-offset-2">
+            Show on your website
+          </Link>{' '}
+          in Widget settings or the launcher stays hidden.
+        </p>
+        <pre className="max-h-72 overflow-auto rounded-lg bg-zinc-950 p-4 text-xs text-zinc-100">
+          <code>{snippet}</code>
+        </pre>
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <Button variant="outline" onClick={() => void copySnippet()} disabled={copyingSnippet}>
+            <ClipboardDocumentIcon className="h-4 w-4" />
+            {copyingSnippet ? 'Copying…' : 'Copy snippet'}
+          </Button>
+          <CopyAgentPromptButton prompt={agentPrompt} />
+        </div>
         <p className="mt-3 text-xs text-muted-foreground">
           The prompt points your agent at the{' '}
           <a
@@ -128,65 +141,43 @@ function WidgetInstallPage() {
             className="underline underline-offset-2"
           >
             install-widget skill
-          </a>{' '}
-          and includes your widget secret. Paste it into a local agent only.
+          </a>
+          {identifyUsers
+            ? '. It includes your signing secret — paste it into a local agent only.'
+            : '. Identify stays out of the prompt until you turn it on below.'}
         </p>
-        <pre className="mt-4 max-h-72 overflow-auto rounded-lg border border-border/50 bg-muted/30 p-3 text-xs font-mono leading-relaxed text-foreground whitespace-pre-wrap">
-          {previewPrompt}
-        </pre>
       </SettingsCard>
 
       <SettingsCard
-        title="Or add the snippet yourself"
-        description="Paste this before the closing body tag if you would rather install it by hand."
+        title="2. Identify signed-in users"
+        description="So votes, chats, and posts attach to a real person. Skip this if you only need the anonymous launcher. Your server signs a short-lived token; the browser never sees this secret."
+        action={
+          <Badge size="sm" shape="pill" variant="secondary">
+            Recommended
+          </Badge>
+        }
       >
-        <div className="mb-4 flex items-center justify-between gap-4 rounded-lg border border-border/50 p-4">
+        {secretQuery.data ? <WidgetSigningSecret secret={secretQuery.data} /> : null}
+        <div className="mt-4 flex items-center justify-between gap-4 rounded-lg border border-border/50 p-4">
           <div className="min-w-0">
             <Label htmlFor="identify-users" className="cursor-pointer text-sm font-medium">
-              Identify signed-in users
-              <Badge size="sm" shape="pill" variant="secondary">
-                Recommended
-              </Badge>
+              Include identify in the snippet and agent prompt
             </Label>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Attach conversations to a person. Your server signs a short-lived token; the browser
-              only sends that token, never raw id or email.
+              Adds the identify comments and, for the agent prompt, the signing secret.
             </p>
           </div>
           <Switch
             id="identify-users"
             checked={identifyUsers}
             onCheckedChange={setIdentifyUsers}
-            aria-label="Identify signed-in users"
+            aria-label="Include identify in the snippet and agent prompt"
           />
-        </div>
-        <pre className="max-h-72 overflow-auto rounded-lg bg-zinc-950 p-4 text-xs text-zinc-100">
-          <code>{snippet}</code>
-        </pre>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            onClick={() => copy('snippet', snippet)}
-            disabled={copying !== null}
-          >
-            <ClipboardDocumentIcon className="h-4 w-4" />
-            {copying === 'snippet' ? 'Copying…' : 'Copy installation snippet'}
-          </Button>
-          {identifyUsers && secretQuery.data && (
-            <Button
-              variant="outline"
-              onClick={() => copy('secret', secretQuery.data!)}
-              disabled={copying !== null}
-            >
-              <ClipboardDocumentIcon className="h-4 w-4" />
-              {copying === 'secret' ? 'Copying…' : 'Copy widget signing secret'}
-            </Button>
-          )}
         </div>
       </SettingsCard>
 
       <SettingsCard
-        title="Verify the connection"
+        title="Connection"
         description={
           presence.tone === 'idle'
             ? 'Waiting for the first request from your deployed site. Checking every five seconds.'

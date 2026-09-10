@@ -20,6 +20,7 @@ vi.mock('../settings.helpers', async (importOriginal) => ({
 
 import {
   generateWidgetSecret,
+  ensureWidgetSecret,
   publicMessengerConfig,
   getPublicWidgetConfig,
 } from '../settings.widget'
@@ -361,5 +362,12 @@ describe('generateWidgetSecret', () => {
     const secret1 = generateWidgetSecret()
     const secret2 = generateWidgetSecret()
     expect(secret1).not.toBe(secret2)
+  })
+})
+
+describe('ensureWidgetSecret', () => {
+  it('returns the existing secret without writing', async () => {
+    settingsRow.current = { id: 'settings_1', widgetSecret: 'wgt_existing' }
+    await expect(ensureWidgetSecret()).resolves.toBe('wgt_existing')
   })
 })
