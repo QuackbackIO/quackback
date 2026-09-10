@@ -56,8 +56,16 @@ export function widgetQueryKeyEquals(
   actual: readonly unknown[] | undefined
 ): boolean {
   return (
-    !!actual && expected.length === actual.length && expected.every((part, i) => part === actual[i])
+    !!actual && actual.length === expected.length && widgetQueryKeyPrefixEquals(expected, actual)
   )
+}
+
+/** True when `actual` starts with `prefix` — same entity, any trailing key slots. */
+export function widgetQueryKeyPrefixEquals(
+  prefix: readonly unknown[],
+  actual: readonly unknown[] | undefined
+): boolean {
+  return !!actual && prefix.every((part, i) => actual[i] === part)
 }
 
 interface UseWidgetVoteOptions {

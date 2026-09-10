@@ -108,25 +108,26 @@ const SIMILAR_SEARCH_CACHE_LIMIT = 40
 let similarSearchCacheVersion = INITIAL_SESSION_VERSION
 const similarSearchCache = new Map<string, SearchResult>()
 
-function similarSearchCacheGet(sessionVersion: number, q: string): SearchResult | undefined {
+function similarSearchCacheFor(sessionVersion: number) {
   if (similarSearchCacheVersion !== sessionVersion) {
     similarSearchCache.clear()
     similarSearchCacheVersion = sessionVersion
   }
-  return similarSearchCache.get(q)
+  return similarSearchCache
+}
+
+function similarSearchCacheGet(sessionVersion: number, q: string): SearchResult | undefined {
+  return similarSearchCacheFor(sessionVersion).get(q)
 }
 
 function similarSearchCacheSet(sessionVersion: number, q: string, result: SearchResult) {
-  if (similarSearchCacheVersion !== sessionVersion) {
-    similarSearchCache.clear()
-    similarSearchCacheVersion = sessionVersion
-  }
-  if (similarSearchCache.has(q)) similarSearchCache.delete(q)
-  similarSearchCache.set(q, result)
-  while (similarSearchCache.size > SIMILAR_SEARCH_CACHE_LIMIT) {
-    const oldest = similarSearchCache.keys().next().value
+  const cache = similarSearchCacheFor(sessionVersion)
+  if (cache.has(q)) cache.delete(q)
+  cache.set(q, result)
+  while (cache.size > SIMILAR_SEARCH_CACHE_LIMIT) {
+    const oldest = cache.keys().next().value
     if (oldest === undefined) break
-    similarSearchCache.delete(oldest)
+    cache.delete(oldest)
   }
 }
 
