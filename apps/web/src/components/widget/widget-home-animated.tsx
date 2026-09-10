@@ -291,6 +291,11 @@ export function WidgetHomeAnimated({
   const [selectedBoardId, setSelectedBoardId] = useState(() =>
     resolveComposeBoardId(boards, undefined, defaultBoard)
   )
+  const composeBoardDirtyRef = useRef(false)
+  const handleComposeBoardChange = useCallback((id: string) => {
+    composeBoardDirtyRef.current = true
+    setSelectedBoardId(id)
+  }, [])
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
   const [contentHtml, setContentHtml] = useState('')
   const handleEditorChange = useCallback((json: JSONContent, html: string) => {
@@ -302,6 +307,7 @@ export function WidgetHomeAnimated({
   // the trigger so a second identical command still expands and reapplies.
   useEffect(() => {
     if (!composeRequest) return
+    composeBoardDirtyRef.current = false
     setExpanded(true)
     if (composeRequest.title) setTitle(composeRequest.title)
     if (composeRequest.body) {
@@ -324,7 +330,7 @@ export function WidgetHomeAnimated({
     const prev = prevVisibleBoardSlugsRef.current
     prevVisibleBoardSlugsRef.current = next
     const slug = composeRequest?.boardSlug
-    if (!shouldReapplyComposeBoard(slug, prev, next)) return
+    if (!shouldReapplyComposeBoard(slug, prev, next, composeBoardDirtyRef.current)) return
     const match = boards.find((b) => b.slug === slug)
     if (match) setSelectedBoardId(match.id)
   }, [visibleBoardSlugs, boards, composeRequest?.boardSlug, composeRequest?.nonce])
@@ -713,7 +719,7 @@ export function WidgetHomeAnimated({
                         defaultMessage="Posting to"
                       />
                     </span>
-                    <Select value={selectedBoardId} onValueChange={setSelectedBoardId}>
+                    <Select value={selectedBoardId} onValueChange={handleComposeBoardChange}>
                       <SelectTrigger
                         size="xs"
                         className="border-0 bg-transparent shadow-none font-medium text-foreground hover:text-foreground/80 focus-visible:ring-0"
