@@ -129,13 +129,17 @@ export function shouldClearInvisibleBoardFilter(
   )
 }
 
-/** Re-apply `open({ board })` only when identify just granted that slug. */
+/**
+ * Re-apply `open({ board })` only when identify just granted that slug
+ * and the visitor has not picked another board since the compose request.
+ */
 export function shouldReapplyComposeBoard(
   requestedSlug: string | undefined,
   previousSlugs: ReadonlySet<string>,
-  nextSlugs: ReadonlySet<string>
+  nextSlugs: ReadonlySet<string>,
+  selectionDirty = false
 ): boolean {
-  if (!requestedSlug) return false
+  if (selectionDirty || !requestedSlug) return false
   return nextSlugs.has(requestedSlug) && !previousSlugs.has(requestedSlug)
 }
 

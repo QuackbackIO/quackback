@@ -180,6 +180,15 @@ describe('shouldReapplyComposeBoard', () => {
     )
     expect(shouldReapplyComposeBoard(undefined, new Set(), new Set(['bugs']))).toBe(false)
   })
+
+  it('does not overwrite a board the visitor picked after open()', () => {
+    expect(
+      shouldReapplyComposeBoard('secret', new Set(['ideas']), new Set(['ideas', 'secret']), true)
+    ).toBe(false)
+    expect(
+      shouldReapplyComposeBoard('secret', new Set(['ideas']), new Set(['ideas', 'secret']), false)
+    ).toBe(true)
+  })
 })
 
 describe('composeBodyFromPlainText', () => {
