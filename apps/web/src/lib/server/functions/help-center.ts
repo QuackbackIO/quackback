@@ -607,14 +607,14 @@ export const resolvePublicArticleRefFn = createServerFn({ method: 'GET' })
         kbId
           ? getPublicArticleByIdForLocale(kbId, loc, viewer)
           : getPublicArticleBySlugForLocale(data.ref, loc, viewer)
-      const article = await withDefaultLocaleFallback(
+      const { value: article, locale: resolvedLocale } = await withDefaultLocaleFallback(
         locale,
         DEFAULT_LOCALE,
         load,
         (err) => err instanceof NotFoundError
       )
       const { helpfulCount: _h, notHelpfulCount: _n, ...publicArticle } = serializeArticle(article)
-      return publicArticle
+      return { ...publicArticle, resolvedLocale }
     } catch (err) {
       if (err instanceof NotFoundError) return null
       throw err

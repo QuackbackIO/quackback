@@ -6,6 +6,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { resolvePublicArticleRefFn } from '@/lib/server/functions/help-center'
 import { generateOneTimeToken, getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { appendWidgetOtt } from './build-portal-url'
+import { hcArticlePath } from '@/lib/shared/help-center-url'
 import { widgetQueryKeys, widgetQueryKeyEquals } from '@/lib/client/hooks/use-widget-vote'
 import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-content'
 import type { JSONContent } from '@tiptap/react'
@@ -53,7 +54,11 @@ export function WidgetHelpDetail({
     if (!article) return
     const ott = isIdentified ? await generateOneTimeToken() : null
     const url = appendWidgetOtt(
-      `${window.location.origin}/hc/articles/${article.category.slug}/${article.slug}`,
+      `${window.location.origin}${hcArticlePath({
+        locale: article.resolvedLocale,
+        urlId: article.urlId,
+        slug: article.slug,
+      })}`,
       isIdentified,
       ott
     )

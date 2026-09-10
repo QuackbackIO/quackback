@@ -1104,6 +1104,7 @@ function WidgetPage() {
             boardPermissions={livePermissions}
             defaultBoard={defaultBoard}
             initialBoardSlug={initialBoardSlug}
+            confirmedBoardSlugs={liveCapabilities?.boards.map((b) => b.slug) ?? null}
             composeRequest={composeRequest}
             onPostSelect={handlePostSelect}
             onPostCreated={handlePostCreated}

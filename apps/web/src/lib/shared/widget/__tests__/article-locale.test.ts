@@ -5,7 +5,10 @@ import { withDefaultLocaleFallback } from '../article-locale'
 describe('withDefaultLocaleFallback', () => {
   it('returns the requested locale when present', async () => {
     const load = vi.fn(async (locale: string) => locale)
-    await expect(withDefaultLocaleFallback('de', 'en', load, () => false)).resolves.toBe('de')
+    await expect(withDefaultLocaleFallback('de', 'en', load, () => false)).resolves.toEqual({
+      value: 'de',
+      locale: 'de',
+    })
     expect(load).toHaveBeenCalledTimes(1)
   })
 
@@ -16,7 +19,7 @@ describe('withDefaultLocaleFallback', () => {
     })
     await expect(
       withDefaultLocaleFallback('de', 'en', load, (err) => err instanceof NotFoundError)
-    ).resolves.toBe('en-article')
+    ).resolves.toEqual({ value: 'en-article', locale: 'en' })
     expect(load).toHaveBeenCalledWith('de')
     expect(load).toHaveBeenCalledWith('en')
   })
