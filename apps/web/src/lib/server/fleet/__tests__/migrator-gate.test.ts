@@ -352,6 +352,7 @@ describe('replayGateVerdict', () => {
       '0275_slack_thread_sessions',
       '0276_post_tags_is_public',
       '0277_widget_chat_to_messenger',
+      '0278_two_factor_lockout',
     ])
     const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
     expect(verdict.ok).toBe(false)
