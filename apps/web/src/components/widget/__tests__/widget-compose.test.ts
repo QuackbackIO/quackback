@@ -6,6 +6,7 @@ import {
   resolveComposeBoardId,
   resolveOpenCommand,
   shouldClearInvisibleBoardFilter,
+  shouldResetComposeBoard,
   shouldReapplyComposeBoard,
 } from '../widget-compose'
 import type { EnabledTabs } from '../widget-nav'
@@ -147,6 +148,15 @@ describe('resolveOpenCommand', () => {
     expect(
       resolveOpenCommand({ view: 'help', postId: 'post_01h', articleId: 'pricing' }, allTabs)
     ).toEqual({ type: 'post', postId: 'post_01h' })
+  })
+})
+
+describe('shouldResetComposeBoard', () => {
+  it('resets when the selected board is missing from the confirmed list', () => {
+    expect(shouldResetComposeBoard('board_secret', boards, ['ideas', 'bug-reports'])).toBe(true)
+    expect(shouldResetComposeBoard('board_ideas', boards, ['ideas', 'bug-reports'])).toBe(false)
+    expect(shouldResetComposeBoard('board_ideas', boards, null)).toBe(false)
+    expect(shouldResetComposeBoard('', boards, ['ideas'])).toBe(false)
   })
 })
 

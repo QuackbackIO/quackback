@@ -108,6 +108,17 @@ export function resolveComposeBoardId(
   return ''
 }
 
+/** Drop a compose selection the current session can no longer see. */
+export function shouldResetComposeBoard(
+  selectedBoardId: string,
+  boards: ReadonlyArray<{ id: string; slug: string }>,
+  confirmedBoardSlugs: readonly string[] | null | undefined
+): boolean {
+  if (!selectedBoardId || !confirmedBoardSlugs) return false
+  const selected = boards.find((b) => b.id === selectedBoardId)
+  return !selected || !confirmedBoardSlugs.includes(selected.slug)
+}
+
 /** Drop a Popular Ideas filter the current session can no longer see. */
 export function shouldClearInvisibleBoardFilter(
   activeBoardSlug: string | null,
