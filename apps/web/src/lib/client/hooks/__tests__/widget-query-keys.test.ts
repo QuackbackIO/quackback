@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { widgetQueryKeys, widgetQueryKeyEquals, INITIAL_SESSION_VERSION } from '../use-widget-vote'
+import {
+  widgetQueryKeys,
+  widgetQueryKeyEquals,
+  widgetQueryKeyPrefixEquals,
+  INITIAL_SESSION_VERSION,
+} from '../use-widget-vote'
 
 describe('widgetQueryKeys', () => {
   describe('votedPosts', () => {
@@ -93,6 +98,16 @@ describe('widgetQueryKeys', () => {
         widgetQueryKeyEquals(widgetQueryKeys.articleDetail.byRef('article_1', 4, 'de'), key)
       ).toBe(false)
       expect(widgetQueryKeyEquals(key, undefined)).toBe(false)
+    })
+
+    it('prefix match keeps the same entity across trailing key slots', () => {
+      const key = widgetQueryKeys.postDetail.byId('post_1', 4)
+      expect(widgetQueryKeyPrefixEquals([...widgetQueryKeys.postDetail.all, 'post_1'], key)).toBe(
+        true
+      )
+      expect(widgetQueryKeyPrefixEquals([...widgetQueryKeys.postDetail.all, 'post_2'], key)).toBe(
+        false
+      )
     })
   })
 
