@@ -48,6 +48,22 @@ export const widgetQueryKeys = {
     query: (q: string, boardSlug: string | null, version: number) =>
       ['widget', 'search', 'popular', q, boardSlug ?? 'all', version] as const,
   },
+  helpCategories: {
+    bySession: (version: number, locale: string) =>
+      ['widget', 'help', 'categories', locale, version] as const,
+  },
+  helpCategoryArticles: {
+    byCategory: (categoryId: string, version: number, locale: string) =>
+      ['widget', 'help', 'category-articles', categoryId, locale, version] as const,
+  },
+}
+
+/** True when the last key slot is this session (popular search dim-hold). */
+export function widgetQueryKeySameSession(
+  actual: readonly unknown[] | undefined,
+  sessionVersion: number
+): boolean {
+  return !!actual && actual[actual.length - 1] === sessionVersion
 }
 
 /** True when `actual` is the same factory key (avoids placeholder index coupling). */

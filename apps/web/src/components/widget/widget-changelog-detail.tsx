@@ -3,7 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import { FormattedMessage } from 'react-intl'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { getPublicChangelogFn } from '@/lib/server/functions/changelog'
-import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
+import { generateOneTimeToken, getWidgetAuthHeaders } from '@/lib/client/widget-auth'
+import { appendWidgetOtt } from './build-portal-url'
 import { widgetQueryKeys, widgetQueryKeyEquals } from '@/lib/client/hooks/use-widget-vote'
 import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-content'
 import { EmbedHydration } from '@/components/shared/embed-hydration'
@@ -20,7 +21,7 @@ interface WidgetChangelogDetailProps {
 }
 
 export function WidgetChangelogDetail({ entryId }: WidgetChangelogDetailProps) {
-  const { sessionVersion } = useWidgetAuth()
+  const { isIdentified, sessionVersion } = useWidgetAuth()
   const { data: entry, isLoading } = useQuery({
     queryKey: widgetQueryKeys.changelogDetail.byId(entryId, sessionVersion),
     queryFn: () =>
@@ -39,11 +40,16 @@ export function WidgetChangelogDetail({ entryId }: WidgetChangelogDetailProps) {
   })
 
   const changelogEntryId = entry?.id
-  const handleViewOnPortal = useCallback(() => {
+  const handleViewOnPortal = useCallback(async () => {
     if (!changelogEntryId) return
-    const url = `${window.location.origin}/changelog/${changelogEntryId}`
+    const ott = isIdentified ? await generateOneTimeToken() : null
+    const url = appendWidgetOtt(
+      `${window.location.origin}/changelog/${changelogEntryId}`,
+      isIdentified,
+      ott
+    )
     sendToHost({ type: 'quackback:navigate', url })
-  }, [changelogEntryId])
+  }, [changelogEntryId, isIdentified])
 
   if (isLoading) {
     return <WidgetArticleSkeleton />

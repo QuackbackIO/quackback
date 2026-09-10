@@ -9,7 +9,7 @@ import {
   ChevronRightIcon,
 } from '@heroicons/react/24/outline'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useInfiniteQuery, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useIntl, FormattedMessage } from 'react-intl'
 import {
   Select,
@@ -22,7 +22,11 @@ import { listPublicPostsFn } from '@/lib/server/functions/public-posts'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { WidgetVoteButton } from './widget-vote-button'
 import { WidgetPostListSkeleton } from './widget-skeletons'
-import { widgetQueryKeys, INITIAL_SESSION_VERSION } from '@/lib/client/hooks/use-widget-vote'
+import {
+  widgetQueryKeys,
+  widgetQueryKeySameSession,
+  INITIAL_SESSION_VERSION,
+} from '@/lib/client/hooks/use-widget-vote'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { cn } from '@/lib/shared/utils'
 import { useWidgetAuth } from './widget-auth-provider'
@@ -442,9 +446,10 @@ export function WidgetHomeAnimated({
     },
     enabled: debouncedPopularSearch.length > 0,
     // Refining a query keeps the previous hits on screen (dimmed) instead of
-    // blinking the list empty between keystrokes; only the very first search
-    // has nothing to hold and shows the row skeleton.
-    placeholderData: keepPreviousData,
+    // blinking the list empty between keystrokes. Drop them when the session
+    // changes so a later identity never sees the previous visitor's titles.
+    placeholderData: (prev, prevQuery) =>
+      widgetQueryKeySameSession(prevQuery?.queryKey, sessionVersion) ? prev : undefined,
   })
   // Typed-but-unsettled (debounce window), or fetching, or showing hits that
   // belong to the previous query.

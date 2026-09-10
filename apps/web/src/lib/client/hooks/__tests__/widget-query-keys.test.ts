@@ -3,6 +3,7 @@ import {
   widgetQueryKeys,
   widgetQueryKeyEquals,
   widgetQueryKeyPrefixEquals,
+  widgetQueryKeySameSession,
   INITIAL_SESSION_VERSION,
 } from '../use-widget-vote'
 
@@ -108,6 +109,47 @@ describe('widgetQueryKeys', () => {
       expect(widgetQueryKeyPrefixEquals([...widgetQueryKeys.postDetail.all, 'post_2'], key)).toBe(
         false
       )
+    })
+  })
+
+  describe('helpCategories', () => {
+    it('bySession includes locale and version', () => {
+      expect(widgetQueryKeys.helpCategories.bySession(0, 'en')).toEqual([
+        'widget',
+        'help',
+        'categories',
+        'en',
+        0,
+      ])
+      expect(widgetQueryKeys.helpCategories.bySession(2, 'de')).toEqual([
+        'widget',
+        'help',
+        'categories',
+        'de',
+        2,
+      ])
+    })
+  })
+
+  describe('helpCategoryArticles', () => {
+    it('byCategory includes category, locale, and version', () => {
+      expect(widgetQueryKeys.helpCategoryArticles.byCategory('cat_1', 1, 'en')).toEqual([
+        'widget',
+        'help',
+        'category-articles',
+        'cat_1',
+        'en',
+        1,
+      ])
+    })
+  })
+
+  describe('widgetQueryKeySameSession', () => {
+    it('matches when the last key slot is the current session', () => {
+      const key = widgetQueryKeys.popularSearch.query('bugs', null, 3)
+      expect(widgetQueryKeySameSession(key, 3)).toBe(true)
+      expect(widgetQueryKeySameSession(key, 4)).toBe(false)
+      expect(widgetQueryKeySameSession(undefined, 3)).toBe(false)
     })
   })
 

@@ -19,3 +19,11 @@ export function buildPortalUrl(params: {
   }
   return url
 }
+
+/** Append an OTT to a portal URL when the widget visitor is identified. */
+export function appendWidgetOtt(url: string, isIdentified: boolean, ott: string | null): string {
+  if (!isIdentified || !ott) return url
+  const next = new URL(url)
+  next.searchParams.set('ott', ott)
+  return next.toString()
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildPortalUrl } from '../build-portal-url'
+import { appendWidgetOtt, buildPortalUrl } from '../build-portal-url'
 
 describe('buildPortalUrl', () => {
   const baseUrl = 'https://feedback.example.com'
@@ -61,5 +61,25 @@ describe('buildPortalUrl', () => {
       ott: 'token+with/special=chars',
     })
     expect(url).toContain('?ott=token%2Bwith%2Fspecial%3Dchars')
+  })
+})
+
+describe('appendWidgetOtt', () => {
+  it('appends ott when identified', () => {
+    expect(
+      appendWidgetOtt('https://feedback.example.com/hc/articles/getting-started/faq', true, 'ott-1')
+    ).toBe('https://feedback.example.com/hc/articles/getting-started/faq?ott=ott-1')
+  })
+
+  it('leaves the URL unchanged for anonymous visitors', () => {
+    expect(
+      appendWidgetOtt('https://feedback.example.com/changelog/changelog_1', false, 'ott-1')
+    ).toBe('https://feedback.example.com/changelog/changelog_1')
+  })
+
+  it('leaves the URL unchanged when OTT generation returned null', () => {
+    expect(appendWidgetOtt('https://feedback.example.com/changelog/changelog_1', true, null)).toBe(
+      'https://feedback.example.com/changelog/changelog_1'
+    )
   })
 })
