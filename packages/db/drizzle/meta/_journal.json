@@ -1786,6 +1786,13 @@
       "when": 1788991200000,
       "tag": "0277_widget_chat_to_messenger",
       "breakpoints": true
+    },
+    {
+      "idx": 255,
+      "version": "7",
+      "when": 1789030800000,
+      "tag": "0278_two_factor_lockout",
+      "breakpoints": true
     }
   ]
 }

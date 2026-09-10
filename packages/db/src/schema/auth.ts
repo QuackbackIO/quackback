@@ -223,6 +223,12 @@ export const user = pgTable(
  * during the brief window between `/two-factor/enable` and the
  * subsequent `/two-factor/verify-totp`; the default `true` matches
  * Better-Auth's expectation for newly-inserted rows.
+ *
+ * `failedVerificationCount` / `lockedUntil` are the 1.6.30 account-
+ * lockout fields. The plugin writes both on every TOTP verify (success
+ * resets, failure increments). Drizzle drops unknown keys from `.set()`,
+ * so omitting them produces `update "two_factor" set  where …` and
+ * enrolment / sign-in 500. See #432.
  */
 export const twoFactor = pgTable(
   'two_factor',
@@ -233,6 +239,8 @@ export const twoFactor = pgTable(
     backupCodes: text('backup_codes').notNull(),
     verified: boolean('verified').notNull().default(true),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    failedVerificationCount: integer('failed_verification_count').notNull().default(0),
+    lockedUntil: timestamp('locked_until', { withTimezone: true }),
   },
   (table) => [
     // Named to match the constraint the SQL migration created.
