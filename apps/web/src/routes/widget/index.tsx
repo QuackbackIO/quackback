@@ -819,6 +819,12 @@ function WidgetPage() {
     setView('help-detail')
   }, [])
 
+  const handleHelpCategoryUnavailable = useCallback(() => {
+    lastNavRef.current = 'move'
+    setSelectedCategory(null)
+    setView('help')
+  }, [])
+
   // The feedback view stays mounted (form state survives a detail round-trip),
   // so it can't take focus via ViewTransition's mount hook; do it when it
   // becomes visible again after a back/cross navigation.
@@ -1049,6 +1055,7 @@ function WidgetPage() {
             categoryName={selectedCategory.name}
             categoryIcon={selectedCategory.icon}
             onArticleSelect={handleHelpCategoryArticleSelect}
+            onCategoryUnavailable={handleHelpCategoryUnavailable}
           />
         </ViewTransition>
       )}
