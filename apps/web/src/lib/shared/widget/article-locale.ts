@@ -8,12 +8,12 @@ export async function withDefaultLocaleFallback<T>(
   defaultLocale: string,
   load: (locale: string) => Promise<T>,
   isMissing: (err: unknown) => boolean
-): Promise<T> {
+): Promise<{ value: T; locale: string }> {
   try {
-    return await load(locale)
+    return { value: await load(locale), locale }
   } catch (err) {
     if (isMissing(err) && locale !== defaultLocale) {
-      return load(defaultLocale)
+      return { value: await load(defaultLocale), locale: defaultLocale }
     }
     throw err
   }

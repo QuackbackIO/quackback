@@ -108,6 +108,16 @@ export function resolveComposeBoardId(
   return ''
 }
 
+/** Drop a Popular Ideas filter the current session can no longer see. */
+export function shouldClearInvisibleBoardFilter(
+  activeBoardSlug: string | null,
+  confirmedBoardSlugs: readonly string[] | null | undefined
+): boolean {
+  return (
+    !!activeBoardSlug && !!confirmedBoardSlugs && !confirmedBoardSlugs.includes(activeBoardSlug)
+  )
+}
+
 /** Re-apply `open({ board })` only when identify just granted that slug. */
 export function shouldReapplyComposeBoard(
   requestedSlug: string | undefined,

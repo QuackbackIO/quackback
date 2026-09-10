@@ -5,6 +5,7 @@ import {
   isArticleTypeId,
   resolveComposeBoardId,
   resolveOpenCommand,
+  shouldClearInvisibleBoardFilter,
   shouldReapplyComposeBoard,
 } from '../widget-compose'
 import type { EnabledTabs } from '../widget-nav'
@@ -146,6 +147,15 @@ describe('resolveOpenCommand', () => {
     expect(
       resolveOpenCommand({ view: 'help', postId: 'post_01h', articleId: 'pricing' }, allTabs)
     ).toEqual({ type: 'post', postId: 'post_01h' })
+  })
+})
+
+describe('shouldClearInvisibleBoardFilter', () => {
+  it('clears a selected slug that the live session list no longer contains', () => {
+    expect(shouldClearInvisibleBoardFilter('secret', ['ideas', 'bugs'])).toBe(true)
+    expect(shouldClearInvisibleBoardFilter('ideas', ['ideas', 'bugs'])).toBe(false)
+    expect(shouldClearInvisibleBoardFilter('secret', null)).toBe(false)
+    expect(shouldClearInvisibleBoardFilter(null, ['ideas'])).toBe(false)
   })
 })
 

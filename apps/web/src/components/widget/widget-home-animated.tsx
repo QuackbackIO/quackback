@@ -39,6 +39,7 @@ import type { TiptapContent } from '@/lib/shared/schemas/posts'
 import {
   composeBodyFromPlainText,
   resolveComposeBoardId,
+  shouldClearInvisibleBoardFilter,
   shouldReapplyComposeBoard,
   type WidgetComposeRequest,
 } from './widget-compose'
@@ -92,6 +93,11 @@ export interface WidgetHomeProps {
   defaultBoard?: string
   /** SDK `?board=` / `defaultBoard` — seed the Popular Ideas filter. */
   initialBoardSlug?: string
+  /**
+   * Board slugs from the current session's capability fetch. `null` while that
+   * query has no data yet — do not treat the anonymous SSR fallback as final.
+   */
+  confirmedBoardSlugs?: string[] | null
   /** Programmatic `open({ view: 'new-post' })` — expand and prefill. */
   composeRequest?: WidgetComposeRequest | null
   onPostSelect?: (postId: string) => void
@@ -259,6 +265,7 @@ export function WidgetHomeAnimated({
   boardPermissions,
   defaultBoard,
   initialBoardSlug,
+  confirmedBoardSlugs,
   composeRequest,
   onPostSelect,
   onPostCreated,
@@ -369,6 +376,13 @@ export function WidgetHomeAnimated({
   const [activeBoardSlug, setActiveBoardSlug] = useState<string | null>(
     () => initialBoardSlug ?? null
   )
+  // After identify/logout the live board list is authoritative. Keep the SDK
+  // `?board=` filter through the anonymous first paint (identify may grant it).
+  useEffect(() => {
+    if (sessionVersion === INITIAL_SESSION_VERSION) return
+    if (!shouldClearInvisibleBoardFilter(activeBoardSlug, confirmedBoardSlugs)) return
+    setActiveBoardSlug(null)
+  }, [sessionVersion, activeBoardSlug, confirmedBoardSlugs])
   const pills = usePillsScroll()
   const [popularSearch, setPopularSearch] = useState('')
   const [debouncedPopularSearch, setDebouncedPopularSearch] = useState('')

@@ -21,6 +21,8 @@ export function useKbSearch({
   query,
   limit,
   locale,
+  sessionVersion,
+  getHeaders,
   onResults,
 }: {
   query: string
@@ -29,6 +31,10 @@ export function useKbSearch({
    *  (domains/languages §2); an unrecognized/not-enabled locale falls back
    *  to default server-side. */
   locale?: string
+  /** Widget session — included in the cache key and clears hits on change. */
+  sessionVersion?: number
+  /** Widget Bearer (or empty on the portal, which uses cookies). */
+  getHeaders?: () => HeadersInit
   /** Fired with the articles of each completed search (cache hits included);
    *  not fired when the query is blank. */
   onResults?: (articles: KbSearchArticle[]) => void
@@ -40,15 +46,17 @@ export function useKbSearch({
   // Latest callback without retriggering the debounce effect.
   const onResultsRef = useRef(onResults)
   onResultsRef.current = onResults
+  const getHeadersRef = useRef(getHeaders)
+  getHeadersRef.current = getHeaders
 
   const doSearch = useCallback(
-    async (q: string, loc: string | undefined) => {
+    async (q: string, loc: string | undefined, version: number | undefined) => {
       if (!q.trim()) {
         setResults([])
         return
       }
 
-      const cacheKey = `${loc ?? ''}:${q}`
+      const cacheKey = `${version ?? ''}:${loc ?? ''}:${q}`
       const cached = cacheRef.current.get(cacheKey)
       if (cached) {
         setResults(cached)
@@ -71,7 +79,9 @@ export function useKbSearch({
         if (loc) params.set('locale', loc)
         const res = await fetch(`/api/widget/kb-search?${params.toString()}`, {
           signal: controller.signal,
+          headers: getHeadersRef.current?.(),
         })
+        if (!res.ok) return
         const data = await res.json()
         const articles: KbSearchArticle[] = data.data?.articles ?? []
         cacheRef.current.set(cacheKey, articles)
@@ -87,9 +97,14 @@ export function useKbSearch({
   )
 
   useEffect(() => {
-    const timer = setTimeout(() => void doSearch(query, locale), DEBOUNCE_MS)
+    cacheRef.current.clear()
+    setResults([])
+  }, [sessionVersion])
+
+  useEffect(() => {
+    const timer = setTimeout(() => void doSearch(query, locale, sessionVersion), DEBOUNCE_MS)
     return () => clearTimeout(timer)
-  }, [query, locale, doSearch])
+  }, [query, locale, sessionVersion, doSearch])
 
   return { results, isSearching }
 }
