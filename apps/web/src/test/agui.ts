@@ -77,7 +77,9 @@ export function structuredDeltas(object: unknown, pieces = 3): Chunk[] {
  *  Returns the mock for request-body assertions; undo via
  *  `vi.unstubAllGlobals()`. */
 export function stubAguiFetch(frames: string) {
-  const fetchMock = vi.fn(() => Promise.resolve(mockStreamingResponse(frames)))
+  const fetchMock = vi.fn((_input: RequestInfo | URL, _init?: RequestInit): Promise<Response> =>
+    Promise.resolve(mockStreamingResponse(frames))
+  )
   vi.stubGlobal('fetch', fetchMock)
   return fetchMock
 }
