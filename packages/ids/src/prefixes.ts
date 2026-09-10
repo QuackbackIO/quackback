@@ -51,7 +51,8 @@ export const ID_PREFIXES = {
 
   // Help center
   kb_category: 'kb_category',
-  kb_article: 'kb_article',
+  // Serialized as `article_…` (same UUID as the retired `kb_article_…` prefix).
+  kb_article: 'article',
   kb_article_feedback: 'kb_article_feedback',
   hc_redirect_rule: 'hc_redirect_rule',
   kb_article_translation: 'kb_article_translation',
@@ -223,6 +224,15 @@ export type IdPrefix = (typeof ID_PREFIXES)[keyof typeof ID_PREFIXES]
 export type EntityType = keyof typeof ID_PREFIXES
 
 /**
+ * Retired serialized prefixes that still identify the same entity.
+ * Incoming IDs with these prefixes are accepted and rewritten to the
+ * canonical `ID_PREFIXES` value on ensure/parse.
+ */
+export const ID_PREFIX_ALIASES: Readonly<Record<string, IdPrefix>> = {
+  kb_article: 'article',
+}
+
+/**
  * Get the prefix for a given entity type
  */
 export function getPrefix(entity: EntityType): IdPrefix {
@@ -230,8 +240,23 @@ export function getPrefix(entity: EntityType): IdPrefix {
 }
 
 /**
- * Check if a string is a valid prefix
+ * Check if a string is a valid canonical prefix
  */
 export function isValidPrefix(prefix: string): prefix is IdPrefix {
   return Object.values(ID_PREFIXES).includes(prefix as IdPrefix)
+}
+
+/**
+ * True when `actual` is `expected` or a retired alias of it.
+ */
+export function prefixMatches(actual: string, expected: IdPrefix): boolean {
+  return actual === expected || ID_PREFIX_ALIASES[actual] === expected
+}
+
+/**
+ * Map a serialized prefix (canonical or alias) onto the catalogue prefix.
+ */
+export function resolvePrefix(prefix: string): IdPrefix | undefined {
+  if (isValidPrefix(prefix)) return prefix
+  return ID_PREFIX_ALIASES[prefix]
 }

@@ -98,19 +98,19 @@ beforeEach(() => {
   mockLogAiUsage.mockResolvedValue(undefined)
   mockGetChatModel.mockReturnValue('gpt-test')
   mockGetSettings.mockResolvedValue({ id: 'settings_1' })
-  mockRetrieve.mockResolvedValue([makeKbArticle('kb_article_1')])
+  mockRetrieve.mockResolvedValue([makeKbArticle('article_1')])
   mockSynthesize.mockResolvedValue({
     kind: 'grounded',
     answer: 'Do the thing.',
-    sources: [{ articleId: 'kb_article_1' }],
+    sources: [{ articleId: 'article_1' }],
   })
 })
 
 const SOURCE_META = {
-  articleId: 'kb_article_1',
+  articleId: 'article_1',
   urlId: 1,
-  title: 'Title kb_article_1',
-  slug: 'slug-kb_article_1',
+  title: 'Title article_1',
+  slug: 'slug-article_1',
   categorySlug: 'general',
   categoryName: 'General',
 }
@@ -266,7 +266,7 @@ describe('POST /api/widget/kb-ask', () => {
         return {
           kind: 'grounded',
           answer: 'Do the thing.',
-          sources: [{ articleId: 'kb_article_1' }],
+          sources: [{ articleId: 'article_1' }],
         }
       }
     )
@@ -301,13 +301,13 @@ describe('POST /api/widget/kb-ask', () => {
     expect(finished.result).toEqual({
       kind: 'grounded',
       answer: 'Do the thing.',
-      sources: [{ articleId: 'kb_article_1' }],
+      sources: [{ articleId: 'article_1' }],
     })
   })
 
   it('short-circuits on empty retrieval: no snapshot, no model call, RUN_FINISHED miss with related', async () => {
     mockRetrieve.mockImplementation(async (_q: string, opts?: { minScore?: number }) =>
-      opts?.minScore !== undefined ? [makeKbArticle('kb_article_9')] : []
+      opts?.minScore !== undefined ? [makeKbArticle('article_9')] : []
     )
 
     const res = await handleKbAsk({ request: makePost('gibberish') })
@@ -322,10 +322,10 @@ describe('POST /api/widget/kb-ask', () => {
       sources: [],
       related: [
         {
-          articleId: 'kb_article_9',
+          articleId: 'article_9',
           urlId: 9,
-          title: 'Title kb_article_9',
-          slug: 'slug-kb_article_9',
+          title: 'Title article_9',
+          slug: 'slug-article_9',
           categorySlug: 'general',
           categoryName: 'General',
         },
@@ -335,7 +335,7 @@ describe('POST /api/widget/kb-ask', () => {
 
   it('logs a no_sources ai usage entry on the empty-retrieval short-circuit', async () => {
     mockRetrieve.mockImplementation(async (_q: string, opts?: { minScore?: number }) =>
-      opts?.minScore !== undefined ? [makeKbArticle('kb_article_9')] : []
+      opts?.minScore !== undefined ? [makeKbArticle('article_9')] : []
     )
     const res = await handleKbAsk({ request: makePost('gibberish') })
     await res.text()
@@ -356,7 +356,7 @@ describe('POST /api/widget/kb-ask', () => {
   })
 
   it('reuses the retrieved articles as related suggestions on a no-answer', async () => {
-    mockRetrieve.mockResolvedValue([makeKbArticle('kb_article_1')])
+    mockRetrieve.mockResolvedValue([makeKbArticle('article_1')])
     mockSynthesize.mockResolvedValue({
       kind: 'no_answer',
       answer: 'I could not find a specific answer to that.',
@@ -370,7 +370,7 @@ describe('POST /api/widget/kb-ask', () => {
     ).result!
 
     expect(result.kind).toBe('no_answer')
-    expect(result.related.map((r) => r.articleId)).toEqual(['kb_article_1'])
+    expect(result.related.map((r) => r.articleId)).toEqual(['article_1'])
     // The retrieved set was reused; no second retrieval call.
     expect(mockRetrieve).toHaveBeenCalledTimes(1)
   })

@@ -66,18 +66,18 @@ beforeEach(() => {
 describe('searchArticleIdsRanked', () => {
   it('returns ranked ids from the semantic path when embeddings are available', async () => {
     mockGenerateKbEmbedding.mockResolvedValue([0.1, 0.2])
-    mockLimit.mockResolvedValue([{ id: 'kb_article_2' }, { id: 'kb_article_1' }])
+    mockLimit.mockResolvedValue([{ id: 'article_2' }, { id: 'article_1' }])
 
     const ids = await searchArticleIdsRanked('invite teammates', { audience: 'team' })
-    expect(ids).toEqual(['kb_article_2', 'kb_article_1'])
+    expect(ids).toEqual(['article_2', 'article_1'])
   })
 
   it('falls back to keyword ranking when embeddings are unavailable', async () => {
     mockGenerateKbEmbedding.mockResolvedValue(null)
-    mockLimit.mockResolvedValue([{ id: 'kb_article_3' }])
+    mockLimit.mockResolvedValue([{ id: 'article_3' }])
 
     const ids = await searchArticleIdsRanked('billing', { audience: 'team' })
-    expect(ids).toEqual(['kb_article_3'])
+    expect(ids).toEqual(['article_3'])
   })
 
   it('team audience sees drafts and private categories', async () => {

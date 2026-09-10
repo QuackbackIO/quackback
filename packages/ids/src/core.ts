@@ -12,7 +12,13 @@
  */
 
 import { typeid, TypeID } from 'typeid-js'
-import { ID_PREFIXES, type IdPrefix, type EntityType } from './prefixes'
+import {
+  ID_PREFIXES,
+  ID_PREFIX_ALIASES,
+  prefixMatches,
+  type IdPrefix,
+  type EntityType,
+} from './prefixes'
 import type { TypeId, EntityIdMap } from './types'
 
 /**
@@ -147,7 +153,7 @@ export function getTypeIdPrefix(typeIdString: string): string {
 export function isValidTypeId(value: string, expectedPrefix?: IdPrefix): boolean {
   try {
     const tid = TypeID.fromString(value)
-    if (expectedPrefix && tid.getType() !== expectedPrefix) {
+    if (expectedPrefix && !prefixMatches(tid.getType(), expectedPrefix)) {
       return false
     }
     // Also verify the suffix is valid base32 by attempting UUID conversion
@@ -159,10 +165,12 @@ export function isValidTypeId(value: string, expectedPrefix?: IdPrefix): boolean
 }
 
 /**
- * Type guard for checking if a string is a valid TypeID with specific prefix
+ * Type guard for a TypeID whose serialized prefix is exactly `prefix`.
+ * Retired aliases (`kb_article_…`) are valid inbound article ids via
+ * `isValidTypeId` / `ensureTypeId`, but they are not `TypeId<'article'>`.
  */
 export function isTypeId<P extends IdPrefix>(value: string, prefix: P): value is TypeId<P> {
-  return isValidTypeId(value, prefix)
+  return isValidTypeId(value) && getTypeIdPrefix(value) === prefix
 }
 
 /**
@@ -242,8 +250,8 @@ export function normalizeToUuid(id: string, expectedPrefix?: IdPrefix): string {
   // Parse as TypeID
   const parsed = parseTypeId(id)
 
-  // Validate prefix if specified
-  if (expectedPrefix && parsed.prefix !== expectedPrefix) {
+  // Validate prefix if specified (aliases of the expected prefix are ok)
+  if (expectedPrefix && !prefixMatches(parsed.prefix, expectedPrefix)) {
     throw new Error(`Expected ${expectedPrefix} ID, got ${parsed.prefix}`)
   }
 
@@ -267,10 +275,29 @@ export function ensureTypeId<P extends IdPrefix>(id: string, prefix: P): TypeId<
     return fromUuid(prefix, id)
   }
 
-  // Validate it's a TypeID with correct prefix
+  // Validate it's a TypeID with the correct prefix (or a retired alias)
   if (!isValidTypeId(id, prefix)) {
     throw new Error(`Invalid ${prefix} ID: ${id}`)
   }
 
+  const parsed = parseTypeId(id)
+  if (parsed.prefix !== prefix) {
+    return fromUuid(prefix, parsed.uuid)
+  }
+
   return id as TypeId<P>
+}
+
+/**
+ * Canonical TypeID plus retired serialized forms of the same UUID.
+ * Use when comparing against text columns or JSON that may still store
+ * an alias prefix (e.g. `kb_article_…` after articles emit `article_…`).
+ */
+export function typeIdLookupKeys(id: string, prefix: IdPrefix): string[] {
+  const canonical = ensureTypeId(id, prefix)
+  const uuid = toUuid(canonical)
+  const aliases = Object.entries(ID_PREFIX_ALIASES)
+    .filter(([, mapped]) => mapped === prefix)
+    .map(([alias]) => TypeID.fromUUID(alias, uuid).toString())
+  return [canonical, ...aliases]
 }

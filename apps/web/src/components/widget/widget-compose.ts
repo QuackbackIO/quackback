@@ -27,7 +27,7 @@ export type WidgetOpenPayload = {
 export type WidgetOpenCommand =
   | { type: 'new-post'; title?: string; body?: string; boardSlug?: string }
   | { type: 'post'; postId: string }
-  | { type: 'article'; articleId: string } // slug or `article_` / `kb_article_` TypeID
+  | { type: 'article'; articleId: string } // slug or `article_` TypeID (`kb_article_` still accepted)
   | { type: 'changelog'; entryId?: string }
   | { type: 'help'; query?: string }
   | { type: 'messenger' }

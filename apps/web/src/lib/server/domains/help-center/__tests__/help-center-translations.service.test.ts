@@ -22,7 +22,7 @@ function createInsertChain() {
   chain.returning = vi.fn().mockResolvedValue([
     {
       id: 'kb_article_translation_1',
-      articleId: 'kb_article_1',
+      articleId: 'article_1',
       locale: 'de',
       title: 'Titel',
       description: null,
@@ -46,7 +46,7 @@ function createUpdateChain() {
   chain.returning = vi.fn().mockResolvedValue([
     {
       id: 'kb_article_translation_1',
-      articleId: 'kb_article_1',
+      articleId: 'article_1',
       locale: 'de',
       title: 'Titel',
       description: null,
@@ -110,29 +110,29 @@ beforeEach(() => {
 describe('article translations', () => {
   it('lists translations for an article', async () => {
     mockArticleTranslationFindMany.mockResolvedValue([{ locale: 'de' }])
-    const result = await listArticleTranslations('kb_article_1' as KbArticleId)
+    const result = await listArticleTranslations('article_1' as KbArticleId)
     expect(result).toEqual([{ locale: 'de' }])
   })
 
   it('returns null when a translation does not exist', async () => {
     mockArticleTranslationFindFirst.mockResolvedValue(undefined)
-    expect(await getArticleTranslation('kb_article_1' as KbArticleId, 'de')).toBeNull()
+    expect(await getArticleTranslation('article_1' as KbArticleId, 'de')).toBeNull()
   })
 
   it('getPublishedArticleTranslation returns null for a draft translation', async () => {
     mockArticleTranslationFindFirst.mockResolvedValue({ status: 'draft' })
-    expect(await getPublishedArticleTranslation('kb_article_1' as KbArticleId, 'de')).toBeNull()
+    expect(await getPublishedArticleTranslation('article_1' as KbArticleId, 'de')).toBeNull()
   })
 
   it('getPublishedArticleTranslation returns the row when published', async () => {
     const row = { status: 'published', title: 'Titel' }
     mockArticleTranslationFindFirst.mockResolvedValue(row)
-    expect(await getPublishedArticleTranslation('kb_article_1' as KbArticleId, 'de')).toEqual(row)
+    expect(await getPublishedArticleTranslation('article_1' as KbArticleId, 'de')).toEqual(row)
   })
 
   it('upserts via insert + onConflictDoUpdate on (articleId, locale)', async () => {
     const result = await upsertArticleTranslation({
-      articleId: 'kb_article_1' as KbArticleId,
+      articleId: 'article_1' as KbArticleId,
       locale: 'de',
       title: 'Titel',
       content: 'Inhalt',
@@ -143,11 +143,7 @@ describe('article translations', () => {
   })
 
   it('sets translation status and errors when the translation does not exist', async () => {
-    const result = await setArticleTranslationStatus(
-      'kb_article_1' as KbArticleId,
-      'de',
-      'published'
-    )
+    const result = await setArticleTranslationStatus('article_1' as KbArticleId, 'de', 'published')
     expect(result.status).toBe('published')
   })
 
@@ -161,12 +157,12 @@ describe('article translations', () => {
     } as any)
 
     await expect(
-      setArticleTranslationStatus('kb_article_1' as KbArticleId, 'de', 'published')
+      setArticleTranslationStatus('article_1' as KbArticleId, 'de', 'published')
     ).rejects.toThrow(/before publishing/i)
   })
 
   it('deletes a translation', async () => {
-    await deleteArticleTranslation('kb_article_1' as KbArticleId, 'de')
+    await deleteArticleTranslation('article_1' as KbArticleId, 'de')
     // no throw is sufficient; the mocked db.delete().where() always resolves
   })
 
@@ -176,7 +172,7 @@ describe('article translations', () => {
       { locale: 'fr', status: 'draft', updatedAt: new Date('2026-01-03') },
     ])
 
-    const statuses = await getArticleTranslationStatuses('kb_article_1' as KbArticleId, [
+    const statuses = await getArticleTranslationStatuses('article_1' as KbArticleId, [
       'de',
       'fr',
       'es',

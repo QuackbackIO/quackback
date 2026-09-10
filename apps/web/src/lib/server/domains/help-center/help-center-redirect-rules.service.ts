@@ -12,16 +12,39 @@ import {
   eq,
   and,
   desc,
+  inArray,
   helpCenterRedirectRules,
   helpCenterArticles,
   helpCenterCategories,
 } from '@/lib/server/db'
-import type { KbArticleId, KbCategoryId, HcRedirectRuleId } from '@quackback/ids'
+import {
+  ensureTypeId,
+  typeIdLookupKeys,
+  type KbArticleId,
+  type KbCategoryId,
+  type HcRedirectRuleId,
+} from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError, InternalError } from '@/lib/shared/errors'
 import { isUniqueViolation } from '@/lib/server/utils'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'help-center-redirect-rules' })
+
+function canonicalArticleTargetId(targetId: string): KbArticleId {
+  try {
+    return ensureTypeId(targetId, 'article')
+  } catch {
+    return targetId as KbArticleId
+  }
+}
+
+function articleTargetLookupKeys(targetId: string): string[] {
+  try {
+    return typeIdLookupKeys(targetId, 'article')
+  } catch {
+    return [targetId]
+  }
+}
 
 export type RedirectTargetType = 'article' | 'category'
 
@@ -54,7 +77,7 @@ async function requirePublishedTarget(
 ): Promise<string> {
   if (targetType === 'article') {
     const article = await db.query.helpCenterArticles.findFirst({
-      where: eq(helpCenterArticles.id, targetId as KbArticleId),
+      where: eq(helpCenterArticles.id, canonicalArticleTargetId(targetId)),
       columns: { title: true, publishedAt: true, deletedAt: true },
     })
     if (!article || article.deletedAt) {
@@ -85,45 +108,51 @@ async function requirePublishedTarget(
   return category.name
 }
 
-/** Best-effort label lookup for the settings-card list; null if the target vanished. */
-async function lookupTargetLabel(
-  targetType: RedirectTargetType,
-  targetId: string
-): Promise<string | null> {
-  if (targetType === 'article') {
-    const article = await db.query.helpCenterArticles.findFirst({
-      where: eq(helpCenterArticles.id, targetId as KbArticleId),
-      columns: { title: true },
-    })
-    return article?.title ?? null
-  }
-  const category = await db.query.helpCenterCategories.findFirst({
-    where: eq(helpCenterCategories.id, targetId as KbCategoryId),
-    columns: { name: true },
-  })
-  return category?.name ?? null
-}
-
 export async function listRedirectRules(): Promise<HelpCenterRedirectRule[]> {
   const rows = await db
     .select()
     .from(helpCenterRedirectRules)
     .orderBy(desc(helpCenterRedirectRules.createdAt))
 
-  const withLabels = await Promise.all(
-    rows.map(async (row) => {
-      const targetLabel = await lookupTargetLabel(row.targetType, row.targetId).catch(() => null)
-      return {
-        id: row.id,
-        path: row.path,
-        targetType: row.targetType,
-        targetId: row.targetId,
-        targetLabel,
-        createdAt: row.createdAt,
-      }
-    })
-  )
-  return withLabels
+  const articleIds = new Set<KbArticleId>()
+  const categoryIds = new Set<KbCategoryId>()
+  for (const row of rows) {
+    if (row.targetType === 'article') articleIds.add(canonicalArticleTargetId(row.targetId))
+    else categoryIds.add(row.targetId as KbCategoryId)
+  }
+
+  const [articles, categories] = await Promise.all([
+    articleIds.size === 0
+      ? Promise.resolve([] as Array<{ id: KbArticleId; title: string }>)
+      : db
+          .select({ id: helpCenterArticles.id, title: helpCenterArticles.title })
+          .from(helpCenterArticles)
+          .where(inArray(helpCenterArticles.id, [...articleIds])),
+    categoryIds.size === 0
+      ? Promise.resolve([] as Array<{ id: KbCategoryId; name: string }>)
+      : db
+          .select({ id: helpCenterCategories.id, name: helpCenterCategories.name })
+          .from(helpCenterCategories)
+          .where(inArray(helpCenterCategories.id, [...categoryIds])),
+  ])
+
+  const articleTitleById = new Map(articles.map((article) => [article.id, article.title]))
+  const categoryNameById = new Map(categories.map((category) => [category.id, category.name]))
+
+  return rows.map((row) => {
+    const targetLabel =
+      row.targetType === 'article'
+        ? (articleTitleById.get(canonicalArticleTargetId(row.targetId)) ?? null)
+        : (categoryNameById.get(row.targetId as KbCategoryId) ?? null)
+    return {
+      id: row.id,
+      path: row.path,
+      targetType: row.targetType,
+      targetId: row.targetId,
+      targetLabel,
+      createdAt: row.createdAt,
+    }
+  })
 }
 
 export async function createRedirectRule(
@@ -135,13 +164,23 @@ export async function createRedirectRule(
   try {
     const [row] = await db
       .insert(helpCenterRedirectRules)
-      .values({ path, targetType: input.targetType, targetId: input.targetId })
+      .values({
+        path,
+        targetType: input.targetType,
+        targetId:
+          input.targetType === 'article'
+            ? canonicalArticleTargetId(input.targetId)
+            : input.targetId,
+      })
       .returning()
     return { ...row, targetLabel }
   } catch (error) {
     if (error instanceof ValidationError || error instanceof NotFoundError) throw error
     if (isUniqueViolation(error)) {
-      throw new ConflictError('HC_REDIRECT_PATH_TAKEN', `A redirect rule for "${path}" already exists`)
+      throw new ConflictError(
+        'HC_REDIRECT_PATH_TAKEN',
+        `A redirect rule for "${path}" already exists`
+      )
     }
     log.error({ err: error }, 'failed to create redirect rule')
     throw new InternalError('DATABASE_ERROR', 'Failed to create redirect rule', error)
@@ -157,12 +196,13 @@ export async function deleteRedirectRulesForTarget(
   targetType: RedirectTargetType,
   targetId: string
 ): Promise<void> {
+  const targetIds = targetType === 'article' ? articleTargetLookupKeys(targetId) : [targetId]
   await db
     .delete(helpCenterRedirectRules)
     .where(
       and(
         eq(helpCenterRedirectRules.targetType, targetType),
-        eq(helpCenterRedirectRules.targetId, targetId)
+        inArray(helpCenterRedirectRules.targetId, targetIds)
       )
     )
 }
@@ -181,7 +221,7 @@ export async function resolveRedirectRule(path: string): Promise<string | null> 
 
   if (rule.targetType === 'article') {
     const article = await db.query.helpCenterArticles.findFirst({
-      where: eq(helpCenterArticles.id, rule.targetId as KbArticleId),
+      where: eq(helpCenterArticles.id, canonicalArticleTargetId(rule.targetId)),
       with: { category: true },
     })
     if (!article || article.deletedAt || !article.publishedAt) return null

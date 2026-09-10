@@ -103,7 +103,7 @@ beforeEach(async () => {
 
 describe('recordArticleFeedback', () => {
   it('returns the id of the vote it inserted so an anonymous visitor can explain it', async () => {
-    const feedbackId = await recordArticleFeedback('kb_article_1' as KbArticleId, false)
+    const feedbackId = await recordArticleFeedback('article_1' as KbArticleId, false)
 
     expect(feedbackId).toMatch(/^kb_article_feedback_/)
     const [inserted] = insertValuesCalls[0] as [{ id: string; helpful: boolean }]
@@ -114,14 +114,14 @@ describe('recordArticleFeedback', () => {
   it('returns the existing id when a known visitor repeats the same vote', async () => {
     mockFeedbackFindFirst.mockResolvedValue({
       id: 'kb_article_feedback_1',
-      articleId: 'kb_article_1',
+      articleId: 'article_1',
       principalId: 'principal_1',
       helpful: false,
       reason: 'Missing the CLI flag',
     })
 
     const feedbackId = await recordArticleFeedback(
-      'kb_article_1' as KbArticleId,
+      'article_1' as KbArticleId,
       false,
       'principal_1' as PrincipalId
     )
@@ -133,13 +133,13 @@ describe('recordArticleFeedback', () => {
   it('clears the reason when a vote flips to helpful', async () => {
     mockFeedbackFindFirst.mockResolvedValue({
       id: 'kb_article_feedback_1',
-      articleId: 'kb_article_1',
+      articleId: 'article_1',
       principalId: 'principal_1',
       helpful: false,
       reason: 'Missing the CLI flag',
     })
 
-    await recordArticleFeedback('kb_article_1' as KbArticleId, true, 'principal_1' as PrincipalId)
+    await recordArticleFeedback('article_1' as KbArticleId, true, 'principal_1' as PrincipalId)
 
     expect(updateSetCalls[0]).toEqual([{ helpful: true, reason: null }])
   })
@@ -214,7 +214,7 @@ describe('listArticleFeedbackReasons', () => {
       },
     ])
 
-    const reasons = await listArticleFeedbackReasons('kb_article_1' as KbArticleId)
+    const reasons = await listArticleFeedbackReasons('article_1' as KbArticleId)
 
     expect(reasons.map((r) => r.reason)).toEqual([
       'The screenshots are out of date',
@@ -223,7 +223,7 @@ describe('listArticleFeedbackReasons', () => {
   })
 
   it('caps the page size it asks the database for', async () => {
-    await listArticleFeedbackReasons('kb_article_1' as KbArticleId, 500)
+    await listArticleFeedbackReasons('article_1' as KbArticleId, 500)
 
     const [query] = mockFeedbackFindMany.mock.calls[0] as [{ limit: number }]
     expect(query.limit).toBe(100)

@@ -193,7 +193,7 @@ describe('createArticleSchema', () => {
 describe('updateArticleSchema', () => {
   it('accepts partial update', () => {
     const result = updateArticleSchema.safeParse({
-      id: 'kb_article_1',
+      id: 'article_1',
       title: 'Updated Title',
     })
     expect(result.success).toBe(true)
@@ -241,7 +241,7 @@ describe('listArticlesSchema', () => {
 describe('articleFeedbackSchema', () => {
   it('accepts valid feedback', () => {
     const result = articleFeedbackSchema.safeParse({
-      articleId: 'kb_article_1',
+      articleId: 'article_1',
       helpful: true,
     })
     expect(result.success).toBe(true)
@@ -253,13 +253,13 @@ describe('articleFeedbackSchema', () => {
   })
 
   it('rejects missing helpful', () => {
-    const result = articleFeedbackSchema.safeParse({ articleId: 'kb_article_1' })
+    const result = articleFeedbackSchema.safeParse({ articleId: 'article_1' })
     expect(result.success).toBe(false)
   })
 
   it('rejects non-boolean helpful', () => {
     const result = articleFeedbackSchema.safeParse({
-      articleId: 'kb_article_1',
+      articleId: 'article_1',
       helpful: 'yes',
     })
     expect(result.success).toBe(false)

@@ -1,20 +1,20 @@
 import { describe, it, expect } from 'vitest'
 import { generateId } from '@quackback/ids'
-import { articleTypeIdToKbArticleId, isArticleTypeId } from '../article-ref'
+import { canonicalArticleTypeId, isArticleTypeId } from '../article-ref'
 
 describe('article TypeID refs', () => {
   it('treats article_ and kb_article_ as the same row', () => {
-    const stored = generateId('kb_article')
-    const published = `article_${stored.slice('kb_article_'.length)}`
-    expect(isArticleTypeId(stored)).toBe(true)
-    expect(isArticleTypeId(published)).toBe(true)
-    expect(articleTypeIdToKbArticleId(published)).toBe(stored)
-    expect(articleTypeIdToKbArticleId(stored)).toBe(stored)
+    const canonical = generateId('article')
+    const legacy = `kb_article_${canonical.slice('article_'.length)}`
+    expect(isArticleTypeId(canonical)).toBe(true)
+    expect(isArticleTypeId(legacy)).toBe(true)
+    expect(canonicalArticleTypeId(legacy)).toBe(canonical)
+    expect(canonicalArticleTypeId(canonical)).toBe(canonical)
   })
 
   it('rejects slugs and the old art_ prefix', () => {
     expect(isArticleTypeId('pricing')).toBe(false)
     expect(isArticleTypeId('art_01h...')).toBe(false)
-    expect(articleTypeIdToKbArticleId('pricing')).toBeNull()
+    expect(canonicalArticleTypeId('pricing')).toBeNull()
   })
 })

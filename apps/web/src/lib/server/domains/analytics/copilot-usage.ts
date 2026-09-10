@@ -100,7 +100,7 @@ import {
   assistantPendingActions,
   helpCenterArticles,
 } from '@/lib/server/db'
-import type { KbArticleId, PrincipalId } from '@quackback/ids'
+import { ensureTypeId, typeIdLookupKeys, type KbArticleId, type PrincipalId } from '@quackback/ids'
 import { loadAuthors } from '@/lib/server/domains/principals/principal-display'
 import { COPILOT_EVENT_TYPES } from '@/lib/shared/assistant/copilot-contract'
 import { ratePctOrNull } from '@/lib/shared/percent'
@@ -111,6 +111,24 @@ const TOP_TEAMMATES_LIMIT = 10
 /** Cap on the cited-sources leaderboard — same glance-level cap as the
  *  per-teammate list, not a full content audit. */
 const TOP_CITED_SOURCES_LIMIT = 10
+
+function canonicalArticleId(id: string): KbArticleId | null {
+  try {
+    return ensureTypeId(id, 'article')
+  } catch {
+    return null
+  }
+}
+
+function mergeCountsByCanonicalArticleId(rows: Array<{ id: string; n: number }>) {
+  const counts = new Map<KbArticleId, number>()
+  for (const row of rows) {
+    const id = canonicalArticleId(row.id)
+    if (!id) continue
+    counts.set(id, (counts.get(id) ?? 0) + row.n)
+  }
+  return counts
+}
 
 /** The `*_inserted` event kinds, derived from the shared vocabulary (never
  *  hand-listed) so a new insert kind is counted here the day the contract
@@ -392,7 +410,8 @@ export async function getCopilotUsageMetrics(from: Date, to: Date): Promise<Copi
     // both a content owner and a stable admin fix-it URL (see
     // CopilotUsageMetrics.topCitedSources).
     db.execute(sql`
-        SELECT elem->>'id' AS id, count(DISTINCT ai_usage_log.id)::int AS n
+        SELECT regexp_replace(elem->>'id', '^kb_article_', 'article_') AS id,
+               count(DISTINCT ai_usage_log.id)::int AS n
         FROM ai_usage_log
         CROSS JOIN LATERAL jsonb_array_elements(
           CASE WHEN jsonb_typeof(metadata->'citedSources') = 'array'
@@ -405,8 +424,8 @@ export async function getCopilotUsageMetrics(from: Date, to: Date): Promise<Copi
           AND elem->>'type' = 'article'
           AND created_at >= ${from.toISOString()}
           AND created_at < ${to.toISOString()}
-        GROUP BY elem->>'id'
-        ORDER BY count(DISTINCT ai_usage_log.id) DESC, elem->>'id' ASC
+        GROUP BY 1
+        ORDER BY 2 DESC, 1 ASC
         LIMIT ${TOP_CITED_SOURCES_LIMIT}
       `) as unknown as Promise<Array<{ id: string; n: number }>>,
   ])
@@ -424,7 +443,11 @@ export async function getCopilotUsageMetrics(from: Date, to: Date): Promise<Copi
   // Title/url are resolved live off the articles table rather than carried in
   // ai_usage_log metadata, so a rename shows up immediately and a deleted
   // article drops out of the report instead of linking nowhere.
-  const citedArticleIds = citedSourceRows.map((row) => row.id as KbArticleId)
+  // Historical rows may still store `kb_article_…`; fold those onto `article_…`
+  // before joining titles or matching insert events.
+  const citedCounts = mergeCountsByCanonicalArticleId(citedSourceRows)
+  const citedArticleIds = [...citedCounts.keys()]
+  const citedLookupKeys = citedArticleIds.flatMap((id) => typeIdLookupKeys(id, 'article'))
   const [articles, sourceInsertRows] = await Promise.all([
     citedArticleIds.length
       ? db
@@ -455,7 +478,7 @@ export async function getCopilotUsageMetrics(from: Date, to: Date): Promise<Copi
             AND created_at >= ${from.toISOString()}
             AND created_at < ${to.toISOString()}
             AND elem = ANY(ARRAY[${sql.join(
-              citedArticleIds.map((id) => sql`${id}`),
+              citedLookupKeys.map((id) => sql`${id}`),
               sql`, `
             )}]::text[])
           GROUP BY elem
@@ -463,18 +486,18 @@ export async function getCopilotUsageMetrics(from: Date, to: Date): Promise<Copi
       : Promise.resolve([]),
   ])
   const articleTitleById = new Map(articles.map((a) => [a.id, a.title]))
-  const sourceInsertsById = new Map(sourceInsertRows.map((row) => [row.id, row.n]))
-  const topCitedSources: CopilotCitedSourceCount[] = citedSourceRows
-    .filter((row) => articleTitleById.has(row.id as KbArticleId))
-    .map((row) => {
-      const id = row.id as KbArticleId
-      const inserted = sourceInsertsById.get(row.id)
+  const sourceInsertsById = mergeCountsByCanonicalArticleId(sourceInsertRows)
+  const topCitedSources: CopilotCitedSourceCount[] = citedArticleIds
+    .filter((id) => articleTitleById.has(id))
+    .map((id) => {
+      const questions = citedCounts.get(id)!
+      const inserted = sourceInsertsById.get(id)
       return {
         id,
         title: articleTitleById.get(id)!,
         url: `/admin/help-center/articles/${id}`,
-        questions: row.n,
-        insertRate: inserted === undefined ? null : ratePctOrNull(inserted, row.n),
+        questions,
+        insertRate: inserted === undefined ? null : ratePctOrNull(inserted, questions),
       }
     })
 

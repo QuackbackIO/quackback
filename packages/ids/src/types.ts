@@ -321,8 +321,10 @@ export type PostMergeSuggestionId = TypeId<'post_merge_sug'>
 /** Help center category ID - e.g., kb_category_01h455vb4pex5vsknk084sn02q */
 export type KbCategoryId = TypeId<'kb_category'>
 
-/** Help center article ID - e.g., kb_article_01h455vb4pex5vsknk084sn02q */
-export type KbArticleId = TypeId<'kb_article'>
+/** Help center article ID - e.g., article_01h455vb4pex5vsknk084sn02q */
+export type ArticleId = TypeId<'article'>
+/** @deprecated Prefer `ArticleId`. Same type; inbound `kb_article_…` is rewritten. */
+export type KbArticleId = ArticleId
 
 /** Article feedback ID - e.g., kb_article_feedback_01h455vb4pex5vsknk084sn02q */
 export type KbArticleFeedbackId = TypeId<'kb_article_feedback'>

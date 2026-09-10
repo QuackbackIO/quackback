@@ -17,7 +17,7 @@ function createUpdateChain() {
   })
   chain.returning = vi.fn().mockResolvedValue([
     {
-      id: 'kb_article_1' as KbArticleId,
+      id: 'article_1' as KbArticleId,
       slug: 'test',
       title: 'Test',
       description: null,
@@ -125,7 +125,7 @@ beforeEach(async () => {
 describe('getArticleById', () => {
   it('returns article with category when found', async () => {
     mockArticleFindFirst.mockResolvedValue({
-      id: 'kb_article_1' as KbArticleId,
+      id: 'article_1' as KbArticleId,
       slug: 'how-to-start',
       title: 'How to Start',
       content: 'Content here',
@@ -152,7 +152,7 @@ describe('getArticleById', () => {
       avatarUrl: null,
     })
 
-    const result = await getArticleById('kb_article_1' as KbArticleId)
+    const result = await getArticleById('article_1' as KbArticleId)
     expect(result.title).toBe('How to Start')
     expect(result.category.name).toBe('Getting Started')
     expect(result.author?.name).toBe('Test Author')
@@ -161,7 +161,7 @@ describe('getArticleById', () => {
   it('throws NotFoundError when article does not exist', async () => {
     mockArticleFindFirst.mockResolvedValue(null)
 
-    await expect(getArticleById('kb_article_missing' as KbArticleId)).rejects.toMatchObject({
+    await expect(getArticleById('article_missing' as KbArticleId)).rejects.toMatchObject({
       code: 'ARTICLE_NOT_FOUND',
     })
   })
@@ -177,7 +177,7 @@ describe('createArticle', () => {
     })
     articleInsertChain.returning = vi.fn().mockResolvedValue([
       {
-        id: 'kb_article_new1' as KbArticleId,
+        id: 'article_new1' as KbArticleId,
         slug: 'how-to-start',
         title: 'How to Start',
         content: 'Some content',
@@ -291,7 +291,7 @@ describe('createArticle', () => {
     chain.values = vi.fn(() => chain)
     chain.returning = vi.fn().mockResolvedValue([
       {
-        id: 'kb_article_new' as KbArticleId,
+        id: 'article_new' as KbArticleId,
         slug: 'title',
         title: 'Title',
         content: 'Content',
@@ -328,7 +328,7 @@ describe('createArticle slug generation (#285)', () => {
     })
     chain.returning = vi.fn().mockResolvedValue([
       {
-        id: 'kb_article_new1' as KbArticleId,
+        id: 'article_new1' as KbArticleId,
         slug: 'placeholder',
         title: 'placeholder',
         content: 'Content',
@@ -371,9 +371,7 @@ describe('createArticle slug generation (#285)', () => {
   })
 
   it('appends a counter when the derived slug collides', async () => {
-    mockArticleFindFirst
-      .mockResolvedValueOnce({ id: 'kb_article_other' })
-      .mockResolvedValueOnce(null)
+    mockArticleFindFirst.mockResolvedValueOnce({ id: 'article_other' }).mockResolvedValueOnce(null)
     await createArticle({ categoryId: 'kb_category_1', title: '反馈', content: 'c' }, author)
     expect(insertedSlug()).toBe('fan-kui-2')
   })
@@ -381,13 +379,13 @@ describe('createArticle slug generation (#285)', () => {
 
 describe('updateArticle slug generation (#285)', () => {
   it('falls back to a generic slug when an explicit empty slug is given', async () => {
-    await updateArticle('kb_article_1' as KbArticleId, { slug: '' })
+    await updateArticle('article_1' as KbArticleId, { slug: '' })
     expect((updateSetCalls[0][0] as Record<string, unknown>).slug).toBe('article')
   })
 
   it('keeps an explicit slug that only collides with the same article', async () => {
-    mockArticleFindFirst.mockResolvedValueOnce({ id: 'kb_article_1' })
-    await updateArticle('kb_article_1' as KbArticleId, { slug: 'guide' })
+    mockArticleFindFirst.mockResolvedValueOnce({ id: 'article_1' })
+    await updateArticle('article_1' as KbArticleId, { slug: 'guide' })
     expect((updateSetCalls[0][0] as Record<string, unknown>).slug).toBe('guide')
   })
 })
@@ -397,7 +395,7 @@ describe('publishArticle', () => {
     mockCategoryFindFirst.mockResolvedValue({ id: 'kb_category_1', slug: 'test', name: 'Test' })
     mockPrincipalFindFirst.mockResolvedValue(null)
 
-    const result = await publishArticle('kb_article_1' as KbArticleId)
+    const result = await publishArticle('article_1' as KbArticleId)
     expect(result).toBeDefined()
     expect(updateSetCalls.length).toBeGreaterThan(0)
   })
@@ -408,7 +406,7 @@ describe('unpublishArticle', () => {
     mockCategoryFindFirst.mockResolvedValue({ id: 'kb_category_1', slug: 'test', name: 'Test' })
     mockPrincipalFindFirst.mockResolvedValue(null)
 
-    const result = await unpublishArticle('kb_article_1' as KbArticleId)
+    const result = await unpublishArticle('article_1' as KbArticleId)
     expect(result).toBeDefined()
     expect(updateSetCalls.length).toBeGreaterThan(0)
   })
@@ -416,7 +414,7 @@ describe('unpublishArticle', () => {
 
 describe('deleteArticle', () => {
   it('soft deletes the article', async () => {
-    const result = await deleteArticle('kb_article_1' as KbArticleId)
+    const result = await deleteArticle('article_1' as KbArticleId)
     expect(result).toBeUndefined()
   })
 
@@ -428,7 +426,7 @@ describe('deleteArticle', () => {
     emptyChain.returning = vi.fn().mockResolvedValue([])
     vi.mocked(db.update).mockReturnValueOnce(emptyChain as never)
 
-    await expect(deleteArticle('kb_article_missing' as KbArticleId)).rejects.toMatchObject({
+    await expect(deleteArticle('article_missing' as KbArticleId)).rejects.toMatchObject({
       code: 'ARTICLE_NOT_FOUND',
     })
   })
@@ -444,7 +442,7 @@ describe('createArticle with position and description', () => {
     })
     articleInsertChain.returning = vi.fn().mockResolvedValue([
       {
-        id: 'kb_article_new1' as KbArticleId,
+        id: 'article_new1' as KbArticleId,
         slug: 'how-to-start',
         title: 'How to Start',
         description: 'A short intro',
@@ -501,7 +499,7 @@ describe('updateArticle authorId validation', () => {
       type: 'user',
     })
     await expect(
-      updateArticle('kb_article_1' as KbArticleId, {}, 'principal_portal' as PrincipalId)
+      updateArticle('article_1' as KbArticleId, {}, 'principal_portal' as PrincipalId)
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
   })
 
@@ -512,13 +510,13 @@ describe('updateArticle authorId validation', () => {
       type: 'service',
     })
     await expect(
-      updateArticle('kb_article_1' as KbArticleId, {}, 'principal_svc' as PrincipalId)
+      updateArticle('article_1' as KbArticleId, {}, 'principal_svc' as PrincipalId)
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
   })
 
   it('allows re-asserting a former-member as author when they already own the article', async () => {
     mockArticleFindFirst.mockResolvedValueOnce({
-      id: 'kb_article_1',
+      id: 'article_1',
       principalId: 'principal_former',
     })
     mockPrincipalFindFirst.mockResolvedValueOnce({
@@ -533,7 +531,7 @@ describe('updateArticle authorId validation', () => {
     chain.where = vi.fn(() => chain)
     chain.returning = vi.fn().mockResolvedValue([
       {
-        id: 'kb_article_1' as KbArticleId,
+        id: 'article_1' as KbArticleId,
         slug: 'test',
         title: 'Test',
         content: 'Content',
@@ -557,7 +555,7 @@ describe('updateArticle authorId validation', () => {
     })
 
     await expect(
-      updateArticle('kb_article_1' as KbArticleId, {}, 'principal_former' as PrincipalId)
+      updateArticle('article_1' as KbArticleId, {}, 'principal_former' as PrincipalId)
     ).resolves.toBeDefined()
   })
 
@@ -574,7 +572,7 @@ describe('updateArticle authorId validation', () => {
     chain.where = vi.fn(() => chain)
     chain.returning = vi.fn().mockResolvedValue([
       {
-        id: 'kb_article_1' as KbArticleId,
+        id: 'article_1' as KbArticleId,
         slug: 'test',
         title: 'Test',
         content: 'Content',
@@ -598,7 +596,7 @@ describe('updateArticle authorId validation', () => {
     })
 
     await expect(
-      updateArticle('kb_article_1' as KbArticleId, {}, 'principal_member' as PrincipalId)
+      updateArticle('article_1' as KbArticleId, {}, 'principal_member' as PrincipalId)
     ).resolves.toBeDefined()
   })
 })
@@ -617,7 +615,7 @@ describe('updateArticle with position and description', () => {
     })
     articleUpdateChain.returning = vi.fn().mockResolvedValue([
       {
-        id: 'kb_article_1' as KbArticleId,
+        id: 'article_1' as KbArticleId,
         slug: 'test',
         title: 'Test',
         description: 'Updated desc',
@@ -639,7 +637,7 @@ describe('updateArticle with position and description', () => {
     mockCategoryFindFirst.mockResolvedValue({ id: 'kb_category_1', slug: 'test', name: 'Test' })
     mockPrincipalFindFirst.mockResolvedValue(null)
 
-    await updateArticle('kb_article_1' as KbArticleId, {
+    await updateArticle('article_1' as KbArticleId, {
       position: 3,
       description: 'Updated desc',
     })
@@ -661,7 +659,7 @@ describe('restoreArticle', () => {
     chain.where = vi.fn().mockReturnValue(chain)
     chain.returning = vi.fn().mockResolvedValue([
       {
-        id: 'kb_article_1' as KbArticleId,
+        id: 'article_1' as KbArticleId,
         slug: 'how-to-start',
         title: 'How to Start',
         content: 'Some content',
@@ -683,7 +681,7 @@ describe('restoreArticle', () => {
   it('restores a deleted article within the 30-day window', async () => {
     const recentDeletedAt = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000)
     mockArticleFindFirst.mockResolvedValue({
-      id: 'kb_article_1' as KbArticleId,
+      id: 'article_1' as KbArticleId,
       slug: 'how-to-start',
       title: 'How to Start',
       content: 'Some content',
@@ -710,8 +708,8 @@ describe('restoreArticle', () => {
     })
     mockPrincipalFindFirst.mockResolvedValue(null)
 
-    const result = await restoreArticle('kb_article_1' as KbArticleId)
-    expect(result.id).toBe('kb_article_1')
+    const result = await restoreArticle('article_1' as KbArticleId)
+    expect(result.id).toBe('article_1')
     expect(result.deletedAt).toBeNull()
     expect(setCallsCapture.length).toBeGreaterThan(0)
     const setArgs = setCallsCapture[0][0] as Record<string, unknown>
@@ -720,14 +718,14 @@ describe('restoreArticle', () => {
 
   it('throws NotFoundError for a non-existent article', async () => {
     mockArticleFindFirst.mockResolvedValue(null)
-    await expect(restoreArticle('kb_article_missing' as KbArticleId)).rejects.toMatchObject({
+    await expect(restoreArticle('article_missing' as KbArticleId)).rejects.toMatchObject({
       code: 'ARTICLE_NOT_FOUND',
     })
   })
 
   it('throws ValidationError when article is not deleted', async () => {
     mockArticleFindFirst.mockResolvedValue({
-      id: 'kb_article_1' as KbArticleId,
+      id: 'article_1' as KbArticleId,
       slug: 'live',
       title: 'Live Article',
       content: 'Content',
@@ -742,7 +740,7 @@ describe('restoreArticle', () => {
       updatedAt: new Date('2024-01-01'),
       deletedAt: null,
     })
-    await expect(restoreArticle('kb_article_1' as KbArticleId)).rejects.toMatchObject({
+    await expect(restoreArticle('article_1' as KbArticleId)).rejects.toMatchObject({
       code: 'VALIDATION_ERROR',
     })
   })
@@ -750,7 +748,7 @@ describe('restoreArticle', () => {
   it('throws ValidationError when article is outside the 30-day restore window', async () => {
     const oldDeletedAt = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000)
     mockArticleFindFirst.mockResolvedValue({
-      id: 'kb_article_1' as KbArticleId,
+      id: 'article_1' as KbArticleId,
       slug: 'old',
       title: 'Old Article',
       content: 'Content',
@@ -765,7 +763,7 @@ describe('restoreArticle', () => {
       updatedAt: new Date('2024-01-01'),
       deletedAt: oldDeletedAt,
     })
-    await expect(restoreArticle('kb_article_1' as KbArticleId)).rejects.toMatchObject({
+    await expect(restoreArticle('article_1' as KbArticleId)).rejects.toMatchObject({
       code: 'RESTORE_EXPIRED',
     })
   })

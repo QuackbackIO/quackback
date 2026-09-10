@@ -16,7 +16,7 @@ afterEach(() => {
 })
 
 const META: AskAiSourceMeta = {
-  articleId: 'kb_article_1',
+  articleId: 'article_1',
   urlId: 1,
   title: 'Refund policy',
   slug: 'refund-policy',
@@ -34,7 +34,7 @@ describe('useAskAi', () => {
     const answer = {
       kind: 'grounded',
       answer: 'Do the thing.',
-      sources: [{ articleId: 'kb_article_1' }],
+      sources: [{ articleId: 'article_1' }],
     }
     stubAguiFetch(
       aguiRun({
@@ -63,7 +63,7 @@ describe('useAskAi', () => {
       kind: 'grounded',
       answer: 'A.',
       // The model cited an id that never appeared in the snapshot join.
-      sources: [{ articleId: 'kb_article_1' }, { articleId: 'kb_ghost' }],
+      sources: [{ articleId: 'article_1' }, { articleId: 'kb_ghost' }],
     }
     stubAguiFetch(
       aguiRun({ middle: [snapshotChunk([META]), ...structuredDeltas(answer)], result: answer })
@@ -149,7 +149,7 @@ describe('useAskAi', () => {
   })
 
   it('reset returns the hook to idle', async () => {
-    const answer = { kind: 'grounded', answer: 'A.', sources: [{ articleId: 'kb_article_1' }] }
+    const answer = { kind: 'grounded', answer: 'A.', sources: [{ articleId: 'article_1' }] }
     stubAguiFetch(
       aguiRun({ middle: [snapshotChunk([META]), ...structuredDeltas(answer)], result: answer })
     )

@@ -29,7 +29,7 @@ function renderDialog() {
   return render(
     <QueryClientProvider client={queryClient}>
       <ArticleFeedbackReasonsDialog
-        articleId={'kb_article_1' as KbArticleId}
+        articleId={'article_1' as KbArticleId}
         open
         onOpenChange={() => {}}
       />
@@ -61,7 +61,7 @@ describe('ArticleFeedbackReasonsDialog', () => {
     expect(rendered[0]).toContain('The screenshots are out of date')
     expect(rendered[1]).toContain('Missing the CLI flag')
 
-    expect(listReasons).toHaveBeenCalledWith({ data: { articleId: 'kb_article_1' } })
+    expect(listReasons).toHaveBeenCalledWith({ data: { articleId: 'article_1' } })
   })
 
   it('says so when no unhelpful vote came with an explanation', async () => {
