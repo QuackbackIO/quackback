@@ -321,7 +321,12 @@ function WidgetSiteCard({
               />
               {statusTitle}
             </p>
-            <Button asChild size="sm" variant="ghost" className="shrink-0">
+            <Button
+              asChild
+              size="sm"
+              variant={presence.tone === 'idle' ? 'default' : 'ghost'}
+              className="shrink-0"
+            >
               <Link to="/admin/settings/widget/install">
                 {presence.tone === 'idle' ? 'Install widget' : 'View installation'}
                 <ArrowRightIcon className="h-3.5 w-3.5" />
@@ -329,6 +334,12 @@ function WidgetSiteCard({
             </Button>
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">{statusDescription}</p>
+          {presence.tone === 'idle' && (
+            <p className="text-xs text-muted-foreground mt-1">
+              The preview on this page is admin-only. Customers see the widget after you paste the
+              snippet.
+            </p>
+          )}
           {status.hasWidgetInstalled && <WidgetLastDetected at={status.widgetLastDetectedAt} />}
         </div>
       </div>

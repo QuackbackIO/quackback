@@ -433,6 +433,39 @@ export async function getWidgetSecret(): Promise<string | null> {
   }
 }
 
+/**
+ * Admin-only: return the workspace signing secret, minting one if missing.
+ * Identify and other public paths must keep using {@link getWidgetSecret}.
+ */
+export async function ensureWidgetSecret(): Promise<string> {
+  log.debug('ensure widget secret')
+  try {
+    const org = await requireSettings()
+    if (org.widgetSecret) return org.widgetSecret
+
+    const secret = generateWidgetSecret()
+    const [updated] = await db
+      .update(settings)
+      .set({ widgetSecret: secret })
+      .where(and(eq(settings.id, org.id), isNull(settings.widgetSecret)))
+      .returning({ widgetSecret: settings.widgetSecret })
+    if (updated?.widgetSecret) {
+      log.info('minted widget secret')
+      await invalidateSettingsCache()
+      return updated.widgetSecret
+    }
+
+    const again = await requireSettings()
+    if (!again.widgetSecret) {
+      throw new Error('widget secret missing after ensure')
+    }
+    return again.widgetSecret
+  } catch (error) {
+    log.error({ err: error }, 'ensure widget secret failed')
+    wrapDbError('ensure widget secret', error)
+  }
+}
+
 /** Regenerate the widget secret. Returns the new secret once. */
 export async function regenerateWidgetSecret(): Promise<string> {
   log.info('regenerate widget secret')

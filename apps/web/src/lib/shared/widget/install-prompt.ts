@@ -1,10 +1,10 @@
 export interface WidgetInstallPromptInput {
   instanceUrl: string
   widgetSecret: string | null
+  /** When true, the prompt includes identify steps and the signing secret. */
+  identify?: boolean
 }
 
-export const WIDGET_SECRET_ENV = 'QUACKBACK_WIDGET_SECRET'
-export const WIDGET_SECRET_PLACEHOLDER = 'wgt_YOUR_WIDGET_SECRET'
 export const WIDGET_SKILL_REPO = 'https://github.com/QuackbackIO/skills'
 export const WIDGET_SKILL_RAW =
   'https://raw.githubusercontent.com/QuackbackIO/skills/main/skills/quackback/install-widget/SKILL.md'
@@ -18,38 +18,65 @@ function trimTrailingSlash(url: string): string {
 /** Short prompt an agent pastes: install the public skill, then use these credentials. */
 export function buildWidgetInstallPrompt(input: WidgetInstallPromptInput): string {
   const instanceUrl = trimTrailingSlash(input.instanceUrl)
-  const secret = input.widgetSecret ?? WIDGET_SECRET_PLACEHOLDER
-  const secretNote = input.widgetSecret
-    ? 'A widget secret is included below. Store it in a server-only env var. Never ship it to the browser, commit it, or log it.'
-    : 'No widget secret has been generated yet. Use the placeholder below and ask the user to paste the real secret from Admin → Settings → Widget after they regenerate it.'
+  const identify = input.identify === true
+  const secret = identify ? input.widgetSecret : null
 
-  return `# Install the Quackback widget
+  if (!identify) {
+    return `# Install the Quackback widget
 
-${secretNote}
+Launcher only. Anonymous visitors should see the widget after init.
+
+Do not ask the user for QUACKBACK_WIDGET_SECRET. Do not invent a signing secret. Do not implement identify. Quackback Cloud and self-host do not define a widget secret env var.
 
 ## Workspace
 - Instance URL: ${instanceUrl}
 - SDK script: ${instanceUrl}/api/widget/sdk.js
-- Widget secret (server-only): ${secret}
-- Env var name: ${WIDGET_SECRET_ENV}
+
+## What to do
+1. Add the snippet or npm package and call init. Use the URL above.
+2. Remind the user to turn on Show on your website in Admin → Settings → Widget → Install.
+3. Stop. If they later want identify, they will copy the signing secret from Admin → Settings → Widget → Install.
+
+Optional skill (launcher steps only): ${WIDGET_SKILL_RAW}
+
+Repo: ${WIDGET_SKILL_REPO}
+`
+  }
+
+  const secretLine = secret
+    ? `- Widget signing secret (host app server only): ${secret}`
+    : '- Widget signing secret: ask the user to copy it from Admin → Settings → Widget → Install. Do not invent one.'
+
+  return `# Install the Quackback widget
+
+${
+  secret
+    ? 'A signing secret is included below. Store it in the host app server-side secret store — not in Quackback Cloud or self-host env. Never ship it to the browser, commit it, or log it.'
+    : 'The user wants identify. Copy the signing secret from Admin → Settings → Widget → Install. Do not invent one.'
+}
+
+## Workspace
+- Instance URL: ${instanceUrl}
+- SDK script: ${instanceUrl}/api/widget/sdk.js
+${secretLine}
 
 ## What to do
 1. Fetch and follow the \`install-widget\` skill:
    - ${WIDGET_SKILL_RAW}
    - ${WIDGET_IDENTIFY_RAW}
-2. Follow every step in order. Do not skip identify.
+2. Install the launcher, then identify signed-in users with a backend-signed ssoToken.
 3. Use the credentials above. Do not invent APIs.
 
 Repo: ${WIDGET_SKILL_REPO}
 
-## Identify (required for signed-in users)
-The widget appears after init for anonymous visitors. Call identify as soon as you know who the user is: when the app first loads if they are already signed in, and immediately after login or signup. Once per session — not on every navigation. Mint a fresh HS256 JWT at that moment and call \`Quackback("identify", { ssoToken })\`. \`sub\` is a unique stable host user id, not email. Call \`Quackback("logout")\` on logout. Never pass raw id/email from the client.
+## Identify (signed-in users)
+The widget appears after init for anonymous visitors. Call identify as soon as you know who the user is: when the app first loads if they are already signed in, and immediately after login or signup. Once per session — not on every navigation. Mint a fresh HS256 JWT at that moment with the signing secret from Admin → Settings → Widget → Install and call \`Quackback("identify", { ssoToken })\`. \`sub\` is a unique stable host user id, not email. Call \`Quackback("logout")\` on logout. Never pass raw id/email from the client.
 `
 }
 
 export interface WidgetInstallSnippetInput {
   instanceUrl: string
-  /** Recommended. When true, the snippet identifies signed-in users. Default true. */
+  /** When true, the snippet documents identify. Default false. */
   identify?: boolean
 }
 
@@ -62,10 +89,10 @@ function widgetLoader(instanceUrl: string): string {
     d.head.appendChild(s)})(window,document);`
 }
 
-/** Script-tag snippet for hand install. Identify-on is the recommended default. */
+/** Script-tag snippet for hand install. Launcher-only is the default. */
 export function buildWidgetInstallSnippet(input: WidgetInstallSnippetInput): string {
   const loader = widgetLoader(input.instanceUrl)
-  if (input.identify === false) {
+  if (input.identify !== true) {
     return `<script>
   // Quackback: anonymous visitors see the launcher after init.
   ${loader}
@@ -82,7 +109,8 @@ export function buildWidgetInstallSnippet(input: WidgetInstallSnippetInput): str
   // Call when you first know who they are — app load if already signed in,
   // and right after login/signup. Not on every navigation.
   //
-  // Server: sign a ~5m HS256 JWT with QUACKBACK_WIDGET_SECRET.
+  // Server: sign a ~5m HS256 JWT with the signing secret from
+  // Admin → Settings → Widget → Install.
   //   sub   — stable unique user id (never email)
   //   email — required
   //   name  — optional

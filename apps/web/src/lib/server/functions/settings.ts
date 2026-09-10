@@ -740,8 +740,8 @@ export const fetchWidgetConfig = createServerFn({ method: 'GET' }).handler(async
 export const fetchWidgetSecret = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch widget secret')
   await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
-  const { getWidgetSecret } = await import('@/lib/server/domains/settings/settings.widget')
-  return await getWidgetSecret()
+  const { ensureWidgetSecret } = await import('@/lib/server/domains/settings/settings.widget')
+  return await ensureWidgetSecret()
 })
 
 const messengerConfigInputSchema = z.object({

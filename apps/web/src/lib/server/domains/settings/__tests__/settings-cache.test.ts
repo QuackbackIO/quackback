@@ -144,7 +144,8 @@ const {
   saveHeaderLogoKey,
   deleteHeaderLogoKey,
 } = await import('../settings.media')
-const { updateWidgetConfig, regenerateWidgetSecret } = await import('../settings.widget')
+const { updateWidgetConfig, regenerateWidgetSecret, ensureWidgetSecret } =
+  await import('../settings.widget')
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -401,6 +402,41 @@ describe('settings write functions invalidate cache', () => {
   it('regenerateWidgetSecret invalidates cache', async () => {
     await regenerateWidgetSecret()
     expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
+  })
+})
+
+describe('ensureWidgetSecret', () => {
+  it('returns an existing secret without writing or invalidating', async () => {
+    mockFindFirst.mockResolvedValue(makeSettingsRow({ widgetSecret: 'wgt_existing' }))
+    await expect(ensureWidgetSecret()).resolves.toBe('wgt_existing')
+    expect(mockUpdate).not.toHaveBeenCalled()
+    expect(mockCacheDel).not.toHaveBeenCalled()
+  })
+
+  it('mints when missing and invalidates cache', async () => {
+    mockFindFirst.mockResolvedValue(makeSettingsRow({ widgetSecret: null }))
+    let stored: string | undefined
+    mockSet.mockImplementation((payload: { widgetSecret?: string }) => {
+      stored = payload.widgetSecret
+      return { where: mockWhere }
+    })
+    mockReturning.mockImplementation(() => Promise.resolve([{ widgetSecret: stored }]))
+
+    const secret = await ensureWidgetSecret()
+    expect(secret).toMatch(/^wgt_[a-f0-9]{64}$/)
+    expect(secret).toBe(stored)
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
+  })
+
+  it('returns the winner when the insert loses the race', async () => {
+    const existing = `wgt_${'b'.repeat(64)}`
+    mockFindFirst
+      .mockResolvedValueOnce(makeSettingsRow({ widgetSecret: null }))
+      .mockResolvedValueOnce(makeSettingsRow({ widgetSecret: existing }))
+    mockReturning.mockResolvedValue([])
+
+    await expect(ensureWidgetSecret()).resolves.toBe(existing)
+    expect(mockCacheDel).not.toHaveBeenCalled()
   })
 })
 

@@ -302,8 +302,10 @@ export function useRegenerateWidgetSecret() {
 
   return useMutation({
     mutationFn: () => regenerateWidgetSecretFn(),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: settingsQueries.widgetSecret().queryKey }),
+    onSuccess: (secret) => {
+      queryClient.setQueryData(settingsQueries.widgetSecret().queryKey, secret)
+      return queryClient.invalidateQueries({ queryKey: settingsQueries.widgetSecret().queryKey })
+    },
   })
 }
 

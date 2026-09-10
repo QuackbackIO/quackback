@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const invalidateQueries = vi.fn()
+const setQueryData = vi.fn()
 const updateThemeFn = vi.fn(async () => ({ ok: true }))
 const updateCustomCssFn = vi.fn(async () => ({ ok: true }))
 
@@ -10,7 +11,7 @@ vi.mock('@tanstack/react-query', async () => {
   return {
     ...actual,
     useMutation: vi.fn((options: unknown) => options),
-    useQueryClient: vi.fn(() => ({ invalidateQueries })),
+    useQueryClient: vi.fn(() => ({ invalidateQueries, setQueryData })),
   }
 })
 
@@ -59,12 +60,13 @@ describe('settings config mutations cache invalidation', () => {
     expect(result).toBeInstanceOf(Promise)
   })
 
-  it('useRegenerateWidgetSecret.onSuccess awaits invalidation of the widgetSecret query', async () => {
+  it('useRegenerateWidgetSecret.onSuccess writes the new secret then awaits invalidation', async () => {
     const { useRegenerateWidgetSecret } = await import('../settings')
-    const mutation = useRegenerateWidgetSecret() as { onSuccess?: () => unknown }
+    const mutation = useRegenerateWidgetSecret() as { onSuccess?: (secret: string) => unknown }
 
-    const result = mutation.onSuccess?.()
+    const result = mutation.onSuccess?.('wgt_new')
 
+    expect(setQueryData).toHaveBeenCalledWith(['settings', 'widgetSecret'], 'wgt_new')
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['settings', 'widgetSecret'] })
     expect(result).toBeInstanceOf(Promise)
   })

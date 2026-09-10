@@ -9,7 +9,6 @@ import {
   CodeBracketIcon,
 } from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -17,13 +16,13 @@ import { PageHeader } from '@/components/shared/page-header'
 import { WarningBox } from '@/components/shared/warning-box'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { WidgetLastDetected } from '@/components/admin/settings/widget/widget-last-detected'
+import { WidgetSigningSecret } from '@/components/admin/settings/widget/widget-signing-secret'
 import { copyWithFallback } from '@/components/admin/activation-action-button'
 import { CopyAgentPromptButton } from '@/components/admin/settings/widget/copy-agent-prompt-button'
 import {
   WIDGET_SKILL_REPO,
   buildWidgetInstallPrompt,
   buildWidgetInstallSnippet,
-  maskWidgetSecretInPrompt,
 } from '@/lib/shared/widget/install-prompt'
 import { widgetInstallPresence, widgetOriginVerifiedLabel } from '@/lib/shared/widget/widget-origin'
 import {
@@ -32,6 +31,7 @@ import {
 } from '@/lib/shared/widget/sdk-version'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { adminQueries } from '@/lib/client/queries/admin'
+import { useUpdateWidgetConfig } from '@/lib/client/mutations/settings'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 
@@ -40,15 +40,19 @@ export const Route = createFileRoute('/admin/settings/widget/install')({
     assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MANAGE)
     await Promise.all([
       context.queryClient.ensureQueryData(settingsQueries.widgetSecret()),
+      context.queryClient.ensureQueryData(settingsQueries.widgetConfig()),
       context.queryClient.ensureQueryData(adminQueries.onboardingStatus()),
     ])
   },
   component: WidgetInstallPage,
 })
 
-function WidgetInstallPage() {
+export function WidgetInstallPage() {
   const { baseUrl } = useRouteContext({ from: '__root__' })
   const secretQuery = useSuspenseQuery(settingsQueries.widgetSecret())
+  const widgetConfigQuery = useSuspenseQuery(settingsQueries.widgetConfig())
+  const updateWidgetConfig = useUpdateWidgetConfig()
+  const [enabled, setEnabled] = useState(Boolean(widgetConfigQuery.data.enabled))
   const statusQuery = useQuery({
     ...adminQueries.onboardingStatus(),
     refetchInterval: (query) => {
@@ -65,8 +69,8 @@ function WidgetInstallPage() {
     enabled: Boolean(status.hasWidgetEnabled),
     originHost: status.widgetOriginHost,
   })
-  const [copying, setCopying] = useState<'snippet' | 'secret' | null>(null)
-  const [identifyUsers, setIdentifyUsers] = useState(true)
+  const [copyingSnippet, setCopyingSnippet] = useState(false)
+  const [identifyUsers, setIdentifyUsers] = useState(false)
   const snippet = useMemo(
     () =>
       buildWidgetInstallSnippet({
@@ -80,23 +84,20 @@ function WidgetInstallPage() {
       buildWidgetInstallPrompt({
         instanceUrl: baseUrl ?? '',
         widgetSecret: secretQuery.data,
+        identify: identifyUsers,
       }),
-    [baseUrl, secretQuery.data]
-  )
-  const previewPrompt = useMemo(
-    () => maskWidgetSecretInPrompt(agentPrompt, secretQuery.data),
-    [agentPrompt, secretQuery.data]
+    [baseUrl, secretQuery.data, identifyUsers]
   )
 
-  async function copy(kind: 'snippet' | 'secret', text: string) {
-    setCopying(kind)
+  async function copySnippet() {
+    setCopyingSnippet(true)
     try {
-      await copyWithFallback(text)
+      await copyWithFallback(snippet)
       toast.success('Copied')
     } catch {
       toast.error('Copy failed. Select the text and copy it manually.')
     } finally {
-      setCopying(null)
+      setCopyingSnippet(false)
     }
   }
 
@@ -110,17 +111,61 @@ function WidgetInstallPage() {
       </Button>
       <PageHeader
         icon={CodeBracketIcon}
-        title={mode === 'messenger' ? 'Connect Messenger' : 'Install feedback widget'}
-        description="Copy a prompt that installs the Quackback skill and wires the widget into your codebase."
+        title={mode === 'messenger' ? 'Add Messenger to your site' : 'Install feedback widget'}
+        description="Get the launcher on your site. Identifying signed-in users is optional."
       />
 
       <SettingsCard
-        title="Ask your agent"
-        description="Paste this into Claude, Cursor, Codex, or Copilot. It fetches the install-widget skill, detects your stack, and identifies signed-in users."
+        title="1. Add the launcher"
+        description="Paste this before the closing body tag. Visitors see the launcher only when Show on your website is on. No secret needed."
       >
-        <CopyAgentPromptButton prompt={agentPrompt} />
+        <div className="mb-4 flex items-center justify-between gap-4 rounded-lg border border-border/50 p-4">
+          <div className="min-w-0">
+            <Label htmlFor="show-on-website" className="cursor-pointer text-sm font-medium">
+              Show on your website
+            </Label>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Visitors cannot see the launcher until this is on, even after you paste the snippet.
+            </p>
+          </div>
+          <Switch
+            id="show-on-website"
+            checked={enabled}
+            disabled={updateWidgetConfig.isPending}
+            onCheckedChange={(checked) => {
+              const previous = enabled
+              setEnabled(checked)
+              void updateWidgetConfig
+                .mutateAsync({ enabled: checked })
+                .then(() => {
+                  toast.success(
+                    checked ? 'Widget is visible on your site' : 'Widget hidden from visitors'
+                  )
+                })
+                .catch(() => {
+                  setEnabled(previous)
+                  toast.error('Could not update widget visibility')
+                })
+            }}
+            aria-label="Show on your website"
+          />
+        </div>
+        <pre className="max-h-72 overflow-auto rounded-lg bg-zinc-950 p-4 text-xs text-zinc-100">
+          <code>{snippet}</code>
+        </pre>
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <Button onClick={() => void copySnippet()} disabled={copyingSnippet}>
+            <ClipboardDocumentIcon className="h-4 w-4" />
+            {copyingSnippet ? 'Copying…' : 'Copy snippet'}
+          </Button>
+          <CopyAgentPromptButton prompt={agentPrompt} />
+        </div>
         <p className="mt-3 text-xs text-muted-foreground">
-          The prompt points your agent at the{' '}
+          If an agent asks for QUACKBACK_WIDGET_SECRET, that is the signing secret in step 2 — and
+          you do not need it for the launcher.
+          {identifyUsers
+            ? ' The prompt includes your signing secret; paste it into a local agent only.'
+            : ' The agent prompt is launcher-only until you turn identify on below.'}{' '}
           <a
             href={WIDGET_SKILL_REPO}
             target="_blank"
@@ -128,68 +173,44 @@ function WidgetInstallPage() {
             className="underline underline-offset-2"
           >
             install-widget skill
-          </a>{' '}
-          and includes your widget secret. Paste it into a local agent only.
+          </a>
         </p>
-        <pre className="mt-4 max-h-72 overflow-auto rounded-lg border border-border/50 bg-muted/30 p-3 text-xs font-mono leading-relaxed text-foreground whitespace-pre-wrap">
-          {previewPrompt}
-        </pre>
       </SettingsCard>
 
       <SettingsCard
-        title="Or add the snippet yourself"
-        description="Paste this before the closing body tag if you would rather install it by hand."
+        title="2. Identify signed-in users (optional)"
+        description="Skip this to get the launcher up. Use it later so votes, chats, and posts attach to a person. Your server signs a short-lived token; the browser never sees this secret."
       >
-        <div className="mb-4 flex items-center justify-between gap-4 rounded-lg border border-border/50 p-4">
+        {secretQuery.data ? (
+          <WidgetSigningSecret secret={secretQuery.data} />
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Couldn&apos;t load the signing secret. Refresh this page.
+          </p>
+        )}
+        <div className="mt-4 flex items-center justify-between gap-4 rounded-lg border border-border/50 p-4">
           <div className="min-w-0">
             <Label htmlFor="identify-users" className="cursor-pointer text-sm font-medium">
-              Identify signed-in users
-              <Badge size="sm" shape="pill" variant="secondary">
-                Recommended
-              </Badge>
+              Add identify steps to the snippet and prompt
             </Label>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Attach conversations to a person. Your server signs a short-lived token; the browser
-              only sends that token, never raw id or email.
+              Adds the identify comments and, for the agent prompt, the signing secret.
             </p>
           </div>
           <Switch
             id="identify-users"
             checked={identifyUsers}
             onCheckedChange={setIdentifyUsers}
-            aria-label="Identify signed-in users"
+            aria-label="Add identify steps to the snippet and prompt"
           />
-        </div>
-        <pre className="max-h-72 overflow-auto rounded-lg bg-zinc-950 p-4 text-xs text-zinc-100">
-          <code>{snippet}</code>
-        </pre>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            onClick={() => copy('snippet', snippet)}
-            disabled={copying !== null}
-          >
-            <ClipboardDocumentIcon className="h-4 w-4" />
-            {copying === 'snippet' ? 'Copying…' : 'Copy installation snippet'}
-          </Button>
-          {identifyUsers && secretQuery.data && (
-            <Button
-              variant="outline"
-              onClick={() => copy('secret', secretQuery.data!)}
-              disabled={copying !== null}
-            >
-              <ClipboardDocumentIcon className="h-4 w-4" />
-              {copying === 'secret' ? 'Copying…' : 'Copy widget signing secret'}
-            </Button>
-          )}
         </div>
       </SettingsCard>
 
       <SettingsCard
-        title="Verify the connection"
+        title="Connection"
         description={
           presence.tone === 'idle'
-            ? 'Waiting for the first request from your deployed site. Checking every five seconds.'
+            ? 'Open a page that includes the snippet. Localhost counts. This updates when we see a request.'
             : status.widgetSdkNeedsUpdate
               ? widgetSdkUpdateDescription(status.widgetSdkVersion, status.currentWidgetSdkVersion)
               : widgetOriginVerifiedLabel(status.widgetOriginHost)
@@ -216,19 +237,15 @@ function WidgetInstallPage() {
           </div>
         ) : presence.tone === 'detected' ? (
           <div className="space-y-2">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm text-muted-foreground">
-                The SDK is installed. Turn on Show on your website so visitors can see it.
-              </p>
-              <Button asChild size="sm" variant="outline">
-                <Link to="/admin/settings/widget">Widget settings</Link>
-              </Button>
-            </div>
+            <p className="text-sm text-muted-foreground">
+              The SDK is installed. Turn on Show on your website above so visitors can see it.
+            </p>
             <WidgetLastDetected at={status.widgetLastDetectedAt} />
           </div>
         ) : (
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
-            <ArrowPathIcon className="h-4 w-4 animate-spin" /> Waiting for installation…
+            <ArrowPathIcon className="h-4 w-4 animate-spin" /> Waiting for a page load with the
+            snippet…
           </p>
         )}
       </SettingsCard>
