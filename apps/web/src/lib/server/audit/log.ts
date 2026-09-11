@@ -160,7 +160,8 @@ export type AuditEventType =
 export type AuditEventOutcome = 'success' | 'failure'
 
 export type AuditActorType = 'user' | 'service' | 'anonymous' | 'system' | 'api_key' | 'support'
-export type AuditAuthMethod = 'password' | 'sso' | 'magic_link' | 'ott' | 'api_key' | 'session'
+export type AuditAuthMethod =
+  'password' | 'sso' | 'oauth' | 'magic_link' | 'ott' | 'api_key' | 'session'
 
 export interface AuditActor {
   userId?: UserId | null
