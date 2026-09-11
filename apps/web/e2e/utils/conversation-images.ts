@@ -49,6 +49,7 @@ export const LEGACY_WIDE_PNG = 'e2e-legacy-wide.png'
 export const PASTED_PNG = 'e2e-pasted.png'
 export const WIDGET_PNG = 'e2e-widget.png'
 export const CHANGELOG_PNG = 'e2e-changelog.png'
+export const POST_PNG = 'e2e-post.png'
 
 /** Serve fixture PNGs and stub upload endpoints so e2e never hits MinIO. */
 export async function stubConversationImageNetwork(page: Page): Promise<Buffer> {
@@ -61,7 +62,11 @@ export async function stubConversationImageNetwork(page: Page): Promise<Buffer> 
     if (route.request().method() !== 'POST') return route.continue()
     const body = route.request().postDataBuffer()?.toString('utf8') ?? ''
     const prefix = /name="prefix"\r\n\r\n([^\r]+)/.exec(body)?.[1] ?? 'chat-images'
-    const name = prefix.includes('changelog') ? CHANGELOG_PNG : PASTED_PNG
+    const name = prefix.includes('changelog')
+      ? CHANGELOG_PNG
+      : prefix.includes('post')
+        ? POST_PNG
+        : PASTED_PNG
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -82,6 +87,7 @@ export async function stubConversationImageNetwork(page: Page): Promise<Buffer> 
   await page.route(`**/api/storage/chat-images/${PASTED_PNG}*`, fulfillPng)
   await page.route(`**/api/storage/chat-images/${WIDGET_PNG}*`, fulfillPng)
   await page.route(`**/api/storage/changelog-images/${CHANGELOG_PNG}*`, fulfillPng)
+  await page.route(`**/api/storage/post-images/${POST_PNG}*`, fulfillPng)
 
   return png
 }
@@ -116,5 +122,22 @@ export async function expectLandscapeContainThumb(button: Locator) {
     throw new Error(
       `expected landscape thumb, got ${Math.round(box.width)}×${Math.round(box.height)}`
     )
+  }
+}
+
+/** The displayed <img> decoded real bytes (not a broken-image / filename chip). */
+export async function expectLoadedImage(img: Locator) {
+  await img.waitFor({ state: 'visible' })
+  const loaded = await img.evaluate((el) => {
+    if (!(el instanceof HTMLImageElement)) return { ok: false, reason: 'not an img' }
+    return {
+      ok: el.complete && el.naturalWidth > 0 && el.naturalHeight > 0,
+      naturalWidth: el.naturalWidth,
+      naturalHeight: el.naturalHeight,
+      src: el.currentSrc || el.src,
+    }
+  })
+  if (!loaded.ok) {
+    throw new Error(`expected a decoded image, got ${JSON.stringify(loaded)}`)
   }
 }
