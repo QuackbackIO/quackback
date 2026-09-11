@@ -292,7 +292,9 @@ function WidgetSiteCard({
             <Label htmlFor="widget-toggle" className="text-xs font-medium cursor-pointer">
               Show on your website
             </Label>
-            <p className="text-xs text-muted-foreground">Visible on pages that include the SDK</p>
+            <p className="text-xs text-muted-foreground">
+              Visitors see the launcher on pages you added it to
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <InlineSpinner visible={saving || isPending} />
@@ -328,7 +330,7 @@ function WidgetSiteCard({
               className="shrink-0"
             >
               <Link to="/admin/settings/widget/install">
-                {presence.tone === 'idle' ? 'Install widget' : 'View installation'}
+                {presence.tone === 'idle' ? 'Set it up' : 'View installation'}
                 <ArrowRightIcon className="h-3.5 w-3.5" />
               </Link>
             </Button>
@@ -336,8 +338,8 @@ function WidgetSiteCard({
           <p className="text-xs text-muted-foreground mt-0.5">{statusDescription}</p>
           {presence.tone === 'idle' && (
             <p className="text-xs text-muted-foreground mt-1">
-              The preview on this page is admin-only. Customers see the widget after you paste the
-              snippet.
+              The launcher on this page is only a preview. Visitors see it after you add it to your
+              site.
             </p>
           )}
           {status.hasWidgetInstalled && <WidgetLastDetected at={status.widgetLastDetectedAt} />}

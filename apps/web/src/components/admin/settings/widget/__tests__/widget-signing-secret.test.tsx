@@ -66,7 +66,7 @@ describe('WidgetSigningSecret', () => {
     const { WidgetSigningSecret } = await import('../widget-signing-secret')
     render(<WidgetSigningSecret secret="wgt_abc123secret" />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Regenerate…' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Regenerate signing secret' }))
     expect(screen.getByText('Regenerate signing secret?')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Regenerate secret' }))
 
@@ -81,7 +81,7 @@ describe('WidgetSigningSecret', () => {
     const { WidgetSigningSecret } = await import('../widget-signing-secret')
     render(<WidgetSigningSecret secret="wgt_abc123secret" />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Regenerate…' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Regenerate signing secret' }))
     fireEvent.click(screen.getByRole('button', { name: 'Regenerate secret' }))
 
     await waitFor(() => {

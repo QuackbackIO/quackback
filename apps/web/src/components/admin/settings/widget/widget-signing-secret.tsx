@@ -1,5 +1,10 @@
 import { useState } from 'react'
-import { ClipboardDocumentIcon, EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline'
+import {
+  ArrowPathIcon,
+  ClipboardDocumentIcon,
+  EyeIcon,
+  EyeSlashIcon,
+} from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
@@ -30,13 +35,9 @@ export function WidgetSigningSecret({ secret }: { secret: string }) {
 
   return (
     <div className="space-y-3">
-      <div>
-        <p className="text-sm font-medium">Signing secret</p>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          Paste this into your app&apos;s server env (any name). Do not add it to Quackback Cloud or
-          your Quackback host. Some older notes called it QUACKBACK_WIDGET_SECRET — same value.
-        </p>
-      </div>
+      <p className="text-xs text-muted-foreground">
+        Verifies the identity of signed-in users. Keep it private and server-side only.
+      </p>
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/50 bg-muted/30 px-3 py-2">
         <code className="min-w-0 flex-1 truncate font-mono text-xs" data-testid="signing-secret">
           {revealed ? secret : maskSigningSecret(secret)}
@@ -62,26 +63,28 @@ export function WidgetSigningSecret({ secret }: { secret: string }) {
             <ClipboardDocumentIcon className="h-4 w-4" />
             {copying ? 'Copying…' : 'Copy'}
           </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={regenerate.isPending}
+            onClick={() => setConfirmOpen(true)}
+            aria-label="Regenerate signing secret"
+          >
+            <ArrowPathIcon className="h-4 w-4" />
+            {regenerate.isPending ? 'Regenerating…' : 'Regenerate'}
+          </Button>
         </div>
       </div>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        disabled={regenerate.isPending}
-        onClick={() => setConfirmOpen(true)}
-      >
-        Regenerate…
-      </Button>
       <ConfirmDialog
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title="Regenerate signing secret?"
-        description="Existing identify tokens stop working until you update the secret in your product and redeploy. The launcher keeps working."
+        description="Signed-in users won't be recognized until you put the new secret in your app and redeploy. The launcher keeps working."
         warning={{
-          title: 'Identify breaks until you deploy the new secret',
+          title: 'Update the secret in your app before you regenerate',
           description:
-            'The old secret is invalidated immediately. Anonymous visitors are unaffected.',
+            'The old secret stops working immediately. Anonymous visitors are unaffected.',
         }}
         confirmLabel="Regenerate secret"
         variant="destructive"

@@ -22,6 +22,7 @@
  * - tickets.ts       list_tickets, get_ticket, create_ticket,
  *                    reply_to_ticket, add_ticket_note, link_ticket,
  *                    unlink_ticket
+ * - widget.ts        widget_install_status
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
@@ -34,6 +35,7 @@ import { registerSuggestionTools } from './suggestions'
 import { registerHelpCenterTools } from './help-center'
 import { registerConversationTools } from './conversations'
 import { registerTicketTools } from './tickets'
+import { registerWidgetTools } from './widget'
 
 export function registerTools(server: McpServer, auth: McpAuthContext) {
   registerSearchTools(server, auth)
@@ -44,4 +46,5 @@ export function registerTools(server: McpServer, auth: McpAuthContext) {
   registerHelpCenterTools(server, auth)
   registerConversationTools(server, auth)
   registerTicketTools(server, auth)
+  registerWidgetTools(server, auth)
 }

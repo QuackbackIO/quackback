@@ -19,7 +19,7 @@ describe('widget origin evidence copy', () => {
 describe('widgetInstallPresence', () => {
   it('stays idle until a request is observed', () => {
     expect(widgetInstallPresence({ connected: false, enabled: true })).toMatchObject({
-      title: 'Not detected yet',
+      title: 'Not on your site yet',
       tone: 'idle',
     })
   })
@@ -32,7 +32,7 @@ describe('widgetInstallPresence', () => {
         originHost: 'docs.example.com',
       })
     ).toEqual({
-      title: 'SDK detected',
+      title: 'On your site, but hidden',
       description:
         'First request came from docs.example.com. Turn on Show on your website so visitors can see it.',
       tone: 'detected',

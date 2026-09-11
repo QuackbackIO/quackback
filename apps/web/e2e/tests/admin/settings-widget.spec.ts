@@ -48,7 +48,7 @@ test.describe('Admin Widget Settings', () => {
 
   test('shows install status inside Add to your site', async ({ page }) => {
     await expect(page.getByText('Add to your site')).toBeVisible({ timeout: 10000 })
-    await expect(page.getByRole('link', { name: /Install widget|View installation/ })).toBeVisible()
+    await expect(page.getByRole('link', { name: /Set it up|View installation/ })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Installation' })).toHaveCount(0)
   })
 

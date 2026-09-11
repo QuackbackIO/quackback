@@ -53,15 +53,15 @@ export function widgetInstallPresence(input: {
 }): WidgetInstallPresence {
   if (!input.connected) {
     return {
-      title: 'Not detected yet',
-      description: 'Paste the SDK to connect it',
+      title: 'Not on your site yet',
+      description: 'Copy a prompt for your agent, then open a page to confirm it loaded.',
       tone: 'idle',
     }
   }
   const origin = widgetOriginVerifiedLabel(input.originHost)
   if (!input.enabled) {
     return {
-      title: 'SDK detected',
+      title: 'On your site, but hidden',
       description: `${origin} Turn on Show on your website so visitors can see it.`,
       tone: 'detected',
     }

@@ -190,3 +190,35 @@ describe('launcher setPlacement', () => {
     expect(bubble.style.right).toBe('')
   })
 })
+
+describe('launcher contained in a root', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+    try {
+      sessionStorage.clear()
+    } catch {
+      /* ignore */
+    }
+  })
+
+  it('positions absolutely inside the root instead of the viewport', () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+    const l = createLauncher({ placement: 'right', root, onClick: () => {} })
+    expect(l.el.parentElement).toBe(root)
+    expect(l.el.style.position).toBe('absolute')
+    expect(l.el.style.right).toBe('0px')
+    expect(l.el.style.bottom).toBe('0px')
+  })
+
+  it('does not write the host-page greeting dismiss key', () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+    const l = createLauncher({ placement: 'right', root, onClick: () => {} })
+    l.setGreeting('Hi')
+    const bubble = root.querySelector('div') as HTMLElement
+    ;(bubble.lastElementChild as HTMLElement).click()
+    expect(bubble.style.display).toBe('none')
+    expect(sessionStorage.getItem('quackback:launcher-greeting-dismissed')).toBeNull()
+  })
+})

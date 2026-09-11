@@ -234,7 +234,7 @@ export function buildLaunchTasks(
     title: 'Connect Messenger',
     description: status.hasWidgetInstalled
       ? `Messenger was found on ${status.widgetOriginHost ?? 'your site'}.`
-      : 'Add the SDK to your website to connect it.',
+      : 'Copy a prompt for your agent to add it to your site.',
     completed:
       status.hasWidgetInstalled === true &&
       status.hasWidgetEnabled === true &&
