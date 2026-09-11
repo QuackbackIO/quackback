@@ -233,6 +233,7 @@ export function StatusSubscribeButton({ className }: StatusSubscribeButtonProps)
                     <Checkbox
                       checked={selectedIds.includes(component.id)}
                       onCheckedChange={(checked) => toggleComponent(component.id, checked === true)}
+                      data-in-label
                     />
                     {component.name}
                   </label>

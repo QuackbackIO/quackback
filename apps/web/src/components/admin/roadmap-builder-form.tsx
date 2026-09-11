@@ -92,6 +92,7 @@ function FilterOptions({
                     next ? [...selected, option.id] : selected.filter((id) => id !== option.id)
                   )
                 }
+                data-in-label
               />
               {option.name}
             </label>
@@ -313,6 +314,7 @@ export function RoadmapBuilderForm({
                         <Checkbox
                           checked={!!column}
                           onCheckedChange={(checked) => toggleColumn(status, !!checked)}
+                          data-in-label
                         />
                         <span
                           className="size-2.5 rounded-full"

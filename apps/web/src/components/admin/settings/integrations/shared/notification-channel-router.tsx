@@ -758,6 +758,7 @@ function AddChannelDialog<TChannel extends Channel>({
                         [event.id]: checked === true,
                       }))
                     }
+                    data-in-label
                   />
                   {event.label}
                 </label>

@@ -376,7 +376,11 @@ function FieldDialog({
           )}
 
           <label className="flex items-center gap-2 text-sm">
-            <Checkbox checked={required} onCheckedChange={(v) => setRequired(v === true)} />
+            <Checkbox
+              checked={required}
+              onCheckedChange={(v) => setRequired(v === true)}
+              data-in-label
+            />
             Required
           </label>
 
@@ -385,6 +389,7 @@ function FieldDialog({
               <Checkbox
                 checked={visibleToCustomer}
                 onCheckedChange={(v) => setVisibleToCustomer(v === true)}
+                data-in-label
               />
               Show to customers on the New Ticket form
             </label>

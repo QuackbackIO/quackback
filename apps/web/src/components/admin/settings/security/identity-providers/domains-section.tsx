@@ -249,6 +249,7 @@ function DomainRow({
                 onCheckedChange={(v) => void handleEnforce(v === true)}
                 disabled={pending || disabled || !enforceable}
                 aria-label={`Require SSO for ${domain.name}`}
+                data-in-label
               />
               Require SSO
             </label>

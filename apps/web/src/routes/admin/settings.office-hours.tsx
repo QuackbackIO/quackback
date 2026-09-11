@@ -383,6 +383,7 @@ function OfficeHoursPage() {
                             }
                             disabled={isBusy}
                             aria-label={`Holiday ${index + 1} repeats every year`}
+                            data-in-label
                           />
                           Every year
                         </label>

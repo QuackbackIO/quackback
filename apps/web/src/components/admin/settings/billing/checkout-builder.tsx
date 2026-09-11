@@ -330,6 +330,7 @@ function BrandingAddOnRow(props: {
             checked={props.checked}
             onCheckedChange={(value) => props.onCheckedChange(value === true)}
             aria-label="Add branding removal to the order"
+            data-in-label
           />
         ) : null}
         <div className="min-w-0">

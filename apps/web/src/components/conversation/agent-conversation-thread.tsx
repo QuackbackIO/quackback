@@ -907,8 +907,9 @@ export function AgentConversationThread({
       // broad invalidation.
       appendToThread(res, false)
       // Belt-and-braces: sending via the Send button momentarily moves focus
-      // there, so hand it back and the next reply starts typing, not clicking.
-      activeEditorRef.current?.focus('end')
+      // there, so hand it back — but only if the user hasn't since moved on
+      // (e.g. clicked a triage control mid-flight); never yank focus back.
+      if (isSendControlFocused()) activeEditorRef.current?.focus('end')
     },
     onError: (error, vars) => {
       // Restore the composer to the exact draft cleared at send time so a failed
@@ -994,7 +995,7 @@ export function AgentConversationThread({
       pendingOwnSendScroll.current = true
       appendToThread(res)
       // See sendMutation.onSuccess — same Send-button focus cover.
-      activeEditorRef.current?.focus('end')
+      if (isSendControlFocused()) activeEditorRef.current?.focus('end')
     },
     onError: (_error, vars) => {
       vars.restoreDraft?.()
@@ -1418,6 +1419,14 @@ export function AgentConversationThread({
   // Reply and note render the SAME editor slot, one at a time, so they share
   // one handle ref: whichever is mounted owns it.
   const activeEditorRef = useRef<RichTextEditorHandle | null>(null)
+  // True while focus sits on the composer or the send/note-mode buttons
+  // around it — i.e. the user hasn't moved on to another control mid-flight,
+  // so an async send completion may safely hand focus back to the editor.
+  const isSendControlFocused = () => {
+    const el = document.activeElement as HTMLElement | null
+    if (!el || el === document.body) return true
+    return Boolean(el.closest('[data-inbox-composer]'))
+  }
   const focusComposerMode = useComposerFocus({
     noteMode,
     setNoteMode,
@@ -1510,7 +1519,9 @@ export function AgentConversationThread({
     const restoreDraft = () => {
       // The composer stays editable mid-flight, so the user may have typed
       // something new since the send. Never clobber that — instead move the
-      // failed text below it with a separator, so both survive.
+      // failed text below it with a separator, so both survive. The merge is
+      // JSON-first: the remount reads value.json, so a markdown-only merge
+      // would render invisible and be dropped on the next edit.
       const current = (useNote ? noteDraftRef : replyDraftRef).current
       const failedMarkdown = snapshot.markdown
       if (isEmptyTiptapDoc(current.json ?? undefined)) {
@@ -1521,9 +1532,29 @@ export function AgentConversationThread({
           setReplyDraft(snapshot)
           setReplyKey((k) => k + 1)
         }
-      } else if (failedMarkdown.trim()) {
+      } else if (failedMarkdown.trim() && snapshot.json) {
+        // JSON-first merge: the remount reads value.json, so a markdown-only
+        // merge would render invisible and be dropped on the next edit. The
+        // failed text is short (one message), so plain paragraphs are enough —
+        // no markdown parsing needed, and no server import in this component.
+        const failedParagraphs = failedMarkdown
+          .split(/\n{2,}/)
+          .map((block) => block.trim())
+          .filter(Boolean)
+          .map((text) => ({ type: 'paragraph', content: [{ type: 'text', text }] }))
+        const mergedJson = {
+          ...(current.json as unknown as Record<string, unknown>),
+          content: [
+            ...((current.json as unknown as { content?: unknown[] }).content ?? []),
+            {
+              type: 'paragraph',
+              content: [{ type: 'text', text: '— failed to send, kept below —' }],
+            },
+            ...failedParagraphs,
+          ],
+        } as TiptapContent
         const merged: ComposerDraft = {
-          json: current.json,
+          json: mergedJson,
           markdown: `${current.markdown.replace(/\s+$/, '')}\n\n--- failed to send, kept below ---\n\n${failedMarkdown}`,
         }
         if (useNote) {

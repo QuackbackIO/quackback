@@ -134,6 +134,7 @@ export function TicketFormFields({
                 <Checkbox
                   checked={values[field.key] === true}
                   onCheckedChange={(v) => onChange(field.key, v === true)}
+                  data-in-label
                 />
                 <span className="text-xs font-medium text-muted-foreground">
                   {field.label}

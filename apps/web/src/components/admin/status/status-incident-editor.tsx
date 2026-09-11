@@ -291,7 +291,11 @@ function StatusIncidentEditorContent({
                 <div className="ml-auto">
                   {terminal && (
                     <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
-                      <Checkbox checked={restore} onCheckedChange={(c) => setRestore(c === true)} />
+                      <Checkbox
+                        checked={restore}
+                        onCheckedChange={(c) => setRestore(c === true)}
+                        data-in-label
+                      />
                       Restore affected services to operational
                     </label>
                   )}
