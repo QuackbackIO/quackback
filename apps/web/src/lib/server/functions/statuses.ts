@@ -7,7 +7,7 @@ import { createServerFn } from '@tanstack/react-start'
 import type { PostStatusId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { HEX_COLOR_PATTERN, TaxonomyNameSchema } from '@/lib/shared/schemas/taxonomy'
+import { HexColorFormatSchema, TaxonomyNameSchema } from '@/lib/shared/schemas/taxonomy'
 import {
   listStatuses,
   getStatusById,
@@ -33,7 +33,7 @@ const createStatusSchema = z.object({
     .min(1, 'Slug is required')
     .max(50)
     .regex(/^[a-z0-9_]+$/, 'Slug must be lowercase with underscores'),
-  color: z.string().regex(HEX_COLOR_PATTERN, 'Invalid color format'),
+  color: HexColorFormatSchema,
   category: statusCategorySchema,
   position: z.number().int().min(0).optional(),
   showOnRoadmap: z.boolean().optional(),
@@ -47,7 +47,7 @@ const getStatusSchema = z.object({
 const updateStatusSchema = z.object({
   id: z.string(),
   name: TaxonomyNameSchema.optional(),
-  color: z.string().regex(HEX_COLOR_PATTERN, 'Invalid color format').optional(),
+  color: HexColorFormatSchema.optional(),
   showOnRoadmap: z.boolean().optional(),
   isDefault: z.boolean().optional(),
 })

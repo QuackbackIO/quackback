@@ -16,7 +16,8 @@ import {
 } from '@/lib/server/db'
 import type { ChangelogCategoryId, ChangelogId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
-import { HEX_COLOR_PATTERN as HEX_COLOR_RE } from '@/lib/shared/schemas/taxonomy'
+import { TAXONOMY_DEFAULT_COLOR } from '@/lib/shared/schemas/taxonomy'
+import { assertHexColor, assertTrimmedName, positionCaseSql } from '@/lib/server/utils'
 import type { Actor } from '@/lib/server/policy/types'
 import { segmentGateAllows } from '@/lib/server/policy/segment-gate'
 import type {
@@ -29,21 +30,14 @@ import { logger } from '@/lib/server/logger'
 const log = logger.child({ component: 'changelog-categories' })
 
 function validateName(name: string): string {
-  const trimmed = name.trim()
-  if (!trimmed) {
-    throw new ValidationError('VALIDATION_ERROR', 'Category name is required')
-  }
-  if (trimmed.length > 50) {
-    throw new ValidationError('VALIDATION_ERROR', 'Category name must not exceed 50 characters')
-  }
-  return trimmed
+  return assertTrimmedName(name, {
+    required: 'Category name is required',
+    tooLong: 'Category name must not exceed 50 characters',
+  })
 }
 
 function validateColor(color: string): string {
-  if (!HEX_COLOR_RE.test(color)) {
-    throw new ValidationError('VALIDATION_ERROR', 'Color must be a valid hex color (e.g., #6b7280)')
-  }
-  return color
+  return assertHexColor(color, 'Color must be a valid hex color (e.g., #6b7280)')
 }
 
 /** List categories ordered for the Labels settings card and the filter chips. */
@@ -58,7 +52,7 @@ export async function createChangelogCategory(
 ): Promise<ChangelogCategory> {
   log.debug({ name: input.name }, 'create changelog category')
   const name = validateName(input.name)
-  const color = validateColor(input.color || '#6b7280')
+  const color = validateColor(input.color || TAXONOMY_DEFAULT_COLOR)
 
   const existing = await db.query.changelogCategories.findFirst({
     where: sql`lower(${changelogCategories.name}) = lower(${name})`,
@@ -148,13 +142,9 @@ export async function reorderChangelogCategories(ids: ChangelogCategoryId[]): Pr
     throw new ValidationError('VALIDATION_ERROR', 'Category IDs are required')
   }
 
-  const cases = ids
-    .map((id, i) => sql`WHEN ${changelogCategories.id} = ${id} THEN ${sql.raw(String(i))}`)
-    .reduce((acc, curr) => sql`${acc} ${curr}`, sql``)
-
   await db
     .update(changelogCategories)
-    .set({ position: sql`CASE ${cases} END` })
+    .set({ position: positionCaseSql(changelogCategories.id, ids) })
     .where(inArray(changelogCategories.id, ids))
 }
 

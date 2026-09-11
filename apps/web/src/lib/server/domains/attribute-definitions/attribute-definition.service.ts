@@ -31,8 +31,11 @@ import {
 } from '@/lib/server/db'
 import { createId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError, InternalError } from '@/lib/shared/errors'
+import { normalizeAttributeKey } from '@/lib/shared/normalize-attribute-key'
 import { isUniqueViolation } from '@/lib/server/utils'
 import { logger } from '@/lib/server/logger'
+
+export { normalizeAttributeKey }
 
 /** Attribute value type + ISO-4217 selectors shared by the user/company fn schemas. */
 export const AttributeTypeSchema = z.enum(['string', 'number', 'boolean', 'date', 'currency'])
@@ -50,10 +53,27 @@ export const CurrencyCodeSchema = z.enum([
   'BRL',
 ])
 
-/** Normalize a machine key: trimmed, lowercased, whitespace to underscores. */
-export function normalizeAttributeKey(key: string): string {
-  return key.trim().toLowerCase().replace(/\s+/g, '_')
-}
+export const attributeDefinitionIdSchema = z.object({
+  id: z.string().min(1),
+})
+
+export const createAttributeDefinitionSchema = z.object({
+  key: z.string().min(1).max(64),
+  label: z.string().min(1).max(128),
+  description: z.string().max(512).optional(),
+  type: AttributeTypeSchema,
+  currencyCode: CurrencyCodeSchema.optional(),
+  externalKey: z.string().max(256).optional().nullable(),
+})
+
+export const updateAttributeDefinitionSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1).max(128).optional(),
+  description: z.string().max(512).optional().nullable(),
+  type: AttributeTypeSchema.optional(),
+  currencyCode: CurrencyCodeSchema.optional().nullable(),
+  externalKey: z.string().max(256).optional().nullable(),
+})
 
 export interface AttributeDefinitionInput {
   key: string

@@ -43,13 +43,13 @@ import {
 import type { TicketTypeId } from '@quackback/ids'
 import { TICKET_TYPES, type TicketType } from '@/lib/shared/db-types'
 import { ticketFormSchema, type TicketFormField, type TicketTypeDTO } from '@/lib/shared/tickets'
-import { slugify } from '@/lib/shared/utils/string'
+import { TAXONOMY_DEFAULT_COLOR } from '@/lib/shared/schemas/taxonomy'
+import { assertHexColor, assertTrimmedName } from '@/lib/server/utils'
 import { NotFoundError, ValidationError, ConflictError, ForbiddenError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
+import { uniqueUnderscoreSlug } from './unique-slug'
 
 const log = logger.child({ component: 'ticket-types' })
-
-const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
 const NAME_MAX_LENGTH = 60
 const SLUG_PATTERN = /^[a-z0-9][a-z0-9_]*$/
 const SLUG_MAX_LENGTH = 64
@@ -76,11 +76,6 @@ export interface UpdateTicketTypeInput {
   intakeVisible?: boolean
   isDefault?: boolean
   position?: number
-}
-
-/** Ticket-type slugs use underscores (matching the seeded set + field keys). */
-function toTypeSlug(name: string): string {
-  return slugify(name).replace(/-/g, '_')
 }
 
 function validateSlug(slug: string): string {
@@ -111,38 +106,24 @@ async function unsettleCategoryDefault(tx: Transaction, category: TicketType): P
 }
 
 /** A slug unique across all types (including archived — slug is globally unique). */
-async function uniqueSlug(name: string): Promise<string> {
-  const base = toTypeSlug(name) || 'type'
-  const existing = await db
-    .select({ slug: ticketTypes.slug })
-    .from(ticketTypes)
-    .where(sql`${ticketTypes.slug} = ${base} OR ${ticketTypes.slug} LIKE ${base + '_%'}`)
-  const taken = new Set(existing.map((r) => r.slug))
-  if (!taken.has(base)) return base
-  for (let i = 2; ; i++) {
-    const candidate = `${base}_${i}`
-    if (!taken.has(candidate)) return candidate
-  }
+function uniqueSlug(name: string): Promise<string> {
+  return uniqueUnderscoreSlug(name, 'type', ticketTypes)
 }
 
 function validateName(name: string | undefined): string {
-  const trimmed = name?.trim()
-  if (!trimmed) throw new ValidationError('VALIDATION_ERROR', 'Name is required')
-  if (trimmed.length > NAME_MAX_LENGTH) {
-    throw new ValidationError(
-      'VALIDATION_ERROR',
-      `Name must be ${NAME_MAX_LENGTH} characters or less`
-    )
-  }
-  return trimmed
+  return assertTrimmedName(
+    name,
+    {
+      required: 'Name is required',
+      tooLong: `Name must be ${NAME_MAX_LENGTH} characters or less`,
+    },
+    NAME_MAX_LENGTH
+  )
 }
 
 function validateColor(color: string | undefined): string {
-  if (color === undefined) return '#6b7280'
-  if (!HEX_COLOR.test(color)) {
-    throw new ValidationError('VALIDATION_ERROR', 'Color must be in hex format (e.g., #3b82f6)')
-  }
-  return color
+  if (color === undefined) return TAXONOMY_DEFAULT_COLOR
+  return assertHexColor(color, 'Color must be in hex format (e.g., #3b82f6)')
 }
 
 /** Parse a fields draft against the shared intake-form schema (the same zod

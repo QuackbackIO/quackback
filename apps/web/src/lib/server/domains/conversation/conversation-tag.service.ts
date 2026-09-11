@@ -24,11 +24,10 @@ import {
 } from '@/lib/server/db'
 import type { ConversationTagId, ConversationId } from '@quackback/ids'
 import { ValidationError, NotFoundError } from '@/lib/shared/errors'
-import { HEX_COLOR_PATTERN as HEX_COLOR } from '@/lib/shared/schemas/taxonomy'
+import { TAXONOMY_DEFAULT_COLOR } from '@/lib/shared/schemas/taxonomy'
+import { assertHexColor, assertTrimmedName } from '@/lib/server/utils'
 import { isUniqueViolation } from '@/lib/server/utils'
 import type { ConversationTagDTO } from '@/lib/shared/conversation/types'
-
-const DEFAULT_COLOR = '#6b7280'
 
 /**
  * Validate + normalize a new-tag input. Pure (no I/O) so it's unit-tested
@@ -38,16 +37,16 @@ export function normalizeConversationTagInput(input: { name: string; color?: str
   name: string
   color: string
 } {
-  const name = input.name?.trim() ?? ''
-  if (!name) throw new ValidationError('VALIDATION_ERROR', 'PostTag name is required')
-  if (name.length > 50) {
-    throw new ValidationError('VALIDATION_ERROR', 'PostTag name must not exceed 50 characters')
+  return {
+    name: assertTrimmedName(input.name, {
+      required: 'PostTag name is required',
+      tooLong: 'PostTag name must not exceed 50 characters',
+    }),
+    color: assertHexColor(
+      input.color || TAXONOMY_DEFAULT_COLOR,
+      'Color must be a valid hex color (e.g., #6b7280)'
+    ),
   }
-  const color = input.color || DEFAULT_COLOR
-  if (!HEX_COLOR.test(color)) {
-    throw new ValidationError('VALIDATION_ERROR', 'Color must be a valid hex color (e.g., #6b7280)')
-  }
-  return { name, color }
 }
 
 /**
@@ -172,11 +171,10 @@ export async function updateConversationTag(
 ): Promise<ConversationTagDTO> {
   const patch: { name?: string; color?: string } = {}
   if (input.name !== undefined) {
-    const name = input.name.trim()
-    if (!name) throw new ValidationError('VALIDATION_ERROR', 'PostTag name is required')
-    if (name.length > 50) {
-      throw new ValidationError('VALIDATION_ERROR', 'PostTag name must not exceed 50 characters')
-    }
+    const name = assertTrimmedName(input.name, {
+      required: 'PostTag name is required',
+      tooLong: 'PostTag name must not exceed 50 characters',
+    })
     const live = await db.query.conversationTags.findMany({
       where: isNull(conversationTags.deletedAt),
       columns: { id: true, name: true },
@@ -187,13 +185,7 @@ export async function updateConversationTag(
     patch.name = name
   }
   if (input.color !== undefined) {
-    if (!HEX_COLOR.test(input.color)) {
-      throw new ValidationError(
-        'VALIDATION_ERROR',
-        'Color must be a valid hex color (e.g., #6b7280)'
-      )
-    }
-    patch.color = input.color
+    patch.color = assertHexColor(input.color, 'Color must be a valid hex color (e.g., #6b7280)')
   }
   // Nothing to change (defensive — the server fn requires ≥1 field): return the
   // current row rather than running an empty UPDATE.

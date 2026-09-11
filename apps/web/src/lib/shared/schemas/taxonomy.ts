@@ -15,11 +15,19 @@ export const HEX_COLOR_PATTERN = /^#[0-9A-Fa-f]{6}$/
 
 /**
  * Hex color with the message used by the tag/category/label entry points
- * (server functions and REST routes). The post-status server functions use a
- * different message (`Invalid color format`) and pair `HEX_COLOR_PATTERN`
- * with it inline instead.
+ * (server functions and REST routes). Post-status and ticket entry points
+ * use `HexColorFormatSchema` instead (`Invalid color format`).
  */
 export const HexColorSchema = z.string().regex(HEX_COLOR_PATTERN, 'Color must be a valid hex color')
+
+/**
+ * Same `#rrggbb` rule with the message used by post-status and ticket entry
+ * points. Kept separate from `HexColorSchema` so neither failure string changes.
+ */
+export const HexColorFormatSchema = z.string().regex(HEX_COLOR_PATTERN, 'Invalid color format')
+
+/** Fallback swatch when a create payload omits color. */
+export const TAXONOMY_DEFAULT_COLOR = '#6b7280'
 
 /** Plain 1–50-char display name shared by the taxonomy create/update shapes. */
 export const TaxonomyNameSchema = z.string().min(1).max(50)

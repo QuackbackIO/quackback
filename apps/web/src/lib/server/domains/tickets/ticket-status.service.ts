@@ -23,14 +23,12 @@ import {
   type TicketStage,
 } from '@/lib/server/db'
 import type { TicketStatusId } from '@quackback/ids'
-import { positionCaseSql } from '@/lib/server/utils'
-import { slugify } from '@/lib/shared/utils'
+import { assertHexColor, assertTrimmedName, positionCaseSql } from '@/lib/server/utils'
 import { NotFoundError, ValidationError, ConflictError, ForbiddenError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
+import { uniqueUnderscoreSlug } from './unique-slug'
 
 const log = logger.child({ component: 'ticket-statuses' })
-
-const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
 
 export interface CreateTicketStatusInput {
   name: string
@@ -47,24 +45,9 @@ export interface UpdateTicketStatusInput {
   position?: number
 }
 
-/** Ticket-status slugs use underscores (matching the seeded set). */
-function toStatusSlug(name: string): string {
-  return slugify(name).replace(/-/g, '_')
-}
-
 /** A slug unique across all statuses (including soft-deleted, since slug is globally unique). */
-async function uniqueSlug(name: string): Promise<string> {
-  const base = toStatusSlug(name) || 'status'
-  const existing = await db
-    .select({ slug: ticketStatuses.slug })
-    .from(ticketStatuses)
-    .where(sql`${ticketStatuses.slug} = ${base} OR ${ticketStatuses.slug} LIKE ${base + '_%'}`)
-  const taken = new Set(existing.map((r) => r.slug))
-  if (!taken.has(base)) return base
-  for (let i = 2; ; i++) {
-    const candidate = `${base}_${i}`
-    if (!taken.has(candidate)) return candidate
-  }
+function uniqueSlug(name: string): Promise<string> {
+  return uniqueUnderscoreSlug(name, 'status', ticketStatuses)
 }
 
 /** All non-deleted ticket statuses, ordered by category then position. */
@@ -86,13 +69,11 @@ export async function createTicketStatus(
   input: CreateTicketStatusInput
 ): Promise<TicketStatusEntity> {
   log.debug({ name: input.name }, 'create ticket status')
-  const name = input.name?.trim()
-  if (!name) throw new ValidationError('VALIDATION_ERROR', 'Name is required')
-  if (name.length > 50)
-    throw new ValidationError('VALIDATION_ERROR', 'Name must be 50 characters or less')
-  if (!HEX_COLOR.test(input.color ?? '')) {
-    throw new ValidationError('VALIDATION_ERROR', 'Color must be in hex format (e.g., #3b82f6)')
-  }
+  const name = assertTrimmedName(input.name, {
+    required: 'Name is required',
+    tooLong: 'Name must be 50 characters or less',
+  })
+  assertHexColor(input.color ?? '', 'Color must be in hex format (e.g., #3b82f6)')
 
   const slug = await uniqueSlug(name)
   // Append after the current max position so new statuses land at the end.
@@ -133,17 +114,13 @@ export async function updateTicketStatusEntity(
 
   const updateData: Partial<TicketStatusEntity> = {}
   if (patch.name !== undefined) {
-    const name = patch.name.trim()
-    if (!name) throw new ValidationError('VALIDATION_ERROR', 'Name cannot be empty')
-    if (name.length > 50)
-      throw new ValidationError('VALIDATION_ERROR', 'Name must be 50 characters or less')
-    updateData.name = name
+    updateData.name = assertTrimmedName(patch.name, {
+      required: 'Name cannot be empty',
+      tooLong: 'Name must be 50 characters or less',
+    })
   }
   if (patch.color !== undefined) {
-    if (!HEX_COLOR.test(patch.color)) {
-      throw new ValidationError('VALIDATION_ERROR', 'Color must be in hex format (e.g., #3b82f6)')
-    }
-    updateData.color = patch.color
+    updateData.color = assertHexColor(patch.color, 'Color must be in hex format (e.g., #3b82f6)')
   }
   if (patch.category !== undefined) updateData.category = patch.category
   if (patch.publicStage !== undefined) updateData.publicStage = patch.publicStage

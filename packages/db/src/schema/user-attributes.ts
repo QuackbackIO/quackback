@@ -5,51 +5,23 @@
  * These appear as first-class segment rule options and can be used for
  * segment weighting (e.g., MRR, company size, contract value).
  */
-import { pgTable, text, timestamp, uniqueIndex, customType } from 'drizzle-orm/pg-core'
-import { generateId, toUuid, fromUuid, isUuid, type TypeId } from '@quackback/ids'
-
-/**
- * TypeID column stored as `text` holding the UUID form. The migration created
- * this id column as text rather than uuid, so the standard typeIdColumn (uuid)
- * would drift from the live schema; the app-layer conversion is identical.
- * A follow-up migration converting the column to uuid would let this revert
- * to typeIdWithDefault.
- */
-const userAttrIdText = customType<{ data: TypeId<'user_attr'>; driverData: string }>({
-  dataType() {
-    return 'text'
-  },
-  toDriver(value: TypeId<'user_attr'>): string {
-    return isUuid(value) ? value : toUuid(value)
-  },
-  fromDriver(value: unknown): TypeId<'user_attr'> {
-    if (typeof value !== 'string') {
-      throw new Error(`Expected string from database, got ${typeof value}`)
-    }
-    return fromUuid('user_attr', value)
-  },
-})
+import { pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core'
+import { generateId } from '@quackback/ids'
+import { typeIdTextColumn } from '@quackback/ids/drizzle'
 
 /** Supported data types for user attributes */
 export type UserAttributeType = 'string' | 'number' | 'boolean' | 'date' | 'currency'
 
 /** Currency code (ISO 4217) for currency-type attributes */
 export type CurrencyCode =
-  | 'USD'
-  | 'EUR'
-  | 'GBP'
-  | 'JPY'
-  | 'CAD'
-  | 'AUD'
-  | 'CHF'
-  | 'CNY'
-  | 'INR'
-  | 'BRL'
+  'USD' | 'EUR' | 'GBP' | 'JPY' | 'CAD' | 'AUD' | 'CHF' | 'CNY' | 'INR' | 'BRL'
 
 export const userAttributeDefinitions = pgTable(
   'user_attribute_definitions',
   {
-    id: userAttrIdText('id')
+    // text, not uuid — the original migration stored the UUID form as text
+    // (see typeIdTextColumn). A later uuid migration can switch to typeIdWithDefault.
+    id: typeIdTextColumn('user_attr')('id')
       .primaryKey()
       .$defaultFn(() => generateId('user_attr')),
     /** The JSON key inside user.metadata, e.g. "mrr", "company_size" */

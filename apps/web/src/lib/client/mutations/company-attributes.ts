@@ -10,7 +10,7 @@ import {
   createCompanyAttributeFn,
   updateCompanyAttributeFn,
   deleteCompanyAttributeFn,
-} from '@/lib/server/functions/companies'
+} from '@/lib/server/functions/company-attributes'
 
 const COMPANY_ATTRIBUTES_KEY = ['admin', 'companyAttributes']
 

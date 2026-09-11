@@ -333,10 +333,10 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/companies.ts`::attachPrincipalToCompanyFn | company.manage |
 | `lib/server/functions/companies.ts`::detachPrincipalFromCompanyFn | company.manage |
 | `lib/server/functions/companies.ts`::qualifyCompanyFn | company.manage |
-| `lib/server/functions/companies.ts`::listCompanyAttributesFn | company.view |
-| `lib/server/functions/companies.ts`::createCompanyAttributeFn | company.manage |
-| `lib/server/functions/companies.ts`::updateCompanyAttributeFn | company.manage |
-| `lib/server/functions/companies.ts`::deleteCompanyAttributeFn | company.manage |
+| `lib/server/functions/company-attributes.ts`::listCompanyAttributesFn | company.view |
+| `lib/server/functions/company-attributes.ts`::createCompanyAttributeFn | company.manage |
+| `lib/server/functions/company-attributes.ts`::updateCompanyAttributeFn | company.manage |
+| `lib/server/functions/company-attributes.ts`::deleteCompanyAttributeFn | company.manage |
 | `lib/server/functions/contact-email.ts`::getEmailChangeStateFn | END_USER (any authenticated) |
 | `lib/server/functions/contact-email.ts`::sendCurrentAddressCodeFn | END_USER (any authenticated) |
 | `lib/server/functions/contact-email.ts`::requestEmailChangeFn | END_USER (any authenticated) |

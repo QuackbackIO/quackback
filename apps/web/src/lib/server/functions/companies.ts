@@ -7,15 +7,11 @@
  */
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import type { PrincipalId, CompanyAttributeId } from '@quackback/ids'
+import type { PrincipalId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { toIsoString } from '@/lib/shared/utils'
 import type { JsonValue } from '@/lib/shared/json'
 import { requireAuth } from './auth-helpers'
-import {
-  AttributeTypeSchema as attributeTypeSchema,
-  CurrencyCodeSchema as currencyCodeSchema,
-} from '@/lib/server/domains/attribute-definitions/attribute-definition.service'
 import {
   createCompany,
   updateCompany,
@@ -268,60 +264,11 @@ export const qualifyCompanyFn = createServerFn({ method: 'POST' })
     return serializeCompany(await qualifyCompany(data))
   })
 
-// ============================================
-// Company Attribute Definitions (§K2)
-// ============================================
-
-const createCompanyAttributeSchema = z.object({
-  key: z.string().min(1).max(64),
-  label: z.string().min(1).max(128),
-  description: z.string().max(512).optional(),
-  type: attributeTypeSchema,
-  currencyCode: currencyCodeSchema.optional(),
-  externalKey: z.string().max(256).optional().nullable(),
-})
-
-const updateCompanyAttributeSchema = z.object({
-  id: z.string().min(1),
-  label: z.string().min(1).max(128).optional(),
-  description: z.string().max(512).optional().nullable(),
-  type: attributeTypeSchema.optional(),
-  currencyCode: currencyCodeSchema.optional().nullable(),
-  externalKey: z.string().max(256).optional().nullable(),
-})
-
-/** List all company attribute definitions. */
-export const listCompanyAttributesFn = createServerFn({ method: 'GET' }).handler(async () => {
-  await requireAuth({ permission: PERMISSIONS.COMPANY_VIEW })
-  const { listCompanyAttributes } = await import('@/lib/server/domains/company-attributes')
-  return listCompanyAttributes()
-})
-
-/** Create a new company attribute definition. */
-export const createCompanyAttributeFn = createServerFn({ method: 'POST' })
-  .validator(createCompanyAttributeSchema)
-  .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.COMPANY_MANAGE })
-    const { createCompanyAttribute } = await import('@/lib/server/domains/company-attributes')
-    return createCompanyAttribute(data)
-  })
-
-/** Update an existing company attribute definition. */
-export const updateCompanyAttributeFn = createServerFn({ method: 'POST' })
-  .validator(updateCompanyAttributeSchema)
-  .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.COMPANY_MANAGE })
-    const { updateCompanyAttribute } = await import('@/lib/server/domains/company-attributes')
-    const { id, ...input } = data
-    return updateCompanyAttribute(id as CompanyAttributeId, input)
-  })
-
-/** Delete a company attribute definition. */
-export const deleteCompanyAttributeFn = createServerFn({ method: 'POST' })
-  .validator(z.object({ id: z.string().min(1) }))
-  .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.COMPANY_MANAGE })
-    const { deleteCompanyAttribute } = await import('@/lib/server/domains/company-attributes')
-    await deleteCompanyAttribute(data.id as CompanyAttributeId)
-    return { deleted: true }
-  })
+// Company attribute definitions live in ./company-attributes; re-exported
+// here so existing `functions/companies` importers keep working.
+export {
+  listCompanyAttributesFn,
+  createCompanyAttributeFn,
+  updateCompanyAttributeFn,
+  deleteCompanyAttributeFn,
+} from './company-attributes'

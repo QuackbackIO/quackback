@@ -20,6 +20,7 @@ import {
 } from '@/lib/server/db'
 import type { StatusComponentId, StatusComponentGroupId, StatusIncidentId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
+import { assertTrimmedName, positionCaseSql } from '@/lib/server/utils'
 import { logger } from '@/lib/server/logger'
 import type { EventActor } from '@/lib/server/events/dispatch'
 import type {
@@ -36,12 +37,14 @@ import type {
 const log = logger.child({ component: 'status-components' })
 
 function validateName(name: string, label: string): string {
-  const trimmed = name.trim()
-  if (!trimmed) throw new ValidationError('VALIDATION_ERROR', `${label} name is required`)
-  if (trimmed.length > 200) {
-    throw new ValidationError('VALIDATION_ERROR', `${label} name must not exceed 200 characters`)
-  }
-  return trimmed
+  return assertTrimmedName(
+    name,
+    {
+      required: `${label} name is required`,
+      tooLong: `${label} name must not exceed 200 characters`,
+    },
+    200
+  )
 }
 
 function toComponentRow(row: typeof statusComponents.$inferSelect): StatusComponentRow {
@@ -118,13 +121,9 @@ export async function reorderStatusComponentGroups(ids: StatusComponentGroupId[]
   if (!ids || ids.length === 0) {
     throw new ValidationError('VALIDATION_ERROR', 'Group IDs are required')
   }
-  const cases = ids
-    .map((id, i) => sql`WHEN ${statusComponentGroups.id} = ${id} THEN ${sql.raw(String(i))}`)
-    .reduce((acc, curr) => sql`${acc} ${curr}`, sql``)
-
   await db
     .update(statusComponentGroups)
-    .set({ position: sql`CASE ${cases} END` })
+    .set({ position: positionCaseSql(statusComponentGroups.id, ids) })
     .where(inArray(statusComponentGroups.id, ids))
 }
 
@@ -242,13 +241,9 @@ export async function reorderStatusComponents(ids: StatusComponentId[]): Promise
   if (!ids || ids.length === 0) {
     throw new ValidationError('VALIDATION_ERROR', 'Component IDs are required')
   }
-  const cases = ids
-    .map((id, i) => sql`WHEN ${statusComponents.id} = ${id} THEN ${sql.raw(String(i))}`)
-    .reduce((acc, curr) => sql`${acc} ${curr}`, sql``)
-
   await db
     .update(statusComponents)
-    .set({ position: sql`CASE ${cases} END` })
+    .set({ position: positionCaseSql(statusComponents.id, ids) })
     .where(inArray(statusComponents.id, ids))
 }
 
