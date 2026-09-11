@@ -281,4 +281,32 @@ describe('addAgentNote', () => {
       ],
     })
   })
+
+  it('rejects an image-only note whose attachment URL is not from our storage', async () => {
+    await expect(
+      addAgentNote(conversationId, '', agent, agentActor, null, [
+        {
+          url: 'https://evil.example.com/x.png',
+          name: 'x.png',
+          contentType: 'image/png',
+          size: 10,
+        },
+      ])
+    ).rejects.toBeInstanceOf(ValidationError)
+    expect(insertedMessages).toHaveLength(0)
+  })
+
+  it('rejects an image-only note whose attachment exceeds the size cap', async () => {
+    await expect(
+      addAgentNote(conversationId, '', agent, agentActor, null, [
+        {
+          url: '/api/storage/chat-images/shot.png',
+          name: 'shot.png',
+          contentType: 'image/png',
+          size: 6 * 1024 * 1024,
+        },
+      ])
+    ).rejects.toBeInstanceOf(ValidationError)
+    expect(insertedMessages).toHaveLength(0)
+  })
 })

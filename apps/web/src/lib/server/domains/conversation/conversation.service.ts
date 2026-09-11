@@ -56,7 +56,6 @@ import {
 } from '@/lib/server/policy/conversation'
 import type { Actor } from '@/lib/server/policy/types'
 import {
-  MAX_CONVERSATION_ATTACHMENTS,
   HANDOFF_REASON_LABELS,
   CONVERSATION_SPAM_FILED_BY_LABELS,
   type ConversationStatus,
@@ -873,11 +872,11 @@ export async function addAgentNote(
 ): Promise<SendAgentMessageResult> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
-  const noteAttachments =
-    attachments && attachments.length > 0
-      ? attachments.slice(0, MAX_CONVERSATION_ATTACHMENTS)
-      : null
-  const content = validateContent(rawContent, (noteAttachments?.length ?? 0) > 0)
+  // Same write-side attachment gate as replies: trusted URL + size first,
+  // then empty-content is allowed only when a validated attachment remains.
+  const attachmentsValidated = validateAttachments(attachments)
+  const noteAttachments = attachmentsValidated.length > 0 ? attachmentsValidated : null
+  const content = validateContent(rawContent, attachmentsValidated.length > 0)
 
   // Sanitize on write (Layer 1), like every other TipTap-doc path (comments,
   // posts, changelog). Drops disallowed nodes/attrs + caps depth, so a tampered
