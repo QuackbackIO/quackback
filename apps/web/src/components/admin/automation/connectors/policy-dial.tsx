@@ -103,7 +103,7 @@ export function PolicyDefaultSelect({
         {OPTIONS.map((option) => {
           const ItemIcon = option.icon
           return (
-            <DropdownMenuItem key={option.id} onSelect={() => onChange(option.id)}>
+            <DropdownMenuItem key={option.id} onClick={() => onChange(option.id)}>
               <ItemIcon className="size-3.5" />
               {option.label}
             </DropdownMenuItem>

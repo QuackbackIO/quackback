@@ -68,6 +68,7 @@ vi.mock('@/lib/client/hooks/use-conversation-composer-attachments', () => ({
   }),
 }))
 vi.mock('@/components/shared/portal-user-picker', () => ({ PortalUserPicker: () => null }))
+vi.mock('@/components/ui/select', async () => import('@/test/radix-select'))
 
 import { CreateTicketDialog } from '../create-ticket-dialog'
 
@@ -154,14 +155,10 @@ function renderDialog(props: Partial<Parameters<typeof CreateTicketDialog>[0]> =
   })
 }
 
-/** Open a Radix Select and pick one of its options by visible text. happy-dom
- *  doesn't open the popover on pointerDown, but ArrowDown on the focused
- *  trigger works (the repo's DropdownMenu tests use pointerDown instead). */
+/** Open a Select and pick one of its options by visible text. */
 async function pickSelectOption(trigger: HTMLElement, optionText: string) {
-  trigger.focus()
-  fireEvent.keyDown(trigger, { key: 'ArrowDown' })
   const option = await screen.findByRole('option', { name: new RegExp(optionText) })
-  fireEvent.click(option)
+  fireEvent.change(trigger, { target: { value: (option as HTMLOptionElement).value } })
 }
 
 beforeEach(() => {

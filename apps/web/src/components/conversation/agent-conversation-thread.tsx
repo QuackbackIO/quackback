@@ -1705,10 +1705,10 @@ export function AgentConversationThread({
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => snooze(null)}>Until they reply</DropdownMenuItem>
             <DropdownMenuItem
-              onSelect={() => {
+              onClick={() => {
                 setSnoozeCustomDate(tomorrowAt(9))
                 // Let the menu finish closing before the dialog grabs focus,
-                // so the two Radix overlays don't fight over it.
+                // so the menu teardown and the dialog focus grab don't fight over it.
                 requestAnimationFrame(() => setSnoozeCustomOpen(true))
               }}
             >
@@ -1779,7 +1779,7 @@ export function AgentConversationThread({
             )}
           {conversation && capabilities.convertToPost && (
             <DropdownMenuItem
-              onSelect={() =>
+              onClick={() =>
                 setConvertSeed({ title: convertDefaultTitle, content: convertDefaultContent })
               }
             >

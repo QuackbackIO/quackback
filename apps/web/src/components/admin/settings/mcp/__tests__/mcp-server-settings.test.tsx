@@ -31,9 +31,7 @@ describe('McpServerSettings enable lock', () => {
     fireEvent.click(screen.getByLabelText('Enable MCP Server'))
     expect(screen.getByText(/The MCP server is a Pro feature/)).toBeTruthy()
     expect(save).not.toHaveBeenCalled()
-    expect((screen.getByLabelText('Enable MCP Server') as HTMLButtonElement).dataset.state).toBe(
-      'unchecked'
-    )
+    expect(screen.getByLabelText('Enable MCP Server')).toHaveAttribute('aria-checked', 'false')
   })
 
   it('saves when the plan includes MCP', async () => {

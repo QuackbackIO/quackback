@@ -147,7 +147,7 @@ function AdminLayout() {
 
   return (
     <IntlProvider locale={locale} defaultLocale={DEFAULT_LOCALE} messages={messages}>
-      <TooltipProvider delayDuration={0}>
+      <TooltipProvider delay={0}>
         <div className="flex h-screen bg-background">
           <AdminSidebar initialUserData={initialUserData} latestVersion={latestVersion} />
           <main className="flex-1 min-w-0 overflow-hidden sm:h-screen sm:py-2 sm:pr-2 sm:pl-1 p-0">

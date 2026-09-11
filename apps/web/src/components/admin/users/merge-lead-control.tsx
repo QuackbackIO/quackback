@@ -100,7 +100,7 @@ export function MergeLeadControl({
   return (
     <>
       {mode === 'menu-item' ? (
-        <DropdownMenuItem onSelect={() => setOpen(true)}>
+        <DropdownMenuItem onClick={() => setOpen(true)}>
           <ArrowsRightLeftIcon className="h-4 w-4" />
           Merge
         </DropdownMenuItem>

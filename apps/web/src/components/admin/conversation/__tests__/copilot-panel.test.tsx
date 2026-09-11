@@ -666,7 +666,7 @@ describe('<CopilotPanel> Answer-sources popover', () => {
     }
 
     const checkboxes = screen.getAllByRole('checkbox')
-    expect(checkboxes.some((cb) => cb.getAttribute('data-state') === 'checked')).toBe(true)
+    expect(checkboxes.some((cb) => cb.hasAttribute('data-checked'))).toBe(true)
     vi.unstubAllGlobals()
   })
 })
@@ -1138,10 +1138,10 @@ describe('<CopilotPanel> answer rewrite menu', () => {
 
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: /^modify$/i }))
-    fireEvent.pointerMove(await screen.findByRole('menuitem', { name: 'Translate to' }), {
-      pointerType: 'mouse',
-    })
-    await user.click(await screen.findByRole('menuitem', { name: 'Español' }))
+    const translate = await screen.findByRole('menuitem', { name: 'Translate to' })
+    translate.focus()
+    await user.keyboard('{ArrowRight}')
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Español' }))
 
     expect(hoisted.runTransform).toHaveBeenCalledWith('translate', DEFAULT_ANSWER, {
       language: 'Spanish',

@@ -1,5 +1,6 @@
 import * as React from 'react'
-import { Slot } from '@radix-ui/react-slot'
+import { Button as ButtonPrimitive } from '@base-ui/react/button'
+import { useRender } from '@base-ui/react/use-render'
 import { cva, type VariantProps } from 'class-variance-authority'
 
 import { cn } from '@/lib/shared/utils'
@@ -49,26 +50,42 @@ const buttonVariants = cva(
   }
 )
 
+type ButtonProps = ButtonPrimitive.Props &
+  VariantProps<typeof buttonVariants> & {
+    /**
+     * Style an existing element (usually `Link` or `<a>`) as a button.
+     * Merges classes only — does not apply button role, so links stay links.
+     */
+    asChild?: boolean
+  }
+
 function Button({
   className,
   variant,
   size,
   shape,
   asChild = false,
+  render,
+  children,
   ...props
-}: React.ComponentProps<'button'> &
-  VariantProps<typeof buttonVariants> & {
-    asChild?: boolean
-  }) {
-  const Comp = asChild ? Slot : 'button'
+}: ButtonProps) {
+  const classes = cn(buttonVariants({ variant, size, shape, className }))
+
+  if (asChild) {
+    const child = React.Children.toArray(children).find(React.isValidElement)
+    return useRender({
+      render: (render as React.ReactElement | undefined) ?? child,
+      props: { ...props, className: classes, 'data-slot': 'button' },
+    })
+  }
 
   return (
-    <Comp
-      data-slot="button"
-      className={cn(buttonVariants({ variant, size, shape, className }))}
-      {...props}
-    />
+    <ButtonPrimitive data-slot="button" className={classes} render={render} {...props}>
+      {children}
+    </ButtonPrimitive>
   )
 }
+
+Button.displayName = 'Button'
 
 export { Button, buttonVariants }

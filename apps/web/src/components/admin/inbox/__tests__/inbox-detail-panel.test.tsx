@@ -188,10 +188,10 @@ describe('<InboxDetailPanel> tab host', () => {
 
     const { container } = renderPanel()
     const aside = screen.getByRole('complementary', { name: 'Item details' })
-    const detailsTab = container.querySelector('[data-slot="tabs-content"][data-state="active"]')
+    const detailsTab = container.querySelector('[data-slot="tabs-content"]:not([data-hidden])')
 
     expect(aside).toHaveClass('h-full', 'min-h-0', 'overflow-hidden')
-    expect(detailsTab).toHaveClass('data-[state=active]:flex', 'min-h-0', 'overflow-hidden')
+    expect(detailsTab).toHaveClass('flex', 'min-h-0', 'overflow-hidden')
     expect(detailsTab?.querySelector('[data-slot="scroll-area"]')).toHaveClass('min-h-0', 'flex-1')
   })
 })
@@ -204,11 +204,11 @@ describe('<InboxDetailPanel> openCopilotToken ping (the Ask Copilot shortcut)', 
   it('a token bump switches from Details to the Copilot tab and focuses the ask input', async () => {
     enableCopilot()
     const { rerenderWith } = renderPanel(makeConversation(), { openCopilotToken: 0 })
-    expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('data-state', 'active')
+    expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('data-active')
 
     rerenderWith({ openCopilotToken: 1 })
 
-    expect(screen.getByRole('tab', { name: /copilot/i })).toHaveAttribute('data-state', 'active')
+    expect(screen.getByRole('tab', { name: /copilot/i })).toHaveAttribute('data-active')
     // Focus lands after the rAF that waits for the tab content to un-hide.
     await waitFor(() => expect(screen.getByTestId('copilot-ask-stub')).toHaveFocus())
   })
@@ -217,7 +217,7 @@ describe('<InboxDetailPanel> openCopilotToken ping (the Ask Copilot shortcut)', 
     enableCopilot()
     renderPanel(makeConversation(), { openCopilotToken: 0 })
 
-    expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('data-state', 'active')
+    expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('data-active')
     expect(screen.getByTestId('copilot-ask-stub')).not.toHaveFocus()
   })
 
@@ -229,7 +229,7 @@ describe('<InboxDetailPanel> openCopilotToken ping (the Ask Copilot shortcut)', 
     enableCopilot()
     renderPanel(makeConversation(), { openCopilotToken: 5 })
 
-    expect(screen.getByRole('tab', { name: /copilot/i })).toHaveAttribute('data-state', 'active')
+    expect(screen.getByRole('tab', { name: /copilot/i })).toHaveAttribute('data-active')
     await waitFor(() => expect(screen.getByTestId('copilot-ask-stub')).toHaveFocus())
   })
 
@@ -240,10 +240,10 @@ describe('<InboxDetailPanel> openCopilotToken ping (the Ask Copilot shortcut)', 
     await waitFor(() => expect(screen.getByTestId('copilot-ask-stub')).toHaveFocus())
 
     // Back to Details, then the route resets the token (selection changed).
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Details' }), { button: 0 })
+    fireEvent.click(screen.getByRole('tab', { name: 'Details' }))
     rerenderWith({ openCopilotToken: 0 })
 
-    expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('data-state', 'active')
+    expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('data-active')
   })
 
   it('tabs stay user-switchable after a token bump (controlled Tabs round-trip)', async () => {
@@ -252,10 +252,9 @@ describe('<InboxDetailPanel> openCopilotToken ping (the Ask Copilot shortcut)', 
     rerenderWith({ openCopilotToken: 1 })
     await waitFor(() => expect(screen.getByTestId('copilot-ask-stub')).toHaveFocus())
 
-    // Radix TabsTrigger activates on mousedown, not click.
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Details' }), { button: 0 })
+    fireEvent.click(screen.getByRole('tab', { name: 'Details' }))
 
-    expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('data-state', 'active')
+    expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('data-active')
   })
 
   it('a token bump is a clean no-op when the Copilot tab is unavailable (no copilot.use)', () => {

@@ -176,4 +176,24 @@ describe('<CommentContent>', () => {
     const { container } = render(<CommentContent content="Shipped :tada:" contentJson={json} />)
     await waitFor(() => expect(container.textContent).toContain('🎉'))
   })
+
+  it('upgrades a name-only crossed_fingers node (name is not in shortcodes[])', async () => {
+    const json = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'Luck ' },
+            { type: 'emoji', attrs: { name: 'crossed_fingers' } },
+          ],
+        },
+      ],
+    }
+    const { container } = render(
+      <CommentContent content="Luck :crossed_fingers:" contentJson={json} />
+    )
+    await waitFor(() => expect(container.textContent).toContain('🤞'))
+    expect(container.textContent).not.toContain(':crossed_fingers:')
+  })
 })

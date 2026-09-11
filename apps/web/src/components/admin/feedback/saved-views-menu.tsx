@@ -83,7 +83,7 @@ export function SavedViewsMenu({ filters, hasActiveFilters, onApply }: SavedView
           {views.map((view: PostViewDTO) => (
             <DropdownMenuItem
               key={view.id}
-              onSelect={() => onApply(postViewFiltersToInboxFilters(view.filters))}
+              onClick={() => onApply(postViewFiltersToInboxFilters(view.filters))}
             >
               <span className="flex-1 truncate">{view.name}</span>
               <button
@@ -100,7 +100,7 @@ export function SavedViewsMenu({ filters, hasActiveFilters, onApply }: SavedView
             </DropdownMenuItem>
           ))}
           <DropdownMenuSeparator />
-          <DropdownMenuItem disabled={!hasActiveFilters} onSelect={() => setSaveOpen(true)}>
+          <DropdownMenuItem disabled={!hasActiveFilters} onClick={() => setSaveOpen(true)}>
             <PlusIcon className={MENU_ICON} />
             Save current filters
           </DropdownMenuItem>

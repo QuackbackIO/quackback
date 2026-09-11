@@ -282,6 +282,26 @@ describe('contentJsonToMarkdown', () => {
     expect(result.replace(/\\/g, '')).toContain('[Embedded post: post_123]')
   })
 
+  test('derives a name-only crossed_fingers emoji to its Unicode glyph', () => {
+    // attrs.name is the canonical name, which is NOT in shortcodes[] — the
+    // markdown path must still resolve 🤞 instead of leaving :crossed_fingers:.
+    const doc = {
+      type: 'doc' as const,
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'Luck ' },
+            { type: 'emoji', attrs: { name: 'crossed_fingers' } },
+          ],
+        },
+      ],
+    }
+    const result = projectContentJsonToMarkdown(doc, 'fallback')
+    expect(result).toContain('🤞')
+    expect(result).not.toContain(':crossed_fingers:')
+  })
+
   test('projects current text for an image-free structured-only edit', () => {
     const doc = {
       type: 'doc' as const,

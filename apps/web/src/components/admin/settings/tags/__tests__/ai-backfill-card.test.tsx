@@ -10,6 +10,7 @@ vi.mock('@/lib/server/functions/post-tags', () => ({
 
 const mockToast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }))
 vi.mock('sonner', () => ({ toast: mockToast }))
+vi.mock('@/components/ui/select', async () => import('@/test/radix-select'))
 
 import { AiBackfillCard } from '../ai-backfill-card'
 
@@ -37,13 +38,10 @@ beforeEach(() => {
   mockBackfill.mockResolvedValue({ scanned: 3, tagged: 2, hasMore: false })
 })
 
-/* Radix Select in happy-dom: focus the trigger and open with ArrowDown (the
- *  create-ticket-dialog test idiom), then click the option. */
 async function pickBoard(optionText: string) {
   const trigger = screen.getByRole('combobox')
-  trigger.focus()
-  fireEvent.keyDown(trigger, { key: 'ArrowDown' })
-  fireEvent.click(await screen.findByRole('option', { name: optionText }))
+  const option = await screen.findByRole('option', { name: optionText })
+  fireEvent.change(trigger, { target: { value: (option as HTMLOptionElement).value } })
 }
 
 describe('<AiBackfillCard>', () => {

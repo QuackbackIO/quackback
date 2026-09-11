@@ -14,7 +14,7 @@ import { WorkflowEntitiesProvider } from '../../entities'
 import { BranchEditor } from '../branch-editor'
 import { createStep, newTree, type TreeStep } from '../../../workflow-graph'
 
-// Radix's DropdownMenu needs pointer-capture APIs happy-dom doesn't
+// Base UI's DropdownMenu needs pointer-capture APIs happy-dom doesn't
 // implement (same class of issue noted in csat-editor.test.tsx) —
 // ConditionEditor renders one for its field picker, unused by these tests.
 vi.mock('@/components/ui/dropdown-menu', () => ({
@@ -23,12 +23,12 @@ vi.mock('@/components/ui/dropdown-menu', () => ({
   DropdownMenuContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   DropdownMenuItem: ({
     children,
-    onSelect,
+    onClick,
   }: {
     children: React.ReactNode
-    onSelect?: () => void
+    onClick?: () => void
   }) => (
-    <button type="button" onClick={onSelect}>
+    <button type="button" onClick={onClick}>
       {children}
     </button>
   ),

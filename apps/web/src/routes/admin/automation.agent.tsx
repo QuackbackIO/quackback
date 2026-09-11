@@ -184,29 +184,17 @@ function AssistantAgentSettings() {
                 </TabsList>
               </div>
 
-              <TabsContent
-                value="basics"
-                forceMount
-                className="space-y-6 data-[state=inactive]:hidden"
-              >
+              <TabsContent value="basics" keepMounted className="space-y-6">
                 <AssistantIdentityCard />
                 <AssistantVoiceCard />
                 <AdditionalInstructionsCard />
               </TabsContent>
 
-              <TabsContent
-                value="knowledge"
-                forceMount
-                className="space-y-6 data-[state=inactive]:hidden"
-              >
+              <TabsContent value="knowledge" keepMounted className="space-y-6">
                 <AgentKnowledgeCard />
               </TabsContent>
 
-              <TabsContent
-                value="guidance"
-                forceMount
-                className="space-y-6 data-[state=inactive]:hidden"
-              >
+              <TabsContent value="guidance" keepMounted className="space-y-6">
                 <div className="max-w-2xl space-y-1">
                   <h2 className="text-sm font-medium">
                     {intl.formatMessage({

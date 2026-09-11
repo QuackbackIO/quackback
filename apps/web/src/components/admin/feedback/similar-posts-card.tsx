@@ -99,7 +99,7 @@ export function SimilarPostsCard({ postId, onNavigateToPost }: SimilarPostsCardP
         </CollapsibleTrigger>
 
         {/* Body */}
-        <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+        <CollapsibleContent>
           <div className="divide-y divide-border/20">
             {suggestions.map((suggestion) => {
               const isSource = suggestion.sourcePostId === postId
@@ -127,6 +127,7 @@ export function SimilarPostsCard({ postId, onNavigateToPost }: SimilarPostsCardP
                             size="icon"
                             className="h-7 w-7 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
                             disabled={isPending}
+                            aria-label="Merge"
                           >
                             <IconGitMerge className="size-4" strokeWidth={1.5} />
                           </Button>
@@ -153,6 +154,7 @@ export function SimilarPostsCard({ postId, onNavigateToPost }: SimilarPostsCardP
                         size="icon"
                         className="h-7 w-7 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
                         disabled={isPending}
+                        aria-label="Dismiss"
                         onClick={() => handleDismiss(suggestion.id)}
                       >
                         <XMarkIcon className="size-3.5" />

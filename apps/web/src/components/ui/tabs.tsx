@@ -1,5 +1,5 @@
 import * as React from 'react'
-import * as TabsPrimitive from '@radix-ui/react-tabs'
+import { Tabs as TabsPrimitive } from '@base-ui/react/tabs'
 import { cva, type VariantProps } from 'class-variance-authority'
 
 import { cn } from '@/lib/shared/utils'
@@ -24,7 +24,7 @@ function Tabs({
   className,
   variant = 'pill',
   ...props
-}: React.ComponentProps<typeof TabsPrimitive.Root> & { variant?: TabsVariant }) {
+}: TabsPrimitive.Root.Props & { variant?: TabsVariant }) {
   return (
     <TabsVariantContext.Provider value={variant}>
       <TabsPrimitive.Root
@@ -50,7 +50,7 @@ function TabsList({
   className,
   variant,
   ...props
-}: React.ComponentProps<typeof TabsPrimitive.List> & VariantProps<typeof tabsListVariants>) {
+}: TabsPrimitive.List.Props & VariantProps<typeof tabsListVariants>) {
   const contextVariant = React.useContext(TabsVariantContext)
   return (
     <TabsPrimitive.List
@@ -69,14 +69,14 @@ const tabsTriggerVariants = cva(
         pill: [
           'h-[calc(100%-1px)] flex-1 rounded-md border border-transparent px-2 py-1',
           'text-foreground dark:text-muted-foreground',
-          'data-[state=active]:bg-background data-[state=active]:shadow-sm',
-          'dark:data-[state=active]:text-foreground dark:data-[state=active]:border-input dark:data-[state=active]:bg-input/30',
+          'data-active:bg-background data-active:shadow-sm',
+          'dark:data-active:text-foreground dark:data-active:border-input dark:data-active:bg-input/30',
           'focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:outline-ring focus-visible:ring-[3px] focus-visible:outline-1',
         ],
         line: [
           '-mb-px h-full border-b-2 border-transparent px-1 pb-3',
           'text-muted-foreground hover:text-foreground',
-          'data-[state=active]:border-primary data-[state=active]:text-foreground',
+          'data-active:border-primary data-active:text-foreground',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         ],
       },
@@ -89,10 +89,10 @@ function TabsTrigger({
   className,
   variant,
   ...props
-}: React.ComponentProps<typeof TabsPrimitive.Trigger> & VariantProps<typeof tabsTriggerVariants>) {
+}: TabsPrimitive.Tab.Props & VariantProps<typeof tabsTriggerVariants>) {
   const contextVariant = React.useContext(TabsVariantContext)
   return (
-    <TabsPrimitive.Trigger
+    <TabsPrimitive.Tab
       data-slot="tabs-trigger"
       className={cn(tabsTriggerVariants({ variant: variant ?? contextVariant }), className)}
       {...props}
@@ -100,9 +100,9 @@ function TabsTrigger({
   )
 }
 
-function TabsContent({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.Content>) {
+function TabsContent({ className, ...props }: TabsPrimitive.Panel.Props) {
   return (
-    <TabsPrimitive.Content
+    <TabsPrimitive.Panel
       data-slot="tabs-content"
       className={cn('flex-1 outline-none', className)}
       {...props}

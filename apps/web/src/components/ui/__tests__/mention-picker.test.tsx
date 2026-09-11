@@ -177,10 +177,25 @@ describe('MentionPicker', () => {
     expect(command).toHaveBeenCalledWith({ id: 'principal_jane', label: 'Jane Doe' })
   })
 
+  it('Shift+Tab also confirms the highlighted row', () => {
+    const command = vi.fn()
+    const ref = createRef<MentionPickerHandle>()
+    render(<MentionPicker ref={ref} items={items} command={command} />)
+    expect(fireKey(ref, 'Tab')).toBe(true)
+    expect(command).toHaveBeenCalledWith({ id: 'principal_jane', label: 'Jane Doe' })
+  })
+
   it('returns false for unrelated keys so the editor keeps handling them', () => {
     const ref = createRef<MentionPickerHandle>()
     render(<MentionPicker ref={ref} items={items} command={() => {}} />)
     expect(fireKey(ref, 'a')).toBe(false)
     expect(fireKey(ref, ' ')).toBe(false)
+  })
+
+  it('highlights the typed query in display names', () => {
+    render(<MentionPicker items={items} command={() => {}} query="ja" />)
+    const marks = screen.getAllByText('Ja')
+    expect(marks.length).toBeGreaterThanOrEqual(1)
+    expect(marks[0]).toHaveAttribute('data-query-match')
   })
 })

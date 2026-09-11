@@ -168,8 +168,8 @@ export function SearchableInput({
       <PopoverContent
         align="start"
         sideOffset={4}
-        className={cn('p-0 w-(--radix-popover-anchor-width) overflow-hidden', maxHeightClassName)}
-        onOpenAutoFocus={(e) => e.preventDefault()}
+        className={cn('p-0 w-(--anchor-width) overflow-hidden', maxHeightClassName)}
+        initialFocus={false}
       >
         <Command shouldFilter={false} value={activeValue} onValueChange={setActiveValue}>
           <CommandList className={cn('max-h-none', maxHeightClassName)}>

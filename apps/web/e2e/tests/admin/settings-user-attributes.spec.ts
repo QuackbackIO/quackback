@@ -126,7 +126,7 @@ test.describe('Admin User Attributes Settings', () => {
     // Options should be visible
     const optionContainer = page
       .locator('[role="listbox"]')
-      .or(page.locator('[data-radix-select-content]'))
+      .or(page.locator('[data-slot="select-content"]'))
     if ((await optionContainer.count()) > 0) {
       await expect(optionContainer.getByText('Text')).toBeVisible()
       await expect(optionContainer.getByText('Number')).toBeVisible()
@@ -369,7 +369,7 @@ test.describe('Admin User Attributes Settings', () => {
 
     const optionContainer = page
       .locator('[role="listbox"]')
-      .or(page.locator('[data-radix-select-content]'))
+      .or(page.locator('[data-slot="select-content"]'))
 
     if ((await optionContainer.count()) > 0) {
       const currencyOption = optionContainer.getByText('Currency')

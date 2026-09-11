@@ -260,14 +260,7 @@ function ChannelPicker<TChannel extends Channel>({
           <ChevronUpDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent
-        className="w-(--radix-popover-trigger-width) p-0"
-        align="start"
-        onOpenAutoFocus={(e) => {
-          e.preventDefault()
-          inputRef.current?.focus()
-        }}
-      >
+      <PopoverContent className="w-(--anchor-width) p-0" align="start" initialFocus={inputRef}>
         <div className="flex items-center gap-2 border-b px-3 py-2">
           <MagnifyingGlassIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
           <input
@@ -375,7 +368,7 @@ function BoardFilterCombobox({
           <ChevronUpDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-(--radix-popover-trigger-width) p-0">
+      <PopoverContent align="start" className="w-(--anchor-width) p-0">
         {open && (
           <Command>
             <CommandInput placeholder="Search boards..." />

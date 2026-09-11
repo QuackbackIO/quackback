@@ -113,10 +113,10 @@ describe('ClaimsTable', () => {
       attributes: { map: [{ claimPath: 'dept', attributeKey: 'department' }] },
     })
     expect(
-      screen.getByLabelText('Overwrite attribute values that are already set')
+      screen.getByRole('checkbox', { name: 'Overwrite attribute values that are already set' })
     ).toBeInTheDocument()
     expect(
-      screen.getByLabelText('Clear an attribute when its claim is missing')
+      screen.getByRole('checkbox', { name: 'Clear an attribute when its claim is missing' })
     ).toBeInTheDocument()
     expect(screen.queryByLabelText(/metadata/i)).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: /key/i })).not.toBeInTheDocument()

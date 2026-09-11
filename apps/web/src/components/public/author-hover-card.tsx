@@ -135,7 +135,7 @@ export function AuthorHoverCard({
         className="w-64 p-3"
         align="start"
         sideOffset={6}
-        onOpenAutoFocus={(e) => e.preventDefault()}
+        initialFocus={false}
         onMouseEnter={scheduleOpen}
         onMouseLeave={scheduleClose}
       >

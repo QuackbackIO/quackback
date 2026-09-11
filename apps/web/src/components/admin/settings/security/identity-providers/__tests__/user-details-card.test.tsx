@@ -171,11 +171,11 @@ const confirmSave = () =>
 const editAccountId = () =>
   fireEvent.click(screen.getByRole('button', { name: 'Edit Account ID mapping' }))
 /** Add mapping → Department ← `dept`, committed to the draft. */
-const addDepartmentMapping = () => {
+const addDepartmentMapping = async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Add mapping' }))
-  fireEvent.click(screen.getByRole('combobox', { name: 'Set from this provider' }))
-  fireEvent.click(screen.getByRole('option', { name: /Department/ }))
-  fireEvent.click(screen.getByRole('combobox', { name: 'Provider claim' }))
+  await userEvent.click(screen.getByRole('combobox', { name: 'Set from this provider' }))
+  await userEvent.click(screen.getByRole('option', { name: /Department/ }))
+  await userEvent.click(screen.getByRole('combobox', { name: 'Provider claim' }))
   fireEvent.change(screen.getByPlaceholderText('Search or type…'), { target: { value: 'dept' } })
   fireEvent.click(screen.getByText(/Use ["“]dept["”]/))
   fireEvent.click(screen.getByRole('button', { name: 'Add' }))
@@ -308,7 +308,7 @@ describe('UserDetailsCard save coordination', () => {
         },
       })
     )
-    addDepartmentMapping()
+    await addDepartmentMapping()
     save()
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
@@ -413,7 +413,7 @@ describe('UserDetailsCard save coordination', () => {
         })
     )
     renderCard(makeProvider({ claimMapping: null }))
-    addDepartmentMapping()
+    await addDepartmentMapping()
     fireEvent.click(screen.getByRole('button', { name: 'Save and test' }))
     await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
     expect(openTest).not.toHaveBeenCalled()
@@ -427,7 +427,7 @@ describe('UserDetailsCard save coordination', () => {
       new Error('This mapping was updated elsewhere. Reload and try again.')
     )
     renderCard(makeProvider({ claimMapping: null }))
-    addDepartmentMapping()
+    await addDepartmentMapping()
     fireEvent.click(screen.getByRole('button', { name: 'Save and test' }))
     await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
     expect(openTest).not.toHaveBeenCalled()

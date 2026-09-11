@@ -33,7 +33,7 @@ export function ReactionChip({
   disabled?: boolean
 }) {
   return (
-    <TooltipProvider delayDuration={200}>
+    <TooltipProvider delay={200}>
       <Tooltip>
         <TooltipTrigger asChild>
           <button

@@ -159,8 +159,8 @@ function TrackerSection({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={() => setAdding(true)}>Link existing issue…</DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => create.mutate()}>Create new issue</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setAdding(true)}>Link existing issue…</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => create.mutate()}>Create new issue</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     ) : canLink ? (

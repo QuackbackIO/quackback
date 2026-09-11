@@ -158,19 +158,11 @@ function AssistantCopilotSettings() {
                 </TabsList>
               </div>
 
-              <TabsContent
-                value="knowledge"
-                forceMount
-                className="space-y-6 data-[state=inactive]:hidden"
-              >
+              <TabsContent value="knowledge" keepMounted className="space-y-6">
                 <CopilotKnowledgeCard />
               </TabsContent>
 
-              <TabsContent
-                value="guidance"
-                forceMount
-                className="space-y-6 data-[state=inactive]:hidden"
-              >
+              <TabsContent value="guidance" keepMounted className="space-y-6">
                 <div className="max-w-2xl space-y-1">
                   <h2 className="text-sm font-medium">
                     {intl.formatMessage({

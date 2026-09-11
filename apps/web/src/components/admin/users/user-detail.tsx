@@ -694,13 +694,13 @@ export function UserDetail({
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem
                       variant={blocked ? 'default' : 'destructive'}
-                      onSelect={() => (blocked ? unblock() : setBlockConfirmOpen(true))}
+                      onClick={() => (blocked ? unblock() : setBlockConfirmOpen(true))}
                     >
                       <NoSymbolIcon className="h-4 w-4" />
                       {blocked ? 'Unblock' : 'Block'}
                     </DropdownMenuItem>
                     {user.isLead && (
-                      <DropdownMenuItem onSelect={() => setMergeOpen(true)}>
+                      <DropdownMenuItem onClick={() => setMergeOpen(true)}>
                         <ArrowsRightLeftIcon className="h-4 w-4" />
                         Merge
                       </DropdownMenuItem>
@@ -709,7 +709,7 @@ export function UserDetail({
                     <DropdownMenuItem
                       variant="destructive"
                       disabled={isRemovePending}
-                      onSelect={() => setRemoveDialogOpen(true)}
+                      onClick={() => setRemoveDialogOpen(true)}
                     >
                       {isRemovePending ? (
                         <ArrowPathIcon className="h-4 w-4 animate-spin" />

@@ -124,7 +124,7 @@ export function AdminAuthorHoverCard({
         className="w-72 p-3"
         align="start"
         sideOffset={6}
-        onOpenAutoFocus={(e) => e.preventDefault()}
+        initialFocus={false}
         onMouseEnter={scheduleOpen}
         onMouseLeave={scheduleClose}
       >

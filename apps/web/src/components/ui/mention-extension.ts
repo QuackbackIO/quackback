@@ -41,6 +41,7 @@ const renderSuggestion: SuggestionOptions<MentionItem>['render'] = () => {
         props: {
           items: props.items,
           command: props.command,
+          query: props.query,
         },
         editor: props.editor,
       })
@@ -52,7 +53,14 @@ const renderSuggestion: SuggestionOptions<MentionItem>['render'] = () => {
         showOnCreate: true,
         interactive: true,
         trigger: 'manual',
-        placement: 'bottom-start',
+        placement: 'top-start',
+        // Composer sits at the bottom of the inbox — never flip below the caret.
+        popperOptions: {
+          modifiers: [
+            { name: 'flip', enabled: false },
+            { name: 'preventOverflow', options: { mainAxis: false, altAxis: true } },
+          ],
+        },
         arrow: false,
         // Custom theme so our CSS can strip tippy's default chrome and
         // let .mention-picker be the only visible surface.
@@ -64,6 +72,7 @@ const renderSuggestion: SuggestionOptions<MentionItem>['render'] = () => {
       component?.updateProps({
         items: props.items,
         command: props.command,
+        query: props.query,
       })
       popup?.setProps({
         getReferenceClientRect: () => props.clientRect?.() ?? new DOMRect(),

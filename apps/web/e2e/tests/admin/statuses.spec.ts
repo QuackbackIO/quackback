@@ -71,7 +71,7 @@ test.describe('Admin Status Management', () => {
       await colorButtons.first().click()
 
       // May show popover with color options
-      const colorPopover = page.locator('[data-radix-popover-content]')
+      const colorPopover = page.locator('[data-slot="popover-content"]')
 
       if ((await colorPopover.count()) > 0) {
         await expect(colorPopover).toBeVisible()
@@ -89,14 +89,14 @@ test.describe('Admin Status Management', () => {
       const firstToggle = roadmapToggles.first()
 
       // Get current state
-      const isChecked = await firstToggle.getAttribute('data-state')
+      const isChecked = await firstToggle.getAttribute('aria-checked')
 
       // Click to toggle
       await firstToggle.click()
 
       // State should change
       await page.waitForTimeout(500)
-      const newState = await firstToggle.getAttribute('data-state')
+      const newState = await firstToggle.getAttribute('aria-checked')
 
       // Should be different from initial state
       expect(newState).not.toBe(isChecked)
@@ -107,7 +107,9 @@ test.describe('Admin Status Management', () => {
     // Default status is indicated by a LockClosedIcon (Heroicons, not Lucide).
     // The icon renders with className "h-3 w-3 text-muted-foreground" which is unique
     // to the lock icon within the status list on this page.
-    const defaultIndicator = page.locator('svg.h-3.w-3.text-muted-foreground').or(page.getByText(/default/i))
+    const defaultIndicator = page
+      .locator('svg.h-3.w-3.text-muted-foreground')
+      .or(page.getByText(/default/i))
 
     await expect(defaultIndicator.first()).toBeVisible({ timeout: 10000 })
   })
