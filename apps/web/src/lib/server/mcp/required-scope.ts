@@ -63,7 +63,7 @@ function searchScope(args: unknown): McpScope {
   return entity === 'articles' ? 'read:article' : 'read:feedback'
 }
 
-function getDetailsScope(args: unknown): McpScope | null {
+function getDetailsScope(args: unknown): McpScope {
   const id = isRecord(args) && typeof args.id === 'string' ? args.id : null
   if (!id) return 'read:feedback'
   try {
@@ -73,7 +73,7 @@ function getDetailsScope(args: unknown): McpScope | null {
     }
     return 'read:feedback'
   } catch {
-    return null
+    return 'read:feedback'
   }
 }
 

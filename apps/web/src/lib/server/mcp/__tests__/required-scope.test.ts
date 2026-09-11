@@ -43,6 +43,9 @@ describe('requiredScopeForMcpRpc', () => {
     expect(requiredScopeForMcpRpc(toolsCall('get_details', { id: generateId('article') }))).toBe(
       'read:article'
     )
+    expect(requiredScopeForMcpRpc(toolsCall('get_details', { id: 'not-a-typeid' }))).toBe(
+      'read:feedback'
+    )
   })
 
   it('maps help-center resource reads to read:article', () => {
