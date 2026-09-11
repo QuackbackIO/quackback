@@ -41,6 +41,8 @@ function Checkbox({
           // A <button> checkbox nested in a <label> re-dispatches the click onto
           // the control. Happy-dom (and some label implementations) then bubble
           // that click back to the label and loop until the stack overflows.
+          // Inside a real <label> (data-in-label) the label's own activation
+          // drives the toggle, so leave that path alone (checkout-builder).
           event.stopPropagation()
         }
         onClick?.(event)
