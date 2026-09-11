@@ -310,6 +310,31 @@ describe('startAgentConversation happy path', () => {
     expect(notify.notifyVisitorMessage).not.toHaveBeenCalled()
   })
 
+  it('emails an attachment name when the opening message has no text', async () => {
+    await startAgentConversation(
+      {
+        targetPrincipalId,
+        content: '',
+        attachments: [
+          {
+            url: '/api/storage/chat-images/shot.png',
+            name: 'shot.png',
+            contentType: 'image/png',
+            size: 10,
+          },
+        ],
+      },
+      agent,
+      agentActor
+    )
+
+    expect(notify.notifyConversationStarted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: 'shot.png',
+      })
+    )
+  })
+
   it('passes the FULL content and contentJson to the notify layer (not a truncated preview)', async () => {
     const longContent = 'A'.repeat(300)
     const contentJson = {

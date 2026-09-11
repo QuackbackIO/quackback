@@ -92,6 +92,38 @@ function keepSsrOnlyDepsOutOfClientOptimizer(): PluginOption {
   }
 }
 
+/**
+ * Nitro's Vite pre-middleware skips any request it classifies as a static
+ * asset (`sec-fetch-dest: image`, or a `.png`/`.jpg`/… extension without
+ * `Accept: text/html`) and marks it `_nitroHandled` so the post-middleware
+ * never sees it either. Browser `<img src="/api/storage/…/file.png">` is
+ * exactly that shape, so the splat route never runs and Vite answers
+ * `Cannot GET`. Clear the asset signals for this prefix only; Nitro's
+ * post-middleware then serves the bytes.
+ */
+function letNitroServeStorageAssets(): PluginOption {
+  return {
+    name: 'quackback:let-nitro-serve-storage-assets',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use((req, _res, next) => {
+        const pathname = req.url?.split('?')[0] ?? ''
+        if (!pathname.startsWith('/api/storage/')) {
+          next()
+          return
+        }
+        // Drop dest so Nitro does not take the `image`/`style` branch.
+        delete req.headers['sec-fetch-dest']
+        const accept = req.headers.accept
+        if (typeof accept !== 'string' || !/\btext\/html\b/.test(accept)) {
+          req.headers.accept = accept ? `${accept}, text/html` : 'text/html'
+        }
+        next()
+      })
+    },
+  }
+}
+
 function getBuildInfo() {
   const pkg = JSON.parse(readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8'))
   let gitCommit = 'unknown'
@@ -154,6 +186,7 @@ export default defineConfig(({ mode }) => {
       tsconfigPaths: true,
     },
     plugins: [
+      letNitroServeStorageAssets(),
       keepSsrOnlyDepsOutOfClientOptimizer(),
       stubServerLoggerInClient(),
       tailwindcss(),

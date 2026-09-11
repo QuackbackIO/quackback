@@ -1,7 +1,15 @@
-import { useEffect, useMemo, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type DragEvent,
+} from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { XMarkIcon } from '@heroicons/react/24/solid'
+import { PaperClipIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import type { JSONContent } from '@tiptap/react'
 import type { ConversationId, PrincipalId, TicketId, TicketTypeId } from '@quackback/ids'
 import type { TicketType, TiptapContent } from '@/lib/shared/db-types'
@@ -20,8 +28,10 @@ import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { TicketFormFields } from '@/components/shared/ticket-form-fields'
 import { useTicketIntakeForm } from '@/components/shared/use-ticket-intake-form'
 import { CONVERSATION_EDITOR_FEATURES } from '@/components/conversation/conversation-editor-features'
+import { ComposerAttachmentTray } from '@/components/shared/composer-attachment-tray'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
+import { useConversationComposerAttachments } from '@/lib/client/hooks/use-conversation-composer-attachments'
 import {
   Dialog,
   DialogContent,
@@ -46,6 +56,10 @@ import {
 // enforced pre-submit with the same toast the dialog already uses for
 // mutation errors.
 const DESCRIPTION_MAX_LENGTH = 4000
+
+function toastImageUploadError(error: Error) {
+  toast.error(error.message)
+}
 
 interface Requester {
   principalId: string
@@ -195,6 +209,7 @@ export function CreateTicketDialog({
       setTitle(fromConversation ? (defaultTitle ?? '') : '')
       setDescriptionJson(undefined)
       setDescriptionMarkdown('')
+      clearAttachments()
       setRequester(fromConversation ? (defaultRequester ?? null) : null)
       setFieldValues({})
       setFieldErrors({})
@@ -215,9 +230,43 @@ export function CreateTicketDialog({
   }, [open, candidates, selectedTypeId])
 
   const create = useCreateTicket()
-  const { upload: uploadImage } = useImageUpload({ prefix: 'chat-images' })
+  const { upload: uploadImage } = useImageUpload({
+    prefix: 'chat-images',
+    onError: toastImageUploadError,
+  })
+  const {
+    pending: pendingAttachments,
+    addFiles,
+    remove: removeAttachment,
+    clear: clearAttachments,
+    uploading,
+  } = useConversationComposerAttachments(uploadImage)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleComposerPaste = useCallback(
+    (e: ClipboardEvent<HTMLDivElement>) => {
+      const images = Array.from(e.clipboardData?.files ?? []).filter((f) =>
+        f.type.startsWith('image/')
+      )
+      if (images.length === 0) return
+      e.preventDefault()
+      void addFiles(images)
+    },
+    [addFiles]
+  )
+  const handleComposerDrop = useCallback(
+    (e: DragEvent<HTMLDivElement>) => {
+      const images = Array.from(e.dataTransfer?.files ?? []).filter((f) =>
+        f.type.startsWith('image/')
+      )
+      if (images.length === 0) return
+      e.preventDefault()
+      void addFiles(images)
+    },
+    [addFiles]
+  )
   const [linking, setLinking] = useState(false)
-  const canCreate = title.trim().length > 0 && !create.isPending && !linking
+  const canCreate = title.trim().length > 0 && !create.isPending && !linking && !uploading
 
   /** Type swap: change the field set and drop the old type's answers (the
    *  retype rule protects STORED answers, not a draft's stale keys). Any
@@ -314,6 +363,7 @@ export function CreateTicketDialog({
         descriptionJson: isEmptyTiptapDoc(descriptionJson as TiptapContent | undefined)
           ? null
           : (descriptionJson as TiptapContent),
+        attachments: pendingAttachments.length > 0 ? pendingAttachments : undefined,
         requesterPrincipalId: requester?.principalId as PrincipalId | undefined,
         customAttributes,
         // Lets the create inherit this conversation's assignee (born owned by
@@ -450,17 +500,43 @@ export function CreateTicketDialog({
 
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">Description</label>
-            <RichTextEditor
-              value={descriptionJson ?? ''}
-              onChange={(json, _html, markdown) => {
-                setDescriptionJson(json)
-                setDescriptionMarkdown(markdown)
-              }}
-              features={CONVERSATION_EDITOR_FEATURES}
-              onImageUpload={uploadImage}
-              minHeight="120px"
-              placeholder="Add details (optional). This opens the ticket thread."
-            />
+            <div onPaste={handleComposerPaste} onDrop={handleComposerDrop}>
+              <RichTextEditor
+                value={descriptionJson ?? ''}
+                onChange={(json, _html, markdown) => {
+                  setDescriptionJson(json)
+                  setDescriptionMarkdown(markdown)
+                }}
+                features={CONVERSATION_EDITOR_FEATURES}
+                minHeight="120px"
+                placeholder="Add details (optional). This opens the ticket thread."
+              />
+              <ComposerAttachmentTray
+                attachments={pendingAttachments}
+                onRemove={removeAttachment}
+              />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  const files = e.target.files
+                  if (files && files.length > 0) void addFiles(files)
+                  e.target.value = ''
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="mt-1 flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-40 transition-colors"
+                aria-label="Attach image"
+              >
+                <PaperClipIcon className="h-4 w-4" />
+              </button>
+            </div>
           </div>
 
           {/* The chosen type's field set — agents fill the full set (customer-

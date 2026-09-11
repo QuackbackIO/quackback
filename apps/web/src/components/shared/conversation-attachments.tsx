@@ -1,6 +1,7 @@
 import { PaperClipIcon } from '@heroicons/react/24/outline'
 import { ZoomableImage } from '@/components/shared/zoomable-image'
 import type { ConversationAttachment } from '@/lib/shared/conversation/types'
+import { sanitizeImageUrl } from '@/lib/shared/utils/sanitize'
 
 function humanSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -9,13 +10,15 @@ function humanSize(bytes: number): string {
 }
 
 /**
- * Defense-in-depth: only ever render http(s) or same-origin relative URLs into
- * href/src, so a malformed/hostile URL can never become a javascript: sink.
+ * Defense-in-depth: never render a javascript: (or other hostile) URL into
+ * href/src. Image srcs use the same raster-data-URI policy as lift/sanitize
+ * so a stored `data:image/png;...` that we lift onto attachments still shows.
  */
-function isSafeUrl(url: string): boolean {
-  if (url.startsWith('/')) return true
+function isSafeAttachment(a: ConversationAttachment): boolean {
+  if (a.contentType.startsWith('image/')) return sanitizeImageUrl(a.url).length > 0
+  if (a.url.startsWith('/')) return true
   try {
-    const proto = new URL(url).protocol
+    const proto = new URL(a.url).protocol
     return proto === 'https:' || proto === 'http:'
   } catch {
     return false
@@ -28,7 +31,7 @@ export function ConversationAttachmentList({
 }: {
   attachments: ConversationAttachment[]
 }) {
-  const safe = (attachments ?? []).filter((a) => isSafeUrl(a.url))
+  const safe = (attachments ?? []).filter(isSafeAttachment)
   if (safe.length === 0) return null
   return (
     <div className="mt-1.5 flex flex-col gap-1.5">
@@ -40,7 +43,7 @@ export function ConversationAttachmentList({
             src={a.url}
             alt={a.name}
             className="block w-fit overflow-hidden rounded-lg border border-border/40"
-            thumbClassName="max-h-40 max-w-[14rem] object-cover"
+            thumbClassName="max-h-40 max-w-full w-auto h-auto object-contain"
           />
         ) : (
           <a
