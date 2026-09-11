@@ -24,7 +24,7 @@ import {
   unauthenticatedMcpChallenge,
   unauthenticatedMcpResponse,
 } from './oauth-challenge'
-import { requiredScopeForMcpRpc } from './required-scope'
+import { requiredScopesForMcpRpc } from './required-scope'
 import { DomainException, RateLimitError } from '@/lib/shared/errors'
 import { EntitlementRequiredError } from '@/lib/server/errors/entitlement-error'
 import { getDeveloperConfig } from '@/lib/server/domains/settings/settings.service'
@@ -222,9 +222,9 @@ async function oauthScopeStepUp(request: Request, auth: McpAuthContext): Promise
   } catch {
     return null
   }
-  const required = requiredScopeForMcpRpc(body)
-  if (!required || hasApiScope(auth.scopes, required)) return null
-  return insufficientScopeChallenge(required)
+  const missing = requiredScopesForMcpRpc(body).find((scope) => !hasApiScope(auth.scopes, scope))
+  if (!missing) return null
+  return insufficientScopeChallenge(missing)
 }
 
 /** Create a stateless transport + server, handle the request, clean up */

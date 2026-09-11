@@ -13,8 +13,7 @@
  * - comments.ts      add_comment, update_comment, delete_comment,
  *                    react_to_comment
  * - changelog.ts     create_changelog, update_changelog, delete_changelog
- * - suggestions.ts   list_suggestions, accept_suggestion, dismiss_suggestion,
- *                    restore_suggestion
+ * - suggestions.ts   accept_suggestion, dismiss_suggestion, restore_suggestion
  * - help-center.ts   create_article, update_article, delete_article,
  *                    manage_category
  * - conversations.ts list_conversations, get_conversation,

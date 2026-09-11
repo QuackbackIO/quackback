@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import { generateId } from '@quackback/ids'
-import { requiredScopeForMcpRpc } from '../required-scope'
+import { registerTools } from '@/lib/server/mcp/tools'
+import {
+  MCP_ARGUMENT_DISPATCHED_TOOLS,
+  MCP_FIXED_TOOL_SCOPES,
+  requiredScopeForMcpRpc,
+  requiredScopesForMcpRpc,
+} from '../required-scope'
 
 function toolsCall(name: string, args: Record<string, unknown> = {}) {
   return { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }
@@ -43,5 +49,37 @@ describe('requiredScopeForMcpRpc', () => {
   it('ignores initialize and unknown tools', () => {
     expect(requiredScopeForMcpRpc({ jsonrpc: '2.0', id: 1, method: 'initialize' })).toBeNull()
     expect(requiredScopeForMcpRpc(toolsCall('not_a_tool'))).toBeNull()
+  })
+
+  it('collects every required scope in a JSON-RPC batch', () => {
+    expect(
+      requiredScopesForMcpRpc([
+        toolsCall('search', { query: 'x' }),
+        toolsCall('create_article'),
+        { jsonrpc: '2.0', id: 3, method: 'initialize' },
+      ])
+    ).toEqual(['read:feedback', 'write:article'])
+  })
+
+  it('maps every registered tool that is not argument-dispatched', () => {
+    const names: string[] = []
+    registerTools(
+      {
+        tool: (name: string) => {
+          names.push(name)
+        },
+      } as never,
+      {
+        principalId: 'principal_test',
+        name: 'Test',
+        role: 'admin',
+        authMethod: 'api-key',
+        scopes: [],
+      } as never
+    )
+    const dispatched = new Set<string>(MCP_ARGUMENT_DISPATCHED_TOOLS)
+    const registeredFixed = names.filter((name) => !dispatched.has(name))
+    expect(registeredFixed.sort()).toEqual(Object.keys(MCP_FIXED_TOOL_SCOPES).sort())
+    for (const name of dispatched) expect(names).toContain(name)
   })
 })

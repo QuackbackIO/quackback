@@ -96,12 +96,25 @@ describe('rewriteMcpAuthorizeRequest', () => {
     ])
   })
 
-  it('does not rewrite a request that was already expanded', () => {
+  it('does not rewrite a request whose scope is already the catalogue', () => {
     const once = rewriteMcpAuthorizeRequest(
       new Request('http://localhost:3008/api/auth/oauth2/authorize?scope=read:feedback')
     )
     const twice = rewriteMcpAuthorizeRequest(once)
     expect(twice.url).toBe(once.url)
+  })
+
+  it('ignores a client-supplied qb_requested_scope when scope is not the catalogue', () => {
+    const request = rewriteMcpAuthorizeRequest(
+      new Request(
+        'http://localhost:3008/api/auth/oauth2/authorize?scope=read:feedback&qb_requested_scope=write:chat+write:feedback'
+      )
+    )
+    const url = new URL(request.url)
+    expect(parseScopeList(url.searchParams.get(CLIENT_REQUESTED_SCOPE_PARAM))).toEqual([
+      'read:feedback',
+    ])
+    expect(url.searchParams.get('scope')?.split(' ')).toEqual([...MCP_AS_SCOPES])
   })
 })
 

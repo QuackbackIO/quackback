@@ -48,19 +48,35 @@ export function expandAuthorizeScopes(): string {
   return MCP_AS_SCOPES.join(' ')
 }
 
+function isFullAsCatalogue(raw: string): boolean {
+  const held = new Set(parseScopeList(raw))
+  return held.size === MCP_AS_SCOPES.length && MCP_AS_SCOPES.every((scope) => held.has(scope))
+}
+
 /**
  * MCP clients follow the spec and first-request only PRM / 401 scopes (the
  * three reads). Better Auth then refuses any consent grant that was not on
  * that authorize request. Expand `scope` to the full allow-list so the user
  * can opt into writes now; keep the original request for defaults.
  *
+ * A client-supplied `qb_requested_scope` is ignored on the first hop — only
+ * `scope=` is the request. The second pass is identified by `scope` already
+ * being the catalogue, not by the param being present.
+ *
  * @see https://modelcontextprotocol.io/specification/2026-07-28/basic/security_best_practices#scope-minimization
  */
 export function rewriteMcpAuthorizeRequest(request: Request): Request {
   const url = new URL(request.url)
   if (!url.pathname.endsWith('/oauth2/authorize')) return request
-  if (url.searchParams.has(CLIENT_REQUESTED_SCOPE_PARAM)) return request
-  url.searchParams.set(CLIENT_REQUESTED_SCOPE_PARAM, url.searchParams.get('scope') ?? '')
+  const scope = url.searchParams.get('scope') ?? ''
+  if (isFullAsCatalogue(scope)) {
+    if (!url.searchParams.has(CLIENT_REQUESTED_SCOPE_PARAM)) {
+      url.searchParams.set(CLIENT_REQUESTED_SCOPE_PARAM, scope)
+      return new Request(url, request)
+    }
+    return request
+  }
+  url.searchParams.set(CLIENT_REQUESTED_SCOPE_PARAM, scope)
   url.searchParams.set('scope', expandAuthorizeScopes())
   return new Request(url, request)
 }

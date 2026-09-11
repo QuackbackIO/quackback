@@ -77,7 +77,13 @@ function getDetailsScope(args: unknown): McpScope | null {
   }
 }
 
-export function requiredScopeForMcpRpc(body: unknown): McpScope | null {
+/** Tools that pick a scope from arguments instead of a single `scope:` on registerTool. */
+export const MCP_ARGUMENT_DISPATCHED_TOOLS = ['search', 'get_details'] as const
+
+/** Fixed tool → scope map. `search` / `get_details` are not here. */
+export const MCP_FIXED_TOOL_SCOPES: Readonly<Record<string, McpScope>> = TOOL_SCOPES
+
+function requiredScopeForOne(body: unknown): McpScope | null {
   if (!isRecord(body) || typeof body.method !== 'string') return null
   const params = isRecord(body.params) ? body.params : {}
 
@@ -94,4 +100,19 @@ export function requiredScopeForMcpRpc(body: unknown): McpScope | null {
   }
 
   return null
+}
+
+/** Every capability scope this JSON-RPC body (or batch) needs. */
+export function requiredScopesForMcpRpc(body: unknown): McpScope[] {
+  if (Array.isArray(body)) {
+    const scopes: McpScope[] = []
+    for (const item of body) scopes.push(...requiredScopesForMcpRpc(item))
+    return scopes
+  }
+  const one = requiredScopeForOne(body)
+  return one ? [one] : []
+}
+
+export function requiredScopeForMcpRpc(body: unknown): McpScope | null {
+  return requiredScopesForMcpRpc(body)[0] ?? null
 }

@@ -146,7 +146,7 @@ function ConsentPage() {
       <div className="w-full max-w-md space-y-8">
         <div className="flex flex-col items-center text-center gap-1.5">
           <div className="mb-1 flex h-11 w-11 items-center justify-center rounded-full border border-border/50 bg-muted/50">
-            {client.logo_uri ? (
+            {client.logo_uri && isSafeUrl(client.logo_uri) ? (
               <img
                 src={client.logo_uri}
                 alt={clientName}

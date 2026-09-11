@@ -197,27 +197,41 @@ CREATE TABLE IF NOT EXISTS "oauth_client_assertion" (
 --> statement-breakpoint
 -- Microsoft oid backfill from stored id_tokens (unverified decode of the
 -- already-stored JWT payload — the token was verified at sign-in time).
+-- A corrupt token is skipped so one bad row cannot abort the upgrade.
+CREATE OR REPLACE FUNCTION pg_temp._m0279_microsoft_oid(id_token text)
+RETURNS text
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF id_token IS NULL OR id_token NOT LIKE '%.%.%' THEN
+    RETURN NULL;
+  END IF;
+  RETURN convert_from(
+    decode(
+      rpad(
+        replace(replace(split_part(id_token, '.', 2), '-', '+'), '_', '/'),
+        ((length(replace(replace(split_part(id_token, '.', 2), '-', '+'), '_', '/')) + 3) / 4) * 4,
+        '='
+      ),
+      'base64'
+    ),
+    'utf8'
+  )::jsonb ->> 'oid';
+EXCEPTION WHEN OTHERS THEN
+  RETURN NULL;
+END;
+$$;
+--> statement-breakpoint
 -- @replay: guarded-by microsoft account_id already matching the stored oid, or a colliding row already owning that oid
 DO $$
 BEGIN
 WITH extracted AS (
   SELECT
     "id",
-    convert_from(
-      decode(
-        rpad(
-          replace(replace(split_part("id_token", '.', 2), '-', '+'), '_', '/'),
-          ((length(replace(replace(split_part("id_token", '.', 2), '-', '+'), '_', '/')) + 3) / 4) * 4,
-          '='
-        ),
-        'base64'
-      ),
-      'utf8'
-    )::jsonb ->> 'oid' AS oid
+    pg_temp._m0279_microsoft_oid("id_token") AS oid
   FROM "account"
   WHERE "provider_id" = 'microsoft'
     AND "id_token" IS NOT NULL
-    AND "id_token" LIKE '%.%.%'
 )
 UPDATE "account" AS a
 SET "account_id" = e.oid
