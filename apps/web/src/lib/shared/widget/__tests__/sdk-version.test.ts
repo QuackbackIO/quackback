@@ -57,7 +57,7 @@ describe('widgetSdkNeedsUpdate', () => {
 
 describe('copy', () => {
   it('names the connected and update states', () => {
-    expect(widgetConnectedStatusLabel({})).toBe('Not detected yet')
+    expect(widgetConnectedStatusLabel({})).toBe('Not on your site yet')
     expect(widgetConnectedStatusLabel({ hasWidgetInstalled: true })).toBe('Widget connected')
     expect(
       widgetConnectedStatusLabel({ hasWidgetInstalled: true, widgetSdkNeedsUpdate: true })

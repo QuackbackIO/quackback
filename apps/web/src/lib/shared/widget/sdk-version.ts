@@ -57,7 +57,7 @@ export function widgetConnectedStatusLabel(opts: {
   hasWidgetInstalled?: boolean
   widgetSdkNeedsUpdate?: boolean
 }): string {
-  if (!opts.hasWidgetInstalled) return 'Not detected yet'
+  if (!opts.hasWidgetInstalled) return 'Not on your site yet'
   if (opts.widgetSdkNeedsUpdate) return 'Widget connected · SDK update available'
   return 'Widget connected'
 }
