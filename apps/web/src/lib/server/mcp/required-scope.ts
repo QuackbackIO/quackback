@@ -45,7 +45,7 @@ export const TOOL_SCOPES: Readonly<Record<string, McpScope>> = {
   unlink_ticket: 'write:chat',
 }
 
-const RESOURCE_SCOPES: Record<string, McpScope> = {
+export const RESOURCE_SCOPES: Readonly<Record<string, McpScope>> = {
   'quackback://boards': 'read:feedback',
   'quackback://statuses': 'read:feedback',
   'quackback://tags': 'read:feedback',

@@ -1,12 +1,22 @@
 import { describe, it, expect } from 'vitest'
 import { generateId } from '@quackback/ids'
 import { registerTools } from '@/lib/server/mcp/tools'
+import { registerResources } from '@/lib/server/mcp/server'
 import {
   MCP_ARGUMENT_DISPATCHED_TOOLS,
+  RESOURCE_SCOPES,
   TOOL_SCOPES,
   requiredScopeForMcpRpc,
   requiredScopesForMcpRpc,
 } from '../required-scope'
+
+const TEST_AUTH = {
+  principalId: 'principal_test',
+  name: 'Test',
+  role: 'admin',
+  authMethod: 'api-key',
+  scopes: [],
+} as never
 
 function toolsCall(name: string, args: Record<string, unknown> = {}) {
   return { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }
@@ -69,17 +79,45 @@ describe('requiredScopeForMcpRpc', () => {
           names.push(name)
         },
       } as never,
-      {
-        principalId: 'principal_test',
-        name: 'Test',
-        role: 'admin',
-        authMethod: 'api-key',
-        scopes: [],
-      } as never
+      TEST_AUTH
     )
     const dispatched = new Set<string>(MCP_ARGUMENT_DISPATCHED_TOOLS)
     const registeredFixed = names.filter((name) => !dispatched.has(name))
     expect(registeredFixed.sort()).toEqual(Object.keys(TOOL_SCOPES).sort())
     for (const name of dispatched) expect(names).toContain(name)
+  })
+
+  it('maps every registered resource URI', () => {
+    const uris: string[] = []
+    registerResources(
+      {
+        resource: (_name: string, uri: string) => {
+          uris.push(uri)
+        },
+      } as never,
+      TEST_AUTH
+    )
+    expect(uris.sort()).toEqual(Object.keys(RESOURCE_SCOPES).sort())
+    for (const [uri, scope] of Object.entries(RESOURCE_SCOPES)) {
+      expect(
+        requiredScopeForMcpRpc({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'resources/read',
+          params: { uri },
+        })
+      ).toBe(scope)
+    }
+  })
+
+  it('ignores unknown resource URIs', () => {
+    expect(
+      requiredScopeForMcpRpc({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'resources/read',
+        params: { uri: 'quackback://not-a-resource' },
+      })
+    ).toBeNull()
   })
 })

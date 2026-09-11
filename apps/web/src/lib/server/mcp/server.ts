@@ -2,7 +2,7 @@
  * MCP Server Factory
  *
  * Creates an McpServer instance with all tools and resources registered.
- * Resources are inlined here (5 one-liner service calls).
+ * Resources are inlined here (one service call each).
  */
 
 import { McpServer, type ReadResourceCallback } from '@modelcontextprotocol/sdk/server/mcp.js'
@@ -62,7 +62,7 @@ function jsonResource(name: string, data: unknown): Awaited<ReturnType<ReadResou
   }
 }
 
-function registerResources(server: McpServer, auth: McpAuthContext) {
+export function registerResources(server: McpServer, auth: McpAuthContext) {
   server.resource(
     'boards',
     'quackback://boards',
