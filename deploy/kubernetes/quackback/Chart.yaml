@@ -1,0 +1,20 @@
+apiVersion: v2
+name: quackback
+description: Open-source feedback platform — boards, roadmap, changelog, and an AI-powered inbox.
+type: application
+version: 0.1.0
+appVersion: "0.13.1"
+home: https://quackback.io
+icon: https://raw.githubusercontent.com/QuackbackIO/quackback/main/.github/logo.svg
+sources:
+  - https://github.com/QuackbackIO/quackback
+keywords:
+  - feedback
+  - roadmap
+  - changelog
+  - support
+  - helpdesk
+maintainers:
+  - name: Quackback
+    url: https://quackback.io
+    email: support@quackback.io

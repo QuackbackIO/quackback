@@ -1,0 +1,32 @@
+Quackback has been deployed.
+
+{{- if .Values.ingress.enabled }}
+
+Once the ingress controller has provisioned, your instance will be available at:
+  {{ if .Values.ingress.tls.enabled }}https{{ else }}http{{ end }}://{{ .Values.ingress.host }}
+{{- else }}
+
+No ingress was created (ingress.enabled=false). Reach the app with:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "quackback.fullname" . }} 3000:{{ .Values.app.port }}
+then open http://localhost:3000
+{{- end }}
+
+{{- if .Values.migrations.enabled }}
+
+Migrations run automatically via a pre-install/pre-upgrade hook Job
+({{ include "quackback.fullname" . }}-migrate). Check its status with:
+  kubectl -n {{ .Release.Namespace }} logs job/{{ include "quackback.fullname" . }}-migrate
+{{- end }}
+
+{{- if .Values.postgres.enabled }}
+
+A bundled PostgreSQL StatefulSet is running for evaluation. For production,
+point at a managed database instead: set postgres.enabled=false and
+externalDatabaseUrl, then see the note on pg_cron in
+deploy/kubernetes/README.md.
+{{- end }}
+
+Check the rollout with:
+  kubectl -n {{ .Release.Namespace }} rollout status deployment/{{ include "quackback.fullname" . }}
+
+Docs: https://quackback.io/docs/self-hosting
