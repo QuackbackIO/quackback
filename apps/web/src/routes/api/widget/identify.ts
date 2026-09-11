@@ -112,6 +112,7 @@ async function findOrCreateSession(
     where: and(
       eq(session.userId, userId),
       gt(session.expiresAt, new Date()),
+      sql`${session.scope} in ('widget', 'portal')`,
       sql`exists (select 1 from widget_identified_session wis where wis.session_id = ${session.id} and wis.hmac_verified = true)`
     ),
   })
@@ -129,6 +130,7 @@ async function findOrCreateSession(
     id,
     token,
     userId,
+    scope: 'widget',
     expiresAt: new Date(now.getTime() + SESSION_TTL_MS),
     createdAt: now,
     updatedAt: now,

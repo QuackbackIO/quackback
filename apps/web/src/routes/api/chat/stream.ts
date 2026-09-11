@@ -27,7 +27,7 @@ import { readActivitySnapshot } from '@/lib/server/domains/assistant/assistant-a
 import { canViewConversation } from '@/lib/server/policy/conversation'
 import { assertTicketVisible } from '@/lib/server/domains/tickets/ticket.service'
 import { NotFoundError } from '@/lib/shared/errors'
-import { isTeamMember } from '@/lib/shared/roles'
+import { isTeamMember, toSessionScope, type SessionScope } from '@/lib/shared/roles'
 import {
   loadAuthors,
   toMessageDTO,
@@ -52,6 +52,8 @@ interface StreamPrincipal {
   /** How the principal was authenticated: a minted token (portal access already
    *  enforced at mint) vs a raw session cookie (must be re-gated here). */
   via: 'token' | 'session'
+  /** Session audience; null for minted tokens. Non-dashboard sessions are portal-tier here. */
+  scope: SessionScope | null
 }
 
 /** Resolve the principal for a stream from a signed token (widget) or the
@@ -61,7 +63,8 @@ async function resolveStreamPrincipal(request: Request): Promise<StreamPrincipal
   const tokenPrincipalId = verifyStreamToken(url.searchParams.get('token'))
   if (tokenPrincipalId) {
     const row = await db.query.principal.findFirst({ where: eq(principal.id, tokenPrincipalId) })
-    if (row) return { principalId: row.id, role: row.role, type: row.type, via: 'token' }
+    if (row)
+      return { principalId: row.id, role: row.role, type: row.type, via: 'token', scope: null }
     return null
   }
 
@@ -71,7 +74,13 @@ async function resolveStreamPrincipal(request: Request): Promise<StreamPrincipal
     where: eq(principal.userId, session.user.id as never),
   })
   if (!row) return null
-  return { principalId: row.id, role: row.role, type: row.type, via: 'session' }
+  return {
+    principalId: row.id,
+    role: row.role,
+    type: row.type,
+    via: 'session',
+    scope: toSessionScope(session.session.scope),
+  }
 }
 
 /** Frame a raw pub/sub payload as a named SSE event (id carried for message
@@ -105,6 +114,9 @@ export const Route = createFileRoute('/api/chat/stream')({
           return new Response('Unauthorized', { status: 401 })
         }
 
+        // A non-dashboard session is portal-tier regardless of principal role.
+        const effectiveRole = me.via === 'session' && me.scope !== 'dashboard' ? 'user' : me.role
+
         // Feature-flag gate: stop streams when the relevant surface is off (a
         // token may have been minted before the flag flipped). Portal access
         // for visitors was enforced when the stream token was minted. A ticket
@@ -124,7 +136,7 @@ export const Route = createFileRoute('/api/chat/stream')({
 
         const actor: Actor = {
           principalId: me.principalId,
-          role: (me.role as Actor['role']) ?? null,
+          role: (effectiveRole as Actor['role']) ?? null,
           principalType: normalizePrincipalType(me.type),
           segmentIds: new Set(),
         }
@@ -134,14 +146,14 @@ export const Route = createFileRoute('/api/chat/stream')({
         let backfillConversationId: ConversationId | null = null
 
         if (scope === 'inbox') {
-          if (!isTeamMember(me.role)) {
+          if (!isTeamMember(effectiveRole)) {
             return new Response('Forbidden', { status: 403 })
           }
           channels.push(CONVERSATION_INBOX_CHANNEL)
         } else if (scope === 'presence') {
           // App-wide agent presence: any admin page keeps a team member marked
           // online for routing. Heartbeat only — no channel subscription.
-          if (!isTeamMember(me.role)) {
+          if (!isTeamMember(effectiveRole)) {
             return new Response('Forbidden', { status: 403 })
           }
         } else if (conversationIdParam) {
@@ -149,7 +161,7 @@ export const Route = createFileRoute('/api/chat/stream')({
           // A cookie-authed (non-token) visitor bypassed the mint-time portal
           // gate, so re-check portal access here. Token streams were already
           // gated at mint; team members reach chat from the admin inbox.
-          if (me.via === 'session' && !isTeamMember(me.role)) {
+          if (me.via === 'session' && !isTeamMember(effectiveRole)) {
             const { resolvePortalAccessForRequest } =
               await import('@/lib/server/functions/portal-access')
             const access = await resolvePortalAccessForRequest()
@@ -170,7 +182,7 @@ export const Route = createFileRoute('/api/chat/stream')({
           // Team-member-only in this phase (unified inbox §3.2, M3) — there is
           // no requester-facing ticket stream yet, so unlike conversationId
           // above there's no visitor/portal branch to re-gate.
-          if (!isTeamMember(me.role)) {
+          if (!isTeamMember(effectiveRole)) {
             return new Response('Forbidden', { status: 403 })
           }
           const ticketId = ticketIdParam as TicketId
@@ -339,7 +351,7 @@ export const Route = createFileRoute('/api/chat/stream')({
                         // Visitor (non-team) reconnect backfill must exclude
                         // them — publish-time channel separation doesn't cover
                         // this DB read path.
-                        isTeamMember(me.role)
+                        isTeamMember(effectiveRole)
                           ? undefined
                           : eq(conversationMessages.isInternal, false),
                         or(

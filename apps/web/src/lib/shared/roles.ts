@@ -21,6 +21,14 @@ export type Role = 'admin' | 'member' | 'user'
 /** What kind of actor a principal is. */
 export type PrincipalType = 'user' | 'anonymous' | 'service' | 'support'
 
+/** Session audience. Only 'dashboard' may satisfy team/permission gates. */
+export type SessionScope = 'dashboard' | 'widget' | 'portal'
+
+/** Normalize a stored scope; unmarked values are dashboard. */
+export function toSessionScope(value: unknown): SessionScope {
+  return value === 'widget' || value === 'portal' ? value : 'dashboard'
+}
+
 /** Role privilege order, low to high. Used to compare/escalate roles. */
 export const ROLE_RANK: Record<Role, number> = { user: 0, member: 1, admin: 2 }
 

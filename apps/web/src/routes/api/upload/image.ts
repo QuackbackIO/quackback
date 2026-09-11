@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import type { UserId } from '@quackback/ids'
 import { auth } from '@/lib/server/auth'
+import { toSessionScope } from '@/lib/shared/roles'
 import { db, eq, principal } from '@/lib/server/db'
 import { isS3Usable, uploadImageFromFormData } from '@/lib/server/storage/s3'
 
@@ -17,6 +18,9 @@ export async function handleAdminUpload({ request }: { request: Request }): Prom
   const session = await auth.api.getSession({ headers: request.headers })
   if (!session?.user) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  if (toSessionScope(session.session.scope) !== 'dashboard') {
+    return Response.json({ error: 'Forbidden' }, { status: 403 })
   }
   const principalRecord = await db.query.principal.findFirst({
     where: eq(principal.userId, session.user.id as UserId),

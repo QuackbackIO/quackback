@@ -282,6 +282,7 @@ describe('the real corpus', () => {
     // that are not already present, so a second run writes zero rows.
     // 0279 wraps oauth_client backfills, the oauth_client_resource FK rewrite,
     // and the Microsoft oid rewrite so each second run writes zero rows.
+    // 0280 marks session scope behind scope predicates, so a second run writes zero rows.
     const vouching = files.filter(
       (f) => assessReplaySafety(f, readFileSync(join(MIGRATIONS_DIR, f), 'utf8')).vouched.length > 0
     )
@@ -295,6 +296,7 @@ describe('the real corpus', () => {
       '0274_slack_agent_gateway.sql',
       '0277_widget_chat_to_messenger.sql',
       '0279_better_auth_17.sql',
+      '0280_widget_session_scope.sql',
     ])
   })
 

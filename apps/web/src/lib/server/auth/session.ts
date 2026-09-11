@@ -3,7 +3,8 @@ import type { UserId, SessionId } from '@quackback/ids'
 import { auth } from '@/lib/server/auth/index'
 import { db, principal as principalTable, eq } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
-import type { PrincipalType } from '@/lib/shared/roles'
+import type { PrincipalType, SessionScope } from '@/lib/shared/roles'
+import { toSessionScope } from '@/lib/shared/roles'
 
 const log = logger.child({ component: 'auth-session' })
 
@@ -31,6 +32,7 @@ export interface Session {
     createdAt: string
     updatedAt: string
     userId: UserId
+    scope: SessionScope
   }
   user: SessionUser
 }
@@ -60,6 +62,7 @@ export async function getSession(): Promise<Session | null> {
         createdAt: session.session.createdAt.toISOString(),
         updatedAt: session.session.updatedAt.toISOString(),
         userId,
+        scope: toSessionScope(session.session.scope),
       },
       user: {
         id: userId,

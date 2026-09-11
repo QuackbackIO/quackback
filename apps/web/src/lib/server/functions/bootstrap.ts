@@ -1,5 +1,6 @@
 import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
 import type { Role } from '@/lib/shared/roles'
+import { toSessionScope } from '@/lib/shared/roles'
 import { getThemeCookie, parsePrefersColorScheme, type Theme } from '@/lib/shared/theme'
 import { getUpdateBannerDismissedVersionCookie } from '@/lib/shared/update-banner-cookie'
 import { resolveLocale, type SupportedLocale } from '@/lib/shared/i18n'
@@ -122,6 +123,7 @@ async function getSessionAndRole(): Promise<{
           createdAt: session.session.createdAt.toISOString(),
           updatedAt: session.session.updatedAt.toISOString(),
           userId,
+          scope: toSessionScope(session.session.scope),
         },
         user: {
           id: userId,

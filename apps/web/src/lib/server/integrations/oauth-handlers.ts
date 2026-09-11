@@ -10,6 +10,7 @@ import type { PrincipalId, UserId } from '@quackback/ids'
 import { getIntegration } from '.'
 import { verifyOAuthState } from '@/lib/server/auth/oauth-state'
 import { auth } from '@/lib/server/auth'
+import { toSessionScope } from '@/lib/shared/roles'
 import { db, principal, eq } from '@/lib/server/db'
 import {
   STATE_EXPIRY_MS,
@@ -170,6 +171,10 @@ export async function handleOAuthCallback(
   try {
     const session = await auth.api.getSession({ headers: request.headers })
     if (!session?.user) {
+      return redirectResponse(fail('auth_required'))
+    }
+    // Credential-linking is dashboard-only.
+    if (toSessionScope(session.session.scope) !== 'dashboard') {
       return redirectResponse(fail('auth_required'))
     }
     const principalRecord = await db.query.principal.findFirst({

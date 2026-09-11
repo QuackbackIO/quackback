@@ -37,6 +37,12 @@ const mockOnConflictDoNothing: any = vi.fn()
 const mockInsertValues: any = vi.fn(() => ({ onConflictDoNothing: mockOnConflictDoNothing }))
 // oxlint-disable-next-line @typescript-eslint/no-explicit-any
 const mockDbInsert: any = vi.fn(() => ({ values: mockInsertValues }))
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
+const mockUpdateWhere: any = vi.fn(async () => undefined)
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
+const mockUpdateSet: any = vi.fn(() => ({ where: mockUpdateWhere }))
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
+const mockDbUpdate: any = vi.fn(() => ({ set: mockUpdateSet }))
 // Provenance lookup: tests default to hmacVerified=true so the
 // existing redirect/audit assertions still exercise the success
 // path. The provenance gate itself is covered in detail by
@@ -46,6 +52,7 @@ vi.mock('@/lib/server/db', () => ({
   db: {
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     insert: (arg: any) => mockDbInsert(arg),
+    update: (arg: unknown) => mockDbUpdate(arg),
     query: {
       widgetIdentifiedSession: {
         findFirst: (...args: unknown[]) => mockWidgetIdentifiedFindFirst(...(args as [])),
@@ -54,6 +61,7 @@ vi.mock('@/lib/server/db', () => ({
   },
   widgetOriginSession: {},
   widgetIdentifiedSession: { sessionId: 'widget_identified_session.session_id' },
+  session: { id: 'session.id' },
   eq: vi.fn((col, val) => ({ kind: 'eq', col, val })),
 }))
 
@@ -70,7 +78,7 @@ vi.stubGlobal('fetch', mockFetch)
 async function runHandoffLoader(search: string) {
   const { setResponseHeader, getRequestHeaders } = await import('@tanstack/react-start/server')
   const { config } = await import('@/lib/server/config')
-  const { db, widgetOriginSession } = await import('@/lib/server/db')
+  const { db, widgetOriginSession, session } = await import('@/lib/server/db')
   const { recordAuditEvent } = await import('@/lib/server/audit/log')
   const { isSafeCallbackUrl } = await import('@/lib/shared/routing')
 
@@ -172,7 +180,14 @@ async function runHandoffLoader(search: string) {
     return { status: 'invalid' as const }
   }
 
-  // Provenance passed — safe to install the session cookie now.
+  // Provenance passed — promote to portal audience, then install the cookie.
+  try {
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+    await (db.update(session) as any).set({ scope: 'portal' }).where(eq(session.id, sessionId))
+  } catch {
+    /* non-fatal */
+  }
+
   for (const cookie of setCookieValues) {
     setResponseHeader('Set-Cookie', cookie)
   }
@@ -265,6 +280,13 @@ describe('widget handoff loader — valid OTT', () => {
     expect(mockDbInsert).toHaveBeenCalled()
   })
 
+  it('promotes the verified session to portal scope', async () => {
+    mockFetch.mockResolvedValue(makeOkResponse({ id: 'sess_1', userId: 'user_abc' }))
+
+    await runHandoffLoader('?ott=valid-token')
+    expect(mockUpdateSet).toHaveBeenCalledWith({ scope: 'portal' })
+  })
+
   it('records the consumed audit event', async () => {
     mockFetch.mockResolvedValue(makeOkResponse({ id: 'sess_1', userId: 'user_abc' }))
 
@@ -305,6 +327,7 @@ describe('widget handoff loader — valid OTT', () => {
       const result = await runHandoffLoader('?ott=valid-token')
       expect(result.status).toBe('invalid')
       expect(mockDbInsert).not.toHaveBeenCalled()
+      expect(mockUpdateSet).not.toHaveBeenCalled()
     })
 
     it('rejects when hmac_verified is false (email-capture identify)', async () => {

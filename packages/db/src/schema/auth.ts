@@ -266,6 +266,8 @@ export const session = pgTable(
       .notNull(),
     ipAddress: text('ip_address'),
     userAgent: text('user_agent'),
+    // Session audience: dashboard | widget | portal. Only dashboard may satisfy team/permission gates.
+    scope: text('scope').notNull().default('dashboard'),
     userId: typeIdColumn('user')('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
