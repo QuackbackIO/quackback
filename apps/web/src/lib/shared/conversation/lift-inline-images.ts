@@ -6,9 +6,9 @@
  * are not rewritten — this helper is applied when mapping a row to a DTO so
  * every surface uses ConversationAttachmentList.
  */
-import type { JSONContent } from '@tiptap/core'
 import type { ConversationAttachment } from '@/lib/shared/conversation/types'
 import { MAX_CONVERSATION_ATTACHMENTS } from '@/lib/shared/conversation/types'
+import type { TiptapContent } from '@/lib/shared/db-types'
 import { sanitizeImageUrl } from '@/lib/shared/utils/sanitize'
 
 const INLINE_IMAGE_TYPES = new Set(['image', 'resizableImage', 'chatImage'])
@@ -45,12 +45,12 @@ function toAttachment(src: string, alt?: unknown): ConversationAttachment {
 
 /** Strip image nodes and collect displayable srcs. Returns null to drop the node. */
 function stripImages(
-  node: JSONContent,
+  node: TiptapContent,
   collected: ConversationAttachment[],
   seen: Set<string>,
   slotsLeft: number
-): JSONContent | null {
-  if (INLINE_IMAGE_TYPES.has(node.type ?? '')) {
+): TiptapContent | null {
+  if (INLINE_IMAGE_TYPES.has(node.type)) {
     const raw = typeof node.attrs?.src === 'string' ? node.attrs.src : ''
     const src = sanitizeImageUrl(raw)
     if (src && !seen.has(src) && collected.length < slotsLeft) {
@@ -62,7 +62,7 @@ function stripImages(
   if (!node.content?.length) return node
   const next = node.content
     .map((child) => stripImages(child, collected, seen, slotsLeft))
-    .filter((child): child is JSONContent => child != null)
+    .filter((child): child is TiptapContent => child != null)
   return next.length === node.content.length && next.every((c, i) => c === node.content![i])
     ? node
     : { ...node, content: next }
@@ -74,10 +74,10 @@ function stripImages(
  * original `attachments` / `contentJson` references when nothing is lifted.
  */
 export function liftInlineImagesToAttachments(
-  contentJson: JSONContent | null | undefined,
+  contentJson: TiptapContent | null | undefined,
   attachments: ConversationAttachment[]
-): { contentJson: JSONContent | null; attachments: ConversationAttachment[] } {
-  if (!contentJson) return { contentJson: contentJson ?? null, attachments }
+): { contentJson: TiptapContent | null; attachments: ConversationAttachment[] } {
+  if (!contentJson) return { contentJson: null, attachments }
   const lifted: ConversationAttachment[] = []
   const seen = new Set(attachments.map((a) => a.url))
   const slotsLeft = Math.max(0, MAX_CONVERSATION_ATTACHMENTS - attachments.length)

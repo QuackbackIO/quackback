@@ -1,8 +1,15 @@
-import { useCallback, useEffect, useState, type ClipboardEvent, type DragEvent } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type DragEvent,
+} from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
-import { ArrowLeftIcon, PaperAirplaneIcon } from '@heroicons/react/24/solid'
+import { ArrowLeftIcon, PaperAirplaneIcon, PaperClipIcon } from '@heroicons/react/24/solid'
 import type { JSONContent } from '@tiptap/react'
 import type { PrincipalId } from '@quackback/ids'
 import type { TiptapContent } from '@/lib/shared/db-types'
@@ -79,7 +86,9 @@ export function NewConversationDialog({
     addFiles,
     remove: removeAttachment,
     clear: clearAttachments,
+    uploading,
   } = useConversationComposerAttachments(uploadImage)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleComposerPaste = useCallback(
     (e: ClipboardEvent<HTMLDivElement>) => {
@@ -122,7 +131,8 @@ export function NewConversationDialog({
   })
 
   const isEmpty = isEmptyTiptapDoc(messageJson as TiptapContent | undefined)
-  const canSend = !!target && (!isEmpty || pendingAttachments.length > 0) && !send.isPending
+  const canSend =
+    !!target && (!isEmpty || pendingAttachments.length > 0) && !send.isPending && !uploading
 
   const submit = () => {
     if (!canSend || !target) return
@@ -206,7 +216,28 @@ export function NewConversationDialog({
                 onRemove={removeAttachment}
               />
             </div>
-            <div className="flex justify-end">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                const files = e.target.files
+                if (files && files.length > 0) void addFiles(files)
+                e.target.value = ''
+              }}
+            />
+            <div className="flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-40 transition-colors"
+                aria-label="Attach image"
+              >
+                <PaperClipIcon className="h-4 w-4" />
+              </button>
               <Button onClick={submit} disabled={!canSend}>
                 <PaperAirplaneIcon className="me-1.5 size-4" />
                 {send.isPending ? 'Sending…' : 'Send message'}

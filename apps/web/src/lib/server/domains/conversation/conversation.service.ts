@@ -665,7 +665,9 @@ export async function startAgentConversation(
     conversationId: txResult.conversation.id,
     visitorPrincipalId: txResult.conversation.visitorPrincipalId,
     // Full text, not the truncated preview — notify derives its own excerpt.
-    content: content || fallbackLabel,
+    // Same fallback as sendAgentMessage: attachment-only opens have no
+    // contentJson image node, so richMessageFallbackLabel is empty.
+    content: content || preview(fallbackLabel, attachments),
     contentJson: safeContentJson,
     agentName: agent.displayName ?? 'Support',
     messageId: txResult.message.id,

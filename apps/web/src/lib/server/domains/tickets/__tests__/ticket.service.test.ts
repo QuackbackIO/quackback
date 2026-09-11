@@ -328,14 +328,23 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
     )
     const page = await listTicketMessages(dto.id, { includeInternal: true })
     const stored = page.messages[0]
-    const types = stored.contentJson?.content?.map((n) => n.type)
-    expect(types).not.toContain('script')
-    expect(types).toEqual(['paragraph', 'image'])
-    const imageNode = stored.contentJson?.content?.find((n) => n.type === 'image')
-    expect(imageNode?.attrs?.src).toBe('')
     // Derived from the sanitized doc: the surviving paragraph's text, plus the
     // `[image]` placeholder for the (now-neutralized) image node.
     expect(stored.content).toBe('Safe text.\n[image]')
+    // Empty-src image is stripped on read (it would not render) and is not
+    // lifted onto attachments.
+    expect(stored.contentJson?.content?.map((n) => n.type)).toEqual(['paragraph'])
+    expect(stored.attachments).toEqual([])
+
+    const [row] = await testDb
+      .select({ contentJson: conversationMessages.contentJson })
+      .from(conversationMessages)
+      .where(eq(conversationMessages.id, stored.id))
+    const types = row?.contentJson?.content?.map((n) => n.type)
+    expect(types).not.toContain('script')
+    expect(types).toEqual(['paragraph', 'image'])
+    const imageNode = row?.contentJson?.content?.find((n) => n.type === 'image')
+    expect(imageNode?.attrs?.src).toBe('')
   })
 
   it('persists attachments on the opening message', async () => {

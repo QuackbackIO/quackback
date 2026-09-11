@@ -11,6 +11,18 @@ const png = (url: string, extra?: Partial<ConversationAttachment>): Conversation
 })
 
 describe('liftInlineImagesToAttachments', () => {
+  it('returns contentJson null for a missing doc', () => {
+    const attachments: ConversationAttachment[] = []
+    expect(liftInlineImagesToAttachments(null, attachments)).toEqual({
+      contentJson: null,
+      attachments,
+    })
+    expect(liftInlineImagesToAttachments(undefined, attachments)).toEqual({
+      contentJson: null,
+      attachments,
+    })
+  })
+
   it('returns the same references when the doc has no images', () => {
     const attachments: ConversationAttachment[] = []
     const doc = {

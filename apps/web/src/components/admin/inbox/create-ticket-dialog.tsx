@@ -2,13 +2,14 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ClipboardEvent,
   type DragEvent,
 } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { XMarkIcon } from '@heroicons/react/24/solid'
+import { PaperClipIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import type { JSONContent } from '@tiptap/react'
 import type { ConversationId, PrincipalId, TicketId, TicketTypeId } from '@quackback/ids'
 import type { TicketType, TiptapContent } from '@/lib/shared/db-types'
@@ -231,7 +232,9 @@ export function CreateTicketDialog({
     addFiles,
     remove: removeAttachment,
     clear: clearAttachments,
+    uploading,
   } = useConversationComposerAttachments(uploadImage)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleComposerPaste = useCallback(
     (e: ClipboardEvent<HTMLDivElement>) => {
@@ -256,7 +259,7 @@ export function CreateTicketDialog({
     [addFiles]
   )
   const [linking, setLinking] = useState(false)
-  const canCreate = title.trim().length > 0 && !create.isPending && !linking
+  const canCreate = title.trim().length > 0 && !create.isPending && !linking && !uploading
 
   /** Type swap: change the field set and drop the old type's answers (the
    *  retype rule protects STORED answers, not a draft's stale keys). Any
@@ -505,6 +508,27 @@ export function CreateTicketDialog({
                 attachments={pendingAttachments}
                 onRemove={removeAttachment}
               />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  const files = e.target.files
+                  if (files && files.length > 0) void addFiles(files)
+                  e.target.value = ''
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="mt-1 flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-40 transition-colors"
+                aria-label="Attach image"
+              >
+                <PaperClipIcon className="h-4 w-4" />
+              </button>
             </div>
           </div>
 
