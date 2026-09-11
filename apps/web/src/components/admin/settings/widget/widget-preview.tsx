@@ -1,6 +1,18 @@
-import { useEffect, useState } from 'react'
-import { ChatBubbleOvalLeftEllipsisIcon } from '@heroicons/react/24/solid'
+import { useEffect, useRef, useState } from 'react'
+import {
+  createLauncher,
+  type LauncherHandle,
+} from '../../../../../../../packages/widget/src/core/launcher'
 import { cn } from '@/lib/shared/utils'
+
+type PreviewServerTheme = {
+  theme?: {
+    lightPrimary?: string
+    lightPrimaryForeground?: string
+    darkPrimary?: string
+    darkPrimaryForeground?: string
+  }
+}
 
 interface WidgetPreviewProps {
   position: 'bottom-right' | 'bottom-left'
@@ -17,12 +29,26 @@ interface WidgetPreviewProps {
   refreshKey?: string
 }
 
+function applyLauncherTheme(
+  handle: LauncherHandle,
+  theme: 'light' | 'dark',
+  config: PreviewServerTheme
+) {
+  const t = config.theme
+  if (!t) return
+  const dark = theme === 'dark'
+  handle.setColors({
+    backgroundColor: dark ? (t.darkPrimary ?? t.lightPrimary) : t.lightPrimary,
+    foregroundColor: dark
+      ? (t.darkPrimaryForeground ?? t.lightPrimaryForeground)
+      : t.lightPrimaryForeground,
+  })
+}
+
 /**
  * Live preview of the embedded widget: the real `/widget` app in an iframe
- * (the same document the customer-facing SDK frames), surrounded by the same
- * chrome the SDK provides on a host page — a launcher button and the page
- * behind it. Only the chrome is simulated; everything inside the panel is the
- * production widget with real settings and content.
+ * (the same document the customer-facing SDK frames) and the real SDK
+ * launcher button, on a fake page. Only the page behind it is simulated.
  */
 export function WidgetPreview({
   position,
@@ -31,26 +57,75 @@ export function WidgetPreview({
   theme = 'light',
   refreshKey,
 }: WidgetPreviewProps) {
+  const hostRef = useRef<HTMLDivElement>(null)
+  const launcherRef = useRef<LauncherHandle | null>(null)
+  const themeConfigRef = useRef<PreviewServerTheme | null>(null)
   const [isOpen, setIsOpen] = useState(true)
-  const [greetingDismissed, setGreetingDismissed] = useState(false)
-  const greetingText = greeting?.trim() || ''
   const onRight = position !== 'bottom-left'
-  // Same corner stack as the SDK: greeting sits above the launcher, and the
-  // open panel covers that corner so the bubble hides.
-  const showGreeting = greetingText.length > 0 && !greetingDismissed && !isOpen
-  const corner = onRight ? 'right-0' : 'left-0'
 
   useEffect(() => {
-    setGreetingDismissed(false)
-  }, [greetingText])
+    const host = hostRef.current
+    if (!host) return
+    const handle = createLauncher({
+      placement: onRight ? 'right' : 'left',
+      root: host,
+      onClick: () => setIsOpen((open) => !open),
+    })
+    launcherRef.current = handle
+    handle.setOpen(isOpen)
+    handle.setLabel(label ?? '')
+    handle.setGreeting(greeting ?? '')
+    if (themeConfigRef.current) applyLauncherTheme(handle, theme, themeConfigRef.current)
+    handle.reveal()
+    return () => {
+      handle.remove()
+      if (launcherRef.current === handle) launcherRef.current = null
+    }
+    // Remount only when the corner changes. Label / greeting / open sync below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
+  }, [onRight])
 
-  // The widget's in-panel close button messages its host (the SDK on a real
-  // page); here the preview is the host, so honour it the same way.
+  useEffect(() => {
+    launcherRef.current?.setOpen(isOpen)
+  }, [isOpen])
+
+  useEffect(() => {
+    launcherRef.current?.setLabel(label ?? '')
+  }, [label])
+
+  useEffect(() => {
+    launcherRef.current?.setGreeting(greeting ?? '')
+  }, [greeting])
+
+  useEffect(() => {
+    if (themeConfigRef.current && launcherRef.current) {
+      applyLauncherTheme(launcherRef.current, theme, themeConfigRef.current)
+    }
+    let cancelled = false
+    void fetch('/api/widget/config.json')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((config: PreviewServerTheme | null) => {
+        if (cancelled || !config) return
+        themeConfigRef.current = config
+        if (!launcherRef.current) return
+        applyLauncherTheme(launcherRef.current, theme, config)
+      })
+      .catch(() => {
+        /* keep the SDK defaults */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [theme, refreshKey])
+
   useEffect(() => {
     function onMessage(event: MessageEvent) {
       if (event.origin !== window.location.origin) return
-      const msg = event.data as { type?: string } | null
+      const msg = event.data as { type?: string; count?: number } | null
       if (msg?.type === 'quackback:close') setIsOpen(false)
+      if (msg?.type === 'quackback:unread') {
+        launcherRef.current?.setUnread(typeof msg.count === 'number' ? msg.count : 0)
+      }
     }
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
@@ -59,14 +134,10 @@ export function WidgetPreview({
   return (
     <div className={cn('h-full', theme === 'dark' && 'dark')}>
       <div className="relative h-full min-h-[560px] rounded-xl border border-border bg-muted/30 overflow-hidden text-foreground">
-        {/* Simulated page background */}
         <PageBackdrop />
 
-        {/* Widget + launcher as one centered unit so a wide pane doesn't pin
-            them to a far corner. The button still sits below the panel on the
-            configured side (SDK: bottom 88px, 400×600). */}
         <div className="absolute inset-0 flex items-center justify-center p-6">
-          <div className="relative h-[688px] w-[400px] max-h-full max-w-full">
+          <div ref={hostRef} className="relative h-[688px] w-[400px] max-h-full max-w-full">
             {isOpen && (
               <div
                 className={cn(
@@ -83,52 +154,6 @@ export function WidgetPreview({
                 />
               </div>
             )}
-
-            {/* Greeting bubble — same side as the launcher, just above it.
-                Hidden while the panel is open, matching the host-page SDK. */}
-            {showGreeting && (
-              <div
-                className={cn(
-                  'absolute bottom-[84px] z-10 flex max-w-[220px] items-center gap-2 rounded-[14px] px-3 py-2.5',
-                  'bg-white text-[13px] leading-snug text-zinc-900 shadow-lg',
-                  corner
-                )}
-              >
-                <button
-                  type="button"
-                  className="min-w-0 flex-1 cursor-pointer text-start"
-                  onClick={() => setIsOpen(true)}
-                >
-                  {greetingText}
-                </button>
-                <button
-                  type="button"
-                  aria-label="Dismiss greeting"
-                  onClick={() => setGreetingDismissed(true)}
-                  className="flex size-[18px] shrink-0 items-center justify-center rounded-full text-base leading-none text-zinc-400 hover:text-zinc-600"
-                >
-                  ×
-                </button>
-              </div>
-            )}
-
-            {/* Trigger button — bottom of the same side, below the open panel. */}
-            <button
-              type="button"
-              aria-label={isOpen ? 'Close feedback widget' : 'Open feedback widget'}
-              aria-expanded={isOpen}
-              onClick={() => setIsOpen(!isOpen)}
-              className={cn(
-                'absolute bottom-0 z-20 flex items-center justify-center h-12 rounded-full',
-                'bg-primary text-primary-foreground shadow-md',
-                'transition-all hover:shadow-lg hover:-translate-y-0.5',
-                label ? 'gap-1.5 ps-3 pe-4 text-xs font-semibold' : 'w-12',
-                corner
-              )}
-            >
-              <ChatBubbleOvalLeftEllipsisIcon className="w-5 h-5 shrink-0" />
-              {label && <span className="max-w-40 truncate">{label}</span>}
-            </button>
           </div>
         </div>
       </div>
@@ -139,7 +164,6 @@ export function WidgetPreview({
 function PageBackdrop() {
   return (
     <div className="absolute inset-0 p-4 pointer-events-none select-none opacity-40">
-      {/* Nav bar */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <div className="w-5 h-5 rounded bg-muted-foreground/20" />
@@ -151,14 +175,12 @@ function PageBackdrop() {
           <div className="w-12 h-2 rounded-full bg-muted-foreground/10" />
         </div>
       </div>
-      {/* Hero */}
       <div className="mt-8 mb-6 space-y-2 max-w-[60%]">
         <div className="w-48 h-3 rounded-full bg-muted-foreground/15" />
         <div className="w-36 h-3 rounded-full bg-muted-foreground/10" />
         <div className="w-full h-2 rounded-full bg-muted-foreground/8 mt-3" />
         <div className="w-4/5 h-2 rounded-full bg-muted-foreground/8" />
       </div>
-      {/* Content blocks */}
       <div className="grid grid-cols-3 gap-3 mt-6">
         {[1, 2, 3].map((i) => (
           <div key={i} className="rounded-lg border border-muted-foreground/10 p-3 space-y-2">
