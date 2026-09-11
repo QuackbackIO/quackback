@@ -107,7 +107,9 @@ describe('buildExtensions', () => {
       },
     })
     try {
-      const img = editor.getJSON().content?.[0]?.content?.[0]
+      const img = editor.getJSON().content?.[0]?.content?.[0] as
+        | { type?: string; attrs?: { src?: string; width?: number | null; height?: number | null } }
+        | undefined
       expect(img?.type).toBe('image')
       expect(img?.attrs?.src).toBe('https://cdn.example.com/wide.png')
       expect(img?.attrs?.width).toBeNull()
