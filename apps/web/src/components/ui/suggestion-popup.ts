@@ -1,4 +1,4 @@
-import { autoUpdate, computePosition, offset, shift, size } from '@floating-ui/dom'
+import { autoUpdate, computePosition, flip, offset, shift, size } from '@floating-ui/dom'
 
 // Editor suggestion popups (slash menu, emoji, mention) are portalled to
 // <body>, outside the editor DOM. They carry this attribute so code that
@@ -20,7 +20,11 @@ async function applySuggestionPopupPosition(
     placement: SUGGESTION_PLACEMENT,
     middleware: [
       offset(8),
-      // Horizontal only — never slide the menu down onto the composer.
+      // Prefer above the caret (inbox composer sits at the bottom), but flip
+      // below when the caret is near the top of the viewport — e.g. the first
+      // lines of the help-center/changelog editors. Horizontal slide stays
+      // off: the menu must not drift down onto the composer it annotates.
+      flip({ padding: 8 }),
       shift({ padding: 8, mainAxis: false }),
       size({
         padding: 8,

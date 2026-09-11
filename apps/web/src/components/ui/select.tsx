@@ -9,7 +9,7 @@ type SelectItemRecord = { label: React.ReactNode; value: unknown }
 const SelectItemsContext = React.createContext<{
   register: (value: unknown, label: React.ReactNode) => () => void
   publish: (items: SelectItemRecord[]) => void
-  labels: Map<unknown, React.ReactNode>
+  lookup: (value: unknown) => React.ReactNode | undefined
 } | null>(null)
 
 function collectItemsFromChildren(node: React.ReactNode): SelectItemRecord[] {
@@ -67,53 +67,81 @@ function Select<Value = string>({
       collectItemsFromChildren(children).map((item) => [item.value, item.label])
     )
   }
-  const [itemTick, setItemTick] = React.useState(0)
+  const [, setItemTick] = React.useState(0)
 
-  const register = React.useCallback((value: unknown, label: React.ReactNode) => {
-    const existing = labelsRef.current!.get(value)
-    if (existing !== undefined && flattenLabel(existing) === flattenLabel(label)) {
-      return () => {}
-    }
-    const next = new Map(labelsRef.current!)
-    next.set(value, label)
-    labelsRef.current = next
-    setItemTick((tick) => tick + 1)
-    return () => {
-      if (!labelsRef.current!.has(value)) return
-      const copy = new Map(labelsRef.current!)
-      copy.delete(value)
-      labelsRef.current = copy
-    }
+  // Bump a re-render outside the current commit: ref writes don't trigger one
+  // on their own, and setState synchronously inside a registry write (which
+  // runs from an item layout effect) would warn or loop.
+  const bumpTick = React.useCallback(() => {
+    queueMicrotask(() => setItemTick((tick) => tick + 1))
   }, [])
 
-  const publish = React.useCallback((items: SelectItemRecord[]) => {
-    let changed = false
-    const next = new Map(labelsRef.current!)
-    for (const item of items) {
-      const existing = next.get(item.value)
-      if (existing !== undefined && flattenLabel(existing) === flattenLabel(item.label)) continue
-      next.set(item.value, item.label)
-      changed = true
-    }
-    if (!changed) return
-    labelsRef.current = next
-    setItemTick((tick) => tick + 1)
-  }, [])
+  const register = React.useCallback(
+    (value: unknown, label: React.ReactNode) => {
+      const existing = labelsRef.current!.get(value)
+      if (existing !== undefined && flattenLabel(existing) === flattenLabel(label)) {
+        return () => {}
+      }
+      const next = new Map(labelsRef.current!)
+      next.set(value, label)
+      labelsRef.current = next
+      bumpTick()
+      return () => {
+        if (!labelsRef.current!.has(value)) return
+        const copy = new Map(labelsRef.current!)
+        copy.delete(value)
+        labelsRef.current = copy
+        bumpTick()
+      }
+    },
+    [bumpTick]
+  )
 
-  // Non-null: seeded above on first render before any callback can run.
-  const labels = labelsRef.current!
+  const publish = React.useCallback(
+    (items: SelectItemRecord[]) => {
+      let changed = false
+      const next = new Map(labelsRef.current!)
+      for (const item of items) {
+        const existing = next.get(item.value)
+        if (existing !== undefined && flattenLabel(existing) === flattenLabel(item.label)) continue
+        next.set(item.value, item.label)
+        changed = true
+      }
+      if (!changed) return
+      labelsRef.current = next
+      bumpTick()
+    },
+    [bumpTick]
+  )
+
+  // The context value is stable across registry writes (registration only
+  // mutates the ref), so item layout effects keyed on it don't churn — a
+  // write can no longer feed back into itself through a fresh context object.
+  // lookup reads the ref live, so labels resolve without a context change.
+  const ctx = React.useMemo(
+    () => ({
+      register,
+      publish,
+      lookup: (value: unknown) => labelsRef.current!.get(value),
+    }),
+    [register, publish]
+  )
+
+  // The collected items array refreshes when a write swaps the map instance
+  // (labelsRef.current in deps) — the microtask tick above only schedules a
+  // re-render; the memo needs a changed dep to recompute on it.
   const collected = React.useMemo<SelectItemRecord[]>(
     () =>
-      // Ref reads are exempt from exhaustive-deps; itemTick bumps on every write.
       Array.from(labelsRef.current!, ([value, label]) => ({
         value,
         label: flattenLabel(label) || label,
       })),
-    [itemTick]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [labelsRef.current]
   )
 
   return (
-    <SelectItemsContext.Provider value={{ register, publish, labels }}>
+    <SelectItemsContext.Provider value={ctx}>
       <SelectPrimitive.Root
         data-slot="select"
         items={itemsProp ?? collected}
@@ -160,7 +188,7 @@ function SelectValue({
         if (typeof children === 'function') return children(value ?? '')
         if (children) return children
         if (value == null || value === '') return placeholder ?? null
-        const registered = registry?.labels.get(value)
+        const registered = registry?.lookup(value)
         return registered ?? value
       }}
     </SelectPrimitive.Value>

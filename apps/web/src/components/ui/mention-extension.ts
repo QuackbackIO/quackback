@@ -54,12 +54,10 @@ const renderSuggestion: SuggestionOptions<MentionItem>['render'] = () => {
         interactive: true,
         trigger: 'manual',
         placement: 'top-start',
-        // Composer sits at the bottom of the inbox — never flip below the caret.
+        // Prefer above the caret, but flip below near the top of the
+        // viewport — @ works in tall editors too, not just the composer.
         popperOptions: {
-          modifiers: [
-            { name: 'flip', enabled: false },
-            { name: 'preventOverflow', options: { mainAxis: false, altAxis: true } },
-          ],
+          modifiers: [{ name: 'preventOverflow', options: { mainAxis: true, altAxis: true } }],
         },
         arrow: false,
         // Custom theme so our CSS can strip tippy's default chrome and

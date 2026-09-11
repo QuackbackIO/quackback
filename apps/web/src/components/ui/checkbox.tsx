@@ -7,11 +7,18 @@ function Checkbox({
   className,
   checked,
   onClick,
+  onCheckedChange,
   ...props
 }: Omit<CheckboxPrimitive.Root.Props, 'checked'> & {
   checked?: boolean | 'indeterminate'
 }) {
   const indeterminate = checked === 'indeterminate'
+  // When embedded as a pure visual in a clickable row (no onCheckedChange of
+  // its own — the row's onClick owns the toggle), don't intercept the click:
+  // stopping propagation there would swallow the row's handler and the box
+  // would look dead. The label-loop guard below only applies when the box is
+  // itself interactive.
+  const decorative = onCheckedChange === undefined
   return (
     <CheckboxPrimitive.Root
       data-slot="checkbox"
@@ -24,11 +31,14 @@ function Checkbox({
         className
       )}
       {...props}
+      onCheckedChange={onCheckedChange}
       onClick={(event) => {
-        // A <button> checkbox nested in a <label> re-dispatches the click onto
-        // the control. Happy-dom (and some label implementations) then bubble
-        // that click back to the label and loop until the stack overflows.
-        event.stopPropagation()
+        if (!decorative) {
+          // A <button> checkbox nested in a <label> re-dispatches the click onto
+          // the control. Happy-dom (and some label implementations) then bubble
+          // that click back to the label and loop until the stack overflows.
+          event.stopPropagation()
+        }
         onClick?.(event)
       }}
     >

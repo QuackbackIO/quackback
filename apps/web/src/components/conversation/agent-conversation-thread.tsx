@@ -1509,16 +1509,31 @@ export function AgentConversationThread({
     const snapshot = draft
     const restoreDraft = () => {
       // The composer stays editable mid-flight, so the user may have typed
-      // something new since the send — never clobber that with the stale
-      // snapshot (the failed content remains available via the error toast).
+      // something new since the send. Never clobber that — instead move the
+      // failed text below it with a separator, so both survive.
       const current = (useNote ? noteDraftRef : replyDraftRef).current
-      if (!isEmptyTiptapDoc(current.json ?? undefined)) return
-      if (useNote) {
-        setNoteDraft(snapshot)
-        setNoteKey((k) => k + 1)
-      } else {
-        setReplyDraft(snapshot)
-        setReplyKey((k) => k + 1)
+      const failedMarkdown = snapshot.markdown
+      if (isEmptyTiptapDoc(current.json ?? undefined)) {
+        if (useNote) {
+          setNoteDraft(snapshot)
+          setNoteKey((k) => k + 1)
+        } else {
+          setReplyDraft(snapshot)
+          setReplyKey((k) => k + 1)
+        }
+      } else if (failedMarkdown.trim()) {
+        const merged: ComposerDraft = {
+          json: current.json,
+          markdown: `${current.markdown.replace(/\s+$/, '')}\n\n--- failed to send, kept below ---\n\n${failedMarkdown}`,
+        }
+        if (useNote) {
+          setNoteDraft(merged)
+          setNoteKey((k) => k + 1)
+        } else {
+          setReplyDraft(merged)
+          setReplyKey((k) => k + 1)
+        }
+        toast.error('Failed to send message — kept below your new typing')
       }
       // The restore remounts the editor (destroying the focused node), so hand
       // focus back once the new instance commits.
