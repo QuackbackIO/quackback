@@ -2,21 +2,29 @@ import { test, expect } from '@playwright/test'
 
 test.describe('Admin MCP Settings', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/admin/settings/mcp')
+    await page.goto('/admin/settings/developers?tab=mcp')
     await page.waitForLoadState('networkidle')
+  })
+
+  test('legacy /admin/settings/mcp URL lands on the developers MCP tab', async ({ page }) => {
+    await page.goto('/admin/settings/mcp')
+    await page.waitForURL(/\/admin\/settings\/developers\?tab=mcp/)
+    await expect(page.getByText('MCP Server').first()).toBeVisible({ timeout: 10000 })
   })
 
   test('page loads and shows MCP Server heading', async ({ page }) => {
     await expect(page.getByText('MCP Server').first()).toBeVisible({ timeout: 10000 })
     await expect(
-      page.getByText('Allow AI tools to interact with your feedback data via the Model Context Protocol')
+      page.getByText('Enable or disable the MCP endpoint for AI integrations.')
     ).toBeVisible({ timeout: 10000 })
   })
 
   test('shows Enable MCP Server toggle', async ({ page }) => {
     await expect(page.getByText('Enable MCP Server').first()).toBeVisible({ timeout: 10000 })
     await expect(
-      page.getByText('Allow AI tools like Claude Code to interact with your feedback data via the MCP protocol')
+      page.getByText(
+        'Allow AI tools like Claude Code to interact with your feedback data via the MCP protocol'
+      )
     ).toBeVisible()
   })
 
@@ -24,6 +32,15 @@ test.describe('Admin MCP Settings', () => {
     const mcpToggle = page.locator('#mcp-toggle')
     await expect(mcpToggle).toBeVisible({ timeout: 10000 })
     await expect(mcpToggle).toBeEnabled()
+  })
+
+  test('shows Dynamic client registration toggle', async ({ page }) => {
+    const dcrToggle = page.locator('#dynamic-registration-toggle')
+    await expect(page.getByText('Dynamic client registration').first()).toBeVisible({
+      timeout: 10000,
+    })
+    await expect(dcrToggle).toBeVisible()
+    await expect(dcrToggle).toBeEnabled()
   })
 
   test('can toggle MCP server on and off', async ({ page }) => {
@@ -96,7 +113,7 @@ test.describe('Admin MCP Settings', () => {
     await expect(apiKeyLink).toBeVisible({ timeout: 10000 })
 
     const href = await apiKeyLink.getAttribute('href')
-    expect(href).toMatch(/api-keys/)
+    expect(href).toMatch(/developers\?tab=keys/)
   })
 
   test('shows Choose your client step with client selector buttons', async ({ page }) => {

@@ -13,7 +13,9 @@ test.describe('Admin API Keys Settings', () => {
   })
 
   test('shows page header description', async ({ page }) => {
-    await expect(page.getByText(/manage api keys for programmatic access/i)).toBeVisible({
+    await expect(
+      page.getByText(/api keys, webhooks, and the mcp server for programmatic integrations/i)
+    ).toBeVisible({
       timeout: 10000,
     })
   })
@@ -97,17 +99,11 @@ test.describe('Admin API Keys Settings', () => {
     await createDialog.getByRole('textbox', { name: /^name$/i }).fill(keyName)
     await createDialog.getByRole('button', { name: /create key/i }).click()
 
-    // Create dialog closes and reveal dialog opens
-    await expect(createDialog).toBeHidden({ timeout: 10000 })
-
+    // Reveal replaces create in-place; both are role=dialog, so assert on title.
     const revealDialog = page.getByRole('dialog')
-    await expect(revealDialog).toBeVisible({ timeout: 10000 })
+    await expect(revealDialog.getByText(/api key created/i)).toBeVisible({ timeout: 10000 })
 
-    // Should show "API Key Created" title
-    await expect(revealDialog.getByText(/api key created/i)).toBeVisible()
-
-    // The key value should be visible in a code element
-    await expect(revealDialog.locator('code')).toBeVisible()
+    await expect(revealDialog.locator('code').filter({ hasText: /^qb_/ })).toBeVisible()
 
     // Copy button should be present (aria-label contains "copy")
     const copyButton = revealDialog.getByRole('button', { name: /copy/i })
@@ -154,11 +150,11 @@ test.describe('Admin API Keys Settings', () => {
     await page.waitForTimeout(500)
 
     // Create a key first if none exist
-    const revokeButtons = page.getByRole('button', { name: /revoke .* api key/i })
+    const revokeButtons = page.getByRole('button', { name: /^revoke /i })
 
     if ((await revokeButtons.count()) === 0) {
       // Create one
-      const keyName = `Revoke Test ${Date.now()}`
+      const keyName = `Cleanup Test ${Date.now()}`
       const createButton = page
         .getByRole('button', { name: /create key/i })
         .or(page.getByRole('button', { name: /create your first api key/i }))
@@ -168,17 +164,15 @@ test.describe('Admin API Keys Settings', () => {
       await expect(createDialog).toBeVisible({ timeout: 5000 })
       await createDialog.getByRole('textbox', { name: /^name$/i }).fill(keyName)
       await createDialog.getByRole('button', { name: /create key/i }).click()
-      await expect(createDialog).toBeHidden({ timeout: 10000 })
 
-      // Dismiss reveal dialog
       const revealDialog = page.getByRole('dialog')
-      await expect(revealDialog).toBeVisible({ timeout: 10000 })
+      await expect(revealDialog.getByText(/api key created/i)).toBeVisible({ timeout: 10000 })
       await revealDialog.getByRole('button', { name: /i've saved my key/i }).click()
       await expect(revealDialog).toBeHidden({ timeout: 5000 })
     }
 
     // Click the revoke button (trash icon, aria-label "Revoke X API key")
-    const revokeBtn = page.getByRole('button', { name: /revoke .* api key/i }).first()
+    const revokeBtn = page.getByRole('button', { name: /^revoke /i }).first()
 
     if ((await revokeBtn.count()) > 0) {
       await revokeBtn.click()

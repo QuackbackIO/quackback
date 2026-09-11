@@ -5,7 +5,7 @@ import { closeDialog } from '../../utils/helpers'
  * Public portal auth tests — no prior authentication.
  *
  * The portal exposes auth via a Dialog triggered from the header.
- * Login mode: title "Welcome back", description "Sign in to your account..."
+ * Login mode: title "Welcome back", description "Sign in to vote and comment..."
  * Signup mode: title "Create an account", description "Sign up to vote..."
  *
  * The default auth step depends on whether password auth is enabled:
@@ -67,20 +67,18 @@ test.describe('Portal Auth Dialog', () => {
     await page.getByRole('button', { name: /log in/i }).click()
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 })
 
-    await expect(
-      page.getByText(/sign in to your account to vote and comment/i)
-    ).toBeVisible()
+    await expect(page.getByText(/sign in to vote and comment on feedback/i)).toBeVisible()
   })
 
-  test('login dialog has a Sign up switch link for users without an account', async ({ page }) => {
+  test('login dialog has a Create an account switch for users without an account', async ({
+    page,
+  }) => {
     await page.getByRole('button', { name: /log in/i }).click()
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 })
 
-    // "Don't have an account? Sign up" link
-    const signUpLink = page.getByRole('dialog').getByRole('button', { name: /sign up/i })
-    if ((await signUpLink.count()) > 0) {
-      await expect(signUpLink.first()).toBeVisible()
-    }
+    await expect(
+      page.getByRole('dialog').getByRole('button', { name: /create an account/i })
+    ).toBeVisible()
   })
 
   // ---------------------------------------------------------------------------
@@ -117,10 +115,7 @@ test.describe('Portal Auth Dialog', () => {
     await page.getByRole('button', { name: /sign up/i }).click()
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 })
 
-    const signInLink = page.getByRole('dialog').getByRole('button', { name: /sign in/i })
-    if ((await signInLink.count()) > 0) {
-      await expect(signInLink.first()).toBeVisible()
-    }
+    await expect(page.getByRole('dialog').getByRole('button', { name: /sign in/i })).toBeVisible()
   })
 
   // ---------------------------------------------------------------------------
@@ -133,17 +128,19 @@ test.describe('Portal Auth Dialog', () => {
     await page.getByRole('button', { name: /log in/i }).click()
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 })
 
-    // Navigate to the email-OTP step if we're on the password step first
-    const useEmailCodeLink = page
+    // Password step offers a magic-link / email-code escape hatch.
+    const useEmailInstead = page
       .getByRole('dialog')
-      .getByRole('button', { name: /use email code instead/i })
-    if ((await useEmailCodeLink.count()) > 0) {
-      await useEmailCodeLink.click()
+      .getByRole('button', { name: /email me a sign-in link instead|use email code instead/i })
+    if ((await useEmailInstead.count()) > 0) {
+      await useEmailInstead.click()
     }
 
     // Skip if the email OTP step is not available (email OTP may be disabled).
     // Wait briefly for the transition after clicking "use email code instead".
-    const continueWithEmailBtn = page.getByRole('dialog').getByRole('button', { name: /continue with email/i })
+    const continueWithEmailBtn = page
+      .getByRole('dialog')
+      .getByRole('button', { name: /continue with email/i })
     try {
       await expect(continueWithEmailBtn).toBeVisible({ timeout: 2000 })
     } catch {
@@ -166,8 +163,7 @@ test.describe('Portal Auth Dialog', () => {
 
     expect(otpResponse.ok()).toBeTruthy()
 
-    // Code verification step is now visible
-    await expect(page.getByText(/we sent a 6-digit code to/i)).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText(/for your 6-digit code/i)).toBeVisible({ timeout: 10000 })
     await expect(page.getByText('test@example.com')).toBeVisible()
   })
 
@@ -175,11 +171,11 @@ test.describe('Portal Auth Dialog', () => {
     await page.getByRole('button', { name: /log in/i }).click()
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 })
 
-    const useEmailCodeLink = page
+    const useEmailInstead = page
       .getByRole('dialog')
-      .getByRole('button', { name: /use email code instead/i })
-    if ((await useEmailCodeLink.count()) > 0) {
-      await useEmailCodeLink.click()
+      .getByRole('button', { name: /email me a sign-in link instead|use email code instead/i })
+    if ((await useEmailInstead.count()) > 0) {
+      await useEmailInstead.click()
     }
 
     const continueWithEmailBtn = page.getByRole('button', { name: /continue with email/i })
@@ -198,7 +194,7 @@ test.describe('Portal Auth Dialog', () => {
       continueWithEmailBtn.click(),
     ])
 
-    const codeInput = page.locator('#inline-code')
+    const codeInput = page.getByRole('dialog').getByLabel(/verification code/i)
     await expect(codeInput).toBeVisible({ timeout: 10000 })
     await expect(codeInput).toHaveAttribute('maxlength', '6')
   })
@@ -209,7 +205,7 @@ test.describe('Portal Auth Dialog', () => {
 
     const useEmailCodeLink = page
       .getByRole('dialog')
-      .getByRole('button', { name: /use email code instead/i })
+      .getByRole('button', { name: /email me a sign-in link instead|use email code instead/i })
     if ((await useEmailCodeLink.count()) > 0) {
       await useEmailCodeLink.click()
     }
@@ -230,7 +226,7 @@ test.describe('Portal Auth Dialog', () => {
       continueWithEmailBtn.click(),
     ])
 
-    const codeInput = page.locator('#inline-code')
+    const codeInput = page.getByRole('dialog').getByLabel(/verification code/i)
     await expect(codeInput).toBeVisible({ timeout: 10000 })
 
     const verifyButton = page.getByRole('button', { name: /verify code/i })
@@ -249,7 +245,7 @@ test.describe('Portal Auth Dialog', () => {
 
     const useEmailCodeLink = page
       .getByRole('dialog')
-      .getByRole('button', { name: /use email code instead/i })
+      .getByRole('button', { name: /email me a sign-in link instead|use email code instead/i })
     if ((await useEmailCodeLink.count()) > 0) {
       await useEmailCodeLink.click()
     }
@@ -270,10 +266,13 @@ test.describe('Portal Auth Dialog', () => {
       continueWithEmailBtn.click(),
     ])
 
-    await expect(page.locator('#inline-code')).toBeVisible({ timeout: 10000 })
+    await expect(page.getByRole('dialog').getByLabel(/verification code/i)).toBeVisible({
+      timeout: 10000,
+    })
 
-    // Click the Back button inside the dialog
-    const backButton = page.getByRole('dialog').getByRole('button', { name: /back/i })
+    const backButton = page
+      .getByRole('dialog')
+      .getByRole('button', { name: /use a different email/i })
     await expect(backButton).toBeVisible()
     await backButton.click()
 
@@ -287,7 +286,7 @@ test.describe('Portal Auth Dialog', () => {
 
     const useEmailCodeLink = page
       .getByRole('dialog')
-      .getByRole('button', { name: /use email code instead/i })
+      .getByRole('button', { name: /email me a sign-in link instead|use email code instead/i })
     if ((await useEmailCodeLink.count()) > 0) {
       await useEmailCodeLink.click()
     }
@@ -308,8 +307,10 @@ test.describe('Portal Auth Dialog', () => {
       continueWithEmailBtn.click(),
     ])
 
-    await expect(page.locator('#inline-code')).toBeVisible({ timeout: 10000 })
-    await expect(page.getByText(/resend code in \d+s/i)).toBeVisible()
+    await expect(page.getByRole('dialog').getByLabel(/verification code/i)).toBeVisible({
+      timeout: 10000,
+    })
+    await expect(page.getByText(/resend in \d+s/i)).toBeVisible()
   })
 
   // ---------------------------------------------------------------------------
@@ -323,14 +324,16 @@ test.describe('Portal Auth Dialog', () => {
     // Navigate to OTP email step
     const useEmailCodeLink = page
       .getByRole('dialog')
-      .getByRole('button', { name: /use email code instead/i })
+      .getByRole('button', { name: /email me a sign-in link instead|use email code instead/i })
     if ((await useEmailCodeLink.count()) > 0) {
       await useEmailCodeLink.click()
     }
 
     // Skip if the email OTP step is not available (email OTP may be disabled).
     // Wait briefly for the transition after clicking "use email code instead".
-    const continueWithEmailBtn = page.getByRole('dialog').getByRole('button', { name: /continue with email/i })
+    const continueWithEmailBtn = page
+      .getByRole('dialog')
+      .getByRole('button', { name: /continue with email/i })
     try {
       await expect(continueWithEmailBtn).toBeVisible({ timeout: 2000 })
     } catch {
@@ -389,9 +392,7 @@ test.describe('Portal Auth Dialog', () => {
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 })
 
     // shadcn Dialog renders a close button with aria-label "Close"
-    const closeButton = page
-      .getByRole('dialog')
-      .getByRole('button', { name: /close/i })
+    const closeButton = page.getByRole('dialog').getByRole('button', { name: /close/i })
     if ((await closeButton.count()) > 0) {
       await closeButton.click()
       await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 5000 })
@@ -408,15 +409,14 @@ test.describe('Portal Auth Dialog', () => {
       timeout: 5000,
     })
 
-    // Click the "Sign up" mode-switch link inside the dialog
-    const signUpModeLink = page.getByRole('dialog').getByRole('button', { name: /sign up/i })
-    expect(await signUpModeLink.count()).toBeGreaterThan(0)
-    if ((await signUpModeLink.count()) > 0) {
-      await signUpModeLink.first().click()
-      await expect(page.getByRole('heading', { name: /create an account/i })).toBeVisible({
-        timeout: 5000,
-      })
-    }
+    const signUpModeLink = page
+      .getByRole('dialog')
+      .getByRole('button', { name: /create an account/i })
+    await expect(signUpModeLink).toBeVisible()
+    await signUpModeLink.click()
+    await expect(page.getByRole('heading', { name: /create an account/i })).toBeVisible({
+      timeout: 5000,
+    })
   })
 
   test('switching from signup to login changes the dialog title', async ({ page }) => {
@@ -425,13 +425,11 @@ test.describe('Portal Auth Dialog', () => {
       timeout: 5000,
     })
 
-    // Click the "Sign in" mode-switch link inside the dialog
     const signInModeLink = page.getByRole('dialog').getByRole('button', { name: /sign in/i })
-    if ((await signInModeLink.count()) > 0) {
-      await signInModeLink.first().click()
-      await expect(page.getByRole('heading', { name: /welcome back/i })).toBeVisible({
-        timeout: 5000,
-      })
-    }
+    await expect(signInModeLink).toBeVisible()
+    await signInModeLink.click()
+    await expect(page.getByRole('heading', { name: /welcome back/i })).toBeVisible({
+      timeout: 5000,
+    })
   })
 })
