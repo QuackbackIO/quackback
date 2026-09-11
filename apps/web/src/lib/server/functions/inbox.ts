@@ -14,6 +14,7 @@ import type { PrincipalId, TeamId, CompanyId, ConversationId } from '@quackback/
 import { TICKET_TYPES, TICKET_STAGES, CONVERSATION_PRIORITIES } from '@/lib/shared/db-types'
 import { INBOX_TRIAGE_FACETS } from '@/lib/shared/inbox/items'
 import { coerceTicketTypeId } from '@/lib/shared/tickets'
+import { PageLimitMinOneSchema } from '@/lib/shared/schemas/taxonomy'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { ForbiddenError } from '@/lib/shared/errors'
 import { requireAuth, policyActorFromAuth } from './auth-helpers'
@@ -49,7 +50,7 @@ export const listInboxItemsSchema = z.object({
   teamId: z.string().optional(),
   companyId: z.string().optional(),
   sort: inboxSortSchema.optional(),
-  limit: z.number().int().min(1).max(100).optional(),
+  limit: PageLimitMinOneSchema,
   cursor: z.string().optional(),
   channel: inboxChannelFilterSchema.optional(),
 })

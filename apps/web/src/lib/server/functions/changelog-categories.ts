@@ -7,6 +7,7 @@ import { createServerFn } from '@tanstack/react-start'
 import type { ChangelogCategoryId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { HEX_COLOR_PATTERN, TaxonomyNameSchema } from '@/lib/shared/schemas/taxonomy'
 import {
   listChangelogCategories,
   createChangelogCategory,
@@ -19,22 +20,15 @@ import { logger } from '@/lib/server/logger'
 const log = logger.child({ component: 'changelog-categories' })
 
 const createCategorySchema = z.object({
-  name: z.string().min(1).max(50),
-  color: z
-    .string()
-    .regex(/^#[0-9A-Fa-f]{6}$/)
-    .optional()
-    .default('#6b7280'),
+  name: TaxonomyNameSchema,
+  color: z.string().regex(HEX_COLOR_PATTERN).optional().default('#6b7280'),
   segmentIds: z.array(z.string()).optional(),
 })
 
 const updateCategorySchema = z.object({
   id: z.string(),
-  name: z.string().min(1).max(50).optional(),
-  color: z
-    .string()
-    .regex(/^#[0-9A-Fa-f]{6}$/)
-    .optional(),
+  name: TaxonomyNameSchema.optional(),
+  color: z.string().regex(HEX_COLOR_PATTERN).optional(),
   segmentIds: z.array(z.string()).optional(),
 })
 

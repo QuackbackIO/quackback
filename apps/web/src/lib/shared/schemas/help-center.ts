@@ -5,6 +5,7 @@
  */
 
 import { z } from 'zod'
+import { PageLimitSchema } from './taxonomy'
 import { tiptapContentSchema } from './posts'
 import { SUPPORTED_LOCALES } from '../i18n'
 
@@ -87,7 +88,7 @@ export const listArticlesSchema = z.object({
   status: z.enum(['draft', 'published', 'all']).optional(),
   search: z.string().optional(),
   cursor: z.string().optional(),
-  limit: z.number().int().positive().max(100).optional(),
+  limit: PageLimitSchema,
   showDeleted: z.boolean().optional(),
   sort: z.enum(['newest', 'oldest']).optional(),
 })
@@ -96,7 +97,7 @@ export const listPublicArticlesSchema = z.object({
   categoryId: z.string().optional(),
   search: z.string().optional(),
   cursor: z.string().optional(),
-  limit: z.number().int().positive().max(100).optional(),
+  limit: PageLimitSchema,
 })
 
 export const listArticlePerformanceSchema = z.object({
@@ -132,7 +133,7 @@ export const articleFeedbackReasonSchema = z.object({
 
 export const listArticleFeedbackReasonsSchema = z.object({
   articleId: z.string().min(1),
-  limit: z.number().int().positive().max(100).optional(),
+  limit: PageLimitSchema,
 })
 
 export const getCategoryBySlugSchema = z.object({

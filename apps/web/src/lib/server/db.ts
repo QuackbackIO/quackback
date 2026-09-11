@@ -490,6 +490,8 @@ export {
   SYSTEM_ROLE_DEFS,
   SYSTEM_ROLE_PERMISSIONS,
   presetForLegacyRole,
+  // Client-safe permissions mirror renderer (pure; used by the drift test)
+  renderPermissionsMirror,
   // Migration ledger status (readiness probe)
   getMigrationStatus,
   // System-data reconcile (integration tests exercise the assignment heal)

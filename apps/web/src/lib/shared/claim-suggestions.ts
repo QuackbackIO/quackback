@@ -80,7 +80,7 @@ export function deriveClaimSuggestions(allClaims: Record<string, JsonValue>): Cl
       record(key, value)
     } else if (value !== null && typeof value === 'object') {
       // Depth-2 only, e.g. realm_access.roles. Skip URL-shaped child keys so
-      // the dotted path stays resolvable by getNestedClaim at sign-in.
+      // the dotted path stays resolvable by getClaimByPath at sign-in.
       for (const [childKey, childValue] of Object.entries(value)) {
         if (childKey.includes('://')) continue
         record(`${key}.${childKey}`, childValue as JsonValue)

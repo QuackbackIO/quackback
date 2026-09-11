@@ -12,6 +12,7 @@
 import { db, eq, and, isNull, inArray, sql, posts, postStatuses, asc } from '@/lib/server/db'
 import { toUuid, type PostStatusId } from '@quackback/ids'
 import { positionCaseSql } from '@/lib/server/utils'
+import { HEX_COLOR_PATTERN } from '@/lib/shared/schemas/taxonomy'
 import {
   NotFoundError,
   ValidationError,
@@ -62,7 +63,7 @@ export async function createStatus(input: CreateStatusInput): Promise<Status> {
   if (!input.color?.trim()) {
     throw new ValidationError('VALIDATION_ERROR', 'Color is required')
   }
-  if (!/^#[0-9a-fA-F]{6}$/.test(input.color)) {
+  if (!HEX_COLOR_PATTERN.test(input.color)) {
     throw new ValidationError('VALIDATION_ERROR', 'Color must be in hex format (e.g., #3b82f6)')
   }
 
@@ -122,7 +123,7 @@ export async function updateStatus(id: PostStatusId, input: UpdateStatusInput): 
     if (!input.color.trim()) {
       throw new ValidationError('VALIDATION_ERROR', 'Color cannot be empty')
     }
-    if (!/^#[0-9a-fA-F]{6}$/.test(input.color)) {
+    if (!HEX_COLOR_PATTERN.test(input.color)) {
       throw new ValidationError('VALIDATION_ERROR', 'Color must be in hex format (e.g., #3b82f6)')
     }
   }

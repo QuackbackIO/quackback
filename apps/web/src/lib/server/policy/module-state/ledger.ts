@@ -1111,4 +1111,22 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'The installed email-log callback for this process. apps/web plugs it in once; every ' +
       'workspace uses the same function, which then writes through the active workspace scope.',
   },
+  {
+    file: 'apps/web/src/lib/server/domains/user-attributes/user-attribute.service.ts',
+    name: 'service',
+    category: 'process-lifetime',
+    reason:
+      'A stateless closure bundle from createAttributeDefinitionService. Every method reads and ' +
+      'writes the ACTIVE workspace\u2019s user_attribute_definitions rows through the db proxy on ' +
+      'each call; it caches nothing, so a cross-workspace hit cannot return another tenant\u2019s data.',
+  },
+  {
+    file: 'apps/web/src/lib/server/domains/company-attributes/company-attribute.service.ts',
+    name: 'service',
+    category: 'process-lifetime',
+    reason:
+      'A stateless closure bundle from createAttributeDefinitionService. Every method reads and ' +
+      'writes the ACTIVE workspace\u2019s company_attribute_definitions rows through the db proxy ' +
+      'on each call; it caches nothing, so a cross-workspace hit cannot return another tenant\u2019s data.',
+  },
 ]

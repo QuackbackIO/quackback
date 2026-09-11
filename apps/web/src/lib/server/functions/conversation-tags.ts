@@ -9,6 +9,7 @@ import { createServerFn } from '@tanstack/react-start'
 import type { ConversationTagId, ConversationId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { HEX_COLOR_PATTERN, TaxonomyNameSchema } from '@/lib/shared/schemas/taxonomy'
 import { ForbiddenError } from '@/lib/shared/errors'
 import {
   listConversationTags,
@@ -25,11 +26,8 @@ import {
 } from '@/lib/server/domains/conversation/conversation-tag.service'
 
 const createConversationTagSchema = z.object({
-  name: z.string().min(1).max(50),
-  color: z
-    .string()
-    .regex(/^#[0-9A-Fa-f]{6}$/)
-    .optional(),
+  name: TaxonomyNameSchema,
+  color: z.string().regex(HEX_COLOR_PATTERN).optional(),
 })
 
 const deleteConversationTagSchema = z.object({ id: z.string() })
@@ -38,11 +36,8 @@ const deleteConversationTagSchema = z.object({ id: z.string() })
 const updateConversationTagSchema = z
   .object({
     id: z.string(),
-    name: z.string().min(1).max(50).optional(),
-    color: z
-      .string()
-      .regex(/^#[0-9A-Fa-f]{6}$/)
-      .optional(),
+    name: TaxonomyNameSchema.optional(),
+    color: z.string().regex(HEX_COLOR_PATTERN).optional(),
   })
   .refine((d) => d.name !== undefined || d.color !== undefined, {
     message: 'Provide a name or color to update',
@@ -54,11 +49,8 @@ const addConversationTagSchema = z
   .object({
     conversationId: z.string(),
     tagId: z.string().optional(),
-    name: z.string().min(1).max(50).optional(),
-    color: z
-      .string()
-      .regex(/^#[0-9A-Fa-f]{6}$/)
-      .optional(),
+    name: TaxonomyNameSchema.optional(),
+    color: z.string().regex(HEX_COLOR_PATTERN).optional(),
   })
   .refine((d) => Boolean(d.tagId) || Boolean(d.name?.trim()), {
     message: 'Provide an existing tagId or a name to create',

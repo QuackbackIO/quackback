@@ -16,6 +16,7 @@ import {
 } from '@/lib/server/db'
 import type { ChangelogCategoryId, ChangelogId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
+import { HEX_COLOR_PATTERN as HEX_COLOR_RE } from '@/lib/shared/schemas/taxonomy'
 import type { Actor } from '@/lib/server/policy/types'
 import { segmentGateAllows } from '@/lib/server/policy/segment-gate'
 import type {
@@ -26,8 +27,6 @@ import type {
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'changelog-categories' })
-
-const HEX_COLOR_RE = /^#[0-9A-Fa-f]{6}$/
 
 function validateName(name: string): string {
   const trimmed = name.trim()

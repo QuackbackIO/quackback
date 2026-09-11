@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { coerceAttributeValue } from '../coerce'
+import { coerceAttributeValue } from '@/lib/shared/coerce-attribute-value'
 
 describe('coerceAttributeValue', () => {
   describe('string type', () => {

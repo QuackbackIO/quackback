@@ -11,7 +11,7 @@
 import { db, integrations, userAttributeDefinitions, user, eq, and, sql } from '@/lib/server/db'
 import { getIntegration } from './index'
 import { decryptSecrets } from './encryption'
-import { coerceAttributeValue } from '@/lib/server/domains/user-attributes/coerce'
+import { coerceAttributeValue } from '@/lib/shared/coerce-attribute-value'
 import type { UserAttributeType } from '@/lib/server/db'
 import type { UserIdentifyPayload } from './user-sync-types'
 import { logger } from '@/lib/server/logger'

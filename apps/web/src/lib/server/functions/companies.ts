@@ -13,6 +13,10 @@ import { toIsoString } from '@/lib/shared/utils'
 import type { JsonValue } from '@/lib/shared/json'
 import { requireAuth } from './auth-helpers'
 import {
+  AttributeTypeSchema as attributeTypeSchema,
+  CurrencyCodeSchema as currencyCodeSchema,
+} from '@/lib/server/domains/attribute-definitions/attribute-definition.service'
+import {
   createCompany,
   updateCompany,
   deleteCompany,
@@ -267,20 +271,6 @@ export const qualifyCompanyFn = createServerFn({ method: 'POST' })
 // ============================================
 // Company Attribute Definitions (§K2)
 // ============================================
-
-const attributeTypeSchema = z.enum(['string', 'number', 'boolean', 'date', 'currency'])
-const currencyCodeSchema = z.enum([
-  'USD',
-  'EUR',
-  'GBP',
-  'JPY',
-  'CAD',
-  'AUD',
-  'CHF',
-  'CNY',
-  'INR',
-  'BRL',
-])
 
 const createCompanyAttributeSchema = z.object({
   key: z.string().min(1).max(64),

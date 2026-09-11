@@ -8,6 +8,11 @@ import type { BoardId, PostTagId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
+  HEX_COLOR_PATTERN,
+  HexColorSchema,
+  TaxonomyNameSchema,
+} from '@/lib/shared/schemas/taxonomy'
+import {
   listPostTags,
   getTagById,
   createPostTag,
@@ -24,11 +29,7 @@ const log = logger.child({ component: 'tags' })
 
 const createTagSchema = z.object({
   name: z.string().min(1, 'Name is required').max(50, 'Name must be 50 characters or less'),
-  color: z
-    .string()
-    .regex(/^#[0-9A-Fa-f]{6}$/, 'Color must be a valid hex color')
-    .optional()
-    .default('#6b7280'),
+  color: HexColorSchema.optional().default('#6b7280'),
   description: z.string().max(200).optional(),
   aiPrompt: z.string().max(500).optional(),
   isPublic: z.boolean().optional(),
@@ -40,11 +41,8 @@ const getTagSchema = z.object({
 
 const updateTagSchema = z.object({
   id: z.string(),
-  name: z.string().min(1).max(50).optional(),
-  color: z
-    .string()
-    .regex(/^#[0-9A-Fa-f]{6}$/)
-    .optional(),
+  name: TaxonomyNameSchema.optional(),
+  color: z.string().regex(HEX_COLOR_PATTERN).optional(),
   description: z.string().max(200).optional().nullable(),
   aiPrompt: z.string().max(500).optional().nullable(),
   isPublic: z.boolean().optional(),

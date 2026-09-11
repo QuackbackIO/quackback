@@ -24,10 +24,10 @@ import {
 } from '@/lib/server/db'
 import type { ConversationTagId, ConversationId } from '@quackback/ids'
 import { ValidationError, NotFoundError } from '@/lib/shared/errors'
+import { HEX_COLOR_PATTERN as HEX_COLOR } from '@/lib/shared/schemas/taxonomy'
 import { isUniqueViolation } from '@/lib/server/utils'
 import type { ConversationTagDTO } from '@/lib/shared/conversation/types'
 
-const HEX_COLOR = /^#[0-9A-Fa-f]{6}$/
 const DEFAULT_COLOR = '#6b7280'
 
 /**

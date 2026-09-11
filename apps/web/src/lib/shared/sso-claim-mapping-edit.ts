@@ -13,6 +13,7 @@ import {
   type ProfileField,
 } from './oidc-claim-mapping'
 import type { Role } from './roles'
+import { isPlainRecord as isRecord } from './record'
 
 export const MAX_CLAIM_PATH_LENGTH = 256
 
@@ -44,10 +45,6 @@ export class ClaimMappingEditError extends Error {
     this.code = code
     this.name = 'ClaimMappingEditError'
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function cloneRaw(raw: unknown): Record<string, unknown> {

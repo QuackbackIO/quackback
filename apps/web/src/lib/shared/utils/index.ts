@@ -19,7 +19,6 @@ export {
   escapeHtmlAttr,
   sanitizeUrl,
   sanitizeImageUrl,
-  sanitizeImageUrl as sanitizeImageSrc,
   safePositiveInt,
   extractYoutubeId,
 } from './sanitize'

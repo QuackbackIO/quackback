@@ -24,6 +24,7 @@ import {
 } from '@/lib/server/db'
 import type { PostTagId, BoardId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError, InternalError } from '@/lib/shared/errors'
+import { HEX_COLOR_PATTERN } from '@/lib/shared/schemas/taxonomy'
 import type { CreateTagInput, UpdateTagInput } from './post-tag.types'
 import { isTeamActor, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
 import { logger } from '@/lib/server/logger'
@@ -64,8 +65,7 @@ export async function createPostTag(input: CreateTagInput): Promise<PostTag> {
   const color = input.color || '#6b7280'
 
   // Validate color format
-  const hexColorRegex = /^#[0-9A-Fa-f]{6}$/
-  if (!hexColorRegex.test(color)) {
+  if (!HEX_COLOR_PATTERN.test(color)) {
     throw new ValidationError('VALIDATION_ERROR', 'Color must be a valid hex color (e.g., #6b7280)')
   }
 
@@ -128,8 +128,7 @@ export async function updatePostTag(id: PostTagId, input: UpdateTagInput): Promi
 
   // Validate color format if provided
   if (input.color !== undefined) {
-    const hexColorRegex = /^#[0-9A-Fa-f]{6}$/
-    if (!hexColorRegex.test(input.color)) {
+    if (!HEX_COLOR_PATTERN.test(input.color)) {
       throw new ValidationError(
         'VALIDATION_ERROR',
         'Color must be a valid hex color (e.g., #6b7280)'
