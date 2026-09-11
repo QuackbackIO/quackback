@@ -24,6 +24,7 @@ import {
   publicMessengerConfig,
   getPublicWidgetConfig,
 } from '../settings.widget'
+import { getWidgetInstallStatus } from '../widget-install-pairing'
 import { deepMerge } from '../settings.helpers'
 
 function fixtureRow(widget: WidgetConfig, featureFlags?: Record<string, boolean>) {
@@ -369,5 +370,25 @@ describe('ensureWidgetSecret', () => {
   it('returns the existing secret without writing', async () => {
     settingsRow.current = { id: 'settings_1', widgetSecret: 'wgt_existing' }
     await expect(ensureWidgetSecret()).resolves.toBe('wgt_existing')
+  })
+})
+
+describe('getWidgetInstallStatus', () => {
+  it('reports connection evidence without a signing secret', async () => {
+    settingsRow.current = {
+      id: 'settings_1',
+      widgetSecret: 'wgt_must_not_leak',
+      widgetConfig: JSON.stringify({ enabled: true }),
+      widgetInstalledFirstSeenAt: new Date('2026-09-11T10:00:00.000Z'),
+      widgetInstalledLastSeenAt: new Date('2026-09-11T10:05:00.000Z'),
+      widgetInstalledOriginHost: 'app.example.com',
+      widgetInstalledSdkVersion: '0.1.6',
+    }
+    const status = await getWidgetInstallStatus()
+    expect(status.connected).toBe(true)
+    expect(status.enabled).toBe(true)
+    expect(status.originHost).toBe('app.example.com')
+    expect(status.lastDetectedAt).toBe('2026-09-11T10:05:00.000Z')
+    expect(JSON.stringify(status)).not.toContain('wgt_')
   })
 })

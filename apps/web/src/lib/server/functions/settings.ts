@@ -900,6 +900,14 @@ export const regenerateWidgetSecretFn = createServerFn({ method: 'POST' }).handl
   return await regenerateWidgetSecret()
 })
 
+export const mintWidgetInstallCodeFn = createServerFn({ method: 'POST' }).handler(async () => {
+  log.info('mint widget install pairing code')
+  await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+  const { mintWidgetInstallCode } =
+    await import('@/lib/server/domains/settings/widget-install-pairing')
+  return await mintWidgetInstallCode()
+})
+
 // ============================================
 // Office Hours Operations
 // ============================================

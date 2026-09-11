@@ -25,6 +25,8 @@ const ANON_MINT_LIMIT = 100
 const ANON_MINT_WINDOW_S = 10 * 60
 const IDENTIFY_LIMIT = 60
 const IDENTIFY_WINDOW_S = 15 * 60
+const INSTALL_CONTEXT_LIMIT = 20
+const INSTALL_CONTEXT_WINDOW_S = 15 * 60
 
 /** Increment every bucket, then block on the first over its cap. A null count
  *  (the store errored) fails open. */
@@ -54,5 +56,13 @@ export function checkWidgetIdentifyRateLimit(ip: string): Promise<WidgetRateLimi
   return limit(
     [{ key: `widget:identify:ip:${ip}`, windowSeconds: IDENTIFY_WINDOW_S }],
     [IDENTIFY_LIMIT]
+  )
+}
+
+/** Bound pairing-code redeem attempts — this endpoint returns the signing secret. */
+export function checkWidgetInstallContextRateLimit(ip: string): Promise<WidgetRateLimitResult> {
+  return limit(
+    [{ key: `widget:install-context:ip:${ip}`, windowSeconds: INSTALL_CONTEXT_WINDOW_S }],
+    [INSTALL_CONTEXT_LIMIT]
   )
 }

@@ -29,4 +29,18 @@ describe('CopyAgentPromptButton', () => {
       expect(screen.getByRole('button', { name: 'Install prompt copied' })).toBeTruthy()
     })
   })
+
+  it('resolves getPrompt on click so a pairing code can be minted then', async () => {
+    const getPrompt = vi.fn().mockResolvedValue('prompt with qbi_code')
+    render(<CopyAgentPromptButton getPrompt={getPrompt} />)
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Copy install prompt for your coding agent' })
+    )
+
+    await waitFor(() => {
+      expect(getPrompt).toHaveBeenCalled()
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith('prompt with qbi_code')
+    })
+  })
 })

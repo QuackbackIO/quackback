@@ -20,6 +20,7 @@ import {
   updateModerationDefaultFn,
   updateWidgetConfigFn,
   regenerateWidgetSecretFn,
+  mintWidgetInstallCodeFn,
   updateThemeFn,
   updateCustomCssFn,
   updateWorkflowAbandonedAutoCloseFn,
@@ -306,6 +307,12 @@ export function useRegenerateWidgetSecret() {
       queryClient.setQueryData(settingsQueries.widgetSecret().queryKey, secret)
       return queryClient.invalidateQueries({ queryKey: settingsQueries.widgetSecret().queryKey })
     },
+  })
+}
+
+export function useMintWidgetInstallCode() {
+  return useMutation({
+    mutationFn: () => mintWidgetInstallCodeFn(),
   })
 }
 

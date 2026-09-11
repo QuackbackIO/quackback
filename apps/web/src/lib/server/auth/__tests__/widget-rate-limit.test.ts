@@ -11,7 +11,11 @@ const { incrementBuckets, bucketRetryAfter } = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/server/utils/rate-bucket', () => ({ incrementBuckets, bucketRetryAfter }))
 
-import { checkAnonMintRateLimit, checkWidgetIdentifyRateLimit } from '../widget-rate-limit'
+import {
+  checkAnonMintRateLimit,
+  checkWidgetIdentifyRateLimit,
+  checkWidgetInstallContextRateLimit,
+} from '../widget-rate-limit'
 
 beforeEach(() => vi.clearAllMocks())
 
@@ -36,6 +40,16 @@ describe('widget rate limits', () => {
     expect(await checkWidgetIdentifyRateLimit('1.2.3.4')).toEqual({ allowed: true }) // at cap
     incrementBuckets.mockResolvedValue([61])
     expect(await checkWidgetIdentifyRateLimit('1.2.3.4')).toEqual({
+      allowed: false,
+      retryAfter: 42,
+    })
+  })
+
+  it('bounds install-context redeem per IP', async () => {
+    incrementBuckets.mockResolvedValue([20])
+    expect(await checkWidgetInstallContextRateLimit('1.2.3.4')).toEqual({ allowed: true })
+    incrementBuckets.mockResolvedValue([21])
+    expect(await checkWidgetInstallContextRateLimit('1.2.3.4')).toEqual({
       allowed: false,
       retryAfter: 42,
     })
