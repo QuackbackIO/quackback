@@ -1,7 +1,7 @@
 /**
  * `handleSignInFailureAudit` — emits `auth.signin.failed` when a sign-in
  * path is hit but no session is created (wrong password, invalid/expired
- * magic-link token).
+ * magic-link token, failed OIDC / social callback).
  *
  * Key behaviors covered:
  *  - Emits with INVALID_CREDENTIALS on a failed credential (password) path.
@@ -10,6 +10,8 @@
  *  - Does NOT log the attempted password or token — only email + reason code.
  *  - Does NOT emit for non-sign-in paths.
  *  - Survives an audit-store failure (best-effort emit).
+ *  - Shared `/callback/:id` is `sso` only for a registered customer IdP;
+ *    GitHub / Google / Microsoft stay `oauth`.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
@@ -197,6 +199,23 @@ function oidcCtx(opts: { error?: string; withSession?: boolean; providerId?: str
   }
 }
 
+function sharedCallbackCtx(opts: { id: string; error?: string; withSession?: boolean }) {
+  const location = opts.error
+    ? `https://acme.test/api/auth/error?error=${opts.error}`
+    : 'https://acme.test/api/auth/error'
+  return {
+    path: '/callback/:id',
+    params: { id: opts.id },
+    body: {},
+    context: {
+      newSession: opts.withSession
+        ? { user: { id: 'user_1' }, session: { token: 'session_tok' } }
+        : null,
+      returned: new Response(null, { status: 302, headers: { location } }),
+    },
+  }
+}
+
 describe('handleSignInFailureAudit — OIDC callback', () => {
   it('emits with the IdP-reported reason code', async () => {
     await handleSignInFailureAudit(oidcCtx({ error: 'email_is_missing' }) as never)
@@ -236,5 +255,52 @@ describe('handleSignInFailureAudit — OIDC callback', () => {
     // there is one) belongs to the IdP response rather than a typed attempt.
     await handleSignInFailureAudit(oidcCtx({ error: 'email_is_missing' }) as never)
     expect(mockRecordAuditEvent.mock.calls[0][0].actor.email).toBeNull()
+  })
+})
+
+describe('handleSignInFailureAudit — shared /callback/:id', () => {
+  const registered = new Set(['oidc_abc', 'sso'])
+
+  it('labels a registered customer IdP as SSO', async () => {
+    await handleSignInFailureAudit(
+      sharedCallbackCtx({ id: 'oidc_abc', error: 'email_is_missing' }) as never,
+      registered
+    )
+    const call = mockRecordAuditEvent.mock.calls[0][0]
+    expect(call.actor.authMethod).toBe('sso')
+    expect(call.metadata).toMatchObject({
+      reason: 'EMAIL_IS_MISSING',
+      providerId: 'oidc_abc',
+    })
+  })
+
+  it('labels GitHub / Google / Microsoft as oauth, not SSO', async () => {
+    for (const id of ['github', 'google', 'microsoft'] as const) {
+      mockRecordAuditEvent.mockClear()
+      await handleSignInFailureAudit(
+        sharedCallbackCtx({ id, error: 'access_denied' }) as never,
+        registered
+      )
+      const call = mockRecordAuditEvent.mock.calls[0][0]
+      expect(call.actor.authMethod).toBe('oauth')
+      expect(call.metadata).toMatchObject({
+        reason: 'ACCESS_DENIED',
+        providerId: id,
+      })
+    }
+  })
+
+  it('falls back to OAUTH_SIGNIN_FAILED when a social redirect has no error', async () => {
+    await handleSignInFailureAudit(sharedCallbackCtx({ id: 'github' }) as never, registered)
+    expect(mockRecordAuditEvent.mock.calls[0][0].metadata.reason).toBe('OAUTH_SIGNIN_FAILED')
+    expect(mockRecordAuditEvent.mock.calls[0][0].actor.authMethod).toBe('oauth')
+  })
+
+  it('does not emit when the social callback created a session', async () => {
+    await handleSignInFailureAudit(
+      sharedCallbackCtx({ id: 'github', withSession: true }) as never,
+      registered
+    )
+    expect(mockRecordAuditEvent).not.toHaveBeenCalled()
   })
 })

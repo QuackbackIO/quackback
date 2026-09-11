@@ -31,7 +31,7 @@ export const auditLog = pgTable(
     requestId: text('request_id'),
     /** Denormalised principal type at write time ('user' | 'service' | 'anonymous' | 'system' | 'api_key' | 'support'). */
     actorType: text('actor_type'),
-    /** Auth method used for sign-in events ('password' | 'sso' | 'magic_link' | 'ott' | 'api_key' | 'session'). */
+    /** Auth method used for sign-in events ('password' | 'sso' | 'oauth' | 'magic_link' | 'ott' | 'api_key' | 'session'). */
     authMethod: text('auth_method'),
     /** Dotted taxonomy — see `AuditEventType`. */
     eventType: text('event_type').notNull(),
