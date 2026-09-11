@@ -3,7 +3,7 @@ import { generateId } from '@quackback/ids'
 import { registerTools } from '@/lib/server/mcp/tools'
 import {
   MCP_ARGUMENT_DISPATCHED_TOOLS,
-  MCP_FIXED_TOOL_SCOPES,
+  TOOL_SCOPES,
   requiredScopeForMcpRpc,
   requiredScopesForMcpRpc,
 } from '../required-scope'
@@ -79,7 +79,7 @@ describe('requiredScopeForMcpRpc', () => {
     )
     const dispatched = new Set<string>(MCP_ARGUMENT_DISPATCHED_TOOLS)
     const registeredFixed = names.filter((name) => !dispatched.has(name))
-    expect(registeredFixed.sort()).toEqual(Object.keys(MCP_FIXED_TOOL_SCOPES).sort())
+    expect(registeredFixed.sort()).toEqual(Object.keys(TOOL_SCOPES).sort())
     for (const name of dispatched) expect(names).toContain(name)
   })
 })

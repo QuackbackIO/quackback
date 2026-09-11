@@ -21,6 +21,16 @@ export function parseScopeList(raw: string | null | undefined): string[] {
   return raw.split(/[+\s]+/).filter(Boolean)
 }
 
+function isFullAsCatalogue(raw: string): boolean {
+  const held = new Set(parseScopeList(raw))
+  return held.size === MCP_AS_SCOPES.length && MCP_AS_SCOPES.every((scope) => held.has(scope))
+}
+
+/** The AS allow-list, in catalogue order — what consent is allowed to grant. */
+export function expandAuthorizeScopes(): string {
+  return MCP_AS_SCOPES.join(' ')
+}
+
 /**
  * What the client asked for, used only to prefill toggles.
  * After authorize rewrite, that lives on `qb_requested_scope`. If the
@@ -32,25 +42,8 @@ export function clientRequestedFromConsentSearch(params: {
   scope?: string
 }): string[] {
   if (params.requested !== undefined) return parseScopeList(params.requested)
-  const fromScope = parseScopeList(params.scope)
-  const expanded = expandAuthorizeScopes().split(' ')
-  if (
-    fromScope.length === expanded.length &&
-    expanded.every((scope) => fromScope.includes(scope))
-  ) {
-    return [...MCP_FIRST_CONNECT_SCOPES]
-  }
-  return fromScope
-}
-
-/** The AS allow-list, in catalogue order — what consent is allowed to grant. */
-export function expandAuthorizeScopes(): string {
-  return MCP_AS_SCOPES.join(' ')
-}
-
-function isFullAsCatalogue(raw: string): boolean {
-  const held = new Set(parseScopeList(raw))
-  return held.size === MCP_AS_SCOPES.length && MCP_AS_SCOPES.every((scope) => held.has(scope))
+  if (isFullAsCatalogue(params.scope ?? '')) return [...MCP_FIRST_CONNECT_SCOPES]
+  return parseScopeList(params.scope)
 }
 
 /**
@@ -70,11 +63,9 @@ export function rewriteMcpAuthorizeRequest(request: Request): Request {
   if (!url.pathname.endsWith('/oauth2/authorize')) return request
   const scope = url.searchParams.get('scope') ?? ''
   if (isFullAsCatalogue(scope)) {
-    if (!url.searchParams.has(CLIENT_REQUESTED_SCOPE_PARAM)) {
-      url.searchParams.set(CLIENT_REQUESTED_SCOPE_PARAM, scope)
-      return new Request(url, request)
-    }
-    return request
+    if (url.searchParams.has(CLIENT_REQUESTED_SCOPE_PARAM)) return request
+    url.searchParams.set(CLIENT_REQUESTED_SCOPE_PARAM, scope)
+    return new Request(url, request)
   }
   url.searchParams.set(CLIENT_REQUESTED_SCOPE_PARAM, scope)
   url.searchParams.set('scope', expandAuthorizeScopes())

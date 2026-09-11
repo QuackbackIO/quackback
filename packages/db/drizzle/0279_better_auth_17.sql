@@ -202,19 +202,15 @@ CREATE OR REPLACE FUNCTION pg_temp._m0279_microsoft_oid(id_token text)
 RETURNS text
 LANGUAGE plpgsql
 AS $$
+DECLARE
+  payload text;
 BEGIN
   IF id_token IS NULL OR id_token NOT LIKE '%.%.%' THEN
     RETURN NULL;
   END IF;
+  payload := replace(replace(split_part(id_token, '.', 2), '-', '+'), '_', '/');
   RETURN convert_from(
-    decode(
-      rpad(
-        replace(replace(split_part(id_token, '.', 2), '-', '+'), '_', '/'),
-        ((length(replace(replace(split_part(id_token, '.', 2), '-', '+'), '_', '/')) + 3) / 4) * 4,
-        '='
-      ),
-      'base64'
-    ),
+    decode(rpad(payload, ((length(payload) + 3) / 4) * 4, '='), 'base64'),
     'utf8'
   )::jsonb ->> 'oid';
 EXCEPTION WHEN OTHERS THEN

@@ -1,7 +1,7 @@
 /**
  * MCP Tools for Quackback
  *
- * 39 tools calling domain services directly (no HTTP self-loop), grouped by
+ * Tools calling domain services directly (no HTTP self-loop), grouped by
  * resource module. Each tool declares its authorization contract — `{ scope,
  * teamOnly, feature }` — on `registerTool` (see ./helpers), except the two
  * cross-entity lookup tools (search, get_details) which gate per-branch.

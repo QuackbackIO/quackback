@@ -6,7 +6,7 @@
 import { getTypeIdPrefix } from '@quackback/ids'
 import type { McpScope } from './types'
 
-const TOOL_SCOPES: Record<string, McpScope> = {
+export const TOOL_SCOPES: Readonly<Record<string, McpScope>> = {
   triage_post: 'write:feedback',
   vote_post: 'write:feedback',
   proxy_vote: 'write:feedback',
@@ -79,9 +79,6 @@ function getDetailsScope(args: unknown): McpScope | null {
 
 /** Tools that pick a scope from arguments instead of a single `scope:` on registerTool. */
 export const MCP_ARGUMENT_DISPATCHED_TOOLS = ['search', 'get_details'] as const
-
-/** Fixed tool → scope map. `search` / `get_details` are not here. */
-export const MCP_FIXED_TOOL_SCOPES: Readonly<Record<string, McpScope>> = TOOL_SCOPES
 
 function requiredScopeForOne(body: unknown): McpScope | null {
   if (!isRecord(body) || typeof body.method !== 'string') return null
