@@ -33,6 +33,10 @@ import {
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
 
+function toastImageUploadError(error: Error) {
+  toast.error(error.message)
+}
+
 export interface NewConversationTarget {
   principalId: string
   name: string | null
@@ -80,7 +84,10 @@ export function NewConversationDialog({
     }
   }, [open, initialTarget])
 
-  const { upload: uploadImage } = useImageUpload({ prefix: 'chat-images' })
+  const { upload: uploadImage } = useImageUpload({
+    prefix: 'chat-images',
+    onError: toastImageUploadError,
+  })
   const {
     pending: pendingAttachments,
     addFiles,

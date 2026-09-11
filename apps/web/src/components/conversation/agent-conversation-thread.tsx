@@ -268,6 +268,10 @@ export interface ThreadComposerHandle {
   openMacros: () => void
 }
 
+function toastImageUploadError(error: Error) {
+  toast.error(error.message)
+}
+
 export function AgentConversationThread({
   item,
   targetMessageId,
@@ -393,7 +397,11 @@ export function AgentConversationThread({
   const sendTyping = useTypingSender(isTicket ? null : conversationId)
   const { onLocalInput } = useConversationTyping(sendTyping)
 
-  const { upload } = useImageUpload({ endpoint: '/api/upload/image', prefix: 'chat-images' })
+  const { upload } = useImageUpload({
+    endpoint: '/api/upload/image',
+    prefix: 'chat-images',
+    onError: toastImageUploadError,
+  })
   const {
     pending: pendingAttachments,
     addFiles,

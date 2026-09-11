@@ -57,6 +57,10 @@ import {
 // mutation errors.
 const DESCRIPTION_MAX_LENGTH = 4000
 
+function toastImageUploadError(error: Error) {
+  toast.error(error.message)
+}
+
 interface Requester {
   principalId: string
   name: string | null
@@ -226,7 +230,10 @@ export function CreateTicketDialog({
   }, [open, candidates, selectedTypeId])
 
   const create = useCreateTicket()
-  const { upload: uploadImage } = useImageUpload({ prefix: 'chat-images' })
+  const { upload: uploadImage } = useImageUpload({
+    prefix: 'chat-images',
+    onError: toastImageUploadError,
+  })
   const {
     pending: pendingAttachments,
     addFiles,
