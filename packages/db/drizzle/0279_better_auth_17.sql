@@ -1,3 +1,4 @@
+-- @contract: safe-after 0.13.2 (oauth_client_resource is new in this file; DROP of the drizzle-kit id-FK name only fires if a local first-draft apply left it)
 -- Better Auth 1.7.4 OAuth provider schema (resource model, DPoP / assertion
 -- columns, refresh-reuse cache, authorization-code replay) plus jwt() JWKS
 -- algorithm columns. Expand-only.
@@ -9,6 +10,10 @@
 -- pairwise `sub`. When a stored id_token still carries `oid`, rewrite
 -- account_id. Collisions (a row already on that oid) are left alone so the
 -- unique-looking identity index does not gain a silent duplicate pair.
+--
+-- Data backfills and the FK rewrite sit in DO blocks so a fleet replay is a
+-- no-op. A bare UPDATE or unannotated DO at the tip would collapse the
+-- gap-heal window.
 
 ALTER TABLE "jwks" ADD COLUMN IF NOT EXISTS "alg" text;
 --> statement-breakpoint
@@ -32,30 +37,49 @@ ALTER TABLE "oauth_client" ADD COLUMN IF NOT EXISTS "jwks_uri" text;
 --> statement-breakpoint
 ALTER TABLE "oauth_client" ADD COLUMN IF NOT EXISTS "dpop_bound_access_tokens" boolean DEFAULT false;
 --> statement-breakpoint
-UPDATE "oauth_client"
-SET "client_credentials_scopes" = ARRAY[]::text[]
-WHERE "client_credentials_scopes" IS NULL;
---> statement-breakpoint
-UPDATE "oauth_client"
-SET "application_type" = "type"
-WHERE "application_type" IS NULL AND "type" IN ('web', 'native');
---> statement-breakpoint
-UPDATE "oauth_client"
-SET "token_endpoint_auth_method" = 'none'
-WHERE "public" IS TRUE
-  AND ("token_endpoint_auth_method" IS NULL OR "token_endpoint_auth_method" = '');
---> statement-breakpoint
-UPDATE "oauth_client"
-SET "grant_types" = ARRAY['authorization_code', 'refresh_token']::text[]
-WHERE "grant_types" IS NULL OR cardinality("grant_types") = 0;
---> statement-breakpoint
--- Existing DCR clients stored only the scopes they registered with. Step-up
--- needs the client row to allow the full AS catalogue; the token still only
--- contains scopes the user authorized.
-UPDATE "oauth_client"
-SET "scopes" = ARRAY(
-  SELECT DISTINCT unnest(
-    COALESCE("scopes", ARRAY[]::text[]) || ARRAY[
+-- @replay: guarded-by null/empty oauth_client backfills and clients that already hold the full AS catalogue
+DO $$
+BEGIN
+  UPDATE "oauth_client"
+  SET "client_credentials_scopes" = ARRAY[]::text[]
+  WHERE "client_credentials_scopes" IS NULL;
+
+  UPDATE "oauth_client"
+  SET "application_type" = "type"
+  WHERE "application_type" IS NULL AND "type" IN ('web', 'native');
+
+  UPDATE "oauth_client"
+  SET "token_endpoint_auth_method" = 'none'
+  WHERE "public" IS TRUE
+    AND ("token_endpoint_auth_method" IS NULL OR "token_endpoint_auth_method" = '');
+
+  UPDATE "oauth_client"
+  SET "grant_types" = ARRAY['authorization_code', 'refresh_token']::text[]
+  WHERE "grant_types" IS NULL OR cardinality("grant_types") = 0;
+
+  -- Existing DCR clients stored only the scopes they registered with. Step-up
+  -- needs the client row to allow the full AS catalogue; the token still only
+  -- contains scopes the user authorized.
+  UPDATE "oauth_client"
+  SET "scopes" = ARRAY(
+    SELECT DISTINCT unnest(
+      COALESCE("scopes", ARRAY[]::text[]) || ARRAY[
+        'openid',
+        'profile',
+        'email',
+        'offline_access',
+        'read:feedback',
+        'write:feedback',
+        'write:changelog',
+        'read:article',
+        'write:article',
+        'read:chat',
+        'write:chat'
+      ]::text[]
+    )
+  )
+  WHERE NOT (
+    ARRAY[
       'openid',
       'profile',
       'email',
@@ -67,9 +91,9 @@ SET "scopes" = ARRAY(
       'write:article',
       'read:chat',
       'write:chat'
-    ]::text[]
-  )
-);
+    ]::text[] <@ COALESCE("scopes", ARRAY[]::text[])
+  );
+END $$;
 --> statement-breakpoint
 ALTER TABLE "oauth_refresh_token" ADD COLUMN IF NOT EXISTS "authorization_code_id" text;
 --> statement-breakpoint
@@ -132,6 +156,7 @@ CREATE TABLE IF NOT EXISTS "oauth_client_resource" (
   "created_at" timestamptz
 );
 --> statement-breakpoint
+-- @replay: guarded-by IF NOT EXISTS / IF EXISTS on oauth_client_resource FK names; the drop only fires when the never-shipped drizzle-kit name is present
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -172,6 +197,9 @@ CREATE TABLE IF NOT EXISTS "oauth_client_assertion" (
 --> statement-breakpoint
 -- Microsoft oid backfill from stored id_tokens (unverified decode of the
 -- already-stored JWT payload — the token was verified at sign-in time).
+-- @replay: guarded-by microsoft account_id already matching the stored oid, or a colliding row already owning that oid
+DO $$
+BEGIN
 WITH extracted AS (
   SELECT
     "id",
@@ -204,3 +232,4 @@ WHERE a."id" = e."id"
       AND other."account_id" = e.oid
       AND other."id" <> a."id"
   );
+END $$;
