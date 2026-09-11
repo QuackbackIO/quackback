@@ -17,7 +17,7 @@ import type {
 } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { PageLimitSchema } from '@/lib/shared/schemas/taxonomy'
+import { EntityIdSchema, PageLimitSchema, ReorderIdsSchema } from '@/lib/shared/schemas/taxonomy'
 import { requireAuth, getOptionalAuth, policyActorFromAuth } from './auth-helpers'
 import { resolvePortalAccessForRequest } from './portal-access'
 import {
@@ -207,8 +207,8 @@ export const updateStatusComponentFn = createServerFn({ method: 'POST' })
     })
   })
 
-const idSchema = z.object({ id: z.string() })
-const reorderIdsSchema = z.object({ ids: z.array(z.string()).min(1) })
+const idSchema = EntityIdSchema
+const reorderIdsSchema = ReorderIdsSchema
 
 export const deleteStatusComponentFn = createServerFn({ method: 'POST' })
   .validator(idSchema)

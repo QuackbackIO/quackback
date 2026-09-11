@@ -8,8 +8,9 @@ import type { BoardId, PostTagId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
-  HEX_COLOR_PATTERN,
-  HexColorSchema,
+  EntityIdSchema,
+  HexColorWithDefaultSchema,
+  OptionalHexColorPatternSchema,
   TaxonomyNameSchema,
 } from '@/lib/shared/schemas/taxonomy'
 import {
@@ -29,28 +30,24 @@ const log = logger.child({ component: 'tags' })
 
 const createTagSchema = z.object({
   name: z.string().min(1, 'Name is required').max(50, 'Name must be 50 characters or less'),
-  color: HexColorSchema.optional().default('#6b7280'),
+  color: HexColorWithDefaultSchema,
   description: z.string().max(200).optional(),
   aiPrompt: z.string().max(500).optional(),
   isPublic: z.boolean().optional(),
 })
 
-const getTagSchema = z.object({
-  id: z.string(),
-})
+const getTagSchema = EntityIdSchema
 
 const updateTagSchema = z.object({
   id: z.string(),
   name: TaxonomyNameSchema.optional(),
-  color: z.string().regex(HEX_COLOR_PATTERN).optional(),
+  color: OptionalHexColorPatternSchema,
   description: z.string().max(200).optional().nullable(),
   aiPrompt: z.string().max(500).optional().nullable(),
   isPublic: z.boolean().optional(),
 })
 
-const deleteTagSchema = z.object({
-  id: z.string(),
-})
+const deleteTagSchema = EntityIdSchema
 
 const backfillAiTagsSchema = z.object({
   boardId: z.string(),

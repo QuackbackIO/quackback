@@ -1,32 +1,10 @@
 import type { CompanyAttributeId } from '@quackback/ids'
-import type { UserAttributeType, CurrencyCode } from '@/lib/server/db'
+import type {
+  AttributeDefinitionRecord,
+  CreateAttributeDefinitionInput,
+  UpdateAttributeDefinitionInput,
+} from '@/lib/server/domains/attribute-definitions/attribute-definition.types'
 
-export interface CompanyAttribute {
-  id: CompanyAttributeId
-  key: string
-  label: string
-  description: string | null
-  type: UserAttributeType
-  currencyCode: CurrencyCode | null
-  /** External key for CRM/CDP attribute mapping. Falls back to `key` if null. */
-  externalKey: string | null
-  createdAt: Date
-  updatedAt: Date
-}
-
-export interface CreateCompanyAttributeInput {
-  key: string
-  label: string
-  description?: string | null
-  type: UserAttributeType
-  currencyCode?: CurrencyCode | null
-  externalKey?: string | null
-}
-
-export interface UpdateCompanyAttributeInput {
-  label?: string
-  description?: string | null
-  type?: UserAttributeType
-  currencyCode?: CurrencyCode | null
-  externalKey?: string | null
-}
+export type CompanyAttribute = AttributeDefinitionRecord<CompanyAttributeId>
+export type CreateCompanyAttributeInput = CreateAttributeDefinitionInput
+export type UpdateCompanyAttributeInput = UpdateAttributeDefinitionInput

@@ -23,7 +23,12 @@ import {
   type TicketStage,
 } from '@/lib/server/db'
 import type { TicketStatusId } from '@quackback/ids'
-import { assertHexColor, assertTrimmedName, positionCaseSql } from '@/lib/server/utils'
+import {
+  assertHexColor,
+  assertTrimmedName,
+  nextPosition,
+  positionCaseSql,
+} from '@/lib/server/utils'
 import { NotFoundError, ValidationError, ConflictError, ForbiddenError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
 import { uniqueUnderscoreSlug } from './unique-slug'
@@ -77,10 +82,11 @@ export async function createTicketStatus(
 
   const slug = await uniqueSlug(name)
   // Append after the current max position so new statuses land at the end.
-  const [{ max }] = await db
-    .select({ max: sql<number>`COALESCE(MAX(${ticketStatuses.position}), -1)` })
-    .from(ticketStatuses)
-    .where(isNull(ticketStatuses.deletedAt))
+  const position = await nextPosition(
+    ticketStatuses,
+    ticketStatuses.position,
+    isNull(ticketStatuses.deletedAt)
+  )
 
   try {
     const [status] = await db
@@ -90,7 +96,7 @@ export async function createTicketStatus(
         slug,
         color: input.color,
         category: input.category,
-        position: Number(max) + 1,
+        position,
         publicStage: input.publicStage ?? null,
         isDefault: false,
       })

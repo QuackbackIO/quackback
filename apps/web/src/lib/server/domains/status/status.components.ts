@@ -20,7 +20,7 @@ import {
 } from '@/lib/server/db'
 import type { StatusComponentId, StatusComponentGroupId, StatusIncidentId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
-import { assertTrimmedName, positionCaseSql } from '@/lib/server/utils'
+import { assertTrimmedName, nextPosition, positionCaseSql } from '@/lib/server/utils'
 import { logger } from '@/lib/server/logger'
 import type { EventActor } from '@/lib/server/events/dispatch'
 import type {
@@ -68,13 +68,13 @@ export async function createStatusComponentGroup(
   input: CreateStatusComponentGroupInput
 ): Promise<StatusComponentGroupWithComponents> {
   const name = validateName(input.name, 'Group')
-  const [{ maxPosition }] = await db
-    .select({ maxPosition: sql<number>`coalesce(max(${statusComponentGroups.position}), -1)::int` })
-    .from(statusComponentGroups)
-
   const [group] = await db
     .insert(statusComponentGroups)
-    .values({ name, collapsed: input.collapsed ?? false, position: maxPosition + 1 })
+    .values({
+      name,
+      collapsed: input.collapsed ?? false,
+      position: await nextPosition(statusComponentGroups, statusComponentGroups.position),
+    })
     .returning()
 
   return {
@@ -172,10 +172,6 @@ export async function createStatusComponent(
   input: CreateStatusComponentInput
 ): Promise<StatusComponentRow> {
   const name = validateName(input.name, 'Component')
-  const [{ maxPosition }] = await db
-    .select({ maxPosition: sql<number>`coalesce(max(${statusComponents.position}), -1)::int` })
-    .from(statusComponents)
-
   const [component] = await db
     .insert(statusComponents)
     .values({
@@ -185,7 +181,7 @@ export async function createStatusComponent(
       status: input.status ?? 'operational',
       showUptime: input.showUptime ?? true,
       segmentIds: input.segmentIds ?? [],
-      position: maxPosition + 1,
+      position: await nextPosition(statusComponents, statusComponents.position),
     })
     .returning()
 

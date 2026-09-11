@@ -20,20 +20,23 @@
  * AI-detect), archive/restore lifecycle, and no hard delete.
  */
 import { z } from 'zod'
-import {
-  db,
-  eq,
-  asc,
-  userAttributeDefinitions,
-  companyAttributeDefinitions,
-  type UserAttributeType,
-  type CurrencyCode,
-} from '@/lib/server/db'
+import { db, eq, asc, userAttributeDefinitions, companyAttributeDefinitions } from '@/lib/server/db'
 import { createId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError, InternalError } from '@/lib/shared/errors'
 import { normalizeAttributeKey } from '@/lib/shared/normalize-attribute-key'
 import { isUniqueViolation } from '@/lib/server/utils'
 import { logger } from '@/lib/server/logger'
+import type {
+  AttributeDefinitionRecord,
+  CreateAttributeDefinitionInput,
+  UpdateAttributeDefinitionInput,
+} from './attribute-definition.types'
+
+export type {
+  AttributeDefinitionRecord,
+  CreateAttributeDefinitionInput,
+  UpdateAttributeDefinitionInput,
+} from './attribute-definition.types'
 
 export { normalizeAttributeKey }
 
@@ -75,34 +78,9 @@ export const updateAttributeDefinitionSchema = z.object({
   externalKey: z.string().max(256).optional().nullable(),
 })
 
-export interface AttributeDefinitionInput {
-  key: string
-  label: string
-  description?: string | null
-  type: UserAttributeType
-  currencyCode?: CurrencyCode | null
-  externalKey?: string | null
-}
-
-export interface AttributeDefinitionUpdate {
-  label?: string
-  description?: string | null
-  type?: UserAttributeType
-  currencyCode?: CurrencyCode | null
-  externalKey?: string | null
-}
-
-export interface AttributeDefinition {
-  id: string
-  key: string
-  label: string
-  description: string | null
-  type: UserAttributeType
-  currencyCode: CurrencyCode | null
-  externalKey: string | null
-  createdAt: Date
-  updatedAt: Date
-}
+type AttributeDefinitionInput = CreateAttributeDefinitionInput
+type AttributeDefinitionUpdate = UpdateAttributeDefinitionInput
+type AttributeDefinition = AttributeDefinitionRecord
 
 export interface AttributeDefinitionServiceConfig {
   table: typeof userAttributeDefinitions | typeof companyAttributeDefinitions

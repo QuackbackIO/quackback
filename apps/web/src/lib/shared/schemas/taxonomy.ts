@@ -29,6 +29,28 @@ export const HexColorFormatSchema = z.string().regex(HEX_COLOR_PATTERN, 'Invalid
 /** Fallback swatch when a create payload omits color. */
 export const TAXONOMY_DEFAULT_COLOR = '#6b7280'
 
+/**
+ * Optional `#rrggbb` with zod's default regex message (no custom string).
+ * Used by conversation-tag and update paths that historically had no message.
+ */
+export const OptionalHexColorPatternSchema = z.string().regex(HEX_COLOR_PATTERN).optional()
+
+/** Same optional pattern, defaulting to `TAXONOMY_DEFAULT_COLOR`. */
+export const OptionalHexColorPatternWithDefaultSchema =
+  OptionalHexColorPatternSchema.default(TAXONOMY_DEFAULT_COLOR)
+
+/** `HexColorSchema` (custom message) with the default swatch. */
+export const HexColorWithDefaultSchema = HexColorSchema.optional().default(TAXONOMY_DEFAULT_COLOR)
+
+/** `{ id }` used by taxonomy get/delete server functions. */
+export const EntityIdSchema = z.object({ id: z.string() })
+
+/** Reorder payload that rejects an empty list at the zod layer. */
+export const ReorderIdsSchema = z.object({ ids: z.array(z.string()).min(1) })
+
+/** Reorder payload that allows empty `ids` (the service throws instead). */
+export const ReorderIdsOpenSchema = z.object({ ids: z.array(z.string()) })
+
 /** Plain 1–50-char display name shared by the taxonomy create/update shapes. */
 export const TaxonomyNameSchema = z.string().min(1).max(50)
 

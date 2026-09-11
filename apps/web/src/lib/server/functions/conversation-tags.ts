@@ -9,7 +9,11 @@ import { createServerFn } from '@tanstack/react-start'
 import type { ConversationTagId, ConversationId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { HEX_COLOR_PATTERN, TaxonomyNameSchema } from '@/lib/shared/schemas/taxonomy'
+import {
+  EntityIdSchema,
+  OptionalHexColorPatternSchema,
+  TaxonomyNameSchema,
+} from '@/lib/shared/schemas/taxonomy'
 import { ForbiddenError } from '@/lib/shared/errors'
 import {
   listConversationTags,
@@ -27,17 +31,17 @@ import {
 
 const createConversationTagSchema = z.object({
   name: TaxonomyNameSchema,
-  color: z.string().regex(HEX_COLOR_PATTERN).optional(),
+  color: OptionalHexColorPatternSchema,
 })
 
-const deleteConversationTagSchema = z.object({ id: z.string() })
+const deleteConversationTagSchema = EntityIdSchema
 
 // Rename and/or recolor a label. At least one of name/color must be present.
 const updateConversationTagSchema = z
   .object({
     id: z.string(),
     name: TaxonomyNameSchema.optional(),
-    color: z.string().regex(HEX_COLOR_PATTERN).optional(),
+    color: OptionalHexColorPatternSchema,
   })
   .refine((d) => d.name !== undefined || d.color !== undefined, {
     message: 'Provide a name or color to update',
@@ -50,7 +54,7 @@ const addConversationTagSchema = z
     conversationId: z.string(),
     tagId: z.string().optional(),
     name: TaxonomyNameSchema.optional(),
-    color: z.string().regex(HEX_COLOR_PATTERN).optional(),
+    color: OptionalHexColorPatternSchema,
   })
   .refine((d) => Boolean(d.tagId) || Boolean(d.name?.trim()), {
     message: 'Provide an existing tagId or a name to create',

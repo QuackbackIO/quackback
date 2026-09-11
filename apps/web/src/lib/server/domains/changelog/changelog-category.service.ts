@@ -17,7 +17,12 @@ import {
 import type { ChangelogCategoryId, ChangelogId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
 import { TAXONOMY_DEFAULT_COLOR } from '@/lib/shared/schemas/taxonomy'
-import { assertHexColor, assertTrimmedName, positionCaseSql } from '@/lib/server/utils'
+import {
+  assertHexColor,
+  assertTrimmedName,
+  nextPosition,
+  positionCaseSql,
+} from '@/lib/server/utils'
 import type { Actor } from '@/lib/server/policy/types'
 import { segmentGateAllows } from '@/lib/server/policy/segment-gate'
 import type {
@@ -61,17 +66,13 @@ export async function createChangelogCategory(
     throw new ConflictError('DUPLICATE_NAME', `A category named "${name}" already exists`)
   }
 
-  const [{ maxPosition }] = await db
-    .select({ maxPosition: sql<number>`coalesce(max(${changelogCategories.position}), -1)::int` })
-    .from(changelogCategories)
-
   const [category] = await db
     .insert(changelogCategories)
     .values({
       name,
       color,
       segmentIds: input.segmentIds ?? [],
-      position: maxPosition + 1,
+      position: await nextPosition(changelogCategories, changelogCategories.position),
     })
     .returning()
 

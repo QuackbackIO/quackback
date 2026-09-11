@@ -10,10 +10,12 @@
  * Note: Authorization is handled at the action/API layer, not in services.
  */
 
+import { sql } from 'drizzle-orm'
 import {
   db,
   eq,
   and,
+  ne,
   isNull,
   asc,
   type PostTag,
@@ -48,11 +50,10 @@ export async function createPostTag(input: CreateTagInput): Promise<PostTag> {
     tooLong: 'PostTag name must not exceed 50 characters',
   })
 
-  // Check for duplicate name in the organization
-  const existingTags = await db.query.postTags.findMany({
-    orderBy: [asc(postTags.name)],
+  // Includes soft-deleted rows — the name unique check spans archived tags.
+  const duplicate = await db.query.postTags.findFirst({
+    where: sql`lower(${postTags.name}) = ${trimmedName.toLowerCase()}`,
   })
-  const duplicate = existingTags.find((tag) => tag.name.toLowerCase() === trimmedName.toLowerCase())
   if (duplicate) {
     throw new ConflictError('DUPLICATE_NAME', `A tag with name "${trimmedName}" already exists`)
   }
@@ -101,12 +102,9 @@ export async function updatePostTag(id: PostTagId, input: UpdateTagInput): Promi
       required: 'PostTag name cannot be empty',
       tooLong: 'PostTag name must not exceed 50 characters',
     })
-    const existingTags = await db.query.postTags.findMany({
-      orderBy: [asc(postTags.name)],
+    const duplicate = await db.query.postTags.findFirst({
+      where: and(sql`lower(${postTags.name}) = ${trimmedName.toLowerCase()}`, ne(postTags.id, id)),
     })
-    const duplicate = existingTags.find(
-      (tag) => tag.id !== id && tag.name.toLowerCase() === trimmedName.toLowerCase()
-    )
     if (duplicate) {
       throw new ConflictError('DUPLICATE_NAME', `A tag with name "${trimmedName}" already exists`)
     }

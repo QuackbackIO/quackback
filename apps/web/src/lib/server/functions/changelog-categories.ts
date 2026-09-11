@@ -7,7 +7,13 @@ import { createServerFn } from '@tanstack/react-start'
 import type { ChangelogCategoryId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { HEX_COLOR_PATTERN, TaxonomyNameSchema } from '@/lib/shared/schemas/taxonomy'
+import {
+  EntityIdSchema,
+  OptionalHexColorPatternSchema,
+  OptionalHexColorPatternWithDefaultSchema,
+  ReorderIdsOpenSchema,
+  TaxonomyNameSchema,
+} from '@/lib/shared/schemas/taxonomy'
 import {
   listChangelogCategories,
   createChangelogCategory,
@@ -21,19 +27,19 @@ const log = logger.child({ component: 'changelog-categories' })
 
 const createCategorySchema = z.object({
   name: TaxonomyNameSchema,
-  color: z.string().regex(HEX_COLOR_PATTERN).optional().default('#6b7280'),
+  color: OptionalHexColorPatternWithDefaultSchema,
   segmentIds: z.array(z.string()).optional(),
 })
 
 const updateCategorySchema = z.object({
   id: z.string(),
   name: TaxonomyNameSchema.optional(),
-  color: z.string().regex(HEX_COLOR_PATTERN).optional(),
+  color: OptionalHexColorPatternSchema,
   segmentIds: z.array(z.string()).optional(),
 })
 
-const idSchema = z.object({ id: z.string() })
-const reorderSchema = z.object({ ids: z.array(z.string()) })
+const idSchema = EntityIdSchema
+const reorderSchema = ReorderIdsOpenSchema
 
 /** List categories (public: powers the widget/portal filter chips too). */
 export const listChangelogCategoriesFn = createServerFn({ method: 'GET' }).handler(async () => {

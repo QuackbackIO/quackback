@@ -44,7 +44,7 @@ import type { TicketTypeId } from '@quackback/ids'
 import { TICKET_TYPES, type TicketType } from '@/lib/shared/db-types'
 import { ticketFormSchema, type TicketFormField, type TicketTypeDTO } from '@/lib/shared/tickets'
 import { TAXONOMY_DEFAULT_COLOR } from '@/lib/shared/schemas/taxonomy'
-import { assertHexColor, assertTrimmedName } from '@/lib/server/utils'
+import { assertHexColor, assertTrimmedName, nextPosition } from '@/lib/server/utils'
 import { NotFoundError, ValidationError, ConflictError, ForbiddenError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
 import { uniqueUnderscoreSlug } from './unique-slug'
@@ -242,10 +242,11 @@ export async function createTicketType(input: CreateTicketTypeInput): Promise<Ti
   const slug = input.slug !== undefined ? validateSlug(input.slug) : await uniqueSlug(name)
 
   // Append after the current max position within the category.
-  const [{ max }] = await db
-    .select({ max: sql<number>`COALESCE(MAX(${ticketTypes.position}), -1)` })
-    .from(ticketTypes)
-    .where(and(eq(ticketTypes.category, category), isNull(ticketTypes.deletedAt)))
+  const position = await nextPosition(
+    ticketTypes,
+    ticketTypes.position,
+    and(eq(ticketTypes.category, category), isNull(ticketTypes.deletedAt))
+  )
 
   try {
     return await db.transaction(async (tx) => {
@@ -265,7 +266,7 @@ export async function createTicketType(input: CreateTicketTypeInput): Promise<Ti
           fields,
           intakeVisible: input.intakeVisible ?? true,
           isDefault: input.isDefault ?? false,
-          position: Number(max) + 1,
+          position,
         })
         .returning()
       return created

@@ -68,6 +68,7 @@ const CUSTOMER_ACTOR: Actor = {
 beforeEach(() => {
   vi.clearAllMocks()
   mockFindMany.mockResolvedValue([])
+  mockFindFirst.mockResolvedValue(undefined)
 })
 
 describe('listPublicPostTags — portal visibility', () => {
