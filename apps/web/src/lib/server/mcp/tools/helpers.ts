@@ -16,6 +16,7 @@ import { DomainException } from '@/lib/shared/errors'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import type { TiptapContent } from '@/lib/server/db'
 import type { Actor } from '@/lib/server/policy/types'
+import { hasApiScope } from '@/lib/server/domains/api-keys/api-key-scopes'
 import type { McpAuthContext, McpScope } from '../types'
 
 // ============================================================================
@@ -105,7 +106,7 @@ export function decodeSearchCursor(cursor?: string): { entity: string; value: nu
 
 /** Return an error if the token is missing a required scope. */
 export function requireScope(auth: McpAuthContext, scope: McpScope): CallToolResult | null {
-  if (auth.scopes.includes(scope)) return null
+  if (hasApiScope(auth.scopes, scope)) return null
   return {
     isError: true,
     content: [{ type: 'text', text: `Error: Insufficient scope. Required: ${scope}` }],

@@ -13,7 +13,7 @@ export type OAuthProviderEntry = {
 
 /**
  * Get the OAuth redirect URL for a provider.
- * Handles routing between signIn.oauth2 (generic) and signIn.social (built-in).
+ * Better Auth 1.7: generic OIDC and built-in social both use signIn.social.
  *
  * `errorCallbackURL` is always set to the same popup landing: without it,
  * Better-Auth bounces callback failures to its own bare `/api/auth/error`
@@ -30,20 +30,12 @@ export async function getOAuthRedirectUrl(
     providerType: provider.type === 'generic-oauth' ? 'oidc' : 'social',
     callbackUrl: callbackURL,
   })
-  const result =
-    provider.type === 'generic-oauth'
-      ? await authClient.signIn.oauth2({
-          providerId: provider.id,
-          callbackURL,
-          errorCallbackURL: callbackURL,
-          disableRedirect: true,
-        })
-      : await authClient.signIn.social({
-          provider: provider.id,
-          callbackURL,
-          errorCallbackURL: callbackURL,
-          disableRedirect: true,
-        })
+  const result = await authClient.signIn.social({
+    provider: provider.id,
+    callbackURL,
+    errorCallbackURL: callbackURL,
+    disableRedirect: true,
+  })
   return result.data?.url ?? null
 }
 

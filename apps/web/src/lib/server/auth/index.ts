@@ -1,4 +1,4 @@
-import { betterAuth, type RateLimit } from 'better-auth'
+import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import {
   anonymous,
@@ -10,10 +10,10 @@ import {
   bearer,
   twoFactor,
 } from 'better-auth/plugins'
-import { oauthProvider } from '@better-auth/oauth-provider'
+import { mcp } from '@better-auth/mcp'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { generateId, type PrincipalId, type UserId } from '@quackback/ids'
-import { API_KEY_SCOPES } from '@/lib/server/domains/api-keys/api-key-scopes'
+import { API_KEY_SCOPES, MCP_AS_SCOPES } from '@/lib/server/domains/api-keys/api-key-scopes'
 import { config } from '@/lib/server/config'
 import { activeSecretKey } from '@/lib/server/secret-key'
 import { logger } from '@/lib/server/logger'
@@ -122,21 +122,36 @@ const authInstances = new WorkspaceKeyedCache<AuthInstance>(256)
 const authConfigVersions = new WorkspaceKeyedCache<number>(256)
 const AUTH_CACHE_KEY = 'instance'
 
-const rateLimitCounters = new WorkspaceKeyedCache<RateLimit>(20_000)
+type RateLimitCounter = { count: number; lastRequest: number }
+
+const rateLimitCounters = new WorkspaceKeyedCache<RateLimitCounter>(20_000)
 
 /**
  * Rate-limit counters, partitioned by workspace.
  *
- * Exported for the isolation tests: the leak this replaces is invisible from
- * outside (a 429 looks the same whichever workspace's traffic earned it), so
- * the only way to assert the separation is to read the counters directly.
+ * Better Auth 1.7 requires a single `consume` that checks and increments
+ * together. Exported for the isolation tests.
  */
 export const workspaceRateLimitStorage = {
-  async get(key: string): Promise<RateLimit | null> {
-    return rateLimitCounters.get(key) ?? null
-  },
-  async set(key: string, value: RateLimit): Promise<void> {
-    rateLimitCounters.set(key, value)
+  async consume(
+    key: string,
+    rule: { window: number; max: number }
+  ): Promise<{ allowed: boolean; retryAfter: number | null }> {
+    const now = Date.now()
+    const existing = rateLimitCounters.get(key)
+    if (!existing || now - existing.lastRequest >= rule.window * 1000) {
+      rateLimitCounters.set(key, { count: 1, lastRequest: now })
+      return { allowed: true, retryAfter: null }
+    }
+    if (existing.count >= rule.max) {
+      const retryAfter = Math.max(
+        1,
+        Math.ceil((existing.lastRequest + rule.window * 1000 - now) / 1000)
+      )
+      return { allowed: false, retryAfter }
+    }
+    existing.count += 1
+    return { allowed: true, retryAfter: null }
   },
 }
 
@@ -162,6 +177,9 @@ async function createAuth() {
     oauthAccessToken: oauthAccessTokenTable,
     oauthRefreshToken: oauthRefreshTokenTable,
     oauthConsent: oauthConsentTable,
+    oauthResource: oauthResourceTable,
+    oauthClientResource: oauthClientResourceTable,
+    oauthClientAssertion: oauthClientAssertionTable,
     twoFactor: twoFactorTable,
     eq,
   } = await import('@/lib/server/db')
@@ -176,21 +194,6 @@ async function createAuth() {
   const { buildGenericOAuthConfigs } = await import('./build-oauth-configs')
   const { ensurePrincipalForUser } =
     await import('@/lib/server/domains/principals/principal.factory')
-
-  // login_hint pre-selects the typed email in the IdP picker. Read from
-  // the `additionalData.loginHint` body field that the team-login /
-  // portal-auth forms pass when initiating an OIDC sign-in. When absent
-  // (e.g. a direct hit on /sign-in/oauth2 with no email context) the hint
-  // is omitted and the IdP shows its default account list. Carried to
-  // every OIDC provider since any of them may be domain-routed.
-  const buildLoginHintParams = (ctx: {
-    body?: { additionalData?: { loginHint?: string } }
-  }): Record<string, string> => {
-    const hint = ctx.body?.additionalData?.loginHint
-    const params: Record<string, string> = {}
-    if (hint) params.login_hint = hint
-    return params
-  }
 
   // Build socialProviders config from DB-stored credentials
   const socialProviders: Record<string, Record<string, unknown>> = {}
@@ -284,7 +287,6 @@ async function createAuth() {
     },
     placeholderEmailFor: resolvePlaceholderEmail,
     mapProfileToUser: mapProfileClaims,
-    buildLoginHintParams,
   })
   genericOAuthConfigs.push(...oidcConfigs)
 
@@ -425,6 +427,9 @@ async function createAuth() {
         oauthAccessToken: oauthAccessTokenTable,
         oauthRefreshToken: oauthRefreshTokenTable,
         oauthConsent: oauthConsentTable,
+        oauthResource: oauthResourceTable,
+        oauthClientResource: oauthClientResourceTable,
+        oauthClientAssertion: oauthClientAssertionTable,
         // The twoFactor plugin uses model name "twoFactor"; our Drizzle
         // table is `two_factor` (snake-case). The column→field mapping
         // (camelCase plugin field → snake_case column) is handled by
@@ -683,63 +688,35 @@ async function createAuth() {
       // JWT plugin — signs access tokens, exposes /api/auth/jwks for verification
       jwt(),
 
-      // OAuth 2.1 Provider — turns Better Auth into an authorization server for MCP
-      oauthProvider({
-        // Redirect unauthenticated OAuth users to portal login
+      // MCP authorization server (`mcp()` replaces `oauthProvider()` — do not
+      // register both). Tokens are audience-bound to `/api/mcp`.
+      mcp({
         loginPage: '/auth/login',
-
-        // Consent page — always shown for non-trusted clients
         consentPage: '/oauth/consent',
-
-        // Allow Claude Code (and other MCP clients) to self-register
-        // (RFC 7591). Admin-toggleable via Settings > Developers; the
-        // service bumps auth_config_version on change, so the toggle takes
-        // effect without a restart via the normal instance rebuild.
-        // `?? true` also covers cached settings serialized before the key
-        // existed.
+        resource: `${baseURL}/api/mcp`,
         allowDynamicClientRegistration:
           workspaceSettings?.developerConfig?.oauthDynamicClientRegistrationEnabled ?? true,
         allowUnauthenticatedClientRegistration: true,
-
-        // Identity scopes plus the shared capability vocabulary (the same
-        // list API keys store and the MCP tools enforce).
-        scopes: ['openid', 'profile', 'email', 'offline_access', ...API_KEY_SCOPES],
-
-        // Default scopes when a registering client omits `scope` (RFC 7591).
-        // Real MCP clients (Claude Code, MCP SDK per SEP-835) resolve their
-        // scope list from the protected-resource metadata's scopes_supported
-        // and send it explicitly at registration, so these defaults only
-        // apply to clients that ask for nothing. Keep that fallback
-        // read-only with no offline_access: an unknown silent client gets
-        // no write access and no refresh token unless it asks.
+        scopes: [...MCP_AS_SCOPES],
+        // Fallback when DCR omits `scope`. The register interceptor still
+        // persists the full AS allow-list on the client row so step-up works.
         clientRegistrationDefaultScopes: [
           'openid',
           'profile',
           'email',
           ...API_KEY_SCOPES.filter((s) => s.startsWith('read:')),
         ],
-
-        // Setting clientRegistrationDefaultScopes alone would also narrow
-        // the set a registering client may REQUEST to those defaults and
-        // reject MCP clients' explicit write/offline_access registrations,
-        // so allow the full catalogue for explicit requests.
-        clientRegistrationAllowedScopes: [
-          'openid',
-          'profile',
-          'email',
-          'offline_access',
-          ...API_KEY_SCOPES,
+        clientRegistrationAllowedScopes: [...MCP_AS_SCOPES],
+        resources: [
+          {
+            identifier: `${baseURL}/api/mcp`,
+            allowedScopes: [...API_KEY_SCOPES],
+          },
         ],
-
-        // MCP endpoint is a valid token audience
-        validAudiences: [`${baseURL}/api/mcp`],
-
-        // Better Auth warns that /.well-known/oauth-authorization-server/api/auth
-        // doesn't exist, but we intentionally serve metadata at the root well-known
-        // path (matching the official Better Auth demo pattern — see #7453)
-        silenceWarnings: { oauthAuthServerConfig: true },
-
-        // Embed principal info in the JWT so MCP handler can avoid extra DB lookups
+        // DCR clients otherwise get `invalid_target` (1.7 defaults this on).
+        enforcePerClientResources: false,
+        clientRegistrationDefaultResources: [`${baseURL}/api/mcp`],
+        clientRegistrationAllowedResources: [`${baseURL}/api/mcp`],
         customAccessTokenClaims: async ({ user }) => {
           if (!user?.id) return {}
           const p = await db.query.principal.findFirst({

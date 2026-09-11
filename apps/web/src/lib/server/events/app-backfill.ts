@@ -8,6 +8,7 @@
  * Only event types the app is BOTH subscribed to AND scoped for are eligible —
  * the same scope gate the live app-webhook resolver applies.
  */
+import { hasApiScope } from '@/lib/server/domains/api-keys/api-key-scopes'
 import { db, apps, events, oauthClient, eq, and, inArray, asc, isNotNull } from '@/lib/server/db'
 import { getEventDefinition } from './catalogue'
 import { enqueueHookJobsWithIds } from './process'
@@ -22,7 +23,7 @@ export function deliverableTypes(
 ): string[] {
   return app.subscribedEventTypes.filter((t) => {
     const scope = getEventDefinition(t)?.requiredScope
-    return !!scope && app.grantedScopes.includes(scope)
+    return !!scope && hasApiScope(app.grantedScopes, scope)
   })
 }
 

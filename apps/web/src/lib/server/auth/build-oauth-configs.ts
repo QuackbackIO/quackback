@@ -88,10 +88,11 @@ export interface GenericOAuthConfig {
     | 'select_account'
     | 'select_account consent'
     | 'login consent'
-  // Emit `login_hint` to pre-select the typed email in the IdP picker.
-  authorizationUrlParams?: (ctx: {
-    body?: { additionalData?: { loginHint?: string } }
-  }) => Record<string, string>
+  /**
+   * 1.7 keys OIDC accounts on profile `sub` by default. We keep the
+   * identity-resolution `id` so claim-mapped subjects stay stable.
+   */
+  accountSubject?: (ctx: { profile: Record<string, unknown> }) => string
 }
 
 /**
@@ -147,13 +148,6 @@ export interface BuildGenericOAuthConfigsArgs {
   placeholderEmailFor?: (registrationId: string, accountId: string) => Promise<string>
   /** Attached to every config so `user.locale` populates from sign-in. */
   mapProfileToUser?: (profile: unknown) => Record<string, unknown>
-  /**
-   * Builds the `login_hint` authorizationUrlParams. Carried to EVERY
-   * provider (any provider may be domain-routed), not just the legacy sso one.
-   */
-  buildLoginHintParams?: (ctx: {
-    body?: { additionalData?: { loginHint?: string } }
-  }) => Record<string, string>
 }
 
 /**
@@ -173,7 +167,6 @@ export async function buildGenericOAuthConfigs({
   onIdentityFailure,
   placeholderEmailFor,
   mapProfileToUser,
-  buildLoginHintParams,
 }: BuildGenericOAuthConfigsArgs): Promise<GenericOAuthConfig[]> {
   // Defense-in-depth: a workspace downgraded off the OIDC tier keeps its
   // provider rows in the DB. Skip registration so no login button renders
@@ -338,7 +331,7 @@ export async function buildGenericOAuthConfigs({
       // users still link via accountLinking.trustedProviders.
       disableSignUp: provider.autoCreateUsers === false,
       ...(mapProfileToUser ? { mapProfileToUser } : {}),
-      ...(buildLoginHintParams ? { authorizationUrlParams: buildLoginHintParams } : {}),
+      accountSubject: ({ profile }) => String(profile.id ?? profile.sub ?? ''),
     })
   }
 

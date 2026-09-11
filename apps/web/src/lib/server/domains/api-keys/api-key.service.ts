@@ -21,7 +21,7 @@ import {
 import {
   API_KEY_SCOPES,
   EMPTY_SCOPES_MESSAGE,
-  orderScopes,
+  expandWriteGrants,
   parseApiKeyScopes,
   parseScopesJson,
 } from './api-key-scopes'
@@ -55,7 +55,8 @@ function toApiKey(row: ApiKeyRow): ApiKey {
 /**
  * Validate + normalize the scopes for a new key. Undefined/null means a legacy
  * full-authority key (stored NULL). A provided list must be non-empty and drawn
- * from the vocabulary; it is deduped and stored in vocabulary order.
+ * from the vocabulary; write implies the sibling read, then the set is
+ * stored in vocabulary order.
  */
 function normalizeScopesInput(scopes: CreateApiKeyInput['scopes']): string | null {
   if (scopes === undefined || scopes === null) return null
@@ -63,7 +64,7 @@ function normalizeScopesInput(scopes: CreateApiKeyInput['scopes']): string | nul
   if (unknown.length > 0) {
     throw new ValidationError('VALIDATION_ERROR', `Unknown API key scope(s): ${unknown.join(', ')}`)
   }
-  const ordered = orderScopes(scopes)
+  const ordered = expandWriteGrants(scopes)
   if (ordered.length === 0) {
     throw new ValidationError('VALIDATION_ERROR', EMPTY_SCOPES_MESSAGE)
   }

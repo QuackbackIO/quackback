@@ -2,10 +2,15 @@ import { describe, it, expect } from 'vitest'
 import { ALL_PERMISSIONS, PERMISSIONS } from '@/lib/shared/permissions'
 import {
   API_KEY_SCOPES,
-  parseApiKeyScopes,
-  scopeForPermission,
+  domainAccessLevels,
+  expandWriteGrants,
   hasApiScope,
+  parseApiKeyScopes,
   permissionsWithinScopes,
+  scopeForPermission,
+  scopesFromDomainLevels,
+  summarizeDomainAccess,
+  toggleDomainLevel,
 } from '../api-key-scopes'
 
 describe('parseApiKeyScopes', () => {
@@ -82,10 +87,81 @@ describe('hasApiScope', () => {
     expect(hasApiScope(null, 'write:chat')).toBe(true)
   })
 
-  it('requires the exact scope for a scoped key (write does not imply read)', () => {
+  it('lets same-domain write satisfy the matching read', () => {
     expect(hasApiScope(['read:feedback'], 'read:feedback')).toBe(true)
-    expect(hasApiScope(['write:feedback'], 'read:feedback')).toBe(false)
+    expect(hasApiScope(['write:feedback'], 'read:feedback')).toBe(true)
+    expect(hasApiScope(['write:article'], 'read:article')).toBe(true)
+    expect(hasApiScope(['write:chat'], 'read:chat')).toBe(true)
     expect(hasApiScope([], 'read:feedback')).toBe(false)
+  })
+
+  it('does not let write:changelog imply read:feedback', () => {
+    expect(hasApiScope(['write:changelog'], 'read:feedback')).toBe(false)
+    expect(hasApiScope(['write:changelog'], 'write:changelog')).toBe(true)
+  })
+
+  it('never lets read imply write', () => {
+    expect(hasApiScope(['read:feedback'], 'write:feedback')).toBe(false)
+  })
+})
+
+describe('expandWriteGrants', () => {
+  it('adds the sibling read when write:X is held', () => {
+    expect(expandWriteGrants(['write:feedback'])).toEqual(['read:feedback', 'write:feedback'])
+  })
+
+  it('does not invent a read:changelog scope', () => {
+    expect(expandWriteGrants(['write:changelog'])).toEqual(['write:changelog'])
+  })
+})
+
+describe('domainAccessLevels', () => {
+  it('maps first-connect reads to Read and leaves changelog off', () => {
+    expect(domainAccessLevels(['read:feedback', 'read:article', 'read:chat'])).toEqual({
+      feedback: 'read',
+      changelog: 'off',
+      article: 'read',
+      chat: 'read',
+    })
+  })
+
+  it('presents write-only tokens as Read and write', () => {
+    expect(domainAccessLevels(['write:feedback']).feedback).toBe('read_write')
+  })
+
+  it('round-trips read_write to both stored scopes', () => {
+    const levels = {
+      feedback: 'read_write',
+      changelog: 'write',
+      article: 'read',
+      chat: 'off',
+    } as const
+    expect(scopesFromDomainLevels(levels)).toEqual([
+      'read:feedback',
+      'write:feedback',
+      'write:changelog',
+      'read:article',
+    ])
+  })
+})
+
+describe('toggleDomainLevel', () => {
+  it('toggles the selected chip off and downgrades Read and write via Read', () => {
+    expect(toggleDomainLevel('read', 'read')).toBe('off')
+    expect(toggleDomainLevel('read_write', 'read_write')).toBe('off')
+    expect(toggleDomainLevel('read_write', 'read')).toBe('read')
+    expect(toggleDomainLevel('off', 'read_write')).toBe('read_write')
+    expect(toggleDomainLevel('write', 'write')).toBe('off')
+  })
+})
+
+describe('summarizeDomainAccess', () => {
+  it('labels legacy, full, and mixed keys', () => {
+    expect(summarizeDomainAccess(null)).toBe('Full access (legacy)')
+    expect(summarizeDomainAccess([...API_KEY_SCOPES])).toBe('All scopes')
+    expect(summarizeDomainAccess(['read:feedback', 'write:feedback', 'read:article'])).toBe(
+      'Feedback (read and write), Help Center (read)'
+    )
   })
 })
 
@@ -98,5 +174,17 @@ describe('permissionsWithinScopes', () => {
     ])
     const filtered = permissionsWithinScopes(base, new Set(['read:feedback']))
     expect(filtered).toEqual(new Set([PERMISSIONS.POST_VIEW_PRIVATE]))
+  })
+
+  it('lets write:feedback cover mapped read permissions', () => {
+    const base = new Set([PERMISSIONS.POST_VIEW_PRIVATE, PERMISSIONS.POST_CREATE])
+    expect(permissionsWithinScopes(base, new Set(['write:feedback']))).toEqual(base)
+  })
+
+  it('does not let write:changelog cover feedback reads', () => {
+    const base = new Set([PERMISSIONS.POST_VIEW_PRIVATE, PERMISSIONS.CHANGELOG_MANAGE])
+    expect(permissionsWithinScopes(base, new Set(['write:changelog']))).toEqual(
+      new Set([PERMISSIONS.CHANGELOG_MANAGE])
+    )
   })
 })

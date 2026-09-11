@@ -3,8 +3,8 @@
 import { useState, useTransition } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
+import { DomainAccessPicker } from '@/components/domain-access-picker'
 import { Button } from '@/components/ui/button'
-import { CheckboxGroup } from '@/components/ui/checkbox-group'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -18,8 +18,10 @@ import {
 import { createApiKeyFn } from '@/lib/server/functions/api-keys'
 import {
   API_KEY_SCOPES,
-  API_KEY_SCOPE_LABELS,
-  type ApiKeyScope,
+  EMPTY_SCOPES_MESSAGE,
+  domainAccessLevels,
+  scopesFromDomainLevels,
+  type DomainAccessLevels,
 } from '@/lib/server/domains/api-keys/api-key-scopes'
 import type { ApiKey } from '@/lib/shared/types'
 
@@ -29,22 +31,19 @@ interface CreateApiKeyDialogProps {
   onKeyCreated: (key: ApiKey, plainTextKey: string) => void
 }
 
+function defaultLevels(): DomainAccessLevels {
+  return domainAccessLevels(API_KEY_SCOPES)
+}
+
 export function CreateApiKeyDialog({ open, onOpenChange, onKeyCreated }: CreateApiKeyDialogProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
   const [isPending, startTransition] = useTransition()
   const [name, setName] = useState('')
-  // Default = every scope checked, matching what a key could do before scopes existed.
-  const [scopes, setScopes] = useState<ApiKeyScope[]>([...API_KEY_SCOPES])
+  const [levels, setLevels] = useState<DomainAccessLevels>(defaultLevels)
   const [error, setError] = useState<string | null>(null)
 
-  const toggleScope = (scope: string) => {
-    setScopes((prev) =>
-      prev.includes(scope as ApiKeyScope)
-        ? prev.filter((s) => s !== scope)
-        : [...prev, scope as ApiKeyScope]
-    )
-  }
+  const scopes = scopesFromDomainLevels(levels)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -55,22 +54,20 @@ export function CreateApiKeyDialog({ open, onOpenChange, onKeyCreated }: CreateA
       return
     }
     if (scopes.length === 0) {
-      setError('Select at least one scope')
+      setError(EMPTY_SCOPES_MESSAGE)
       return
     }
 
     try {
       const result = await createApiKeyFn({ data: { name: name.trim(), scopes } })
 
-      // Invalidate queries to refresh the list
       startTransition(() => {
         queryClient.invalidateQueries({ queryKey: ['admin', 'api-keys'] })
         router.invalidate()
       })
 
-      // Reset form and notify parent
       setName('')
-      setScopes([...API_KEY_SCOPES])
+      setLevels(defaultLevels())
       onKeyCreated(result.apiKey, result.plainTextKey)
     } catch (err) {
       console.error('Failed to create API key:', err)
@@ -81,7 +78,7 @@ export function CreateApiKeyDialog({ open, onOpenChange, onKeyCreated }: CreateA
   const handleOpenChange = (newOpen: boolean) => {
     if (!newOpen) {
       setName('')
-      setScopes([...API_KEY_SCOPES])
+      setLevels(defaultLevels())
       setError(null)
     }
     onOpenChange(newOpen)
@@ -113,25 +110,12 @@ export function CreateApiKeyDialog({ open, onOpenChange, onKeyCreated }: CreateA
               </p>
             </div>
             <div className="space-y-2">
-              <Label>Scopes</Label>
-              <CheckboxGroup
-                className="grid grid-cols-2 gap-x-4 gap-y-2"
-                items={API_KEY_SCOPES.map((scope) => ({
-                  value: scope,
-                  label: (
-                    <>
-                      {API_KEY_SCOPE_LABELS[scope]}{' '}
-                      <code className="text-xs text-muted-foreground">{scope}</code>
-                    </>
-                  ),
-                }))}
-                selected={scopes}
-                onToggle={toggleScope}
-                disabled={isPending}
-              />
+              <Label>Access</Label>
+              <div className="rounded-lg border border-border/50 overflow-hidden">
+                <DomainAccessPicker levels={levels} onChange={setLevels} disabled={isPending} />
+              </div>
               <p className="text-xs text-muted-foreground">
-                The key can only perform operations covered by its scopes. All scopes are selected
-                by default.
+                The key can only do what you select. Read and write includes lookup in that area.
               </p>
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}

@@ -1006,7 +1006,7 @@ export interface PublicPortalConfig {
   /**
    * Public OIDC sign-in buttons from the identity_provider table. Each
    * `id` is a provider's `registrationId` (drives
-   * `signIn.oauth2({ providerId })`); `name` is its display label. Only
+   * `signIn.social({ provider })`); `name` is its display label. Only
    * button-eligible, registered providers appear — routed-only providers
    * (verified domain + showButton:false) are omitted.
    */

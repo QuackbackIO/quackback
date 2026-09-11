@@ -224,10 +224,10 @@ export function getAuthProviderByProviderId(id: string): AuthProviderDefinition 
 }
 
 /**
- * The better-auth callback path to register at the IdP for a provider. Generic
- * OAuth providers (Custom OIDC) are served by the genericOAuth plugin at
- * `/api/auth/oauth2/callback/<id>`; built-in social providers (Google, GitHub,
- * etc.) use `/api/auth/callback/<id>`. Unknown ids default to the social path.
+ * The callback path to register at the IdP. Custom OIDC still advertises
+ * `/api/auth/oauth2/callback/<id>` because customers already registered that
+ * URL; Better Auth 1.7 serves `/api/auth/callback/<id>` and the auth catch-all
+ * rewrites the legacy path. Built-in social providers use the social path.
  */
 export function authProviderCallbackPath(providerId: string): string {
   const provider = byProviderId.get(providerId)

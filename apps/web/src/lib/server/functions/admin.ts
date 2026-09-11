@@ -667,7 +667,7 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
  * `getRegisteredOidcProviderIds` gate the auth engine and enforcement use
  * (enabled + credentials + `customOidcProvider` tier). It is scoped to `'sso'`
  * specifically because the onboarding button hardcodes
- * `signIn.oauth2({ providerId: 'sso' })`: a true here must mean *that* provider
+ * `signIn.social({ provider: 'sso' })`: a true here must mean *that* provider
  * is callable, not merely that some other (`custom-oidc` / `oidc_*`) provider
  * exists. Reading the registry (not the legacy `authConfig.ssoOidc` blob) means
  * the legacy-config cleanup can run without breaking the button. In practice

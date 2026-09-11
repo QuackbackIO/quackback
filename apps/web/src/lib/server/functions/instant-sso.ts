@@ -52,9 +52,9 @@ export const resolveInstantSsoRedirectFn = createServerFn({ method: 'GET' })
     // errorCallbackURL: without it a failed callback strands the visitor on
     // Better-Auth's bare /api/auth/error page. Land on the sign-in dialog
     // instead, which also runs link-conflict recovery for account_not_linked.
-    const result = await auth.api.signInWithOAuth2({
+    const result = await auth.api.signInSocial({
       body: {
-        providerId,
+        provider: providerId,
         callbackURL: safeCallback,
         errorCallbackURL: signinErrorLanding(safeCallback),
         disableRedirect: true,

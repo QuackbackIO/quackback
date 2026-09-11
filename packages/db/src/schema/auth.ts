@@ -984,6 +984,9 @@ export const jwks = pgTable('jwks', {
   privateKey: text('private_key').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
   expiresAt: timestamp('expires_at', { withTimezone: true }),
+  // Better Auth 1.7 jwt() plugin — optional, but the schema check requires the columns.
+  alg: text('alg'),
+  crv: text('crv'),
 })
 
 /**
@@ -1022,6 +1025,17 @@ export const oauthClient = pgTable('oauth_client', {
   requirePKCE: boolean('require_pkce'),
   referenceId: text('reference_id'),
   metadata: jsonb('metadata'),
+  // Better Auth 1.7 columns. `public` / `type` stay for expand-only rollback;
+  // 1.7 reads `applicationType` and `tokenEndpointAuthMethod` instead.
+  clientDiscoveryId: text('client_discovery_id'),
+  subjectType: text('subject_type'),
+  clientCredentialsScopes: text('client_credentials_scopes').array().default([]),
+  backchannelLogoutUri: text('backchannel_logout_uri'),
+  backchannelLogoutSessionRequired: boolean('backchannel_logout_session_required'),
+  applicationType: text('application_type'),
+  jwks: text('jwks'),
+  jwksUri: text('jwks_uri'),
+  dpopBoundAccessTokens: boolean('dpop_bound_access_tokens').default(false),
 })
 
 /**
@@ -1045,6 +1059,13 @@ export const oauthRefreshToken = pgTable(
     revoked: timestamp('revoked', { withTimezone: true }),
     authTime: timestamp('auth_time', { withTimezone: true }),
     scopes: text('scopes').array().notNull(),
+    authorizationCodeId: text('authorization_code_id'),
+    resources: text('resources').array(),
+    requestedUserInfoClaims: text('requested_user_info_claims').array(),
+    rotatedAt: timestamp('rotated_at', { withTimezone: true }),
+    rotationReplayResponse: text('rotation_replay_response'),
+    rotationReplayExpiresAt: timestamp('rotation_replay_expires_at', { withTimezone: true }),
+    confirmation: jsonb('confirmation'),
   },
   (table) => [
     // Serves the grace-heal successor lookup (auth/refresh-grace.ts) and
@@ -1058,6 +1079,7 @@ export const oauthRefreshToken = pgTable(
     // check these columns on every referenced-row delete.
     index('oauth_refresh_token_session_id_idx').on(table.sessionId),
     index('oauth_refresh_token_user_id_idx').on(table.userId),
+    index('oauth_refresh_token_authorization_code_id_idx').on(table.authorizationCodeId),
   ]
 )
 
@@ -1079,6 +1101,11 @@ export const oauthAccessToken = pgTable(
     expiresAt: timestamp('expires_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }),
     scopes: text('scopes').array().notNull(),
+    authorizationCodeId: text('authorization_code_id'),
+    resources: text('resources').array(),
+    requestedUserInfoClaims: text('requested_user_info_claims').array(),
+    revoked: timestamp('revoked', { withTimezone: true }),
+    confirmation: jsonb('confirmation'),
   },
   (table) => [
     // FK RI-lookup protection: session logout/expiry, refresh-token
@@ -1087,6 +1114,7 @@ export const oauthAccessToken = pgTable(
     index('oauth_access_token_session_id_idx').on(table.sessionId),
     index('oauth_access_token_user_id_idx').on(table.userId),
     index('oauth_access_token_refresh_id_idx').on(table.refreshId),
+    index('oauth_access_token_authorization_code_id_idx').on(table.authorizationCodeId),
   ]
 )
 
@@ -1103,6 +1131,65 @@ export const oauthConsent = pgTable('oauth_consent', {
   scopes: text('scopes').array().notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
+  resources: text('resources').array(),
+  requestedUserInfoClaims: text('requested_user_info_claims').array(),
+})
+
+/**
+ * Protected resource the AS issues tokens for (RFC 8707). Seeded from
+ * Better Auth 1.7 `resources` config.
+ */
+export const oauthResource = pgTable('oauth_resource', {
+  id: text('id').primaryKey(),
+  identifier: text('identifier').notNull().unique(),
+  name: text('name').notNull(),
+  accessTokenTtl: integer('access_token_ttl'),
+  refreshTokenTtl: integer('refresh_token_ttl'),
+  signingAlgorithm: text('signing_algorithm'),
+  signingKeyId: text('signing_key_id'),
+  allowedScopes: text('allowed_scopes').array(),
+  customClaims: jsonb('custom_claims'),
+  dpopBoundAccessTokensRequired: boolean('dpop_bound_access_tokens_required').default(false),
+  disabled: boolean('disabled').default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+  policyVersion: integer('policy_version').default(1),
+  metadata: jsonb('metadata'),
+})
+
+/**
+ * Client ↔ resource linkage. Authoritative only when
+ * `enforcePerClientResources` is true; we keep the flag off for DCR.
+ */
+export const oauthClientResource = pgTable(
+  'oauth_client_resource',
+  {
+    id: text('id').primaryKey(),
+    clientId: text('client_id')
+      .notNull()
+      .references(() => oauthClient.clientId, { onDelete: 'cascade' }),
+    // Better Auth stores the resource identifier (RFC 8707 URL) here, not
+    // oauth_resource.id — DCR inserts `resourceId: "https://…/api/mcp"`.
+    resourceId: text('resource_id')
+      .notNull()
+      .references(() => oauthResource.identifier, { onDelete: 'cascade' }),
+    metadata: jsonb('metadata'),
+    createdAt: timestamp('created_at', { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex('oauth_client_resource_client_resource_uidx').on(table.clientId, table.resourceId),
+    index('oauth_client_resource_client_id_idx').on(table.clientId),
+    index('oauth_client_resource_resource_id_idx').on(table.resourceId),
+  ]
+)
+
+/**
+ * Single-use `private_key_jwt` client-assertion `jti` digest. Row id is the
+ * digest; insert collision is the replay reject.
+ */
+export const oauthClientAssertion = pgTable('oauth_client_assertion', {
+  id: text('id').primaryKey(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
 })
 
 // Relations for Drizzle relational queries (enables experimental joins)
@@ -1166,6 +1253,22 @@ export const oauthClientRelations = relations(oauthClient, ({ one, many }) => ({
   oauthRefreshTokens: many(oauthRefreshToken),
   oauthAccessTokens: many(oauthAccessToken),
   oauthConsents: many(oauthConsent),
+  oauthClientResources: many(oauthClientResource),
+}))
+
+export const oauthResourceRelations = relations(oauthResource, ({ many }) => ({
+  oauthClientResources: many(oauthClientResource),
+}))
+
+export const oauthClientResourceRelations = relations(oauthClientResource, ({ one }) => ({
+  oauthClient: one(oauthClient, {
+    fields: [oauthClientResource.clientId],
+    references: [oauthClient.clientId],
+  }),
+  oauthResource: one(oauthResource, {
+    fields: [oauthClientResource.resourceId],
+    references: [oauthResource.identifier],
+  }),
 }))
 
 export const oauthRefreshTokenRelations = relations(oauthRefreshToken, ({ one, many }) => ({

@@ -26,6 +26,18 @@ describe('appMatches (WO-13 scope gate)', () => {
     )
   })
 
+  it('lets write:feedback satisfy a read:feedback event', () => {
+    expect(
+      appMatches(app({ grantedScopes: ['write:feedback'] }), 'post.created', 'read:feedback')
+    ).toBe(true)
+  })
+
+  it('does not let write:changelog satisfy read:feedback', () => {
+    expect(
+      appMatches(app({ grantedScopes: ['write:changelog'] }), 'post.created', 'read:feedback')
+    ).toBe(false)
+  })
+
   it('denies when not subscribed to the event type', () => {
     expect(
       appMatches(

@@ -2,8 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { authProviderCallbackPath } from '../auth-providers'
 
 describe('authProviderCallbackPath', () => {
-  // Custom OIDC is served by the genericOAuth plugin, whose callback lives at
-  // /api/auth/oauth2/callback/<id> — not the social /api/auth/callback/<id>.
+  // Customer-facing IdP URL stays the legacy genericOAuth path; we rewrite it.
   it('uses the genericOAuth callback path for Custom OIDC', () => {
     expect(authProviderCallbackPath('custom-oidc')).toBe('/api/auth/oauth2/callback/custom-oidc')
   })

@@ -163,6 +163,12 @@ describe('an IdP configured to create users, on its own callback', () => {
     ).toBe(true)
   })
 
+  it('lets the employee through on the 1.7 social callback path', async () => {
+    expect(
+      await creationAllowed(EMPLOYEE, { path: '/callback/:id', params: { id: 'acme-idp' } })
+    ).toBe(true)
+  })
+
   // The control for every refusal below: with no provider row at all, the same
   // address on the same callback is refused. So the cases that expect `false`
   // are observing the scope of the exemption, not its absence.

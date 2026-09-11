@@ -1793,6 +1793,13 @@
       "when": 1789030800000,
       "tag": "0278_two_factor_lockout",
       "breakpoints": true
+    },
+    {
+      "idx": 256,
+      "version": "7",
+      "when": 1789117200000,
+      "tag": "0279_better_auth_17",
+      "breakpoints": true
     }
   ]
 }

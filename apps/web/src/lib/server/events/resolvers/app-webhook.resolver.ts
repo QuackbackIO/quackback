@@ -8,6 +8,7 @@
  * Delivery goes through the 'app_webhook' hook (HMAC-signed, safeFetch,
  * hook_deliveries idempotency) — the same substrate as customer webhooks.
  */
+import { hasApiScope } from '@/lib/server/domains/api-keys/api-key-scopes'
 import { db, apps, oauthClient, and, eq } from '@/lib/server/db'
 import { getEventDefinition } from '../catalogue'
 import type { SinkResolver } from './registry'
@@ -31,7 +32,7 @@ export function appMatches(
   // Scope gate: the app must hold the event's required scope. An event with no
   // requiredScope (shouldn't happen — the catalogue mandates one) is denied.
   if (!requiredScope) return false
-  if (!app.grantedScopes.includes(requiredScope)) return false
+  if (!hasApiScope(app.grantedScopes, requiredScope)) return false
   return true
 }
 
