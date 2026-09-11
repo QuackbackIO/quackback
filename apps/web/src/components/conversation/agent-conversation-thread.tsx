@@ -906,6 +906,9 @@ export function AgentConversationThread({
       // comment); calling onChanged here too raced it with a redundant
       // broad invalidation.
       appendToThread(res, false)
+      // Belt-and-braces: sending via the Send button momentarily moves focus
+      // there, so hand it back and the next reply starts typing, not clicking.
+      activeEditorRef.current?.focus('end')
     },
     onError: (error, vars) => {
       // Restore the composer to the exact draft cleared at send time so a failed
@@ -928,6 +931,7 @@ export function AgentConversationThread({
               setReplyDraft(EMPTY_DRAFT)
               setReplyKey((k) => k + 1)
               sendMutation.mutate({ ...vars, skipTranslation: true })
+              requestAnimationFrame(() => activeEditorRef.current?.focus('end'))
             },
           },
         })
@@ -945,6 +949,7 @@ export function AgentConversationThread({
               setReplyDraft(EMPTY_DRAFT)
               setReplyKey((k) => k + 1)
               sendMutation.mutate({ ...vars, skipTranslation: true })
+              requestAnimationFrame(() => activeEditorRef.current?.focus('end'))
             },
           },
         })
@@ -988,6 +993,8 @@ export function AgentConversationThread({
       setShareNoteWithConversation(false)
       pendingOwnSendScroll.current = true
       appendToThread(res)
+      // See sendMutation.onSuccess — same Send-button focus cover.
+      activeEditorRef.current?.focus('end')
     },
     onError: (_error, vars) => {
       vars.restoreDraft?.()
@@ -1501,6 +1508,11 @@ export function AgentConversationThread({
     // (remounting the editor via a key bump) — a failed send never loses it.
     const snapshot = draft
     const restoreDraft = () => {
+      // The composer stays editable mid-flight, so the user may have typed
+      // something new since the send — never clobber that with the stale
+      // snapshot (the failed content remains available via the error toast).
+      const current = (useNote ? noteDraftRef : replyDraftRef).current
+      if (!isEmptyTiptapDoc(current.json ?? undefined)) return
       if (useNote) {
         setNoteDraft(snapshot)
         setNoteKey((k) => k + 1)
@@ -1508,6 +1520,9 @@ export function AgentConversationThread({
         setReplyDraft(snapshot)
         setReplyKey((k) => k + 1)
       }
+      // The restore remounts the editor (destroying the focused node), so hand
+      // focus back once the new instance commits.
+      requestAnimationFrame(() => activeEditorRef.current?.focus('end'))
     }
     mutation.mutate({
       content: draft.markdown.trim(),
@@ -1515,13 +1530,16 @@ export function AgentConversationThread({
       attachments: hasAttachments ? pendingAttachments : undefined,
       restoreDraft,
     })
+    // Clear in place (no key bump): remounting would destroy the focused node
+    // and drop focus to <body>. The view clears imperatively, the state mirrors
+    // it, and focus never leaves the editing surface.
+    activeEditorRef.current?.clear()
     if (useNote) {
       setNoteDraft(EMPTY_DRAFT)
-      setNoteKey((k) => k + 1)
     } else {
       setReplyDraft(EMPTY_DRAFT)
-      setReplyKey((k) => k + 1)
     }
+    activeEditorRef.current?.focus('end')
   }
   const onSend = useCallback(() => sendRef.current(), [])
 
@@ -2068,7 +2086,6 @@ export function AgentConversationThread({
                 borderless
                 minHeight="4.5rem"
                 autofocus={noteKey > 0 ? 'end' : false}
-                disabled={noteMutation.isPending}
                 placeholder="Add an internal note for your team…"
                 className="max-h-64 overflow-y-auto"
                 onChange={onNoteChange}
@@ -2083,7 +2100,6 @@ export function AgentConversationThread({
                 borderless
                 minHeight="4.5rem"
                 autofocus={replyKey > 0 ? 'end' : false}
-                disabled={sendMutation.isPending}
                 placeholder={channelReplyPlaceholder(conversation?.channel, {
                   closed: isClosedConversation,
                   isTicket,

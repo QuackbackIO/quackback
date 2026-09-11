@@ -1217,6 +1217,9 @@ export function createEmojiExtension() {
 export interface RichTextEditorHandle {
   /** Focus the editing surface, placing the cursor at `position` (default 'end'). */
   focus: (position?: 'start' | 'end' | number) => void
+  /** Empty the document in place. Unlike a key-remount clear, the ProseMirror
+   * node survives, so focus never leaves the editing surface. */
+  clear: () => void
 }
 
 interface RichTextEditorProps {
@@ -1376,6 +1379,7 @@ function RichTextEditorBase({
     () => ({
       focus: (position: 'start' | 'end' | number = 'end') =>
         withLiveEditor(editor, (live) => live.commands.focus(position)),
+      clear: () => withLiveEditor(editor, (live) => live.commands.clearContent()),
     }),
     [editor]
   )
