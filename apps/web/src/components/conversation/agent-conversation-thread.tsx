@@ -1534,14 +1534,10 @@ export function AgentConversationThread({
         }
       } else if (failedMarkdown.trim() && snapshot.json) {
         // JSON-first merge: the remount reads value.json, so a markdown-only
-        // merge would render invisible and be dropped on the next edit. The
-        // failed text is short (one message), so plain paragraphs are enough —
-        // no markdown parsing needed, and no server import in this component.
-        const failedParagraphs = failedMarkdown
-          .split(/\n{2,}/)
-          .map((block) => block.trim())
-          .filter(Boolean)
-          .map((text) => ({ type: 'paragraph', content: [{ type: 'text', text }] }))
+        // merge would render invisible and be dropped on the next edit. Take
+        // the snapshot's own nodes verbatim — full fidelity (marks, mentions,
+        // embeds) with no parsing involved and no server import here.
+        const failedContent = (snapshot.json as unknown as { content?: unknown[] }).content ?? []
         const mergedJson = {
           ...(current.json as unknown as Record<string, unknown>),
           content: [
@@ -1550,7 +1546,7 @@ export function AgentConversationThread({
               type: 'paragraph',
               content: [{ type: 'text', text: '— failed to send, kept below —' }],
             },
-            ...failedParagraphs,
+            ...failedContent,
           ],
         } as TiptapContent
         const merged: ComposerDraft = {

@@ -39,9 +39,16 @@ function storage(): Storage | null {
   }
 }
 
-/** Most-recent-first Unicode chars. Invalid / empty storage yields []. */
+/** Most-recent-first Unicode chars. Invalid / empty / blocked storage yields []. */
 export function readRecentEmojis(): string[] {
-  const raw = storage()?.getItem(EMOJI_RECENT_STORAGE_KEY)
+  let raw: string | null = null
+  try {
+    // getItem itself can throw under blocked storage (privacy-restricted
+    // embedded widget) — not just the window.localStorage access above.
+    raw = storage()?.getItem(EMOJI_RECENT_STORAGE_KEY) ?? null
+  } catch {
+    return []
+  }
   if (!raw) return []
   try {
     const parsed: unknown = JSON.parse(raw)
