@@ -9,9 +9,11 @@ import { MAX_CONVERSATION_ATTACHMENTS } from '@/lib/shared/conversation/types'
  * uploading flag.
  *
  * `uploading` is an in-flight count (not a boolean flip), so two overlapping
- * paste/drops keep Send disabled until both finish. `clear` bumps a generation
- * so a dialog reset drops in-flight results instead of leaking them onto the
- * next compose.
+ * paste/drops keep Send disabled until both finish. Slot math also reserves
+ * files already uploading so two near-cap pastes cannot both claim the last
+ * seat. `clear` bumps a generation so a dialog reset drops in-flight results
+ * instead of leaking them onto the next compose. A mixed multi-file pick keeps
+ * the files that uploaded; failures stay dropped (the upload fn reports them).
  */
 export function useConversationComposerAttachments(upload: (file: File) => Promise<string>) {
   const [pending, setPending] = useState<ConversationAttachment[]>([])
@@ -21,20 +23,24 @@ export function useConversationComposerAttachments(upload: (file: File) => Promi
   const pendingRef = useRef<ConversationAttachment[]>([])
   pendingRef.current = pending
   const generationRef = useRef(0)
-  const inFlightRef = useRef(0)
+  const inFlightBatchesRef = useRef(0)
+  const reservedSlotsRef = useRef(0)
 
   const addFiles = useCallback(
     async (files: FileList | File[]) => {
       // Only take as many as still fit, so we don't upload files we'd then have
-      // to silently drop past the cap.
+      // to silently drop past the cap. Reserved slots are in-flight files from
+      // overlapping addFiles calls that have not landed in `pending` yet.
       const generation = generationRef.current
-      const slotsLeft = MAX_CONVERSATION_ATTACHMENTS - pendingRef.current.length
+      const slotsLeft =
+        MAX_CONVERSATION_ATTACHMENTS - pendingRef.current.length - reservedSlotsRef.current
       const list = Array.from(files).slice(0, Math.max(0, slotsLeft))
       if (list.length === 0) return
-      inFlightRef.current += 1
+      reservedSlotsRef.current += list.length
+      inFlightBatchesRef.current += 1
       setUploading(true)
       try {
-        const uploaded = await Promise.all(
+        const results = await Promise.allSettled(
           list.map(async (f) => ({
             url: await upload(f),
             name: f.name,
@@ -43,14 +49,14 @@ export function useConversationComposerAttachments(upload: (file: File) => Promi
           }))
         )
         if (generation !== generationRef.current) return
+        const uploaded = results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []))
+        if (uploaded.length === 0) return
         setPending((prev) => [...prev, ...uploaded].slice(0, MAX_CONVERSATION_ATTACHMENTS))
-      } catch {
-        // The upload fn's onError handler (when the caller wires one) surfaces
-        // the failure to the user; either way, drop the failed batch.
       } finally {
         if (generation !== generationRef.current) return
-        inFlightRef.current = Math.max(0, inFlightRef.current - 1)
-        setUploading(inFlightRef.current > 0)
+        reservedSlotsRef.current = Math.max(0, reservedSlotsRef.current - list.length)
+        inFlightBatchesRef.current = Math.max(0, inFlightBatchesRef.current - 1)
+        setUploading(inFlightBatchesRef.current > 0)
       }
     },
     [upload]
@@ -62,7 +68,8 @@ export function useConversationComposerAttachments(upload: (file: File) => Promi
 
   const clear = useCallback(() => {
     generationRef.current += 1
-    inFlightRef.current = 0
+    inFlightBatchesRef.current = 0
+    reservedSlotsRef.current = 0
     setUploading(false)
     setPending([])
   }, [])

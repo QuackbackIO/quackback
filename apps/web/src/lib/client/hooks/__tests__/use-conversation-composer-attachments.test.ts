@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
+import { MAX_CONVERSATION_ATTACHMENTS } from '@/lib/shared/conversation/types'
 import { useConversationComposerAttachments } from '../use-conversation-composer-attachments'
 
 function png(name: string) {
@@ -66,6 +67,62 @@ describe('useConversationComposerAttachments', () => {
       await addDone
     })
     expect(result.current.pending).toEqual([])
+    expect(result.current.uploading).toBe(false)
+  })
+
+  it('does not upload a second near-cap paste while the last slot is reserved', async () => {
+    const upload = vi.fn((file: File) => Promise.resolve(`/api/storage/chat-images/${file.name}`))
+    const { result } = renderHook(() => useConversationComposerAttachments(upload))
+    act(() => {
+      result.current.restore(
+        Array.from({ length: MAX_CONVERSATION_ATTACHMENTS - 1 }, (_, i) => ({
+          url: `/api/storage/chat-images/${i}.png`,
+          name: `${i}.png`,
+          contentType: 'image/png',
+          size: 1,
+        }))
+      )
+    })
+
+    const first = deferred<string>()
+    upload.mockImplementationOnce(() => first.promise)
+
+    let firstDone!: Promise<void>
+    let secondDone!: Promise<void>
+    act(() => {
+      firstDone = result.current.addFiles([png('last.png')])
+      secondDone = result.current.addFiles([png('overflow.png')])
+    })
+    expect(upload).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      first.resolve('/api/storage/chat-images/last.png')
+      await firstDone
+      await secondDone
+    })
+    expect(result.current.pending).toHaveLength(MAX_CONVERSATION_ATTACHMENTS)
+    expect(result.current.pending.at(-1)?.name).toBe('last.png')
+  })
+
+  it('keeps the files that uploaded when one image in a multi-pick fails', async () => {
+    const upload = vi.fn((file: File) =>
+      file.name === 'bad.png'
+        ? Promise.reject(new Error('too large'))
+        : Promise.resolve(`/api/storage/chat-images/${file.name}`)
+    )
+    const { result } = renderHook(() => useConversationComposerAttachments(upload))
+
+    await act(async () => {
+      await result.current.addFiles([png('ok.png'), png('bad.png')])
+    })
+    expect(result.current.pending).toEqual([
+      {
+        url: '/api/storage/chat-images/ok.png',
+        name: 'ok.png',
+        contentType: 'image/png',
+        size: 1,
+      },
+    ])
     expect(result.current.uploading).toBe(false)
   })
 })
