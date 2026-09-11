@@ -202,16 +202,36 @@ export function buildExtensions(
         class: 'text-primary underline',
       },
     }),
-    // Always register so the schema can parse image nodes in existing content
-    ResizableImage.configure({
+    // Always register so the schema can parse image nodes in existing content.
+    // Width/height default to null (not the extension's 500×500, and not 0): a
+    // stored post/changelog image that omitted dims must keep its natural box.
+    // New inserts still get a measured box from `resizableImageInsertAttrs`.
+    ResizableImage.extend({
+      addAttributes() {
+        const parent = this.parent?.() ?? {}
+        const keepRatio = parent['data-keep-ratio']
+        return {
+          ...parent,
+          width: { ...parent.width, default: null },
+          height: { ...parent.height, default: null },
+          'data-keep-ratio': {
+            ...keepRatio,
+            renderHTML(attributes: { width?: number | null; 'data-keep-ratio'?: boolean }) {
+              if (!attributes['data-keep-ratio']) return {}
+              const width = Number(attributes.width)
+              if (Number.isFinite(width) && width > 0) {
+                return { style: `max-width: ${width}px`, 'data-keep-ratio': 'true' }
+              }
+              return { 'data-keep-ratio': 'true' }
+            },
+          },
+        }
+      },
+    }).configure({
       HTMLAttributes: {
         class: 'max-w-full h-auto rounded-lg',
       },
       allowBase64: false,
-      // 0 so a node created with only `{ src, data-keep-ratio }` is not stored
-      // as the extension's 500×500 square default (that forced 1:1 on display).
-      defaultWidth: 0,
-      defaultHeight: 0,
     }),
     // Always register so saved embed nodes round-trip in any editor; paste rules
     // only fire when quackbackEmbeds is enabled for this editor.
