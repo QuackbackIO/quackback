@@ -309,10 +309,23 @@ describe.skipIf(!fixture.available)('requester ticket service (real DB, rolled b
       contentJson,
       attachments,
     })
-    expect(message.attachments).toHaveLength(1)
-    const images = (message.contentJson?.content ?? []).filter((n) => n.type === 'resizableImage')
-    // External host neutralized; own-storage src kept (visitor images are
-    // trusted-origin only).
+    // Read-time lift moves the surviving own-storage image onto attachments.
+    expect(message.attachments).toHaveLength(2)
+    expect(message.attachments.map((a) => a.url)).toEqual([
+      '/api/storage/chat-images/screenshot.png',
+      '/api/storage/portal-images/mine.png',
+    ])
+    expect((message.contentJson?.content ?? []).some((n) => n.type === 'resizableImage')).toBe(
+      false
+    )
+
+    const [row] = await testDb
+      .select({ contentJson: conversationMessages.contentJson })
+      .from(conversationMessages)
+      .where(eq(conversationMessages.id, message.id))
+    const images = (row?.contentJson?.content ?? []).filter((n) => n.type === 'resizableImage')
+    // Stored row still has both nodes: external host neutralized, own-storage
+    // src kept (visitor images are trusted-origin only). No DB rewrite.
     expect(images[0]?.attrs?.src).toBe('')
     expect(images[1]?.attrs?.src).toBe('/api/storage/portal-images/mine.png')
   })

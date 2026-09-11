@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   linkTicketToConversationFn: vi.fn(),
   suggestTicketFieldValuesFn: vi.fn(),
   toastInfo: vi.fn(),
+  uploading: false,
   routeContext: {
     settings: { featureFlags: {} },
   } as Record<string, unknown>,
@@ -56,6 +57,15 @@ vi.mock('sonner', () => ({
 vi.mock('@/components/ui/rich-text-editor', () => ({ RichTextEditor: () => null }))
 vi.mock('@/lib/client/hooks/use-image-upload', () => ({
   useImageUpload: () => ({ upload: vi.fn() }),
+}))
+vi.mock('@/lib/client/hooks/use-conversation-composer-attachments', () => ({
+  useConversationComposerAttachments: () => ({
+    pending: [],
+    addFiles: vi.fn(),
+    remove: vi.fn(),
+    clear: vi.fn(),
+    uploading: mocks.uploading,
+  }),
 }))
 vi.mock('@/components/shared/portal-user-picker', () => ({ PortalUserPicker: () => null }))
 
@@ -163,6 +173,7 @@ beforeEach(() => {
   mocks.routeContext = { settings: { featureFlags: {} } }
   mocks.listTicketTypesFn.mockReset()
   mocks.listTicketTypesFn.mockResolvedValue([bugType, refundType, taskType, outageType])
+  mocks.uploading = false
 })
 
 afterEach(cleanup)
@@ -407,5 +418,23 @@ describe('CreateTicketDialog — Phase 5 copilot auto-fill', () => {
     expect((screen.getByPlaceholderText('Summarize the request…') as HTMLInputElement).value).toBe(
       'Suggested'
     )
+  })
+})
+
+describe('CreateTicketDialog — attachment tray', () => {
+  it('offers a file picker next to the description composer', async () => {
+    renderDialog()
+    expect(await screen.findByRole('button', { name: 'Attach image' })).toBeInTheDocument()
+  })
+
+  it('blocks create while an image is still uploading', async () => {
+    mocks.uploading = true
+    renderDialog()
+    fireEvent.change(await screen.findByPlaceholderText('Summarize the request…'), {
+      target: { value: 'Has a title' },
+    })
+    expect(screen.getByRole('button', { name: 'Create ticket' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Create ticket' }))
+    expect(mocks.mutate).not.toHaveBeenCalled()
   })
 })

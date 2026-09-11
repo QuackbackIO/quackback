@@ -56,7 +56,6 @@ import {
 } from '@/lib/server/policy/conversation'
 import type { Actor } from '@/lib/server/policy/types'
 import {
-  MAX_CONVERSATION_ATTACHMENTS,
   HANDOFF_REASON_LABELS,
   CONVERSATION_SPAM_FILED_BY_LABELS,
   type ConversationStatus,
@@ -537,6 +536,7 @@ export interface StartAgentConversationInput {
   targetPrincipalId: PrincipalId
   content: string
   contentJson?: TiptapContent | null
+  attachments?: ConversationAttachment[]
 }
 
 /**
@@ -559,6 +559,7 @@ export async function startAgentConversation(
   // Rich-composer doc (inline embeds/images): sanitized on write like the
   // agent-reply path, but no origin restriction — this message is always
   // agent-authored, never a visitor upload.
+  const attachments = validateAttachments(input.attachments)
   const safeContentJson = input.contentJson ? sanitizeTiptapContent(input.contentJson) : null
   // A text-less rich message is valid only when it carries an inline image or
   // a shared post; this label also backs the subject/preview/notification body.
@@ -567,7 +568,7 @@ export async function startAgentConversation(
   // caller sent blank content alongside a text-bearing one.
   const content = validateContent(
     resolveMessageContent(input.content, safeContentJson),
-    !!fallbackLabel
+    attachments.length > 0 || !!fallbackLabel
   )
 
   const [target] = await db
@@ -615,7 +616,7 @@ export async function startAgentConversation(
         // The composer owns the thread from the start — it lands in "Mine".
         assignedAgentPrincipalId: agent.principalId,
         status: 'open',
-        subject: preview(content || fallbackLabel, []),
+        subject: preview(content || fallbackLabel, attachments),
       })
       .returning()
 
@@ -627,6 +628,7 @@ export async function startAgentConversation(
         senderType: 'agent',
         content,
         contentJson: safeContentJson,
+        attachments: attachments.length > 0 ? attachments : null,
       })
       .returning()
 
@@ -634,7 +636,7 @@ export async function startAgentConversation(
       .update(conversations)
       .set({
         lastMessageAt: message.createdAt,
-        lastMessagePreview: preview(content || fallbackLabel, []),
+        lastMessagePreview: preview(content || fallbackLabel, attachments),
         // Composing counts as reading on the agent side.
         agentLastReadAt: message.createdAt,
         updatedAt: message.createdAt,
@@ -662,7 +664,9 @@ export async function startAgentConversation(
     conversationId: txResult.conversation.id,
     visitorPrincipalId: txResult.conversation.visitorPrincipalId,
     // Full text, not the truncated preview — notify derives its own excerpt.
-    content: content || fallbackLabel,
+    // Same fallback as sendAgentMessage: attachment-only opens have no
+    // contentJson image node, so richMessageFallbackLabel is empty.
+    content: content || preview(fallbackLabel, attachments),
     contentJson: safeContentJson,
     agentName: agent.displayName ?? 'Support',
     messageId: txResult.message.id,
@@ -868,11 +872,11 @@ export async function addAgentNote(
 ): Promise<SendAgentMessageResult> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
-  const content = validateContent(rawContent)
-  const noteAttachments =
-    attachments && attachments.length > 0
-      ? attachments.slice(0, MAX_CONVERSATION_ATTACHMENTS)
-      : null
+  // Same write-side attachment gate as replies: trusted URL + size first,
+  // then empty-content is allowed only when a validated attachment remains.
+  const attachmentsValidated = validateAttachments(attachments)
+  const noteAttachments = attachmentsValidated.length > 0 ? attachmentsValidated : null
+  const content = validateContent(rawContent, attachmentsValidated.length > 0)
 
   // Sanitize on write (Layer 1), like every other TipTap-doc path (comments,
   // posts, changelog). Drops disallowed nodes/attrs + caps depth, so a tampered

@@ -99,6 +99,15 @@ describe('generateContentHTML', () => {
     expect(html).toContain('alt="shot"')
   })
 
+  it('does not force a 1:1 aspect-ratio when width and height are absent', () => {
+    const html = generateContentHTML({
+      type: 'doc',
+      content: [{ type: 'resizableImage', attrs: { src: 'https://cdn.example.com/a.png' } }],
+    })
+    expect(html).toContain('<img')
+    expect(html).not.toContain('aspect-ratio')
+  })
+
   it('drops an image with an unsafe (javascript:) src', () => {
     const html = generateContentHTML({
       type: 'doc',

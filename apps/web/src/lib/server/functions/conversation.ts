@@ -234,14 +234,17 @@ const setInboxTranslationEnabledSchema = z.object({
 const startConversationSchema = z.object({
   targetPrincipalId: z.string(),
   content: z.string().max(MAX_CONVERSATION_MESSAGE_LENGTH).default(''),
-  // Rich-composer TipTap doc (inline embeds / images). Sanitized server-side;
+  // Rich-composer TipTap doc (inline embeds). Sanitized server-side;
   // the plain `content` is the doc's text, kept for previews/notifications/search.
   contentJson: z.unknown().nullable().optional(),
+  attachments: z.array(attachmentSchema).max(MAX_CONVERSATION_ATTACHMENTS).optional(),
 })
 
 const agentNoteSchema = z.object({
   conversationId: z.string(),
-  content: z.string().min(1).max(MAX_CONVERSATION_MESSAGE_LENGTH),
+  // Empty is allowed only with attachments — same rule as replies; the
+  // service's validateContent enforces it.
+  content: z.string().max(MAX_CONVERSATION_MESSAGE_LENGTH).default(''),
   // TipTap doc from the note editor (carries @-mention nodes). Validated +
   // mention-extracted server-side; omitted for a plain-text note.
   contentJson: z.unknown().nullable().optional(),
@@ -1126,6 +1129,7 @@ export const startAgentConversationFn = createServerFn({ method: 'POST' })
         content: data.content,
         contentJson: (data.contentJson ?? null) as
           import('@/lib/shared/db-types').TiptapContent | null,
+        attachments: data.attachments as ConversationAttachment[] | undefined,
       },
       {
         principalId: ctx.principal.id,

@@ -20,6 +20,7 @@ import {
   type ConversationMessageDTO,
   type MessageSenderType,
 } from '@/lib/shared/conversation/types'
+import { liftInlineImagesToAttachments } from '@/lib/shared/conversation/lift-inline-images'
 
 export const PREVIEW_LENGTH = 120
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
@@ -125,6 +126,10 @@ export function toMessageDTO(
   author: ConversationAuthorDTO | null,
   assistantPrincipalId?: PrincipalId | null
 ): ConversationMessageDTO {
+  const { contentJson, attachments } = liftInlineImagesToAttachments(
+    contentJsonForClient(message.contentJson ?? null),
+    message.attachments ?? []
+  )
   return {
     id: message.id,
     conversationId: message.conversationId,
@@ -133,11 +138,11 @@ export function toMessageDTO(
     content: message.content,
     createdAt: message.createdAt.toISOString(),
     author,
-    attachments: message.attachments ?? [],
+    attachments,
     citations: message.citations ?? [],
     isAssistant: assistantPrincipalId != null && message.principalId === assistantPrincipalId,
     isInternal: message.isInternal,
-    contentJson: contentJsonForClient(message.contentJson ?? null),
+    contentJson,
     viaEmail: message.metadata?.source === 'email',
     systemEvent: message.metadata?.systemEvent ?? null,
     block: message.metadata?.block ?? null,

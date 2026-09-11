@@ -187,10 +187,11 @@ vi.mock('@/lib/client/hooks/use-copilot-insert', () => ({ useCopilotInsert: () =
 vi.mock('@/lib/client/hooks/use-image-upload', () => ({
   useImageUpload: () => ({ upload: vi.fn() }),
 }))
+const addFiles = vi.fn()
 vi.mock('@/lib/client/hooks/use-conversation-composer-attachments', () => ({
   useConversationComposerAttachments: () => ({
     pending: [],
-    addFiles: vi.fn(),
+    addFiles,
     remove: vi.fn(),
     clear: vi.fn(),
     uploading: false,
@@ -722,6 +723,18 @@ describe('AgentConversationThread — composer focus handle', () => {
     // The marker follows the note composer too — the modes share one box.
     act(() => composerRef.current?.focusComposer('note'))
     expect(screen.getByTestId('editor').closest('[data-inbox-composer]')).not.toBeNull()
+  })
+
+  it('pasting an image on the composer stages the attachment tray, not an inline node', async () => {
+    renderWithHandle({ kind: 'conversation', id: 'conversation_1' })
+    const editor = await screen.findByTestId('editor')
+    const box = editor.closest('[data-inbox-composer]')
+    expect(box).not.toBeNull()
+    const file = new File([new Uint8Array([1, 2, 3])], 'shot.png', { type: 'image/png' })
+    fireEvent.paste(box as HTMLElement, {
+      clipboardData: { files: [file], items: [] },
+    })
+    expect(addFiles).toHaveBeenCalledWith([file])
   })
 
   it('focusComposer("reply") focuses the reply editor already showing, leaving the mode alone', async () => {

@@ -14,7 +14,9 @@ function ConversationImageNodeView({ node, selected, deleteNode }: ReactNodeView
   const alt = (node.attrs.alt as string | null) ?? ''
   return (
     <NodeViewWrapper className="group relative my-1 inline-block" contentEditable={false}>
-      {src ? <img src={src} alt={alt} className="max-w-xs rounded-md" /> : null}
+      {src ? (
+        <img src={src} alt={alt} className="max-w-xs h-auto object-contain rounded-md" />
+      ) : null}
       {/* Remove control. mousedown-preventDefault so it doesn't steal the
           editor selection before the click fires. */}
       <button
