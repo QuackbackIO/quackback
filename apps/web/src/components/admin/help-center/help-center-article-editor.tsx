@@ -119,7 +119,7 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
   const handleContentChange = useCallback(
     (json: JSONContent, _html: string, markdown: string) => {
       setContentJson(json)
-      form.setValue('content', markdown, { shouldValidate: true, shouldDirty: true })
+      form.setValue('content', markdown, { shouldValidate: false, shouldDirty: true })
     },
     [form]
   )
