@@ -165,7 +165,7 @@ test.describe('Admin Users Segments', () => {
 
     const optionContainer = page
       .locator('[role="listbox"]')
-      .or(page.locator('[data-radix-select-content]'))
+      .or(page.locator('[data-slot="select-content"]'))
 
     if ((await optionContainer.count()) > 0) {
       await expect(optionContainer.getByText('Email Domain')).toBeVisible()
@@ -195,7 +195,7 @@ test.describe('Admin Users Segments', () => {
     await comboboxes.nth(1).click()
     const optionContainer = page
       .locator('[role="listbox"]')
-      .or(page.locator('[data-radix-select-content]'))
+      .or(page.locator('[data-slot="select-content"]'))
 
     if ((await optionContainer.count()) > 0) {
       const postCountOption = optionContainer.getByText('Post Count')
@@ -322,7 +322,7 @@ test.describe('Admin Users Segments', () => {
 
     const optionContainer = page
       .locator('[role="listbox"]')
-      .or(page.locator('[data-radix-select-content]'))
+      .or(page.locator('[data-slot="select-content"]'))
 
     if ((await optionContainer.count()) > 0) {
       await expect(optionContainer.getByText(/all/i).first()).toBeVisible()

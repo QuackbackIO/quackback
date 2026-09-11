@@ -189,7 +189,7 @@ test.describe('Admin Tags Settings', () => {
       await colorDots.first().click()
 
       // Color picker popover should open
-      const popover = page.locator('[data-radix-popover-content]')
+      const popover = page.locator('[data-slot="popover-content"]')
       if ((await popover.count()) > 0) {
         await expect(popover).toBeVisible()
 

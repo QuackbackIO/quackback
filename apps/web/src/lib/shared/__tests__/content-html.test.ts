@@ -181,4 +181,33 @@ describe('generateContentHTML', () => {
         '<img src="https://cdn.example.com/z.png" alt="" class="max-w-full h-auto rounded-lg"  />'
     )
   })
+
+  it('emits the Unicode char when an emoji node carries attrs.emoji', () => {
+    const html = generateContentHTML({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'emoji', attrs: { name: 'crossed_fingers', emoji: '🤞' } }],
+        },
+      ],
+    })
+    expect(html).toContain('🤞')
+    expect(html).toContain('data-type="emoji"')
+    expect(html).not.toContain(':crossed_fingers:')
+  })
+
+  it('emits a :shortcode: placeholder for a name-only emoji node (client upgrades it)', () => {
+    const html = generateContentHTML({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'emoji', attrs: { name: 'crossed_fingers' } }],
+        },
+      ],
+    })
+    expect(html).toContain(':crossed_fingers:')
+    expect(html).toContain('data-name="crossed_fingers"')
+  })
 })

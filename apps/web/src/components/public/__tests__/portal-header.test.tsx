@@ -135,15 +135,14 @@ describe('PortalHeader — Admin dropdown item', () => {
     // The avatar button is the only button in the header (theme toggle off,
     // NotificationBell mocked away, standalone Admin renders as a link).
     const trigger = screen.getByRole('button')
-    // Radix DropdownMenuTrigger opens on pointerDown (not click).
-    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false })
+    fireEvent.click(trigger)
     expect(await screen.findByRole('menuitem', { name: /admin/i })).toBeInTheDocument()
   })
 
   it('hides the Admin item for portal users', async () => {
     renderHeader({ userRole: 'user', isLoggedIn: true })
     const trigger = screen.getByRole('button')
-    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false })
+    fireEvent.click(trigger)
     // Wait for the dropdown to open (Settings will appear), then confirm
     // no Admin menuitem is present.
     await screen.findByRole('menuitem', { name: /settings/i })
@@ -161,7 +160,7 @@ describe('PortalHeader — sign-out cache hygiene', () => {
 
   it('removes (not merely invalidates) every viewer-scoped cache so internal tags do not outlive a team session', async () => {
     renderHeader({ userRole: 'admin', isLoggedIn: true })
-    fireEvent.pointerDown(screen.getByRole('button'), { button: 0, ctrlKey: false })
+    fireEvent.click(screen.getByRole('button'))
     fireEvent.click(await screen.findByRole('menuitem', { name: /log out|sign out/i }))
     await vi.waitFor(() => expect(mockSignOut).toHaveBeenCalled())
 

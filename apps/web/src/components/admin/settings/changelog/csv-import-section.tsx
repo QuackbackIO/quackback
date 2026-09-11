@@ -143,6 +143,7 @@ export function CsvImportSection() {
                   checked={consentChecked}
                   onCheckedChange={(checked) => setConsentChecked(checked === true)}
                   className="mt-0.5"
+                  data-in-label
                 />
                 <span>
                   I confirm every person on this list has agreed to receive email from us, and I am

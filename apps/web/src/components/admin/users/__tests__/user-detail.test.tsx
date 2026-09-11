@@ -151,7 +151,7 @@ describe('UserDetail', () => {
 
     // Destructive actions are in the overflow menu, not stacked buttons.
     expect(screen.queryByRole('button', { name: 'Remove from portal' })).not.toBeInTheDocument()
-    fireEvent.pointerDown(screen.getByLabelText('More actions'), { button: 0, ctrlKey: false })
+    fireEvent.click(screen.getByLabelText('More actions'))
     expect(await screen.findByRole('menuitem', { name: 'Block' })).toBeInTheDocument()
     expect(screen.getByRole('menuitem', { name: 'Remove from portal' })).toBeInTheDocument()
   })
@@ -193,7 +193,7 @@ describe('UserDetail', () => {
     expect(screen.getByText('Lead')).toBeInTheDocument()
     expect(screen.getByText(/No email/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Send message/ })).toBeDisabled()
-    fireEvent.pointerDown(screen.getByLabelText('More actions'), { button: 0, ctrlKey: false })
+    fireEvent.click(screen.getByLabelText('More actions'))
     expect(await screen.findByRole('menuitem', { name: 'Merge' })).toBeInTheDocument()
   })
 })

@@ -134,6 +134,7 @@ export function EditWebhookDialog({ webhook, open, onOpenChange }: EditWebhookDi
                         disabled={isPending}
                         className="mt-0.5"
                         aria-label={`Subscribe to ${event.label} events`}
+                        data-in-label
                       />
                       <div>
                         <p className="text-sm font-medium">{event.label}</p>

@@ -186,7 +186,7 @@ export function AssistantVoiceCard() {
               return (
                 <label
                   key={value}
-                  className="flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-border/60 p-3 has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5"
+                  className="flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-border/60 p-3 has-[[data-checked]]:border-primary has-[[data-checked]]:bg-primary/5"
                 >
                   <RadioGroupItem
                     value={value}
@@ -236,7 +236,7 @@ export function AssistantVoiceCard() {
               return (
                 <label
                   key={value}
-                  className="flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-border/60 p-3 has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5"
+                  className="flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-border/60 p-3 has-[[data-checked]]:border-primary has-[[data-checked]]:bg-primary/5"
                 >
                   <RadioGroupItem
                     value={value}

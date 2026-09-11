@@ -1,5 +1,5 @@
-import * as React from 'react'
-import * as ScrollAreaPrimitive from '@radix-ui/react-scroll-area'
+import type { Ref } from 'react'
+import { ScrollArea as ScrollAreaPrimitive } from '@base-ui/react/scroll-area'
 
 import { cn } from '@/lib/shared/utils'
 
@@ -8,11 +8,14 @@ function ScrollArea({
   children,
   scrollBarClassName,
   viewportRef,
+  type: _type,
   ...props
-}: React.ComponentProps<typeof ScrollAreaPrimitive.Root> & {
+}: ScrollAreaPrimitive.Root.Props & {
   scrollBarClassName?: string
   /** Ref to the scrolling viewport — e.g. for a virtualizer's getScrollElement. */
-  viewportRef?: React.Ref<HTMLDivElement>
+  viewportRef?: Ref<HTMLDivElement>
+  /** Radix scrollbar visibility — ignored; native/Base UI scrollbars always show when needed. */
+  type?: 'auto' | 'always' | 'scroll' | 'hover'
 }) {
   return (
     <ScrollAreaPrimitive.Root
@@ -23,10 +26,7 @@ function ScrollArea({
       <ScrollAreaPrimitive.Viewport
         ref={viewportRef}
         data-slot="scroll-area-viewport"
-        // Radix wraps children in a `display:table` element that shrink-wraps to
-        // content width, which lets a `truncate` child grow instead of clipping.
-        // Force it to block so descendants stay bounded to the viewport width.
-        className="focus-visible:ring-ring/50 size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:outline-1 [&>div]:!block"
+        className="focus-visible:ring-ring/50 size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:outline-1"
       >
         {children}
       </ScrollAreaPrimitive.Viewport>
@@ -40,9 +40,9 @@ function ScrollBar({
   className,
   orientation = 'vertical',
   ...props
-}: React.ComponentProps<typeof ScrollAreaPrimitive.ScrollAreaScrollbar>) {
+}: ScrollAreaPrimitive.Scrollbar.Props) {
   return (
-    <ScrollAreaPrimitive.ScrollAreaScrollbar
+    <ScrollAreaPrimitive.Scrollbar
       data-slot="scroll-area-scrollbar"
       orientation={orientation}
       className={cn(
@@ -53,11 +53,11 @@ function ScrollBar({
       )}
       {...props}
     >
-      <ScrollAreaPrimitive.ScrollAreaThumb
+      <ScrollAreaPrimitive.Thumb
         data-slot="scroll-area-thumb"
         className="bg-border relative flex-1 rounded-full"
       />
-    </ScrollAreaPrimitive.ScrollAreaScrollbar>
+    </ScrollAreaPrimitive.Scrollbar>
   )
 }
 

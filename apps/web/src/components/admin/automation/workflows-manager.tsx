@@ -380,12 +380,12 @@ export function WorkflowsManager({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {/* Deferred one tick: opening a dialog synchronously from a
-            dropdown's onSelect races the menu's own teardown — the
+            dropdown item's onClick races the menu's own teardown — the
             dialog captures the menu's body pointer-events lock as its
             restore baseline, and closing it (or navigating away from
             it) then leaves the whole page unclickable. */}
         <DropdownMenuItem
-          onSelect={() =>
+          onClick={() =>
             refuseOr(() => {
               setTimeout(() => setGalleryOpen(true), 0)
             })
@@ -397,7 +397,7 @@ export function WorkflowsManager({
             defaultMessage: 'Create from template',
           })}
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={createFromScratch}>
+        <DropdownMenuItem onClick={createFromScratch}>
           <PencilSquareIcon className="mr-2 size-4 text-muted-foreground" />
           {intl.formatMessage({
             id: 'automation.workflows.fromScratch',
@@ -766,11 +766,11 @@ function WorkflowRow({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={() => onNavigate(workflow.id)}>Edit</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => onViewRuns(workflow)}>View runs</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onNavigate(workflow.id)}>Edit</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onViewRuns(workflow)}>View runs</DropdownMenuItem>
             <DropdownMenuSeparator />
             {STATUSES.filter((s) => s !== workflow.status).map((s) => (
-              <DropdownMenuItem key={s} onSelect={() => onSetStatus(workflow.id, s)}>
+              <DropdownMenuItem key={s} onClick={() => onSetStatus(workflow.id, s)}>
                 {STATUS_ACTION_LABEL[s]}
               </DropdownMenuItem>
             ))}
@@ -779,7 +779,7 @@ function WorkflowRow({
                 dialog must open after the menu's teardown, not during it. */}
             <DropdownMenuItem
               variant="destructive"
-              onSelect={() => setTimeout(() => onDelete(workflow), 0)}
+              onClick={() => setTimeout(() => onDelete(workflow), 0)}
             >
               Delete
             </DropdownMenuItem>

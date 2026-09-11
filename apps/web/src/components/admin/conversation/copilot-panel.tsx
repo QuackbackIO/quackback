@@ -1003,23 +1003,29 @@ function CopilotAskInput({
               {sourceOptions.map((opt) => {
                 const Icon = opt.icon
                 return (
-                  <label
+                  <div
                     key={opt.type}
                     className="flex cursor-pointer items-start gap-2 rounded-md px-1 py-1.5 hover:bg-muted/60"
                   >
                     <Checkbox
+                      id={`copilot-source-${opt.type}`}
                       checked={checked.has(opt.type)}
                       onCheckedChange={() => onToggleSource(opt.type)}
                       className="mt-0.5"
                     />
-                    <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    <span className="flex flex-col">
-                      <span className="text-sm">{opt.label}</span>
-                      {opt.subtitle && (
-                        <span className="text-[11px] text-muted-foreground">{opt.subtitle}</span>
-                      )}
-                    </span>
-                  </label>
+                    <label
+                      htmlFor={`copilot-source-${opt.type}`}
+                      className="flex cursor-pointer items-start gap-2"
+                    >
+                      <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <span className="flex flex-col">
+                        <span className="text-sm">{opt.label}</span>
+                        {opt.subtitle && (
+                          <span className="text-[11px] text-muted-foreground">{opt.subtitle}</span>
+                        )}
+                      </span>
+                    </label>
+                  </div>
                 )
               })}
             </PopoverContent>

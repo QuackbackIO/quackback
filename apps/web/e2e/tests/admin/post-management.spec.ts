@@ -145,7 +145,7 @@ test.describe('Admin Post Management', () => {
     // Find post items - looking for clickable elements in the list
     const postList = page
       .locator('[data-testid="post-item"]')
-      .or(page.locator('button[data-state]').filter({ has: page.getByText(/.+/) }))
+      .or(page.locator('[data-testid="post-item"]'))
 
     if ((await postList.count()) > 0) {
       await postList.first().click()
@@ -467,7 +467,7 @@ test.describe('Admin Post Management - Status Transitions', () => {
     await statusBadgeButton.click()
 
     // Popover opens with status options
-    const popover = page.locator('[data-radix-popper-content-wrapper]')
+    const popover = page.locator('[data-slot="popover-content"]')
     await expect(popover).toBeVisible({ timeout: 5000 })
 
     // Pick a status that is different from the current one
@@ -540,7 +540,7 @@ test.describe('Admin Post Management - Status Transitions', () => {
 
     // Open status popover and pick a different option
     await statusBadgeButton.click()
-    const popover = page.locator('[data-radix-popper-content-wrapper]')
+    const popover = page.locator('[data-slot="popover-content"]')
     await expect(popover).toBeVisible({ timeout: 5000 })
 
     const statusOptions = popover.locator('button')
@@ -604,7 +604,7 @@ test.describe('Admin Post Management - Status Transitions', () => {
     const initialStatusText = (await statusBadgeButton.textContent()) ?? ''
     await statusBadgeButton.click()
 
-    const popover = page.locator('[data-radix-popper-content-wrapper]')
+    const popover = page.locator('[data-slot="popover-content"]')
     await expect(popover).toBeVisible({ timeout: 5000 })
 
     const statusOptions = popover.locator('button')
@@ -683,7 +683,10 @@ test.describe('Admin Post Management - Post Detail Panel Accuracy', () => {
 
     // Vote count is rendered as a tabular-nums span next to the "Upvotes" label
     // MetadataSidebar admin mode: <span className="text-sm font-semibold tabular-nums">{voteCount}</span>
-    const upvotesRow = sidebar.locator('div').filter({ hasText: /Upvotes/ }).first()
+    const upvotesRow = sidebar
+      .locator('div')
+      .filter({ hasText: /Upvotes/ })
+      .first()
     await expect(upvotesRow).toBeVisible()
 
     // The vote count is a number — find a span that contains only digits
@@ -744,7 +747,10 @@ test.describe('Admin Post Management - Post Detail Panel Accuracy', () => {
 
     // Board name appears as a button (editable in admin mode) or plain span
     // Either way there must be some non-empty text next to the Board label
-    const boardRow = sidebar.locator('div').filter({ hasText: /^Board/ }).first()
+    const boardRow = sidebar
+      .locator('div')
+      .filter({ hasText: /^Board/ })
+      .first()
     await expect(boardRow).toBeVisible()
 
     // The board name text must be non-empty
@@ -808,7 +814,10 @@ test.describe('Admin Post Management - Post Detail Panel Accuracy', () => {
     await expect(sidebar.getByText('Author')).toBeVisible()
 
     // Author name is rendered as a span with text-sm font-medium next to an Avatar
-    const authorRow = sidebar.locator('div').filter({ hasText: /^Author/ }).first()
+    const authorRow = sidebar
+      .locator('div')
+      .filter({ hasText: /^Author/ })
+      .first()
     await expect(authorRow).toBeVisible()
 
     // There should be a non-empty name or "Anonymous" fallback
@@ -852,12 +861,13 @@ test.describe('Admin Post Management - Filter + Pagination Accuracy', () => {
     const emptyState = page.locator('text=/no posts|no results/i')
 
     // Either posts exist (filtered) or empty state appears — both are valid results
-    const hasContent =
-      (await postCards.count()) > 0 || (await emptyState.count()) > 0
+    const hasContent = (await postCards.count()) > 0 || (await emptyState.count()) > 0
     expect(hasContent).toBe(true)
 
     // The active filters bar should show the selected board name as a chip
-    const activeFiltersBar = page.locator('[class*="ActiveFilters"], [data-testid="active-filters"]')
+    const activeFiltersBar = page.locator(
+      '[class*="ActiveFilters"], [data-testid="active-filters"]'
+    )
     // Board filter chip: text contains the board name (trimmed)
     const boardChip = activeFiltersBar.first().getByText(boardName.trim(), { exact: false })
     await expect(activeFiltersBar.first()).toBeVisible()
@@ -1079,7 +1089,10 @@ test.describe('Admin Post Management - Edit Flow', () => {
     await expect(sidebar.getByText('Board')).toBeVisible()
 
     // Board name is a clickable button in admin mode
-    const boardRow = sidebar.locator('div').filter({ hasText: /^Board/ }).first()
+    const boardRow = sidebar
+      .locator('div')
+      .filter({ hasText: /^Board/ })
+      .first()
     const boardButton = boardRow.locator('button').first()
 
     if ((await boardButton.count()) === 0) {
@@ -1093,11 +1106,13 @@ test.describe('Admin Post Management - Edit Flow', () => {
     await boardButton.click()
 
     // Board popover opens with list of boards
-    const boardPopover = page.locator('[data-radix-popper-content-wrapper]')
+    const boardPopover = page.locator('[data-slot="popover-content"]')
     await expect(boardPopover).toBeVisible({ timeout: 5000 })
 
     // Pick a different board
-    const boardChoices = boardPopover.locator('button').filter({ hasNot: boardPopover.locator('svg.lucide-check') })
+    const boardChoices = boardPopover
+      .locator('button')
+      .filter({ hasNot: boardPopover.locator('svg.lucide-check') })
     let newBoardName = ''
     for (let i = 0; i < (await boardChoices.count()); i++) {
       const choiceText = ((await boardChoices.nth(i).textContent()) ?? '').trim()
@@ -1137,7 +1152,10 @@ test.describe('Admin Post Management - Edit Flow', () => {
 
     const reopenedSidebar = reopenedModal.locator('aside')
     await expect(reopenedSidebar).toBeVisible({ timeout: 5000 })
-    const persistedBoardRow = reopenedSidebar.locator('div').filter({ hasText: /^Board/ }).first()
+    const persistedBoardRow = reopenedSidebar
+      .locator('div')
+      .filter({ hasText: /^Board/ })
+      .first()
     const persistedBoardText = ((await persistedBoardRow.textContent()) ?? '')
       .replace(/^Board/, '')
       .trim()

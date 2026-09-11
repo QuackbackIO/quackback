@@ -143,6 +143,30 @@ describe('buildExtensions', () => {
     expect(names).not.toContain('emoji')
   })
 
+  it('persists attrs.emoji on an emoji node so read-only HTML can skip the dataset', () => {
+    const editor = new Editor({
+      extensions: buildExtensions({ slashMenu: false, mentions: false }, { placeholder: '' }),
+      content: {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [{ type: 'emoji', attrs: { name: 'crossed_fingers', emoji: '🤞' } }],
+          },
+        ],
+      },
+    })
+    try {
+      const node = editor.getJSON().content?.[0]?.content?.[0] as
+        { type?: string; attrs?: { name?: string; emoji?: string } } | undefined
+      expect(node?.type).toBe('emoji')
+      expect(node?.attrs?.name).toBe('crossed_fingers')
+      expect(node?.attrs?.emoji).toBe('🤞')
+    } finally {
+      editor.destroy()
+    }
+  })
+
   it('omits enterAsHardBreak by default (document-style Enter)', () => {
     const exts = buildExtensions({}, { placeholder: '' })
     const names = exts.map((e) => (e as { name: string }).name)
@@ -297,6 +321,23 @@ describe('submitOnEnter (onSubmit)', () => {
     const consumed = handlersFor(editor, onSubmit).Enter()
     expect(onSubmit).not.toHaveBeenCalled()
     expect(consumed).toBe(false) // let the popover's own onKeyDown pick the item
+  })
+
+  it('Mod-Enter fires onSubmit (Slack-style send) and consumes the key', () => {
+    const onSubmit = vi.fn()
+    const { editor, setHardBreak } = makeMockEditor()
+    const consumed = handlersFor(editor, onSubmit)['Mod-Enter']()
+    expect(onSubmit).toHaveBeenCalledOnce()
+    expect(consumed).toBe(true)
+    expect(setHardBreak).not.toHaveBeenCalled()
+  })
+
+  it('yields Mod-Enter to an active suggestion popover instead of submitting', () => {
+    const onSubmit = vi.fn()
+    const { editor } = makeMockEditor({ suggestion: true })
+    const consumed = handlersFor(editor, onSubmit)['Mod-Enter']()
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(consumed).toBe(false)
   })
 
   it('wins over enterAsHardBreak via a higher extension priority', () => {

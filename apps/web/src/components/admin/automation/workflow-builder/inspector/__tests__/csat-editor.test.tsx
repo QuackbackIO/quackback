@@ -18,22 +18,22 @@ vi.mock('@/components/ui/rich-text-editor', () => ({
   ),
 }))
 
-// Radix's DropdownMenu needs pointer-capture APIs happy-dom doesn't
+// Base UI's DropdownMenu needs pointer-capture APIs happy-dom doesn't
 // implement (same class of issue as Select — see condition-editor.test.tsx),
 // so content renders unconditionally here instead of behind an open/close
-// trigger; clicking an item still exercises onSelect the same way.
+// trigger; clicking an item still exercises onClick the same way.
 vi.mock('@/components/ui/dropdown-menu', () => ({
   DropdownMenu: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   DropdownMenuContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   DropdownMenuItem: ({
     children,
-    onSelect,
+    onClick,
   }: {
     children: React.ReactNode
-    onSelect?: () => void
+    onClick?: () => void
   }) => (
-    <button type="button" onClick={onSelect}>
+    <button type="button" onClick={onClick}>
       {children}
     </button>
   ),

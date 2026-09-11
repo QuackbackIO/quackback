@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/solid'
 import type { BillingProjectionOverview } from '@/lib/server/domains/billing/projection-overview'
 import type { BillingCatalogue } from '@/lib/server/control-plane/client'
@@ -315,8 +315,12 @@ function BrandingAddOnRow(props: {
   const intervalLabel = props.period === 'annual' ? 'yr' : 'mo'
   const price = `${formatUsd(brandingCents(props.price, props.period), 0)}/${intervalLabel}`
   const selectable = !props.hideBranding && props.canPurchase
+  // The box is a native <button> (see ui/checkbox): it gets no native label
+  // re-dispatch, so the row owns the toggle via htmlFor — one path only, no
+  // double-fire, real browsers and fireEvent alike.
+  const boxId = useId()
   return (
-    <label
+    <div
       className={cn(
         'flex items-center justify-between gap-3 rounded-xl border border-border/50 bg-card px-4 py-3',
         selectable && 'cursor-pointer',
@@ -326,6 +330,7 @@ function BrandingAddOnRow(props: {
       <div className="flex min-w-0 items-start gap-3">
         {selectable ? (
           <Checkbox
+            id={boxId}
             className="mt-0.5"
             checked={props.checked}
             onCheckedChange={(value) => props.onCheckedChange(value === true)}
@@ -333,7 +338,9 @@ function BrandingAddOnRow(props: {
           />
         ) : null}
         <div className="min-w-0">
-          <div className="text-[13px] font-medium">Remove Quackback branding</div>
+          <label htmlFor={boxId} className="block cursor-pointer text-[13px] font-medium">
+            Remove Quackback branding
+          </label>
           <div className="text-[12px] text-muted-foreground">
             Hide &quot;Powered by Quackback&quot; on the portal, widget, and emails. Billed with
             your plan on the same {props.period === 'annual' ? 'yearly' : 'monthly'} cycle.
@@ -347,7 +354,7 @@ function BrandingAddOnRow(props: {
       ) : (
         <span className="shrink-0 text-[13px] font-medium tabular-nums">{price}</span>
       )}
-    </label>
+    </div>
   )
 }
 

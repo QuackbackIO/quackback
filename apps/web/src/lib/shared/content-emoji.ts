@@ -24,10 +24,13 @@ export { defaultEmojis }
 export type { EmojiItem }
 
 /**
- * Resolve a bundled emoji by shortcode (e.g. `smile`). Shared with the editor's
- * `:`-picker, the server markdown serializer, and the read-only renderer's
- * on-demand legacy fallback.
+ * Resolve a bundled emoji by canonical name or any shortcode (e.g. `smile`,
+ * `crossed_fingers`, `fingers_crossed`). Matches TipTap's `shortcodeToEmoji`
+ * so a name-only node whose `name` is not itself a shortcode still resolves —
+ * 284 of the bundled items are in that shape, including `crossed_fingers`.
  */
 export function lookupEmoji(shortcode: string): EmojiItem | undefined {
-  return defaultEmojis.find((e) => e.emoji && e.shortcodes.includes(shortcode))
+  return defaultEmojis.find(
+    (e) => e.emoji && (e.name === shortcode || e.shortcodes.includes(shortcode))
+  )
 }

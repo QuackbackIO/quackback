@@ -906,6 +906,10 @@ export function AgentConversationThread({
       // comment); calling onChanged here too raced it with a redundant
       // broad invalidation.
       appendToThread(res, false)
+      // Belt-and-braces: sending via the Send button momentarily moves focus
+      // there, so hand it back — but only if the user hasn't since moved on
+      // (e.g. clicked a triage control mid-flight); never yank focus back.
+      if (isSendControlFocused()) activeEditorRef.current?.focus('end')
     },
     onError: (error, vars) => {
       // Restore the composer to the exact draft cleared at send time so a failed
@@ -928,6 +932,7 @@ export function AgentConversationThread({
               setReplyDraft(EMPTY_DRAFT)
               setReplyKey((k) => k + 1)
               sendMutation.mutate({ ...vars, skipTranslation: true })
+              requestAnimationFrame(() => activeEditorRef.current?.focus('end'))
             },
           },
         })
@@ -945,6 +950,7 @@ export function AgentConversationThread({
               setReplyDraft(EMPTY_DRAFT)
               setReplyKey((k) => k + 1)
               sendMutation.mutate({ ...vars, skipTranslation: true })
+              requestAnimationFrame(() => activeEditorRef.current?.focus('end'))
             },
           },
         })
@@ -988,6 +994,8 @@ export function AgentConversationThread({
       setShareNoteWithConversation(false)
       pendingOwnSendScroll.current = true
       appendToThread(res)
+      // See sendMutation.onSuccess — same Send-button focus cover.
+      if (isSendControlFocused()) activeEditorRef.current?.focus('end')
     },
     onError: (_error, vars) => {
       vars.restoreDraft?.()
@@ -1411,6 +1419,14 @@ export function AgentConversationThread({
   // Reply and note render the SAME editor slot, one at a time, so they share
   // one handle ref: whichever is mounted owns it.
   const activeEditorRef = useRef<RichTextEditorHandle | null>(null)
+  // True while focus sits on the composer or the send/note-mode buttons
+  // around it — i.e. the user hasn't moved on to another control mid-flight,
+  // so an async send completion may safely hand focus back to the editor.
+  const isSendControlFocused = () => {
+    const el = document.activeElement as HTMLElement | null
+    if (!el || el === document.body) return true
+    return Boolean(el.closest('[data-inbox-composer]'))
+  }
   const focusComposerMode = useComposerFocus({
     noteMode,
     setNoteMode,
@@ -1501,13 +1517,54 @@ export function AgentConversationThread({
     // (remounting the editor via a key bump) — a failed send never loses it.
     const snapshot = draft
     const restoreDraft = () => {
-      if (useNote) {
-        setNoteDraft(snapshot)
-        setNoteKey((k) => k + 1)
-      } else {
-        setReplyDraft(snapshot)
-        setReplyKey((k) => k + 1)
+      // The composer stays editable mid-flight, so the user may have typed
+      // something new since the send. Never clobber that — instead move the
+      // failed text below it with a separator, so both survive. The merge is
+      // JSON-first: the remount reads value.json, so a markdown-only merge
+      // would render invisible and be dropped on the next edit.
+      const current = (useNote ? noteDraftRef : replyDraftRef).current
+      const failedMarkdown = snapshot.markdown
+      if (isEmptyTiptapDoc(current.json ?? undefined)) {
+        if (useNote) {
+          setNoteDraft(snapshot)
+          setNoteKey((k) => k + 1)
+        } else {
+          setReplyDraft(snapshot)
+          setReplyKey((k) => k + 1)
+        }
+      } else if (failedMarkdown.trim() && snapshot.json) {
+        // JSON-first merge: the remount reads value.json, so a markdown-only
+        // merge would render invisible and be dropped on the next edit. Take
+        // the snapshot's own nodes verbatim — full fidelity (marks, mentions,
+        // embeds) with no parsing involved and no server import here.
+        const failedContent = (snapshot.json as unknown as { content?: unknown[] }).content ?? []
+        const mergedJson = {
+          ...(current.json as unknown as Record<string, unknown>),
+          content: [
+            ...((current.json as unknown as { content?: unknown[] }).content ?? []),
+            {
+              type: 'paragraph',
+              content: [{ type: 'text', text: '— failed to send, kept below —' }],
+            },
+            ...failedContent,
+          ],
+        } as TiptapContent
+        const merged: ComposerDraft = {
+          json: mergedJson,
+          markdown: `${current.markdown.replace(/\s+$/, '')}\n\n--- failed to send, kept below ---\n\n${failedMarkdown}`,
+        }
+        if (useNote) {
+          setNoteDraft(merged)
+          setNoteKey((k) => k + 1)
+        } else {
+          setReplyDraft(merged)
+          setReplyKey((k) => k + 1)
+        }
+        toast.error('Failed to send message — kept below your new typing')
       }
+      // The restore remounts the editor (destroying the focused node), so hand
+      // focus back once the new instance commits.
+      requestAnimationFrame(() => activeEditorRef.current?.focus('end'))
     }
     mutation.mutate({
       content: draft.markdown.trim(),
@@ -1515,13 +1572,16 @@ export function AgentConversationThread({
       attachments: hasAttachments ? pendingAttachments : undefined,
       restoreDraft,
     })
+    // Clear in place (no key bump): remounting would destroy the focused node
+    // and drop focus to <body>. The view clears imperatively, the state mirrors
+    // it, and focus never leaves the editing surface.
+    activeEditorRef.current?.clear()
     if (useNote) {
       setNoteDraft(EMPTY_DRAFT)
-      setNoteKey((k) => k + 1)
     } else {
       setReplyDraft(EMPTY_DRAFT)
-      setReplyKey((k) => k + 1)
     }
+    activeEditorRef.current?.focus('end')
   }
   const onSend = useCallback(() => sendRef.current(), [])
 
@@ -1705,10 +1765,10 @@ export function AgentConversationThread({
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => snooze(null)}>Until they reply</DropdownMenuItem>
             <DropdownMenuItem
-              onSelect={() => {
+              onClick={() => {
                 setSnoozeCustomDate(tomorrowAt(9))
                 // Let the menu finish closing before the dialog grabs focus,
-                // so the two Radix overlays don't fight over it.
+                // so the menu teardown and the dialog focus grab don't fight over it.
                 requestAnimationFrame(() => setSnoozeCustomOpen(true))
               }}
             >
@@ -1779,7 +1839,7 @@ export function AgentConversationThread({
             )}
           {conversation && capabilities.convertToPost && (
             <DropdownMenuItem
-              onSelect={() =>
+              onClick={() =>
                 setConvertSeed({ title: convertDefaultTitle, content: convertDefaultContent })
               }
             >
@@ -1998,10 +2058,10 @@ export function AgentConversationThread({
             // modes and every control that can hold focus alongside them.
             data-inbox-composer=""
             className={cn(
-              'rounded-lg border px-3 py-2 focus-within:ring-2',
+              'rounded-lg border px-3 py-2 transition-colors',
               noteMode || !capabilities.reply
-                ? 'border-amber-400/50 bg-amber-400/5 focus-within:ring-amber-400/20'
-                : 'border-border bg-background focus-within:ring-primary/20'
+                ? 'border-amber-400/50 bg-amber-400/5 focus-within:border-amber-400'
+                : 'border-border bg-background focus-within:border-primary/60'
             )}
             onPaste={handleComposerPaste}
             onDrop={handleComposerDrop}
@@ -2068,7 +2128,6 @@ export function AgentConversationThread({
                 borderless
                 minHeight="4.5rem"
                 autofocus={noteKey > 0 ? 'end' : false}
-                disabled={noteMutation.isPending}
                 placeholder="Add an internal note for your team…"
                 className="max-h-64 overflow-y-auto"
                 onChange={onNoteChange}
@@ -2083,7 +2142,6 @@ export function AgentConversationThread({
                 borderless
                 minHeight="4.5rem"
                 autofocus={replyKey > 0 ? 'end' : false}
-                disabled={sendMutation.isPending}
                 placeholder={channelReplyPlaceholder(conversation?.channel, {
                   closed: isClosedConversation,
                   isTicket,

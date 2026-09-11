@@ -112,7 +112,7 @@ export function BlockPersonControl({
         <DropdownMenuItem
           variant={blocked ? 'default' : 'destructive'}
           disabled={busy}
-          onSelect={() => trigger()}
+          onClick={() => trigger()}
         >
           <NoSymbolIcon className="h-4 w-4" />
           {blocked ? 'Unblock' : 'Block'}

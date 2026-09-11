@@ -21,8 +21,8 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Radio } from '@base-ui/react/radio'
 import { RadioGroup } from '@/components/ui/radio-group'
-import * as RadioGroupPrimitive from '@radix-ui/react-radio-group'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { ColorPickerGrid, ColorHexInput, randomColor } from '@/components/shared/color-picker'
@@ -255,26 +255,22 @@ function VisibilityCard({
   icon: ReactNode
 }) {
   return (
-    <RadioGroupPrimitive.Item
+    <Radio.Root
       value={value}
       aria-label={label}
       className={cn(
         'group flex flex-col items-stretch gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors outline-none',
         'border-border bg-muted/30 hover:bg-muted/60 cursor-pointer',
         'focus-visible:ring-2 focus-visible:ring-ring/50',
-        'data-[state=checked]:border-primary data-[state=checked]:bg-primary/10'
+        'data-checked:border-primary data-checked:bg-primary/10'
       )}
     >
       <div className="flex items-center gap-2">
-        <span className="text-muted-foreground group-data-[state=checked]:text-primary">
-          {icon}
-        </span>
-        <span className="text-sm font-semibold group-data-[state=checked]:text-primary">
-          {label}
-        </span>
+        <span className="text-muted-foreground group-data-checked:text-primary">{icon}</span>
+        <span className="text-sm font-semibold group-data-checked:text-primary">{label}</span>
       </div>
       <span className="text-xs text-muted-foreground leading-snug">{description}</span>
-    </RadioGroupPrimitive.Item>
+    </Radio.Root>
   )
 }
 

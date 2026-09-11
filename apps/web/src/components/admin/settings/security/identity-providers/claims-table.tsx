@@ -114,7 +114,7 @@ export function ClaimsTable({
 
       {hasPeople && editable && (
         <div className="space-y-2">
-          <label className="flex items-start gap-2 text-sm">
+          <div className="flex items-start gap-2 text-sm">
             <Checkbox
               checked={peopleFlags.overrideExisting}
               onCheckedChange={(v) =>
@@ -125,8 +125,8 @@ export function ClaimsTable({
               className="mt-0.5"
             />
             <span>Overwrite attribute values that are already set</span>
-          </label>
-          <label className="flex items-start gap-2 text-sm">
+          </div>
+          <div className="flex items-start gap-2 text-sm">
             <Checkbox
               checked={peopleFlags.syncOnSignIn}
               onCheckedChange={(v) =>
@@ -137,7 +137,7 @@ export function ClaimsTable({
               className="mt-0.5"
             />
             <span>Clear an attribute when its claim is missing</span>
-          </label>
+          </div>
         </div>
       )}
     </div>

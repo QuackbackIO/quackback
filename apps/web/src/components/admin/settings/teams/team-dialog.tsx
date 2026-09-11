@@ -222,6 +222,7 @@ export function TeamDialog({
                     <Checkbox
                       checked={memberIds.has(t.principalId)}
                       onCheckedChange={() => toggleMember(t.principalId)}
+                      data-in-label
                     />
                     <span className="min-w-0">
                       <span className="block text-sm font-medium truncate">

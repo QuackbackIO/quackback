@@ -3,7 +3,7 @@
  * dropdown — and picking a fixed-discovery kind (Google) seeds the canonical
  * discovery URL immediately, since it has no shortcut input of its own.
  */
-import * as RadioGroupPrimitive from '@radix-ui/react-radio-group'
+import { Radio } from '@base-ui/react/radio'
 import { RadioGroup } from '@/components/ui/radio-group'
 import { IdpLogo } from '@/components/icons/idp-provider-icons'
 import { cn } from '@/lib/shared/utils'
@@ -34,7 +34,7 @@ export function ProviderKindPicker({
       className="grid grid-cols-2 gap-2.5 sm:grid-cols-3"
     >
       {IDP_KIND_OPTIONS.map((k) => (
-        <RadioGroupPrimitive.Item
+        <Radio.Root
           key={k}
           value={k}
           id={`idp-kind-${k}`}
@@ -43,13 +43,13 @@ export function ProviderKindPicker({
             'flex items-center gap-2.5 rounded-lg border border-border/50 bg-card p-3 text-left shadow-sm outline-none transition-all',
             'hover:border-border hover:bg-accent/40',
             'focus-visible:ring-2 focus-visible:ring-ring/50',
-            'data-[state=checked]:border-primary data-[state=checked]:ring-2 data-[state=checked]:ring-primary/30',
+            'data-checked:border-primary data-checked:ring-2 data-checked:ring-primary/30',
             'disabled:cursor-not-allowed disabled:opacity-60'
           )}
         >
           <IdpLogo kind={k} className="h-8 w-8 shrink-0" iconClassName="h-[18px] w-[18px]" />
           <span className="truncate text-sm font-medium">{IDP_KIND_NAMES[k]}</span>
-        </RadioGroupPrimitive.Item>
+        </Radio.Root>
       ))}
     </RadioGroup>
   )

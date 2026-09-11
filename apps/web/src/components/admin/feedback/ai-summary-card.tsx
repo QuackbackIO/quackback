@@ -62,7 +62,7 @@ export function AiSummaryCard({ summaryJson, summaryUpdatedAt }: AiSummaryCardPr
         </CollapsibleTrigger>
 
         {/* Body */}
-        <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+        <CollapsibleContent>
           <div className="px-4 pb-4 space-y-3">
             {/* Summary prose */}
             <p className="text-sm text-foreground/80 leading-relaxed">{summaryJson.summary}</p>

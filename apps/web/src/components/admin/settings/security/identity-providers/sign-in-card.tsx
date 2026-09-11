@@ -172,7 +172,7 @@ export function SignInCard({ provider }: { provider: IdentityProvider }) {
           defaultOpen={storedAllowMissingEmail}
           summary={allowMissingEmail ? 'Sign-in without email allowed' : undefined}
         >
-          <label className="flex items-start gap-2 text-sm">
+          <div className="flex items-start gap-2 text-sm">
             <Checkbox
               checked={allowMissingEmail}
               onCheckedChange={(v) => setAllowMissingEmail(v === true)}
@@ -189,7 +189,7 @@ export function SignInCard({ provider }: { provider: IdentityProvider }) {
                 </span>
               )}
             </span>
-          </label>
+          </div>
         </Disclosure>
 
         <div className="flex justify-end border-t border-border/40 pt-5">

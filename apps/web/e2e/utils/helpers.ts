@@ -1,4 +1,31 @@
-import { Page, expect } from '@playwright/test'
+import { Page, Locator, expect } from '@playwright/test'
+
+/**
+ * Wait until a control is hydrated (React has attached event handlers).
+ *
+ * Visibility alone is not enough: pages are server-rendered, so a button can
+ * be visible seconds before hydration attaches its handlers — a click in that
+ * window is silently swallowed (no error, nothing opens). With SSE streams
+ * keeping the network hot, `networkidle` never fires, so wait on the control
+ * itself: React 19 marks hydrated DOM nodes with `__reactProps$…` keys.
+ *
+ * Call this on the exact control about to be clicked — selective hydration
+ * means one hydrated region says nothing about another.
+ *
+ * Suites that already gate on `networkidle` after `goto` rarely need this
+ * (idle network implies the bundles loaded well before first paint), but
+ * specs that interact right after `toBeVisible` — or retry-free single
+ * clicks — should wait explicitly.
+ */
+export async function waitForHydration(target: Locator, timeout = 20000) {
+  await expect(target).toBeVisible({ timeout })
+  await expect
+    .poll(
+      () => target.evaluate((el) => Object.keys(el).some((k) => k.startsWith('__reactProps'))),
+      { timeout, message: 'Timed out waiting for React hydration' }
+    )
+    .toBe(true)
+}
 
 /**
  * Wait for a toast notification with specific text

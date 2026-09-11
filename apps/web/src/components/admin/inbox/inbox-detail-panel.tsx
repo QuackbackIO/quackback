@@ -269,7 +269,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
     if (openCopilotToken === 0) return // the route-side reset, not a bump
     if (!showCopilotTab) return
     setTab('copilot')
-    // Focus once the (forceMount + CSS-hidden) Copilot content is un-hidden
+    // Focus once the (keepMounted + CSS-hidden) Copilot content is un-hidden
     // by the state commit above — rAF runs after React flushes it.
     requestAnimationFrame(() => askInputRef.current?.focus())
   }, [openCopilotToken, showCopilotTab])
@@ -865,22 +865,22 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
             Copilot
           </TabsTrigger>
         </TabsList>
-        {/* Both tabs stay mounted (forceMount + CSS-hide instead of Radix's
+        {/* Both tabs stay mounted (keepMounted + CSS-hide instead of the
             default unmount-on-inactive) so Details keeps its scroll position
             and the Copilot thread survives switching tabs within the same
             item view — it only resets when the item itself changes (the
             whole subtree remounts via `key={selectedId}`). */}
         <TabsContent
           value="details"
-          forceMount
-          className="min-h-0 flex-1 flex-col overflow-hidden data-[state=active]:flex data-[state=inactive]:hidden"
+          keepMounted
+          className="min-h-0 flex flex-1 flex-col overflow-hidden"
         >
           {detailsBody}
         </TabsContent>
         <TabsContent
           value="copilot"
-          forceMount
-          className="min-h-0 flex-1 flex-col overflow-hidden data-[state=active]:flex data-[state=inactive]:hidden"
+          keepMounted
+          className="min-h-0 flex flex-1 flex-col overflow-hidden"
         >
           <CopilotPanel
             item={item}

@@ -222,6 +222,7 @@ export function ReportIncidentDialog({ variant = 'default' }: { variant?: 'defau
                 checked={notify}
                 onCheckedChange={(c) => setNotify(c === true)}
                 className="mt-0.5"
+                data-in-label
               />
               <span className="text-sm">
                 Email subscribers

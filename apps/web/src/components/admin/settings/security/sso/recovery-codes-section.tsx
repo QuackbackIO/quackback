@@ -170,6 +170,7 @@ export function RecoveryCodesSection() {
                 <Checkbox
                   checked={acknowledged}
                   onCheckedChange={(v) => setAcknowledged(v === true)}
+                  data-in-label
                 />
                 <span>
                   I&apos;ve saved these codes somewhere safe. I understand they won&apos;t be shown

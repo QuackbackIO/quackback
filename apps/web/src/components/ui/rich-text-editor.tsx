@@ -1,5 +1,6 @@
 import {
   useEditor,
+  useEditorState,
   EditorContent,
   ReactRenderer,
   type Editor,
@@ -20,13 +21,15 @@ import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
 import Youtube from '@tiptap/extension-youtube'
-import { Emoji } from '@tiptap/extension-emoji'
+import { Emoji, inputRegex } from '@tiptap/extension-emoji'
 import { MentionExtension } from './mention-extension'
-import { createSuggestionPopup } from './suggestion-popup'
+import { createSuggestionPopup, createSuggestionPositioner } from './suggestion-popup'
+import { applySuggestionListKey } from './suggestion-list-keys'
+import { HighlightQuery, emojiSuggestionLabel } from './highlight-query'
 import { QuackbackEmbed } from './quackback-embed-extension'
 import { ConversationImage } from './conversation-image-node'
 import { Markdown } from '@tiptap/markdown'
-import { Extension } from '@tiptap/core'
+import { Extension, InputRule } from '@tiptap/core'
 import type { Range } from '@tiptap/core'
 import Suggestion, { type SuggestionOptions, type SuggestionProps } from '@tiptap/suggestion'
 import { createLowlight } from 'lowlight'
@@ -58,7 +61,6 @@ import {
   useImperativeHandle,
   useRef,
 } from 'react'
-import { computePosition, flip, shift, offset } from '@floating-ui/dom'
 import { cn } from '@/lib/shared/utils'
 import { resizableImageInsertAttrs } from '@/lib/client/resizable-image-insert-attrs'
 // The read-only JSON→HTML serializer now lives in a browser-free shared module
@@ -69,6 +71,13 @@ import { generateContentHTML } from '@/lib/shared/content-html'
 // surfaces don't statically bundle it; the editor's `:` picker is fine to pay
 // the cost since the editor chunk is already lazy-loaded on compose surfaces.
 import { defaultEmojis, lookupEmoji, type EmojiItem } from '@/lib/shared/content-emoji'
+import {
+  MAX_EMOJI_SUGGESTIONS,
+  POPULAR_EMOJI_SHORTCODES,
+  readRecentEmojis,
+  recommendEmojiItems,
+  recordRecentEmoji,
+} from '@/lib/shared/emoji-recommendations'
 // Read-only rendering (RichTextContent / isRichTextContent) lives in a sibling
 // module with only light deps. Re-exported below for backward compatibility;
 // read-only consumers should import from '@/components/ui/rich-text-content'.
@@ -358,6 +367,11 @@ function createSubmitOnEnter(onSubmit: () => void) {
     addKeyboardShortcuts() {
       return {
         Enter: () => {
+          if (hasActiveSuggestion(this.editor)) return false
+          onSubmit()
+          return true
+        },
+        'Mod-Enter': () => {
           if (hasActiveSuggestion(this.editor)) return false
           onSubmit()
           return true
@@ -710,18 +724,27 @@ interface SlashMenuListRef {
 interface SlashMenuListProps {
   items: SlashMenuItem[]
   command: (item: SlashMenuItem) => void
+  query?: string
 }
 
-const SlashMenuList = forwardRef<SlashMenuListRef, SlashMenuListProps>(
-  ({ items, command }, ref) => {
+export const SlashMenuList = forwardRef<SlashMenuListRef, SlashMenuListProps>(
+  ({ items, command, query = '' }, ref) => {
     const [selectedIndex, setSelectedIndex] = useState(0)
     const containerRef = useRef<HTMLDivElement>(null)
+    const selectedRef = useRef(0)
+    const itemsRef = useRef(items)
+    const commandRef = useRef(command)
+    itemsRef.current = items
+    commandRef.current = command
 
     const selectItem = (index: number) => {
-      const item = items[index]
-      if (item) {
-        command(item)
-      }
+      const item = itemsRef.current[index]
+      if (item) commandRef.current(item)
+    }
+
+    const updateSelected = (index: number) => {
+      selectedRef.current = index
+      setSelectedIndex(index)
     }
 
     // Scroll selected item into view
@@ -738,33 +761,25 @@ const SlashMenuList = forwardRef<SlashMenuListRef, SlashMenuListProps>(
 
     // Reset selection when items change
     useEffect(() => {
-      setSelectedIndex(0)
+      updateSelected(0)
     }, [items])
 
-    useImperativeHandle(ref, () => ({
-      onKeyDown: ({ event }) => {
-        if (event.key === 'ArrowUp') {
-          const newIndex = (selectedIndex - 1 + items.length) % items.length
-          setSelectedIndex(newIndex)
-          scrollToSelected(newIndex)
-          return true
-        }
-
-        if (event.key === 'ArrowDown') {
-          const newIndex = (selectedIndex + 1) % items.length
-          setSelectedIndex(newIndex)
-          scrollToSelected(newIndex)
-          return true
-        }
-
-        if (event.key === 'Enter') {
-          selectItem(selectedIndex)
-          return true
-        }
-
-        return false
-      },
-    }))
+    useImperativeHandle(
+      ref,
+      () => ({
+        onKeyDown: ({ event }) =>
+          applySuggestionListKey(event, {
+            items: itemsRef.current,
+            selected: selectedRef.current,
+            onMove: (index) => {
+              updateSelected(index)
+              scrollToSelected(index)
+            },
+            onConfirm: (item) => commandRef.current(item),
+          }),
+      }),
+      [scrollToSelected]
+    )
 
     if (items.length === 0) {
       return (
@@ -825,7 +840,9 @@ const SlashMenuList = forwardRef<SlashMenuListRef, SlashMenuListProps>(
                       <span className="flex size-6 shrink-0 items-center justify-center rounded border bg-background text-xs">
                         {item.icon}
                       </span>
-                      <span className="truncate font-medium">{item.title}</span>
+                      <span className="truncate font-medium">
+                        <HighlightQuery text={item.title} query={query} />
+                      </span>
                     </button>
                   )
                 })}
@@ -885,29 +902,7 @@ function createSlashCommands(
           render: () => {
             let component: ReactRenderer<SlashMenuListRef> | null = null
             let floatingEl: HTMLDivElement | null = null
-
-            const updatePosition = async (clientRect: (() => DOMRect | null) | null) => {
-              if (!floatingEl || !clientRect) return
-
-              const rect = clientRect()
-              if (!rect) return
-
-              // Create a virtual element for floating-ui
-              const virtualEl = {
-                getBoundingClientRect: () => rect,
-              }
-
-              const { x, y } = await computePosition(virtualEl, floatingEl, {
-                strategy: 'fixed',
-                placement: 'bottom-start',
-                middleware: [offset(8), flip(), shift({ padding: 8 })],
-              })
-
-              Object.assign(floatingEl.style, {
-                left: `${x}px`,
-                top: `${y}px`,
-              })
-            }
+            const positioner = createSuggestionPositioner()
 
             return {
               onStart: (props: SuggestionProps<SlashMenuItem>) => {
@@ -915,6 +910,7 @@ function createSlashCommands(
                   props: {
                     items: props.items,
                     command: (item: SlashMenuItem) => props.command(item),
+                    query: props.query,
                   },
                   editor: props.editor,
                 })
@@ -924,15 +920,16 @@ function createSlashCommands(
                 floatingEl.appendChild(component.element)
                 document.body.appendChild(floatingEl)
 
-                updatePosition(props.clientRect ?? null)
+                positioner.attach(floatingEl, props.clientRect ?? null)
               },
 
               onUpdate: (props: SuggestionProps<SlashMenuItem>) => {
                 component?.updateProps({
                   items: props.items,
                   command: (item: SlashMenuItem) => props.command(item),
+                  query: props.query,
                 })
-                updatePosition(props.clientRect ?? null)
+                if (floatingEl) positioner.attach(floatingEl, props.clientRect ?? null)
               },
 
               onKeyDown: (props: { event: KeyboardEvent }) => {
@@ -944,6 +941,7 @@ function createSlashCommands(
               },
 
               onExit: () => {
+                positioner.detach()
                 if (floatingEl) {
                   floatingEl.remove()
                   floatingEl = null
@@ -969,62 +967,62 @@ interface EmojiSuggestionListRef {
 interface EmojiSuggestionListProps {
   items: EmojiItem[]
   command: (item: EmojiItem) => void
+  /** Leading items that are recents (bare `:` only). 0 hides section labels. */
+  recentCount?: number
+  /** Typed text after `:`; highlighted Slack-style in each shortcode. */
+  query?: string
 }
-
-const MAX_EMOJI_RESULTS = 12
-
-// Curated shortcodes shown the moment the user types `:`. Picked for the
-// long tail of comment reactions (joy, agreement, celebration). Ordering
-// here is the ordering in the dropdown.
-const DEFAULT_EMOJI_SHORTCODES = [
-  'smile',
-  'joy',
-  'heart_eyes',
-  'thinking',
-  'rolling_on_the_floor_laughing',
-  'face_with_tears_of_joy',
-  'thumbsup',
-  'thumbsdown',
-  'heart',
-  'fire',
-  'tada',
-  'rocket',
-] as const
 
 function filterEmojiItems(query: string): EmojiItem[] {
-  const lower = query.trim().toLowerCase()
-  if (!lower) {
-    // Bare `:` opens the picker with a small curated set so users can pick
-    // without typing a shortcode. Falls back to defaultEmojis order if a
-    // curated shortcode isn't in the bundled set.
-    const defaults: EmojiItem[] = []
-    for (const shortcode of DEFAULT_EMOJI_SHORTCODES) {
-      const found = lookupEmoji(shortcode)
-      if (found) defaults.push(found)
-    }
-    return defaults
-  }
-  const matches: EmojiItem[] = []
-  for (const item of defaultEmojis) {
-    if (!item.emoji) continue
-    const hitsShortcode = item.shortcodes.some((s) => s.toLowerCase().includes(lower))
-    const hitsTag = item.tags?.some((t) => t.toLowerCase().includes(lower)) ?? false
-    if (hitsShortcode || hitsTag) {
-      matches.push(item)
-      if (matches.length >= MAX_EMOJI_RESULTS) break
-    }
-  }
-  return matches
+  return recommendEmojiItems(query, {
+    recents: readRecentEmojis(),
+    popularShortcodes: POPULAR_EMOJI_SHORTCODES,
+    lookup: lookupEmoji,
+    catalog: defaultEmojis,
+    max: MAX_EMOJI_SUGGESTIONS,
+  })
 }
 
-const EmojiSuggestionList = forwardRef<EmojiSuggestionListRef, EmojiSuggestionListProps>(
-  ({ items, command }, ref) => {
+function rememberAndInsertEmoji(item: EmojiItem, command: (item: EmojiItem) => void): void {
+  if (item.emoji) recordRecentEmoji(item.emoji)
+  command(item)
+}
+
+function emojiSuggestionProps(props: SuggestionProps<EmojiItem>): EmojiSuggestionListProps {
+  const recents = readRecentEmojis()
+  let recentCount = 0
+  if (!props.query.trim()) {
+    for (const item of props.items) {
+      if (item.emoji && recents.includes(item.emoji)) recentCount++
+      else break
+    }
+  }
+  return {
+    items: props.items,
+    command: (item: EmojiItem) => rememberAndInsertEmoji(item, props.command),
+    recentCount,
+    query: props.query,
+  }
+}
+
+export const EmojiSuggestionList = forwardRef<EmojiSuggestionListRef, EmojiSuggestionListProps>(
+  ({ items, command, recentCount = 0, query = '' }, ref) => {
     const [selectedIndex, setSelectedIndex] = useState(0)
     const containerRef = useRef<HTMLDivElement>(null)
+    const selectedRef = useRef(0)
+    const itemsRef = useRef(items)
+    const commandRef = useRef(command)
+    itemsRef.current = items
+    commandRef.current = command
 
     const selectItem = (index: number) => {
-      const item = items[index]
-      if (item) command(item)
+      const item = itemsRef.current[index]
+      if (item) commandRef.current(item)
+    }
+
+    const updateSelected = (index: number) => {
+      selectedRef.current = index
+      setSelectedIndex(index)
     }
 
     const scrollToSelected = useCallback((index: number) => {
@@ -1038,30 +1036,25 @@ const EmojiSuggestionList = forwardRef<EmojiSuggestionListRef, EmojiSuggestionLi
     }, [])
 
     useEffect(() => {
-      setSelectedIndex(0)
+      updateSelected(0)
     }, [items])
 
-    useImperativeHandle(ref, () => ({
-      onKeyDown: ({ event }) => {
-        if (event.key === 'ArrowUp') {
-          const next = (selectedIndex - 1 + items.length) % items.length
-          setSelectedIndex(next)
-          scrollToSelected(next)
-          return true
-        }
-        if (event.key === 'ArrowDown') {
-          const next = (selectedIndex + 1) % items.length
-          setSelectedIndex(next)
-          scrollToSelected(next)
-          return true
-        }
-        if (event.key === 'Enter') {
-          selectItem(selectedIndex)
-          return true
-        }
-        return false
-      },
-    }))
+    useImperativeHandle(
+      ref,
+      () => ({
+        onKeyDown: ({ event }) =>
+          applySuggestionListKey(event, {
+            items: itemsRef.current,
+            selected: selectedRef.current,
+            onMove: (index) => {
+              updateSelected(index)
+              scrollToSelected(index)
+            },
+            onConfirm: (item) => commandRef.current(item),
+          }),
+      }),
+      [scrollToSelected]
+    )
 
     if (items.length === 0) return null
 
@@ -1073,26 +1066,38 @@ const EmojiSuggestionList = forwardRef<EmojiSuggestionListRef, EmojiSuggestionLi
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div ref={containerRef} className="p-0.5">
-          {items.map((item, index) => (
-            <button
-              key={item.name}
-              type="button"
-              className={cn(
-                'flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs',
-                'hover:bg-accent focus:bg-accent focus:outline-none',
-                index === selectedIndex && 'bg-accent'
-              )}
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                selectItem(index)
-              }}
-              onMouseDown={(e) => e.preventDefault()}
-            >
-              <span className="text-base leading-none">{item.emoji}</span>
-              <span className="truncate text-muted-foreground">:{item.shortcodes[0]}:</span>
-            </button>
-          ))}
+          {items.map((item, index) => {
+            const label = emojiSuggestionLabel(item, query)
+            return (
+              <div key={item.name}>
+                {recentCount > 0 && index === 0 && (
+                  <div className="px-2 py-1 text-xs font-medium text-muted-foreground">Recent</div>
+                )}
+                {recentCount > 0 && index === recentCount && (
+                  <div className="px-2 py-1 text-xs font-medium text-muted-foreground">Popular</div>
+                )}
+                <button
+                  type="button"
+                  className={cn(
+                    'flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs',
+                    'hover:bg-accent focus:bg-accent focus:outline-none',
+                    index === selectedIndex && 'bg-accent'
+                  )}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    selectItem(index)
+                  }}
+                  onMouseDown={(e) => e.preventDefault()}
+                >
+                  <span className="text-base leading-none">{item.emoji}</span>
+                  <span className="truncate text-muted-foreground" data-emoji-shortcode={label}>
+                    :<HighlightQuery text={label} query={query} />:
+                  </span>
+                </button>
+              </div>
+            )
+          })}
         </div>
       </div>
     )
@@ -1103,7 +1108,41 @@ EmojiSuggestionList.displayName = 'EmojiSuggestionList'
 /** The `:`-triggered inline emoji picker, shared with the conversation composers so
  *  reply + note get the same emoji UX as posts. */
 export function createEmojiExtension() {
-  return Emoji.configure({
+  return Emoji.extend({
+    addAttributes() {
+      return {
+        ...this.parent?.(),
+        // Persist the Unicode char at write time so read-only HTML/email hit
+        // generateContentHTML's attrs.emoji fast path without loading the
+        // dataset. Legacy name-only nodes still upgrade via lookupEmoji.
+        emoji: { default: null },
+      }
+    },
+    addInputRules() {
+      const parent = this.parent?.() ?? []
+      const shortcodeRule = new InputRule({
+        find: inputRegex,
+        handler: ({ range, match, chain }) => {
+          const typed = match[1]
+          const item = lookupEmoji(typed)
+          if (!item?.emoji) return
+          recordRecentEmoji(item.emoji)
+          chain()
+            .insertContentAt(range, {
+              type: this.name,
+              attrs: { name: item.name, emoji: item.emoji },
+            })
+            .command(({ tr, state }) => {
+              tr.setStoredMarks(state.doc.resolve(state.selection.to - 1).marks())
+              return true
+            })
+            .run()
+        },
+      })
+      const withoutDefaultShortcode = parent.filter((rule) => rule.find !== inputRegex)
+      return [shortcodeRule, ...withoutDefaultShortcode]
+    },
+  }).configure({
     enableEmoticons: true,
     suggestion: {
       items: ({ query }) => filterEmojiItems(query),
@@ -1111,39 +1150,25 @@ export function createEmojiExtension() {
       render: () => {
         let component: ReactRenderer<EmojiSuggestionListRef> | null = null
         let floatingEl: HTMLDivElement | null = null
-
-        const updatePosition = async (clientRect: (() => DOMRect | null) | null) => {
-          if (!floatingEl || !clientRect) return
-          const rect = clientRect()
-          if (!rect) return
-          const virtualEl = { getBoundingClientRect: () => rect }
-          const { x, y } = await computePosition(virtualEl, floatingEl, {
-            strategy: 'fixed',
-            placement: 'bottom-start',
-            middleware: [offset(8), flip(), shift({ padding: 8 })],
-          })
-          Object.assign(floatingEl.style, { left: `${x}px`, top: `${y}px` })
-        }
+        const positioner = createSuggestionPositioner()
 
         return {
           onStart: (props: SuggestionProps<EmojiItem>) => {
             if (props.items.length === 0) return
             component = new ReactRenderer(EmojiSuggestionList, {
-              props: {
-                items: props.items,
-                command: (item: EmojiItem) => props.command(item),
-              },
+              props: emojiSuggestionProps(props),
               editor: props.editor,
             })
             floatingEl = createSuggestionPopup()
             floatingEl.appendChild(component.element)
             document.body.appendChild(floatingEl)
-            updatePosition(props.clientRect ?? null)
+            positioner.attach(floatingEl, props.clientRect ?? null)
           },
           onUpdate: (props: SuggestionProps<EmojiItem>) => {
             // No matches → tear down so a bare `:` doesn't leave a stale
             // dropdown floating.
             if (props.items.length === 0) {
+              positioner.detach()
               if (floatingEl) {
                 floatingEl.remove()
                 floatingEl = null
@@ -1154,28 +1179,23 @@ export function createEmojiExtension() {
             }
             if (!component) {
               component = new ReactRenderer(EmojiSuggestionList, {
-                props: {
-                  items: props.items,
-                  command: (item: EmojiItem) => props.command(item),
-                },
+                props: emojiSuggestionProps(props),
                 editor: props.editor,
               })
               floatingEl = createSuggestionPopup()
               floatingEl.appendChild(component.element)
               document.body.appendChild(floatingEl)
             } else {
-              component.updateProps({
-                items: props.items,
-                command: (item: EmojiItem) => props.command(item),
-              })
+              component.updateProps(emojiSuggestionProps(props))
             }
-            updatePosition(props.clientRect ?? null)
+            if (floatingEl) positioner.attach(floatingEl, props.clientRect ?? null)
           },
           onKeyDown: (props: { event: KeyboardEvent }) => {
             if (props.event.key === 'Escape') return true
             return component?.ref?.onKeyDown(props) ?? false
           },
           onExit: () => {
+            positioner.detach()
             if (floatingEl) {
               floatingEl.remove()
               floatingEl = null
@@ -1198,6 +1218,9 @@ export function createEmojiExtension() {
 export interface RichTextEditorHandle {
   /** Focus the editing surface, placing the cursor at `position` (default 'end'). */
   focus: (position?: 'start' | 'end' | number) => void
+  /** Empty the document in place. Unlike a key-remount clear, the ProseMirror
+   * node survives, so focus never leaves the editing surface. */
+  clear: () => void
 }
 
 interface RichTextEditorProps {
@@ -1357,6 +1380,7 @@ function RichTextEditorBase({
     () => ({
       focus: (position: 'start' | 'end' | number = 'end') =>
         withLiveEditor(editor, (live) => live.commands.focus(position)),
+      clear: () => withLiveEditor(editor, (live) => live.commands.clearContent()),
     }),
     [editor]
   )
@@ -1487,7 +1511,11 @@ function RichTextEditorBase({
 
   return (
     <ContextMenu>
-      <ContextMenuTrigger asChild disabled={!features.images}>
+      {/* No `disabled` here: Base UI disables pointer events for the whole
+          trigger subtree, which would make the editor itself unclickable.
+          The image menu can't open without images anyway — handleContextMenu
+          clears the src unless features.images is on. */}
+      <ContextMenuTrigger asChild>
         <div
           ref={containerRef}
           className={cn(
@@ -1805,34 +1833,46 @@ interface BubbleMenuContentProps {
 }
 
 function BubbleMenuContent({ editor, disabled }: BubbleMenuContentProps) {
+  // Same subscription trick as MenuBar: active-state without full re-renders.
+  const active = useEditorState({
+    editor,
+    selector: ({ editor: e }) => ({
+      bold: e.isActive('bold'),
+      italic: e.isActive('italic'),
+      underline: e.isActive('underline'),
+      strike: e.isActive('strike'),
+      code: e.isActive('code'),
+      link: e.isActive('link'),
+    }),
+  })
   return (
     <div className="flex items-center gap-0.5 rounded-lg border bg-popover p-1 shadow-md">
       <ToolbarButton
         icon={<Bold className="size-4" />}
         onClick={() => editor.chain().focus().toggleBold().run()}
         disabled={disabled}
-        isActive={editor.isActive('bold')}
+        isActive={active.bold}
         title="Bold (Cmd+B)"
       />
       <ToolbarButton
         icon={<Italic className="size-4" />}
         onClick={() => editor.chain().focus().toggleItalic().run()}
         disabled={disabled}
-        isActive={editor.isActive('italic')}
+        isActive={active.italic}
         title="Italic (Cmd+I)"
       />
       <ToolbarButton
         icon={<UnderlineIcon className="size-4" />}
         onClick={() => editor.chain().focus().toggleUnderline().run()}
         disabled={disabled}
-        isActive={editor.isActive('underline')}
+        isActive={active.underline}
         title="Underline (Cmd+U)"
       />
       <ToolbarButton
         icon={<Strikethrough className="size-4" />}
         onClick={() => editor.chain().focus().toggleStrike().run()}
         disabled={disabled}
-        isActive={editor.isActive('strike')}
+        isActive={active.strike}
         title="Strikethrough (Cmd+Shift+S)"
       />
       <ToolbarDivider />
@@ -1840,7 +1880,7 @@ function BubbleMenuContent({ editor, disabled }: BubbleMenuContentProps) {
         icon={<Code className="size-4" />}
         onClick={() => editor.chain().focus().toggleCode().run()}
         disabled={disabled}
-        isActive={editor.isActive('code')}
+        isActive={active.code}
         title="Inline Code (Cmd+E)"
       />
       <LinkButton editor={editor} disabled={disabled} />
@@ -2230,6 +2270,30 @@ function MenuBar({
   const isBottom = variant === 'bottom'
   // Muted ghost buttons on the transparent bottom row; filled active-state on top.
   const btn = isBottom ? ('quiet' as const) : ('default' as const)
+  // Subscribe to the marks/nodes the toolbar reflects so active-state stays
+  // current without re-rendering the whole editor on every keystroke
+  // (useEditor's default re-renders all children per transaction).
+  const active = useEditorState({
+    editor,
+    selector: ({ editor: e }) => ({
+      bold: e.isActive('bold'),
+      italic: e.isActive('italic'),
+      link: e.isActive('link'),
+      bulletList: e.isActive('bulletList'),
+      orderedList: e.isActive('orderedList'),
+      codeBlock: e.isActive('codeBlock'),
+      heading1: e.isActive('heading', { level: 1 }),
+      heading2: e.isActive('heading', { level: 2 }),
+      heading3: e.isActive('heading', { level: 3 }),
+    }),
+  })
+  const canUndoRedo = useEditorState({
+    editor,
+    selector: ({ editor: e }) => ({
+      undo: e.can().undo(),
+      redo: e.can().redo(),
+    }),
+  })
   const setLink = useCallback(() => {
     const previousUrl = editor.getAttributes('link').href
     let url = window.prompt('URL', previousUrl)
@@ -2270,8 +2334,8 @@ function MenuBar({
     input.click()
   }, [editor, onImageUpload])
 
-  const canUndo = editor.can().chain().focus().undo().run()
-  const canRedo = editor.can().chain().focus().redo().run()
+  const canUndo = canUndoRedo.undo
+  const canRedo = canUndoRedo.redo
 
   return (
     <div
@@ -2293,7 +2357,7 @@ function MenuBar({
             icon={<Heading1 className="size-4" />}
             onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
             disabled={disabled}
-            isActive={editor.isActive('heading', { level: 1 })}
+            isActive={active.heading1}
             title="Heading 1"
           />
           <ToolbarButton
@@ -2301,7 +2365,7 @@ function MenuBar({
             icon={<Heading2 className="size-4" />}
             onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
             disabled={disabled}
-            isActive={editor.isActive('heading', { level: 2 })}
+            isActive={active.heading2}
             title="Heading 2"
           />
           <ToolbarButton
@@ -2309,7 +2373,7 @@ function MenuBar({
             icon={<Heading3 className="size-4" />}
             onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
             disabled={disabled}
-            isActive={editor.isActive('heading', { level: 3 })}
+            isActive={active.heading3}
             title="Heading 3"
           />
           <ToolbarDivider />
@@ -2321,16 +2385,16 @@ function MenuBar({
         variant={btn}
         icon={<Bold className="size-4" />}
         onClick={() => editor.chain().focus().toggleBold().run()}
-        disabled={disabled || !editor.can().chain().focus().toggleBold().run()}
-        isActive={editor.isActive('bold')}
+        disabled={disabled}
+        isActive={active.bold}
         title="Bold"
       />
       <ToolbarButton
         variant={btn}
         icon={<Italic className="size-4" />}
         onClick={() => editor.chain().focus().toggleItalic().run()}
-        disabled={disabled || !editor.can().chain().focus().toggleItalic().run()}
-        isActive={editor.isActive('italic')}
+        disabled={disabled}
+        isActive={active.italic}
         title="Italic"
       />
       <ToolbarDivider />
@@ -2341,7 +2405,7 @@ function MenuBar({
         icon={<ListBulletIcon className="size-4" />}
         onClick={() => editor.chain().focus().toggleBulletList().run()}
         disabled={disabled}
-        isActive={editor.isActive('bulletList')}
+        isActive={active.bulletList}
         title="Bullet List"
       />
       <ToolbarButton
@@ -2349,7 +2413,7 @@ function MenuBar({
         icon={<ListOrdered className="size-4" />}
         onClick={() => editor.chain().focus().toggleOrderedList().run()}
         disabled={disabled}
-        isActive={editor.isActive('orderedList')}
+        isActive={active.orderedList}
         title="Ordered List"
       />
       <ToolbarDivider />
@@ -2360,7 +2424,7 @@ function MenuBar({
         icon={<LinkIcon className="size-4" />}
         onClick={setLink}
         disabled={disabled}
-        isActive={editor.isActive('link')}
+        isActive={active.link}
         title="Insert Link"
       />
 
@@ -2371,7 +2435,7 @@ function MenuBar({
           icon={<Code2 className="size-4" />}
           onClick={() => editor.chain().focus().toggleCodeBlock().run()}
           disabled={disabled}
-          isActive={editor.isActive('codeBlock')}
+          isActive={active.codeBlock}
           title="Code Block"
         />
       )}

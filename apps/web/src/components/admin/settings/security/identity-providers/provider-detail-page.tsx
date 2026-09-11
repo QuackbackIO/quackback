@@ -184,7 +184,7 @@ function ProviderHeader({
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
-        <label
+        <div
           className="flex items-center gap-2 text-sm"
           title={isOnlyMethod ? 'At least one sign-in method must stay enabled.' : undefined}
         >
@@ -195,7 +195,7 @@ function ProviderHeader({
             disabled={saving || isOnlyMethod}
             aria-label={`Enable ${provider.label}`}
           />
-        </label>
+        </div>
         <ProviderMenu provider={provider} isOnlyMethod={isOnlyMethod} />
       </div>
     </div>

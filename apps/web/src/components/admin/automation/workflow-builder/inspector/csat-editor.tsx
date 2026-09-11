@@ -118,7 +118,7 @@ export function CsatEditor({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
               {unwired.map((key) => (
-                <DropdownMenuItem key={key} onSelect={() => addPath(key)}>
+                <DropdownMenuItem key={key} onClick={() => addPath(key)}>
                   {RATING_LABELS[key]}
                 </DropdownMenuItem>
               ))}

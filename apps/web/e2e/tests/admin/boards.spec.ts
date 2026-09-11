@@ -89,7 +89,7 @@ test.describe('Admin Board Management', () => {
 
   test('can access board general settings', async ({ page }) => {
     await openFirstBoard(page)
-    await expect(page.getByRole('tab', { name: 'General' })).toHaveAttribute('data-state', 'active')
+    await expect(page.getByRole('tab', { name: 'General' })).toHaveAttribute('data-active')
     await expect(page.getByRole('textbox', { name: 'Board name', exact: true })).toBeVisible()
     await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toBeVisible()
     await expect(page.getByTestId('board-switcher')).toHaveCount(0)
@@ -627,7 +627,7 @@ test.describe('Board Settings Tabs', () => {
     const generalTab = page.getByRole('tab', { name: 'General' })
     if ((await generalTab.count()) === 0) return
 
-    await expect(generalTab).toHaveAttribute('data-state', 'active')
+    await expect(generalTab).toHaveAttribute('data-active')
   })
 
   test('active tab button is visually distinct after switching', async ({ page }) => {
@@ -637,11 +637,8 @@ test.describe('Board Settings Tabs', () => {
     await accessTab.click()
     await page.waitForLoadState('networkidle')
 
-    await expect(accessTab).toHaveAttribute('data-state', 'active')
-    await expect(page.getByRole('tab', { name: 'General' })).toHaveAttribute(
-      'data-state',
-      'inactive'
-    )
+    await expect(accessTab).toHaveAttribute('data-active')
+    await expect(page.getByRole('tab', { name: 'General' })).not.toHaveAttribute('data-active')
   })
 })
 

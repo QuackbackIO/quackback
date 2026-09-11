@@ -326,6 +326,7 @@ function TemplateFormDialog({
                   <Checkbox
                     checked={values.componentIds.includes(c.id)}
                     onCheckedChange={() => toggleComponent(c.id)}
+                    data-in-label
                   />
                   <span className="text-sm">{c.name}</span>
                 </label>

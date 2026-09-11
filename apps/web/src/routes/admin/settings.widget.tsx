@@ -730,7 +730,7 @@ function TabRow({
       <div className="flex items-center gap-2">
         <InlineSpinner visible={saving} />
         {showHint ? (
-          <TooltipProvider delayDuration={200}>
+          <TooltipProvider delay={200}>
             <Tooltip>
               {/* span trigger so the tooltip works over a disabled control */}
               <TooltipTrigger asChild>

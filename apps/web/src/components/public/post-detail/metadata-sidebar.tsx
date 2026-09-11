@@ -127,7 +127,7 @@ export function ManagePostActions({
           })}
         </span>
       )}
-      <TooltipProvider delayDuration={300}>
+      <TooltipProvider delay={300}>
         <div className="flex items-center gap-0.5">
           {!actions.isMerged && actions.onMergeOthers && actions.onMergeInto && (
             <DropdownMenu>

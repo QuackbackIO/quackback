@@ -127,10 +127,7 @@ describe('<UsersList> metric column headers', () => {
   it('adds a Country column header once the field is turned on', async () => {
     renderList()
     expect(screen.queryByText('Country')).toBeNull()
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'Columns' }), {
-      button: 0,
-      ctrlKey: false,
-    })
+    fireEvent.click(screen.getByRole('button', { name: 'Columns' }))
     fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Country' }))
     expect(await screen.findAllByText('Country')).not.toHaveLength(0)
   })
@@ -144,21 +141,14 @@ describe('<UsersList> column picker', () => {
 
   it('shows the Country field for every row once turned on from the Columns menu', async () => {
     renderList()
-    // Radix DropdownMenuTrigger opens on pointerDown (not click).
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'Columns' }), {
-      button: 0,
-      ctrlKey: false,
-    })
+    fireEvent.click(screen.getByRole('button', { name: 'Columns' }))
     fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Country' }))
     expect(await screen.findByText('United States')).toBeInTheDocument()
   })
 
   it('remembers the Country column choice across remounts', async () => {
     const first = renderList()
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'Columns' }), {
-      button: 0,
-      ctrlKey: false,
-    })
+    fireEvent.click(screen.getByRole('button', { name: 'Columns' }))
     fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Country' }))
     expect(await screen.findByText('United States')).toBeInTheDocument()
 
@@ -169,16 +159,9 @@ describe('<UsersList> column picker', () => {
 
   it('remembers turning the column back off across remounts', async () => {
     const first = renderList()
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'Columns' }), {
-      button: 0,
-      ctrlKey: false,
-    })
+    fireEvent.click(screen.getByRole('button', { name: 'Columns' }))
     fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Country' }))
     expect(await screen.findByText('United States')).toBeInTheDocument()
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'Columns' }), {
-      button: 0,
-      ctrlKey: false,
-    })
     fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Country' }))
     expect(screen.queryByText('United States')).toBeNull()
 
@@ -189,17 +172,10 @@ describe('<UsersList> column picker', () => {
 
   it('turning the column back off hides it again', async () => {
     renderList()
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'Columns' }), {
-      button: 0,
-      ctrlKey: false,
-    })
+    fireEvent.click(screen.getByRole('button', { name: 'Columns' }))
     fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Country' }))
     expect(await screen.findByText('United States')).toBeInTheDocument()
 
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'Columns' }), {
-      button: 0,
-      ctrlKey: false,
-    })
     fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Country' }))
     expect(screen.queryByText('United States')).toBeNull()
   })

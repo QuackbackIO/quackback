@@ -177,17 +177,21 @@ export function CreateBoardDialog({
                 )}
               />
 
-              <Label className="flex items-center gap-2 text-xs font-normal text-muted-foreground cursor-pointer">
+              <div className="flex items-center gap-2 text-xs font-normal text-muted-foreground">
                 <Checkbox
+                  id="customize-access"
                   checked={customize}
                   onCheckedChange={(v) => setCustomize(v === true)}
                   aria-label="Customize access after create"
                 />
-                <span>
+                <Label
+                  htmlFor="customize-access"
+                  className="cursor-pointer text-xs font-normal text-muted-foreground"
+                >
                   Customize access after create
                   <span className="ml-1">open the Access tab to fine-tune.</span>
-                </span>
-              </Label>
+                </Label>
+              </div>
             </div>
 
             <DialogFooter>

@@ -1,5 +1,4 @@
 import * as React from 'react'
-import { Slot } from '@radix-ui/react-slot'
 import { cva, type VariantProps } from 'class-variance-authority'
 
 import { cn } from '@/lib/shared/utils'
@@ -23,14 +22,10 @@ const badgeVariants = cva(
         subtle: 'border-transparent bg-muted/40 text-muted-foreground/90 [a&]:hover:bg-muted/60',
         ghost: 'border-transparent text-muted-foreground hover:bg-muted/30 hover:text-foreground',
       },
-      // Sizing standard: `default` is the general badge (12px); `sm` is the dense
-      // meta / count chip (11px, the type floor). Never smaller than 11px.
       size: {
         default: 'text-xs [&>svg]:size-3',
         sm: 'text-[11px] [&>svg]:size-2.5',
       },
-      // `default` keeps the subtly-rounded label corners; `pill` is the
-      // rounded-full chip used for status/tag/count pills.
       shape: {
         default: '[border-radius:calc(var(--radius)*0.6)]',
         pill: 'rounded-full',
@@ -49,13 +44,10 @@ function Badge({
   variant,
   size,
   shape,
-  asChild = false,
   ...props
-}: React.ComponentProps<'span'> & VariantProps<typeof badgeVariants> & { asChild?: boolean }) {
-  const Comp = asChild ? Slot : 'span'
-
+}: React.ComponentProps<'span'> & VariantProps<typeof badgeVariants>) {
   return (
-    <Comp
+    <span
       data-slot="badge"
       className={cn(badgeVariants({ variant, size, shape }), className)}
       {...props}
