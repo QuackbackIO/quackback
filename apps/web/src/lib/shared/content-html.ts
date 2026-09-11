@@ -187,7 +187,7 @@ export function generateContentHTML(content: JSONContent): string {
         const src = escapeHtmlAttr(sanitizeImageUrl(String(node.attrs?.src ?? '')))
         const alt = escapeHtmlAttr(String(node.attrs?.alt ?? ''))
         if (!src) return ''
-        return `<img src="${src}" alt="${alt}" class="max-w-xs rounded-md" />`
+        return `<img src="${src}" alt="${alt}" class="max-w-xs h-auto object-contain rounded-md" />`
       }
 
       case 'youtube': {

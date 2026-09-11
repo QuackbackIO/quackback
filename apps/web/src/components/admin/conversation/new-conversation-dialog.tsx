@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ClipboardEvent, type DragEvent } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
@@ -12,8 +12,10 @@ import { realEmail } from '@/lib/shared/anonymous-email'
 import { PortalUserPicker } from '@/components/shared/portal-user-picker'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { CONVERSATION_EDITOR_FEATURES } from '@/components/conversation/conversation-editor-features'
+import { ComposerAttachmentTray } from '@/components/shared/composer-attachment-tray'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
+import { useConversationComposerAttachments } from '@/lib/client/hooks/use-conversation-composer-attachments'
 import {
   Dialog,
   DialogContent,
@@ -67,16 +69,47 @@ export function NewConversationDialog({
       setMessageJson(undefined)
       setMessageMarkdown('')
       setComposerKey((k) => k + 1)
+      clearAttachments()
     }
   }, [open, initialTarget])
 
   const { upload: uploadImage } = useImageUpload({ prefix: 'chat-images' })
+  const {
+    pending: pendingAttachments,
+    addFiles,
+    remove: removeAttachment,
+    clear: clearAttachments,
+  } = useConversationComposerAttachments(uploadImage)
+
+  const handleComposerPaste = useCallback(
+    (e: ClipboardEvent<HTMLDivElement>) => {
+      const images = Array.from(e.clipboardData?.files ?? []).filter((f) =>
+        f.type.startsWith('image/')
+      )
+      if (images.length === 0) return
+      e.preventDefault()
+      void addFiles(images)
+    },
+    [addFiles]
+  )
+  const handleComposerDrop = useCallback(
+    (e: DragEvent<HTMLDivElement>) => {
+      const images = Array.from(e.dataTransfer?.files ?? []).filter((f) =>
+        f.type.startsWith('image/')
+      )
+      if (images.length === 0) return
+      e.preventDefault()
+      void addFiles(images)
+    },
+    [addFiles]
+  )
 
   const send = useMutation({
     mutationFn: (vars: {
       targetPrincipalId: PrincipalId
       content: string
       contentJson?: TiptapContent | null
+      attachments?: typeof pendingAttachments
     }) => startAgentConversationFn({ data: vars }),
     onSuccess: (result) => {
       toast.success('Message sent')
@@ -89,7 +122,7 @@ export function NewConversationDialog({
   })
 
   const isEmpty = isEmptyTiptapDoc(messageJson as TiptapContent | undefined)
-  const canSend = !!target && !isEmpty && !send.isPending
+  const canSend = !!target && (!isEmpty || pendingAttachments.length > 0) && !send.isPending
 
   const submit = () => {
     if (!canSend || !target) return
@@ -107,6 +140,7 @@ export function NewConversationDialog({
       targetPrincipalId: target.principalId as PrincipalId,
       content,
       contentJson: isEmpty ? null : (messageJson as TiptapContent),
+      attachments: pendingAttachments.length > 0 ? pendingAttachments : undefined,
     })
   }
 
@@ -154,19 +188,24 @@ export function NewConversationDialog({
                 </span>
               </span>
             </div>
-            <RichTextEditor
-              key={composerKey}
-              value={messageJson ?? ''}
-              onChange={(json, _html, markdown) => {
-                setMessageJson(json)
-                setMessageMarkdown(markdown)
-              }}
-              features={CONVERSATION_EDITOR_FEATURES}
-              onImageUpload={uploadImage}
-              autofocus
-              minHeight="100px"
-              placeholder="Write your message…"
-            />
+            <div onPaste={handleComposerPaste} onDrop={handleComposerDrop}>
+              <RichTextEditor
+                key={composerKey}
+                value={messageJson ?? ''}
+                onChange={(json, _html, markdown) => {
+                  setMessageJson(json)
+                  setMessageMarkdown(markdown)
+                }}
+                features={CONVERSATION_EDITOR_FEATURES}
+                autofocus
+                minHeight="100px"
+                placeholder="Write your message…"
+              />
+              <ComposerAttachmentTray
+                attachments={pendingAttachments}
+                onRemove={removeAttachment}
+              />
+            </div>
             <div className="flex justify-end">
               <Button onClick={submit} disabled={!canSend}>
                 <PaperAirplaneIcon className="me-1.5 size-4" />

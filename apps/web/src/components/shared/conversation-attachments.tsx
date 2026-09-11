@@ -40,7 +40,7 @@ export function ConversationAttachmentList({
             src={a.url}
             alt={a.name}
             className="block w-fit overflow-hidden rounded-lg border border-border/40"
-            thumbClassName="max-h-40 max-w-[14rem] object-cover"
+            thumbClassName="max-h-40 max-w-full w-auto h-auto object-contain"
           />
         ) : (
           <a

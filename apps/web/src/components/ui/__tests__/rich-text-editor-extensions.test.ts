@@ -507,7 +507,7 @@ describe('generateContentHTML — chatImage nodes', () => {
     expect(html).toContain('<img')
     expect(html).toContain('src="https://example.com/photo.png"')
     expect(html).toContain('alt="A screenshot"')
-    expect(html).toContain('class="max-w-xs rounded-md"')
+    expect(html).toContain('class="max-w-xs h-auto object-contain rounded-md"')
   })
 
   it('renders nothing for a chatImage with no src', () => {

@@ -22,6 +22,8 @@ import {
   useMemo,
   useRef,
   useState,
+  type ClipboardEvent,
+  type DragEvent,
   type ReactNode,
   type RefObject,
 } from 'react'
@@ -400,6 +402,30 @@ export function AgentConversationThread({
     uploading,
   } = useConversationComposerAttachments(upload)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // Same as the visitor messenger: paste/drop stages the tray. The editor has
+  // no onImageUpload, so it never inlines a resizableImage into the draft.
+  const handleComposerPaste = useCallback(
+    (e: ClipboardEvent<HTMLDivElement>) => {
+      const images = Array.from(e.clipboardData?.files ?? []).filter((f) =>
+        f.type.startsWith('image/')
+      )
+      if (images.length === 0) return
+      e.preventDefault()
+      void addFiles(images)
+    },
+    [addFiles]
+  )
+  const handleComposerDrop = useCallback(
+    (e: DragEvent<HTMLDivElement>) => {
+      const images = Array.from(e.dataTransfer?.files ?? []).filter((f) =>
+        f.type.startsWith('image/')
+      )
+      if (images.length === 0) return
+      e.preventDefault()
+      void addFiles(images)
+    },
+    [addFiles]
+  )
 
   // Both kind's thread queries are always called (rules of hooks) but only one
   // is ever `enabled` — the conversation adapter is unchanged from before the
@@ -1969,6 +1995,8 @@ export function AgentConversationThread({
                 ? 'border-amber-400/50 bg-amber-400/5 focus-within:ring-amber-400/20'
                 : 'border-border bg-background focus-within:ring-primary/20'
             )}
+            onPaste={handleComposerPaste}
+            onDrop={handleComposerDrop}
           >
             {/* Reply vs internal-note mode — a back_office/tracker ticket has
                 no reply capability, so Note is the only mode: hide the
@@ -2020,8 +2048,9 @@ export function AgentConversationThread({
             {/* Reply and Note share the unified RichTextEditor; reply keeps
                 @-mentions on (agent surface), note is the team-internal preset.
                 Enter sends, Shift+Enter breaks; formatting comes from the editor's
-                own bubble/slash/`:` surfaces. Pasted/dropped images inline via
-                onImageUpload; the paperclip still stages files in the tray below. */}
+                own bubble/slash/`:` surfaces. Images stay tray-only (paste/drop
+                and the paperclip stage files below) — the editor has no
+                onImageUpload, so it never inlines a resizableImage. */}
             {noteMode || !capabilities.reply ? (
               <RichTextEditor
                 key={`note-${noteKey}`}
@@ -2036,7 +2065,6 @@ export function AgentConversationThread({
                 className="max-h-64 overflow-y-auto"
                 onChange={onNoteChange}
                 onSubmit={onSend}
-                onImageUpload={upload}
               />
             ) : (
               <RichTextEditor
@@ -2055,7 +2083,6 @@ export function AgentConversationThread({
                 className="max-h-64 overflow-y-auto"
                 onChange={onReplyChange}
                 onSubmit={onSend}
-                onImageUpload={upload}
               />
             )}
             <ComposerAttachmentTray attachments={pendingAttachments} onRemove={removeAttachment} />

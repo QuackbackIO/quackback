@@ -537,6 +537,7 @@ export interface StartAgentConversationInput {
   targetPrincipalId: PrincipalId
   content: string
   contentJson?: TiptapContent | null
+  attachments?: ConversationAttachment[]
 }
 
 /**
@@ -559,6 +560,7 @@ export async function startAgentConversation(
   // Rich-composer doc (inline embeds/images): sanitized on write like the
   // agent-reply path, but no origin restriction — this message is always
   // agent-authored, never a visitor upload.
+  const attachments = validateAttachments(input.attachments)
   const safeContentJson = input.contentJson ? sanitizeTiptapContent(input.contentJson) : null
   // A text-less rich message is valid only when it carries an inline image or
   // a shared post; this label also backs the subject/preview/notification body.
@@ -567,7 +569,7 @@ export async function startAgentConversation(
   // caller sent blank content alongside a text-bearing one.
   const content = validateContent(
     resolveMessageContent(input.content, safeContentJson),
-    !!fallbackLabel
+    attachments.length > 0 || !!fallbackLabel
   )
 
   const [target] = await db
@@ -615,7 +617,7 @@ export async function startAgentConversation(
         // The composer owns the thread from the start — it lands in "Mine".
         assignedAgentPrincipalId: agent.principalId,
         status: 'open',
-        subject: preview(content || fallbackLabel, []),
+        subject: preview(content || fallbackLabel, attachments),
       })
       .returning()
 
@@ -627,6 +629,7 @@ export async function startAgentConversation(
         senderType: 'agent',
         content,
         contentJson: safeContentJson,
+        attachments: attachments.length > 0 ? attachments : null,
       })
       .returning()
 
@@ -634,7 +637,7 @@ export async function startAgentConversation(
       .update(conversations)
       .set({
         lastMessageAt: message.createdAt,
-        lastMessagePreview: preview(content || fallbackLabel, []),
+        lastMessagePreview: preview(content || fallbackLabel, attachments),
         // Composing counts as reading on the agent side.
         agentLastReadAt: message.createdAt,
         updatedAt: message.createdAt,

@@ -51,15 +51,47 @@ describe('toMessageDTO — storage read tokens', () => {
       }),
       null
     )
-    expect(dto.contentJson).toEqual({
-      type: 'doc',
-      content: [
-        {
-          type: 'image',
-          attrs: { src: 'https://old.example.com/api/storage/chat-images/a.png?read=live' },
+    expect(dto.contentJson).toEqual({ type: 'doc', content: [] })
+    expect(dto.attachments).toEqual([
+      {
+        url: 'https://old.example.com/api/storage/chat-images/a.png?read=live',
+        name: 'a.png',
+        contentType: 'image/png',
+        size: 0,
+      },
+    ])
+  })
+
+  it('lifts a stored 500×500 resizableImage onto attachments', () => {
+    const dto = toMessageDTO(
+      message({
+        content: '',
+        contentJson: {
+          type: 'doc',
+          content: [
+            {
+              type: 'resizableImage',
+              attrs: {
+                src: 'https://cdn.example.com/wide.png',
+                width: 500,
+                height: 500,
+                'data-keep-ratio': true,
+              },
+            },
+          ],
         },
-      ],
-    })
+      }),
+      null
+    )
+    expect(dto.attachments).toEqual([
+      {
+        url: 'https://cdn.example.com/wide.png',
+        name: 'wide.png',
+        contentType: 'image/png',
+        size: 0,
+      },
+    ])
+    expect(dto.contentJson).toEqual({ type: 'doc', content: [] })
   })
 })
 
