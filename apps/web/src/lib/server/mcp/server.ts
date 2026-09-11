@@ -2,13 +2,16 @@
  * MCP Server Factory
  *
  * Creates an McpServer instance with all tools and resources registered.
- * Resources are inlined here (5 one-liner service calls).
+ * Resources are inlined here (one service call each).
  */
 
 import { McpServer, type ReadResourceCallback } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { hasApiScope } from '@/lib/server/domains/api-keys/api-key-scopes'
+import { RESOURCE_SCOPES } from './required-scope'
 import { registerTools } from './tools'
 import type { McpAuthContext, McpScope } from './types'
+
+type ResourceUri = keyof typeof RESOURCE_SCOPES
 
 export function createMcpServer(auth: McpAuthContext): McpServer {
   const server = new McpServer({
@@ -23,16 +26,16 @@ export function createMcpServer(auth: McpAuthContext): McpServer {
 }
 
 /**
- * Wrap a resource callback with a scope check. The scope literals below are
- * per-resource requirements, not a scope list: each is typed McpScope (an
- * alias of the API_KEY_SCOPES vocabulary), so a scope removed from the
- * vocabulary fails typecheck here rather than drifting.
+ * Wrap a resource callback with a scope check. The required scope comes
+ * from RESOURCE_SCOPES so the handler gate and the OAuth 403 map stay
+ * the same entry.
  */
 function scopeGated(
   auth: McpAuthContext,
-  scope: McpScope,
+  resourceUri: ResourceUri,
   fn: ReadResourceCallback
 ): ReadResourceCallback {
+  const scope: McpScope = RESOURCE_SCOPES[resourceUri]
   return async (uri, extra) => {
     if (!hasApiScope(auth.scopes, scope)) {
       return {
@@ -62,12 +65,12 @@ function jsonResource(name: string, data: unknown): Awaited<ReturnType<ReadResou
   }
 }
 
-function registerResources(server: McpServer, auth: McpAuthContext) {
+export function registerResources(server: McpServer, auth: McpAuthContext) {
   server.resource(
     'boards',
     'quackback://boards',
     { description: 'List all boards' },
-    scopeGated(auth, 'read:feedback', async () => {
+    scopeGated(auth, 'quackback://boards', async () => {
       const { listBoards } = await import('@/lib/server/domains/boards/board.service')
       const boards = await listBoards()
       return jsonResource(
@@ -81,7 +84,7 @@ function registerResources(server: McpServer, auth: McpAuthContext) {
     'statuses',
     'quackback://statuses',
     { description: 'List all statuses' },
-    scopeGated(auth, 'read:feedback', async () => {
+    scopeGated(auth, 'quackback://statuses', async () => {
       const { listStatuses } = await import('@/lib/server/domains/statuses/status.service')
       const statuses = await listStatuses()
       return jsonResource(
@@ -95,7 +98,7 @@ function registerResources(server: McpServer, auth: McpAuthContext) {
     'tags',
     'quackback://tags',
     { description: 'List all tags' },
-    scopeGated(auth, 'read:feedback', async () => {
+    scopeGated(auth, 'quackback://tags', async () => {
       const { listPostTags } = await import('@/lib/server/domains/post-tags/post-tag.service')
       const tags = await listPostTags()
       return jsonResource(
@@ -109,7 +112,7 @@ function registerResources(server: McpServer, auth: McpAuthContext) {
     'roadmaps',
     'quackback://roadmaps',
     { description: 'List all roadmaps' },
-    scopeGated(auth, 'read:feedback', async () => {
+    scopeGated(auth, 'quackback://roadmaps', async () => {
       const { listRoadmaps } = await import('@/lib/server/domains/roadmaps/roadmap.service')
       const roadmaps = await listRoadmaps()
       return jsonResource(
@@ -123,7 +126,7 @@ function registerResources(server: McpServer, auth: McpAuthContext) {
     'members',
     'quackback://members',
     { description: 'List all team members (emails stripped)' },
-    scopeGated(auth, 'read:feedback', async () => {
+    scopeGated(auth, 'quackback://members', async () => {
       const { listTeamMembers } = await import('@/lib/server/domains/principals/principal.service')
       const members = await listTeamMembers()
       return jsonResource(
@@ -137,7 +140,7 @@ function registerResources(server: McpServer, auth: McpAuthContext) {
     'help-center-categories',
     'quackback://help-center/categories',
     { description: 'List all help center categories with article counts' },
-    scopeGated(auth, 'read:article', async () => {
+    scopeGated(auth, 'quackback://help-center/categories', async () => {
       const { isFeatureEnabled } = await import('@/lib/server/domains/settings/settings.service')
       if (!(await isFeatureEnabled('helpCenter'))) {
         return {
