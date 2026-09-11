@@ -11,6 +11,7 @@ import {
   twoFactor,
 } from 'better-auth/plugins'
 import { mcp } from '@better-auth/mcp'
+import { betterAuthMcpResource } from './mcp-plugin-resource'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { generateId, type PrincipalId, type UserId } from '@quackback/ids'
 import { API_KEY_SCOPES, MCP_AS_SCOPES } from '@/lib/server/domains/api-keys/api-key-scopes'
@@ -693,7 +694,7 @@ async function createAuth() {
       mcp({
         loginPage: '/auth/login',
         consentPage: '/oauth/consent',
-        resource: `${baseURL}/api/mcp`,
+        resource: betterAuthMcpResource(`${baseURL}/api/mcp`),
         allowDynamicClientRegistration:
           workspaceSettings?.developerConfig?.oauthDynamicClientRegistrationEnabled ?? true,
         allowUnauthenticatedClientRegistration: true,

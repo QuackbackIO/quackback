@@ -20,7 +20,16 @@ describe('mcpDcrRegistrationBody', () => {
     expect(scopes).toContain('offline_access')
     expect(scopes).toContain('write:feedback')
     expect(scopes).toContain('read:feedback')
-    expect(body.application_type).toBe('native')
+    expect(body.application_type).toBeUndefined()
+  })
+
+  it('leaves an explicit HTTPS web client as web', () => {
+    const body = mcpDcrRegistrationBody({
+      application_type: 'web',
+      redirect_uris: ['https://example.com/oauth/callback'],
+    })
+    expect(body.application_type).toBe('web')
+    expect(body.redirect_uris).toEqual(['https://example.com/oauth/callback'])
   })
 
   it('coerces omitted application_type and Cursor custom-scheme redirects for Better Auth 1.7', () => {

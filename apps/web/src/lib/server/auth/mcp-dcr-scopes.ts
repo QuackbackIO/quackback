@@ -96,11 +96,17 @@ export function mcpDcrRedirectUrisToRestore(body: Record<string, unknown>): stri
  */
 export function mcpDcrRegistrationBody(body: Record<string, unknown>): Record<string, unknown> {
   const redirectUris = parseRedirectUris(body.redirect_uris)
+  const rewritten = redirectUris ? redirectUrisForBetterAuth17Native(redirectUris) : null
+  const usedNativeRedirectRewrite = Boolean(
+    redirectUris && rewritten && redirectUris.some((uri, i) => uri !== rewritten[i])
+  )
   return {
     ...body,
     scope: MCP_AS_SCOPES.join(' '),
-    application_type: 'native',
-    ...(redirectUris ? { redirect_uris: redirectUrisForBetterAuth17Native(redirectUris) } : {}),
+    // Only force native when we had to swap a host-bearing private-use
+    // scheme for the 1.7.4 placeholder. HTTPS web clients keep `web`.
+    ...(usedNativeRedirectRewrite ? { application_type: 'native' } : {}),
+    ...(rewritten ? { redirect_uris: rewritten } : {}),
   }
 }
 

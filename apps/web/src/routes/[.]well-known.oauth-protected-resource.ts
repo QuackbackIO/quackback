@@ -15,9 +15,15 @@ export const Route = createFileRoute('/.well-known/oauth-protected-resource')({
     handlers: {
       GET: async () => {
         const { config } = await import('@/lib/server/config')
-        const { mcpProtectedResourceResponse } =
+        const { mcpProtectedResourceMetadata } =
           await import('@/lib/server/mcp/protected-resource-metadata')
-        return mcpProtectedResourceResponse(config.baseUrl)
+        return new Response(JSON.stringify(mcpProtectedResourceMetadata(config.baseUrl)), {
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'public, max-age=3600',
+            Vary: 'Host',
+          },
+        })
       },
     },
   },

@@ -18,7 +18,7 @@ ALTER TABLE "oauth_client" ADD COLUMN IF NOT EXISTS "client_discovery_id" text;
 --> statement-breakpoint
 ALTER TABLE "oauth_client" ADD COLUMN IF NOT EXISTS "subject_type" text;
 --> statement-breakpoint
-ALTER TABLE "oauth_client" ADD COLUMN IF NOT EXISTS "client_credentials_scopes" text[] DEFAULT ARRAY[]::text[];
+ALTER TABLE "oauth_client" ADD COLUMN IF NOT EXISTS "client_credentials_scopes" text[] DEFAULT '{}';
 --> statement-breakpoint
 ALTER TABLE "oauth_client" ADD COLUMN IF NOT EXISTS "backchannel_logout_uri" text;
 --> statement-breakpoint

@@ -87,7 +87,14 @@ export function useCreateRoadmap() {
           frequency: input.type === 'date' ? input.frequency : null,
           visibility: input.visibility,
           visibleSegmentIds: input.visibleSegmentIds,
-          columns: input.type === 'column' ? input.columns : [],
+          columns: (input.type === 'column' ? input.columns : []) as Array<{
+            id: string | undefined
+            statusId: string
+            name: string
+            icon?: string | null
+            color: string
+            position: number
+          }>,
         },
       }) as unknown as Promise<RoadmapView>,
     onSuccess: () => {
@@ -115,7 +122,14 @@ export function useUpdateRoadmap() {
           frequency: input.frequency,
           visibility: input.visibility,
           visibleSegmentIds: input.visibleSegmentIds,
-          columns: input.columns,
+          columns: input.columns as Array<{
+            id: string | undefined
+            statusId: string
+            name: string
+            icon?: string | null
+            color: string
+            position: number
+          }>,
         },
       }) as unknown as Promise<RoadmapView>,
     onSuccess: () => {
