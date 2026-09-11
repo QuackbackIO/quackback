@@ -4,7 +4,6 @@ const kvSet = vi.fn()
 const dbExecute = vi.fn()
 const ensureWidgetSecret = vi.fn()
 const updateWidgetConfig = vi.fn()
-const requireSettings = vi.fn()
 const getBaseUrl = vi.fn(() => 'https://feedback.example.com/')
 
 vi.mock('@/lib/server/kv/pg-kv', () => ({ kvSet: (...a: unknown[]) => kvSet(...a) }))
@@ -14,10 +13,6 @@ vi.mock('../settings.widget', () => ({
   ensureWidgetSecret: (...a: unknown[]) => ensureWidgetSecret(...a),
   updateWidgetConfig: (...a: unknown[]) => updateWidgetConfig(...a),
 }))
-vi.mock('../settings.helpers', () => ({
-  requireSettings: () => requireSettings(),
-  parseWidgetConfig: (raw: string) => JSON.parse(raw),
-}))
 
 import {
   WIDGET_INSTALL_CODE_MAX_USES,
@@ -26,7 +21,6 @@ import {
   consumeWidgetInstallCode,
   generateWidgetInstallCode,
   hashWidgetInstallCode,
-  isHttpsRequest,
   mintWidgetInstallCode,
   redeemWidgetInstallCode,
   widgetInstallPairingKey,
@@ -36,7 +30,6 @@ beforeEach(() => {
   vi.clearAllMocks()
   ensureWidgetSecret.mockResolvedValue('wgt_mintedsecret')
   updateWidgetConfig.mockResolvedValue({ enabled: true })
-  requireSettings.mockResolvedValue({ widgetConfig: JSON.stringify({ enabled: false }) })
   dbExecute.mockResolvedValue([{ remaining: 1 }])
 })
 
@@ -63,9 +56,7 @@ describe('mintWidgetInstallCode', () => {
   it('ensures a secret exists and stores a hashed TTL record with two uses', async () => {
     const minted = await mintWidgetInstallCode()
     expect(ensureWidgetSecret).toHaveBeenCalledTimes(1)
-    expect(minted.code.startsWith(WIDGET_INSTALL_CODE_PREFIX)).toBe(true)
-    expect(minted.expiresInSeconds).toBe(WIDGET_INSTALL_CODE_TTL_SECONDS)
-    expect(minted.redeemUrl).toBe('https://feedback.example.com/api/widget/install-context')
+    expect(minted).toEqual({ code: expect.stringMatching(/^qbi_/) })
     expect(kvSet).toHaveBeenCalledWith(
       widgetInstallPairingKey(hashWidgetInstallCode(minted.code)),
       { remaining: WIDGET_INSTALL_CODE_MAX_USES },
@@ -97,46 +88,10 @@ describe('redeemWidgetInstallCode', () => {
     expect(updateWidgetConfig).toHaveBeenCalledWith({ enabled: true })
   })
 
-  it('does not re-enable when the widget is already on', async () => {
-    requireSettings.mockResolvedValue({ widgetConfig: JSON.stringify({ enabled: true }) })
-    await expect(redeemWidgetInstallCode('qbi_ok')).resolves.toMatchObject({
-      signingSecret: 'wgt_mintedsecret',
-    })
-    expect(updateWidgetConfig).not.toHaveBeenCalled()
-  })
-
   it('returns null without enabling when the code is spent or expired', async () => {
     dbExecute.mockResolvedValue([])
     await expect(redeemWidgetInstallCode('qbi_spent')).resolves.toBeNull()
     expect(ensureWidgetSecret).not.toHaveBeenCalled()
     expect(updateWidgetConfig).not.toHaveBeenCalled()
-  })
-})
-
-describe('isHttpsRequest', () => {
-  it('trusts the first forwarded proto', () => {
-    expect(
-      isHttpsRequest(
-        new Request('http://internal/api/widget/install-context', {
-          headers: { 'x-forwarded-proto': 'https, http' },
-        })
-      )
-    ).toBe(true)
-    expect(
-      isHttpsRequest(
-        new Request('http://internal/api/widget/install-context', {
-          headers: { 'x-forwarded-proto': 'http' },
-        })
-      )
-    ).toBe(false)
-  })
-
-  it('falls back to the request URL', () => {
-    expect(
-      isHttpsRequest(new Request('https://feedback.example.com/api/widget/install-context'))
-    ).toBe(true)
-    expect(isHttpsRequest(new Request('http://127.0.0.1:3020/api/widget/install-context'))).toBe(
-      false
-    )
   })
 })

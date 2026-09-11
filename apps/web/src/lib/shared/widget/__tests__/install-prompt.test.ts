@@ -3,15 +3,11 @@ import {
   WIDGET_SKILL_RAW,
   buildWidgetInstallPrompt,
   buildWidgetInstallSnippet,
-  maskWidgetSecretInPrompt,
 } from '../install-prompt'
 
 describe('buildWidgetInstallPrompt', () => {
   it('always includes redeem instructions and never a wgt_ secret', () => {
-    const prompt = buildWidgetInstallPrompt({
-      instanceUrl: 'https://feedback.example.com/',
-      pairingCode: 'qbi_testpairingcode',
-    })
+    const prompt = buildWidgetInstallPrompt('https://feedback.example.com/', 'qbi_testpairingcode')
 
     expect(prompt).toContain('Instance URL: https://feedback.example.com')
     expect(prompt).toContain('https://feedback.example.com/api/widget/sdk.js')
@@ -22,33 +18,19 @@ describe('buildWidgetInstallPrompt', () => {
     expect(prompt).toContain('If this app has login')
     expect(prompt).toContain('signingSecret')
     expect(prompt).toContain('ssoToken')
-    expect(prompt).toContain('Once per session')
+    expect(prompt).toContain('once per session')
     expect(prompt).toContain('Show on your website')
     expect(prompt).not.toContain('Do not implement identify')
     expect(prompt).not.toContain('with identify on')
     expect(prompt).not.toMatch(/wgt_[A-Za-z0-9]/)
     expect(prompt).not.toContain('QUACKBACK_WIDGET_SECRET')
-  })
-
-  it('does not invent a pairing code when the code is missing', () => {
-    const prompt = buildWidgetInstallPrompt({
-      instanceUrl: 'https://feedback.example.com',
-      pairingCode: null,
-    })
-
-    expect(prompt).toContain('Do not invent a code or secret')
-    expect(prompt).toContain('copy the install prompt again')
-    expect(prompt).not.toContain('with identify on')
-    expect(prompt).not.toContain('wgt_YOUR_WIDGET_SECRET')
-    expect(prompt).not.toMatch(/wgt_[A-Za-z0-9]/)
+    expect(prompt).not.toContain('identify-users.md')
   })
 })
 
 describe('buildWidgetInstallSnippet', () => {
   it('always documents identify primitives without a live secret', () => {
-    const snippet = buildWidgetInstallSnippet({
-      instanceUrl: 'https://feedback.example.com/',
-    })
+    const snippet = buildWidgetInstallSnippet('https://feedback.example.com/')
 
     expect(snippet).toContain('https://feedback.example.com/api/widget/sdk.js')
     expect(snippet).toContain('Quackback("init")')
@@ -63,22 +45,5 @@ describe('buildWidgetInstallSnippet', () => {
     expect(snippet).not.toContain('/api/quackback')
     expect(snippet).not.toContain('user.id')
     expect(snippet).not.toMatch(/wgt_[A-Za-z0-9]/)
-  })
-})
-
-describe('maskWidgetSecretInPrompt', () => {
-  it('masks a secret if one is still present in the text', () => {
-    const secret = 'wgt_abc123secret'
-    const masked = maskWidgetSecretInPrompt(`secret ${secret} here`, secret)
-    expect(masked).not.toContain(secret)
-    expect(masked).toContain('wgt_abc1••••••••')
-  })
-
-  it('leaves prompts unchanged when no secret is passed', () => {
-    const prompt = buildWidgetInstallPrompt({
-      instanceUrl: 'https://feedback.example.com',
-      pairingCode: 'qbi_x',
-    })
-    expect(maskWidgetSecretInPrompt(prompt, null)).toBe(prompt)
   })
 })

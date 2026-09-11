@@ -1,13 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { getClientIp } from '@/lib/server/domains/api/rate-limit'
-import { checkWidgetInstallContextRateLimit } from '@/lib/server/auth/widget-rate-limit'
 import { isPooledTenancy } from '@/lib/server/workspaces/mode'
+import { redeemWidgetInstallCode } from '@/lib/server/domains/settings/widget-install-pairing'
 import {
-  isHttpsRequest,
-  redeemWidgetInstallCode,
-} from '@/lib/server/domains/settings/widget-install-pairing'
-import { widgetCorsHeaders, widgetJsonError } from '@/lib/server/widget/public-endpoint'
+  enforcePerIpLimit,
+  widgetCorsHeaders,
+  widgetJsonError,
+} from '@/lib/server/widget/public-endpoint'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'widget-install-context' })
@@ -16,19 +15,24 @@ const bodySchema = z.object({
   code: z.string().trim().min(8).max(80),
 })
 
+function isHttpsRequest(request: Request): boolean {
+  const forwarded = request.headers.get('x-forwarded-proto')
+  if (forwarded) return forwarded.split(',')[0]?.trim() === 'https'
+  return new URL(request.url).protocol === 'https:'
+}
+
 export async function handleWidgetInstallContext(request: Request): Promise<Response> {
   if (isPooledTenancy() && !isHttpsRequest(request)) {
     return widgetJsonError(400, 'HTTPS_REQUIRED', 'Redeem pairing codes over HTTPS')
   }
 
-  const rl = await checkWidgetInstallContextRateLimit(getClientIp(request)).catch(() => ({
-    allowed: true as const,
-  }))
-  if (!rl.allowed) {
-    return widgetJsonError(429, 'RATE_LIMITED', 'Too many install attempts, try again later', {
-      'Retry-After': String(rl.retryAfter ?? 60),
-    })
-  }
+  const limited = await enforcePerIpLimit(request, {
+    keyPrefix: 'widget:install-context',
+    limit: 20,
+    windowSeconds: 15 * 60,
+    message: 'Too many install attempts, try again later',
+  })
+  if (limited) return limited
 
   let code: string
   try {

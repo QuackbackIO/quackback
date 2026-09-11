@@ -2,25 +2,28 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
-const { onboarding, updateWidgetConfig, mintInstallCode, toast } = vi.hoisted(() => ({
-  onboarding: {
-    useCase: 'product_feedback',
-    hasWidgetInstalled: false,
-    hasWidgetEnabled: false,
-    widgetOriginHost: null as string | null,
-    widgetLastDetectedAt: null as string | null,
-    widgetSdkNeedsUpdate: false,
-  },
-  updateWidgetConfig: {
-    mutateAsync: vi.fn(),
-    isPending: false,
-  },
-  mintInstallCode: {
-    mutateAsync: vi.fn(),
-    isPending: false,
-  },
-  toast: { success: vi.fn(), error: vi.fn() },
-}))
+const { onboarding, updateWidgetConfig, mintInstallCode, toast, copyWithFallback } = vi.hoisted(
+  () => ({
+    onboarding: {
+      useCase: 'product_feedback',
+      hasWidgetInstalled: false,
+      hasWidgetEnabled: false,
+      widgetOriginHost: null as string | null,
+      widgetLastDetectedAt: null as string | null,
+      widgetSdkNeedsUpdate: false,
+    },
+    updateWidgetConfig: {
+      mutateAsync: vi.fn(),
+      isPending: false,
+    },
+    mintInstallCode: {
+      mutateAsync: vi.fn(),
+      isPending: false,
+    },
+    toast: { success: vi.fn(), error: vi.fn() },
+    copyWithFallback: vi.fn(),
+  })
+)
 
 vi.mock('@tanstack/react-router', async () => {
   const actual =
@@ -65,7 +68,7 @@ vi.mock('@/lib/client/mutations/settings', () => ({
 }))
 
 vi.mock('@/components/admin/activation-action-button', () => ({
-  copyWithFallback: vi.fn(),
+  copyWithFallback: (...args: unknown[]) => copyWithFallback(...args),
 }))
 
 vi.mock('sonner', () => ({
@@ -82,9 +85,9 @@ describe('WidgetInstallPage', () => {
     mintInstallCode.mutateAsync.mockReset()
     mintInstallCode.mutateAsync.mockResolvedValue({
       code: 'qbi_pagepairingcode',
-      expiresInSeconds: 900,
-      redeemUrl: 'https://feedback.example.com/api/widget/install-context',
     })
+    copyWithFallback.mockReset()
+    copyWithFallback.mockResolvedValue(undefined)
     toast.success.mockReset()
     toast.error.mockReset()
   })
@@ -134,11 +137,6 @@ describe('WidgetInstallPage', () => {
   })
 
   it('mints a pairing code into the agent prompt and never copies a wgt_ secret', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined)
-    Object.defineProperty(navigator, 'clipboard', {
-      configurable: true,
-      value: { writeText },
-    })
     const { WidgetInstallPage } = await import('../settings.widget.install')
     render(<WidgetInstallPage />)
 
@@ -148,9 +146,9 @@ describe('WidgetInstallPage', () => {
 
     await waitFor(() => {
       expect(mintInstallCode.mutateAsync).toHaveBeenCalled()
-      expect(writeText).toHaveBeenCalled()
+      expect(copyWithFallback).toHaveBeenCalled()
     })
-    const copied = writeText.mock.calls[0][0] as string
+    const copied = copyWithFallback.mock.calls[0][0] as string
     expect(copied).toContain('qbi_pagepairingcode')
     expect(copied).toContain('/api/widget/install-context')
     expect(copied).toContain('If this app has login')

@@ -73,19 +73,12 @@ export function WidgetInstallPage() {
   })
   const installed = presence.tone !== 'idle'
   const [copyingSnippet, setCopyingSnippet] = useState(false)
-  const snippet = useMemo(
-    () => buildWidgetInstallSnippet({ instanceUrl: baseUrl ?? '' }),
-    [baseUrl]
-  )
+  const snippet = useMemo(() => buildWidgetInstallSnippet(baseUrl ?? ''), [baseUrl])
 
   async function agentPrompt(): Promise<string> {
-    const instanceUrl = baseUrl ?? ''
     try {
       const minted = await mintInstallCode.mutateAsync()
-      return buildWidgetInstallPrompt({
-        instanceUrl,
-        pairingCode: minted.code,
-      })
+      return buildWidgetInstallPrompt(baseUrl ?? '', minted.code)
     } catch {
       toast.error('Could not copy the install prompt. Try again.')
       return ''

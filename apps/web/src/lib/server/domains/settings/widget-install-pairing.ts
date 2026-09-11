@@ -14,14 +14,11 @@ import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { currentWorkspaceNamespace } from '@/lib/server/workspaces/workspace-keyed'
 import { getBaseUrl } from '@/lib/server/config'
 import { CURRENT_WIDGET_SDK_VERSION, widgetSdkNeedsUpdate } from '@/lib/shared/widget/sdk-version'
+import { trimTrailingSlash } from '@/lib/shared/widget/install-prompt'
+import { toIsoStringOrNull } from '@/lib/shared/utils/date'
 import { logger } from '@/lib/server/logger'
 import { ensureWidgetSecret, updateWidgetConfig } from './settings.widget'
-import {
-  parseWidgetConfig,
-  requireSettings,
-  requireSettingsCached,
-  wrapDbError,
-} from './settings.helpers'
+import { parseWidgetConfig, requireSettingsCached, wrapDbError } from './settings.helpers'
 
 const log = logger.child({ component: 'widget-install-pairing' })
 
@@ -41,29 +38,7 @@ export function widgetInstallPairingKey(hash: string): string {
   return `widget:install-pairing:${hash}`
 }
 
-export function trimInstanceUrl(url: string): string {
-  return url.replace(/\/+$/, '')
-}
-
-export function widgetInstallContextUrl(instanceUrl: string): string {
-  return `${trimInstanceUrl(instanceUrl)}/api/widget/install-context`
-}
-
-export function isHttpsRequest(request: Request): boolean {
-  const forwarded = request.headers.get('x-forwarded-proto')
-  if (forwarded) return forwarded.split(',')[0]?.trim() === 'https'
-  try {
-    return new URL(request.url).protocol === 'https:'
-  } catch {
-    return false
-  }
-}
-
-export async function mintWidgetInstallCode(): Promise<{
-  code: string
-  expiresInSeconds: number
-  redeemUrl: string
-}> {
+export async function mintWidgetInstallCode(): Promise<{ code: string }> {
   await ensureWidgetSecret()
   const code = generateWidgetInstallCode()
   await kvSet(
@@ -71,12 +46,7 @@ export async function mintWidgetInstallCode(): Promise<{
     { remaining: WIDGET_INSTALL_CODE_MAX_USES },
     WIDGET_INSTALL_CODE_TTL_SECONDS
   )
-  const instanceUrl = trimInstanceUrl(getBaseUrl())
-  return {
-    code,
-    expiresInSeconds: WIDGET_INSTALL_CODE_TTL_SECONDS,
-    redeemUrl: widgetInstallContextUrl(instanceUrl),
-  }
+  return { code }
 }
 
 /** Decrement remaining uses. True iff this caller consumed a live use. */
@@ -109,13 +79,9 @@ export async function redeemWidgetInstallCode(code: string): Promise<WidgetInsta
   if (!consumed) return null
 
   const signingSecret = await ensureWidgetSecret()
-  const org = await requireSettings()
-  const previous = parseWidgetConfig(org.widgetConfig)
-  if (!previous.enabled) {
-    await updateWidgetConfig({ enabled: true })
-  }
+  await updateWidgetConfig({ enabled: true })
 
-  const instanceUrl = trimInstanceUrl(getBaseUrl())
+  const instanceUrl = trimTrailingSlash(getBaseUrl())
   return {
     instanceUrl,
     sdkUrl: `${instanceUrl}/api/widget/sdk.js`,
@@ -133,12 +99,6 @@ export interface WidgetInstallStatus {
   sdkNeedsUpdate: boolean
 }
 
-function toIso(value: Date | string | null | undefined): string | null {
-  if (!value) return null
-  if (value instanceof Date) return value.toISOString()
-  return String(value)
-}
-
 /** Read-only install evidence for MCP / admin — never includes the HMAC. */
 export async function getWidgetInstallStatus(): Promise<WidgetInstallStatus> {
   try {
@@ -148,7 +108,7 @@ export async function getWidgetInstallStatus(): Promise<WidgetInstallStatus> {
     return {
       connected,
       enabled: config.enabled === true,
-      lastDetectedAt: toIso(org.widgetInstalledLastSeenAt),
+      lastDetectedAt: toIsoStringOrNull(org.widgetInstalledLastSeenAt),
       originHost: org.widgetInstalledOriginHost ?? null,
       sdkVersion: org.widgetInstalledSdkVersion ?? null,
       currentSdkVersion: CURRENT_WIDGET_SDK_VERSION,

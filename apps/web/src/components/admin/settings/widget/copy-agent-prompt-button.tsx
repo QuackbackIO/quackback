@@ -1,33 +1,46 @@
+import { useEffect, useRef, useState } from 'react'
 import { CheckIcon } from '@heroicons/react/24/solid'
 import { AGENT_BRANDS } from '@/components/admin/settings/widget/agent-brand-icons'
-import { useCopyToClipboard } from '@/lib/client/hooks/use-copy-to-clipboard'
+import { copyWithFallback } from '@/components/admin/activation-action-button'
 import { cn } from '@/lib/shared/utils'
-
-interface CopyAgentPromptButtonProps {
-  /** Static prompt. Ignored when getPrompt is set. */
-  prompt?: string
-  /** Mint a pairing code (or otherwise build the prompt) at click time. */
-  getPrompt?: () => string | Promise<string>
-  className?: string
-  disabled?: boolean
-}
 
 /**
  * Cloudflare-style agent onboard pill: one click copies the install prompt,
  * with brand marks for the agents people actually paste into.
  */
 export function CopyAgentPromptButton({
-  prompt,
   getPrompt,
   className,
   disabled,
-}: CopyAgentPromptButtonProps) {
-  const { copied, copy } = useCopyToClipboard()
+}: {
+  getPrompt: () => string | Promise<string>
+  className?: string
+  disabled?: boolean
+}) {
+  const [copied, setCopied] = useState(false)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(
+    () => () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+    },
+    []
+  )
 
   async function handleClick() {
-    const text = getPrompt ? await getPrompt() : (prompt ?? '')
+    const text = await getPrompt()
     if (!text) return
-    await copy(text)
+    try {
+      await copyWithFallback(text)
+    } catch {
+      return
+    }
+    setCopied(true)
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null
+      setCopied(false)
+    }, 2000)
   }
 
   return (

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const redeemWidgetInstallCode = vi.fn()
-const checkRateLimit = vi.fn()
+const enforcePerIpLimit = vi.fn()
 const pooled = { current: false }
 
 vi.mock('@/lib/server/domains/settings/widget-install-pairing', async (importOriginal) => {
@@ -12,9 +12,13 @@ vi.mock('@/lib/server/domains/settings/widget-install-pairing', async (importOri
     redeemWidgetInstallCode: (...a: unknown[]) => redeemWidgetInstallCode(...a),
   }
 })
-vi.mock('@/lib/server/auth/widget-rate-limit', () => ({
-  checkWidgetInstallContextRateLimit: (...a: unknown[]) => checkRateLimit(...a),
-}))
+vi.mock('@/lib/server/widget/public-endpoint', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/server/widget/public-endpoint')>()
+  return {
+    ...actual,
+    enforcePerIpLimit: (...a: unknown[]) => enforcePerIpLimit(...a),
+  }
+})
 vi.mock('@/lib/server/workspaces/mode', () => ({
   isPooledTenancy: () => pooled.current,
 }))
@@ -23,11 +27,20 @@ vi.mock('@/lib/server/logger', () => ({
 }))
 
 import { handleWidgetInstallContext } from '../install-context'
+import { widgetJsonError } from '@/lib/server/widget/public-endpoint'
 
-function post(body: unknown, url = 'http://127.0.0.1:3020/api/widget/install-context') {
+function post(
+  body: unknown,
+  url = 'http://127.0.0.1:3020/api/widget/install-context',
+  extraHeaders: Record<string, string> = {}
+) {
   return new Request(url, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-forwarded-for': '203.0.113.9' },
+    headers: {
+      'content-type': 'application/json',
+      'x-forwarded-for': '203.0.113.9',
+      ...extraHeaders,
+    },
     body: JSON.stringify(body),
   })
 }
@@ -35,7 +48,7 @@ function post(body: unknown, url = 'http://127.0.0.1:3020/api/widget/install-con
 beforeEach(() => {
   vi.clearAllMocks()
   pooled.current = false
-  checkRateLimit.mockResolvedValue({ allowed: true })
+  enforcePerIpLimit.mockResolvedValue(null)
   redeemWidgetInstallCode.mockResolvedValue({
     instanceUrl: 'https://feedback.example.com',
     sdkUrl: 'https://feedback.example.com/api/widget/sdk.js',
@@ -53,6 +66,14 @@ describe('POST /api/widget/install-context', () => {
       signingSecret: 'wgt_fromredeem',
     })
     expect(redeemWidgetInstallCode).toHaveBeenCalledWith('qbi_validcode12')
+    expect(enforcePerIpLimit).toHaveBeenCalledWith(
+      expect.any(Request),
+      expect.objectContaining({
+        keyPrefix: 'widget:install-context',
+        limit: 20,
+        windowSeconds: 15 * 60,
+      })
+    )
   })
 
   it('rejects an unknown or spent code', async () => {
@@ -63,7 +84,9 @@ describe('POST /api/widget/install-context', () => {
   })
 
   it('rate-limits by IP', async () => {
-    checkRateLimit.mockResolvedValue({ allowed: false, retryAfter: 42 })
+    enforcePerIpLimit.mockResolvedValue(
+      widgetJsonError(429, 'RATE_LIMITED', 'Too many install attempts, try again later')
+    )
     const res = await handleWidgetInstallContext(post({ code: 'qbi_validcode12' }))
     expect(res.status).toBe(429)
     expect(redeemWidgetInstallCode).not.toHaveBeenCalled()
@@ -80,14 +103,18 @@ describe('POST /api/widget/install-context', () => {
   it('allows HTTPS Cloud redeem', async () => {
     pooled.current = true
     const res = await handleWidgetInstallContext(
-      new Request('https://acme.quackback.app/api/widget/install-context', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-forwarded-proto': 'https',
-          'x-forwarded-for': '203.0.113.9',
-        },
-        body: JSON.stringify({ code: 'qbi_validcode12' }),
+      post({ code: 'qbi_validcode12' }, 'https://acme.quackback.app/api/widget/install-context', {
+        'x-forwarded-proto': 'https',
+      })
+    )
+    expect(res.status).toBe(200)
+  })
+
+  it('trusts the first forwarded proto on Cloud', async () => {
+    pooled.current = true
+    const res = await handleWidgetInstallContext(
+      post({ code: 'qbi_validcode12' }, 'http://internal/api/widget/install-context', {
+        'x-forwarded-proto': 'https, http',
       })
     )
     expect(res.status).toBe(200)
