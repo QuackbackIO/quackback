@@ -28,18 +28,169 @@ export const API_KEY_SCOPES = [
 
 export type ApiKeyScope = (typeof API_KEY_SCOPES)[number]
 
+/**
+ * MCP first-connect grant (RFC 9728 `scopes_supported` + 401 `scope=`).
+ * Write scopes stay on the authorization server so a client can step up.
+ */
+export const MCP_FIRST_CONNECT_SCOPES = [
+  'read:feedback',
+  'read:article',
+  'read:chat',
+] as const satisfies readonly ApiKeyScope[]
+
+/** Identity + refresh + the full capability catalogue — AS allow-list. */
+export const MCP_AS_SCOPES = [
+  'openid',
+  'profile',
+  'email',
+  'offline_access',
+  ...API_KEY_SCOPES,
+] as const
+
 /** Shared empty-selection message (zod schema, key service, creation dialog). */
 export const EMPTY_SCOPES_MESSAGE = 'Select at least one scope'
 
-/** Human labels for the key-creation UI checkbox set. */
-export const API_KEY_SCOPE_LABELS: Record<ApiKeyScope, string> = {
-  'read:feedback': 'Read feedback',
-  'write:feedback': 'Write feedback',
-  'write:changelog': 'Write changelog',
-  'read:article': 'Read help center',
-  'write:article': 'Write help center',
-  'read:chat': 'Read conversations',
-  'write:chat': 'Write conversations',
+export type AccessDomainId = 'feedback' | 'changelog' | 'article' | 'chat'
+export type DomainAccessKind = 'read_write' | 'write_only'
+export type DomainAccessLevel = 'off' | 'read' | 'read_write' | 'write'
+export type DomainAccessChip = 'read' | 'read_write' | 'write'
+export type DomainAccessLevels = Record<AccessDomainId, DomainAccessLevel>
+
+export interface AccessDomain {
+  domain: AccessDomainId
+  label: string
+  description: string
+  kind: DomainAccessKind
+  readScope: ApiKeyScope | null
+  writeScope: ApiKeyScope
+}
+
+/**
+ * Picker rows. Feedback / Help Center / Conversations are read-or-read-write;
+ * changelog is write-only (its reads already ride `read:feedback`).
+ */
+export const ACCESS_DOMAINS: readonly AccessDomain[] = [
+  {
+    domain: 'feedback',
+    label: 'Feedback',
+    description: 'Posts, comments, boards, and roadmaps',
+    kind: 'read_write',
+    readScope: 'read:feedback',
+    writeScope: 'write:feedback',
+  },
+  {
+    domain: 'changelog',
+    label: 'Changelog',
+    description: 'Changelog entries and releases',
+    kind: 'write_only',
+    readScope: null,
+    writeScope: 'write:changelog',
+  },
+  {
+    domain: 'article',
+    label: 'Help Center',
+    description: 'Categories and articles',
+    kind: 'read_write',
+    readScope: 'read:article',
+    writeScope: 'write:article',
+  },
+  {
+    domain: 'chat',
+    label: 'Conversations',
+    description: 'Support inbox conversations and messages',
+    kind: 'read_write',
+    readScope: 'read:chat',
+    writeScope: 'write:chat',
+  },
+]
+
+function emptyDomainAccessLevels(): DomainAccessLevels {
+  return { feedback: 'off', changelog: 'off', article: 'off', chat: 'off' }
+}
+
+/** The write sibling of a read scope, when that write exists in the vocabulary. */
+function writeSiblingOfRead(scope: string): ApiKeyScope | null {
+  if (!scope.startsWith('read:')) return null
+  const write = `write:${scope.slice(5)}`
+  return API_KEY_SCOPES.includes(write as ApiKeyScope) ? (write as ApiKeyScope) : null
+}
+
+/**
+ * Issue-time expansion: holding `write:X` also stores `read:X` when that read
+ * exists. `write:changelog` has no sibling read — changelog reads ride
+ * `read:feedback` and are not implied.
+ */
+export function expandWriteGrants(scopes: Iterable<string>): ApiKeyScope[] {
+  const held = new Set(scopes)
+  for (const scope of [...held]) {
+    if (!scope.startsWith('write:')) continue
+    const read = `read:${scope.slice(6)}`
+    if (API_KEY_SCOPES.includes(read as ApiKeyScope)) held.add(read)
+  }
+  return orderScopes(held)
+}
+
+/** Map stored / requested scopes onto picker levels. Write implies read in-UI. */
+export function domainAccessLevels(scopes: Iterable<string>): DomainAccessLevels {
+  const held = new Set(scopes)
+  const levels = emptyDomainAccessLevels()
+  for (const domain of ACCESS_DOMAINS) {
+    if (domain.kind === 'write_only') {
+      levels[domain.domain] = held.has(domain.writeScope) ? 'write' : 'off'
+      continue
+    }
+    if (held.has(domain.writeScope)) levels[domain.domain] = 'read_write'
+    else if (domain.readScope && held.has(domain.readScope)) levels[domain.domain] = 'read'
+  }
+  return levels
+}
+
+/** Inverse of `domainAccessLevels` — `read_write` stores both halves. */
+export function scopesFromDomainLevels(levels: DomainAccessLevels): ApiKeyScope[] {
+  const scopes: string[] = []
+  for (const domain of ACCESS_DOMAINS) {
+    const level = levels[domain.domain]
+    if (level === 'read' && domain.readScope) scopes.push(domain.readScope)
+    if (level === 'read_write') {
+      if (domain.readScope) scopes.push(domain.readScope)
+      scopes.push(domain.writeScope)
+    }
+    if (level === 'write') scopes.push(domain.writeScope)
+  }
+  return orderScopes(scopes)
+}
+
+/**
+ * Chip click: selected chip again → off; Read while Read-and-write → downgrade;
+ * otherwise select the clicked level.
+ */
+export function toggleDomainLevel(
+  current: DomainAccessLevel,
+  chip: DomainAccessChip
+): DomainAccessLevel {
+  if (chip === current) return 'off'
+  return chip
+}
+
+/** One-line list summary. Null scopes = pre-scope-selection key. */
+export function summarizeDomainAccess(scopes: readonly ApiKeyScope[] | null | undefined): string {
+  if (scopes == null) return 'Full access (legacy)'
+  if (scopes.length === 0) return 'No API scopes'
+  const levels = domainAccessLevels(scopes)
+  const allOn = ACCESS_DOMAINS.every((domain) =>
+    domain.kind === 'write_only'
+      ? levels[domain.domain] === 'write'
+      : levels[domain.domain] === 'read_write'
+  )
+  if (allOn) return 'All scopes'
+  const parts: string[] = []
+  for (const domain of ACCESS_DOMAINS) {
+    const level = levels[domain.domain]
+    if (level === 'read') parts.push(`${domain.label} (read)`)
+    else if (level === 'read_write') parts.push(`${domain.label} (read and write)`)
+    else if (level === 'write') parts.push(`${domain.label} (write)`)
+  }
+  return parts.join(', ')
 }
 
 /**
@@ -82,7 +233,6 @@ const CATEGORY_BY_KEY = new Map<PermissionKey, PermissionCategory>(
 /** Verbs that read data without mutating it (`post.export` produces a download). */
 const READ_VERBS = new Set(['view', 'view_private', 'view_all', 'view_draft', 'export'])
 
-/** The scope an API key must hold for a catalogue permission to apply. */
 /**
  * The read scope for a permission category — the capability an app/API key needs
  * to RECEIVE data in that category (an event subscription is a read). Events
@@ -143,12 +293,17 @@ export function orderScopes(scopes: Iterable<string>): ApiKeyScope[] {
   return API_KEY_SCOPES.filter((s) => held.has(s))
 }
 
-/** Whether a key's scope set (null/undefined = legacy full authority) holds a scope. */
-export function hasApiScope(
-  scopes: readonly ApiKeyScope[] | null | undefined,
-  scope: ApiKeyScope
-): boolean {
-  return scopes == null || scopes.includes(scope)
+/**
+ * Whether a key's scope set (null/undefined = legacy full authority) holds a
+ * scope. Same-domain write includes read (`write:feedback` satisfies
+ * `read:feedback`). `write:changelog` does not imply `read:feedback` — there
+ * is no `read:changelog`. Read never implies write.
+ */
+export function hasApiScope(scopes: readonly string[] | null | undefined, scope: string): boolean {
+  if (scopes == null) return true
+  if (scopes.includes(scope)) return true
+  const write = writeSiblingOfRead(scope)
+  return write != null && scopes.includes(write)
 }
 
 /**
@@ -165,5 +320,6 @@ export function permissionsWithinScopes(
   permissions: ReadonlySet<PermissionKey>,
   scopes: ReadonlySet<ApiKeyScope>
 ): Set<PermissionKey> {
-  return new Set([...permissions].filter((p) => scopes.has(scopeForPermission(p))))
+  const held = [...scopes]
+  return new Set([...permissions].filter((p) => hasApiScope(held, scopeForPermission(p))))
 }

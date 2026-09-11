@@ -38,6 +38,7 @@ import {
   type SignInRateLimiter,
 } from './signin-rate-limit'
 import { checkAnonMintRateLimit } from './widget-rate-limit'
+import { isOidcCallbackPath, oidcCallbackProviderId } from './oidc-callback-path'
 import { formatSignInDevice, forgetDevice, isDeviceUnseen } from './signin-device-tracker'
 import {
   deviceCookieAttributes,
@@ -459,10 +460,8 @@ export async function handleSsoCallbackAfter(
    *  Used to resolve the callback provider for the H8 promotion gate. */
   providers: readonly ProviderWithDomains[]
 ): Promise<void> {
-  if (ctx.path !== '/oauth2/callback/:providerId') return
-  const providerId = ctx.params?.providerId
-  if (typeof providerId !== 'string' || !isRegisteredOidcProvider(providerId, registeredOidcIds))
-    return
+  const providerId = oidcCallbackProviderId(ctx)
+  if (!providerId || !isRegisteredOidcProvider(providerId, registeredOidcIds)) return
   const userId = ctx.context?.newSession?.user?.id
   if (typeof userId !== 'string' || userId.length === 0) return
   const email = ctx.context?.newSession?.user?.email
@@ -611,10 +610,8 @@ export async function handleAutoProvisionAfter(
   /** Shared per-callback claim reader. Omitted, falls back to `readSsoClaims`. */
   readClaims?: () => Promise<ClaimRead>
 ): Promise<void> {
-  if (ctx.path !== '/oauth2/callback/:providerId') return
-  const providerId = ctx.params?.providerId
-  if (typeof providerId !== 'string' || !isRegisteredOidcProvider(providerId, registeredOidcIds))
-    return
+  const providerId = oidcCallbackProviderId(ctx)
+  if (!providerId || !isRegisteredOidcProvider(providerId, registeredOidcIds)) return
 
   const userId = ctx.context?.newSession?.user?.id
   const email = ctx.context?.newSession?.user?.email
@@ -801,10 +798,8 @@ export async function handleAvatarBackfillAfter(
   registeredOidcIds: Set<string>,
   providers: IdpRows
 ): Promise<void> {
-  if (ctx.path !== '/oauth2/callback/:providerId') return
-  const providerId = ctx.params?.providerId
-  if (typeof providerId !== 'string' || !isRegisteredOidcProvider(providerId, registeredOidcIds))
-    return
+  const providerId = oidcCallbackProviderId(ctx)
+  if (!providerId || !isRegisteredOidcProvider(providerId, registeredOidcIds)) return
   const userId = ctx.context?.newSession?.user?.id
   if (typeof userId !== 'string' || userId.length === 0) return
   type UserId = `user_${string}`
@@ -1101,11 +1096,6 @@ export async function handleTwoFactorLifecycleAudit(ctx: {
  */
 const CREDENTIAL_FAILURE_PATHS = new Set<string>(['/sign-in/email'])
 const MAGIC_LINK_FAILURE_PATHS = new Set<string>(['/magic-link/verify', '/sign-in/email-otp'])
-/** The genericOAuth callback, as a Better-Auth path TEMPLATE — the concrete
- *  provider id lives in `ctx.params.providerId`, matching `inferProvider`.
- *  A failure here redirects with `?error=<code>` rather than returning a body,
- *  so the reason is read off the Location header. */
-const OIDC_CALLBACK_PATH = '/oauth2/callback/:providerId'
 
 /**
  * Pull the IdP-reported failure code out of the callback's redirect and
@@ -1141,7 +1131,7 @@ export async function handleSignInFailureAudit(ctx: {
   const path = ctx.path ?? ''
   const isCredentialPath = CREDENTIAL_FAILURE_PATHS.has(path)
   const isMagicLinkPath = MAGIC_LINK_FAILURE_PATHS.has(path)
-  const isOidcCallback = path === OIDC_CALLBACK_PATH
+  const isOidcCallback = isOidcCallbackPath(path)
   if (!isCredentialPath && !isMagicLinkPath && !isOidcCallback) return
 
   // If a session was actually created, the success audit handles it.
@@ -1160,7 +1150,7 @@ export async function handleSignInFailureAudit(ctx: {
     actor = { email: null, type: 'user', authMethod: 'sso' }
     metadata = {
       reason: oidcFailureReason(ctx.context?.returned) ?? 'OIDC_SIGNIN_FAILED',
-      providerId: typeof ctx.params?.providerId === 'string' ? ctx.params.providerId : null,
+      providerId: oidcCallbackProviderId(ctx),
     }
   } else {
     // Never log passwords, tokens, or other credential material — only the
@@ -1513,11 +1503,9 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
   // each calling `takeResolvedClaims`.
   let claimsPromise: Promise<ClaimRead> | undefined
   const callbackUserId = ctx.context?.newSession?.user?.id
-  const callbackProviderId = ctx.params?.providerId
+  const callbackProviderId = oidcCallbackProviderId(ctx)
   const readClaims =
-    ctx.path === '/oauth2/callback/:providerId' &&
-    typeof callbackUserId === 'string' &&
-    typeof callbackProviderId === 'string'
+    callbackProviderId !== null && typeof callbackUserId === 'string'
       ? () => {
           if (!claimsPromise) {
             claimsPromise = readSsoClaimsWithProvenance(

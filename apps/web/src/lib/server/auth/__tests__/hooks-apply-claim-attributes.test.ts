@@ -123,6 +123,22 @@ describe('applyClaimAttributesAfter', () => {
     )
   })
 
+  it('writes on the 1.7 social callback path after the legacy URL rewrite', async () => {
+    await applyClaimAttributesAfter(
+      {
+        path: '/callback/:id',
+        params: { id: 'sso' },
+        context: { newSession: { user: { id: 'user_1' } } },
+      },
+      providersWith(),
+      new Set(['sso']),
+      fresh({ department: 'Engineering' })
+    )
+    expect(mockUpdateSet).toHaveBeenCalledWith({
+      metadata: JSON.stringify({ department: 'Engineering' }),
+    })
+  })
+
   it('ignores an unknown attributeKey and creates nothing', async () => {
     await applyClaimAttributesAfter(
       ctxFor(),

@@ -29,6 +29,7 @@ import {
   useAuthBroadcast,
 } from '@/lib/client/hooks/use-auth-broadcast'
 import { authClient } from '@/lib/client/auth-client'
+import { startOidcSignIn } from '@/lib/client/start-oidc-sign-in'
 import { stashSsoAttempt, takeSsoAttempt } from '@/lib/client/sso-attempt-stash'
 import { startProviderLink } from '@/lib/client/start-provider-link'
 import { AUTH_BLOCK_MESSAGES } from '@/lib/server/auth/redirect-errors'
@@ -140,7 +141,7 @@ function OAuthButton({
  *    the form lives inside a dialog).
  *
  *  Stage 2: routed by `lookupAuthMethodsFn` —
- *    - `sso-redirect`     → `authClient.signIn.oauth2(...)` same-tab
+ *    - `sso-redirect`     → `startOidcSignIn(...)` same-tab
  *      (the dialog is closing anyway since the page navigates).
  *    - `sso-default`      → "Workspace uses SSO" card + escape hatch.
  *    - `methods`          → password + magic-link form, email locked.
@@ -382,10 +383,11 @@ export function PortalAuthFormInline({
           email: trimmed,
           callbackUrl: effectiveCallbackUrl,
         })
-        await authClient.signIn.oauth2({
+        await startOidcSignIn({
           providerId: result.providerId,
           callbackURL: effectiveCallbackUrl,
           errorCallbackURL: signinErrorLanding(effectiveCallbackUrl),
+          loginHint: trimmed,
         })
         return
       }
@@ -1062,10 +1064,11 @@ export function PortalAuthFormInline({
                 email: email.trim() || undefined,
                 callbackUrl: effectiveCallbackUrl,
               })
-              await authClient.signIn.oauth2({
+              await startOidcSignIn({
                 providerId: view.providerId,
                 callbackURL: effectiveCallbackUrl,
                 errorCallbackURL: signinErrorLanding(effectiveCallbackUrl),
+                loginHint: email.trim() || undefined,
               })
             } catch (err) {
               setError(

@@ -36,13 +36,25 @@ afterEach(() => {
 })
 
 describe('CreateApiKeyDialog scopes', () => {
-  it('renders a checkbox per scope, all checked by default (legacy-equivalent authority)', () => {
-    const { getAllByRole } = renderDialog()
-    const checkboxes = getAllByRole('checkbox')
-    expect(checkboxes).toHaveLength(API_KEY_SCOPES.length)
-    for (const box of checkboxes) {
-      expect(box.getAttribute('data-state')).toBe('checked')
-    }
+  it('defaults every domain to its maximum level (legacy-equivalent authority)', () => {
+    const { getByRole } = renderDialog()
+    expect(getByRole('button', { name: 'Feedback: Read and write' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+    expect(getByRole('button', { name: 'Help Center: Read and write' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+    expect(getByRole('button', { name: 'Conversations: Read and write' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+    expect(getByRole('button', { name: 'Changelog: Write' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+    expect(getByRole('button', { name: 'Feedback: Read' })).toHaveAttribute('aria-pressed', 'false')
   })
 
   it('submits the selected scopes with the key name', async () => {
@@ -61,7 +73,7 @@ describe('CreateApiKeyDialog scopes', () => {
     })
   })
 
-  it('excludes unchecked scopes from the payload', async () => {
+  it('stores only the three reads after downgrading every domain from Read and write', async () => {
     mockCreateApiKeyFn.mockResolvedValue({
       apiKey: { id: 'api_key_1', name: 'Read bot' },
       plainTextKey: 'qb_secret',
@@ -69,24 +81,24 @@ describe('CreateApiKeyDialog scopes', () => {
     const { getByLabelText, getByRole, onKeyCreated } = renderDialog()
 
     fireEvent.change(getByLabelText('Name'), { target: { value: 'Read bot' } })
-    for (const scope of API_KEY_SCOPES) {
-      if (scope.startsWith('write:')) {
-        fireEvent.click(getByRole('checkbox', { name: new RegExp(scope) }))
-      }
-    }
+    fireEvent.click(getByRole('button', { name: 'Feedback: Read' }))
+    fireEvent.click(getByRole('button', { name: 'Help Center: Read' }))
+    fireEvent.click(getByRole('button', { name: 'Conversations: Read' }))
+    fireEvent.click(getByRole('button', { name: 'Changelog: Write' }))
     fireEvent.click(getByRole('button', { name: 'Create Key' }))
 
     await waitFor(() => expect(onKeyCreated).toHaveBeenCalled())
     const sent = mockCreateApiKeyFn.mock.calls[0][0].data.scopes as string[]
-    expect(sent.sort()).toEqual(['read:article', 'read:chat', 'read:feedback'])
+    expect(sent).toEqual(['read:feedback', 'read:article', 'read:chat'])
   })
 
-  it('disables submit when every scope is unchecked', () => {
-    const { getByLabelText, getByRole, getAllByRole } = renderDialog()
+  it('disables submit when every domain is off', () => {
+    const { getByLabelText, getByRole } = renderDialog()
     fireEvent.change(getByLabelText('Name'), { target: { value: 'k' } })
-    for (const box of getAllByRole('checkbox')) {
-      fireEvent.click(box)
-    }
+    fireEvent.click(getByRole('button', { name: 'Feedback: Read and write' }))
+    fireEvent.click(getByRole('button', { name: 'Help Center: Read and write' }))
+    fireEvent.click(getByRole('button', { name: 'Conversations: Read and write' }))
+    fireEvent.click(getByRole('button', { name: 'Changelog: Write' }))
     expect(getByRole('button', { name: 'Create Key' })).toBeDisabled()
     expect(mockCreateApiKeyFn).not.toHaveBeenCalled()
   })

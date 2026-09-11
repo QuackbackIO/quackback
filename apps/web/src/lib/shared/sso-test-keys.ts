@@ -35,3 +35,13 @@ export const SSO_TEST_POSTMESSAGE_SOURCE = 'quackback-sso-test' as const
  * — a KV miss for the OAuth `state` still falls through cleanly.
  */
 export const SSO_OAUTH_CALLBACK_PREFIX = '/api/auth/oauth2/callback/' as const
+
+/** Better Auth 1.7 social-path callback. SSO test also intercepts this. */
+export const SSO_SOCIAL_CALLBACK_PREFIX = '/api/auth/callback/' as const
+
+export function isSsoTestCallbackPath(pathname: string): boolean {
+  return (
+    pathname.startsWith(SSO_OAUTH_CALLBACK_PREFIX) ||
+    pathname.startsWith(SSO_SOCIAL_CALLBACK_PREFIX)
+  )
+}

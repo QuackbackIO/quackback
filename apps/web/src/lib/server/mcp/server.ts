@@ -6,6 +6,7 @@
  */
 
 import { McpServer, type ReadResourceCallback } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { hasApiScope } from '@/lib/server/domains/api-keys/api-key-scopes'
 import { registerTools } from './tools'
 import type { McpAuthContext, McpScope } from './types'
 
@@ -33,7 +34,7 @@ function scopeGated(
   fn: ReadResourceCallback
 ): ReadResourceCallback {
   return async (uri, extra) => {
-    if (!auth.scopes.includes(scope)) {
+    if (!hasApiScope(auth.scopes, scope)) {
       return {
         contents: [
           {

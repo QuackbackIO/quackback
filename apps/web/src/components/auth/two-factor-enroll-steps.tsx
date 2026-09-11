@@ -32,9 +32,12 @@ export function TwoFactorEnrollSteps({
   useEffect(() => {
     let cancelled = false
     async function start() {
-      const { data, error: betterErr } = await authClient.twoFactor.enable({ password })
+      const { data, error: betterErr } = await authClient.twoFactor.enable({
+        password,
+        method: 'totp',
+      })
       if (cancelled) return
-      if (betterErr || !data) {
+      if (betterErr || !data || !('totpURI' in data) || !data.totpURI) {
         setError(betterErr?.message ?? 'Could not start 2FA setup.')
         return
       }

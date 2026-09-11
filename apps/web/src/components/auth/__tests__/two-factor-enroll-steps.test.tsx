@@ -57,7 +57,7 @@ beforeEach(() => {
 describe('TwoFactorEnrollSteps', () => {
   it('enables on mount and renders the QR step', async () => {
     render(<TwoFactorEnrollSteps password="pw" onComplete={() => {}} onCancel={() => {}} />)
-    await waitFor(() => expect(mockEnable).toHaveBeenCalledWith({ password: 'pw' }))
+    await waitFor(() => expect(mockEnable).toHaveBeenCalledWith({ password: 'pw', method: 'totp' }))
     expect(await screen.findByAltText(/QR code/i)).toBeInTheDocument()
   })
 

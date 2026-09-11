@@ -1,5 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { SSO_OAUTH_CALLBACK_PREFIX } from '@/lib/shared/sso-test-keys'
+import { isSsoTestCallbackPath } from '@/lib/shared/sso-test-keys'
+import {
+  mcpDcrRedirectUrisToRestore,
+  mcpDcrRegistrationBody,
+  restoreMcpDcrRegisteredRedirectUris,
+} from '@/lib/server/auth/mcp-dcr-scopes'
 import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 
 /**
@@ -45,7 +50,7 @@ export const Route = createFileRoute('/api/auth/$')({
         // Intercept any genericOAuth callback before Better-Auth: a hit on
         // `sso-test:<state>` in the KV store means this is an admin test sign-in;
         // a miss returns null and falls through to the real OAuth handler.
-        if (url.pathname.startsWith(SSO_OAUTH_CALLBACK_PREFIX)) {
+        if (isSsoTestCallbackPath(url.pathname)) {
           const { handleSsoTestCallback, renderSsoTestCallbackHtml } =
             await import('@/lib/server/auth/sso-test-callback')
           const handled = await handleSsoTestCallback({
@@ -70,8 +75,11 @@ export const Route = createFileRoute('/api/auth/$')({
           }
         }
 
+        const { rewriteLegacyOAuthCallback } =
+          await import('@/lib/server/auth/legacy-oauth-callback')
+        const { rewriteMcpAuthorizeRequest } = await import('@/lib/shared/mcp-consent-scopes')
         const { auth } = await import('@/lib/server/auth/index')
-        return await auth.handler(request)
+        return await auth.handler(rewriteMcpAuthorizeRequest(rewriteLegacyOAuthCallback(request)))
       },
 
       /**
@@ -80,6 +88,7 @@ export const Route = createFileRoute('/api/auth/$')({
        */
       POST: async ({ request }) => {
         const url = new URL(request.url)
+        let restoreRedirectUris: string[] | null = null
 
         // Rate-limit OAuth dynamic client registration to prevent spam/phishing
         if (url.pathname.endsWith('/oauth2/register')) {
@@ -89,11 +98,26 @@ export const Route = createFileRoute('/api/auth/$')({
               { status: 429 }
             )
           }
+          // Persist the full AS allow-list on the client row so a later
+          // step-up authorize can request writes without `invalid_scope`.
+          // Also coerce MCP DCR to native and swap Cursor's `cursor://`
+          // callback for a Better Auth 1.7-accepted loopback, then restore
+          // the real URIs after registration (authorize exact-matches).
+          const contentType = request.headers.get('content-type') ?? ''
+          if (contentType.includes('application/json')) {
+            const body = (await request.json()) as Record<string, unknown>
+            restoreRedirectUris = mcpDcrRedirectUrisToRestore(body)
+            request = new Request(request.url, {
+              method: request.method,
+              headers: request.headers,
+              body: JSON.stringify(mcpDcrRegistrationBody(body)),
+            })
+          }
         }
 
         // Ensure `resource` is present in token exchange requests.
         // Without it, better-auth issues opaque tokens instead of JWTs,
-        // breaking `verifyAccessToken` in the MCP handler.
+        // breaking `verifyAccessTokenRequest` in the MCP handler.
         // Reading the body consumes the stream, so we always reconstruct
         // the request to avoid passing a consumed body to better-auth.
         if (url.pathname.endsWith('/oauth2/token')) {
@@ -113,8 +137,17 @@ export const Route = createFileRoute('/api/auth/$')({
           }
         }
 
+        const { rewriteLegacyOAuthCallback } =
+          await import('@/lib/server/auth/legacy-oauth-callback')
+        const { rewriteMcpAuthorizeRequest } = await import('@/lib/shared/mcp-consent-scopes')
         const { auth } = await import('@/lib/server/auth/index')
-        return await auth.handler(request)
+        const response = await auth.handler(
+          rewriteMcpAuthorizeRequest(rewriteLegacyOAuthCallback(request))
+        )
+        if (restoreRedirectUris && response.ok) {
+          return restoreMcpDcrRegisteredRedirectUris(response, restoreRedirectUris)
+        }
+        return response
       },
     },
   },

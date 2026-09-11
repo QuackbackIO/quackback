@@ -17,7 +17,12 @@ vi.mock('@/lib/server/domains/api-keys/api-key.service', () => ({
 }))
 
 vi.mock('better-auth/oauth2', () => ({
-  verifyAccessToken: vi.fn(),
+  verifyAccessTokenRequest: vi.fn(),
+  requestToResourceInput: vi.fn((request: Request) => ({
+    authorizationHeader: request.headers.get('authorization'),
+    method: request.method,
+    url: request.url,
+  })),
 }))
 
 const mockFindFirst = vi.fn()
@@ -387,8 +392,8 @@ function oauthRequest(body: unknown, token = 'oauth_test_token_abc123'): Request
 /** Set up mocks for a valid OAuth JWT verification. */
 async function setupValidOAuth(overrides?: { role?: string; scopes?: string[] }) {
   const role = overrides?.role ?? 'admin'
-  const { verifyAccessToken } = await import('better-auth/oauth2')
-  vi.mocked(verifyAccessToken).mockResolvedValue({
+  const { verifyAccessTokenRequest } = await import('better-auth/oauth2')
+  vi.mocked(verifyAccessTokenRequest).mockResolvedValue({
     sub: MOCK_USER_ID,
     principalId: MOCK_MEMBER_ID,
     role,
@@ -423,7 +428,9 @@ describe('MCP HTTP Handler', () => {
 
       const response = await handleMcpRequest(request)
       expect(response.status).toBe(401)
-      expect(response.headers.get('www-authenticate')).toContain('resource_metadata=')
+      const challenge = response.headers.get('www-authenticate') ?? ''
+      expect(challenge).toContain('resource_metadata=')
+      expect(challenge).toContain('scope="read:feedback read:article read:chat"')
     })
 
     it('should return 401 when API key is invalid', async () => {
@@ -521,8 +528,8 @@ describe('MCP HTTP Handler', () => {
     })
 
     it('should return 401 for expired OAuth token', async () => {
-      const { verifyAccessToken } = await import('better-auth/oauth2')
-      vi.mocked(verifyAccessToken).mockRejectedValue(new Error('token expired'))
+      const { verifyAccessTokenRequest } = await import('better-auth/oauth2')
+      vi.mocked(verifyAccessTokenRequest).mockRejectedValue(new Error('token expired'))
 
       const { handleMcpRequest } = await import('../handler')
       const response = await handleMcpRequest(oauthRequest(jsonRpcRequest('initialize')))
@@ -531,8 +538,8 @@ describe('MCP HTTP Handler', () => {
     })
 
     it('should return 401 for invalid OAuth token', async () => {
-      const { verifyAccessToken } = await import('better-auth/oauth2')
-      vi.mocked(verifyAccessToken).mockRejectedValue(new Error('token invalid'))
+      const { verifyAccessTokenRequest } = await import('better-auth/oauth2')
+      vi.mocked(verifyAccessTokenRequest).mockRejectedValue(new Error('token invalid'))
 
       const { handleMcpRequest } = await import('../handler')
       const response = await handleMcpRequest(oauthRequest(jsonRpcRequest('initialize')))
@@ -1604,7 +1611,7 @@ describe('MCP HTTP Handler', () => {
       return handleMcpRequest
     }
 
-    it('should deny search when read:feedback scope missing', async () => {
+    it('should allow search when the token holds write:feedback (write implies read)', async () => {
       const handleMcpRequest = await initializeOAuthSession(['write:feedback'])
 
       const response = await handleMcpRequest(
@@ -1618,10 +1625,27 @@ describe('MCP HTTP Handler', () => {
 
       expect(response.status).toBe(200)
       const body = (await response.json()) as {
-        result: { isError: boolean; content: Array<{ text: string }> }
+        result: { isError?: boolean; content: Array<{ text: string }> }
       }
-      expect(body.result.isError).toBe(true)
-      expect(body.result.content[0].text).toContain('read:feedback')
+      expect(body.result.isError).not.toBe(true)
+      expect(body.result.content[0].text).toContain('posts')
+    })
+
+    it('should deny search when read:feedback scope missing', async () => {
+      const handleMcpRequest = await initializeOAuthSession(['write:changelog'])
+
+      const response = await handleMcpRequest(
+        oauthRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'search',
+            arguments: { query: 'test' },
+          })
+        )
+      )
+
+      expect(response.status).toBe(403)
+      expect(response.headers.get('www-authenticate') ?? '').toContain('error="insufficient_scope"')
+      expect(response.headers.get('www-authenticate') ?? '').toContain('scope="read:feedback"')
     })
 
     it('should deny create_post when write:feedback scope missing', async () => {
@@ -1636,12 +1660,9 @@ describe('MCP HTTP Handler', () => {
         )
       )
 
-      expect(response.status).toBe(200)
-      const body = (await response.json()) as {
-        result: { isError: boolean; content: Array<{ text: string }> }
-      }
-      expect(body.result.isError).toBe(true)
-      expect(body.result.content[0].text).toContain('write:feedback')
+      expect(response.status).toBe(403)
+      expect(response.headers.get('www-authenticate') ?? '').toContain('error="insufficient_scope"')
+      expect(response.headers.get('www-authenticate') ?? '').toContain('scope="write:feedback"')
     })
 
     it('should deny create_changelog when write:changelog scope missing', async () => {
@@ -1656,12 +1677,25 @@ describe('MCP HTTP Handler', () => {
         )
       )
 
-      expect(response.status).toBe(200)
-      const body = (await response.json()) as {
-        result: { isError: boolean; content: Array<{ text: string }> }
-      }
-      expect(body.result.isError).toBe(true)
-      expect(body.result.content[0].text).toContain('write:changelog')
+      expect(response.status).toBe(403)
+      expect(response.headers.get('www-authenticate') ?? '').toContain('scope="write:changelog"')
+    })
+
+    it('should deny search(articles) when read:article scope missing', async () => {
+      const handleMcpRequest = await initializeOAuthSession(['read:feedback'])
+
+      const response = await handleMcpRequest(
+        oauthRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'search',
+            arguments: { query: 'test', entity: 'articles' },
+          })
+        )
+      )
+
+      expect(response.status).toBe(403)
+      expect(response.headers.get('www-authenticate') ?? '').toContain('error="insufficient_scope"')
+      expect(response.headers.get('www-authenticate') ?? '').toContain('scope="read:article"')
     })
 
     it('should allow search with read:feedback scope', async () => {
@@ -1728,12 +1762,8 @@ describe('MCP HTTP Handler', () => {
         )
       )
 
-      expect(response.status).toBe(200)
-      const body = (await response.json()) as {
-        result: { isError: boolean; content: Array<{ text: string }> }
-      }
-      expect(body.result.isError).toBe(true)
-      expect(body.result.content[0].text).toContain('write:feedback')
+      expect(response.status).toBe(403)
+      expect(response.headers.get('www-authenticate') ?? '').toContain('scope="write:feedback"')
     })
 
     it('should deny restore_post when write:feedback scope missing', async () => {
@@ -1748,12 +1778,8 @@ describe('MCP HTTP Handler', () => {
         )
       )
 
-      expect(response.status).toBe(200)
-      const body = (await response.json()) as {
-        result: { isError: boolean; content: Array<{ text: string }> }
-      }
-      expect(body.result.isError).toBe(true)
-      expect(body.result.content[0].text).toContain('write:feedback')
+      expect(response.status).toBe(403)
+      expect(response.headers.get('www-authenticate') ?? '').toContain('scope="write:feedback"')
     })
 
     it('should deny search posts for OAuth portal user (inbox is team-only)', async () => {
@@ -2143,6 +2169,26 @@ describe('MCP HTTP Handler', () => {
       expect(body.result.content[0].text).toContain('write:changelog')
     })
 
+    it('a write-only scoped API key can still invoke same-domain read tools', async () => {
+      const handleMcpRequest = await initializeScopedKeySession(['write:feedback'])
+
+      const response = await handleMcpRequest(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'search',
+            arguments: { query: 'test' },
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { isError?: boolean; content: Array<{ text: string }> }
+      }
+      expect(body.result.isError).not.toBe(true)
+      expect(body.result.content[0].text).toContain('posts')
+    })
+
     it('a read-only scoped API key can still invoke read tools', async () => {
       const handleMcpRequest = await initializeScopedKeySession(['read:feedback'])
 
@@ -2490,12 +2536,9 @@ describe('MCP HTTP Handler', () => {
         )
       )
 
-      expect(response.status).toBe(200)
-      const body = (await response.json()) as {
-        result: { isError: boolean; content: Array<{ text: string }> }
-      }
-      expect(body.result.isError).toBe(true)
-      expect(body.result.content[0].text).toContain('write:chat')
+      expect(response.status).toBe(403)
+      expect(response.headers.get('www-authenticate') ?? '').toContain('error="insufficient_scope"')
+      expect(response.headers.get('www-authenticate') ?? '').toContain('scope="write:chat"')
     })
 
     it('should deny share_post when write:chat scope missing', async () => {
@@ -2526,12 +2569,8 @@ describe('MCP HTTP Handler', () => {
         )
       )
 
-      expect(response.status).toBe(200)
-      const body = (await response.json()) as {
-        result: { isError: boolean; content: Array<{ text: string }> }
-      }
-      expect(body.result.isError).toBe(true)
-      expect(body.result.content[0].text).toContain('write:chat')
+      expect(response.status).toBe(403)
+      expect(response.headers.get('www-authenticate') ?? '').toContain('scope="write:chat"')
     })
 
     it('should deny reply_to_conversation when write:chat scope missing', async () => {
@@ -2563,12 +2602,8 @@ describe('MCP HTTP Handler', () => {
         )
       )
 
-      expect(response.status).toBe(200)
-      const body = (await response.json()) as {
-        result: { isError: boolean; content: Array<{ text: string }> }
-      }
-      expect(body.result.isError).toBe(true)
-      expect(body.result.content[0].text).toContain('write:chat')
+      expect(response.status).toBe(403)
+      expect(response.headers.get('www-authenticate') ?? '').toContain('scope="write:chat"')
     })
 
     it('should deny list_conversations for OAuth portal user (role enforcement)', async () => {

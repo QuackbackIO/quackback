@@ -13,6 +13,7 @@ import {
 } from '@/lib/shared/plan-claim-attribute-writes'
 import { logger } from '@/lib/server/logger'
 import { readSsoClaimsWithProvenance, type ClaimRead } from './read-sso-claims'
+import { oidcCallbackProviderId } from './oidc-callback-path'
 
 export { planClaimAttributeWrites }
 export type { AttributeDefinition }
@@ -44,11 +45,9 @@ export async function applyClaimAttributesAfter(
   registeredOidcIds: Set<string>,
   readClaims?: () => Promise<ClaimRead>
 ): Promise<void> {
-  if (ctx.path !== '/oauth2/callback/:providerId') return
-  const providerId = ctx.params?.providerId
+  const providerId = oidcCallbackProviderId(ctx)
   const { isRegisteredOidcProvider } = await import('./provider-ids')
-  if (typeof providerId !== 'string' || !isRegisteredOidcProvider(providerId, registeredOidcIds))
-    return
+  if (!providerId || !isRegisteredOidcProvider(providerId, registeredOidcIds)) return
 
   const userId = ctx.context?.newSession?.user?.id
   if (typeof userId !== 'string') return

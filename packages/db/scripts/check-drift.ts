@@ -226,6 +226,13 @@ const EXEMPTIONS: { reason: string; pattern: RegExp; optional?: boolean }[] = [
       /^ALTER TABLE "apps" ALTER COLUMN "(granted_scopes|subscribed_event_types)" SET DEFAULT '\{\}';?$/,
   },
   {
+    // Same empty text[] default false positive as apps / invitation
+    // (0279 Better Auth 1.7 oauth_client.client_credentials_scopes).
+    reason: 'drizzle-kit false positive: empty text[] default reads back as \'{""}\'',
+    pattern:
+      /^ALTER TABLE "oauth_client" ALTER COLUMN "client_credentials_scopes" SET DEFAULT '\{\}';?$/,
+  },
+  {
     // The settings.assistant_config jsonb default (0204) is byte-identical in TS,
     // but postgres normalizes the stored jsonb literal (spacing/formatting) so
     // drizzle-kit's introspected default never string-matches the TS default.

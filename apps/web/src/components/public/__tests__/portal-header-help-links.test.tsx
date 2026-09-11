@@ -59,7 +59,7 @@ vi.mock('@/lib/client/hooks/use-auth-broadcast', () => ({
 
 vi.mock('@/lib/client/auth-client', () => ({
   signOut: vi.fn(),
-  authClient: { signIn: { oauth2: vi.fn() } },
+  authClient: { signIn: { social: vi.fn() } },
 }))
 
 vi.mock('@/components/notifications', () => ({

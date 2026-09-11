@@ -4,7 +4,7 @@ import { FormattedMessage, useIntl } from 'react-intl'
 import { Button } from '@/components/ui/button'
 import { PortalAuthFormInline } from '@/components/auth/portal-auth-form-inline'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
-import { authClient } from '@/lib/client/auth-client'
+import { startOidcSignIn } from '@/lib/client/start-oidc-sign-in'
 import type { WorkspaceClaim } from '@/lib/server/functions/onboarding'
 import type { OidcSignInButton } from '@/lib/shared/oidc-sign-in-button'
 
@@ -241,7 +241,7 @@ function SsoStep() {
     setSsoRedirecting(true)
     setError('')
     try {
-      const result = await authClient.signIn.oauth2({
+      const result = await startOidcSignIn({
         providerId: 'sso',
         callbackURL: ONBOARDING_CALLBACK,
       })

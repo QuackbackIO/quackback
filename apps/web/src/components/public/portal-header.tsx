@@ -10,7 +10,8 @@ import { useIntl, FormattedMessage } from 'react-intl'
 import { cn } from '@/lib/shared/utils'
 import { isTeamMember, Role } from '@/lib/shared/roles'
 import { Button } from '@/components/ui/button'
-import { signOut, authClient } from '@/lib/client/auth-client'
+import { signOut } from '@/lib/client/auth-client'
+import { startOidcSignIn } from '@/lib/client/start-oidc-sign-in'
 import { stashSsoAttempt } from '@/lib/client/sso-attempt-stash'
 import { signinErrorLanding } from '@/lib/shared/auth-prompt'
 import {
@@ -194,7 +195,7 @@ export function PortalHeader({
       providerType: 'oidc',
       callbackUrl: pathname,
     })
-    void authClient.signIn.oauth2({
+    void startOidcSignIn({
       providerId: soleOidcProviderId,
       callbackURL: pathname,
       errorCallbackURL: signinErrorLanding(pathname),

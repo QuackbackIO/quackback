@@ -280,6 +280,8 @@ describe('the real corpus', () => {
     // A replay preserves widened constraints, workspace customizations and revisions.
     // 0277 rewrites leftover widget `chat` keys and inserts chat-only macros
     // that are not already present, so a second run writes zero rows.
+    // 0279 wraps oauth_client backfills, the oauth_client_resource FK rewrite,
+    // and the Microsoft oid rewrite so each second run writes zero rows.
     const vouching = files.filter(
       (f) => assessReplaySafety(f, readFileSync(join(MIGRATIONS_DIR, f), 'utf8')).vouched.length > 0
     )
@@ -292,6 +294,7 @@ describe('the real corpus', () => {
       '0269_messenger_ai_default_on.sql',
       '0274_slack_agent_gateway.sql',
       '0277_widget_chat_to_messenger.sql',
+      '0279_better_auth_17.sql',
     ])
   })
 

@@ -36,8 +36,10 @@ export type AuthBlockCode =
   // generic-oauth plugin and the linking pipeline). These arrive as
   // `?error=<code>` on the errorCallbackURL, not from our pre-checks.
   | 'account_not_linked'
-  // Better-Auth emits this code with a literal apostrophe.
+  // Better Auth 1.7 renamed the apostrophe spelling; keep both so a
+  // leftover 1.6 redirect or a mixed-version hop still renders.
   | "email_doesn't_match"
+  | 'email_does_not_match'
   | 'account_already_linked_to_different_user'
   | 'unable_to_link_account'
   | 'email_is_missing'
@@ -84,6 +86,8 @@ export const AUTH_BLOCK_MESSAGES: Record<AuthBlockCode, string> = {
   account_not_linked:
     'An account with this email already exists. Sign in with your original method (for example an emailed sign-in link) to confirm it, and your SSO login will be connected.',
   "email_doesn't_match":
+    'The identity provider returned a different email than your account. Sign in with an IdP account that uses the same email address.',
+  email_does_not_match:
     'The identity provider returned a different email than your account. Sign in with an IdP account that uses the same email address.',
   account_already_linked_to_different_user:
     'That identity is already connected to a different account. Sign in with a different IdP account, or contact your administrator.',

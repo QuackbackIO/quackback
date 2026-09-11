@@ -2,7 +2,6 @@ import { createAuthClient } from 'better-auth/client'
 import {
   anonymousClient,
   emailOTPClient,
-  genericOAuthClient,
   magicLinkClient,
   oneTimeTokenClient,
   twoFactorClient,
@@ -32,7 +31,6 @@ export const authClient = createAuthClient({
   plugins: [
     anonymousClient(),
     emailOTPClient(),
-    genericOAuthClient(),
     magicLinkClient(),
     oneTimeTokenClient(),
     twoFactorClient({

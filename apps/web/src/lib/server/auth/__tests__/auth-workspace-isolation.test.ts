@@ -78,32 +78,44 @@ describe('OTP stash', () => {
 
 describe('rate-limit counters', () => {
   const key = '203.0.113.9/sign-in/email'
+  const rule = { window: 60, max: 2 }
 
   it('counts each workspace separately for the same IP and path', async () => {
     await withWorkspace('workspace-alpha', async () => {
       __resetRateLimitCountersForWorkspace()
-      await workspaceRateLimitStorage.set(key, { key, count: 3, lastRequest: 1_000 })
+      expect(await workspaceRateLimitStorage.consume(key, rule)).toEqual({
+        allowed: true,
+        retryAfter: null,
+      })
+      expect(await workspaceRateLimitStorage.consume(key, rule)).toEqual({
+        allowed: true,
+        retryAfter: null,
+      })
+      expect((await workspaceRateLimitStorage.consume(key, rule)).allowed).toBe(false)
     })
     await withWorkspace('workspace-bravo', async () => {
       __resetRateLimitCountersForWorkspace()
-      await workspaceRateLimitStorage.set(key, { key, count: 1, lastRequest: 2_000 })
+      expect(await workspaceRateLimitStorage.consume(key, rule)).toEqual({
+        allowed: true,
+        retryAfter: null,
+      })
     })
-
-    const alpha = await withWorkspace('workspace-alpha', () => workspaceRateLimitStorage.get(key))
-    const bravo = await withWorkspace('workspace-bravo', () => workspaceRateLimitStorage.get(key))
-
-    expect(alpha?.count).toBe(3)
-    expect(bravo?.count).toBe(1)
   })
 
   it('does not let one workspace see another workspace-only counter', async () => {
     await withWorkspace('workspace-charlie', async () => {
       __resetRateLimitCountersForWorkspace()
-      await workspaceRateLimitStorage.set(key, { key, count: 9, lastRequest: 5_000 })
+      await workspaceRateLimitStorage.consume(key, { window: 60, max: 1 })
+      expect((await workspaceRateLimitStorage.consume(key, { window: 60, max: 1 })).allowed).toBe(
+        false
+      )
     })
 
     expect(
-      await withWorkspace('workspace-delta', () => workspaceRateLimitStorage.get(key))
-    ).toBeNull()
+      await withWorkspace('workspace-delta', async () => {
+        const first = await workspaceRateLimitStorage.consume(key, { window: 60, max: 1 })
+        return first.allowed
+      })
+    ).toBe(true)
   })
 })

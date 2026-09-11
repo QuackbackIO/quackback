@@ -2,7 +2,7 @@ import type { Control, FieldValues, Path } from 'react-hook-form'
 import { FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form'
 
 interface TitleInputProps<T extends FieldValues = FieldValues> {
-  control: Control<T>
+  control: Control<T, unknown, any>
   name?: Path<T>
   placeholder?: string
   autoFocus?: boolean
