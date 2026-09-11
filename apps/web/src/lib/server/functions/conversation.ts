@@ -242,7 +242,9 @@ const startConversationSchema = z.object({
 
 const agentNoteSchema = z.object({
   conversationId: z.string(),
-  content: z.string().min(1).max(MAX_CONVERSATION_MESSAGE_LENGTH),
+  // Empty is allowed only with attachments — same rule as replies; the
+  // service's validateContent enforces it.
+  content: z.string().max(MAX_CONVERSATION_MESSAGE_LENGTH).default(''),
   // TipTap doc from the note editor (carries @-mention nodes). Validated +
   // mention-extracted server-side; omitted for a plain-text note.
   contentJson: z.unknown().nullable().optional(),

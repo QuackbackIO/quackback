@@ -873,11 +873,11 @@ export async function addAgentNote(
 ): Promise<SendAgentMessageResult> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
-  const content = validateContent(rawContent)
   const noteAttachments =
     attachments && attachments.length > 0
       ? attachments.slice(0, MAX_CONVERSATION_ATTACHMENTS)
       : null
+  const content = validateContent(rawContent, (noteAttachments?.length ?? 0) > 0)
 
   // Sanitize on write (Layer 1), like every other TipTap-doc path (comments,
   // posts, changelog). Drops disallowed nodes/attrs + caps depth, so a tampered

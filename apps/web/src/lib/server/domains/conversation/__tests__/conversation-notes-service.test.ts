@@ -258,4 +258,27 @@ describe('addAgentNote', () => {
     )
     expect(insertedMessages).toHaveLength(0)
   })
+
+  it('accepts an image-only note the tray can now send', async () => {
+    await addAgentNote(conversationId, '', agent, agentActor, null, [
+      {
+        url: '/api/storage/chat-images/shot.png',
+        name: 'shot.png',
+        contentType: 'image/png',
+        size: 10,
+      },
+    ])
+    expect(insertedMessages[0]).toMatchObject({
+      content: '',
+      isInternal: true,
+      attachments: [
+        {
+          url: '/api/storage/chat-images/shot.png',
+          name: 'shot.png',
+          contentType: 'image/png',
+          size: 10,
+        },
+      ],
+    })
+  })
 })
