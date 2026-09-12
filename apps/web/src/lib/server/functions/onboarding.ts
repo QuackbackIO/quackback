@@ -212,6 +212,7 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
       )
       const session = await getSession()
       if (!session?.user) throw new Error('Authentication required')
+      if (session.session.scope !== 'dashboard') throw new Error('Only admin can change setup')
 
       const workspaceName = data.workspaceName.trim()
       const slug = slugify(workspaceName)
@@ -354,6 +355,7 @@ export const saveCloudOnboardingGoalFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const session = await getSession()
     if (!session?.user) throw new Error('Authentication required')
+    if (session.session.scope !== 'dashboard') throw new Error('Only admin can change setup')
     const caller = await db.query.principal.findFirst({
       where: eq(principal.userId, session.user.id as UserId),
     })

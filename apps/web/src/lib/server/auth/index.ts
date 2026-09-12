@@ -531,6 +531,9 @@ async function createAuth() {
       storeSessionInDatabase: true,
       expiresIn: 60 * 60 * 24 * 7, // 7 days
       updateAge: 60 * 60 * 24, // Update session every 24 hours
+      additionalFields: {
+        scope: { type: 'string', required: false, input: false, defaultValue: 'dashboard' },
+      },
     },
 
     advanced: {
@@ -607,6 +610,16 @@ async function createAuth() {
                   log.error({ err }, 'failed to auto-subscribe to changelog on signup')
                 )
               }
+            }
+          },
+        },
+      },
+      session: {
+        create: {
+          // Only the widget's lazy anonymous mint; everything else is a dashboard sign-in.
+          before: async (sessionData, context) => {
+            if (context?.path === '/sign-in/anonymous') {
+              return { data: { ...sessionData, scope: 'widget' } }
             }
           },
         },

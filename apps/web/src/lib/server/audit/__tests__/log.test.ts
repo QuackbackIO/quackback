@@ -214,6 +214,7 @@ describe('actorFromAuth', () => {
       principal: { id: 'principal_admin1' as never, role: 'admin', type: 'user' },
       settings: { id: 'workspace_1' as never, slug: 's', name: 'n', logoKey: null },
       permissions: [],
+      scope: 'dashboard',
     })
 
     expect(actor).toEqual({

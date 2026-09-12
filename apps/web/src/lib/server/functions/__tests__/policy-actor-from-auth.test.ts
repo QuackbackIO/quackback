@@ -51,6 +51,7 @@ function buildAuth(overrides: {
       type: overrides.principalType ?? 'user',
     },
     permissions: overrides.permissions ?? [],
+    scope: 'dashboard',
   }
 }
 

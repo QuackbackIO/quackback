@@ -3,7 +3,7 @@
  * and update portal access settings (admin only).
  */
 import { z } from 'zod'
-import type { Role } from '@/lib/shared/roles'
+import { sessionRole, toSessionScope, type Role } from '@/lib/shared/roles'
 import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
 import type { UserId, PrincipalId, SegmentId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -103,7 +103,10 @@ export const resolvePortalAccessForRequest = createServerOnlyFn(
         if (principalRecord?.type === 'anonymous') {
           isAnonymousPrincipal = true
         }
-        role = (principalRecord?.role as Role | null) ?? null
+        const rawRole = (principalRecord?.role as Role | null) ?? null
+        // Non-dashboard audiences are portal-tier: a promoted principal on a
+        // widget/portal session must not take the evaluator's team branch.
+        role = rawRole ? sessionRole(rawRole, toSessionScope(session.session.scope)) : null
         resolvedPrincipalId = principalRecord?.id ?? null
       }
     }

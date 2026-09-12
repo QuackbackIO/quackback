@@ -1800,6 +1800,13 @@
       "when": 1789117200000,
       "tag": "0279_better_auth_17",
       "breakpoints": true
+    },
+    {
+      "idx": 257,
+      "version": "7",
+      "when": 1789166954246,
+      "tag": "0280_widget_session_scope",
+      "breakpoints": true
     }
   ]
 }

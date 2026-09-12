@@ -136,7 +136,10 @@ const { bootstrapAdminLock } = await import('@/lib/server/domains/principals/boo
 beforeEach(() => {
   vi.clearAllMocks()
   hoisted.flagWrites = []
-  hoisted.getSession.mockResolvedValue({ user: { id: 'user_caller' } })
+  hoisted.getSession.mockResolvedValue({
+    session: { scope: 'dashboard' },
+    user: { id: 'user_caller' },
+  })
   hoisted.postStatusesFindFirst.mockResolvedValue({ id: 'status_existing' })
   hoisted.stamp.value = null
   // The transaction's `execute` answers by statement, as the real one does: the

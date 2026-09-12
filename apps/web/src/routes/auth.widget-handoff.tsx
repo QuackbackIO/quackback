@@ -247,6 +247,14 @@ const consumeWidgetHandoffFn = createServerFn({ method: 'POST' })
       return { kind: 'error', status: 'invalid' }
     }
 
+    // Promote to portal audience so the cookie can never satisfy team gates.
+    try {
+      const { db, session: sessionTable, eq } = await import('@/lib/server/db')
+      await db.update(sessionTable).set({ scope: 'portal' }).where(eq(sessionTable.id, sessionId))
+    } catch (err) {
+      log.error({ err }, 'failed to promote handoff session to portal scope')
+    }
+
     // Provenance passed — safe to install the BA session cookie now.
     // Pass the array so h3/Node emits a separate Set-Cookie line per
     // cookie. Calling setResponseHeader in a loop would overwrite (set,

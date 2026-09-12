@@ -7,6 +7,7 @@
 import type { UserId, PrincipalId, WorkspaceId } from '@quackback/ids'
 import type { Role } from '@/lib/server/auth'
 import { auth } from '@/lib/server/auth'
+import { toSessionScope, sessionRole, type SessionScope } from '@/lib/shared/roles'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { db, principal, eq, type PermissionKey } from '@/lib/server/db'
 import { ensurePrincipalForUser } from '@/lib/server/domains/principals/principal.factory'
@@ -107,6 +108,8 @@ export interface AuthContext {
    * be narrower than the preset, and a fallback would silently widen.
    */
   permissions: PermissionKey[]
+  /** Session audience; only 'dashboard' may carry permissions. */
+  scope: SessionScope
 }
 
 /**
@@ -127,6 +130,7 @@ export async function requireAuth(options?: { permission?: PermissionKey }): Pro
     throw new Error('Authentication required')
   }
   const userId = session.user.id as UserId
+  const scope = toSessionScope(session.session.scope)
 
   const appSettings = await getAuthSettings()
   if (!appSettings) {
@@ -149,9 +153,17 @@ export async function requireAuth(options?: { permission?: PermissionKey }): Pro
     }
   )
 
-  const role = principalRecord.role as Role
+  const role: Role = sessionRole(principalRecord.role as Role, scope)
+  // Non-dashboard audiences never carry team authority downstream.
+  const permissions: PermissionKey[] = scope === 'dashboard' ? [...resolvedPermissions] : []
 
-  if (options?.permission && !resolvedPermissions.has(options.permission)) {
+  if (options?.permission && scope !== 'dashboard') {
+    throw new Error(
+      `Access denied: Requires permission '${options.permission}' on a dashboard session`
+    )
+  }
+
+  if (options?.permission && !permissions.includes(options.permission)) {
     throw new Error(
       `Access denied: Requires permission '${options.permission}', role ${role} lacks it`
     )
@@ -172,10 +184,11 @@ export async function requireAuth(options?: { permission?: PermissionKey }): Pro
     },
     principal: {
       id: principalRecord.id as PrincipalId,
-      role: principalRecord.role as Role,
+      role,
       type: principalRecord.type,
     },
-    permissions: [...resolvedPermissions],
+    permissions,
+    scope,
   }
 }
 
@@ -195,9 +208,12 @@ export { isAuthDenialError } from './auth-errors'
  * fallback, which could be wider than a custom role's actual grant.
  */
 export function assertPermission(
-  auth: Pick<AuthContext, 'permissions' | 'principal'>,
+  auth: Pick<AuthContext, 'permissions' | 'principal' | 'scope'>,
   permission: PermissionKey
 ): void {
+  if (auth.scope !== 'dashboard') {
+    throw new Error(`Access denied: Requires permission '${permission}' on a dashboard session`)
+  }
   if (!auth.permissions.includes(permission)) {
     throw new Error(
       `Access denied: Requires permission '${permission}', role ${auth.principal.role} lacks it`
@@ -252,6 +268,11 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
     }
   )
 
+  const scope = toSessionScope(session.session.scope)
+  const role: Role = sessionRole(principalRecord.role as Role, scope)
+  // Non-dashboard audiences never carry team authority downstream.
+  const permissions: PermissionKey[] = scope === 'dashboard' ? [...resolvedPermissions] : []
+
   return {
     settings: {
       id: appSettings.id as WorkspaceId,
@@ -267,10 +288,11 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
     },
     principal: {
       id: principalRecord.id as PrincipalId,
-      role: principalRecord.role as Role,
+      role,
       type: principalRecord.type,
     },
-    permissions: [...resolvedPermissions],
+    permissions,
+    scope,
   }
 }
 

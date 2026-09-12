@@ -83,6 +83,11 @@ export const requireWorkspaceRole = createServerFn({ method: 'GET' })
       throw redirect(buildSigninRedirect('/admin', { error: 'not_team_member' }))
     }
 
+    // Team routes and permission-gated routes only accept dashboard sessions.
+    if ((teamOnly || data.permission) && session.session.scope !== 'dashboard') {
+      throw redirect(buildSigninRedirect('/admin', { error: 'not_team_member' }))
+    }
+
     const resolvedPermissions = await permissionsForPrincipal(
       principalRecord.id,
       principalRecord.role as Role

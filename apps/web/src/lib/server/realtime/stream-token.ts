@@ -13,6 +13,7 @@
 import { createHmac, timingSafeEqual } from 'crypto'
 import { activeSecretKey } from '../secret-key'
 import type { PrincipalId } from '@quackback/ids'
+import { toSessionScope, type SessionScope } from '@/lib/shared/roles'
 
 // Short TTL: the token only authorizes the initial SSE handshake, and the
 // client re-mints via the authenticated mint fn on every reconnect — so a
@@ -35,14 +36,23 @@ function sign(payload: string): string {
     .digest('base64url')
 }
 
+export interface VerifiedStreamToken {
+  principalId: PrincipalId
+  scope: SessionScope
+}
+
 /** Mint a stream token for a principal, valid for `ttlMs` (default 2 min). */
-export function mintStreamToken(principalId: PrincipalId, ttlMs: number = DEFAULT_TTL_MS): string {
-  const payload = `${principalId}.${Date.now() + ttlMs}`
+export function mintStreamToken(
+  principalId: PrincipalId,
+  scope: SessionScope = 'dashboard',
+  ttlMs: number = DEFAULT_TTL_MS
+): string {
+  const payload = `${principalId}.${scope}.${Date.now() + ttlMs}`
   return `${b64url(payload)}.${sign(payload)}`
 }
 
-/** Verify a stream token, returning the principal id or null if invalid/expired. */
-export function verifyStreamToken(token: string | null | undefined): PrincipalId | null {
+/** Verify a stream token, returning its principal and audience or null if invalid/expired. */
+export function verifyStreamToken(token: string | null | undefined): VerifiedStreamToken | null {
   if (!token) return null
   const dot = token.lastIndexOf('.')
   if (dot <= 0) return null
@@ -63,9 +73,17 @@ export function verifyStreamToken(token: string | null | undefined): PrincipalId
 
   const sep = payload.lastIndexOf('.')
   if (sep <= 0) return null
-  const principalId = payload.slice(0, sep)
   const exp = Number(payload.slice(sep + 1))
   if (!Number.isFinite(exp) || Date.now() > exp) return null
 
-  return principalId as PrincipalId
+  // `${principalId}.${scope}.${exp}`. Audience-less legacy tokens are refused:
+  // they are short-lived and the client re-mints on reconnect, so failing
+  // closed costs a handshake rather than leaking an unbound audience.
+  const withoutExpiry = payload.slice(0, sep)
+  const scopeSep = withoutExpiry.lastIndexOf('.')
+  if (scopeSep <= 0) return null
+  return {
+    principalId: withoutExpiry.slice(0, scopeSep) as PrincipalId,
+    scope: toSessionScope(withoutExpiry.slice(scopeSep + 1)),
+  }
 }
