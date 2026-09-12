@@ -58,6 +58,17 @@ export interface GenericOAuthConfig {
   clientId: string
   clientSecret: string
   disableSignUp?: boolean
+  /**
+   * Keep sign-out local to Quackback.
+   *
+   * Better Auth 1.7 RP-initiated logout ([docs](https://better-auth.com/docs/plugins/generic-oauth#rp-initiated-logout),
+   * #9368) redirects `signOut()` to whichever linked OIDC provider exposes
+   * `end_session_endpoint`, picking the most recently updated account. GitHub
+   * has no logout URL, so a GitHub session still federates out of Microsoft
+   * when that account is linked. Discovery fills `end_session_endpoint` for
+   * Entra automatically. We always disable it.
+   */
+  disableProviderLogout: true
   discoveryUrl?: string
   pkce?: boolean
   authorizationUrl?: string
@@ -324,6 +335,7 @@ export async function buildGenericOAuthConfigs({
       // reject without it; RFC 7636 §5 makes the params backwards-compatible
       // (IdPs without PKCE support simply ignore them).
       pkce: true,
+      disableProviderLogout: true,
       ...(prompt ? { prompt } : {}),
       authentication: request.tokenAuth,
       // Better-Auth's JIT block. When false, the OAuth callback aborts in
