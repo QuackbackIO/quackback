@@ -46,7 +46,8 @@ vi.mock('@/lib/server/domains/segments/segment-membership.service', () => ({
   segmentIdsForPrincipal: vi.fn(async () => new Set()),
 }))
 
-import { assertPermission, requireAuth } from '../auth-helpers'
+import { assertPermission, getOptionalAuth, requireAuth } from '../auth-helpers'
+import { ensurePrincipalForUser } from '@/lib/server/domains/principals/principal.factory'
 import { toSessionScope } from '@/lib/shared/roles'
 
 function sessionWithScope(scope: string) {
@@ -59,6 +60,10 @@ function sessionWithScope(scope: string) {
 beforeEach(() => {
   vi.clearAllMocks()
   mockPrincipalFindFirst.mockResolvedValue({ id: 'principal_1', role: 'admin', type: 'user' })
+  vi.mocked(ensurePrincipalForUser).mockResolvedValue({
+    principal: { id: 'principal_1', role: 'admin', type: 'user' } as never,
+    created: false,
+  })
 })
 
 describe('requireAuth permission gates are dashboard-only', () => {
@@ -86,11 +91,40 @@ describe('requireAuth permission gates are dashboard-only', () => {
     expect(auth.permissions).toContain(PERMISSIONS.SETTINGS_MANAGE)
   })
 
-  it('bare requireAuth stays cross-plane', async () => {
+  it('bare requireAuth stays cross-plane but strips team authority from widget scope', async () => {
     mockGetSession.mockResolvedValue(sessionWithScope('widget'))
 
     const auth = await requireAuth()
     expect(auth.scope).toBe('widget')
+    expect(auth.principal.role).toBe('user')
+    expect(auth.permissions).toEqual([])
+  })
+
+  it('keeps the team role and permissions on a dashboard session', async () => {
+    mockGetSession.mockResolvedValue(sessionWithScope('dashboard'))
+
+    const auth = await requireAuth()
+    expect(auth.principal.role).toBe('admin')
+    expect(auth.permissions).toContain(PERMISSIONS.SETTINGS_MANAGE)
+  })
+})
+
+describe('getOptionalAuth strips team authority from non-dashboard scopes', () => {
+  it('downgrades a promoted widget principal to the portal tier', async () => {
+    mockGetSession.mockResolvedValue(sessionWithScope('widget'))
+
+    const auth = await getOptionalAuth()
+    expect(auth?.scope).toBe('widget')
+    expect(auth?.principal.role).toBe('user')
+    expect(auth?.permissions).toEqual([])
+  })
+
+  it('keeps the team role on a dashboard session', async () => {
+    mockGetSession.mockResolvedValue(sessionWithScope('dashboard'))
+
+    const auth = await getOptionalAuth()
+    expect(auth?.principal.role).toBe('admin')
+    expect(auth?.permissions).toContain(PERMISSIONS.SETTINGS_MANAGE)
   })
 })
 

@@ -78,7 +78,7 @@ vi.stubGlobal('fetch', mockFetch)
 async function runHandoffLoader(search: string) {
   const { setResponseHeader, getRequestHeaders } = await import('@tanstack/react-start/server')
   const { config } = await import('@/lib/server/config')
-  const { db, widgetOriginSession, session } = await import('@/lib/server/db')
+  const { db, widgetOriginSession, session, eq } = await import('@/lib/server/db')
   const { recordAuditEvent } = await import('@/lib/server/audit/log')
   const { isSafeCallbackUrl } = await import('@/lib/shared/routing')
 

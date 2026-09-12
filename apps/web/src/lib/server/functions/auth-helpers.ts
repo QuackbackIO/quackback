@@ -153,7 +153,9 @@ export async function requireAuth(options?: { permission?: PermissionKey }): Pro
     }
   )
 
-  const role = principalRecord.role as Role
+  const role: Role = scope === 'dashboard' ? (principalRecord.role as Role) : 'user'
+  // Non-dashboard audiences never carry team authority downstream.
+  const permissions: PermissionKey[] = scope === 'dashboard' ? [...resolvedPermissions] : []
 
   if (options?.permission && scope !== 'dashboard') {
     throw new Error(
@@ -161,7 +163,7 @@ export async function requireAuth(options?: { permission?: PermissionKey }): Pro
     )
   }
 
-  if (options?.permission && !resolvedPermissions.has(options.permission)) {
+  if (options?.permission && !permissions.includes(options.permission)) {
     throw new Error(
       `Access denied: Requires permission '${options.permission}', role ${role} lacks it`
     )
@@ -182,10 +184,10 @@ export async function requireAuth(options?: { permission?: PermissionKey }): Pro
     },
     principal: {
       id: principalRecord.id as PrincipalId,
-      role: principalRecord.role as Role,
+      role,
       type: principalRecord.type,
     },
-    permissions: [...resolvedPermissions],
+    permissions,
     scope,
   }
 }
@@ -266,6 +268,11 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
     }
   )
 
+  const scope = toSessionScope(session.session.scope)
+  const role: Role = scope === 'dashboard' ? (principalRecord.role as Role) : 'user'
+  // Non-dashboard audiences never carry team authority downstream.
+  const permissions: PermissionKey[] = scope === 'dashboard' ? [...resolvedPermissions] : []
+
   return {
     settings: {
       id: appSettings.id as WorkspaceId,
@@ -281,11 +288,11 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
     },
     principal: {
       id: principalRecord.id as PrincipalId,
-      role: principalRecord.role as Role,
+      role,
       type: principalRecord.type,
     },
-    permissions: [...resolvedPermissions],
-    scope: toSessionScope(session.session.scope),
+    permissions,
+    scope,
   }
 }
 

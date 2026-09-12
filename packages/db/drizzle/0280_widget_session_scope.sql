@@ -9,6 +9,11 @@ BEGIN
   WHERE "scope" = 'dashboard'
     AND "id" IN (SELECT "session_id" FROM "widget_identified_session");
 
+  -- Anonymous users are only ever minted by the widget's lazy anonymous sign-in.
+  UPDATE "session" SET "scope" = 'widget'
+  WHERE "scope" = 'dashboard'
+    AND "user_id" IN (SELECT "id" FROM "user" WHERE "is_anonymous" = true);
+
   UPDATE "session" SET "scope" = 'portal'
   WHERE "scope" <> 'portal'
     AND "id" IN (SELECT "session_id" FROM "widget_origin_session");
