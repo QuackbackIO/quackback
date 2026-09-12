@@ -76,12 +76,12 @@ export function verifyStreamToken(token: string | null | undefined): VerifiedStr
   const exp = Number(payload.slice(sep + 1))
   if (!Number.isFinite(exp) || Date.now() > exp) return null
 
-  // `${principalId}.${scope}.${exp}`; legacy `${principalId}.${exp}` is dashboard.
+  // `${principalId}.${scope}.${exp}`. Audience-less legacy tokens are refused:
+  // they are short-lived and the client re-mints on reconnect, so failing
+  // closed costs a handshake rather than leaking an unbound audience.
   const withoutExpiry = payload.slice(0, sep)
   const scopeSep = withoutExpiry.lastIndexOf('.')
-  if (scopeSep <= 0) {
-    return { principalId: withoutExpiry as PrincipalId, scope: 'dashboard' }
-  }
+  if (scopeSep <= 0) return null
   return {
     principalId: withoutExpiry.slice(0, scopeSep) as PrincipalId,
     scope: toSessionScope(withoutExpiry.slice(scopeSep + 1)),
