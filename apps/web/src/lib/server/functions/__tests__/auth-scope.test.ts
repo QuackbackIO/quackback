@@ -48,7 +48,7 @@ vi.mock('@/lib/server/domains/segments/segment-membership.service', () => ({
 
 import { assertPermission, getOptionalAuth, requireAuth } from '../auth-helpers'
 import { ensurePrincipalForUser } from '@/lib/server/domains/principals/principal.factory'
-import { toSessionScope } from '@/lib/shared/roles'
+import { sessionRole, toSessionScope } from '@/lib/shared/roles'
 
 function sessionWithScope(scope: string) {
   return {
@@ -167,5 +167,14 @@ describe('toSessionScope', () => {
     expect(toSessionScope(undefined)).toBe('dashboard')
     expect(toSessionScope(null)).toBe('dashboard')
     expect(toSessionScope('future')).toBe('dashboard')
+  })
+})
+
+describe('sessionRole', () => {
+  it('keeps the role only for dashboard sessions', () => {
+    expect(sessionRole('admin', 'dashboard')).toBe('admin')
+    expect(sessionRole('member', 'dashboard')).toBe('member')
+    expect(sessionRole('admin', 'widget')).toBe('user')
+    expect(sessionRole('member', 'portal')).toBe('user')
   })
 })

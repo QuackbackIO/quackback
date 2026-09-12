@@ -29,6 +29,11 @@ export function toSessionScope(value: unknown): SessionScope {
   return value === 'widget' || value === 'portal' ? value : 'dashboard'
 }
 
+/** Team roles only apply to dashboard sessions; every other audience is portal-tier. */
+export function sessionRole(role: Role, scope: SessionScope): Role {
+  return scope === 'dashboard' ? role : 'user'
+}
+
 /** Role privilege order, low to high. Used to compare/escalate roles. */
 export const ROLE_RANK: Record<Role, number> = { user: 0, member: 1, admin: 2 }
 

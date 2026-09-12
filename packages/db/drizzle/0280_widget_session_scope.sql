@@ -14,6 +14,17 @@ BEGIN
   WHERE "scope" = 'dashboard'
     AND "user_id" IN (SELECT "id" FROM "user" WHERE "is_anonymous" = true);
 
+  -- Sessions that predate the user's first account were minted before any
+  -- credential existed — the preserved session of an anonymous→signup absorb,
+  -- whose user.is_anonymous is already false by upgrade time. Conservative by
+  -- design: a false positive costs a re-login, a false negative keeps a
+  -- widget token dashboard-capable.
+  UPDATE "session" AS s SET "scope" = 'widget'
+  WHERE s."scope" = 'dashboard'
+    AND s."created_at" < (
+      SELECT min(a."created_at") FROM account a WHERE a."user_id" = s."user_id"
+    );
+
   UPDATE "session" SET "scope" = 'portal'
   WHERE "scope" <> 'portal'
     AND "id" IN (SELECT "session_id" FROM "widget_origin_session");

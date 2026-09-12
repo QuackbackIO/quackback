@@ -7,7 +7,7 @@
 import type { UserId, PrincipalId, WorkspaceId } from '@quackback/ids'
 import type { Role } from '@/lib/server/auth'
 import { auth } from '@/lib/server/auth'
-import { toSessionScope, type SessionScope } from '@/lib/shared/roles'
+import { toSessionScope, sessionRole, type SessionScope } from '@/lib/shared/roles'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { db, principal, eq, type PermissionKey } from '@/lib/server/db'
 import { ensurePrincipalForUser } from '@/lib/server/domains/principals/principal.factory'
@@ -153,7 +153,7 @@ export async function requireAuth(options?: { permission?: PermissionKey }): Pro
     }
   )
 
-  const role: Role = scope === 'dashboard' ? (principalRecord.role as Role) : 'user'
+  const role: Role = sessionRole(principalRecord.role as Role, scope)
   // Non-dashboard audiences never carry team authority downstream.
   const permissions: PermissionKey[] = scope === 'dashboard' ? [...resolvedPermissions] : []
 
@@ -269,7 +269,7 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
   )
 
   const scope = toSessionScope(session.session.scope)
-  const role: Role = scope === 'dashboard' ? (principalRecord.role as Role) : 'user'
+  const role: Role = sessionRole(principalRecord.role as Role, scope)
   // Non-dashboard audiences never carry team authority downstream.
   const permissions: PermissionKey[] = scope === 'dashboard' ? [...resolvedPermissions] : []
 
