@@ -96,6 +96,14 @@ describe('buildGenericOAuthConfigs', () => {
     expect(cfgs[0].providerId).toBe('sso') // preserved registration id, NOT oidc_idp_abc
     expect(cfgs[0].pkce).toBe(true)
     expect(cfgs[0].disableSignUp).toBe(false)
+    expect(cfgs[0].disableProviderLogout).toBe(true)
+  })
+
+  it('keeps sign-out local so a GitHub session does not federate Microsoft logout', async () => {
+    // Better Auth 1.7 RP-initiated logout redirects to any linked OIDC
+    // provider with end_session_endpoint, not the provider used this session.
+    const cfg = await buildOne()
+    expect(cfg.disableProviderLogout).toBe(true)
   })
 
   it('requests the broadly-supported prompt=login, not the OIDC-optional select_account', async () => {
