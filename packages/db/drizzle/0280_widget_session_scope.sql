@@ -29,3 +29,22 @@ BEGIN
   WHERE "scope" <> 'portal'
     AND "id" IN (SELECT "session_id" FROM "widget_origin_session");
 END $$;
+--> statement-breakpoint
+-- Rolling deploys: an old replica's identify insert omits scope, so a session
+-- minted after the backfill would keep the dashboard default. Provenance is
+-- written for every identified session, so re-scope on its insert.
+CREATE OR REPLACE FUNCTION quackback_widget_session_scope()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  UPDATE "session" SET "scope" = 'widget'
+  WHERE "id" = NEW.session_id AND "scope" = 'dashboard';
+  RETURN NEW;
+END $$;
+--> statement-breakpoint
+DROP TRIGGER IF EXISTS widget_identified_session_scope ON widget_identified_session;
+--> statement-breakpoint
+CREATE TRIGGER widget_identified_session_scope
+  AFTER INSERT OR UPDATE ON widget_identified_session
+  FOR EACH ROW EXECUTE FUNCTION quackback_widget_session_scope();
