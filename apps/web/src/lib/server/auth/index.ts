@@ -24,6 +24,7 @@ import type { GenericOAuthConfig } from './build-oauth-configs'
 import { guardBetterAuthUserCreation } from './signup-policy'
 import { isSignInMethodEnabled } from '@/lib/shared/signin-methods'
 import { workspaceAuthTrustedOrigins } from './trusted-origins'
+import { ensureMcpOauthResource } from './ensure-mcp-oauth-resource'
 
 const log = logger.child({ component: 'auth-config' })
 
@@ -371,6 +372,19 @@ async function createAuth() {
   // instance is cached per workspace, so the callback origin and the cookie
   // `secure` flag below follow the hostname the request arrived on.
   const baseURL = config.baseUrl
+  const mcpResourceIdentifier = betterAuthMcpResource(`${baseURL}/api/mcp`)
+  // Better Auth 1.7 seeds oauth_resource on plugin init. Pre-insert so a
+  // Drizzle-wrapped unique from a concurrent replica cannot abort that init
+  // (better-auth/better-auth#11034). Both spellings: e2e rewrites *.localhost
+  // on the plugin `resource` only.
+  for (const identifier of new Set([`${baseURL}/api/mcp`, mcpResourceIdentifier])) {
+    await ensureMcpOauthResource({
+      db: db as Parameters<typeof ensureMcpOauthResource>[0]['db'],
+      table: oauthResourceTable,
+      identifier,
+      allowedScopes: API_KEY_SCOPES,
+    })
+  }
 
   // Origin allowlist. Better Auth rejects an auth POST whose Origin is
   // absent. The list is the documented per-request callback
@@ -707,7 +721,7 @@ async function createAuth() {
       mcp({
         loginPage: '/auth/login',
         consentPage: '/oauth/consent',
-        resource: betterAuthMcpResource(`${baseURL}/api/mcp`),
+        resource: mcpResourceIdentifier,
         allowDynamicClientRegistration:
           workspaceSettings?.developerConfig?.oauthDynamicClientRegistrationEnabled ?? true,
         allowUnauthenticatedClientRegistration: true,
