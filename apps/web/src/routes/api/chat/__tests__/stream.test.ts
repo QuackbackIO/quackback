@@ -167,8 +167,8 @@ function tokenPrincipal(role: string, type = 'user') {
   mockPrincipalFindFirst.mockResolvedValue({ id: 'principal_tok', role, type })
 }
 
-function sessionPrincipal(role: string, type = 'user') {
-  mockGetSession.mockResolvedValue({ user: { id: 'user_1' } })
+function sessionPrincipal(role: string, type = 'user', scope = 'dashboard') {
+  mockGetSession.mockResolvedValue({ session: { id: 'sess_1', scope }, user: { id: 'user_1' } })
   mockPrincipalFindFirst.mockResolvedValue({ id: 'principal_sess', role, type })
 }
 
@@ -217,6 +217,13 @@ describe('GET /api/chat/stream - inbox scope', () => {
     expect(res.headers.get('Content-Type')).toContain('text/event-stream')
     await settleAndClose(res)
     expect(mockSubscribe).toHaveBeenCalledWith(['conversation:inbox'], expect.any(Function))
+  })
+
+  it('403s a promoted team role carried on a non-dashboard session', async () => {
+    sessionPrincipal('admin', 'user', 'widget')
+    const res = await GET({ request: req('?scope=inbox') })
+    expect(res.status).toBe(403)
+    expect(mockSubscribe).not.toHaveBeenCalled()
   })
 })
 
