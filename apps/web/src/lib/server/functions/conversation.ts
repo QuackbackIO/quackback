@@ -844,7 +844,7 @@ export const mintConversationStreamTokenFn = createServerFn({ method: 'GET' }).h
   const ctx = await requireAuth()
   await assertVisitorConversationAccess(ctx.principal.role)
   const { mintStreamToken } = await import('@/lib/server/realtime/stream-token')
-  return { token: mintStreamToken(ctx.principal.id) }
+  return { token: mintStreamToken(ctx.principal.id, ctx.scope) }
 })
 
 /** Soft-delete a message (team members; or a visitor deleting their own). */

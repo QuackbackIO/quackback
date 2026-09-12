@@ -52,19 +52,27 @@ interface StreamPrincipal {
   /** How the principal was authenticated: a minted token (portal access already
    *  enforced at mint) vs a raw session cookie (must be re-gated here). */
   via: 'token' | 'session'
-  /** Session audience; null for minted tokens. Non-dashboard sessions are portal-tier here. */
-  scope: SessionScope | null
+  /** Bound audience; non-dashboard tokens and sessions are portal-tier here. */
+  scope: SessionScope
 }
 
 /** Resolve the principal for a stream from a signed token (widget) or the
  * session cookie / Bearer header (admin + identified portal). */
 async function resolveStreamPrincipal(request: Request): Promise<StreamPrincipal | null> {
   const url = new URL(request.url)
-  const tokenPrincipalId = verifyStreamToken(url.searchParams.get('token'))
-  if (tokenPrincipalId) {
-    const row = await db.query.principal.findFirst({ where: eq(principal.id, tokenPrincipalId) })
+  const tokenPrincipal = verifyStreamToken(url.searchParams.get('token'))
+  if (tokenPrincipal) {
+    const row = await db.query.principal.findFirst({
+      where: eq(principal.id, tokenPrincipal.principalId),
+    })
     if (row)
-      return { principalId: row.id, role: row.role, type: row.type, via: 'token', scope: null }
+      return {
+        principalId: row.id,
+        role: row.role,
+        type: row.type,
+        via: 'token',
+        scope: tokenPrincipal.scope,
+      }
     return null
   }
 
@@ -113,9 +121,8 @@ export const Route = createFileRoute('/api/chat/stream')({
         if (!me) {
           return new Response('Unauthorized', { status: 401 })
         }
-
-        // A non-dashboard session is portal-tier regardless of principal role.
-        const effectiveRole = me.via === 'session' && me.scope !== 'dashboard' ? 'user' : me.role
+        // A non-dashboard audience is portal-tier regardless of principal role.
+        const effectiveRole = me.scope !== 'dashboard' ? 'user' : me.role
 
         // Feature-flag gate: stop streams when the relevant surface is off (a
         // token may have been minted before the flag flipped). Portal access

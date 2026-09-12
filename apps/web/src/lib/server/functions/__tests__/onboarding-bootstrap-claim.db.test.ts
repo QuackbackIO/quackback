@@ -167,7 +167,10 @@ describe.skipIf(!fixture.available)('bootstrap promotion guard', () => {
     const ownerId = await seedUser('owner@acme.example')
     await seedPrincipal({ userId: ownerId, role: 'admin' })
     const intruderId = await seedUser('someone.else@acme.example')
-    hoisted.getSession.mockResolvedValue({ user: { id: intruderId } })
+    hoisted.getSession.mockResolvedValue({
+      session: { scope: 'dashboard' },
+      user: { id: intruderId },
+    })
 
     await expect(saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })).rejects.toThrow(/only admin/i)
     expect(hoisted.ensurePrincipalForUser).not.toHaveBeenCalled()
@@ -179,7 +182,10 @@ describe.skipIf(!fixture.available)('bootstrap promotion guard', () => {
     await seedPrincipal({ userId: ownerId, role: 'admin' })
     const memberId = await seedUser('member@acme.example')
     await seedPrincipal({ userId: memberId, role: 'member' })
-    hoisted.getSession.mockResolvedValue({ user: { id: memberId } })
+    hoisted.getSession.mockResolvedValue({
+      session: { scope: 'dashboard' },
+      user: { id: memberId },
+    })
 
     await expect(saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })).rejects.toThrow(/only admin/i)
     expect(hoisted.ensurePrincipalForUser).not.toHaveBeenCalled()
@@ -196,7 +202,7 @@ describe.skipIf(!fixture.available)('bootstrap promotion guard', () => {
       createdAt: new Date(),
     })
     const firstId = await seedUser('first@acme.example')
-    hoisted.getSession.mockResolvedValue({ user: { id: firstId } })
+    hoisted.getSession.mockResolvedValue({ session: { scope: 'dashboard' }, user: { id: firstId } })
 
     await saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })
 
@@ -209,7 +215,7 @@ describe.skipIf(!fixture.available)('bootstrap promotion guard', () => {
   it('lets the seeded owner through without a second promotion', async () => {
     const ownerId = await seedUser('owner@acme.example')
     await seedPrincipal({ userId: ownerId, role: 'admin' })
-    hoisted.getSession.mockResolvedValue({ user: { id: ownerId } })
+    hoisted.getSession.mockResolvedValue({ session: { scope: 'dashboard' }, user: { id: ownerId } })
 
     await saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })
 
@@ -220,7 +226,7 @@ describe.skipIf(!fixture.available)('bootstrap promotion guard', () => {
 
   it('promotes the first user on a workspace nobody has claimed', async () => {
     const firstId = await seedUser('first@acme.example')
-    hoisted.getSession.mockResolvedValue({ user: { id: firstId } })
+    hoisted.getSession.mockResolvedValue({ session: { scope: 'dashboard' }, user: { id: firstId } })
 
     await saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })
 
@@ -239,7 +245,7 @@ describe.skipIf(!fixture.available)('bootstrap promotion guard', () => {
   it('upgrades a first user whose principal was already created at the default role', async () => {
     const firstId = await seedUser('first@acme.example')
     await seedPrincipal({ userId: firstId, role: 'user' })
-    hoisted.getSession.mockResolvedValue({ user: { id: firstId } })
+    hoisted.getSession.mockResolvedValue({ session: { scope: 'dashboard' }, user: { id: firstId } })
     hoisted.ensurePrincipalForUser.mockImplementation(async ({ userId }: { userId: UserId }) => {
       const existing = await testDb.query.principal.findFirst({
         where: eq(principal.userId, userId),
@@ -266,7 +272,7 @@ describe.skipIf(!fixture.available)('bootstrap promotion guard', () => {
     const ownerId = await seedUser('owner@acme.example')
     await seedPrincipal({ userId: ownerId, role: 'admin' })
     const loserId = await seedUser('loser@acme.example')
-    hoisted.getSession.mockResolvedValue({ user: { id: loserId } })
+    hoisted.getSession.mockResolvedValue({ session: { scope: 'dashboard' }, user: { id: loserId } })
     hoisted.findHumanAdmin
       .mockImplementationOnce(async () => undefined)
       .mockImplementation(realBootstrap.findHumanAdmin)
@@ -285,7 +291,10 @@ describe.skipIf(!fixture.available)('bootstrap promotion guard', () => {
   it('refuses to hand a provisioned workspace to whoever arrives first', async () => {
     await seedProvisionedWorkspace()
     const arrivalId = await seedUser('whoever@evil.example')
-    hoisted.getSession.mockResolvedValue({ user: { id: arrivalId } })
+    hoisted.getSession.mockResolvedValue({
+      session: { scope: 'dashboard' },
+      user: { id: arrivalId },
+    })
 
     await expect(saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })).rejects.toThrow(
       /not open to be set up/i
@@ -301,7 +310,10 @@ describe.skipIf(!fixture.available)('bootstrap promotion guard', () => {
     await seedProvisionedWorkspace()
     const arrivalId = await seedUser('whoever@evil.example')
     await seedPrincipal({ userId: arrivalId, role: 'user' })
-    hoisted.getSession.mockResolvedValue({ user: { id: arrivalId } })
+    hoisted.getSession.mockResolvedValue({
+      session: { scope: 'dashboard' },
+      user: { id: arrivalId },
+    })
 
     await expect(saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })).rejects.toThrow(
       /not open to be set up/i
@@ -317,7 +329,7 @@ describe.skipIf(!fixture.available)('bootstrap promotion guard', () => {
     await testDb.execute(sql`UPDATE settings SET cloud_workspace_key = NULL`)
     hoisted.getSettings.mockResolvedValue({ id: 'workspace_1' })
     const firstId = await seedUser('first@acme.example')
-    hoisted.getSession.mockResolvedValue({ user: { id: firstId } })
+    hoisted.getSession.mockResolvedValue({ session: { scope: 'dashboard' }, user: { id: firstId } })
 
     await saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })
 
@@ -339,7 +351,10 @@ describe.skipIf(!fixture.available)('bootstrap promotion guard', () => {
       metadata: JSON.stringify({ cloudTenant: { v: 1, workspaceKey: 'ws_acme', stampedAt: '' } }),
     })
     const arrivalId = await seedUser('whoever@evil.example')
-    hoisted.getSession.mockResolvedValue({ user: { id: arrivalId } })
+    hoisted.getSession.mockResolvedValue({
+      session: { scope: 'dashboard' },
+      user: { id: arrivalId },
+    })
 
     await expect(saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })).rejects.toThrow(
       /not open to be set up/i
@@ -354,7 +369,7 @@ describe.skipIf(!fixture.available)('bootstrap promotion guard', () => {
     hoisted.getSettings.mockResolvedValue({ id: 'workspace_1' })
     const ownerId = await seedUser('owner@acme.example')
     await seedPrincipal({ userId: ownerId, role: 'admin' })
-    hoisted.getSession.mockResolvedValue({ user: { id: ownerId } })
+    hoisted.getSession.mockResolvedValue({ session: { scope: 'dashboard' }, user: { id: ownerId } })
 
     await saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })
 
@@ -369,7 +384,10 @@ describe.skipIf(!fixture.available)('bootstrap promotion guard', () => {
     await seedPrincipal({ userId: ownerId, role: 'admin' })
     const visitorId = await seedUser('visitor@acme.example')
     await seedPrincipal({ userId: visitorId, role: 'user' })
-    hoisted.getSession.mockResolvedValue({ user: { id: visitorId } })
+    hoisted.getSession.mockResolvedValue({
+      session: { scope: 'dashboard' },
+      user: { id: visitorId },
+    })
 
     await expect(saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })).rejects.toThrow(/only admin/i)
     expect(hoisted.setPrincipalRole).not.toHaveBeenCalled()
