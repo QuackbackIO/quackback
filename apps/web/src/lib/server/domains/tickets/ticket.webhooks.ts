@@ -33,8 +33,10 @@ import {
 } from '@/lib/server/events/dispatch'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { logger } from '@/lib/server/logger'
+import { makeSafeDispatch } from '@/lib/server/events/safe-dispatch'
 
 const log = logger.child({ component: 'ticket-webhooks' })
+const safe = makeSafeDispatch(log)
 
 /** The actor is the teammate/requester who acted, never the ticket's requester
  *  (they differ when a teammate files on someone's behalf). No author email is
@@ -71,14 +73,6 @@ function ticketData(
     createdAt: t.createdAt.toISOString(),
     updatedAt: t.updatedAt.toISOString(),
     resolvedAt: t.resolvedAt ? t.resolvedAt.toISOString() : null,
-  }
-}
-
-async function safe(label: string, fn: () => Promise<void>): Promise<void> {
-  try {
-    await fn()
-  } catch (err) {
-    log.warn({ err, label }, 'webhook failed')
   }
 }
 

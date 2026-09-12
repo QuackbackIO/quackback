@@ -5,6 +5,7 @@
  */
 
 import type { JsonValue } from './json'
+import { isPlainRecord as isRecord } from './record'
 import { IDENTITY_SOURCES } from './oidc-claim-mapping'
 import type { CapturedIdentity, IdentitySource, SourceUnavailableReason } from './db-types'
 import { finishBinding, replayClaimMapping } from './sso-claim-binder'
@@ -35,10 +36,6 @@ export type SsoTestCaptureV2 = SsoTestCapture & {
 export type { CapturedIdentity }
 
 const UNAVAILABLE: readonly SourceUnavailableReason[] = ['absent', 'unreadable', 'fetch_failed']
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 
 function parseIdentity(value: unknown, required: boolean): CapturedIdentity | undefined {
   if (!isRecord(value) || typeof value.id !== 'string') {

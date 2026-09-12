@@ -1,10 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  getTopLevelCategories,
-  getActiveCategory,
-  getSubcategories,
-  buildCategoryBreadcrumbs,
-} from '../help-center-utils'
+import { getTopLevelCategories, buildCategoryBreadcrumbs } from '../help-center-utils'
 
 interface TestCategory {
   id: string
@@ -39,61 +34,6 @@ describe('getTopLevelCategories', () => {
 
   it('returns empty array for empty input', () => {
     expect(getTopLevelCategories([])).toEqual([])
-  })
-})
-
-describe('getActiveCategory', () => {
-  it('returns null for the help center root', () => {
-    expect(getActiveCategory('/hc')).toBeNull()
-    expect(getActiveCategory('/hc/')).toBeNull()
-  })
-
-  it('returns the slug for a category path', () => {
-    expect(getActiveCategory('/hc/categories/getting-started')).toBe('getting-started')
-  })
-
-  it('returns the slug tail of a numeric collection path', () => {
-    expect(getActiveCategory('/hc/en/collections/42-getting-started')).toBe('getting-started')
-  })
-
-  it('returns the category slug for a legacy article path', () => {
-    expect(getActiveCategory('/hc/articles/getting-started/first-steps')).toBe('getting-started')
-  })
-
-  it('returns null for non-hc portal paths', () => {
-    expect(getActiveCategory('/')).toBeNull()
-    expect(getActiveCategory('/roadmap')).toBeNull()
-  })
-})
-
-describe('getSubcategories', () => {
-  const categories: TestCategory[] = [
-    { id: '1', parentId: null, slug: 'getting-started', name: 'Getting Started' },
-    { id: '2', parentId: '1', slug: 'first-steps', name: 'First Steps' },
-    { id: '3', parentId: '1', slug: 'advanced', name: 'Advanced' },
-    { id: '4', parentId: null, slug: 'faq', name: 'FAQ' },
-    { id: '5', parentId: '4', slug: 'billing', name: 'Billing' },
-  ]
-
-  it('returns children of a given parent', () => {
-    const result = getSubcategories(categories, '1')
-    expect(result).toHaveLength(2)
-    expect(result.map((c) => c.slug)).toEqual(['first-steps', 'advanced'])
-  })
-
-  it('returns empty array when no children exist', () => {
-    const result = getSubcategories(categories, '2')
-    expect(result).toHaveLength(0)
-  })
-
-  it('returns empty array for empty categories list', () => {
-    expect(getSubcategories([], '1')).toEqual([])
-  })
-
-  it('returns children for a different parent', () => {
-    const result = getSubcategories(categories, '4')
-    expect(result).toHaveLength(1)
-    expect(result[0].slug).toBe('billing')
   })
 })
 

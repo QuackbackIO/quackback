@@ -1,25 +1,21 @@
 /**
- * getNestedClaim + resolveSsoRole — pure helpers for IdP-attribute-
+ * getClaimByPath + resolveSsoRole — pure helpers for IdP-attribute-
  * driven role assignment. Tested separately because the logic has
  * lots of branches and ID tokens have lots of shapes (dotted nested
  * objects, URL-shaped namespaced claims, arrays vs scalars, missing
  * values, etc.).
  */
 import { describe, it, expect } from 'vitest'
-import {
-  getNestedClaim as serverGetNestedClaim,
-  resolveSsoRole as serverResolveSsoRole,
-  resolveSsoRoleMatch as serverResolveSsoRoleMatch,
-} from '../resolve-sso-role'
-import {
-  getNestedClaim as previewGetNestedClaim,
-  resolveSsoRole as previewResolveSsoRole,
-  resolveSsoRoleMatch as previewResolveSsoRoleMatch,
-} from '@/lib/shared/resolve-sso-role'
+import { getClaimByPath as getNestedClaim } from '@/lib/shared/oidc-claim-mapping'
+import { resolveSsoRole, resolveSsoRoleMatch } from '@/lib/shared/resolve-sso-role'
 import type { ClaimRoleMapping } from '@/lib/server/db'
 
-const getNestedClaim = serverGetNestedClaim
-const resolveSsoRole = serverResolveSsoRole
+const serverGetNestedClaim = getNestedClaim
+const previewGetNestedClaim = getNestedClaim
+const serverResolveSsoRole = resolveSsoRole
+const previewResolveSsoRole = resolveSsoRole
+const serverResolveSsoRoleMatch = resolveSsoRoleMatch
+const previewResolveSsoRoleMatch = resolveSsoRoleMatch
 
 describe('getNestedClaim', () => {
   it('reads a dotted path', () => {

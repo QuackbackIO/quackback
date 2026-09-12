@@ -201,10 +201,6 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/admin.ts`::removeUsersFromSegmentFn | segment.manage |
 | `lib/server/functions/admin.ts`::evaluateSegmentFn | segment.manage |
 | `lib/server/functions/admin.ts`::evaluateAllSegmentsFn | segment.manage |
-| `lib/server/functions/admin.ts`::listUserAttributesFn | user_attribute.view |
-| `lib/server/functions/admin.ts`::createUserAttributeFn | user_attribute.manage |
-| `lib/server/functions/admin.ts`::updateUserAttributeFn | user_attribute.manage |
-| `lib/server/functions/admin.ts`::deleteUserAttributeFn | user_attribute.manage |
 | `lib/server/functions/analytics.ts`::getAnalyticsData | analytics.view |
 | `lib/server/functions/api-keys.ts`::fetchApiKeys | api_key.manage |
 | `lib/server/functions/api-keys.ts`::fetchApiKey | api_key.manage |
@@ -337,10 +333,10 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/companies.ts`::attachPrincipalToCompanyFn | company.manage |
 | `lib/server/functions/companies.ts`::detachPrincipalFromCompanyFn | company.manage |
 | `lib/server/functions/companies.ts`::qualifyCompanyFn | company.manage |
-| `lib/server/functions/companies.ts`::listCompanyAttributesFn | company.view |
-| `lib/server/functions/companies.ts`::createCompanyAttributeFn | company.manage |
-| `lib/server/functions/companies.ts`::updateCompanyAttributeFn | company.manage |
-| `lib/server/functions/companies.ts`::deleteCompanyAttributeFn | company.manage |
+| `lib/server/functions/company-attributes.ts`::listCompanyAttributesFn | company.view |
+| `lib/server/functions/company-attributes.ts`::createCompanyAttributeFn | company.manage |
+| `lib/server/functions/company-attributes.ts`::updateCompanyAttributeFn | company.manage |
+| `lib/server/functions/company-attributes.ts`::deleteCompanyAttributeFn | company.manage |
 | `lib/server/functions/contact-email.ts`::getEmailChangeStateFn | END_USER (any authenticated) |
 | `lib/server/functions/contact-email.ts`::sendCurrentAddressCodeFn | END_USER (any authenticated) |
 | `lib/server/functions/contact-email.ts`::requestEmailChangeFn | END_USER (any authenticated) |
@@ -764,6 +760,10 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/uploads.ts`::getWidgetHeroUploadUrlFn | settings.manage |
 | `lib/server/functions/uploads.ts`::getAvatarUploadUrlFn | END_USER (any authenticated) |
 | `lib/server/functions/uploads.ts`::getAssistantAvatarUploadUrlFn | assistant.manage |
+| `lib/server/functions/user-attributes.ts`::listUserAttributesFn | user_attribute.view |
+| `lib/server/functions/user-attributes.ts`::createUserAttributeFn | user_attribute.manage |
+| `lib/server/functions/user-attributes.ts`::updateUserAttributeFn | user_attribute.manage |
+| `lib/server/functions/user-attributes.ts`::deleteUserAttributeFn | user_attribute.manage |
 | `lib/server/functions/user.ts`::requirePrincipalId | END_USER (any authenticated) |
 | `lib/server/functions/visitor-analytics.ts`::getVisitorAnalyticsData | analytics.view |
 | `lib/server/functions/webhooks.ts`::fetchWebhooks | webhook.view |

@@ -8,15 +8,12 @@ import {
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { HexColorSchema } from '@/lib/shared/schemas/taxonomy'
 
 // Input validation schema
 const createTagSchema = z.object({
   name: z.string().min(1, 'Name is required').max(50),
-  color: z
-    .string()
-    .regex(/^#[0-9A-Fa-f]{6}$/, 'Color must be a valid hex color')
-    .optional()
-    .default('#6b7280'),
+  color: HexColorSchema.optional().default('#6b7280'),
   description: z.string().max(200).optional(),
   isPublic: z.boolean().optional(),
 })

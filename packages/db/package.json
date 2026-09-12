@@ -24,6 +24,7 @@
     "db:migrate": "bun run src/migrate.ts",
     "db:migrate:cli": "drizzle-kit migrate",
     "db:check-drift": "bun scripts/check-drift.ts",
+    "db:permissions": "bun scripts/generate-permissions-mirror.ts",
     "db:studio": "drizzle-kit studio",
     "db:seed": "bun src/seed.ts",
     "db:reset": "bun src/reset.ts",

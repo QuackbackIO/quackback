@@ -8,6 +8,9 @@ export * from './src/schema'
 // RBAC permission catalogue (pure data; the code-authoritative contract)
 export * from './src/rbac-catalogue'
 
+// Client-safe mirror renderer (pure data in, file text out)
+export { renderPermissionsMirror } from './src/permissions-mirror'
+
 // page_views partition maintenance (SQL helpers; take a Database, import no client)
 export { ensurePageViewPartitions, dropExpiredPageViewPartitions } from './src/page-view-partitions'
 

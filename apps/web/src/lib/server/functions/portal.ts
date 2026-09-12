@@ -22,6 +22,7 @@ import { NotFoundError } from '@/lib/shared/errors'
 import { isTeamMember } from '@/lib/shared/roles'
 import { can } from '@/lib/server/policy/authorize'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { PageLimitMinOneSchema, PageLimitSchema } from '@/lib/shared/schemas/taxonomy'
 import { db, principal as principalTable, user as userTable, eq, inArray } from '@/lib/server/db'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
@@ -312,7 +313,7 @@ export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
       // Optional comment-page controls. Omitted by first-page callers so the
       // default page size applies; supplied by "show more" fetches.
       commentsCursor: z.string().nullish(),
-      commentsLimit: z.number().int().positive().max(100).optional(),
+      commentsLimit: PageLimitSchema,
     })
   )
   .handler(async ({ data }) => {
@@ -587,7 +588,7 @@ export const fetchPublicRoadmapPosts = createServerFn({ method: 'GET' })
       roadmapId: roadmapIdSchema,
       statusId: postStatusIdSchema.optional(),
       bucketId: z.string().max(20).optional(),
-      limit: z.number().int().min(1).max(100).optional(),
+      limit: PageLimitMinOneSchema,
       offset: z.number().int().min(0).optional(),
       search: z.string().optional(),
       boardIds: z.array(boardIdInputSchema).optional(),

@@ -15,15 +15,6 @@ import type { Role } from './roles'
 
 type Claims = Record<string, unknown>
 
-/**
- * Resolve a claim by dotted path OR by literal URL-shaped key.
- * Kept as a named export so existing tests that import getNestedClaim
- * continue to pass through the server shim.
- */
-export function getNestedClaim(claims: Claims, path: string): unknown {
-  return getClaimByPath(claims, path)
-}
-
 function matchesRule(claim: unknown, whenContains: string): boolean {
   const needle = whenContains.toLowerCase()
   if (Array.isArray(claim)) {
@@ -40,7 +31,7 @@ export function resolveSsoRoleMatch(
   mapping: ClaimRoleMapping | undefined
 ): { role: Role; ruleIndex: number } | null {
   if (!mapping) return null
-  const claim = getNestedClaim(claims, mapping.claimPath)
+  const claim = getClaimByPath(claims, mapping.claimPath)
   for (let i = 0; i < mapping.rules.length; i++) {
     const rule = mapping.rules[i]
     if (rule && matchesRule(claim, rule.whenContains)) {

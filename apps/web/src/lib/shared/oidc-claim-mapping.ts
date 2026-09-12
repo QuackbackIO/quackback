@@ -19,6 +19,7 @@
  */
 
 import type { Role } from './roles'
+import { isPlainRecord as isRecord } from './record'
 import type {
   ClaimRoleMapping,
   IdentityProviderClaimMapping,
@@ -54,10 +55,6 @@ const UNSAFE_SEGMENTS = new Set(['__proto__', 'constructor', 'prototype'])
 
 export function claimPathIsUnsafe(path: string): boolean {
   return path.split('.').some((segment) => UNSAFE_SEGMENTS.has(segment))
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 /** A claim path is usable only if it has non-whitespace content. */

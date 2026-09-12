@@ -10,10 +10,12 @@
  * Note: Authorization is handled at the action/API layer, not in services.
  */
 
+import { sql } from 'drizzle-orm'
 import {
   db,
   eq,
   and,
+  ne,
   isNull,
   asc,
   type PostTag,
@@ -24,6 +26,8 @@ import {
 } from '@/lib/server/db'
 import type { PostTagId, BoardId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError, InternalError } from '@/lib/shared/errors'
+import { TAXONOMY_DEFAULT_COLOR } from '@/lib/shared/schemas/taxonomy'
+import { assertHexColor, assertTrimmedName } from '@/lib/server/utils'
 import type { CreateTagInput, UpdateTagInput } from './post-tag.types'
 import { isTeamActor, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
 import { logger } from '@/lib/server/logger'
@@ -41,33 +45,23 @@ const log = logger.child({ component: 'tags' })
  */
 export async function createPostTag(input: CreateTagInput): Promise<PostTag> {
   log.debug({ name: input.name }, 'create tag')
-  // Basic validation
-  if (!input.name || !input.name.trim()) {
-    throw new ValidationError('VALIDATION_ERROR', 'PostTag name is required')
-  }
-
-  const trimmedName = input.name.trim()
-
-  if (trimmedName.length > 50) {
-    throw new ValidationError('VALIDATION_ERROR', 'PostTag name must not exceed 50 characters')
-  }
-
-  // Check for duplicate name in the organization
-  const existingTags = await db.query.postTags.findMany({
-    orderBy: [asc(postTags.name)],
+  const trimmedName = assertTrimmedName(input.name, {
+    required: 'PostTag name is required',
+    tooLong: 'PostTag name must not exceed 50 characters',
   })
-  const duplicate = existingTags.find((tag) => tag.name.toLowerCase() === trimmedName.toLowerCase())
+
+  // Includes soft-deleted rows — the name unique check spans archived tags.
+  const duplicate = await db.query.postTags.findFirst({
+    where: sql`lower(${postTags.name}) = ${trimmedName.toLowerCase()}`,
+  })
   if (duplicate) {
     throw new ConflictError('DUPLICATE_NAME', `A tag with name "${trimmedName}" already exists`)
   }
 
-  const color = input.color || '#6b7280'
-
-  // Validate color format
-  const hexColorRegex = /^#[0-9A-Fa-f]{6}$/
-  if (!hexColorRegex.test(color)) {
-    throw new ValidationError('VALIDATION_ERROR', 'Color must be a valid hex color (e.g., #6b7280)')
-  }
+  const color = assertHexColor(
+    input.color || TAXONOMY_DEFAULT_COLOR,
+    'Color must be a valid hex color (e.g., #6b7280)'
+  )
 
   // Create the tag
   const [tag] = await db
@@ -103,38 +97,21 @@ export async function updatePostTag(id: PostTagId, input: UpdateTagInput): Promi
     throw new NotFoundError('TAG_NOT_FOUND', `PostTag with ID ${id} not found`)
   }
 
-  // Basic validation
-  if (input.name !== undefined && !input.name.trim()) {
-    throw new ValidationError('VALIDATION_ERROR', 'PostTag name cannot be empty')
-  }
-
-  // Check for duplicate name (excluding current tag)
   if (input.name !== undefined) {
-    const trimmedName = input.name.trim()
-
-    if (trimmedName.length > 50) {
-      throw new ValidationError('VALIDATION_ERROR', 'PostTag name must not exceed 50 characters')
-    }
-    const existingTags = await db.query.postTags.findMany({
-      orderBy: [asc(postTags.name)],
+    const trimmedName = assertTrimmedName(input.name, {
+      required: 'PostTag name cannot be empty',
+      tooLong: 'PostTag name must not exceed 50 characters',
     })
-    const duplicate = existingTags.find(
-      (tag) => tag.id !== id && tag.name.toLowerCase() === trimmedName.toLowerCase()
-    )
+    const duplicate = await db.query.postTags.findFirst({
+      where: and(sql`lower(${postTags.name}) = ${trimmedName.toLowerCase()}`, ne(postTags.id, id)),
+    })
     if (duplicate) {
       throw new ConflictError('DUPLICATE_NAME', `A tag with name "${trimmedName}" already exists`)
     }
   }
 
-  // Validate color format if provided
   if (input.color !== undefined) {
-    const hexColorRegex = /^#[0-9A-Fa-f]{6}$/
-    if (!hexColorRegex.test(input.color)) {
-      throw new ValidationError(
-        'VALIDATION_ERROR',
-        'Color must be a valid hex color (e.g., #6b7280)'
-      )
-    }
+    assertHexColor(input.color, 'Color must be a valid hex color (e.g., #6b7280)')
   }
 
   // Build update data

@@ -1,11 +1,14 @@
 /**
  * Client-safe mirror of the RBAC permission catalogue.
  *
+ * GENERATED — do not edit by hand. Edit `packages/db/src/rbac-catalogue.ts`
+ * then run `bun run db:permissions` from the repo root.
+ *
  * The widget/portal client bundles can't import `@quackback/db` (it drags in
- * postgres), so the catalogue is duplicated here as plain data for the admin
+ * postgres), so the catalogue is projected here as plain data for the admin
  * UI. A drift test (permissions-catalogue-drift.test.ts) asserts this stays
  * identical to the `@quackback/db` source of truth: edit the catalogue there
- * first, then mirror the change here.
+ * first, then regenerate here.
  */
 
 export const PERMISSIONS = {
@@ -14,7 +17,7 @@ export const PERMISSIONS = {
   SETTINGS_BRANDING: 'settings.branding',
   SETTINGS_MODERATION: 'settings.moderation',
   SETTINGS_NOTIFICATIONS: 'settings.notifications',
-  SETTINGS_CUSTOM_DOMAIN: 'settings.custom_domain', // Settings → Domains
+  SETTINGS_CUSTOM_DOMAIN: 'settings.custom_domain',
   BILLING_MANAGE: 'billing.manage',
   ROLE_MANAGE: 'role.manage',
   API_KEY_MANAGE: 'api_key.manage',
@@ -103,8 +106,7 @@ export const PERMISSIONS = {
   INTEGRATION_VIEW: 'integration.view',
   INTEGRATION_MANAGE: 'integration.manage',
 
-  // support (dormant until the support platform lands). Tickets are a peer aggregate with their own
-  // resource verbs, team-scoped for humans and workspace-scoped for machine/AI principals.
+  // support
   TICKET_VIEW: 'ticket.view',
   TICKET_VIEW_ALL: 'ticket.view_all',
   TICKET_REPLY: 'ticket.reply',
@@ -124,8 +126,7 @@ export const PERMISSIONS = {
   ASSISTANT_MANAGE: 'assistant.manage',
   COPILOT_USE: 'copilot.use',
 
-  // status_page (named status_page.* to avoid colliding with the existing
-  // post-status-taxonomy STATUS_VIEW/STATUS_MANAGE keys above)
+  // status_page
   STATUS_PAGE_MANAGE: 'status_page.manage',
   STATUS_PAGE_PUBLISH: 'status_page.publish',
 } as const
@@ -155,7 +156,7 @@ export const PERMISSION_CATEGORIES = [
 export type PermissionCategory = (typeof PERMISSION_CATEGORIES)[number]
 
 // --------------------------------------------------------------- presets ---
-// Mirrored from @quackback/db (the drift test enforces equality). The policy
+// Projected from @quackback/db (the drift test enforces equality). The policy
 // layer resolves an actor's permissions from these, and the read-only Roles UI
 // renders them, so they must be client-safe.
 

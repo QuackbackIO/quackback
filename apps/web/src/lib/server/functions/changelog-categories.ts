@@ -8,6 +8,13 @@ import type { ChangelogCategoryId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
+  EntityIdSchema,
+  OptionalHexColorPatternSchema,
+  OptionalHexColorPatternWithDefaultSchema,
+  ReorderIdsOpenSchema,
+  TaxonomyNameSchema,
+} from '@/lib/shared/schemas/taxonomy'
+import {
   listChangelogCategories,
   createChangelogCategory,
   updateChangelogCategory,
@@ -19,27 +26,20 @@ import { logger } from '@/lib/server/logger'
 const log = logger.child({ component: 'changelog-categories' })
 
 const createCategorySchema = z.object({
-  name: z.string().min(1).max(50),
-  color: z
-    .string()
-    .regex(/^#[0-9A-Fa-f]{6}$/)
-    .optional()
-    .default('#6b7280'),
+  name: TaxonomyNameSchema,
+  color: OptionalHexColorPatternWithDefaultSchema,
   segmentIds: z.array(z.string()).optional(),
 })
 
 const updateCategorySchema = z.object({
   id: z.string(),
-  name: z.string().min(1).max(50).optional(),
-  color: z
-    .string()
-    .regex(/^#[0-9A-Fa-f]{6}$/)
-    .optional(),
+  name: TaxonomyNameSchema.optional(),
+  color: OptionalHexColorPatternSchema,
   segmentIds: z.array(z.string()).optional(),
 })
 
-const idSchema = z.object({ id: z.string() })
-const reorderSchema = z.object({ ids: z.array(z.string()) })
+const idSchema = EntityIdSchema
+const reorderSchema = ReorderIdsOpenSchema
 
 /** List categories (public: powers the widget/portal filter chips too). */
 export const listChangelogCategoriesFn = createServerFn({ method: 'GET' }).handler(async () => {

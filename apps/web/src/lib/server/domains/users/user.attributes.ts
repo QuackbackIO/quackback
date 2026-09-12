@@ -7,7 +7,7 @@
 
 import { db, userAttributeDefinitions } from '@/lib/server/db'
 import type { UserAttributeType } from '@/lib/server/db'
-import { coerceAttributeValue } from '@/lib/server/domains/user-attributes/coerce'
+import { coerceAttributeValue } from '@/lib/shared/coerce-attribute-value'
 import { ValidationError } from '@/lib/shared/errors'
 
 // ============================================

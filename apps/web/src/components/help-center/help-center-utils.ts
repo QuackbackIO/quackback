@@ -4,6 +4,7 @@
  */
 
 import { hcCollectionPath } from '@/lib/shared/help-center-url'
+import { buildAncestorChain } from '@/lib/shared/help-center-tree'
 
 interface CategoryLike {
   parentId?: string | null
@@ -16,62 +17,12 @@ export function getTopLevelCategories<T extends CategoryLike>(categories: T[]): 
   return categories.filter((c) => c.parentId == null)
 }
 
-/**
- * Extracts the active category slug from the current pathname.
- * Understands /hc/{locale}/collections/{urlId}-{slug} and legacy /hc/categories/:slug.
- * Returns null when not on a specific category.
- */
-export function getActiveCategory(pathname: string): string | null {
-  if (!pathname) return null
-  const segments = pathname.split('/').filter(Boolean)
-  if (segments[0] !== 'hc') return null
-  // /hc/{locale}/collections/{urlId}-{slug}  or legacy /hc/categories/:slug
-  if (segments[1] === 'categories') return segments[2] ?? null
-  if (segments[2] === 'collections' || segments[2] === 'articles') {
-    const idSlug = segments[3] ?? null
-    if (!idSlug) return null
-    const hyphen = idSlug.indexOf('-')
-    return hyphen === -1 ? idSlug : idSlug.slice(hyphen + 1)
-  }
-  if (segments[1] === 'articles') return segments[2] ?? null
-  return null
-}
-
-/**
- * Filters categories to find direct children of a given parent category.
- */
-export function getSubcategories<T extends CategoryLike>(categories: T[], parentId: string): T[] {
-  return categories.filter((c) => c.parentId === parentId)
-}
-
 interface CategoryLikeWithSlug {
   id: string
   urlId: number
-  parentId?: string | null
+  parentId: string | null
   slug: string
   name: string
-}
-
-/**
- * Walk from the given category up to its top-level ancestor.
- * Returns the chain ordered root-first. Empty array if id unknown.
- * Bails out on cycles rather than looping forever.
- */
-function buildAncestorChain<T extends CategoryLikeWithSlug>(flat: T[], id: string): T[] {
-  const byId = new Map(flat.map((c) => [c.id, c]))
-  const start = byId.get(id)
-  if (!start) return []
-  const chain: T[] = []
-  const seen = new Set<string>()
-  let current: T | undefined = start
-  while (current) {
-    if (seen.has(current.id)) break
-    seen.add(current.id)
-    chain.push(current)
-    if (!current.parentId) break
-    current = byId.get(current.parentId)
-  }
-  return chain.reverse()
 }
 
 /**

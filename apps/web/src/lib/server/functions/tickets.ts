@@ -37,6 +37,7 @@ import type {
   BulkTicketAction,
 } from '@/lib/server/domains/tickets'
 import { requireAuth, policyActorFromAuth, assertPermission } from './auth-helpers'
+import { HexColorFormatSchema, PageLimitMinOneSchema } from '@/lib/shared/schemas/taxonomy'
 import type { ConversationAttachment } from '@/lib/shared/db-types'
 import { ForbiddenError, ValidationError } from '@/lib/shared/errors'
 import { conversationIdSchema } from '@/lib/server/domains/assistant/conversation-id.schema'
@@ -45,7 +46,7 @@ const ticketTypeSchema = z.enum(TICKET_TYPES)
 const statusCategorySchema = z.enum(TICKET_STATUS_CATEGORIES)
 const stageSchema = z.enum(TICKET_STAGES)
 const prioritySchema = z.enum(CONVERSATION_PRIORITIES)
-const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Invalid color format')
+const hexColor = HexColorFormatSchema
 
 // Shared by every rich-content entry point (the opening description, a reply,
 // a note): the service re-validates count/size/url, so this only shapes the
@@ -74,7 +75,7 @@ const listTicketsSchema = z.object({
   search: z.string().optional(),
   sort: z.enum(['recent', 'oldest', 'created', 'priority']).optional(),
   cursor: z.string().optional(),
-  limit: z.number().int().min(1).max(100).optional(),
+  limit: PageLimitMinOneSchema,
 })
 
 export const listTicketsFn = createServerFn({ method: 'GET' })

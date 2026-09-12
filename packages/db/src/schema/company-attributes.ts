@@ -6,34 +6,15 @@
  * first-class company predicates in the segment rule builder and as typed
  * editors on the company profile.
  */
-import { pgTable, text, timestamp, uniqueIndex, customType } from 'drizzle-orm/pg-core'
-import { generateId, toUuid, fromUuid, isUuid, type TypeId } from '@quackback/ids'
+import { pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core'
+import { generateId } from '@quackback/ids'
+import { typeIdTextColumn } from '@quackback/ids/drizzle'
 import type { UserAttributeType, CurrencyCode } from './user-attributes'
-
-/**
- * TypeID column stored as `text` holding the UUID form — cloned from the
- * user_attr column so the two definition tables stay structurally identical
- * (see user-attributes.ts for why the id is text rather than uuid).
- */
-const companyAttrIdText = customType<{ data: TypeId<'company_attr'>; driverData: string }>({
-  dataType() {
-    return 'text'
-  },
-  toDriver(value: TypeId<'company_attr'>): string {
-    return isUuid(value) ? value : toUuid(value)
-  },
-  fromDriver(value: unknown): TypeId<'company_attr'> {
-    if (typeof value !== 'string') {
-      throw new Error(`Expected string from database, got ${typeof value}`)
-    }
-    return fromUuid('company_attr', value)
-  },
-})
 
 export const companyAttributeDefinitions = pgTable(
   'company_attribute_definitions',
   {
-    id: companyAttrIdText('id')
+    id: typeIdTextColumn('company_attr')('id')
       .primaryKey()
       .$defaultFn(() => generateId('company_attr')),
     /** The JSON key inside companies.custom_attributes, e.g. "region", "seats" */

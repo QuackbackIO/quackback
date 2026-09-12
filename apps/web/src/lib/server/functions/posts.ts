@@ -15,6 +15,7 @@ import {
   type UserId,
 } from '@quackback/ids'
 import { tiptapContentSchema, type TiptapContent } from '@/lib/shared/schemas/posts'
+import { PageLimitSchema } from '@/lib/shared/schemas/taxonomy'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import { requireAuth, policyActorFromAuth } from './auth-helpers'
@@ -266,7 +267,7 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
       // Comment keyset-page controls. First-page callers omit them (default
       // page size); "show more" fetches pass the prior page's nextCursor.
       commentsCursor: z.string().nullish(),
-      commentsLimit: z.number().int().positive().max(100).optional(),
+      commentsLimit: PageLimitSchema,
     })
   )
   .handler(async ({ data }) => {

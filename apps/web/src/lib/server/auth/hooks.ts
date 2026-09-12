@@ -645,7 +645,7 @@ export async function handleAutoProvisionAfter(
     const claims = readClaims
       ? (await readClaims()).claims
       : await readSsoClaims(userIdTyped, providerId)
-    const { resolveSsoRole } = await import('./resolve-sso-role')
+    const { resolveSsoRole } = await import('@/lib/shared/resolve-sso-role')
     claimRole = resolveSsoRole(claims, roleMapping)
   }
 

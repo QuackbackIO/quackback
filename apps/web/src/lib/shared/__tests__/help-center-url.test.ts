@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import {
-  getHelpCenterBaseUrl,
   localizedHcPath,
   parseHcLocalePath,
   resolveHcLandingLocale,
@@ -9,12 +8,6 @@ import {
   hcArticlePath,
   hcCollectionPath,
 } from '../help-center-url'
-
-describe('getHelpCenterBaseUrl', () => {
-  it('returns /hc as the inline help center base path', () => {
-    expect(getHelpCenterBaseUrl()).toBe('/hc')
-  })
-})
 
 describe('formatHcIdSlug / parseHcIdSlug', () => {
   it('joins a numeric id with the slug', () => {

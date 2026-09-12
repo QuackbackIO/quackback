@@ -17,6 +17,7 @@ import type {
 } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { EntityIdSchema, PageLimitSchema, ReorderIdsSchema } from '@/lib/shared/schemas/taxonomy'
 import { requireAuth, getOptionalAuth, policyActorFromAuth } from './auth-helpers'
 import { resolvePortalAccessForRequest } from './portal-access'
 import {
@@ -206,8 +207,8 @@ export const updateStatusComponentFn = createServerFn({ method: 'POST' })
     })
   })
 
-const idSchema = z.object({ id: z.string() })
-const reorderIdsSchema = z.object({ ids: z.array(z.string()).min(1) })
+const idSchema = EntityIdSchema
+const reorderIdsSchema = ReorderIdsSchema
 
 export const deleteStatusComponentFn = createServerFn({ method: 'POST' })
   .validator(idSchema)
@@ -449,7 +450,7 @@ const listStatusIncidentsAdminSchema = z.object({
   state: z.enum(['active', 'resolved', 'all']).optional(),
   search: z.string().trim().max(200).optional(),
   cursor: z.string().optional(),
-  limit: z.number().int().positive().max(100).optional(),
+  limit: PageLimitSchema,
 })
 
 export const listStatusIncidentsAdminFn = createServerFn({ method: 'GET' })
@@ -641,7 +642,7 @@ export const deleteStatusIncidentTemplateFn = createServerFn({ method: 'POST' })
 
 const listStatusSubscriptionsSchema = z.object({
   cursor: z.string().optional(),
-  limit: z.number().int().positive().max(100).optional(),
+  limit: PageLimitSchema,
   search: z.string().trim().max(200).optional(),
 })
 
@@ -850,7 +851,7 @@ export const getStatusUptimeFn = createServerFn({ method: 'GET' })
 
 const listStatusHistorySchema = z.object({
   cursor: z.string().optional(),
-  limit: z.number().int().positive().max(100).optional(),
+  limit: PageLimitSchema,
 })
 
 /** Paginated resolved-incident history (public view). */

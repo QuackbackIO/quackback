@@ -9,15 +9,13 @@ import {
 } from '@/lib/server/domains/api/responses'
 import { parseTypeId } from '@/lib/server/domains/api/validation'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { HexColorSchema, TaxonomyNameSchema } from '@/lib/shared/schemas/taxonomy'
 import type { PostTagId } from '@quackback/ids'
 
 // Input validation schema
 const updateTagSchema = z.object({
-  name: z.string().min(1).max(50).optional(),
-  color: z
-    .string()
-    .regex(/^#[0-9A-Fa-f]{6}$/, 'Color must be a valid hex color')
-    .optional(),
+  name: TaxonomyNameSchema.optional(),
+  color: HexColorSchema.optional(),
   description: z.string().max(200).optional().nullable(),
   isPublic: z.boolean().optional(),
 })

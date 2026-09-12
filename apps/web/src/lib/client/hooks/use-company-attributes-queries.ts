@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 
 export type CompanyAttributeItem = Awaited<
-  ReturnType<typeof import('@/lib/server/functions/companies').listCompanyAttributesFn>
+  ReturnType<typeof import('@/lib/server/functions/company-attributes').listCompanyAttributesFn>
 >[number]
 
 /** Fetch all company attribute definitions. */

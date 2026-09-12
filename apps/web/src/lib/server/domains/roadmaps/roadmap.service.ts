@@ -5,7 +5,6 @@ import {
   isNull,
   inArray,
   asc,
-  sql,
   roadmaps,
   roadmapColumns,
   postStatuses,
@@ -15,7 +14,7 @@ import {
   type Transaction,
 } from '@/lib/server/db'
 import type { PostTagId, RoadmapId, RoadmapColumnId } from '@quackback/ids'
-import { positionCaseSql } from '@/lib/server/utils'
+import { nextPosition, positionCaseSql } from '@/lib/server/utils'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
 import { roadmapBaseFilterSchema } from '@/lib/shared/roadmap-config'
 import { roadmapViewFilter, isTeamActor, type Actor, ANONYMOUS_ACTOR } from '@/lib/server/policy'
@@ -146,10 +145,7 @@ export async function createRoadmap(input: CreateRoadmapInput): Promise<RoadmapW
     throw new ConflictError('DUPLICATE_SLUG', `A roadmap with slug "${input.slug}" already exists`)
   }
 
-  const positionResult = await db
-    .select({ maxPosition: sql<number>`COALESCE(MAX(${roadmaps.position}), -1)` })
-    .from(roadmaps)
-  const position = (positionResult[0]?.maxPosition ?? -1) + 1
+  const position = await nextPosition(roadmaps, roadmaps.position)
   const type = input.type ?? 'column'
   const visibility = input.visibility ?? 'public'
 
