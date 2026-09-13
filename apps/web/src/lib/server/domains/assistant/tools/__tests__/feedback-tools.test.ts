@@ -180,6 +180,7 @@ describe('flexibleDatetime since-filter', () => {
     '2026-01-05T06:15+02:00', // minute precision with offset
     '2026-01-05T06:15+14:00', // largest real UTC offset
     '2026-01-05T06:15-12:00', // smallest real UTC offset
+    '2026-01-05T06:15+0200', // compact offset spelling
     '2024-02-29T06:15Z', // leap day is real
   ])('accepts %s', (value) => {
     expect(flexibleDatetime.safeParse(value).success).toBe(true)
@@ -191,6 +192,7 @@ describe('flexibleDatetime since-filter', () => {
     '2026-01-05T06:15+02:99', // impossible offset minutes
     '2026-01-05T06:15+15:00', // beyond the real +14:00 maximum
     '2026-01-05T06:15-12:01', // beyond the real -12:00 minimum
+    '2026-01-05T06:15+1500', // compact spelling of an out-of-range offset
     '2026-13-01T06:15Z', // month 13
     '2026-01-05T25:15Z', // hour 25
     'not a date',
