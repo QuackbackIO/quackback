@@ -166,9 +166,15 @@ describe('WorkflowRunsSheet', () => {
       />
     )
     await screen.findByText('Waiting')
-    expect(hoisted.workflowRunTimelineFn).toHaveBeenCalledWith({
-      data: { runId: 'workflow_run_2' },
-    })
+    // The timeline query fires after the runs list renders and the default
+    // (most-recent) run is selected — wait for it rather than asserting
+    // synchronously. (Under Vitest 5 `clearMocks` defaults to true, so mock
+    // history from earlier tests no longer masks the async gap here.)
+    await vi.waitFor(() =>
+      expect(hoisted.workflowRunTimelineFn).toHaveBeenCalledWith({
+        data: { runId: 'workflow_run_2' },
+      })
+    )
   })
 
   it("renders the selected run's timeline, humanizing an action_failed:<type> kind", async () => {

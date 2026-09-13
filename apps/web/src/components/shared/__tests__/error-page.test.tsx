@@ -16,6 +16,17 @@ describe('isAuthorizationError', () => {
     expect(isAuthorizationError(new Error('Network request failed'))).toBe(false)
     expect(isAuthorizationError(new Error('undefined is not a function'))).toBe(false)
   })
+
+  it('preserves the message of object-shaped boundary errors', () => {
+    // Serialized server payloads are not `instanceof Error` but still carry
+    // the classification signal in `.message`.
+    expect(isAuthorizationError({ message: 'Access denied: Requires [admin], got member' })).toBe(
+      true
+    )
+    expect(isAuthorizationError({ message: 'boom' })).toBe(false)
+    expect(isAuthorizationError(null)).toBe(false)
+    expect(isAuthorizationError(undefined)).toBe(false)
+  })
 })
 
 describe('isEntitlementError', () => {
@@ -58,6 +69,13 @@ describe('DefaultErrorPage', () => {
 
     expect(screen.getByText(/Something went wrong/i)).toBeInTheDocument()
     expect(screen.getByText(/Technical details/i)).toBeInTheDocument()
+  })
+
+  it('renders the message of an object-shaped boundary error', () => {
+    render(<DefaultErrorPage error={{ message: 'custom exploded' }} />)
+
+    expect(screen.getByText(/Something went wrong/i)).toBeInTheDocument()
+    expect(screen.getByText(/custom exploded/)).toBeInTheDocument()
   })
 
   it('does not treat a plan refusal as an unexpected crash', () => {

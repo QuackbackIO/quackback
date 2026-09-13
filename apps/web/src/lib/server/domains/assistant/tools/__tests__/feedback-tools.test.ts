@@ -8,7 +8,7 @@ vi.mock('@/lib/server/db', async (original) => ({
 import { testDb, createDbTestFixture } from '@/lib/server/__tests__/db-test-fixture'
 import { principal, posts, boards, conversations, conversationMessages } from '@/lib/server/db'
 import { makeAssistantToolContext } from '../../assistant.toolspec'
-import { executeListFeedback, executeFeedbackStats } from '../feedback-tools'
+import { executeListFeedback, executeFeedbackStats, flexibleDatetime } from '../feedback-tools'
 import { workspaceConversationSource } from '../../workspace-retrieval'
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -169,6 +169,29 @@ describe.skipIf(!fixture.available)('workspace reads with real DB', () => {
     expect(
       await workspaceConversationSource(true).retrieve('billing', 'team', { topK: 5 })
     ).toEqual([])
+  })
+})
+
+describe('flexibleDatetime since-filter', () => {
+  it.each([
+    '2026-01-05T06:15:00.000Z',
+    '2026-01-05T06:15:00Z',
+    '2026-01-05T06:15Z', // minute precision (what LLMs emit)
+    '2024-02-29T06:15Z', // leap day
+  ])('accepts %s', (value) => {
+    expect(flexibleDatetime.safeParse(value).success).toBe(true)
+  })
+  it.each([
+    '2026-02-30T06:15:00Z', // `new Date` rolls this to Mar 2
+    '2026-02-30T06:15Z',
+    '2026-13-01T06:15Z',
+    '2026-01-05T06:15', // naive: server-local TZ would shift the cutoff
+    '2026-01-05T06:15+02:00', // offsets were never in the pre-4.5 schema
+    '2026-01-05T25:15Z',
+    'not a date',
+    '',
+  ])('rejects %s', (value) => {
+    expect(flexibleDatetime.safeParse(value).success).toBe(false)
   })
 })
 

@@ -9,6 +9,7 @@ import { UsersContainer } from '@/components/admin/users/users-container'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
+import { errorMessage } from '@/components/shared/error-page'
 
 const searchSchema = z.object({
   search: z.string().optional(),
@@ -80,14 +81,15 @@ export const Route = createFileRoute('/admin/users')({
   component: UsersPage,
 })
 
-function UsersErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
+function UsersErrorComponent({ error, reset }: { error: unknown; reset: () => void }) {
+  const message = errorMessage(error)
   return (
     <div className="flex items-center justify-center min-h-[400px] p-4">
       <Alert variant="destructive" className="max-w-2xl">
         <ExclamationCircleIcon className="h-4 w-4" />
         <AlertTitle>Failed to load users</AlertTitle>
         <AlertDescription className="mt-2">
-          <p className="mb-4">{error.message}</p>
+          <p className="mb-4">{message}</p>
           <Button onClick={reset} variant="outline" size="sm">
             Try again
           </Button>
