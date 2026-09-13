@@ -31,8 +31,6 @@ import {
   agentEventChangesInboxList,
   applyAgentThreadEvent,
   applyTicketThreadEvent,
-  type AgentThreadCache,
-  type TicketThreadCache,
 } from '@/components/conversation/events-reducer'
 import { conversationKeys } from '@/components/conversation/query-keys'
 import { ConversationListColumn } from '@/components/admin/conversation/conversation-list-column'
@@ -94,6 +92,7 @@ import {
   type InboxNavItem,
   type InboxSearch,
 } from '@/lib/client/conversation/inbox-scope'
+import { reconcileCachedThread } from '@/lib/client/conversation/reconcile-cached-thread'
 import type { Channel } from '@/lib/shared/channels'
 import { conversationInboxQueries } from '@/lib/client/queries/conversation-inbox'
 import { inboxQueries, inboxKeys, ticketQueries, ticketKeys } from '@/lib/client/queries/inbox'
@@ -671,7 +670,6 @@ function InboxPage() {
   // The open conversation/ticket id, or null when the other kind (or nothing)
   // is selected.
   const activeConversationId = selectedRef?.kind === 'conversation' ? selectedRef.id : null
-  const activeTicketId = selectedRef?.kind === 'ticket' ? selectedRef.id : null
 
   // Hoisted above `useInboxListSource` (below) so its connection state can
   // gate that hook's polling-fallback `refetchInterval`s — while the stream
@@ -720,19 +718,27 @@ function InboxPage() {
         else if (evt.side === 'agent') onOtherAgentTyping()
       }
 
-      // Everything cache-shaped (message/read/updated/deleted/conversation)
-      // routes through the pure reducer against the open thread's cache — one
-      // branch per kind, since each has its own cache key + reducer.
-      if (activeConversationId) {
-        queryClient.setQueryData(
-          conversationKeys.agentThread(activeConversationId),
-          (prev: AgentThreadCache | undefined) =>
-            applyAgentThreadEvent(prev, evt, activeConversationId)
+      // Thread caches: the open thread and any hover-prefetched (or previously
+      // opened) thread for this event. Unvisited rows stay untouched. Ephemeral
+      // typing / assistant frames have nothing in the cache to patch.
+      const conversationId =
+        evt.kind === 'conversation'
+          ? evt.conversation.id
+          : 'conversationId' in evt
+            ? evt.conversationId
+            : undefined
+      if (
+        conversationId &&
+        evt.kind !== 'typing' &&
+        evt.kind !== 'assistant_activity' &&
+        evt.kind !== 'assistant_delta'
+      ) {
+        reconcileCachedThread(queryClient, conversationKeys.agentThread(conversationId), (prev) =>
+          applyAgentThreadEvent(prev, evt, conversationId)
         )
-      } else if (activeTicketId) {
-        queryClient.setQueryData(
-          ticketKeys.thread(activeTicketId),
-          (prev: TicketThreadCache | undefined) => applyTicketThreadEvent(prev, evt, activeTicketId)
+      } else if (evt.kind === 'ticket_message') {
+        reconcileCachedThread(queryClient, ticketKeys.thread(evt.ticketId), (prev) =>
+          applyTicketThreadEvent(prev, evt, evt.ticketId)
         )
       }
     },
