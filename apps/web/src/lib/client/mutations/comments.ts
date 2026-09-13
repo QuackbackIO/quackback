@@ -7,6 +7,7 @@
 import { useMutation, useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { createCommentFn, addReactionFn, removeReactionFn } from '@/lib/server/functions/comments'
 import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
+import { updatePostInInboxLists } from '@/lib/client/mutations/inbox-list-cache'
 import type { PostDetails, PostCommentReaction, CommentWithReplies } from '@/lib/shared/types'
 import type { InboxPostListResult } from '@/lib/shared/db-types'
 import type { PostCommentId, PrincipalId, PostId } from '@quackback/ids'
@@ -42,27 +43,13 @@ interface AddCommentInput {
 // Helper Functions
 // ============================================================================
 
-/** Update a post in all list caches */
+/** Update a post in all infinite inbox list caches (skips non-list siblings). */
 function updatePostInLists(
   queryClient: ReturnType<typeof useQueryClient>,
   postId: PostId,
   updater: (post: { commentCount: number }) => { commentCount: number }
 ): void {
-  queryClient.setQueriesData<InfiniteData<InboxPostListResult>>(
-    { queryKey: inboxKeys.lists() },
-    (old) => {
-      if (!old) return old
-      return {
-        ...old,
-        pages: old.pages.map((page) => ({
-          ...page,
-          items: page.items.map((post) =>
-            post.id === postId ? { ...post, ...updater(post) } : post
-          ),
-        })),
-      }
-    }
-  )
+  updatePostInInboxLists(queryClient, postId, (post) => ({ ...post, ...updater(post) }))
 }
 
 /** Optimistically update reactions in nested comment structure */
