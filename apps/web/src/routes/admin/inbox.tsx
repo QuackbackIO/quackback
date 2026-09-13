@@ -31,6 +31,8 @@ import {
   agentEventChangesInboxList,
   applyAgentThreadEvent,
   applyTicketThreadEvent,
+  type AgentThreadCache,
+  type TicketThreadCache,
 } from '@/components/conversation/events-reducer'
 import { conversationKeys } from '@/components/conversation/query-keys'
 import { ConversationListColumn } from '@/components/admin/conversation/conversation-list-column'
@@ -733,12 +735,16 @@ function InboxPage() {
         evt.kind !== 'assistant_activity' &&
         evt.kind !== 'assistant_delta'
       ) {
-        reconcileCachedThread(queryClient, conversationKeys.agentThread(conversationId), (prev) =>
-          applyAgentThreadEvent(prev, evt, conversationId)
+        reconcileCachedThread<AgentThreadCache>(
+          queryClient,
+          conversationKeys.agentThread(conversationId),
+          (prev) => applyAgentThreadEvent(prev, evt, conversationId)
         )
       } else if (evt.kind === 'ticket_message') {
-        reconcileCachedThread(queryClient, ticketKeys.thread(evt.ticketId), (prev) =>
-          applyTicketThreadEvent(prev, evt, evt.ticketId)
+        reconcileCachedThread<TicketThreadCache>(
+          queryClient,
+          ticketKeys.thread(evt.ticketId),
+          (prev) => applyTicketThreadEvent(prev, evt, evt.ticketId)
         )
       }
     },
