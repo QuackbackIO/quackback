@@ -33,17 +33,16 @@ export const Route = createFileRoute('/admin/feedback/')({
 
     // The posts query only ever prefetches the default/initial (unfiltered)
     // dataset — a filtered URL on first load falls through to InboxContainer's
-    // own client fetch, same as the portal feed. List, counts, and summary
-    // stream in via fire-and-forget prefetch on the same keys the components
-    // read, so a warmed cache still hydrates instead of refetching.
-    void queryClient.prefetchInfiniteQuery(inboxPostsInfiniteOptions(defaultInboxFilters))
-    void queryClient.prefetchQuery(inboxFacetCountsOptions(defaultInboxFilters))
-    void queryClient.prefetchQuery(mergeSuggestionQueries.summary())
+    // own client fetch, same as the portal feed. Awaited so the document
+    // hydrates instead of racing a fire-and-forget prefetch.
     await Promise.all([
+      queryClient.ensureInfiniteQueryData(inboxPostsInfiniteOptions(defaultInboxFilters)),
+      queryClient.ensureQueryData(inboxFacetCountsOptions(defaultInboxFilters)),
       queryClient.ensureQueryData(adminQueries.boards()),
       queryClient.ensureQueryData(adminQueries.tags()),
       queryClient.ensureQueryData(adminQueries.statuses()),
       queryClient.ensureQueryData(adminQueries.teamMembers()),
+      queryClient.ensureQueryData(mergeSuggestionQueries.summary()),
       // Warm the moderation count so the pending-moderation banner renders on
       // first paint instead of popping in once the query resolves.
       queryClient.ensureQueryData(adminQueries.moderationStatus()),

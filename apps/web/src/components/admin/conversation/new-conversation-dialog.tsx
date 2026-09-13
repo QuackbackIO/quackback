@@ -1,6 +1,5 @@
 import {
   Suspense,
-  lazy,
   useCallback,
   useEffect,
   useRef,
@@ -19,12 +18,9 @@ import { MAX_CONVERSATION_MESSAGE_LENGTH } from '@/lib/shared/conversation/types
 import { startAgentConversationFn } from '@/lib/server/functions/conversation'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { PortalUserPicker } from '@/components/shared/portal-user-picker'
+import { LazyRichTextEditor } from '@/components/ui/lazy-rich-text-editor'
 import { Skeleton } from '@/components/ui/skeleton'
 import { CONVERSATION_EDITOR_FEATURES } from '@/components/conversation/conversation-editor-features'
-
-const RichTextEditor = lazy(() =>
-  import('@/components/ui/rich-text-editor').then((m) => ({ default: m.RichTextEditor }))
-)
 import { ComposerAttachmentTray } from '@/components/shared/composer-attachment-tray'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
@@ -215,7 +211,7 @@ export function NewConversationDialog({
               <Suspense
                 fallback={<Skeleton className="w-full rounded-md" style={{ minHeight: '100px' }} />}
               >
-                <RichTextEditor
+                <LazyRichTextEditor
                   key={composerKey}
                   value={messageJson ?? ''}
                   onChange={(json, _html, markdown) => {

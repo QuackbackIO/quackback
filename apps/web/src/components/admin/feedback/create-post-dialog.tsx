@@ -12,14 +12,12 @@ import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/
 import { Button } from '@/components/ui/button'
 import { FolderIcon, TagIcon, UserIcon } from '@heroicons/react/24/outline'
 import { PencilSquareIcon } from '@heroicons/react/24/solid'
+import { LazyRichTextEditor } from '@/components/ui/lazy-rich-text-editor'
 import { Skeleton } from '@/components/ui/skeleton'
 // Defer framer-motion via the public similar-posts-card lazy boundary so the
 // admin/feedback bundle no longer pulls framer-motion into the SSR bundle.
 const SimilarPostsCard = lazy(() =>
   import('@/components/public/similar-posts-card').then((m) => ({ default: m.SimilarPostsCard }))
-)
-const RichTextEditor = lazy(() =>
-  import('@/components/ui/rich-text-editor').then((m) => ({ default: m.RichTextEditor }))
 )
 import {
   Select,
@@ -204,7 +202,7 @@ export function CreatePostDialog({
                               />
                             }
                           >
-                            <RichTextEditor
+                            <LazyRichTextEditor
                               value={contentJson || ''}
                               onChange={handleContentChange}
                               placeholder="Add more details... Type / for commands"
