@@ -178,6 +178,7 @@ describe('flexibleDatetime since-filter', () => {
     '2026-01-05T06:15:00Z',
     '2026-01-05T06:15Z', // minute precision (what LLMs emit)
     '2026-01-05T06:15+02:00', // minute precision with offset
+    '2026-01-05T06:15+14:00', // largest real UTC offset
     '2024-02-29T06:15Z', // leap day is real
   ])('accepts %s', (value) => {
     expect(flexibleDatetime.safeParse(value).success).toBe(true)
@@ -185,6 +186,8 @@ describe('flexibleDatetime since-filter', () => {
   it.each([
     '2026-02-30T06:15:00Z', // rolled to Mar 2 by `new Date`, must reject
     '2026-02-30T06:15Z', // same at minute precision
+    '2026-01-05T06:15+99:99', // impossible offset (would be Invalid Date downstream)
+    '2026-01-05T06:15+02:99', // impossible offset minutes
     '2026-13-01T06:15Z', // month 13
     '2026-01-05T25:15Z', // hour 25
     'not a date',

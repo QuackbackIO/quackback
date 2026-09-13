@@ -36,10 +36,18 @@ function isValidMinutePrecision(s: string): boolean {
   const day = Number(match[3])
   const hour = Number(match[4])
   const minute = Number(match[5])
+  const offset = match[6] ?? ''
   if (month < 1 || month > 12 || hour > 23 || minute > 59) return false
   // Day 0 of month+1 is the last day of month — rejects Feb 30 etc.
   const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate()
-  return day >= 1 && day <= daysInMonth
+  if (day < 1 || day > daysInMonth) return false
+  // The regex alone permits impossible offsets (e.g. +99:99), which `new
+  // Date()` turns into Invalid Date and would fail at the database instead
+  // of at validation. Re-parse the normalized second-precision form: shape
+  // and calendar are already constrained above, so a NaN here can only mean
+  // a bad offset.
+  const normalized = `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}:00${offset}`
+  return !Number.isNaN(Date.parse(normalized))
 }
 export const flexibleDatetime = z
   .string()

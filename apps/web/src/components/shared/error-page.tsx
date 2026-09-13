@@ -37,6 +37,17 @@ export function FriendlyShell({ children, fullPage = true }: FriendlyShellProps)
 function toError(error: unknown): Error {
   if (error instanceof Error) return error
   if (typeof error === 'string') return new Error(error)
+  // Route boundaries can deliver serialized server payloads (e.g.
+  // `{ message: 'Access denied: ...' }`) — preserve their message so
+  // classification and technical details keep working.
+  if (
+    error !== null &&
+    typeof error === 'object' &&
+    'message' in error &&
+    typeof (error as { message: unknown }).message === 'string'
+  ) {
+    return new Error((error as { message: string }).message)
+  }
   return new Error('An unexpected error occurred')
 }
 
