@@ -21,11 +21,29 @@ import { getBaseUrl } from '@/lib/server/config'
 import type { AssistantToolContext } from '../assistant.toolspec'
 import { RETRIEVED_CONTENT_NOTE } from '../injection-guard'
 // Zod 4.5+ `z.iso.datetime()` requires seconds, but LLMs frequently emit
-// minute-precision datetimes (e.g. `2020-01-01T06:15Z`). Accept any
-// Date-parseable string instead — downstream `new Date()` normalizes it.
-const flexibleDatetime = z
+// minute-precision datetimes (e.g. `2020-01-01T06:15Z`). Accept those too —
+// but validate them as real calendar dates: unlike `new Date()`, which rolls
+// `2026-02-30` over to March 2, this rejects it, matching the strictness the
+// ISO validator applies to second-precision inputs. Deliberately a plain
+// string schema (no transform), so the tool-call JSON schema is unchanged.
+const isoDatetime = z.iso.datetime()
+const MINUTE_DATETIME_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(Z|[+-]\d{2}:?\d{2})?$/
+function isValidMinutePrecision(s: string): boolean {
+  const match = MINUTE_DATETIME_RE.exec(s)
+  if (!match) return false
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  const hour = Number(match[4])
+  const minute = Number(match[5])
+  if (month < 1 || month > 12 || hour > 23 || minute > 59) return false
+  // Day 0 of month+1 is the last day of month — rejects Feb 30 etc.
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate()
+  return day >= 1 && day <= daysInMonth
+}
+export const flexibleDatetime = z
   .string()
-  .refine((s) => !Number.isNaN(new Date(s).getTime()), 'Invalid datetime')
+  .refine((s) => isoDatetime.safeParse(s).success || isValidMinutePrecision(s), 'Invalid datetime')
 const listInput = z.object({
   query: z.string().max(300).optional(),
   boardSlug: z.string().max(100).optional(),

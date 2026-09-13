@@ -8,7 +8,7 @@ vi.mock('@/lib/server/db', async (original) => ({
 import { testDb, createDbTestFixture } from '@/lib/server/__tests__/db-test-fixture'
 import { principal, posts, boards, conversations, conversationMessages } from '@/lib/server/db'
 import { makeAssistantToolContext } from '../../assistant.toolspec'
-import { executeListFeedback, executeFeedbackStats } from '../feedback-tools'
+import { executeListFeedback, executeFeedbackStats, flexibleDatetime } from '../feedback-tools'
 import { workspaceConversationSource } from '../../workspace-retrieval'
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -169,6 +169,28 @@ describe.skipIf(!fixture.available)('workspace reads with real DB', () => {
     expect(
       await workspaceConversationSource(true).retrieve('billing', 'team', { topK: 5 })
     ).toEqual([])
+  })
+})
+
+describe('flexibleDatetime since-filter', () => {
+  it.each([
+    '2026-01-05T06:15:00.000Z', // full ISO
+    '2026-01-05T06:15:00Z',
+    '2026-01-05T06:15Z', // minute precision (what LLMs emit)
+    '2026-01-05T06:15+02:00', // minute precision with offset
+    '2024-02-29T06:15Z', // leap day is real
+  ])('accepts %s', (value) => {
+    expect(flexibleDatetime.safeParse(value).success).toBe(true)
+  })
+  it.each([
+    '2026-02-30T06:15:00Z', // rolled to Mar 2 by `new Date`, must reject
+    '2026-02-30T06:15Z', // same at minute precision
+    '2026-13-01T06:15Z', // month 13
+    '2026-01-05T25:15Z', // hour 25
+    'not a date',
+    '',
+  ])('rejects %s', (value) => {
+    expect(flexibleDatetime.safeParse(value).success).toBe(false)
   })
 })
 
