@@ -22,6 +22,14 @@ type UnifiedListCache = {
 
 function membershipFingerprint(c: ConversationDTO): string {
   const tagIds = [...c.tags.map((t) => t.id)].sort().join(',')
+  const sla = c.sla
+    ? [
+        c.sla.policyId,
+        c.sla.firstResponseDueAt,
+        c.sla.nextResponseDueAt,
+        c.sla.timeToCloseDueAt,
+      ].join(',')
+    : ''
   return [
     c.status,
     c.priority,
@@ -29,6 +37,7 @@ function membershipFingerprint(c: ConversationDTO): string {
     c.assignedTeamId ?? '',
     c.snoozedUntil ?? '',
     tagIds,
+    sla,
   ].join('|')
 }
 

@@ -716,6 +716,32 @@ function InboxPage() {
         else if (evt.side === 'agent') onOtherAgentTyping()
       }
 
+      // Prefetched or recently-visited threads stay cached while inactive, and
+      // a fresh cache performs no refetch on select — so events landing there
+      // still apply, or the thread opens stale. Guarded on the cache existing
+      // so this never creates entries for unvisited threads.
+      if (
+        (evt.kind === 'message' ||
+          evt.kind === 'read' ||
+          evt.kind === 'message_updated' ||
+          evt.kind === 'message_deleted') &&
+        evt.conversationId !== activeConversationId
+      ) {
+        const key = conversationKeys.agentThread(evt.conversationId)
+        if (queryClient.getQueryData(key) !== undefined) {
+          queryClient.setQueryData(key, (prev: AgentThreadCache | undefined) =>
+            applyAgentThreadEvent(prev, evt, evt.conversationId)
+          )
+        }
+      } else if (evt.kind === 'ticket_message' && evt.ticketId !== activeTicketId) {
+        const key = ticketKeys.thread(evt.ticketId)
+        if (queryClient.getQueryData(key) !== undefined) {
+          queryClient.setQueryData(key, (prev: TicketThreadCache | undefined) =>
+            applyTicketThreadEvent(prev, evt, evt.ticketId)
+          )
+        }
+      }
+
       // Everything cache-shaped (message/read/updated/deleted) routes through
       // the pure reducer against the open thread's cache — one branch per
       // kind, since each has its own cache key + reducer. `conversation`
