@@ -174,11 +174,11 @@ export function generateContentHTML(content: JSONContent): string {
           node.attrs?.height !== undefined ? safePositiveInt(node.attrs.height, 0) : 0
         if (imgWidth && imgHeight) {
           const style = `style="aspect-ratio: ${imgWidth} / ${imgHeight};"`
-          return `<img src="${src}" alt="${alt}" width="${imgWidth}" height="${imgHeight}" class="max-w-full h-auto rounded-lg" ${style} />`
+          return `<img src="${src}" alt="${alt}" width="${imgWidth}" height="${imgHeight}" loading="lazy" decoding="async" class="max-w-full h-auto rounded-lg" ${style} />`
         }
         // Only apply width (not height) so h-auto preserves aspect ratio
         const style = imgWidth ? `style="width:${imgWidth}px;"` : ''
-        return `<img src="${src}" alt="${alt}" class="max-w-full h-auto rounded-lg" ${style} />`
+        return `<img src="${src}" alt="${alt}" loading="lazy" decoding="async" class="max-w-full h-auto rounded-lg" ${style} />`
       }
 
       case 'chatImage': {
@@ -187,7 +187,7 @@ export function generateContentHTML(content: JSONContent): string {
         const src = escapeHtmlAttr(sanitizeImageUrl(String(node.attrs?.src ?? '')))
         const alt = escapeHtmlAttr(String(node.attrs?.alt ?? ''))
         if (!src) return ''
-        return `<img src="${src}" alt="${alt}" class="max-w-xs h-auto object-contain rounded-md" />`
+        return `<img src="${src}" alt="${alt}" loading="lazy" decoding="async" class="max-w-xs h-auto object-contain rounded-md" />`
       }
 
       case 'youtube': {

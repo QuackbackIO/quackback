@@ -34,8 +34,8 @@ describe('Avatar (simple API)', () => {
     const img = screen.getByRole('img')
     expect(img).toHaveAttribute('src', 'https://example.com/a.png')
     expect(img).toHaveAttribute('alt', 'Jane Doe')
-    // Prioritize the avatar fetch among page resources.
-    expect(img).toHaveAttribute('fetchpriority', 'high')
+    expect(img).toHaveAttribute('loading', 'lazy')
+    expect(img).toHaveAttribute('decoding', 'async')
   })
 
   // The <img> must be in the server-rendered HTML so the browser fetches it

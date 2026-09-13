@@ -1,4 +1,4 @@
-import { Suspense } from 'react'
+import { Suspense, lazy } from 'react'
 import {
   createFileRoute,
   Outlet,
@@ -12,12 +12,15 @@ import { DEFAULT_LOCALE, loadMessages } from '@/lib/shared/i18n'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
 import { getLatestVersion, isNewerVersion } from '@/lib/server/functions/version'
 import { AdminSidebar } from '@/components/admin/admin-sidebar'
-import { PostModal } from '@/components/admin/feedback/post-modal'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { UpdateBanner } from '@/components/admin/update-banner'
 import { PlanNoticeBanner } from '@/components/admin/plan-notice-banner'
 import { getPlanNotice } from '@/lib/server/functions/plan-notice'
 import { isProductEnabled } from '@/lib/shared/types/settings'
+
+const PostModal = lazy(() =>
+  import('@/components/admin/feedback/post-modal').then((m) => ({ default: m.PostModal }))
+)
 
 export const Route = createFileRoute('/admin')({
   beforeLoad: async ({ location }) => {
@@ -30,15 +33,18 @@ export const Route = createFileRoute('/admin')({
 
     // Only team members (admin, member roles) can access admin dashboard
     // Portal users (role='user') don't have access to this
-    const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
-    const { user, principal, permissions } = await requireWorkspaceRole({
-      data: { allowedRoles: ['admin', 'member'] },
-    })
-
-    const { shouldLockAdminToBillingFn } = await import('@/lib/server/functions/billing')
-    if (await shouldLockAdminToBillingFn({ data: { pathname: location.pathname } })) {
+    const [{ requireWorkspaceRole }, { shouldLockAdminToBillingFn }] = await Promise.all([
+      import('@/lib/server/functions/workspace-utils'),
+      import('@/lib/server/functions/billing'),
+    ])
+    const [auth, locked] = await Promise.all([
+      requireWorkspaceRole({ data: { allowedRoles: ['admin', 'member'] } }),
+      shouldLockAdminToBillingFn({ data: { pathname: location.pathname } }),
+    ])
+    if (locked) {
       throw redirect({ href: '/admin/settings/billing' })
     }
+    const { user, principal, permissions } = auth
 
     return {
       user,
@@ -163,8 +169,8 @@ function AdminLayout() {
               </div>
             </div>
           </main>
-          {currentUser && feedbackEnabled && (
-            <Suspense>
+          {currentUser && feedbackEnabled && postId && (
+            <Suspense fallback={null}>
               <PostModal postId={postId} currentUser={currentUser} />
             </Suspense>
           )}

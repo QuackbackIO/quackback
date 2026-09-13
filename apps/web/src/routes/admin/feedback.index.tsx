@@ -31,23 +31,19 @@ export const Route = createFileRoute('/admin/feedback/')({
       queryClient: typeof context.queryClient
     }
 
-    // Pre-fetch all data in parallel using React Query. The posts query only
-    // ever prefetches the default/initial (unfiltered) dataset — a filtered
-    // URL on first load falls through to InboxContainer's own client fetch,
-    // same as the portal feed.
+    // The posts query only ever prefetches the default/initial (unfiltered)
+    // dataset — a filtered URL on first load falls through to InboxContainer's
+    // own client fetch, same as the portal feed. List, counts, and summary
+    // stream in via fire-and-forget prefetch on the same keys the components
+    // read, so a warmed cache still hydrates instead of refetching.
+    void queryClient.prefetchInfiniteQuery(inboxPostsInfiniteOptions(defaultInboxFilters))
+    void queryClient.prefetchQuery(inboxFacetCountsOptions(defaultInboxFilters))
+    void queryClient.prefetchQuery(mergeSuggestionQueries.summary())
     await Promise.all([
-      // Warm the SAME infinite cache the renderer reads (QC-1): one shared
-      // query definition, so mutations invalidating inboxKeys.lists() reach the
-      // cache the UI actually renders. Only the default/unfiltered dataset is
-      // prefetched; a filtered URL on first load falls through to the client
-      // fetch inside InboxContainer.
-      queryClient.ensureInfiniteQueryData(inboxPostsInfiniteOptions(defaultInboxFilters)),
-      queryClient.ensureQueryData(inboxFacetCountsOptions(defaultInboxFilters)),
       queryClient.ensureQueryData(adminQueries.boards()),
       queryClient.ensureQueryData(adminQueries.tags()),
       queryClient.ensureQueryData(adminQueries.statuses()),
       queryClient.ensureQueryData(adminQueries.teamMembers()),
-      queryClient.ensureQueryData(mergeSuggestionQueries.summary()),
       // Warm the moderation count so the pending-moderation banner renders on
       // first paint instead of popping in once the query resolves.
       queryClient.ensureQueryData(adminQueries.moderationStatus()),

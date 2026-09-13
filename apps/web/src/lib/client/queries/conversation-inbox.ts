@@ -106,6 +106,8 @@ export const conversationInboxQueries = {
     queryOptions({
       queryKey: conversationKeys.agentThread(conversationId),
       queryFn: () => getConversationFn({ data: { conversationId } }),
+      staleTime: 60_000,
+      gcTime: 15 * 60_000,
     }),
 
   /** Labels + per-tag open-conversation counts (drives the nav Tags group). */

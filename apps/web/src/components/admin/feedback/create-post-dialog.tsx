@@ -12,11 +12,14 @@ import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/
 import { Button } from '@/components/ui/button'
 import { FolderIcon, TagIcon, UserIcon } from '@heroicons/react/24/outline'
 import { PencilSquareIcon } from '@heroicons/react/24/solid'
-import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import { Skeleton } from '@/components/ui/skeleton'
 // Defer framer-motion via the public similar-posts-card lazy boundary so the
 // admin/feedback bundle no longer pulls framer-motion into the SSR bundle.
 const SimilarPostsCard = lazy(() =>
   import('@/components/public/similar-posts-card').then((m) => ({ default: m.SimilarPostsCard }))
+)
+const RichTextEditor = lazy(() =>
+  import('@/components/ui/rich-text-editor').then((m) => ({ default: m.RichTextEditor }))
 )
 import {
   Select,
@@ -193,28 +196,37 @@ export function CreatePostDialog({
                     render={() => (
                       <FormItem>
                         <FormControl>
-                          <RichTextEditor
-                            value={contentJson || ''}
-                            onChange={handleContentChange}
-                            placeholder="Add more details... Type / for commands"
-                            minHeight="200px"
-                            borderless
-                            toolbarPosition="bottom"
-                            features={{
-                              headings: true,
-                              codeBlocks: true,
-                              taskLists: true,
-                              blockquotes: true,
-                              dividers: true,
-                              images: true,
-                              tables: true,
-                              embeds: true,
-                              quackbackEmbeds: true,
-                              bubbleMenu: true,
-                              slashMenu: true,
-                            }}
-                            onImageUpload={uploadImage}
-                          />
+                          <Suspense
+                            fallback={
+                              <Skeleton
+                                className="w-full rounded-md"
+                                style={{ minHeight: '200px' }}
+                              />
+                            }
+                          >
+                            <RichTextEditor
+                              value={contentJson || ''}
+                              onChange={handleContentChange}
+                              placeholder="Add more details... Type / for commands"
+                              minHeight="200px"
+                              borderless
+                              toolbarPosition="bottom"
+                              features={{
+                                headings: true,
+                                codeBlocks: true,
+                                taskLists: true,
+                                blockquotes: true,
+                                dividers: true,
+                                images: true,
+                                tables: true,
+                                embeds: true,
+                                quackbackEmbeds: true,
+                                bubbleMenu: true,
+                                slashMenu: true,
+                              }}
+                              onImageUpload={uploadImage}
+                            />
+                          </Suspense>
                         </FormControl>
                         <FormMessage />
                       </FormItem>

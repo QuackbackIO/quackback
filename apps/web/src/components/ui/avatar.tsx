@@ -133,7 +133,8 @@ function AvatarImageWithFallback({
           data-slot="avatar-image"
           src={src}
           alt={alt}
-          fetchPriority="high"
+          loading="lazy"
+          decoding="async"
           className="absolute inset-0 aspect-square size-full object-cover"
           onLoad={() => setStatus('loaded')}
           onError={() => setStatus('error')}

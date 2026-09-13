@@ -240,7 +240,7 @@ export const inboxQueries = {
         const page = await listTicketMessagesFn({ data: { ticketId: id } })
         return { ...page, messages: page.messages.map(asAgentMessage) }
       },
-      staleTime: 10_000,
+      staleTime: 30_000,
     }),
 
   /** A single ticket's properties, for the unified thread's header controls
