@@ -34,7 +34,7 @@ export function FriendlyShell({ children, fullPage = true }: FriendlyShellProps)
  * `ErrorComponentProps` defaults to `ErrorBoundaryTypes['error']`, i.e.
  * `unknown`), so normalize before reading `.message`.
  */
-function toError(error: unknown): Error {
+export function toError(error: unknown): Error {
   if (error instanceof Error) return error
   if (typeof error === 'string') return new Error(error)
   // Route boundaries can deliver serialized server payloads (e.g.

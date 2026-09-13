@@ -11,6 +11,7 @@ import { InboxContainer } from '@/components/admin/feedback/inbox-container'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
+import { toError } from '@/components/shared/error-page'
 
 export const Route = createFileRoute('/admin/feedback/')({
   // Note: No loaderDeps for the filter fields - the loader only runs on
@@ -65,7 +66,7 @@ export const Route = createFileRoute('/admin/feedback/')({
 })
 
 function FeedbackErrorComponent({ error, reset }: { error: unknown; reset: () => void }) {
-  const message = error instanceof Error ? error.message : 'An unexpected error occurred'
+  const message = toError(error).message
   return (
     <div className="flex items-center justify-center min-h-[400px] p-4">
       <Alert variant="destructive" className="max-w-2xl">

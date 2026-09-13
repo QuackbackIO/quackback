@@ -41,6 +41,14 @@ function isValidMinutePrecision(s: string): boolean {
   // Day 0 of month+1 is the last day of month — rejects Feb 30 etc.
   const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate()
   if (day < 1 || day > daysInMonth) return false
+  // Real UTC offsets run from -12:00 to +14:00, but `Date.parse` accepts
+  // out-of-range offsets as genuine instants — so check explicitly.
+  if (offset && offset !== 'Z') {
+    const sign = offset[0] === '-' ? -1 : 1
+    const [offsetHours, offsetMinutes] = offset.slice(1).split(':').map(Number)
+    const totalMinutes = sign * (offsetHours * 60 + offsetMinutes)
+    if (totalMinutes < -12 * 60 || totalMinutes > 14 * 60) return false
+  }
   // The regex alone permits impossible offsets (e.g. +99:99), which `new
   // Date()` turns into Invalid Date and would fail at the database instead
   // of at validation. Re-parse the normalized second-precision form: shape
