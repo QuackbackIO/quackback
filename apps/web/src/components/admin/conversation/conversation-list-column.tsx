@@ -1,5 +1,8 @@
-import { memo, useState, type ReactNode } from 'react'
+import { memo, useCallback, useState, type ReactNode } from 'react'
 import { useRouteContext } from '@tanstack/react-router'
+import { useQueryClient } from '@tanstack/react-query'
+import { conversationInboxQueries } from '@/lib/client/queries/conversation-inbox'
+import { inboxQueries } from '@/lib/client/queries/inbox'
 import type {
   ConversationDTO,
   ConversationPriority,
@@ -7,7 +10,11 @@ import type {
 } from '@/lib/shared/conversation/types'
 import { listChannelDescriptors } from '@/lib/shared/channels'
 import { CONVERSATION_SPAM_FILED_BY_LABELS } from '@/lib/shared/conversation/types'
-import type { InboxItemDTO, InboxTriageFacet } from '@/lib/shared/inbox/items'
+import {
+  inboxItemRefFromId,
+  type InboxItemDTO,
+  type InboxTriageFacet,
+} from '@/lib/shared/inbox/items'
 import { ChevronDownIcon, PencilSquareIcon, BarsArrowDownIcon } from '@heroicons/react/24/solid'
 import { TicketIcon, BuildingOffice2Icon, RectangleStackIcon } from '@heroicons/react/24/outline'
 import {
@@ -217,6 +224,19 @@ export function ConversationListColumn({
   const { userRole } = useRouteContext({ from: '__root__' })
   const activationAction = useActivationAction('conversation_empty')
   const [composeOpen, setComposeOpen] = useState(false)
+  const queryClient = useQueryClient()
+  const prefetchItem = useCallback(
+    (id: string) => {
+      const ref = inboxItemRefFromId(id)
+      if (ref?.kind === 'conversation') {
+        void queryClient.prefetchQuery(conversationInboxQueries.thread(ref.id))
+      } else if (ref?.kind === 'ticket') {
+        void queryClient.prefetchQuery(inboxQueries.ticketThread(ref.id))
+        void queryClient.prefetchQuery(inboxQueries.ticketDetail(ref.id))
+      }
+    },
+    [queryClient]
+  )
   // Whether the list is a search, which decides both the implicit sort and
   // whether the term-scored sort is offered at all.
   const searching = searchInput.trim().length > 0
@@ -514,6 +534,7 @@ export function ConversationListColumn({
                 item={item}
                 selected={selectedId === id}
                 onSelect={onSelect}
+                onPrefetch={prefetchItem}
               />
             ) : (
               <TicketRow
@@ -522,6 +543,7 @@ export function ConversationListColumn({
                 item={item}
                 selected={selectedId === id}
                 onSelect={onSelect}
+                onPrefetch={prefetchItem}
               />
             )
           })
@@ -619,11 +641,13 @@ export const ConversationRow = memo(function ConversationRow({
   id,
   selected,
   onSelect,
+  onPrefetch,
 }: {
   item: Extract<InboxItemDTO, { kind: 'conversation' }>
   id: string
   selected: boolean
   onSelect: (id: string) => void
+  onPrefetch?: (id: string) => void
 }) {
   const c = item.conversation
   return (
@@ -641,6 +665,8 @@ export const ConversationRow = memo(function ConversationRow({
       <button
         type="button"
         onClick={() => onSelect(id)}
+        onMouseEnter={onPrefetch ? () => onPrefetch(id) : undefined}
+        onFocus={onPrefetch ? () => onPrefetch(id) : undefined}
         className="flex min-w-0 flex-1 items-center gap-2.5 py-3 pl-1.5 pr-3 text-left"
       >
         <Avatar
@@ -716,11 +742,13 @@ const TicketRow = memo(function TicketRow({
   id,
   selected,
   onSelect,
+  onPrefetch,
 }: {
   item: Extract<InboxItemDTO, { kind: 'ticket' }>
   id: string
   selected: boolean
   onSelect: (id: string) => void
+  onPrefetch?: (id: string) => void
 }) {
   const t = item.ticket
   return (
@@ -730,6 +758,8 @@ const TicketRow = memo(function TicketRow({
       <button
         type="button"
         onClick={() => onSelect(id)}
+        onMouseEnter={onPrefetch ? () => onPrefetch(id) : undefined}
+        onFocus={onPrefetch ? () => onPrefetch(id) : undefined}
         className="flex min-w-0 flex-1 items-center gap-2.5 py-3 pl-1.5 pr-3 text-left"
       >
         <TicketTypeGlyph type={t.type} />

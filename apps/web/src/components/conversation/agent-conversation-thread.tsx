@@ -201,7 +201,7 @@ import { ComposerAiActions, type ComposerMode } from './composer-ai-actions'
 import { TypingDots } from '@/components/shared/typing-dots'
 import { EmojiPicker } from '@/components/shared/emoji-picker'
 import { Avatar } from '@/components/ui/avatar'
-import { Spinner } from '@/components/shared/spinner'
+import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/shared/empty-state'
 import { Button } from '@/components/ui/button'
 import { DateTimePicker } from '@/components/ui/datetime-picker'
@@ -1656,8 +1656,33 @@ export function AgentConversationThread({
 
   if (isLoading) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <Spinner />
+      <div className="flex h-full flex-1 min-w-0">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="flex items-center gap-2.5 border-b border-border/50 px-4 py-3">
+            <Skeleton className="size-8 shrink-0 rounded-full" />
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <Skeleton className="h-3.5 w-1/3" />
+              <Skeleton className="h-3 w-1/4" />
+            </div>
+            <Skeleton className="h-8 w-20 shrink-0 rounded-md" />
+          </div>
+          <div className="min-h-0 flex-1 space-y-3 overflow-hidden px-5 py-4">
+            <div className="flex gap-2.5">
+              <Skeleton className="size-7 shrink-0 rounded-full" />
+              <Skeleton className="h-16 w-2/3 rounded-lg" />
+            </div>
+            <div className="flex justify-end">
+              <Skeleton className="h-12 w-1/2 rounded-lg" />
+            </div>
+            <div className="flex gap-2.5">
+              <Skeleton className="size-7 shrink-0 rounded-full" />
+              <Skeleton className="h-20 w-3/5 rounded-lg" />
+            </div>
+          </div>
+          <div className="px-5 py-3">
+            <Skeleton className="h-24 w-full rounded-lg" />
+          </div>
+        </div>
       </div>
     )
   }

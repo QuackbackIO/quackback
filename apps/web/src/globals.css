@@ -15,10 +15,6 @@
    @font-face and breaks SSR hydration; self-host everything instead, and keep
    the family name matching the value FONT_OPTIONS/presets.ts store. */
 @import "@fontsource-variable/inter/index.css";
-@import "@fontsource/inter/400.css";
-@import "@fontsource/inter/500.css";
-@import "@fontsource/inter/600.css";
-@import "@fontsource/inter/700.css";
 
 @custom-variant dark (&:is(.dark *));
 

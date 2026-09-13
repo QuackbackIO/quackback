@@ -66,12 +66,11 @@ export const Route = createFileRoute('/admin/users')({
       queryClient: typeof context.queryClient
     }
 
-    await Promise.all([
-      // Warm the SAME infinite cache the Users list renders (QC-1), so a
-      // segment membership change (invalidating usersKeys.all) reaches it.
-      queryClient.ensureInfiniteQueryData(portalUsersInfiniteOptions(defaultUsersFilters)),
-      queryClient.ensureQueryData(adminQueries.segments()),
-    ])
+    // The users list streams in via fire-and-forget prefetch (same infinite
+    // cache the list renders, so a warmed cache still hydrates instead of
+    // refetching).
+    void queryClient.prefetchInfiniteQuery(portalUsersInfiniteOptions(defaultUsersFilters))
+    await Promise.all([queryClient.ensureQueryData(adminQueries.segments())])
 
     return {
       currentMemberRole: principal.role,

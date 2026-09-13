@@ -192,8 +192,8 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
     enabled: isAdmin && !cachedLaunchSettled,
     refetchInterval: (query) => {
       const data = query.state.data
-      if (!data) return 15_000
-      return isLaunchPlanActive(launchChecklistSummary(data)) ? 15_000 : false
+      if (!data) return 30_000
+      return isLaunchPlanActive(launchChecklistSummary(data)) ? 30_000 : false
     },
   })
   const launchSummary = onboardingQuery.data ? launchChecklistSummary(onboardingQuery.data) : null

@@ -1,8 +1,15 @@
+import { Suspense, lazy } from 'react'
 import { createFileRoute, Navigate } from '@tanstack/react-router'
-import { WorkflowBuilder } from '@/components/admin/automation/workflow-builder/workflow-builder'
+import { Skeleton } from '@/components/ui/skeleton'
 import { workflowDetailQuery } from '@/lib/client/queries/workflows'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
+
+const WorkflowBuilder = lazy(() =>
+  import('@/components/admin/automation/workflow-builder/workflow-builder').then((m) => ({
+    default: m.WorkflowBuilder,
+  }))
+)
 
 // The trailing underscore on "automation_" escapes nesting under
 // /admin/automation's sidebar layout (routes/admin/automation.tsx): this
@@ -27,5 +34,16 @@ function WorkflowBuilderPage() {
   if (!flags?.supportInbox) {
     return <Navigate to="/admin/automation/agent" />
   }
-  return <WorkflowBuilder workflowId={workflowId} />
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-full flex-col gap-3 p-4">
+          <Skeleton className="h-10 w-full rounded-md" />
+          <Skeleton className="min-h-0 flex-1 rounded-lg" />
+        </div>
+      }
+    >
+      <WorkflowBuilder workflowId={workflowId} />
+    </Suspense>
+  )
 }

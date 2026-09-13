@@ -178,7 +178,7 @@ describe('generateContentHTML', () => {
       '<p>Intro <strong>strong</strong></p>' +
         '<ul><li>item</li></ul>' +
         '<pre class="not-prose rounded-lg bg-muted p-4 overflow-x-auto"><code class="language-js">x()</code></pre>' +
-        '<img src="https://cdn.example.com/z.png" alt="" class="max-w-full h-auto rounded-lg"  />'
+        '<img src="https://cdn.example.com/z.png" alt="" loading="lazy" decoding="async" class="max-w-full h-auto rounded-lg"  />'
     )
   })
 
