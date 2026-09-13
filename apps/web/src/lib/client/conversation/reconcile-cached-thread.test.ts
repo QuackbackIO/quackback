@@ -64,4 +64,24 @@ describe('reconcileCachedThread', () => {
     })
     unsubscribe()
   })
+
+  it('reapplies after a stale-cache refetch so the response cannot drop the event', async () => {
+    const queryClient = makeClient()
+    queryClient.setQueryData<Row>(key, { n: 1 })
+    let resolve!: (value: Row) => void
+    const pending = new Promise<Row>((r) => {
+      resolve = r
+    })
+    const refetch = queryClient.fetchQuery({ queryKey: key, queryFn: () => pending })
+    expect(queryClient.getQueryState(key)?.fetchStatus).toBe('fetching')
+
+    reconcileCachedThread<Row>(queryClient, key, (prev) => (prev ? { n: prev.n + 1 } : prev))
+    expect(queryClient.getQueryData(key)).toEqual({ n: 2 })
+
+    resolve({ n: 10 })
+    await refetch
+    await vi.waitFor(() => {
+      expect(queryClient.getQueryData(key)).toEqual({ n: 11 })
+    })
+  })
 })
