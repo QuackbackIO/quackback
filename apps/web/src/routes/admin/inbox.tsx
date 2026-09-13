@@ -693,7 +693,14 @@ function InboxPage() {
       // membership/order invalidation follows for this event — the patch IS
       // the up-to-date row.
       if (evt.kind === 'ticket_updated') {
+        // Seed the event DTO, then reapply after any in-flight detail prefetch
+        // so its older snapshot cannot overwrite this and stay fresh for 60s.
         queryClient.setQueryData(ticketKeys.detail(evt.ticket.id), evt.ticket)
+        reconcileCachedThread<TicketDTO>(
+          queryClient,
+          ticketKeys.detail(evt.ticket.id),
+          () => evt.ticket
+        )
         patchTicketInInboxLists(queryClient, evt.ticket)
       } else if (agentEventChangesInboxList(evt)) {
         // Every membership/order/preview-changing event (a new message, a
