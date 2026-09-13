@@ -30,7 +30,10 @@ const isoDatetime = z.iso.datetime()
 // Groups: 1 year, 2 month, 3 day, 4 hour, 5 minute, 6 full zone,
 // 7 zone sign, 8 zone hours, 9 zone minutes. The zone is parsed here —
 // not re-parsed downstream — so every allowed spelling is range-checked.
-const MINUTE_DATETIME_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(Z|([+-])(\d{2}):?(\d{2}))?$/
+// The zone is mandatory: like the strict ISO branch, naive timestamps are
+// rejected, since `new Date()` would read them in the server's local
+// timezone and shift the cutoff on non-UTC self-hosted deployments.
+const MINUTE_DATETIME_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(Z|([+-])(\d{2}):?(\d{2}))$/
 function isValidMinutePrecision(s: string): boolean {
   const match = MINUTE_DATETIME_RE.exec(s)
   if (!match) return false
