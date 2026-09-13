@@ -654,6 +654,16 @@ function InboxPage() {
     refreshInboxList()
     refreshInboxCounts()
   }, [refreshInboxList, refreshInboxCounts])
+  // SSE reconnect forgoes Last-Event-ID replay, so list/count invalidation
+  // alone leaves hover-prefetched threads fresh and missing gap events.
+  // Mark those caches stale; the open pane refetches, inactive prefetches
+  // refetch on select.
+  const refreshInboxAfterReconnect = useCallback(() => {
+    refreshInbox()
+    void queryClient.invalidateQueries({ queryKey: ['admin', 'inbox', 'thread'] })
+    void queryClient.invalidateQueries({ queryKey: [...ticketKeys.all(), 'thread'] })
+    void queryClient.invalidateQueries({ queryKey: [...ticketKeys.all(), 'detail'] })
+  }, [queryClient, refreshInbox])
 
   // Track whether the visitor of the selected conversation is currently typing.
   const {
@@ -681,7 +691,7 @@ function InboxPage() {
   const { connected: streamConnected } = useConversationStream({
     enabled: true,
     buildUrl: async () => '/api/chat/stream?scope=inbox',
-    onReconnect: refreshInbox,
+    onReconnect: refreshInboxAfterReconnect,
     onEvent: (evt) => {
       // A ticket's live properties (status/assignee/priority/stage/type) name
       // their own cache keys precisely, so this patches them directly instead
