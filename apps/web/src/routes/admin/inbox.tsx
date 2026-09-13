@@ -688,7 +688,7 @@ function InboxPage() {
       } else if (evt.kind === 'conversation') {
         // The event carries the fresh DTO, so patch it into the thread header
         // and every list row directly. Only a scope-membership change
-        // (status/assignee/team/tags/snooze) still refetches the lists.
+        // (status/priority/assignee/team/tags/snooze) still refetches the lists.
         const { membershipChanged } = upsertConversationEntity(queryClient, evt.conversation)
         if (membershipChanged) refreshInboxList()
       } else if (agentEventChangesInboxList(evt)) {

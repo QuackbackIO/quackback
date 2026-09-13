@@ -24,6 +24,7 @@ function membershipFingerprint(c: ConversationDTO): string {
   const tagIds = [...c.tags.map((t) => t.id)].sort().join(',')
   return [
     c.status,
+    c.priority,
     c.assignedAgent?.principalId ?? '',
     c.assignedTeamId ?? '',
     c.snoozedUntil ?? '',

@@ -73,7 +73,7 @@ describe('upsertConversationEntity', () => {
     expect(row?.kind === 'conversation' && row.conversation.unreadCount).toBe(0)
   })
 
-  it('reports a membership change when status, assignee, team, tags, or snooze move', () => {
+  it('reports a membership change when status, priority, assignee, team, tags, or snooze move', () => {
     const qc = client()
     const before = dto()
     qc.setQueryData(
@@ -82,6 +82,7 @@ describe('upsertConversationEntity', () => {
     )
 
     expect(upsertConversationEntity(qc, dto({ status: 'closed' })).membershipChanged).toBe(true)
+    expect(upsertConversationEntity(qc, dto({ priority: 'urgent' })).membershipChanged).toBe(true)
     expect(
       upsertConversationEntity(
         qc,
