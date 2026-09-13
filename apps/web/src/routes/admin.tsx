@@ -3,6 +3,7 @@ import {
   createFileRoute,
   Outlet,
   redirect,
+  useNavigate,
   useRouterState,
   useRouteContext,
 } from '@tanstack/react-router'
@@ -121,12 +122,16 @@ export const Route = createFileRoute('/admin')({
 })
 
 function PostModalChunkFallback() {
+  const navigate = useNavigate()
+  const { pathname, search } = useRouterState({ select: (s) => s.location })
+  const close = () => {
+    const { post: _post, ...rest } = search as Record<string, unknown>
+    void navigate({ to: pathname, search: rest, replace: true })
+  }
+
   return (
-    <Dialog open onOpenChange={() => {}}>
-      <DialogContent
-        className="flex h-[85vh] w-[95vw] flex-col gap-0 p-0 sm:w-[90vw] lg:max-w-5xl xl:max-w-6xl"
-        showCloseButton={false}
-      >
+    <Dialog open onOpenChange={(next) => !next && close()}>
+      <DialogContent className="flex h-[85vh] w-[95vw] flex-col gap-0 p-0 sm:w-[90vw] lg:max-w-5xl xl:max-w-6xl">
         <DialogTitle className="sr-only">Edit post</DialogTitle>
         <div className="flex h-full flex-col gap-3 p-6">
           <Skeleton className="h-8 w-1/3 rounded-md" />

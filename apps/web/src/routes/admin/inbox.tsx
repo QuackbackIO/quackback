@@ -662,10 +662,11 @@ function InboxPage() {
     refreshInboxList()
     refreshInboxCounts()
   }, [refreshInboxList, refreshInboxCounts])
-  // SSE reconnect forgoes Last-Event-ID replay, so list/count invalidation
-  // alone leaves hover-prefetched threads fresh and missing gap events.
-  // Mark those caches stale; the open pane refetches, inactive prefetches
-  // refetch on select.
+  // SSE reconnect (and a first open after failed attempts) forgoes
+  // Last-Event-ID replay, so list/count invalidation alone leaves
+  // hover-prefetched threads fresh and missing gap events. Mark those
+  // caches stale; the open pane refetches, inactive prefetches refetch
+  // on select.
   const refreshInboxAfterReconnect = useCallback(() => {
     refreshInbox()
     void queryClient.invalidateQueries({ queryKey: ['admin', 'inbox', 'thread'] })
