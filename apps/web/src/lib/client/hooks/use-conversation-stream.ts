@@ -52,6 +52,11 @@ const NAMED_EVENTS = [
   // drops any named frame with no matching listener, so these MUST be registered.
   'assistant_activity',
   'assistant_delta',
+  // Ticket frames (inbox stream). EventSource drops named events with no
+  // listener, so hover-prefetched ticket caches would stay stale without these.
+  'ticket_message',
+  'ticket_updated',
+  'ticket_read',
 ] as const
 
 // After this many consecutive SSE failures with no successful open in between,
