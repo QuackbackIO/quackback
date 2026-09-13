@@ -233,7 +233,12 @@ function validateInboxSearch(search: Record<string, unknown>): InboxSearch {
       search.ai === 'resolved' || search.ai === 'escalated' || search.ai === 'pending'
         ? search.ai
         : undefined,
-    q: typeof search.q === 'string' && search.q ? search.q : undefined,
+    q:
+      typeof search.q === 'string' && search.q
+        ? search.q
+        : typeof search.q === 'number' && Number.isFinite(search.q)
+          ? String(search.q)
+          : undefined,
     channel: normalizeInboxChannel(search.channel),
     // Carries the shared `?post=` modal target (the admin layout mounts the
     // modal) so clicking an embedded post in a conversation opens it without leaving the
@@ -273,9 +278,12 @@ export const Route = createFileRoute('/admin/inbox')({
     // conversation affordances hidden.
     if (!flags?.supportInbox && !flags?.supportTickets) return {}
     const { queryClient } = context
-    // validateSearch already ran; the loader context has no `search` field
-    // unless loaderDeps is set (which we deliberately omit).
-    const search = location.search as InboxSearch
+    // No loaderDeps (so filter/selection changes do not remount the outlet),
+    // which also means the loader is not given the validateSearch result.
+    // `location.search` is the raw parsed URL — re-run the same normalizer
+    // so `?q=123` is a string, `?c=` maps onto `i`, and rejected facets
+    // never reach the prefetch queries.
+    const search = validateInboxSearch(location.search as Record<string, unknown>)
     const nav = navFromSearch(search)
     const facet: InboxTriageFacet = search.status ?? 'open'
     const priority = search.priority ?? 'all'
