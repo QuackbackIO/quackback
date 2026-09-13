@@ -30,29 +30,25 @@ export function FriendlyShell({ children, fullPage = true }: FriendlyShellProps)
 }
 
 /**
- * Route error boundaries now deliver `unknown` (TanStack Router's
- * `ErrorComponentProps` defaults to `ErrorBoundaryTypes['error']`, i.e.
- * `unknown`), so normalize before reading `.message`.
+ * Router error boundaries deliver `unknown` (and sometimes a serialized
+ * `{ message }` payload rather than an Error). Read the diagnostic text
+ * without requiring `instanceof Error`.
  */
-export function toError(error: unknown): Error {
-  if (error instanceof Error) return error
-  if (typeof error === 'string') return new Error(error)
-  // Route boundaries can deliver serialized server payloads (e.g.
-  // `{ message: 'Access denied: ...' }`) — preserve their message so
-  // classification and technical details keep working.
+export function errorMessage(error: unknown): string {
+  if (typeof error === 'string') return error
   if (
     error !== null &&
     typeof error === 'object' &&
     'message' in error &&
-    typeof (error as { message: unknown }).message === 'string'
+    typeof error.message === 'string'
   ) {
-    return new Error((error as { message: string }).message)
+    return error.message
   }
-  return new Error('An unexpected error occurred')
+  return 'An unexpected error occurred'
 }
 
-function errorMessage(error: unknown): string {
-  return toError(error).message
+export function toError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(errorMessage(error))
 }
 
 /**

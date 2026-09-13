@@ -9,7 +9,7 @@ import { UsersContainer } from '@/components/admin/users/users-container'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
-import { toError } from '@/components/shared/error-page'
+import { errorMessage } from '@/components/shared/error-page'
 
 const searchSchema = z.object({
   search: z.string().optional(),
@@ -82,7 +82,7 @@ export const Route = createFileRoute('/admin/users')({
 })
 
 function UsersErrorComponent({ error, reset }: { error: unknown; reset: () => void }) {
-  const message = toError(error).message
+  const message = errorMessage(error)
   return (
     <div className="flex items-center justify-center min-h-[400px] p-4">
       <Alert variant="destructive" className="max-w-2xl">

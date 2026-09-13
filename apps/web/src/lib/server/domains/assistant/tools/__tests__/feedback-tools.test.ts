@@ -174,28 +174,20 @@ describe.skipIf(!fixture.available)('workspace reads with real DB', () => {
 
 describe('flexibleDatetime since-filter', () => {
   it.each([
-    '2026-01-05T06:15:00.000Z', // full ISO
+    '2026-01-05T06:15:00.000Z',
     '2026-01-05T06:15:00Z',
     '2026-01-05T06:15Z', // minute precision (what LLMs emit)
-    '2026-01-05T06:15+02:00', // minute precision with offset
-    '2026-01-05T06:15+14:00', // largest real UTC offset
-    '2026-01-05T06:15-12:00', // smallest real UTC offset
-    '2026-01-05T06:15+0200', // compact offset spelling
-    '2024-02-29T06:15Z', // leap day is real
+    '2024-02-29T06:15Z', // leap day
   ])('accepts %s', (value) => {
     expect(flexibleDatetime.safeParse(value).success).toBe(true)
   })
   it.each([
-    '2026-02-30T06:15:00Z', // rolled to Mar 2 by `new Date`, must reject
-    '2026-02-30T06:15Z', // same at minute precision
-    '2026-01-05T06:15+99:99', // impossible offset (would be Invalid Date downstream)
-    '2026-01-05T06:15+02:99', // impossible offset minutes
-    '2026-01-05T06:15+15:00', // beyond the real +14:00 maximum
-    '2026-01-05T06:15-12:01', // beyond the real -12:00 minimum
-    '2026-01-05T06:15+1500', // compact spelling of an out-of-range offset
-    '2026-13-01T06:15Z', // month 13
+    '2026-02-30T06:15:00Z', // `new Date` rolls this to Mar 2
+    '2026-02-30T06:15Z',
+    '2026-13-01T06:15Z',
     '2026-01-05T06:15', // naive: server-local TZ would shift the cutoff
-    '2026-01-05T25:15Z', // hour 25
+    '2026-01-05T06:15+02:00', // offsets were never in the pre-4.5 schema
+    '2026-01-05T25:15Z',
     'not a date',
     '',
   ])('rejects %s', (value) => {

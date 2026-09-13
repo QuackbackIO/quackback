@@ -20,47 +20,10 @@ import { listInboxPosts } from '@/lib/server/domains/posts/post.inbox'
 import { getBaseUrl } from '@/lib/server/config'
 import type { AssistantToolContext } from '../assistant.toolspec'
 import { RETRIEVED_CONTENT_NOTE } from '../injection-guard'
-// Zod 4.5+ `z.iso.datetime()` requires seconds, but LLMs frequently emit
-// minute-precision datetimes (e.g. `2020-01-01T06:15Z`). Accept those too —
-// but validate them as real calendar dates: unlike `new Date()`, which rolls
-// `2026-02-30` over to March 2, this rejects it, matching the strictness the
-// ISO validator applies to second-precision inputs. Deliberately a plain
-// string schema (no transform), so the tool-call JSON schema is unchanged.
-const isoDatetime = z.iso.datetime()
-// Groups: 1 year, 2 month, 3 day, 4 hour, 5 minute, 6 full zone,
-// 7 zone sign, 8 zone hours, 9 zone minutes. The zone is parsed here —
-// not re-parsed downstream — so every allowed spelling is range-checked.
-// The zone is mandatory: like the strict ISO branch, naive timestamps are
-// rejected, since `new Date()` would read them in the server's local
-// timezone and shift the cutoff on non-UTC self-hosted deployments.
-const MINUTE_DATETIME_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(Z|([+-])(\d{2}):?(\d{2}))$/
-function isValidMinutePrecision(s: string): boolean {
-  const match = MINUTE_DATETIME_RE.exec(s)
-  if (!match) return false
-  const year = Number(match[1])
-  const month = Number(match[2])
-  const day = Number(match[3])
-  const hour = Number(match[4])
-  const minute = Number(match[5])
-  if (month < 1 || month > 12 || hour > 23 || minute > 59) return false
-  // Day 0 of month+1 is the last day of month — rejects Feb 30 etc.,
-  // which `new Date()` would otherwise roll into the next month.
-  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate()
-  if (day < 1 || day > daysInMonth) return false
-  // Real UTC offsets run from -12:00 to +14:00, but `Date.parse` accepts
-  // out-of-range offsets as genuine instants — so check explicitly.
-  if (match[6] && match[6] !== 'Z') {
-    const sign = match[7] === '-' ? -1 : 1
-    const offsetMinutes = Number(match[9])
-    if (offsetMinutes > 59) return false
-    const totalMinutes = sign * (Number(match[8]) * 60 + offsetMinutes)
-    if (totalMinutes < -12 * 60 || totalMinutes > 14 * 60) return false
-  }
-  return true
-}
-export const flexibleDatetime = z
-  .string()
-  .refine((s) => isoDatetime.safeParse(s).success || isValidMinutePrecision(s), 'Invalid datetime')
+// Zod 4.5+ requires seconds (`2020-01-01T06:15:00Z`). LLMs often omit them.
+// The documented union restores the 4.4 default: both precisions, Z only,
+// real calendar dates, no naive / local timestamps.
+export const flexibleDatetime = z.iso.datetime().or(z.iso.datetime({ precision: -1 }))
 const listInput = z.object({
   query: z.string().max(300).optional(),
   boardSlug: z.string().max(100).optional(),
