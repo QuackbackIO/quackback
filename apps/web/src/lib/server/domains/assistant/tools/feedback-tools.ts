@@ -20,12 +20,18 @@ import { listInboxPosts } from '@/lib/server/domains/posts/post.inbox'
 import { getBaseUrl } from '@/lib/server/config'
 import type { AssistantToolContext } from '../assistant.toolspec'
 import { RETRIEVED_CONTENT_NOTE } from '../injection-guard'
+// Zod 4.5+ `z.iso.datetime()` requires seconds, but LLMs frequently emit
+// minute-precision datetimes (e.g. `2020-01-01T06:15Z`). Accept any
+// Date-parseable string instead — downstream `new Date()` normalizes it.
+const flexibleDatetime = z
+  .string()
+  .refine((s) => !Number.isNaN(new Date(s).getTime()), 'Invalid datetime')
 const listInput = z.object({
   query: z.string().max(300).optional(),
   boardSlug: z.string().max(100).optional(),
   statusSlug: z.string().max(100).optional(),
   tagSlug: z.string().max(100).optional(),
-  since: z.iso.datetime().optional(),
+  since: flexibleDatetime.optional(),
   sort: z.enum(['votes', 'recent']).default('votes'),
   limit: z.number().int().min(1).max(20).default(10),
 })
@@ -108,7 +114,7 @@ export async function executeListFeedback(
   return items.length > 0 ? { items, note: RETRIEVED_CONTENT_NOTE } : { items }
 }
 const statsInput = z.object({
-  since: z.iso.datetime().optional(),
+  since: flexibleDatetime.optional(),
   groupBy: z.enum(['status', 'board', 'tag']),
 })
 export const feedbackStatsTool = toolDefinition({

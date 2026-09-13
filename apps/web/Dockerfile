@@ -44,19 +44,24 @@ RUN bun run --filter @quackback/widget build
 WORKDIR /app/apps/web
 RUN bun run build
 
-# Patch Nitro's lazy SSR loading: Nitro 3.x wraps the SSR service in
-# `lazyService(() => import('./_ssr/ssr.mjs'))` which only fires the import
-# when the FIRST request arrives. That puts ~200ms of module evaluation +
-# ~1s of dependency cold-start on the critical path of every cold start.
+# Patch Nitro's lazy SSR loading: Nitro wraps the SSR renderer chunk in
+# `defineLazyEventHandler(() => import("./_chunks/ssr-renderer.mjs"))` which
+# only fires the import when the FIRST request arrives. That puts ~200ms of
+# module evaluation + ~1s of dependency cold-start on the critical path of
+# every cold start.
 #
-# Inject an unconditional `import("./_ssr/ssr.mjs")` right after the
-# services are declared. Bun fires the import as a side effect; by the
+# Inject an unconditional `import("./_chunks/ssr-renderer.mjs")` right after
+# the lazy handler is declared. Bun fires the import as a side effect; by the
 # time Knative finishes its pod-readiness propagation (~1s) and forwards
 # the buffered request, the SSR module is already in V8's module cache
-# and lazyService's loader resolves synchronously. Top-level await (TLA)
+# and the lazy handler resolves synchronously. Top-level await (TLA)
 # would also work but delays the TCP listen — losing the parallelism
 # between Bun module load and Knative routing setup.
-RUN sed -i 's|globalThis.__nitro_vite_envs__ = services;|globalThis.__nitro_vite_envs__ = services;\nimport("./_ssr/ssr.mjs").catch(() => {});|' /app/apps/web/.output/server/index.mjs
+#
+# The trailing grep turns a silent no-op into a loud build failure: if a
+# future Nitro upgrade reshapes the server entry again, the image build
+# fails here instead of shipping without the pre-warm.
+RUN sed -i 's|defineLazyEventHandler(() => import("./_chunks/ssr-renderer.mjs"));|defineLazyEventHandler(() => import("./_chunks/ssr-renderer.mjs"));\nimport("./_chunks/ssr-renderer.mjs").catch(() => {});|' /app/apps/web/.output/server/index.mjs && grep -q 'ssr-renderer.mjs").catch' /app/apps/web/.output/server/index.mjs
 
 # Bundle the migration script so the runner doesn't need /app/node_modules.
 # The CLI entrypoint at packages/db/src/migrate.ts pulls in dotenv + drizzle-orm

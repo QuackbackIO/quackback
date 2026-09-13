@@ -3,7 +3,7 @@ import { describePlanRefusal } from '@/lib/shared/describe-upgrade'
 import { cn } from '@/lib/shared/utils'
 
 interface ErrorPageProps {
-  error: Error
+  error: unknown
   reset?: () => void
   fullPage?: boolean
 }
@@ -30,24 +30,37 @@ export function FriendlyShell({ children, fullPage = true }: FriendlyShellProps)
 }
 
 /**
+ * Route error boundaries now deliver `unknown` (TanStack Router's
+ * `ErrorComponentProps` defaults to `ErrorBoundaryTypes['error']`, i.e.
+ * `unknown`), so normalize before reading `.message`.
+ */
+function toError(error: unknown): Error {
+  if (error instanceof Error) return error
+  if (typeof error === 'string') return new Error(error)
+  return new Error('An unexpected error occurred')
+}
+
+function errorMessage(error: unknown): string {
+  return toError(error).message
+}
+
+/**
  * True for the role-gate failures thrown by requireAuth / requireWorkspaceRole
  * (e.g. "Access denied: Requires [admin], got member"). These are expected
  * outcomes, not crashes, so they get a calm permission notice rather than the
  * scary generic error treatment.
  */
-export function isAuthorizationError(error: Error): boolean {
-  return /access denied/i.test(error.message)
+export function isAuthorizationError(error: unknown): boolean {
+  return /access denied/i.test(errorMessage(error))
 }
 
 /**
  * True for a plan entitlement refusal that leaked into a route error
  * boundary. Those sentences are commercial outcomes, not crashes.
  */
-export function isEntitlementError(error: Error): boolean {
-  return (
-    /upgrade to \w+ to enable it/i.test(error.message) ||
-    /not included in your plan/i.test(error.message)
-  )
+export function isEntitlementError(error: unknown): boolean {
+  const message = errorMessage(error)
+  return /upgrade to \w+ to enable it/i.test(message) || /not included in your plan/i.test(message)
 }
 
 export function PermissionDeniedPage({ fullPage = true }: { fullPage?: boolean }) {
@@ -89,9 +102,10 @@ export function EntitlementRequiredPage({
   error,
   fullPage = true,
 }: {
-  error: Error
+  error: unknown
   fullPage?: boolean
 }) {
+  const normalized = toError(error)
   const isAdminArea = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')
   const refusal = describePlanRefusal(error, {
     entitlement: null,
@@ -99,13 +113,13 @@ export function EntitlementRequiredPage({
     requiredPlan: null,
     requiredPlanName: null,
     headline: 'This is a plan feature',
-    body: error.message,
+    body: normalized.message,
   })
 
   return (
     <FriendlyShell fullPage={fullPage}>
       <h1 className="text-2xl font-semibold tracking-tight">{refusal.headline}</h1>
-      <p className="mt-2 text-sm text-muted-foreground">{error.message}</p>
+      <p className="mt-2 text-sm text-muted-foreground">{normalized.message}</p>
       <div className="mt-6 flex items-center justify-center gap-3">
         {isAdminArea ? (
           <Button asChild>
@@ -130,6 +144,7 @@ export function DefaultErrorPage({ error, reset, fullPage = true }: ErrorPagePro
     return <EntitlementRequiredPage error={error} fullPage={fullPage} />
   }
 
+  const message = errorMessage(error)
   return (
     <FriendlyShell fullPage={fullPage}>
       <h1 className="text-2xl font-semibold tracking-tight">Something went wrong</h1>
@@ -137,12 +152,12 @@ export function DefaultErrorPage({ error, reset, fullPage = true }: ErrorPagePro
         An unexpected error occurred. Try again, or return to the home page.
       </p>
 
-      {error.message && (
+      {message && (
         <details className="mt-4 rounded-md border bg-muted/40 px-4 py-3 text-left">
           <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
             Technical details
           </summary>
-          <p className="mt-2 break-words text-sm text-muted-foreground">{error.message}</p>
+          <p className="mt-2 break-words text-sm text-muted-foreground">{message}</p>
         </details>
       )}
 
