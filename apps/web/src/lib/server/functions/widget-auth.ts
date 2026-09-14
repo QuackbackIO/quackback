@@ -2,7 +2,7 @@ import type { PrincipalId, UserId, WorkspaceId } from '@quackback/ids'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import type { Role } from '@/lib/server/auth'
 import { auth } from '@/lib/server/auth'
-import { sessionRole, toSessionScope } from '@/lib/shared/roles'
+import { sessionRole } from '@/lib/shared/roles'
 import { db, session, principal, eq, and, gt } from '@/lib/server/db'
 import { ensurePrincipalForUser } from '@/lib/server/domains/principals/principal.factory'
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
@@ -102,8 +102,10 @@ export async function getWidgetSession(opts?: {
     },
     principal: {
       id: principalRecord.id as PrincipalId,
-      // Widget/portal audiences are portal-tier; only dashboard sessions keep a team role.
-      role: sessionRole(principalRecord.role as Role, toSessionScope(sessionRecord.scope)),
+      // This function is widget-only. Always present portal-tier so a
+      // teammate (or a same-origin dashboard cookie reused as Bearer) cannot
+      // exercise team actions through widget endpoints.
+      role: sessionRole(principalRecord.role as Role, 'widget'),
       type: principalRecord.type ?? 'user',
     },
   }

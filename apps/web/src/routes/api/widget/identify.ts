@@ -226,13 +226,10 @@ export const Route = createFileRoute('/api/widget/identify')({
         }
         const hasAttrs = Object.keys(validAttrs).length > 0
 
-        // Find or create user. Case-insensitive on email — the staff/admin
-        // identity guard below would otherwise be bypassable by varying the
-        // casing of a teammate's email ("ADMIN@x.com" wouldn't match the
-        // stored "admin@x.com" and a fresh user row would be created
-        // with role 'user' AND the same email address, breaking the
-        // "one email per account" invariant. The fix mirrors the
-        // segment-evaluator + recovery-codes case-insensitive lookups.
+        // Find or create user. Case-insensitive on email so a mixed-case
+        // JWT ("ADMIN@x.com") cannot create a second row next to the stored
+        // "admin@x.com" and break the one-email-per-account invariant. The
+        // lookup mirrors segment-evaluator + recovery-codes.
         const normalizedEmail = identified.email.toLowerCase()
         // The JWT `sub` is the durable cross-device identity key — resolve by
         // it first so a returning visitor is recognized even after an email
@@ -251,35 +248,46 @@ export const Route = createFileRoute('/api/widget/identify')({
         const country = captureCountryFromHeaders(request.headers)
 
         if (userRecord) {
-          // Staff/admin identity guard: a signed ssoToken only vouches for
-          // email/sub matching, never for role. If those claims resolve to an
-          // existing teammate account (principal role 'admin' or 'member'),
-          // refuse before touching that row any further — a widget embedded
-          // on a customer's site must never be able to mint or piggyback a
-          // session that can authorize dashboard/admin APIs.
+          // Widget sessions are audience-scoped (`scope=widget`) and cannot
+          // satisfy team/permission gates, so a teammate may identify as a
+          // customer. Do not overwrite the dashboard profile from the host-app
+          // JWT — name, avatar, metadata, and email stay as the team member
+          // set them. Stamp externalId (cross-device key) and country only.
           const existingPrincipal = await db.query.principal.findFirst({
             where: eq(principal.userId, userRecord.id),
             columns: { role: true },
           })
-          if (existingPrincipal && isTeamMember(existingPrincipal.role)) {
-            return jsonError(
-              'IDENTITY_NOT_ALLOWED',
-              'This identity cannot be used with the widget',
-              403
-            )
-          }
+          const isTeammate = isTeamMember(existingPrincipal?.role)
 
           const updates: Record<string, unknown> = {}
-          if (identified.name && identified.name !== userRecord.name) updates.name = identified.name
-          if (identified.avatarURL && identified.avatarURL !== userRecord.image)
-            updates.image = identified.avatarURL
-          if (hasAttrs) {
-            // Atomic JSONB merge in SQL (not a JS read/merge/write) so a
-            // concurrent writer landing between the load above and this
-            // update can never be clobbered. Mirrors user.identify.ts. The
-            // `metadata` column is text-typed, so round-trip through jsonb
-            // and back to text; there are no removals on this path.
-            updates.metadata = sql`((coalesce(nullif(${user.metadata}, ''), '{}')::jsonb - ${[]}::text[]) || ${JSON.stringify(validAttrs)}::jsonb)::text`
+          if (!isTeammate) {
+            if (identified.name && identified.name !== userRecord.name) {
+              updates.name = identified.name
+            }
+            if (identified.avatarURL && identified.avatarURL !== userRecord.image) {
+              updates.image = identified.avatarURL
+            }
+            if (hasAttrs) {
+              // Atomic JSONB merge in SQL (not a JS read/merge/write) so a
+              // concurrent writer landing between the load above and this
+              // update can never be clobbered. Mirrors user.identify.ts. The
+              // `metadata` column is text-typed, so round-trip through jsonb
+              // and back to text; there are no removals on this path.
+              updates.metadata = sql`((coalesce(nullif(${user.metadata}, ''), '{}')::jsonb - ${[]}::text[]) || ${JSON.stringify(validAttrs)}::jsonb)::text`
+            }
+            if (externalId && userRecord.email !== normalizedEmail) {
+              // `sub` is authoritative on a verified email change. Adopt the new
+              // address unless another row already holds it — the partial-unique
+              // email index would otherwise reject the move, and external_id still
+              // resolves this visitor either way.
+              const emailHolder = await db.query.user.findFirst({
+                columns: { id: true },
+                where: sql`LOWER(${user.email}) = ${normalizedEmail}`,
+              })
+              if (!emailHolder || emailHolder.id === userRecord.id) {
+                updates.email = normalizedEmail
+              }
+            }
           }
           if (country && country !== userRecord.country) {
             updates.country = country
@@ -287,19 +295,6 @@ export const Route = createFileRoute('/api/widget/identify')({
           if (externalId && userRecord.externalId !== externalId) {
             // First verified sight of this account — stamp the durable subject.
             updates.externalId = externalId
-          }
-          if (externalId && userRecord.email !== normalizedEmail) {
-            // `sub` is authoritative on a verified email change. Adopt the new
-            // address unless another row already holds it — the partial-unique
-            // email index would otherwise reject the move, and external_id still
-            // resolves this visitor either way.
-            const emailHolder = await db.query.user.findFirst({
-              columns: { id: true },
-              where: sql`LOWER(${user.email}) = ${normalizedEmail}`,
-            })
-            if (!emailHolder || emailHolder.id === userRecord.id) {
-              updates.email = normalizedEmail
-            }
           }
 
           if (Object.keys(updates).length > 0) {

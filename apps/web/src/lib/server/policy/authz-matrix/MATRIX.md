@@ -788,7 +788,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/workflows.ts`::runWorkflowManuallyFn | conversation.reply |
 | `lib/server/functions/workspace-wipe.ts`::wipeCloudWorkspaceFn | END_USER (any authenticated) |
 
-### Public REST API (`withApiKeyAuth`) — 126 surfaces
+### Public REST API (`withApiKeyAuth`) — 125 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -917,7 +917,6 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `routes/api/v1/webhooks/$webhookId.ts`::DELETE | webhook.manage |
 | `routes/api/v1/webhooks/index.ts`::GET | webhook.view |
 | `routes/api/v1/webhooks/index.ts`::POST | webhook.manage |
-| `routes/api/widget/identify.ts`::POST | TEAM-ONLY |
 
 ### Session-authenticated routes (`requireAuth`) — 1 surface
 

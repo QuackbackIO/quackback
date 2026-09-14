@@ -421,11 +421,6 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
     roleBar: 'team',
     why: 'permission echo for portal UI affordances: non-team callers fail open to an empty permission list rather than an error',
   },
-  'routes/api/widget/identify.ts::POST::isTeamMember': {
-    intent: 'SECONDARY_GATE',
-    roleBar: 'team',
-    why: 'widget identify refuses to mint a widget-scoped session when the resolved identity is a staff/team member, so a dashboard-authorized session is never handed to an embedding origin',
-  },
   'lib/server/functions/onboarding.ts::saveWorkspaceAndGoalFn::isAdmin': {
     intent: 'SECONDARY_GATE',
     roleBar: 'admin',
@@ -438,6 +433,9 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
   ),
   'lib/server/functions/onboarding.ts::ensureBootstrapAdmin::isAdmin': NOT_A_GATE(
     'promotes an existing non-admin principal during bootstrap — not an access check'
+  ),
+  'routes/api/widget/identify.ts::POST::isTeamMember': NOT_A_GATE(
+    'skips overwriting a teammate dashboard profile from the host-app JWT; identify still mints a widget-scoped customer session'
   ),
   'lib/server/functions/conversation.ts::assertVisitorConversationAccess::isTeamMember': NOT_A_GATE(
     'team bypasses the portal-access check; entry is the bare requireAuth on each caller'
