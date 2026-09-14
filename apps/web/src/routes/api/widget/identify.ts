@@ -248,11 +248,7 @@ export const Route = createFileRoute('/api/widget/identify')({
         const country = captureCountryFromHeaders(request.headers)
 
         if (userRecord) {
-          // Widget sessions are audience-scoped (`scope=widget`) and cannot
-          // satisfy team/permission gates, so a teammate may identify as a
-          // customer. Do not overwrite the dashboard profile from the host-app
-          // JWT — name, avatar, metadata, and email stay as the team member
-          // set them. Stamp externalId (cross-device key) and country only.
+          // Do not write host-app profile fields onto a teammate row.
           const existingPrincipal = await db.query.principal.findFirst({
             where: eq(principal.userId, userRecord.id),
             columns: { role: true },
@@ -437,6 +433,9 @@ export const Route = createFileRoute('/api/widget/identify')({
             avatarUrl,
           },
           votedPostIds,
+          // Teammates may use the widget as customers but must not mint a
+          // portal OTT — that cookie would replace a dashboard login.
+          canPortalHandoff: !isTeamMember(principalRecord.role),
         })
       },
     },

@@ -187,7 +187,7 @@ export function WidgetShell({
         reduceMotion || expanded ? { duration: 0 } : { duration: 0.16, ease: 'easeIn' as const },
     }),
   }
-  const { user, isIdentified, hmacRequired, closeWidget } = useWidgetAuth()
+  const { user, isIdentified, hmacRequired, canPortalHandoff, closeWidget } = useWidgetAuth()
 
   const onHome = activeTab === 'home' && !onBack
 
@@ -238,6 +238,13 @@ export function WidgetShell({
   const [portalCtaError, setPortalCtaError] = useState(false)
   const handleGoToPortal = useCallback(async () => {
     setPortalCtaError(false)
+    const origin = portalOrigin || window.location.origin
+    // Teammates skip OTT mint entirely — a portal cookie would replace a
+    // dashboard login. Send them to the site unsigned.
+    if (!canPortalHandoff) {
+      sendToHost({ type: 'quackback:navigate', url: `${origin}/?auth=signin` })
+      return
+    }
     const ott = await generateOneTimeToken()
     if (!ott) {
       setPortalCtaError(true)
@@ -246,10 +253,9 @@ export function WidgetShell({
     // Prefer the server-resolved portal origin so the handoff URL targets the
     // portal host — not the widget iframe's origin, which may differ in
     // self-hosted setups where the widget is served from a separate domain.
-    const origin = portalOrigin || window.location.origin
     const portalUrl = `${origin}/auth/widget-handoff?ott=${encodeURIComponent(ott)}`
     sendToHost({ type: 'quackback:navigate', url: portalUrl })
-  }, [])
+  }, [canPortalHandoff, portalOrigin])
 
   return (
     <div className="relative flex flex-col h-full bg-background text-foreground overflow-x-hidden">

@@ -49,6 +49,11 @@ interface WidgetAuthContextValue {
   identityResolved: boolean
   /** Whether verified identity is required (inline email capture disabled) */
   hmacRequired: boolean
+  /**
+   * Whether this identity may mint a portal one-time token. False for workspace
+   * teammates so "Go to portal" / "View on board" do not replace a dashboard login.
+   */
+  canPortalHandoff: boolean
   /** Ensures a session exists (identified or anonymous). Returns true if ready. */
   ensureSession: () => Promise<boolean>
   /** Ensures a session exists before performing a write action. Creates anonymous session if needed. */
@@ -80,6 +85,8 @@ interface WidgetAuthProviderProps {
   portalSessionToken?: string | null
   /** When true, inline email capture is disabled and the host app must sign users. */
   hmacRequired?: boolean
+  /** False when the same-origin portal cookie belongs to a workspace teammate. */
+  canPortalHandoff?: boolean
   /** Locale resolved on the server (Accept-Language header + ?locale=
    *  override). Deriving it from navigator at render time diverges from
    *  SSR and triggers React hydration error #418 — see issue #133. An SDK
@@ -96,12 +103,14 @@ export function WidgetAuthProvider({
   portalUser,
   portalSessionToken,
   hmacRequired,
+  canPortalHandoff: canPortalHandoffFromPortal,
   initialLocale,
   initialMessages,
   children,
 }: WidgetAuthProviderProps) {
   const queryClient = useQueryClient()
   const [user, setUser] = useState<WidgetUser | null>(null)
+  const [canPortalHandoff, setCanPortalHandoff] = useState(canPortalHandoffFromPortal ?? true)
   const [sessionVersion, setSessionVersion] = useState(0)
   const [identityResolved, setIdentityResolved] = useState(false)
   const isIdentified = user !== null
@@ -249,13 +258,19 @@ export function WidgetAuthProvider({
 
   /** Shared success path for both SDK identify and inline email capture */
   const applyIdentifyResult = useCallback(
-    (result: { sessionToken: string; user: WidgetUser; votedPostIds?: string[] }) => {
+    (result: {
+      sessionToken: string
+      user: WidgetUser
+      votedPostIds?: string[]
+      canPortalHandoff?: boolean
+    }) => {
       storeToken(result.sessionToken)
       // Any anonymous session was merged into this identified user server-side,
       // so drop its persisted token. Identified tokens are never persisted —
       // they're re-established via SDK identify / portal passthrough on load.
       clearPersistedToken()
       setUser(result.user)
+      setCanPortalHandoff(result.canPortalHandoff !== false)
       if (result.votedPostIds) {
         queryClient.setQueryData(
           widgetQueryKeys.votedPosts.bySession(sessionVersionRef.current),
@@ -287,11 +302,12 @@ export function WidgetAuthProvider({
     storeToken(portalSessionToken)
     if (portalUser) {
       setUser(portalUser)
+      setCanPortalHandoff(canPortalHandoffFromPortal !== false)
       sendToHost({ type: 'quackback:identify-result', success: true, user: portalUser })
       sendToHost({ type: 'quackback:auth-change', user: portalUser })
     }
     setIdentityResolved(true)
-  }, [portalSessionToken, portalUser, storeToken])
+  }, [portalSessionToken, portalUser, canPortalHandoffFromPortal, storeToken])
 
   // Restore a persisted anonymous session on mount so a returning visitor's
   // conversation is visible immediately, without waiting for a write. Skipped
@@ -366,6 +382,7 @@ export function WidgetAuthProvider({
       // Don't eagerly create anonymous session — it will be created lazily
       // on first write action (vote, comment, post) via ensureSessionThen.
       setUser(null)
+      setCanPortalHandoff(true)
       setIdentityResolved(true)
       sendToHost({ type: 'quackback:identify-result', success: true, user: null })
       sendToHost({ type: 'quackback:auth-change', user: null })
@@ -410,6 +427,7 @@ export function WidgetAuthProvider({
             sessionVersionRef.current += 1
             setSessionVersion(sessionVersionRef.current)
             setUser(null)
+            setCanPortalHandoff(true)
             setIdentityResolved(true)
             sendToHost({ type: 'quackback:identify-result', success: true, user: null })
             sendToHost({ type: 'quackback:auth-change', user: null })
@@ -443,6 +461,7 @@ export function WidgetAuthProvider({
       isIdentified,
       identityResolved,
       hmacRequired: hmacRequired ?? false,
+      canPortalHandoff,
       ensureSession,
       ensureSessionThen,
       closeWidget,
@@ -455,6 +474,7 @@ export function WidgetAuthProvider({
       user,
       isIdentified,
       identityResolved,
+      canPortalHandoff,
       ensureSession,
       ensureSessionThen,
       closeWidget,

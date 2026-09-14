@@ -40,8 +40,15 @@ interface WidgetPostDetailProps {
 export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
   const intl = useIntl()
   const { upload: uploadImage } = useWidgetImageUpload()
-  const { isIdentified, hmacRequired, user, ensureSessionThen, emitEvent, sessionVersion } =
-    useWidgetAuth()
+  const {
+    isIdentified,
+    hmacRequired,
+    user,
+    canPortalHandoff,
+    ensureSessionThen,
+    emitEvent,
+    sessionVersion,
+  } = useWidgetAuth()
   const queryClient = useQueryClient()
 
   // Widget-specific post detail query that injects Bearer headers so the server
@@ -88,16 +95,16 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
 
   const handleViewOnPortal = useCallback(async () => {
     if (!post) return
-    const ott = isIdentified ? await generateOneTimeToken() : null
+    const ott = isIdentified && canPortalHandoff ? await generateOneTimeToken() : null
     const url = buildPortalUrl({
       origin: window.location.origin,
       boardSlug: post.board.slug,
       postId: post.id,
-      isIdentified,
+      isIdentified: isIdentified && canPortalHandoff,
       ott,
     })
     sendToHost({ type: 'quackback:navigate', url })
-  }, [post, isIdentified])
+  }, [post, isIdentified, canPortalHandoff])
 
   /** Submit a comment (root or reply). */
   const submitComment = useCallback(

@@ -143,6 +143,7 @@ describe('getWidgetSession', () => {
       settings: { id: 'ws_123', slug: 'acme', name: 'Acme Inc' },
       user: { id: 'user_1', email: 'jane@acme.com', name: 'Jane', image: 'https://avatar.url' },
       principal: { id: 'principal_1', role: 'user', type: 'user' },
+      canPortalHandoff: true,
     })
   })
 
@@ -168,6 +169,7 @@ describe('getWidgetSession', () => {
       settings: { id: 'ws_123', slug: 'acme', name: 'Acme Inc' },
       user: { id: 'user_1', email: 'jane@acme.com', name: 'Jane', image: null },
       principal: { id: 'principal_mock123', role: 'user', type: 'user' },
+      canPortalHandoff: true,
     })
   })
 
@@ -204,6 +206,7 @@ describe('getWidgetSession', () => {
 
     expect(result?.principal.role).toBe('user')
     expect(result?.principal.id).toBe('principal_admin')
+    expect(result?.canPortalHandoff).toBe(false)
   })
 
   it('accepts a portal-scoped session and still presents portal-tier', async () => {

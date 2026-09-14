@@ -11,6 +11,7 @@ import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
 import { escapeInlineStyle } from '@/lib/shared/safe-inline-content'
 import { Button } from '@/components/ui/button'
 import { useBrandingFont } from '@/lib/client/hooks/use-branding-font'
+import { isTeamMember } from '@/lib/shared/roles'
 
 const setIframeHeaders = createServerFn({ method: 'GET' }).handler(async () => {
   setResponseHeader('Content-Security-Policy', 'frame-ancestors *')
@@ -55,7 +56,7 @@ export const Route = createFileRoute('/widget')({
     theme: search.theme === 'light' || search.theme === 'dark' ? search.theme : undefined,
   }),
   loader: async ({ context, location }) => {
-    const { settings, session } = context
+    const { settings, session, userRole } = context
 
     const org = settings?.settings
     if (!org) {
@@ -122,6 +123,7 @@ export const Route = createFileRoute('/widget')({
       portalUser,
       portalSessionToken,
       hmacRequired: settings?.publicWidgetConfig?.hmacRequired ?? false,
+      canPortalHandoff: !isTeamMember(userRole),
       locale,
       messages,
     }
@@ -159,6 +161,7 @@ function WidgetLayout() {
     portalUser,
     portalSessionToken,
     hmacRequired,
+    canPortalHandoff,
     locale,
     messages,
   } = Route.useLoaderData()
@@ -174,6 +177,7 @@ function WidgetLayout() {
       portalUser={portalUser}
       portalSessionToken={portalSessionToken}
       hmacRequired={hmacRequired}
+      canPortalHandoff={canPortalHandoff}
       initialLocale={locale}
       initialMessages={messages}
     >

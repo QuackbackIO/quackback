@@ -2,7 +2,7 @@ import type { PrincipalId, UserId, WorkspaceId } from '@quackback/ids'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import type { Role } from '@/lib/server/auth'
 import { auth } from '@/lib/server/auth'
-import { sessionRole } from '@/lib/shared/roles'
+import { isTeamMember, sessionRole } from '@/lib/shared/roles'
 import { db, session, principal, eq, and, gt } from '@/lib/server/db'
 import { ensurePrincipalForUser } from '@/lib/server/domains/principals/principal.factory'
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
@@ -29,6 +29,8 @@ export interface WidgetAuthContext {
     role: Role
     type: string
   }
+  /** False for workspace teammates — the widget must not mint a portal OTT. */
+  canPortalHandoff: boolean
 }
 
 /**
@@ -108,6 +110,7 @@ export async function getWidgetSession(opts?: {
       role: sessionRole(principalRecord.role as Role, 'widget'),
       type: principalRecord.type ?? 'user',
     },
+    canPortalHandoff: !isTeamMember(principalRecord.role),
   }
 }
 

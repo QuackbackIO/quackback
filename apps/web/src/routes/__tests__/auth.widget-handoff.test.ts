@@ -48,6 +48,7 @@ const mockDbUpdate: any = vi.fn(() => ({ set: mockUpdateSet }))
 // path. The provenance gate itself is covered in detail by
 // auth.widget-handoff-provenance.test.ts.
 const mockWidgetIdentifiedFindFirst = vi.fn(async () => ({ hmacVerified: true }))
+const mockPrincipalFindFirst = vi.fn(async () => ({ role: 'user' }))
 vi.mock('@/lib/server/db', () => ({
   db: {
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
@@ -57,10 +58,14 @@ vi.mock('@/lib/server/db', () => ({
       widgetIdentifiedSession: {
         findFirst: (...args: unknown[]) => mockWidgetIdentifiedFindFirst(...(args as [])),
       },
+      principal: {
+        findFirst: (...args: unknown[]) => mockPrincipalFindFirst(...(args as [])),
+      },
     },
   },
   widgetOriginSession: {},
   widgetIdentifiedSession: { sessionId: 'widget_identified_session.session_id' },
+  principal: { userId: 'principal.user_id' },
   session: { id: 'session.id' },
   eq: vi.fn((col, val) => ({ kind: 'eq', col, val })),
 }))
@@ -180,6 +185,21 @@ async function runHandoffLoader(search: string) {
     return { status: 'invalid' as const }
   }
 
+  const { isHandoffPrincipalTeammate } = await import('../auth.widget-handoff')
+  if (await isHandoffPrincipalTeammate(userId)) {
+    await recordAuditEvent({
+      event: 'portal.widget_handshake.invalid',
+      outcome: 'failure',
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      actor: { userId: userId as any },
+      target: { type: 'session', id: sessionId },
+      metadata: { reason: 'teammate_identity' },
+    })
+    const { buildSigninRedirect } = await import('@/lib/shared/auth-prompt')
+    const landing = buildSigninRedirect(returnTo)
+    return { status: 'redirect' as const, to: landing.to, search: landing.search }
+  }
+
   // Provenance passed — promote to portal audience, then install the cookie.
   try {
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
@@ -219,6 +239,24 @@ async function runHandoffLoader(search: string) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+})
+
+describe('isHandoffPrincipalTeammate', () => {
+  it('is true for admin and member, false for portal users', async () => {
+    const { isHandoffPrincipalTeammate } = await import('../auth.widget-handoff')
+    mockPrincipalFindFirst.mockResolvedValueOnce({ role: 'admin' })
+    expect(await isHandoffPrincipalTeammate('user_admin')).toBe(true)
+    mockPrincipalFindFirst.mockResolvedValueOnce({ role: 'member' })
+    expect(await isHandoffPrincipalTeammate('user_member')).toBe(true)
+    mockPrincipalFindFirst.mockResolvedValueOnce({ role: 'user' })
+    expect(await isHandoffPrincipalTeammate('user_customer')).toBe(false)
+  })
+
+  it('is false when no principal exists', async () => {
+    const { isHandoffPrincipalTeammate } = await import('../auth.widget-handoff')
+    mockPrincipalFindFirst.mockResolvedValueOnce(undefined)
+    expect(await isHandoffPrincipalTeammate('user_unknown')).toBe(false)
+  })
 })
 
 describe('widget handoff loader — missing OTT', () => {
@@ -378,6 +416,57 @@ describe('widget handoff loader — valid OTT', () => {
       expect(mockSetResponseHeader).toHaveBeenCalledWith(
         'Set-Cookie',
         expect.stringContaining('better-auth.session_token')
+      )
+    })
+  })
+
+  describe('teammate identity', () => {
+    it('does not install a portal cookie when the identified user is an admin', async () => {
+      mockFetch.mockResolvedValue(makeOkResponse({ id: 'sess_admin', userId: 'user_admin' }))
+      mockPrincipalFindFirst.mockResolvedValueOnce({ role: 'admin' })
+
+      const result = await runHandoffLoader('?ott=valid-token')
+
+      expect(result.status).toBe('redirect')
+      expect(mockSetResponseHeader).not.toHaveBeenCalledWith('Set-Cookie', expect.anything())
+      expect(mockDbInsert).not.toHaveBeenCalled()
+      expect(mockUpdateSet).not.toHaveBeenCalled()
+    })
+
+    it('does not install a portal cookie when the identified user is a member', async () => {
+      mockFetch.mockResolvedValue(makeOkResponse({ id: 'sess_member', userId: 'user_member' }))
+      mockPrincipalFindFirst.mockResolvedValueOnce({ role: 'member' })
+
+      await runHandoffLoader('?ott=valid-token')
+
+      expect(mockSetResponseHeader).not.toHaveBeenCalledWith('Set-Cookie', expect.anything())
+    })
+
+    it('sends teammates to the portal sign-in landing without authenticating', async () => {
+      mockFetch.mockResolvedValue(makeOkResponse({ id: 'sess_admin', userId: 'user_admin' }))
+      mockPrincipalFindFirst.mockResolvedValueOnce({ role: 'admin' })
+
+      const result = await runHandoffLoader('?ott=valid-token&returnTo=/posts/abc')
+
+      expect(result.status).toBe('redirect')
+      if (result.status === 'redirect') {
+        expect(result.to).toBe('/')
+        expect(result.search).toEqual({ auth: 'signin', callbackUrl: '/posts/abc' })
+      }
+    })
+
+    it('records teammate_identity when skipping the cookie', async () => {
+      mockFetch.mockResolvedValue(makeOkResponse({ id: 'sess_admin', userId: 'user_admin' }))
+      mockPrincipalFindFirst.mockResolvedValueOnce({ role: 'admin' })
+
+      await runHandoffLoader('?ott=valid-token')
+
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: 'portal.widget_handshake.invalid',
+          outcome: 'failure',
+          metadata: expect.objectContaining({ reason: 'teammate_identity' }),
+        })
       )
     })
   })

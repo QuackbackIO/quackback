@@ -21,7 +21,7 @@ interface WidgetChangelogDetailProps {
 }
 
 export function WidgetChangelogDetail({ entryId }: WidgetChangelogDetailProps) {
-  const { isIdentified, sessionVersion } = useWidgetAuth()
+  const { isIdentified, canPortalHandoff, sessionVersion } = useWidgetAuth()
   const { data: entry, isLoading } = useQuery({
     queryKey: widgetQueryKeys.changelogDetail.byId(entryId, sessionVersion),
     queryFn: () =>
@@ -42,14 +42,14 @@ export function WidgetChangelogDetail({ entryId }: WidgetChangelogDetailProps) {
   const changelogEntryId = entry?.id
   const handleViewOnPortal = useCallback(async () => {
     if (!changelogEntryId) return
-    const ott = isIdentified ? await generateOneTimeToken() : null
+    const ott = isIdentified && canPortalHandoff ? await generateOneTimeToken() : null
     const url = appendWidgetOtt(
       `${window.location.origin}/changelog/${changelogEntryId}`,
-      isIdentified,
+      isIdentified && canPortalHandoff,
       ott
     )
     sendToHost({ type: 'quackback:navigate', url })
-  }, [changelogEntryId, isIdentified])
+  }, [changelogEntryId, isIdentified, canPortalHandoff])
 
   if (isLoading) {
     return <WidgetArticleSkeleton />

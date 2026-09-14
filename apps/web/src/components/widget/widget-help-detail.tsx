@@ -31,7 +31,7 @@ export function WidgetHelpDetail({
   onCategorySelect,
   onAskQuestion,
 }: WidgetHelpDetailProps) {
-  const { isIdentified, sessionVersion } = useWidgetAuth()
+  const { isIdentified, canPortalHandoff, sessionVersion } = useWidgetAuth()
   const { locale } = useIntl()
   const { data: article, isLoading } = useQuery({
     queryKey: widgetQueryKeys.articleDetail.byRef(articleRef, sessionVersion, locale),
@@ -52,18 +52,18 @@ export function WidgetHelpDetail({
 
   const handleViewOnPortal = useCallback(async () => {
     if (!article) return
-    const ott = isIdentified ? await generateOneTimeToken() : null
+    const ott = isIdentified && canPortalHandoff ? await generateOneTimeToken() : null
     const url = appendWidgetOtt(
       `${window.location.origin}${hcArticlePath({
         locale: article.resolvedLocale,
         urlId: article.urlId,
         slug: article.slug,
       })}`,
-      isIdentified,
+      isIdentified && canPortalHandoff,
       ott
     )
     sendToHost({ type: 'quackback:navigate', url })
-  }, [article, isIdentified])
+  }, [article, isIdentified, canPortalHandoff])
 
   if (isLoading) {
     return <WidgetArticleSkeleton />

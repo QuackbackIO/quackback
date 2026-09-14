@@ -198,8 +198,9 @@ describe('POST /api/widget/identify — teammate identities mint a widget sessio
     const res = await postIdentify({ ssoToken: 'jwt.token.here' })
 
     expect(res.status).toBe(200)
-    const body = (await res.json()) as { sessionToken?: string }
+    const body = (await res.json()) as { sessionToken?: string; canPortalHandoff?: boolean }
     expect(body.sessionToken).toBeTruthy()
+    expect(body.canPortalHandoff).toBe(false)
     expect(mockInsertValues).toHaveBeenCalledWith(expect.objectContaining({ scope: 'widget' }))
   })
 
@@ -273,8 +274,9 @@ describe('POST /api/widget/identify — the verified (ssoToken) path for a porta
     const res = await postIdentify({ ssoToken: 'jwt.token.here' })
 
     expect(res.status).toBe(200)
-    const body = (await res.json()) as { sessionToken?: string }
+    const body = (await res.json()) as { sessionToken?: string; canPortalHandoff?: boolean }
     expect(body.sessionToken).toBeTruthy()
+    expect(body.canPortalHandoff).toBe(true)
   })
 
   it('succeeds for a brand-new identity (no existing user, no existing principal)', async () => {
