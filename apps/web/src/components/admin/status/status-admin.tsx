@@ -4,6 +4,7 @@ import { SignalIcon } from '@heroicons/react/24/solid'
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline'
 import { AdminFilterLayout } from '@/components/admin/admin-filter-layout'
 import { FilterSection } from '@/components/shared/filter-section'
+import { MENU_ROW } from '@/components/ui/menu'
 import { cn } from '@/lib/shared/utils'
 import { Route } from '@/routes/admin/status'
 import { listStatusIncidentsAdminFn } from '@/lib/server/functions/status'
@@ -20,13 +21,7 @@ import { StatusTemplatesView } from './status-templates-view'
 import { StatusSubscribersView } from './status-subscribers-view'
 
 export type StatusAdminView =
-  | 'overview'
-  | 'open'
-  | 'maintenance'
-  | 'all'
-  | 'components'
-  | 'templates'
-  | 'subscribers'
+  'overview' | 'open' | 'maintenance' | 'all' | 'components' | 'templates' | 'subscribers'
 
 function useIncidentCount(kind: 'incident' | 'maintenance', state: 'active' | 'all') {
   const { data } = useQuery({
@@ -41,9 +36,7 @@ function useIncidentCount(kind: 'incident' | 'maintenance', state: 'active' | 'a
 function CountBadge({ count }: { count: number | string | undefined }) {
   if (count === undefined) return null
   return (
-    <span className="ml-auto text-[11px] font-semibold rounded-full bg-muted px-1.5 py-0.5 text-muted-foreground">
-      {count}
-    </span>
+    <span className="ml-auto shrink-0 text-[11px] tabular-nums text-muted-foreground">{count}</span>
   )
 }
 
@@ -62,14 +55,16 @@ function SideItem({
     <button
       type="button"
       onClick={onClick}
+      data-active={active || undefined}
       className={cn(
-        'w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors text-left',
+        MENU_ROW,
+        'w-full',
         active
-          ? 'bg-muted text-foreground'
+          ? 'bg-muted text-foreground font-medium'
           : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
       )}
     >
-      <span className="truncate">{children}</span>
+      <span className="min-w-0 flex-1 truncate text-left">{children}</span>
       <CountBadge count={count} />
     </button>
   )
@@ -92,14 +87,14 @@ function StatusFilterNav({ view }: { view: StatusAdminView }) {
   }
 
   return (
-    <div className="space-y-1 flex flex-col h-full">
-      <div className="space-y-0.5 pb-1">
+    <div className="space-y-0 flex flex-col h-full">
+      <div className="space-y-1 pb-4">
         <SideItem active={view === 'overview'} onClick={() => go('overview')}>
           Overview
         </SideItem>
       </div>
-      <FilterSection title="Incidents" collapsible={false}>
-        <div className="space-y-0.5">
+      <FilterSection title="Incidents">
+        <div className="space-y-1">
           <SideItem active={view === 'open'} onClick={() => go('open')} count={openCount}>
             Open incidents
           </SideItem>
@@ -116,8 +111,8 @@ function StatusFilterNav({ view }: { view: StatusAdminView }) {
         </div>
       </FilterSection>
 
-      <FilterSection title="Manage" collapsible={false}>
-        <div className="space-y-0.5">
+      <FilterSection title="Manage">
+        <div className="space-y-1">
           <SideItem
             active={view === 'components'}
             onClick={() => go('components')}
@@ -140,19 +135,25 @@ function StatusFilterNav({ view }: { view: StatusAdminView }) {
 
       {/* The status page's two other surfaces, one click away: the page
           visitors see, and its settings (which live under /admin/settings). */}
-      <div className="mt-2 pt-2 border-t border-border/40 space-y-0.5">
+      <div className="mt-2 pt-2 border-t border-border/40 space-y-1">
         <a
           href="/status"
           target="_blank"
           rel="noreferrer"
-          className="w-full flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+          className={cn(
+            MENU_ROW,
+            'w-full text-muted-foreground hover:text-foreground hover:bg-muted/50'
+          )}
         >
           View public page
           <ArrowTopRightOnSquareIcon className="h-3 w-3" />
         </a>
         <Link
           to="/admin/settings/status"
-          className="w-full flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+          className={cn(
+            MENU_ROW,
+            'w-full text-muted-foreground hover:text-foreground hover:bg-muted/50'
+          )}
         >
           Page settings
         </Link>

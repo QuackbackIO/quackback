@@ -2,13 +2,14 @@ import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { z } from 'zod'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { db, settings } from '@/lib/server/db'
+import { db, eq, settings } from '@/lib/server/db'
 import { requireAuth } from './auth-helpers'
 import { parseIdentityProjection } from '@/lib/server/domains/settings/cloud/identity-projection'
 import { verifyIdentityProjectionToken } from '@/lib/server/domains/settings/cloud/identity-projection.signature'
 import { writeIdentityProjection } from '@/lib/server/domains/settings/cloud/identity-projection.write'
-import { mutateSetupStateAtomic } from '@/lib/server/setup-state'
+import { finishIdentityOnboarding, mutateSetupStateAtomic } from '@/lib/server/setup-state'
 import { friendlyPlatformLabel, platformLabelFromHostname } from '@/lib/shared/platform-label'
+import { flagsForGoal, resolveFeatureFlags } from '@/lib/server/domains/settings/settings.types'
 
 export { platformLabelFromHostname }
 
@@ -40,12 +41,21 @@ export const markCloudWorkspaceDetailsSeenFn = createServerFn({ method: 'POST' }
     if (!friendlyPlatformLabel(identity.platformHostname)) {
       throw new Error('Choose a Workspace URL before continuing')
     }
-    const { state } = await mutateSetupStateAtomic((current) => ({
-      state: current.workspaceDetailsSeenAt
-        ? current
-        : { ...current, workspaceDetailsSeenAt: new Date().toISOString() },
-      value: undefined,
-    }))
+    const { state } = await mutateSetupStateAtomic(async (current, row, tx) => {
+      const goal =
+        current.useCase && current.useCase !== 'internal' ? current.useCase : 'product_feedback'
+      if (!current.steps.startingPoint || current.steps.startingPoint.source === 'managed') {
+        const { flags } = flagsForGoal(resolveFeatureFlags(row.featureFlags), goal)
+        await tx
+          .update(settings)
+          .set({ featureFlags: JSON.stringify(flags) })
+          .where(eq(settings.id, row.id))
+      }
+      return {
+        state: finishIdentityOnboarding(current, goal),
+        value: undefined,
+      }
+    })
     return { workspaceDetailsSeenAt: state.workspaceDetailsSeenAt! }
   }
 )

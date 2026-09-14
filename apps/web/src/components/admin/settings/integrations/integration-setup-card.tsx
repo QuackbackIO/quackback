@@ -16,7 +16,7 @@ export function IntegrationSetupCard({
   connectionForm,
 }: IntegrationSetupCardProps) {
   return (
-    <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
+    <div data-settings-card="" className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
       <div className="flex items-start gap-4">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
           {icon}

@@ -10,6 +10,7 @@ import {
   type PlatformCredentialField,
 } from '@/lib/shared/integration-types'
 import { canInstallIntegration } from '@/lib/shared/integration-connect'
+import { MENU_ROW } from '@/components/ui/menu'
 import { cn } from '@/lib/shared/utils'
 
 const PlatformCredentialsDialog = lazy(() =>
@@ -68,10 +69,12 @@ export function IntegrationList({ catalog, integrations }: IntegrationListProps)
           <button
             type="button"
             onClick={() => setActiveCategory('all')}
+            data-active={activeCategory === 'all' || undefined}
             className={cn(
-              'flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
+              MENU_ROW,
+              'w-full justify-between',
               activeCategory === 'all'
-                ? 'bg-muted text-foreground'
+                ? 'bg-muted text-foreground font-medium'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
             )}
           >
@@ -83,10 +86,12 @@ export function IntegrationList({ catalog, integrations }: IntegrationListProps)
               key={cat}
               type="button"
               onClick={() => setActiveCategory(cat)}
+              data-active={activeCategory === cat || undefined}
               className={cn(
-                'flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
+                MENU_ROW,
+                'w-full justify-between',
                 activeCategory === cat
-                  ? 'bg-muted text-foreground'
+                  ? 'bg-muted text-foreground font-medium'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
               )}
             >
@@ -160,6 +165,7 @@ export function IntegrationList({ catalog, integrations }: IntegrationListProps)
               <Link
                 key={entry.id}
                 to={entry.settingsPath}
+                data-settings-tile=""
                 className="group flex items-center gap-3 rounded-lg border border-border/50 bg-card p-3 transition-all hover:border-border hover:shadow-sm"
               >
                 {icon}
@@ -185,6 +191,7 @@ export function IntegrationList({ catalog, integrations }: IntegrationListProps)
                     fields: entry.platformCredentialFields ?? [],
                   })
                 }
+                data-settings-tile=""
                 className="group flex items-center gap-3 rounded-lg border border-dashed border-border/40 bg-muted/10 p-3 text-left transition-all hover:border-border/60"
               >
                 {icon}

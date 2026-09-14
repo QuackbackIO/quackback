@@ -46,6 +46,7 @@ import {
 import { PageHeader } from '@/components/shared/page-header'
 import { FilterSection } from '@/components/shared/filter-section'
 import { MENU_ROW } from '@/components/ui/menu'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/shared/utils'
 
 // The active left-nav selection (one view / label / segment / team / custom
@@ -270,6 +271,7 @@ function ScopeFilterSection({
               key={r.id}
               type="button"
               onClick={() => onSelect(item)}
+              data-active={active || undefined}
               className={itemClass(active)}
             >
               <span
@@ -404,7 +406,6 @@ function ViewsFilterSection({
   return (
     <FilterSection
       title="Saved views"
-      collapsible={false}
       action={
         onCreateView ? (
           <button
@@ -427,7 +428,11 @@ function ViewsFilterSection({
             const item: InboxNavItem = { kind: 'custom', viewId: v.id }
             const active = activeKey === inboxNavKey(item)
             return (
-              <div key={v.id} className={cn('group flex items-center gap-1', itemClass(active))}>
+              <div
+                key={v.id}
+                data-active={active || undefined}
+                className={cn('group flex items-center gap-1', itemClass(active))}
+              >
                 <button
                   type="button"
                   onClick={() => onSelect(item)}
@@ -544,7 +549,10 @@ export function InboxNavSidebar({
   const quinnActive = activeKey === inboxNavKey(quinnItem)
 
   return (
-    <nav className="hidden w-64 shrink-0 flex-col border-r border-border/50 bg-card/30 lg:flex xl:w-72">
+    <nav
+      data-side-pane=""
+      className="hidden w-64 shrink-0 flex-col overflow-hidden border-r border-border/50 bg-card/30 lg:flex xl:w-72"
+    >
       <div className="px-4 py-3.5">
         <PageHeader icon={ChatBubbleLeftRightIcon} title="Inbox" />
       </div>
@@ -562,93 +570,98 @@ export function InboxNavSidebar({
           />
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">
-        <FilterSection title="Conversations">
-          <div className="space-y-1">
-            {CONVERSATION_VIEWS.map(({ view, label, Icon }) => {
-              const item: InboxNavItem = { kind: 'view', view }
-              const active = activeKey === inboxNavKey(item)
-              return (
-                <button
-                  key={view}
-                  type="button"
-                  onClick={() => onSelect(item)}
-                  className={itemClass(active)}
-                >
-                  <Icon className={cn('size-4 shrink-0', active && 'text-primary')} />
-                  <span className="min-w-0 flex-1 truncate text-left">{label}</span>
-                  <NavRowCount count={countForConversationView(view, counts)} />
-                </button>
-              )
-            })}
-          </div>
-        </FilterSection>
-
-        {showTickets && (
-          <FilterSection title="Tickets">
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="px-5 pb-5">
+          <FilterSection title="Conversations">
             <div className="space-y-1">
-              {TICKET_INBOX_VIEWS.map(({ view, label, Icon }) => {
+              {CONVERSATION_VIEWS.map(({ view, label, Icon }) => {
                 const item: InboxNavItem = { kind: 'view', view }
                 const active = activeKey === inboxNavKey(item)
-                const count = countForTicketView(view, counts)
                 return (
                   <button
                     key={view}
                     type="button"
                     onClick={() => onSelect(item)}
+                    data-active={active || undefined}
                     className={itemClass(active)}
                   >
                     <Icon className={cn('size-4 shrink-0', active && 'text-primary')} />
                     <span className="min-w-0 flex-1 truncate text-left">{label}</span>
-                    <NavRowCount count={count} />
+                    <NavRowCount count={countForConversationView(view, counts)} />
                   </button>
                 )
               })}
             </div>
           </FilterSection>
-        )}
 
-        <FilterSection title="AI" collapsible={false}>
-          <button
-            type="button"
-            onClick={() => onSelect(quinnItem)}
-            className={itemClass(quinnActive)}
-          >
-            <QUINN_VIEW.Icon className={cn('size-4 shrink-0', quinnActive && 'text-primary')} />
-            {QUINN_VIEW.label}
-          </button>
-        </FilterSection>
+          {showTickets && (
+            <FilterSection title="Tickets">
+              <div className="space-y-1">
+                {TICKET_INBOX_VIEWS.map(({ view, label, Icon }) => {
+                  const item: InboxNavItem = { kind: 'view', view }
+                  const active = activeKey === inboxNavKey(item)
+                  const count = countForTicketView(view, counts)
+                  return (
+                    <button
+                      key={view}
+                      type="button"
+                      onClick={() => onSelect(item)}
+                      data-active={active || undefined}
+                      className={itemClass(active)}
+                    >
+                      <Icon className={cn('size-4 shrink-0', active && 'text-primary')} />
+                      <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+                      <NavRowCount count={count} />
+                    </button>
+                  )
+                })}
+              </div>
+            </FilterSection>
+          )}
 
-        <ScopeFilterSection
-          title="Teams"
-          rows={teamRows}
-          activeKey={activeKey}
-          onSelect={onSelect}
-          makeItem={teamNavItem}
-          showCounts={false}
-        />
-        <ViewsFilterSection
-          views={views ?? []}
-          activeKey={activeKey}
-          onSelect={onSelect}
-          onCreateView={onCreateView}
-          onEditView={onEditView}
-        />
-        <ScopeFilterSection
-          title="Tags"
-          rows={tags ?? []}
-          activeKey={activeKey}
-          onSelect={onSelect}
-          makeItem={tagNavItem}
-        />
-        <ScopeFilterSection
-          title="Segments"
-          rows={segments ?? []}
-          activeKey={activeKey}
-          onSelect={onSelect}
-          makeItem={segmentNavItem}
-        />
-      </div>
+          <FilterSection title="AI">
+            <button
+              type="button"
+              onClick={() => onSelect(quinnItem)}
+              data-active={quinnActive || undefined}
+              className={itemClass(quinnActive)}
+            >
+              <QUINN_VIEW.Icon className={cn('size-4 shrink-0', quinnActive && 'text-primary')} />
+              {QUINN_VIEW.label}
+            </button>
+          </FilterSection>
+
+          <ScopeFilterSection
+            title="Teams"
+            rows={teamRows}
+            activeKey={activeKey}
+            onSelect={onSelect}
+            makeItem={teamNavItem}
+            showCounts={false}
+          />
+          <ViewsFilterSection
+            views={views ?? []}
+            activeKey={activeKey}
+            onSelect={onSelect}
+            onCreateView={onCreateView}
+            onEditView={onEditView}
+          />
+          <ScopeFilterSection
+            title="Tags"
+            rows={tags ?? []}
+            activeKey={activeKey}
+            onSelect={onSelect}
+            makeItem={tagNavItem}
+          />
+          <ScopeFilterSection
+            title="Segments"
+            rows={segments ?? []}
+            activeKey={activeKey}
+            onSelect={onSelect}
+            makeItem={segmentNavItem}
+          />
+        </div>
+      </ScrollArea>
     </nav>
   )
 }

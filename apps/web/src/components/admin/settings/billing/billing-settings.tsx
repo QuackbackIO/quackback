@@ -134,7 +134,10 @@ export function BillingPlansView(props: {
         )}
 
         {catalogue && (
-          <div className="grid grid-cols-1 overflow-hidden rounded-xl border border-border/50 bg-card sm:grid-cols-2 xl:grid-cols-4">
+          <div
+            data-settings-card=""
+            className="grid grid-cols-1 overflow-hidden rounded-xl border border-border/50 bg-card sm:grid-cols-2 xl:grid-cols-4"
+          >
             {catalogue.plans.map((plan, index) => (
               <PlanCard
                 key={plan.id}
@@ -285,7 +288,10 @@ function CurrentPlanCard(props: {
     renewalBits.push(`Renews ${formatDate(overview.renewalAt)}`)
   }
   return (
-    <section className="overflow-hidden rounded-xl border border-border/50 bg-card">
+    <section
+      data-settings-card=""
+      className="overflow-hidden rounded-xl border border-border/50 bg-card"
+    >
       <div className="flex items-start justify-between gap-3 px-6 py-5">
         <div className="min-w-0 space-y-1">
           <div className="flex items-center gap-2">
@@ -444,7 +450,10 @@ function UsageCard(props: {
   const hasMonthly = hasAi || hasEmails || hasApi
 
   return (
-    <section className="overflow-hidden rounded-xl border border-border/50 bg-card">
+    <section
+      data-settings-card=""
+      className="overflow-hidden rounded-xl border border-border/50 bg-card"
+    >
       <div className="flex items-center justify-between border-b border-border/50 px-6 py-4">
         <h2 className="text-base font-semibold">Usage</h2>
         {hasMonthly ? (
@@ -548,7 +557,10 @@ function AddOnsCard(props: {
   return (
     <section className="space-y-3">
       <h2 className="text-base font-semibold">Add-ons</h2>
-      <div className="overflow-hidden rounded-xl border border-border/50 bg-card">
+      <div
+        data-settings-card=""
+        className="overflow-hidden rounded-xl border border-border/50 bg-card"
+      >
         <div className="flex items-center justify-between gap-3 px-4 py-3">
           <div className="min-w-0">
             <div className="text-[13px] font-medium">Remove Quackback branding</div>
@@ -822,7 +834,10 @@ function PeriodToggle(props: {
 
 function InvoiceList({ invoices }: { invoices: CustomerInvoice[] }) {
   return (
-    <ul className="divide-y divide-border/50 rounded-xl border border-border/50">
+    <ul
+      data-settings-card=""
+      className="divide-y divide-border/50 rounded-xl border border-border/50"
+    >
       {invoices.map((invoice) => (
         <li key={invoice.id} className="flex items-center gap-3 px-4 py-2.5 text-[13px]">
           <span className="min-w-0 flex-1 truncate font-medium">{invoice.number ?? 'Invoice'}</span>

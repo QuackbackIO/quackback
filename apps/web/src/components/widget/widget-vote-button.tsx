@@ -81,6 +81,7 @@ export function WidgetVoteButton({
   return (
     <button
       type="button"
+      data-testid="vote-button"
       aria-label={ariaLabel}
       aria-pressed={hasVoted}
       aria-disabled={noAccessReason ? true : undefined}

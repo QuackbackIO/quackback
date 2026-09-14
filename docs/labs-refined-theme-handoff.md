@@ -10,7 +10,7 @@ Production was not enabled or deployed. The experiment defaults to `{ visible: f
 
 ## What shipped
 
-Reusable, database-backed Labs. First registered experiment: `refined-visual-theme` (“Refined interface”). When enabled, `visualTheme` becomes `refined` and `data-visual-theme="refined"` is set on `<html>`. When disabled or missing, the document marker is omitted and today’s styling is unchanged.
+Reusable, database-backed Labs. First registered experiment: `refined-visual-theme` (“Refreshed UI”). When enabled, `visualTheme` becomes `refined` and `data-visual-theme="refined"` is set on `<html>`. When disabled or missing, the document marker is omitted and today’s styling is unchanged.
 
 ## State semantics
 

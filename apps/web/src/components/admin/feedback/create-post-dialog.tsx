@@ -61,6 +61,7 @@ export function CreatePostDialog({
 }: CreatePostDialogProps) {
   const defaultStatusId = statuses.find((s) => s.isDefault)?.id || statuses[0]?.id || ''
   const [internalOpen, setInternalOpen] = useState(false)
+  const isControlled = controlledOpen !== undefined
   const open = controlledOpen ?? internalOpen
   const setOpen = controlledOnOpenChange ?? setInternalOpen
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
@@ -156,13 +157,15 @@ export function CreatePostDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        {trigger ?? (
-          <Button variant="ghost" size="icon" title="Create new post">
-            <PencilSquareIcon className="h-4 w-4" />
-          </Button>
-        )}
-      </DialogTrigger>
+      {(!isControlled || trigger) && (
+        <DialogTrigger asChild>
+          {trigger ?? (
+            <Button variant="ghost" size="icon" title="Create new post">
+              <PencilSquareIcon className="h-4 w-4" />
+            </Button>
+          )}
+        </DialogTrigger>
+      )}
       <DialogContent
         className="w-[95vw] max-w-5xl p-0 gap-0 overflow-hidden"
         onKeyDown={handleKeyDown}

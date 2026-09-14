@@ -112,9 +112,9 @@ export function selectActivationAction({
       return {
         id: 'open-launch-plan',
         outcome,
-        label: 'View your launch plan',
+        label: 'Open Home',
         kind: 'link',
-        destination: '/admin/getting-started',
+        destination: '/admin',
       }
     }
     if (outcome === 'product_feedback') {
@@ -158,9 +158,9 @@ export function selectActivationAction({
     return {
       id: 'open-launch-plan',
       outcome,
-      label: 'View your launch plan',
+      label: 'Open Home',
       kind: 'link',
-      destination: '/admin/getting-started',
+      destination: '/admin',
     }
   }
 
@@ -196,7 +196,7 @@ export function resolveOnboardingHandoffCtas(input: Omit<ActivationActionContext
       outcome,
       label: 'Go to your workspace',
       kind: 'link',
-      destination: '/admin/getting-started',
+      destination: '/admin',
     },
     share: null,
   }

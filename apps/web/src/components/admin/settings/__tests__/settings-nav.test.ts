@@ -18,20 +18,6 @@ function groupKids(
   return g.kids.map((k) => ({ label: k.label, to: 'to' in k ? k.to : undefined }))
 }
 
-function nestedGroupKids(
-  sections: ReturnType<typeof buildNavSections>,
-  section: string,
-  group: string,
-  nested: string
-): { label: string; to?: string }[] {
-  const s = sections.find((x) => x.label === section)!
-  const g = s.items.find((i) => i.label === group)
-  if (!g || !isNavGroup(g)) return []
-  const child = g.kids.find((i) => i.label === nested)
-  if (!child || !isNavGroup(child)) return []
-  return child.kids.map((k) => ({ label: k.label, to: 'to' in k ? k.to : undefined }))
-}
-
 function entryLabels(
   entry: ReturnType<typeof buildNavSections>[number]['items'][number]
 ): string[] {
@@ -52,7 +38,7 @@ describe('buildNavSections', () => {
       { supportInbox: true },
     ]) {
       const sections = buildNavSections(flags)
-      expect(sections.map((s) => s.label)).toEqual(['Products', 'Workspace', 'Data'])
+      expect(sections.map((s) => s.label)).toEqual(['Modules', 'Workspace', 'Data'])
     }
   })
 
@@ -68,123 +54,99 @@ describe('buildNavSections', () => {
     expect(allLabels(sections)).not.toContain('Sandbox')
   })
 
-  it('Products always contains the Feedback & Roadmaps accordion with its four pages', () => {
+  it('Modules lists Feedback & Roadmaps as a flat link to Boards', () => {
     const sections = buildNavSections()
-    expect(itemLabels(sections, 'Products')).toContain('Feedback & Roadmaps')
-    expect(groupKids(sections, 'Products', 'Feedback & Roadmaps').map((k) => k.label)).toEqual([
-      'Boards',
-      'Statuses',
-      'Tags',
-      'Moderation',
+    expect(itemLabels(sections, 'Modules')).toContain('Feedback & Roadmaps')
+    expect(groupKids(sections, 'Modules', 'Feedback & Roadmaps')).toEqual([])
+    const item = sections
+      .find((s) => s.label === 'Modules')!
+      .items.find((i) => i.label === 'Feedback & Roadmaps')!
+    expect(!isNavGroup(item) && item.to).toBe('/admin/settings/boards')
+    expect(!isNavGroup(item) && item.activeFor).toEqual([
+      '/admin/settings/boards',
+      '/admin/settings/statuses',
+      '/admin/settings/tags',
+      '/admin/settings/moderation',
     ])
-    expect(itemLabels(buildNavSections({ feedback: false }), 'Products')).toContain(
+    expect(itemLabels(buildNavSections({ feedback: false }), 'Modules')).toContain(
       'Feedback & Roadmaps'
     )
   })
 
-  it('has no Support accordion when both support flags are off', () => {
+  it('has no Support row when both support flags are off', () => {
     const sections = buildNavSections({ helpCenter: true })
-    expect(itemLabels(sections, 'Products')).not.toContain('Support')
+    expect(itemLabels(sections, 'Modules')).not.toContain('Support')
   })
 
-  it('Support shows Channels as the parent of channel pages, then Macros, Office Hours and SLA policies', () => {
+  it('Support is a flat link to Channels when the inbox is on', () => {
     const sections = buildNavSections({ supportInbox: true })
-    expect(groupKids(sections, 'Products', 'Support').map((k) => k.label)).toEqual([
-      'Channels',
-      'Macros',
-      'Office Hours',
-      'SLA policies',
-    ])
-    expect(
-      nestedGroupKids(sections, 'Products', 'Support', 'Channels').map((k) => k.label)
-    ).toEqual(['Messenger', 'Email', 'GitHub'])
-  })
-
-  it('Support shows ticket pages under supportTickets, after the inbox pages', () => {
-    const sections = buildNavSections({ supportInbox: true, supportTickets: true })
-    expect(groupKids(sections, 'Products', 'Support').map((k) => k.label)).toEqual([
-      'Channels',
-      'Macros',
-      'Office Hours',
-      'SLA policies',
-      'Ticket types',
-      'Ticket statuses & stages',
-    ])
-  })
-
-  it('Support shows Email, GitHub, SLA, Office Hours, Macros, and ticket pages when just supportTickets is on', () => {
-    const sections = buildNavSections({ supportTickets: true })
-    expect(groupKids(sections, 'Products', 'Support').map((k) => k.label)).toEqual([
-      'Email',
-      'GitHub',
-      'Macros',
-      'Office Hours',
-      'SLA policies',
-      'Ticket types',
-      'Ticket statuses & stages',
-    ])
-    expect(groupKids(sections, 'Products', 'Support').map((k) => k.label)).not.toContain('Channels')
-    expect(groupKids(sections, 'Products', 'Support').map((k) => k.label)).not.toContain(
-      'Messenger'
-    )
-  })
-
-  it('Channels and its pages live under Support, not Workspace', () => {
-    const sections = buildNavSections({ supportInbox: true })
-    const kids = groupKids(sections, 'Products', 'Support')
-    expect(kids.find((k) => k.label === 'Channels')!.to).toBe('/admin/settings/channels')
-    const channelPages = nestedGroupKids(sections, 'Products', 'Support', 'Channels')
-    expect(channelPages.find((k) => k.label === 'Messenger')!.to).toBe(
-      '/admin/settings/channels/messenger'
-    )
-    expect(channelPages.find((k) => k.label === 'Email')!.to).toBe('/admin/settings/channels/email')
-    expect(channelPages.find((k) => k.label === 'GitHub')!.to).toBe(
-      '/admin/settings/channels/github'
-    )
+    expect(groupKids(sections, 'Modules', 'Support')).toEqual([])
+    const item = sections
+      .find((s) => s.label === 'Modules')!
+      .items.find((i) => i.label === 'Support')!
+    expect(!isNavGroup(item) && item.to).toBe('/admin/settings/channels')
     expect(itemLabels(sections, 'Workspace')).not.toContain('Emails')
-    expect(kids.map((k) => k.label)).not.toContain('Messenger')
-    expect(kids.map((k) => k.label)).not.toContain('Email')
-    expect(kids.map((k) => k.label)).not.toContain('GitHub')
+    expect(allLabels(sections)).not.toContain('Messenger')
+    expect(allLabels(sections)).not.toContain('Email')
+    expect(allLabels(sections)).not.toContain('GitHub')
+    expect(allLabels(sections)).not.toContain('Channels')
+  })
+
+  it('Support is a flat link to Email when only supportTickets is on', () => {
+    const sections = buildNavSections({ supportTickets: true })
+    const item = sections
+      .find((s) => s.label === 'Modules')!
+      .items.find((i) => i.label === 'Support')!
+    expect(!isNavGroup(item) && item.to).toBe('/admin/settings/channels/email')
+    expect(allLabels(sections)).not.toContain('Channels')
+    expect(allLabels(sections)).not.toContain('Messenger')
   })
 
   it('Help Center is a flat link that appears only with the helpCenter flag', () => {
-    expect(itemLabels(buildNavSections({ helpCenter: false }), 'Products')).not.toContain(
+    expect(itemLabels(buildNavSections({ helpCenter: false }), 'Modules')).not.toContain(
       'Help Center'
     )
     const sections = buildNavSections({ helpCenter: true })
-    expect(groupKids(sections, 'Products', 'Help Center')).toEqual([])
+    expect(groupKids(sections, 'Modules', 'Help Center')).toEqual([])
     const item = sections
-      .find((s) => s.label === 'Products')!
+      .find((s) => s.label === 'Modules')!
       .items.find((i) => i.label === 'Help Center')!
     expect(!isNavGroup(item) && item.to).toBe('/admin/settings/help-center')
   })
 
   it('Changelog is a flat link that appears only when the product is enabled', () => {
-    expect(itemLabels(buildNavSections({ changelog: false }), 'Products')).not.toContain(
-      'Changelog'
-    )
+    expect(itemLabels(buildNavSections({ changelog: false }), 'Modules')).not.toContain('Changelog')
     const sections = buildNavSections()
-    expect(groupKids(sections, 'Products', 'Changelog')).toEqual([])
+    expect(groupKids(sections, 'Modules', 'Changelog')).toEqual([])
     const item = sections
-      .find((s) => s.label === 'Products')!
+      .find((s) => s.label === 'Modules')!
       .items.find((i) => i.label === 'Changelog')!
     expect(!isNavGroup(item) && item.to).toBe('/admin/settings/changelog')
   })
 
   it('Status is a flat link that appears only with the status flag', () => {
-    expect(itemLabels(buildNavSections(), 'Products')).not.toContain('Status')
+    expect(itemLabels(buildNavSections(), 'Modules')).not.toContain('Status')
     const sections = buildNavSections({ statusPage: true })
-    expect(groupKids(sections, 'Products', 'Status')).toEqual([])
+    expect(groupKids(sections, 'Modules', 'Status')).toEqual([])
     const item = sections
-      .find((s) => s.label === 'Products')!
+      .find((s) => s.label === 'Modules')!
       .items.find((i) => i.label === 'Status')!
     expect(!isNavGroup(item) && item.to).toBe('/admin/settings/status')
   })
 
-  it('SLA policies points at the sla URL', () => {
-    const sections = buildNavSections({ supportInbox: true })
-    const sla = groupKids(sections, 'Products', 'Support').find((k) => k.label === 'SLA policies')!
-    expect(sla.to).toBe('/admin/settings/sla')
+  it('Modules never nests product pages in the sidebar', () => {
+    const sections = buildNavSections({
+      helpCenter: true,
+      supportInbox: true,
+      supportTickets: true,
+      statusPage: true,
+    })
+    expect(
+      sections.find((s) => s.label === 'Modules')!.items.every((item) => !isNavGroup(item))
+    ).toBe(true)
+    expect(allLabels(sections)).not.toContain('Boards')
+    expect(allLabels(sections)).not.toContain('Macros')
+    expect(allLabels(sections)).not.toContain('Ticket types')
   })
 
   it('Workspace contains the administration pages in order (flags off)', () => {

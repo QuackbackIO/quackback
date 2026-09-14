@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/react-router'
 import {
   ChatBubbleLeftIcon,
@@ -14,9 +14,11 @@ import {
   ChartBarIcon,
   QuestionMarkCircleIcon,
   CpuChipIcon,
-  RocketLaunchIcon,
+  MegaphoneIcon,
 } from '@heroicons/react/24/solid'
-import { SignalIcon } from '@heroicons/react/24/outline'
+import { SignalIcon as SignalIconOutline } from '@heroicons/react/24/outline'
+import { SignalIcon as SignalIconSolid } from '@heroicons/react/24/solid'
+import { useRefinedTheme } from '@/lib/client/hooks/use-visual-theme'
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
 import {
@@ -36,22 +38,14 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import type { LatestVersionResult } from '@/lib/server/functions/version'
 import type { SettingsBrandingData } from '@/lib/server/domains/settings/settings.types'
 import { setAgentAvailabilityFn } from '@/lib/server/functions/conversation'
-import { adminQueries } from '@/lib/client/queries/admin'
 import {
   listOwnerWorkspacesFn,
   openOwnerWorkspaceFn,
 } from '@/lib/server/functions/owner-workspaces'
 import { friendlySiblingAddress, WorkspaceSwitcher } from '@/components/admin/workspace-switcher'
-import {
-  isLaunchPlanActive,
-  launchChecklistSummary,
-  type LaunchStatus,
-} from '@/lib/shared/launch-checklist'
-import { useIntl } from 'react-intl'
 import { usePermission } from '@/lib/client/hooks/use-permission'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { isProductEnabled, type FeatureFlags, type ProductId } from '@/lib/shared/types/settings'
-import { resolveAdminHomePath } from '@/lib/shared/admin-home'
 
 /** Availability toggle for the account menu (conversation routing). The label shows the
  *  state you'll switch to; the avatar dot shows the current one. */
@@ -94,7 +88,7 @@ const navItems: Array<{
   { label: 'Roadmap', href: '/admin/roadmap', icon: MapIcon, product: 'feedback' },
   { label: 'Changelog', href: '/admin/changelog', icon: DocumentTextIcon, product: 'changelog' },
   { label: 'Help Center', href: '/admin/help-center', icon: BookOpenIcon, product: 'helpCenter' },
-  { label: 'Status', href: '/admin/status', icon: SignalIcon, product: 'status' },
+  { label: 'Status', href: '/admin/status', icon: SignalIconOutline, product: 'status' },
   { label: 'Analytics', href: '/admin/analytics', icon: ChartBarIcon },
   { label: 'AI & Automation', href: '/admin/automation/agent', icon: CpuChipIcon },
   { label: 'Users', href: '/admin/users', icon: UsersIcon },
@@ -102,6 +96,26 @@ const navItems: Array<{
 
 function isNavActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(href + '/')
+}
+
+function navItemIcon(
+  item: (typeof navItems)[number],
+  refined: boolean
+): (typeof navItems)[number]['icon'] {
+  if (item.href === '/admin/changelog' && refined) return MegaphoneIcon
+  return item.product === 'status' && refined ? SignalIconSolid : item.icon
+}
+
+function railControlClass(labeled: boolean, isActive = false) {
+  return cn(
+    'relative transition-all duration-200',
+    labeled
+      ? 'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm'
+      : 'flex size-9 items-center justify-center rounded-lg',
+    'text-muted-foreground/70 hover:text-foreground hover:bg-muted/50',
+    isActive && 'bg-muted/80 text-foreground',
+    labeled && isActive && 'font-semibold'
+  )
 }
 
 function NavItem({
@@ -112,6 +126,7 @@ function NavItem({
   onClick,
   badge,
   dot,
+  labeled = false,
 }: {
   href: string
   icon: typeof ChatBubbleLeftIcon
@@ -122,41 +137,54 @@ function NavItem({
   badge?: string | number | null
   /** Quiet marker while the plan is resolved but the first win is still open */
   dot?: boolean
+  /** Icon + visible label. Legacy stays icon-only with a tooltip. */
+  labeled?: boolean
 }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Link
-          to={href}
-          onClick={onClick}
+  const link = (
+    <Link
+      to={href}
+      onClick={onClick}
+      data-admin-rail-item=""
+      data-labeled={labeled ? '' : undefined}
+      data-active={isActive || undefined}
+      className={railControlClass(labeled, isActive)}
+    >
+      <Icon className="size-5 shrink-0" />
+      {labeled ? (
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+      ) : (
+        <span className="sr-only">{label}</span>
+      )}
+      {badge != null && badge !== '' && (
+        <span
           className={cn(
-            'relative flex size-9 items-center justify-center rounded-lg transition-all duration-200',
-            'text-muted-foreground/70 hover:text-foreground hover:bg-muted/50',
-            isActive && 'bg-muted/80 text-foreground'
+            labeled
+              ? 'ms-auto flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1'
+              : 'absolute -top-0.5 -right-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1',
+            'border-2 border-card bg-primary text-[11px] font-semibold text-primary-foreground'
           )}
         >
-          <Icon className="size-5" />
-          {badge != null && badge !== '' && (
-            <span
-              className={cn(
-                'absolute -top-0.5 -right-0.5 flex items-center justify-center',
-                'min-w-[18px] h-[18px] px-1 rounded-full',
-                'bg-primary text-primary-foreground text-[11px] font-semibold',
-                'border-2 border-card'
-              )}
-            >
-              {badge}
-            </span>
-          )}
-          {dot && (badge == null || badge === '') && (
-            <span
-              className="absolute top-0.5 right-0.5 size-2 rounded-full bg-primary"
-              aria-hidden="true"
-            />
-          )}
-          <span className="sr-only">{label}</span>
-        </Link>
-      </TooltipTrigger>
+          {badge}
+        </span>
+      )}
+      {dot && (badge == null || badge === '') && (
+        <span
+          className={
+            labeled
+              ? 'ms-auto size-2 rounded-full bg-primary'
+              : 'absolute top-0.5 right-0.5 size-2 rounded-full bg-primary'
+          }
+          aria-hidden="true"
+        />
+      )}
+    </Link>
+  )
+
+  if (labeled) return link
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{link}</TooltipTrigger>
       <TooltipContent side="right" sideOffset={8}>
         {label}
       </TooltipContent>
@@ -165,7 +193,7 @@ function NavItem({
 }
 
 export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarProps) {
-  const intl = useIntl()
+  const refined = useRefinedTheme()
   const router = useRouter()
   const { session, settings, userRole, billingEnabled } = useRouteContext({ from: '__root__' })
   const pathname = useRouterState({ select: (s) => s.location.pathname })
@@ -175,47 +203,6 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
   const canManageAssistant = usePermission(PERMISSIONS.ASSISTANT_MANAGE)
   const canManageWorkflows = usePermission(PERMISSIONS.WORKFLOW_MANAGE)
   const canOpenAutomation = canManageAssistant || canManageWorkflows
-  // Launch-plan progress for the shell badge (admins only). Stay visible and
-  // polling until essentials resolve *and* the first win lands — a first win
-  // can arrive while invite-team is still open. Skip/complete actions also
-  // invalidate ['admin', 'onboarding'] explicitly.
-  const queryClient = useQueryClient()
-  const onboardingQueryOptions = adminQueries.onboardingStatus()
-  const cachedOnboardingStatus = queryClient.getQueryData<LaunchStatus>(
-    onboardingQueryOptions.queryKey
-  )
-  const cachedLaunchSettled = cachedOnboardingStatus
-    ? !isLaunchPlanActive(launchChecklistSummary(cachedOnboardingStatus))
-    : false
-  const onboardingQuery = useQuery({
-    ...onboardingQueryOptions,
-    enabled: isAdmin && !cachedLaunchSettled,
-    refetchInterval: (query) => {
-      const data = query.state.data
-      if (!data) return 30_000
-      return isLaunchPlanActive(launchChecklistSummary(data)) ? 30_000 : false
-    },
-  })
-  const launchSummary = onboardingQuery.data ? launchChecklistSummary(onboardingQuery.data) : null
-  const showLaunchNav = isAdmin && (!launchSummary || isLaunchPlanActive(launchSummary))
-  const launchRemaining =
-    launchSummary && !launchSummary.resolved && launchSummary.remaining > 0
-      ? launchSummary.remaining
-      : null
-  const launchQuietDot = Boolean(launchSummary?.resolved && !launchSummary.firstWinComplete)
-  const launchPlanLabel =
-    launchRemaining != null
-      ? intl.formatMessage(
-          {
-            id: 'activation.nav.remaining',
-            defaultMessage: 'Launch plan · {count} left',
-          },
-          { count: launchRemaining }
-        )
-      : intl.formatMessage({
-          id: 'activation.nav.label',
-          defaultMessage: 'Launch plan',
-        })
 
   const flags = settings?.featureFlags as FeatureFlags | undefined
   // The org's own logo (resolved in brandingData by the root loader, same source
@@ -228,11 +215,6 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
     if (item.product && !isProductEnabled(flags, item.product)) return false
     if (item.href === '/admin/automation/agent') return canOpenAutomation
     return true
-  })
-  const homePath = resolveAdminHomePath({
-    isAdmin,
-    launchResolved: Boolean(launchSummary?.resolved),
-    flags,
   })
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
@@ -279,13 +261,20 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
   return (
     <>
       {/* Desktop Sidebar */}
-      <aside className="hidden w-14 shrink-0 flex-col sm:flex">
+      <aside
+        data-admin-rail=""
+        data-labeled={refined ? '' : undefined}
+        className={cn('hidden shrink-0 flex-col sm:flex', refined ? 'w-56' : 'w-14')}
+      >
         <ScrollArea className="h-full" scrollBarClassName="w-2" type="auto">
           <div className="flex h-full min-h-screen flex-col py-2">
             {/* Logo */}
             <Link
-              to={homePath}
-              className="mb-4 flex items-center justify-center opacity-90 transition-opacity hover:opacity-100"
+              to="/admin"
+              className={cn(
+                'mb-4 flex items-center opacity-90 transition-opacity hover:opacity-100',
+                refined ? 'gap-2.5 px-4' : 'justify-center'
+              )}
             >
               <img
                 src={orgLogo}
@@ -294,27 +283,19 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                 height={28}
                 className="h-7 w-7 rounded object-contain"
               />
+              {refined ? <span className="truncate text-sm font-semibold">{orgName}</span> : null}
             </Link>
 
             {/* Main Navigation */}
-            <nav className="flex flex-col items-center gap-2.5">
-              {showLaunchNav && (
-                <NavItem
-                  href="/admin/getting-started"
-                  icon={RocketLaunchIcon}
-                  label={launchPlanLabel}
-                  isActive={isNavActive(pathname, '/admin/getting-started')}
-                  badge={launchRemaining}
-                  dot={launchQuietDot}
-                />
-              )}
+            <nav className={cn('flex flex-col', refined ? 'gap-0.5 px-2' : 'items-center gap-2.5')}>
               {filteredNavItems.map((item) => (
                 <NavItem
                   key={item.href}
                   href={item.href}
-                  icon={item.icon}
+                  icon={navItemIcon(item, refined)}
                   label={item.label}
                   isActive={isNavActive(pathname, item.href)}
+                  labeled={refined}
                 />
               ))}
             </nav>
@@ -323,7 +304,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
             <div className="min-h-3 flex-1" />
 
             {/* Bottom Section */}
-            <div className="flex flex-col items-center gap-2.5">
+            <div className={cn('flex flex-col', refined ? 'gap-0.5 px-2' : 'items-center gap-2.5')}>
               {/* Settings (admin-only) */}
               {isAdmin && (
                 <NavItem
@@ -331,50 +312,80 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                   icon={Cog6ToothIcon}
                   label="Settings"
                   isActive={isNavActive(pathname, '/admin/settings')}
+                  labeled={refined}
                 />
               )}
 
               {billingEnabled && siblings.length > 0 ? (
-                <WorkspaceSwitcher siblings={siblings} onOpen={(id) => openSibling.mutate(id)} />
+                <WorkspaceSwitcher
+                  siblings={siblings}
+                  onOpen={(id) => openSibling.mutate(id)}
+                  labeled={refined}
+                />
               ) : null}
 
               {/* Notifications */}
-              <NotificationBell className="size-9" />
+              <NotificationBell className={refined ? undefined : 'size-9'} labeled={refined} />
 
               {/* Portal Link */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Link
-                    to="/"
-                    className="flex size-9 items-center justify-center rounded-lg text-muted-foreground/70 transition-all duration-200 hover:bg-muted/50 hover:text-foreground"
-                  >
-                    <GlobeAltIcon className="size-5" />
-                    <span className="sr-only">View Portal</span>
-                  </Link>
-                </TooltipTrigger>
-                <TooltipContent side="right" sideOffset={8}>
-                  View Portal
-                </TooltipContent>
-              </Tooltip>
+              {refined ? (
+                <Link to="/" data-admin-rail-item="" className={railControlClass(true)}>
+                  <GlobeAltIcon className="size-5 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">View Portal</span>
+                </Link>
+              ) : (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Link
+                      to="/"
+                      className="flex size-9 items-center justify-center rounded-lg text-muted-foreground/70 transition-all duration-200 hover:bg-muted/50 hover:text-foreground"
+                    >
+                      <GlobeAltIcon className="size-5" />
+                      <span className="sr-only">View Portal</span>
+                    </Link>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" sideOffset={8}>
+                    View Portal
+                  </TooltipContent>
+                </Tooltip>
+              )}
 
               {/* Help Menu */}
               <DropdownMenu>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <DropdownMenuTrigger asChild>
-                      <button className="relative flex size-9 items-center justify-center rounded-lg text-muted-foreground/70 transition-all duration-200 hover:bg-muted/50 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                        <QuestionMarkCircleIcon className="size-5" />
-                        {latestVersion && (
-                          <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-primary" />
-                        )}
-                        <span className="sr-only">Help</span>
-                      </button>
-                    </DropdownMenuTrigger>
-                  </TooltipTrigger>
-                  <TooltipContent side="right" sideOffset={8}>
-                    Help
-                  </TooltipContent>
-                </Tooltip>
+                {refined ? (
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      data-admin-rail-item=""
+                      className={cn(
+                        railControlClass(true),
+                        'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+                      )}
+                    >
+                      <QuestionMarkCircleIcon className="size-5 shrink-0" />
+                      <span className="min-w-0 flex-1 truncate text-left">Help</span>
+                      {latestVersion && (
+                        <span className="size-2 rounded-full bg-primary" aria-hidden="true" />
+                      )}
+                    </button>
+                  </DropdownMenuTrigger>
+                ) : (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <DropdownMenuTrigger asChild>
+                        <button className="relative flex size-9 items-center justify-center rounded-lg text-muted-foreground/70 transition-all duration-200 hover:bg-muted/50 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                          <QuestionMarkCircleIcon className="size-5" />
+                          {latestVersion && (
+                            <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-primary" />
+                          )}
+                          <span className="sr-only">Help</span>
+                        </button>
+                      </DropdownMenuTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent side="right" sideOffset={8}>
+                      Help
+                    </TooltipContent>
+                  </Tooltip>
+                )}
                 <DropdownMenuContent align="start" side="right" sideOffset={8} className="w-52">
                   <DropdownMenuItem asChild>
                     <a
@@ -415,15 +426,21 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
 
               {/* User Menu */}
               <DropdownMenu>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <DropdownMenuTrigger asChild>
-                      <button className="relative flex size-9 items-center justify-center rounded-full transition-all duration-200 hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                        <Avatar className="size-7" src={avatarUrl} name={name} />
+                {refined ? (
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      data-admin-rail-item=""
+                      className={cn(
+                        railControlClass(true),
+                        'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+                      )}
+                    >
+                      <span className="relative shrink-0">
+                        <Avatar className="size-6" src={avatarUrl} name={name} />
                         {conversationsEnabled && (
                           <span
                             className={cn(
-                              'absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-background',
+                              'absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full ring-2 ring-background',
                               availability === 'online'
                                 ? 'bg-green-500'
                                 : 'border-2 border-muted-foreground bg-background'
@@ -431,13 +448,35 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                             aria-hidden="true"
                           />
                         )}
-                      </button>
-                    </DropdownMenuTrigger>
-                  </TooltipTrigger>
-                  <TooltipContent side="right" sideOffset={8}>
-                    Account
-                  </TooltipContent>
-                </Tooltip>
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-left">{name || 'Account'}</span>
+                    </button>
+                  </DropdownMenuTrigger>
+                ) : (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <DropdownMenuTrigger asChild>
+                        <button className="relative flex size-9 items-center justify-center rounded-full transition-all duration-200 hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                          <Avatar className="size-7" src={avatarUrl} name={name} />
+                          {conversationsEnabled && (
+                            <span
+                              className={cn(
+                                'absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-background',
+                                availability === 'online'
+                                  ? 'bg-green-500'
+                                  : 'border-2 border-muted-foreground bg-background'
+                              )}
+                              aria-hidden="true"
+                            />
+                          )}
+                        </button>
+                      </DropdownMenuTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent side="right" sideOffset={8}>
+                      Account
+                    </TooltipContent>
+                  </Tooltip>
+                )}
                 <DropdownMenuContent align="start" side="right" sideOffset={8} className="w-56">
                   <DropdownMenuLabel className="font-normal">
                     <div className="flex items-center gap-2">
@@ -475,7 +514,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
           <SheetContent side="left" className="w-72 p-0">
             <SheetHeader className="px-5 pt-6 pb-4">
               <SheetTitle className="flex items-center gap-3">
-                <Link to={homePath} onClick={() => setMobileMenuOpen(false)}>
+                <Link to="/admin" onClick={() => setMobileMenuOpen(false)}>
                   <img
                     src={orgLogo}
                     alt={orgName}
@@ -488,24 +527,9 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
               </SheetTitle>
             </SheetHeader>
             <nav className="flex flex-col gap-1.5 px-4 py-3">
-              {showLaunchNav && (
-                <Link
-                  to="/admin/getting-started"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={cn(
-                    'flex items-center gap-3 px-4 py-3 rounded-lg text-sm transition-colors',
-                    'text-muted-foreground/80 hover:text-foreground hover:bg-muted/50',
-                    isNavActive(pathname, '/admin/getting-started') &&
-                      'bg-muted/80 text-foreground font-medium'
-                  )}
-                >
-                  <RocketLaunchIcon className="h-5 w-5" />
-                  {launchPlanLabel}
-                </Link>
-              )}
               {filteredNavItems.map((item) => {
                 const isActive = isNavActive(pathname, item.href)
-                const Icon = item.icon
+                const Icon = navItemIcon(item, refined)
                 return (
                   <Link
                     key={item.href}
@@ -600,7 +624,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
           </SheetContent>
         </Sheet>
 
-        <Link to={homePath} className="absolute left-1/2 -translate-x-1/2">
+        <Link to="/admin" className="absolute left-1/2 -translate-x-1/2">
           <img
             src={orgLogo}
             alt={orgName}

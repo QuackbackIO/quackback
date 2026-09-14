@@ -79,6 +79,7 @@ function RoleCard({ role }: { role: RoleWithMeta }) {
     <Link
       to="/admin/settings/members/roles/$roleId"
       params={{ roleId: role.id }}
+      data-settings-card=""
       className="group flex min-h-[7.5rem] flex-col rounded-xl border bg-card p-4 shadow-sm transition hover:border-foreground/25 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <div className="flex items-start justify-between gap-2">

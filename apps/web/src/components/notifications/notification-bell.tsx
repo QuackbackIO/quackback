@@ -12,9 +12,15 @@ interface NotificationBellProps {
   className?: string
   /** Popover position: 'right' for sidebar, 'bottom' for header */
   popoverSide?: 'right' | 'bottom'
+  /** Icon + visible label. Default stays icon-only with a tooltip. */
+  labeled?: boolean
 }
 
-export function NotificationBell({ className, popoverSide = 'right' }: NotificationBellProps) {
+export function NotificationBell({
+  className,
+  popoverSide = 'right',
+  labeled = false,
+}: NotificationBellProps) {
   const [open, setOpen] = useState(false)
   const { data: unreadCount = 0 } = useUnreadCount()
   const [shouldPulse, setShouldPulse] = useState(false)
@@ -32,41 +38,51 @@ export function NotificationBell({ className, popoverSide = 'right' }: Notificat
 
   const isBottomAligned = popoverSide === 'bottom'
 
+  const trigger = (
+    <PopoverTrigger asChild>
+      <button
+        data-admin-rail-item={labeled ? '' : undefined}
+        className={cn(
+          'relative transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          labeled
+            ? 'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm'
+            : 'flex h-10 w-10 items-center justify-center rounded-lg',
+          'text-muted-foreground/70 hover:bg-muted/50 hover:text-foreground',
+          className
+        )}
+        aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
+      >
+        <BellIcon className="h-5 w-5 shrink-0" />
+        {labeled ? <span className="min-w-0 flex-1 truncate text-left">Notifications</span> : null}
+        {unreadCount > 0 && (
+          <span
+            className={cn(
+              labeled
+                ? 'ms-auto flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1'
+                : 'absolute -top-0.5 -right-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1',
+              'border-2 border-card bg-primary text-[11px] font-semibold text-primary-foreground',
+              shouldPulse && 'animate-pulse'
+            )}
+          >
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </span>
+        )}
+      </button>
+    </PopoverTrigger>
+  )
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <PopoverTrigger asChild>
-            <button
-              className={cn(
-                'relative flex items-center justify-center w-10 h-10 rounded-lg',
-                'text-muted-foreground/70 hover:text-foreground hover:bg-muted/50',
-                'transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                className
-              )}
-              aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
-            >
-              <BellIcon className="h-5 w-5" />
-              {unreadCount > 0 && (
-                <span
-                  className={cn(
-                    'absolute -top-0.5 -right-0.5 flex items-center justify-center',
-                    'min-w-[18px] h-[18px] px-1 rounded-full',
-                    'bg-primary text-primary-foreground text-[11px] font-semibold',
-                    'border-2 border-card',
-                    shouldPulse && 'animate-pulse'
-                  )}
-                >
-                  {unreadCount > 99 ? '99+' : unreadCount}
-                </span>
-              )}
-            </button>
-          </PopoverTrigger>
-        </TooltipTrigger>
-        <TooltipContent side={isBottomAligned ? 'bottom' : 'right'} sideOffset={8}>
-          Notifications
-        </TooltipContent>
-      </Tooltip>
+      {labeled ? (
+        trigger
+      ) : (
+        <Tooltip>
+          <TooltipTrigger asChild>{trigger}</TooltipTrigger>
+          <TooltipContent side={isBottomAligned ? 'bottom' : 'right'} sideOffset={8}>
+            Notifications
+          </TooltipContent>
+        </Tooltip>
+      )}
       <PopoverContent
         align={isBottomAligned ? 'end' : 'start'}
         side={popoverSide}

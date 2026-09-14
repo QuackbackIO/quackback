@@ -298,7 +298,10 @@ function PostDetailPage() {
       )}
 
       {/* Post detail card */}
-      <div className="bg-card border border-border/40 rounded-lg overflow-hidden">
+      <div
+        data-article-frame=""
+        className="bg-card border border-border/40 rounded-lg overflow-hidden"
+      >
         <div className="flex">
           <Suspense fallback={<VoteSidebarSkeleton />}>
             <VoteSidebar postId={postId} voteCount={post.voteCount} disabled={!!post.mergeInfo} />
@@ -361,7 +364,10 @@ function PostDetailPage() {
       </div>
 
       {/* Comments card */}
-      <div className="bg-card border border-border/40 rounded-lg overflow-hidden mt-4">
+      <div
+        data-article-frame=""
+        className="bg-card border border-border/40 rounded-lg overflow-hidden mt-4"
+      >
         <Suspense fallback={<CommentsSectionSkeleton count={post.commentsTotalRootCount} />}>
           <CommentsSection
             postId={postId}

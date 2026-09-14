@@ -93,6 +93,20 @@ export function applyDeferredLaunchStartingPoint(
   }
 }
 
+/** Stamp identity complete: starting point, workspace details, and handoff. */
+export function finishIdentityOnboarding(
+  current: SetupState,
+  outcome: OnboardingOutcome,
+  now = new Date().toISOString()
+): SetupState {
+  const next = applyDeferredLaunchStartingPoint(current, outcome, now)
+  return {
+    ...next,
+    workspaceDetailsSeenAt: current.workspaceDetailsSeenAt ?? now,
+    activationHandoffSeenAt: current.activationHandoffSeenAt ?? now,
+  }
+}
+
 /** Mark the activation handoff as acknowledged without disturbing other state. */
 export async function acknowledgeActivationHandoff(): Promise<SetupState> {
   const { state } = await mutateSetupStateAtomic((current) => ({

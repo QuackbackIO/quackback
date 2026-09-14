@@ -42,10 +42,10 @@ export const DEFAULT_LIGHT_BASE: ThemeColorBase = {
   foreground: 'oklch(0.145 0 0)',
   card: 'oklch(1 0 0)',
   muted: 'oklch(0.97 0 0)',
-  mutedForeground: 'oklch(0.556 0 0)',
-  border: 'oklch(0.922 0 0)',
+  mutedForeground: 'oklch(0.45 0 0)',
+  border: 'oklch(0.87 0 0)',
   destructive: 'oklch(0.577 0.245 27)',
-  success: 'oklch(0.696 0.149 163)',
+  success: 'oklch(0.62 0.149 163)',
 }
 
 export const DEFAULT_DARK_BASE: ThemeColorBase = {
@@ -56,7 +56,7 @@ export const DEFAULT_DARK_BASE: ThemeColorBase = {
   muted: 'oklch(0.269 0 0)',
   mutedForeground: 'oklch(0.708 0 0)',
   border: 'oklch(0.269 0 0)',
-  destructive: 'oklch(0.396 0.141 25)',
+  destructive: 'oklch(0.70 0.19 25)',
   success: 'oklch(0.696 0.149 163)',
 }
 
@@ -70,24 +70,24 @@ export type ThemeBaseline = 'legacy' | 'refined'
 export const REFINED_LIGHT_BASE: ThemeColorBase = {
   primary: 'oklch(0.886 0.176 86)',
   background: '#ffffff',
-  foreground: '#0F1419',
+  foreground: '#0a0a0a',
   card: '#ffffff',
-  muted: '#EFF3F4',
-  mutedForeground: '#536471',
-  border: '#EFF3F4',
+  muted: '#f5f5f5',
+  mutedForeground: '#525252',
+  border: '#d4d4d4',
   destructive: 'oklch(0.577 0.245 27)',
-  success: 'oklch(0.696 0.149 163)',
+  success: 'oklch(0.62 0.149 163)',
 }
 
 export const REFINED_DARK_BASE: ThemeColorBase = {
   primary: 'oklch(0.886 0.176 86)',
-  background: '#000000',
-  foreground: '#E7E9EA',
-  card: '#000000',
+  background: '#0a0a0a',
+  foreground: '#fafafa',
+  card: '#0a0a0a',
   muted: '#181818',
-  mutedForeground: '#8B98A5',
-  border: '#2F3336',
-  destructive: 'oklch(0.396 0.141 25)',
+  mutedForeground: '#a1a1a1',
+  border: '#262626',
+  destructive: 'oklch(0.70 0.19 25)',
   success: 'oklch(0.696 0.149 163)',
 }
 
@@ -211,6 +211,16 @@ export function computeContrastForeground(bgOklch: string): string {
   return parsed.l > 0.6 ? 'oklch(0.145 0 0)' : 'oklch(0.985 0 0)'
 }
 
+/** Gold-as-fill stays bright; on light surfaces, type/icons step down in
+ *  lightness only. Keep chroma/hue so it still reads yellow, not olive. */
+export function computeAccentInk(primary: string, mode: 'light' | 'dark'): string {
+  if (mode === 'dark') return primary
+  const parsed = parseOklch(primary)
+  if (!parsed) return primary
+  if (parsed.l <= 0.75) return primary
+  return formatOklch(0.72, parsed.c, parsed.h)
+}
+
 export function generateChartColors(primary: string): [string, string, string, string, string] {
   const parsed = parseOklch(primary)
   if (!parsed) {
@@ -256,10 +266,12 @@ export function expandTheme(
         : DARK_SHADOWS
   const primaryForeground = computeContrastForeground(minimal.primary)
   const destructiveForeground = computeContrastForeground(minimal.destructive)
+  const accentInk = computeAccentInk(minimal.primary, options.mode)
   const charts = generateChartColors(minimal.primary)
 
   return {
     primary: minimal.primary,
+    accentInk,
     background: minimal.background,
     foreground: minimal.foreground,
     card: minimal.card,

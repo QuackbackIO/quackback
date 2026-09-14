@@ -16,6 +16,7 @@ export const variableMap: Record<string, string> = {
   mutedForeground: '--muted-foreground',
   accent: '--accent',
   accentForeground: '--accent-foreground',
+  accentInk: '--accent-ink',
   destructive: '--destructive',
   destructiveForeground: '--destructive-foreground',
   border: '--border',

@@ -24,7 +24,10 @@ import { DocumentTextIcon } from '@heroicons/react/24/solid'
 function ChangelogSkeleton() {
   return (
     <div className="p-3">
-      <div className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50">
+      <div
+        data-continuous-list=""
+        className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50"
+      >
         {Array.from({ length: 5 }).map((_, i) => (
           <div key={i} className="p-4">
             <Skeleton className="h-5 w-16 rounded-full mb-1" />
@@ -179,7 +182,10 @@ export function ChangelogList() {
             />
           ) : (
             <div className="p-3">
-              <div className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50">
+              <div
+                data-continuous-list=""
+                className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50"
+              >
                 {entries.map((entry, index) => (
                   <div
                     key={entry.id}

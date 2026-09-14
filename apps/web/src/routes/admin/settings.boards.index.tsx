@@ -5,6 +5,7 @@ import { adminQueries } from '@/lib/client/queries/admin'
 import { Squares2X2Icon, ChatBubbleLeftIcon, LockClosedIcon } from '@heroicons/react/24/solid'
 import { EmptyState } from '@/components/shared/empty-state'
 import { PageHeader } from '@/components/shared/page-header'
+import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { BackLink } from '@/components/ui/back-link'
 import { Badge } from '@/components/ui/badge'
 import { CreateBoardDialog } from '@/components/admin/settings/boards/create-board-dialog'
@@ -62,32 +63,34 @@ function BoardsSettingsPage() {
         action={<CreateBoardDialog />}
       />
 
-      <div className="divide-y divide-border rounded-xl border border-border/60 bg-card">
-        {boards.map((board) => (
-          <Link
-            key={board.id}
-            to="/admin/settings/boards/$slug"
-            params={{ slug: board.slug }}
-            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/40"
-          >
-            <div className="flex min-w-0 items-center gap-3">
-              <ChatBubbleLeftIcon className="size-4 shrink-0 text-muted-foreground" />
-              <div className="min-w-0">
-                <p className="text-sm font-medium">{board.name}</p>
-                {board.description ? (
-                  <p className="text-xs text-muted-foreground truncate">{board.description}</p>
-                ) : null}
+      <SettingsCard contentClassName="p-0 sm:p-0">
+        <div data-settings-list="" className="divide-y divide-border">
+          {boards.map((board) => (
+            <Link
+              key={board.id}
+              to="/admin/settings/boards/$slug"
+              params={{ slug: board.slug }}
+              className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/40"
+            >
+              <div className="flex min-w-0 items-center gap-3">
+                <ChatBubbleLeftIcon className="size-4 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">{board.name}</p>
+                  {board.description ? (
+                    <p className="text-xs text-muted-foreground truncate">{board.description}</p>
+                  ) : null}
+                </div>
               </div>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <BoardAccessBadge access={board.access} />
-              <span className="text-xs text-muted-foreground tabular-nums">
-                {board.postCount === 1 ? '1 post' : `${board.postCount} posts`}
-              </span>
-            </div>
-          </Link>
-        ))}
-      </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <BoardAccessBadge access={board.access} />
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {board.postCount === 1 ? '1 post' : `${board.postCount} posts`}
+                </span>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </SettingsCard>
     </div>
   )
 }
@@ -121,7 +124,7 @@ function EmptyBoardsState() {
         description="Where feedback is collected and organized."
       />
 
-      <div className="rounded-xl border border-border/50 bg-card p-4 sm:p-6 shadow-sm">
+      <SettingsCard>
         <EmptyState
           icon={ChatBubbleLeftIcon}
           title="No boards yet"
@@ -129,7 +132,7 @@ function EmptyBoardsState() {
           action={<CreateBoardDialog />}
           className="py-8"
         />
-      </div>
+      </SettingsCard>
     </div>
   )
 }

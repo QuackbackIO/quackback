@@ -105,57 +105,59 @@ function ChannelsHubPage() {
         description="Where customer conversations happen."
       />
 
-      <div className="divide-y divide-border rounded-xl border border-border/60 bg-card">
-        <Link
-          to="/admin/settings/channels/messenger"
-          className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/40"
-        >
-          <div className="flex items-center gap-3">
-            <ChatBubbleLeftRightIcon className="size-4 text-muted-foreground" />
-            <div>
-              <p className="text-sm font-medium">{messenger?.label ?? 'Messenger'}</p>
-              <p className="text-xs text-muted-foreground">Widget and portal</p>
-            </div>
-          </div>
-          <Badge size="sm" shape="pill" variant={messengerOn ? 'default' : 'secondary'}>
-            {messengerOn ? 'On' : 'Off'}
-          </Badge>
-        </Link>
-        <Link
-          to="/admin/settings/channels/email"
-          className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/40"
-        >
-          <div className="flex items-center gap-3">
-            <EnvelopeIcon className="size-4 text-muted-foreground" />
-            <div>
-              <p className="text-sm font-medium">{email?.label ?? 'Email'}</p>
-              <p className="text-xs text-muted-foreground">{emailSubtitle}</p>
-            </div>
-          </div>
-          <Badge
-            size="sm"
-            shape="pill"
-            variant={emailStatus === 'Set up' ? 'secondary' : 'default'}
+      <SettingsCard contentClassName="p-0 sm:p-0">
+        <div data-settings-list="" className="divide-y divide-border">
+          <Link
+            to="/admin/settings/channels/messenger"
+            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/40"
           >
-            {emailStatus}
-          </Badge>
-        </Link>
-        <Link
-          to="/admin/settings/channels/github"
-          className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/40"
-        >
-          <div className="flex items-center gap-3">
-            <GitHubIcon className="size-4 text-muted-foreground" />
-            <div>
-              <p className="text-sm font-medium">{github?.label ?? 'GitHub'}</p>
-              <p className="text-xs text-muted-foreground">{githubSubtitle}</p>
+            <div className="flex items-center gap-3">
+              <ChatBubbleLeftRightIcon className="size-4 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium">{messenger?.label ?? 'Messenger'}</p>
+                <p className="text-xs text-muted-foreground">Widget and portal</p>
+              </div>
             </div>
-          </div>
-          <Badge size="sm" shape="pill" variant={githubBadge.variant}>
-            {githubBadge.label}
-          </Badge>
-        </Link>
-      </div>
+            <Badge size="sm" shape="pill" variant={messengerOn ? 'default' : 'secondary'}>
+              {messengerOn ? 'On' : 'Off'}
+            </Badge>
+          </Link>
+          <Link
+            to="/admin/settings/channels/email"
+            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/40"
+          >
+            <div className="flex items-center gap-3">
+              <EnvelopeIcon className="size-4 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium">{email?.label ?? 'Email'}</p>
+                <p className="text-xs text-muted-foreground">{emailSubtitle}</p>
+              </div>
+            </div>
+            <Badge
+              size="sm"
+              shape="pill"
+              variant={emailStatus === 'Set up' ? 'secondary' : 'default'}
+            >
+              {emailStatus}
+            </Badge>
+          </Link>
+          <Link
+            to="/admin/settings/channels/github"
+            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/40"
+          >
+            <div className="flex items-center gap-3">
+              <GitHubIcon className="size-4 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium">{github?.label ?? 'GitHub'}</p>
+                <p className="text-xs text-muted-foreground">{githubSubtitle}</p>
+              </div>
+            </div>
+            <Badge size="sm" shape="pill" variant={githubBadge.variant}>
+              {githubBadge.label}
+            </Badge>
+          </Link>
+        </div>
+      </SettingsCard>
 
       <SettingsCard
         title="Conversation routing"

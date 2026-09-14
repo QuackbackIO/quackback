@@ -221,7 +221,6 @@ export function UsersSegmentNav({
         <div className="mt-5">
           <FilterSection
             title="Segments"
-            collapsible={false}
             action={
               <button
                 type="button"

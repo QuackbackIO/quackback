@@ -193,7 +193,10 @@ export function ApiUsageGuide({ apiBaseUrl }: ApiUsageGuideProps) {
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden flex flex-col min-h-[420px]">
+    <div
+      data-settings-card=""
+      className="rounded-xl border border-border bg-card overflow-hidden flex flex-col min-h-[420px]"
+    >
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] flex-1">
         {/* ─── Left: Configuration ─── */}
         <div className="flex flex-col border-b lg:border-b-0 lg:border-r border-border divide-y divide-border">

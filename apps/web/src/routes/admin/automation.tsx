@@ -29,7 +29,10 @@ function AutomationLayout() {
   const intl = useIntl()
   return (
     <div className="flex h-full bg-background">
-      <aside className="hidden w-64 shrink-0 flex-col overflow-hidden border-e border-border/50 bg-card/30 lg:flex xl:w-72">
+      <aside
+        data-side-pane=""
+        className="hidden w-64 shrink-0 flex-col overflow-hidden border-e border-border/50 bg-card/30 lg:flex xl:w-72"
+      >
         <div className="shrink-0 px-4 py-3.5">
           <PageHeader
             icon={SparklesIcon}

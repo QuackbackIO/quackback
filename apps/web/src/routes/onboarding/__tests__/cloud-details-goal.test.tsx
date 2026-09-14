@@ -1,10 +1,8 @@
 // @vitest-environment happy-dom
 import '@testing-library/jest-dom/vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { IntlProvider } from 'react-intl'
 import { describe, expect, it, vi } from 'vitest'
-import { CloudUseCaseForm } from '../_layout.usecase'
-import { CloudWorkspaceDetailsForm } from '../_layout.workspace'
+import { CloudWorkspaceDetailsForm } from '../-workspace-step'
 
 const IDENTITY = {
   version: 1,
@@ -80,22 +78,5 @@ describe('cloud post-handoff onboarding', () => {
 
     expect(screen.getByText('.quackback.co.uk')).toBeInTheDocument()
     expect(screen.queryByText('.example.com')).not.toBeInTheDocument()
-  })
-
-  it('keeps the outcome screen to one primary action', async () => {
-    const save = vi.fn().mockResolvedValue(undefined)
-    render(
-      <IntlProvider locale="en" messages={{}}>
-        <CloudUseCaseForm onSave={save} />
-      </IntlProvider>
-    )
-
-    expect(primaryButtons()).toHaveLength(1)
-    const continueButton = screen.getByRole('button', { name: 'Continue' })
-    expect(continueButton).toBeDisabled()
-    fireEvent.click(screen.getByRole('radio', { name: /Product feedback/ }))
-    expect(continueButton).toBeEnabled()
-    fireEvent.click(continueButton)
-    await waitFor(() => expect(save).toHaveBeenCalledWith('product_feedback'))
   })
 })

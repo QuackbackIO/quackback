@@ -27,7 +27,7 @@ export function IntegrationHealthPanel({ health }: IntegrationHealthPanelProps) 
   if (!lastOutboundAt && !lastInboundAt && !lastError) return null
 
   return (
-    <div className="rounded-xl border border-border/50 bg-card p-4 shadow-sm">
+    <div data-settings-card="" className="rounded-xl border border-border/50 bg-card p-4 shadow-sm">
       <h3 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
         Health
       </h3>

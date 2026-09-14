@@ -37,7 +37,11 @@ import { isPathManaged } from '@/lib/server/config-file/managed-paths'
 import { slugify } from '@/lib/shared/utils'
 import { getSetupState } from '@/lib/shared/db-types'
 import { logger } from '@/lib/server/logger'
-import { applyDeferredLaunchStartingPoint, mutateSetupStateAtomic } from '@/lib/server/setup-state'
+import {
+  applyDeferredLaunchStartingPoint,
+  finishIdentityOnboarding,
+  mutateSetupStateAtomic,
+} from '@/lib/server/setup-state'
 import { parseIdentityProjection } from '@/lib/server/domains/settings/cloud/identity-projection'
 
 const log = logger.child({ component: 'onboarding' })
@@ -172,7 +176,7 @@ const saveWorkspaceAndGoalSchema = z.object({
     .min(2, 'Name must be at least 2 characters')
     .max(100, 'Name must be 100 characters or less')
     .optional(),
-  useCase: z.enum(ONBOARDING_OUTCOMES),
+  useCase: z.enum(ONBOARDING_OUTCOMES).optional(),
 })
 
 // ============================================
@@ -207,7 +211,7 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
   .handler(
     async ({ data }: { data: SaveWorkspaceAndGoalInput }): Promise<SaveWorkspaceAndGoalResult> => {
       log.debug(
-        { workspace_name: data.workspaceName, use_case: data.useCase },
+        { workspace_name: data.workspaceName, use_case: data.useCase ?? 'product_feedback' },
         'save workspace and goal'
       )
       const session = await getSession()
@@ -217,6 +221,7 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
       const workspaceName = data.workspaceName.trim()
       const slug = slugify(workspaceName)
       if (slug.length < 2) throw new Error('Invalid workspace name - cannot generate valid slug')
+      const useCase = data.useCase ?? 'product_feedback'
       const existingSettings = await getSettings()
 
       // Who owns setup decides this, not what the setup state says. An earlier
@@ -251,13 +256,11 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
 
       let result: SaveWorkspaceAndGoalResult
       if (!existingSettings) {
-        const initialState: SetupState = {
-          ...applyDeferredLaunchStartingPoint(
-            { ...DEFAULT_SETUP_STATE, steps: { ...DEFAULT_SETUP_STATE.steps, workspace: true } },
-            data.useCase
-          ),
-        }
-        const { flags, enabledModules } = flagsForGoal(DEFAULT_FEATURE_FLAGS, data.useCase)
+        const initialState: SetupState = finishIdentityOnboarding(
+          { ...DEFAULT_SETUP_STATE, steps: { ...DEFAULT_SETUP_STATE.steps, workspace: true } },
+          useCase
+        )
+        const { flags, enabledModules } = flagsForGoal(DEFAULT_FEATURE_FLAGS, useCase)
         const [created] = await db
           .insert(settings)
           .values({
@@ -278,7 +281,7 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
           id: created.id,
           name: created.name,
           slug: created.slug,
-          useCase: data.useCase,
+          useCase,
           managed: { name: false, slug: false, useCase: false },
           enabledModules,
         }
@@ -290,10 +293,10 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
           if (nameManaged && workspaceName !== row.name) {
             throw new Error('Workspace name is managed by your workspace admin')
           }
-          if (useCaseManaged && data.useCase !== current.useCase) {
+          if (useCaseManaged && data.useCase && data.useCase !== current.useCase) {
             throw new Error('Workspace goal is managed by your workspace admin')
           }
-          const goal = useCaseManaged ? (current.useCase ?? data.useCase) : data.useCase
+          const goal = useCaseManaged ? (current.useCase ?? useCase) : useCase
           const { flags, enabledModules } = flagsForGoal(
             resolveFeatureFlags(row.featureFlags),
             goal
@@ -312,7 +315,7 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
             .where(eq(settings.id, row.id))
             .returning()
           return {
-            state: applyDeferredLaunchStartingPoint(current, goal),
+            state: finishIdentityOnboarding(current, goal),
             value: {
               updated,
               goal,
@@ -394,6 +397,46 @@ export const saveCloudOnboardingGoalFn = createServerFn({ method: 'POST' })
     }
     return { useCase: state.useCase!, enabledModules: value.enabledModules }
   })
+
+/** Stamp default outcome, friendly-host details, and handoff so Home can open. */
+export const ensureOnboardingHomeReadyFn = createServerFn({ method: 'POST' }).handler(async () => {
+  const session = await getSession()
+  if (!session?.user) return { ok: false as const }
+  if (session.session.scope !== 'dashboard') return { ok: false as const }
+  const existingSettings = await getSettings()
+  if (!existingSettings) return { ok: false as const }
+  const caller = await db.query.principal.findFirst({
+    where: eq(principal.userId, session.user.id as UserId),
+  })
+  if (!caller || !isAdmin(caller.role)) return { ok: false as const }
+
+  const identity = parseIdentityProjection(existingSettings.cloudIdentity)
+  const { friendlyPlatformLabel } = await import('@/lib/shared/platform-label')
+  const hasFriendlyHost = Boolean(friendlyPlatformLabel(identity?.platformHostname))
+
+  await mutateSetupStateAtomic(async (current, row, tx) => {
+    const now = new Date().toISOString()
+    const goal =
+      current.useCase && current.useCase !== 'internal' ? current.useCase : 'product_feedback'
+    let next = current
+    if (hasFriendlyHost && !current.workspaceDetailsSeenAt) {
+      next = { ...next, workspaceDetailsSeenAt: now }
+    }
+    if (!next.steps.startingPoint || next.steps.startingPoint.source === 'managed') {
+      const { flags } = flagsForGoal(resolveFeatureFlags(row.featureFlags), goal)
+      await tx
+        .update(settings)
+        .set({ featureFlags: JSON.stringify(flags) })
+        .where(eq(settings.id, row.id))
+      next = applyDeferredLaunchStartingPoint(next, goal, now)
+    }
+    if (!next.activationHandoffSeenAt) {
+      next = { ...next, activationHandoffSeenAt: now }
+    }
+    return { state: next, value: undefined }
+  })
+  return { ok: true as const }
+})
 
 /**
  * Save user name during onboarding.

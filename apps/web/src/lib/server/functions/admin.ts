@@ -343,7 +343,8 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
   const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
 
   const { getWidgetConfig } = await import('@/lib/server/domains/settings/settings.widget')
-  const { boards, helpCenterArticles, isNull } = await import('@/lib/server/db')
+  const { boards, changelogEntries, helpCenterArticles, isNotNull, isNull, statusComponents } =
+    await import('@/lib/server/db')
   const { getSetupState } = await import('@/lib/shared/db-types')
   const { permissionsForLegacyRole } = await import('@/lib/server/policy/permissions')
   const { resolveFeatureFlags } = await import('@/lib/server/domains/settings/settings.types')
@@ -356,6 +357,8 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
     widgetConfig,
     connectedIntegration,
     helpArticle,
+    publishedChangelog,
+    statusComponent,
     tierLimits,
   ] = await Promise.all([
     db.query.boards.findMany({
@@ -376,6 +379,14 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
     db.query.helpCenterArticles.findFirst({
       columns: { id: true },
       where: isNull(helpCenterArticles.deletedAt),
+    }),
+    db.query.changelogEntries.findFirst({
+      columns: { id: true },
+      where: and(isNull(changelogEntries.deletedAt), isNotNull(changelogEntries.publishedAt)),
+    }),
+    db.query.statusComponents.findFirst({
+      columns: { id: true },
+      where: isNull(statusComponents.deletedAt),
     }),
     getTierLimits(),
   ])
@@ -401,6 +412,8 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
       has_widget: hasWidgetEnabled,
       has_messenger: hasMessengerEnabled,
       has_help_article: Boolean(helpArticle),
+      has_published_changelog: Boolean(publishedChangelog),
+      has_status_component: Boolean(statusComponent),
       use_case: setupState?.useCase,
     },
     'fetch onboarding status'
@@ -428,6 +441,8 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
     hasWidgetEnabled,
     hasMessengerEnabled,
     hasHelpArticle: Boolean(helpArticle),
+    hasPublishedChangelog: Boolean(publishedChangelog),
+    hasStatusComponent: Boolean(statusComponent),
     hasIntegration,
     hasFirstWin: firstWin.reached,
     firstWinAt: firstWin.reachedAt,
@@ -453,6 +468,7 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
       supportInbox: flags.supportInbox,
       helpCenter: flags.helpCenter,
       statusPage: flags.statusPage,
+      changelog: flags.changelog,
       integrations: tierLimits.features.integrations,
     },
   }
@@ -707,6 +723,7 @@ export const checkOnboardingState = createServerFn({ method: 'GET' }).handler(as
       hasSettings: false,
       setupState: null,
       isOnboardingComplete: false,
+      platformHostname: null,
     }
   }
 
@@ -730,6 +747,10 @@ export const checkOnboardingState = createServerFn({ method: 'GET' }).handler(as
   const currentSettings = await getSettings()
   const setupState = getSetupState(currentSettings?.setupState ?? null)
   const isOnboardingComplete = checkComplete(setupState)
+  const { parseIdentityProjection } =
+    await import('@/lib/server/domains/settings/cloud/identity-projection')
+  const platformHostname =
+    parseIdentityProjection(currentSettings?.cloudIdentity)?.platformHostname ?? null
 
   log.debug(
     {
@@ -753,6 +774,7 @@ export const checkOnboardingState = createServerFn({ method: 'GET' }).handler(as
     hasSettings: !!currentSettings,
     setupState,
     isOnboardingComplete,
+    platformHostname,
   }
 })
 

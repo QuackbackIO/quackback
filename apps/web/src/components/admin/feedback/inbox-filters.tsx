@@ -94,7 +94,7 @@ export function InboxFiltersPanel({
 
       {/* Tags Filter */}
       {tags.length > 0 && (
-        <FilterSection title="Tags" defaultOpen={true}>
+        <FilterSection title="Tags">
           <div className="flex flex-wrap gap-1.5">
             {tags.map((tag) => {
               const isSelected = filters.tags?.includes(tag.id)
@@ -124,7 +124,7 @@ export function InboxFiltersPanel({
 
       {/* Segments Filter */}
       {segments && segments.length > 0 && (
-        <FilterSection title="Segments" defaultOpen={true}>
+        <FilterSection title="Segments">
           <div className="space-y-1">
             {segments.map((segment) => {
               const isSelected = filters.segmentIds?.includes(segment.id)

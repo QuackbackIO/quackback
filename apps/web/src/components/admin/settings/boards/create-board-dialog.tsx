@@ -38,14 +38,19 @@ interface CreateBoardDialogProps {
   open?: boolean
   onOpenChange?: (open: boolean) => void
   trigger?: React.ReactNode
+  redirectOnCreate?: boolean
+  onCreated?: () => void
 }
 
 export function CreateBoardDialog({
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
   trigger,
+  redirectOnCreate = true,
+  onCreated,
 }: CreateBoardDialogProps = {}) {
   const [internalOpen, setInternalOpen] = useState(false)
+  const isControlled = controlledOpen !== undefined
   const isOpen = controlledOpen ?? internalOpen
   const setIsOpen = controlledOnOpenChange ?? setInternalOpen
   const router = useRouter()
@@ -70,14 +75,17 @@ export function CreateBoardDialog({
       onSuccess: (board) => {
         setIsOpen(false)
         form.reset()
-        // When the admin opted in, deep-link straight to the Access tab
-        // for the new board so they can fine-tune the matrix without
-        // hunting through the boards list.
-        void navigate({
-          to: '/admin/settings/boards/$slug',
-          params: { slug: board.slug },
-          search: customize ? { tab: 'access' } : {},
-        })
+        onCreated?.()
+        if (redirectOnCreate) {
+          // When the admin opted in, deep-link straight to the Access tab
+          // for the new board so they can fine-tune the matrix without
+          // hunting through the boards list.
+          void navigate({
+            to: '/admin/settings/boards/$slug',
+            params: { slug: board.slug },
+            search: customize ? { tab: 'access' } : {},
+          })
+        }
         setCustomize(false)
         router.invalidate()
       },
@@ -95,14 +103,16 @@ export function CreateBoardDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        {trigger ?? (
-          <Button>
-            <PlusIcon className="h-4 w-4" />
-            New board
-          </Button>
-        )}
-      </DialogTrigger>
+      {(!isControlled || trigger) && (
+        <DialogTrigger asChild>
+          {trigger ?? (
+            <Button>
+              <PlusIcon className="h-4 w-4" />
+              New board
+            </Button>
+          )}
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-lg">
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>

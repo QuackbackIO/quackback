@@ -22,10 +22,19 @@ import { ChangelogMetadataSidebarContent } from './changelog-metadata-sidebar-co
 
 interface CreateChangelogDialogProps {
   onChangelogCreated?: () => void
+  /** Controlled open state. When provided, the built-in trigger button is hidden. */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
-export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDialogProps) {
-  const [open, setOpen] = useState(false)
+export function CreateChangelogDialog({
+  onChangelogCreated,
+  open: openProp,
+  onOpenChange,
+}: CreateChangelogDialogProps) {
+  const [internalOpen, setInternalOpen] = useState(false)
+  const isControlled = openProp !== undefined
+  const open = isControlled ? openProp : internalOpen
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
   const [linkedPostIds, setLinkedPostIds] = useState<PostId[]>([])
   const [categoryIds, setCategoryIds] = useState<ChangelogCategoryId[]>([])
@@ -110,7 +119,7 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
       },
       {
         onSuccess: () => {
-          setOpen(false)
+          handleOpenChange(false)
           resetFormState()
           onChangelogCreated?.()
         },
@@ -119,7 +128,11 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
   })
 
   function handleOpenChange(isOpen: boolean) {
-    setOpen(isOpen)
+    if (isControlled) {
+      onOpenChange?.(isOpen)
+    } else {
+      setInternalOpen(isOpen)
+    }
     if (!isOpen) {
       resetFormState()
     }
@@ -143,12 +156,14 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        <Button size="sm">
-          <PlusIcon className="h-4 w-4 mr-1.5" />
-          New Entry
-        </Button>
-      </DialogTrigger>
+      {!isControlled && (
+        <DialogTrigger asChild>
+          <Button size="sm">
+            <PlusIcon className="h-4 w-4 mr-1.5" />
+            New Entry
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent
         className="w-[95vw] sm:w-[90vw] lg:max-w-5xl xl:max-w-6xl h-[85vh] p-0 gap-0 overflow-hidden flex flex-col"
         onKeyDown={handleKeyDown}
@@ -196,7 +211,7 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
 
             {/* Footer */}
             <ModalFooter
-              onCancel={() => setOpen(false)}
+              onCancel={() => handleOpenChange(false)}
               submitLabel={getSubmitButtonText()}
               isPending={createChangelogMutation.isPending}
             >

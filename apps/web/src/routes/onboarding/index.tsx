@@ -1,5 +1,6 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { checkOnboardingState } from '@/lib/server/functions/admin'
+import { ensureOnboardingHomeReadyFn } from '@/lib/server/functions/onboarding'
 import { pickOnboardingStep } from './-onboarding-step'
 
 /**
@@ -16,7 +17,9 @@ export const Route = createFileRoute('/onboarding/')({
     }
 
     const state = await checkOnboardingState()
-    throw redirect({ to: pickOnboardingStep({ session: { userId: session.user.id }, state }) })
+    const target = pickOnboardingStep({ session: { userId: session.user.id }, state })
+    if (target === '/admin') await ensureOnboardingHomeReadyFn()
+    throw redirect({ to: target })
   },
   component: () => null,
 })
