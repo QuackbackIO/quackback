@@ -48,7 +48,9 @@ const mockDbUpdate: any = vi.fn(() => ({ set: mockUpdateSet }))
 // path. The provenance gate itself is covered in detail by
 // auth.widget-handoff-provenance.test.ts.
 const mockWidgetIdentifiedFindFirst = vi.fn(async () => ({ hmacVerified: true }))
-const mockPrincipalFindFirst = vi.fn(async () => ({ role: 'user' }))
+const mockPrincipalFindFirst = vi.fn(async (): Promise<{ role: string } | null> => ({
+  role: 'user',
+}))
 vi.mock('@/lib/server/db', () => ({
   db: {
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any

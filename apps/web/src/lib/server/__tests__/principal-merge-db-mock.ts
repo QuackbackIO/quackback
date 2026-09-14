@@ -43,7 +43,7 @@ export const mockTx: MockTx = {
     return { set: mockUpdateSet }
   },
   query: {
-    principal: { findFirst: (...args: unknown[]) => mockTxPrincipalFindFirst(...args) },
+    principal: { findFirst: mockTxPrincipalFindFirst },
   },
 }
 
