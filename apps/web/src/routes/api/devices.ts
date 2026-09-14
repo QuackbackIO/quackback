@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { getSession } from '@/lib/server/auth/session'
+import { toSessionScope } from '@/lib/shared/roles'
 import { db, principal, eq } from '@/lib/server/db'
 import {
   registerDevice,
@@ -11,14 +12,17 @@ const PLATFORMS: readonly PushPlatform[] = ['ios', 'android']
 
 /**
  * POST /api/devices — register the caller's push token.
- * Session-authed (cookie); anonymous/widget callers have no admin session and
- * get 401. No role gate: the push consumer only targets admin/member
- * principals, so a non-agent row is harmless and never delivered to.
+ * Session-authed (cookie). Widget/portal Bearers cannot bind a push token
+ * to a teammate principal. No extra role gate: the consumer only delivers
+ * to admin/member principals.
  */
 export async function handleRegisterDevice(request: Request): Promise<Response> {
   const session = await getSession()
   if (!session?.user) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  if (toSessionScope(session.session?.scope) !== 'dashboard') {
+    return Response.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const body = (await request.json().catch(() => null)) as {
@@ -48,6 +52,9 @@ export async function handleUnregisterDevice(request: Request): Promise<Response
   const session = await getSession()
   if (!session?.user) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  if (toSessionScope(session.session?.scope) !== 'dashboard') {
+    return Response.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const body = (await request.json().catch(() => null)) as { token?: unknown } | null
