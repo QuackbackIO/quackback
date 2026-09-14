@@ -77,10 +77,12 @@ export type {
 } from './types'
 export { CORE_THEME_VARIABLES } from './types'
 
-export type { MinimalThemeVariables, MinimalThemeConfig } from './expand'
+export type { MinimalThemeVariables, MinimalThemeConfig, ThemeBaseline } from './expand'
 export {
   expandTheme,
   extractMinimal,
+  REFINED_DARK_BASE,
+  REFINED_LIGHT_BASE,
   parseOklch,
   formatOklch,
   adjustHue,
@@ -94,6 +96,7 @@ export { hexToOklch, oklchToHex, isValidHex, isValidOklch } from './colors'
 
 export {
   generateThemeCSS,
+  generateWorkspaceThemeCSS,
   generateReadableCSS,
   isGeneratedThemeCss,
   advancedCssRemainder,

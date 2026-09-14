@@ -2,7 +2,7 @@ import { createFileRoute, Outlet, redirect, useRouter } from '@tanstack/react-ro
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders, setResponseHeader } from '@tanstack/react-start/server'
 import { z } from 'zod'
-import { generateThemeCSS, readFontSans } from '@/lib/shared/theme'
+import { generateWorkspaceThemeCSS, readFontSans } from '@/lib/shared/theme'
 import { resolveLocale, loadWidgetMessages } from '@/lib/shared/i18n'
 import { WidgetAuthProvider } from '@/components/widget/widget-auth-provider'
 import { extractSessionTokenFromCookie } from '@/lib/server/functions/portal-session-token'
@@ -70,8 +70,8 @@ export const Route = createFileRoute('/widget')({
     const customCss = settings.customCss ?? ''
     const themeMode = brandingConfig.themeMode ?? 'user'
 
-    const hasThemeConfig = brandingConfig.light || brandingConfig.dark
-    const themeStyles = hasThemeConfig ? generateThemeCSS(brandingConfig) : ''
+    const visualTheme = settings.visualTheme === 'refined' ? 'refined' : 'legacy'
+    const themeStyles = generateWorkspaceThemeCSS(brandingConfig, visualTheme)
 
     // If user is logged into the portal (same-origin), extract the signed
     // session cookie so the widget can reuse it directly as a Bearer token.

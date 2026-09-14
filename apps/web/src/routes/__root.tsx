@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { Component, type ReactNode } from 'react'
+import { Component, useLayoutEffect, type ReactNode } from 'react'
 import type { Role } from '@/lib/shared/roles'
 import type { QueryClient } from '@tanstack/react-query'
 import {
@@ -17,6 +17,7 @@ import {
 } from '@/lib/shared/db-types'
 import { isAdmin } from '@/lib/shared/roles'
 import appCss from '../globals.css?url'
+import refinedThemeCss from '../styles/labs/refined-theme.css?url'
 import { getBootstrapData, type BootstrapData } from '@/lib/server/functions/bootstrap'
 import type { WorkspaceSettings } from '@/lib/shared/types/settings'
 import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
@@ -28,6 +29,11 @@ import { OttHandler } from '@/components/shared/ott-handler'
 import { VisitorBeacon } from '@/components/shared/visitor-beacon'
 import { documentLocale, htmlLangDir } from '@/lib/shared/document-locale'
 import { normalizeLocale, DEFAULT_LOCALE, type SupportedLocale } from '@/lib/shared/i18n'
+import {
+  applyVisualThemeToDocument,
+  visualThemeAttribute,
+  type VisualTheme,
+} from '@/lib/shared/labs'
 
 export interface RouterContext {
   queryClient: QueryClient
@@ -43,6 +49,8 @@ export interface RouterContext {
   updateBannerDismissedVersion?: BootstrapData['updateBannerDismissedVersion']
   billingEnabled?: boolean
   cloudEnabled?: boolean
+  /** Effective Labs appearance. Independent of light/dark preference. */
+  visualTheme?: VisualTheme
 }
 
 // Paths that are allowed before onboarding is complete
@@ -79,6 +87,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       billingEnabled,
       cloudEnabled,
     } = await getBootstrapData()
+    const visualTheme: VisualTheme = settings?.visualTheme === 'refined' ? 'refined' : 'legacy'
 
     if (!isOnboardingExempt(location.pathname)) {
       const setupState = getSetupState(settings?.settings?.setupState ?? null)
@@ -134,6 +143,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       updateBannerDismissedVersion,
       billingEnabled,
       cloudEnabled,
+      visualTheme,
     }
   },
   head: () => ({
@@ -165,6 +175,10 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       {
         rel: 'stylesheet',
         href: appCss,
+      },
+      {
+        rel: 'stylesheet',
+        href: refinedThemeCss,
       },
       {
         rel: 'alternate',
@@ -235,9 +249,18 @@ class SafeRootDocument extends Component<{ children: ReactNode }, { hasError: bo
 // feel like they crossed into a different product.
 const NON_PORTAL_PREFIXES = ['/admin', '/onboarding', '/api', '/complete-signup']
 
+function VisualThemeSync({ visualTheme }: { visualTheme: VisualTheme }) {
+  useLayoutEffect(() => {
+    applyVisualThemeToDocument(visualTheme)
+  }, [visualTheme])
+  return null
+}
+
 function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
-  const { settings, themeCookie, prefersColorScheme, acceptLanguageLocale } =
+  const { settings, themeCookie, prefersColorScheme, acceptLanguageLocale, visualTheme } =
     Route.useRouteContext()
+  const resolvedVisualTheme: VisualTheme =
+    visualTheme === 'refined' || settings?.visualTheme === 'refined' ? 'refined' : 'legacy'
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   // structuralSharing keeps the array reference stable across store updates that
   // don't change the matched routes, so RootDocument doesn't re-render every tick.
@@ -305,12 +328,14 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
       dir={dir}
       className={themeClass}
       style={{ colorScheme }}
+      data-visual-theme={visualThemeAttribute(resolvedVisualTheme)}
       suppressHydrationWarning
     >
       <head>
         <HeadContent />
       </head>
       <body className="min-h-screen bg-background font-sans antialiased">
+        <VisualThemeSync visualTheme={resolvedVisualTheme} />
         <ThemeProvider
           attribute="class"
           defaultTheme={defaultTheme}

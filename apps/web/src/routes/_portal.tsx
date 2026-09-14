@@ -19,7 +19,7 @@ import { AuthDialog } from '@/components/auth/auth-dialog'
 import { buildPortalAuthDialogConfig } from '@/components/auth/portal-auth-dialog-config'
 import { PortalAccessGate } from '@/components/portal/portal-access-gate'
 import type { PortalAccessGateError } from '@/lib/shared/types/portal-gate-error'
-import { generateThemeCSS, readFontSans } from '@/lib/shared/theme'
+import { generateWorkspaceThemeCSS, readFontSans } from '@/lib/shared/theme'
 import { PortalIntlProvider } from '@/components/portal-intl-provider'
 import { getPortalLocaleFn, loadPortalIntl } from '@/lib/server/functions/locale'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
@@ -145,7 +145,7 @@ export const Route = createFileRoute('/_portal')({
 
       const brandingData = settings?.brandingData ?? null
       const brandingConfig = settings?.brandingConfig ?? {}
-      const hasThemeConfig = brandingConfig.light || brandingConfig.dark
+      const visualTheme = settings?.visualTheme === 'refined' ? 'refined' : 'legacy'
       // Locale so the gate's auth dialog renders under PortalIntlProvider.
       const locale = await getPortalLocaleFn().catch(() => DEFAULT_LOCALE)
       // Instant-SSO: when the workspace's only sign-in method is a single OIDC
@@ -168,7 +168,7 @@ export const Route = createFileRoute('/_portal')({
         reason: accessResult.reason,
         workspaceName: settings?.name ?? '',
         logoUrl: brandingData?.logoUrl ?? null,
-        themeStyles: hasThemeConfig ? generateThemeCSS(brandingConfig) : '',
+        themeStyles: generateWorkspaceThemeCSS(brandingConfig, visualTheme),
         customCss: settings?.customCss ?? '',
         configFontSans: readFontSans(brandingConfig.light),
         locale,
@@ -219,10 +219,8 @@ export const Route = createFileRoute('/_portal')({
     const publicPortalConfig = settings?.publicPortalConfig ?? null
 
     const themeMode = brandingConfig.themeMode ?? 'user'
-
-    // Always generate CSS from theme config (if structured vars exist)
-    const hasThemeConfig = brandingConfig.light || brandingConfig.dark
-    const themeStyles = hasThemeConfig ? generateThemeCSS(brandingConfig) : ''
+    const visualTheme = settings?.visualTheme === 'refined' ? 'refined' : 'legacy'
+    const themeStyles = generateWorkspaceThemeCSS(brandingConfig, visualTheme)
 
     // Always apply custom CSS on top (cascades over theme styles)
     const customCssToApply = customCss

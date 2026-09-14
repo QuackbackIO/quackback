@@ -1,5 +1,5 @@
 import type { ThemeConfig, ThemeMode, ThemeVariables } from './types'
-import { expandTheme, type MinimalThemeVariables } from './expand'
+import { expandTheme, type MinimalThemeVariables, type ThemeBaseline } from './expand'
 
 export const variableMap: Record<string, string> = {
   background: '--background',
@@ -435,37 +435,53 @@ export function normalizeFontSans(fontSans: string): string {
   return normalized
 }
 
-export function generateThemeCSS(config: ThemeConfig): string {
+export interface GenerateThemeCSSOptions {
+  /** Unbranded baseline. Legacy (default) keeps existing unparameterized output. */
+  baseline?: ThemeBaseline
+}
+
+export function generateThemeCSS(config: ThemeConfig, options?: GenerateThemeCSSOptions): string {
   if (!config) return ''
 
-  // Each half is expanded only when the config has one, so a workspace that
-  // branded a single mode keeps the other on the stylesheet defaults. Either
-  // half may be partial; expandTheme fills its gaps from the base palette.
+  const baseline: ThemeBaseline = options?.baseline ?? 'legacy'
   const themeMode = config.themeMode ?? 'user'
-  const lightVars = config.light ? expandTheme(config.light, { mode: 'light' }) : {}
-  const darkVars = config.dark ? expandTheme(config.dark, { mode: 'dark' }) : {}
+  const hasLight = Boolean(config.light)
+  const hasDark = Boolean(config.dark)
+  // Legacy empty configs stay on stylesheet defaults. Refined unbranded emits
+  // the experiment baseline so admin/portal/widget share one source of tokens
+  // when branding is absent.
+  if (!hasLight && !hasDark && baseline === 'legacy') return ''
+
+  const emitLight = themeMode !== 'dark' && (hasLight || baseline === 'refined')
+  const emitDark = themeMode !== 'light' && (hasDark || baseline === 'refined')
+
+  const lightVars = emitLight ? expandTheme(config.light ?? {}, { mode: 'light', baseline }) : {}
+  const darkVars = emitDark ? expandTheme(config.dark ?? {}, { mode: 'dark', baseline }) : {}
   if (lightVars.fontSans) lightVars.fontSans = normalizeFontSans(lightVars.fontSans)
   if (darkVars.fontSans) darkVars.fontSans = normalizeFontSans(darkVars.fontSans)
 
   const parts: string[] = []
+  // :where() keeps refined selectors at :root / .dark specificity so later
+  // branding and custom CSS still win, matching today's cascade.
+  const lightSelector =
+    baseline === 'refined' ? ':root:where([data-visual-theme="refined"])' : ':root'
+  const darkForcedSelector =
+    baseline === 'refined' ? ':root:where([data-visual-theme="refined"])' : ':root'
+  const darkClassSelector =
+    baseline === 'refined' ? '.dark:where([data-visual-theme="refined"])' : '.dark'
 
-  // Only output light mode CSS if themeMode is not 'dark'
-  // Use :root selector so custom CSS (e.g., from tweakcn) can override via cascade
   if (themeMode !== 'dark') {
     const lightCSS = variablesToCSS(lightVars)
-    if (lightCSS) parts.push(`:root { ${lightCSS} }`)
+    if (lightCSS) parts.push(`${lightSelector} { ${lightCSS} }`)
   }
 
-  // Only output dark mode CSS if themeMode is not 'light'
   if (themeMode !== 'light') {
     const darkCSS = variablesToCSS(darkVars)
-    // When forcing dark mode, use :root instead of .dark so it applies without the class
-    // Use .dark selector so custom CSS can override via cascade
     if (darkCSS) {
       if (themeMode === 'dark') {
-        parts.push(`:root { ${darkCSS} }`)
+        parts.push(`${darkForcedSelector} { ${darkCSS} }`)
       } else {
-        parts.push(`.dark { ${darkCSS} }`)
+        parts.push(`${darkClassSelector} { ${darkCSS} }`)
       }
     }
   }
@@ -482,6 +498,18 @@ export function generateThemeCSS(config: ThemeConfig): string {
   }
 
   return parts.join(' ')
+}
+
+/** Portal/widget/auth helper: emit CSS only when branding or the refined baseline needs it. */
+export function generateWorkspaceThemeCSS(
+  config: ThemeConfig | null | undefined,
+  visualTheme: ThemeBaseline | null | undefined
+): string {
+  const baseline: ThemeBaseline = visualTheme === 'refined' ? 'refined' : 'legacy'
+  const branding = config ?? {}
+  const hasThemeConfig = Boolean(branding.light || branding.dark)
+  if (!hasThemeConfig && baseline === 'legacy') return ''
+  return generateThemeCSS(branding, { baseline })
 }
 
 export function parseThemeConfig(json: string | null | undefined): ThemeConfig | null {
