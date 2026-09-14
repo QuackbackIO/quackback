@@ -1,0 +1,145 @@
+/*
+ * Refined visual theme — gated by the Labs experiment marker.
+ * Legacy appearance is unchanged when the attribute is absent.
+ *
+ * Token selectors use :where() so they stay at :root / .dark specificity.
+ * Explicit workspace branding and custom CSS injected later still win.
+ */
+
+:root:where([data-visual-theme='refined']) {
+  --background: #ffffff;
+  --foreground: #0f1419;
+  --card: #ffffff;
+  --card-foreground: #0f1419;
+  --popover: #ffffff;
+  --popover-foreground: #0f1419;
+  --primary: oklch(0.886 0.176 86);
+  --primary-foreground: oklch(0.145 0 0);
+  --secondary: #eff3f4;
+  --secondary-foreground: #0f1419;
+  --muted: #eff3f4;
+  --muted-foreground: #536471;
+  --accent: #eff3f4;
+  --accent-foreground: #0f1419;
+  --border: #eff3f4;
+  --input: #eff3f4;
+  --ring: oklch(0.886 0.176 86);
+  --sidebar: #ffffff;
+  --sidebar-foreground: #0f1419;
+  --sidebar-accent: #eff3f4;
+  --sidebar-accent-foreground: #0f1419;
+  --sidebar-border: #eff3f4;
+  --header-background: #ffffff;
+  --header-foreground: #0f1419;
+  --header-border: #eff3f4;
+  --post-card-background: #ffffff;
+  --post-card-border: #eff3f4;
+  --nav-active-background: #eff3f4;
+  --nav-active-foreground: #0f1419;
+  --nav-inactive-color: #536471;
+  --radius: 0.5rem;
+  --shadow-2xs: 0 0 0 0 transparent;
+  --shadow-xs: 0 0 0 0 transparent;
+  --shadow-sm: 0 0 0 1px oklch(0 0 0 / 0.04);
+  --shadow: 0 0 0 1px oklch(0 0 0 / 0.06);
+  --shadow-md: 0 4px 16px oklch(0 0 0 / 0.08);
+  --shadow-lg: 0 8px 24px oklch(0 0 0 / 0.1);
+  --shadow-xl: 0 12px 32px oklch(0 0 0 / 0.12);
+  --shadow-2xl: 0 16px 40px oklch(0 0 0 / 0.16);
+}
+
+.dark:where([data-visual-theme='refined']) {
+  --background: #000000;
+  --foreground: #e7e9ea;
+  --card: #000000;
+  --card-foreground: #e7e9ea;
+  --popover: #000000;
+  --popover-foreground: #e7e9ea;
+  --primary: oklch(0.886 0.176 86);
+  --primary-foreground: oklch(0.145 0 0);
+  --secondary: #181818;
+  --secondary-foreground: #e7e9ea;
+  --muted: #181818;
+  --muted-foreground: #8b98a5;
+  --accent: #181818;
+  --accent-foreground: #e7e9ea;
+  --border: #2f3336;
+  --input: #2f3336;
+  --ring: oklch(0.886 0.176 86);
+  --sidebar: #000000;
+  --sidebar-foreground: #e7e9ea;
+  --sidebar-accent: #181818;
+  --sidebar-accent-foreground: #e7e9ea;
+  --sidebar-border: #2f3336;
+  --header-background: #000000;
+  --header-foreground: #e7e9ea;
+  --header-border: #2f3336;
+  --post-card-background: #000000;
+  --post-card-border: #2f3336;
+  --nav-active-background: #181818;
+  --nav-active-foreground: #e7e9ea;
+  --nav-inactive-color: #8b98a5;
+  --shadow-2xs: 0 0 0 0 transparent;
+  --shadow-xs: 0 0 0 0 transparent;
+  --shadow-sm: 0 0 0 1px oklch(1 0 0 / 0.06);
+  --shadow: 0 0 0 1px oklch(1 0 0 / 0.08);
+  --shadow-md: 0 8px 24px oklch(0 0 0 / 0.4);
+  --shadow-lg: 0 12px 32px oklch(0 0 0 / 0.5);
+  --shadow-xl: 0 16px 40px oklch(0 0 0 / 0.55);
+  --shadow-2xl: 0 20px 48px oklch(0 0 0 / 0.6);
+}
+
+:where([data-visual-theme='refined']) h1,
+:where([data-visual-theme='refined']) h2,
+:where([data-visual-theme='refined']) h3 {
+  font-weight: 600;
+}
+
+:where([data-visual-theme='refined']) [data-slot='card'] {
+  box-shadow: var(--shadow-sm);
+}
+
+:where([data-visual-theme='refined']) [data-slot='dialog-content'],
+:where([data-visual-theme='refined']) [data-slot='alert-dialog-content'],
+:where([data-visual-theme='refined']) [data-slot='sheet-content'],
+:where([data-visual-theme='refined']) [data-slot='popover-content'],
+:where([data-visual-theme='refined']) [data-slot='dropdown-menu-content'],
+:where([data-visual-theme='refined']) [data-slot='context-menu-content'],
+:where([data-visual-theme='refined']) [data-slot='hover-card-content'],
+:where([data-visual-theme='refined']) [data-slot='tooltip-content'],
+:where([data-visual-theme='refined']) [data-slot='select-content'],
+:where([data-visual-theme='refined']) [data-slot='command'] {
+  box-shadow: var(--shadow-md);
+  border-color: var(--border);
+}
+
+:where([data-visual-theme='refined']) [data-slot='input'],
+:where([data-visual-theme='refined']) [data-slot='textarea'],
+:where([data-visual-theme='refined']) [data-slot='select-trigger'] {
+  border-radius: var(--radius);
+}
+
+:where([data-visual-theme='refined']) [data-slot='table'] {
+  border-color: var(--border);
+}
+
+:where([data-visual-theme='refined']) [data-slot='table-row']:hover {
+  background-color: var(--muted);
+}
+
+:where([data-visual-theme='refined']) [data-slot='skeleton'] {
+  background-color: var(--muted);
+}
+
+:where([data-visual-theme='refined']) :focus-visible {
+  outline-color: var(--ring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where([data-visual-theme='refined']) *,
+  :where([data-visual-theme='refined']) *::before,
+  :where([data-visual-theme='refined']) *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

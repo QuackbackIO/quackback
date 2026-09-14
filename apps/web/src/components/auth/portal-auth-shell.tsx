@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useRouteContext } from '@tanstack/react-router'
 import { PortalBrandMark } from './portal-brand-mark'
-import { generateThemeCSS } from '@/lib/shared/theme'
+import { generateWorkspaceThemeCSS } from '@/lib/shared/theme'
 import type { BrandingConfig } from '@/lib/server/domains/settings/settings.types'
 import { escapeInlineStyle } from '@/lib/shared/safe-inline-content'
 
@@ -29,16 +29,22 @@ interface PortalAuthShellProps {
  */
 export function PortalAuthShell({ heading, subheading, children, footer }: PortalAuthShellProps) {
   const ctx = useRouteContext({ from: '__root__' }) as {
-    settings?: { brandingConfig?: BrandingConfig; customCss?: string }
+    settings?: {
+      brandingConfig?: BrandingConfig
+      customCss?: string
+      visualTheme?: 'legacy' | 'refined'
+    }
+    visualTheme?: 'legacy' | 'refined'
   }
   const brandingConfig = ctx.settings?.brandingConfig
   const customCss = ctx.settings?.customCss ?? ''
+  const visualTheme =
+    ctx.visualTheme === 'refined' || ctx.settings?.visualTheme === 'refined' ? 'refined' : 'legacy'
 
-  const themeStyles = useMemo(() => {
-    if (!brandingConfig) return ''
-    const hasThemeConfig = brandingConfig.light || brandingConfig.dark
-    return hasThemeConfig ? generateThemeCSS(brandingConfig) : ''
-  }, [brandingConfig])
+  const themeStyles = useMemo(
+    () => generateWorkspaceThemeCSS(brandingConfig, visualTheme),
+    [brandingConfig, visualTheme]
+  )
 
   return (
     <div className="relative min-h-screen flex items-center justify-center px-4 py-12 overflow-hidden">
