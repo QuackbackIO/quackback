@@ -29,6 +29,13 @@ export function toSessionScope(value: unknown): SessionScope {
   return value === 'widget' || value === 'portal' ? value : 'dashboard'
 }
 
+/** Widget Bearers cannot mutate the signed-in account. Portal and dashboard may. */
+export function assertNotWidgetScope(scope: SessionScope): void {
+  if (scope === 'widget') {
+    throw new Error('Access denied: Widget sessions cannot update this account')
+  }
+}
+
 /** Team roles only apply to dashboard sessions; every other audience is portal-tier. */
 export function sessionRole(role: Role, scope: SessionScope): Role {
   return scope === 'dashboard' ? role : 'user'

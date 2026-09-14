@@ -235,6 +235,9 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/user.ts::requirePrincipalId': END_USER(
     'own-profile helper — resolves the caller principal'
   ),
+  'lib/server/functions/user.ts::updateNotificationPreferencesFn': END_USER(
+    'update own notification preferences; widget scope is refused separately'
+  ),
   'lib/server/functions/teammate-preferences.ts::getMyLanguagePreferenceFn': END_USER(
     'teammate reads their own language preference'
   ),

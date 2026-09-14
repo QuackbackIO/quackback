@@ -146,14 +146,14 @@ describe('WidgetAuthProvider — identityResolved', () => {
   })
 })
 
-describe('WidgetAuthProvider — teammate cookie handoff veto', () => {
+describe('WidgetAuthProvider — canPortalHandoff follows the current identity', () => {
   beforeEach(() => {
     clearWidgetToken()
     window.localStorage.clear()
     vi.unstubAllGlobals()
   })
 
-  it('keeps canPortalHandoff false after SDK identify of a customer', async () => {
+  it('starts vetoed for a teammate cookie, then follows a customer identify', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
@@ -174,6 +174,6 @@ describe('WidgetAuthProvider — teammate cookie handoff veto', () => {
     await waitFor(() => expect(screen.getByTestId('handoff').textContent).toBe('resolved:veto'))
 
     postFromHost({ id: 'cust', ssoToken: 'sso' })
-    await waitFor(() => expect(screen.getByTestId('handoff').textContent).toBe('resolved:veto'))
+    await waitFor(() => expect(screen.getByTestId('handoff').textContent).toBe('resolved:handoff'))
   })
 })

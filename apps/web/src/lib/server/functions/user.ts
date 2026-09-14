@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { toSessionScope, type Role } from '@/lib/shared/roles'
+import { assertNotWidgetScope, toSessionScope, type Role } from '@/lib/shared/roles'
 import { createServerFn } from '@tanstack/react-start'
 import { type UserId, type PrincipalId } from '@quackback/ids'
 import { getSession } from '@/lib/server/auth/session'
@@ -180,16 +180,11 @@ export const getProfileFn = createServerFn({ method: 'GET' }).handler(
   }
 )
 
-/** Account mutations: dashboard and portal (widget-handoff customers) are
- *  allowed; a widget Bearer — including a teammate who identified as a
- *  customer — is not. */
 function requireNonWidgetSession(session: Awaited<ReturnType<typeof getSession>>) {
   if (!session?.user) {
     throw new Error('Authentication required')
   }
-  if (toSessionScope(session.session.scope) === 'widget') {
-    throw new Error('Access denied: Widget sessions cannot update this account')
-  }
+  assertNotWidgetScope(toSessionScope(session.session.scope))
   return session
 }
 
@@ -311,9 +306,7 @@ export const updateNotificationPreferencesFn = createServerFn({ method: 'POST' }
     }): Promise<NotificationPreferences> => {
       log.debug('update notification preferences')
       const ctx = await requireAuth()
-      if (ctx.scope === 'widget') {
-        throw new Error('Access denied: Widget sessions cannot update this account')
-      }
+      assertNotWidgetScope(ctx.scope)
       const principalId = ctx.principal.id
       const { emailStatusChange, emailNewComment, emailMuted, matrix } = data
 

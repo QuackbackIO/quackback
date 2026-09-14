@@ -3,7 +3,7 @@ import { getRequestHeaders } from '@tanstack/react-start/server'
 import { z } from 'zod'
 import type { InviteId, PrincipalId, RoleId, UserId } from '@quackback/ids'
 import { db, invitation, principal, user, and, eq } from '@/lib/server/db'
-import { ROLE_RANK, toSessionScope, type Role } from '@/lib/shared/roles'
+import { ROLE_RANK, assertNotWidgetScope, toSessionScope, type Role } from '@/lib/shared/roles'
 import {
   createPrincipal,
   setPrincipalRole,
@@ -349,11 +349,7 @@ export const setPasswordFn = createServerFn({ method: 'POST' })
     if (!session?.user) {
       throw new Error('Not authenticated')
     }
-    // Portal-scoped customers (widget handoff) still need PasswordForm;
-    // only a widget Bearer — including a teammate identify — is refused.
-    if (toSessionScope(session.session.scope) === 'widget') {
-      throw new Error('Access denied: Widget sessions cannot update this account')
-    }
+    assertNotWidgetScope(toSessionScope(session.session.scope))
     const headers = getRequestHeaders()
     const { auth } = await import('@/lib/server/auth')
     await auth.api.setPassword({
