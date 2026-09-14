@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { NotificationId } from '@quackback/ids'
 import { requireAuth, policyActorFromAuth } from './auth-helpers'
+import { assertNotWidgetScope } from '@/lib/shared/roles'
 import {
   getNotificationsForMember,
   getUnreadCount,
@@ -47,6 +48,7 @@ export const getNotificationsFn = createServerFn({ method: 'GET' })
       'get notifications'
     )
     const auth = await requireAuth()
+    assertNotWidgetScope(auth.scope)
     // Resolve the actor so audience-denied posts get their preview
     // hidden in the notification list.
     const actor = await policyActorFromAuth(auth)
@@ -111,6 +113,7 @@ export const getNotificationsFn = createServerFn({ method: 'GET' })
 export const getUnreadCountFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug({}, 'get unread count')
   const auth = await requireAuth()
+  assertNotWidgetScope(auth.scope)
   const count = await getUnreadCount(auth.principal.id)
   return { count }
 })
@@ -127,6 +130,7 @@ export const markNotificationAsReadFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ notification_id: data.notificationId }, 'notification marked read')
     const auth = await requireAuth()
+    assertNotWidgetScope(auth.scope)
     await markAsRead(auth.principal.id, data.notificationId as NotificationId)
     return { success: true }
   })
@@ -137,6 +141,7 @@ export const markNotificationAsReadFn = createServerFn({ method: 'POST' })
 export const markAllNotificationsAsReadFn = createServerFn({ method: 'POST' }).handler(async () => {
   log.info({}, 'all notifications marked read')
   const auth = await requireAuth()
+  assertNotWidgetScope(auth.scope)
   await markAllAsRead(auth.principal.id)
   return { success: true }
 })
@@ -149,6 +154,7 @@ export const archiveNotificationFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ notification_id: data.notificationId }, 'notification archived')
     const auth = await requireAuth()
+    assertNotWidgetScope(auth.scope)
     await archiveNotification(auth.principal.id, data.notificationId as NotificationId)
     return { success: true }
   })
@@ -160,6 +166,7 @@ export const archiveAllReadNotificationsFn = createServerFn({ method: 'POST' }).
   async () => {
     log.info({}, 'all read notifications archived')
     const auth = await requireAuth()
+    assertNotWidgetScope(auth.scope)
     await archiveAllNotifications(auth.principal.id, { onlyRead: true })
     return { success: true }
   }

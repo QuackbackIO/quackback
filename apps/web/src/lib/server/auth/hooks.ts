@@ -417,6 +417,8 @@ const ACCOUNT_MUTATION_PATHS = new Set([
   '/delete-user',
   '/email-otp/request-email-change',
   '/email-otp/change-email',
+  '/link-social',
+  '/oauth2/link',
 ])
 
 type HeaderBag = { get(name: string): string | null }
@@ -466,7 +468,9 @@ export async function handleWidgetAccountMutationGate(ctx: {
   if (!token) return
   const found = await ctx.context?.internalAdapter?.findSession?.(token)
   const session =
-    found && typeof found === 'object' && found !== null && 'session' in found
+    typeof found === 'object' &&
+    found !== null &&
+    Object.prototype.hasOwnProperty.call(found, 'session')
       ? (found as { session?: { scope?: unknown } }).session
       : undefined
   if (!session) return

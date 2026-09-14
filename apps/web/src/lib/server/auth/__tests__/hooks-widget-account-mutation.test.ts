@@ -100,6 +100,19 @@ describe('handleWidgetAccountMutationGate', () => {
     ).resolves.toBeUndefined()
   })
 
+  it('rejects a widget Bearer on OAuth account-link routes', async () => {
+    await expect(
+      handleWidgetAccountMutationGate(
+        ctx({ path: '/link-social', token: 'widget-tok', scope: 'widget' })
+      )
+    ).rejects.toThrow(/Widget sessions/)
+    await expect(
+      handleWidgetAccountMutationGate(
+        ctx({ path: '/oauth2/link', token: 'widget-tok', scope: 'widget' })
+      )
+    ).rejects.toThrow(/Widget sessions/)
+  })
+
   it('ignores unrelated paths', async () => {
     await expect(
       handleWidgetAccountMutationGate(
