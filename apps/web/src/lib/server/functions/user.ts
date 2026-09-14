@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { Role } from '@/lib/shared/roles'
+import { toSessionScope, type Role } from '@/lib/shared/roles'
 import { createServerFn } from '@tanstack/react-start'
 import { type UserId, type PrincipalId } from '@quackback/ids'
 import { getSession } from '@/lib/server/auth/session'
@@ -180,18 +180,26 @@ export const getProfileFn = createServerFn({ method: 'GET' }).handler(
   }
 )
 
+function requireDashboardSession(session: Awaited<ReturnType<typeof getSession>>) {
+  if (!session?.user) {
+    throw new Error('Authentication required')
+  }
+  if (toSessionScope(session.session.scope) !== 'dashboard') {
+    throw new Error('Access denied: Requires a dashboard session')
+  }
+  return session
+}
+
 /**
  * Update current user's display name.
- * Only requires authentication - any logged-in user can update their own name.
+ * Dashboard-scoped only — a widget Bearer for a teammate must not rename
+ * the shared dashboard account.
  */
 export const updateProfileNameFn = createServerFn({ method: 'POST' })
   .validator(updateProfileNameSchema)
   .handler(async ({ data }: { data: UpdateProfileNameInput }): Promise<UserProfile> => {
     log.debug('update profile name')
-    const session = await getSession()
-    if (!session?.user) {
-      throw new Error('Authentication required')
-    }
+    const session = requireDashboardSession(await getSession())
     const { name } = data
 
     const [updated] = await db
@@ -210,15 +218,12 @@ export const updateProfileNameFn = createServerFn({ method: 'POST' })
 
 /**
  * Remove custom avatar.
- * Only requires authentication - any logged-in user can remove their own avatar.
+ * Dashboard-scoped only — a widget Bearer must not clear a teammate avatar.
  */
 export const removeAvatarFn = createServerFn({ method: 'POST' }).handler(
   async (): Promise<UserProfile> => {
     log.debug('remove avatar')
-    const session = await getSession()
-    if (!session?.user) {
-      throw new Error('Authentication required')
-    }
+    const session = requireDashboardSession(await getSession())
 
     await deleteExistingAvatar(session.user.id)
 
@@ -245,10 +250,7 @@ export const saveAvatarKeyFn = createServerFn({ method: 'POST' })
   .validator(saveAvatarKeySchema)
   .handler(async ({ data }: { data: z.infer<typeof saveAvatarKeySchema> }) => {
     log.debug('save avatar key')
-    const session = await getSession()
-    if (!session?.user) {
-      throw new Error('Authentication required')
-    }
+    const session = requireDashboardSession(await getSession())
 
     await deleteExistingAvatar(session.user.id)
 

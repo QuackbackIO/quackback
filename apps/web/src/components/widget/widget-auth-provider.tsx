@@ -116,6 +116,12 @@ export function WidgetAuthProvider({
   const isIdentified = user !== null
   const sessionReadyRef = useRef(false)
   const sessionSourceRef = useRef<SessionSource>(null)
+  // Same-origin teammate dashboard cookie: never re-enable portal handoff
+  // after an SDK identify of a different customer, or a later clear.
+  const teammateCookieVetoRef = useRef(canPortalHandoffFromPortal === false)
+  const setHandoffAllowed = useCallback((allowed: boolean) => {
+    setCanPortalHandoff(teammateCookieVetoRef.current ? false : allowed)
+  }, [])
 
   // Durable device id from the host page (visitor analytics layer 2). Linked
   // to the session's principal server-side; deduped per (device, token) so
@@ -270,7 +276,7 @@ export function WidgetAuthProvider({
       // they're re-established via SDK identify / portal passthrough on load.
       clearPersistedToken()
       setUser(result.user)
-      setCanPortalHandoff(result.canPortalHandoff !== false)
+      setHandoffAllowed(result.canPortalHandoff !== false)
       if (result.votedPostIds) {
         queryClient.setQueryData(
           widgetQueryKeys.votedPosts.bySession(sessionVersionRef.current),
@@ -280,7 +286,7 @@ export function WidgetAuthProvider({
       sendToHost({ type: 'quackback:identify-result', success: true, user: result.user })
       sendToHost({ type: 'quackback:auth-change', user: result.user })
     },
-    [storeToken, queryClient]
+    [storeToken, queryClient, setHandoffAllowed]
   )
 
   // NOTE: there is deliberately no inline email-capture identify. A verified
@@ -382,7 +388,7 @@ export function WidgetAuthProvider({
       // Don't eagerly create anonymous session — it will be created lazily
       // on first write action (vote, comment, post) via ensureSessionThen.
       setUser(null)
-      setCanPortalHandoff(true)
+      setHandoffAllowed(true)
       setIdentityResolved(true)
       sendToHost({ type: 'quackback:identify-result', success: true, user: null })
       sendToHost({ type: 'quackback:auth-change', user: null })
@@ -427,7 +433,7 @@ export function WidgetAuthProvider({
             sessionVersionRef.current += 1
             setSessionVersion(sessionVersionRef.current)
             setUser(null)
-            setCanPortalHandoff(true)
+            setHandoffAllowed(true)
             setIdentityResolved(true)
             sendToHost({ type: 'quackback:identify-result', success: true, user: null })
             sendToHost({ type: 'quackback:auth-change', user: null })
@@ -453,7 +459,7 @@ export function WidgetAuthProvider({
     sendToHost({ type: 'quackback:ready' })
 
     return () => window.removeEventListener('message', handleMessage)
-  }, [storeToken, applyIdentifyResult])
+  }, [storeToken, applyIdentifyResult, setHandoffAllowed])
 
   const contextValue = useMemo(
     () => ({

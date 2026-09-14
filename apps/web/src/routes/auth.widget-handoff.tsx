@@ -35,8 +35,9 @@
  *     through this route cannot gain the widget grant.
  *   - identifyVerificationEnabled is also checked by the evaluator: email-capture
  *     widget sessions (HMAC not required) never reach the portal via this path.
- *   - Teammate identities never receive a portal cookie. Handoff redirects them
- *     to the portal sign-in landing unsigned so a dashboard login is not replaced.
+ *   - Teammate identities never receive a portal cookie. An existing dashboard
+ *     session is redirected to returnTo; otherwise handoff lands on portal
+ *     sign-in unsigned so a dashboard login is not replaced.
  */
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
@@ -259,19 +260,30 @@ const consumeWidgetHandoffFn = createServerFn({ method: 'POST' })
       return { kind: 'error', status: 'invalid' }
     }
 
-    // Teammates may identify in the widget as customers, but handoff must
-    // not install a portal cookie for them — that cookie would replace a
-    // dashboard login on this origin. Send them to the portal sign-in
-    // landing unsigned. Already-signed-in staff keep their dashboard
-    // session (the sign-in dialog is a no-op when authenticated).
-    if (await isHandoffPrincipalTeammate(userId)) {
+    // Never install a portal cookie over a dashboard login. Teammate OTTs
+    // (and a customer OTT while a dashboard cookie is present) skip the
+    // cookie. An already-authenticated dashboard session goes straight to
+    // returnTo so "View on board" lands on the post/article; unauthenticated
+    // teammate OTTs still hit the sign-in landing.
+    const { getSession } = await import('@/lib/server/auth/session')
+    const { toSessionScope } = await import('@/lib/shared/roles')
+    const existing = await getSession().catch(() => null)
+    const existingIsDashboard =
+      !!existing?.user && toSessionScope(existing.session.scope) === 'dashboard'
+    const isTeammate = await isHandoffPrincipalTeammate(userId)
+    if (isTeammate || existingIsDashboard) {
       await recordAuditEvent({
         event: 'portal.widget_handshake.invalid',
         outcome: 'failure',
         actor: { userId: userId as UserId },
         target: { type: 'session', id: sessionId },
-        metadata: { reason: 'teammate_identity' },
+        metadata: {
+          reason: isTeammate ? 'teammate_identity' : 'dashboard_session_present',
+        },
       })
+      if (existingIsDashboard) {
+        return { kind: 'redirect', to: returnTo }
+      }
       const landing = buildSigninRedirect(returnTo)
       return { kind: 'redirect', to: landing.to, search: landing.search }
     }

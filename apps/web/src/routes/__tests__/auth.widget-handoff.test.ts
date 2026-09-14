@@ -51,6 +51,12 @@ const mockWidgetIdentifiedFindFirst = vi.fn(async () => ({ hmacVerified: true })
 const mockPrincipalFindFirst = vi.fn(async (): Promise<{ role: string } | null> => ({
   role: 'user',
 }))
+const mockGetSession = vi.fn(
+  async (): Promise<{
+    user: { id: string }
+    session: { scope: string }
+  } | null> => null
+)
 vi.mock('@/lib/server/db', () => ({
   db: {
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
@@ -188,15 +194,23 @@ async function runHandoffLoader(search: string) {
   }
 
   const { isHandoffPrincipalTeammate } = await import('../auth.widget-handoff')
-  if (await isHandoffPrincipalTeammate(userId)) {
+  const existing = await mockGetSession()
+  const existingIsDashboard = !!existing?.user && existing.session.scope === 'dashboard'
+  const isTeammate = await isHandoffPrincipalTeammate(userId)
+  if (isTeammate || existingIsDashboard) {
     await recordAuditEvent({
       event: 'portal.widget_handshake.invalid',
       outcome: 'failure',
       // oxlint-disable-next-line @typescript-eslint/no-explicit-any
       actor: { userId: userId as any },
       target: { type: 'session', id: sessionId },
-      metadata: { reason: 'teammate_identity' },
+      metadata: {
+        reason: isTeammate ? 'teammate_identity' : 'dashboard_session_present',
+      },
     })
+    if (existingIsDashboard) {
+      return { status: 'redirect' as const, to: returnTo }
+    }
     const { buildSigninRedirect } = await import('@/lib/shared/auth-prompt')
     const landing = buildSigninRedirect(returnTo)
     return { status: 'redirect' as const, to: landing.to, search: landing.search }
@@ -468,6 +482,46 @@ describe('widget handoff loader — valid OTT', () => {
           event: 'portal.widget_handshake.invalid',
           outcome: 'failure',
           metadata: expect.objectContaining({ reason: 'teammate_identity' }),
+        })
+      )
+    })
+
+    it('sends an already-authenticated teammate to returnTo without replacing the cookie', async () => {
+      mockFetch.mockResolvedValue(makeOkResponse({ id: 'sess_admin', userId: 'user_admin' }))
+      mockPrincipalFindFirst.mockResolvedValueOnce({ role: 'admin' })
+      mockGetSession.mockResolvedValueOnce({
+        user: { id: 'user_admin' },
+        session: { scope: 'dashboard' },
+      })
+
+      const result = await runHandoffLoader('?ott=valid-token&returnTo=/posts/abc')
+
+      expect(result.status).toBe('redirect')
+      if (result.status === 'redirect') {
+        expect(result.to).toBe('/posts/abc')
+        expect(result.search).toBeUndefined()
+      }
+      expect(mockSetResponseHeader).not.toHaveBeenCalledWith('Set-Cookie', expect.anything())
+    })
+
+    it('does not replace a dashboard cookie with a customer OTT', async () => {
+      mockFetch.mockResolvedValue(makeOkResponse({ id: 'sess_customer', userId: 'user_customer' }))
+      mockPrincipalFindFirst.mockResolvedValueOnce({ role: 'user' })
+      mockGetSession.mockResolvedValueOnce({
+        user: { id: 'user_admin' },
+        session: { scope: 'dashboard' },
+      })
+
+      const result = await runHandoffLoader('?ott=valid-token&returnTo=/posts/abc')
+
+      expect(result.status).toBe('redirect')
+      if (result.status === 'redirect') {
+        expect(result.to).toBe('/posts/abc')
+      }
+      expect(mockSetResponseHeader).not.toHaveBeenCalledWith('Set-Cookie', expect.anything())
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({ reason: 'dashboard_session_present' }),
         })
       )
     })
