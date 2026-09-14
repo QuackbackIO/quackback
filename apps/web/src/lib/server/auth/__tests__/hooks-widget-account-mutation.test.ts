@@ -100,6 +100,19 @@ describe('handleWidgetAccountMutationGate', () => {
     ).resolves.toBeUndefined()
   })
 
+  it('rejects a widget Bearer on session-revocation routes', async () => {
+    await expect(
+      handleWidgetAccountMutationGate(
+        ctx({ path: '/revoke-sessions', token: 'widget-tok', scope: 'widget' })
+      )
+    ).rejects.toThrow(/Widget sessions/)
+    await expect(
+      handleWidgetAccountMutationGate(
+        ctx({ path: '/revoke-other-sessions', token: 'widget-tok', scope: 'widget' })
+      )
+    ).rejects.toThrow(/Widget sessions/)
+  })
+
   it('rejects a widget Bearer on OAuth account-link routes', async () => {
     await expect(
       handleWidgetAccountMutationGate(

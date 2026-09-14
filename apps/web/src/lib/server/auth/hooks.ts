@@ -419,6 +419,8 @@ const ACCOUNT_MUTATION_PATHS = new Set([
   '/email-otp/change-email',
   '/link-social',
   '/oauth2/link',
+  '/revoke-sessions',
+  '/revoke-other-sessions',
 ])
 
 type HeaderBag = { get(name: string): string | null }

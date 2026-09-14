@@ -226,6 +226,35 @@ describe('POST /api/widget/identify — teammate identities mint a widget sessio
     expect(mockInsert).toHaveBeenCalled()
   })
 
+  it('does not reuse a portal-scoped session for a teammate identify', async () => {
+    mockUserFindFirst.mockResolvedValue({
+      id: 'user_admin_sso',
+      email: 'sso@acme.com',
+      name: 'Dashboard Admin Name',
+      image: null,
+      imageKey: null,
+      metadata: null,
+      externalId: 'sso-user',
+    })
+    mockPrincipalFindFirst.mockResolvedValue({
+      id: 'principal_admin_sso',
+      role: 'admin',
+      type: 'user',
+    })
+    mockSessionFindFirst.mockResolvedValue({
+      id: 'sess_portal',
+      token: 'portal-token',
+      scope: 'portal',
+    })
+
+    const res = await postIdentify({ ssoToken: 'jwt.token.here' })
+
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { sessionToken?: string }
+    expect(body.sessionToken).not.toBe('portal-token')
+    expect(mockInsertValues).toHaveBeenCalledWith(expect.objectContaining({ scope: 'widget' }))
+  })
+
   it('does not overwrite a teammate dashboard profile from the host-app JWT', async () => {
     mockVerifyJWT.mockReturnValue({
       sub: 'sso-user',

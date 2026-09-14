@@ -106,17 +106,23 @@ export async function recordWidgetSessionProvenance(
 
 async function findOrCreateSession(
   userId: UserId,
-  request: Request
+  request: Request,
+  opts?: { teammate?: boolean }
 ): Promise<{ id: string; token: string }> {
+  // Teammates must not reuse a portal-scoped session from an earlier
+  // customer handoff — that token would pass widget-only mutation guards.
+  const scopeClause = opts?.teammate
+    ? eq(session.scope, 'widget')
+    : sql`${session.scope} in ('widget', 'portal')`
   const existingSession = await db.query.session.findFirst({
     where: and(
       eq(session.userId, userId),
       gt(session.expiresAt, new Date()),
-      sql`${session.scope} in ('widget', 'portal')`,
+      scopeClause,
       sql`exists (select 1 from widget_identified_session wis where wis.session_id = ${session.id} and wis.hmac_verified = true)`
     ),
   })
-  if (existingSession) {
+  if (existingSession && !(opts?.teammate && existingSession.scope !== 'widget')) {
     await db
       .update(session)
       .set({ updatedAt: new Date() })
@@ -403,7 +409,9 @@ export const Route = createFileRoute('/api/widget/identify')({
         // Find/create session and fetch voted posts in parallel
         // (voted posts include any merged anonymous votes)
         const [sessionInfo, votedPostIdSet] = await Promise.all([
-          findOrCreateSession(userId, request),
+          findOrCreateSession(userId, request, {
+            teammate: isTeamMember(principalRecord.role),
+          }),
           getAllUserVotedPostIds(principalId),
         ])
         const votedPostIds = Array.from(votedPostIdSet)
