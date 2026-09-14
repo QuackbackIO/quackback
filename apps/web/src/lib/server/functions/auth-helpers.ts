@@ -198,6 +198,13 @@ export async function requireAuth(options?: { permission?: PermissionKey }): Pro
 // vocabulary and its matcher still travel together for existing importers.
 export { isAuthDenialError } from './auth-errors'
 
+/** Cloud/admin lifecycle mutations: widget and portal sessions cannot act as owner. */
+export function assertDashboardScope(auth: Pick<AuthContext, 'scope'>): void {
+  if (auth.scope !== 'dashboard') {
+    throw new Error('Access denied: Requires a dashboard session')
+  }
+}
+
 /**
  * Assert the authenticated caller holds a permission, throwing the same
  * canonical message `requireAuth({ permission })` uses. For the rare gate

@@ -46,7 +46,12 @@ vi.mock('@/lib/server/domains/segments/segment-membership.service', () => ({
   segmentIdsForPrincipal: vi.fn(async () => new Set()),
 }))
 
-import { assertPermission, getOptionalAuth, requireAuth } from '../auth-helpers'
+import {
+  assertDashboardScope,
+  assertPermission,
+  getOptionalAuth,
+  requireAuth,
+} from '../auth-helpers'
 import { ensurePrincipalForUser } from '@/lib/server/domains/principals/principal.factory'
 import { sessionRole, toSessionScope } from '@/lib/shared/roles'
 
@@ -167,6 +172,17 @@ describe('toSessionScope', () => {
     expect(toSessionScope(undefined)).toBe('dashboard')
     expect(toSessionScope(null)).toBe('dashboard')
     expect(toSessionScope('future')).toBe('dashboard')
+  })
+})
+
+describe('assertDashboardScope', () => {
+  it('rejects widget and portal', () => {
+    expect(() => assertDashboardScope({ scope: 'widget' })).toThrow(/dashboard session/)
+    expect(() => assertDashboardScope({ scope: 'portal' })).toThrow(/dashboard session/)
+  })
+
+  it('allows dashboard', () => {
+    expect(() => assertDashboardScope({ scope: 'dashboard' })).not.toThrow()
   })
 })
 

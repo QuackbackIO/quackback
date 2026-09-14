@@ -419,7 +419,9 @@ const ACCOUNT_MUTATION_PATHS = new Set([
   '/email-otp/change-email',
 ])
 
-function sessionTokenFromAuthHeaders(headers: Headers | undefined): string | null {
+type HeaderBag = { get(name: string): string | null }
+
+function sessionTokenFromAuthHeaders(headers: HeaderBag | undefined): string | null {
   if (!headers) return null
   const authHeader = headers.get('authorization') ?? headers.get('Authorization')
   if (authHeader && authHeader.slice(0, 7).toLowerCase() === 'bearer ') {
@@ -450,11 +452,11 @@ function sessionTokenFromAuthHeaders(headers: Headers | undefined): string | nul
  */
 export async function handleWidgetAccountMutationGate(ctx: {
   path?: string
-  headers?: Headers
-  request?: { headers?: Headers }
+  headers?: HeaderBag
+  request?: { headers?: HeaderBag }
   context?: {
     internalAdapter?: {
-      findSession?: (token: string) => Promise<{ session?: { scope?: unknown } } | null>
+      findSession?: (token: string) => Promise<unknown>
     }
   }
 }): Promise<void> {
@@ -463,8 +465,12 @@ export async function handleWidgetAccountMutationGate(ctx: {
   const token = sessionTokenFromAuthHeaders(headers)
   if (!token) return
   const found = await ctx.context?.internalAdapter?.findSession?.(token)
-  if (!found?.session) return
-  if (toSessionScope(found.session.scope) === 'widget') {
+  const session =
+    found && typeof found === 'object' && found !== null && 'session' in found
+      ? (found as { session?: { scope?: unknown } }).session
+      : undefined
+  if (!session) return
+  if (toSessionScope(session.scope) === 'widget') {
     throw new APIError('FORBIDDEN', {
       message: 'Widget sessions cannot update this account',
     })
