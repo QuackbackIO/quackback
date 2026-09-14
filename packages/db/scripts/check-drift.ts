@@ -264,7 +264,7 @@ const EXEMPTIONS: { reason: string; pattern: RegExp; optional?: boolean }[] = [
     reason:
       'drizzle-kit composite PK column-order rewrite (PG 17 creation order vs alphabetical TS)',
     pattern:
-      /^ALTER TABLE "(?:status_incident_components|ticket_links|visitor_top_stats|ticket_conversations|changelog_entry_categories)" DROP CONSTRAINT "(?:status_incident_components_incident_id_component_id_pk|ticket_links_pkey|visitor_top_stats_pkey|ticket_conversations_pkey|changelog_entry_categories_pk)"/,
+      /^ALTER TABLE "(?:status_incident_components|ticket_links|visitor_top_stats|ticket_conversations|changelog_entry_categories|slack_thread_sessions|workspace_experiments)" DROP CONSTRAINT "(?:status_incident_components_incident_id_component_id_pk|ticket_links_pkey|visitor_top_stats_pkey|ticket_conversations_pkey|changelog_entry_categories_pk|slack_thread_sessions_pkey|workspace_experiments_pkey)"/,
     optional: true,
   },
   {

@@ -82,6 +82,7 @@ const FILTER_EVENT_TYPES: FilterEventOption[] = [
   { group: 'Portal', label: 'Invite sent', value: 'portal.invite.sent' },
   { group: 'Portal', label: 'Sign-in failed', value: 'auth.signin.failed' },
   { group: 'Portal', label: 'Visibility changed', value: 'portal.visibility.changed' },
+  { group: 'Labs', label: 'Experiment changed', value: 'labs.experiment.changed' },
   { group: 'Portal', label: 'Widget sign-in changed', value: 'portal.widget_signin.changed' },
   // Widget activity — separated because handshake events are high-volume on active workspaces.
   // portal.widget_handshake.consumed is flagged excludeByDefault for future multi-select support.

@@ -25,6 +25,7 @@ import {
   BuildingOfficeIcon,
   CreditCardIcon,
   GlobeAltIcon,
+  BeakerIcon,
 } from '@heroicons/react/24/solid'
 import { GitHubIcon } from '@/components/icons/integration-icons'
 import { cn } from '@/lib/shared/utils'
@@ -181,6 +182,7 @@ export function buildNavSections(
           icon: ShieldCheckIcon,
         },
         { label: 'Developers', to: '/admin/settings/developers', icon: CommandLineIcon },
+        { label: 'Labs', to: '/admin/settings/labs', icon: BeakerIcon },
         { label: 'Integrations', to: '/admin/settings/integrations', icon: PuzzlePieceIcon },
         ...(billingEnabled
           ? [{ label: 'Plan & billing', to: '/admin/settings/billing', icon: CreditCardIcon }]
