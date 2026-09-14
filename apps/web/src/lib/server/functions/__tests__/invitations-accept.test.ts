@@ -591,20 +591,19 @@ describe('setPasswordFn', () => {
     })
 
     await expect(setPasswordHandler({ data: { newPassword: 'password1' } })).rejects.toThrow(
-      /dashboard session/
+      /Widget sessions/
     )
     expect(hoisted.mockSetPassword).not.toHaveBeenCalled()
   })
 
-  it('rejects a portal-scoped session', async () => {
+  it('allows a portal-scoped session so handoff customers can set a password', async () => {
     hoisted.mockGetSession.mockResolvedValue({
       session: { id: 'sess_1', scope: 'portal' },
       user: SESSION_USER,
     })
 
-    await expect(setPasswordHandler({ data: { newPassword: 'password1' } })).rejects.toThrow(
-      /dashboard session/
-    )
-    expect(hoisted.mockSetPassword).not.toHaveBeenCalled()
+    const result = await setPasswordHandler({ data: { newPassword: 'password1' } })
+    expect(result).toEqual({ status: true })
+    expect(hoisted.mockSetPassword).toHaveBeenCalledOnce()
   })
 })

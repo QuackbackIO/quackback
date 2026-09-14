@@ -64,7 +64,7 @@ export const Route = createFileRoute('/api/user/profile')({
             log.warn('unauthorized profile update')
             return Response.json({ error: 'Unauthorized' }, { status: 401 })
           }
-          if (toSessionScope(session.session.scope) !== 'dashboard') {
+          if (toSessionScope(session.session.scope) === 'widget') {
             return Response.json({ error: 'Forbidden' }, { status: 403 })
           }
 
@@ -131,7 +131,7 @@ export const Route = createFileRoute('/api/user/profile')({
             log.warn('unauthorized avatar delete')
             return Response.json({ error: 'Unauthorized' }, { status: 401 })
           }
-          if (toSessionScope(session.session.scope) !== 'dashboard') {
+          if (toSessionScope(session.session.scope) === 'widget') {
             return Response.json({ error: 'Forbidden' }, { status: 403 })
           }
 

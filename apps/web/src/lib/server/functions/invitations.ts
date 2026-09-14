@@ -349,8 +349,10 @@ export const setPasswordFn = createServerFn({ method: 'POST' })
     if (!session?.user) {
       throw new Error('Not authenticated')
     }
-    if (toSessionScope(session.session.scope) !== 'dashboard') {
-      throw new Error('Access denied: Requires a dashboard session')
+    // Portal-scoped customers (widget handoff) still need PasswordForm;
+    // only a widget Bearer — including a teammate identify — is refused.
+    if (toSessionScope(session.session.scope) === 'widget') {
+      throw new Error('Access denied: Widget sessions cannot update this account')
     }
     const headers = getRequestHeaders()
     const { auth } = await import('@/lib/server/auth')

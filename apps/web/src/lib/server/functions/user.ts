@@ -180,26 +180,29 @@ export const getProfileFn = createServerFn({ method: 'GET' }).handler(
   }
 )
 
-function requireDashboardSession(session: Awaited<ReturnType<typeof getSession>>) {
+/** Account mutations: dashboard and portal (widget-handoff customers) are
+ *  allowed; a widget Bearer — including a teammate who identified as a
+ *  customer — is not. */
+function requireNonWidgetSession(session: Awaited<ReturnType<typeof getSession>>) {
   if (!session?.user) {
     throw new Error('Authentication required')
   }
-  if (toSessionScope(session.session.scope) !== 'dashboard') {
-    throw new Error('Access denied: Requires a dashboard session')
+  if (toSessionScope(session.session.scope) === 'widget') {
+    throw new Error('Access denied: Widget sessions cannot update this account')
   }
   return session
 }
 
 /**
  * Update current user's display name.
- * Dashboard-scoped only — a widget Bearer for a teammate must not rename
- * the shared dashboard account.
+ * Widget Bearers cannot rename a shared teammate row; portal-scoped
+ * customers after widget handoff still can.
  */
 export const updateProfileNameFn = createServerFn({ method: 'POST' })
   .validator(updateProfileNameSchema)
   .handler(async ({ data }: { data: UpdateProfileNameInput }): Promise<UserProfile> => {
     log.debug('update profile name')
-    const session = requireDashboardSession(await getSession())
+    const session = requireNonWidgetSession(await getSession())
     const { name } = data
 
     const [updated] = await db
@@ -218,12 +221,12 @@ export const updateProfileNameFn = createServerFn({ method: 'POST' })
 
 /**
  * Remove custom avatar.
- * Dashboard-scoped only — a widget Bearer must not clear a teammate avatar.
+ * Widget Bearers cannot clear a teammate avatar; portal-scoped customers can.
  */
 export const removeAvatarFn = createServerFn({ method: 'POST' }).handler(
   async (): Promise<UserProfile> => {
     log.debug('remove avatar')
-    const session = requireDashboardSession(await getSession())
+    const session = requireNonWidgetSession(await getSession())
 
     await deleteExistingAvatar(session.user.id)
 
@@ -250,7 +253,7 @@ export const saveAvatarKeyFn = createServerFn({ method: 'POST' })
   .validator(saveAvatarKeySchema)
   .handler(async ({ data }: { data: z.infer<typeof saveAvatarKeySchema> }) => {
     log.debug('save avatar key')
-    const session = requireDashboardSession(await getSession())
+    const session = requireNonWidgetSession(await getSession())
 
     await deleteExistingAvatar(session.user.id)
 
@@ -307,7 +310,11 @@ export const updateNotificationPreferencesFn = createServerFn({ method: 'POST' }
       data: UpdateNotificationPreferencesInput
     }): Promise<NotificationPreferences> => {
       log.debug('update notification preferences')
-      const principalId = await requirePrincipalId()
+      const ctx = await requireAuth()
+      if (ctx.scope === 'widget') {
+        throw new Error('Access denied: Widget sessions cannot update this account')
+      }
+      const principalId = ctx.principal.id
       const { emailStatusChange, emailNewComment, emailMuted, matrix } = data
 
       const updates: {
