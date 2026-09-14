@@ -81,7 +81,7 @@ function GeneralSettingsPage() {
     },
     onError: (error, _update, context) => {
       if (context?.previous) setLocalFlags(context.previous)
-      toast.error(error instanceof Error ? error.message : "Couldn't update product. Try again.")
+      toast.error(error instanceof Error ? error.message : "Couldn't update module. Try again.")
     },
   })
 
@@ -124,7 +124,7 @@ function GeneralSettingsPage() {
       <PageHeader
         icon={Cog6ToothIcon}
         title="General"
-        description="Workspace identity and products"
+        description="Workspace identity and modules"
       />
 
       <WorkspaceIdentityCard
@@ -136,8 +136,8 @@ function GeneralSettingsPage() {
       />
 
       <SettingsCard
-        title="Products"
-        description="Choose the Quackback products available to your team and customers"
+        title="Modules"
+        description="Choose the Quackback modules available to your team and customers"
       >
         <div className="divide-y divide-border/50">
           {PRODUCT_DEFINITIONS.map((product) => {

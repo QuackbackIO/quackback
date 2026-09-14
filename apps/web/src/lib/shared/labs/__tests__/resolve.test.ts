@@ -92,8 +92,8 @@ describe('projectVisibleExperiments', () => {
     expect(cards).toEqual([
       {
         id: REFINED_VISUAL_THEME_ID,
-        title: 'Refined interface',
-        description: 'A quieter interface with refined spacing, solid icons, and simpler surfaces.',
+        title: 'Refreshed UI',
+        description: 'A quieter look with tighter spacing, solid icons, and simpler surfaces.',
         enabled: false,
       },
     ])

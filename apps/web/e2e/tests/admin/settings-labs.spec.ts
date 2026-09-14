@@ -9,7 +9,7 @@ test.describe('Admin Labs Settings', () => {
 
     await expect(page.getByRole('heading', { name: 'Labs' })).toBeVisible({ timeout: 10000 })
     await expect(page.getByText('No experiments are available right now.')).toBeVisible()
-    await expect(page.getByText('Refined interface')).toHaveCount(0)
+    await expect(page.getByText('Refreshed UI')).toHaveCount(0)
     await expect(page.locator('html')).not.toHaveAttribute('data-visual-theme', 'refined')
   })
 })

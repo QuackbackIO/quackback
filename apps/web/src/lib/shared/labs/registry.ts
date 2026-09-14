@@ -7,8 +7,8 @@ import type { LabsExperimentDefinition } from './types'
 export const LABS_REGISTRY = [
   {
     id: 'refined-visual-theme',
-    title: 'Refined interface',
-    description: 'A quieter interface with refined spacing, solid icons, and simpler surfaces.',
+    title: 'Refreshed UI',
+    description: 'A quieter look with tighter spacing, solid icons, and simpler surfaces.',
     scope: 'workspace',
   },
 ] as const satisfies readonly LabsExperimentDefinition[]

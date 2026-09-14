@@ -29,7 +29,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { Route } from '@/routes/admin/status'
 import { useCreateStatusIncident } from '@/lib/client/mutations/status'
 import {
   AffectedComponentsField,
@@ -40,13 +39,22 @@ import {
 import { deriveImpact } from '@/lib/shared/status-calc'
 import { IMPACT_LABELS, type StatusIncidentImpact } from './status-admin-colors'
 
-export function ReportIncidentDialog({ variant = 'default' }: { variant?: 'default' | 'outline' }) {
-  const [open, setOpen] = useState(false)
+export function ReportIncidentDialog({
+  variant = 'default',
+  open: openProp,
+  onOpenChange,
+}: {
+  variant?: 'default' | 'outline'
+  /** Controlled open state. When provided, the built-in trigger button is hidden. */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+}) {
+  const [internalOpen, setInternalOpen] = useState(false)
+  const isControlled = openProp !== undefined
+  const open = isControlled ? openProp : internalOpen
   const [backfill, setBackfill] = useState(false)
-  const navigate = useNavigate({ from: Route.fullPath })
-  const search = Route.useSearch()
+  const navigate = useNavigate()
   const createMutation = useCreateStatusIncident()
-
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
   const [affected, setAffected] = useState<AffectedRow[]>([])
@@ -60,6 +68,14 @@ export function ReportIncidentDialog({ variant = 'default' }: { variant?: 'defau
   const [notify, setNotify] = useState(true)
   const [backfillStart, setBackfillStart] = useState<Date | undefined>(undefined)
   const [backfillEnd, setBackfillEnd] = useState<Date | undefined>(undefined)
+
+  function setOpen(next: boolean) {
+    if (isControlled) {
+      onOpenChange?.(next)
+    } else {
+      setInternalOpen(next)
+    }
+  }
 
   function reset() {
     setBackfill(false)
@@ -105,7 +121,7 @@ export function ReportIncidentDialog({ variant = 'default' }: { variant?: 'defau
       reset()
       void navigate({
         to: '/admin/status',
-        search: { ...search, view: 'open', incident: created.id },
+        search: { view: 'open', incident: created.id },
       })
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to report incident')
@@ -120,12 +136,14 @@ export function ReportIncidentDialog({ variant = 'default' }: { variant?: 'defau
         if (!o) reset()
       }}
     >
-      <DialogTrigger asChild>
-        <Button size="sm" variant={variant}>
-          <PlusIcon className="h-4 w-4 mr-1.5" />
-          Report incident
-        </Button>
-      </DialogTrigger>
+      {!isControlled && (
+        <DialogTrigger asChild>
+          <Button size="sm" variant={variant}>
+            <PlusIcon className="h-4 w-4 mr-1.5" />
+            Report incident
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{backfill ? 'Log a past incident' : 'Report an incident'}</DialogTitle>

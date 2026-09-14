@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { PageHeader } from '@/components/shared/page-header'
 import { FilterSection } from '@/components/shared/filter-section'
+import { MENU_ICON, MENU_ROW } from '@/components/ui/menu'
 import {
   Dialog,
   DialogContent,
@@ -114,7 +115,10 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
   }
 
   return (
-    <aside className="w-64 xl:w-72 shrink-0 flex flex-col border-r border-border/50 bg-card/30 overflow-hidden">
+    <aside
+      data-side-pane=""
+      className="w-64 xl:w-72 shrink-0 flex flex-col border-r border-border/50 bg-card/30 overflow-hidden"
+    >
       <div className="shrink-0 px-4 py-3.5">
         <PageHeader icon={MapIcon} title="Roadmap" />
       </div>
@@ -126,7 +130,6 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
         <div className="px-5 pb-5">
           <FilterSection
             title="Roadmaps"
-            collapsible={false}
             action={
               <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
                 <DialogTrigger asChild>
@@ -174,8 +177,10 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
                 {roadmaps?.map((roadmap) => (
                   <div
                     key={roadmap.id}
+                    data-active={selectedRoadmapId === roadmap.id || undefined}
                     className={cn(
-                      'group flex items-center gap-2 px-2.5 py-1.5 rounded-md cursor-pointer font-normal transition-colors',
+                      MENU_ROW,
+                      'group w-full cursor-pointer',
                       selectedRoadmapId === roadmap.id
                         ? 'bg-muted text-foreground font-medium'
                         : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
@@ -184,11 +189,11 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
                   >
                     <MapIcon
                       className={cn(
-                        'size-4 shrink-0',
+                        MENU_ICON,
                         selectedRoadmapId === roadmap.id ? 'text-primary' : ''
                       )}
                     />
-                    <span className="flex-1 text-[13px] truncate">{roadmap.name}</span>
+                    <span className="flex-1 truncate">{roadmap.name}</span>
                     {roadmap.visibility !== 'public' && (
                       <LockClosedIcon className="h-3 w-3 text-muted-foreground/60 shrink-0" />
                     )}

@@ -98,6 +98,7 @@ export function CheckoutBuilder(props: {
           <div
             role="radiogroup"
             aria-label="Plan"
+            data-settings-card=""
             className="divide-y divide-border/50 overflow-hidden rounded-xl border border-border/50 bg-card"
           >
             {freePlan && freeAction ? <FreePlanRow plan={freePlan} action={freeAction} /> : null}
@@ -321,6 +322,7 @@ function BrandingAddOnRow(props: {
   const boxId = useId()
   return (
     <div
+      data-settings-card=""
       className={cn(
         'flex items-center justify-between gap-3 rounded-xl border border-border/50 bg-card px-4 py-3',
         selectable && 'cursor-pointer',
@@ -383,7 +385,10 @@ function OrderSummary(props: {
 
   return (
     <aside className="lg:sticky lg:top-6">
-      <div className="overflow-hidden rounded-xl border border-border/50 bg-card">
+      <div
+        data-settings-card=""
+        className="overflow-hidden rounded-xl border border-border/50 bg-card"
+      >
         <div className="border-b border-border/50 px-5 py-4">
           <h2 className="text-sm font-semibold">Order summary</h2>
         </div>

@@ -134,19 +134,21 @@ describe('AdminSidebar — workspace switcher', () => {
   })
 })
 
-describe('AdminSidebar — Getting Started placement', () => {
+describe('AdminSidebar — Home logo', () => {
   afterEach(() => cleanup())
 
-  it('puts the rocket first in the main list for an admin with launch work left', () => {
-    renderSidebar('admin')
-    const nav = document.querySelector('aside nav')
-    const first = nav?.querySelector('a')
-    expect(first?.getAttribute('href')).toBe('/admin/getting-started')
+  it('sends the org logo to Overview', () => {
+    const { container } = renderSidebar('admin')
+    expect(container.querySelector('aside a[href="/admin"]')).toBeTruthy()
+    expect(container.querySelectorAll('a[href="/admin/getting-started"]').length).toBe(0)
   })
 
-  it('hides Getting Started from non-admin team members', () => {
-    const { container } = renderSidebar('member')
-    expect(container.querySelectorAll('a[href="/admin/getting-started"]').length).toBe(0)
+  it('does not add a Getting Started rocket for admins or members', () => {
+    const admin = renderSidebar('admin')
+    expect(admin.container.querySelectorAll('a[href="/admin/getting-started"]').length).toBe(0)
+    cleanup()
+    const member = renderSidebar('member')
+    expect(member.container.querySelectorAll('a[href="/admin/getting-started"]').length).toBe(0)
   })
 })
 
@@ -161,6 +163,43 @@ describe('AdminSidebar — settings cog visibility', () => {
   it('hides the settings cog from non-admin team members', () => {
     const { container } = renderSidebar('member')
     expect(container.querySelectorAll('a[href="/admin/settings"]').length).toBe(0)
+  })
+})
+
+describe('AdminSidebar — refined labeled rail', () => {
+  afterEach(() => cleanup())
+
+  it('keeps the legacy rail icon-only when the experiment is off', () => {
+    const { container } = renderSidebar('admin')
+    expect(container.querySelector('[data-admin-rail][data-labeled]')).toBeNull()
+    expect(container.querySelector('[data-admin-rail-item][data-labeled]')).toBeNull()
+    expect(container.querySelector('aside')?.className).toContain('w-14')
+  })
+
+  it('shows full menu labels when the refined theme is on', () => {
+    mockRole.current = 'admin'
+    mockGetRouteContext.mockReturnValue({
+      session: { user: { name: 'Test', email: 'test@example.com', image: null } },
+      settings: { featureFlags: {}, visualTheme: 'refined' },
+      visualTheme: 'refined',
+      userRole: 'admin',
+      billingEnabled: false,
+    })
+    const { container } = render(
+      <IntlProvider locale="en" messages={{}}>
+        <TooltipProvider>
+          <AdminSidebar />
+        </TooltipProvider>
+      </IntlProvider>
+    )
+    expect(container.querySelector('[data-admin-rail][data-labeled]')).toBeTruthy()
+    expect(
+      container.querySelectorAll('[data-admin-rail-item][data-labeled]').length
+    ).toBeGreaterThan(0)
+    expect(container.querySelector('aside a[href="/admin/settings"]')?.textContent).toContain(
+      'Settings'
+    )
+    expect(container.querySelector('aside')?.className).toContain('w-56')
   })
 })
 

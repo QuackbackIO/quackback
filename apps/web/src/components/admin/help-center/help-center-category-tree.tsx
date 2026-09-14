@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { ChevronRightIcon } from '@heroicons/react/20/solid'
 import { CategoryIcon } from '@/components/help-center/category-icon'
 import { PlusIcon, PencilIcon, TrashIcon, FolderPlusIcon } from '@heroicons/react/16/solid'
+import { MENU_ROW } from '@/components/ui/menu'
 import { cn } from '@/lib/shared/utils'
 import { buildAncestorChain, MAX_CATEGORY_DEPTH } from '@/lib/shared/help-center-tree'
 import type { KbCategoryId } from '@quackback/ids'
@@ -130,7 +131,10 @@ export function HelpCenterCategoryTree({
       <button
         type="button"
         onClick={() => actions.onNew(null)}
-        className="mt-1 w-full flex items-center gap-1.5 px-2 h-7 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+        className={cn(
+          MENU_ROW,
+          'mt-1 w-full text-muted-foreground hover:text-foreground hover:bg-muted/50'
+        )}
       >
         <PlusIcon className="h-3 w-3 shrink-0" />
         New category
@@ -172,8 +176,10 @@ function TreeRow({
       aria-level={depth + 1}
       aria-expanded={hasChildren ? isExpanded : undefined}
       aria-selected={isSelected}
+      data-active={isSelected || undefined}
       className={cn(
-        'group relative flex items-center h-7 rounded-md text-xs transition-colors',
+        MENU_ROW,
+        'group relative w-full',
         isSelected
           ? 'bg-muted text-foreground font-medium'
           : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
@@ -203,7 +209,7 @@ function TreeRow({
         <span className="truncate">{category.name}</span>
       </button>
       <span
-        className="shrink-0 tabular-nums text-xs text-muted-foreground pr-2 group-hover:opacity-0 transition-opacity"
+        className="shrink-0 tabular-nums text-[11px] text-muted-foreground pr-2 group-hover:opacity-0 transition-opacity"
         title={
           category.articleCount === category.recursiveArticleCount
             ? `${category.articleCount} article${category.articleCount === 1 ? '' : 's'}`

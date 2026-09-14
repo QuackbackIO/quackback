@@ -10,7 +10,7 @@
 
 /** A menu / dropdown / filter / nav row (icon + label). Callers append active colors + `font-medium`. */
 export const MENU_ROW =
-  'flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] font-normal transition-colors'
+  'nav-row flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] font-normal transition-colors'
 
 /** Leading icon paired with a MENU_ROW. */
 export const MENU_ICON = 'size-4 shrink-0'
@@ -19,4 +19,5 @@ export const MENU_ICON = 'size-4 shrink-0'
 export const MENU_AFFORDANCE = 'size-3.5 shrink-0'
 
 /** A section subheading / eyebrow label in a menu or filter pane. */
-export const MENU_LABEL = 'text-[11px] font-semibold uppercase tracking-wider text-muted-foreground'
+export const MENU_LABEL =
+  'nav-section text-[11px] font-semibold uppercase tracking-wider text-muted-foreground'

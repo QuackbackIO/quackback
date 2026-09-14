@@ -22,6 +22,7 @@ export function PageHeader({
 }: PageHeaderProps) {
   return (
     <div
+      data-page-header=""
       className={cn(
         'flex items-start justify-between gap-4',
         animate && 'animate-in fade-in duration-200 fill-mode-backwards motion-reduce:animate-none',
@@ -30,7 +31,10 @@ export function PageHeader({
     >
       <div className="flex items-center gap-2.5">
         {Icon && (
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+          <div
+            data-page-header-icon=""
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10"
+          >
             <Icon className="h-4 w-4 text-primary" />
           </div>
         )}

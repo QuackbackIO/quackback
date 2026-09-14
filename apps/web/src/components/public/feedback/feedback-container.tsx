@@ -30,6 +30,7 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { useApprovePost, useRejectPost } from '@/lib/client/mutations/moderation'
 import type { PublicPostListItem } from '@/lib/shared/types'
 import { cn } from '@/lib/shared/utils'
+import { useRefinedTheme } from '@/lib/client/hooks/use-visual-theme'
 import type { PostId, PostStatusId } from '@quackback/ids'
 
 interface FeedbackContainerProps {
@@ -74,6 +75,7 @@ export function FeedbackContainer({
   showPoweredBy = true,
 }: FeedbackContainerProps): React.ReactElement {
   const intl = useIntl()
+  const refined = useRefinedTheme()
   const router = useRouter()
   const { session } = useRouteContext({ from: '__root__' })
   const { filters, setFilters, clearFilters, activeFilterCount } = usePublicFilters()
@@ -325,7 +327,7 @@ export function FeedbackContainer({
   return (
     <div className="py-6">
       <div className="flex gap-8">
-        <div className="flex-1 min-w-0">
+        <div data-feed="" className="flex-1 min-w-0">
           <FeedbackHeader
             workspaceName={workspaceName}
             boards={boards}
@@ -400,14 +402,18 @@ export function FeedbackContainer({
                 <div
                   key={listKey}
                   className={cn(
-                    'space-y-3 transition-opacity duration-150',
+                    'transition-opacity duration-150',
+                    refined ? 'divide-y divide-border' : 'space-y-3',
                     isLoading && 'opacity-60'
                   )}
                 >
                   {posts.map((post, index) => (
                     <div
                       key={post.id}
-                      className="bg-card border border-border/40 rounded-lg overflow-hidden animate-in fade-in duration-200 fill-mode-backwards"
+                      className={cn(
+                        'animate-in fade-in duration-200 fill-mode-backwards',
+                        !refined && 'bg-card border border-border/40 rounded-lg overflow-hidden'
+                      )}
                       style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
                     >
                       <PostCard

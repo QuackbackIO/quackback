@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { expandTheme, REFINED_DARK_BASE, REFINED_LIGHT_BASE } from '../expand'
+import { computeAccentInk, expandTheme, REFINED_DARK_BASE, REFINED_LIGHT_BASE } from '../expand'
 import { generateThemeCSS, generateWorkspaceThemeCSS } from '../generator'
 import type { ThemeConfig } from '../types'
 
@@ -9,6 +9,16 @@ function readVar(css: string, selector: string, name: string): string | undefine
   const match = block.match(new RegExp(`${name}:\\s*([^;]+)`))
   return match?.[1]?.trim()
 }
+
+describe('computeAccentInk', () => {
+  it('steps default gold down in lightness only, keeping chroma and hue', () => {
+    expect(computeAccentInk('oklch(0.886 0.176 86)', 'light')).toBe('oklch(0.720 0.176 86)')
+  })
+
+  it('leaves dark-mode gold unchanged', () => {
+    expect(computeAccentInk('oklch(0.886 0.176 86)', 'dark')).toBe('oklch(0.886 0.176 86)')
+  })
+})
 
 describe('refined theme baseline', () => {
   it('keeps unparameterized generateThemeCSS on the legacy contract', () => {

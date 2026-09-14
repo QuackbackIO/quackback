@@ -139,7 +139,10 @@ export function StatusIncidentList({ kind, state, emptyMessage }: StatusIncident
           />
         ) : (
           <div className="p-3">
-            <div className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50">
+            <div
+              data-continuous-list=""
+              className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50"
+            >
               {items.map((incident) => (
                 <StatusIncidentRow
                   key={incident.id}

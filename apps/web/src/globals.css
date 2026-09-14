@@ -49,16 +49,18 @@
     --secondary: oklch(0.97 0 0);
     --secondary-foreground: oklch(0.145 0 0);
     --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
+    --muted-foreground: oklch(0.45 0 0);
     --accent: oklch(0.97 0 0);
     --accent-foreground: oklch(0.145 0 0);
+    /* Same gold as --primary, one step darker so type/icons stay yellow on white. */
+    --accent-ink: oklch(0.72 0.176 86);
     --destructive: oklch(0.577 0.245 27);
     --destructive-foreground: oklch(0.577 0.245 27);
-    --success: oklch(0.696 0.149 163);
+    --success: oklch(0.62 0.149 163);
     --success-foreground: oklch(0.985 0 0);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.886 0.176 86);
+    --border: oklch(0.87 0 0);
+    --input: oklch(0.87 0 0);
+    --ring: var(--accent-ink);
     --chart-1: oklch(0.646 0.222 41);
     --chart-2: oklch(0.6 0.118 184);
     --chart-3: oklch(0.398 0.07 227);
@@ -78,12 +80,12 @@
     --metric-ticket-form: oklch(0.6 0.14 45);
     --sidebar: oklch(0.985 0 0);
     --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.886 0.176 86);
+    --sidebar-primary: var(--accent-ink);
     --sidebar-primary-foreground: oklch(0.145 0 0);
     --sidebar-accent: oklch(0.97 0 0);
     --sidebar-accent-foreground: oklch(0.145 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.886 0.176 86);
+    --sidebar-border: oklch(0.87 0 0);
+    --sidebar-ring: var(--accent-ink);
     --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
     --font-serif: ui-serif, Georgia, Cambria, serif;
     --font-mono: ui-monospace, SFMono-Regular, monospace;
@@ -104,7 +106,7 @@
     --header-border: var(--border);
     --post-card-background: var(--card);
     --post-card-border: var(--border);
-    --post-card-voted-color: var(--primary);
+    --post-card-voted-color: var(--accent-ink);
     --nav-active-background: var(--muted);
     --nav-active-foreground: var(--foreground);
     --nav-inactive-color: var(--muted-foreground);
@@ -128,8 +130,10 @@
     --muted-foreground: oklch(0.708 0 0);
     --accent: oklch(0.269 0 0);
     --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.396 0.141 25);
-    --destructive-foreground: oklch(0.637 0.237 25);
+    /* Same hue as light destructive; lifted to sit next to --success on near-black. */
+    --destructive: oklch(0.70 0.19 25);
+    --destructive-foreground: oklch(0.145 0 0);
+    --accent-ink: oklch(0.886 0.176 86);
     --success: oklch(0.696 0.149 163);
     --success-foreground: oklch(0.985 0 0);
     --border: oklch(0.269 0 0);
@@ -199,6 +203,7 @@
     --color-muted-foreground: var(--muted-foreground);
     --color-accent: var(--accent);
     --color-accent-foreground: var(--accent-foreground);
+    --color-accent-ink: var(--accent-ink);
     --color-destructive: var(--destructive);
     --color-destructive-foreground: var(--destructive-foreground);
     --color-success: var(--success);
@@ -315,6 +320,23 @@
   }
   100% {
     background-color: transparent;
+  }
+}
+
+/* Light: --primary is the fill gold. Type, icons, and carets use --accent-ink
+   so yellow never sits on white at ~1.5:1. Dark keeps gold as ink. */
+@layer utilities {
+  html:not(.dark) .text-primary {
+    color: var(--accent-ink);
+  }
+  html:not(.dark) .fill-primary {
+    fill: var(--accent-ink);
+  }
+  html:not(.dark) .stroke-primary {
+    stroke: var(--accent-ink);
+  }
+  html:not(.dark) .caret-primary {
+    caret-color: var(--accent-ink);
   }
 }
 

@@ -12,7 +12,7 @@ export function ComingSoonIntegration({ catalog }: ComingSoonIntegrationProps) {
       <IntegrationHeader catalog={catalog} />
 
       {capabilities.length > 0 && (
-        <div className="rounded-xl border border-border/40 bg-card p-5">
+        <div data-settings-card="" className="rounded-xl border border-border/40 bg-card p-5">
           <h3 className="text-sm font-medium text-foreground mb-3">
             What this integration will do
           </h3>

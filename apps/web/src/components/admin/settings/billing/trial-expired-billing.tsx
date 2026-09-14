@@ -66,7 +66,10 @@ export function TrialExpiredBilling(props: {
             </p>
           ) : null}
 
-          <div className="overflow-hidden rounded-xl border border-border/50 bg-card">
+          <div
+            data-settings-card=""
+            className="overflow-hidden rounded-xl border border-border/50 bg-card"
+          >
             {plans.map((plan) => {
               const action = billingPlanAction(plan.id, overview, trialedPlanIds)
               const isCurrent = overview.trialPlanId
@@ -130,7 +133,7 @@ export function TrialExpiredBilling(props: {
           <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             2 Payment
           </p>
-          <div className="rounded-xl border border-border/50 bg-card p-5">
+          <div data-settings-card="" className="rounded-xl border border-border/50 bg-card p-5">
             <h3 className="text-sm font-semibold">Order summary</h3>
             {paidSelected ? (
               <OrderSummary plan={paidSelected} period={period} />

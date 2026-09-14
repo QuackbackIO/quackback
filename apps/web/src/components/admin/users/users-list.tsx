@@ -97,7 +97,10 @@ function useShowCountryColumn(): [boolean, (next: boolean) => void] {
 function UserListSkeleton() {
   return (
     <div className="p-3">
-      <div className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50">
+      <div
+        data-continuous-list=""
+        className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50"
+      >
         {Array.from({ length: 8 }).map((_, i) => (
           <div key={i} className="flex items-center gap-3 px-3 py-2">
             <Skeleton className="h-8 w-8 rounded-full shrink-0" />
@@ -396,7 +399,10 @@ export function UsersList({
 
       {/* User List */}
       <div className="p-3">
-        <div className="rounded-xl overflow-hidden shadow-sm bg-card border border-border/50">
+        <div
+          data-continuous-list=""
+          className="rounded-xl overflow-hidden shadow-sm bg-card border border-border/50"
+        >
           {/* Column headers — kept in sync with each row's avatar
               spacer and the column-width constants in `user-card.tsx` so every
               label lands directly above the field it describes, giving the

@@ -14,17 +14,23 @@ export interface TabStripItem {
 
 interface TabStripProps {
   tabs: TabStripItem[]
+  className?: string
 }
 
-export function TabStrip({ tabs }: TabStripProps) {
+export function TabStrip({ tabs, className }: TabStripProps) {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
 
   return (
-    <div className="flex items-center gap-1 border-b border-border/50 px-4">
+    <div
+      className={cn(
+        'flex items-center gap-1 overflow-x-auto border-b border-border/50 px-6',
+        className
+      )}
+    >
       {tabs.map((tab) => {
         const isActive = tab.exact
           ? pathname === tab.to || pathname === tab.to + '/'
-          : pathname.startsWith(tab.to)
+          : pathname === tab.to || pathname.startsWith(`${tab.to}/`)
         const Icon = tab.icon
 
         return (

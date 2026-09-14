@@ -30,7 +30,10 @@ export function AdminFilterLayout({
   return (
     <div className="flex h-full">
       {/* Filters - Desktop */}
-      <aside className="hidden lg:flex w-64 xl:w-72 shrink-0 flex-col border-r border-border/50 bg-card/30 overflow-hidden">
+      <aside
+        data-side-pane=""
+        className="hidden lg:flex w-64 xl:w-72 shrink-0 flex-col border-r border-border/50 bg-card/30 overflow-hidden"
+      >
         {headerTitle ? (
           <>
             <div className="shrink-0 px-4 py-3.5">

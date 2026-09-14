@@ -29,6 +29,7 @@ function Tabs({
     <TabsVariantContext.Provider value={variant}>
       <TabsPrimitive.Root
         data-slot="tabs"
+        data-variant={variant}
         className={cn('flex flex-col gap-2', className)}
         {...props}
       />

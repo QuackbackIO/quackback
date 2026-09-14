@@ -19,6 +19,7 @@ export function SettingsCard({
 }: SettingsCardProps): React.ReactElement {
   return (
     <section
+      data-settings-card=""
       className={cn(
         'rounded-xl border bg-card shadow-sm overflow-hidden',
         variant === 'danger' ? 'border-destructive/20' : 'border-border/50'

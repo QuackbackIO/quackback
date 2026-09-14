@@ -1,4 +1,5 @@
 import type { SetupState } from '@/lib/shared/db-types'
+import { friendlyPlatformLabel } from '@/lib/shared/platform-label'
 import { isAdmin } from '@/lib/shared/roles'
 
 interface OnboardingStateInput {
@@ -11,6 +12,9 @@ interface OnboardingStateInput {
   setupOpenToClaim?: boolean | null
   setupState: SetupState | null
   principalRecord: { id: string; role: string } | null
+  /** Cloud platform hostname, used to skip the in-product name/URL form
+   *  once a friendly label already exists. */
+  platformHostname?: string | null
 }
 
 interface PickStepInput {
@@ -21,7 +25,7 @@ interface PickStepInput {
 /** Step targets the onboarding flow can route to. Pure string union so
  *  the loader can swap between server-fn redirects and tests can assert. */
 export type OnboardingStep =
-  | '/admin/getting-started'
+  | '/admin'
   | '/onboarding/account'
   | '/onboarding/complete'
   | '/onboarding/no-access'
@@ -99,14 +103,12 @@ export function pickOnboardingStep({ session, state }: PickStepInput): Onboardin
   // an external pre-seed populated workspace without picking a use
   // case.
   if (state.setupOpenToClaim === false) {
-    if (!state.setupState?.workspaceDetailsSeenAt) return '/onboarding/workspace'
-    // A provision stamp may pre-fill a goal. The owner still chooses one.
-    if (!state.setupState.useCase || state.setupState.steps.startingPoint?.source === 'managed') {
-      return '/onboarding/usecase'
+    const hasFriendlyHost = Boolean(friendlyPlatformLabel(state.platformHostname))
+    if (!state.setupState?.workspaceDetailsSeenAt && !hasFriendlyHost) {
+      return '/onboarding/workspace'
     }
-  } else if (!state.setupState?.useCase || !state.setupState.steps.workspace) {
+  } else if (!state.setupState?.steps.workspace) {
     return '/onboarding/workspace'
   }
-  if (!state.setupState.activationHandoffSeenAt) return '/onboarding/complete'
-  return '/admin/getting-started'
+  return '/admin'
 }

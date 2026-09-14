@@ -17,6 +17,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { PageHeader } from '@/components/shared/page-header'
 import { FilterSection } from '@/components/shared/filter-section'
+import { MENU_ICON, MENU_ROW } from '@/components/ui/menu'
 import { cn } from '@/lib/shared/utils'
 import { ChartBarIcon, FunnelIcon, CalendarDaysIcon } from '@heroicons/react/24/solid'
 import { CHART_HEIGHT_CLASS, channelLabel, formatResponseTime } from './analytics-constants'
@@ -175,32 +176,38 @@ export function AnalyticsPage() {
   return (
     <div className="flex h-full bg-background">
       {/* Left sidebar */}
-      <aside className="hidden lg:flex w-64 xl:w-72 shrink-0 flex-col border-r border-border/50 bg-card/30 overflow-hidden">
+      <aside
+        data-side-pane=""
+        className="hidden lg:flex w-64 xl:w-72 shrink-0 flex-col border-r border-border/50 bg-card/30 overflow-hidden"
+      >
         <div className="shrink-0 px-4 py-3.5">
           <PageHeader icon={ChartBarIcon} title="Analytics" />
         </div>
         <ScrollArea className="min-h-0 flex-1">
           <div className="px-5 pb-5">
-            <FilterSection title="Sections" collapsible={false}>
+            <FilterSection title="Sections">
               <div className="space-y-1">
-                {sections.map(({ key, label, icon: Icon }) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setSection(key)}
-                    className={cn(
-                      'flex w-full items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors',
-                      section === key
-                        ? 'bg-muted text-foreground'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                    )}
-                  >
-                    <Icon
-                      className={cn('h-3.5 w-3.5 shrink-0', section === key && 'text-primary')}
-                    />
-                    {label}
-                  </button>
-                ))}
+                {sections.map(({ key, label, icon: Icon }) => {
+                  const active = section === key
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setSection(key)}
+                      data-active={active || undefined}
+                      className={cn(
+                        MENU_ROW,
+                        'w-full',
+                        active
+                          ? 'bg-muted text-foreground font-medium'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                      )}
+                    >
+                      <Icon className={cn(MENU_ICON, active && 'text-primary')} />
+                      <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+                    </button>
+                  )
+                })}
               </div>
             </FilterSection>
           </div>
