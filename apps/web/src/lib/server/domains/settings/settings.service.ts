@@ -48,6 +48,7 @@ import {
 } from './settings.types'
 import { signupOpenFor } from '@/lib/shared/signup-open'
 import { projectPublicWidgetConfig, widgetActivationConfig } from './settings.widget'
+import { loadLabsProjection, repairLabsProjection } from './settings.labs'
 import { getSetupState, isOnboardingComplete } from '@/lib/shared/db-types'
 import { resolveStatusSettings } from './settings.status'
 import {
@@ -886,6 +887,7 @@ export async function getWorkspaceSettings(): Promise<WorkspaceSettings | null> 
         // before that rule existed still carries feedback:false and would keep
         // the portal dark for the hour the entry has left to live.
         if (cached.featureFlags) cached.featureFlags.feedback = true
+        await repairLabsProjection(cached)
         return liveWorkspaceSettings(cached)
       }
     }
@@ -908,10 +910,11 @@ export async function getWorkspaceSettings(): Promise<WorkspaceSettings | null> 
 
     const featureFlags = resolveFeatureFlags(org.featureFlags)
 
-    const [configuredTypes, passthroughKeys, verifiedDomains] = await Promise.all([
+    const [configuredTypes, passthroughKeys, verifiedDomains, labs] = await Promise.all([
       getConfiguredAuthTypes(),
       getEmailDependentPassthroughKeys(),
       listVerifiedDomains(),
+      loadLabsProjection(org.id),
     ])
     const filteredAuthOAuth = filterOAuthByCredentials(
       authConfig.oauth,
@@ -968,6 +971,7 @@ export async function getWorkspaceSettings(): Promise<WorkspaceSettings | null> 
       managedFieldPaths: org.managedFieldPaths ?? [],
       state: (org.state as 'active' | 'suspended' | 'deleting' | null) ?? 'active',
       verifiedDomains,
+      visualTheme: labs.visualTheme,
     }
 
     // 1h TTL: settings change rarely and every mutation in this file

@@ -184,6 +184,8 @@ export {
   sessionRelations,
   settings,
   settingsRelations,
+  workspaceExperiments,
+  workspaceExperimentsRelations,
   identityProvider,
   ssoVerifiedDomain,
   twoFactor,

@@ -1807,6 +1807,13 @@
       "when": 1789166954246,
       "tag": "0280_widget_session_scope",
       "breakpoints": true
+    },
+    {
+      "idx": 258,
+      "version": "7",
+      "when": 1789386800000,
+      "tag": "0281_workspace_experiments",
+      "breakpoints": true
     }
   ]
 }

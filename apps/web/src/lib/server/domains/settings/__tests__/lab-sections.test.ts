@@ -77,6 +77,14 @@ describe('resolveFeatureFlags', () => {
     expect(resolveFeatureFlags(null)).toEqual(DEFAULT_FEATURE_FLAGS)
   })
 
+  it('does not treat Labs appearance as a product feature flag', () => {
+    expect(DEFAULT_FEATURE_FLAGS).not.toHaveProperty('refinedVisualTheme')
+    expect(DEFAULT_FEATURE_FLAGS).not.toHaveProperty('labs')
+    expect(PRODUCT_DEFINITIONS.flatMap((product) => [...product.featureFlags])).not.toContain(
+      'refinedVisualTheme'
+    )
+  })
+
   it('keeps stored values for current keys and drops unknown keys', () => {
     const flags = resolveFeatureFlags(
       JSON.stringify({ helpCenter: false, notAFlag: true, inboxAi: true })

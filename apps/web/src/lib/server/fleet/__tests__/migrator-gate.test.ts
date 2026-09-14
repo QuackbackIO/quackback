@@ -355,6 +355,7 @@ describe('replayGateVerdict', () => {
       '0278_two_factor_lockout',
       '0279_better_auth_17',
       '0280_widget_session_scope',
+      '0281_workspace_experiments',
     ])
     const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
     expect(verdict.ok).toBe(false)

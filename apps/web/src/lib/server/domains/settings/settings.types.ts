@@ -1086,6 +1086,11 @@ export interface WorkspaceSettings {
    *  (dormant workspaces are scaled to 0 by the control plane; the gateway
    *  serves their hostnames). Nothing reads this anymore. */
   state: 'active' | 'suspended' | 'deleting'
+  /**
+   * Effective Labs appearance. Public: the active theme is visible in the
+   * document. Hidden experiment discovery is not included here.
+   */
+  visualTheme: 'legacy' | 'refined'
 }
 
 // =============================================================================
