@@ -583,4 +583,28 @@ describe('setPasswordFn', () => {
     expect(hoisted.mockSetPassword).toHaveBeenCalledOnce()
     expect(hoisted.mockRevokeOtherSessions).not.toHaveBeenCalled()
   })
+
+  it('rejects a widget-scoped session', async () => {
+    hoisted.mockGetSession.mockResolvedValue({
+      session: { id: 'sess_1', scope: 'widget' },
+      user: SESSION_USER,
+    })
+
+    await expect(setPasswordHandler({ data: { newPassword: 'password1' } })).rejects.toThrow(
+      /dashboard session/
+    )
+    expect(hoisted.mockSetPassword).not.toHaveBeenCalled()
+  })
+
+  it('rejects a portal-scoped session', async () => {
+    hoisted.mockGetSession.mockResolvedValue({
+      session: { id: 'sess_1', scope: 'portal' },
+      user: SESSION_USER,
+    })
+
+    await expect(setPasswordHandler({ data: { newPassword: 'password1' } })).rejects.toThrow(
+      /dashboard session/
+    )
+    expect(hoisted.mockSetPassword).not.toHaveBeenCalled()
+  })
 })

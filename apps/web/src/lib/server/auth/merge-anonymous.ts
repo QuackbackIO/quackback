@@ -16,7 +16,8 @@
  *   account.
  */
 import type { PrincipalId, UserId } from '@quackback/ids'
-import { db, account, session, user, eq } from '@/lib/server/db'
+import { db, account, session, user, principal, eq } from '@/lib/server/db'
+import { isTeamMember } from '@/lib/shared/roles'
 import { repointPrincipalActivity } from '@/lib/server/domains/principals/principal-repoint'
 import {
   deleteAnonymousIdentity,
@@ -41,8 +42,13 @@ export async function mergeAnonymousToIdentified(params: MergeAnonymousParams): 
     params
 
   await db.transaction(async (tx) => {
+    const target = await tx.query.principal.findFirst({
+      where: eq(principal.id, targetPrincipalId),
+      columns: { role: true },
+    })
     await repointPrincipalActivity(tx, anonPrincipalId, targetPrincipalId, {
       displayNames: { from: anonDisplayName || 'Anonymous', to: targetDisplayName },
+      skipBlockTransfer: isTeamMember(target?.role),
     })
     await deleteAnonymousIdentity({ principalId: anonPrincipalId, userId: anonUserId }, tx)
   })

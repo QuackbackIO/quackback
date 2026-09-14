@@ -254,7 +254,7 @@ describe('isHandoffPrincipalTeammate', () => {
 
   it('is false when no principal exists', async () => {
     const { isHandoffPrincipalTeammate } = await import('../auth.widget-handoff')
-    mockPrincipalFindFirst.mockResolvedValueOnce(undefined)
+    mockPrincipalFindFirst.mockResolvedValueOnce(null)
     expect(await isHandoffPrincipalTeammate('user_unknown')).toBe(false)
   })
 })
