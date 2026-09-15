@@ -288,11 +288,9 @@ describe('confirmEmailChangeFn', () => {
 
 describe('widget-scoped sessions cannot change email', () => {
   beforeEach(() => {
-    hoisted.requireAuth.mockResolvedValue({
-      user: { id: 'usr_1' },
-      principal: { type: 'user', role: 'admin' },
-      scope: 'widget',
-    })
+    hoisted.requireAuth.mockRejectedValue(
+      new Error('Access denied: Widget sessions cannot access this resource')
+    )
   })
 
   it('rejects requestEmailChangeFn', async () => {

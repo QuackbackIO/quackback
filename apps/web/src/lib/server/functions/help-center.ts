@@ -73,7 +73,7 @@ const log = logger.child({ component: 'help-center' })
  * invisible); signed-in requests resolve segment memberships via the
  * standard policy-actor path.
  */
-export async function resolveHelpPublicViewer(
+async function resolveHelpPublicViewer(
   auth?: Awaited<ReturnType<typeof getOptionalAuth>> | undefined
 ): Promise<Actor> {
   if (auth !== undefined) return policyActorFromAuth(auth)
@@ -89,7 +89,7 @@ async function publicViewer(): Promise<Actor> {
 // Helper: serialize article dates
 // ============================================================================
 
-export function serializeArticle<
+function serializeArticle<
   T extends { createdAt: Date; updatedAt: Date; publishedAt: Date | null; deletedAt?: Date | null },
 >(article: T) {
   // embedding (pgvector) and searchVector (tsvector) are not JSON-serializable
@@ -108,9 +108,9 @@ export function serializeArticle<
   }
 }
 
-export function serializeCategory<
-  T extends { createdAt: Date; updatedAt: Date; deletedAt?: Date | null },
->(cat: T) {
+function serializeCategory<T extends { createdAt: Date; updatedAt: Date; deletedAt?: Date | null }>(
+  cat: T
+) {
   return {
     ...cat,
     createdAt: toIsoString(cat.createdAt),

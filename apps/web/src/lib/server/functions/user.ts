@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { assertNotWidgetScope, toSessionScope, type Role } from '@/lib/shared/roles'
-import { createServerFn } from '@tanstack/react-start'
+import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
 import { type UserId, type PrincipalId } from '@quackback/ids'
 import { getSession } from '@/lib/server/auth/session'
 import { requireAuth } from './auth-helpers'
@@ -345,7 +345,9 @@ export const updateNotificationPreferencesFn = createServerFn({ method: 'POST' }
 // User Engagement Stats
 // ============================================
 
-export async function runGetUserStats(principalId: PrincipalId): Promise<UserEngagementStats> {
+export const runGetUserStats = createServerOnlyFn(async function runGetUserStats(
+  principalId: PrincipalId
+): Promise<UserEngagementStats> {
   log.debug('get user stats')
   const [ideasResult, votesResult, commentsResult] = await Promise.all([
     db
@@ -364,7 +366,7 @@ export async function runGetUserStats(principalId: PrincipalId): Promise<UserEng
     votes: votesResult[0]?.count ?? 0,
     comments: commentsResult[0]?.count ?? 0,
   }
-}
+})
 
 export const getUserStatsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<UserEngagementStats> => {

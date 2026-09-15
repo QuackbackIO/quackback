@@ -12,6 +12,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // createServerFn → directly-callable fns (mirrors sla-policies.fn.test.ts /
 // workflows-class-guard.test.ts), with the real zod validator applied.
 vi.mock('@tanstack/react-start', () => ({
+  createServerOnlyFn: <T>(fn: T) => fn,
   createServerFn: () => {
     let _schema: { parse: (v: unknown) => unknown } | null = null
     let _handler: ((args: { data: unknown }) => Promise<unknown>) | null = null

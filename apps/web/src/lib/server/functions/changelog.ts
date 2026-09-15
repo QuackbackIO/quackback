@@ -4,7 +4,7 @@
  * These functions handle changelog CRUD operations via TanStack Start server functions.
  */
 
-import { createServerFn } from '@tanstack/react-start'
+import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
 import type { BoardId, ChangelogCategoryId, ChangelogId, PostId, SegmentId } from '@quackback/ids'
 // Note: BoardId is only used for searchShippedPosts filtering
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
@@ -188,7 +188,7 @@ export const listChangelogsFn = createServerFn({ method: 'GET' })
 /**
  * Get a published changelog entry by ID (public view)
  */
-export async function runGetPublicChangelog(
+export const runGetPublicChangelog = createServerOnlyFn(async function runGetPublicChangelog(
   authCtx: Awaited<ReturnType<typeof getOptionalAuth>>,
   data: z.infer<typeof getChangelogSchema>
 ) {
@@ -224,7 +224,7 @@ export async function runGetPublicChangelog(
     ...entry,
     publishedAt: toIsoString(entry.publishedAt),
   }
-}
+})
 
 export const getPublicChangelogFn = createServerFn({ method: 'GET' })
   .validator(getChangelogSchema)
@@ -235,7 +235,7 @@ export const getPublicChangelogFn = createServerFn({ method: 'GET' })
 /**
  * List published changelog entries (public view)
  */
-export async function runListPublicChangelogs(
+export const runListPublicChangelogs = createServerOnlyFn(async function runListPublicChangelogs(
   authCtx: Awaited<ReturnType<typeof getOptionalAuth>>,
   data: z.infer<typeof listPublicChangelogsSchema>
 ) {
@@ -269,7 +269,7 @@ export async function runListPublicChangelogs(
       publishedAt: toIsoString(entry.publishedAt),
     })),
   }
-}
+})
 
 export const listPublicChangelogsFn = createServerFn({ method: 'GET' })
   .validator(listPublicChangelogsSchema)

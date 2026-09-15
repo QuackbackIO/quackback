@@ -192,11 +192,9 @@ describe('setMyLanguagePreferenceFn', () => {
   })
 
   it('rejects a widget-scoped session', async () => {
-    mockRequireAuth.mockResolvedValue({
-      user: { id: AUTH_USER_ID },
-      principal: { id: 'principal_caller' },
-      scope: 'widget',
-    })
+    mockRequireAuth.mockRejectedValue(
+      new Error('Access denied: Widget sessions cannot access this resource')
+    )
 
     await expect(setMyLanguagePreferenceFn({ data: { language: 'en' } })).rejects.toThrow(
       /Widget sessions/

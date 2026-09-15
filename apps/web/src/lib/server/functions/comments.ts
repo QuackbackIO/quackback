@@ -3,7 +3,7 @@
  */
 
 import { z } from 'zod'
-import { createServerFn } from '@tanstack/react-start'
+import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { type PostCommentId, type PostId, type PostStatusId, type UserId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -74,7 +74,7 @@ export type UserEditCommentInput = z.infer<typeof userEditCommentSchema>
 export type UserDeleteCommentInput = z.infer<typeof userDeleteCommentSchema>
 
 // Write Operations
-export async function runCreateComment(
+export const runCreateComment = createServerOnlyFn(async function runCreateComment(
   auth: Awaited<ReturnType<typeof requireAuth>>,
   data: z.infer<typeof createCommentSchema>
 ) {
@@ -136,7 +136,7 @@ export async function runCreateComment(
 
   log.info({ comment_id: result.comment.id }, 'comment created')
   return result
-}
+})
 
 export const createCommentFn = createServerFn({ method: 'POST' })
   .validator(createCommentSchema)
@@ -144,7 +144,7 @@ export const createCommentFn = createServerFn({ method: 'POST' })
     return runCreateComment(await requireAuth(), data)
   })
 
-export async function runAddReaction(
+export const runAddReaction = createServerOnlyFn(async function runAddReaction(
   auth: Awaited<ReturnType<typeof requireAuth>>,
   data: ReactionInput
 ) {
@@ -167,7 +167,7 @@ export async function runAddReaction(
   )
   log.debug({ added: result.added }, 'add reaction result')
   return result
-}
+})
 
 export const addReactionFn = createServerFn({ method: 'POST' })
   .validator(reactionSchema)
@@ -175,7 +175,7 @@ export const addReactionFn = createServerFn({ method: 'POST' })
     return runAddReaction(await requireAuth(), data)
   })
 
-export async function runRemoveReaction(
+export const runRemoveReaction = createServerOnlyFn(async function runRemoveReaction(
   auth: Awaited<ReturnType<typeof requireAuth>>,
   data: ReactionInput
 ) {
@@ -194,7 +194,7 @@ export async function runRemoveReaction(
   )
   log.debug('reaction removed')
   return result
-}
+})
 
 export const removeReactionFn = createServerFn({ method: 'POST' })
   .validator(reactionSchema)

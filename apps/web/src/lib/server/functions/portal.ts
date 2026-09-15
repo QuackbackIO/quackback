@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { createServerFn } from '@tanstack/react-start'
+import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
 import {
   type PostId,
   type PrincipalId,
@@ -315,7 +315,7 @@ export const fetchPublicPostDetailSchema = z.object({
 })
 export type FetchPublicPostDetailInput = z.infer<typeof fetchPublicPostDetailSchema>
 
-export async function runFetchPublicPostDetail(
+export const runFetchPublicPostDetail = createServerOnlyFn(async function runFetchPublicPostDetail(
   auth: Awaited<ReturnType<typeof getOptionalAuth>>,
   data: FetchPublicPostDetailInput
 ) {
@@ -409,7 +409,7 @@ export async function runFetchPublicPostDetail(
     canVote,
     canComment,
   }
-}
+})
 
 export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
   .validator(fetchPublicPostDetailSchema)
@@ -748,33 +748,35 @@ export const getCommentsSectionDataFn = createServerFn({ method: 'GET' })
  * handlers by declaration order, so new server fns append here to avoid
  * shifting existing indices.
  */
-export async function runFetchBoardCapabilities(auth: Awaited<ReturnType<typeof getOptionalAuth>>) {
-  log.debug('fetch board capabilities')
-  const empty: Record<string, { canSubmit: boolean; canVote: boolean }> = {}
+export const runFetchBoardCapabilities = createServerOnlyFn(
+  async function runFetchBoardCapabilities(auth: Awaited<ReturnType<typeof getOptionalAuth>>) {
+    log.debug('fetch board capabilities')
+    const empty: Record<string, { canSubmit: boolean; canVote: boolean }> = {}
 
-  // Same portal-visibility + per-board gates as fetchPortalData.
-  const access = await resolvePortalAccessForRequest()
-  if (!access.granted) return { permissions: empty, boards: [] as WidgetVisibleBoard[] }
+    // Same portal-visibility + per-board gates as fetchPortalData.
+    const access = await resolvePortalAccessForRequest()
+    if (!access.granted) return { permissions: empty, boards: [] as WidgetVisibleBoard[] }
 
-  const actor = await policyActorFromAuth(auth)
+    const actor = await policyActorFromAuth(auth)
 
-  // Settings read overlaps the board query — only one DB round-trip is on the
-  // critical path for this refetch-on-identify endpoint.
-  const [boards, allowAnonymous] = await Promise.all([
-    listPublicBoardsWithStats(actor),
-    loadAllowAnonymous(),
-  ])
-  return {
-    permissions: await buildBoardPermissions(actor, boards, allowAnonymous),
-    // Same visitor-visible list as the permissions map, so identify can
-    // surface segment/members boards the anonymous SSR seed omitted.
-    boards: boards.map((board): WidgetVisibleBoard => ({
-      id: String(board.id),
-      name: board.name,
-      slug: board.slug,
-    })),
+    // Settings read overlaps the board query — only one DB round-trip is on the
+    // critical path for this refetch-on-identify endpoint.
+    const [boards, allowAnonymous] = await Promise.all([
+      listPublicBoardsWithStats(actor),
+      loadAllowAnonymous(),
+    ])
+    return {
+      permissions: await buildBoardPermissions(actor, boards, allowAnonymous),
+      // Same visitor-visible list as the permissions map, so identify can
+      // surface segment/members boards the anonymous SSR seed omitted.
+      boards: boards.map((board): WidgetVisibleBoard => ({
+        id: String(board.id),
+        name: board.name,
+        slug: board.slug,
+      })),
+    }
   }
-}
+)
 
 export const fetchBoardCapabilitiesFn = createServerFn({ method: 'GET' }).handler(async () => {
   return runFetchBoardCapabilities(await getOptionalAuth())

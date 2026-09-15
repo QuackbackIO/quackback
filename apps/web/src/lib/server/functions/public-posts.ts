@@ -3,7 +3,7 @@
  */
 
 import { z } from 'zod'
-import { createServerFn } from '@tanstack/react-start'
+import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
 import {
   type PostId,
   type BoardId,
@@ -150,7 +150,7 @@ export type GetVoteSidebarDataInput = z.infer<typeof getVoteSidebarDataSchema>
  * portal-access resolver denies. The per-board audience filter inside
  * `listPublicPosts` still runs as the inner layer for granted callers.
  */
-export async function runListPublicPosts(
+export const runListPublicPosts = createServerOnlyFn(async function runListPublicPosts(
   auth: Awaited<ReturnType<typeof getOptionalAuth>>,
   data: ListPublicPostsInput
 ) {
@@ -208,7 +208,7 @@ export async function runListPublicPosts(
       createdAt: post.createdAt.toISOString(),
     })),
   }
-}
+})
 
 export const listPublicPostsFn = createServerFn({ method: 'GET' })
   .validator(listPublicPostsSchema)
@@ -363,7 +363,7 @@ export const userDeletePostFn = createServerFn({ method: 'POST' })
  * Anonymous users sign in via Better Auth's anonymous plugin on the client side
  * before calling this function.
  */
-export async function runToggleVote(
+export const runToggleVote = createServerOnlyFn(async function runToggleVote(
   ctx: Awaited<ReturnType<typeof requireAuth>>,
   data: ToggleVoteInput
 ): Promise<{ voted: boolean; voteCount: number }> {
@@ -416,7 +416,7 @@ export async function runToggleVote(
     'toggle vote results'
   )
   return result
-}
+})
 
 export const toggleVoteFn = createServerFn({ method: 'POST' })
   .validator(toggleVoteSchema)
@@ -429,7 +429,7 @@ export const toggleVoteFn = createServerFn({ method: 'POST' })
 /**
  * Create a post on a public board.
  */
-export async function runCreatePublicPost(
+export const runCreatePublicPost = createServerOnlyFn(async function runCreatePublicPost(
   ctx: Awaited<ReturnType<typeof requireAuth>>,
   data: CreatePublicPostInput
 ) {
@@ -521,7 +521,7 @@ export async function runCreatePublicPost(
       slug: board.slug,
     },
   }
-}
+})
 
 export const createPublicPostFn = createServerFn({ method: 'POST' })
   .validator(createPublicPostSchema)
@@ -532,7 +532,7 @@ export const createPublicPostFn = createServerFn({ method: 'POST' })
 /**
  * Get all post IDs the user has voted on (optional auth, includes anonymous sessions).
  */
-export async function runGetVotedPosts(
+export const runGetVotedPosts = createServerOnlyFn(async function runGetVotedPosts(
   ctx: Awaited<ReturnType<typeof getOptionalAuth>>
 ): Promise<{ votedPostIds: string[] }> {
   log.debug('get voted posts')
@@ -544,7 +544,7 @@ export async function runGetVotedPosts(
   const result = await getAllUserVotedPostIds(ctx.principal.id)
   log.debug({ count: result.size }, 'get voted posts results')
   return { votedPostIds: Array.from(result) }
-}
+})
 
 export const getVotedPostsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<{ votedPostIds: string[] }> => {

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // Mock createServerFn to just return the handler directly
 vi.mock('@tanstack/react-start', () => ({
+  createServerOnlyFn: <T>(fn: T) => fn,
   createServerFn: () => ({
     validator: () => ({
       handler: (fn: (...args: unknown[]) => unknown) => fn,

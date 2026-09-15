@@ -11,6 +11,7 @@ import { createId, type ConversationId, type TicketTypeId } from '@quackback/ids
 import { PERMISSIONS } from '@/lib/shared/permissions'
 
 vi.mock('@tanstack/react-start', () => ({
+  createServerOnlyFn: <T>(fn: T) => fn,
   createServerFn: () => {
     let _schema: { parse: (v: unknown) => unknown } | null = null
     let _handler: ((args: { data: unknown }) => Promise<unknown>) | null = null

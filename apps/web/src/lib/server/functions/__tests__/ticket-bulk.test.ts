@@ -19,6 +19,7 @@ import type { PermissionKey } from '@/lib/server/db'
 
 // createServerFn → directly-callable fns (mirrors conversation-bulk.test.ts).
 vi.mock('@tanstack/react-start', () => ({
+  createServerOnlyFn: <T>(fn: T) => fn,
   createServerFn: () => {
     let _handler: ((args: { data: unknown }) => Promise<unknown>) | null = null
     const fn = (args: { data: unknown }) => {

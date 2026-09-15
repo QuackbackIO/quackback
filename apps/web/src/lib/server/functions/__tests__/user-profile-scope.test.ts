@@ -9,6 +9,7 @@ type AnyHandler = (args: { data?: Record<string, unknown> }) => Promise<unknown>
 const handlers: AnyHandler[] = []
 
 vi.mock('@tanstack/react-start', () => ({
+  createServerOnlyFn: <T>(fn: T) => fn,
   createServerFn: () => {
     const chain = {
       validator() {
@@ -142,10 +143,9 @@ describe('notification preference mutations reject widget scope', () => {
   })
 
   it('rejects a widget session so a teammate Bearer cannot mute mail', async () => {
-    hoisted.mockRequireAuth.mockResolvedValue({
-      principal: { id: 'principal_1' },
-      scope: 'widget',
-    })
+    hoisted.mockRequireAuth.mockRejectedValue(
+      new Error('Access denied: Widget sessions cannot access this resource')
+    )
     await expect(
       updateNotificationPreferencesHandler({ data: { emailMuted: true } })
     ).rejects.toThrow(/Widget sessions/)

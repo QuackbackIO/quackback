@@ -12,6 +12,7 @@ const commentsHandlers: AnyHandler[] = []
 let currentHandlerTarget: AnyHandler[] = publicPostsHandlers
 
 vi.mock('@tanstack/react-start', () => ({
+  createServerOnlyFn: <T>(fn: T) => fn,
   createServerFn: () => {
     const chain = {
       validator() {

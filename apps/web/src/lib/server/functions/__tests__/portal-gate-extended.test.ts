@@ -53,6 +53,7 @@ const handlersByExport = new WeakMap<object, AnyHandler>()
 let _currentModule = ''
 
 vi.mock('@tanstack/react-start', () => ({
+  createServerOnlyFn: <T>(fn: T) => fn,
   createServerFn: () => {
     const chain = {
       validator() {

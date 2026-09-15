@@ -9,7 +9,7 @@
  * the policy actor, and delegate.
  */
 import { z } from 'zod'
-import { createServerFn } from '@tanstack/react-start'
+import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
 import { isValidTypeId } from '@quackback/ids'
 import type {
   TicketId,
@@ -823,10 +823,12 @@ export const exportTicketTranscriptFn = createServerFn({ method: 'GET' })
  * ownership dimension to enforce (unlike the agent-gated
  * `getTicketStageLabelsFn`, which reads on `ticket.view`).
  */
-export async function runGetMyTicketStageLabels(_ctx: Awaited<ReturnType<typeof requireAuth>>) {
-  const { getStageLabels } = await import('@/lib/server/domains/settings/settings.tickets')
-  return getStageLabels()
-}
+export const runGetMyTicketStageLabels = createServerOnlyFn(
+  async function runGetMyTicketStageLabels(_ctx: Awaited<ReturnType<typeof requireAuth>>) {
+    const { getStageLabels } = await import('@/lib/server/domains/settings/settings.tickets')
+    return getStageLabels()
+  }
+)
 
 export const getMyTicketStageLabelsFn = createServerFn({ method: 'GET' }).handler(async () => {
   return runGetMyTicketStageLabels(await requireAuth())
@@ -838,7 +840,9 @@ export const getMyTicketStageLabelsFn = createServerFn({ method: 'GET' }).handle
  * answers back to their field labels through this. Read shape only — any
  * signed-in requester while the support-tickets flag is on.
  */
-export async function runGetMyTicketForm(_ctx: Awaited<ReturnType<typeof requireAuth>>) {
+export const runGetMyTicketForm = createServerOnlyFn(async function runGetMyTicketForm(
+  _ctx: Awaited<ReturnType<typeof requireAuth>>
+) {
   const { isSupportTicketsEnabled } = await import('@/lib/server/domains/settings/settings.support')
   if (!(await isSupportTicketsEnabled())) {
     throw new ForbiddenError('FORBIDDEN', 'Tickets are not available')
@@ -846,7 +850,7 @@ export async function runGetMyTicketForm(_ctx: Awaited<ReturnType<typeof require
   const svc = await import('@/lib/server/domains/tickets/ticket-type-intake.service')
   const types = await svc.listIntakeTypes()
   return { types: types.map((t) => svc.ticketTypeToIntakeDTO(t)) }
-}
+})
 
 export const getMyTicketFormFn = createServerFn({ method: 'GET' }).handler(async () => {
   return runGetMyTicketForm(await requireAuth())
@@ -987,15 +991,18 @@ async function requireSupportTicketsEnabled(): Promise<void> {
   }
 }
 
-export async function runGetMyTicketWatchStatus(
-  ctx: Awaited<ReturnType<typeof requireAuth>>,
-  data: { ticketId: string }
-) {
-  await requireSupportTicketsEnabled()
-  const actor = await policyActorFromAuth(ctx)
-  const { getMyTicketWatchStatus } = await import('@/lib/server/domains/tickets/requester.service')
-  return getMyTicketWatchStatus(actor, data.ticketId as TicketId)
-}
+export const runGetMyTicketWatchStatus = createServerOnlyFn(
+  async function runGetMyTicketWatchStatus(
+    ctx: Awaited<ReturnType<typeof requireAuth>>,
+    data: { ticketId: string }
+  ) {
+    await requireSupportTicketsEnabled()
+    const actor = await policyActorFromAuth(ctx)
+    const { getMyTicketWatchStatus } =
+      await import('@/lib/server/domains/tickets/requester.service')
+    return getMyTicketWatchStatus(actor, data.ticketId as TicketId)
+  }
+)
 
 export const getMyTicketWatchStatusFn = createServerFn({ method: 'GET' })
   .validator(z.object({ ticketId: z.string() }))
@@ -1010,18 +1017,24 @@ export const getMyTicketWatchStatusFn = createServerFn({ method: 'GET' })
  * system event (creation, stage crossing) lands on the stream. Null when no
  * pair exists — callers render no header, so this is a value, not an error.
  */
-export async function runGetConversationLinkedTicket(
-  ctx: Awaited<ReturnType<typeof requireAuth>>,
-  data: { conversationId: string }
-) {
-  // Graceful null (not Forbidden) when tickets are off: the caller is
-  // refreshing a header that may simply no longer apply.
-  const { isSupportTicketsEnabled } = await import('@/lib/server/domains/settings/settings.support')
-  if (!(await isSupportTicketsEnabled())) return null
-  const { getRequesterTicketForConversation } =
-    await import('@/lib/server/domains/tickets/requester.service')
-  return getRequesterTicketForConversation(data.conversationId as ConversationId, ctx.principal.id)
-}
+export const runGetConversationLinkedTicket = createServerOnlyFn(
+  async function runGetConversationLinkedTicket(
+    ctx: Awaited<ReturnType<typeof requireAuth>>,
+    data: { conversationId: string }
+  ) {
+    // Graceful null (not Forbidden) when tickets are off: the caller is
+    // refreshing a header that may simply no longer apply.
+    const { isSupportTicketsEnabled } =
+      await import('@/lib/server/domains/settings/settings.support')
+    if (!(await isSupportTicketsEnabled())) return null
+    const { getRequesterTicketForConversation } =
+      await import('@/lib/server/domains/tickets/requester.service')
+    return getRequesterTicketForConversation(
+      data.conversationId as ConversationId,
+      ctx.principal.id
+    )
+  }
+)
 
 export const getConversationLinkedTicketFn = createServerFn({ method: 'GET' })
   .validator(z.object({ conversationId: z.string() }))
@@ -1034,11 +1047,13 @@ export const getConversationLinkedTicketFn = createServerFn({ method: 'GET' })
  * widget Tickets tab). Ownership-scoped in requester.service; flag-gated here
  * like the other requester reads.
  */
-export async function runGetMyTickets(ctx: Awaited<ReturnType<typeof requireAuth>>) {
+export const runGetMyTickets = createServerOnlyFn(async function runGetMyTickets(
+  ctx: Awaited<ReturnType<typeof requireAuth>>
+) {
   await requireSupportTicketsEnabled()
   const { listMyTicketSummaries } = await import('@/lib/server/domains/tickets/requester.service')
   return { tickets: await listMyTicketSummaries(ctx.principal.id) }
-}
+})
 
 export const getMyTicketsFn = createServerFn({ method: 'GET' }).handler(async () => {
   return runGetMyTickets(await requireAuth())
@@ -1068,7 +1083,7 @@ export type CreateMyTicketInput = z.infer<typeof createMyTicketSchema>
  * captured contact email or supply a plausible one here, captured
  * overwrite-once — the service enforces the same contact-channel guard.
  */
-export async function runCreateMyTicket(
+export const runCreateMyTicket = createServerOnlyFn(async function runCreateMyTicket(
   ctx: Awaited<ReturnType<typeof requireAuth>>,
   data: CreateMyTicketInput
 ) {
@@ -1102,7 +1117,7 @@ export async function runCreateMyTicket(
     ticketTypeId: intake.ticketTypeId,
     customAttributes: intake.customAttributes,
   })
-}
+})
 
 export const createMyTicketFn = createServerFn({ method: 'POST' })
   .validator(createMyTicketSchema)
@@ -1110,7 +1125,7 @@ export const createMyTicketFn = createServerFn({ method: 'POST' })
     return runCreateMyTicket(await requireAuth(), data)
   })
 
-export async function runWatchMyTicket(
+export const runWatchMyTicket = createServerOnlyFn(async function runWatchMyTicket(
   ctx: Awaited<ReturnType<typeof requireAuth>>,
   data: { ticketId: string }
 ) {
@@ -1118,7 +1133,7 @@ export async function runWatchMyTicket(
   const actor = await policyActorFromAuth(ctx)
   const { watchMyTicket } = await import('@/lib/server/domains/tickets/requester.service')
   await watchMyTicket(actor, data.ticketId as TicketId)
-}
+})
 
 export const watchMyTicketFn = createServerFn({ method: 'POST' })
   .validator(z.object({ ticketId: z.string() }))
@@ -1126,7 +1141,7 @@ export const watchMyTicketFn = createServerFn({ method: 'POST' })
     return runWatchMyTicket(await requireAuth(), data)
   })
 
-export async function runUnwatchMyTicket(
+export const runUnwatchMyTicket = createServerOnlyFn(async function runUnwatchMyTicket(
   ctx: Awaited<ReturnType<typeof requireAuth>>,
   data: { ticketId: string }
 ) {
@@ -1134,7 +1149,7 @@ export async function runUnwatchMyTicket(
   const actor = await policyActorFromAuth(ctx)
   const { unwatchMyTicket } = await import('@/lib/server/domains/tickets/requester.service')
   await unwatchMyTicket(actor, data.ticketId as TicketId)
-}
+})
 
 export const unwatchMyTicketFn = createServerFn({ method: 'POST' })
   .validator(z.object({ ticketId: z.string() }))
