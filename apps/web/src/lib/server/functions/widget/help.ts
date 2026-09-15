@@ -2,13 +2,15 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { KbArticleId, PrincipalId } from '@quackback/ids'
 import { listPublicArticlesSchema } from '@/lib/shared/schemas/help-center'
-import { resolveHelpPublicViewer, serializeCategory, serializeArticle } from '../help-center'
-import { getOptionalWidgetAuth } from '../widget-auth'
 import { toIsoStringOrNull } from '@/lib/shared/utils'
 
+const localeSchema = z.object({ locale: z.string().optional() })
+
 export const widgetListPublicCategoriesFn = createServerFn({ method: 'GET' })
-  .validator(z.object({ locale: z.string().optional() }))
+  .validator(localeSchema)
   .handler(async ({ data }) => {
+    const { getOptionalWidgetAuth } = await import('../widget-auth')
+    const { resolveHelpPublicViewer, serializeCategory } = await import('../help-center')
     const { listPublicCategoriesForLocale } =
       await import('@/lib/server/domains/help-center/help-center-locale.query')
     const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
@@ -22,6 +24,8 @@ export const widgetListPublicCategoriesFn = createServerFn({ method: 'GET' })
 export const widgetListPublicArticlesForCategoryFn = createServerFn({ method: 'GET' })
   .validator(z.object({ categoryId: z.string(), locale: z.string().optional() }))
   .handler(async ({ data }) => {
+    const { getOptionalWidgetAuth } = await import('../widget-auth')
+    const { resolveHelpPublicViewer } = await import('../help-center')
     const { listPublicArticlesForCategoryLocale } =
       await import('@/lib/server/domains/help-center/help-center-locale.query')
     const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
@@ -39,6 +43,8 @@ export const widgetListPublicArticlesForCategoryFn = createServerFn({ method: 'G
 export const widgetResolvePublicArticleRefFn = createServerFn({ method: 'GET' })
   .validator(z.object({ ref: z.string().min(1), locale: z.string().optional() }))
   .handler(async ({ data }) => {
+    const { getOptionalWidgetAuth } = await import('../widget-auth')
+    const { resolveHelpPublicViewer, serializeArticle } = await import('../help-center')
     const { canonicalArticleTypeId } = await import('@/lib/shared/widget/article-ref')
     const { getPublicArticleByIdForLocale, getPublicArticleBySlugForLocale } =
       await import('@/lib/server/domains/help-center/help-center-locale.query')
@@ -68,13 +74,9 @@ export const widgetResolvePublicArticleRefFn = createServerFn({ method: 'GET' })
   })
 
 export const widgetRecordArticleFeedbackFn = createServerFn({ method: 'POST' })
-  .validator(
-    z.object({
-      articleId: z.string(),
-      helpful: z.boolean(),
-    })
-  )
+  .validator(z.object({ articleId: z.string(), helpful: z.boolean() }))
   .handler(async ({ data }) => {
+    const { getOptionalWidgetAuth } = await import('../widget-auth')
     const auth = await getOptionalWidgetAuth()
     const { recordArticleFeedback } =
       await import('@/lib/server/domains/help-center/help-center.service')
@@ -89,6 +91,8 @@ export const widgetRecordArticleFeedbackFn = createServerFn({ method: 'POST' })
 export const widgetListPublicArticlesFn = createServerFn({ method: 'GET' })
   .validator(listPublicArticlesSchema)
   .handler(async ({ data }) => {
+    const { getOptionalWidgetAuth } = await import('../widget-auth')
+    const { resolveHelpPublicViewer, serializeArticle } = await import('../help-center')
     const { listPublicArticles } =
       await import('@/lib/server/domains/help-center/help-center.article.query')
     const result = await listPublicArticles(
