@@ -106,17 +106,23 @@ export async function recordWidgetSessionProvenance(
 
 async function findOrCreateSession(
   userId: UserId,
-  request: Request
+  request: Request,
+  opts?: { teammate?: boolean }
 ): Promise<{ id: string; token: string }> {
+  // Teammates must not reuse a portal-scoped session from an earlier
+  // customer handoff — that token would pass widget-only mutation guards.
+  const scopeClause = opts?.teammate
+    ? eq(session.scope, 'widget')
+    : sql`${session.scope} in ('widget', 'portal')`
   const existingSession = await db.query.session.findFirst({
     where: and(
       eq(session.userId, userId),
       gt(session.expiresAt, new Date()),
-      sql`${session.scope} in ('widget', 'portal')`,
+      scopeClause,
       sql`exists (select 1 from widget_identified_session wis where wis.session_id = ${session.id} and wis.hmac_verified = true)`
     ),
   })
-  if (existingSession) {
+  if (existingSession && !(opts?.teammate && existingSession.scope !== 'widget')) {
     await db
       .update(session)
       .set({ updatedAt: new Date() })
@@ -226,13 +232,10 @@ export const Route = createFileRoute('/api/widget/identify')({
         }
         const hasAttrs = Object.keys(validAttrs).length > 0
 
-        // Find or create user. Case-insensitive on email — the staff/admin
-        // identity guard below would otherwise be bypassable by varying the
-        // casing of a teammate's email ("ADMIN@x.com" wouldn't match the
-        // stored "admin@x.com" and a fresh user row would be created
-        // with role 'user' AND the same email address, breaking the
-        // "one email per account" invariant. The fix mirrors the
-        // segment-evaluator + recovery-codes case-insensitive lookups.
+        // Find or create user. Case-insensitive on email so a mixed-case
+        // JWT ("ADMIN@x.com") cannot create a second row next to the stored
+        // "admin@x.com" and break the one-email-per-account invariant. The
+        // lookup mirrors segment-evaluator + recovery-codes.
         const normalizedEmail = identified.email.toLowerCase()
         // The JWT `sub` is the durable cross-device identity key — resolve by
         // it first so a returning visitor is recognized even after an email
@@ -251,35 +254,42 @@ export const Route = createFileRoute('/api/widget/identify')({
         const country = captureCountryFromHeaders(request.headers)
 
         if (userRecord) {
-          // Staff/admin identity guard: a signed ssoToken only vouches for
-          // email/sub matching, never for role. If those claims resolve to an
-          // existing teammate account (principal role 'admin' or 'member'),
-          // refuse before touching that row any further — a widget embedded
-          // on a customer's site must never be able to mint or piggyback a
-          // session that can authorize dashboard/admin APIs.
+          // Do not write host-app profile fields onto a teammate row.
           const existingPrincipal = await db.query.principal.findFirst({
             where: eq(principal.userId, userRecord.id),
             columns: { role: true },
           })
-          if (existingPrincipal && isTeamMember(existingPrincipal.role)) {
-            return jsonError(
-              'IDENTITY_NOT_ALLOWED',
-              'This identity cannot be used with the widget',
-              403
-            )
-          }
+          const isTeammate = isTeamMember(existingPrincipal?.role)
 
           const updates: Record<string, unknown> = {}
-          if (identified.name && identified.name !== userRecord.name) updates.name = identified.name
-          if (identified.avatarURL && identified.avatarURL !== userRecord.image)
-            updates.image = identified.avatarURL
-          if (hasAttrs) {
-            // Atomic JSONB merge in SQL (not a JS read/merge/write) so a
-            // concurrent writer landing between the load above and this
-            // update can never be clobbered. Mirrors user.identify.ts. The
-            // `metadata` column is text-typed, so round-trip through jsonb
-            // and back to text; there are no removals on this path.
-            updates.metadata = sql`((coalesce(nullif(${user.metadata}, ''), '{}')::jsonb - ${[]}::text[]) || ${JSON.stringify(validAttrs)}::jsonb)::text`
+          if (!isTeammate) {
+            if (identified.name && identified.name !== userRecord.name) {
+              updates.name = identified.name
+            }
+            if (identified.avatarURL && identified.avatarURL !== userRecord.image) {
+              updates.image = identified.avatarURL
+            }
+            if (hasAttrs) {
+              // Atomic JSONB merge in SQL (not a JS read/merge/write) so a
+              // concurrent writer landing between the load above and this
+              // update can never be clobbered. Mirrors user.identify.ts. The
+              // `metadata` column is text-typed, so round-trip through jsonb
+              // and back to text; there are no removals on this path.
+              updates.metadata = sql`((coalesce(nullif(${user.metadata}, ''), '{}')::jsonb - ${[]}::text[]) || ${JSON.stringify(validAttrs)}::jsonb)::text`
+            }
+            if (externalId && userRecord.email !== normalizedEmail) {
+              // `sub` is authoritative on a verified email change. Adopt the new
+              // address unless another row already holds it — the partial-unique
+              // email index would otherwise reject the move, and external_id still
+              // resolves this visitor either way.
+              const emailHolder = await db.query.user.findFirst({
+                columns: { id: true },
+                where: sql`LOWER(${user.email}) = ${normalizedEmail}`,
+              })
+              if (!emailHolder || emailHolder.id === userRecord.id) {
+                updates.email = normalizedEmail
+              }
+            }
           }
           if (country && country !== userRecord.country) {
             updates.country = country
@@ -287,19 +297,6 @@ export const Route = createFileRoute('/api/widget/identify')({
           if (externalId && userRecord.externalId !== externalId) {
             // First verified sight of this account — stamp the durable subject.
             updates.externalId = externalId
-          }
-          if (externalId && userRecord.email !== normalizedEmail) {
-            // `sub` is authoritative on a verified email change. Adopt the new
-            // address unless another row already holds it — the partial-unique
-            // email index would otherwise reject the move, and external_id still
-            // resolves this visitor either way.
-            const emailHolder = await db.query.user.findFirst({
-              columns: { id: true },
-              where: sql`LOWER(${user.email}) = ${normalizedEmail}`,
-            })
-            if (!emailHolder || emailHolder.id === userRecord.id) {
-              updates.email = normalizedEmail
-            }
           }
 
           if (Object.keys(updates).length > 0) {
@@ -412,7 +409,9 @@ export const Route = createFileRoute('/api/widget/identify')({
         // Find/create session and fetch voted posts in parallel
         // (voted posts include any merged anonymous votes)
         const [sessionInfo, votedPostIdSet] = await Promise.all([
-          findOrCreateSession(userId, request),
+          findOrCreateSession(userId, request, {
+            teammate: isTeamMember(principalRecord.role),
+          }),
           getAllUserVotedPostIds(principalId),
         ])
         const votedPostIds = Array.from(votedPostIdSet)
@@ -442,6 +441,9 @@ export const Route = createFileRoute('/api/widget/identify')({
             avatarUrl,
           },
           votedPostIds,
+          // Teammates may use the widget as customers but must not mint a
+          // portal OTT — that cookie would replace a dashboard login.
+          canPortalHandoff: !isTeamMember(principalRecord.role),
         })
       },
     },

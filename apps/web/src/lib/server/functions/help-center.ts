@@ -2,7 +2,7 @@
  * Server Functions for Help Center Operations
  */
 
-import { createServerFn } from '@tanstack/react-start'
+import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
 import type { KbCategoryId, KbArticleId, KbArticleFeedbackId, PrincipalId } from '@quackback/ids'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
@@ -73,18 +73,23 @@ const log = logger.child({ component: 'help-center' })
  * invisible); signed-in requests resolve segment memberships via the
  * standard policy-actor path.
  */
-async function publicViewer(): Promise<Actor> {
-  // Cookie (portal) or Bearer (widget iframe) — anything else is anonymous
-  // without a DB round-trip, and fails closed on gated content.
+export const resolveHelpPublicViewer = createServerOnlyFn(async function resolveHelpPublicViewer(
+  auth?: Awaited<ReturnType<typeof getOptionalAuth>> | undefined
+): Promise<Actor> {
+  if (auth !== undefined) return policyActorFromAuth(auth)
   if (!hasAuthCredentials()) return ANONYMOUS_ACTOR
   return policyActorFromAuth(await getOptionalAuth())
+})
+
+async function publicViewer(): Promise<Actor> {
+  return resolveHelpPublicViewer()
 }
 
 // ============================================================================
 // Helper: serialize article dates
 // ============================================================================
 
-function serializeArticle<
+export const serializeArticle = createServerOnlyFn(function serializeArticle<
   T extends { createdAt: Date; updatedAt: Date; publishedAt: Date | null; deletedAt?: Date | null },
 >(article: T) {
   // embedding (pgvector) and searchVector (tsvector) are not JSON-serializable
@@ -101,18 +106,18 @@ function serializeArticle<
     publishedAt: toIsoStringOrNull(article.publishedAt),
     deletedAt: toIsoStringOrNull(article.deletedAt ?? null),
   }
-}
+})
 
-function serializeCategory<T extends { createdAt: Date; updatedAt: Date; deletedAt?: Date | null }>(
-  cat: T
-) {
+export const serializeCategory = createServerOnlyFn(function serializeCategory<
+  T extends { createdAt: Date; updatedAt: Date; deletedAt?: Date | null },
+>(cat: T) {
   return {
     ...cat,
     createdAt: toIsoString(cat.createdAt),
     updatedAt: toIsoString(cat.updatedAt),
     deletedAt: 'deletedAt' in cat ? toIsoStringOrNull(cat.deletedAt ?? null) : undefined,
   }
-}
+})
 
 // ============================================================================
 // Category Server Functions

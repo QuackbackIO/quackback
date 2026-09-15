@@ -4,6 +4,8 @@ import type { ConversationId } from '@quackback/ids'
 import { VisitorConversationThread } from '@/components/shared/conversation/visitor-conversation-thread'
 import { useWidgetAuth } from './widget-auth-provider'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
+import { VisitorSurfaceRpcProvider } from '@/lib/client/visitor-surface-rpc'
+import { widgetVisitorRpc } from '@/lib/client/widget-visitor-rpc'
 import { useConversationPresence, markAgentPresentInCache } from './use-messenger-presence'
 import { useWidgetImageUpload } from './use-widget-image-upload'
 
@@ -62,20 +64,22 @@ export function WidgetMessenger({
   }, [helpEnabled, onArticleSelect, sessionVersion])
 
   return (
-    <VisitorConversationThread
-      conversationTarget={conversationTarget}
-      linkPreviews={linkPreviews}
-      getAuthHeaders={getWidgetAuthHeaders}
-      ensureSession={ensureSession}
-      sessionVersion={sessionVersion}
-      currentUser={user}
-      uploadImage={upload}
-      presence={presence}
-      onAgentActivity={onAgentActivity}
-      helpSearch={helpSearch}
-      embedOpenMode="newTab"
-      showHeader={false}
-      autofocusComposer={autofocusComposer}
-    />
+    <VisitorSurfaceRpcProvider value={widgetVisitorRpc}>
+      <VisitorConversationThread
+        conversationTarget={conversationTarget}
+        linkPreviews={linkPreviews}
+        getAuthHeaders={getWidgetAuthHeaders}
+        ensureSession={ensureSession}
+        sessionVersion={sessionVersion}
+        currentUser={user}
+        uploadImage={upload}
+        presence={presence}
+        onAgentActivity={onAgentActivity}
+        helpSearch={helpSearch}
+        embedOpenMode="newTab"
+        showHeader={false}
+        autofocusComposer={autofocusComposer}
+      />
+    </VisitorSurfaceRpcProvider>
   )
 }

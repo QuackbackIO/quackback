@@ -46,7 +46,12 @@ vi.mock('@/lib/server/domains/segments/segment-membership.service', () => ({
   segmentIdsForPrincipal: vi.fn(async () => new Set()),
 }))
 
-import { assertPermission, getOptionalAuth, requireAuth } from '../auth-helpers'
+import {
+  assertDashboardScope,
+  assertPermission,
+  getOptionalAuth,
+  requireAuth,
+} from '../auth-helpers'
 import { ensurePrincipalForUser } from '@/lib/server/domains/principals/principal.factory'
 import { sessionRole, toSessionScope } from '@/lib/shared/roles'
 
@@ -71,7 +76,7 @@ describe('requireAuth permission gates are dashboard-only', () => {
     mockGetSession.mockResolvedValue(sessionWithScope('widget'))
 
     await expect(requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })).rejects.toThrow(
-      /dashboard session/
+      /Widget sessions cannot access this resource/
     )
   })
 
@@ -91,13 +96,10 @@ describe('requireAuth permission gates are dashboard-only', () => {
     expect(auth.permissions).toContain(PERMISSIONS.SETTINGS_MANAGE)
   })
 
-  it('bare requireAuth stays cross-plane but strips team authority from widget scope', async () => {
+  it('bare requireAuth denies widget by default', async () => {
     mockGetSession.mockResolvedValue(sessionWithScope('widget'))
 
-    const auth = await requireAuth()
-    expect(auth.scope).toBe('widget')
-    expect(auth.principal.role).toBe('user')
-    expect(auth.permissions).toEqual([])
+    await expect(requireAuth()).rejects.toThrow(/Widget sessions cannot access this resource/)
   })
 
   it('keeps the team role and permissions on a dashboard session', async () => {
@@ -110,11 +112,17 @@ describe('requireAuth permission gates are dashboard-only', () => {
 })
 
 describe('getOptionalAuth strips team authority from non-dashboard scopes', () => {
-  it('downgrades a promoted widget principal to the portal tier', async () => {
+  it('treats a widget session as anonymous by default', async () => {
     mockGetSession.mockResolvedValue(sessionWithScope('widget'))
 
+    expect(await getOptionalAuth()).toBeNull()
+  })
+
+  it('downgrades a promoted portal principal to the portal tier', async () => {
+    mockGetSession.mockResolvedValue(sessionWithScope('portal'))
+
     const auth = await getOptionalAuth()
-    expect(auth?.scope).toBe('widget')
+    expect(auth?.scope).toBe('portal')
     expect(auth?.principal.role).toBe('user')
     expect(auth?.permissions).toEqual([])
   })
@@ -167,6 +175,17 @@ describe('toSessionScope', () => {
     expect(toSessionScope(undefined)).toBe('dashboard')
     expect(toSessionScope(null)).toBe('dashboard')
     expect(toSessionScope('future')).toBe('dashboard')
+  })
+})
+
+describe('assertDashboardScope', () => {
+  it('rejects widget and portal', () => {
+    expect(() => assertDashboardScope({ scope: 'widget' })).toThrow(/dashboard session/)
+    expect(() => assertDashboardScope({ scope: 'portal' })).toThrow(/dashboard session/)
+  })
+
+  it('allows dashboard', () => {
+    expect(() => assertDashboardScope({ scope: 'dashboard' })).not.toThrow()
   })
 })
 

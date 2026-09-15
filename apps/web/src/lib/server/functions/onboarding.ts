@@ -8,7 +8,7 @@ import {
   type OnboardingOutcome,
   type SetupState,
 } from '@/lib/server/db'
-import { isAdmin } from '@/lib/shared/roles'
+import { isAdmin, toSessionScope } from '@/lib/shared/roles'
 import { getSession } from '@/lib/server/auth/session'
 import { getSettings } from './workspace'
 import { syncPrincipalProfile } from '@/lib/server/domains/principals/principal.service'
@@ -410,6 +410,9 @@ export const saveUserNameFn = createServerFn({ method: 'POST' })
     const session = await getSession()
     if (!session?.user) {
       throw new Error('Authentication required')
+    }
+    if (toSessionScope(session.session?.scope) !== 'dashboard') {
+      throw new Error('Only admin can change setup')
     }
 
     await db

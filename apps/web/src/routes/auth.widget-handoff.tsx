@@ -35,33 +35,45 @@
  *     through this route cannot gain the widget grant.
  *   - identifyVerificationEnabled is also checked by the evaluator: email-capture
  *     widget sessions (HMAC not required) never reach the portal via this path.
+ *   - Teammate identities never receive a portal cookie. An existing dashboard
+ *     session is redirected to returnTo; otherwise handoff lands on portal
+ *     sign-in unsigned so a dashboard login is not replaced.
  */
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
 import { getRequestHeaders, setResponseHeader } from '@tanstack/react-start/server'
 import { z } from 'zod'
 import { isSafeCallbackUrl } from '@/lib/shared/routing'
+import { buildSigninRedirect } from '@/lib/shared/auth-prompt'
 import type { UserId } from '@quackback/ids'
 
+/** Skip the portal cookie for teammates so a dashboard login is not replaced. */
+export const isHandoffPrincipalTeammate = createServerOnlyFn(
+  async (userId: string): Promise<boolean> => {
+    try {
+      // oxlint-disable-next-line no-restricted-imports -- createServerOnlyFn body; stripped from the client graph
+      const { db, principal, eq } = await import('@/lib/server/db')
+      // oxlint-disable-next-line no-restricted-imports -- createServerOnlyFn body; stripped from the client graph
+      const { isTeamMember } = await import('@/lib/shared/roles')
+      const row = await db.query.principal.findFirst({
+        where: eq(principal.userId, userId as UserId),
+        columns: { role: true },
+      })
+      return isTeamMember(row?.role)
+    } catch (err) {
+      // oxlint-disable-next-line no-restricted-imports -- createServerOnlyFn body; stripped from the client graph
+      const { logger } = await import('@/lib/server/logger')
+      logger
+        .child({ component: 'widget-handoff' })
+        .error({ err }, 'teammate lookup failed; skipping portal cookie')
+      return true
+    }
+  }
+)
+
 /**
- * Look up the widget identification provenance for a session.
- *
- * Returns true only when the session has a `widget_identified_session`
- * row with `hmac_verified=true` — i.e. the session was created by
- * `/api/widget/identify` on the HMAC-verified path. Returns false when
- * the row is missing (session minted elsewhere — e.g. a portal email
- * signup that produced a generic BA OTT) OR when the row says the
- * identify happened on the email-capture path.
- *
- * The handoff route uses this to gate insertion of the
- * `widget_origin_session` marker — without it, any BA OTT could earn
- * the marker, breaking the chain of trust the portal-access widget
- * branch depends on.
- *
- * Exported for unit-test reach. Fails closed on DB errors — a query
- * hiccup must never be interpreted as "verified". Imports db lazily
- * so this file stays client-bundle-safe (the route file ends up in
- * the client bundle via routeTree.gen.ts).
+ * True only when the session has a widget_identified_session row with
+ * hmac_verified=true. Missing or unverified rows fail closed. Exported for tests.
  */
 export const isWidgetSessionHmacVerified = createServerOnlyFn(
   async (sessionId: string): Promise<boolean> => {
@@ -102,7 +114,8 @@ type LoaderData = { status: 'invalid' | 'expired' | 'error' }
 // ---------------------------------------------------------------------------
 
 type HandoffResult =
-  { kind: 'redirect'; to: string } | { kind: 'error'; status: 'invalid' | 'expired' | 'error' }
+  | { kind: 'redirect'; to: string; search?: Record<string, string> }
+  | { kind: 'error'; status: 'invalid' | 'expired' | 'error' }
 
 /**
  * Verify the OTT against BA, forward Set-Cookie to the browser, insert the
@@ -247,6 +260,34 @@ const consumeWidgetHandoffFn = createServerFn({ method: 'POST' })
       return { kind: 'error', status: 'invalid' }
     }
 
+    // Never install a portal cookie over a dashboard login. Teammate OTTs
+    // (and a customer OTT while a dashboard cookie is present) skip the
+    // cookie. An already-authenticated dashboard session goes straight to
+    // returnTo so "View on board" lands on the post/article; unauthenticated
+    // teammate OTTs still hit the sign-in landing.
+    const { getSession } = await import('@/lib/server/auth/session')
+    const { toSessionScope } = await import('@/lib/shared/roles')
+    const existing = await getSession().catch(() => null)
+    const existingIsDashboard =
+      !!existing?.user && toSessionScope(existing.session.scope) === 'dashboard'
+    const isTeammate = await isHandoffPrincipalTeammate(userId)
+    if (isTeammate || existingIsDashboard) {
+      await recordAuditEvent({
+        event: 'portal.widget_handshake.invalid',
+        outcome: 'failure',
+        actor: { userId: userId as UserId },
+        target: { type: 'session', id: sessionId },
+        metadata: {
+          reason: isTeammate ? 'teammate_identity' : 'dashboard_session_present',
+        },
+      })
+      if (existingIsDashboard) {
+        return { kind: 'redirect', to: returnTo }
+      }
+      const landing = buildSigninRedirect(returnTo)
+      return { kind: 'redirect', to: landing.to, search: landing.search }
+    }
+
     // Promote to portal audience so the cookie can never satisfy team gates.
     try {
       const { db, session: sessionTable, eq } = await import('@/lib/server/db')
@@ -302,7 +343,7 @@ export const Route = createFileRoute('/auth/widget-handoff')({
       data: { ott: search.ott, returnTo: search.returnTo },
     })
     if (result.kind === 'redirect') {
-      throw redirect({ to: result.to })
+      throw redirect({ to: result.to, search: result.search })
     }
     return { status: result.status }
   },

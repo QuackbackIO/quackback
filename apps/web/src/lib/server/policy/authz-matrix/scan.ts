@@ -3,7 +3,8 @@
  *
  * Walks the server source tree and, via the TypeScript AST, enumerates every
  * place a request's authorization is decided:
- *   - `requireAuth(...)`        — server-function gates
+ *   - `requireAuth(...)`        — site (dashboard + portal) server-function gates
+ *   - `requireWidgetAuth()`     — widget BFF server-function gates
  *   - `withApiKeyAuth(...)`     — public REST API gates
  *   - `requireTeamAuth()`       — the moderation-queue wrapper (a gate alias)
  *   - inline `isAdmin(...)` / `isTeamMember(...)` inside function/route files
@@ -26,7 +27,12 @@ import { join, relative } from 'node:path'
 import { walkSourceFiles } from '../source-files'
 
 /** Gate call-ees whose argument declares the enforced authorization. */
-const GATE_CALLEES = new Set(['requireAuth', 'withApiKeyAuth', 'requireTeamAuth'])
+const GATE_CALLEES = new Set([
+  'requireAuth',
+  'requireWidgetAuth',
+  'withApiKeyAuth',
+  'requireTeamAuth',
+])
 /** Team wrappers with no options arg — authority declared in classifications. */
 const ALIAS_CALLEES = new Set(['requireTeamAuth'])
 /** Role predicates that, used inside a route/function file, may gate access. */
@@ -118,7 +124,7 @@ function classifyPermissionArg(objArg: ts.Expression): ScannedAuthz {
 function gateAuthz(callee: string, call: ts.CallExpression): ScannedAuthz {
   if (ALIAS_CALLEES.has(callee)) return { kind: 'alias', callee }
 
-  if (callee === 'requireAuth') {
+  if (callee === 'requireAuth' || callee === 'requireWidgetAuth') {
     if (call.arguments.length === 0) return { kind: 'bare' }
     return classifyPermissionArg(call.arguments[0])
   }

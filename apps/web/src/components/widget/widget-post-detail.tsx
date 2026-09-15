@@ -5,8 +5,8 @@ import { useIntl, FormattedMessage } from 'react-intl'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { PostContent } from '@/components/public/post-content'
-import { fetchPublicPostDetail } from '@/lib/server/functions/portal'
-import { createCommentFn } from '@/lib/server/functions/comments'
+import { widgetFetchPublicPostDetailFn } from '@/lib/server/functions/widget/posts'
+import { widgetCreateCommentFn } from '@/lib/server/functions/widget/comments'
 import { getWidgetAuthHeaders, generateOneTimeToken } from '@/lib/client/widget-auth'
 import { buildPortalUrl } from './build-portal-url'
 import { widgetQueryKeys, widgetQueryKeyPrefixEquals } from '@/lib/client/hooks/use-widget-vote'
@@ -40,8 +40,15 @@ interface WidgetPostDetailProps {
 export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
   const intl = useIntl()
   const { upload: uploadImage } = useWidgetImageUpload()
-  const { isIdentified, hmacRequired, user, ensureSessionThen, emitEvent, sessionVersion } =
-    useWidgetAuth()
+  const {
+    isIdentified,
+    hmacRequired,
+    user,
+    canPortalHandoff,
+    ensureSessionThen,
+    emitEvent,
+    sessionVersion,
+  } = useWidgetAuth()
   const queryClient = useQueryClient()
 
   // Widget-specific post detail query that injects Bearer headers so the server
@@ -55,7 +62,7 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
   } = useQuery({
     queryKey: detailKey,
     queryFn: async (): Promise<PublicPostDetailView> => {
-      const result = await fetchPublicPostDetail({
+      const result = await widgetFetchPublicPostDetailFn({
         // Smaller first page for the constrained widget viewport; further roots
         // load via "show more".
         data: { postId, commentsLimit: WIDGET_COMMENT_PAGE_SIZE },
@@ -88,22 +95,22 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
 
   const handleViewOnPortal = useCallback(async () => {
     if (!post) return
-    const ott = isIdentified ? await generateOneTimeToken() : null
+    const ott = isIdentified && canPortalHandoff ? await generateOneTimeToken() : null
     const url = buildPortalUrl({
       origin: window.location.origin,
       boardSlug: post.board.slug,
       postId: post.id,
-      isIdentified,
+      isIdentified: isIdentified && canPortalHandoff,
       ott,
     })
     sendToHost({ type: 'quackback:navigate', url })
-  }, [post, isIdentified])
+  }, [post, isIdentified, canPortalHandoff])
 
   /** Submit a comment (root or reply). */
   const submitComment = useCallback(
     async (content: string, contentJson: TiptapContent | null, parentId?: string) => {
       await ensureSessionThen(async () => {
-        const result = await createCommentFn({
+        const result = await widgetCreateCommentFn({
           data: { postId, content, contentJson: contentJson ?? undefined, parentId },
           headers: getWidgetAuthHeaders(),
         })
@@ -126,7 +133,7 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
   )
 
   // Per-board vote/comment capability, computed server-side for the real actor
-  // (fetchPublicPostDetail runs with the widget's Bearer identity and the query
+  // (widgetFetchPublicPostDetailFn runs with the widget's Bearer identity and the query
   // re-keys on sessionVersion, so this refetches after identify). Replaces the
   // old workspace-wide anonymous flags, which advertised CTAs on boards whose
   // per-action tier requires sign-in (#191). Undefined (legacy/cached) → false.

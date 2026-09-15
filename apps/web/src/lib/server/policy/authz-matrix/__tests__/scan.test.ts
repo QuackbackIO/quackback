@@ -42,6 +42,17 @@ describe('scanSourceFile — gate authorization extraction', () => {
     })
   })
 
+  it('treats requireWidgetAuth() as bare', () => {
+    expect(
+      authzOf(
+        'lib/server/functions/widget/x.ts',
+        `export const fn = h(async () => { await requireWidgetAuth() })`
+      )
+    ).toEqual({
+      kind: 'bare',
+    })
+  })
+
   it('reads a string-literal permission', () => {
     expect(
       authzOf(

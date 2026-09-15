@@ -23,11 +23,13 @@ export const mockSelectFrom: Mock = vi.fn(() => ({ where: mockSelectWhere }))
 export const mockDeleteWhere: Mock = vi.fn()
 export const mockUpdateWhere: Mock = vi.fn()
 export const mockUpdateSet: Mock = vi.fn((_values?: unknown) => ({ where: mockUpdateWhere }))
+export const mockTxPrincipalFindFirst: Mock = vi.fn()
 
 interface MockTx {
   select: (...args: unknown[]) => { from: Mock }
   delete: (table: { __name?: string }) => { where: Mock }
   update: (table: { __name?: string }) => { set: Mock }
+  query: { principal: { findFirst: Mock } }
 }
 
 export const mockTx: MockTx = {
@@ -39,6 +41,9 @@ export const mockTx: MockTx = {
   update: (table: { __name?: string }) => {
     operations.push(`update:${table.__name || 'unknown'}`)
     return { set: mockUpdateSet }
+  },
+  query: {
+    principal: { findFirst: mockTxPrincipalFindFirst },
   },
 }
 
@@ -53,6 +58,7 @@ export function resetDbMockState() {
   mockSelectWhere.mockResolvedValue([])
   mockDeleteWhere.mockResolvedValue(undefined)
   mockUpdateWhere.mockResolvedValue(undefined)
+  mockTxPrincipalFindFirst.mockResolvedValue({ role: 'user' })
 }
 
 /** Ops for one table, in issue order. */

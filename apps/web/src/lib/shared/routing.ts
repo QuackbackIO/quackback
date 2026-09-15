@@ -20,6 +20,12 @@ export function isSafeCallbackUrl(url: unknown): url is string {
   )
 }
 
+/** Consume a widget OTT on `/auth/widget-handoff` (teammate cookie guard lives there). */
+export function widgetHandoffPath(ott: string, returnTo: string): string {
+  const params = new URLSearchParams({ ott, returnTo })
+  return `/auth/widget-handoff?${params.toString()}`
+}
+
 /** True when a (safe, relative) callback URL targets a team surface, so the
  *  login should serve the always-on team form (break-glass), not the public
  *  portal form. Covers /admin and the team-invitation accept flow.

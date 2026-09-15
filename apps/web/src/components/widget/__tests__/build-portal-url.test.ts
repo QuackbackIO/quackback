@@ -6,7 +6,7 @@ describe('buildPortalUrl', () => {
   const boardSlug = 'feature-requests'
   const postId = 'post_abc123'
 
-  it('includes OTT param when user is identified and OTT is available', () => {
+  it('sends identified visitors through widget-handoff with returnTo', () => {
     const url = buildPortalUrl({
       origin: baseUrl,
       boardSlug,
@@ -15,7 +15,7 @@ describe('buildPortalUrl', () => {
       ott: 'ott-token-123',
     })
     expect(url).toBe(
-      'https://feedback.example.com/b/feature-requests/posts/post_abc123?ott=ott-token-123'
+      'https://feedback.example.com/auth/widget-handoff?ott=ott-token-123&returnTo=%2Fb%2Ffeature-requests%2Fposts%2Fpost_abc123'
     )
   })
 
@@ -60,15 +60,18 @@ describe('buildPortalUrl', () => {
       isIdentified: true,
       ott: 'token+with/special=chars',
     })
-    expect(url).toContain('?ott=token%2Bwith%2Fspecial%3Dchars')
+    expect(url).toContain('ott=token%2Bwith%2Fspecial%3Dchars')
+    expect(url).toContain('/auth/widget-handoff?')
   })
 })
 
 describe('appendWidgetOtt', () => {
-  it('appends ott when identified', () => {
+  it('routes identified visitors through widget-handoff', () => {
     expect(
       appendWidgetOtt('https://feedback.example.com/hc/articles/getting-started/faq', true, 'ott-1')
-    ).toBe('https://feedback.example.com/hc/articles/getting-started/faq?ott=ott-1')
+    ).toBe(
+      'https://feedback.example.com/auth/widget-handoff?ott=ott-1&returnTo=%2Fhc%2Farticles%2Fgetting-started%2Ffaq'
+    )
   })
 
   it('leaves the URL unchanged for anonymous visitors', () => {

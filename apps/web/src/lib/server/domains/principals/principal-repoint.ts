@@ -72,6 +72,8 @@ export interface RepointOptions {
    * path, which has no meaningful source name; the fixup is skipped.
    */
   displayNames?: { from: string; to: string }
+  /** Do not copy blocked_at / blocked_by onto a teammate target. */
+  skipBlockTransfer?: boolean
 }
 
 interface RepointContext extends RepointOptions {
@@ -171,14 +173,20 @@ function collisionRepoint(
  * column is still NULL (user wins, source fills gaps). A source with no value
  * writes NULL over the target's NULL — a no-op.
  */
-function fillIfEmpty(column: string, description: string): RepointStep {
+function fillIfEmpty(
+  column: string,
+  description: string,
+  opts?: { skipWhen?: (ctx: RepointContext) => boolean }
+): RepointStep {
   const key = columnKey(column)
   const dbTable = principal as RepointTable
   return {
     table: 'principal',
     columns: [column],
     description,
-    async run(tx, { from, to }) {
+    async run(tx, ctx) {
+      if (opts?.skipWhen?.(ctx)) return
+      const { from, to } = ctx
       // The SET pulls the source value via a correlated subquery (a raw uuid,
       // so no TypeID mapping); the IS NULL guard makes a populated target match
       // zero rows.
@@ -411,11 +419,13 @@ export const REPOINT_STEPS: RepointStep[] = [
   // company_id), never REPOINT_EXEMPTIONS entries.
   fillIfEmpty(
     'blocked_at',
-    'Attribute consolidation, not a re-point: a blocked source blocks the target when the target is not already blocked (user wins). Stops a merged visitor from shedding a block by identifying.'
+    'Attribute consolidation, not a re-point: a blocked source blocks the target when the target is not already blocked (user wins). Stops a merged visitor from shedding a block by identifying. Skipped when the target is a teammate (team members cannot be blocked).',
+    { skipWhen: (ctx) => ctx.skipBlockTransfer === true }
   ),
   fillIfEmpty(
     'blocked_by_principal_id',
-    'Attribute consolidation, not a re-point: the blocking team actor moves with blocked_at so the audit trail survives the merge (only filled when the target was not itself blocked).'
+    'Attribute consolidation, not a re-point: the blocking team actor moves with blocked_at so the audit trail survives the merge (only filled when the target was not itself blocked). Skipped when the target is a teammate.',
+    { skipWhen: (ctx) => ctx.skipBlockTransfer === true }
   ),
   collisionRepoint(
     'changelog_subscriptions',

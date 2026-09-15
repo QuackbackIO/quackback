@@ -1,5 +1,5 @@
 import { infiniteQueryOptions } from '@tanstack/react-query'
-import { listPublicChangelogsFn } from '@/lib/server/functions/changelog'
+import { widgetListPublicChangelogsFn } from '@/lib/server/functions/widget/changelog'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { INITIAL_SESSION_VERSION, widgetQueryKeys } from '@/lib/client/hooks/use-widget-vote'
 
@@ -10,7 +10,7 @@ export function widgetChangelogListQuery(sessionVersion: number) {
   return infiniteQueryOptions({
     queryKey: widgetQueryKeys.changelogList.bySession(sessionVersion),
     queryFn: ({ pageParam }) =>
-      listPublicChangelogsFn({
+      widgetListPublicChangelogsFn({
         data: {
           cursor: pageParam,
           limit: 10,

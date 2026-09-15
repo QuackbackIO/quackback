@@ -3,7 +3,7 @@ import { FormattedMessage, useIntl } from 'react-intl'
 import { motion, useReducedMotion } from 'framer-motion'
 import { ChatBubbleOvalLeftEllipsisIcon } from '@heroicons/react/24/solid'
 import type { ConversationId } from '@quackback/ids'
-import { getMyConversationsFn } from '@/lib/server/functions/conversation'
+import { widgetGetMyConversationsFn } from '@/lib/server/functions/widget/conversation'
 import { conversationKeys } from '@/lib/client/queries/conversation-keys'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { useWidgetAuth } from './widget-auth-provider'
@@ -49,7 +49,7 @@ export function WidgetMessages({
     queryKey: conversationKeys.widgetConversationList(sessionVersion),
     // Forward the widget Bearer token, or token-authed visitors fail the
     // server-side hasAuthCredentials() guard and always get an empty list.
-    queryFn: () => getMyConversationsFn({ headers: getWidgetAuthHeaders() }),
+    queryFn: () => widgetGetMyConversationsFn({ headers: getWidgetAuthHeaders() }),
     staleTime: 30_000,
   })
 

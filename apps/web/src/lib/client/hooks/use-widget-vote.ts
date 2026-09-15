@@ -8,7 +8,7 @@
 
 import { useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { toggleVoteFn, getVotedPostsFn } from '@/lib/server/functions/public-posts'
+import { widgetToggleVoteFn, widgetGetVotedPostsFn } from '@/lib/server/functions/widget/posts'
 import { getWidgetAuthHeaders, hasWidgetToken } from '@/lib/client/widget-auth'
 import { sendToHost } from '@/lib/client/widget-bridge'
 import { voteCountKeys } from './use-post-vote'
@@ -120,7 +120,7 @@ export function useWidgetVote({
     queryFn: async () => {
       const headers = getWidgetAuthHeaders()
       if (!headers.Authorization) return new Set<string>()
-      const result = await getVotedPostsFn({ headers })
+      const result = await widgetGetVotedPostsFn({ headers })
       return new Set(result.votedPostIds)
     },
     staleTime: 5 * 60 * 1000,
@@ -131,7 +131,7 @@ export function useWidgetVote({
 
   const voteMutation = useMutation({
     mutationFn: (id: PostId) =>
-      toggleVoteFn({ data: { postId: id }, headers: getWidgetAuthHeaders() }),
+      widgetToggleVoteFn({ data: { postId: id }, headers: getWidgetAuthHeaders() }),
     onMutate: async (id) => {
       const previouslyVoted = votedPosts?.has(id) ?? false
       const key = widgetQueryKeys.votedPosts.bySession(sessionVersionRef.current)

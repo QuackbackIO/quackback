@@ -2,7 +2,7 @@ import { useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { FormattedMessage } from 'react-intl'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { getPublicChangelogFn } from '@/lib/server/functions/changelog'
+import { widgetGetPublicChangelogFn } from '@/lib/server/functions/widget/changelog'
 import { generateOneTimeToken, getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { appendWidgetOtt } from './build-portal-url'
 import { widgetQueryKeys, widgetQueryKeyEquals } from '@/lib/client/hooks/use-widget-vote'
@@ -21,11 +21,11 @@ interface WidgetChangelogDetailProps {
 }
 
 export function WidgetChangelogDetail({ entryId }: WidgetChangelogDetailProps) {
-  const { isIdentified, sessionVersion } = useWidgetAuth()
+  const { isIdentified, canPortalHandoff, sessionVersion } = useWidgetAuth()
   const { data: entry, isLoading } = useQuery({
     queryKey: widgetQueryKeys.changelogDetail.byId(entryId, sessionVersion),
     queryFn: () =>
-      getPublicChangelogFn({
+      widgetGetPublicChangelogFn({
         data: { id: entryId as ChangelogId },
         headers: getWidgetAuthHeaders(),
       }),
@@ -42,14 +42,14 @@ export function WidgetChangelogDetail({ entryId }: WidgetChangelogDetailProps) {
   const changelogEntryId = entry?.id
   const handleViewOnPortal = useCallback(async () => {
     if (!changelogEntryId) return
-    const ott = isIdentified ? await generateOneTimeToken() : null
+    const ott = isIdentified && canPortalHandoff ? await generateOneTimeToken() : null
     const url = appendWidgetOtt(
       `${window.location.origin}/changelog/${changelogEntryId}`,
-      isIdentified,
+      isIdentified && canPortalHandoff,
       ott
     )
     sendToHost({ type: 'quackback:navigate', url })
-  }, [changelogEntryId, isIdentified])
+  }, [changelogEntryId, isIdentified, canPortalHandoff])
 
   if (isLoading) {
     return <WidgetArticleSkeleton />

@@ -1,8 +1,8 @@
 import { queryOptions } from '@tanstack/react-query'
 import {
-  listPublicArticlesForCategoryFn,
-  listPublicCategoriesFn,
-} from '@/lib/server/functions/help-center'
+  widgetListPublicArticlesForCategoryFn,
+  widgetListPublicCategoriesFn,
+} from '@/lib/server/functions/widget/help'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { INITIAL_SESSION_VERSION, widgetQueryKeys } from '@/lib/client/hooks/use-widget-vote'
 
@@ -13,7 +13,7 @@ export function widgetHelpCategoriesQuery(sessionVersion: number, locale: string
   return queryOptions({
     queryKey: widgetQueryKeys.helpCategories.bySession(sessionVersion, locale),
     queryFn: () =>
-      listPublicCategoriesFn({
+      widgetListPublicCategoriesFn({
         data: { locale },
         headers: getWidgetAuthHeaders(),
       }),
@@ -30,7 +30,7 @@ export function widgetHelpCategoryArticlesQuery(
   return queryOptions({
     queryKey: widgetQueryKeys.helpCategoryArticles.byCategory(categoryId, sessionVersion, locale),
     queryFn: () =>
-      listPublicArticlesForCategoryFn({
+      widgetListPublicArticlesForCategoryFn({
         data: { categoryId, locale },
         headers: getWidgetAuthHeaders(),
       }),

@@ -18,6 +18,10 @@ import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'auth-helpers' })
 
+export type RequireAuthOptions = {
+  permission?: PermissionKey
+}
+
 // Type alias for session result
 type SessionResult = Awaited<ReturnType<typeof auth.api.getSession>>
 
@@ -113,17 +117,12 @@ export interface AuthContext {
 }
 
 /**
- * Require authentication, optionally gated on a permission.
+ * Site authentication (dashboard + portal cookies). Widget Bearers are denied;
+ * widget surfaces use `requireWidgetAuth` instead.
  *
- * `{ permission }` checks the caller's resolved permission set (their role's
- * preset bundle). Bare `requireAuth()` requires only a valid principal. The
- * legacy `{ roles }` form was retired at the Phase C completion gate.
- *
- * @example
- * const auth = await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
- * const anyAuth = await requireAuth()
+ * `{ permission }` is dashboard-only (unchanged).
  */
-export async function requireAuth(options?: { permission?: PermissionKey }): Promise<AuthContext> {
+export async function requireAuth(options?: RequireAuthOptions): Promise<AuthContext> {
   log.debug({ permission: options?.permission }, 'require auth')
   const session = await getSessionDirect()
   if (!session?.user) {
@@ -131,6 +130,9 @@ export async function requireAuth(options?: { permission?: PermissionKey }): Pro
   }
   const userId = session.user.id as UserId
   const scope = toSessionScope(session.session.scope)
+  if (scope === 'widget') {
+    throw new Error('Access denied: Widget sessions cannot access this resource')
+  }
 
   const appSettings = await getAuthSettings()
   if (!appSettings) {
@@ -198,6 +200,13 @@ export async function requireAuth(options?: { permission?: PermissionKey }): Pro
 // vocabulary and its matcher still travel together for existing importers.
 export { isAuthDenialError } from './auth-errors'
 
+/** Cloud/admin lifecycle mutations: widget and portal sessions cannot act as owner. */
+export function assertDashboardScope(auth: Pick<AuthContext, 'scope'>): void {
+  if (auth.scope !== 'dashboard') {
+    throw new Error('Access denied: Requires a dashboard session')
+  }
+}
+
 /**
  * Assert the authenticated caller holds a permission, throwing the same
  * canonical message `requireAuth({ permission })` uses. For the rare gate
@@ -235,6 +244,10 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
     return null
   }
   const userId = session.user.id as UserId
+  const scope = toSessionScope(session.session.scope)
+  if (scope === 'widget') {
+    return null
+  }
 
   const appSettings = await getAuthSettings()
   if (!appSettings) {
@@ -268,7 +281,6 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
     }
   )
 
-  const scope = toSessionScope(session.session.scope)
   const role: Role = sessionRole(principalRecord.role as Role, scope)
   // Non-dashboard audiences never carry team authority downstream.
   const permissions: PermissionKey[] = scope === 'dashboard' ? [...resolvedPermissions] : []

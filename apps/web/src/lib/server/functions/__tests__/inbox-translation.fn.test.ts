@@ -15,6 +15,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // createServerFn → directly-callable fns (mirrors conversation-transcript-export.test.ts).
 vi.mock('@tanstack/react-start', () => ({
+  createServerOnlyFn: <T>(fn: T) => fn,
   createServerFn: () => {
     let handler: ((args: { data: unknown }) => Promise<unknown>) | null = null
     const fn = (args: { data: unknown }) => {

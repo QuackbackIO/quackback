@@ -4,7 +4,7 @@
  * These functions handle changelog CRUD operations via TanStack Start server functions.
  */
 
-import { createServerFn } from '@tanstack/react-start'
+import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
 import type { BoardId, ChangelogCategoryId, ChangelogId, PostId, SegmentId } from '@quackback/ids'
 // Note: BoardId is only used for searchShippedPosts filtering
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
@@ -188,81 +188,93 @@ export const listChangelogsFn = createServerFn({ method: 'GET' })
 /**
  * Get a published changelog entry by ID (public view)
  */
+export const runGetPublicChangelog = createServerOnlyFn(async function runGetPublicChangelog(
+  authCtx: Awaited<ReturnType<typeof getOptionalAuth>>,
+  data: z.infer<typeof getChangelogSchema>
+) {
+  log.debug({ changelog_id: data.id }, 'get public changelog')
+  // Outer gate: a private portal must not serve changelog content to a
+  // caller the portal-access resolver denies. Throw the same not-found
+  // error as a genuinely missing entry — a blocked visitor sees no data
+  // and cannot distinguish a private entry from a non-existent one.
+  const access = await resolvePortalAccessForRequest()
+  if (!access.granted) {
+    log.debug('portal access denied')
+    throw new NotFoundError(
+      'CHANGELOG_NOT_FOUND',
+      `Published changelog entry with ID ${data.id} not found`
+    )
+  }
+
+  const actor = await policyActorFromAuth(authCtx)
+
+  // Changelog audience gate (Settings > Changelog > Visibility): same
+  // not-found shape as a missing entry when audience='authenticated'.
+  if (!(await isChangelogAudienceGranted(actor))) {
+    log.debug('changelog audience denied')
+    throw new NotFoundError(
+      'CHANGELOG_NOT_FOUND',
+      `Published changelog entry with ID ${data.id} not found`
+    )
+  }
+
+  const entry = await getPublicChangelogById(data.id as ChangelogId, actor)
+
+  return {
+    ...entry,
+    publishedAt: toIsoString(entry.publishedAt),
+  }
+})
+
 export const getPublicChangelogFn = createServerFn({ method: 'GET' })
   .validator(getChangelogSchema)
   .handler(async ({ data }) => {
-    log.debug({ changelog_id: data.id }, 'get public changelog')
-    // Outer gate: a private portal must not serve changelog content to a
-    // caller the portal-access resolver denies. Throw the same not-found
-    // error as a genuinely missing entry — a blocked visitor sees no data
-    // and cannot distinguish a private entry from a non-existent one.
-    const access = await resolvePortalAccessForRequest()
-    if (!access.granted) {
-      log.debug('portal access denied')
-      throw new NotFoundError(
-        'CHANGELOG_NOT_FOUND',
-        `Published changelog entry with ID ${data.id} not found`
-      )
-    }
-
-    const authCtx = await getOptionalAuth()
-    const actor = await policyActorFromAuth(authCtx)
-
-    // Changelog audience gate (Settings > Changelog > Visibility): same
-    // not-found shape as a missing entry when audience='authenticated'.
-    if (!(await isChangelogAudienceGranted(actor))) {
-      log.debug('changelog audience denied')
-      throw new NotFoundError(
-        'CHANGELOG_NOT_FOUND',
-        `Published changelog entry with ID ${data.id} not found`
-      )
-    }
-
-    const entry = await getPublicChangelogById(data.id as ChangelogId, actor)
-
-    return {
-      ...entry,
-      publishedAt: toIsoString(entry.publishedAt),
-    }
+    return runGetPublicChangelog(await getOptionalAuth(), data)
   })
 
 /**
  * List published changelog entries (public view)
  */
+export const runListPublicChangelogs = createServerOnlyFn(async function runListPublicChangelogs(
+  authCtx: Awaited<ReturnType<typeof getOptionalAuth>>,
+  data: z.infer<typeof listPublicChangelogsSchema>
+) {
+  log.debug({ limit: data.limit }, 'list public changelogs')
+  // Outer gate: private portal + unauthorized caller → no changelog entries.
+  const access = await resolvePortalAccessForRequest()
+  if (!access.granted) {
+    log.debug('portal access denied, returning empty list')
+    return { items: [], nextCursor: null, hasMore: false }
+  }
+
+  const actor = await policyActorFromAuth(authCtx)
+
+  if (!(await isChangelogAudienceGranted(actor))) {
+    log.debug('changelog audience denied, returning empty list')
+    return { items: [], nextCursor: null, hasMore: false }
+  }
+
+  const result = await listPublicChangelogs(
+    {
+      cursor: data.cursor,
+      limit: data.limit,
+    },
+    actor
+  )
+
+  return {
+    ...result,
+    items: result.items.map((entry) => ({
+      ...entry,
+      publishedAt: toIsoString(entry.publishedAt),
+    })),
+  }
+})
+
 export const listPublicChangelogsFn = createServerFn({ method: 'GET' })
   .validator(listPublicChangelogsSchema)
   .handler(async ({ data }) => {
-    log.debug({ limit: data.limit }, 'list public changelogs')
-    // Outer gate: private portal + unauthorized caller → no changelog entries.
-    const access = await resolvePortalAccessForRequest()
-    if (!access.granted) {
-      log.debug('portal access denied, returning empty list')
-      return { items: [], nextCursor: null, hasMore: false }
-    }
-
-    const authCtx = await getOptionalAuth()
-    const actor = await policyActorFromAuth(authCtx)
-
-    if (!(await isChangelogAudienceGranted(actor))) {
-      log.debug('changelog audience denied, returning empty list')
-      return { items: [], nextCursor: null, hasMore: false }
-    }
-
-    const result = await listPublicChangelogs(
-      {
-        cursor: data.cursor,
-        limit: data.limit,
-      },
-      actor
-    )
-
-    return {
-      ...result,
-      items: result.items.map((entry) => ({
-        ...entry,
-        publishedAt: toIsoString(entry.publishedAt),
-      })),
-    }
+    return runListPublicChangelogs(await getOptionalAuth(), data)
   })
 
 // ============================================================================

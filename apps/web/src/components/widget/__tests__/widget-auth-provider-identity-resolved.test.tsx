@@ -7,6 +7,7 @@
  * ticket-holding visitor is identified.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { type ReactNode } from 'react'
 import { act, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { installInMemoryLocalStorage } from '@/test/local-storage'
@@ -34,10 +35,21 @@ function Probe() {
   )
 }
 
+function HandoffProbe() {
+  const { canPortalHandoff, identityResolved } = useWidgetAuth()
+  return (
+    <span data-testid="handoff">
+      {identityResolved ? 'resolved' : 'pending'}:{canPortalHandoff ? 'handoff' : 'veto'}
+    </span>
+  )
+}
+
 function renderWidget(
   props: {
     portalSessionToken?: string | null
     portalUser?: { id: string; name: string; email: string; avatarUrl: string | null } | null
+    canPortalHandoff?: boolean
+    probe?: ReactNode
   } = {}
 ) {
   const qc = new QueryClient()
@@ -46,8 +58,9 @@ function renderWidget(
       <WidgetAuthProvider
         portalSessionToken={props.portalSessionToken ?? null}
         portalUser={props.portalUser ?? null}
+        canPortalHandoff={props.canPortalHandoff}
       >
-        <Probe />
+        {props.probe ?? <Probe />}
       </WidgetAuthProvider>
     </QueryClientProvider>
   )
@@ -130,5 +143,37 @@ describe('WidgetAuthProvider — identityResolved', () => {
       portalUser: { id: 'u1', name: 'Ada', email: 'ada@example.com', avatarUrl: null },
     })
     await waitFor(() => expect(screen.getByTestId('probe').textContent).toBe('resolved:identified'))
+  })
+})
+
+describe('WidgetAuthProvider — canPortalHandoff follows the current identity', () => {
+  beforeEach(() => {
+    clearWidgetToken()
+    window.localStorage.clear()
+    vi.unstubAllGlobals()
+  })
+
+  it('starts vetoed for a teammate cookie, then follows a customer identify', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          sessionToken: 'tok',
+          user: { id: 'cust', name: 'Customer', email: 'c@example.com', avatarUrl: null },
+          canPortalHandoff: true,
+        }),
+      })
+    )
+    renderWidget({
+      portalSessionToken: 'dashboard-tok',
+      portalUser: { id: 'admin', name: 'Admin', email: 'a@example.com', avatarUrl: null },
+      canPortalHandoff: false,
+      probe: <HandoffProbe />,
+    })
+    await waitFor(() => expect(screen.getByTestId('handoff').textContent).toBe('resolved:veto'))
+
+    postFromHost({ id: 'cust', ssoToken: 'sso' })
+    await waitFor(() => expect(screen.getByTestId('handoff').textContent).toBe('resolved:handoff'))
   })
 })

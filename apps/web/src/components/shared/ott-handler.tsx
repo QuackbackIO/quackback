@@ -2,20 +2,27 @@
 
 import { useEffect, useRef } from 'react'
 import { useRouterState } from '@tanstack/react-router'
-import { authClient } from '@/lib/client/auth-client'
-import { recordPlgEvent } from '@/lib/client/plg-events'
+import { widgetHandoffPath } from '@/lib/shared/routing'
 
 /**
- * Handles one-time token (OTT) session transfer from the widget to the portal.
- *
- * When a widget user clicks "View on feedback board", the widget generates a
- * one-time token and appends it as `?ott=<token>` to the portal URL. This
- * component detects the param, verifies the token (which sets the session cookie),
- * strips the param from the URL, and reloads to pick up the new session.
- * Dedicated `/auth/*` consume routes own their token; do not race them.
+ * Forwards leftover `?ott=` on portal pages to `/auth/widget-handoff`.
+ * That route owns cookie install (and the teammate skip). Do not verify here.
  */
 export function isPortalOttPath(pathname: string): boolean {
   return !pathname.startsWith('/auth/')
+}
+
+/** Build the widget-handoff URL for a portal page that still has `?ott=`. */
+export function portalOttForwardUrl(pathname: string, searchStr: string): string | null {
+  if (!isPortalOttPath(pathname)) return null
+  const raw = searchStr.startsWith('?') ? searchStr.slice(1) : searchStr
+  const params = new URLSearchParams(raw)
+  const ott = params.get('ott')
+  if (!ott) return null
+  params.delete('ott')
+  const cleanSearch = params.toString()
+  const returnTo = pathname + (cleanSearch ? `?${cleanSearch}` : '')
+  return widgetHandoffPath(ott, returnTo)
 }
 
 export function OttHandler() {
@@ -24,26 +31,10 @@ export function OttHandler() {
   const processedRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (!isPortalOttPath(pathname)) return
-    const params = new URLSearchParams(searchStr)
-    const ott = params.get('ott')
-    if (!ott || processedRef.current === ott) return
-    processedRef.current = ott
-
-    authClient.oneTimeToken.verify({ token: ott }).then(({ error }) => {
-      params.delete('ott')
-      const cleanSearch = params.toString()
-      const cleanUrl = window.location.pathname + (cleanSearch ? `?${cleanSearch}` : '')
-
-      if (error) {
-        window.location.replace('/admin/login?error=handoff_failed')
-        return
-      }
-
-      recordPlgEvent({ name: 'saas_handoff_consumed' })
-      // Full reload to pick up the new session cookie in SSR
-      window.location.replace(cleanUrl)
-    })
+    const next = portalOttForwardUrl(pathname, searchStr)
+    if (!next || processedRef.current === next) return
+    processedRef.current = next
+    window.location.replace(next)
   }, [pathname, searchStr])
 
   return null

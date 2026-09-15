@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { ChevronRightIcon } from '@heroicons/react/24/outline'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { resolvePublicArticleRefFn } from '@/lib/server/functions/help-center'
+import { widgetResolvePublicArticleRefFn } from '@/lib/server/functions/widget/help'
 import { generateOneTimeToken, getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { appendWidgetOtt } from './build-portal-url'
 import { hcArticlePath } from '@/lib/shared/help-center-url'
@@ -31,12 +31,12 @@ export function WidgetHelpDetail({
   onCategorySelect,
   onAskQuestion,
 }: WidgetHelpDetailProps) {
-  const { isIdentified, sessionVersion } = useWidgetAuth()
+  const { isIdentified, canPortalHandoff, sessionVersion } = useWidgetAuth()
   const { locale } = useIntl()
   const { data: article, isLoading } = useQuery({
     queryKey: widgetQueryKeys.articleDetail.byRef(articleRef, sessionVersion, locale),
     queryFn: () =>
-      resolvePublicArticleRefFn({
+      widgetResolvePublicArticleRefFn({
         data: { ref: articleRef, locale },
         headers: getWidgetAuthHeaders(),
       }),
@@ -52,18 +52,18 @@ export function WidgetHelpDetail({
 
   const handleViewOnPortal = useCallback(async () => {
     if (!article) return
-    const ott = isIdentified ? await generateOneTimeToken() : null
+    const ott = isIdentified && canPortalHandoff ? await generateOneTimeToken() : null
     const url = appendWidgetOtt(
       `${window.location.origin}${hcArticlePath({
         locale: article.resolvedLocale,
         urlId: article.urlId,
         slug: article.slug,
       })}`,
-      isIdentified,
+      isIdentified && canPortalHandoff,
       ott
     )
     sendToHost({ type: 'quackback:navigate', url })
-  }, [article, isIdentified])
+  }, [article, isIdentified, canPortalHandoff])
 
   if (isLoading) {
     return <WidgetArticleSkeleton />

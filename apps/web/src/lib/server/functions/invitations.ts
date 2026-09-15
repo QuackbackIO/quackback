@@ -3,7 +3,7 @@ import { getRequestHeaders } from '@tanstack/react-start/server'
 import { z } from 'zod'
 import type { InviteId, PrincipalId, RoleId, UserId } from '@quackback/ids'
 import { db, invitation, principal, user, and, eq } from '@/lib/server/db'
-import { ROLE_RANK, type Role } from '@/lib/shared/roles'
+import { ROLE_RANK, assertNotWidgetScope, toSessionScope, type Role } from '@/lib/shared/roles'
 import {
   createPrincipal,
   setPrincipalRole,
@@ -345,6 +345,11 @@ export const setPasswordFn = createServerFn({ method: 'POST' })
     })
   )
   .handler(async ({ data }) => {
+    const session = await getSession()
+    if (!session?.user) {
+      throw new Error('Not authenticated')
+    }
+    assertNotWidgetScope(toSessionScope(session.session.scope))
     const headers = getRequestHeaders()
     const { auth } = await import('@/lib/server/auth')
     await auth.api.setPassword({

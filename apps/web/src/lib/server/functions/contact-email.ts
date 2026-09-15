@@ -26,6 +26,7 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { requireAuth } from './auth-helpers'
+
 import { ValidationError } from '@/lib/shared/errors'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { logger } from '@/lib/server/logger'
@@ -72,7 +73,8 @@ export const getEmailChangeStateFn = createServerFn({ method: 'GET' }).handler(a
  * to it. Proves the person holds the address they are moving away from.
  */
 export const sendCurrentAddressCodeFn = createServerFn({ method: 'POST' }).handler(async () => {
-  const row = await userRow(await requireAuth())
+  const ctx = await requireAuth()
+  const row = await userRow(ctx)
   const current = realEmail(row.email)
   if (!current) {
     throw new ValidationError('NO_CURRENT_EMAIL', 'This account has no confirmed address yet.')
@@ -110,7 +112,8 @@ export const sendCurrentAddressCodeFn = createServerFn({ method: 'POST' }).handl
 export const requestEmailChangeFn = createServerFn({ method: 'POST' })
   .validator(z.object({ email: z.string().max(320), currentCode: z.string().max(16).optional() }))
   .handler(async ({ data }) => {
-    const row = await userRow(await requireAuth())
+    const ctx = await requireAuth()
+    const row = await userRow(ctx)
     const { acceptableContactEmail } = await import('@/lib/server/domains/principals/contact-email')
     const email = acceptableContactEmail(data.email)
     if (!email) throw new ValidationError('VALIDATION_ERROR', 'Enter a valid email address.')

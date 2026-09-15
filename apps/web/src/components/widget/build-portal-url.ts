@@ -1,10 +1,13 @@
+import { widgetHandoffPath } from '@/lib/shared/routing'
+
 /**
  * Build the portal URL for "View on feedback board" navigation.
  *
- * Only includes the OTT (one-time token) when the user is identified.
- * Transferring an anonymous session via OTT would overwrite any existing
- * portal session cookie, effectively logging the user out.
+ * Identified visitors go through `/auth/widget-handoff` so the teammate
+ * cookie guard runs. Anonymous visitors get the resource URL with no OTT
+ * (an anonymous OTT would overwrite an existing portal cookie).
  */
+
 export function buildPortalUrl(params: {
   origin: string
   boardSlug: string
@@ -13,17 +16,17 @@ export function buildPortalUrl(params: {
   ott: string | null
 }): string {
   const { origin, boardSlug, postId, isIdentified, ott } = params
-  let url = `${origin}/b/${boardSlug}/posts/${postId}`
+  const dest = `/b/${boardSlug}/posts/${postId}`
   if (isIdentified && ott) {
-    url += `?ott=${encodeURIComponent(ott)}`
+    return `${origin}${widgetHandoffPath(ott, dest)}`
   }
-  return url
+  return `${origin}${dest}`
 }
 
-/** Append an OTT to a portal URL when the widget visitor is identified. */
+/** Send an identified visitor through widget-handoff; leave anonymous URLs unchanged. */
 export function appendWidgetOtt(url: string, isIdentified: boolean, ott: string | null): string {
   if (!isIdentified || !ott) return url
   const next = new URL(url)
-  next.searchParams.set('ott', ott)
-  return next.toString()
+  const returnTo = `${next.pathname}${next.search}`
+  return `${next.origin}${widgetHandoffPath(ott, returnTo)}`
 }

@@ -120,6 +120,7 @@ beforeEach(() => {
   hoisted.requireAuth.mockResolvedValue({
     user: { id: 'usr_1' },
     principal: { type: 'user', role: 'user' },
+    scope: 'dashboard',
   })
   hoisted.checkRateLimit.mockResolvedValue({ allowed: true })
   hoisted.checkVerificationOTP.mockResolvedValue({ success: true })
@@ -265,6 +266,7 @@ describe('confirmEmailChangeFn', () => {
     hoisted.requireAuth.mockResolvedValue({
       user: { id: 'usr_1' },
       principal: { type: 'user', role: 'member' },
+      scope: 'dashboard',
     })
     hoisted.findFirst.mockReset()
     hoisted.findFirst.mockResolvedValueOnce(undefined)
@@ -281,5 +283,26 @@ describe('confirmEmailChangeFn', () => {
     await call(confirmEmailChangeFn, { email: REAL, code: '123456' })
 
     expect(hoisted.enqueueMembershipSync).not.toHaveBeenCalled()
+  })
+})
+
+describe('widget-scoped sessions cannot change email', () => {
+  beforeEach(() => {
+    hoisted.requireAuth.mockRejectedValue(
+      new Error('Access denied: Widget sessions cannot access this resource')
+    )
+  })
+
+  it('rejects requestEmailChangeFn', async () => {
+    accountIs(PLACEHOLDER)
+    await expect(call(requestEmailChangeFn, { email: REAL })).rejects.toThrow(/Widget sessions/)
+    expect(hoisted.requestEmailChangeEmailOTP).not.toHaveBeenCalled()
+  })
+
+  it('rejects confirmEmailChangeFn', async () => {
+    await expect(call(confirmEmailChangeFn, { email: REAL, code: '123456' })).rejects.toThrow(
+      /Widget sessions/
+    )
+    expect(hoisted.changeEmailEmailOTP).not.toHaveBeenCalled()
   })
 })

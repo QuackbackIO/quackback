@@ -12,11 +12,7 @@ import { useVirtualizer, type Virtualizer } from '@tanstack/react-virtual'
 import type { JSONContent } from '@tiptap/core'
 import type { ConversationId } from '@quackback/ids'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import {
-  listConversationMessagesFn,
-  markConversationReadFn,
-  sendConversationTypingFn,
-} from '@/lib/server/functions/conversation'
+import { useVisitorSurfaceRpc, type VisitorSurfaceRpc } from '@/lib/client/visitor-surface-rpc'
 import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
 
 /** True when the composer doc carries an inline image or post embed, which makes
@@ -189,16 +185,17 @@ export function useOlderMessages({
   conversationId: ConversationId | null
   messages: ConversationMessageDTO[]
   getHeaders?: () => Record<string, string>
-  onPage: (page: Awaited<ReturnType<typeof listConversationMessagesFn>>) => void
+  onPage: (page: Awaited<ReturnType<VisitorSurfaceRpc['listConversationMessages']>>) => void
   onError?: () => void
 }) {
+  const { listConversationMessages } = useVisitorSurfaceRpc()
   const [loadingOlder, setLoadingOlder] = useState(false)
 
   const loadOlder = async () => {
     if (!conversationId || loadingOlder || messages.length === 0) return
     setLoadingOlder(true)
     try {
-      const page = await listConversationMessagesFn({
+      const page = await listConversationMessages({
         data: { conversationId, before: messages[0].id },
         ...(getHeaders ? { headers: getHeaders() } : {}),
       })
@@ -237,6 +234,7 @@ export function useMarkReadOnIncoming({
   const lastMessage = messages.at(-1)
   const lastMessageId = lastMessage?.id
   const lastSenderType = lastMessage?.senderType
+  const { markConversationRead } = useVisitorSurfaceRpc()
   const getHeadersRef = useRef(getHeaders)
   getHeadersRef.current = getHeaders
   const onMarkedRef = useRef(onMarked)
@@ -246,7 +244,7 @@ export function useMarkReadOnIncoming({
     if (!conversationId || !enabled) return
     if (lastSenderType !== whenLastFrom) return
     const headers = getHeadersRef.current?.()
-    void markConversationReadFn({
+    void markConversationRead({
       data: { conversationId },
       ...(headers ? { headers } : {}),
     })
@@ -261,11 +259,12 @@ export function useTypingSender(
   conversationId: ConversationId | null,
   getHeaders?: () => Record<string, string>
 ) {
+  const { sendConversationTyping } = useVisitorSurfaceRpc()
   return useCallback(() => {
     if (!conversationId) return
-    void sendConversationTypingFn({
+    void sendConversationTyping({
       data: { conversationId },
       ...(getHeaders ? { headers: getHeaders() } : {}),
     }).catch(() => {})
-  }, [conversationId, getHeaders])
+  }, [conversationId, getHeaders, sendConversationTyping])
 }

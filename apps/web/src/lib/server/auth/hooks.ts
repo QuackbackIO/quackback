@@ -21,7 +21,7 @@
 
 import { APIError, createAuthMiddleware } from 'better-auth/api'
 import type { UserId } from '@quackback/ids'
-import type { Role } from '@/lib/shared/roles'
+import { toSessionScope, type Role } from '@/lib/shared/roles'
 import {
   findProviderForDomainEmail,
   isRegisteredOidcProvider,
@@ -406,11 +406,81 @@ export async function handleSignInPreCheck(ctx: {
   }
 }
 
+/** Better Auth HTTP paths a widget-scoped session may call. Everything else
+ *  is denied so new BA endpoints stay closed by default. */
+const WIDGET_AUTH_ALLOWLIST = new Set([
+  '/get-session',
+  '/sign-in/anonymous',
+  '/one-time-token/generate',
+  '/one-time-token/verify',
+])
+
+type HeaderBag = { get(name: string): string | null }
+
+function sessionTokenFromAuthHeaders(headers: HeaderBag | undefined): string | null {
+  if (!headers) return null
+  const authHeader = headers.get('authorization') ?? headers.get('Authorization')
+  if (authHeader && authHeader.slice(0, 7).toLowerCase() === 'bearer ') {
+    const token = authHeader.slice(7).trim()
+    if (token) return token.includes('.') ? token.split('.')[0]! : token
+  }
+  const cookie = headers.get('cookie') ?? ''
+  for (const part of cookie.split(';')) {
+    const [name, ...rest] = part.trim().split('=')
+    if (name?.trim() !== 'better-auth.session_token') continue
+    const raw = rest.join('=')
+    if (!raw) return null
+    let value = raw
+    try {
+      value = decodeURIComponent(raw)
+    } catch {
+      /* keep raw */
+    }
+    return value.includes('.') ? value.split('.')[0]! : value
+  }
+  return null
+}
+
+/**
+ * Widget-scoped sessions may only hit the Better Auth allowlist. Portal and
+ * dashboard sessions still pass; missing sessions are left to the endpoint's
+ * own auth middleware.
+ */
+export async function handleWidgetAccountMutationGate(ctx: {
+  path?: string
+  headers?: HeaderBag
+  request?: { headers?: HeaderBag }
+  context?: {
+    internalAdapter?: {
+      findSession?: (token: string) => Promise<unknown>
+    }
+  }
+}): Promise<void> {
+  const headers = ctx.headers ?? ctx.request?.headers
+  const token = sessionTokenFromAuthHeaders(headers)
+  if (!token) return
+  const found = await ctx.context?.internalAdapter?.findSession?.(token)
+  const session =
+    typeof found === 'object' &&
+    found !== null &&
+    Object.prototype.hasOwnProperty.call(found, 'session')
+      ? (found as { session?: { scope?: unknown } }).session
+      : undefined
+  if (!session) return
+  if (toSessionScope(session.scope) !== 'widget') return
+  if (WIDGET_AUTH_ALLOWLIST.has(ctx.path ?? '')) return
+  throw new APIError('FORBIDDEN', {
+    message: 'Widget sessions cannot access this endpoint',
+  })
+}
+
 export const hooksBefore = createAuthMiddleware(async (ctx) => {
   // Disjoint path matchers: grace heal only touches /oauth2/token,
-  // sign-in pre-check only touches sign-in/OTP paths. Order is irrelevant.
+  // sign-in pre-check only touches sign-in/OTP paths. Widget-session
+  // allowlist covers every Better Auth HTTP path.
   await handleRefreshGraceHeal(ctx)
   await handleSignInPreCheck(ctx as Parameters<typeof handleSignInPreCheck>[0])
+  await handleWidgetAccountMutationGate(ctx)
 })
 
 /**

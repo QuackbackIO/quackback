@@ -23,13 +23,7 @@ import { readAttributeValue } from '@/lib/shared/conversation/attribute-values'
 import { StageChip, StageTracker } from '@/components/shared/ticket-stage'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
-import {
-  getMyTicketStageLabelsFn,
-  getMyTicketFormFn,
-  getMyTicketWatchStatusFn,
-  watchMyTicketFn,
-  unwatchMyTicketFn,
-} from '@/lib/server/functions/tickets'
+import { useVisitorSurfaceRpc } from '@/lib/client/visitor-surface-rpc'
 
 const NO_HEADERS = (): Record<string, string> => ({})
 
@@ -73,26 +67,28 @@ export function TicketHeaderCard({
 }) {
   const intl = useIntl()
   const queryClient = useQueryClient()
+  const rpc = useVisitorSurfaceRpc()
   const [expanded, setExpanded] = useState(false)
   const id = ticket.id as TicketId
 
   // B19: customized stage labels, shared cache with everything ticket-shaped.
   const { data: stageLabels } = useQuery({
     queryKey: ['ticket-stage-labels'],
-    queryFn: () => getMyTicketStageLabelsFn({ headers: getAuthHeaders() }),
+    queryFn: () => rpc.getMyTicketStageLabels({ headers: getAuthHeaders() }),
     staleTime: 300_000,
   })
   // The intake form resolves stored answers back to field labels; only
   // fetched once the Details disclosure is opened.
   const { data: intakeForm } = useQuery({
     queryKey: ['ticket-intake-form'],
-    queryFn: () => getMyTicketFormFn({ headers: getAuthHeaders() }),
+    queryFn: () => rpc.getMyTicketForm({ headers: getAuthHeaders() }),
     staleTime: 300_000,
     enabled: expanded && !!ticket.ticketType,
   })
   const { data: watchStatus } = useQuery({
     queryKey: ['ticket-watch', id],
-    queryFn: () => getMyTicketWatchStatusFn({ data: { ticketId: id }, headers: getAuthHeaders() }),
+    queryFn: () =>
+      rpc.getMyTicketWatchStatus({ data: { ticketId: id }, headers: getAuthHeaders() }),
     staleTime: 30_000,
   })
   const watching = watchStatus?.watching ?? false
@@ -100,8 +96,8 @@ export function TicketHeaderCard({
   const toggleWatch = useMutation({
     mutationFn: () =>
       watching
-        ? unwatchMyTicketFn({ data: { ticketId: id }, headers: getAuthHeaders() })
-        : watchMyTicketFn({ data: { ticketId: id }, headers: getAuthHeaders() }),
+        ? rpc.unwatchMyTicket({ data: { ticketId: id }, headers: getAuthHeaders() })
+        : rpc.watchMyTicket({ data: { ticketId: id }, headers: getAuthHeaders() }),
     onSettled: () => void queryClient.invalidateQueries({ queryKey: ['ticket-watch', id] }),
   })
 

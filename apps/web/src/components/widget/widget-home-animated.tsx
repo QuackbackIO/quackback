@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { listPublicPostsFn } from '@/lib/server/functions/public-posts'
+import { widgetListPublicPostsFn } from '@/lib/server/functions/widget/posts'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { WidgetVoteButton } from './widget-vote-button'
 import { WidgetPostListSkeleton } from './widget-skeletons'
@@ -418,7 +418,7 @@ export function WidgetHomeAnimated({
   } = useInfiniteQuery({
     queryKey: widgetQueryKeys.popularPosts.list(activeBoardSlug, sessionVersion),
     queryFn: async ({ pageParam }) => {
-      const page = await listPublicPostsFn({
+      const page = await widgetListPublicPostsFn({
         data: {
           sort: 'top',
           page: pageParam,
@@ -625,16 +625,16 @@ export function WidgetHomeAnimated({
         }
       }
 
-      const [{ getWidgetAuthHeaders }, { createPublicPostFn }] = await Promise.all([
+      const [{ getWidgetAuthHeaders }, { widgetCreatePublicPostFn }] = await Promise.all([
         import('@/lib/client/widget-auth'),
-        import('@/lib/server/functions/public-posts'),
+        import('@/lib/server/functions/widget/posts'),
       ])
       // Headers and session version are captured together: the vote the
       // server casts belongs to whichever principal made this request, even
       // if the host identifies or clears the visitor while it is in flight.
       const headers = getWidgetAuthHeaders()
       const votedPostsKey = widgetQueryKeys.votedPosts.bySession(getSessionVersion())
-      const result = await createPublicPostFn({
+      const result = await widgetCreatePublicPostFn({
         data: {
           boardId: selectedBoardId,
           title: title.trim(),

@@ -13,7 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { TimeAgo } from '@/components/ui/time-ago'
 import { REACTION_EMOJIS } from '@/lib/shared/db-types'
 import { ReactionChip } from '@/components/shared/reaction-chip'
-import { addReactionFn, removeReactionFn } from '@/lib/server/functions/comments'
+import { widgetAddReactionFn, widgetRemoveReactionFn } from '@/lib/server/functions/widget/comments'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { widgetQueryKeys } from '@/lib/client/hooks/use-widget-vote'
 import { useWidgetAuth } from './widget-auth-provider'
@@ -139,7 +139,7 @@ function WidgetCommentItem({
     setReactionPending(true)
     try {
       const hasReacted = reactions.some((r) => r.emoji === emoji && r.hasReacted)
-      const fn = hasReacted ? removeReactionFn : addReactionFn
+      const fn = hasReacted ? widgetRemoveReactionFn : widgetAddReactionFn
       // Reacting may be the visitor's first write, so there may be no session
       // yet — mint one (anonymous is fine) or the request goes out with no
       // Bearer and requireAuth() rejects it silently (GH #464).
