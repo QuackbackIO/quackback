@@ -13,6 +13,12 @@ import { BlockTicketForm } from '../block-ticket-form'
 
 vi.mock('@/lib/server/functions/tickets', () => ({
   createMyTicketFn: vi.fn(async () => ({ id: 'ticket_1' })),
+  getConversationLinkedTicketFn: vi.fn(),
+  getMyTicketStageLabelsFn: vi.fn(),
+  getMyTicketFormFn: vi.fn(),
+  getMyTicketWatchStatusFn: vi.fn(),
+  watchMyTicketFn: vi.fn(),
+  unwatchMyTicketFn: vi.fn(),
 }))
 import { createMyTicketFn } from '@/lib/server/functions/tickets'
 

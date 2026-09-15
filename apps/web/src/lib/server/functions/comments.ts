@@ -31,7 +31,7 @@ import { getOptionalAuth, requireAuth, hasAuthCredentials } from './auth-helpers
 const log = logger.child({ component: 'comments' })
 
 // Schemas
-const createCommentSchema = z.object({
+export const createCommentSchema = z.object({
   postId: z.string(),
   content: z.string().min(1).max(5000),
   contentJson: z.unknown().nullable().optional(),
@@ -40,7 +40,7 @@ const createCommentSchema = z.object({
   isPrivate: z.boolean().optional(),
 })
 
-const reactionSchema = z.object({
+export const reactionSchema = z.object({
   commentId: z.string(),
   emoji: z.string(),
 })
@@ -74,115 +74,132 @@ export type UserEditCommentInput = z.infer<typeof userEditCommentSchema>
 export type UserDeleteCommentInput = z.infer<typeof userDeleteCommentSchema>
 
 // Write Operations
+export async function runCreateComment(
+  auth: Awaited<ReturnType<typeof requireAuth>>,
+  data: z.infer<typeof createCommentSchema>
+) {
+  log.info({ post_id: data.postId }, 'create comment')
+  // Portal-visibility gate: a denied caller (signed-in but not on
+  // the allowlist of a private portal) must not be able to comment.
+  // Matches createPublicPostFn / toggleVoteFn — read-side gating
+  // already runs at list / detail, the write surface needs it too
+  // or the caller could mutate from inside a portal they're not
+  // entitled to view. Dynamic import keeps the cycle out of static
+  // analysis (comments.ts ↔ portal-access.ts both pull from db).
+  const { resolvePortalAccessForRequest } = await import('./portal-access')
+  const access = await resolvePortalAccessForRequest()
+  if (!access.granted) {
+    throw new Error('Portal access required')
+  }
+
+  // Block anonymous users unless the workspace master switch allows
+  // anonymous interaction. Per-board comment tiers are still checked
+  // downstream; this is the workspace-wide ceiling collapsed in
+  // migration 0084 from the legacy anonymousCommenting flag.
+  if (auth.principal.type === 'anonymous') {
+    // Fail closed on a missing flag — read the raw config, not
+    // getPortalConfig's permissive merged default (matches the vote/post
+    // gates). The per-board comment tier is enforced downstream.
+    const { getSettings } = await import('./workspace')
+    const { workspaceAllowsAnonymous } =
+      await import('@/lib/server/domains/settings/settings.types')
+    const settings = await getSettings()
+    if (!workspaceAllowsAnonymous(settings?.portalConfig)) {
+      throw new Error('Anonymous interaction is not enabled')
+    }
+  }
+
+  const actor = await policyActorFromAuth(auth)
+
+  const result = await createComment(
+    {
+      postId: data.postId as PostId,
+      content: data.content,
+      contentJson: (data.contentJson ?? undefined) as
+        import('@/lib/shared/db-types').TiptapContent | undefined,
+      parentId: data.parentId as PostCommentId | undefined,
+      statusId: data.statusId as PostStatusId | undefined,
+      isPrivate: data.isPrivate,
+    },
+    {
+      principalId: auth.principal.id,
+      userId: auth.user.id as UserId,
+      name: auth.user.name,
+      email: auth.user.email,
+      role: auth.principal.role,
+    },
+    actor,
+    { headers: getRequestHeaders() }
+  )
+
+  // Events are dispatched by the service layer
+
+  log.info({ comment_id: result.comment.id }, 'comment created')
+  return result
+}
+
 export const createCommentFn = createServerFn({ method: 'POST' })
   .validator(createCommentSchema)
   .handler(async ({ data }) => {
-    log.info({ post_id: data.postId }, 'create comment')
-    // Portal-visibility gate: a denied caller (signed-in but not on
-    // the allowlist of a private portal) must not be able to comment.
-    // Matches createPublicPostFn / toggleVoteFn — read-side gating
-    // already runs at list / detail, the write surface needs it too
-    // or the caller could mutate from inside a portal they're not
-    // entitled to view. Dynamic import keeps the cycle out of static
-    // analysis (comments.ts ↔ portal-access.ts both pull from db).
-    const { resolvePortalAccessForRequest } = await import('./portal-access')
-    const access = await resolvePortalAccessForRequest()
-    if (!access.granted) {
-      throw new Error('Portal access required')
-    }
-    const auth = await requireAuth()
-
-    // Block anonymous users unless the workspace master switch allows
-    // anonymous interaction. Per-board comment tiers are still checked
-    // downstream; this is the workspace-wide ceiling collapsed in
-    // migration 0084 from the legacy anonymousCommenting flag.
-    if (auth.principal.type === 'anonymous') {
-      // Fail closed on a missing flag — read the raw config, not
-      // getPortalConfig's permissive merged default (matches the vote/post
-      // gates). The per-board comment tier is enforced downstream.
-      const { getSettings } = await import('./workspace')
-      const { workspaceAllowsAnonymous } =
-        await import('@/lib/server/domains/settings/settings.types')
-      const settings = await getSettings()
-      if (!workspaceAllowsAnonymous(settings?.portalConfig)) {
-        throw new Error('Anonymous interaction is not enabled')
-      }
-    }
-
-    const actor = await policyActorFromAuth(auth)
-
-    const result = await createComment(
-      {
-        postId: data.postId as PostId,
-        content: data.content,
-        contentJson: (data.contentJson ?? undefined) as
-          | import('@/lib/shared/db-types').TiptapContent
-          | undefined,
-        parentId: data.parentId as PostCommentId | undefined,
-        statusId: data.statusId as PostStatusId | undefined,
-        isPrivate: data.isPrivate,
-      },
-      {
-        principalId: auth.principal.id,
-        userId: auth.user.id as UserId,
-        name: auth.user.name,
-        email: auth.user.email,
-        role: auth.principal.role,
-      },
-      actor,
-      { headers: getRequestHeaders() }
-    )
-
-    // Events are dispatched by the service layer
-
-    log.info({ comment_id: result.comment.id }, 'comment created')
-    return result
+    return runCreateComment(await requireAuth(), data)
   })
+
+export async function runAddReaction(
+  auth: Awaited<ReturnType<typeof requireAuth>>,
+  data: ReactionInput
+) {
+  log.info({ comment_id: data.commentId, emoji: data.emoji }, 'add reaction')
+  // Portal-visibility gate — mirror createCommentFn / toggleVoteFn.
+  const { resolvePortalAccessForRequest } = await import('./portal-access')
+  const access = await resolvePortalAccessForRequest()
+  if (!access.granted) {
+    throw new Error('Portal access required')
+  }
+  // The reaction service now runs canViewPost + isPrivate using
+  // the actor; without that, an authenticated user could probe
+  // commentIds on team-only / private comments.
+  const actor = await policyActorFromAuth(auth)
+  const result = await addReaction(
+    data.commentId as PostCommentId,
+    data.emoji,
+    auth.principal.id,
+    actor
+  )
+  log.debug({ added: result.added }, 'add reaction result')
+  return result
+}
 
 export const addReactionFn = createServerFn({ method: 'POST' })
   .validator(reactionSchema)
   .handler(async ({ data }) => {
-    log.info({ comment_id: data.commentId, emoji: data.emoji }, 'add reaction')
-    // Portal-visibility gate — mirror createCommentFn / toggleVoteFn.
-    const { resolvePortalAccessForRequest } = await import('./portal-access')
-    const access = await resolvePortalAccessForRequest()
-    if (!access.granted) {
-      throw new Error('Portal access required')
-    }
-    const auth = await requireAuth()
-    // The reaction service now runs canViewPost + isPrivate using
-    // the actor; without that, an authenticated user could probe
-    // commentIds on team-only / private comments.
-    const actor = await policyActorFromAuth(auth)
-    const result = await addReaction(
-      data.commentId as PostCommentId,
-      data.emoji,
-      auth.principal.id,
-      actor
-    )
-    log.debug({ added: result.added }, 'add reaction result')
-    return result
+    return runAddReaction(await requireAuth(), data)
   })
+
+export async function runRemoveReaction(
+  auth: Awaited<ReturnType<typeof requireAuth>>,
+  data: ReactionInput
+) {
+  log.info({ comment_id: data.commentId, emoji: data.emoji }, 'remove reaction')
+  const { resolvePortalAccessForRequest } = await import('./portal-access')
+  const access = await resolvePortalAccessForRequest()
+  if (!access.granted) {
+    throw new Error('Portal access required')
+  }
+  const actor = await policyActorFromAuth(auth)
+  const result = await removeReaction(
+    data.commentId as PostCommentId,
+    data.emoji,
+    auth.principal.id,
+    actor
+  )
+  log.debug('reaction removed')
+  return result
+}
 
 export const removeReactionFn = createServerFn({ method: 'POST' })
   .validator(reactionSchema)
   .handler(async ({ data }) => {
-    log.info({ comment_id: data.commentId, emoji: data.emoji }, 'remove reaction')
-    const { resolvePortalAccessForRequest } = await import('./portal-access')
-    const access = await resolvePortalAccessForRequest()
-    if (!access.granted) {
-      throw new Error('Portal access required')
-    }
-    const auth = await requireAuth()
-    const actor = await policyActorFromAuth(auth)
-    const result = await removeReaction(
-      data.commentId as PostCommentId,
-      data.emoji,
-      auth.principal.id,
-      actor
-    )
-    log.debug('reaction removed')
-    return result
+    return runRemoveReaction(await requireAuth(), data)
   })
 
 // Read Operations
@@ -258,8 +275,7 @@ export const userEditCommentFn = createServerFn({ method: 'POST' })
 
     const result = await userEditComment(data.commentId as PostCommentId, data.content, actor, {
       contentJson: (data.contentJson ?? undefined) as
-        | import('@/lib/shared/db-types').TiptapContent
-        | undefined,
+        import('@/lib/shared/db-types').TiptapContent | undefined,
     })
     log.info({ comment_id: data.commentId }, 'comment edited')
     return result

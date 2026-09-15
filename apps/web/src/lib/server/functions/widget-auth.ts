@@ -9,6 +9,7 @@ import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-
 import { rawSessionToken } from '@/lib/server/auth/session-token'
 import { shouldRollSession, WIDGET_SESSION_TTL_MS } from './widget-session-roll'
 import { logger } from '@/lib/server/logger'
+import type { AuthContext } from './auth-helpers'
 
 const log = logger.child({ component: 'widget-auth' })
 
@@ -112,6 +113,29 @@ export async function getWidgetSession(opts?: {
     },
     canPortalHandoff: !isTeamMember(principalRecord.role),
   }
+}
+
+function toAuthContext(w: WidgetAuthContext): AuthContext {
+  return {
+    settings: { ...w.settings, logoKey: null },
+    user: w.user,
+    principal: w.principal,
+    permissions: [],
+    scope: 'widget',
+  }
+}
+
+/** Widget BFF entry: Bearer session required. Never use requireAuth on widget surfaces. */
+export async function requireWidgetAuth(): Promise<AuthContext> {
+  const w = await getWidgetSession()
+  if (!w) throw new Error('Authentication required')
+  return toAuthContext(w)
+}
+
+/** Widget BFF entry: Bearer session if present. */
+export async function getOptionalWidgetAuth(): Promise<AuthContext | null> {
+  const w = await getWidgetSession()
+  return w ? toAuthContext(w) : null
 }
 
 /**

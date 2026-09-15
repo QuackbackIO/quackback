@@ -406,21 +406,13 @@ export async function handleSignInPreCheck(ctx: {
   }
 }
 
-/** Better Auth account-mutation routes the bearer plugin also authenticates.
- *  Widget tokens must not reach them: `emailOTP.changeEmail` has
- *  `verifyCurrentEmail: false`, so the current-address proof lives only in
- *  `contact-email.ts` and is skipped on these mounted paths. */
-const ACCOUNT_MUTATION_PATHS = new Set([
-  '/change-email',
-  '/change-password',
-  '/update-user',
-  '/delete-user',
-  '/email-otp/request-email-change',
-  '/email-otp/change-email',
-  '/link-social',
-  '/oauth2/link',
-  '/revoke-sessions',
-  '/revoke-other-sessions',
+/** Better Auth HTTP paths a widget-scoped session may call. Everything else
+ *  is denied so new BA endpoints stay closed by default. */
+const WIDGET_AUTH_ALLOWLIST = new Set([
+  '/get-session',
+  '/sign-in/anonymous',
+  '/one-time-token/generate',
+  '/one-time-token/verify',
 ])
 
 type HeaderBag = { get(name: string): string | null }
@@ -450,9 +442,9 @@ function sessionTokenFromAuthHeaders(headers: HeaderBag | undefined): string | n
 }
 
 /**
- * Refuse widget-scoped Bearers on Better Auth account-mutation endpoints.
- * Portal and dashboard sessions still pass; missing sessions are left to the
- * endpoint's own auth middleware.
+ * Widget-scoped sessions may only hit the Better Auth allowlist. Portal and
+ * dashboard sessions still pass; missing sessions are left to the endpoint's
+ * own auth middleware.
  */
 export async function handleWidgetAccountMutationGate(ctx: {
   path?: string
@@ -464,7 +456,6 @@ export async function handleWidgetAccountMutationGate(ctx: {
     }
   }
 }): Promise<void> {
-  if (!ACCOUNT_MUTATION_PATHS.has(ctx.path ?? '')) return
   const headers = ctx.headers ?? ctx.request?.headers
   const token = sessionTokenFromAuthHeaders(headers)
   if (!token) return
@@ -476,17 +467,17 @@ export async function handleWidgetAccountMutationGate(ctx: {
       ? (found as { session?: { scope?: unknown } }).session
       : undefined
   if (!session) return
-  if (toSessionScope(session.scope) === 'widget') {
-    throw new APIError('FORBIDDEN', {
-      message: 'Widget sessions cannot update this account',
-    })
-  }
+  if (toSessionScope(session.scope) !== 'widget') return
+  if (WIDGET_AUTH_ALLOWLIST.has(ctx.path ?? '')) return
+  throw new APIError('FORBIDDEN', {
+    message: 'Widget sessions cannot access this endpoint',
+  })
 }
 
 export const hooksBefore = createAuthMiddleware(async (ctx) => {
   // Disjoint path matchers: grace heal only touches /oauth2/token,
-  // sign-in pre-check only touches sign-in/OTP paths. Account-mutation
-  // gate only touches Better Auth profile/email/password writes.
+  // sign-in pre-check only touches sign-in/OTP paths. Widget-session
+  // allowlist covers every Better Auth HTTP path.
   await handleRefreshGraceHeal(ctx)
   await handleSignInPreCheck(ctx as Parameters<typeof handleSignInPreCheck>[0])
   await handleWidgetAccountMutationGate(ctx)

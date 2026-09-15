@@ -1,6 +1,6 @@
 import { useQuery, type QueryClient } from '@tanstack/react-query'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
-import { getConversationPresenceFn } from '@/lib/server/functions/conversation'
+import { widgetGetConversationPresenceFn } from '@/lib/server/functions/widget/conversation'
 import {
   CONVERSATION_PRESENCE_POLL_MS,
   type ConversationPresence,
@@ -31,7 +31,7 @@ const OFFLINE: ConversationPresence = {
 export function useConversationPresence(enabled: boolean): ConversationPresence {
   const { data } = useQuery({
     queryKey: CONVERSATION_PRESENCE_QUERY_KEY,
-    queryFn: () => getConversationPresenceFn({ headers: getWidgetAuthHeaders() }),
+    queryFn: () => widgetGetConversationPresenceFn({ headers: getWidgetAuthHeaders() }),
     enabled,
     refetchInterval: CONVERSATION_PRESENCE_POLL_MS,
     // The SSR seed is fresh at page load, so trust it across the first interval

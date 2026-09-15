@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 
 vi.mock('../widget-auth-provider', () => ({ useWidgetAuth: vi.fn() }))
 vi.mock('@/lib/client/widget-auth', () => ({ getWidgetAuthHeaders: () => ({}) }))
-vi.mock('@/lib/server/functions/tickets', () => ({ getMyTicketsFn: vi.fn() }))
+vi.mock('@/lib/server/functions/widget/tickets', () => ({ widgetGetMyTicketsFn: vi.fn() }))
 
 import { resolveHasTickets } from '../use-ticket-stage-badge'
 

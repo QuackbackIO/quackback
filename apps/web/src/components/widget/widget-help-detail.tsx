@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { ChevronRightIcon } from '@heroicons/react/24/outline'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { resolvePublicArticleRefFn } from '@/lib/server/functions/help-center'
+import { widgetResolvePublicArticleRefFn } from '@/lib/server/functions/widget/help'
 import { generateOneTimeToken, getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { appendWidgetOtt } from './build-portal-url'
 import { hcArticlePath } from '@/lib/shared/help-center-url'
@@ -36,7 +36,7 @@ export function WidgetHelpDetail({
   const { data: article, isLoading } = useQuery({
     queryKey: widgetQueryKeys.articleDetail.byRef(articleRef, sessionVersion, locale),
     queryFn: () =>
-      resolvePublicArticleRefFn({
+      widgetResolvePublicArticleRefFn({
         data: { ref: articleRef, locale },
         headers: getWidgetAuthHeaders(),
       }),

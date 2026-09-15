@@ -35,8 +35,8 @@ const ticket = (
 
 const myTickets = { tickets: [ticket(1), ticket(2), ticket(3), ticket(4)] }
 
-vi.mock('@/lib/server/functions/tickets', () => ({
-  getMyTicketsFn: () => Promise.resolve(myTickets),
+vi.mock('@/lib/server/functions/widget/tickets', () => ({
+  widgetGetMyTicketsFn: () => Promise.resolve(myTickets),
 }))
 
 import { WidgetRecentTicketsCard } from '../widget-recent-tickets'

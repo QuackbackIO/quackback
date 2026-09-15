@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useIntl } from 'react-intl'
 import { useWidgetAuth } from './widget-auth-provider'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
-import { getMyConversationFn } from '@/lib/server/functions/conversation'
+import { widgetGetMyConversationFn } from '@/lib/server/functions/widget/conversation'
 import type { ConversationDTO } from '@/lib/shared/conversation/types'
 import { useConversationPresence } from './use-messenger-presence'
 
@@ -38,7 +38,10 @@ export function useConversationSummary(enabled: boolean): ConversationSummary {
   const { data } = useQuery({
     queryKey: conversationSummaryKey(sessionVersion),
     queryFn: async () => {
-      const res = await getMyConversationFn({ data: { locale }, headers: getWidgetAuthHeaders() })
+      const res = await widgetGetMyConversationFn({
+        data: { locale },
+        headers: getWidgetAuthHeaders(),
+      })
       return { conversation: res.conversation ?? null, teamName: res.teamName }
     },
     enabled,

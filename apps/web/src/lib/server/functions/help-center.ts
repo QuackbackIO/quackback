@@ -73,18 +73,23 @@ const log = logger.child({ component: 'help-center' })
  * invisible); signed-in requests resolve segment memberships via the
  * standard policy-actor path.
  */
-async function publicViewer(): Promise<Actor> {
-  // Cookie (portal) or Bearer (widget iframe) — anything else is anonymous
-  // without a DB round-trip, and fails closed on gated content.
+export async function resolveHelpPublicViewer(
+  auth?: Awaited<ReturnType<typeof getOptionalAuth>> | undefined
+): Promise<Actor> {
+  if (auth !== undefined) return policyActorFromAuth(auth)
   if (!hasAuthCredentials()) return ANONYMOUS_ACTOR
   return policyActorFromAuth(await getOptionalAuth())
+}
+
+async function publicViewer(): Promise<Actor> {
+  return resolveHelpPublicViewer()
 }
 
 // ============================================================================
 // Helper: serialize article dates
 // ============================================================================
 
-function serializeArticle<
+export function serializeArticle<
   T extends { createdAt: Date; updatedAt: Date; publishedAt: Date | null; deletedAt?: Date | null },
 >(article: T) {
   // embedding (pgvector) and searchVector (tsvector) are not JSON-serializable
@@ -103,9 +108,9 @@ function serializeArticle<
   }
 }
 
-function serializeCategory<T extends { createdAt: Date; updatedAt: Date; deletedAt?: Date | null }>(
-  cat: T
-) {
+export function serializeCategory<
+  T extends { createdAt: Date; updatedAt: Date; deletedAt?: Date | null },
+>(cat: T) {
   return {
     ...cat,
     createdAt: toIsoString(cat.createdAt),

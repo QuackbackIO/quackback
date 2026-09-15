@@ -126,12 +126,25 @@ describe('handleWidgetAccountMutationGate', () => {
     ).rejects.toThrow(/Widget sessions/)
   })
 
-  it('ignores unrelated paths', async () => {
+  it('allows widget Bearers on the session/OTT allowlist', async () => {
     await expect(
       handleWidgetAccountMutationGate(
         ctx({ path: '/get-session', token: 'widget-tok', scope: 'widget' })
       )
     ).resolves.toBeUndefined()
+    await expect(
+      handleWidgetAccountMutationGate(
+        ctx({ path: '/one-time-token/generate', token: 'widget-tok', scope: 'widget' })
+      )
+    ).resolves.toBeUndefined()
+  })
+
+  it('rejects a widget Bearer on any other Better Auth path', async () => {
+    await expect(
+      handleWidgetAccountMutationGate(
+        ctx({ path: '/sign-out', token: 'widget-tok', scope: 'widget' })
+      )
+    ).rejects.toThrow(/Widget sessions/)
   })
 
   it('no-ops when there is no session token', async () => {

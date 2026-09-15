@@ -13,6 +13,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { QueryKey } from '@tanstack/react-query'
 import type { PostId } from '@quackback/ids'
 import { fetchPublicPostDetail } from '@/lib/server/functions/portal'
+import { widgetFetchPublicPostDetailFn } from '@/lib/server/functions/widget/posts'
 import { fetchPostWithDetails } from '@/lib/server/functions/posts'
 import type { PublicPostDetailView, PublicCommentView } from '@/lib/client/queries/portal-detail'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
@@ -111,7 +112,7 @@ export function useLoadMoreWidgetComments(
     if (!detail?.commentsHasMore || !detail.commentsNextCursor) return
     setIsLoading(true)
     try {
-      const page = (await fetchPublicPostDetail({
+      const page = (await widgetFetchPublicPostDetailFn({
         data: { postId, commentsCursor: detail.commentsNextCursor, commentsLimit: pageSize },
         headers: getWidgetAuthHeaders(),
       })) as PublicPostDetailView | null

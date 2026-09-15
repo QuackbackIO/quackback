@@ -20,7 +20,7 @@ import { useState } from 'react'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { useMutation } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { createMyTicketFn } from '@/lib/server/functions/tickets'
+import { useVisitorSurfaceRpc } from '@/lib/client/visitor-surface-rpc'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/shared/spinner'
@@ -31,6 +31,7 @@ export function BlockTicketForm({
   getAuthHeaders: () => Record<string, string>
 }) {
   const intl = useIntl()
+  const rpc = useVisitorSurfaceRpc()
   const [email, setEmail] = useState('')
   const [title, setTitle] = useState('')
   const [details, setDetails] = useState('')
@@ -38,7 +39,7 @@ export function BlockTicketForm({
 
   const create = useMutation({
     mutationFn: (vars: { title: string; description?: string; email?: string }) =>
-      createMyTicketFn({ data: vars, headers: getAuthHeaders() }),
+      rpc.createMyTicket({ data: vars, headers: getAuthHeaders() }),
     onSuccess: () => setFiled(true),
     onError: (error) =>
       toast.error(error instanceof Error ? error.message : 'Failed to create ticket'),

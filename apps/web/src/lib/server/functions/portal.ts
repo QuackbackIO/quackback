@@ -306,108 +306,116 @@ export const fetchPublicBoardBySlug = createServerFn({ method: 'GET' })
     return { ...rest, settings: (rest.settings ?? {}) as BoardSettings }
   })
 
-export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
-  .validator(
-    z.object({
-      postId: z.string(),
-      // Optional comment-page controls. Omitted by first-page callers so the
-      // default page size applies; supplied by "show more" fetches.
-      commentsCursor: z.string().nullish(),
-      commentsLimit: PageLimitSchema,
-    })
-  )
-  .handler(async ({ data }) => {
-    log.debug({ post_id: data.postId }, 'fetch public post detail')
+export const fetchPublicPostDetailSchema = z.object({
+  postId: z.string(),
+  // Optional comment-page controls. Omitted by first-page callers so the
+  // default page size applies; supplied by "show more" fetches.
+  commentsCursor: z.string().nullish(),
+  commentsLimit: PageLimitSchema,
+})
+export type FetchPublicPostDetailInput = z.infer<typeof fetchPublicPostDetailSchema>
 
-    // Outer gate: a private portal serves no post detail to a caller the
-    // portal-access resolver denies. The per-board audience check inside
-    // getPublicPostDetail stays as the inner layer for granted callers.
-    const access = await resolvePortalAccessForRequest()
-    if (!access.granted) {
-      log.debug('portal access denied, returning null')
-      return null
-    }
+export async function runFetchPublicPostDetail(
+  auth: Awaited<ReturnType<typeof getOptionalAuth>>,
+  data: FetchPublicPostDetailInput
+) {
+  log.debug({ post_id: data.postId }, 'fetch public post detail')
 
-    // The policy actor is the sole input getPublicPostDetail needs:
-    // it drives the visibility check, the principalId-for-own-comments
-    // lookup, and the include-private-comments flag (derived from
-    // isTeamActor). Same resolution path as list reads.
-    const auth = hasAuthCredentials() ? await getOptionalAuth() : null
-    const actor = await policyActorFromAuth(auth)
-    const result = await getPublicPostDetail(data.postId as PostId, actor, {
-      cursor: data.commentsCursor ?? null,
-      limit: data.commentsLimit,
-    })
+  // Outer gate: a private portal serves no post detail to a caller the
+  // portal-access resolver denies. The per-board audience check inside
+  // getPublicPostDetail stays as the inner layer for granted callers.
+  const access = await resolvePortalAccessForRequest()
+  if (!access.granted) {
+    log.debug('portal access denied, returning null')
+    return null
+  }
 
-    if (!result) return null
+  // The policy actor is the sole input getPublicPostDetail needs:
+  // it drives the visibility check, the principalId-for-own-comments
+  // lookup, and the include-private-comments flag (derived from
+  // isTeamActor). Same resolution path as list reads.
+  const actor = await policyActorFromAuth(auth)
+  const result = await getPublicPostDetail(data.postId as PostId, actor, {
+    cursor: data.commentsCursor ?? null,
+    limit: data.commentsLimit,
+  })
 
-    // Helper to safely convert Date or string to ISO string
-    // Raw SQL may return dates as strings depending on the driver
-    const toISOString = (date: Date | string): string =>
-      typeof date === 'string' ? date : date.toISOString()
+  if (!result) return null
 
-    type CommentType = (typeof result.comments)[0]
-    type SerializedComment = Omit<CommentType, 'createdAt' | 'replies'> & {
-      createdAt: string
-      replies: SerializedComment[]
-    }
-    function serializeComment(c: CommentType): SerializedComment {
-      return {
-        ...c,
-        createdAt: toISOString(c.createdAt),
-        replies: c.replies.map(serializeComment),
-      }
-    }
+  // Helper to safely convert Date or string to ISO string
+  // Raw SQL may return dates as strings depending on the driver
+  const toISOString = (date: Date | string): string =>
+    typeof date === 'string' ? date : date.toISOString()
 
-    // Fetch merge info for this post. Pass the same actor used to gate
-    // the post detail above so the canonical's audience check runs from
-    // the caller's perspective — without it, the canonical's title and
-    // board slug could leak through the merge banner. The workspace anonymous
-    // switch (only needed to ceiling a non-user actor) is fetched alongside so
-    // its DB read overlaps the merge queries instead of running in series.
-    const postId = data.postId as PostId
-    const needsAnonCeiling = actor.principalType !== 'user'
-    const [mergeInfo, mergedPostsList, allowAnonymous] = await Promise.all([
-      getPostMergeInfo(postId, actor).then((info) =>
-        info ? { ...info, mergedAt: toISOString(info.mergedAt) } : null
-      ),
-      getMergedPosts(postId),
-      needsAnonCeiling ? loadAllowAnonymous() : Promise.resolve(false),
-    ])
-
-    // Per-board vote/comment capability for THIS viewer. The widget passes its
-    // Bearer identity to this fn and refetches on identify, so `actor` reflects
-    // the real (possibly just-identified) viewer — unlike the home feed, which
-    // only has the anonymous SSR baseline. boardCapabilitiesForActor applies the
-    // per-board tier + the workspace anonymous ceiling (non-user actors only),
-    // so the UI never advertises a vote/comment CTA the board's tier rejects
-    // (#191). canSubmit is unused on the detail view.
-    const { boardCapabilitiesForActor } = await import('@/lib/server/policy')
-    const { canVote, canComment } = boardCapabilitiesForActor(
-      actor,
-      result.boardAccess,
-      allowAnonymous
-    )
-
-    // Drop boardAccess (server-only — used above to compute the booleans) so
-    // the board's segment ids never reach the client.
-    const { boardAccess: _boardAccess, ...serializable } = result
+  type CommentType = (typeof result.comments)[0]
+  type SerializedComment = Omit<CommentType, 'createdAt' | 'replies'> & {
+    createdAt: string
+    replies: SerializedComment[]
+  }
+  function serializeComment(c: CommentType): SerializedComment {
     return {
-      ...serializable,
-      contentJson: result.contentJson ?? {},
-      createdAt: toISOString(result.createdAt),
-      eta: result.eta ? toISOString(result.eta) : null,
-      comments: result.comments.map(serializeComment),
-      // Pass through the comment keyset-page metadata so the client can drive
-      // the infinite "show more comments" affordance.
-      commentsHasMore: result.commentsHasMore,
-      commentsNextCursor: result.commentsNextCursor,
-      commentsTotalRootCount: result.commentsTotalRootCount,
-      mergeInfo,
-      mergedPostCount: mergedPostsList.length > 0 ? mergedPostsList.length : undefined,
-      canVote,
-      canComment,
+      ...c,
+      createdAt: toISOString(c.createdAt),
+      replies: c.replies.map(serializeComment),
     }
+  }
+
+  // Fetch merge info for this post. Pass the same actor used to gate
+  // the post detail above so the canonical's audience check runs from
+  // the caller's perspective — without it, the canonical's title and
+  // board slug could leak through the merge banner. The workspace anonymous
+  // switch (only needed to ceiling a non-user actor) is fetched alongside so
+  // its DB read overlaps the merge queries instead of running in series.
+  const postId = data.postId as PostId
+  const needsAnonCeiling = actor.principalType !== 'user'
+  const [mergeInfo, mergedPostsList, allowAnonymous] = await Promise.all([
+    getPostMergeInfo(postId, actor).then((info) =>
+      info ? { ...info, mergedAt: toISOString(info.mergedAt) } : null
+    ),
+    getMergedPosts(postId),
+    needsAnonCeiling ? loadAllowAnonymous() : Promise.resolve(false),
+  ])
+
+  // Per-board vote/comment capability for THIS viewer. The widget passes its
+  // Bearer identity to this fn and refetches on identify, so `actor` reflects
+  // the real (possibly just-identified) viewer — unlike the home feed, which
+  // only has the anonymous SSR baseline. boardCapabilitiesForActor applies the
+  // per-board tier + the workspace anonymous ceiling (non-user actors only),
+  // so the UI never advertises a vote/comment CTA the board's tier rejects
+  // (#191). canSubmit is unused on the detail view.
+  const { boardCapabilitiesForActor } = await import('@/lib/server/policy')
+  const { canVote, canComment } = boardCapabilitiesForActor(
+    actor,
+    result.boardAccess,
+    allowAnonymous
+  )
+
+  // Drop boardAccess (server-only — used above to compute the booleans) so
+  // the board's segment ids never reach the client.
+  const { boardAccess: _boardAccess, ...serializable } = result
+  return {
+    ...serializable,
+    contentJson: result.contentJson ?? {},
+    createdAt: toISOString(result.createdAt),
+    eta: result.eta ? toISOString(result.eta) : null,
+    comments: result.comments.map(serializeComment),
+    // Pass through the comment keyset-page metadata so the client can drive
+    // the infinite "show more comments" affordance.
+    commentsHasMore: result.commentsHasMore,
+    commentsNextCursor: result.commentsNextCursor,
+    commentsTotalRootCount: result.commentsTotalRootCount,
+    mergeInfo,
+    mergedPostCount: mergedPostsList.length > 0 ? mergedPostsList.length : undefined,
+    canVote,
+    canComment,
+  }
+}
+
+export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
+  .validator(fetchPublicPostDetailSchema)
+  .handler(async ({ data }) => {
+    const auth = hasAuthCredentials() ? await getOptionalAuth() : null
+    return runFetchPublicPostDetail(auth, data)
   })
 
 export const fetchPublicPosts = createServerFn({ method: 'GET' })
@@ -740,7 +748,7 @@ export const getCommentsSectionDataFn = createServerFn({ method: 'GET' })
  * handlers by declaration order, so new server fns append here to avoid
  * shifting existing indices.
  */
-export const fetchBoardCapabilitiesFn = createServerFn({ method: 'GET' }).handler(async () => {
+export async function runFetchBoardCapabilities(auth: Awaited<ReturnType<typeof getOptionalAuth>>) {
   log.debug('fetch board capabilities')
   const empty: Record<string, { canSubmit: boolean; canVote: boolean }> = {}
 
@@ -748,7 +756,6 @@ export const fetchBoardCapabilitiesFn = createServerFn({ method: 'GET' }).handle
   const access = await resolvePortalAccessForRequest()
   if (!access.granted) return { permissions: empty, boards: [] as WidgetVisibleBoard[] }
 
-  const auth = await getOptionalAuth()
   const actor = await policyActorFromAuth(auth)
 
   // Settings read overlaps the board query — only one DB round-trip is on the
@@ -767,6 +774,10 @@ export const fetchBoardCapabilitiesFn = createServerFn({ method: 'GET' }).handle
       slug: board.slug,
     })),
   }
+}
+
+export const fetchBoardCapabilitiesFn = createServerFn({ method: 'GET' }).handler(async () => {
+  return runFetchBoardCapabilities(await getOptionalAuth())
 })
 
 export type WidgetVisibleBoard = { id: string; name: string; slug: string }

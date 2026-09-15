@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { FormattedMessage } from 'react-intl'
 import { HandThumbUpIcon, HandThumbDownIcon } from '@heroicons/react/24/outline'
 import { ChatBubbleLeftRightIcon } from '@heroicons/react/24/solid'
-import { recordArticleFeedbackFn } from '@/lib/server/functions/help-center'
+import { widgetRecordArticleFeedbackFn } from '@/lib/server/functions/widget/help'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { cn } from '@/lib/shared/utils'
 import { useWidgetAuth } from './widget-auth-provider'
@@ -36,7 +36,7 @@ export function WidgetArticleFooter({ articleId, onAskQuestion }: WidgetArticleF
       // to a principal — otherwise the server can't find an existing vote to
       // update and every tap inserts and counts another row.
       if (!(await ensureSession())) return
-      await recordArticleFeedbackFn({
+      await widgetRecordArticleFeedbackFn({
         data: { articleId: articleId as KbArticleId, helpful },
         headers: getWidgetAuthHeaders(),
       })

@@ -6,8 +6,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 vi.mock('@/lib/client/widget-auth', () => ({ getWidgetAuthHeaders: () => ({}) }))
 // Never resolves: the value under test is the SSR seed in the cache, not a fetch.
-vi.mock('@/lib/server/functions/conversation', () => ({
-  getConversationPresenceFn: () => new Promise(() => {}),
+vi.mock('@/lib/server/functions/widget/conversation', () => ({
+  widgetGetConversationPresenceFn: () => new Promise(() => {}),
 }))
 
 import {

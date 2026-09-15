@@ -13,7 +13,7 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { requireAuth } from './auth-helpers'
-import { assertNotWidgetScope } from '@/lib/shared/roles'
+
 import { db, user, eq } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 
@@ -79,7 +79,6 @@ export const setMyLanguagePreferenceFn = createServerFn({ method: 'POST' })
     async ({ data }: { data: SetMyLanguagePreferenceInput }): Promise<MyLanguagePreference> => {
       log.debug('set my language preference')
       const auth = await requireAuth()
-      assertNotWidgetScope(auth.scope)
 
       const [updated] = await db
         .update(user)

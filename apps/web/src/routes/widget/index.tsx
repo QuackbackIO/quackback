@@ -36,9 +36,9 @@ import { useWidgetAuth } from '@/components/widget/widget-auth-provider'
 import { portalQueries } from '@/lib/client/queries/portal'
 import { widgetChangelogListQuery } from '@/components/widget/widget-changelog-query'
 import { widgetHelpCategoriesQuery } from '@/components/widget/widget-help-query'
-import { fetchBoardCapabilitiesFn } from '@/lib/server/functions/portal'
+import { widgetFetchBoardCapabilitiesFn } from '@/lib/server/functions/widget/posts'
 import { getShowPoweredByFn } from '@/lib/server/functions/powered-by'
-import { listPublicArticlesFn } from '@/lib/server/functions/help-center'
+import { widgetListPublicArticlesFn } from '@/lib/server/functions/widget/help'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { sendToHost } from '@/lib/client/widget-bridge'
 import { widgetQueryKeys, INITIAL_SESSION_VERSION } from '@/lib/client/hooks/use-widget-vote'
@@ -173,8 +173,8 @@ export const Route = createFileRoute('/widget/')({
       // unwrapped helper): its handler — and the database-reaching presence
       // import inside it — is stripped from the client bundle.
       messengerTabEnabled
-        ? import('@/lib/server/functions/conversation')
-            .then(({ getConversationPresenceFn }) => getConversationPresenceFn())
+        ? import('@/lib/server/functions/widget/conversation')
+            .then(({ widgetGetConversationPresenceFn }) => widgetGetConversationPresenceFn())
             .then((presence) => {
               queryClient.setQueryData(CONVERSATION_PRESENCE_QUERY_KEY, presence)
             })
@@ -182,8 +182,8 @@ export const Route = createFileRoute('/widget/')({
         : Promise.resolve(),
       // Never break the widget load over the decorative header avatar cluster.
       (settings?.publicWidgetConfig?.home?.showTeamAvatars ?? true)
-        ? import('@/lib/server/functions/conversation')
-            .then(({ getWidgetTeamAvatarsFn }) => getWidgetTeamAvatarsFn())
+        ? import('@/lib/server/functions/widget/conversation')
+            .then(({ widgetGetTeamAvatarsFn }) => widgetGetTeamAvatarsFn())
             .then((avatars) => {
               team = avatars
             })
@@ -200,15 +200,15 @@ export const Route = createFileRoute('/widget/')({
             .catch(() => {})
         : Promise.resolve(),
       helpTabEnabled
-        ? listPublicArticlesFn({ data: { limit: 4 } })
+        ? widgetListPublicArticlesFn({ data: { limit: 4 } })
             .then((res) => {
               topArticles = res.items.map((a) => ({ slug: a.slug, title: a.title }))
             })
             .catch(() => {})
         : Promise.resolve(),
       messengerTabEnabled
-        ? import('@/lib/server/functions/conversation')
-            .then(({ getMyConversationFn }) => getMyConversationFn())
+        ? import('@/lib/server/functions/widget/conversation')
+            .then(({ widgetGetMyConversationFn }) => widgetGetMyConversationFn())
             .then((res) => {
               queryClient.setQueryData(conversationSummaryKey(INITIAL_SESSION_VERSION), {
                 conversation: res.conversation ?? null,
@@ -415,7 +415,7 @@ function WidgetPage() {
   // actor cannot act on). Seeded with the loader map so SSR + first paint match.
   const { data: liveCapabilities } = useQuery({
     queryKey: ['widget', 'boardCapabilities', sessionVersion],
-    queryFn: () => fetchBoardCapabilitiesFn({ headers: getWidgetAuthHeaders() }),
+    queryFn: () => widgetFetchBoardCapabilitiesFn({ headers: getWidgetAuthHeaders() }),
     // Seed ONLY the initial (anonymous, SSR) key from the loader. initialData
     // stamps an entry fresh as of now, so seeding it on every key would also
     // mark the post-identify key fresh and suppress the Bearer refetch within

@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 684 surfaces
+### Server functions (`requireAuth`) — 704 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -772,6 +772,26 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/webhooks.ts`::updateWebhookFn | webhook.manage |
 | `lib/server/functions/webhooks.ts`::deleteWebhookFn | webhook.manage |
 | `lib/server/functions/webhooks.ts`::rotateWebhookSecretFn | webhook.manage |
+| `lib/server/functions/widget/comments.ts`::widgetCreateCommentFn | END_USER (any authenticated) |
+| `lib/server/functions/widget/comments.ts`::widgetAddReactionFn | END_USER (any authenticated) |
+| `lib/server/functions/widget/comments.ts`::widgetRemoveReactionFn | END_USER (any authenticated) |
+| `lib/server/functions/widget/conversation.ts`::widgetSendConversationMessageFn | END_USER (any authenticated) |
+| `lib/server/functions/widget/conversation.ts`::widgetListConversationMessagesFn | END_USER (any authenticated) |
+| `lib/server/functions/widget/conversation.ts`::widgetMarkConversationReadFn | END_USER (any authenticated) |
+| `lib/server/functions/widget/conversation.ts`::widgetSendConversationTypingFn | END_USER (any authenticated) |
+| `lib/server/functions/widget/conversation.ts`::widgetSubmitCsatFn | END_USER (any authenticated) |
+| `lib/server/functions/widget/conversation.ts`::widgetMintConversationStreamTokenFn | END_USER (any authenticated) |
+| `lib/server/functions/widget/posts.ts`::widgetCreatePublicPostFn | END_USER (any authenticated) |
+| `lib/server/functions/widget/posts.ts`::widgetToggleVoteFn | END_USER (any authenticated) |
+| `lib/server/functions/widget/tickets.ts`::widgetGetMyTicketsFn | END_USER (any authenticated) |
+| `lib/server/functions/widget/tickets.ts`::widgetGetMyTicketStageLabelsFn | END_USER (any authenticated) |
+| `lib/server/functions/widget/tickets.ts`::widgetGetMyTicketFormFn | END_USER (any authenticated) |
+| `lib/server/functions/widget/tickets.ts`::widgetGetMyTicketWatchStatusFn | END_USER (any authenticated) |
+| `lib/server/functions/widget/tickets.ts`::widgetGetConversationLinkedTicketFn | END_USER (any authenticated) |
+| `lib/server/functions/widget/tickets.ts`::widgetCreateMyTicketFn | END_USER (any authenticated) |
+| `lib/server/functions/widget/tickets.ts`::widgetWatchMyTicketFn | END_USER (any authenticated) |
+| `lib/server/functions/widget/tickets.ts`::widgetUnwatchMyTicketFn | END_USER (any authenticated) |
+| `lib/server/functions/widget/user.ts`::widgetGetUserStatsFn | END_USER (any authenticated) |
 | `lib/server/functions/workflow-reporting.ts`::workflowEffectivenessFn | routing.manage |
 | `lib/server/functions/workflow-reporting.ts`::workflowRunsFn | routing.manage |
 | `lib/server/functions/workflow-reporting.ts`::workflowRunTimelineFn | routing.manage |
@@ -995,7 +1015,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-195 of 991 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+211 of 1027 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -1104,6 +1124,22 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/user.ts`::updateProfileNameFn | server-fn |
 | `lib/server/functions/version.ts`::getLatestVersion | server-fn |
 | `lib/server/functions/widget-capabilities.ts`::getWidgetCapabilitiesFn | server-fn |
+| `lib/server/functions/widget/changelog.ts`::widgetGetPublicChangelogFn | server-fn |
+| `lib/server/functions/widget/changelog.ts`::widgetListPublicChangelogsFn | server-fn |
+| `lib/server/functions/widget/conversation.ts`::widgetGetConversationPresenceFn | server-fn |
+| `lib/server/functions/widget/conversation.ts`::widgetGetMessengerUnreadFn | server-fn |
+| `lib/server/functions/widget/conversation.ts`::widgetGetMyConversationFn | server-fn |
+| `lib/server/functions/widget/conversation.ts`::widgetGetMyConversationsFn | server-fn |
+| `lib/server/functions/widget/conversation.ts`::widgetGetTeamAvatarsFn | server-fn |
+| `lib/server/functions/widget/help.ts`::widgetListPublicArticlesFn | server-fn |
+| `lib/server/functions/widget/help.ts`::widgetListPublicArticlesForCategoryFn | server-fn |
+| `lib/server/functions/widget/help.ts`::widgetListPublicCategoriesFn | server-fn |
+| `lib/server/functions/widget/help.ts`::widgetRecordArticleFeedbackFn | server-fn |
+| `lib/server/functions/widget/help.ts`::widgetResolvePublicArticleRefFn | server-fn |
+| `lib/server/functions/widget/posts.ts`::widgetFetchBoardCapabilitiesFn | server-fn |
+| `lib/server/functions/widget/posts.ts`::widgetFetchPublicPostDetailFn | server-fn |
+| `lib/server/functions/widget/posts.ts`::widgetGetVotedPostsFn | server-fn |
+| `lib/server/functions/widget/posts.ts`::widgetListPublicPostsFn | server-fn |
 | `lib/server/functions/workspace-utils.ts`::requireWorkspaceRole | server-fn |
 | `routes/_portal.tsx`::setPortalFrameHeaders | server-fn |
 | `routes/[.]well-known.oauth-authorization-server.ts`::GET | route |

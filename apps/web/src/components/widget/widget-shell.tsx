@@ -18,6 +18,7 @@ import { cn } from '@/lib/shared/utils'
 import { Avatar } from '@/components/ui/avatar'
 import { UserStatsBar } from '@/components/shared/user-stats'
 import { getWidgetAuthHeaders, generateOneTimeToken } from '@/lib/client/widget-auth'
+import { widgetGetUserStatsFn } from '@/lib/server/functions/widget/user'
 import { sendToHost } from '@/lib/client/widget-bridge'
 import { useWidgetAuth } from './widget-auth-provider'
 import { useMessengerUnread } from './use-messenger-unread'
@@ -557,7 +558,10 @@ function UserAvatarPopover({
             </div>
           </div>
           <div className="border-t border-border px-3 py-2.5">
-            <UserStatsBar compact headers={getWidgetAuthHeaders()} />
+            <UserStatsBar
+              compact
+              fetchStats={() => widgetGetUserStatsFn({ headers: getWidgetAuthHeaders() })}
+            />
           </div>
         </div>
       )}

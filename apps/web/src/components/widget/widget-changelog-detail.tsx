@@ -2,7 +2,7 @@ import { useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { FormattedMessage } from 'react-intl'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { getPublicChangelogFn } from '@/lib/server/functions/changelog'
+import { widgetGetPublicChangelogFn } from '@/lib/server/functions/widget/changelog'
 import { generateOneTimeToken, getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { appendWidgetOtt } from './build-portal-url'
 import { widgetQueryKeys, widgetQueryKeyEquals } from '@/lib/client/hooks/use-widget-vote'
@@ -25,7 +25,7 @@ export function WidgetChangelogDetail({ entryId }: WidgetChangelogDetailProps) {
   const { data: entry, isLoading } = useQuery({
     queryKey: widgetQueryKeys.changelogDetail.byId(entryId, sessionVersion),
     queryFn: () =>
-      getPublicChangelogFn({
+      widgetGetPublicChangelogFn({
         data: { id: entryId as ChangelogId },
         headers: getWidgetAuthHeaders(),
       }),

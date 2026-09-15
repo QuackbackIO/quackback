@@ -4,7 +4,7 @@ import { FormattedMessage } from 'react-intl'
 import { TicketIcon } from '@heroicons/react/24/solid'
 import { ChevronRightIcon } from '@heroicons/react/24/outline'
 import type { ConversationId } from '@quackback/ids'
-import { getMyTicketsFn } from '@/lib/server/functions/tickets'
+import { widgetGetMyTicketsFn } from '@/lib/server/functions/widget/tickets'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { useWidgetAuth } from './widget-auth-provider'
 import {
@@ -43,7 +43,7 @@ export function WidgetTickets({
     // Re-keyed on sessionVersion so the list refreshes after identify.
     queryKey: widgetMyTicketsKey(sessionVersion),
     // Forward the widget Bearer token — the requester scope is the token.
-    queryFn: () => getMyTicketsFn({ headers: getWidgetAuthHeaders() }),
+    queryFn: () => widgetGetMyTicketsFn({ headers: getWidgetAuthHeaders() }),
     staleTime: 30_000,
   })
 

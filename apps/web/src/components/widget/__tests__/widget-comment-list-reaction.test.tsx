@@ -36,9 +36,9 @@ const addReactionFn = vi.fn(async () => {
   calls.push('addReaction')
   return { added: true, reactions: [{ emoji: '👍', count: 2, hasReacted: true, reactors: [] }] }
 })
-vi.mock('@/lib/server/functions/comments', () => ({
-  addReactionFn: (...args: unknown[]) => addReactionFn(...(args as [])),
-  removeReactionFn: vi.fn(),
+vi.mock('@/lib/server/functions/widget/comments', () => ({
+  widgetAddReactionFn: (...args: unknown[]) => addReactionFn(...(args as [])),
+  widgetRemoveReactionFn: vi.fn(),
 }))
 vi.mock('@/components/ui/rich-text-editor', () => ({ RichTextEditor: () => null }))
 vi.mock('@/components/public/comment-content', () => ({

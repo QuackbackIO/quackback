@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { getMyTicketsFn } from '@/lib/server/functions/tickets'
+import { widgetGetMyTicketsFn } from '@/lib/server/functions/widget/tickets'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { useWidgetAuth } from './widget-auth-provider'
 import { widgetMyTicketsKey } from './widget-tickets'
@@ -34,7 +34,7 @@ export function useTicketStageBadge(enabled: boolean): { unread: number; hasTick
   const { sessionVersion, isIdentified, identityResolved } = useWidgetAuth()
   const { data, isError } = useQuery({
     queryKey: widgetMyTicketsKey(sessionVersion),
-    queryFn: () => getMyTicketsFn({ headers: getWidgetAuthHeaders() }),
+    queryFn: () => widgetGetMyTicketsFn({ headers: getWidgetAuthHeaders() }),
     staleTime: 30_000,
     refetchInterval: 60_000,
     enabled: enabled && isIdentified,

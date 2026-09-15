@@ -26,7 +26,7 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { requireAuth } from './auth-helpers'
-import { assertNotWidgetScope } from '@/lib/shared/roles'
+
 import { ValidationError } from '@/lib/shared/errors'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { logger } from '@/lib/server/logger'
@@ -74,7 +74,6 @@ export const getEmailChangeStateFn = createServerFn({ method: 'GET' }).handler(a
  */
 export const sendCurrentAddressCodeFn = createServerFn({ method: 'POST' }).handler(async () => {
   const ctx = await requireAuth()
-  assertNotWidgetScope(ctx.scope)
   const row = await userRow(ctx)
   const current = realEmail(row.email)
   if (!current) {
@@ -114,7 +113,6 @@ export const requestEmailChangeFn = createServerFn({ method: 'POST' })
   .validator(z.object({ email: z.string().max(320), currentCode: z.string().max(16).optional() }))
   .handler(async ({ data }) => {
     const ctx = await requireAuth()
-    assertNotWidgetScope(ctx.scope)
     const row = await userRow(ctx)
     const { acceptableContactEmail } = await import('@/lib/server/domains/principals/contact-email')
     const email = acceptableContactEmail(data.email)
@@ -185,7 +183,6 @@ export const confirmEmailChangeFn = createServerFn({ method: 'POST' })
   .validator(confirmSchema)
   .handler(async ({ data }) => {
     const ctx = await requireAuth()
-    assertNotWidgetScope(ctx.scope)
     const { acceptableContactEmail } = await import('@/lib/server/domains/principals/contact-email')
     const email = acceptableContactEmail(data.email)
     if (!email) throw new ValidationError('VALIDATION_ERROR', 'Enter a valid email address.')

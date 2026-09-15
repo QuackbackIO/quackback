@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { FormattedMessage } from 'react-intl'
 import type { ConversationId } from '@quackback/ids'
-import { getMyTicketsFn } from '@/lib/server/functions/tickets'
+import { widgetGetMyTicketsFn } from '@/lib/server/functions/widget/tickets'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { useWidgetAuth } from './widget-auth-provider'
 import { widgetMyTicketsKey } from './widget-tickets'
@@ -29,7 +29,7 @@ export function WidgetRecentTicketsCard({
   const { sessionVersion, isIdentified } = useWidgetAuth()
   const { data } = useQuery({
     queryKey: widgetMyTicketsKey(sessionVersion),
-    queryFn: () => getMyTicketsFn({ headers: getWidgetAuthHeaders() }),
+    queryFn: () => widgetGetMyTicketsFn({ headers: getWidgetAuthHeaders() }),
     staleTime: 30_000,
     // Anonymous visitors have no requester scope; the fn would 403.
     enabled: isIdentified,

@@ -306,7 +306,6 @@ export const updateNotificationPreferencesFn = createServerFn({ method: 'POST' }
     }): Promise<NotificationPreferences> => {
       log.debug('update notification preferences')
       const ctx = await requireAuth()
-      assertNotWidgetScope(ctx.scope)
       const principalId = ctx.principal.id
       const { emailStatusChange, emailNewComment, emailMuted, matrix } = data
 
@@ -346,27 +345,29 @@ export const updateNotificationPreferencesFn = createServerFn({ method: 'POST' }
 // User Engagement Stats
 // ============================================
 
+export async function runGetUserStats(principalId: PrincipalId): Promise<UserEngagementStats> {
+  log.debug('get user stats')
+  const [ideasResult, votesResult, commentsResult] = await Promise.all([
+    db
+      .select({ count: count() })
+      .from(posts)
+      .where(and(eq(posts.principalId, principalId), isNull(posts.deletedAt))),
+    db.select({ count: count() }).from(postVotes).where(eq(postVotes.principalId, principalId)),
+    db
+      .select({ count: count() })
+      .from(postComments)
+      .where(and(eq(postComments.principalId, principalId), isNull(postComments.deletedAt))),
+  ])
+
+  return {
+    ideas: ideasResult[0]?.count ?? 0,
+    votes: votesResult[0]?.count ?? 0,
+    comments: commentsResult[0]?.count ?? 0,
+  }
+}
+
 export const getUserStatsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<UserEngagementStats> => {
-    log.debug('get user stats')
-    const principalId = await requirePrincipalId()
-
-    const [ideasResult, votesResult, commentsResult] = await Promise.all([
-      db
-        .select({ count: count() })
-        .from(posts)
-        .where(and(eq(posts.principalId, principalId), isNull(posts.deletedAt))),
-      db.select({ count: count() }).from(postVotes).where(eq(postVotes.principalId, principalId)),
-      db
-        .select({ count: count() })
-        .from(postComments)
-        .where(and(eq(postComments.principalId, principalId), isNull(postComments.deletedAt))),
-    ])
-
-    return {
-      ideas: ideasResult[0]?.count ?? 0,
-      votes: votesResult[0]?.count ?? 0,
-      comments: commentsResult[0]?.count ?? 0,
-    }
+    return runGetUserStats(await requirePrincipalId())
   }
 )
