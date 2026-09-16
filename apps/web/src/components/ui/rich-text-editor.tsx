@@ -1363,6 +1363,10 @@ function RichTextEditorBase({
   // markdown serialization is "", which without this guard would round-trip
   // back through clearContent() and erase the heading they just created.
   const lastEmittedMarkdownRef = useRef<string | null>(null)
+  // Last markdown that actually serialized. Distinct from the sync sentinel
+  // above, which is cleared after a controlled-value round trip; comment
+  // composers need this if a later getMarkdown() throw would otherwise emit ''.
+  const lastSuccessfulMarkdownRef = useRef('')
 
   // Stable initial content reference — passed once to useEditor so TipTap v3's
   // compareOptions never sees a reference change on `content` and never calls
@@ -1391,9 +1395,10 @@ function RichTextEditorBase({
       const markdown = markdownFromEditor(
         editor,
         onChange.length,
-        lastEmittedMarkdownRef.current ?? ''
+        lastSuccessfulMarkdownRef.current
       )
       lastEmittedMarkdownRef.current = markdown
+      if (onChange.length >= 3) lastSuccessfulMarkdownRef.current = markdown
       onChange(json, html, markdown)
     },
     editorProps,
