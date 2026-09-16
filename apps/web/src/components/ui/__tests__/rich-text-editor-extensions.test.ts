@@ -468,6 +468,17 @@ describe('markdown serialization optimization', () => {
     expect(seedMarkdownFallback('already markdown')).toBe('already markdown')
   })
 
+  it('keeps newlines between blocks in the plaintext fallback', () => {
+    const json = {
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'First' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'Second' }] },
+      ],
+    }
+    expect(plaintextFromTiptapJson(json)).toBe('First\nSecond')
+  })
+
   it('keeps JSON plaintext when initial getMarkdown throws', () => {
     const json = {
       type: 'doc',

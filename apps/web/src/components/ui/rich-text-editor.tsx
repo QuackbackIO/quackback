@@ -445,21 +445,43 @@ export function markdownFromEditor(
   }
 }
 
-/** Text nodes walked out of a TipTap JSON doc. Used to seed markdown fallback
- *  when the editor mounts on JSON (comment edit) and getMarkdown() has not run. */
+const PLAINTEXT_BLOCKS = new Set([
+  'paragraph',
+  'heading',
+  'blockquote',
+  'listItem',
+  'taskItem',
+  'codeBlock',
+])
+
+/** Text from a TipTap JSON doc, with newlines between blocks. Used when
+ *  getMarkdown() throws so the markdown mirror still matches this edit. */
 export function plaintextFromTiptapJson(doc: unknown): string {
   if (!doc || typeof doc !== 'object') return ''
-  const parts: string[] = []
-  const walk = (node: { type?: string; text?: string; content?: unknown[] }) => {
-    if (node.type === 'text' && node.text) parts.push(node.text)
-    if (Array.isArray(node.content)) {
-      for (const child of node.content) {
-        if (child && typeof child === 'object') walk(child as typeof node)
-      }
+
+  const inlineText = (node: { type?: string; text?: string; content?: unknown[] }): string => {
+    if (node.type === 'text') return node.text ?? ''
+    if (node.type === 'hardBreak') return '\n'
+    if (!Array.isArray(node.content)) return ''
+    return node.content
+      .map((child) => (child && typeof child === 'object' ? inlineText(child as typeof node) : ''))
+      .join('')
+  }
+
+  const blocks: string[] = []
+  const walk = (node: { type?: string; content?: unknown[] }) => {
+    if (node.type && PLAINTEXT_BLOCKS.has(node.type)) {
+      const text = inlineText(node).trim()
+      if (text) blocks.push(text)
+      return
+    }
+    if (!Array.isArray(node.content)) return
+    for (const child of node.content) {
+      if (child && typeof child === 'object') walk(child as typeof node)
     }
   }
-  walk(doc as { type?: string; text?: string; content?: unknown[] })
-  return parts.join('')
+  walk(doc as { type?: string; content?: unknown[] })
+  return blocks.join('\n')
 }
 
 export function seedMarkdownFallback(
