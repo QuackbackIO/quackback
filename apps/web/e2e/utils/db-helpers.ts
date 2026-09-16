@@ -74,6 +74,11 @@ export function setSupportSurfaces(enabled: boolean = true): void {
   runScript('set-support-surfaces.ts', [enabled ? 'on' : 'off'], 'set support surfaces')
 }
 
+/** Enable (or disable) widget Help/Changelog/Messages tabs plus product flags. */
+export function setWidgetSurfaces(enabled: boolean = true): void {
+  runScript('set-widget-surfaces.ts', [enabled ? 'on' : 'off'], 'set widget surfaces')
+}
+
 export interface SeededConversation {
   /** TypeID string (conversation_...) used in /admin/inbox?c= and /support/ URLs. */
   conversationId: string
