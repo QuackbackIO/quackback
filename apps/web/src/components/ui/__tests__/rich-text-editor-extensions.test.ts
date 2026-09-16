@@ -19,6 +19,8 @@ import {
   generateContentHTML,
   hasActiveSuggestion,
   markdownFromEditor,
+  plaintextFromTiptapJson,
+  seedMarkdownFallback,
   stopEnterFromReachingParentForm,
 } from '../rich-text-editor'
 import { COMMENT_EDITOR_FEATURES } from '@/components/public/comment-editor-features'
@@ -431,6 +433,39 @@ describe('markdown serialization optimization', () => {
       },
     }
     expect(markdownFromEditor(editor, 3, '- GIF per link')).toBe('- GIF per link')
+  })
+
+  it('seeds markdown fallback from JSON text when the serializer has not run', () => {
+    const json = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: 'Existing comment' }],
+        },
+      ],
+    }
+    expect(plaintextFromTiptapJson(json)).toBe('Existing comment')
+    expect(seedMarkdownFallback(json)).toBe('Existing comment')
+    expect(seedMarkdownFallback('already markdown')).toBe('already markdown')
+  })
+
+  it('keeps JSON plaintext when initial getMarkdown throws', () => {
+    const json = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: 'Existing comment' }],
+        },
+      ],
+    }
+    const editor = {
+      getMarkdown: () => {
+        throw new Error('unknown node')
+      },
+    }
+    expect(seedMarkdownFallback(json, editor)).toBe('Existing comment')
   })
 })
 

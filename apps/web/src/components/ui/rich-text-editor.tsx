@@ -443,6 +443,36 @@ export function markdownFromEditor(
   }
 }
 
+/** Text nodes walked out of a TipTap JSON doc. Used to seed markdown fallback
+ *  when the editor mounts on JSON (comment edit) and getMarkdown() has not run. */
+export function plaintextFromTiptapJson(doc: unknown): string {
+  if (!doc || typeof doc !== 'object') return ''
+  const parts: string[] = []
+  const walk = (node: { type?: string; text?: string; content?: unknown[] }) => {
+    if (node.type === 'text' && node.text) parts.push(node.text)
+    if (Array.isArray(node.content)) {
+      for (const child of node.content) {
+        if (child && typeof child === 'object') walk(child as typeof node)
+      }
+    }
+  }
+  walk(doc as { type?: string; text?: string; content?: unknown[] })
+  return parts.join('')
+}
+
+export function seedMarkdownFallback(
+  value: string | JSONContent | undefined | null,
+  editor?: { getMarkdown?: () => string }
+): string {
+  const fromValue = typeof value === 'string' ? value : plaintextFromTiptapJson(value)
+  if (!editor) return fromValue
+  try {
+    return editor.getMarkdown?.() || fromValue
+  } catch {
+    return fromValue
+  }
+}
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -1366,7 +1396,7 @@ function RichTextEditorBase({
   // Last markdown that actually serialized. Distinct from the sync sentinel
   // above, which is cleared after a controlled-value round trip; comment
   // composers need this if a later getMarkdown() throw would otherwise emit ''.
-  const lastSuccessfulMarkdownRef = useRef('')
+  const lastSuccessfulMarkdownRef = useRef(seedMarkdownFallback(value))
 
   // Stable initial content reference — passed once to useEditor so TipTap v3's
   // compareOptions never sees a reference change on `content` and never calls
@@ -1384,6 +1414,9 @@ function RichTextEditorBase({
     content: initialContentRef.current,
     autofocus,
     editable: !disabled,
+    onCreate: ({ editor }) => {
+      lastSuccessfulMarkdownRef.current = seedMarkdownFallback(initialContentRef.current, editor)
+    },
     onUpdate: ({ editor }) => {
       if (!onChange) return
       const json = editor.getJSON()
