@@ -435,6 +435,24 @@ describe('markdown serialization optimization', () => {
     expect(markdownFromEditor(editor, 3, '- GIF per link')).toBe('- GIF per link')
   })
 
+  it('projects current JSON text when the serializer throws mid-edit', () => {
+    const editor = {
+      getMarkdown: () => {
+        throw new Error('unknown node')
+      },
+    }
+    const json = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: 'new edit' }],
+        },
+      ],
+    }
+    expect(markdownFromEditor(editor, 3, 'old markdown', json)).toBe('new edit')
+  })
+
   it('seeds markdown fallback from JSON text when the serializer has not run', () => {
     const json = {
       type: 'doc',

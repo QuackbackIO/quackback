@@ -427,19 +427,21 @@ export function withLiveEditor(editor: Editor | null, run: (editor: Editor) => v
  * submits an empty `content` string and the server rejects with
  * "Content is required" while the editor still shows a body.
  *
- * On throw, keep `fallback` (the last successful markdown) so comment
- * composers that gate send on the markdown string don't go empty.
+ * On throw, project plaintext from the current JSON (so the markdown
+ * mirror matches this edit) and only then fall back to the last successful
+ * serialization so comment composers that gate send on trim() don't go empty.
  */
 export function markdownFromEditor(
   editor: { getMarkdown?: () => string },
   onChangeArity: number,
-  fallback = ''
+  fallback = '',
+  json?: unknown
 ): string {
   if (onChangeArity < 3) return ''
   try {
     return editor.getMarkdown?.() ?? ''
   } catch {
-    return fallback
+    return plaintextFromTiptapJson(json) || fallback
   }
 }
 
@@ -1428,7 +1430,8 @@ function RichTextEditorBase({
       const markdown = markdownFromEditor(
         editor,
         onChange.length,
-        lastSuccessfulMarkdownRef.current
+        lastSuccessfulMarkdownRef.current,
+        json
       )
       lastEmittedMarkdownRef.current = markdown
       if (onChange.length >= 3) lastSuccessfulMarkdownRef.current = markdown
