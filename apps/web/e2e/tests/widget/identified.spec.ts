@@ -49,6 +49,31 @@ test.describe('Identified widget harness', { tag: '@smoke' }, () => {
     await expect(widget.getByText(/glad it helped/i)).toBeVisible({ timeout: 10000 })
   })
 
+  test('customer can vote and submit an idea from Feedback', async ({ page }) => {
+    const widget = await openIdentified(page, 'customer')
+    await widget.getByRole('button', { name: 'Feedback', exact: true }).click()
+    const vote = widget.getByRole('button', { name: /^Vote \(/ }).first()
+    await expect(vote).toBeVisible({ timeout: 15000 })
+    await vote.click()
+    await expect
+      .poll(async () => vote.getAttribute('aria-pressed'), { timeout: 10000 })
+      .toBe('true')
+
+    const title = widget.getByRole('textbox', { name: 'Feedback title' })
+    await expect(title).toBeVisible()
+    const idea = `Widget e2e idea ${Date.now()}`
+    await title.fill(idea)
+    const boardPicker = widget.getByRole('combobox')
+    if (await boardPicker.isVisible()) {
+      await boardPicker.click()
+      await widget.getByRole('option').first().click()
+    }
+    const submit = widget.getByRole('button', { name: 'Submit', exact: true })
+    await expect(submit).toBeEnabled({ timeout: 10000 })
+    await submit.click()
+    await expect(widget.getByText(idea).first()).toBeVisible({ timeout: 15000 })
+  })
+
   test('customer user menu loads engagement stats', async ({ page }) => {
     const widget = await openIdentified(page, 'customer')
     await widget.getByRole('button', { name: 'User menu' }).click()
