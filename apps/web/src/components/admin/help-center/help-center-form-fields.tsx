@@ -25,7 +25,7 @@ export function HelpCenterFormFields({
   const { upload: uploadImage } = useImageUpload({ prefix: 'help-center' })
 
   return (
-    <div className="px-4 sm:px-6 py-4 space-y-4 h-full flex flex-col">
+    <div className="flex h-full min-h-0 flex-col gap-4 px-4 py-4 sm:px-6">
       {error && <FormError message={error} className="px-3 py-2" />}
 
       <TitleInput control={form.control} placeholder="Article title" autoFocus />
@@ -56,13 +56,15 @@ export function HelpCenterFormFields({
         control={form.control}
         name="content"
         render={() => (
-          <FormItem className="flex-1 min-h-0">
+          <FormItem className="!flex min-h-0 flex-1 flex-col">
             <FormControl>
               <RichTextEditor
                 value={contentJson || ''}
                 onChange={onContentChange}
                 placeholder="Write your help article..."
                 minHeight="100%"
+                fill
+                className="min-h-0 flex-1"
                 borderless
                 toolbarPosition="bottom"
                 features={{

@@ -1300,6 +1300,8 @@ interface RichTextEditorProps {
   className?: string
   disabled?: boolean
   minHeight?: string
+  /** Stretch the writing surface to fill a flex parent (modal body). */
+  fill?: boolean
   borderless?: boolean
   /** Where the formatting toolbar sits relative to the content area.
    * - 'top': classic bordered strip above the editor (filled, muted bg)
@@ -1339,6 +1341,7 @@ function RichTextEditorBase({
   className,
   disabled = false,
   minHeight = '120px',
+  fill = false,
   borderless = false,
   toolbarPosition = borderless ? 'none' : 'bottom',
   autofocus = false,
@@ -1573,6 +1576,7 @@ function RichTextEditorBase({
         className={cn(
           !borderless && 'overflow-hidden rounded-md border border-input bg-background',
           disabled && 'opacity-50 cursor-not-allowed',
+          fill && 'flex h-full min-h-0 flex-col',
           className
         )}
         aria-hidden="true"
@@ -1582,7 +1586,8 @@ function RichTextEditorBase({
             'prose prose-sm prose-neutral dark:prose-invert max-w-none',
             'min-h-[var(--editor-min-height)]',
             borderless ? 'py-0' : 'px-3 py-2',
-            'text-muted-foreground'
+            'text-muted-foreground',
+            fill && 'min-h-0 flex-1'
           )}
           style={{ '--editor-min-height': minHeight } as React.CSSProperties}
         >
@@ -1604,6 +1609,7 @@ function RichTextEditorBase({
           className={cn(
             !borderless && 'overflow-hidden rounded-md border border-input bg-background',
             disabled && 'opacity-50 cursor-not-allowed',
+            fill && 'flex h-full min-h-0 flex-col',
             className
           )}
           onContextMenu={handleContextMenu}
@@ -1618,7 +1624,10 @@ function RichTextEditorBase({
             />
           )}
 
-          <EditorContent editor={editor} />
+          <EditorContent
+            editor={editor}
+            className={cn(fill && 'min-h-0 flex-1 overflow-y-auto [&_.tiptap]:min-h-full')}
+          />
 
           {toolbarPosition === 'bottom' && (
             <MenuBar
@@ -1730,6 +1739,7 @@ export const RichTextEditor = memo(RichTextEditorBase, (prev, next) => {
     prev.disabled !== next.disabled ||
     prev.placeholder !== next.placeholder ||
     prev.minHeight !== next.minHeight ||
+    prev.fill !== next.fill ||
     prev.borderless !== next.borderless ||
     prev.toolbarPosition !== next.toolbarPosition ||
     prev.className !== next.className ||

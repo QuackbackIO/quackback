@@ -184,7 +184,7 @@ function ArticleModalContent({ articleId, onClose }: ArticleModalContentProps) {
         />
 
         <div className="flex min-h-0 flex-1">
-          <div className="min-w-0 flex-1 overflow-y-auto">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             <HelpCenterFormFields
               form={form}
               contentJson={contentJson}
