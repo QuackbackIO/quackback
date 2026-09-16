@@ -86,6 +86,7 @@ describe('sanitizeTiptapContent', () => {
       'image',
       'resizableImage',
       'youtube',
+      'video',
       'horizontalRule',
       'hardBreak',
       'table',
@@ -703,6 +704,41 @@ describe('sanitizeTiptapContent', () => {
   // ============================================
   // Inline conversation image sanitization
   // ============================================
+
+  it('preserves a same-origin uploaded video and drops unknown attributes', () => {
+    const result = sanitizeTiptapContent({
+      type: 'doc',
+      content: [
+        {
+          type: 'video',
+          attrs: {
+            src: '/api/storage/portal-media/recording.mp4',
+            mimeType: 'video/mp4',
+            title: 'Reproduction',
+            autoplay: true,
+          },
+        },
+      ],
+    })
+    expect(result.content?.[0]).toEqual({
+      type: 'video',
+      attrs: {
+        src: '/api/storage/portal-media/recording.mp4',
+        mimeType: 'video/mp4',
+        title: 'Reproduction',
+      },
+    })
+  })
+
+  it('neutralizes a video pointing at an external host', () => {
+    const result = sanitizeTiptapContent({
+      type: 'doc',
+      content: [
+        { type: 'video', attrs: { src: 'https://evil.example/track.mp4', mimeType: 'video/mp4' } },
+      ],
+    })
+    expect(result.content?.[0]?.attrs?.src).toBe('')
+  })
 
   it('preserves a chatImage with a same-origin upload src', () => {
     const input = {

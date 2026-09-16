@@ -15,6 +15,7 @@ const COMMENT: EditorFeatures = {
   blockquotes: true,
   dividers: true,
   images: true,
+  videos: true,
   tables: true,
   embeds: true,
   quackbackEmbeds: true,

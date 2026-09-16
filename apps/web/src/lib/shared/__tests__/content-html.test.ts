@@ -10,6 +10,34 @@ import type { JSONContent } from '@tiptap/core'
 import { generateContentHTML } from '../content-html'
 
 describe('generateContentHTML', () => {
+  it('renders an uploaded video with native controls', () => {
+    const html = generateContentHTML({
+      type: 'doc',
+      content: [
+        {
+          type: 'video',
+          attrs: {
+            src: '/api/storage/portal-media/recording.mp4',
+            mimeType: 'video/mp4',
+            title: 'Bug recording',
+          },
+        },
+      ],
+    })
+    expect(html).toContain('<video')
+    expect(html).toContain('controls')
+    expect(html).toContain('preload="metadata"')
+    expect(html).toContain('/api/storage/portal-media/recording.mp4')
+  })
+
+  it('refuses executable video sources', () => {
+    expect(
+      generateContentHTML({
+        type: 'doc',
+        content: [{ type: 'video', attrs: { src: 'javascript:alert(1)' } }],
+      })
+    ).toBe('')
+  })
   it('renders paragraphs with bold and italic marks', () => {
     const html = generateContentHTML({
       type: 'doc',

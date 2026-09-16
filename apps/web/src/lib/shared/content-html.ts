@@ -16,6 +16,7 @@ import {
   escapeHtmlAttr,
   sanitizeUrl,
   sanitizeImageUrl,
+  sanitizeMediaUrl,
   safePositiveInt,
   extractYoutubeId,
 } from '@/lib/shared/utils/sanitize'
@@ -201,6 +202,14 @@ export function generateContentHTML(content: JSONContent): string {
           return `<div class="relative aspect-video my-4 rounded-lg overflow-hidden"><iframe src="https://www.youtube-nocookie.com/embed/${safeVideoId}" width="${width}" height="${height}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen class="absolute inset-0 w-full h-full"></iframe></div>`
         }
         return ''
+      }
+
+      case 'video': {
+        const src = escapeHtmlAttr(sanitizeMediaUrl(String(node.attrs?.src ?? '')))
+        if (!src) return ''
+        const mimeType = node.attrs?.mimeType === 'video/webm' ? 'video/webm' : 'video/mp4'
+        const title = escapeHtmlAttr(String(node.attrs?.title ?? ''))
+        return `<video src="${src}" type="${mimeType}" title="${title}" controls preload="metadata" playsinline class="not-prose my-4 max-h-[70vh] w-full rounded-lg bg-black"></video>`
       }
 
       case 'hardBreak':

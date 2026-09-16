@@ -34,6 +34,7 @@ const WIDGET_FEATURES: EditorFeatures = {
   dividers: true,
   tables: true,
   images: true,
+  videos: true,
   embeds: true,
   bubbleMenu: true,
   slashMenu: true,
@@ -91,6 +92,13 @@ describe('buildExtensions', () => {
     const withoutNames = without.map((e) => (e as { name: string }).name)
     expect(withNames).toContain('image')
     expect(withoutNames).toContain('image')
+  })
+
+  it('always includes the native video node for saved-content compatibility', () => {
+    const names = buildExtensions({ videos: false }, { placeholder: '' }).map(
+      (extension) => (extension as { name: string }).name
+    )
+    expect(names).toContain('video')
   })
 
   it('does not materialize 0×0 or 500×500 on a stored image that omitted dimensions', () => {

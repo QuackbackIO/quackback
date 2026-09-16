@@ -14,7 +14,7 @@ import { ModalHeader } from '@/components/shared/modal-header'
 import { UrlModalShell } from '@/components/shared/url-modal-shell'
 import { Button } from '@/components/ui/button'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
-import { usePostImageUpload, usePortalImageUpload } from '@/lib/client/hooks/use-image-upload'
+import { usePostMediaUpload, usePortalMediaUpload } from '@/lib/client/hooks/use-image-upload'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { postOwnerQueries } from '@/lib/client/queries/post-owner'
 import { mergeSuggestionQueries } from '@/lib/client/queries/signals'
@@ -126,8 +126,8 @@ function PostModalContent({
   } = useLoadMoreAdminComments(postId, inboxKeys.detail(postId))
 
   // Image upload
-  const { upload: uploadImage } = usePostImageUpload()
-  const { upload: uploadCommentImage } = usePortalImageUpload()
+  const { upload: uploadMedia } = usePostMediaUpload()
+  const { upload: uploadCommentMedia } = usePortalMediaUpload()
 
   // Form state - always in edit mode
   const [title, setTitle] = useState(post.title)
@@ -417,13 +417,15 @@ function PostModalContent({
                   blockquotes: true,
                   dividers: true,
                   images: true,
+                  videos: true,
                   tables: true,
                   embeds: true,
                   quackbackEmbeds: true,
                   bubbleMenu: true,
                   slashMenu: true,
                 }}
-                onImageUpload={uploadImage}
+                onImageUpload={uploadMedia}
+                onVideoUpload={uploadMedia}
               />
 
               {/* AI section — summary + similar posts */}
@@ -500,7 +502,7 @@ function PostModalContent({
                     onRestoreComment={(commentId: PostCommentId) =>
                       restoreCommentMutation.mutate(commentId)
                     }
-                    onImageUpload={uploadCommentImage}
+                    onImageUpload={uploadCommentMedia}
                     canModerate={canModerate}
                     restoringCommentId={
                       restoreCommentMutation.isPending

@@ -226,6 +226,9 @@ server {
     ssl_certificate /path/to/cert.pem;
     ssl_certificate_key /path/to/key.pem;
 
+    # Feedback videos may be up to 100 MB. Leave room for multipart overhead.
+    client_max_body_size 110m;
+
     location / {
         proxy_pass http://localhost:3000;
         proxy_http_version 1.1;
@@ -239,6 +242,10 @@ server {
     }
 }
 ```
+
+Quackback accepts MP4 and WebM feedback videos up to 100 MB. If another proxy,
+load balancer, or hosting platform sits in front of Quackback, set its request
+body limit above 100 MB as well. Image uploads remain limited to 5 MB.
 
 ### Caddy
 

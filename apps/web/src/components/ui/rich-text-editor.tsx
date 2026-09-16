@@ -28,6 +28,7 @@ import { applySuggestionListKey } from './suggestion-list-keys'
 import { HighlightQuery, emojiSuggestionLabel } from './highlight-query'
 import { QuackbackEmbed } from './quackback-embed-extension'
 import { ConversationImage } from './conversation-image-node'
+import { UploadedVideo } from './uploaded-video-node'
 import { Markdown } from '@tiptap/markdown'
 import { Extension, InputRule } from '@tiptap/core'
 import type { Range } from '@tiptap/core'
@@ -110,6 +111,7 @@ import {
   Copy,
   Expand,
   Link2,
+  Video as VideoIcon,
 } from 'lucide-react'
 import {
   ArrowUturnLeftIcon,
@@ -188,11 +190,12 @@ export function buildExtensions(
   options: {
     placeholder: string
     onImageUpload?: (file: File) => Promise<string>
+    onVideoUpload?: (file: File) => Promise<string>
     /** When set, Enter submits (chat-send) instead of splitting the block. */
     onSubmit?: () => void
   }
 ) {
-  const { placeholder, onImageUpload, onSubmit } = options
+  const { placeholder, onImageUpload, onVideoUpload, onSubmit } = options
   return [
     StarterKit.configure({
       heading: features.headings ? { levels: [1, 2, 3] } : false,
@@ -249,6 +252,9 @@ export function buildExtensions(
     // authored by the retired hand-rolled composers) still parse in the editor
     // schema and round-trip. New images author as resizableImage.
     ConversationImage,
+    // Always register so previously saved native videos remain editable even
+    // when uploads are disabled for the current viewer.
+    UploadedVideo,
     ...(features.codeBlocks
       ? [
           CodeBlockLowlight.configure({
@@ -307,7 +313,9 @@ export function buildExtensions(
           }),
         ]
       : []),
-    ...(features.slashMenu !== false ? [createSlashCommands(features, onImageUpload)] : []),
+    ...(features.slashMenu !== false
+      ? [createSlashCommands(features, onImageUpload, onVideoUpload)]
+      : []),
     ...(features.emojiPicker !== false ? [createEmojiExtension()] : []),
     // Enter-key bindings, highest precedence first. createSubmitOnEnter registers
     // at a higher priority than createEnterAsHardBreak (see the factory below), so
@@ -503,6 +511,8 @@ export interface EditorFeatures {
   headings?: boolean
   /** Enable image paste/drop/button with upload support */
   images?: boolean
+  /** Enable native MP4/WebM upload and inline playback. */
+  videos?: boolean
   /** Enable syntax-highlighted code blocks */
   codeBlocks?: boolean
   /** Enable floating bubble menu on text selection (default: true) */
@@ -555,7 +565,8 @@ interface SlashMenuItem {
 
 function getSlashMenuItems(
   features: EditorFeatures,
-  onImageUpload?: (file: File) => Promise<string>
+  onImageUpload?: (file: File) => Promise<string>,
+  onVideoUpload?: (file: File) => Promise<string>
 ): SlashMenuItem[] {
   const items: SlashMenuItem[] = [
     // Text group - always available
@@ -714,6 +725,42 @@ function getSlashMenuItems(
         input.click()
       },
       aliases: ['img', 'picture'],
+      group: 'advanced',
+    })
+  }
+
+  if (features.videos && onVideoUpload) {
+    items.push({
+      title: 'Video',
+      description: 'Upload an MP4 or WebM video',
+      icon: <VideoIcon className="size-4" />,
+      command: ({ editor, range }) => {
+        editor.chain().focus().deleteRange(range).run()
+        const input = document.createElement('input')
+        input.type = 'file'
+        input.accept = 'video/mp4,video/webm'
+        input.onchange = async () => {
+          const file = input.files?.[0]
+          if (!file) return
+          try {
+            const src = await onVideoUpload(file)
+            editor
+              .chain()
+              .focus()
+              .insertContent({
+                type: 'video',
+                attrs: { src, mimeType: file.type, title: file.name },
+              })
+              .run()
+          } catch (error) {
+            console.error('Failed to upload video:', error)
+            const { toast } = await import('sonner')
+            toast.error("Couldn't upload video. Try again.")
+          }
+        }
+        input.click()
+      },
+      aliases: ['recording', 'mp4', 'webm'],
       group: 'advanced',
     })
   }
@@ -929,12 +976,13 @@ SlashMenuList.displayName = 'SlashMenuList'
 // Create the slash commands extension
 function createSlashCommands(
   features: EditorFeatures,
-  onImageUpload?: (file: File) => Promise<string>
+  onImageUpload?: (file: File) => Promise<string>,
+  onVideoUpload?: (file: File) => Promise<string>
 ) {
   // Compute once per extension instance. Since buildExtensions() is wrapped in
   // useMemo, this only re-runs when features or onImageUpload actually changes —
   // NOT on every keystroke.
-  const allItems = getSlashMenuItems(features, onImageUpload)
+  const allItems = getSlashMenuItems(features, onImageUpload, onVideoUpload)
 
   return Extension.create({
     name: 'slashCommands',
@@ -1318,6 +1366,8 @@ interface RichTextEditorProps {
   features?: EditorFeatures
   /** Callback for uploading images. Returns the public URL of the uploaded image. */
   onImageUpload?: (file: File) => Promise<string>
+  /** Callback for uploading an MP4/WebM recording. */
+  onVideoUpload?: (file: File) => Promise<string>
   /** When set, Enter submits (chat-send) instead of splitting the block and
    * Shift+Enter / Alt+Enter insert a line break. Yields to an open
    * slash/mention/emoji popover. MUST be a stable callback (wrap churning state
@@ -1347,6 +1397,7 @@ function RichTextEditorBase({
   autofocus = false,
   features = {},
   onImageUpload,
+  onVideoUpload,
   onSubmit,
   editorRef,
 }: RichTextEditorProps) {
@@ -1356,7 +1407,7 @@ function RichTextEditorBase({
   // Rebuilding the array on every render causes setOptions→transaction→onUpdate
   // on every keystroke, resulting in 300–400 ms input violations.
   const extensions = useMemo(
-    () => buildExtensions(features, { placeholder, onImageUpload, onSubmit }),
+    () => buildExtensions(features, { placeholder, onImageUpload, onVideoUpload, onSubmit }),
 
     [
       features.headings,
@@ -1364,6 +1415,7 @@ function RichTextEditorBase({
       features.blockquotes,
       features.dividers,
       features.images,
+      features.videos,
       features.taskLists,
       features.tables,
       features.embeds,
@@ -1373,6 +1425,7 @@ function RichTextEditorBase({
       features.enterAsHardBreak,
       features.mentions,
       onImageUpload,
+      onVideoUpload,
       onSubmit,
       placeholder,
     ]
@@ -1390,15 +1443,27 @@ function RichTextEditorBase({
         ),
         style: `--editor-min-height: ${minHeight}`,
       },
-      handleDrop: features.images && onImageUpload ? handleImageDrop(onImageUpload) : undefined,
-      handlePaste: features.images && onImageUpload ? handleImagePaste(onImageUpload) : undefined,
+      handleDrop:
+        (features.images && onImageUpload) || (features.videos && onVideoUpload)
+          ? handleMediaDrop(
+              features.images ? onImageUpload : undefined,
+              features.videos ? onVideoUpload : undefined
+            )
+          : undefined,
+      handlePaste:
+        (features.images && onImageUpload) || (features.videos && onVideoUpload)
+          ? handleMediaPaste(
+              features.images ? onImageUpload : undefined,
+              features.videos ? onVideoUpload : undefined
+            )
+          : undefined,
       handleDOMEvents: {
         keydown: (_view: import('@tiptap/pm/view').EditorView, event: KeyboardEvent) =>
           stopEnterFromReachingParentForm(event),
       },
     }),
 
-    [features.images, onImageUpload, borderless, minHeight]
+    [features.images, features.videos, onImageUpload, onVideoUpload, borderless, minHeight]
   )
 
   // Stores the last JSON emitted by onUpdate so the value-sync useEffect can
@@ -1620,6 +1685,7 @@ function RichTextEditorBase({
               disabled={disabled}
               features={features}
               onImageUpload={onImageUpload}
+              onVideoUpload={onVideoUpload}
               variant="top"
             />
           )}
@@ -1635,6 +1701,7 @@ function RichTextEditorBase({
               disabled={disabled}
               features={features}
               onImageUpload={onImageUpload}
+              onVideoUpload={onVideoUpload}
               variant="bottom"
               borderless={borderless}
             />
@@ -1735,6 +1802,7 @@ export const RichTextEditor = memo(RichTextEditorBase, (prev, next) => {
     prev.value !== next.value ||
     prev.onChange !== next.onChange ||
     prev.onImageUpload !== next.onImageUpload ||
+    prev.onVideoUpload !== next.onVideoUpload ||
     prev.onSubmit !== next.onSubmit ||
     prev.disabled !== next.disabled ||
     prev.placeholder !== next.placeholder ||
@@ -1754,6 +1822,7 @@ export const RichTextEditor = memo(RichTextEditorBase, (prev, next) => {
     pf.blockquotes === nf.blockquotes &&
     pf.dividers === nf.dividers &&
     pf.images === nf.images &&
+    pf.videos === nf.videos &&
     pf.taskLists === nf.taskLists &&
     pf.tables === nf.tables &&
     pf.embeds === nf.embeds &&
@@ -1767,14 +1836,15 @@ export const RichTextEditor = memo(RichTextEditorBase, (prev, next) => {
 })
 
 // ============================================================================
-// Image Handling
+// Uploaded media handling
 // ============================================================================
 
 /**
- * Handle image drop events in the editor.
+ * Handle image/video drop events in the editor.
  */
-function handleImageDrop(
-  onImageUpload: (file: File) => Promise<string>
+function handleMediaDrop(
+  onImageUpload?: (file: File) => Promise<string>,
+  onVideoUpload?: (file: File) => Promise<string>
 ): (
   view: import('@tiptap/pm/view').EditorView,
   event: DragEvent,
@@ -1786,11 +1856,13 @@ function handleImageDrop(
       return false
     }
 
-    const images = Array.from(event.dataTransfer.files).filter((file) =>
-      file.type.startsWith('image/')
+    const files = Array.from(event.dataTransfer.files).filter(
+      (file) =>
+        (file.type.startsWith('image/') && !!onImageUpload) ||
+        (file.type.startsWith('video/') && !!onVideoUpload)
     )
 
-    if (images.length === 0) {
+    if (files.length === 0) {
       return false
     }
 
@@ -1799,20 +1871,28 @@ function handleImageDrop(
     const { schema } = view.state
     const coordinates = view.posAtCoords({ left: event.clientX, top: event.clientY })
 
-    images.forEach((image) => {
-      onImageUpload(image)
+    files.forEach((file) => {
+      const isVideo = file.type.startsWith('video/')
+      const upload = isVideo ? onVideoUpload : onImageUpload
+      if (!upload) return
+      upload(file)
         .then(async (src) => {
-          const nodeType = schema.nodes.resizableImage || schema.nodes.image
-          const node = nodeType?.create(await resizableImageInsertAttrs(src, image))
+          const nodeType = isVideo
+            ? schema.nodes.video
+            : schema.nodes.resizableImage || schema.nodes.image
+          const attrs = isVideo
+            ? { src, mimeType: file.type, title: file.name }
+            : await resizableImageInsertAttrs(src, file)
+          const node = nodeType?.create(attrs)
           if (node && coordinates) {
             const transaction = view.state.tr.insert(coordinates.pos, node)
             view.dispatch(transaction)
           }
         })
         .catch((err) => {
-          console.error('[RichTextEditor] Image drop upload failed:', err)
+          console.error('[RichTextEditor] Media drop upload failed:', err)
           void import('sonner').then(({ toast }) =>
-            toast.error("Couldn't upload image. Try again.")
+            toast.error(`Couldn't upload ${isVideo ? 'video' : 'image'}. Try again.`)
           )
         })
     })
@@ -1822,39 +1902,52 @@ function handleImageDrop(
 }
 
 /**
- * Handle image paste events in the editor.
+ * Handle image/video paste events in the editor.
  */
-function handleImagePaste(
-  onImageUpload: (file: File) => Promise<string>
+function handleMediaPaste(
+  onImageUpload?: (file: File) => Promise<string>,
+  onVideoUpload?: (file: File) => Promise<string>
 ): (view: import('@tiptap/pm/view').EditorView, event: ClipboardEvent, slice: unknown) => boolean {
   return (view, event) => {
     const items = Array.from(event.clipboardData?.items ?? [])
-    const images = items.filter((item) => item.type.startsWith('image/'))
+    const media = items.filter(
+      (item) =>
+        (item.type.startsWith('image/') && !!onImageUpload) ||
+        (item.type.startsWith('video/') && !!onVideoUpload)
+    )
 
-    if (images.length === 0) {
+    if (media.length === 0) {
       return false
     }
 
     event.preventDefault()
 
-    images.forEach((item) => {
+    media.forEach((item) => {
       const file = item.getAsFile()
       if (!file) return
+      const isVideo = file.type.startsWith('video/')
+      const upload = isVideo ? onVideoUpload : onImageUpload
+      if (!upload) return
 
-      onImageUpload(file)
+      upload(file)
         .then(async (src) => {
           const { schema } = view.state
-          const nodeType = schema.nodes.resizableImage || schema.nodes.image
-          const node = nodeType?.create(await resizableImageInsertAttrs(src, file))
+          const nodeType = isVideo
+            ? schema.nodes.video
+            : schema.nodes.resizableImage || schema.nodes.image
+          const attrs = isVideo
+            ? { src, mimeType: file.type, title: file.name }
+            : await resizableImageInsertAttrs(src, file)
+          const node = nodeType?.create(attrs)
           if (node) {
             const transaction = view.state.tr.replaceSelectionWith(node)
             view.dispatch(transaction)
           }
         })
         .catch((err) => {
-          console.error('[RichTextEditor] Image paste upload failed:', err)
+          console.error('[RichTextEditor] Media paste upload failed:', err)
           void import('sonner').then(({ toast }) =>
-            toast.error("Couldn't upload image. Try again.")
+            toast.error(`Couldn't upload ${isVideo ? 'video' : 'image'}. Try again.`)
           )
         })
     })
@@ -2342,6 +2435,7 @@ interface MenuBarProps {
   disabled: boolean
   features?: EditorFeatures
   onImageUpload?: (file: File) => Promise<string>
+  onVideoUpload?: (file: File) => Promise<string>
   /** 'top' is the classic bordered strip; 'bottom' is a quiet transparent row
    * of ghost icon buttons rendered below the content. Both render the same
    * feature-gated button set. */
@@ -2357,6 +2451,7 @@ function MenuBar({
   disabled,
   features = {},
   onImageUpload,
+  onVideoUpload,
   variant = 'top',
   borderless = false,
 }: MenuBarProps) {
@@ -2426,6 +2521,34 @@ function MenuBar({
     }
     input.click()
   }, [editor, onImageUpload])
+
+  const insertVideo = useCallback(() => {
+    if (!onVideoUpload) return
+
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'video/mp4,video/webm'
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      if (!file) return
+      try {
+        const src = await onVideoUpload(file)
+        editor
+          .chain()
+          .focus()
+          .insertContent({
+            type: 'video',
+            attrs: { src, mimeType: file.type, title: file.name },
+          })
+          .run()
+      } catch (error) {
+        console.error('Failed to upload video:', error)
+        const { toast } = await import('sonner')
+        toast.error("Couldn't upload video. Try again.")
+      }
+    }
+    input.click()
+  }, [editor, onVideoUpload])
 
   const canUndo = canUndoRedo.undo
   const canRedo = canUndoRedo.redo
@@ -2541,6 +2664,16 @@ function MenuBar({
           onClick={insertImage}
           disabled={disabled}
           title="Insert Image"
+        />
+      )}
+
+      {features.videos && onVideoUpload && (
+        <ToolbarButton
+          variant={btn}
+          icon={<VideoIcon className="size-4" />}
+          onClick={insertVideo}
+          disabled={disabled}
+          title="Insert Video"
         />
       )}
 

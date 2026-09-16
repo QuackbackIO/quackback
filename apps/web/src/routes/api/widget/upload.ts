@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { auth } from '@/lib/server/auth'
-import { isS3Usable, uploadImageFromFormData } from '@/lib/server/storage/s3'
+import { isS3Usable, uploadMediaFromFormData } from '@/lib/server/storage/s3'
 import { enforceWidgetQuota, widgetJsonError } from '@/lib/server/widget/public-endpoint'
 import { getSettings } from '@/lib/server/functions/workspace'
 
@@ -35,7 +35,7 @@ export async function handleWidgetUpload({ request }: { request: Request }): Pro
   } catch {
     return Response.json({ error: 'Invalid request body' }, { status: 400 })
   }
-  return uploadImageFromFormData(formData, 'widget-images')
+  return uploadMediaFromFormData(formData, 'widget-media')
 }
 
 export const Route = createFileRoute('/api/widget/upload')({

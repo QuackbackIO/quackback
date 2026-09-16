@@ -706,6 +706,7 @@ function CommentItem({
                   autofocus="end"
                   features={COMMENT_EDITOR_FEATURES}
                   onImageUpload={onImageUpload}
+                  onVideoUpload={onImageUpload}
                   disabled={editMutation.isPending}
                   onChange={(json, _html, markdown) => {
                     editJsonRef.current = json as TiptapContent

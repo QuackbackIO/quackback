@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { PencilIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
-import { usePortalImageUpload } from '@/lib/client/hooks/use-image-upload'
+import { usePortalMediaUpload } from '@/lib/client/hooks/use-image-upload'
 import { useCreatePublicPost } from '@/lib/client/mutations/portal-posts'
 import { useAuthPopover } from '@/components/auth/auth-popover-context'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
@@ -78,9 +78,14 @@ export function FeedbackHeaderAnimated({
     session?.user && !isAnonymousSession
       ? { name: session.user.name, email: session.user.email }
       : user
-  const canUploadImages = !isAnonymousSession && !!session?.user && richMediaEnabled
-
-  const { upload: uploadImage } = usePortalImageUpload()
+  const { upload: uploadMedia } = usePortalMediaUpload()
+  const uploadMediaWithSession = useCallback(
+    async (file: File) => {
+      if (!(await ensureAnonSession())) throw new Error('Could not create upload session')
+      return uploadMedia(file)
+    },
+    [ensureAnonSession, uploadMedia]
+  )
 
   // Listen for auth success to refetch session (no page reload)
   useAuthBroadcast({
@@ -106,6 +111,7 @@ export function FeedbackHeaderAnimated({
   // on a board whose tier requires sign-in (Codex #191).
   const boardCanSubmit = boardPermissions?.[selectedBoardId]?.canSubmit ?? false
   const { canSubmit, canPostAnonymously, noAccess } = resolveSubmitState(boardCanSubmit, session)
+  const canUploadMedia = richMediaEnabled && (!!session?.user || canPostAnonymously)
 
   const [title, setTitle] = useState('')
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
@@ -383,8 +389,9 @@ export function FeedbackHeaderAnimated({
                 minHeight="150px"
                 borderless
                 toolbarPosition="bottom"
-                features={{ images: canUploadImages, quackbackEmbeds: true }}
-                onImageUpload={canUploadImages ? uploadImage : undefined}
+                features={{ images: canUploadMedia, videos: canUploadMedia, quackbackEmbeds: true }}
+                onImageUpload={canUploadMedia ? uploadMediaWithSession : undefined}
+                onVideoUpload={canUploadMedia ? uploadMediaWithSession : undefined}
               />
             </motion.div>
 

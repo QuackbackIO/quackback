@@ -76,3 +76,21 @@ export function sniffImageMime(buf: Buffer): string | null {
   }
   return null
 }
+
+/**
+ * Sniff the browser-playable video formats accepted by feedback uploads.
+ *
+ * MP4 is an ISO Base Media File Format container, identified by its `ftyp`
+ * box. AVIF uses the same container, so reject its brands before accepting the
+ * file as video. WebM starts with the EBML header used by Matroska/WebM.
+ */
+export function sniffVideoMime(buf: Buffer): 'video/mp4' | 'video/webm' | null {
+  if (buf.length >= 12 && buf.slice(4, 8).toString('ascii') === 'ftyp') {
+    const brand = buf.slice(8, 12).toString('ascii')
+    if (brand !== 'avif' && brand !== 'avis') return 'video/mp4'
+  }
+
+  if (startsWithAt(buf, 0, [0x1a, 0x45, 0xdf, 0xa3])) return 'video/webm'
+
+  return null
+}

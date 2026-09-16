@@ -228,6 +228,7 @@ export function CommentForm({
                         disabled={isSubmitting}
                         features={COMMENT_EDITOR_FEATURES}
                         onImageUpload={onImageUpload}
+                        onVideoUpload={onImageUpload}
                         placeholder={intl.formatMessage({
                           id: 'portal.commentForm.placeholder',
                           defaultMessage: 'Write a comment...',
@@ -468,6 +469,7 @@ export function CommentForm({
                     disabled={isSubmitting}
                     features={COMMENT_EDITOR_FEATURES}
                     onImageUpload={onImageUpload}
+                    onVideoUpload={onImageUpload}
                     placeholder={intl.formatMessage({
                       id: 'portal.commentForm.placeholder',
                       defaultMessage: 'Write a comment...',

@@ -33,7 +33,7 @@ import { useWidgetAuth } from './widget-auth-provider'
 import { sendToHost } from '@/lib/client/widget-bridge'
 import type { PostId } from '@quackback/ids'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
-import { useWidgetImageUpload, WidgetSessionError } from './use-widget-image-upload'
+import { useWidgetMediaUpload, WidgetSessionError } from './use-widget-image-upload'
 import type { JSONContent } from '@tiptap/react'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
 import {
@@ -381,7 +381,7 @@ export function WidgetHomeAnimated({
     },
     [intl]
   )
-  const { upload: uploadImage } = useWidgetImageUpload({
+  const { upload: uploadMedia } = useWidgetMediaUpload({
     onStart: handleUploadStart,
     onError: handleUploadError,
   })
@@ -822,12 +822,14 @@ export function WidgetHomeAnimated({
                         dividers: true,
                         tables: true,
                         images: true,
+                        videos: true,
                         embeds: true,
                         quackbackEmbeds: true,
                         bubbleMenu: true,
                         slashMenu: true,
                       }}
-                      onImageUpload={uploadImage}
+                      onImageUpload={uploadMedia}
+                      onVideoUpload={uploadMedia}
                       className="text-sm"
                     />
                   </motion.div>

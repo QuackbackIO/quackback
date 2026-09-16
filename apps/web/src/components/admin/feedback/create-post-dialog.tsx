@@ -7,7 +7,7 @@ import { createPostSchema } from '@/lib/shared/schemas/posts'
 import { useCreatePost } from '@/lib/client/mutations/posts'
 import type { CreatePostInput } from '@/lib/shared/types'
 import { useSimilarPosts } from '@/lib/client/hooks/use-similar-posts'
-import { usePostImageUpload } from '@/lib/client/hooks/use-image-upload'
+import { usePostMediaUpload } from '@/lib/client/hooks/use-image-upload'
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { FolderIcon, TagIcon, UserIcon } from '@heroicons/react/24/outline'
@@ -66,7 +66,7 @@ export function CreatePostDialog({
   const setOpen = controlledOnOpenChange ?? setInternalOpen
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
 
-  const { upload: uploadImage } = usePostImageUpload()
+  const { upload: uploadMedia } = usePostMediaUpload()
   const [authorPrincipalId, setAuthorPrincipalId] = useState(currentUser.principalId)
   const createPostMutation = useCreatePost()
   const createUserMutation = useCreatePortalUser()
@@ -219,13 +219,15 @@ export function CreatePostDialog({
                                 blockquotes: true,
                                 dividers: true,
                                 images: true,
+                                videos: true,
                                 tables: true,
                                 embeds: true,
                                 quackbackEmbeds: true,
                                 bubbleMenu: true,
                                 slashMenu: true,
                               }}
-                              onImageUpload={uploadImage}
+                              onImageUpload={uploadMedia}
+                              onVideoUpload={uploadMedia}
                             />
                           </Suspense>
                         </FormControl>

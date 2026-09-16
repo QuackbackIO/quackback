@@ -393,6 +393,7 @@ function WidgetCommentItem({
                   minHeight="44px"
                   features={COMMENT_EDITOR_FEATURES}
                   onImageUpload={onImageUpload}
+                  onVideoUpload={onImageUpload}
                   disabled={isSubmitting}
                   placeholder={intl.formatMessage(
                     {

@@ -87,6 +87,7 @@ export function WidgetCommentForm({
           minHeight="52px"
           features={COMMENT_EDITOR_FEATURES}
           onImageUpload={onImageUpload}
+          onVideoUpload={onImageUpload}
           disabled={isSubmitting}
           placeholder={intl.formatMessage({
             id: 'widget.commentForm.placeholder',
