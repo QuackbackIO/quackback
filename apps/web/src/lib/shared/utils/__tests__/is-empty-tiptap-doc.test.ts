@@ -111,4 +111,30 @@ describe('isEmptyTiptapDoc', () => {
     }
     expect(isEmptyTiptapDoc(doc)).toBe(false)
   })
+
+  it('treats an empty heading as empty', () => {
+    const doc: TiptapContent = {
+      type: 'doc',
+      content: [{ type: 'heading', attrs: { level: 1 } }],
+    }
+    expect(isEmptyTiptapDoc(doc)).toBe(true)
+  })
+
+  it('treats an empty table shell as empty', () => {
+    const doc: TiptapContent = {
+      type: 'doc',
+      content: [
+        {
+          type: 'table',
+          content: [
+            {
+              type: 'tableRow',
+              content: [{ type: 'tableCell', content: [{ type: 'paragraph' }] }],
+            },
+          ],
+        },
+      ],
+    }
+    expect(isEmptyTiptapDoc(doc)).toBe(true)
+  })
 })

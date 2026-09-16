@@ -327,6 +327,27 @@ describe('createChangelog wiring', () => {
     )
   })
 
+  it('rejects a missing title', async () => {
+    const { createChangelog } = await import('../changelog.service')
+
+    await expect(
+      createChangelog({ title: '   ', content: 'Body', publishState: { type: 'draft' } }, AUTHOR)
+    ).rejects.toMatchObject({ message: 'Title is required' })
+    expect(mockInsertValues).not.toHaveBeenCalled()
+  })
+
+  it('rejects a title over 200 characters', async () => {
+    const { createChangelog } = await import('../changelog.service')
+
+    await expect(
+      createChangelog(
+        { title: 'X'.repeat(201), content: 'Body', publishState: { type: 'draft' } },
+        AUTHOR
+      )
+    ).rejects.toMatchObject({ message: 'Title must not exceed 200 characters' })
+    expect(mockInsertValues).not.toHaveBeenCalled()
+  })
+
   it('rejects empty markdown without contentJson', async () => {
     const { createChangelog } = await import('../changelog.service')
 
@@ -420,6 +441,36 @@ describe('createChangelog wiring', () => {
         content: expect.stringContaining('GIF per link'),
       })
     )
+  })
+
+  it('accepts markdown-only content when contentJson is omitted', async () => {
+    const { createChangelog } = await import('../changelog.service')
+
+    await createChangelog(
+      { title: 'X', content: 'Hello from markdown', publishState: { type: 'draft' } },
+      AUTHOR
+    )
+
+    expect(mockInsertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining('Hello from markdown'),
+      })
+    )
+  })
+
+  it('accepts an image-only contentJson with empty markdown', async () => {
+    const { createChangelog } = await import('../changelog.service')
+    const contentJson: TiptapContent = {
+      type: 'doc',
+      content: [{ type: 'image', attrs: { src: 'https://cdn.example.com/shot.png' } }],
+    }
+
+    await createChangelog(
+      { title: 'X', content: '', contentJson, publishState: { type: 'draft' } },
+      AUTHOR
+    )
+
+    expect(mockInsertValues).toHaveBeenCalled()
   })
 })
 
