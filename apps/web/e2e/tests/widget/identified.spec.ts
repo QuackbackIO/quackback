@@ -55,9 +55,9 @@ test.describe('Identified widget harness', { tag: '@smoke' }, () => {
     const vote = widget.getByRole('button', { name: /^Vote \(/ }).first()
     await expect(vote).toBeVisible({ timeout: 15000 })
     await vote.click()
-    await expect
-      .poll(async () => vote.getAttribute('aria-pressed'), { timeout: 10000 })
-      .toBe('true')
+    await expect(widget.getByRole('button', { name: /^Remove vote \(/ }).first()).toBeVisible({
+      timeout: 10000,
+    })
 
     const title = widget.getByRole('textbox', { name: 'Feedback title' })
     await expect(title).toBeVisible()

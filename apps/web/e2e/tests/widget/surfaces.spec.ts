@@ -18,10 +18,11 @@ test.describe('Widget visitor surfaces', { tag: '@smoke' }, () => {
       .first()
     await expect(postRow).toBeVisible()
     await postRow.click()
-    await expect(page.getByRole('button', { name: /^Vote \(/ }).first()).toBeVisible({
-      timeout: 10000,
-    })
-    await expect(page.getByPlaceholder('Write a comment...')).toBeVisible({ timeout: 10000 })
+    await expect(page.getByRole('button', { name: 'Go back' })).toBeVisible({ timeout: 10000 })
+    await expect(page.getByRole('heading').first()).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: 'Log in to join the conversation' })
+    ).toBeVisible()
   })
 
   test('Help tab loads via the widget BFF', async ({ page }) => {
