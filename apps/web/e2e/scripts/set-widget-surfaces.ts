@@ -1,6 +1,7 @@
 /**
- * Enable widget visitor tabs for e2e: Home, Feedback, Help, Changelog, Messages.
- * Tickets stays on in config; the bar still hides it for anonymous visitors.
+ * Enable widget visitor tabs for e2e: Home, Feedback, Help, Changelog, Messages,
+ * and Tickets. `supportTickets` must be on or the public widget projection
+ * strips the Tickets tab and requester ticket reads 403.
  *
  * Usage: bun set-widget-surfaces.ts <on|off>
  */
@@ -23,6 +24,7 @@ try {
 
   const flags = parseJson(rows[0].feature_flags)
   flags.supportInbox = enabled
+  flags.supportTickets = enabled
   flags.helpCenter = enabled
   flags.changelog = enabled
   flags.feedback = true

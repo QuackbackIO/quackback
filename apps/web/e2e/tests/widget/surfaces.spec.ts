@@ -6,8 +6,9 @@ test.describe('Widget visitor surfaces', { tag: '@smoke' }, () => {
     setWidgetSurfaces(true)
   })
 
-  test('home lists posts, votes, and opens post detail', async ({ page }) => {
+  test('Feedback tab lists posts, votes, and opens post detail', async ({ page }) => {
     await page.goto('/widget')
+    await page.getByRole('button', { name: 'Feedback', exact: true }).click()
     const vote = page.getByRole('button', { name: /^Vote \(/ }).first()
     await expect(vote).toBeVisible({ timeout: 15000 })
 
@@ -36,8 +37,9 @@ test.describe('Widget visitor surfaces', { tag: '@smoke' }, () => {
     await expect(page.getByText(body).first()).toBeVisible({ timeout: 15000 })
   })
 
-  test('submit an idea from Home', async ({ page }) => {
+  test('submit an idea from Feedback', async ({ page }) => {
     await page.goto('/widget')
+    await page.getByRole('button', { name: 'Feedback', exact: true }).click()
     const title = page.getByRole('textbox', { name: 'Feedback title' })
     await expect(title).toBeVisible({ timeout: 15000 })
     const idea = `Widget e2e idea ${Date.now()}`
@@ -69,6 +71,6 @@ test.describe('Widget visitor surfaces', { tag: '@smoke' }, () => {
     await expect(page.getByRole('button', { name: 'Home', exact: true })).toBeVisible({
       timeout: 10000,
     })
-    await expect(page.getByRole('button', { name: 'Tickets', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /^(?:\d+ unread )?Tickets$/ })).toHaveCount(0)
   })
 })

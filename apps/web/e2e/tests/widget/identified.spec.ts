@@ -5,6 +5,11 @@ function widgetFrame(page: Page): FrameLocator {
   return page.frameLocator('iframe.quackback-widget-iframe')
 }
 
+/** Tab labels include an unread prefix (`1 unread Messages`) when badged. */
+function tabButton(widget: FrameLocator, label: 'Messages' | 'Tickets') {
+  return widget.getByRole('button', { name: new RegExp(`^(?:\\d+ unread )?${label}$`) })
+}
+
 async function openIdentified(page: Page, persona: 'customer' | 'teammate' | 'anon') {
   await page.goto(`/e2e/widget?persona=${persona}`)
   await expect(page.getByTestId('e2e-persona')).toHaveText(persona)
@@ -21,14 +26,14 @@ test.describe('Identified widget harness', { tag: '@smoke' }, () => {
   test('customer identify shows Tickets and the seeded ticket', async ({ page }) => {
     const widget = await openIdentified(page, 'customer')
     await expect(page.locator('html')).toHaveAttribute('data-user-name', 'E2E Customer')
-    await widget.getByRole('button', { name: 'Tickets', exact: true }).click()
+    await tabButton(widget, 'Tickets').click()
     await expect(widget.getByText('E2E Widget Ticket')).toBeVisible({ timeout: 15000 })
   })
 
   test('customer can rate a closed CSAT thread', async ({ page }) => {
     const widget = await openIdentified(page, 'customer')
-    await widget.getByRole('button', { name: 'Messages', exact: true }).click()
-    await widget.getByText('E2E CSAT thread').click()
+    await tabButton(widget, 'Messages').click()
+    await widget.getByText('How did we do?').click()
     await widget.getByRole('button', { name: '5 of 5' }).click()
     await expect(widget.getByText(/thanks/i).first()).toBeVisible({ timeout: 10000 })
   })
@@ -47,15 +52,15 @@ test.describe('Identified widget harness', { tag: '@smoke' }, () => {
   test('customer user menu loads engagement stats', async ({ page }) => {
     const widget = await openIdentified(page, 'customer')
     await widget.getByRole('button', { name: 'User menu' }).click()
-    await expect(widget.getByText('Ideas')).toBeVisible({ timeout: 10000 })
-    await expect(widget.getByText('Votes')).toBeVisible()
-    await expect(widget.getByText('Comments')).toBeVisible()
+    await expect(widget.getByText('Ideas', { exact: true })).toBeVisible({ timeout: 10000 })
+    await expect(widget.getByText('Votes', { exact: true })).toBeVisible()
+    await expect(widget.getByText('Comments', { exact: true })).toBeVisible()
   })
 
   test('teammate identify does not apply the host-app name', async ({ page }) => {
     const widget = await openIdentified(page, 'teammate')
     await expect(page.locator('html')).not.toHaveAttribute('data-user-name', 'Host App Teammate')
     await expect(widget.getByRole('button', { name: 'User menu' })).toBeVisible({ timeout: 10000 })
-    await expect(widget.getByRole('button', { name: 'Tickets', exact: true })).toHaveCount(0)
+    await expect(tabButton(widget, 'Tickets')).toHaveCount(0)
   })
 })
