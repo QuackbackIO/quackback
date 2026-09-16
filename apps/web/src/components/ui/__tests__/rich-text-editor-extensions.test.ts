@@ -479,6 +479,22 @@ describe('markdown serialization optimization', () => {
     expect(plaintextFromTiptapJson(json)).toBe('First\nSecond')
   })
 
+  it('keeps newlines between paragraphs nested in a blockquote', () => {
+    const json = {
+      type: 'doc',
+      content: [
+        {
+          type: 'blockquote',
+          content: [
+            { type: 'paragraph', content: [{ type: 'text', text: 'First' }] },
+            { type: 'paragraph', content: [{ type: 'text', text: 'Second' }] },
+          ],
+        },
+      ],
+    }
+    expect(plaintextFromTiptapJson(json)).toBe('First\nSecond')
+  })
+
   it('keeps JSON plaintext when initial getMarkdown throws', () => {
     const json = {
       type: 'doc',

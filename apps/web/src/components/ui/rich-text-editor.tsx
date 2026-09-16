@@ -445,14 +445,7 @@ export function markdownFromEditor(
   }
 }
 
-const PLAINTEXT_BLOCKS = new Set([
-  'paragraph',
-  'heading',
-  'blockquote',
-  'listItem',
-  'taskItem',
-  'codeBlock',
-])
+const PLAINTEXT_BLOCKS = new Set(['paragraph', 'heading', 'codeBlock'])
 
 /** Text from a TipTap JSON doc, with newlines between blocks. Used when
  *  getMarkdown() throws so the markdown mirror still matches this edit. */
