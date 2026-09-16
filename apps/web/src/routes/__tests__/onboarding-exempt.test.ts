@@ -6,4 +6,8 @@ describe('onboarding exempt paths', () => {
     expect(isOnboardingExempt('/auth/login')).toBe(true)
     expect(isOnboardingExempt('/admin/login')).toBe(true) // still redirects, must not loop into onboarding
   })
+
+  it('exempts the widget e2e harness', () => {
+    expect(isOnboardingExempt('/e2e/widget')).toBe(true)
+  })
 })

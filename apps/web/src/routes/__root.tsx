@@ -56,6 +56,7 @@ const ONBOARDING_EXEMPT_PATHS = [
   '/oauth/',
   '/.well-known/',
   '/widget',
+  '/e2e/',
 ]
 
 export function isOnboardingExempt(pathname: string): boolean {
