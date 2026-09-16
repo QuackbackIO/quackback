@@ -235,6 +235,9 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/user.ts::requirePrincipalId': END_USER(
     'own-profile helper — resolves the caller principal'
   ),
+  'lib/server/functions/admin-overview.ts::fetchAdminOverviewFn': END_USER(
+    'admin home aggregation — each product section still gates on its own permission'
+  ),
 
   // Widget BFF: Bearer-only surfaces. Site `requireAuth` denies widget; these
   // call `requireWidgetAuth` and reuse the same domain run* helpers.
@@ -491,6 +494,11 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
     intent: 'SECONDARY_GATE',
     roleBar: 'admin',
     why: 'onboarding bootstrap: the first authenticated user provisions as admin; once the workspace step is done, completing setup requires an existing admin',
+  },
+  'lib/server/functions/onboarding.ts::ensureOnboardingHomeReadyFn::isAdmin': {
+    intent: 'SECONDARY_GATE',
+    roleBar: 'admin',
+    why: 'home launch-plan stamp: only an admin can mark workspace details and starting point as seen',
   },
 
   // Behavior refinements sitting behind an already-present entry gate.

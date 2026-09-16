@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 704 surfaces
+### Server functions (`requireAuth`) — 708 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -164,6 +164,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/activation.ts`::completeStartingPointFn | settings.manage |
 | `lib/server/functions/activation.ts`::acknowledgeActivationHandoffFn | settings.manage |
 | `lib/server/functions/activity.ts`::fetchActivityForPost | post.view_private |
+| `lib/server/functions/admin-overview.ts`::fetchAdminOverviewFn | END_USER (any authenticated) |
 | `lib/server/functions/admin-reset-two-factor.ts`::adminResetTwoFactorFn | auth.manage |
 | `lib/server/functions/admin.ts`::fetchInboxPosts | post.view_private |
 | `lib/server/functions/admin.ts`::fetchTagsList | tag.view |
@@ -462,6 +463,8 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/integrations.ts`::addNotificationChannelFn | integration.manage |
 | `lib/server/functions/integrations.ts`::updateNotificationChannelFn | integration.manage |
 | `lib/server/functions/integrations.ts`::removeNotificationChannelFn | integration.manage |
+| `lib/server/functions/labs.ts`::listVisibleLabsExperimentsFn | settings.manage |
+| `lib/server/functions/labs.ts`::setWorkspaceExperimentEnabledFn | settings.manage |
 | `lib/server/functions/link-preview.ts`::unfurlLinkFn | END_USER (any authenticated) |
 | `lib/server/functions/macros.ts`::listMacrosFn | conversation.reply |
 | `lib/server/functions/macros.ts`::createMacroFn | conversation.manage |
@@ -487,6 +490,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/notifications.ts`::archiveAllReadNotificationsFn | END_USER (any authenticated) |
 | `lib/server/functions/onboarding.ts`::saveWorkspaceAndGoalFn | ADMIN-ONLY |
 | `lib/server/functions/onboarding.ts`::saveCloudOnboardingGoalFn | ADMIN-ONLY |
+| `lib/server/functions/onboarding.ts`::ensureOnboardingHomeReadyFn | ADMIN-ONLY |
 | `lib/server/functions/owner-workspaces.ts`::listOwnerWorkspacesFn | settings.manage |
 | `lib/server/functions/owner-workspaces.ts`::openOwnerWorkspaceFn | settings.manage |
 | `lib/server/functions/ownership.ts`::getCloudOwnerEmailFn | END_USER (any authenticated) |
@@ -1015,7 +1019,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-212 of 1028 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+213 of 1032 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -1065,6 +1069,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/invitations.ts`::getInviteBrandingFn | server-fn |
 | `lib/server/functions/invitations.ts`::setPasswordFn | server-fn |
 | `lib/server/functions/locale.ts`::getPortalLocaleFn | server-fn |
+| `lib/server/functions/onboarding.ts`::ensureOnboardingHomeReadyFn | server-fn |
 | `lib/server/functions/onboarding.ts`::getWorkspaceClaimFn | server-fn |
 | `lib/server/functions/onboarding.ts`::saveCloudOnboardingGoalFn | server-fn |
 | `lib/server/functions/onboarding.ts`::saveUserNameFn | server-fn |

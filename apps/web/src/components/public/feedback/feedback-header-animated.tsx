@@ -23,7 +23,6 @@ import type { BoardSettings } from '@/lib/shared/db-types'
 import { signOut } from '@/lib/client/auth-client'
 import { removeViewerScopedPortalQueries } from '@/lib/client/queries/portal'
 import { resolveSubmitState } from '@/components/public/feedback/submit-permission'
-import { useRefinedTheme } from '@/lib/client/hooks/use-visual-theme'
 import type { JSONContent } from '@tiptap/react'
 
 interface BoardOption {
@@ -62,7 +61,6 @@ export function FeedbackHeaderAnimated({
   boardLocked = false,
 }: FeedbackHeaderProps) {
   const intl = useIntl()
-  const refined = useRefinedTheme()
   const router = useRouter()
   const queryClient = useQueryClient()
   const { session } = useRouteContext({ from: '__root__' })
@@ -262,15 +260,12 @@ export function FeedbackHeaderAnimated({
 
   return (
     <motion.div
-      data-compose-card=""
       className="bg-card border border-border rounded-lg mb-5 shadow-sm overflow-hidden"
       initial={false}
       animate={{
-        boxShadow: refined
-          ? 'none'
-          : expanded
-            ? '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)'
-            : '0 1px 2px 0 rgb(0 0 0 / 0.05)',
+        boxShadow: expanded
+          ? '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)'
+          : '0 1px 2px 0 rgb(0 0 0 / 0.05)',
       }}
       transition={{ duration: 0.2 }}
       onKeyDown={handleKeyDown}
@@ -310,7 +305,6 @@ export function FeedbackHeaderAnimated({
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.8, width: 0, marginRight: -12 }}
               transition={{ duration: 0.2 }}
-              data-compose-icon=""
               className="flex-shrink-0 w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center"
             >
               <PencilIcon className="w-4 h-4 text-primary" />

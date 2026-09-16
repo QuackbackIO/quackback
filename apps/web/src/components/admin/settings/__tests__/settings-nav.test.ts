@@ -54,15 +54,16 @@ describe('buildNavSections', () => {
     expect(allLabels(sections)).not.toContain('Sandbox')
   })
 
-  it('Modules lists Feedback & Roadmaps as a flat link to Boards', () => {
+  it('Modules lists Feedback & Roadmaps as a flat link to the hub card', () => {
     const sections = buildNavSections()
     expect(itemLabels(sections, 'Modules')).toContain('Feedback & Roadmaps')
     expect(groupKids(sections, 'Modules', 'Feedback & Roadmaps')).toEqual([])
     const item = sections
       .find((s) => s.label === 'Modules')!
       .items.find((i) => i.label === 'Feedback & Roadmaps')!
-    expect(!isNavGroup(item) && item.to).toBe('/admin/settings/boards')
+    expect(!isNavGroup(item) && item.to).toBe('/admin/settings/feedback')
     expect(!isNavGroup(item) && item.activeFor).toEqual([
+      '/admin/settings/feedback',
       '/admin/settings/boards',
       '/admin/settings/statuses',
       '/admin/settings/tags',
@@ -78,13 +79,13 @@ describe('buildNavSections', () => {
     expect(itemLabels(sections, 'Modules')).not.toContain('Support')
   })
 
-  it('Support is a flat link to Channels when the inbox is on', () => {
+  it('Support is a flat link to the Support hub when the inbox is on', () => {
     const sections = buildNavSections({ supportInbox: true })
     expect(groupKids(sections, 'Modules', 'Support')).toEqual([])
     const item = sections
       .find((s) => s.label === 'Modules')!
       .items.find((i) => i.label === 'Support')!
-    expect(!isNavGroup(item) && item.to).toBe('/admin/settings/channels')
+    expect(!isNavGroup(item) && item.to).toBe('/admin/settings/support')
     expect(itemLabels(sections, 'Workspace')).not.toContain('Emails')
     expect(allLabels(sections)).not.toContain('Messenger')
     expect(allLabels(sections)).not.toContain('Email')
@@ -92,12 +93,12 @@ describe('buildNavSections', () => {
     expect(allLabels(sections)).not.toContain('Channels')
   })
 
-  it('Support is a flat link to Email when only supportTickets is on', () => {
+  it('Support is a flat link to the Support hub when only supportTickets is on', () => {
     const sections = buildNavSections({ supportTickets: true })
     const item = sections
       .find((s) => s.label === 'Modules')!
       .items.find((i) => i.label === 'Support')!
-    expect(!isNavGroup(item) && item.to).toBe('/admin/settings/channels/email')
+    expect(!isNavGroup(item) && item.to).toBe('/admin/settings/support')
     expect(allLabels(sections)).not.toContain('Channels')
     expect(allLabels(sections)).not.toContain('Messenger')
   })

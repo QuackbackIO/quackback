@@ -1,4 +1,4 @@
-import { createFileRoute, Link, redirect } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { ChatBubbleLeftRightIcon, EnvelopeIcon } from '@heroicons/react/24/solid'
@@ -9,6 +9,7 @@ import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
+import { SettingsMenuCard, SettingsMenuRow } from '@/components/admin/settings/settings-menu-card'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
@@ -97,7 +98,7 @@ function ChannelsHubPage() {
   return (
     <div className="space-y-6 max-w-3xl">
       <div className="lg:hidden">
-        <BackLink to="/admin/settings">Settings</BackLink>
+        <BackLink to="/admin/settings/support">Support</BackLink>
       </div>
       <PageHeader
         icon={ChatBubbleLeftRightIcon}
@@ -105,34 +106,24 @@ function ChannelsHubPage() {
         description="Where customer conversations happen."
       />
 
-      <SettingsCard contentClassName="p-0 sm:p-0">
-        <div data-settings-list="" className="divide-y divide-border">
-          <Link
-            to="/admin/settings/channels/messenger"
-            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/40"
-          >
-            <div className="flex items-center gap-3">
-              <ChatBubbleLeftRightIcon className="size-4 text-muted-foreground" />
-              <div>
-                <p className="text-sm font-medium">{messenger?.label ?? 'Messenger'}</p>
-                <p className="text-xs text-muted-foreground">Widget and portal</p>
-              </div>
-            </div>
+      <SettingsMenuCard>
+        <SettingsMenuRow
+          to="/admin/settings/channels/messenger"
+          icon={ChatBubbleLeftRightIcon}
+          title={messenger?.label ?? 'Messenger'}
+          description="Widget and portal"
+          trailing={
             <Badge size="sm" shape="pill" variant={messengerOn ? 'default' : 'secondary'}>
               {messengerOn ? 'On' : 'Off'}
             </Badge>
-          </Link>
-          <Link
-            to="/admin/settings/channels/email"
-            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/40"
-          >
-            <div className="flex items-center gap-3">
-              <EnvelopeIcon className="size-4 text-muted-foreground" />
-              <div>
-                <p className="text-sm font-medium">{email?.label ?? 'Email'}</p>
-                <p className="text-xs text-muted-foreground">{emailSubtitle}</p>
-              </div>
-            </div>
+          }
+        />
+        <SettingsMenuRow
+          to="/admin/settings/channels/email"
+          icon={EnvelopeIcon}
+          title={email?.label ?? 'Email'}
+          description={emailSubtitle}
+          trailing={
             <Badge
               size="sm"
               shape="pill"
@@ -140,24 +131,20 @@ function ChannelsHubPage() {
             >
               {emailStatus}
             </Badge>
-          </Link>
-          <Link
-            to="/admin/settings/channels/github"
-            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/40"
-          >
-            <div className="flex items-center gap-3">
-              <GitHubIcon className="size-4 text-muted-foreground" />
-              <div>
-                <p className="text-sm font-medium">{github?.label ?? 'GitHub'}</p>
-                <p className="text-xs text-muted-foreground">{githubSubtitle}</p>
-              </div>
-            </div>
+          }
+        />
+        <SettingsMenuRow
+          to="/admin/settings/channels/github"
+          icon={GitHubIcon}
+          title={github?.label ?? 'GitHub'}
+          description={githubSubtitle}
+          trailing={
             <Badge size="sm" shape="pill" variant={githubBadge.variant}>
               {githubBadge.label}
             </Badge>
-          </Link>
-        </div>
-      </SettingsCard>
+          }
+        />
+      </SettingsMenuCard>
 
       <SettingsCard
         title="Conversation routing"

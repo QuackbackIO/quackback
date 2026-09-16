@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { buildSettingsModules, settingsModuleForPath } from '../settings-modules'
+import {
+  buildSettingsModules,
+  settingsModuleForPath,
+  settingsModuleLandingPath,
+} from '../settings-modules'
 
 describe('buildSettingsModules', () => {
   it('always includes Feedback & Roadmaps pages', () => {
@@ -50,11 +54,34 @@ describe('buildSettingsModules', () => {
   })
 })
 
+describe('settingsModuleLandingPath', () => {
+  it('sends multi-page modules to their hub card', () => {
+    const modules = buildSettingsModules({ supportInbox: true })
+    expect(settingsModuleLandingPath(modules.find((m) => m.id === 'feedback')!)).toBe(
+      '/admin/settings/feedback'
+    )
+    expect(settingsModuleLandingPath(modules.find((m) => m.id === 'support')!)).toBe(
+      '/admin/settings/support'
+    )
+  })
+
+  it('sends single-page modules to the page itself', () => {
+    const modules = buildSettingsModules({ helpCenter: true })
+    expect(settingsModuleLandingPath(modules.find((m) => m.id === 'helpCenter')!)).toBe(
+      '/admin/settings/help-center'
+    )
+  })
+})
+
 describe('settingsModuleForPath', () => {
   const modules = buildSettingsModules({
     supportInbox: true,
     helpCenter: true,
     statusPage: true,
+  })
+
+  it('matches the feedback hub to Feedback & Roadmaps', () => {
+    expect(settingsModuleForPath('/admin/settings/feedback', modules)?.id).toBe('feedback')
   })
 
   it('matches a nested board page to Feedback & Roadmaps', () => {

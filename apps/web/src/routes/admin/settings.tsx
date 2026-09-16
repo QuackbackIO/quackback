@@ -1,17 +1,10 @@
 'use client'
 
-import { useMemo } from 'react'
-import { createFileRoute, Outlet, useRouterState, useRouteContext } from '@tanstack/react-router'
+import { createFileRoute, Outlet } from '@tanstack/react-router'
 import { Cog6ToothIcon } from '@heroicons/react/24/solid'
 import { SettingsNav } from '@/components/admin/settings/settings-nav'
-import {
-  buildSettingsModules,
-  settingsModuleForPath,
-} from '@/components/admin/settings/settings-modules'
-import { TabStrip } from '@/components/admin/tab-strip'
 import { PageHeader } from '@/components/shared/page-header'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import type { FeatureFlags } from '@/lib/shared/types'
 
 export const Route = createFileRoute('/admin/settings')({
   loader: async ({ context }) => {
@@ -22,16 +15,6 @@ export const Route = createFileRoute('/admin/settings')({
 })
 
 function SettingsLayout() {
-  const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const { settings } = useRouteContext({ from: '__root__' })
-  const flags = settings?.featureFlags as FeatureFlags | undefined
-  const modules = useMemo(() => buildSettingsModules(flags), [flags])
-  const currentModule = settingsModuleForPath(pathname, modules)
-  const moduleTabs =
-    currentModule && currentModule.pages.length > 1
-      ? currentModule.pages.map((page) => ({ label: page.label, to: page.to, icon: page.icon }))
-      : null
-
   return (
     <div className="flex h-full bg-background">
       <aside
@@ -49,11 +32,6 @@ function SettingsLayout() {
       </aside>
 
       <main className="flex-1 min-w-0 flex flex-col overflow-hidden">
-        {moduleTabs ? (
-          <div className="shrink-0" data-settings-module-tabs="">
-            <TabStrip tabs={moduleTabs} />
-          </div>
-        ) : null}
         <ScrollArea className="min-h-0 flex-1">
           <div data-settings-page="" className="p-6">
             <Outlet />

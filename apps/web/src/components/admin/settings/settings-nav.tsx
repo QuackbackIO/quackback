@@ -22,7 +22,11 @@ import { NAV_ICON_CLASS, NAV_ITEM_CLASS, NAV_SECTION_CLASS } from '@/components/
 import { FilterSection } from '@/components/shared/filter-section'
 import { useRefinedTheme } from '@/lib/client/hooks/use-visual-theme'
 import { isProductEnabled, type FeatureFlags } from '@/lib/shared/types'
-import { buildSettingsModules } from './settings-modules'
+import {
+  buildSettingsModules,
+  settingsModuleActivePaths,
+  settingsModuleLandingPath,
+} from './settings-modules'
 
 interface NavItem {
   label: string
@@ -72,9 +76,9 @@ export function buildNavSections(
 ): NavSection[] {
   const products: NavEntry[] = buildSettingsModules(flags).map((module) => ({
     label: module.label,
-    to: module.pages[0]!.to,
+    to: settingsModuleLandingPath(module),
     icon: module.icon,
-    activeFor: module.pages.map((page) => page.to),
+    activeFor: settingsModuleActivePaths(module),
   }))
 
   return [
@@ -161,10 +165,12 @@ function NavEntries({
   entries,
   pathname,
   refined,
+  parentOpen = true,
 }: {
   entries: NavEntry[]
   pathname: string
   refined: boolean
+  parentOpen?: boolean
 }) {
   return entries.map((entry) =>
     isNavGroup(entry) ? (
@@ -172,11 +178,17 @@ function NavEntries({
         key={entry.label}
         group={entry}
         pathname={pathname}
-        parentOpen={true}
+        parentOpen={parentOpen}
         refined={refined}
       />
     ) : (
-      <NavLink key={entry.to} item={entry} pathname={pathname} tabbable={true} refined={refined} />
+      <NavLink
+        key={entry.to}
+        item={entry}
+        pathname={pathname}
+        tabbable={parentOpen}
+        refined={refined}
+      />
     )
   )
 }

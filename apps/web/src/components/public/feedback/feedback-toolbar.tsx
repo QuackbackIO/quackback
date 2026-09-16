@@ -68,8 +68,8 @@ export function FeedbackToolbar({
   }
 
   return (
-    <div data-sort-bar="" className="flex items-center justify-between gap-3 sm:gap-4">
-      <div data-sort-tabs="" className="flex items-center gap-1 min-w-0">
+    <div className="flex items-center justify-between gap-3 sm:gap-4">
+      <div className="flex items-center gap-1 min-w-0">
         {SORT_OPTIONS.map((option) => {
           const Icon = option.icon
           const isActive = currentSort === option.value
@@ -77,7 +77,6 @@ export function FeedbackToolbar({
             <button
               key={option.value}
               type="button"
-              data-active={isActive || undefined}
               onClick={() => onSortChange(option.value)}
               className={cn(
                 'flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-full text-sm transition-colors cursor-pointer',

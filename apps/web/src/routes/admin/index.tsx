@@ -1,13 +1,15 @@
 import { Suspense, useState } from 'react'
-import { createFileRoute, useRouteContext } from '@tanstack/react-router'
+import { createFileRoute, useNavigate, useRouteContext } from '@tanstack/react-router'
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
+import { z } from 'zod'
 import { toast } from 'sonner'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { GettingStartedCard } from '@/components/admin/getting-started-card'
-import { AttentionRow, RecentTiles, useWorkspaceHomeTitle } from '@/components/admin/admin-overview'
+import { OverviewDashboard } from '@/components/admin/admin-overview'
 import { HomeActions } from '@/components/admin/home-actions'
 import { CreateBoardDialog } from '@/components/admin/settings/boards/create-board-dialog'
 import { adminQueries } from '@/lib/client/queries/admin'
+import { adminOverviewQueries } from '@/lib/client/queries/admin-overview'
 import { setLaunchTaskResolutionFn } from '@/lib/server/functions/admin'
 import { ensureOnboardingHomeReadyFn } from '@/lib/server/functions/onboarding'
 import {
@@ -15,12 +17,23 @@ import {
   launchChecklistSummary,
   normalizeOutcome,
 } from '@/lib/shared/launch-checklist'
+import { blankOmittedSearchKeys } from '@/lib/shared/route-search'
 import { isAdmin } from '@/lib/shared/roles'
+import type { OverviewScope } from '@/lib/shared/admin-overview'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 
+const searchSchema = z.object({
+  scope: z.enum(['team', 'mine']).optional().catch(undefined),
+})
+
 export const Route = createFileRoute('/admin/')({
-  loader: async ({ context }) => {
+  validateSearch: (raw: Record<string, unknown>) =>
+    blankOmittedSearchKeys(raw, searchSchema.parse(raw)),
+  loader: async ({ context, location }) => {
     const admin = isAdmin(context.userRole)
+    const rawScope = (location.search as { scope?: string }).scope
+    const scope: OverviewScope = rawScope === 'mine' ? 'mine' : 'team'
+    await context.queryClient.ensureQueryData(adminOverviewQueries.get(scope))
     if (admin) {
       await ensureOnboardingHomeReadyFn()
       await context.queryClient.ensureQueryData(adminQueries.onboardingStatus())
@@ -31,24 +44,32 @@ export const Route = createFileRoute('/admin/')({
 
 function AdminOverviewPage() {
   const { userRole, settings } = useRouteContext({ from: '__root__' })
+  const search = Route.useSearch()
+  const navigate = useNavigate()
   const admin = isAdmin(userRole)
-  const workspaceName = useWorkspaceHomeTitle()
   const flags = settings?.featureFlags as FeatureFlags | undefined
+  const scope: OverviewScope = search.scope === 'mine' ? 'mine' : 'team'
 
   return (
     <ScrollArea className="h-full">
-      <div className="w-full max-w-5xl space-y-6 px-4 py-8 pb-16 sm:px-8">
-        <div className="flex items-center justify-between gap-4">
-          <h1 className="text-xl font-semibold tracking-tight">{workspaceName}</h1>
-          <HomeActions flags={flags} />
-        </div>
-        <AttentionRow flags={flags} />
-        {admin ? (
-          <Suspense fallback={null}>
-            <HomeGettingStarted />
-          </Suspense>
-        ) : null}
-        <RecentTiles flags={flags} />
+      <div className="mx-auto w-full max-w-6xl space-y-6 px-6 pt-4 pb-16">
+        <OverviewDashboard
+          scope={scope}
+          onScopeChange={(next) => {
+            void navigate({
+              to: '/admin',
+              search: { scope: next === 'team' ? undefined : next },
+            })
+          }}
+          actions={<HomeActions flags={flags} />}
+          banner={
+            admin ? (
+              <Suspense fallback={null}>
+                <HomeGettingStarted />
+              </Suspense>
+            ) : null
+          }
+        />
       </div>
     </ScrollArea>
   )

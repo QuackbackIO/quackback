@@ -21,10 +21,7 @@ export function FeedbackSidebar({
   return (
     <aside className="w-64 shrink-0 hidden lg:block">
       <div className="sticky top-24">
-        <div
-          data-side-filters=""
-          className="bg-card border border-border/50 rounded-lg shadow-sm overflow-hidden"
-        >
+        <div className="bg-card border border-border/50 rounded-lg shadow-sm overflow-hidden">
           <h2 className="font-semibold text-xs uppercase tracking-wider text-muted-foreground px-4 pt-4 pb-3">
             <FormattedMessage id="portal.feedback.sidebar.boards" defaultMessage="Boards" />
           </h2>
@@ -89,7 +86,6 @@ export function FeedbackSidebar({
             <a
               href={`https://quackback.io?utm_campaign=${encodeURIComponent(workspaceSlug || 'unknown')}&utm_content=feedback-board&utm_medium=referral&utm_source=powered-by`}
               target="_blank"
-              data-powered-by=""
               className="group inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-all px-2.5 py-1 rounded-full bg-muted/50 hover:bg-muted border border-transparent hover:border-border/50"
             >
               <img

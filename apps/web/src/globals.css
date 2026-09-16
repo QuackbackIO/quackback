@@ -102,7 +102,7 @@
     --header-border: var(--border);
     --post-card-background: var(--card);
     --post-card-border: var(--border);
-    --post-card-voted-color: var(--accent-ink);
+    --post-card-voted-color: var(--primary);
     --nav-active-background: var(--muted);
     --nav-active-foreground: var(--foreground);
     --nav-inactive-color: var(--muted-foreground);

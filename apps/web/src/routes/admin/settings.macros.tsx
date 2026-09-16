@@ -33,7 +33,7 @@ function MacrosSettingsPage() {
   return (
     <div className="space-y-6 max-w-3xl">
       <div className="lg:hidden">
-        <BackLink to="/admin/settings">Settings</BackLink>
+        <BackLink to="/admin/settings/support">Support</BackLink>
       </div>
       <PageHeader
         icon={DocumentDuplicateIcon}
