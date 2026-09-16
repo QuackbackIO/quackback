@@ -21,7 +21,6 @@ import { TimeAgo } from '@/components/ui/time-ago'
 import {
   SidebarRow,
   StatusSelect,
-  ListItem,
   VoteCount,
   ListItemRemoveButton,
   type StatusOption,
@@ -414,22 +413,28 @@ export function ChangelogMetadataSidebarContent({
         {selectedPosts.length > 0 ? (
           <div className="space-y-1.5">
             {selectedPosts.map((post) => (
-              <ListItem
+              <div
                 key={post.id}
-                left={<VoteCount count={post.voteCount} />}
-                title={post.title}
-                meta={[
-                  <span key="author">{post.authorName || 'Anonymous'}</span>,
-                  <TimeAgo key="date" date={post.createdAt} className="text-muted-foreground/70" />,
-                  <span key="board">{post.boardSlug}</span>,
-                ]}
-                action={
+                className="group relative flex items-start gap-2 rounded-md border border-border/40 bg-muted/40 p-2"
+              >
+                <VoteCount count={post.voteCount} />
+                <div className="min-w-0 flex-1 pr-5">
+                  <p className="truncate text-xs font-medium leading-snug">{post.title}</p>
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                    {post.authorName || 'Anonymous'}
+                    <span className="px-1 text-muted-foreground/50">·</span>
+                    {post.boardSlug}
+                    <span className="px-1 text-muted-foreground/50">·</span>
+                    <TimeAgo date={post.createdAt} />
+                  </p>
+                </div>
+                <div className="absolute right-1 top-1 opacity-0 transition-opacity group-hover:opacity-100">
                   <ListItemRemoveButton
                     onClick={() => handleRemovePost(post.id)}
                     label={`Remove ${post.title}`}
                   />
-                }
-              />
+                </div>
+              </div>
             ))}
           </div>
         ) : (
