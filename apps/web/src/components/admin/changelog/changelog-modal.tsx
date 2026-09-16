@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
+import { useRouterState } from '@tanstack/react-router'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { ModalFooter } from '@/components/shared/modal-footer'
 import { useUrlModal } from '@/lib/client/hooks/use-url-modal'
@@ -20,7 +21,6 @@ import { ChangelogFormFields } from './changelog-form-fields'
 import { ChangelogMetadataSidebar } from './changelog-metadata-sidebar'
 import { ChangelogMetadataSidebarContent } from './changelog-metadata-sidebar-content'
 import { toPublishState, type PublishState } from '@/lib/shared/schemas/changelog'
-import { Route } from '@/routes/admin/changelog'
 import {
   type ChangelogId,
   type PostId,
@@ -273,13 +273,13 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
 }
 
 export function ChangelogModal({ entryId: urlEntryId }: ChangelogModalProps) {
-  const search = Route.useSearch()
+  const { pathname, search } = useRouterState({ select: (s) => s.location })
   const { open, validatedId, close } = useUrlModal<ChangelogId>({
     urlId: urlEntryId,
     idPrefix: 'changelog',
     searchParam: 'entry',
-    route: '/admin/changelog',
-    search,
+    route: pathname,
+    search: search as Record<string, unknown>,
   })
 
   return (

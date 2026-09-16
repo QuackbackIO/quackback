@@ -3,7 +3,6 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/react-router'
 import {
   ChatBubbleLeftIcon,
-  ChatBubbleLeftRightIcon,
   MapIcon,
   UsersIcon,
   Cog6ToothIcon,
@@ -14,7 +13,6 @@ import {
   ChartBarIcon,
   QuestionMarkCircleIcon,
   CpuChipIcon,
-  MegaphoneIcon,
 } from '@heroicons/react/24/solid'
 import { SignalIcon as SignalIconOutline } from '@heroicons/react/24/outline'
 import { SignalIcon as SignalIconSolid } from '@heroicons/react/24/solid'
@@ -46,6 +44,7 @@ import { friendlySiblingAddress, WorkspaceSwitcher } from '@/components/admin/wo
 import { usePermission } from '@/lib/client/hooks/use-permission'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { isProductEnabled, type FeatureFlags, type ProductId } from '@/lib/shared/types/settings'
+import { ENTITY_ICONS } from '@/components/admin/entity-icon'
 
 /** Availability toggle for the account menu (conversation routing). The label shows the
  *  state you'll switch to; the avatar dot shows the current one. */
@@ -80,14 +79,24 @@ const navItems: Array<{
   icon: typeof ChatBubbleLeftIcon
   product?: ProductId
 }> = [
-  { label: 'Feedback', href: '/admin/feedback', icon: ChatBubbleLeftIcon, product: 'feedback' },
+  { label: 'Feedback', href: '/admin/feedback', icon: ENTITY_ICONS.post, product: 'feedback' },
   // UNIFIED-INBOX-SPEC.md §2.3/§4: one Support entry replaces the old
   // Conversations + Tickets pair — the unified /admin/inbox shell now covers
   // both (gated below on either flag being on).
-  { label: 'Support', href: '/admin/inbox', icon: ChatBubbleLeftRightIcon, product: 'support' },
+  { label: 'Support', href: '/admin/inbox', icon: ENTITY_ICONS.conversation, product: 'support' },
   { label: 'Roadmap', href: '/admin/roadmap', icon: MapIcon, product: 'feedback' },
-  { label: 'Changelog', href: '/admin/changelog', icon: DocumentTextIcon, product: 'changelog' },
-  { label: 'Help Center', href: '/admin/help-center', icon: BookOpenIcon, product: 'helpCenter' },
+  {
+    label: 'Changelog',
+    href: '/admin/changelog',
+    icon: ENTITY_ICONS.changelog,
+    product: 'changelog',
+  },
+  {
+    label: 'Help Center',
+    href: '/admin/help-center',
+    icon: ENTITY_ICONS.article,
+    product: 'helpCenter',
+  },
   { label: 'Status', href: '/admin/status', icon: SignalIconOutline, product: 'status' },
   { label: 'Analytics', href: '/admin/analytics', icon: ChartBarIcon },
   { label: 'AI & Automation', href: '/admin/automation/agent', icon: CpuChipIcon },
@@ -102,7 +111,6 @@ function navItemIcon(
   item: (typeof navItems)[number],
   refined: boolean
 ): (typeof navItems)[number]['icon'] {
-  if (item.href === '/admin/changelog' && refined) return MegaphoneIcon
   return item.product === 'status' && refined ? SignalIconSolid : item.icon
 }
 

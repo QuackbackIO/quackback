@@ -1,7 +1,6 @@
 import { Suspense, useState } from 'react'
-import { createFileRoute, useNavigate, useRouteContext } from '@tanstack/react-router'
+import { createFileRoute, useRouteContext } from '@tanstack/react-router'
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
-import { z } from 'zod'
 import { toast } from 'sonner'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { GettingStartedCard } from '@/components/admin/getting-started-card'
@@ -17,23 +16,13 @@ import {
   launchChecklistSummary,
   normalizeOutcome,
 } from '@/lib/shared/launch-checklist'
-import { blankOmittedSearchKeys } from '@/lib/shared/route-search'
 import { isAdmin } from '@/lib/shared/roles'
-import type { OverviewScope } from '@/lib/shared/admin-overview'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 
-const searchSchema = z.object({
-  scope: z.enum(['team', 'mine']).optional().catch(undefined),
-})
-
 export const Route = createFileRoute('/admin/')({
-  validateSearch: (raw: Record<string, unknown>) =>
-    blankOmittedSearchKeys(raw, searchSchema.parse(raw)),
-  loader: async ({ context, location }) => {
+  loader: async ({ context }) => {
     const admin = isAdmin(context.userRole)
-    const rawScope = (location.search as { scope?: string }).scope
-    const scope: OverviewScope = rawScope === 'mine' ? 'mine' : 'team'
-    await context.queryClient.ensureQueryData(adminOverviewQueries.get(scope))
+    await context.queryClient.ensureQueryData(adminOverviewQueries.get())
     if (admin) {
       await ensureOnboardingHomeReadyFn()
       await context.queryClient.ensureQueryData(adminQueries.onboardingStatus())
@@ -44,23 +33,13 @@ export const Route = createFileRoute('/admin/')({
 
 function AdminOverviewPage() {
   const { userRole, settings } = useRouteContext({ from: '__root__' })
-  const search = Route.useSearch()
-  const navigate = useNavigate()
   const admin = isAdmin(userRole)
   const flags = settings?.featureFlags as FeatureFlags | undefined
-  const scope: OverviewScope = search.scope === 'mine' ? 'mine' : 'team'
 
   return (
     <ScrollArea className="h-full">
       <div className="mx-auto w-full max-w-6xl space-y-6 px-4 pt-4 pb-16 sm:px-6">
         <OverviewDashboard
-          scope={scope}
-          onScopeChange={(next) => {
-            void navigate({
-              to: '/admin',
-              search: { scope: next === 'team' ? undefined : next },
-            })
-          }}
           actions={<HomeActions flags={flags} />}
           banner={
             admin ? (

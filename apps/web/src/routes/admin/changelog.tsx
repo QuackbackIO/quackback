@@ -1,6 +1,6 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { z } from 'zod'
-import { ChangelogList, ChangelogModal } from '@/components/admin/changelog'
+import { ChangelogList } from '@/components/admin/changelog'
 import { blankOmittedSearchKeys } from '@/lib/shared/route-search'
 import { getFirstEnabledAdminProductPath, isProductEnabled } from '@/lib/shared/types/settings'
 
@@ -22,12 +22,9 @@ export const Route = createFileRoute('/admin/changelog')({
 })
 
 function ChangelogPage() {
-  const search = Route.useSearch()
-
   return (
     <main className="h-full">
       <ChangelogList />
-      <ChangelogModal entryId={search.entry} />
     </main>
   )
 }

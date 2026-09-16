@@ -21,12 +21,25 @@ import { PlanNoticeBanner } from '@/components/admin/plan-notice-banner'
 import { getPlanNotice } from '@/lib/server/functions/plan-notice'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { CloudQuackbackWidget } from '@/components/shared/cloud-quackback-widget'
+import { useHasPermission } from '@/lib/client/use-permissions'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 
 const PostModal = lazy(() =>
   import('@/components/admin/feedback/post-modal').then((m) => ({ default: m.PostModal }))
 )
+const ChangelogModal = lazy(() =>
+  import('@/components/admin/changelog/changelog-modal').then((m) => ({
+    default: m.ChangelogModal,
+  }))
+)
 
 export const Route = createFileRoute('/admin')({
+  validateSearch: (search: Record<string, unknown>): { post?: string; entry?: string } => {
+    const next: { post?: string; entry?: string } = {}
+    if (typeof search.post === 'string') next.post = search.post
+    if (typeof search.entry === 'string') next.entry = search.entry
+    return next
+  },
   beforeLoad: async ({ location }) => {
     // Skip auth for public admin routes (login, signup)
     // These are child routes but should be publicly accessible
@@ -122,18 +135,24 @@ export const Route = createFileRoute('/admin')({
   component: AdminLayout,
 })
 
-function PostModalChunkFallback() {
+function EntityModalChunkFallback({
+  searchParam,
+  title,
+}: {
+  searchParam: 'post' | 'entry'
+  title: string
+}) {
   const navigate = useNavigate()
   const { pathname, search } = useRouterState({ select: (s) => s.location })
   const close = () => {
-    const { post: _post, ...rest } = search as Record<string, unknown>
+    const { [searchParam]: _cleared, ...rest } = search as Record<string, unknown>
     void navigate({ to: pathname, search: rest, replace: true })
   }
 
   return (
     <Dialog open onOpenChange={(next) => !next && close()}>
       <DialogContent className="flex h-[85vh] w-[95vw] flex-col gap-0 p-0 sm:w-[90vw] lg:max-w-5xl xl:max-w-6xl">
-        <DialogTitle className="sr-only">Edit post</DialogTitle>
+        <DialogTitle className="sr-only">{title}</DialogTitle>
         <div className="flex h-full flex-col gap-3 p-6">
           <Skeleton className="h-8 w-1/3 rounded-md" />
           <Skeleton className="min-h-0 flex-1 rounded-lg" />
@@ -143,11 +162,11 @@ function PostModalChunkFallback() {
   )
 }
 
-function usePostIdFromUrl(): string | undefined {
+function useEntityIdFromUrl(key: 'post' | 'entry'): string | undefined {
   return useRouterState({
     select: (s) => {
-      const { post } = s.location.search as { post?: string }
-      return post
+      const value = (s.location.search as { post?: string; entry?: string })[key]
+      return value
     },
   })
 }
@@ -162,7 +181,11 @@ function AdminLayout() {
     locale,
     messages,
   } = Route.useLoaderData()
-  const postId = usePostIdFromUrl()
+  const postId = useEntityIdFromUrl('post')
+  const entryId = useEntityIdFromUrl('entry')
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const onRoadmap = pathname === '/admin/roadmap' || pathname.startsWith('/admin/roadmap/')
+  const canViewChangelogDrafts = useHasPermission(PERMISSIONS.CHANGELOG_VIEW_DRAFT)
 
   // Mark team members online for conversation routing across the whole admin (not just
   // the inbox), but only when the support inbox feature is on.
@@ -170,6 +193,7 @@ function AdminLayout() {
   const conversationsEnabled =
     (settings?.featureFlags as { supportInbox?: boolean } | undefined)?.supportInbox ?? false
   const feedbackEnabled = isProductEnabled(settings?.featureFlags, 'feedback')
+  const changelogEnabled = isProductEnabled(settings?.featureFlags, 'changelog')
   useAdminPresence(Boolean(initialUserData) && conversationsEnabled)
 
   // For public routes (login, signup), render just the outlet without the admin layout
@@ -202,9 +226,18 @@ function AdminLayout() {
               </div>
             </div>
           </main>
-          {currentUser && feedbackEnabled && postId && (
-            <Suspense fallback={<PostModalChunkFallback />}>
+          {currentUser && feedbackEnabled && postId && !onRoadmap && (
+            <Suspense fallback={<EntityModalChunkFallback searchParam="post" title="Edit post" />}>
               <PostModal postId={postId} currentUser={currentUser} />
+            </Suspense>
+          )}
+          {changelogEnabled && canViewChangelogDrafts && entryId && (
+            <Suspense
+              fallback={
+                <EntityModalChunkFallback searchParam="entry" title="Edit changelog entry" />
+              }
+            >
+              <ChangelogModal entryId={entryId} />
             </Suspense>
           )}
         </div>

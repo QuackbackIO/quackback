@@ -3,48 +3,34 @@ import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import type { AdminOverviewData } from '@/lib/shared/admin-overview'
 
-const { overview } = vi.hoisted(() => {
+const { state } = vi.hoisted(() => {
   const data: AdminOverviewData = {
-    generatedAt: '2026-09-16T19:00:00.000Z',
-    scope: 'team',
     metrics: [
       {
         key: 'waiting',
-        label: 'Waiting for reply',
+        label: 'waiting for reply',
         count: 3,
-        unit: 'open',
-        hint: '',
-        hintTone: 'neutral',
         link: { to: '/admin/inbox' },
         filter: 'support',
       },
       {
         key: 'feedback',
-        label: 'Feedback to review',
+        label: 'to review',
         count: 30,
-        unit: 'open',
-        hint: '',
-        hintTone: 'neutral',
         link: { to: '/admin/feedback' },
         filter: 'feedback',
       },
       {
         key: 'complete',
-        label: 'No changelog',
+        label: 'without changelog',
         count: 6,
-        unit: 'open',
-        hint: '',
-        hintTone: 'neutral',
         link: { to: '/admin/feedback' },
         filter: 'publishing',
       },
       {
         key: 'articles',
-        label: 'Article drafts',
+        label: 'article drafts',
         count: 0,
-        unit: 'drafts',
-        hint: '',
-        hintTone: 'neutral',
         link: { to: '/admin/help-center' },
         filter: 'articles',
       },
@@ -53,18 +39,19 @@ const { overview } = vi.hoisted(() => {
       {
         id: 'c1',
         kind: 'support',
+        entity: 'conversation',
         title: 'Hello! I have just created my boards in a new cloud workspace',
         link: { to: '/admin/inbox' },
         reason: 'Waiting on reply',
         reasonTone: 'neutral',
-        meta: 'Noble Dolphin · Waiting 12d',
+        meta: 'Noble Dolphin · waiting 12d',
         ownerName: 'James',
         ownerInitials: 'JM',
+        mine: true,
       },
     ],
     momentum: [],
-    publishing: { changelog: [], helpCenter: [] },
-    activity: [],
+    publishing: [],
     sections: {
       support: { enabled: true, error: null },
       feedback: { enabled: true, error: null },
@@ -72,12 +59,12 @@ const { overview } = vi.hoisted(() => {
       helpCenter: { enabled: true, error: null },
     },
   }
-  return { overview: data }
+  return { state: { data } }
 })
 
 vi.mock('@/lib/client/queries/admin-overview', () => ({
   adminOverviewQueries: {
-    get: () => ({ queryKey: ['admin', 'overview', 'team'] }),
+    get: () => ({ queryKey: ['admin', 'overview'] }),
   },
 }))
 
@@ -85,7 +72,7 @@ vi.mock('@tanstack/react-query', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@tanstack/react-query')>()
   return {
     ...actual,
-    useQuery: () => ({ data: overview, isLoading: false, isError: false, refetch: vi.fn() }),
+    useQuery: () => ({ data: state.data, isLoading: false, isError: false, refetch: vi.fn() }),
   }
 })
 
@@ -94,35 +81,48 @@ vi.mock('@tanstack/react-router', () => ({
     children,
     className,
     to,
+    search,
   }: {
     children: React.ReactNode
     className?: string
     to: string
-  }) => (
-    <a href={to} className={className}>
-      {children}
-    </a>
-  ),
+    search?: Record<string, string | string[] | undefined>
+  }) => {
+    const params = new URLSearchParams()
+    for (const [key, value] of Object.entries(search ?? {})) {
+      if (value == null) continue
+      if (Array.isArray(value)) value.forEach((item) => params.append(key, item))
+      else params.set(key, value)
+    }
+    const query = params.toString()
+    return (
+      <a href={query ? `${to}?${query}` : to} className={className}>
+        {children}
+      </a>
+    )
+  },
   useRouteContext: () => ({ settings: { name: 'Acme' } }),
 }))
 
 import { OverviewDashboard } from '../admin-overview'
 
 describe('OverviewDashboard', () => {
-  it('renders compact metric copy that fits a two-up phone grid', () => {
-    const { container } = render(<OverviewDashboard scope="team" onScopeChange={() => undefined} />)
+  it('renders counts as a single phrase with no units, hints, or captions', () => {
+    const { container } = render(<OverviewDashboard />)
 
-    expect(screen.getByText('Waiting for reply')).toBeInTheDocument()
-    expect(screen.getByText('Feedback to review')).toBeInTheDocument()
-    expect(screen.getByText('No changelog')).toBeInTheDocument()
-    expect(screen.getByText('Article drafts')).toBeInTheDocument()
-    expect(screen.getByText('drafts')).toBeInTheDocument()
+    expect(screen.getByText('3')).toBeInTheDocument()
+    expect(screen.getByText('waiting for reply')).toBeInTheDocument()
+    expect(screen.getByText('to review')).toBeInTheDocument()
+    expect(screen.getByText('without changelog')).toBeInTheDocument()
+    expect(screen.getByText('article drafts')).toBeInTheDocument()
 
-    expect(screen.queryByText('Customer waiting on a teammate')).not.toBeInTheDocument()
-    expect(screen.queryByText('Complete, no changelog')).not.toBeInTheDocument()
-    expect(screen.queryByText('Complete status with no linked changelog')).not.toBeInTheDocument()
-    expect(screen.queryByText('Continue in Help Center')).not.toBeInTheDocument()
-    expect(screen.queryByText(/On Open/)).not.toBeInTheDocument()
+    expect(screen.queryByText('open')).not.toBeInTheDocument()
+    expect(screen.queryByText('drafts')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Updated/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/A little context/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Needs attention')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Start with customer replies/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Recent activity')).not.toBeInTheDocument()
 
     const grid = container.querySelector('.grid.gap-px')
     expect(grid?.className).toContain('grid-cols-2')
@@ -130,9 +130,76 @@ describe('OverviewDashboard', () => {
     expect(grid?.className).not.toContain('grid-cols-3')
   })
 
-  it('lets long attention titles wrap to two lines instead of clipping', () => {
-    render(<OverviewDashboard scope="team" onScopeChange={() => undefined} />)
+  it('has no Team / My work scope control', () => {
+    render(<OverviewDashboard />)
+    expect(screen.queryByText('Team')).not.toBeInTheDocument()
+    expect(screen.queryByText('My work')).not.toBeInTheDocument()
+  })
+
+  it('keeps attention rows to two lines: title, then reason and meta', () => {
+    render(<OverviewDashboard />)
     const title = screen.getByText('Hello! I have just created my boards in a new cloud workspace')
     expect(title.className).toContain('line-clamp-2')
+    expect(title.className).toContain('sm:line-clamp-1')
+    expect(screen.getByText('Waiting on reply')).toBeInTheDocument()
+    expect(screen.getByText('Noble Dolphin · waiting 12d')).toBeInTheDocument()
+    expect(title.closest('a')?.querySelector('[data-entity="conversation"]')).not.toBeNull()
+  })
+
+  it('opens a feedback item on the current page via ?post=', () => {
+    state.data = {
+      ...state.data,
+      attention: [
+        {
+          id: 'p1',
+          kind: 'feedback',
+          entity: 'post',
+          title: 'Allow disabling votes',
+          link: { to: '/admin', search: { post: 'p1' } },
+          reason: 'Open',
+          reasonTone: 'info',
+          meta: 'Feature Requests · 9d',
+          ownerName: null,
+          ownerInitials: null,
+          mine: false,
+        },
+      ],
+    }
+    render(<OverviewDashboard />)
+    const title = screen.getByText('Allow disabling votes')
+    expect(title.closest('a')).toHaveAttribute('href', '/admin?post=p1')
+    expect(title.closest('a')?.querySelector('[data-entity="post"]')).not.toBeNull()
+  })
+
+  it('hides the side panel entirely when momentum and publishing are empty', () => {
+    const { container } = render(<OverviewDashboard />)
+    expect(container.querySelector('aside')).toBeNull()
+    expect(screen.queryByText('Momentum')).not.toBeInTheDocument()
+    expect(screen.queryByText('Publishing', { selector: 'h2' })).not.toBeInTheDocument()
+    expect(screen.queryByText('No new votes this week.')).not.toBeInTheDocument()
+  })
+
+  it('shows only the non-empty side groups', () => {
+    state.data = {
+      ...state.data,
+      publishing: [
+        {
+          id: 'a1',
+          product: 'helpCenter',
+          entity: 'article',
+          title: 'Environment Variables',
+          link: { to: '/admin/help-center/articles/$articleId', params: { articleId: 'a1' } },
+          status: 'draft',
+          meta: 'James Morton',
+        },
+      ],
+    }
+    const { container } = render(<OverviewDashboard />)
+    expect(container.querySelector('aside')).not.toBeNull()
+    expect(screen.queryByText('Momentum')).not.toBeInTheDocument()
+    expect(screen.getByText('Publishing', { selector: 'h2' })).toBeInTheDocument()
+    expect(screen.getByText('Environment Variables')).toBeInTheDocument()
+    expect(screen.getByText('Draft')).toBeInTheDocument()
+    expect(screen.getByText('James Morton')).toBeInTheDocument()
   })
 })

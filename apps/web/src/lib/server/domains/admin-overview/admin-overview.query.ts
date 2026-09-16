@@ -2,6 +2,7 @@
 /**
  * Admin Overview aggregation. Each section is gated on the real product flag
  * and permission, then reads the same columns the product lists already use.
+ * Everything is workspace-wide; the viewer only affects ordering via `mine`.
  */
 import type { PrincipalId, PostId } from '@quackback/ids'
 import {
@@ -12,7 +13,6 @@ import {
   ne,
   gt,
   gte,
-  lte,
   desc,
   asc,
   count,
@@ -25,7 +25,6 @@ import {
   posts,
   postStatuses,
   postVotes,
-  postActivity,
   boards,
   principal,
   changelogEntries,
@@ -44,20 +43,17 @@ import { toIsoString, toIsoStringOrNull } from '@/lib/shared/utils'
 import {
   buildOverviewMetrics,
   conversationTitle,
-  describeOverviewActivity,
   formatCompactAge,
   ownerInitials,
   mixAttention,
   supportAttentionRank,
   supportAttentionReason,
+  viewerFirst,
   type AdminOverviewData,
-  type OverviewActivityItem,
   type OverviewAttentionItem,
   type OverviewMomentumItem,
   type OverviewLink,
   type OverviewPublishItem,
-  type OverviewPublishStatus,
-  type OverviewScope,
   type OverviewSectionState,
 } from '@/lib/shared/admin-overview'
 import type { ConversationPriority } from '@/lib/shared/conversation/types'
@@ -65,18 +61,17 @@ import type { ConversationPriority } from '@/lib/shared/conversation/types'
 const log = logger.child({ component: 'admin-overview' })
 
 const ATTENTION_LIMIT = 8
-const MOMENTUM_LIMIT = 5
-const PUBLISH_LIMIT = 3
-const ACTIVITY_LIMIT = 6
+const MOMENTUM_LIMIT = 3
+/** Per product; changelog and help center together stay at four rows or fewer. */
+const PUBLISH_LIMIT = 2
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 
 export async function getAdminOverview(input: {
-  scope: OverviewScope
   actor: Actor
   flags: Partial<FeatureFlags> | undefined
 }): Promise<AdminOverviewData> {
-  const { scope, actor, flags } = input
-  const mineId = scope === 'mine' ? actor.principalId : null
+  const { actor, flags } = input
+  const viewerId = actor.principalId
   const now = new Date()
 
   const supportOn =
@@ -88,15 +83,15 @@ export async function getAdminOverview(input: {
     isProductEnabled(flags, 'changelog') && can(actor, PERMISSIONS.CHANGELOG_VIEW_DRAFT)
   const helpOn = isProductEnabled(flags, 'helpCenter') && can(actor, PERMISSIONS.HELP_CENTER_MANAGE)
 
-  const [support, feedback, changelog, help, momentum, activity] = await Promise.all([
+  const [support, feedback, changelog, help, momentum] = await Promise.all([
     supportOn
-      ? loadSupport(actor, mineId, now).catch((err) => {
+      ? loadSupport(actor, viewerId, now).catch((err) => {
           log.error({ err }, 'overview support failed')
           return failedSupport()
         })
       : Promise.resolve(disabledSupport()),
     feedbackOn
-      ? loadFeedback(mineId, now).catch((err) => {
+      ? loadFeedback(viewerId, now).catch((err) => {
           log.error({ err }, 'overview feedback failed')
           return failedFeedback()
         })
@@ -108,7 +103,7 @@ export async function getAdminOverview(input: {
         })
       : Promise.resolve(disabledChangelog()),
     helpOn
-      ? loadHelpCenter(mineId, now).catch((err) => {
+      ? loadHelpCenter().catch((err) => {
           log.error({ err }, 'overview help center failed')
           return failedHelp()
         })
@@ -119,27 +114,11 @@ export async function getAdminOverview(input: {
           return [] as OverviewMomentumItem[]
         })
       : Promise.resolve([] as OverviewMomentumItem[]),
-    loadActivity({
-      feedbackOn,
-      changelogOn,
-      helpOn,
-      supportOn,
-      actor,
-      now,
-    }).catch((err) => {
-      log.error({ err }, 'overview activity failed')
-      return [] as OverviewActivityItem[]
-    }),
   ])
 
   const metrics = buildOverviewMetrics({
-    scope,
     support: supportOn
-      ? {
-          waitingCount: support.waitingCount,
-          highPriorityCount: support.highPriorityCount,
-          waitingLink: support.waitingLink,
-        }
+      ? { waitingCount: support.waitingCount, waitingLink: support.waitingLink }
       : undefined,
     feedback: feedbackOn
       ? {
@@ -149,28 +128,17 @@ export async function getAdminOverview(input: {
           completeLink: feedback.completeLink,
         }
       : undefined,
-    help: helpOn
-      ? {
-          draftCount: help.draftCount,
-          draftLink: help.draftLink,
-        }
-      : undefined,
+    help: helpOn ? { draftCount: help.draftCount, draftLink: help.draftLink } : undefined,
   })
 
   return {
-    generatedAt: now.toISOString(),
-    scope,
     metrics,
     attention: mixAttention(
       [support.attention, feedback.attention, feedback.announce],
       ATTENTION_LIMIT
     ),
     momentum,
-    publishing: {
-      changelog: changelog.items,
-      helpCenter: help.items,
-    },
-    activity,
+    publishing: [...changelog.items, ...help.items],
     sections: {
       support: support.section,
       feedback: feedback.section,
@@ -187,7 +155,7 @@ function disabledSection(): OverviewSectionState {
   return { enabled: false, error: null }
 }
 function errorSection(): OverviewSectionState {
-  return { enabled: true, error: 'Couldn’t load this section. Try again.' }
+  return { enabled: true, error: 'Couldn’t load this section.' }
 }
 
 function disabledSupport() {
@@ -195,7 +163,6 @@ function disabledSupport() {
     section: disabledSection(),
     attention: [] as OverviewAttentionItem[],
     waitingCount: 0,
-    highPriorityCount: 0,
     waitingLink: { to: '/admin/inbox', search: { sort: 'waiting' } } satisfies OverviewLink,
   }
 }
@@ -234,27 +201,17 @@ function failedHelp() {
   return { ...disabledHelp(), section: errorSection() }
 }
 
-async function loadSupport(actor: Actor, mineId: PrincipalId | null, now: Date) {
+async function loadSupport(actor: Actor, viewerId: PrincipalId | null, now: Date) {
   const visibility = conversationFilter(actor)
-  const waitingLink: OverviewLink = {
-    to: '/admin/inbox',
-    search: mineId != null ? { view: 'mine', sort: 'waiting' } : { sort: 'waiting' },
-  }
+  const waitingLink: OverviewLink = { to: '/admin/inbox', search: { sort: 'waiting' } }
 
-  const conditions = [
+  const conditions = and(
     visibility,
     isNotNull(conversations.waitingSince),
-    ne(conversations.status, 'closed'),
-  ]
-  if (mineId) conditions.push(eq(conversations.assignedAgentPrincipalId, mineId))
+    ne(conversations.status, 'closed')
+  )
 
-  const [totals] = await db
-    .select({
-      waitingCount: count(),
-      highPriorityCount: sql<number>`count(*) filter (where ${conversations.priority} in ('high', 'urgent'))::int`,
-    })
-    .from(conversations)
-    .where(and(...conditions))
+  const [totals] = await db.select({ waitingCount: count() }).from(conversations).where(conditions)
 
   const rows = await db
     .select({
@@ -268,7 +225,7 @@ async function loadSupport(actor: Actor, mineId: PrincipalId | null, now: Date) 
     })
     .from(conversations)
     .innerJoin(principal, eq(principal.id, conversations.visitorPrincipalId))
-    .where(and(...conditions))
+    .where(conditions)
     .orderBy(asc(conversations.waitingSince), desc(conversations.lastMessageAt))
     .limit(40)
 
@@ -289,6 +246,7 @@ async function loadSupport(actor: Actor, mineId: PrincipalId | null, now: Date) 
   const ranked = rows
     .map((row) => {
       const assigned = Boolean(row.assignedAgentPrincipalId)
+      const mine = viewerId != null && row.assignedAgentPrincipalId === viewerId
       const priority = row.priority as ConversationPriority
       const { reason, tone } = supportAttentionReason({ priority, assigned })
       const waitingIso = toIsoStringOrNull(row.waitingSince)
@@ -300,25 +258,21 @@ async function loadSupport(actor: Actor, mineId: PrincipalId | null, now: Date) 
       const reasonColor =
         priority === 'high' || priority === 'urgent' ? priorityMeta(priority).color : null
       return {
-        rank: supportAttentionRank({
-          priority,
-          assigned,
-          waitingSince: waitingIso,
-        }),
+        rank: supportAttentionRank({ priority, assigned, mine }),
         waitingSince: waitingIso,
         item: {
           id: row.id,
           kind: 'support' as const,
+          entity: 'conversation' as const,
           title: conversationTitle(row.subject, row.lastMessagePreview),
           link: { to: '/admin/inbox', search: { i: row.id } },
           reason,
           reasonTone: tone,
           reasonColor,
-          meta: [visitor, wait ? `Waiting ${wait}` : null].filter(Boolean).join(' · '),
+          meta: [visitor, wait ? `waiting ${wait}` : null].filter(Boolean).join(' · '),
           ownerName,
           ownerInitials: ownerInitials(ownerName),
-          visitorName: visitor,
-          waitingSince: waitingIso,
+          mine,
         } satisfies OverviewAttentionItem,
       }
     })
@@ -328,91 +282,73 @@ async function loadSupport(actor: Actor, mineId: PrincipalId | null, now: Date) 
     section: enabledSection(),
     attention: ranked.slice(0, ATTENTION_LIMIT).map((row) => row.item),
     waitingCount: Number(totals?.waitingCount ?? 0),
-    highPriorityCount: Number(totals?.highPriorityCount ?? 0),
     waitingLink,
   }
 }
 
-async function loadFeedback(mineId: PrincipalId | null, now: Date) {
+type FeedbackRow = {
+  id: PostId
+  title: string
+  at: Date
+  boardName: string
+  statusName: string
+  statusColor: string
+  ownerPrincipalId: PrincipalId | null
+  ownerName: string | null
+}
+
+async function loadFeedback(viewerId: PrincipalId | null, now: Date) {
   const defaultStatus = await db.query.postStatuses.findFirst({
     where: and(eq(postStatuses.isDefault, true), isNull(postStatuses.deletedAt)),
     columns: { id: true, name: true, slug: true },
   })
   const completeStatuses = await db
-    .select({
-      id: postStatuses.id,
-      name: postStatuses.name,
-      slug: postStatuses.slug,
-    })
+    .select({ id: postStatuses.id, name: postStatuses.name, slug: postStatuses.slug })
     .from(postStatuses)
     .where(and(eq(postStatuses.category, 'complete'), isNull(postStatuses.deletedAt)))
 
-  const liveParts = [isNull(posts.deletedAt), isNull(posts.canonicalPostId)]
-  if (mineId) liveParts.push(eq(posts.ownerPrincipalId, mineId))
-  const livePost = and(...liveParts)
+  const livePost = and(isNull(posts.deletedAt), isNull(posts.canonicalPostId))
 
-  const reviewLink: OverviewLink | null = defaultStatus
-    ? {
-        to: '/admin/feedback',
-        search: {
-          status: [defaultStatus.slug],
-          owner: mineId ?? undefined,
-        },
-      }
+  const reviewLink: OverviewLink = defaultStatus
+    ? { to: '/admin/feedback', search: { status: [defaultStatus.slug] } }
     : { to: '/admin/feedback' }
   const completeSlugs = completeStatuses.map((status) => status.slug)
-  const completeLink: OverviewLink | null =
+  const completeLink: OverviewLink =
     completeSlugs.length > 0
-      ? {
-          to: '/admin/feedback',
-          search: {
-            status: completeSlugs,
-            owner: mineId ?? undefined,
-          },
-        }
+      ? { to: '/admin/feedback', search: { status: completeSlugs } }
       : { to: '/admin/feedback' }
 
-  let reviewCount = 0
-  let reviewRows: Array<{
-    id: PostId
-    title: string
-    voteCount: number
-    createdAt: Date
-    boardName: string
-    statusName: string
-    statusColor: string
-    ownerName: string | null
-  }> = []
+  const rowShape = (at: typeof posts.createdAt | typeof posts.updatedAt) => ({
+    id: posts.id,
+    title: posts.title,
+    at,
+    boardName: boards.name,
+    statusName: postStatuses.name,
+    statusColor: postStatuses.color,
+    ownerPrincipalId: posts.ownerPrincipalId,
+    ownerName: principal.displayName,
+  })
 
+  let reviewCount = 0
+  let reviewRows: FeedbackRow[] = []
   if (defaultStatus) {
-    const [countRow] = await db
-      .select({ value: count() })
-      .from(posts)
-      .where(and(livePost, eq(posts.statusId, defaultStatus.id)))
+    const where = and(livePost, eq(posts.statusId, defaultStatus.id))
+    const [countRow] = await db.select({ value: count() }).from(posts).where(where)
     reviewCount = Number(countRow?.value ?? 0)
 
     reviewRows = await db
-      .select({
-        id: posts.id,
-        title: posts.title,
-        voteCount: posts.voteCount,
-        createdAt: posts.createdAt,
-        boardName: boards.name,
-        statusName: postStatuses.name,
-        statusColor: postStatuses.color,
-        ownerName: principal.displayName,
-      })
+      .select(rowShape(posts.createdAt))
       .from(posts)
       .innerJoin(boards, eq(boards.id, posts.boardId))
       .innerJoin(postStatuses, eq(postStatuses.id, posts.statusId))
       .leftJoin(principal, eq(principal.id, posts.ownerPrincipalId))
-      .where(and(livePost, eq(posts.statusId, defaultStatus.id)))
+      .where(where)
       .orderBy(desc(posts.createdAt))
       .limit(ATTENTION_LIMIT)
   }
 
   let completeCount = 0
-  let completeRows: typeof reviewRows = []
+  let completeRows: FeedbackRow[] = []
   if (completeStatuses.length > 0) {
     const completeIds = completeStatuses.map((status) => status.id)
     const noChangelog = notExists(
@@ -421,77 +357,42 @@ async function loadFeedback(mineId: PrincipalId | null, now: Date) {
         .from(changelogEntryPosts)
         .where(eq(changelogEntryPosts.postId, posts.id))
     )
-    const [countRow] = await db
-      .select({ value: count() })
-      .from(posts)
-      .where(and(livePost, inArray(posts.statusId, completeIds), noChangelog))
+    const where = and(livePost, inArray(posts.statusId, completeIds), noChangelog)
+    const [countRow] = await db.select({ value: count() }).from(posts).where(where)
     completeCount = Number(countRow?.value ?? 0)
 
     completeRows = await db
-      .select({
-        id: posts.id,
-        title: posts.title,
-        voteCount: posts.voteCount,
-        createdAt: posts.updatedAt,
-        boardName: boards.name,
-        statusName: postStatuses.name,
-        statusColor: postStatuses.color,
-        ownerName: principal.displayName,
-      })
+      .select(rowShape(posts.updatedAt))
       .from(posts)
       .innerJoin(boards, eq(boards.id, posts.boardId))
       .innerJoin(postStatuses, eq(postStatuses.id, posts.statusId))
       .leftJoin(principal, eq(principal.id, posts.ownerPrincipalId))
-      .where(and(livePost, inArray(posts.statusId, completeIds), noChangelog))
+      .where(where)
       .orderBy(desc(posts.updatedAt))
       .limit(ATTENTION_LIMIT)
   }
 
-  const attention: OverviewAttentionItem[] = reviewRows.map((row) => ({
-    id: row.id,
-    kind: 'feedback',
-    title: row.title,
-    link: { to: '/admin/feedback', search: { post: row.id } },
-    reason: row.statusName,
-    reasonTone: 'info',
-    reasonColor: row.statusColor,
-    meta: [
-      row.boardName,
-      `${row.voteCount} votes`,
-      `Created ${formatCompactAge(toIsoString(row.createdAt), now.getTime())} ago`,
-    ].join(' · '),
-    ownerName: row.ownerName,
-    ownerInitials: ownerInitials(row.ownerName),
-    voteCount: row.voteCount,
-    boardName: row.boardName,
-    createdAt: toIsoString(row.createdAt),
-  }))
-
-  const announce: OverviewAttentionItem[] = completeRows.map((row) => ({
-    id: row.id,
-    kind: 'publishing',
-    title: row.title,
-    link: { to: '/admin/feedback', search: { post: row.id } },
-    reason: row.statusName,
-    reasonTone: 'success',
-    reasonColor: row.statusColor,
-    meta: [
-      row.boardName,
-      `${row.voteCount} votes`,
-      'No linked changelog',
-      `Updated ${formatCompactAge(toIsoString(row.createdAt), now.getTime())} ago`,
-    ].join(' · '),
-    ownerName: row.ownerName,
-    ownerInitials: ownerInitials(row.ownerName),
-    voteCount: row.voteCount,
-    boardName: row.boardName,
-    createdAt: toIsoString(row.createdAt),
-  }))
+  const toItem =
+    (kind: 'feedback' | 'publishing', tone: 'info' | 'success') =>
+    (row: FeedbackRow): OverviewAttentionItem => ({
+      id: row.id,
+      kind,
+      entity: 'post',
+      title: row.title,
+      link: { to: '/admin', search: { post: row.id } },
+      reason: row.statusName,
+      reasonTone: tone,
+      reasonColor: row.statusColor,
+      meta: `${row.boardName} · ${formatCompactAge(toIsoString(row.at), now.getTime())}`,
+      ownerName: row.ownerName,
+      ownerInitials: ownerInitials(row.ownerName),
+      mine: viewerId != null && row.ownerPrincipalId === viewerId,
+    })
 
   return {
     section: enabledSection(),
-    attention,
-    announce,
+    attention: viewerFirst(reviewRows.map(toItem('feedback', 'info'))),
+    announce: viewerFirst(completeRows.map(toItem('publishing', 'success'))),
     reviewCount,
     completeCount,
     reviewLink,
@@ -503,40 +404,20 @@ async function loadMomentum(now: Date): Promise<OverviewMomentumItem[]> {
   const since = new Date(now.getTime() - WEEK_MS)
   const voteDelta = sql<number>`count(${postVotes.id})::int`
   const rows = await db
-    .select({
-      postId: posts.id,
-      title: posts.title,
-      voteCount: posts.voteCount,
-      boardName: boards.name,
-      statusName: postStatuses.name,
-      statusColor: postStatuses.color,
-      votesLast7d: voteDelta,
-    })
+    .select({ postId: posts.id, title: posts.title, votesLast7d: voteDelta })
     .from(posts)
-    .innerJoin(boards, eq(boards.id, posts.boardId))
-    .leftJoin(postStatuses, eq(postStatuses.id, posts.statusId))
     .innerJoin(postVotes, and(eq(postVotes.postId, posts.id), gte(postVotes.createdAt, since)))
     .where(and(isNull(posts.deletedAt), isNull(posts.canonicalPostId)))
-    .groupBy(
-      posts.id,
-      posts.title,
-      posts.voteCount,
-      boards.name,
-      postStatuses.name,
-      postStatuses.color
-    )
+    .groupBy(posts.id, posts.title)
     .orderBy(desc(voteDelta))
     .limit(MOMENTUM_LIMIT)
 
   return rows.map((row) => ({
     postId: row.postId,
+    entity: 'post' as const,
     title: row.title,
-    boardName: row.boardName,
-    statusName: row.statusName ?? 'No status',
-    statusColor: row.statusColor,
-    voteCount: row.voteCount,
     votesLast7d: Number(row.votesLast7d),
-    link: { to: '/admin/feedback', search: { post: row.postId } },
+    link: { to: '/admin', search: { post: row.postId } },
   }))
 }
 
@@ -546,7 +427,6 @@ async function loadChangelog(now: Date) {
       id: changelogEntries.id,
       title: changelogEntries.title,
       publishedAt: changelogEntries.publishedAt,
-      updatedAt: changelogEntries.updatedAt,
       authorName: principal.displayName,
     })
     .from(changelogEntries)
@@ -558,301 +438,57 @@ async function loadChangelog(now: Date) {
       )
     )
     .orderBy(desc(changelogEntries.updatedAt))
-    .limit(PUBLISH_LIMIT + 2)
+    .limit(PUBLISH_LIMIT)
 
-  const ids = rows.map((row) => row.id)
-  const linked =
-    ids.length > 0
-      ? await db
-          .select({
-            changelogEntryId: changelogEntryPosts.changelogEntryId,
-            value: count(),
-          })
-          .from(changelogEntryPosts)
-          .where(inArray(changelogEntryPosts.changelogEntryId, ids))
-          .groupBy(changelogEntryPosts.changelogEntryId)
-      : []
-  const linkedCount = new Map(linked.map((row) => [row.changelogEntryId, Number(row.value)]))
-
-  const items: OverviewPublishItem[] = rows.slice(0, PUBLISH_LIMIT).map((row) => {
-    const status = computeStatus(row.publishedAt) as OverviewPublishStatus
-    const author = row.authorName?.trim()
-    const when =
-      status === 'scheduled' && row.publishedAt
-        ? formatCompactAge(toIsoString(row.publishedAt), now.getTime())
-        : `edited ${formatCompactAge(toIsoString(row.updatedAt), now.getTime())} ago`
-    const links = linkedCount.get(row.id) ?? 0
+  const items: OverviewPublishItem[] = rows.map((row) => {
+    const scheduled = computeStatus(row.publishedAt) === 'scheduled' && row.publishedAt
     return {
       id: row.id,
       product: 'changelog',
+      entity: 'changelog',
       title: row.title,
-      link: { to: '/admin/changelog', search: { entry: row.id } },
-      status,
-      meta: ['Changelog', when, author, links > 0 ? `${links} linked posts` : null]
-        .filter(Boolean)
-        .join(' · '),
+      link: { to: '/admin', search: { entry: row.id } },
+      status: scheduled ? 'scheduled' : 'draft',
+      meta: scheduled
+        ? formatCompactAge(toIsoString(row.publishedAt!), now.getTime())
+        : (row.authorName?.trim() ?? ''),
     }
   })
 
   return { section: enabledSection(), items }
 }
 
-async function loadHelpCenter(mineId: PrincipalId | null, now: Date) {
-  const draftLink: OverviewLink = {
-    to: '/admin/help-center',
-    search: { status: 'draft' },
-  }
-  const conditions = [isNull(helpCenterArticles.deletedAt), isNull(helpCenterArticles.publishedAt)]
-  if (mineId) conditions.push(eq(helpCenterArticles.principalId, mineId))
+async function loadHelpCenter() {
+  const draftLink: OverviewLink = { to: '/admin/help-center', search: { status: 'draft' } }
+  const conditions = and(
+    isNull(helpCenterArticles.deletedAt),
+    isNull(helpCenterArticles.publishedAt)
+  )
 
-  const [countRow] = await db
-    .select({ value: count() })
-    .from(helpCenterArticles)
-    .where(and(...conditions))
+  const [countRow] = await db.select({ value: count() }).from(helpCenterArticles).where(conditions)
   const draftCount = Number(countRow?.value ?? 0)
 
   const drafts = await db
     .select({
       id: helpCenterArticles.id,
       title: helpCenterArticles.title,
-      updatedAt: helpCenterArticles.updatedAt,
       authorName: principal.displayName,
     })
     .from(helpCenterArticles)
     .innerJoin(principal, eq(principal.id, helpCenterArticles.principalId))
-    .where(and(...conditions))
+    .where(conditions)
     .orderBy(desc(helpCenterArticles.updatedAt))
     .limit(PUBLISH_LIMIT)
 
-  const published = mineId
-    ? []
-    : await db
-        .select({
-          id: helpCenterArticles.id,
-          title: helpCenterArticles.title,
-          updatedAt: helpCenterArticles.publishedAt,
-          authorName: principal.displayName,
-        })
-        .from(helpCenterArticles)
-        .innerJoin(principal, eq(principal.id, helpCenterArticles.principalId))
-        .where(
-          and(
-            isNull(helpCenterArticles.deletedAt),
-            isNotNull(helpCenterArticles.publishedAt),
-            lte(helpCenterArticles.publishedAt, now)
-          )
-        )
-        .orderBy(desc(helpCenterArticles.publishedAt))
-        .limit(1)
-
-  const items: OverviewPublishItem[] = [
-    ...drafts.map((row) => ({
-      id: row.id,
-      product: 'helpCenter' as const,
-      title: row.title,
-      link: {
-        to: '/admin/help-center/articles/$articleId',
-        params: { articleId: row.id },
-      },
-      status: 'draft' as const,
-      meta: [
-        'Help Center',
-        row.authorName,
-        `edited ${formatCompactAge(toIsoString(row.updatedAt), now.getTime())} ago`,
-      ]
-        .filter(Boolean)
-        .join(' · '),
-    })),
-    ...published.map((row) => ({
-      id: row.id,
-      product: 'helpCenter' as const,
-      title: row.title,
-      link: {
-        to: '/admin/help-center/articles/$articleId',
-        params: { articleId: row.id },
-      },
-      status: 'published' as const,
-      meta: [
-        'Help Center',
-        row.authorName,
-        row.updatedAt
-          ? `published ${formatCompactAge(toIsoString(row.updatedAt), now.getTime())} ago`
-          : null,
-      ]
-        .filter(Boolean)
-        .join(' · '),
-    })),
-  ]
+  const items: OverviewPublishItem[] = drafts.map((row) => ({
+    id: row.id,
+    product: 'helpCenter',
+    entity: 'article',
+    title: row.title,
+    link: { to: '/admin/help-center/articles/$articleId', params: { articleId: row.id } },
+    status: 'draft',
+    meta: row.authorName?.trim() ?? '',
+  }))
 
   return { section: enabledSection(), items, draftCount, draftLink }
-}
-
-async function loadActivity(input: {
-  feedbackOn: boolean
-  changelogOn: boolean
-  helpOn: boolean
-  supportOn: boolean
-  actor: Actor
-  now: Date
-}): Promise<OverviewActivityItem[]> {
-  const since = new Date(input.now.getTime() - WEEK_MS)
-  const events: OverviewActivityItem[] = []
-
-  if (input.feedbackOn) {
-    const rows = await db
-      .select({
-        id: postActivity.id,
-        type: postActivity.type,
-        metadata: postActivity.metadata,
-        createdAt: postActivity.createdAt,
-        postId: posts.id,
-        title: posts.title,
-        actorName: principal.displayName,
-      })
-      .from(postActivity)
-      .innerJoin(posts, eq(posts.id, postActivity.postId))
-      .leftJoin(principal, eq(principal.id, postActivity.principalId))
-      .where(
-        and(
-          gte(postActivity.createdAt, since),
-          isNull(posts.deletedAt),
-          inArray(postActivity.type, ['status.changed', 'post.created', 'owner.assigned'])
-        )
-      )
-      .orderBy(desc(postActivity.createdAt))
-      .limit(ACTIVITY_LIMIT)
-
-    for (const row of rows) {
-      const metadata = (row.metadata ?? {}) as { toName?: string }
-      events.push({
-        id: row.id,
-        actorName: row.actorName,
-        actorInitials: ownerInitials(row.actorName),
-        event: describeOverviewActivity({
-          source: 'post',
-          type: row.type,
-          actorName: row.actorName,
-          toName: metadata.toName,
-        }),
-        title: row.title,
-        link: { to: '/admin/feedback', search: { post: row.postId } },
-        at: toIsoString(row.createdAt),
-      })
-    }
-  }
-
-  if (input.changelogOn) {
-    const rows = await db
-      .select({
-        id: changelogEntries.id,
-        title: changelogEntries.title,
-        publishedAt: changelogEntries.publishedAt,
-        updatedAt: changelogEntries.updatedAt,
-        actorName: principal.displayName,
-      })
-      .from(changelogEntries)
-      .leftJoin(principal, eq(principal.id, changelogEntries.principalId))
-      .where(and(isNull(changelogEntries.deletedAt), gte(changelogEntries.updatedAt, since)))
-      .orderBy(desc(changelogEntries.updatedAt))
-      .limit(4)
-
-    for (const row of rows) {
-      const status = computeStatus(row.publishedAt)
-      if (status === 'draft') continue
-      events.push({
-        id: `changelog:${row.id}`,
-        actorName: row.actorName,
-        actorInitials: ownerInitials(row.actorName),
-        event: describeOverviewActivity({
-          source: 'changelog',
-          status,
-          actorName: row.actorName,
-        }),
-        title: row.title,
-        link: { to: '/admin/changelog', search: { entry: row.id } },
-        at: toIsoString(row.publishedAt ?? row.updatedAt),
-      })
-    }
-  }
-
-  if (input.helpOn) {
-    const rows = await db
-      .select({
-        id: helpCenterArticles.id,
-        title: helpCenterArticles.title,
-        publishedAt: helpCenterArticles.publishedAt,
-        actorName: principal.displayName,
-      })
-      .from(helpCenterArticles)
-      .innerJoin(principal, eq(principal.id, helpCenterArticles.principalId))
-      .where(
-        and(
-          isNull(helpCenterArticles.deletedAt),
-          isNotNull(helpCenterArticles.publishedAt),
-          gte(helpCenterArticles.publishedAt, since)
-        )
-      )
-      .orderBy(desc(helpCenterArticles.publishedAt))
-      .limit(4)
-
-    for (const row of rows) {
-      events.push({
-        id: `article:${row.id}`,
-        actorName: row.actorName,
-        actorInitials: ownerInitials(row.actorName),
-        event: describeOverviewActivity({
-          source: 'article',
-          published: true,
-          actorName: row.actorName,
-        }),
-        title: row.title,
-        link: {
-          to: '/admin/help-center/articles/$articleId',
-          params: { articleId: row.id },
-        },
-        at: toIsoString(row.publishedAt!),
-      })
-    }
-  }
-
-  if (input.supportOn) {
-    const visibility = conversationFilter(input.actor)
-    const rows = await db
-      .select({
-        id: conversations.id,
-        subject: conversations.subject,
-        lastMessagePreview: conversations.lastMessagePreview,
-        resolvedAt: conversations.resolvedAt,
-        actorName: principal.displayName,
-      })
-      .from(conversations)
-      .leftJoin(principal, eq(principal.id, conversations.assignedAgentPrincipalId))
-      .where(
-        and(
-          visibility,
-          eq(conversations.status, 'closed'),
-          isNotNull(conversations.resolvedAt),
-          gte(conversations.resolvedAt, since)
-        )
-      )
-      .orderBy(desc(conversations.resolvedAt))
-      .limit(4)
-
-    for (const row of rows) {
-      events.push({
-        id: `conversation:${row.id}`,
-        actorName: row.actorName,
-        actorInitials: ownerInitials(row.actorName),
-        event: describeOverviewActivity({
-          source: 'conversation',
-          actorName: row.actorName,
-        }),
-        title: conversationTitle(row.subject, row.lastMessagePreview),
-        link: { to: '/admin/inbox', search: { i: row.id } },
-        at: toIsoString(row.resolvedAt!),
-      })
-    }
-  }
-
-  return events.sort((a, b) => b.at.localeCompare(a.at)).slice(0, ACTIVITY_LIMIT)
 }

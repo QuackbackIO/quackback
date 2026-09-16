@@ -2,14 +2,14 @@ import { describe, expect, it } from 'vitest'
 import {
   buildOverviewMetrics,
   conversationTitle,
-  describeOverviewActivity,
   formatCompactAge,
   mixAttention,
   overviewMetricGridClass,
   ownerInitials,
   publishStatusLabel,
-  sortAttention,
+  supportAttentionRank,
   supportAttentionReason,
+  viewerFirst,
   type OverviewAttentionItem,
   type OverviewLink,
 } from '../admin-overview'
@@ -41,55 +41,34 @@ describe('supportAttentionReason', () => {
   })
 })
 
+describe('supportAttentionRank', () => {
+  it('keeps urgency ahead of the viewer, then unassigned, then the rest of the team', () => {
+    const urgent = supportAttentionRank({ priority: 'urgent', assigned: false, mine: false })
+    const high = supportAttentionRank({ priority: 'high', assigned: true, mine: false })
+    const mine = supportAttentionRank({ priority: 'medium', assigned: true, mine: true })
+    const unassigned = supportAttentionRank({ priority: 'medium', assigned: false, mine: false })
+    const teammate = supportAttentionRank({ priority: 'medium', assigned: true, mine: false })
+    expect([urgent, high, mine, unassigned, teammate]).toEqual([0, 1, 2, 3, 4])
+  })
+})
+
+describe('viewerFirst', () => {
+  it('moves the viewer’s items to the front without reordering the rest', () => {
+    const items = [
+      { id: 'a', mine: false },
+      { id: 'b', mine: true },
+      { id: 'c', mine: false },
+      { id: 'd', mine: true },
+    ]
+    expect(viewerFirst(items).map((item) => item.id)).toEqual(['b', 'd', 'a', 'c'])
+  })
+})
+
 describe('conversationTitle', () => {
   it('prefers subject, then preview, then Conversation', () => {
     expect(conversationTitle('Sign-in issue', 'hello')).toBe('Sign-in issue')
     expect(conversationTitle('  ', 'Can you help?')).toBe('Can you help?')
     expect(conversationTitle(null, null)).toBe('Conversation')
-  })
-})
-
-describe('describeOverviewActivity', () => {
-  it('uses post_activity status.changed metadata.toName', () => {
-    expect(
-      describeOverviewActivity({
-        source: 'post',
-        type: 'status.changed',
-        actorName: 'Maya Chen',
-        toName: 'Complete',
-      })
-    ).toBe('Maya Chen moved feedback to Complete')
-  })
-
-  it('uses changelog publishedAt-derived status', () => {
-    expect(
-      describeOverviewActivity({
-        source: 'changelog',
-        status: 'scheduled',
-        actorName: 'James',
-      })
-    ).toBe('James scheduled a changelog')
-  })
-
-  it('does not invent a teammate name when the actor is missing', () => {
-    expect(
-      describeOverviewActivity({
-        source: 'article',
-        published: true,
-        actorName: null,
-      })
-    ).toBe('A teammate published an article')
-  })
-})
-
-describe('sortAttention', () => {
-  it('keeps support ahead of feedback and publishing', () => {
-    const items = [
-      { id: 'p', kind: 'publishing' },
-      { id: 'f', kind: 'feedback' },
-      { id: 's', kind: 'support' },
-    ] as OverviewAttentionItem[]
-    expect(sortAttention(items).map((item) => item.id)).toEqual(['s', 'f', 'p'])
   })
 })
 
@@ -134,7 +113,6 @@ describe('publishStatusLabel', () => {
   it('matches changelog/article publishedAt states', () => {
     expect(publishStatusLabel('draft')).toBe('Draft')
     expect(publishStatusLabel('scheduled')).toBe('Scheduled')
-    expect(publishStatusLabel('published')).toBe('Published')
   })
 })
 
@@ -143,10 +121,9 @@ const feedback: OverviewLink = { to: '/admin/feedback' }
 const help: OverviewLink = { to: '/admin/help-center' }
 
 describe('buildOverviewMetrics', () => {
-  it('keeps labels and units short and omits restating hints', () => {
+  it('produces count + phrase pairs with no units or hints', () => {
     const metrics = buildOverviewMetrics({
-      scope: 'team',
-      support: { waitingCount: 3, highPriorityCount: 0, waitingLink: inbox },
+      support: { waitingCount: 3, waitingLink: inbox },
       feedback: {
         reviewCount: 30,
         completeCount: 6,
@@ -156,28 +133,25 @@ describe('buildOverviewMetrics', () => {
       help: { draftCount: 0, draftLink: help },
     })
 
-    expect(metrics.map((metric) => [metric.key, metric.label, metric.unit, metric.hint])).toEqual([
-      ['waiting', 'Waiting for reply', 'open', ''],
-      ['feedback', 'Feedback to review', 'open', ''],
-      ['complete', 'No changelog', 'open', ''],
-      ['articles', 'Article drafts', 'drafts', ''],
+    expect(metrics.map((metric) => [metric.key, metric.count, metric.label])).toEqual([
+      ['waiting', 3, 'waiting for reply'],
+      ['feedback', 30, 'to review'],
+      ['complete', 6, 'without changelog'],
+      ['articles', 0, 'article drafts'],
     ])
+    for (const metric of metrics) {
+      expect(metric).not.toHaveProperty('unit')
+      expect(metric).not.toHaveProperty('hint')
+    }
   })
 
-  it('only hints when waiting conversations are high priority', () => {
-    const [waiting] = buildOverviewMetrics({
-      scope: 'team',
-      support: { waitingCount: 3, highPriorityCount: 2, waitingLink: inbox },
-    })
-    expect(waiting).toMatchObject({ hint: '2 high priority', hintTone: 'urgent' })
+  it('pluralizes article drafts', () => {
+    const [drafts] = buildOverviewMetrics({ help: { draftCount: 1, draftLink: help } })
+    expect(drafts).toMatchObject({ count: 1, label: 'article draft' })
   })
 
-  it('scopes article drafts to the current user', () => {
-    const [drafts] = buildOverviewMetrics({
-      scope: 'mine',
-      help: { draftCount: 1, draftLink: help },
-    })
-    expect(drafts).toMatchObject({ label: 'Your drafts', unit: 'drafts' })
+  it('omits sections that are off', () => {
+    expect(buildOverviewMetrics({})).toEqual([])
   })
 })
 
