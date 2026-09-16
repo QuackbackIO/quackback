@@ -116,6 +116,17 @@ test.describe('Public Post Submission', () => {
     await expect(editor).toBeVisible({ timeout: 5000 })
   })
 
+  test('can format feedback details as headings', async () => {
+    const createPostInput = globalPage.getByPlaceholder("What's your idea?")
+    await createPostInput.click()
+
+    const editor = globalPage.locator('.tiptap')
+    await editor.fill('Heading test')
+    await globalPage.getByRole('button', { name: 'Heading 2' }).click()
+
+    await expect(editor.locator('h2')).toHaveText('Heading test')
+  })
+
   test('can close form with Cancel button', async () => {
     // Expand the form
     const createPostInput = globalPage.getByPlaceholder("What's your idea?")

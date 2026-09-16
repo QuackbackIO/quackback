@@ -23,6 +23,7 @@ import type { BoardSettings } from '@/lib/shared/db-types'
 import { signOut } from '@/lib/client/auth-client'
 import { removeViewerScopedPortalQueries } from '@/lib/client/queries/portal'
 import { resolveSubmitState } from '@/components/public/feedback/submit-permission'
+import { PUBLIC_FEEDBACK_EDITOR_FEATURES } from '@/components/public/feedback/feedback-editor-features'
 import type { JSONContent } from '@tiptap/react'
 
 interface BoardOption {
@@ -383,7 +384,10 @@ export function FeedbackHeaderAnimated({
                 minHeight="150px"
                 borderless
                 toolbarPosition="bottom"
-                features={{ images: canUploadImages, quackbackEmbeds: true }}
+                features={{
+                  ...PUBLIC_FEEDBACK_EDITOR_FEATURES,
+                  images: canUploadImages,
+                }}
                 onImageUpload={canUploadImages ? uploadImage : undefined}
               />
             </motion.div>
