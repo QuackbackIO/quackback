@@ -149,6 +149,15 @@ export async function getAdminOverview(input: {
   }
 }
 
+function uniqueById<T extends { id: string }>(rows: T[]): T[] {
+  const seen = new Set<string>()
+  return rows.filter((row) => {
+    if (seen.has(row.id)) return false
+    seen.add(row.id)
+    return true
+  })
+}
+
 function enabledSection(): OverviewSectionState {
   return { enabled: true, error: null }
 }
@@ -214,21 +223,47 @@ async function loadSupport(actor: Actor, viewerId: PrincipalId | null, now: Date
 
   const [totals] = await db.select({ waitingCount: count() }).from(conversations).where(conditions)
 
-  const rows = await db
-    .select({
-      id: conversations.id,
-      subject: conversations.subject,
-      lastMessagePreview: conversations.lastMessagePreview,
-      priority: conversations.priority,
-      waitingSince: conversations.waitingSince,
-      assignedAgentPrincipalId: conversations.assignedAgentPrincipalId,
-      visitorName: principal.displayName,
-    })
+  const supportSelect = {
+    id: conversations.id,
+    subject: conversations.subject,
+    lastMessagePreview: conversations.lastMessagePreview,
+    priority: conversations.priority,
+    waitingSince: conversations.waitingSince,
+    assignedAgentPrincipalId: conversations.assignedAgentPrincipalId,
+    visitorName: principal.displayName,
+  }
+  const waitingOrder = [asc(conversations.waitingSince), desc(conversations.lastMessageAt)] as const
+
+  const mineRows =
+    viewerId != null
+      ? await db
+          .select(supportSelect)
+          .from(conversations)
+          .innerJoin(principal, eq(principal.id, conversations.visitorPrincipalId))
+          .where(and(conditions, eq(conversations.assignedAgentPrincipalId, viewerId)))
+          .orderBy(...waitingOrder)
+          .limit(40)
+      : []
+
+  const restRows = await db
+    .select(supportSelect)
     .from(conversations)
     .innerJoin(principal, eq(principal.id, conversations.visitorPrincipalId))
-    .where(conditions)
-    .orderBy(asc(conversations.waitingSince), desc(conversations.lastMessageAt))
+    .where(
+      viewerId != null
+        ? and(
+            conditions,
+            or(
+              isNull(conversations.assignedAgentPrincipalId),
+              ne(conversations.assignedAgentPrincipalId, viewerId)
+            )
+          )
+        : conditions
+    )
+    .orderBy(...waitingOrder)
     .limit(40)
+
+  const rows = uniqueById([...mineRows, ...restRows])
 
   const agentIds = [
     ...new Set(
@@ -298,6 +333,43 @@ type FeedbackRow = {
   ownerName: string | null
 }
 
+/** Owned posts first, then the newest remaining rows, so LIMIT cannot drop the viewer's work. */
+async function selectFeedbackRows(
+  where: ReturnType<typeof and>,
+  at: typeof posts.createdAt | typeof posts.updatedAt,
+  viewerId: PrincipalId | null
+): Promise<FeedbackRow[]> {
+  const query = (filter: ReturnType<typeof and>) =>
+    db
+      .select({
+        id: posts.id,
+        title: posts.title,
+        at,
+        boardName: boards.name,
+        statusName: postStatuses.name,
+        statusColor: postStatuses.color,
+        ownerPrincipalId: posts.ownerPrincipalId,
+        ownerName: principal.displayName,
+      })
+      .from(posts)
+      .innerJoin(boards, eq(boards.id, posts.boardId))
+      .innerJoin(postStatuses, eq(postStatuses.id, posts.statusId))
+      .leftJoin(principal, eq(principal.id, posts.ownerPrincipalId))
+      .where(filter)
+      .orderBy(desc(at))
+
+  if (!viewerId) return query(where).limit(ATTENTION_LIMIT)
+
+  const mine = await query(and(where, eq(posts.ownerPrincipalId, viewerId))).limit(ATTENTION_LIMIT)
+  if (mine.length >= ATTENTION_LIMIT) return mine
+
+  const rest = await query(
+    and(where, or(isNull(posts.ownerPrincipalId), ne(posts.ownerPrincipalId, viewerId)))
+  ).limit(ATTENTION_LIMIT - mine.length)
+
+  return [...mine, ...rest]
+}
+
 async function loadFeedback(viewerId: PrincipalId | null, now: Date) {
   const defaultStatus = await db.query.postStatuses.findFirst({
     where: and(eq(postStatuses.isDefault, true), isNull(postStatuses.deletedAt)),
@@ -319,17 +391,6 @@ async function loadFeedback(viewerId: PrincipalId | null, now: Date) {
       ? { to: '/admin/feedback', search: { status: completeSlugs } }
       : { to: '/admin/feedback' }
 
-  const rowShape = (at: typeof posts.createdAt | typeof posts.updatedAt) => ({
-    id: posts.id,
-    title: posts.title,
-    at,
-    boardName: boards.name,
-    statusName: postStatuses.name,
-    statusColor: postStatuses.color,
-    ownerPrincipalId: posts.ownerPrincipalId,
-    ownerName: principal.displayName,
-  })
-
   let reviewCount = 0
   let reviewRows: FeedbackRow[] = []
   if (defaultStatus) {
@@ -337,15 +398,7 @@ async function loadFeedback(viewerId: PrincipalId | null, now: Date) {
     const [countRow] = await db.select({ value: count() }).from(posts).where(where)
     reviewCount = Number(countRow?.value ?? 0)
 
-    reviewRows = await db
-      .select(rowShape(posts.createdAt))
-      .from(posts)
-      .innerJoin(boards, eq(boards.id, posts.boardId))
-      .innerJoin(postStatuses, eq(postStatuses.id, posts.statusId))
-      .leftJoin(principal, eq(principal.id, posts.ownerPrincipalId))
-      .where(where)
-      .orderBy(desc(posts.createdAt))
-      .limit(ATTENTION_LIMIT)
+    reviewRows = await selectFeedbackRows(where, posts.createdAt, viewerId)
   }
 
   let completeCount = 0
@@ -362,15 +415,7 @@ async function loadFeedback(viewerId: PrincipalId | null, now: Date) {
     const [countRow] = await db.select({ value: count() }).from(posts).where(where)
     completeCount = Number(countRow?.value ?? 0)
 
-    completeRows = await db
-      .select(rowShape(posts.updatedAt))
-      .from(posts)
-      .innerJoin(boards, eq(boards.id, posts.boardId))
-      .innerJoin(postStatuses, eq(postStatuses.id, posts.statusId))
-      .leftJoin(principal, eq(principal.id, posts.ownerPrincipalId))
-      .where(where)
-      .orderBy(desc(posts.updatedAt))
-      .limit(ATTENTION_LIMIT)
+    completeRows = await selectFeedbackRows(where, posts.updatedAt, viewerId)
   }
 
   const toItem =

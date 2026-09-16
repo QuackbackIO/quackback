@@ -235,4 +235,33 @@ describe('OverviewDashboard', () => {
         ?.querySelector('[data-entity="article"]')
     ).not.toBeNull()
   })
+
+  it('keeps successful rail modules when another module fails', () => {
+    state.data = {
+      ...state.data,
+      changelog: [],
+      helpCenter: [
+        {
+          id: 'a1',
+          product: 'helpCenter',
+          entity: 'article',
+          title: 'Environment Variables',
+          link: { to: '/admin', search: { article: 'a1' } },
+          status: 'draft',
+          meta: 'James Morton',
+        },
+      ],
+      sections: {
+        ...state.data.sections,
+        changelog: { enabled: true, error: 'Couldn’t load this section.' },
+        helpCenter: { enabled: true, error: null },
+      },
+    }
+    render(<OverviewDashboard />)
+    expect(screen.getByText('Changelog', { selector: 'h2' })).toBeInTheDocument()
+    expect(screen.getByText('Couldn’t load this section.')).toBeInTheDocument()
+    expect(screen.getByText('Help Center', { selector: 'h2' })).toBeInTheDocument()
+    expect(screen.getByText('Environment Variables')).toBeInTheDocument()
+    expect(screen.queryByText('Feedback', { selector: 'h2' })).not.toBeInTheDocument()
+  })
 })

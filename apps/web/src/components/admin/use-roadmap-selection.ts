@@ -6,15 +6,17 @@ export function useRoadmapSelection(): {
   setSelectedRoadmap: (roadmapId: string | null) => void
 } {
   const navigate = useNavigate()
-  const { roadmap } = Route.useSearch()
+  const search = Route.useSearch()
 
   function setSelectedRoadmap(roadmapId: string | null): void {
     void navigate({
       to: '/admin/roadmap',
-      search: { roadmap: roadmapId ?? undefined },
+      search: { ...search, roadmap: roadmapId ?? undefined },
       replace: true,
     })
   }
+
+  const { roadmap } = search
 
   return { selectedRoadmapId: roadmap ?? null, setSelectedRoadmap }
 }

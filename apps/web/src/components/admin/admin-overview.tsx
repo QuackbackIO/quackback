@@ -63,12 +63,14 @@ export function OverviewDashboard({
   const momentum = data?.momentum ?? []
   const changelog = data?.changelog ?? []
   const helpCenter = data?.helpCenter ?? []
-  const hasAside = momentum.length > 0 || changelog.length > 0 || helpCenter.length > 0
-  const asideError =
-    data?.sections.feedback.error ||
-    data?.sections.changelog.error ||
-    data?.sections.helpCenter.error ||
-    null
+  const changelogError = data?.sections.changelog.error ?? null
+  const helpError = data?.sections.helpCenter.error ?? null
+  const hasAside =
+    momentum.length > 0 ||
+    changelog.length > 0 ||
+    helpCenter.length > 0 ||
+    Boolean(changelogError) ||
+    Boolean(helpError)
   const feedError = data?.sections.support.error || data?.sections.feedback.error || null
 
   return (
@@ -97,7 +99,7 @@ export function OverviewDashboard({
           <div
             className={cn(
               'grid items-start gap-6',
-              (hasAside || asideError) && 'lg:grid-cols-[minmax(0,1.65fr)_minmax(280px,1fr)]'
+              hasAside && 'lg:grid-cols-[minmax(0,1.65fr)_minmax(280px,1fr)]'
             )}
           >
             <SettingsCard contentClassName="p-0 sm:p-0">
@@ -118,42 +120,45 @@ export function OverviewDashboard({
                 </Tabs>
               ) : null}
 
-              {feedError ? (
-                <Quiet>
-                  {feedError}{' '}
-                  <RetryButton onClick={() => void overview.refetch()}>Retry</RetryButton>
-                </Quiet>
-              ) : overview.isLoading ? (
+              {overview.isLoading ? (
                 <RowsSkeleton rows={5} />
-              ) : attention.length === 0 ? (
-                <Quiet>You’re all caught up.</Quiet>
-              ) : (
+              ) : attention.length > 0 ? (
                 <div className="divide-y divide-border">
                   {attention.map((item) => (
                     <AttentionRow key={item.id} item={item} />
                   ))}
                 </div>
+              ) : feedError ? (
+                <Quiet>
+                  {feedError}{' '}
+                  <RetryButton onClick={() => void overview.refetch()}>Retry</RetryButton>
+                </Quiet>
+              ) : (
+                <Quiet>You’re all caught up.</Quiet>
               )}
             </SettingsCard>
 
             {overview.isLoading ? (
               <Skeleton className="hidden h-40 rounded-xl lg:block" />
-            ) : asideError ? (
-              <SettingsCard contentClassName="p-0 sm:p-0">
-                <Quiet>
-                  {asideError}{' '}
-                  <RetryButton onClick={() => void overview.refetch()}>Retry</RetryButton>
-                </Quiet>
-              </SettingsCard>
             ) : hasAside ? (
               <aside className="min-w-0 space-y-6">
                 <ModuleCard title="Feedback" items={momentum}>
                   {(item) => <MomentumRow key={item.postId} item={item} />}
                 </ModuleCard>
-                <ModuleCard title="Changelog" items={changelog}>
+                <ModuleCard
+                  title="Changelog"
+                  items={changelog}
+                  error={changelogError}
+                  onRetry={() => void overview.refetch()}
+                >
                   {(item) => <DeskRow key={item.id} item={item} />}
                 </ModuleCard>
-                <ModuleCard title="Help Center" items={helpCenter}>
+                <ModuleCard
+                  title="Help Center"
+                  items={helpCenter}
+                  error={helpError}
+                  onRetry={() => void overview.refetch()}
+                >
                   {(item) => <DeskRow key={item.id} item={item} />}
                 </ModuleCard>
               </aside>
@@ -290,12 +295,25 @@ function DeskRow({ item }: { item: OverviewPublishItem }) {
 function ModuleCard<T>({
   title,
   items,
+  error,
+  onRetry,
   children,
 }: {
   title: string
   items: T[]
+  error?: string | null
+  onRetry?: () => void
   children: (item: T) => ReactNode
 }) {
+  if (error) {
+    return (
+      <SettingsCard title={title} contentClassName="p-0 sm:p-0">
+        <Quiet>
+          {error} {onRetry ? <RetryButton onClick={onRetry}>Retry</RetryButton> : null}
+        </Quiet>
+      </SettingsCard>
+    )
+  }
   if (items.length === 0) return null
   return (
     <SettingsCard title={title} contentClassName="p-0 sm:p-0">
