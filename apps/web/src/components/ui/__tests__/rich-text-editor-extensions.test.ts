@@ -20,6 +20,7 @@ import {
   hasActiveSuggestion,
   markdownFromEditor,
   plaintextFromTiptapJson,
+  resolveEditorMediaKind,
   seedMarkdownFallback,
   stopEnterFromReachingParentForm,
 } from '../rich-text-editor'
@@ -39,6 +40,37 @@ const WIDGET_FEATURES: EditorFeatures = {
   bubbleMenu: true,
   slashMenu: true,
 }
+
+describe('resolveEditorMediaKind', () => {
+  it('accepts screenshots as images when image uploads are enabled', () => {
+    expect(resolveEditorMediaKind({ name: 'Screenshot.png', type: 'image/png' }, true, true)).toBe(
+      'image'
+    )
+  })
+
+  it('accepts MOV and M4V drops when the browser omits a useful MIME type', () => {
+    expect(resolveEditorMediaKind({ name: 'recording.mov', type: '' }, true, true)).toBe('video')
+    expect(
+      resolveEditorMediaKind(
+        { name: 'recording.m4v', type: 'application/octet-stream' },
+        true,
+        true
+      )
+    ).toBe('video')
+  })
+
+  it('rejects unsupported video containers and disabled media kinds', () => {
+    expect(
+      resolveEditorMediaKind({ name: 'recording.avi', type: 'video/x-msvideo' }, true, true)
+    ).toBe(null)
+    expect(
+      resolveEditorMediaKind({ name: 'recording.mov', type: 'video/quicktime' }, true, false)
+    ).toBe(null)
+    expect(resolveEditorMediaKind({ name: 'Screenshot.png', type: 'image/png' }, false, true)).toBe(
+      null
+    )
+  })
+})
 
 describe('buildExtensions', () => {
   it('contains no duplicate extension names (full widget feature set)', () => {

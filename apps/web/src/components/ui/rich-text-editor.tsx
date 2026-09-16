@@ -512,7 +512,7 @@ export interface EditorFeatures {
   headings?: boolean
   /** Enable image paste/drop/button with upload support */
   images?: boolean
-  /** Enable native MP4/WebM upload and inline playback. */
+  /** Enable native MP4/WebM/MOV/M4V upload and inline playback. */
   videos?: boolean
   /** Enable syntax-highlighted code blocks */
   codeBlocks?: boolean
@@ -1371,7 +1371,7 @@ interface RichTextEditorProps {
   features?: EditorFeatures
   /** Callback for uploading images. Returns the public URL of the uploaded image. */
   onImageUpload?: (file: File) => Promise<string>
-  /** Callback for uploading an MP4/WebM recording. */
+  /** Callback for uploading an MP4/WebM/MOV/M4V recording. */
   onVideoUpload?: (file: File) => Promise<string>
   /** When set, Enter submits (chat-send) instead of splitting the block and
    * Shift+Enter / Alt+Enter insert a line break. Yields to an open
@@ -1844,6 +1844,24 @@ export const RichTextEditor = memo(RichTextEditorBase, (prev, next) => {
 // Uploaded media handling
 // ============================================================================
 
+type EditorMediaKind = 'image' | 'video'
+
+/**
+ * Resolve a dropped or pasted file through the same rules as the media picker.
+ * Some desktop browsers leave QuickTime/M4V MIME types empty (or use
+ * application/octet-stream), so video detection must also consider the file
+ * extension instead of relying on `type.startsWith('video/')` alone.
+ */
+export function resolveEditorMediaKind(
+  file: Pick<File, 'name' | 'type'>,
+  allowImage: boolean,
+  allowVideo: boolean
+): EditorMediaKind | null {
+  if (allowImage && file.type.startsWith('image/')) return 'image'
+  if (allowVideo && resolveVideoMimeType(file.type, file.name)) return 'video'
+  return null
+}
+
 /**
  * Handle image/video drop events in the editor.
  */
@@ -1861,11 +1879,12 @@ function handleMediaDrop(
       return false
     }
 
-    const files = Array.from(event.dataTransfer.files).filter(
-      (file) =>
-        (file.type.startsWith('image/') && !!onImageUpload) ||
-        (file.type.startsWith('video/') && !!onVideoUpload)
-    )
+    const files = Array.from(event.dataTransfer.files)
+      .map((file) => ({
+        file,
+        kind: resolveEditorMediaKind(file, !!onImageUpload, !!onVideoUpload),
+      }))
+      .filter((entry): entry is { file: File; kind: EditorMediaKind } => entry.kind !== null)
 
     if (files.length === 0) {
       return false
@@ -1876,8 +1895,8 @@ function handleMediaDrop(
     const { schema } = view.state
     const coordinates = view.posAtCoords({ left: event.clientX, top: event.clientY })
 
-    files.forEach((file) => {
-      const isVideo = file.type.startsWith('video/')
+    files.forEach(({ file, kind }) => {
+      const isVideo = kind === 'video'
       const upload = isVideo ? onVideoUpload : onImageUpload
       if (!upload) return
       upload(file)
@@ -1886,7 +1905,11 @@ function handleMediaDrop(
             ? schema.nodes.video
             : schema.nodes.resizableImage || schema.nodes.image
           const attrs = isVideo
-            ? { src, mimeType: file.type, title: file.name }
+            ? {
+                src,
+                mimeType: resolveVideoMimeType(file.type, file.name) ?? file.type,
+                title: file.name,
+              }
             : await resizableImageInsertAttrs(src, file)
           const node = nodeType?.create(attrs)
           if (node && coordinates) {
@@ -1914,12 +1937,14 @@ function handleMediaPaste(
   onVideoUpload?: (file: File) => Promise<string>
 ): (view: import('@tiptap/pm/view').EditorView, event: ClipboardEvent, slice: unknown) => boolean {
   return (view, event) => {
-    const items = Array.from(event.clipboardData?.items ?? [])
-    const media = items.filter(
-      (item) =>
-        (item.type.startsWith('image/') && !!onImageUpload) ||
-        (item.type.startsWith('video/') && !!onVideoUpload)
-    )
+    const media = Array.from(event.clipboardData?.items ?? [])
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => file !== null)
+      .map((file) => ({
+        file,
+        kind: resolveEditorMediaKind(file, !!onImageUpload, !!onVideoUpload),
+      }))
+      .filter((entry): entry is { file: File; kind: EditorMediaKind } => entry.kind !== null)
 
     if (media.length === 0) {
       return false
@@ -1927,10 +1952,8 @@ function handleMediaPaste(
 
     event.preventDefault()
 
-    media.forEach((item) => {
-      const file = item.getAsFile()
-      if (!file) return
-      const isVideo = file.type.startsWith('video/')
+    media.forEach(({ file, kind }) => {
+      const isVideo = kind === 'video'
       const upload = isVideo ? onVideoUpload : onImageUpload
       if (!upload) return
 
@@ -1941,7 +1964,11 @@ function handleMediaPaste(
             ? schema.nodes.video
             : schema.nodes.resizableImage || schema.nodes.image
           const attrs = isVideo
-            ? { src, mimeType: file.type, title: file.name }
+            ? {
+                src,
+                mimeType: resolveVideoMimeType(file.type, file.name) ?? file.type,
+                title: file.name,
+              }
             : await resizableImageInsertAttrs(src, file)
           const node = nodeType?.create(attrs)
           if (node) {
