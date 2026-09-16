@@ -185,6 +185,8 @@ jobs:
             tests/admin/workflows.spec.ts \
             tests/public/portal-support.spec.ts \
             tests/widget/messenger.spec.ts \
+            tests/widget/surfaces.spec.ts \
+            tests/widget/identified.spec.ts \
             --grep "@smoke"); then
             echo '===== server log (playwright failed) ====='
             cat /tmp/quackback-e2e.log
