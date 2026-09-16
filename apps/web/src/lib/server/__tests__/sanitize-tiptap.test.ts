@@ -730,6 +730,30 @@ describe('sanitizeTiptapContent', () => {
     })
   })
 
+  it('preserves QuickTime playback metadata and normalizes M4V to MP4', () => {
+    const result = sanitizeTiptapContent({
+      type: 'doc',
+      content: [
+        {
+          type: 'video',
+          attrs: {
+            src: '/api/storage/portal-media/recording.mov',
+            mimeType: 'video/quicktime',
+          },
+        },
+        {
+          type: 'video',
+          attrs: {
+            src: '/api/storage/portal-media/recording.m4v',
+            mimeType: 'video/x-m4v',
+          },
+        },
+      ],
+    })
+    expect(result.content?.[0]?.attrs?.mimeType).toBe('video/quicktime')
+    expect(result.content?.[1]?.attrs?.mimeType).toBe('video/mp4')
+  })
+
   it('neutralizes a video pointing at an external host', () => {
     const result = sanitizeTiptapContent({
       type: 'doc',

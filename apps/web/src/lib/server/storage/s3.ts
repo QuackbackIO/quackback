@@ -72,7 +72,12 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 import type { WorkspaceId } from '@quackback/ids'
 import { config } from '@/lib/server/config'
-import { sniffImageMime, sniffVideoMime } from '@/lib/server/content/magic-bytes'
+import {
+  canonicalizeVideoMime,
+  sniffImageMime,
+  sniffVideoMime,
+} from '@/lib/server/content/magic-bytes'
+import { resolveVideoMimeType } from '@/lib/shared/storage-config'
 import {
   getCurrentWorkspace,
   getWorkspaceStorageCredential,
@@ -849,7 +854,13 @@ export function isAllowedImageType(contentType: string): boolean {
   return ALLOWED_IMAGE_TYPES.has(contentType)
 }
 
-const ALLOWED_VIDEO_TYPES = new Set(['video/mp4', 'video/webm'])
+const ALLOWED_VIDEO_TYPES = new Set([
+  'video/mp4',
+  'video/webm',
+  'video/quicktime',
+  'video/x-m4v',
+  'video/m4v',
+])
 
 export function isAllowedVideoType(contentType: string): boolean {
   return ALLOWED_VIDEO_TYPES.has(contentType)
@@ -920,10 +931,13 @@ export async function uploadMediaFromFormData(
   if (!(file instanceof File)) {
     return Response.json({ error: 'No file provided' }, { status: 400 })
   }
-  if (!isAllowedMediaType(file.type)) {
+  const contentType = isAllowedImageType(file.type)
+    ? file.type
+    : resolveVideoMimeType(file.type, file.name)
+  if (!contentType || !isAllowedMediaType(contentType)) {
     return Response.json({ error: 'Invalid file type' }, { status: 400 })
   }
-  const maxBytes = maxMediaFileSize(file.type)
+  const maxBytes = maxMediaFileSize(contentType)
   if (file.size > maxBytes) {
     return Response.json(
       { error: `File too large. Maximum size is ${maxBytes / 1024 / 1024}MB` },
@@ -933,19 +947,25 @@ export async function uploadMediaFromFormData(
 
   try {
     const ext =
-      file.type === 'video/mp4'
+      contentType === 'video/mp4'
         ? 'mp4'
-        : file.type === 'video/webm'
+        : contentType === 'video/webm'
           ? 'webm'
-          : file.type.split('/')[1] || 'bin'
+          : contentType === 'video/quicktime'
+            ? 'mov'
+            : contentType === 'video/x-m4v' || contentType === 'video/m4v'
+              ? 'm4v'
+              : contentType.split('/')[1] || 'bin'
     const filename = file.name || `upload-${Date.now()}.${ext}`
     const key = generateStorageKey(storagePrefix, filename)
     const body = Buffer.from(await file.arrayBuffer())
-    const sniffed = isAllowedVideoType(file.type) ? sniffVideoMime(body) : sniffImageMime(body)
-    if (sniffed !== file.type) {
+    const video = isAllowedVideoType(contentType)
+    const sniffed = video ? sniffVideoMime(body) : sniffImageMime(body)
+    const expected = video ? canonicalizeVideoMime(contentType) : contentType
+    if (sniffed !== expected) {
       return Response.json({ error: 'File content does not match its type' }, { status: 400 })
     }
-    const publicUrl = await uploadObject(key, body, file.type)
+    const publicUrl = await uploadObject(key, body, contentType)
     return Response.json({ publicUrl })
   } catch {
     return Response.json({ error: 'Upload failed' }, { status: 500 })

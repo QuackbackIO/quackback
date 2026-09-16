@@ -30,6 +30,25 @@ describe('generateContentHTML', () => {
     expect(html).toContain('/api/storage/portal-media/recording.mp4')
   })
 
+  it('renders QuickTime and M4V recordings with browser playback MIME types', () => {
+    const quickTime = generateContentHTML({
+      type: 'video',
+      attrs: {
+        src: '/api/storage/portal-media/recording.mov',
+        mimeType: 'video/quicktime',
+      },
+    })
+    const m4v = generateContentHTML({
+      type: 'video',
+      attrs: {
+        src: '/api/storage/portal-media/recording.m4v',
+        mimeType: 'video/x-m4v',
+      },
+    })
+    expect(quickTime).toContain('type="video/quicktime"')
+    expect(m4v).toContain('type="video/mp4"')
+  })
+
   it('refuses executable video sources', () => {
     expect(
       generateContentHTML({

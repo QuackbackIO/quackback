@@ -36,7 +36,19 @@ export function mockVideoFile(name = 'recording.mp4', type = 'video/mp4', extraB
   const bytes =
     type === 'video/webm'
       ? [0x1a, 0x45, 0xdf, 0xa3, 0, 0, 0, 0]
-      : [0, 0, 0, 0x18, ...'ftypmp42'.split('').map((char) => char.charCodeAt(0)), 0, 0, 0, 0]
+      : [
+          0,
+          0,
+          0,
+          0x18,
+          ...`ftyp${type === 'video/quicktime' || name.endsWith('.mov') ? 'qt  ' : 'mp42'}`
+            .split('')
+            .map((char) => char.charCodeAt(0)),
+          0,
+          0,
+          0,
+          0,
+        ]
   return new File([new Uint8Array(bytes), new Uint8Array(extraBytes)], name, { type })
 }
 

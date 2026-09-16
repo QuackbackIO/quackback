@@ -121,6 +121,21 @@ describe('POST /api/portal/upload', () => {
     )
   })
 
+  it('uploads a QuickTime MOV recording for an identified user', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValueOnce(identifiedSession)
+    vi.mocked(db.query.principal.findFirst).mockResolvedValueOnce(identifiedPrincipal)
+    vi.mocked(uploadObject).mockResolvedValueOnce('https://cdn.example.com/portal-media/clip.mov')
+    const res = await handlePortalUpload({
+      request: makeRequest(mockVideoFile('recording.mov', 'video/quicktime')),
+    })
+    expect(res.status).toBe(200)
+    expect(uploadObject).toHaveBeenCalledWith(
+      expect.stringContaining('portal-media'),
+      expect.any(Buffer),
+      'video/quicktime'
+    )
+  })
+
   it('accepts feedback videos larger than the 5 MB image limit', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValueOnce(identifiedSession)
     vi.mocked(db.query.principal.findFirst).mockResolvedValueOnce(identifiedPrincipal)

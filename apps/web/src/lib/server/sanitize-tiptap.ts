@@ -18,6 +18,7 @@ import {
   safePositiveInt,
 } from '@/lib/shared/utils/sanitize'
 import { isTrustedAttachmentUrl } from '@/lib/server/storage/trusted-url'
+import { normalizeVideoMimeType } from '@/lib/shared/storage-config'
 
 function isExtraTrustedImageHost(rawSrc: string, extraHosts: string[] | undefined): boolean {
   if (!extraHosts?.length) return false
@@ -212,7 +213,7 @@ function sanitizeAttrs(
       if (!isTrustedAttachmentUrl(rawSrc)) return { src: '', mimeType: '', title: '' }
       const src = sanitizeMediaUrl(rawSrc)
       if (!src) return { src: '', mimeType: '', title: '' }
-      const mimeType = attrs.mimeType === 'video/webm' ? 'video/webm' : 'video/mp4'
+      const mimeType = normalizeVideoMimeType(attrs.mimeType)
       return { src, mimeType, title: String(attrs.title ?? '').slice(0, 500) }
     }
 

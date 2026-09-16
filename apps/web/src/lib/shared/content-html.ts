@@ -12,6 +12,7 @@
  * `RichTextContent`), which requires a DOM and so stays in the editor module.
  */
 import type { JSONContent } from '@tiptap/core'
+import { normalizeVideoMimeType } from '@/lib/shared/storage-config'
 import {
   escapeHtmlAttr,
   sanitizeUrl,
@@ -207,7 +208,7 @@ export function generateContentHTML(content: JSONContent): string {
       case 'video': {
         const src = escapeHtmlAttr(sanitizeMediaUrl(String(node.attrs?.src ?? '')))
         if (!src) return ''
-        const mimeType = node.attrs?.mimeType === 'video/webm' ? 'video/webm' : 'video/mp4'
+        const mimeType = normalizeVideoMimeType(node.attrs?.mimeType)
         const title = escapeHtmlAttr(String(node.attrs?.title ?? ''))
         return `<video src="${src}" type="${mimeType}" title="${title}" controls preload="metadata" playsinline class="not-prose my-4 max-h-[70vh] w-full rounded-lg bg-black"></video>`
       }

@@ -63,6 +63,7 @@ import {
   useRef,
 } from 'react'
 import { cn } from '@/lib/shared/utils'
+import { resolveVideoMimeType, VIDEO_FILE_ACCEPT } from '@/lib/shared/storage-config'
 import { resizableImageInsertAttrs } from '@/lib/client/resizable-image-insert-attrs'
 // The read-only JSON→HTML serializer now lives in a browser-free shared module
 // so server-side consumers (e.g. outbound conversation email) can import it
@@ -732,13 +733,13 @@ function getSlashMenuItems(
   if (features.videos && onVideoUpload) {
     items.push({
       title: 'Video',
-      description: 'Upload an MP4 or WebM video',
+      description: 'Upload an MP4, WebM, MOV, or M4V video',
       icon: <VideoIcon className="size-4" />,
       command: ({ editor, range }) => {
         editor.chain().focus().deleteRange(range).run()
         const input = document.createElement('input')
         input.type = 'file'
-        input.accept = 'video/mp4,video/webm'
+        input.accept = VIDEO_FILE_ACCEPT
         input.onchange = async () => {
           const file = input.files?.[0]
           if (!file) return
@@ -749,7 +750,11 @@ function getSlashMenuItems(
               .focus()
               .insertContent({
                 type: 'video',
-                attrs: { src, mimeType: file.type, title: file.name },
+                attrs: {
+                  src,
+                  mimeType: resolveVideoMimeType(file.type, file.name) ?? file.type,
+                  title: file.name,
+                },
               })
               .run()
           } catch (error) {
@@ -760,7 +765,7 @@ function getSlashMenuItems(
         }
         input.click()
       },
-      aliases: ['recording', 'mp4', 'webm'],
+      aliases: ['recording', 'mp4', 'webm', 'mov', 'm4v', 'quicktime'],
       group: 'advanced',
     })
   }
@@ -2527,7 +2532,7 @@ function MenuBar({
 
     const input = document.createElement('input')
     input.type = 'file'
-    input.accept = 'video/mp4,video/webm'
+    input.accept = VIDEO_FILE_ACCEPT
     input.onchange = async () => {
       const file = input.files?.[0]
       if (!file) return
@@ -2538,7 +2543,11 @@ function MenuBar({
           .focus()
           .insertContent({
             type: 'video',
-            attrs: { src, mimeType: file.type, title: file.name },
+            attrs: {
+              src,
+              mimeType: resolveVideoMimeType(file.type, file.name) ?? file.type,
+              title: file.name,
+            },
           })
           .run()
       } catch (error) {

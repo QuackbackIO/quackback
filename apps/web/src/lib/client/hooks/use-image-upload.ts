@@ -4,6 +4,7 @@ import {
   isAllowedImageType,
   isAllowedMediaType,
   maxMediaFileSize,
+  resolveVideoMimeType,
 } from '@/lib/shared/storage-config'
 
 interface UseImageUploadOptions {
@@ -29,17 +30,34 @@ export function validateImageFile(file: File): Error | null {
 }
 
 export function validateMediaFile(file: File): Error | null {
-  if (!isAllowedMediaType(file.type)) {
-    return new Error('Invalid file type. Allowed types: JPEG, PNG, GIF, WebP, AVIF, MP4, WebM.')
+  const contentType = isAllowedImageType(file.type)
+    ? file.type
+    : resolveVideoMimeType(file.type, file.name)
+  if (!contentType || !isAllowedMediaType(contentType)) {
+    return new Error(
+      'Invalid file type. Allowed types: JPEG, PNG, GIF, WebP, AVIF, MP4, WebM, MOV, M4V.'
+    )
   }
-  const maxBytes = maxMediaFileSize(file.type)
+  const maxBytes = maxMediaFileSize(contentType)
   if (file.size > maxBytes) {
     return new Error(`File too large. Maximum size is ${maxBytes / 1024 / 1024}MB.`)
   }
   return null
 }
 
-function useFileUpload(options: UseImageUploadOptions, validate: FileValidator) {
+type FileNormalizer = (file: File) => File
+
+function normalizeMediaFile(file: File): File {
+  const contentType = resolveVideoMimeType(file.type, file.name)
+  if (!contentType || contentType === file.type) return file
+  return new File([file], file.name, { type: contentType, lastModified: file.lastModified })
+}
+
+function useFileUpload(
+  options: UseImageUploadOptions,
+  validate: FileValidator,
+  normalize: FileNormalizer = (file) => file
+) {
   const {
     prefix = 'uploads',
     endpoint = '/api/upload/image',
@@ -51,6 +69,7 @@ function useFileUpload(options: UseImageUploadOptions, validate: FileValidator) 
 
   const upload = useCallback(
     async (file: File): Promise<string> => {
+      file = normalize(file)
       const invalid = validate(file)
       if (invalid) {
         onError?.(invalid)
@@ -89,7 +108,7 @@ function useFileUpload(options: UseImageUploadOptions, validate: FileValidator) 
         throw error
       }
     },
-    [prefix, endpoint, extraHeaders, onStart, onSuccess, onError, validate]
+    [prefix, endpoint, extraHeaders, onStart, onSuccess, onError, validate, normalize]
   )
 
   return { upload }
@@ -100,7 +119,7 @@ export function useImageUpload(options: UseImageUploadOptions = {}) {
 }
 
 export function useMediaUpload(options: UseImageUploadOptions = {}) {
-  return useFileUpload(options, validateMediaFile)
+  return useFileUpload(options, validateMediaFile, normalizeMediaFile)
 }
 
 export function useChangelogImageUpload(
