@@ -122,19 +122,29 @@ export function OverviewDashboard({
 
               {overview.isLoading ? (
                 <RowsSkeleton rows={5} />
-              ) : attention.length > 0 ? (
-                <div className="divide-y divide-border">
-                  {attention.map((item) => (
-                    <AttentionRow key={item.id} item={item} />
-                  ))}
-                </div>
-              ) : feedError ? (
-                <Quiet>
-                  {feedError}{' '}
-                  <RetryButton onClick={() => void overview.refetch()}>Retry</RetryButton>
-                </Quiet>
               ) : (
-                <Quiet>You’re all caught up.</Quiet>
+                <>
+                  {feedError && attention.length > 0 ? (
+                    <p className="border-b border-border px-3 py-2.5 text-sm text-muted-foreground sm:px-4">
+                      {feedError}{' '}
+                      <RetryButton onClick={() => void overview.refetch()}>Retry</RetryButton>
+                    </p>
+                  ) : null}
+                  {attention.length > 0 ? (
+                    <div className="divide-y divide-border">
+                      {attention.map((item) => (
+                        <AttentionRow key={item.id} item={item} />
+                      ))}
+                    </div>
+                  ) : feedError ? (
+                    <Quiet>
+                      {feedError}{' '}
+                      <RetryButton onClick={() => void overview.refetch()}>Retry</RetryButton>
+                    </Quiet>
+                  ) : (
+                    <Quiet>You’re all caught up.</Quiet>
+                  )}
+                </>
               )}
             </SettingsCard>
 

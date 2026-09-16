@@ -264,4 +264,40 @@ describe('OverviewDashboard', () => {
     expect(screen.getByText('Environment Variables')).toBeInTheDocument()
     expect(screen.queryByText('Feedback', { selector: 'h2' })).not.toBeInTheDocument()
   })
+
+  it('surfaces a feed failure next to successful attention items', () => {
+    state.data = {
+      ...state.data,
+      attention: [
+        {
+          id: 'c1',
+          kind: 'support',
+          entity: 'conversation',
+          title: 'Hello! I have just created my boards in a new cloud workspace',
+          link: { to: '/admin/inbox' },
+          reason: 'Waiting on reply',
+          reasonTone: 'neutral',
+          meta: 'Noble Dolphin · waiting 12d',
+          ownerName: 'James',
+          ownerInitials: 'JM',
+          mine: true,
+        },
+      ],
+      changelog: [],
+      helpCenter: [],
+      sections: {
+        support: { enabled: true, error: null },
+        feedback: { enabled: true, error: 'Couldn’t load this section.' },
+        changelog: { enabled: true, error: null },
+        helpCenter: { enabled: true, error: null },
+      },
+    }
+    render(<OverviewDashboard />)
+    expect(
+      screen.getByText('Hello! I have just created my boards in a new cloud workspace')
+    ).toBeInTheDocument()
+    expect(screen.getByText('Couldn’t load this section.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+    expect(screen.queryByText('You’re all caught up.')).not.toBeInTheDocument()
+  })
 })
