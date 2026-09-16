@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ChartBarIcon, HomeIcon } from '@heroicons/react/24/solid'
 import { adminOverviewQueries } from '@/lib/client/queries/admin-overview'
 import {
+  overviewMetricGridClass,
   publishStatusLabel,
   type OverviewActivityItem,
   type OverviewAttentionItem,
@@ -64,9 +65,10 @@ export function OverviewDashboard({
   }, [data?.sections])
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <div className="min-w-0 space-y-6">
+      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <PageHeader
+          className="min-w-0"
           icon={HomeIcon}
           title="Overview"
           size="large"
@@ -296,37 +298,35 @@ function MetricsRow({
     return <Skeleton className="h-28 w-full rounded-xl" />
   }
   if (metrics.length === 0) return null
-  const cols =
-    metrics.length === 4
-      ? 'grid-cols-2 lg:grid-cols-4'
-      : metrics.length === 3
-        ? 'grid-cols-3'
-        : 'grid-cols-2'
   return (
     <Card className="overflow-hidden py-0 gap-0">
-      <div className={cn('grid divide-border/50', cols, 'divide-y lg:divide-y-0 lg:divide-x')}>
+      <div className={cn('grid gap-px bg-border/50', overviewMetricGridClass(metrics.length))}>
         {metrics.map((metric) => (
           <OverviewNavLink
             key={metric.key}
             link={metric.link}
             onClick={() => onFilter(metric.filter)}
-            className="px-5 py-4 text-left transition-colors hover:bg-muted/20"
+            className="min-w-0 bg-card px-3.5 py-3 text-left transition-colors hover:bg-muted/20 sm:px-5 sm:py-4"
           >
-            <p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">
+            <p className="mb-1.5 truncate text-[11px] font-medium leading-tight text-muted-foreground sm:mb-2 sm:text-xs">
               {metric.label}
             </p>
-            <p className="flex items-baseline gap-1 text-2xl font-bold leading-none tracking-tight tabular-nums sm:text-3xl">
+            <p className="flex flex-wrap items-baseline gap-x-1.5 text-2xl font-bold leading-none tracking-tight tabular-nums sm:text-3xl">
               {metric.count.toLocaleString()}
-              <span className="text-base font-medium text-muted-foreground">{metric.unit}</span>
+              <span className="text-sm font-medium text-muted-foreground sm:text-base">
+                {metric.unit}
+              </span>
             </p>
-            <p
-              className={cn(
-                'mt-1.5 flex h-4 items-center text-xs leading-none',
-                metric.hintTone === 'urgent' ? 'text-destructive' : 'text-muted-foreground'
-              )}
-            >
-              {metric.hint}
-            </p>
+            {metric.hint ? (
+              <p
+                className={cn(
+                  'mt-1.5 truncate text-xs leading-tight',
+                  metric.hintTone === 'urgent' ? 'text-destructive' : 'text-muted-foreground'
+                )}
+              >
+                {metric.hint}
+              </p>
+            ) : null}
           </OverviewNavLink>
         ))}
       </div>
@@ -352,10 +352,10 @@ function OverviewEntityRow({
   return (
     <OverviewNavLink
       link={link}
-      className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/40"
+      className="flex w-full min-w-0 items-start gap-3 px-3 py-3 text-left hover:bg-muted/40 sm:items-center sm:px-4"
     >
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium">{title}</span>
+        <span className="block line-clamp-2 break-words text-sm font-medium">{title}</span>
         {badge || meta ? (
           <span className="mt-0.5 flex min-w-0 items-center gap-2">
             {badge ? (
@@ -367,7 +367,9 @@ function OverviewEntityRow({
           </span>
         ) : null}
       </span>
-      {trailing ? <span className="flex shrink-0 items-center gap-2">{trailing}</span> : null}
+      {trailing ? (
+        <span className="flex shrink-0 items-center gap-2 pt-0.5 sm:pt-0">{trailing}</span>
+      ) : null}
     </OverviewNavLink>
   )
 }

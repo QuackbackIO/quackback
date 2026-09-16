@@ -42,6 +42,7 @@ import { priorityMeta } from '@/lib/shared/conversation/priority-meta'
 import { logger } from '@/lib/server/logger'
 import { toIsoString, toIsoStringOrNull } from '@/lib/shared/utils'
 import {
+  buildOverviewMetrics,
   conversationTitle,
   describeOverviewActivity,
   formatCompactAge,
@@ -52,7 +53,6 @@ import {
   type AdminOverviewData,
   type OverviewActivityItem,
   type OverviewAttentionItem,
-  type OverviewMetric,
   type OverviewMomentumItem,
   type OverviewLink,
   type OverviewPublishItem,
@@ -132,60 +132,30 @@ export async function getAdminOverview(input: {
     }),
   ])
 
-  const metrics: OverviewMetric[] = []
-  if (supportOn) {
-    metrics.push({
-      key: 'waiting',
-      label: 'Waiting for reply',
-      count: support.waitingCount,
-      unit: 'open',
-      hint:
-        support.highPriorityCount > 0
-          ? `${support.highPriorityCount} high priority`
-          : 'Customer waiting on a teammate',
-      hintTone: support.highPriorityCount > 0 ? 'urgent' : 'neutral',
-      link: support.waitingLink,
-      filter: 'support',
-    })
-  }
-  if (feedbackOn && feedback.reviewLink) {
-    metrics.push({
-      key: 'feedback',
-      label: 'Feedback to review',
-      count: feedback.reviewCount,
-      unit: 'open',
-      hint: feedback.defaultStatusName
-        ? `On ${feedback.defaultStatusName}`
-        : 'Default status posts',
-      hintTone: 'neutral',
-      link: feedback.reviewLink,
-      filter: 'feedback',
-    })
-  }
-  if (feedbackOn && feedback.completeLink) {
-    metrics.push({
-      key: 'complete',
-      label: 'Complete, no changelog',
-      count: feedback.completeCount,
-      unit: 'open',
-      hint: 'Complete status with no linked changelog',
-      hintTone: 'neutral',
-      link: feedback.completeLink,
-      filter: 'publishing',
-    })
-  }
-  if (helpOn) {
-    metrics.push({
-      key: 'articles',
-      label: scope === 'mine' ? 'Your article drafts' : 'Article drafts',
-      count: help.draftCount,
-      unit: 'in progress',
-      hint: 'Continue in Help Center',
-      hintTone: 'neutral',
-      link: help.draftLink,
-      filter: 'articles',
-    })
-  }
+  const metrics = buildOverviewMetrics({
+    scope,
+    support: supportOn
+      ? {
+          waitingCount: support.waitingCount,
+          highPriorityCount: support.highPriorityCount,
+          waitingLink: support.waitingLink,
+        }
+      : undefined,
+    feedback: feedbackOn
+      ? {
+          reviewCount: feedback.reviewCount,
+          completeCount: feedback.completeCount,
+          reviewLink: feedback.reviewLink,
+          completeLink: feedback.completeLink,
+        }
+      : undefined,
+    help: helpOn
+      ? {
+          draftCount: help.draftCount,
+          draftLink: help.draftLink,
+        }
+      : undefined,
+  })
 
   return {
     generatedAt: now.toISOString(),
@@ -239,7 +209,6 @@ function disabledFeedback() {
     announce: [] as OverviewAttentionItem[],
     reviewCount: 0,
     completeCount: 0,
-    defaultStatusName: null as string | null,
     reviewLink: null as OverviewLink | null,
     completeLink: null as OverviewLink | null,
   }
@@ -525,7 +494,6 @@ async function loadFeedback(mineId: PrincipalId | null, now: Date) {
     announce,
     reviewCount,
     completeCount,
-    defaultStatusName: defaultStatus?.name ?? null,
     reviewLink,
     completeLink,
   }

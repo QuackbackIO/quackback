@@ -54,6 +54,88 @@ export type OverviewMetric = {
   filter: OverviewAttentionKind | 'articles'
 }
 
+type OverviewMetricsInput = {
+  scope: OverviewScope
+  support?: {
+    waitingCount: number
+    highPriorityCount: number
+    waitingLink: OverviewLink
+  }
+  feedback?: {
+    reviewCount: number
+    completeCount: number
+    reviewLink: OverviewLink | null
+    completeLink: OverviewLink | null
+  }
+  help?: {
+    draftCount: number
+    draftLink: OverviewLink
+  }
+}
+
+/** Labels and units stay short enough for a 2-up phone grid. Skip hints that restate the label. */
+export function buildOverviewMetrics(input: OverviewMetricsInput): OverviewMetric[] {
+  const metrics: OverviewMetric[] = []
+  if (input.support) {
+    const high = input.support.highPriorityCount
+    metrics.push({
+      key: 'waiting',
+      label: 'Waiting for reply',
+      count: input.support.waitingCount,
+      unit: 'open',
+      hint: high > 0 ? `${high} high priority` : '',
+      hintTone: high > 0 ? 'urgent' : 'neutral',
+      link: input.support.waitingLink,
+      filter: 'support',
+    })
+  }
+  if (input.feedback?.reviewLink) {
+    metrics.push({
+      key: 'feedback',
+      label: 'Feedback to review',
+      count: input.feedback.reviewCount,
+      unit: 'open',
+      hint: '',
+      hintTone: 'neutral',
+      link: input.feedback.reviewLink,
+      filter: 'feedback',
+    })
+  }
+  if (input.feedback?.completeLink) {
+    metrics.push({
+      key: 'complete',
+      label: 'No changelog',
+      count: input.feedback.completeCount,
+      unit: 'open',
+      hint: '',
+      hintTone: 'neutral',
+      link: input.feedback.completeLink,
+      filter: 'publishing',
+    })
+  }
+  if (input.help) {
+    metrics.push({
+      key: 'articles',
+      label: input.scope === 'mine' ? 'Your drafts' : 'Article drafts',
+      count: input.help.draftCount,
+      unit: 'drafts',
+      hint: '',
+      hintTone: 'neutral',
+      link: input.help.draftLink,
+      filter: 'articles',
+    })
+  }
+  return metrics
+}
+
+/** Never 3-up on a phone — 3 skinny columns overflow the metric labels. */
+export function overviewMetricGridClass(count: number): string {
+  if (count <= 1) return 'grid-cols-1'
+  if (count === 3) return 'grid-cols-1 sm:grid-cols-3'
+  if (count >= 4) return 'grid-cols-2 lg:grid-cols-4'
+  return 'grid-cols-2'
+}
+
 export type OverviewMomentumItem = {
   postId: string
   title: string

@@ -1,14 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildOverviewMetrics,
   conversationTitle,
   describeOverviewActivity,
   formatCompactAge,
   mixAttention,
+  overviewMetricGridClass,
   ownerInitials,
   publishStatusLabel,
   sortAttention,
   supportAttentionReason,
   type OverviewAttentionItem,
+  type OverviewLink,
 } from '../admin-overview'
 
 describe('supportAttentionReason', () => {
@@ -132,5 +135,57 @@ describe('publishStatusLabel', () => {
     expect(publishStatusLabel('draft')).toBe('Draft')
     expect(publishStatusLabel('scheduled')).toBe('Scheduled')
     expect(publishStatusLabel('published')).toBe('Published')
+  })
+})
+
+const inbox: OverviewLink = { to: '/admin/inbox' }
+const feedback: OverviewLink = { to: '/admin/feedback' }
+const help: OverviewLink = { to: '/admin/help-center' }
+
+describe('buildOverviewMetrics', () => {
+  it('keeps labels and units short and omits restating hints', () => {
+    const metrics = buildOverviewMetrics({
+      scope: 'team',
+      support: { waitingCount: 3, highPriorityCount: 0, waitingLink: inbox },
+      feedback: {
+        reviewCount: 30,
+        completeCount: 6,
+        reviewLink: feedback,
+        completeLink: feedback,
+      },
+      help: { draftCount: 0, draftLink: help },
+    })
+
+    expect(metrics.map((metric) => [metric.key, metric.label, metric.unit, metric.hint])).toEqual([
+      ['waiting', 'Waiting for reply', 'open', ''],
+      ['feedback', 'Feedback to review', 'open', ''],
+      ['complete', 'No changelog', 'open', ''],
+      ['articles', 'Article drafts', 'drafts', ''],
+    ])
+  })
+
+  it('only hints when waiting conversations are high priority', () => {
+    const [waiting] = buildOverviewMetrics({
+      scope: 'team',
+      support: { waitingCount: 3, highPriorityCount: 2, waitingLink: inbox },
+    })
+    expect(waiting).toMatchObject({ hint: '2 high priority', hintTone: 'urgent' })
+  })
+
+  it('scopes article drafts to the current user', () => {
+    const [drafts] = buildOverviewMetrics({
+      scope: 'mine',
+      help: { draftCount: 1, draftLink: help },
+    })
+    expect(drafts).toMatchObject({ label: 'Your drafts', unit: 'drafts' })
+  })
+})
+
+describe('overviewMetricGridClass', () => {
+  it('does not use three columns on small screens', () => {
+    expect(overviewMetricGridClass(1)).toBe('grid-cols-1')
+    expect(overviewMetricGridClass(2)).toBe('grid-cols-2')
+    expect(overviewMetricGridClass(3)).toBe('grid-cols-1 sm:grid-cols-3')
+    expect(overviewMetricGridClass(4)).toBe('grid-cols-2 lg:grid-cols-4')
   })
 })

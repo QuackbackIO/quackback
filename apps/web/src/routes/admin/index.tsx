@@ -52,7 +52,7 @@ function AdminOverviewPage() {
 
   return (
     <ScrollArea className="h-full">
-      <div className="mx-auto w-full max-w-6xl space-y-6 px-6 pt-4 pb-16">
+      <div className="mx-auto w-full max-w-6xl space-y-6 px-4 pt-4 pb-16 sm:px-6">
         <OverviewDashboard
           scope={scope}
           onScopeChange={(next) => {
