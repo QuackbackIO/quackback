@@ -420,6 +420,25 @@ export function withLiveEditor(editor: Editor | null, run: (editor: Editor) => v
   if (editor && !editor.isDestroyed) run(editor)
 }
 
+/**
+ * Markdown for onChange's 3rd argument. Skip the serializer when the caller
+ * only declared json+html (arity < 3). Catch serializer failures so a custom
+ * node can't prevent JSON from reaching the form — otherwise changelog create
+ * submits an empty `content` string and the server rejects with
+ * "Content is required" while the editor still shows a body.
+ */
+export function markdownFromEditor(
+  editor: { getMarkdown?: () => string },
+  onChangeArity: number
+): string {
+  if (onChangeArity < 3) return ''
+  try {
+    return editor.getMarkdown?.() ?? ''
+  } catch {
+    return ''
+  }
+}
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -1365,7 +1384,7 @@ function RichTextEditorBase({
       // Only serialize to markdown when the caller declares a 3rd parameter.
       // Callers that only need json+html (widget, portal) skip the expensive
       // recursive tree-walk that @tiptap/markdown does on every keystroke.
-      const markdown = onChange.length >= 3 ? (editor.getMarkdown?.() ?? '') : ''
+      const markdown = markdownFromEditor(editor, onChange.length)
       lastEmittedMarkdownRef.current = markdown
       onChange(json, html, markdown)
     },

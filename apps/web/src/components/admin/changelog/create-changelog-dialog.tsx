@@ -36,6 +36,7 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
   const [featuredImageUrl, setFeaturedImageUrl] = useState<string | null>(null)
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false)
   const createChangelogMutation = useCreateChangelog()
+  const resetCreateError = createChangelogMutation.reset
 
   const form = useForm({
     resolver: standardSchemaResolver(createChangelogSchema),
@@ -51,8 +52,11 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
     (json: JSONContent, _html: string, markdown: string) => {
       setContentJson(json)
       form.setValue('content', markdown, { shouldValidate: false, shouldDirty: true })
+      // A failed save leaves the mutation error banner up. Clear it as soon as
+      // the body changes so "Content is required" doesn't sit over a filled editor.
+      resetCreateError()
     },
-    [form]
+    [form, resetCreateError]
   )
 
   function handlePublishStateChange(state: PublishState) {

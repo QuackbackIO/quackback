@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { ChangelogId, PrincipalId } from '@quackback/ids'
 import type { EventActor } from '@/lib/server/events/dispatch'
+import { ValidationError } from '@/lib/shared/errors'
+import type { TiptapContent } from '@/lib/shared/db-types'
 
 const ENTRY_ID = 'changelog_01test' as ChangelogId
 const AUTHOR = { principalId: 'principal_01author' as PrincipalId, name: 'Author' }
@@ -321,6 +323,76 @@ describe('createChangelog wiring', () => {
     expect(mockInsertValues).toHaveBeenCalledWith(
       expect.objectContaining({
         content: expect.stringContaining('![Shot](https://cdn.example.com/shot.png)'),
+      })
+    )
+  })
+
+  it('rejects empty markdown without contentJson', async () => {
+    const { createChangelog } = await import('../changelog.service')
+
+    await expect(
+      createChangelog({ title: 'X', content: '', publishState: { type: 'draft' } }, AUTHOR)
+    ).rejects.toMatchObject({ message: 'Content is required' })
+    expect(mockInsertValues).not.toHaveBeenCalled()
+  })
+
+  it('rejects whitespace-only markdown without contentJson', async () => {
+    const { createChangelog } = await import('../changelog.service')
+
+    await expect(
+      createChangelog({ title: 'X', content: '   ', publishState: { type: 'draft' } }, AUTHOR)
+    ).rejects.toBeInstanceOf(ValidationError)
+    expect(mockInsertValues).not.toHaveBeenCalled()
+  })
+
+  it('rejects an empty contentJson document with empty markdown', async () => {
+    const { createChangelog } = await import('../changelog.service')
+
+    await expect(
+      createChangelog(
+        {
+          title: 'X',
+          content: '',
+          contentJson: { type: 'doc', content: [{ type: 'paragraph' }] },
+          publishState: { type: 'draft' },
+        },
+        AUTHOR
+      )
+    ).rejects.toMatchObject({ message: 'Content is required' })
+    expect(mockInsertValues).not.toHaveBeenCalled()
+  })
+
+  it('accepts empty markdown when contentJson has a list body', async () => {
+    const { createChangelog } = await import('../changelog.service')
+    const contentJson: TiptapContent = {
+      type: 'doc',
+      content: [
+        {
+          type: 'bulletList',
+          content: [
+            {
+              type: 'listItem',
+              content: [
+                {
+                  type: 'paragraph',
+                  content: [{ type: 'text', text: 'GIF per link — paste a Giphy page link' }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+
+    await createChangelog(
+      { title: 'X', content: '', contentJson, publishState: { type: 'draft' } },
+      AUTHOR
+    )
+
+    expect(mockInsertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contentJson,
+        content: expect.stringContaining('GIF per link'),
       })
     )
   })
