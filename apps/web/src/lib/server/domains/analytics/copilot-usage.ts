@@ -495,7 +495,7 @@ export async function getCopilotUsageMetrics(from: Date, to: Date): Promise<Copi
       return {
         id,
         title: articleTitleById.get(id)!,
-        url: `/admin/help-center/articles/${id}`,
+        url: `/admin/help-center?article=${id}`,
         questions,
         insertRate: inserted === undefined ? null : ratePctOrNull(inserted, questions),
       }

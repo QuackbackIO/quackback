@@ -12,6 +12,7 @@ interface HelpCenterFormFieldsProps {
   contentJson: JSONContent | null
   onContentChange: (json: JSONContent, html: string, markdown: string) => void
   error?: string
+  showDescription?: boolean
 }
 
 export function HelpCenterFormFields({
@@ -19,6 +20,7 @@ export function HelpCenterFormFields({
   contentJson,
   onContentChange,
   error,
+  showDescription,
 }: HelpCenterFormFieldsProps) {
   const { upload: uploadImage } = useImageUpload({ prefix: 'help-center' })
 
@@ -27,6 +29,28 @@ export function HelpCenterFormFields({
       {error && <FormError message={error} className="px-3 py-2" />}
 
       <TitleInput control={form.control} placeholder="Article title" autoFocus />
+
+      {showDescription ? (
+        <FormField
+          control={form.control}
+          name="description"
+          render={({ field }) => (
+            <FormItem>
+              <FormControl>
+                <input
+                  type="text"
+                  aria-label="Page description"
+                  placeholder="Page description (optional)"
+                  className="w-full bg-transparent border-0 outline-none text-sm text-muted-foreground placeholder:text-muted-foreground/50 focus-visible:ring-2 focus-visible:ring-ring/50"
+                  {...field}
+                  value={field.value ?? ''}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      ) : null}
 
       <FormField
         control={form.control}

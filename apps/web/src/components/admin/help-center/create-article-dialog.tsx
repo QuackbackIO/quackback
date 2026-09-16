@@ -78,8 +78,8 @@ export function CreateArticleDialog({
           setContentJson(null)
           setCategoryId('')
           void navigate({
-            to: '/admin/help-center/articles/$articleId',
-            params: { articleId: newArticle.id as string },
+            to: '/admin/help-center',
+            search: { article: newArticle.id },
           })
         },
       }

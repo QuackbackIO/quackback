@@ -71,7 +71,7 @@ export function ArticlePerformanceTable() {
   const summary = rows && rows.length > 0 ? summarizePerformance(rows) : null
 
   const handleOpen = (id: KbArticleId) => {
-    void navigate({ to: '/admin/help-center/articles/$articleId', params: { articleId: id } })
+    void navigate({ search: (prev) => ({ ...prev, article: id }) })
   }
 
   return (

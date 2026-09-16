@@ -529,7 +529,7 @@ describe.skipIf(!fixture.available)('getCopilotUsageMetrics (real DB)', () => {
         {
           id: article,
           title: 'Legacy citation',
-          url: `/admin/help-center/articles/${article}`,
+          url: `/admin/help-center?article=${article}`,
           questions: 1,
           insertRate: null,
         },
@@ -556,14 +556,14 @@ describe.skipIf(!fixture.available)('getCopilotUsageMetrics (real DB)', () => {
       expect(metrics.topCitedSources[0]).toEqual({
         id: popular,
         title: 'Resetting your password',
-        url: `/admin/help-center/articles/${popular}`,
+        url: `/admin/help-center?article=${popular}`,
         questions: 2,
         insertRate: null,
       })
       expect(metrics.topCitedSources[1]).toEqual({
         id: rare,
         title: 'Exporting a report',
-        url: `/admin/help-center/articles/${rare}`,
+        url: `/admin/help-center?article=${rare}`,
         questions: 1,
         insertRate: null,
       })
@@ -584,7 +584,7 @@ describe.skipIf(!fixture.available)('getCopilotUsageMetrics (real DB)', () => {
         {
           id: article,
           title: 'Two links, one turn',
-          url: `/admin/help-center/articles/${article}`,
+          url: `/admin/help-center?article=${article}`,
           questions: 1,
           insertRate: null,
         },
@@ -655,7 +655,7 @@ describe.skipIf(!fixture.available)('getCopilotUsageMetrics (real DB)', () => {
         {
           id: article,
           title: 'Resetting your password',
-          url: `/admin/help-center/articles/${article}`,
+          url: `/admin/help-center?article=${article}`,
           questions: 4,
           insertRate: 25,
         },

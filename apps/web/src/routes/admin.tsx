@@ -32,12 +32,18 @@ const ChangelogModal = lazy(() =>
     default: m.ChangelogModal,
   }))
 )
+const ArticleModal = lazy(() =>
+  import('@/components/admin/help-center/article-modal').then((m) => ({ default: m.ArticleModal }))
+)
 
 export const Route = createFileRoute('/admin')({
-  validateSearch: (search: Record<string, unknown>): { post?: string; entry?: string } => {
-    const next: { post?: string; entry?: string } = {}
+  validateSearch: (
+    search: Record<string, unknown>
+  ): { post?: string; entry?: string; article?: string } => {
+    const next: { post?: string; entry?: string; article?: string } = {}
     if (typeof search.post === 'string') next.post = search.post
     if (typeof search.entry === 'string') next.entry = search.entry
+    if (typeof search.article === 'string') next.article = search.article
     return next
   },
   beforeLoad: async ({ location }) => {
@@ -139,7 +145,7 @@ function EntityModalChunkFallback({
   searchParam,
   title,
 }: {
-  searchParam: 'post' | 'entry'
+  searchParam: 'post' | 'entry' | 'article'
   title: string
 }) {
   const navigate = useNavigate()
@@ -162,10 +168,10 @@ function EntityModalChunkFallback({
   )
 }
 
-function useEntityIdFromUrl(key: 'post' | 'entry'): string | undefined {
+function useEntityIdFromUrl(key: 'post' | 'entry' | 'article'): string | undefined {
   return useRouterState({
     select: (s) => {
-      const value = (s.location.search as { post?: string; entry?: string })[key]
+      const value = (s.location.search as { post?: string; entry?: string; article?: string })[key]
       return value
     },
   })
@@ -183,9 +189,11 @@ function AdminLayout() {
   } = Route.useLoaderData()
   const postId = useEntityIdFromUrl('post')
   const entryId = useEntityIdFromUrl('entry')
+  const articleId = useEntityIdFromUrl('article')
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const onRoadmap = pathname === '/admin/roadmap' || pathname.startsWith('/admin/roadmap/')
   const canViewChangelogDrafts = useHasPermission(PERMISSIONS.CHANGELOG_VIEW_DRAFT)
+  const canManageHelpCenter = useHasPermission(PERMISSIONS.HELP_CENTER_MANAGE)
 
   // Mark team members online for conversation routing across the whole admin (not just
   // the inbox), but only when the support inbox feature is on.
@@ -194,6 +202,7 @@ function AdminLayout() {
     (settings?.featureFlags as { supportInbox?: boolean } | undefined)?.supportInbox ?? false
   const feedbackEnabled = isProductEnabled(settings?.featureFlags, 'feedback')
   const changelogEnabled = isProductEnabled(settings?.featureFlags, 'changelog')
+  const helpCenterEnabled = isProductEnabled(settings?.featureFlags, 'helpCenter')
   useAdminPresence(Boolean(initialUserData) && conversationsEnabled)
 
   // For public routes (login, signup), render just the outlet without the admin layout
@@ -238,6 +247,13 @@ function AdminLayout() {
               }
             >
               <ChangelogModal entryId={entryId} />
+            </Suspense>
+          )}
+          {helpCenterEnabled && canManageHelpCenter && articleId && (
+            <Suspense
+              fallback={<EntityModalChunkFallback searchParam="article" title="Edit article" />}
+            >
+              <ArticleModal articleId={articleId} />
             </Suspense>
           )}
         </div>

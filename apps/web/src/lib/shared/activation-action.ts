@@ -143,7 +143,7 @@ export function selectActivationAction({
         outcome,
         label: 'Continue the article',
         kind: 'link',
-        destination: `/admin/help-center/articles/${startingPoint.resourceId}`,
+        destination: `/admin/help-center?article=${startingPoint.resourceId}`,
       }
     }
     if (outcome === 'internal') {

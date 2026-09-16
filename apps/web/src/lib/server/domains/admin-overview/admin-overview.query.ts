@@ -485,7 +485,7 @@ async function loadHelpCenter() {
     product: 'helpCenter',
     entity: 'article',
     title: row.title,
-    link: { to: '/admin/help-center/articles/$articleId', params: { articleId: row.id } },
+    link: { to: '/admin', search: { article: row.id } },
     status: 'draft',
     meta: row.authorName?.trim() ?? '',
   }))

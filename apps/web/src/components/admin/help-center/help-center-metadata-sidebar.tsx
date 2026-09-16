@@ -1,7 +1,12 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { PlusIcon } from '@heroicons/react/24/solid'
+import { HandThumbDownIcon, LanguageIcon } from '@heroicons/react/24/outline'
 import { CategoryIcon } from '@/components/help-center/category-icon'
+import { ArticleAudienceControl } from '@/components/admin/help-center/article-audience-control'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import type { SegmentItem } from '@/components/admin/segments/segment-multi-select'
 import {
   Select,
   SelectContent,
@@ -23,6 +28,13 @@ interface HelpCenterMetadataSidebarProps {
   isPublished: boolean
   onPublishToggle: () => void
   authorName?: string | null
+  segments?: SegmentItem[]
+  segmentIds?: string[]
+  onSegmentIdsChange?: (ids: string[]) => void
+  notHelpfulCount?: number
+  onOpenFeedback?: () => void
+  onOpenTranslations?: () => void
+  publishPending?: boolean
 }
 
 function SidebarContent({
@@ -31,6 +43,13 @@ function SidebarContent({
   isPublished,
   onPublishToggle,
   authorName,
+  segments,
+  segmentIds,
+  onSegmentIdsChange,
+  notHelpfulCount,
+  onOpenFeedback,
+  onOpenTranslations,
+  publishPending,
 }: HelpCenterMetadataSidebarProps) {
   const [createCategoryOpen, setCreateCategoryOpen] = useState(false)
   const { data: categories } = useQuery(helpCenterQueries.categories())
@@ -38,12 +57,23 @@ function SidebarContent({
   return (
     <>
       <SidebarRow label="Status">
-        <button type="button" onClick={onPublishToggle} className="flex items-center gap-2 text-sm">
+        <button
+          type="button"
+          onClick={onPublishToggle}
+          disabled={publishPending}
+          className="flex items-center gap-2 text-sm disabled:opacity-60"
+        >
           <span
             className="h-2 w-2 rounded-full shrink-0"
             style={{ backgroundColor: isPublished ? '#22c55e' : '#a1a1aa' }}
           />
-          {isPublished ? 'Published' : 'Draft'}
+          {publishPending
+            ? isPublished
+              ? 'Unpublishing…'
+              : 'Publishing…'
+            : isPublished
+              ? 'Published'
+              : 'Draft'}
         </button>
       </SidebarRow>
 
@@ -91,6 +121,46 @@ function SidebarContent({
           </SidebarRow>
         </>
       )}
+
+      {segments && onSegmentIdsChange ? (
+        <>
+          <SidebarDivider />
+          <SidebarRow label="Audience">
+            <ArticleAudienceControl
+              segments={segments}
+              value={segmentIds ?? []}
+              onChange={onSegmentIdsChange}
+            />
+          </SidebarRow>
+        </>
+      ) : null}
+
+      {onOpenTranslations ? (
+        <>
+          <SidebarDivider />
+          <SidebarRow label="Translations">
+            <Button type="button" variant="ghost" size="sm" onClick={onOpenTranslations}>
+              <LanguageIcon className="h-3.5 w-3.5" />
+              Manage
+            </Button>
+          </SidebarRow>
+        </>
+      ) : null}
+
+      {onOpenFeedback && (notHelpfulCount ?? 0) > 0 ? (
+        <>
+          <SidebarDivider />
+          <SidebarRow label="Feedback">
+            <Button type="button" variant="ghost" size="sm" onClick={onOpenFeedback}>
+              <HandThumbDownIcon className="h-3.5 w-3.5" />
+              Unhelpful
+              <Badge size="sm" shape="pill" variant="secondary">
+                {notHelpfulCount}
+              </Badge>
+            </Button>
+          </SidebarRow>
+        </>
+      ) : null}
     </>
   )
 }

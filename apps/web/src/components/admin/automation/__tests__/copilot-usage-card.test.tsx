@@ -45,14 +45,14 @@ const METRICS = {
     {
       id: 'article_1',
       title: 'Resetting your password',
-      url: '/admin/help-center/articles/article_1',
+      url: '/admin/help-center?article=article_1',
       questions: 18,
       insertRate: 33,
     },
     {
       id: 'article_2',
       title: 'Exporting a report',
-      url: '/admin/help-center/articles/article_2',
+      url: '/admin/help-center?article=article_2',
       questions: 4,
       insertRate: null,
     },
@@ -160,14 +160,14 @@ describe('CopilotUsageCard', () => {
     const topRow = (await within(table).findByText('Resetting your password')).closest('tr')!
     expect(within(topRow).getByRole('link')).toHaveAttribute(
       'href',
-      '/admin/help-center/articles/article_1'
+      '/admin/help-center?article=article_1'
     )
     expect(within(topRow).getByText('18')).toBeInTheDocument()
     expect(within(topRow).getByText('33%')).toBeInTheDocument()
     const secondRow = within(table).getByText('Exporting a report').closest('tr')!
     expect(within(secondRow).getByRole('link')).toHaveAttribute(
       'href',
-      '/admin/help-center/articles/article_2'
+      '/admin/help-center?article=article_2'
     )
     expect(within(secondRow).getByText('4')).toBeInTheDocument()
     // A source with no in-range insert (or none logged before the field

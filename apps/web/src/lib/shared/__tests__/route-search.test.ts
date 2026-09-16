@@ -46,10 +46,18 @@ describe('blankOmittedSearchKeys', () => {
   })
 
   it('preserves layout-owned entity peeks a child schema does not declare', () => {
-    expect(mergeLikeRouter({ sort: 'newest', post: 'post_1', entry: 'changelog_1' })).toEqual({
+    expect(
+      mergeLikeRouter({
+        sort: 'newest',
+        post: 'post_1',
+        entry: 'changelog_1',
+        article: 'article_1',
+      })
+    ).toEqual({
       sort: 'newest',
       post: 'post_1',
       entry: 'changelog_1',
+      article: 'article_1',
     })
   })
 })

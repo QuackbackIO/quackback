@@ -17,9 +17,7 @@ import { Route } from '@/routes/admin/help-center'
 import type { KbArticleId, KbCategoryId } from '@quackback/ids'
 
 type CategoryDialogState =
-  | { mode: 'new'; parentId: KbCategoryId | null }
-  | { mode: 'edit'; category: TreeCategory }
-  | null
+  { mode: 'new'; parentId: KbCategoryId | null } | { mode: 'edit'; category: TreeCategory } | null
 
 export function HelpCenterList() {
   const navigate = useNavigate({ from: Route.fullPath })
@@ -63,8 +61,7 @@ export function HelpCenterList() {
     (id: KbArticleId) => {
       startTransition(() => {
         void navigate({
-          to: '/admin/help-center/articles/$articleId',
-          params: { articleId: id },
+          search: (prev) => ({ ...prev, article: id }),
         })
       })
     },

@@ -5,7 +5,7 @@ const { Route } = await import('../help-center.articles.$articleId')
 
 type BeforeLoadFn = (ctx: { params: { articleId: string } }) => void
 
-const beforeLoad = Route.options.beforeLoad as BeforeLoadFn
+const beforeLoad = Route.options.beforeLoad as unknown as BeforeLoadFn
 
 function catchRedirect(fn: () => void): Record<string, unknown> {
   let thrown: unknown
@@ -19,18 +19,21 @@ function catchRedirect(fn: () => void): Record<string, unknown> {
   return (thrown as any).options as Record<string, unknown>
 }
 
-describe('admin article editor legacy TypeID redirect', () => {
-  it('replaces a bookmarked kb_article_ URL with article_', () => {
+describe('admin article editor bookmark redirect', () => {
+  it('opens a bookmarked kb_article_ URL as the list modal', () => {
     const canonical = generateId('article')
     const legacy = `kb_article_${canonical.slice('article_'.length)}`
     const opts = catchRedirect(() => beforeLoad({ params: { articleId: legacy } }))
-    expect(opts.to).toBe('/admin/help-center/articles/$articleId')
-    expect(opts.params).toEqual({ articleId: canonical })
+    expect(opts.to).toBe('/admin/help-center')
+    expect(opts.search).toEqual({ article: canonical })
     expect(opts.replace).toBe(true)
   })
 
-  it('leaves a canonical article_ URL alone', () => {
+  it('opens a canonical article_ URL as the list modal', () => {
     const canonical = generateId('article')
-    expect(beforeLoad({ params: { articleId: canonical } })).toBeUndefined()
+    const opts = catchRedirect(() => beforeLoad({ params: { articleId: canonical } }))
+    expect(opts.to).toBe('/admin/help-center')
+    expect(opts.search).toEqual({ article: canonical })
+    expect(opts.replace).toBe(true)
   })
 })

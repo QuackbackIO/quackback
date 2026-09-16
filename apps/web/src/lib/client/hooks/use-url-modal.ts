@@ -30,7 +30,7 @@ interface UseUrlModalReturn<T> {
  * Hook for URL-synced modals that handles local state for instant UI,
  * URL synchronization, and TypeID validation.
  *
- * Used by PostModal, ChangelogModal, and RoadmapModal.
+ * Used by PostModal, ChangelogModal, ArticleModal, and RoadmapModal.
  */
 export function useUrlModal<T extends string>({
   urlId,

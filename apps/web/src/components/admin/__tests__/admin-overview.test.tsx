@@ -188,7 +188,7 @@ describe('OverviewDashboard', () => {
           product: 'helpCenter',
           entity: 'article',
           title: 'Environment Variables',
-          link: { to: '/admin/help-center/articles/$articleId', params: { articleId: 'a1' } },
+          link: { to: '/admin', search: { article: 'a1' } },
           status: 'draft',
           meta: 'James Morton',
         },
@@ -201,5 +201,15 @@ describe('OverviewDashboard', () => {
     expect(screen.getByText('Environment Variables')).toBeInTheDocument()
     expect(screen.getByText('Draft')).toBeInTheDocument()
     expect(screen.getByText('James Morton')).toBeInTheDocument()
+    expect(screen.getByText('Environment Variables').closest('a')).toHaveAttribute(
+      'href',
+      '/admin?article=a1'
+    )
+    expect(
+      screen
+        .getByText('Environment Variables')
+        .closest('a')
+        ?.querySelector('[data-entity="article"]')
+    ).not.toBeNull()
   })
 })

@@ -3,7 +3,7 @@
  * merges `{...parentSearch, ...childValidated}`, and an omitted key would
  * close a modal opened from any /admin page.
  */
-export const ADMIN_ENTITY_SEARCH_KEYS = ['post', 'entry'] as const
+export const ADMIN_ENTITY_SEARCH_KEYS = ['post', 'entry', 'article'] as const
 
 /**
  * Blank leftover keys Zod omitted so TanStack cannot merge them back.
