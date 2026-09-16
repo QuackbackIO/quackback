@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { ModalFooter } from '@/components/shared/modal-footer'
 import { useForm } from 'react-hook-form'
@@ -36,7 +36,8 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
   const [featuredImageUrl, setFeaturedImageUrl] = useState<string | null>(null)
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false)
   const createChangelogMutation = useCreateChangelog()
-  const resetCreateError = createChangelogMutation.reset
+  const createMutationRef = useRef(createChangelogMutation)
+  createMutationRef.current = createChangelogMutation
 
   const form = useForm({
     resolver: standardSchemaResolver(createChangelogSchema),
@@ -52,11 +53,14 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
     (json: JSONContent, _html: string, markdown: string) => {
       setContentJson(json)
       form.setValue('content', markdown, { shouldValidate: false, shouldDirty: true })
-      // A failed save leaves the mutation error banner up. Clear it as soon as
-      // the body changes so "Content is required" doesn't sit over a filled editor.
-      resetCreateError()
+      // Only drop a *failed* mutation. Resetting while a save is in flight
+      // detaches onSuccess, so the dialog would stay open after a successful
+      // create and a later Save could duplicate the entry.
+      if (createMutationRef.current.isError) {
+        createMutationRef.current.reset()
+      }
     },
-    [form, resetCreateError]
+    [form]
   )
 
   function handlePublishStateChange(state: PublishState) {
