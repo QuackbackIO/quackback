@@ -415,13 +415,22 @@ describe('markdown serialization optimization', () => {
     expect(getMarkdown).toHaveBeenCalledOnce()
   })
 
-  it('returns empty markdown when the serializer throws so onChange can still deliver JSON', () => {
+  it('returns empty markdown when the serializer throws with no prior value', () => {
     const editor = {
       getMarkdown: () => {
         throw new Error('unknown node')
       },
     }
     expect(markdownFromEditor(editor, 3)).toBe('')
+  })
+
+  it('keeps the last successful markdown when the serializer throws', () => {
+    const editor = {
+      getMarkdown: () => {
+        throw new Error('unknown node')
+      },
+    }
+    expect(markdownFromEditor(editor, 3, '- GIF per link')).toBe('- GIF per link')
   })
 })
 

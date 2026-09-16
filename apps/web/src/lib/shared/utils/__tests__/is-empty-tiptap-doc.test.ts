@@ -70,4 +70,45 @@ describe('isEmptyTiptapDoc', () => {
     }
     expect(isEmptyTiptapDoc(doc)).toBe(false)
   })
+
+  it('treats an empty bullet list as empty', () => {
+    const doc: TiptapContent = {
+      type: 'doc',
+      content: [
+        {
+          type: 'bulletList',
+          content: [
+            {
+              type: 'listItem',
+              content: [{ type: 'paragraph' }],
+            },
+          ],
+        },
+      ],
+    }
+    expect(isEmptyTiptapDoc(doc)).toBe(true)
+  })
+
+  it('treats a bullet list with text as non-empty', () => {
+    const doc: TiptapContent = {
+      type: 'doc',
+      content: [
+        {
+          type: 'bulletList',
+          content: [
+            {
+              type: 'listItem',
+              content: [
+                {
+                  type: 'paragraph',
+                  content: [{ type: 'text', text: 'GIF per link' }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+    expect(isEmptyTiptapDoc(doc)).toBe(false)
+  })
 })

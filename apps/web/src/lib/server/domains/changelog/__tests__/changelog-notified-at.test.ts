@@ -362,6 +362,31 @@ describe('createChangelog wiring', () => {
     expect(mockInsertValues).not.toHaveBeenCalled()
   })
 
+  it('rejects an empty bullet-list shell with empty markdown', async () => {
+    const { createChangelog } = await import('../changelog.service')
+
+    await expect(
+      createChangelog(
+        {
+          title: 'X',
+          content: '',
+          contentJson: {
+            type: 'doc',
+            content: [
+              {
+                type: 'bulletList',
+                content: [{ type: 'listItem', content: [{ type: 'paragraph' }] }],
+              },
+            ],
+          },
+          publishState: { type: 'draft' },
+        },
+        AUTHOR
+      )
+    ).rejects.toMatchObject({ message: 'Content is required' })
+    expect(mockInsertValues).not.toHaveBeenCalled()
+  })
+
   it('accepts empty markdown when contentJson has a list body', async () => {
     const { createChangelog } = await import('../changelog.service')
     const contentJson: TiptapContent = {

@@ -426,16 +426,20 @@ export function withLiveEditor(editor: Editor | null, run: (editor: Editor) => v
  * node can't prevent JSON from reaching the form — otherwise changelog create
  * submits an empty `content` string and the server rejects with
  * "Content is required" while the editor still shows a body.
+ *
+ * On throw, keep `fallback` (the last successful markdown) so comment
+ * composers that gate send on the markdown string don't go empty.
  */
 export function markdownFromEditor(
   editor: { getMarkdown?: () => string },
-  onChangeArity: number
+  onChangeArity: number,
+  fallback = ''
 ): string {
   if (onChangeArity < 3) return ''
   try {
     return editor.getMarkdown?.() ?? ''
   } catch {
-    return ''
+    return fallback
   }
 }
 
@@ -1384,7 +1388,11 @@ function RichTextEditorBase({
       // Only serialize to markdown when the caller declares a 3rd parameter.
       // Callers that only need json+html (widget, portal) skip the expensive
       // recursive tree-walk that @tiptap/markdown does on every keystroke.
-      const markdown = markdownFromEditor(editor, onChange.length)
+      const markdown = markdownFromEditor(
+        editor,
+        onChange.length,
+        lastEmittedMarkdownRef.current ?? ''
+      )
       lastEmittedMarkdownRef.current = markdown
       onChange(json, html, markdown)
     },
