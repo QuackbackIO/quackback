@@ -22,7 +22,11 @@ import { NotFoundError } from '@/lib/shared/errors'
 import { isTeamMember } from '@/lib/shared/roles'
 import { can } from '@/lib/server/policy/authorize'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { PageLimitMinOneSchema, PageLimitSchema } from '@/lib/shared/schemas/taxonomy'
+import { PageLimitMinOneSchema } from '@/lib/shared/schemas/taxonomy'
+import {
+  fetchPublicPostDetailSchema,
+  type FetchPublicPostDetailInput,
+} from '@/lib/shared/schemas/posts'
 import { db, principal as principalTable, user as userTable, eq, inArray } from '@/lib/server/db'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
@@ -305,15 +309,6 @@ export const fetchPublicBoardBySlug = createServerFn({ method: 'GET' })
     const { access: _access, ...rest } = board
     return { ...rest, settings: (rest.settings ?? {}) as BoardSettings }
   })
-
-export const fetchPublicPostDetailSchema = z.object({
-  postId: z.string(),
-  // Optional comment-page controls. Omitted by first-page callers so the
-  // default page size applies; supplied by "show more" fetches.
-  commentsCursor: z.string().nullish(),
-  commentsLimit: PageLimitSchema,
-})
-export type FetchPublicPostDetailInput = z.infer<typeof fetchPublicPostDetailSchema>
 
 export const runFetchPublicPostDetail = createServerOnlyFn(async function runFetchPublicPostDetail(
   auth: Awaited<ReturnType<typeof getOptionalAuth>>,

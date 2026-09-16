@@ -290,13 +290,13 @@ export const Route = createFileRoute('/api/widget/identify')({
                 updates.email = normalizedEmail
               }
             }
-          }
-          if (country && country !== userRecord.country) {
-            updates.country = country
-          }
-          if (externalId && userRecord.externalId !== externalId) {
-            // First verified sight of this account — stamp the durable subject.
-            updates.externalId = externalId
+            if (country && country !== userRecord.country) {
+              updates.country = country
+            }
+            if (externalId && userRecord.externalId !== externalId) {
+              // First verified sight of this account — stamp the durable subject.
+              updates.externalId = externalId
+            }
           }
 
           if (Object.keys(updates).length > 0) {

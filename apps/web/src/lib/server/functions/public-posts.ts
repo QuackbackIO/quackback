@@ -14,7 +14,15 @@ import {
   type SegmentId,
   type UserId,
 } from '@quackback/ids'
-import { tiptapContentSchema } from '@/lib/shared/schemas/posts'
+import {
+  tiptapContentSchema,
+  listPublicPostsSchema,
+  createPublicPostSchema,
+  toggleVoteSchema,
+  type ListPublicPostsInput,
+  type CreatePublicPostInput,
+  type ToggleVoteInput,
+} from '@/lib/shared/schemas/posts'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import {
@@ -49,34 +57,6 @@ import { roadmapIdSchema, postStatusIdSchema } from '@quackback/ids/zod'
 
 const log = logger.child({ component: 'public-posts' })
 
-// ============================================
-// Schemas
-// ============================================
-
-// tiptapContentSchema imported from shared schemas
-
-export const listPublicPostsSchema = z.object({
-  boardSlug: z.string().optional(),
-  search: z.string().optional(),
-  statusIds: z.array(z.string()).optional(),
-  statusSlugs: z.array(z.string()).optional(),
-  tagIds: z.array(z.string()).optional(),
-  sort: z.enum(['top', 'new', 'trending']).optional().default('top'),
-  page: z.number().int().min(1).optional().default(1),
-  limit: z.number().int().min(1).max(100).optional().default(20),
-  minVotes: z.number().int().min(1).optional(),
-  dateFrom: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .refine((s) => !Number.isNaN(new Date(s).getTime()), 'Invalid calendar date')
-    .optional(),
-  responded: z.enum(['responded', 'unresponded']).optional(),
-  // Team-only filters, honoured only for post.view_private holders (checked
-  // server-side); silently ignored for everyone else.
-  owner: z.string().optional(),
-  segmentIds: z.array(z.string()).optional(),
-})
-
 const getPostPermissionsSchema = z.object({
   postId: z.string(),
 })
@@ -90,21 +70,6 @@ const userEditPostSchema = z.object({
 
 const userDeletePostSchema = z.object({
   postId: z.string(),
-})
-
-export const toggleVoteSchema = z.object({
-  postId: z.string(),
-})
-
-export const createPublicPostSchema = z.object({
-  boardId: z.string(),
-  title: z.string().min(1, 'Title is required').max(200),
-  content: z.string().max(10000).optional().default(''),
-  contentJson: tiptapContentSchema.optional(),
-  metadata: z.record(z.string(), z.string()).optional(),
-  // Answers to the board's configured custom fields; validated against the
-  // board's declaration inside createPost (unknown keys are dropped there).
-  customFields: z.record(z.string(), z.unknown()).optional(),
 })
 
 const getPublicRoadmapPostsSchema = z.object({
@@ -129,12 +94,9 @@ const getVoteSidebarDataSchema = z.object({
 // Type Exports
 // ============================================
 
-export type ListPublicPostsInput = z.infer<typeof listPublicPostsSchema>
 export type GetPostPermissionsInput = z.infer<typeof getPostPermissionsSchema>
 export type UserEditPostInput = z.infer<typeof userEditPostSchema>
 export type UserDeletePostInput = z.infer<typeof userDeletePostSchema>
-export type ToggleVoteInput = z.infer<typeof toggleVoteSchema>
-export type CreatePublicPostInput = z.infer<typeof createPublicPostSchema>
 export type GetPublicRoadmapPostsInput = z.infer<typeof getPublicRoadmapPostsSchema>
 export type GetRoadmapPostsByStatusInput = z.infer<typeof getRoadmapPostsByStatusSchema>
 export type GetVoteSidebarDataInput = z.infer<typeof getVoteSidebarDataSchema>

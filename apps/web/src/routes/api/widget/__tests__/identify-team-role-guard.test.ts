@@ -87,6 +87,10 @@ vi.mock('@/lib/server/widget/identity-token', () => ({
   verifyHS256JWT: (...args: unknown[]) => mockVerifyJWT(...args),
 }))
 
+vi.mock('@/lib/server/auth/country-capture', () => ({
+  captureCountryFromHeaders: () => 'US',
+}))
+
 vi.mock('@/lib/server/domains/users/user.attributes', () => ({
   validateAndCoerceAttributes: vi.fn(async () => ({ valid: {}, removals: [], errors: [] })),
 }))
@@ -269,7 +273,8 @@ describe('POST /api/widget/identify — teammate identities mint a widget sessio
       image: 'https://dashboard.example/avatar.png',
       imageKey: null,
       metadata: '{"plan":"internal"}',
-      externalId: 'sso-user',
+      country: 'GB',
+      externalId: 'dashboard-subject',
     })
     mockPrincipalFindFirst.mockResolvedValue({
       id: 'principal_admin_sso',
@@ -285,6 +290,8 @@ describe('POST /api/widget/identify — teammate identities mint a widget sessio
     expect(setArgs.some((s) => 'image' in s)).toBe(false)
     expect(setArgs.some((s) => 'metadata' in s)).toBe(false)
     expect(setArgs.some((s) => 'email' in s)).toBe(false)
+    expect(setArgs.some((s) => 'country' in s)).toBe(false)
+    expect(setArgs.some((s) => 'externalId' in s)).toBe(false)
   })
 })
 

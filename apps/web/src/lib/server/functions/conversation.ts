@@ -29,6 +29,19 @@ import {
   type ConversationAssistantActivity,
 } from '@/lib/shared/conversation/types'
 import {
+  conversationAttachmentSchema,
+  sendMessageSchema,
+  conversationIdSchema,
+  listMessagesSchema,
+  myConversationSchema,
+  csatSchema,
+  type SendConversationMessageInput,
+  type MyConversationInput,
+  type ListMessagesInput,
+  type CsatInput,
+  type ConversationIdInput,
+} from '@/lib/shared/schemas/conversation'
+import {
   CONVERSATION_SORTS,
   CONVERSATION_ATTRIBUTE_OPERATORS,
 } from '@/lib/shared/conversation/views'
@@ -79,69 +92,6 @@ async function loadLinkedTicketForVisitor(
     return null
   }
 }
-
-const attachmentSchema = z.object({
-  url: z.string().min(1),
-  name: z.string().max(255),
-  contentType: z.string().max(128),
-  size: z.number().int().nonnegative(),
-})
-
-// A structured reply to a conversational block (Phase C, slice C-1). The
-// server never trusts any of this beyond the shape here — the canonical
-// echo/validation against the referenced block's own config happens in
-// conversation.service.ts's resolveVisitorBlockReply; an invalid/stale/
-// second reply degrades to an ordinary free-text send using `content` below,
-// never an error (so this schema itself stays permissive on VALUES, only
-// pinning the shape).
-const blockReplySchema = z.discriminatedUnion('kind', [
-  z.object({
-    kind: z.literal('buttons'),
-    inReplyToMessageId: z.string().min(1),
-    buttonKey: z.string().min(1).max(80),
-  }),
-  z.object({
-    kind: z.literal('collect'),
-    inReplyToMessageId: z.string().min(1),
-    value: z.union([z.string().max(500), z.number(), z.boolean()]),
-  }),
-  z.object({
-    kind: z.literal('collectReply'),
-    inReplyToMessageId: z.string().min(1),
-    value: z.string().min(1).max(MAX_CONVERSATION_MESSAGE_LENGTH),
-  }),
-  z.object({
-    kind: z.literal('csat'),
-    inReplyToMessageId: z.string().min(1),
-    rating: z.number().int().min(1).max(5),
-    comment: z.string().max(2000).optional(),
-  }),
-])
-
-// Content may be empty only when attachments are present (validated in the
-// service); allow empty here and let the service enforce the real rule. A
-// blockReply (Phase C, slice C-1) also allows empty content — a resolved
-// reply supplies its own server-derived echo; the widget is still expected
-// to send a sensible `content` alongside it as a defense-in-depth fallback
-// for the (never-an-error) degrade path.
-export const sendMessageSchema = z.object({
-  conversationId: z.string().optional(),
-  content: z.string().max(MAX_CONVERSATION_MESSAGE_LENGTH).default(''),
-  // Rich-composer TipTap doc (inline embeds / images). Sanitized server-side;
-  // the plain `content` is the doc's text, kept for previews/notifications/search.
-  contentJson: z.unknown().nullable().optional(),
-  attachments: z.array(attachmentSchema).max(MAX_CONVERSATION_ATTACHMENTS).optional(),
-  blockReply: blockReplySchema.optional(),
-  /** Optional pre-chat email capture (anonymous visitors). */
-})
-export type SendConversationMessageInput = z.infer<typeof sendMessageSchema>
-
-export const conversationIdSchema = z.object({ conversationId: z.string() })
-
-export const listMessagesSchema = z.object({
-  conversationId: z.string(),
-  before: z.string().optional(),
-})
 
 const listConversationsSchema = z.object({
   status: z.enum(CONVERSATION_STATUSES).optional(),
@@ -203,19 +153,13 @@ const listConversationsSchema = z.object({
 
 const messageIdSchema = z.object({ messageId: z.string() })
 
-export const csatSchema = z.object({
-  conversationId: z.string(),
-  rating: z.number().int().min(1).max(5),
-  comment: z.string().max(2000).optional(),
-})
-
 const agentSendSchema = z.object({
   conversationId: z.string(),
   content: z.string().max(MAX_CONVERSATION_MESSAGE_LENGTH).default(''),
   // Rich-composer TipTap doc (inline embeds / images). Sanitized server-side;
   // the plain `content` is the doc's text, kept for previews/notifications/search.
   contentJson: z.unknown().nullable().optional(),
-  attachments: z.array(attachmentSchema).max(MAX_CONVERSATION_ATTACHMENTS).optional(),
+  attachments: z.array(conversationAttachmentSchema).max(MAX_CONVERSATION_ATTACHMENTS).optional(),
   // P2-D.1 inbox translation: the explicit "Send untranslated" fallback a
   // teammate picks after a translated send is blocked (TRANSLATION_FAILED).
   // Bypasses translation entirely for this one send.
@@ -238,7 +182,7 @@ const startConversationSchema = z.object({
   // Rich-composer TipTap doc (inline embeds). Sanitized server-side;
   // the plain `content` is the doc's text, kept for previews/notifications/search.
   contentJson: z.unknown().nullable().optional(),
-  attachments: z.array(attachmentSchema).max(MAX_CONVERSATION_ATTACHMENTS).optional(),
+  attachments: z.array(conversationAttachmentSchema).max(MAX_CONVERSATION_ATTACHMENTS).optional(),
 })
 
 const agentNoteSchema = z.object({
@@ -250,7 +194,7 @@ const agentNoteSchema = z.object({
   // mention-extracted server-side; omitted for a plain-text note.
   contentJson: z.unknown().nullable().optional(),
   // Image/file attachments on the note (agent-only, same pipeline as replies).
-  attachments: z.array(attachmentSchema).max(MAX_CONVERSATION_ATTACHMENTS).optional(),
+  attachments: z.array(conversationAttachmentSchema).max(MAX_CONVERSATION_ATTACHMENTS).optional(),
 })
 
 const setStatusSchema = z.object({
@@ -476,15 +420,6 @@ export const getWidgetTeamAvatarsFn = createServerFn({ method: 'GET' }).handler(
     return runGetWidgetTeamAvatars()
   }
 )
-
-// getMyConversationFn optionally targets a specific conversation:
-//  - omitted        → the visitor's active/most-recent thread (default)
-//  - a conversation → that thread, if the caller owns it (else greeting state)
-//  - null           → "new": config + greeting with no thread
-export const myConversationSchema = z
-  .object({ conversationId: z.string().nullish(), locale: z.string().max(20).optional() })
-  .optional()
-export type MyConversationInput = z.infer<typeof myConversationSchema>
 
 /** The current visitor's active conversation + first page of messages. */
 export const runGetMyConversation = createServerOnlyFn(async function runGetMyConversation(
@@ -721,10 +656,7 @@ export const getMessengerUnreadFn = createServerFn({ method: 'GET' }).handler(as
 
 /** Older messages for a conversation the caller can view (keyset pagination). */
 export const runListConversationMessages = createServerOnlyFn(
-  async function runListConversationMessages(
-    ctx: AuthContext,
-    data: z.infer<typeof listMessagesSchema>
-  ) {
+  async function runListConversationMessages(ctx: AuthContext, data: ListMessagesInput) {
     await assertVisitorConversationAccess(ctx.principal.role)
     const actor = await policyActorFromAuth(ctx)
     const { assertConversationViewable } =
@@ -827,7 +759,7 @@ export const exportConversationTranscriptFn = createServerFn({ method: 'GET' })
 /** Mark a conversation read up to now for the caller's side. */
 export const runMarkConversationRead = createServerOnlyFn(async function runMarkConversationRead(
   ctx: AuthContext,
-  data: z.infer<typeof conversationIdSchema>
+  data: ConversationIdInput
 ) {
   await assertVisitorConversationAccess(ctx.principal.role)
   const actor = await policyActorFromAuth(ctx)
@@ -847,10 +779,7 @@ export const markConversationReadFn = createServerFn({ method: 'POST' })
 
 /** Broadcast that the caller is typing (ephemeral; client-throttled). */
 export const runSendConversationTyping = createServerOnlyFn(
-  async function runSendConversationTyping(
-    ctx: AuthContext,
-    data: z.infer<typeof conversationIdSchema>
-  ) {
+  async function runSendConversationTyping(ctx: AuthContext, data: ConversationIdInput) {
     await assertVisitorConversationAccess(ctx.principal.role)
     const actor = await policyActorFromAuth(ctx)
     // Side derived in the service from conversation ownership, not role.
@@ -869,7 +798,7 @@ export const sendConversationTypingFn = createServerFn({ method: 'POST' })
 /** Submit a CSAT rating for a conversation (visitor only). */
 export const runSubmitCsat = createServerOnlyFn(async function runSubmitCsat(
   ctx: AuthContext,
-  data: z.infer<typeof csatSchema>
+  data: CsatInput
 ) {
   await assertVisitorConversationAccess(ctx.principal.role)
   const actor = await policyActorFromAuth(ctx)

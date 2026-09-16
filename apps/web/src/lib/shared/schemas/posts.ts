@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { boardIdSchema, postStatusIdSchema, tagIdsSchema } from '@quackback/ids/zod'
 import type { TiptapContent as DbTiptapContent } from '@/lib/shared/db-types'
+import { PageLimitSchema } from './taxonomy'
 
 /**
  * TipTap mark schema - validates mark types and their attributes
@@ -104,3 +105,46 @@ export const editPostSchema = z.object({
 export type CreatePostFormData = z.infer<typeof createPostSchema>
 export type EditPostFormData = z.infer<typeof editPostSchema>
 export type { DbTiptapContent as TiptapContent }
+
+export const listPublicPostsSchema = z.object({
+  boardSlug: z.string().optional(),
+  search: z.string().optional(),
+  statusIds: z.array(z.string()).optional(),
+  statusSlugs: z.array(z.string()).optional(),
+  tagIds: z.array(z.string()).optional(),
+  sort: z.enum(['top', 'new', 'trending']).optional().default('top'),
+  page: z.number().int().min(1).optional().default(1),
+  limit: z.number().int().min(1).max(100).optional().default(20),
+  minVotes: z.number().int().min(1).optional(),
+  dateFrom: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .refine((s) => !Number.isNaN(new Date(s).getTime()), 'Invalid calendar date')
+    .optional(),
+  responded: z.enum(['responded', 'unresponded']).optional(),
+  owner: z.string().optional(),
+  segmentIds: z.array(z.string()).optional(),
+})
+export type ListPublicPostsInput = z.infer<typeof listPublicPostsSchema>
+
+export const createPublicPostSchema = z.object({
+  boardId: z.string(),
+  title: z.string().min(1, 'Title is required').max(200),
+  content: z.string().max(10000).optional().default(''),
+  contentJson: tiptapContentSchema.optional(),
+  metadata: z.record(z.string(), z.string()).optional(),
+  customFields: z.record(z.string(), z.unknown()).optional(),
+})
+export type CreatePublicPostInput = z.infer<typeof createPublicPostSchema>
+
+export const toggleVoteSchema = z.object({
+  postId: z.string(),
+})
+export type ToggleVoteInput = z.infer<typeof toggleVoteSchema>
+
+export const fetchPublicPostDetailSchema = z.object({
+  postId: z.string(),
+  commentsCursor: z.string().nullish(),
+  commentsLimit: PageLimitSchema,
+})
+export type FetchPublicPostDetailInput = z.infer<typeof fetchPublicPostDetailSchema>

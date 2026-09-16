@@ -1,26 +1,6 @@
-import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-
-const ticketIdSchema = z.object({ ticketId: z.string() })
-const conversationIdSchema = z.object({ conversationId: z.string() })
-const createMyTicketSchema = z.object({
-  title: z.string().min(1).max(300),
-  description: z.string().max(4000).optional(),
-  descriptionJson: z.any().nullable().optional(),
-  attachments: z
-    .array(
-      z.object({
-        url: z.string(),
-        name: z.string().optional(),
-        contentType: z.string().optional(),
-        size: z.number(),
-      })
-    )
-    .optional(),
-  ticketTypeId: z.string().optional(),
-  fieldValues: z.record(z.string(), z.unknown()).optional(),
-  email: z.string().optional(),
-})
+import { conversationIdSchema } from '@/lib/shared/schemas/conversation'
+import { ticketIdSchema, createMyTicketSchema } from '@/lib/shared/schemas/tickets'
 
 export const widgetGetMyTicketsFn = createServerFn({ method: 'GET' }).handler(async () => {
   const { requireWidgetAuth } = await import('../widget-auth')

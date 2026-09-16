@@ -41,22 +41,17 @@ import { HexColorFormatSchema, PageLimitMinOneSchema } from '@/lib/shared/schema
 import type { ConversationAttachment } from '@/lib/shared/db-types'
 import { ForbiddenError, ValidationError } from '@/lib/shared/errors'
 import { conversationIdSchema } from '@/lib/server/domains/assistant/conversation-id.schema'
+import {
+  ticketAttachmentSchema,
+  createMyTicketSchema,
+  type CreateMyTicketInput,
+} from '@/lib/shared/schemas/tickets'
 
 const ticketTypeSchema = z.enum(TICKET_TYPES)
 const statusCategorySchema = z.enum(TICKET_STATUS_CATEGORIES)
 const stageSchema = z.enum(TICKET_STAGES)
 const prioritySchema = z.enum(CONVERSATION_PRIORITIES)
 const hexColor = HexColorFormatSchema
-
-// Shared by every rich-content entry point (the opening description, a reply,
-// a note): the service re-validates count/size/url, so this only shapes the
-// wire payload.
-const ticketAttachmentSchema = z.object({
-  url: z.string(),
-  name: z.string().optional(),
-  contentType: z.string().optional(),
-  size: z.number(),
-})
 
 // ---------------------------------------------------------------------------
 // Ticket CRUD + lifecycle
@@ -1058,23 +1053,6 @@ export const runGetMyTickets = createServerOnlyFn(async function runGetMyTickets
 export const getMyTicketsFn = createServerFn({ method: 'GET' }).handler(async () => {
   return runGetMyTickets(await requireAuth())
 })
-
-export const createMyTicketSchema = z.object({
-  title: z.string().min(1).max(300),
-  description: z.string().max(4000).optional(),
-  // Empty is valid for an image/embed-only opening message; the service re-validates.
-  descriptionJson: z.any().nullable().optional(),
-  attachments: z.array(ticketAttachmentSchema).optional(),
-  // The registry type filed under; absent = the intake default. Must be live +
-  // intake-visible (enforced server-side).
-  ticketTypeId: z.string().optional(),
-  // Custom intake-form answers; validated against the chosen type's form.
-  fieldValues: z.record(z.string(), z.unknown()).optional(),
-  // Email-capture tier: an anonymous visitor supplies the address the ticket's
-  // updates reach; captured overwrite-once onto their principal.
-  email: z.string().optional(),
-})
-export type CreateMyTicketInput = z.infer<typeof createMyTicketSchema>
 
 /**
  * The requester opens their own customer ticket (workflow send_ticket_form).

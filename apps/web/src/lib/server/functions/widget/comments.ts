@@ -1,19 +1,5 @@
-import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-
-const createCommentSchema = z.object({
-  postId: z.string(),
-  content: z.string().min(1).max(5000),
-  contentJson: z.unknown().nullable().optional(),
-  parentId: z.string().optional(),
-  statusId: z.string().optional(),
-  isPrivate: z.boolean().optional(),
-})
-
-const reactionSchema = z.object({
-  commentId: z.string(),
-  emoji: z.string(),
-})
+import { createCommentSchema, reactionSchema } from '@/lib/shared/schemas/comments'
 
 export const widgetCreateCommentFn = createServerFn({ method: 'POST' })
   .validator(createCommentSchema)

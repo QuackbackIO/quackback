@@ -1,65 +1,11 @@
-import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import {
-  MAX_CONVERSATION_MESSAGE_LENGTH,
-  MAX_CONVERSATION_ATTACHMENTS,
-} from '@/lib/shared/conversation/types'
-
-const attachmentSchema = z.object({
-  url: z.string().min(1),
-  name: z.string().max(255),
-  contentType: z.string().max(128),
-  size: z.number().int().nonnegative(),
-})
-
-const blockReplySchema = z.discriminatedUnion('kind', [
-  z.object({
-    kind: z.literal('buttons'),
-    inReplyToMessageId: z.string().min(1),
-    buttonKey: z.string().min(1).max(80),
-  }),
-  z.object({
-    kind: z.literal('collect'),
-    inReplyToMessageId: z.string().min(1),
-    value: z.union([z.string().max(500), z.number(), z.boolean()]),
-  }),
-  z.object({
-    kind: z.literal('collectReply'),
-    inReplyToMessageId: z.string().min(1),
-    value: z.string().min(1).max(MAX_CONVERSATION_MESSAGE_LENGTH),
-  }),
-  z.object({
-    kind: z.literal('csat'),
-    inReplyToMessageId: z.string().min(1),
-    rating: z.number().int().min(1).max(5),
-    comment: z.string().max(2000).optional(),
-  }),
-])
-
-const sendMessageSchema = z.object({
-  conversationId: z.string().optional(),
-  content: z.string().max(MAX_CONVERSATION_MESSAGE_LENGTH).default(''),
-  contentJson: z.unknown().nullable().optional(),
-  attachments: z.array(attachmentSchema).max(MAX_CONVERSATION_ATTACHMENTS).optional(),
-  blockReply: blockReplySchema.optional(),
-})
-
-const myConversationSchema = z
-  .object({ conversationId: z.string().nullish(), locale: z.string().max(20).optional() })
-  .optional()
-
-const listMessagesSchema = z.object({
-  conversationId: z.string(),
-  before: z.string().optional(),
-})
-
-const conversationIdSchema = z.object({ conversationId: z.string() })
-
-const csatSchema = z.object({
-  conversationId: z.string(),
-  rating: z.number().int().min(1).max(5),
-  comment: z.string().max(2000).optional(),
-})
+  sendMessageSchema,
+  conversationIdSchema,
+  listMessagesSchema,
+  myConversationSchema,
+  csatSchema,
+} from '@/lib/shared/schemas/conversation'
 
 export const widgetSendConversationMessageFn = createServerFn({ method: 'POST' })
   .validator(sendMessageSchema)

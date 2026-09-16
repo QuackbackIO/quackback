@@ -27,23 +27,14 @@ import {
 } from '@/lib/server/domains/comments/comment.pin'
 import { NotFoundError } from '@/lib/shared/errors'
 import { getOptionalAuth, requireAuth, hasAuthCredentials } from './auth-helpers'
+import {
+  createCommentSchema,
+  reactionSchema,
+  type CreateCommentInput,
+  type ReactionInput,
+} from '@/lib/shared/schemas/comments'
 
 const log = logger.child({ component: 'comments' })
-
-// Schemas
-export const createCommentSchema = z.object({
-  postId: z.string(),
-  content: z.string().min(1).max(5000),
-  contentJson: z.unknown().nullable().optional(),
-  parentId: z.string().optional(),
-  statusId: z.string().optional(),
-  isPrivate: z.boolean().optional(),
-})
-
-export const reactionSchema = z.object({
-  commentId: z.string(),
-  emoji: z.string(),
-})
 
 const getCommentPermissionsSchema = z.object({
   commentId: z.string(),
@@ -59,8 +50,6 @@ const userDeleteCommentSchema = z.object({
   commentId: z.string(),
 })
 
-// Types
-export type CreateCommentInput = z.infer<typeof createCommentSchema>
 export interface UpdateCommentInput {
   id: string
   content: string
@@ -68,7 +57,6 @@ export interface UpdateCommentInput {
 export interface DeleteCommentInput {
   id: string
 }
-export type ReactionInput = z.infer<typeof reactionSchema>
 export type GetCommentPermissionsInput = z.infer<typeof getCommentPermissionsSchema>
 export type UserEditCommentInput = z.infer<typeof userEditCommentSchema>
 export type UserDeleteCommentInput = z.infer<typeof userDeleteCommentSchema>
@@ -76,7 +64,7 @@ export type UserDeleteCommentInput = z.infer<typeof userDeleteCommentSchema>
 // Write Operations
 export const runCreateComment = createServerOnlyFn(async function runCreateComment(
   auth: Awaited<ReturnType<typeof requireAuth>>,
-  data: z.infer<typeof createCommentSchema>
+  data: CreateCommentInput
 ) {
   log.info({ post_id: data.postId }, 'create comment')
   // Portal-visibility gate: a denied caller (signed-in but not on
