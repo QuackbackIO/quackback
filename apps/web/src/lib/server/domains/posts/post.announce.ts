@@ -43,7 +43,7 @@ export async function announcePublishedPost(
     board: { slug: string; name: string }
     author: AuthorSnapshot
   },
-  opts?: { skipCreatedWebhook?: boolean }
+  opts?: { skipCreatedWebhook?: boolean; skipMentions?: boolean }
 ): Promise<void> {
   let post: PostSnapshot
   let board: { slug: string; name: string }
@@ -94,7 +94,7 @@ export async function announcePublishedPost(
     })
   }
 
-  if (post.contentJson) {
+  if (!opts?.skipMentions && post.contentJson) {
     const mentionedIds = extractMentions(post.contentJson)
     if (mentionedIds.size > 0) {
       await syncPostMentions({

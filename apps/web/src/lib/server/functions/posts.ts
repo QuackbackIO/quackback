@@ -172,6 +172,10 @@ const toggleCommentsLockSchema = z.object({
   locked: z.boolean(),
 })
 
+const retryPostIntegrationSyncSchema = z.object({
+  id: z.string(),
+})
+
 // ============================================
 // Type Exports
 // ============================================
@@ -562,6 +566,38 @@ export const fetchPostExternalLinksFn = createServerFn({ method: 'GET' })
     const links = await getPostExternalLinks(data.id as PostId)
     log.debug({ count: links.length }, 'fetch post external links result')
     return links
+  })
+
+/**
+ * Re-emit post.created for a published post whose original integration fan-out
+ * was missed. This is deliberately admin-only and refuses posts that already
+ * have an external link, so an operator cannot duplicate a tracked issue by
+ * retrying a successful delivery. Mention notifications are not replayed.
+ */
+export const retryPostIntegrationSyncFn = createServerFn({ method: 'POST' })
+  .validator(retryPostIntegrationSyncSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
+    const postId = data.id as PostId
+
+    const post = await db.query.posts.findFirst({
+      where: eq(posts.id, postId),
+      columns: { deletedAt: true, moderationState: true },
+    })
+    if (!post || post.deletedAt) throw new Error('Post not found')
+    if (post.moderationState !== 'published') {
+      throw new Error('Only published posts can be synced')
+    }
+
+    const links = await getPostExternalLinks(postId)
+    if (links.length > 0) {
+      throw new Error('This post is already linked to an external issue')
+    }
+
+    const { announcePublishedPost } = await import('@/lib/server/domains/posts/post.announce')
+    await announcePublishedPost(postId, undefined, { skipMentions: true })
+    log.info({ post_id: data.id }, 'post integration sync retried')
+    return { queued: true }
   })
 
 /**
