@@ -80,8 +80,8 @@ describe('mixAttention', () => {
       { id: 's3', kind: 'support' },
     ] as OverviewAttentionItem[]
     const feedback = [{ id: 'f1', kind: 'feedback' }] as OverviewAttentionItem[]
-    const publishing = [{ id: 'p1', kind: 'publishing' }] as OverviewAttentionItem[]
-    expect(mixAttention([support, feedback, publishing], 4).map((item) => item.id)).toEqual([
+    const changelogReady = [{ id: 'p1', kind: 'feedback' }] as OverviewAttentionItem[]
+    expect(mixAttention([support, feedback, changelogReady], 4).map((item) => item.id)).toEqual([
       's1',
       'f1',
       'p1',
@@ -121,7 +121,7 @@ const feedback: OverviewLink = { to: '/admin/feedback' }
 const help: OverviewLink = { to: '/admin/help-center' }
 
 describe('buildOverviewMetrics', () => {
-  it('produces count + phrase pairs with no units or hints', () => {
+  it('pairs each count with an item and a state', () => {
     const metrics = buildOverviewMetrics({
       support: { waitingCount: 3, waitingLink: inbox },
       feedback: {
@@ -133,11 +133,11 @@ describe('buildOverviewMetrics', () => {
       help: { draftCount: 0, draftLink: help },
     })
 
-    expect(metrics.map((metric) => [metric.key, metric.count, metric.label])).toEqual([
-      ['waiting', 3, 'waiting for reply'],
-      ['feedback', 30, 'to review'],
-      ['complete', 6, 'without changelog'],
-      ['articles', 0, 'article drafts'],
+    expect(metrics.map((metric) => [metric.count, metric.label, metric.detail])).toEqual([
+      [3, 'conversations', 'waiting for reply'],
+      [30, 'feedback posts', 'to review'],
+      [6, 'feedback posts', 'with no changelog'],
+      [0, 'help center articles', 'in draft'],
     ])
     for (const metric of metrics) {
       expect(metric).not.toHaveProperty('unit')
@@ -145,9 +145,13 @@ describe('buildOverviewMetrics', () => {
     }
   })
 
-  it('pluralizes article drafts', () => {
+  it('pluralizes help center articles', () => {
     const [drafts] = buildOverviewMetrics({ help: { draftCount: 1, draftLink: help } })
-    expect(drafts).toMatchObject({ count: 1, label: 'article draft' })
+    expect(drafts).toMatchObject({
+      count: 1,
+      label: 'help center article',
+      detail: 'in draft',
+    })
   })
 
   it('omits sections that are off', () => {

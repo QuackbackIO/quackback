@@ -6,6 +6,7 @@
  *   changelog_entries.publishedAt, kb_articles.publishedAt.
  * Do not invent status names such as "Unreviewed" or "Ready to announce".
  *
+ * Labels match the admin modules (Support, Feedback, Changelog, Help Center).
  * The page is workspace-wide. Personal relevance is expressed by ordering
  * (`mine` first within a kind) and the owner avatar, not by a scope filter.
  */
@@ -15,7 +16,7 @@ import { getInitials } from '@/lib/shared/utils'
 
 export type AdminEntity = 'conversation' | 'post' | 'changelog' | 'article'
 
-export type OverviewAttentionKind = 'support' | 'feedback' | 'publishing'
+export type OverviewAttentionKind = 'support' | 'feedback'
 
 export type OverviewReasonTone = 'urgent' | 'neutral' | 'info' | 'success'
 
@@ -45,12 +46,14 @@ export type OverviewLink = {
 }
 
 export type OverviewMetric = {
-  key: 'waiting' | 'feedback' | 'complete' | 'articles'
-  /** Reads as one phrase after the count: "3 waiting for reply". */
+  key: 'waiting' | 'feedback' | 'complete' | 'helpCenter'
+  /** The items, e.g. "feedback posts". */
   label: string
+  /** The state of those items, e.g. "with no changelog". */
+  detail: string
   count: number
   link: OverviewLink
-  filter: OverviewAttentionKind | 'articles'
+  filter: OverviewAttentionKind | 'helpCenter'
 }
 
 type OverviewMetricsInput = {
@@ -64,43 +67,51 @@ type OverviewMetricsInput = {
   help?: { draftCount: number; draftLink: OverviewLink }
 }
 
-/** Count + label only. No units, no hints — the list below carries the detail. */
+/** Count on the left, item + state on the right. No units or invented status names. */
 export function buildOverviewMetrics(input: OverviewMetricsInput): OverviewMetric[] {
   const metrics: OverviewMetric[] = []
   if (input.support) {
+    const n = input.support.waitingCount
     metrics.push({
       key: 'waiting',
-      label: 'waiting for reply',
-      count: input.support.waitingCount,
+      label: n === 1 ? 'conversation' : 'conversations',
+      detail: 'waiting for reply',
+      count: n,
       link: input.support.waitingLink,
       filter: 'support',
     })
   }
   if (input.feedback?.reviewLink) {
+    const n = input.feedback.reviewCount
     metrics.push({
       key: 'feedback',
-      label: 'to review',
-      count: input.feedback.reviewCount,
+      label: n === 1 ? 'feedback post' : 'feedback posts',
+      detail: 'to review',
+      count: n,
       link: input.feedback.reviewLink,
       filter: 'feedback',
     })
   }
   if (input.feedback?.completeLink) {
+    const n = input.feedback.completeCount
     metrics.push({
       key: 'complete',
-      label: 'without changelog',
-      count: input.feedback.completeCount,
+      label: n === 1 ? 'feedback post' : 'feedback posts',
+      detail: 'with no changelog',
+      count: n,
       link: input.feedback.completeLink,
-      filter: 'publishing',
+      filter: 'feedback',
     })
   }
   if (input.help) {
+    const n = input.help.draftCount
     metrics.push({
-      key: 'articles',
-      label: input.help.draftCount === 1 ? 'article draft' : 'article drafts',
-      count: input.help.draftCount,
+      key: 'helpCenter',
+      label: n === 1 ? 'help center article' : 'help center articles',
+      detail: 'in draft',
+      count: n,
       link: input.help.draftLink,
-      filter: 'articles',
+      filter: 'helpCenter',
     })
   }
   return metrics
@@ -144,7 +155,8 @@ export type AdminOverviewData = {
   metrics: OverviewMetric[]
   attention: OverviewAttentionItem[]
   momentum: OverviewMomentumItem[]
-  publishing: OverviewPublishItem[]
+  changelog: OverviewPublishItem[]
+  helpCenter: OverviewPublishItem[]
   sections: {
     support: OverviewSectionState
     feedback: OverviewSectionState

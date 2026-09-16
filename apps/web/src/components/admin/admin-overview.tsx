@@ -16,9 +16,11 @@ import {
 } from '@/lib/shared/admin-overview'
 import { cn } from '@/lib/shared/utils'
 import { EntityIcon } from '@/components/admin/entity-icon'
+import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { PageHeader } from '@/components/shared/page-header'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { Avatar } from '@/components/ui/avatar'
+import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
@@ -31,8 +33,8 @@ export function useWorkspaceHomeTitle(): string {
 type Filter = OverviewAttentionKind | 'all'
 
 /**
- * One list, one supporting panel. Counts and the feed are workspace-wide;
- * the viewer's own items are sorted first server-side.
+ * One work list, then a card per module on the rail. Counts and the feed are
+ * workspace-wide; the viewer's own items are sorted first server-side.
  */
 export function OverviewDashboard({
   actions,
@@ -55,14 +57,18 @@ export function OverviewDashboard({
     const kinds: Array<{ id: Filter; label: string }> = [{ id: 'all', label: 'All' }]
     if (data?.sections.support.enabled) kinds.push({ id: 'support', label: 'Support' })
     if (data?.sections.feedback.enabled) kinds.push({ id: 'feedback', label: 'Feedback' })
-    if (data?.sections.feedback.enabled || data?.sections.changelog.enabled) {
-      kinds.push({ id: 'publishing', label: 'Publishing' })
-    }
     return kinds
   }, [data?.sections])
 
-  const hasAside = (data?.momentum.length ?? 0) > 0 || (data?.publishing.length ?? 0) > 0
-  const asideError = data?.sections.changelog.error || data?.sections.helpCenter.error || null
+  const momentum = data?.momentum ?? []
+  const changelog = data?.changelog ?? []
+  const helpCenter = data?.helpCenter ?? []
+  const hasAside = momentum.length > 0 || changelog.length > 0 || helpCenter.length > 0
+  const asideError =
+    data?.sections.feedback.error ||
+    data?.sections.changelog.error ||
+    data?.sections.helpCenter.error ||
+    null
   const feedError = data?.sections.support.error || data?.sections.feedback.error || null
 
   return (
@@ -72,33 +78,35 @@ export function OverviewDashboard({
       {banner}
 
       {overview.isError ? (
-        <Quiet>
-          Couldn’t load the overview.{' '}
-          <RetryButton onClick={() => void overview.refetch()}>Try again</RetryButton>
-        </Quiet>
+        <SettingsCard contentClassName="p-0 sm:p-0">
+          <Quiet>
+            Couldn’t load the overview.{' '}
+            <RetryButton onClick={() => void overview.refetch()}>Try again</RetryButton>
+          </Quiet>
+        </SettingsCard>
       ) : (
         <>
-          <CountsStrip
+          <CountsCard
             metrics={data?.metrics ?? []}
             loading={overview.isLoading}
             onFilter={(next) => {
-              if (next !== 'articles') setFilter(next)
+              if (next !== 'helpCenter') setFilter(next)
             }}
           />
 
           <div
             className={cn(
-              'grid items-start gap-8',
+              'grid items-start gap-6',
               (hasAside || asideError) && 'lg:grid-cols-[minmax(0,1.65fr)_minmax(280px,1fr)]'
             )}
           >
-            <section aria-label="Needs attention" className="min-w-0">
+            <SettingsCard contentClassName="p-0 sm:p-0">
               {filters.length > 2 ? (
                 <Tabs
                   value={filter}
                   onValueChange={(value) => setFilter(value as Filter)}
                   variant="line"
-                  className="gap-0"
+                  className="gap-0 px-4"
                 >
                   <TabsList className="h-9">
                     {filters.map((item) => (
@@ -108,9 +116,7 @@ export function OverviewDashboard({
                     ))}
                   </TabsList>
                 </Tabs>
-              ) : (
-                <div className="border-b border-border" />
-              )}
+              ) : null}
 
               {feedError ? (
                 <Quiet>
@@ -128,26 +134,29 @@ export function OverviewDashboard({
                   ))}
                 </div>
               )}
-            </section>
+            </SettingsCard>
 
             {overview.isLoading ? (
               <Skeleton className="hidden h-40 rounded-xl lg:block" />
             ) : asideError ? (
-              <Aside>
+              <SettingsCard contentClassName="p-0 sm:p-0">
                 <Quiet>
                   {asideError}{' '}
                   <RetryButton onClick={() => void overview.refetch()}>Retry</RetryButton>
                 </Quiet>
-              </Aside>
+              </SettingsCard>
             ) : hasAside ? (
-              <Aside>
-                <AsideGroup title="Momentum" items={data!.momentum}>
+              <aside className="min-w-0 space-y-6">
+                <ModuleCard title="Feedback" items={momentum}>
                   {(item) => <MomentumRow key={item.postId} item={item} />}
-                </AsideGroup>
-                <AsideGroup title="Publishing" items={data!.publishing}>
-                  {(item) => <PublishRow key={item.id} item={item} />}
-                </AsideGroup>
-              </Aside>
+                </ModuleCard>
+                <ModuleCard title="Changelog" items={changelog}>
+                  {(item) => <DeskRow key={item.id} item={item} />}
+                </ModuleCard>
+                <ModuleCard title="Help Center" items={helpCenter}>
+                  {(item) => <DeskRow key={item.id} item={item} />}
+                </ModuleCard>
+              </aside>
             ) : null}
           </div>
         </>
@@ -156,7 +165,7 @@ export function OverviewDashboard({
   )
 }
 
-function CountsStrip({
+function CountsCard({
   metrics,
   loading,
   onFilter,
@@ -165,29 +174,29 @@ function CountsStrip({
   loading: boolean
   onFilter: (filter: OverviewMetric['filter']) => void
 }) {
-  if (loading) return <Skeleton className="h-16 w-full rounded-none" />
+  if (loading) return <Skeleton className="h-24 w-full rounded-xl" />
   if (metrics.length === 0) return null
   return (
-    <div
-      className={cn(
-        'grid gap-px border-y border-border bg-border/60',
-        overviewMetricGridClass(metrics.length)
-      )}
-    >
-      {metrics.map((metric) => (
-        <OverviewNavLink
-          key={metric.key}
-          link={metric.link}
-          onClick={() => onFilter(metric.filter)}
-          className="flex min-w-0 items-baseline gap-2 bg-background px-3 py-3 transition-colors hover:bg-muted/40 sm:px-4"
-        >
-          <span className="text-xl font-semibold leading-none tabular-nums tracking-tight sm:text-2xl">
-            {metric.count.toLocaleString()}
-          </span>
-          <span className="truncate text-sm text-muted-foreground">{metric.label}</span>
-        </OverviewNavLink>
-      ))}
-    </div>
+    <Card className="overflow-hidden py-0 gap-0">
+      <div className={cn('grid gap-px bg-border/50', overviewMetricGridClass(metrics.length))}>
+        {metrics.map((metric) => (
+          <OverviewNavLink
+            key={metric.key}
+            link={metric.link}
+            onClick={() => onFilter(metric.filter)}
+            className="flex min-w-0 items-center gap-3 bg-card px-3 py-3.5 transition-colors hover:bg-muted/40 sm:gap-4 sm:px-5 sm:py-5"
+          >
+            <span className="shrink-0 text-3xl font-semibold leading-none tabular-nums tracking-tight sm:text-4xl">
+              {metric.count.toLocaleString()}
+            </span>
+            <span className="min-w-0 text-sm leading-snug text-muted-foreground">
+              <span className="block">{metric.label}</span>
+              <span className="block">{metric.detail}</span>
+            </span>
+          </OverviewNavLink>
+        ))}
+      </div>
+    </Card>
   )
 }
 
@@ -213,7 +222,7 @@ function OverviewEntityRow({
       link={link}
       className="flex w-full min-w-0 items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-muted/40 sm:px-4"
     >
-      <EntityIcon entity={entity} className="self-start mt-0.5" />
+      <EntityIcon entity={entity} className="mt-0.5 self-start" />
       <span className="min-w-0 flex-1">
         <span className="block break-words text-sm font-medium line-clamp-2 sm:line-clamp-1">
           {title}
@@ -266,7 +275,7 @@ function MomentumRow({ item }: { item: OverviewMomentumItem }) {
   )
 }
 
-function PublishRow({ item }: { item: OverviewPublishItem }) {
+function DeskRow({ item }: { item: OverviewPublishItem }) {
   return (
     <OverviewEntityRow
       link={item.link}
@@ -278,15 +287,7 @@ function PublishRow({ item }: { item: OverviewPublishItem }) {
   )
 }
 
-function Aside({ children }: { children: ReactNode }) {
-  return (
-    <aside className="min-w-0 divide-y divide-border rounded-xl border border-border">
-      {children}
-    </aside>
-  )
-}
-
-function AsideGroup<T>({
+function ModuleCard<T>({
   title,
   items,
   children,
@@ -297,10 +298,9 @@ function AsideGroup<T>({
 }) {
   if (items.length === 0) return null
   return (
-    <div className="py-1">
-      <h2 className="px-3 pb-1 pt-2.5 text-sm font-semibold sm:px-4">{title}</h2>
-      <div>{items.map(children)}</div>
-    </div>
+    <SettingsCard title={title} contentClassName="p-0 sm:p-0">
+      <div className="divide-y divide-border">{items.map(children)}</div>
+    </SettingsCard>
   )
 }
 
@@ -318,7 +318,7 @@ function RetryButton({ onClick, children }: { onClick: () => void; children: Rea
 
 function RowsSkeleton({ rows }: { rows: number }) {
   return (
-    <div className="space-y-3 py-3">
+    <div className="space-y-3 px-4 py-3">
       {Array.from({ length: rows }).map((_, index) => (
         <Skeleton key={index} className="h-10 w-full rounded-md" />
       ))}

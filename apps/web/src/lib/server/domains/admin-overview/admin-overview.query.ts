@@ -62,8 +62,8 @@ const log = logger.child({ component: 'admin-overview' })
 
 const ATTENTION_LIMIT = 8
 const MOMENTUM_LIMIT = 3
-/** Per product; changelog and help center together stay at four rows or fewer. */
-const PUBLISH_LIMIT = 2
+/** Per module so Changelog and Help Center stay short on the rail. */
+const DESK_LIMIT = 2
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 
 export async function getAdminOverview(input: {
@@ -138,7 +138,8 @@ export async function getAdminOverview(input: {
       ATTENTION_LIMIT
     ),
     momentum,
-    publishing: [...changelog.items, ...help.items],
+    changelog: changelog.items,
+    helpCenter: help.items,
     sections: {
       support: support.section,
       feedback: feedback.section,
@@ -373,7 +374,7 @@ async function loadFeedback(viewerId: PrincipalId | null, now: Date) {
   }
 
   const toItem =
-    (kind: 'feedback' | 'publishing', tone: 'info' | 'success') =>
+    (kind: 'feedback', tone: 'info' | 'success') =>
     (row: FeedbackRow): OverviewAttentionItem => ({
       id: row.id,
       kind,
@@ -392,7 +393,7 @@ async function loadFeedback(viewerId: PrincipalId | null, now: Date) {
   return {
     section: enabledSection(),
     attention: viewerFirst(reviewRows.map(toItem('feedback', 'info'))),
-    announce: viewerFirst(completeRows.map(toItem('publishing', 'success'))),
+    announce: viewerFirst(completeRows.map(toItem('feedback', 'success'))),
     reviewCount,
     completeCount,
     reviewLink,
@@ -438,7 +439,7 @@ async function loadChangelog(now: Date) {
       )
     )
     .orderBy(desc(changelogEntries.updatedAt))
-    .limit(PUBLISH_LIMIT)
+    .limit(DESK_LIMIT)
 
   const items: OverviewPublishItem[] = rows.map((row) => {
     const scheduled = computeStatus(row.publishedAt) === 'scheduled' && row.publishedAt
@@ -478,7 +479,7 @@ async function loadHelpCenter() {
     .innerJoin(principal, eq(principal.id, helpCenterArticles.principalId))
     .where(conditions)
     .orderBy(desc(helpCenterArticles.updatedAt))
-    .limit(PUBLISH_LIMIT)
+    .limit(DESK_LIMIT)
 
   const items: OverviewPublishItem[] = drafts.map((row) => ({
     id: row.id,

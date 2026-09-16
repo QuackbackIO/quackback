@@ -8,31 +8,35 @@ const { state } = vi.hoisted(() => {
     metrics: [
       {
         key: 'waiting',
-        label: 'waiting for reply',
+        label: 'conversations',
+        detail: 'waiting for reply',
         count: 3,
         link: { to: '/admin/inbox' },
         filter: 'support',
       },
       {
         key: 'feedback',
-        label: 'to review',
+        label: 'feedback posts',
+        detail: 'to review',
         count: 30,
         link: { to: '/admin/feedback' },
         filter: 'feedback',
       },
       {
         key: 'complete',
-        label: 'without changelog',
+        label: 'feedback posts',
+        detail: 'with no changelog',
         count: 6,
         link: { to: '/admin/feedback' },
-        filter: 'publishing',
+        filter: 'feedback',
       },
       {
-        key: 'articles',
-        label: 'article drafts',
+        key: 'helpCenter',
+        label: 'help center articles',
+        detail: 'in draft',
         count: 0,
         link: { to: '/admin/help-center' },
-        filter: 'articles',
+        filter: 'helpCenter',
       },
     ],
     attention: [
@@ -51,7 +55,8 @@ const { state } = vi.hoisted(() => {
       },
     ],
     momentum: [],
-    publishing: [],
+    changelog: [],
+    helpCenter: [],
     sections: {
       support: { enabled: true, error: null },
       feedback: { enabled: true, error: null },
@@ -107,17 +112,23 @@ vi.mock('@tanstack/react-router', () => ({
 import { OverviewDashboard } from '../admin-overview'
 
 describe('OverviewDashboard', () => {
-  it('renders counts as a single phrase with no units, hints, or captions', () => {
+  it('renders each count with a two-line item description', () => {
     const { container } = render(<OverviewDashboard />)
 
     expect(screen.getByText('3')).toBeInTheDocument()
+    expect(screen.getByText('conversations')).toBeInTheDocument()
     expect(screen.getByText('waiting for reply')).toBeInTheDocument()
+    expect(screen.getAllByText('feedback posts')).toHaveLength(2)
     expect(screen.getByText('to review')).toBeInTheDocument()
-    expect(screen.getByText('without changelog')).toBeInTheDocument()
-    expect(screen.getByText('article drafts')).toBeInTheDocument()
+    expect(screen.getByText('with no changelog')).toBeInTheDocument()
+    expect(screen.getByText('help center articles')).toBeInTheDocument()
+    expect(screen.getByText('in draft')).toBeInTheDocument()
+    expect(screen.getByText('Support')).toBeInTheDocument()
+    expect(screen.getByText('Feedback')).toBeInTheDocument()
 
-    expect(screen.queryByText('open')).not.toBeInTheDocument()
-    expect(screen.queryByText('drafts')).not.toBeInTheDocument()
+    expect(screen.queryByText('without changelog')).not.toBeInTheDocument()
+    expect(screen.queryByText('Complete, no changelog')).not.toBeInTheDocument()
+    expect(screen.queryByText('Publishing')).not.toBeInTheDocument()
     expect(screen.queryByText(/Updated/)).not.toBeInTheDocument()
     expect(screen.queryByText(/A little context/)).not.toBeInTheDocument()
     expect(screen.queryByText('Needs attention')).not.toBeInTheDocument()
@@ -171,18 +182,29 @@ describe('OverviewDashboard', () => {
     expect(title.closest('a')?.querySelector('[data-entity="post"]')).not.toBeNull()
   })
 
-  it('hides the side panel entirely when momentum and publishing are empty', () => {
+  it('hides the side panel entirely when module desks are empty', () => {
     const { container } = render(<OverviewDashboard />)
     expect(container.querySelector('aside')).toBeNull()
-    expect(screen.queryByText('Momentum')).not.toBeInTheDocument()
-    expect(screen.queryByText('Publishing', { selector: 'h2' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Changelog', { selector: 'h2' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Help Center', { selector: 'h2' })).not.toBeInTheDocument()
     expect(screen.queryByText('No new votes this week.')).not.toBeInTheDocument()
   })
 
-  it('shows only the non-empty side groups', () => {
+  it('shows a card per module for non-empty desks', () => {
     state.data = {
       ...state.data,
-      publishing: [
+      changelog: [
+        {
+          id: 'e1',
+          product: 'changelog',
+          entity: 'changelog',
+          title: 'September updates',
+          link: { to: '/admin', search: { entry: 'e1' } },
+          status: 'draft',
+          meta: 'James',
+        },
+      ],
+      helpCenter: [
         {
           id: 'a1',
           product: 'helpCenter',
@@ -196,11 +218,12 @@ describe('OverviewDashboard', () => {
     }
     const { container } = render(<OverviewDashboard />)
     expect(container.querySelector('aside')).not.toBeNull()
+    expect(screen.queryByText('Publishing')).not.toBeInTheDocument()
     expect(screen.queryByText('Momentum')).not.toBeInTheDocument()
-    expect(screen.getByText('Publishing', { selector: 'h2' })).toBeInTheDocument()
+    expect(screen.getByText('Changelog', { selector: 'h2' })).toBeInTheDocument()
+    expect(screen.getByText('Help Center', { selector: 'h2' })).toBeInTheDocument()
+    expect(screen.getByText('September updates')).toBeInTheDocument()
     expect(screen.getByText('Environment Variables')).toBeInTheDocument()
-    expect(screen.getByText('Draft')).toBeInTheDocument()
-    expect(screen.getByText('James Morton')).toBeInTheDocument()
     expect(screen.getByText('Environment Variables').closest('a')).toHaveAttribute(
       'href',
       '/admin?article=a1'
