@@ -25,7 +25,7 @@ Hard rule (test-enforced, not just snapshotted): no package imports app code.
 Top-level directories of src, with lib split one level deeper; root-level files form `(root)`. The components -> lib/server edge is the TanStack Start server-function pattern, recorded as reality.
 
 Nodes (11): (root), components, integrations, lib/client, lib/server, lib/shared, locales, routes, styles, test, types
-Edges (26):
+Edges (27):
 
 - (root) -> components
 - (root) -> lib/server
@@ -52,13 +52,15 @@ Edges (26):
 - routes -> lib/client
 - routes -> lib/server
 - routes -> lib/shared
+- routes -> styles
 - test -> lib/client
 
 ## 3. Server domains (lib/server/domains)
 
-Nodes (50): activity, ai, analytics, api, api-keys, assistant, attribute-definitions, billing, boards, changelog, channel-accounts, channels, comments, companies, company-attributes, conversation, conversation-attributes, conversation-views, embeddings, export, help-center, import, inbox, macros, merge-suggestions, moderation, notifications, office-hours, platform-credentials, post-tags, post-views, posts, principals, push-devices, roadmaps, roles, segments, sentiment, settings, sla, status, statuses, subscriptions, summary, teams, tickets, user-attributes, users, webhooks, workflows
-Edges (120):
+Nodes (51): activity, admin-overview, ai, analytics, api, api-keys, assistant, attribute-definitions, billing, boards, changelog, channel-accounts, channels, comments, companies, company-attributes, conversation, conversation-attributes, conversation-views, embeddings, export, help-center, import, inbox, macros, merge-suggestions, moderation, notifications, office-hours, platform-credentials, post-tags, post-views, posts, principals, push-devices, roadmaps, roles, segments, sentiment, settings, sla, status, statuses, subscriptions, summary, teams, tickets, user-attributes, users, webhooks, workflows
+Edges (121):
 
+- admin-overview -> changelog
 - analytics -> api
 - analytics -> assistant
 - analytics -> principals
