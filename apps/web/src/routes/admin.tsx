@@ -20,6 +20,7 @@ import { UpdateBanner } from '@/components/admin/update-banner'
 import { PlanNoticeBanner } from '@/components/admin/plan-notice-banner'
 import { getPlanNotice } from '@/lib/server/functions/plan-notice'
 import { isProductEnabled } from '@/lib/shared/types/settings'
+import { CloudQuackbackWidget } from '@/components/shared/cloud-quackback-widget'
 
 const PostModal = lazy(() =>
   import('@/components/admin/feedback/post-modal').then((m) => ({ default: m.PostModal }))
@@ -178,6 +179,7 @@ function AdminLayout() {
 
   return (
     <IntlProvider locale={locale} defaultLocale={DEFAULT_LOCALE} messages={messages}>
+      <CloudQuackbackWidget />
       <TooltipProvider delay={0}>
         <div className="flex h-screen bg-background">
           <AdminSidebar initialUserData={initialUserData} latestVersion={latestVersion} />

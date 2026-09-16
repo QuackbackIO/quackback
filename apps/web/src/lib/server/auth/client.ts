@@ -8,6 +8,12 @@ import {
 } from 'better-auth/client/plugins'
 import { detectAuthBlockRedirect } from './redirect-errors'
 
+declare global {
+  interface Window {
+    Quackback?: (...args: unknown[]) => void
+  }
+}
+
 /**
  * Better-auth client for client-side authentication
  * Used in React components for auth actions
@@ -45,7 +51,12 @@ export const authClient = createAuthClient({
  * Sign out the current user
  * Note: Call router.invalidate() after signOut to update session
  */
-export const signOut = authClient.signOut
+export const signOut: typeof authClient.signOut = async (...args) => {
+  if (typeof window !== 'undefined') {
+    window.Quackback?.('logout')
+  }
+  return authClient.signOut(...args)
+}
 
 /**
  * Check if the browser has an active session cookie.
