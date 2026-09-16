@@ -7,12 +7,6 @@ import { isSyntheticAnonEmail } from '@/lib/shared/anonymous-email'
 const INSTANCE_URL = 'https://feedback.quackback.io'
 const SDK_URL = `${INSTANCE_URL}/api/widget/sdk.js`
 
-declare global {
-  interface Window {
-    Quackback?: ((...args: unknown[]) => void) & { q?: unknown[] }
-  }
-}
-
 function installStub() {
   if (window.Quackback) return
   const stub = function Quackback(this: unknown, ...args: unknown[]) {

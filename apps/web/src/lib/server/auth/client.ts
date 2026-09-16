@@ -8,12 +8,6 @@ import {
 } from 'better-auth/client/plugins'
 import { detectAuthBlockRedirect } from './redirect-errors'
 
-declare global {
-  interface Window {
-    Quackback?: (...args: unknown[]) => void
-  }
-}
-
 /**
  * Better-auth client for client-side authentication
  * Used in React components for auth actions
