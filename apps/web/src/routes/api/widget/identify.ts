@@ -26,7 +26,10 @@ import { resolveAndMergeAnonymousToken } from '@/lib/server/auth/identify-merge'
 import { verifyHS256JWT } from '@/lib/server/widget/identity-token'
 import { getClientIp } from '@/lib/server/domains/api/rate-limit'
 import { checkWidgetIdentifyRateLimit } from '@/lib/server/auth/widget-rate-limit'
-import { validateAndCoerceAttributes } from '@/lib/server/domains/users/user.attributes'
+import {
+  EXTERNAL_ID_KEY,
+  validateAndCoerceAttributes,
+} from '@/lib/server/domains/users/user.attributes'
 import { reconcileWidgetMemberships } from '@/lib/server/domains/segments/segment-membership.service'
 import { captureCountryFromHeaders } from '@/lib/server/auth/country-capture'
 import { logger } from '@/lib/server/logger'
@@ -245,6 +248,26 @@ export const Route = createFileRoute('/api/widget/identify')({
         let userRecord = await db.query.user.findFirst({
           where: eq(user.externalId, externalId),
         })
+        if (userRecord) {
+          const boundPrincipal = await db.query.principal.findFirst({
+            where: eq(principal.userId, userRecord.id),
+            columns: { id: true },
+          })
+          if (!boundPrincipal) {
+            // Remove-from-portal leaves the Better-Auth user. If the unique
+            // widget `sub` is still set, a later identify would resurrect that
+            // husk (often with a stale email). Release it and treat as a miss.
+            await db
+              .update(user)
+              .set({
+                externalId: null,
+                metadata: sql`(coalesce(nullif(${user.metadata}, ''), '{}')::jsonb - ${[EXTERNAL_ID_KEY]}::text[])::text`,
+                updatedAt: new Date(),
+              })
+              .where(eq(user.id, userRecord.id))
+            userRecord = null
+          }
+        }
         if (!userRecord) {
           userRecord = await db.query.user.findFirst({
             where: sql`LOWER(${user.email}) = ${normalizedEmail}`,
@@ -278,17 +301,31 @@ export const Route = createFileRoute('/api/widget/identify')({
               updates.metadata = sql`((coalesce(nullif(${user.metadata}, ''), '{}')::jsonb - ${[]}::text[]) || ${JSON.stringify(validAttrs)}::jsonb)::text`
             }
             if (externalId && userRecord.email !== normalizedEmail) {
-              // `sub` is authoritative on a verified email change. Adopt the new
-              // address unless another row already holds it — the partial-unique
-              // email index would otherwise reject the move, and external_id still
-              // resolves this visitor either way.
+              // `sub` is authoritative on a verified email change. Adopt the
+              // new address, or fail closed when another account already holds
+              // it — never keep a stale email on a signed identify.
               const emailHolder = await db.query.user.findFirst({
                 columns: { id: true },
                 where: sql`LOWER(${user.email}) = ${normalizedEmail}`,
               })
-              if (!emailHolder || emailHolder.id === userRecord.id) {
-                updates.email = normalizedEmail
+              if (emailHolder && emailHolder.id !== userRecord.id) {
+                log.warn(
+                  {
+                    external_id: externalId,
+                    claimed_email: normalizedEmail,
+                    bound_email: userRecord.email,
+                    bound_user_id: userRecord.id,
+                    holder_user_id: emailHolder.id,
+                  },
+                  'verified identify email claim collides with another account'
+                )
+                return jsonError(
+                  'EMAIL_IN_USE',
+                  'This email is already bound to another account',
+                  409
+                )
               }
+              updates.email = normalizedEmail
             }
             if (country && country !== userRecord.country) {
               updates.country = country
@@ -301,6 +338,13 @@ export const Route = createFileRoute('/api/widget/identify')({
 
           if (Object.keys(updates).length > 0) {
             await db.update(user).set(updates).where(eq(user.id, userRecord.id))
+            userRecord = {
+              ...userRecord,
+              ...(typeof updates.name === 'string' ? { name: updates.name } : {}),
+              ...(typeof updates.email === 'string' ? { email: updates.email } : {}),
+              ...('image' in updates ? { image: updates.image as string | null } : {}),
+              ...(typeof updates.externalId === 'string' ? { externalId: updates.externalId } : {}),
+            }
           }
         } else {
           const [created] = await db

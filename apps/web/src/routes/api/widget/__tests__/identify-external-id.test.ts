@@ -78,6 +78,7 @@ vi.mock('@/lib/server/widget/identity-token', () => ({
 vi.mock('@/lib/server/domains/users/user.attributes', () => ({
   validateAndCoerceAttributes: vi.fn(async () => ({ valid: {}, removals: [], errors: [] })),
   mergeMetadata: vi.fn(() => null),
+  EXTERNAL_ID_KEY: '_externalUserId',
 }))
 
 vi.mock('@/lib/server/domains/segments/segment-membership.service', () => ({
@@ -154,6 +155,68 @@ describe('POST /api/widget/identify — external_id resolution (verified path)',
     expect(userInsertValues()).toBeUndefined()
     // sub is authoritative: the changed email is adopted onto the same account.
     expect(updateSet).toHaveBeenCalledWith(expect.objectContaining({ email: 'bob-new@acme.com' }))
+    const body = (await res.json()) as { user?: { email?: string; name?: string } }
+    expect(body.user?.email).toBe('bob-new@acme.com')
+  })
+
+  it('rejects a verified email claim that belongs to another account', async () => {
+    mockVerifyJWT.mockReturnValue({
+      sub: 'sub_bob',
+      email: 'taken@acme.com',
+      name: 'Bob',
+    })
+    mockUserFindFirst
+      .mockResolvedValueOnce({
+        id: 'user_bob',
+        email: 'bob-old@acme.com',
+        externalId: 'sub_bob',
+        name: 'Bob',
+        image: null,
+        metadata: null,
+      })
+      .mockResolvedValueOnce({ id: 'user_other' })
+    mockPrincipalFindFirst.mockResolvedValue({ id: 'principal_bob', role: 'user' })
+
+    const res = await postIdentify({ ssoToken: 'jwt' })
+
+    expect(res.status).toBe(409)
+    const body = (await res.json()) as { error?: { code?: string } }
+    expect(body.error?.code).toBe('EMAIL_IN_USE')
+    expect(updateSet).not.toHaveBeenCalled()
+    expect(userInsertValues()).toBeUndefined()
+  })
+
+  it('releases an external_id bound to a user with no principal and creates a clean record', async () => {
+    mockVerifyJWT.mockReturnValue({
+      sub: 'staff-admin',
+      email: 'new@acme.com',
+      name: 'Si Cruse',
+    })
+    mockUserFindFirst
+      // external_id still points at the Remove-from-portal husk…
+      .mockResolvedValueOnce({
+        id: 'user_husk',
+        email: 'kira-probe@example.com',
+        externalId: 'staff-admin',
+        name: 'Old Name',
+        image: null,
+        metadata: '{"_externalUserId":"staff-admin"}',
+      })
+      // …after release, email lookup misses so we insert a new user.
+      .mockResolvedValueOnce(null)
+    mockPrincipalFindFirst.mockResolvedValue(null)
+
+    const res = await postIdentify({ ssoToken: 'jwt' })
+
+    expect(res.status).toBe(200)
+    expect(updateSet).toHaveBeenCalledWith(
+      expect.objectContaining({ externalId: null, metadata: expect.anything() })
+    )
+    expect(userInsertValues()).toMatchObject({
+      email: 'new@acme.com',
+      name: 'Si Cruse',
+      externalId: 'staff-admin',
+    })
   })
 
   it('backfills external_id when the user is first matched by email', async () => {
