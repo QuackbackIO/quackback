@@ -5,25 +5,33 @@
 --
 -- Drop the 1h settings cache only when we actually insert, so a workspace
 -- that already cached visualTheme=legacy does not stay on the old theme
--- until TTL. A replay inserts nothing, so the DELETE is a no-op.
+-- until TTL. The writes sit in a DO block so a fleet replay is a no-op:
+-- ON CONFLICT DO NOTHING inserts nothing, the CTE is empty, and the DELETE
+-- does not run. A bare CTE DELETE at the tip would collapse the gap-heal
+-- window.
 --
 -- @contract: additive
-WITH inserted AS (
-  INSERT INTO "workspace_experiments" (
-    "settings_id",
-    "experiment_id",
-    "visible",
-    "enabled"
+
+-- @replay: guarded-by every settings row already having a refined-visual-theme experiment; ON CONFLICT then inserts nothing and the cache DELETE does not run
+DO $$
+BEGIN
+  WITH inserted AS (
+    INSERT INTO "workspace_experiments" (
+      "settings_id",
+      "experiment_id",
+      "visible",
+      "enabled"
+    )
+    SELECT
+      "id",
+      'refined-visual-theme',
+      true,
+      true
+    FROM "settings"
+    ON CONFLICT ("settings_id", "experiment_id") DO NOTHING
+    RETURNING "settings_id"
   )
-  SELECT
-    "id",
-    'refined-visual-theme',
-    true,
-    true
-  FROM "settings"
-  ON CONFLICT ("settings_id", "experiment_id") DO NOTHING
-  RETURNING "settings_id"
-)
-DELETE FROM "kv_store"
-WHERE "key" IN ('settings:workspace', 'auth:registered-providers')
-  AND EXISTS (SELECT 1 FROM inserted);
+  DELETE FROM "kv_store"
+  WHERE "key" IN ('settings:workspace', 'auth:registered-providers')
+    AND EXISTS (SELECT 1 FROM inserted);
+END $$;

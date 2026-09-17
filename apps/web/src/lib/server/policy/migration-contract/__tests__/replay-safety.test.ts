@@ -283,6 +283,9 @@ describe('the real corpus', () => {
     // 0279 wraps oauth_client backfills, the oauth_client_resource FK rewrite,
     // and the Microsoft oid rewrite so each second run writes zero rows.
     // 0280 marks session scope behind scope predicates, so a second run writes zero rows.
+    // 0283 inserts a Labs row only where none exists, then deletes the 1h
+    // settings cache only if that insert returned a row. A second run writes
+    // zero rows. A bare CTE DELETE at the tip would collapse the gap-heal window.
     const vouching = files.filter(
       (f) => assessReplaySafety(f, readFileSync(join(MIGRATIONS_DIR, f), 'utf8')).vouched.length > 0
     )
@@ -297,6 +300,7 @@ describe('the real corpus', () => {
       '0277_widget_chat_to_messenger.sql',
       '0279_better_auth_17.sql',
       '0280_widget_session_scope.sql',
+      '0283_refined_visual_theme_default_on.sql',
     ])
   })
 
