@@ -193,19 +193,6 @@ export const runGetPublicChangelog = createServerOnlyFn(async function runGetPub
   data: z.infer<typeof getChangelogSchema>
 ) {
   log.debug({ changelog_id: data.id }, 'get public changelog')
-  // Outer gate: a private portal must not serve changelog content to a
-  // caller the portal-access resolver denies. Throw the same not-found
-  // error as a genuinely missing entry — a blocked visitor sees no data
-  // and cannot distinguish a private entry from a non-existent one.
-  const access = await resolvePortalAccessForRequest()
-  if (!access.granted) {
-    log.debug('portal access denied')
-    throw new NotFoundError(
-      'CHANGELOG_NOT_FOUND',
-      `Published changelog entry with ID ${data.id} not found`
-    )
-  }
-
   const actor = await policyActorFromAuth(authCtx)
 
   // Changelog audience gate (Settings > Changelog > Visibility): same
@@ -229,6 +216,14 @@ export const runGetPublicChangelog = createServerOnlyFn(async function runGetPub
 export const getPublicChangelogFn = createServerFn({ method: 'GET' })
   .validator(getChangelogSchema)
   .handler(async ({ data }) => {
+    const access = await resolvePortalAccessForRequest()
+    if (!access.granted) {
+      log.debug('portal access denied')
+      throw new NotFoundError(
+        'CHANGELOG_NOT_FOUND',
+        `Published changelog entry with ID ${data.id} not found`
+      )
+    }
     return runGetPublicChangelog(await getOptionalAuth(), data)
   })
 
@@ -240,13 +235,6 @@ export const runListPublicChangelogs = createServerOnlyFn(async function runList
   data: z.infer<typeof listPublicChangelogsSchema>
 ) {
   log.debug({ limit: data.limit }, 'list public changelogs')
-  // Outer gate: private portal + unauthorized caller → no changelog entries.
-  const access = await resolvePortalAccessForRequest()
-  if (!access.granted) {
-    log.debug('portal access denied, returning empty list')
-    return { items: [], nextCursor: null, hasMore: false }
-  }
-
   const actor = await policyActorFromAuth(authCtx)
 
   if (!(await isChangelogAudienceGranted(actor))) {
@@ -274,6 +262,11 @@ export const runListPublicChangelogs = createServerOnlyFn(async function runList
 export const listPublicChangelogsFn = createServerFn({ method: 'GET' })
   .validator(listPublicChangelogsSchema)
   .handler(async ({ data }) => {
+    const access = await resolvePortalAccessForRequest()
+    if (!access.granted) {
+      log.debug('portal access denied, returning empty list')
+      return { items: [], nextCursor: null, hasMore: false }
+    }
     return runListPublicChangelogs(await getOptionalAuth(), data)
   })
 

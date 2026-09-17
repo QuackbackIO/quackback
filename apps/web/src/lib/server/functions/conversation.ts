@@ -253,14 +253,14 @@ async function assertConversationsEnabled(): Promise<void> {
 }
 
 /**
- * Shared gate for every visitor-facing conversation endpoint: conversations must be
- * reachable from some surface (widget messenger or portal Support tab) AND the
- * caller must have portal access. Team members (agents) bypass the portal
- * check — they reach these endpoints from the admin inbox. Throws on failure.
+ * Shared gate for visitor-facing conversation endpoints: conversations must be
+ * reachable. Portal-site callers also need portal access; widget-scoped
+ * sessions (Bearer BFF) do not — the host app already admitted them.
+ * Team members bypass the portal check (admin inbox).
  */
-async function assertVisitorConversationAccess(role: string | null): Promise<void> {
+async function assertVisitorConversationAccess(ctx: AuthContext): Promise<void> {
   await assertConversationsEnabled()
-  if (isTeamMember(role)) return
+  if (isTeamMember(ctx.principal.role) || ctx.scope === 'widget') return
   const { resolvePortalAccessForRequest } = await import('./portal-access')
   const access = await resolvePortalAccessForRequest()
   if (!access.granted) throw new Error('Portal access required')
@@ -271,7 +271,7 @@ async function assertVisitorConversationAccess(role: string | null): Promise<voi
 /** Send a visitor message; creates the conversation on the first message. */
 export const runSendConversationMessage = createServerOnlyFn(
   async function runSendConversationMessage(ctx: AuthContext, data: SendConversationMessageInput) {
-    await assertVisitorConversationAccess(ctx.principal.role)
+    await assertVisitorConversationAccess(ctx)
 
     // Visitor-only ingress checks (agents send via sendAgentMessageFn).
     if (!isTeamMember(ctx.principal.role)) {
@@ -485,9 +485,9 @@ export const runGetMyConversation = createServerOnlyFn(async function runGetMyCo
     return { ...base, conversation: null, messages: [], hasMore: false }
   }
 
-  // Gate reads behind portal access for non-team callers (degrade gracefully
-  // to the greeting-only state rather than throwing on the bootstrap path).
-  if (!isTeamMember(ctx.principal.role)) {
+  // Portal-site visitors need portal access (degrade to greeting-only).
+  // Widget-scoped sessions skip that — the host app already admitted them.
+  if (!isTeamMember(ctx.principal.role) && ctx.scope !== 'widget') {
     const { resolvePortalAccessForRequest } = await import('./portal-access')
     const access = await resolvePortalAccessForRequest()
     if (!access.granted) {
@@ -579,8 +579,7 @@ export const runGetMyConversations = createServerOnlyFn(async function runGetMyC
   const { isConversationsEnabled } = await import('@/lib/server/domains/settings/settings.support')
   if (!(await isConversationsEnabled()) || !ctx?.principal) return empty
 
-  // Non-team callers must hold portal access (mirrors getMyConversationFn gating).
-  if (!isTeamMember(ctx.principal.role)) {
+  if (!isTeamMember(ctx.principal.role) && ctx.scope !== 'widget') {
     const { resolvePortalAccessForRequest } = await import('./portal-access')
     const access = await resolvePortalAccessForRequest()
     if (!access.granted) return empty
@@ -636,8 +635,7 @@ export const runGetMessengerUnread = createServerOnlyFn(async function runGetMes
   const { isConversationsEnabled } = await import('@/lib/server/domains/settings/settings.support')
   if (!(await isConversationsEnabled()) || !ctx?.principal) return zero
 
-  // Non-team callers must hold portal access (mirrors getMyConversationsFn).
-  if (!isTeamMember(ctx.principal.role)) {
+  if (!isTeamMember(ctx.principal.role) && ctx.scope !== 'widget') {
     const { resolvePortalAccessForRequest } = await import('./portal-access')
     const access = await resolvePortalAccessForRequest()
     if (!access.granted) return zero
@@ -657,7 +655,7 @@ export const getMessengerUnreadFn = createServerFn({ method: 'GET' }).handler(as
 /** Older messages for a conversation the caller can view (keyset pagination). */
 export const runListConversationMessages = createServerOnlyFn(
   async function runListConversationMessages(ctx: AuthContext, data: ListMessagesInput) {
-    await assertVisitorConversationAccess(ctx.principal.role)
+    await assertVisitorConversationAccess(ctx)
     const actor = await policyActorFromAuth(ctx)
     const { assertConversationViewable } =
       await import('@/lib/server/domains/conversation/conversation.service')
@@ -761,7 +759,7 @@ export const runMarkConversationRead = createServerOnlyFn(async function runMark
   ctx: AuthContext,
   data: ConversationIdInput
 ) {
-  await assertVisitorConversationAccess(ctx.principal.role)
+  await assertVisitorConversationAccess(ctx)
   const actor = await policyActorFromAuth(ctx)
   // The service derives the side from the actor's relationship to the
   // conversation (a team member in a thread they own is the visitor).
@@ -780,7 +778,7 @@ export const markConversationReadFn = createServerFn({ method: 'POST' })
 /** Broadcast that the caller is typing (ephemeral; client-throttled). */
 export const runSendConversationTyping = createServerOnlyFn(
   async function runSendConversationTyping(ctx: AuthContext, data: ConversationIdInput) {
-    await assertVisitorConversationAccess(ctx.principal.role)
+    await assertVisitorConversationAccess(ctx)
     const actor = await policyActorFromAuth(ctx)
     // Side derived in the service from conversation ownership, not role.
     const { signalTyping } = await import('@/lib/server/domains/conversation/conversation.service')
@@ -800,7 +798,7 @@ export const runSubmitCsat = createServerOnlyFn(async function runSubmitCsat(
   ctx: AuthContext,
   data: CsatInput
 ) {
-  await assertVisitorConversationAccess(ctx.principal.role)
+  await assertVisitorConversationAccess(ctx)
   const actor = await policyActorFromAuth(ctx)
   const { recordCsat } = await import('@/lib/server/domains/conversation/conversation.service')
   await recordCsat(data.conversationId as ConversationId, data.rating, data.comment, actor)
@@ -828,7 +826,7 @@ export const setAgentAvailabilityFn = createServerFn({ method: 'POST' })
 /** Mint a short-lived token authorizing this principal's SSE stream. */
 export const runMintConversationStreamToken = createServerOnlyFn(
   async function runMintConversationStreamToken(ctx: AuthContext) {
-    await assertVisitorConversationAccess(ctx.principal.role)
+    await assertVisitorConversationAccess(ctx)
     const { mintStreamToken } = await import('@/lib/server/realtime/stream-token')
     return { token: mintStreamToken(ctx.principal.id, ctx.scope) }
   }
@@ -843,7 +841,7 @@ export const deleteConversationMessageFn = createServerFn({ method: 'POST' })
   .validator(messageIdSchema)
   .handler(async ({ data }) => {
     const ctx = await requireAuth()
-    await assertVisitorConversationAccess(ctx.principal.role)
+    await assertVisitorConversationAccess(ctx)
     const actor = await policyActorFromAuth(ctx)
     const { deleteConversationMessage } =
       await import('@/lib/server/domains/conversation/conversation.service')
