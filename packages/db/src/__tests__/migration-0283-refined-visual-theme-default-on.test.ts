@@ -14,10 +14,9 @@ const MIGRATION_SQL = readFileSync(
   join(__dirname, '../../drizzle/0283_refined_visual_theme_default_on.sql'),
   'utf8'
 )
-const SCRATCH_SQL = MIGRATION_SQL.replace(/"settings"/g, '"_m0283_settings"').replace(
-  /"workspace_experiments"/g,
-  '"_m0283_workspace_experiments"'
-)
+const SCRATCH_SQL = MIGRATION_SQL.replace(/"settings"/g, '"_m0283_settings"')
+  .replace(/"workspace_experiments"/g, '"_m0283_workspace_experiments"')
+  .replace(/"kv_store"/g, '"_m0283_kv_store"')
 
 const DB_URL = process.env.DATABASE_URL
 let db: Database | null = null
@@ -50,6 +49,19 @@ describe.skipIf(!dbAvailable)('migration 0283 refined visual theme default on', 
             PRIMARY KEY ("settings_id", "experiment_id")
           )
         `)
+        await tx.execute(sql`
+          CREATE TABLE "_m0283_kv_store" (
+            "workspace_key" text NOT NULL,
+            "key" text NOT NULL,
+            "value" jsonb NOT NULL,
+            "expires_at" timestamp with time zone NOT NULL,
+            PRIMARY KEY ("workspace_key", "key")
+          )
+        `)
+        await tx.execute(sql`
+          INSERT INTO "_m0283_kv_store" ("workspace_key", "key", "value", "expires_at")
+          VALUES ('_', 'settings:workspace', '{"visualTheme":"legacy"}'::jsonb, now() + interval '1 hour')
+        `)
 
         const inserted = await tx.execute<{ id: string }>(sql`
           INSERT INTO "_m0283_settings" (id) VALUES
@@ -73,7 +85,22 @@ describe.skipIf(!dbAvailable)('migration 0283 refined visual theme default on', 
         `)
 
         await tx.execute(sql.raw(SCRATCH_SQL))
+
+        const afterInsert = await tx.execute<{ n: string }>(sql`
+          SELECT count(*)::text AS n FROM "_m0283_kv_store"
+        `)
+        expect(Number((afterInsert as unknown as { n: string }[])[0]?.n)).toBe(0)
+
+        await tx.execute(sql`
+          INSERT INTO "_m0283_kv_store" ("workspace_key", "key", "value", "expires_at")
+          VALUES ('_', 'settings:workspace', '{"visualTheme":"legacy"}'::jsonb, now() + interval '1 hour')
+        `)
         await tx.execute(sql.raw(SCRATCH_SQL))
+
+        const afterReplay = await tx.execute<{ n: string }>(sql`
+          SELECT count(*)::text AS n FROM "_m0283_kv_store"
+        `)
+        expect(Number((afterReplay as unknown as { n: string }[])[0]?.n)).toBe(1)
 
         const rows = await tx.execute<{
           settings_id: string

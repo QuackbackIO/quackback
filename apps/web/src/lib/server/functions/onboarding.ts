@@ -262,22 +262,26 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
           useCase
         )
         const { flags, enabledModules } = flagsForGoal(DEFAULT_FEATURE_FLAGS, useCase)
-        const [created] = await db
-          .insert(settings)
-          .values({
-            id: generateId('workspace'),
-            name: workspaceName,
-            slug,
-            createdAt: new Date(),
-            portalConfig: JSON.stringify(DEFAULT_PORTAL_CONFIG),
-            widgetConfig: JSON.stringify(DEFAULT_WIDGET_CONFIG),
-            assistantConfig: DEFAULT_ASSISTANT_CONFIG,
-            authConfig: JSON.stringify({ ...DEFAULT_AUTH_CONFIG, openSignup: true }),
-            setupState: JSON.stringify(initialState),
-            featureFlags: JSON.stringify(flags),
-          })
-          .returning()
-        await ensureNewWorkspaceLabs(created.id)
+        const created = await db.transaction(async (tx) => {
+          const [row] = await tx
+            .insert(settings)
+            .values({
+              id: generateId('workspace'),
+              name: workspaceName,
+              slug,
+              createdAt: new Date(),
+              portalConfig: JSON.stringify(DEFAULT_PORTAL_CONFIG),
+              widgetConfig: JSON.stringify(DEFAULT_WIDGET_CONFIG),
+              assistantConfig: DEFAULT_ASSISTANT_CONFIG,
+              authConfig: JSON.stringify({ ...DEFAULT_AUTH_CONFIG, openSignup: true }),
+              setupState: JSON.stringify(initialState),
+              featureFlags: JSON.stringify(flags),
+            })
+            .returning()
+          if (!row) throw new Error('Failed to create workspace settings')
+          await ensureNewWorkspaceLabs(row.id, tx)
+          return row
+        })
         await invalidateSettingsCache()
         result = {
           id: created.id,
