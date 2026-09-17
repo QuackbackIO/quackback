@@ -91,8 +91,6 @@ interface WidgetShellProps {
    * separate domain).
    */
   portalOrigin?: string
-  /** Teammate avatars shown as a small cluster in the Home header. */
-  team?: { name: string; avatarUrl: string | null }[]
   /** Workspace logo shown top-left on Home (null hides it). */
   logoUrl?: string | null
   /** Extra header content beside the back button (e.g. the messenger thread's
@@ -122,7 +120,6 @@ export function WidgetShell({
   enabledTabs = { feedback: true, changelog: false, help: false, messages: false },
   portalAccess,
   portalOrigin,
-  team = [],
   logoUrl = null,
   headerContent,
   backdrop,
@@ -313,19 +310,6 @@ export function WidgetShell({
 
         {/* Right: portal CTA, user menu, and the always-present close. */}
         <div className="flex items-center gap-1">
-          {/* Teammate cluster — Home only, a friendly "real people are here" cue. */}
-          {activeTab === 'home' && !onBack && team.length > 0 && (
-            <div className="flex items-center -space-x-2 me-1" aria-hidden>
-              {team.map((member, i) => (
-                <Avatar
-                  key={`${member.name}-${i}`}
-                  src={member.avatarUrl}
-                  name={member.name}
-                  className="size-7 text-xs ring-2 ring-background"
-                />
-              ))}
-            </div>
-          )}
           {showPortalCta && (
             <button
               type="button"
