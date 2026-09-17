@@ -27,6 +27,17 @@ const CREATE_ISSUE_MUTATION = `
   }
 `
 
+const UPDATE_ISSUE_MUTATION = `
+  mutation UpdateIssue($id: String!, $input: IssueUpdateInput!) {
+    issueUpdate(id: $id, input: $input) {
+      success
+      issue {
+        id
+      }
+    }
+  }
+`
+
 async function linearGraphql(
   accessToken: string,
   query: string,
@@ -52,6 +63,27 @@ async function linearGraphql(
     data?: Record<string, unknown>
     errors?: Array<{ message: string }>
   }>
+}
+
+/** Refresh the title and full rich description of an already-linked issue. */
+export async function updateLinearIssue(
+  accessToken: string,
+  issueId: string,
+  input: { title: string; description: string }
+): Promise<void> {
+  const result = await linearGraphql(accessToken, UPDATE_ISSUE_MUTATION, {
+    id: issueId,
+    input,
+  })
+
+  if (result.errors?.length) {
+    throw issueError(result.errors[0].message, { retryable: false })
+  }
+  const update = result.data?.issueUpdate as
+    { success?: boolean; issue?: { id: string } } | undefined
+  if (!update?.success || !update.issue) {
+    throw issueError('Linear did not update the issue', { retryable: false })
+  }
 }
 
 export const linearIssues: IssueTrackerCapability = {

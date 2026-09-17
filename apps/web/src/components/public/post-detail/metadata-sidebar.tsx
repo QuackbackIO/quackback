@@ -149,7 +149,7 @@ export function ManagePostActions({
               <TooltipContent side="bottom">
                 {intl.formatMessage({
                   id: 'portal.postDetail.metadata.retryIntegrations',
-                  defaultMessage: 'Retry integrations',
+                  defaultMessage: 'Sync integrations',
                 })}
               </TooltipContent>
             </Tooltip>

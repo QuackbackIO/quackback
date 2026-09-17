@@ -173,9 +173,9 @@ function PostModalContent({
 
   const retryIntegrations = useMutation({
     mutationFn: () => retryPostIntegrationSyncFn({ data: { id: post.id } }),
-    onSuccess: () => {
+    onSuccess: (result) => {
       setRetryQueuedFor(post.id)
-      toast.success('Integration sync queued')
+      toast.success(result.updated ? 'Integration content synced' : 'Integration sync queued')
     },
     onError: (error) =>
       toast.error(error instanceof Error ? error.message : 'Failed to retry integrations'),
@@ -315,7 +315,7 @@ function PostModalContent({
       canManageIntegrations &&
       !post.deletedAt &&
       post.moderationState === 'published' &&
-      externalLinksQuery.data?.length === 0 &&
+      externalLinksQuery.data !== undefined &&
       retryQueuedFor !== post.id
         ? () => retryIntegrations.mutate()
         : undefined,

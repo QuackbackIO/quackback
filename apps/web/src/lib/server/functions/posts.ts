@@ -569,10 +569,9 @@ export const fetchPostExternalLinksFn = createServerFn({ method: 'GET' })
   })
 
 /**
- * Re-emit post.created for a published post whose original integration fan-out
- * was missed. This is deliberately admin-only and refuses posts that already
- * have an external link, so an operator cannot duplicate a tracked issue by
- * retrying a successful delivery. Mention notifications are not replayed.
+ * Sync a published post to its external tracker. A linked Linear issue is
+ * refreshed in place (including media); a post with no external links uses the
+ * normal post.created queue. Mention notifications are never replayed.
  */
 export const retryPostIntegrationSyncFn = createServerFn({ method: 'POST' })
   .validator(retryPostIntegrationSyncSchema)
@@ -591,13 +590,18 @@ export const retryPostIntegrationSyncFn = createServerFn({ method: 'POST' })
 
     const links = await getPostExternalLinks(postId)
     if (links.length > 0) {
-      throw new Error('This post is already linked to an external issue')
+      const { refreshLinkedLinearPost } = await import('@/integrations/linear/server/post-sync')
+      const updated = await refreshLinkedLinearPost(postId)
+      if (!updated)
+        throw new Error('This post is linked to an integration that cannot be refreshed')
+      log.info({ post_id: data.id }, 'linked Linear issue refreshed')
+      return { queued: false, updated: true }
     }
 
     const { announcePublishedPost } = await import('@/lib/server/domains/posts/post.announce')
     await announcePublishedPost(postId, undefined, { skipMentions: true })
     log.info({ post_id: data.id }, 'post integration sync retried')
-    return { queued: true }
+    return { queued: true, updated: false }
   })
 
 /**
