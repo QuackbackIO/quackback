@@ -898,7 +898,6 @@ function WidgetPage() {
       enabledTabs={tabs}
       portalAccess={portalAccess}
       portalOrigin={portalOrigin}
-      team={team}
       showPoweredBy={showPoweredBy}
       logoUrl={(home?.showLogo ?? true) ? logoUrl : null}
       headerContent={messengerHeader}

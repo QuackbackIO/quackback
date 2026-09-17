@@ -108,8 +108,8 @@ describe('POST /api/widget/upload', () => {
     const body = await res.json()
     expect(body).toHaveProperty('publicUrl')
     expect(uploadObject).toHaveBeenCalledWith(
-      expect.stringContaining('widget-images'),
-      expect.any(Buffer),
+      expect.stringContaining('widget-media'),
+      expect.anything(),
       'image/webp'
     )
   })

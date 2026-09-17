@@ -11,8 +11,14 @@
  */
 
 import { isValidTypeId } from '@quackback/ids'
-import { sanitizeUrl, sanitizeImageUrl, safePositiveInt } from '@/lib/shared/utils/sanitize'
+import {
+  sanitizeUrl,
+  sanitizeImageUrl,
+  sanitizeMediaUrl,
+  safePositiveInt,
+} from '@/lib/shared/utils/sanitize'
 import { isTrustedAttachmentUrl } from '@/lib/server/storage/trusted-url'
+import { normalizeVideoMimeType } from '@/lib/shared/storage-config'
 
 function isExtraTrustedImageHost(rawSrc: string, extraHosts: string[] | undefined): boolean {
   if (!extraHosts?.length) return false
@@ -51,6 +57,7 @@ const ALLOWED_NODE_TYPES = new Set([
   'image',
   'resizableImage',
   'youtube',
+  'video',
   'horizontalRule',
   'hardBreak',
   'table',
@@ -196,6 +203,18 @@ function sanitizeAttrs(
       const src = sanitizeImageUrl(rawSrc)
       if (!src) return { src: '', alt: '' }
       return { src, alt: String(attrs.alt ?? '').slice(0, 500) }
+    }
+
+    case 'video': {
+      const rawSrc = String(attrs.src ?? '')
+      // Native video is always an upload, never a remote embed. Keeping it on
+      // the workspace's storage origin prevents a post from becoming a hidden
+      // third-party tracking request.
+      if (!isTrustedAttachmentUrl(rawSrc)) return { src: '', mimeType: '', title: '' }
+      const src = sanitizeMediaUrl(rawSrc)
+      if (!src) return { src: '', mimeType: '', title: '' }
+      const mimeType = normalizeVideoMimeType(attrs.mimeType)
+      return { src, mimeType, title: String(attrs.title ?? '').slice(0, 500) }
     }
 
     case 'taskItem':

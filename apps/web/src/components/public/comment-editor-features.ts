@@ -13,6 +13,7 @@ export const COMMENT_EDITOR_FEATURES: EditorFeatures = {
   blockquotes: true,
   dividers: true,
   images: true,
+  videos: true,
   tables: true,
   embeds: true,
   quackbackEmbeds: true,

@@ -31,6 +31,7 @@ import {
   principal,
   user,
 } from '@/lib/server/db'
+import { EXTERNAL_ID_KEY, extractExternalId } from '@/lib/server/domains/users/user.attributes'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -207,5 +208,31 @@ describe.skipIf(!fixture.available)('removePortalUser (real DB, rolled back)', (
       .from(principal)
       .where(eq(principal.id, DELETED_USER_PRINCIPAL_ID))
     expect(stillThere).toBeDefined()
+  })
+
+  it('releases widget external_id so a later identify cannot resurrect the husk', async () => {
+    const author = await seedPortalUser('Widget Wendy')
+    await testDb
+      .update(user)
+      .set({
+        externalId: 'staff-admin',
+        metadata: JSON.stringify({ [EXTERNAL_ID_KEY]: 'staff-admin', plan: 'pro' }),
+      })
+      .where(eq(user.id, author.userId))
+
+    await expect(removePortalUser(author.principalId)).resolves.toBeUndefined()
+
+    const [row] = await testDb.select().from(user).where(eq(user.id, author.userId))
+    expect(row).toBeDefined()
+    expect(row.externalId).toBeNull()
+    expect(extractExternalId(row.metadata)).toBeNull()
+    expect(JSON.parse(row.metadata ?? '{}')).toMatchObject({ plan: 'pro' })
+    expect(row.email).toMatch(/@example\.com$/)
+
+    const [gone] = await testDb
+      .select({ id: principal.id })
+      .from(principal)
+      .where(eq(principal.id, author.principalId))
+    expect(gone).toBeUndefined()
   })
 })

@@ -19,6 +19,21 @@ export const ALLOWED_REHOST_MIMES = new Set([
   'image/x-icon',
 ])
 
+const ISO_IMAGE_BRANDS = new Set([
+  'avif',
+  'avis',
+  'heic',
+  'heix',
+  'hevc',
+  'hevx',
+  'heim',
+  'heis',
+  'hevm',
+  'hevs',
+  'mif1',
+  'msf1',
+])
+
 /**
  * Map equivalent MIME spellings to the canonical form `sniffImageMime` returns,
  * so a header cross-check accepts e.g. `image/vnd.microsoft.icon` as `image/x-icon`.
@@ -74,5 +89,39 @@ export function sniffImageMime(buf: Buffer): string | null {
   if (startsWithAt(buf, 0, [0x00, 0x00, 0x01, 0x00])) {
     return 'image/x-icon'
   }
+  return null
+}
+
+/**
+ * Sniff the browser-playable video formats accepted by feedback uploads.
+ *
+ * MP4 is an ISO Base Media File Format container, identified by its `ftyp`
+ * box. AVIF uses the same container, so reject its brands before accepting the
+ * file as video. WebM starts with the EBML header used by Matroska/WebM.
+ */
+export type SniffedVideoMime = 'video/mp4' | 'video/webm'
+
+/** Canonical container family used when comparing a declared video MIME. */
+export function canonicalizeVideoMime(mime: string): SniffedVideoMime | null {
+  if (
+    mime === 'video/mp4' ||
+    mime === 'video/quicktime' ||
+    mime === 'video/x-m4v' ||
+    mime === 'video/m4v'
+  ) {
+    return 'video/mp4'
+  }
+  if (mime === 'video/webm') return 'video/webm'
+  return null
+}
+
+export function sniffVideoMime(buf: Buffer): SniffedVideoMime | null {
+  if (buf.length >= 12 && buf.slice(4, 8).toString('ascii') === 'ftyp') {
+    const brand = buf.slice(8, 12).toString('ascii')
+    if (!ISO_IMAGE_BRANDS.has(brand)) return 'video/mp4'
+  }
+
+  if (startsWithAt(buf, 0, [0x1a, 0x45, 0xdf, 0xa3])) return 'video/webm'
+
   return null
 }

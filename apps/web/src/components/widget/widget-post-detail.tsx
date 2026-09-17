@@ -24,7 +24,7 @@ import { WidgetPortalTitle } from './widget-portal-title'
 import { WidgetPostDetailSkeleton } from './widget-skeletons'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { PostId } from '@quackback/ids'
-import { useWidgetImageUpload } from './use-widget-image-upload'
+import { useWidgetMediaUpload } from './use-widget-image-upload'
 
 interface StatusInfo {
   id: string
@@ -39,7 +39,7 @@ interface WidgetPostDetailProps {
 
 export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
   const intl = useIntl()
-  const { upload: uploadImage } = useWidgetImageUpload()
+  const { upload: uploadMedia } = useWidgetMediaUpload()
   const {
     isIdentified,
     hmacRequired,
@@ -316,7 +316,7 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
               isIdentified={isIdentified}
               user={user}
               onSubmit={submitComment}
-              onImageUpload={uploadImage}
+              onImageUpload={uploadMedia}
             />
           )}
 
@@ -347,7 +347,7 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
             pinnedCommentId={post.pinnedCommentId}
             canComment={canComment && !post.isCommentsLocked}
             onSubmitComment={handleSubmitReply}
-            onImageUpload={uploadImage}
+            onImageUpload={uploadMedia}
           />
 
           {hasMoreComments && (

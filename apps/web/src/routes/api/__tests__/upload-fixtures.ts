@@ -31,6 +31,27 @@ export function mockImageFile(name: string, type: string, extraBytes = 0): File 
   })
 }
 
+/** Create a File whose bytes match an accepted native-video container. */
+export function mockVideoFile(name = 'recording.mp4', type = 'video/mp4', extraBytes = 0): File {
+  const bytes =
+    type === 'video/webm'
+      ? [0x1a, 0x45, 0xdf, 0xa3, 0, 0, 0, 0]
+      : [
+          0,
+          0,
+          0,
+          0x18,
+          ...`ftyp${type === 'video/quicktime' || name.endsWith('.mov') ? 'qt  ' : 'mp42'}`
+            .split('')
+            .map((char) => char.charCodeAt(0)),
+          0,
+          0,
+          0,
+          0,
+        ]
+  return new File([new Uint8Array(bytes), new Uint8Array(extraBytes)], name, { type })
+}
+
 /** Create a mock Better Auth session result */
 export function mockSession(
   overrides: Partial<{ user: Partial<SessionResult['user']> }> = {}

@@ -97,6 +97,7 @@ interface PostContentSectionProps {
 const DEFAULT_USER_EDITOR_FEATURES: EditorFeatures = {
   headings: true,
   images: true,
+  videos: true,
   codeBlocks: true,
   bubbleMenu: true,
   slashMenu: true,
@@ -215,6 +216,7 @@ export function PostContentSection({
               toolbarPosition="bottom"
               features={editorFeatures}
               onImageUpload={onImageUpload}
+              onVideoUpload={onImageUpload}
             />
           </Suspense>
         </div>

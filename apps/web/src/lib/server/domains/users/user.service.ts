@@ -45,6 +45,7 @@ import { NotFoundError, InternalError } from '@/lib/shared/errors'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { logger } from '@/lib/server/logger'
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
+import { EXTERNAL_ID_KEY } from '@/lib/server/domains/users/user.attributes'
 
 const log = logger.child({ component: 'users' })
 import type {
@@ -407,14 +408,20 @@ export async function listPortalUsers(
 }
 
 /**
- * Remove a portal user from the portal (soft removal).
+ * Remove a portal user from the portal (membership teardown).
  *
  * Deletes the `principal` record (role='user') only — the Better-Auth `user`
- * and `account` rows are intentionally retained so we still recognize the
- * person if they return (and their re-join shows distinct "joined" vs
- * "account created" dates). The FK is `principal.userId -> user` with
- * onDelete cascade, so deleting the principal does NOT remove the user; a
- * returning sign-in re-provisions a principal via the SSO hooks or lazily.
+ * and `account` rows are retained so a same-email portal sign-in can remint a
+ * principal (distinct "joined" vs "account created" dates). The FK is
+ * `principal.userId -> user` with onDelete cascade, so deleting the principal
+ * does NOT remove the user.
+ *
+ * Widget identity is not membership. `user.external_id` (verified JWT `sub`)
+ * and metadata `_externalUserId` are unique keys for POST /api/widget/identify,
+ * so they are released in this transaction. Leaving them set would resurrect
+ * the same user on the next ssoToken — including a stale email when the claim
+ * has since changed. Same-email identify may still remint via the email
+ * fallback; a different verified email creates a new person.
  *
  * Their authored content — posts, comments, conversation threads — is
  * re-attributed to the deleted-user placeholder first, in the same
@@ -459,6 +466,16 @@ export async function removePortalUser(principalId: PrincipalId): Promise<void> 
         .where(eq(conversations.visitorPrincipalId, principalId))
       if (userId) {
         await tx.delete(session).where(eq(session.userId, userId))
+        // Release widget identity keys so a later ssoToken with this `sub`
+        // cannot resolve the husk. Email stays for a same-address portal re-join.
+        await tx
+          .update(user)
+          .set({
+            externalId: null,
+            metadata: sql`(coalesce(nullif(${user.metadata}, ''), '{}')::jsonb - ${EXTERNAL_ID_KEY}::text)::text`,
+            updatedAt: new Date(),
+          })
+          .where(eq(user.id, userId))
       }
       // Delete principal record (user record is retained; the FK cascades the
       // other way, from user to principal)

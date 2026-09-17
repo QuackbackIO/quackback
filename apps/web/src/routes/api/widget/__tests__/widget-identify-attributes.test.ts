@@ -39,6 +39,7 @@ vi.mock('@/lib/server/domains/users/user.attributes', () => ({
   mergeMetadata: vi.fn((_existing: string | null, valid: Record<string, unknown>) =>
     JSON.stringify({ ...valid })
   ),
+  EXTERNAL_ID_KEY: '_externalUserId',
 }))
 vi.mock('@/lib/server/widget/identity-token', () => ({
   verifyHS256JWT: vi.fn(),

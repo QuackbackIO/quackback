@@ -52,13 +52,36 @@ vi.mock('@aws-sdk/s3-request-presigner', () => ({
   getSignedUrl: vi.fn(async () => 'https://s3.amazonaws.com/presigned'),
 }))
 
-const { uploadImageFromFormData, uploadImageBuffer } = await import('@/lib/server/storage/s3')
+const { uploadImageFromFormData, uploadMediaFromFormData, uploadImageBuffer } =
+  await import('@/lib/server/storage/s3')
 
 const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])
 const GIF_BYTES = new Uint8Array([...'GIF89a'].map((c) => c.charCodeAt(0)).concat([0, 0, 0, 0]))
 const HTML_BYTES = new Uint8Array(
   [...'<html><script>alert(1)</script></html>'].map((c) => c.charCodeAt(0))
 )
+const MOV_BYTES = new Uint8Array([
+  0,
+  0,
+  0,
+  0x18,
+  ...'ftypqt  '.split('').map((c) => c.charCodeAt(0)),
+  0,
+  0,
+  0,
+  0,
+])
+const M4V_BYTES = new Uint8Array([
+  0,
+  0,
+  0,
+  0x18,
+  ...'ftypM4V '.split('').map((c) => c.charCodeAt(0)),
+  0,
+  0,
+  0,
+  0,
+])
 
 function formDataWith(bytes: Uint8Array<ArrayBuffer>, name: string, type: string): FormData {
   const fd = new FormData()
@@ -102,6 +125,53 @@ describe('uploadImageFromFormData — content validation', () => {
       'p'
     )
     expect(res.status).toBe(400)
+  })
+})
+
+describe('uploadMediaFromFormData — MOV and M4V containers', () => {
+  const lastPutInput = () => {
+    const calls = mockSend.mock.calls as unknown as Array<[{ input: { ContentType?: string } }]>
+    return calls[calls.length - 1]![0].input
+  }
+
+  it('accepts a QuickTime MOV and preserves its content type', async () => {
+    mockSend.mockClear()
+    const res = await uploadMediaFromFormData(
+      formDataWith(MOV_BYTES, 'recording.mov', 'video/quicktime'),
+      'portal-media'
+    )
+    expect(res.status).toBe(200)
+    expect(lastPutInput().ContentType).toBe('video/quicktime')
+  })
+
+  it('infers QuickTime for a MOV when the picker omits the MIME type', async () => {
+    mockSend.mockClear()
+    const res = await uploadMediaFromFormData(
+      formDataWith(MOV_BYTES, 'recording.mov', ''),
+      'portal-media'
+    )
+    expect(res.status).toBe(200)
+    expect(lastPutInput().ContentType).toBe('video/quicktime')
+  })
+
+  it('accepts the common M4V MIME alias', async () => {
+    mockSend.mockClear()
+    const res = await uploadMediaFromFormData(
+      formDataWith(M4V_BYTES, 'recording.m4v', 'video/x-m4v'),
+      'portal-media'
+    )
+    expect(res.status).toBe(200)
+    expect(lastPutInput().ContentType).toBe('video/x-m4v')
+  })
+
+  it('rejects non-video bytes declared as QuickTime', async () => {
+    mockSend.mockClear()
+    const res = await uploadMediaFromFormData(
+      formDataWith(HTML_BYTES, 'recording.mov', 'video/quicktime'),
+      'portal-media'
+    )
+    expect(res.status).toBe(400)
+    expect(mockSend).not.toHaveBeenCalled()
   })
 })
 

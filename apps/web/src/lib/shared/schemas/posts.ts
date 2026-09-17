@@ -39,6 +39,7 @@ const tiptapNodeSchema: z.ZodType<DbTiptapContent> = z.lazy(() =>
       'image',
       'resizableImage',
       'youtube',
+      'video',
       'horizontalRule',
       'hardBreak',
       'table',

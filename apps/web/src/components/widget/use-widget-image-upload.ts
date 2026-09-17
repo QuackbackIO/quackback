@@ -1,5 +1,10 @@
 import { useCallback } from 'react'
-import { useImageUpload, validateImageFile } from '@/lib/client/hooks/use-image-upload'
+import {
+  useImageUpload,
+  useMediaUpload,
+  validateImageFile,
+  validateMediaFile,
+} from '@/lib/client/hooks/use-image-upload'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { useWidgetAuth } from './widget-auth-provider'
 
@@ -41,6 +46,40 @@ export function useWidgetImageUpload(options: UseWidgetImageUploadOptions = {}) 
       // Reject unusable files before touching the session: an invalid pick
       // must not mint/persist an anonymous session or bump sessionVersion.
       const invalid = validateImageFile(file)
+      if (invalid) {
+        onError?.(invalid)
+        throw invalid
+      }
+      const ready = await ensureSession()
+      if (!ready) {
+        const error = new WidgetSessionError()
+        onError?.(error)
+        throw error
+      }
+      return rawUpload(file)
+    },
+    [ensureSession, rawUpload, onError]
+  )
+
+  return { upload }
+}
+
+/** Image and native-video upload for feedback and comment editors in the widget. */
+export function useWidgetMediaUpload(options: UseWidgetImageUploadOptions = {}) {
+  const { onStart, onSuccess, onError } = options
+  const { ensureSession } = useWidgetAuth()
+  const { upload: rawUpload } = useMediaUpload({
+    endpoint: '/api/widget/upload',
+    prefix: 'widget-media',
+    extraHeaders: getWidgetAuthHeaders,
+    onStart,
+    onSuccess,
+    onError,
+  })
+
+  const upload = useCallback(
+    async (file: File): Promise<string> => {
+      const invalid = validateMediaFile(file)
       if (invalid) {
         onError?.(invalid)
         throw invalid

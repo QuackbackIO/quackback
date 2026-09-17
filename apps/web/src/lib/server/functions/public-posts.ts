@@ -117,13 +117,6 @@ export const runListPublicPosts = createServerOnlyFn(async function runListPubli
   data: ListPublicPostsInput
 ) {
   log.debug({ sort: data.sort, board_slug: data.boardSlug || 'all' }, 'list public posts')
-  // Outer gate: private portal + unauthorized caller → no portal data.
-  const access = await resolvePortalAccessForRequest()
-  if (!access.granted) {
-    log.debug('portal access denied, returning empty')
-    return { items: [], hasMore: false, total: 0 }
-  }
-
   // Resolve the actor so per-board audience + per-post moderation
   // filters apply from the caller's perspective. Without this,
   // listPublicPosts defaulted to ANONYMOUS_ACTOR and authenticated /
@@ -175,6 +168,11 @@ export const runListPublicPosts = createServerOnlyFn(async function runListPubli
 export const listPublicPostsFn = createServerFn({ method: 'GET' })
   .validator(listPublicPostsSchema)
   .handler(async ({ data }: { data: ListPublicPostsInput }) => {
+    const access = await resolvePortalAccessForRequest()
+    if (!access.granted) {
+      log.debug('portal access denied, returning empty')
+      return { items: [], hasMore: false, total: 0 }
+    }
     return runListPublicPosts(await getOptionalAuth(), data)
   })
 
@@ -330,15 +328,6 @@ export const runToggleVote = createServerOnlyFn(async function runToggleVote(
   data: ToggleVoteInput
 ): Promise<{ voted: boolean; voteCount: number }> {
   log.debug({ post_id: data.postId }, 'toggle vote')
-  // Portal-visibility gate: a denied caller (signed-in but not on
-  // the allowlist of a private portal) must not be able to vote.
-  // Read-side gating happens at list / detail; write paths need
-  // the same check or the caller could mutate state from inside a
-  // portal they're not entitled to view.
-  const access = await resolvePortalAccessForRequest()
-  if (!access.granted) {
-    throw new Error('Portal access required')
-  }
   // Per-post audience gate: portal-access alone is not enough — an
   // authenticated caller could still vote on a team-only / segment-
   // restricted post if they knew the id. `assertPostVotable`
@@ -384,6 +373,10 @@ export const toggleVoteFn = createServerFn({ method: 'POST' })
   .validator(toggleVoteSchema)
   .handler(
     async ({ data }: { data: ToggleVoteInput }): Promise<{ voted: boolean; voteCount: number }> => {
+      const access = await resolvePortalAccessForRequest()
+      if (!access.granted) {
+        throw new Error('Portal access required')
+      }
       return runToggleVote(await requireAuth(), data)
     }
   )
@@ -396,14 +389,6 @@ export const runCreatePublicPost = createServerOnlyFn(async function runCreatePu
   data: CreatePublicPostInput
 ) {
   log.debug({ board_id: data.boardId }, 'create public post')
-  // Portal-visibility gate: a denied caller must not be able to
-  // create posts inside a portal they're not entitled to view. The
-  // per-board audience check inside getPublicBoardById still runs
-  // as the inner layer for granted callers.
-  const access = await resolvePortalAccessForRequest()
-  if (!access.granted) {
-    throw new Error('Portal access required')
-  }
   const { boardId: boardIdRaw, title, content, contentJson, metadata, customFields } = data
   const boardId = boardIdRaw as BoardId
 
@@ -488,6 +473,10 @@ export const runCreatePublicPost = createServerOnlyFn(async function runCreatePu
 export const createPublicPostFn = createServerFn({ method: 'POST' })
   .validator(createPublicPostSchema)
   .handler(async ({ data }: { data: CreatePublicPostInput }) => {
+    const access = await resolvePortalAccessForRequest()
+    if (!access.granted) {
+      throw new Error('Portal access required')
+    }
     return runCreatePublicPost(await requireAuth(), data)
   })
 

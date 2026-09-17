@@ -11,7 +11,7 @@ import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form'
 import { FormError } from '@/components/shared/form-error'
 import { TitleInput } from '@/components/shared/title-input'
-import { usePostImageUpload } from '@/lib/client/hooks/use-image-upload'
+import { usePostMediaUpload } from '@/lib/client/hooks/use-image-upload'
 import type { JSONContent } from '@tiptap/react'
 import type { Board, PostTag, PostStatusEntity } from '@/lib/shared/db-types'
 
@@ -41,7 +41,7 @@ export function PostFormFields({
 }: PostFormFieldsProps) {
   const selectedBoard = boards.find((b) => b.id === form.watch('boardId'))
   const selectedStatus = statuses.find((s) => s.id === form.watch('statusId'))
-  const { upload: uploadImage } = usePostImageUpload()
+  const { upload: uploadMedia } = usePostMediaUpload()
 
   return (
     <>
@@ -147,13 +147,15 @@ export function PostFormFields({
                     blockquotes: true,
                     dividers: true,
                     images: richMediaEnabled,
+                    videos: richMediaEnabled,
                     tables: richMediaEnabled,
                     embeds: richMediaEnabled && videoEmbedsEnabled,
                     quackbackEmbeds: true,
                     bubbleMenu: true,
                     slashMenu: true,
                   }}
-                  onImageUpload={richMediaEnabled ? uploadImage : undefined}
+                  onImageUpload={richMediaEnabled ? uploadMedia : undefined}
+                  onVideoUpload={richMediaEnabled ? uploadMedia : undefined}
                 />
               </FormControl>
               <FormMessage />

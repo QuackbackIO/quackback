@@ -3,13 +3,15 @@ import type { UserId } from '@quackback/ids'
 import { auth } from '@/lib/server/auth'
 import { toSessionScope } from '@/lib/shared/roles'
 import { db, eq, principal } from '@/lib/server/db'
-import { isS3Usable, uploadImageFromFormData } from '@/lib/server/storage/s3'
+import { isS3Usable, uploadMediaFromFormData } from '@/lib/server/storage/s3'
 
 const ALLOWED_PREFIXES = new Set([
   'uploads',
   'changelog-images',
   'changelog',
   'post-images',
+  'post-media',
+  'comment-media',
   'help-center',
   'chat-images',
 ])
@@ -41,7 +43,7 @@ export async function handleAdminUpload({ request }: { request: Request }): Prom
   const rawPrefix = formData.get('prefix')
   const prefix =
     typeof rawPrefix === 'string' && ALLOWED_PREFIXES.has(rawPrefix) ? rawPrefix : 'uploads'
-  return uploadImageFromFormData(formData, prefix)
+  return uploadMediaFromFormData(formData, prefix)
 }
 
 export const Route = createFileRoute('/api/upload/image')({

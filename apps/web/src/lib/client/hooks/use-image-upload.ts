@@ -1,5 +1,11 @@
 import { useCallback } from 'react'
-import { MAX_FILE_SIZE, isAllowedImageType } from '@/lib/shared/storage-config'
+import {
+  MAX_FILE_SIZE,
+  isAllowedImageType,
+  isAllowedMediaType,
+  maxMediaFileSize,
+  resolveVideoMimeType,
+} from '@/lib/shared/storage-config'
 
 interface UseImageUploadOptions {
   prefix?: string
@@ -9,6 +15,8 @@ interface UseImageUploadOptions {
   onSuccess?: (url: string) => void
   onError?: (error: Error) => void
 }
+
+type FileValidator = (file: File) => Error | null
 
 /** Client-side type/size check shared by every upload flavour; null when uploadable. */
 export function validateImageFile(file: File): Error | null {
@@ -21,7 +29,35 @@ export function validateImageFile(file: File): Error | null {
   return null
 }
 
-export function useImageUpload(options: UseImageUploadOptions = {}) {
+export function validateMediaFile(file: File): Error | null {
+  const contentType = isAllowedImageType(file.type)
+    ? file.type
+    : resolveVideoMimeType(file.type, file.name)
+  if (!contentType || !isAllowedMediaType(contentType)) {
+    return new Error(
+      'Invalid file type. Allowed types: JPEG, PNG, GIF, WebP, AVIF, MP4, WebM, MOV, M4V.'
+    )
+  }
+  const maxBytes = maxMediaFileSize(contentType)
+  if (file.size > maxBytes) {
+    return new Error(`File too large. Maximum size is ${maxBytes / 1024 / 1024}MB.`)
+  }
+  return null
+}
+
+type FileNormalizer = (file: File) => File
+
+function normalizeMediaFile(file: File): File {
+  const contentType = resolveVideoMimeType(file.type, file.name)
+  if (!contentType || contentType === file.type) return file
+  return new File([file], file.name, { type: contentType, lastModified: file.lastModified })
+}
+
+function useFileUpload(
+  options: UseImageUploadOptions,
+  validate: FileValidator,
+  normalize: FileNormalizer = (file) => file
+) {
   const {
     prefix = 'uploads',
     endpoint = '/api/upload/image',
@@ -33,7 +69,8 @@ export function useImageUpload(options: UseImageUploadOptions = {}) {
 
   const upload = useCallback(
     async (file: File): Promise<string> => {
-      const invalid = validateImageFile(file)
+      file = normalize(file)
+      const invalid = validate(file)
       if (invalid) {
         onError?.(invalid)
         throw invalid
@@ -71,10 +108,18 @@ export function useImageUpload(options: UseImageUploadOptions = {}) {
         throw error
       }
     },
-    [prefix, endpoint, extraHeaders, onStart, onSuccess, onError]
+    [prefix, endpoint, extraHeaders, onStart, onSuccess, onError, validate, normalize]
   )
 
   return { upload }
+}
+
+export function useImageUpload(options: UseImageUploadOptions = {}) {
+  return useFileUpload(options, validateImageFile)
+}
+
+export function useMediaUpload(options: UseImageUploadOptions = {}) {
+  return useFileUpload(options, validateMediaFile, normalizeMediaFile)
 }
 
 export function useChangelogImageUpload(
@@ -89,10 +134,22 @@ export function usePostImageUpload(
   return useImageUpload({ ...options, prefix: 'post-images' })
 }
 
+export function usePostMediaUpload(
+  options: Omit<UseImageUploadOptions, 'prefix' | 'endpoint' | 'extraHeaders'> = {}
+) {
+  return useMediaUpload({ ...options, prefix: 'post-media', endpoint: '/api/upload/image' })
+}
+
 export function usePortalImageUpload(
   options: Omit<UseImageUploadOptions, 'prefix' | 'endpoint' | 'extraHeaders'> = {}
 ) {
   return useImageUpload({ ...options, endpoint: '/api/portal/upload' })
+}
+
+export function usePortalMediaUpload(
+  options: Omit<UseImageUploadOptions, 'prefix' | 'endpoint' | 'extraHeaders'> = {}
+) {
+  return useMediaUpload({ ...options, prefix: 'portal-media', endpoint: '/api/portal/upload' })
 }
 
 // The widget flavour lives in `@/components/widget/use-widget-image-upload`:

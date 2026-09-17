@@ -74,6 +74,18 @@ export function sanitizeImageUrl(url: string): string {
   }
 }
 
+/** Sanitize an uploaded audio/video source. Data and executable URLs are refused. */
+export function sanitizeMediaUrl(url: string): string {
+  if (!url || typeof url !== 'string') return ''
+  try {
+    const parsed = new URL(url, 'https://example.com')
+    if (!['http:', 'https:'].includes(parsed.protocol)) return ''
+    return url.startsWith('/') ? url : parsed.href
+  } catch {
+    return ''
+  }
+}
+
 /**
  * Coerce a value to a positive integer within a range, or return a default.
  */

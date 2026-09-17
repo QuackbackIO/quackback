@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useIntl } from 'react-intl'
 import { createFileRoute, notFound, useRouteContext } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
@@ -22,7 +22,8 @@ import { getPostPermissionsFn } from '@/lib/server/functions/public-posts'
 import { usePostActions } from '@/lib/client/mutations'
 import { usePortalTeamPostActions } from '@/lib/client/mutations/portal-team-post-actions'
 import { MergeIntoDialog, MergeOthersDialog } from '@/components/admin/feedback/merge-section'
-import { usePortalImageUpload } from '@/lib/client/hooks/use-image-upload'
+import { usePortalMediaUpload } from '@/lib/client/hooks/use-image-upload'
+import { useEnsureAnonSession } from '@/lib/client/hooks/use-ensure-anon-session'
 import {
   useDeleteComment,
   usePinComment,
@@ -163,10 +164,16 @@ function PostDetailPage() {
   const approvePost = useApprovePost(postId)
   const rejectPost = useRejectPost(postId)
 
-  const isAnonymousSession = session?.user?.principalType === 'anonymous'
-  const canUploadImages = effectiveCanEdit && !isAnonymousSession && !!session?.user
-  const canUploadCommentImages = !isAnonymousSession && !!session?.user
-  const { upload: uploadImage } = usePortalImageUpload()
+  const { upload: uploadMedia } = usePortalMediaUpload()
+  const ensureAnonSession = useEnsureAnonSession()
+  const uploadMediaWithSession = useCallback(
+    async (file: File) => {
+      if (!(await ensureAnonSession())) throw new Error('Could not create upload session')
+      return uploadMedia(file)
+    },
+    [ensureAnonSession, uploadMedia]
+  )
+  const canUploadPostMedia = effectiveCanEdit && !!session?.user
 
   const {
     editPost,
@@ -317,7 +324,7 @@ function PostDetailPage() {
             onEditStart={() => setIsEditingPost(true)}
             onEditSave={canEdit ? editPost : (team.saveEditAsTeam ?? editPost)}
             onEditCancel={() => setIsEditingPost(false)}
-            onImageUpload={canUploadImages ? uploadImage : undefined}
+            onImageUpload={canUploadPostMedia ? uploadMediaWithSession : undefined}
             isSaving={isSavingEdit || team.isTeamSavingEdit}
             canModerate={canModerate}
             moderationBusy={approvePost.isPending || rejectPost.isPending}
@@ -397,7 +404,7 @@ function PostDetailPage() {
                 ? Math.max(0, post.commentsTotalRootCount - post.comments.length)
                 : undefined
             }
-            onImageUpload={canUploadCommentImages ? uploadImage : undefined}
+            onImageUpload={uploadMediaWithSession}
             canModerate={canModerate}
           />
         </Suspense>

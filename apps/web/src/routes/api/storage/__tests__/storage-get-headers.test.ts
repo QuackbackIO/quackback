@@ -9,10 +9,21 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockConfig = { s3Proxy: false }
 
-const getS3Object = vi.fn(async (_key: string) => ({
-  body: new Blob([new Uint8Array([0x47, 0x49, 0x46])]).stream(),
-  contentType: 'image/gif',
-}))
+const getS3Object = vi.fn(
+  async (
+    _key: string,
+    _range?: string
+  ): Promise<{
+    body: ReadableStream<Uint8Array>
+    contentType: string
+    contentLength?: number
+    contentRange?: string
+    acceptRanges?: string
+  }> => ({
+    body: new Blob([new Uint8Array([0x47, 0x49, 0x46])]).stream(),
+    contentType: 'image/gif',
+  })
+)
 
 vi.mock('@/lib/server/config', () => ({ config: mockConfig }))
 vi.mock('@/lib/server/storage/s3', () => ({
@@ -88,6 +99,37 @@ describe('handleStorageGet — proxy response headers', () => {
     const res = await get('/api/storage/logos/redirect.gif')
     expect(res.status).toBe(302)
     expect(res.headers.get('Location')).toBe('https://s3.example.com/presigned')
+  })
+
+  it('streams byte ranges for native video playback and seeking', async () => {
+    mockConfig.s3Proxy = true
+    getS3Object.mockResolvedValueOnce({
+      body: new Blob([new Uint8Array([1, 2, 3, 4])]).stream(),
+      contentType: 'video/mp4',
+      contentLength: 4,
+      contentRange: 'bytes 0-3/40',
+      acceptRanges: 'bytes',
+    })
+    const res = await handleStorageGet({
+      request: new Request('https://app.example.com/api/storage/logos/recording.mp4', {
+        headers: { Range: 'bytes=0-3' },
+      }),
+    })
+    expect(res.status).toBe(206)
+    expect(res.headers.get('Content-Range')).toBe('bytes 0-3/40')
+    expect(res.headers.get('Accept-Ranges')).toBe('bytes')
+    expect(getS3Object).toHaveBeenCalledWith('logos/recording.mp4', 'bytes=0-3')
+  })
+
+  it('rejects multipart byte ranges instead of buffering them', async () => {
+    mockConfig.s3Proxy = true
+    const res = await handleStorageGet({
+      request: new Request('https://app.example.com/api/storage/logos/recording.mp4', {
+        headers: { Range: 'bytes=0-3,8-11' },
+      }),
+    })
+    expect(res.status).toBe(416)
+    expect(getS3Object).not.toHaveBeenCalled()
   })
 
   it('rejects a private object when only its key is known', async () => {
