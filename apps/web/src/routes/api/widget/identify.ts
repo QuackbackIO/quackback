@@ -334,6 +334,10 @@ export const Route = createFileRoute('/api/widget/identify')({
               // First verified sight of this account — stamp the durable subject.
               updates.externalId = externalId
             }
+            if (!userRecord.emailVerified) {
+              // Address came from a signed JWT.
+              updates.emailVerified = true
+            }
           }
 
           if (Object.keys(updates).length > 0) {
@@ -353,7 +357,7 @@ export const Route = createFileRoute('/api/widget/identify')({
               // index-eligible and the "one email per account" invariant
               // holds across mixed-case identify calls.
               email: normalizedEmail,
-              emailVerified: false,
+              emailVerified: true,
               image: identified.avatarURL ?? null,
               metadata: hasAttrs ? JSON.stringify(validAttrs) : null,
               country: country ?? null,

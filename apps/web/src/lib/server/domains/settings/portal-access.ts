@@ -10,7 +10,8 @@ import type { Role } from '@/lib/shared/roles'
  * Phase 3: accepted portal email-invite grant (verified email required).
  * Phase 4: allowed segment grant (authenticated; emailVerified required to
  *          prevent unverified email-rule matches from granting access).
- * Phase 5: widget sign-in grant (any portal-signed-in user when admin enables widgetSignIn).
+ * Phase 5: HMAC-verified widget session (iframe Bearer from signed identify).
+ * Phase 6: widget sign-in grant (portal cookie after OTT handoff).
  */
 
 // =============================================================================
@@ -95,11 +96,21 @@ export interface PortalAccessContext {
    * email-based segment.
    */
   isInAllowedSegment?: boolean
+  /**
+   * True when the current session is widget-scoped and has a
+   * `widget_identified_session` row with `hmac_verified = true`.
+   * That is the trust anchor for a signed `ssoToken` identify: the host
+   * app vouched for this person. Defaults to `false`.
+   */
+  hasHmacVerifiedWidgetSession?: boolean
 }
 
 /** Discriminated union — narrows cleanly in if/switch. */
 export type PortalAccessResult =
-  | { granted: true; reason: 'public' | 'team' | 'domain' | 'invite' | 'widget' | 'segment' }
+  | {
+      granted: true
+      reason: 'public' | 'team' | 'domain' | 'invite' | 'widget' | 'segment' | 'widget-identity'
+    }
   | { granted: false; reason: 'unauthenticated' | 'unauthorized' }
 
 // =============================================================================
@@ -130,15 +141,19 @@ function emailDomain(email: string | null): string | null {
  * 3. Verified email on allowed-domain list → granted.
  * 4. Accepted portal invite (email match, verified) → granted.
  * 5. Allowed segment grant (authenticated member of an allowed segment) → granted.
- * 6. Widget sign-in: enabled + authenticated + via-widget marker + HMAC mode → granted.
- * 7. No real session → unauthenticated (redirect to login).
- * 8. Authenticated but no matching grant → unauthorized (show access-denied screen).
+ * 6. HMAC-verified widget session (iframe Bearer from signed identify) → granted.
+ * 7. Widget sign-in: enabled + authenticated + via-widget marker + HMAC mode → granted.
+ * 8. No real session → unauthenticated (redirect to login).
+ * 9. Authenticated but no matching grant → unauthorized (show access-denied screen).
  *
- * Ordering: team > domain > invite > segment > widget. The widget branch is intentionally
- * last among grant paths so that a more-specific grant (team, domain, invite, segment)
- * is preferred when the user qualifies for multiple paths.
+ * Ordering: team > domain > invite > segment > widget-identity > widget.
+ * More-specific portal grants win when the caller qualifies for several.
  *
- * Widget branch requires THREE conditions beyond `isAuthenticated`:
+ * Widget-identity grant: authenticated + hmac-verified widget session. Does
+ * not require widget sign-in or a handoff marker — those gate the portal
+ * *site* after OTT exchange. Board tiers still apply after this outer gate.
+ *
+ * Widget handoff branch requires THREE conditions beyond `isAuthenticated`:
  *   - `widgetSignInEnabled` — admin explicitly enabled widget sign-in.
  *   - `hasViaWidgetMarker` — the session was created via the handoff route
  *     (prevents self-registered portal users from gaining the grant).
@@ -187,7 +202,16 @@ export function evaluatePortalAccess(ctx: PortalAccessContext): PortalAccessResu
     return { granted: true, reason: 'segment' }
   }
 
-  // 6. Widget sign-in grant.
+  // 6. HMAC-verified widget session (iframe Bearer from signed identify).
+  //    The host app vouched for this person. Unlocks the shared public APIs
+  //    the widget calls on a private portal (feed, create, vote, comment,
+  //    capabilities). Board `authenticated` / `segments` / `team` tiers still
+  //    apply after this outer gate.
+  if (ctx.isAuthenticated && (ctx.hasHmacVerifiedWidgetSession ?? false)) {
+    return { granted: true, reason: 'widget-identity' }
+  }
+
+  // 7. Widget sign-in grant (portal cookie after handoff).
   //    Three guards beyond authentication:
   //      - widgetSignInEnabled: admin opted in.
   //      - hasViaWidgetMarker: session was minted by the handoff route, not by
@@ -204,11 +228,11 @@ export function evaluatePortalAccess(ctx: PortalAccessContext): PortalAccessResu
     return { granted: true, reason: 'widget' }
   }
 
-  // 7. No real authentication → redirect to login.
+  // 8. No real authentication → redirect to login.
   if (!ctx.isAuthenticated) {
     return { granted: false, reason: 'unauthenticated' }
   }
 
-  // 8. Authenticated but no matching grant → show access-denied UI.
+  // 9. Authenticated but no matching grant → show access-denied UI.
   return { granted: false, reason: 'unauthorized' }
 }

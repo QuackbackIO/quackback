@@ -130,6 +130,7 @@ describe('POST /api/widget/identify — external_id resolution (verified path)',
 
     expect(res.status).toBe(200)
     expect(userInsertValues()?.externalId).toBe('sub_alice')
+    expect(userInsertValues()?.emailVerified).toBe(true)
   })
 
   it('resolves a returning sub to the same user and adopts the new email', async () => {
@@ -139,6 +140,7 @@ describe('POST /api/widget/identify — external_id resolution (verified path)',
       .mockResolvedValueOnce({
         id: 'user_bob',
         email: 'bob-old@acme.com',
+        emailVerified: false,
         externalId: 'sub_bob',
         name: 'Bob',
         image: null,
@@ -154,7 +156,9 @@ describe('POST /api/widget/identify — external_id resolution (verified path)',
     // No new user row — resolved by the stable subject, not the email.
     expect(userInsertValues()).toBeUndefined()
     // sub is authoritative: the changed email is adopted onto the same account.
-    expect(updateSet).toHaveBeenCalledWith(expect.objectContaining({ email: 'bob-new@acme.com' }))
+    expect(updateSet).toHaveBeenCalledWith(
+      expect.objectContaining({ email: 'bob-new@acme.com', emailVerified: true })
+    )
     const body = (await res.json()) as { user?: { email?: string; name?: string } }
     expect(body.user?.email).toBe('bob-new@acme.com')
   })
