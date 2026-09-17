@@ -472,7 +472,7 @@ export async function removePortalUser(principalId: PrincipalId): Promise<void> 
           .update(user)
           .set({
             externalId: null,
-            metadata: sql`(coalesce(nullif(${user.metadata}, ''), '{}')::jsonb - ${[EXTERNAL_ID_KEY]}::text[])::text`,
+            metadata: sql`(coalesce(nullif(${user.metadata}, ''), '{}')::jsonb - ${EXTERNAL_ID_KEY}::text)::text`,
             updatedAt: new Date(),
           })
           .where(eq(user.id, userId))

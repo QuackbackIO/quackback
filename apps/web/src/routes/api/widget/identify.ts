@@ -261,11 +261,11 @@ export const Route = createFileRoute('/api/widget/identify')({
               .update(user)
               .set({
                 externalId: null,
-                metadata: sql`(coalesce(nullif(${user.metadata}, ''), '{}')::jsonb - ${[EXTERNAL_ID_KEY]}::text[])::text`,
+                metadata: sql`(coalesce(nullif(${user.metadata}, ''), '{}')::jsonb - ${EXTERNAL_ID_KEY}::text)::text`,
                 updatedAt: new Date(),
               })
               .where(eq(user.id, userRecord.id))
-            userRecord = null
+            userRecord = undefined
           }
         }
         if (!userRecord) {
@@ -338,13 +338,10 @@ export const Route = createFileRoute('/api/widget/identify')({
 
           if (Object.keys(updates).length > 0) {
             await db.update(user).set(updates).where(eq(user.id, userRecord.id))
-            userRecord = {
-              ...userRecord,
-              ...(typeof updates.name === 'string' ? { name: updates.name } : {}),
-              ...(typeof updates.email === 'string' ? { email: updates.email } : {}),
-              ...('image' in updates ? { image: updates.image as string | null } : {}),
-              ...(typeof updates.externalId === 'string' ? { externalId: updates.externalId } : {}),
-            }
+            if (typeof updates.name === 'string') userRecord.name = updates.name
+            if (typeof updates.email === 'string') userRecord.email = updates.email
+            if ('image' in updates) userRecord.image = (updates.image as string | null) ?? null
+            if (typeof updates.externalId === 'string') userRecord.externalId = updates.externalId
           }
         } else {
           const [created] = await db
