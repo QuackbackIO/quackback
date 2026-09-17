@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { PostCreatedEvent, EventData } from '@/lib/server/events/types'
 import { linearHook } from '@/integrations/linear/server/hook'
+import { updateLinearIssue } from '@/integrations/linear/server/issues'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -144,5 +145,41 @@ describe('linearHook', () => {
     expect(result.success).toBe(false)
     expect(result.error).toBe('Rate limited')
     expect(result.shouldRetry).toBe(true)
+  })
+})
+
+describe('updateLinearIssue', () => {
+  it('refreshes an existing issue without creating a duplicate', async () => {
+    const fetchMock = mockFetch(200, {
+      data: { issueUpdate: { success: true, issue: { id: 'uuid-abc-123' } } },
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await updateLinearIssue('lin_test_token', 'uuid-abc-123', {
+      title: 'Updated report',
+      description: '![Screenshot](https://say.any.org/api/storage/portal-media/shot.png)',
+    })
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body.query).toContain('issueUpdate')
+    expect(body.query).not.toContain('issueCreate')
+    expect(body.variables).toEqual({
+      id: 'uuid-abc-123',
+      input: {
+        title: 'Updated report',
+        description: '![Screenshot](https://say.any.org/api/storage/portal-media/shot.png)',
+      },
+    })
+  })
+
+  it('fails loudly when Linear rejects the refresh', async () => {
+    vi.stubGlobal('fetch', mockFetch(200, { errors: [{ message: 'Issue not found' }] }))
+
+    await expect(
+      updateLinearIssue('lin_test_token', 'missing', {
+        title: 'Report',
+        description: 'Body',
+      })
+    ).rejects.toThrow('Issue not found')
   })
 })

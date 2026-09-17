@@ -172,6 +172,10 @@ const toggleCommentsLockSchema = z.object({
   locked: z.boolean(),
 })
 
+const retryPostIntegrationSyncSchema = z.object({
+  id: z.string(),
+})
+
 // ============================================
 // Type Exports
 // ============================================
@@ -562,6 +566,42 @@ export const fetchPostExternalLinksFn = createServerFn({ method: 'GET' })
     const links = await getPostExternalLinks(data.id as PostId)
     log.debug({ count: links.length }, 'fetch post external links result')
     return links
+  })
+
+/**
+ * Sync a published post to its external tracker. A linked Linear issue is
+ * refreshed in place (including media); a post with no external links uses the
+ * normal post.created queue. Mention notifications are never replayed.
+ */
+export const retryPostIntegrationSyncFn = createServerFn({ method: 'POST' })
+  .validator(retryPostIntegrationSyncSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
+    const postId = data.id as PostId
+
+    const post = await db.query.posts.findFirst({
+      where: eq(posts.id, postId),
+      columns: { deletedAt: true, moderationState: true },
+    })
+    if (!post || post.deletedAt) throw new Error('Post not found')
+    if (post.moderationState !== 'published') {
+      throw new Error('Only published posts can be synced')
+    }
+
+    const links = await getPostExternalLinks(postId)
+    if (links.length > 0) {
+      const { refreshLinkedLinearPost } = await import('@/integrations/linear/server/post-sync')
+      const updated = await refreshLinkedLinearPost(postId)
+      if (!updated)
+        throw new Error('This post is linked to an integration that cannot be refreshed')
+      log.info({ post_id: data.id }, 'linked Linear issue refreshed')
+      return { queued: false, updated: true }
+    }
+
+    const { announcePublishedPost } = await import('@/lib/server/domains/posts/post.announce')
+    await announcePublishedPost(postId, undefined, { skipMentions: true })
+    log.info({ post_id: data.id }, 'post integration sync retried')
+    return { queued: true, updated: false }
   })
 
 /**

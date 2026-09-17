@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { useQuery } from '@tanstack/react-query'
 import {
+  ArrowPathIcon,
   CalendarIcon,
   ChevronUpIcon,
   FolderIcon,
@@ -87,6 +88,8 @@ function NoneLabel() {
  * the actor is permitted to perform (the admin modal passes everything).
  */
 export interface MetadataSidebarManageActions {
+  onRetryIntegrations?: () => void
+  isRetryIntegrationsPending?: boolean
   onMergeOthers?: () => void
   onMergeInto?: () => void
   onToggleLock?: () => void
@@ -129,6 +132,29 @@ export function ManagePostActions({
       )}
       <TooltipProvider delay={300}>
         <div className="flex items-center gap-0.5">
+          {actions.onRetryIntegrations && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={actions.onRetryIntegrations}
+                  disabled={actions.isRetryIntegrationsPending}
+                  className="flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors disabled:opacity-50"
+                >
+                  <ArrowPathIcon
+                    className={cn('h-5 w-5', actions.isRetryIntegrationsPending && 'animate-spin')}
+                  />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {intl.formatMessage({
+                  id: 'portal.postDetail.metadata.retryIntegrations',
+                  defaultMessage: 'Sync integrations',
+                })}
+              </TooltipContent>
+            </Tooltip>
+          )}
+
           {!actions.isMerged && actions.onMergeOthers && actions.onMergeInto && (
             <DropdownMenu>
               <Tooltip>

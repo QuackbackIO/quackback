@@ -48,6 +48,65 @@ describe('buildLinearIssueBody', () => {
     expect(result.description).not.toContain('voteCount')
   })
 
+  it('turns stored image paths into absolute URLs Linear can import', () => {
+    const result = buildLinearIssueBody(
+      makePostCreatedEvent({
+        content: 'Before\n\n![Block menu](/api/storage/portal-media/block-menu.png)\n\nAfter',
+      }),
+      'https://say.any.org'
+    )
+
+    expect(result.description).toContain(
+      '![Block menu](https://say.any.org/api/storage/portal-media/block-menu.png)'
+    )
+    expect(result.description).not.toContain('](/api/storage/')
+  })
+
+  it('embeds stored videos with absolute URLs so Linear copies them to private storage', () => {
+    const result = buildLinearIssueBody(
+      makePostCreatedEvent({
+        content:
+          'Reproduction\n\n[/api/storage/portal-media/recording.mov](/api/storage/portal-media/recording.mov)',
+      }),
+      'https://say.any.org/'
+    )
+
+    expect(result.description).toContain(
+      '![Video: recording.mov](https://say.any.org/api/storage/portal-media/recording.mov)'
+    )
+    expect(result.description).not.toContain('](/api/storage/')
+  })
+
+  it('keeps every media item even when the narrative is truncated', () => {
+    const result = buildLinearIssueBody(
+      makePostCreatedEvent({
+        content: `${'Long report '.repeat(250)}\n\n![Late screenshot](/api/storage/portal-media/late.png)`,
+      }),
+      'https://say.any.org'
+    )
+
+    expect(result.description).toContain(
+      '![Late screenshot](https://say.any.org/api/storage/portal-media/late.png)'
+    )
+  })
+
+  it('recovers media from legacy HTML content', () => {
+    const result = buildLinearIssueBody(
+      makePostCreatedEvent({
+        content:
+          '<p>Steps</p><img src="/api/storage/portal-media/shot.webp" alt="Shot"><video src="/api/storage/portal-media/demo.mp4" title="Demo"></video>',
+      }),
+      'https://say.any.org'
+    )
+
+    expect(result.description).toContain(
+      '![Shot](https://say.any.org/api/storage/portal-media/shot.webp)'
+    )
+    expect(result.description).toContain(
+      '![Video: Demo](https://say.any.org/api/storage/portal-media/demo.mp4)'
+    )
+  })
+
   it('falls back to email when authorName is missing', () => {
     const result = buildLinearIssueBody(
       makePostCreatedEvent({ authorName: undefined }),

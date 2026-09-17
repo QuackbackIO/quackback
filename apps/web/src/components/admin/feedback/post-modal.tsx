@@ -5,7 +5,7 @@ import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { CustomerContextPanel } from '@/components/admin/feedback/customer-context-panel'
 import { ModalFooter } from '@/components/shared/modal-footer'
 import { useUrlModal } from '@/lib/client/hooks/use-url-modal'
-import { useSuspenseQuery, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useSuspenseQuery, useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import type { JSONContent } from '@tiptap/react'
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
@@ -57,7 +57,7 @@ import {
 } from '@/components/public/post-detail/delete-post-dialog'
 import { usePostExternalLinks } from '@/lib/client/hooks/use-post-external-links-query'
 import { usePostDetailKeyboard } from '@/lib/client/hooks/use-post-detail-keyboard'
-import { setPostEtaFn } from '@/lib/server/functions/posts'
+import { retryPostIntegrationSyncFn, setPostEtaFn } from '@/lib/server/functions/posts'
 import { useRouterState } from '@tanstack/react-router'
 import {
   type PostId,
@@ -108,6 +108,7 @@ function PostModalContent({
   // resolved from it against the post's ownerPrincipalId (already in payload).
   const canSetOwner = usePermission(PERMISSIONS.POST_SET_OWNER)
   const canModerate = usePermission(PERMISSIONS.POST_APPROVE)
+  const canManageIntegrations = usePermission(PERMISSIONS.INTEGRATION_MANAGE)
   const approvePost = useApprovePost(postId)
   const rejectPost = useRejectPost(postId)
   const { data: ownerCandidates } = useQuery({
@@ -141,6 +142,7 @@ function PostModalContent({
   const [showMergeOthersDialog, setShowMergeOthersDialog] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [activeTab, setActiveTab] = useState<'comments' | 'activity'>('comments')
+  const [retryQueuedFor, setRetryQueuedFor] = useState<string | null>(null)
 
   // Duplicate badge indicator — derived from merge suggestions (deduped by React Query with SimilarPostsCard)
   const { data: mergeSuggestionsData } = useQuery(mergeSuggestionQueries.forPost(postId))
@@ -169,8 +171,21 @@ function PostModalContent({
   const changePostBoard = useChangePostBoard()
   const updateOwner = useUpdatePostOwner()
 
+  const retryIntegrations = useMutation({
+    mutationFn: () => retryPostIntegrationSyncFn({ data: { id: post.id } }),
+    onSuccess: (result) => {
+      setRetryQueuedFor(post.id)
+      toast.success(result.updated ? 'Integration content synced' : 'Integration sync queued')
+    },
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : 'Failed to retry integrations'),
+  })
+
   // External links for cascade delete
-  const externalLinksQuery = usePostExternalLinks(post.id as PostId, showDeleteDialog)
+  const externalLinksQuery = usePostExternalLinks(
+    post.id as PostId,
+    showDeleteDialog || canManageIntegrations
+  )
 
   // Initialize form with post data
   useEffect(() => {
@@ -296,6 +311,15 @@ function PostModalContent({
       (ownerCandidates ?? []).find((m) => m.principalId === post.ownerPrincipalId)) ||
     null
   const manageActions = {
+    onRetryIntegrations:
+      canManageIntegrations &&
+      !post.deletedAt &&
+      post.moderationState === 'published' &&
+      externalLinksQuery.data !== undefined &&
+      retryQueuedFor !== post.id
+        ? () => retryIntegrations.mutate()
+        : undefined,
+    isRetryIntegrationsPending: retryIntegrations.isPending,
     onMergeOthers: () => setShowMergeOthersDialog(true),
     onMergeInto: () => setShowMergeDialog(true),
     onToggleLock: () =>
