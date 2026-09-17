@@ -299,22 +299,34 @@ async function seed() {
       activationHandoffSeenAt: new Date().toISOString(),
       useCase: 'product_feedback',
     }
-    await db.insert(settings).values({
-      id: settingsId,
-      name: DEMO_ORG.name,
-      slug: DEMO_ORG.slug,
-      createdAt: new Date(),
-      setupState: JSON.stringify(setupState),
-    })
-    await db.insert(workspaceExperiments).values({
-      settingsId,
-      experimentId: 'refined-visual-theme',
-      visible: true,
-      enabled: true,
+    await db.transaction(async (tx) => {
+      await tx.insert(settings).values({
+        id: settingsId,
+        name: DEMO_ORG.name,
+        slug: DEMO_ORG.slug,
+        createdAt: new Date(),
+        setupState: JSON.stringify(setupState),
+      })
+      await tx.insert(workspaceExperiments).values({
+        settingsId,
+        experimentId: 'refined-visual-theme',
+        visible: true,
+        enabled: true,
+      })
     })
     console.log('Created settings: Acme Corp (onboarding complete)')
   } else {
     console.log('Settings already exist, skipping')
+    // Heal a previous seed that created settings without the Labs row.
+    await db
+      .insert(workspaceExperiments)
+      .values({
+        settingsId: existingSettings[0]!.id,
+        experimentId: 'refined-visual-theme',
+        visible: true,
+        enabled: true,
+      })
+      .onConflictDoNothing()
   }
 
   // Create statuses - use existing or create new
