@@ -135,61 +135,6 @@ describe('evaluatePortalAccess — widget sign-in grant (narrowed)', () => {
   })
 })
 
-describe('evaluatePortalAccess — HMAC-verified widget session', () => {
-  const WIDGET_IDENTITY_CTX = {
-    visibility: 'private' as const,
-    role: 'user' as const,
-    isAuthenticated: true,
-    userEmail: 'ada@example.com',
-    emailVerified: false,
-    allowedDomains: [] as string[],
-    widgetSignInEnabled: false,
-    hasViaWidgetMarker: false,
-    identifyVerificationEnabled: false,
-    hasHmacVerifiedWidgetSession: true,
-  }
-
-  it('grants widget-identity with only an hmac-verified widget session', () => {
-    const result = evaluatePortalAccess(WIDGET_IDENTITY_CTX)
-    expect(result.granted).toBe(true)
-    if (result.granted) expect(result.reason).toBe('widget-identity')
-  })
-
-  it('denies when hasHmacVerifiedWidgetSession is missing', () => {
-    const { hasHmacVerifiedWidgetSession: _, ...rest } = WIDGET_IDENTITY_CTX
-    const result = evaluatePortalAccess(rest)
-    expect(result.granted).toBe(false)
-    if (!result.granted) expect(result.reason).toBe('unauthorized')
-  })
-
-  it('denies when hasHmacVerifiedWidgetSession is false', () => {
-    const result = evaluatePortalAccess({
-      ...WIDGET_IDENTITY_CTX,
-      hasHmacVerifiedWidgetSession: false,
-    })
-    expect(result.granted).toBe(false)
-    if (!result.granted) expect(result.reason).toBe('unauthorized')
-  })
-
-  it('denies hmac widget identity when the caller is not authenticated', () => {
-    const result = evaluatePortalAccess({
-      ...WIDGET_IDENTITY_CTX,
-      isAuthenticated: false,
-    })
-    expect(result.granted).toBe(false)
-    if (!result.granted) expect(result.reason).toBe('unauthenticated')
-  })
-
-  it('team grant still takes precedence over widget-identity', () => {
-    const result = evaluatePortalAccess({
-      ...WIDGET_IDENTITY_CTX,
-      role: 'admin',
-    })
-    expect(result.granted).toBe(true)
-    if (result.granted) expect(result.reason).toBe('team')
-  })
-})
-
 describe('evaluatePortalAccess — self-registered user security', () => {
   it('self-registered user (no marker) cannot gain widget grant even with all other conditions', () => {
     // Simulates a user who registered via /auth/signup — no widget handoff.

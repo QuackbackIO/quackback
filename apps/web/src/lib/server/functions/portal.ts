@@ -315,16 +315,6 @@ export const runFetchPublicPostDetail = createServerOnlyFn(async function runFet
   data: FetchPublicPostDetailInput
 ) {
   log.debug({ post_id: data.postId }, 'fetch public post detail')
-
-  // Outer gate: a private portal serves no post detail to a caller the
-  // portal-access resolver denies. The per-board audience check inside
-  // getPublicPostDetail stays as the inner layer for granted callers.
-  const access = await resolvePortalAccessForRequest()
-  if (!access.granted) {
-    log.debug('portal access denied, returning null')
-    return null
-  }
-
   // The policy actor is the sole input getPublicPostDetail needs:
   // it drives the visibility check, the principalId-for-own-comments
   // lookup, and the include-private-comments flag (derived from
@@ -409,6 +399,11 @@ export const runFetchPublicPostDetail = createServerOnlyFn(async function runFet
 export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
   .validator(fetchPublicPostDetailSchema)
   .handler(async ({ data }) => {
+    const access = await resolvePortalAccessForRequest()
+    if (!access.granted) {
+      log.debug('portal access denied, returning null')
+      return null
+    }
     const auth = hasAuthCredentials() ? await getOptionalAuth() : null
     return runFetchPublicPostDetail(auth, data)
   })
@@ -746,12 +741,6 @@ export const getCommentsSectionDataFn = createServerFn({ method: 'GET' })
 export const runFetchBoardCapabilities = createServerOnlyFn(
   async function runFetchBoardCapabilities(auth: Awaited<ReturnType<typeof getOptionalAuth>>) {
     log.debug('fetch board capabilities')
-    const empty: Record<string, { canSubmit: boolean; canVote: boolean }> = {}
-
-    // Same portal-visibility + per-board gates as fetchPortalData.
-    const access = await resolvePortalAccessForRequest()
-    if (!access.granted) return { permissions: empty, boards: [] as WidgetVisibleBoard[] }
-
     const actor = await policyActorFromAuth(auth)
 
     // Settings read overlaps the board query — only one DB round-trip is on the
@@ -774,6 +763,9 @@ export const runFetchBoardCapabilities = createServerOnlyFn(
 )
 
 export const fetchBoardCapabilitiesFn = createServerFn({ method: 'GET' }).handler(async () => {
+  const empty: Record<string, { canSubmit: boolean; canVote: boolean }> = {}
+  const access = await resolvePortalAccessForRequest()
+  if (!access.granted) return { permissions: empty, boards: [] as WidgetVisibleBoard[] }
   return runFetchBoardCapabilities(await getOptionalAuth())
 })
 

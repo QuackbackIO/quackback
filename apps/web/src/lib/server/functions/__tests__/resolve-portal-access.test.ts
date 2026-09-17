@@ -46,7 +46,6 @@ vi.mock('@/lib/server/auth/index', () => ({
 const mockPrincipalFindFirst = vi.fn()
 const mockInvitationFindFirst = vi.fn()
 const mockWidgetOriginSessionFindFirst = vi.fn()
-const mockWidgetIdentifiedSessionFindFirst = vi.fn()
 
 vi.mock('@/lib/server/db', () => ({
   db: {
@@ -56,15 +55,11 @@ vi.mock('@/lib/server/db', () => ({
       widgetOriginSession: {
         findFirst: (...args: unknown[]) => mockWidgetOriginSessionFindFirst(...args),
       },
-      widgetIdentifiedSession: {
-        findFirst: (...args: unknown[]) => mockWidgetIdentifiedSessionFindFirst(...args),
-      },
     },
   },
   principal: { userId: 'userId', id: 'id' },
   invitation: { email: 'email', kind: 'kind', status: 'status' },
   widgetOriginSession: { sessionId: 'sessionId' },
-  widgetIdentifiedSession: { sessionId: 'sessionId' },
   eq: vi.fn(),
   and: vi.fn((...args: unknown[]) => args),
   inArray: vi.fn(),
@@ -112,8 +107,6 @@ beforeEach(() => {
   mockInvitationFindFirst.mockResolvedValue(null)
   // Default: no widget origin marker.
   mockWidgetOriginSessionFindFirst.mockResolvedValue(null)
-  // Default: no hmac-verified widget identify row.
-  mockWidgetIdentifiedSessionFindFirst.mockResolvedValue(null)
   // Default: identifyVerification off (email-capture mode).
   mockGetWidgetConfig.mockResolvedValue({ identifyVerification: false })
   // Default: no segment memberships.
@@ -604,57 +597,6 @@ describe('resolvePortalAccessForRequest — widget origin marker', () => {
     await resolvePortalAccessForRequest()
 
     expect(mockWidgetOriginSessionFindFirst).not.toHaveBeenCalled()
-  })
-})
-
-describe('resolvePortalAccessForRequest — HMAC-verified widget session', () => {
-  const WIDGET_SESSION = {
-    user: { id: 'user_wgt', email: 'ada@example.com', emailVerified: false },
-    session: { id: 'sess_widget', scope: 'widget' },
-  }
-
-  it('grants widget-identity for a widget-scoped session with hmac_verified', async () => {
-    mockGetSession.mockResolvedValue(WIDGET_SESSION)
-    mockPrincipalFindFirst.mockResolvedValue({ type: 'user', role: 'user' })
-    mockWidgetIdentifiedSessionFindFirst.mockResolvedValue({ hmacVerified: true })
-    mockGetPortalConfig.mockResolvedValue({
-      access: { visibility: 'private', allowedDomains: [], widgetSignIn: false },
-    })
-
-    const result = await resolvePortalAccessForRequest()
-
-    expect(result).toEqual({ granted: true, reason: 'widget-identity' })
-  })
-
-  it('denies a widget-scoped session without an hmac-verified row', async () => {
-    mockGetSession.mockResolvedValue(WIDGET_SESSION)
-    mockPrincipalFindFirst.mockResolvedValue({ type: 'user', role: 'user' })
-    mockGetPortalConfig.mockResolvedValue({
-      access: { visibility: 'private', allowedDomains: [], widgetSignIn: false },
-    })
-
-    const result = await resolvePortalAccessForRequest()
-
-    expect(result.granted).toBe(false)
-    if (!result.granted) expect(result.reason).toBe('unauthorized')
-  })
-
-  it('does not take widget-identity for a portal-scoped session with an hmac row', async () => {
-    mockGetSession.mockResolvedValue({
-      user: { id: 'user_wgt', email: 'ada@example.com', emailVerified: false },
-      session: { id: 'sess_portal', scope: 'portal' },
-    })
-    mockPrincipalFindFirst.mockResolvedValue({ type: 'user', role: 'user' })
-    mockWidgetIdentifiedSessionFindFirst.mockResolvedValue({ hmacVerified: true })
-    mockGetPortalConfig.mockResolvedValue({
-      access: { visibility: 'private', allowedDomains: [], widgetSignIn: false },
-    })
-
-    const result = await resolvePortalAccessForRequest()
-
-    expect(result.granted).toBe(false)
-    if (!result.granted) expect(result.reason).toBe('unauthorized')
-    expect(mockWidgetIdentifiedSessionFindFirst).not.toHaveBeenCalled()
   })
 })
 

@@ -31,7 +31,7 @@ const log = logger.child({ component: 'portal-access' })
 export type PortalAccessDecision =
   | {
       granted: true
-      reason: 'public' | 'team' | 'domain' | 'invite' | 'widget' | 'segment' | 'widget-identity'
+      reason: 'public' | 'team' | 'domain' | 'invite' | 'widget' | 'segment'
     }
   | {
       granted: false
@@ -160,27 +160,6 @@ export const resolvePortalAccessForRequest = createServerOnlyFn(
       }
     }
 
-    // HMAC-verified widget identify (iframe Bearer). Only widget-scoped
-    // sessions qualify — a portal/dashboard cookie must still use handoff
-    // or another portal grant. Fail CLOSED on DB error.
-    let hasHmacVerifiedWidgetSession = false
-    if (
-      isAuthenticated &&
-      session?.session?.id &&
-      toSessionScope(session.session.scope) === 'widget'
-    ) {
-      const { widgetIdentifiedSession } = await import('@/lib/server/db')
-      try {
-        const hmacRow = await db.query.widgetIdentifiedSession.findFirst({
-          where: eq(widgetIdentifiedSession.sessionId, session.session.id),
-          columns: { hmacVerified: true },
-        })
-        hasHmacVerifiedWidgetSession = hmacRow?.hmacVerified === true
-      } catch {
-        hasHmacVerifiedWidgetSession = false
-      }
-    }
-
     // Read the full portal config + widget config server-side — never leaves this function.
     // Two distinct failure modes:
     //   - NotFoundError (no settings row): fresh un-onboarded install, fail
@@ -226,7 +205,6 @@ export const resolvePortalAccessForRequest = createServerOnlyFn(
         hasViaWidgetMarker,
         identifyVerificationEnabled,
         isInAllowedSegment,
-        hasHmacVerifiedWidgetSession,
       })
     } catch (err) {
       const { NotFoundError } = await import('@/lib/shared/errors')
