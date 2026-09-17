@@ -121,7 +121,9 @@ test.describe('Public Post Submission', () => {
     await createPostInput.click()
 
     const editor = globalPage.locator('.tiptap')
-    await editor.fill('Heading test')
+    await expect(editor).toBeVisible({ timeout: 5000 })
+    await editor.click()
+    await globalPage.keyboard.type('Heading test')
     await globalPage.getByRole('button', { name: 'Heading 2' }).click()
 
     await expect(editor.locator('h2')).toHaveText('Heading test')
