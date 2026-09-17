@@ -17,6 +17,11 @@ export type LabsExperimentId = (typeof LABS_REGISTRY)[number]['id']
 
 export const REFINED_VISUAL_THEME_ID = 'refined-visual-theme' satisfies LabsExperimentId
 
+/** Inserted when a settings row is first created. Missing rows stay off. */
+export const NEW_WORKSPACE_LAB_DEFAULTS = [
+  { experimentId: REFINED_VISUAL_THEME_ID, visible: true, enabled: true },
+] as const
+
 const REGISTRY_BY_ID = new Map<string, LabsExperimentDefinition>(
   LABS_REGISTRY.map((entry) => [entry.id, entry])
 )

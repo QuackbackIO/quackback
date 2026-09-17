@@ -22,6 +22,7 @@ import type {
   ChangelogId,
 } from '@quackback/ids'
 import { user, account, settings, principal } from './schema/auth'
+import { workspaceExperiments } from './schema/labs'
 import { boards, postTags, roadmaps, roadmapColumns } from './schema/boards'
 import { posts, postTagAssignments, postVotes, postComments } from './schema/posts'
 import { postStatuses, DEFAULT_STATUSES } from './schema/statuses'
@@ -304,6 +305,12 @@ async function seed() {
       slug: DEMO_ORG.slug,
       createdAt: new Date(),
       setupState: JSON.stringify(setupState),
+    })
+    await db.insert(workspaceExperiments).values({
+      settingsId,
+      experimentId: 'refined-visual-theme',
+      visible: true,
+      enabled: true,
     })
     console.log('Created settings: Acme Corp (onboarding complete)')
   } else {

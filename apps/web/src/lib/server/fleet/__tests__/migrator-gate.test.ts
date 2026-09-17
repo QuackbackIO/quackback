@@ -357,6 +357,7 @@ describe('replayGateVerdict', () => {
       '0280_widget_session_scope',
       '0281_workspace_experiments',
       '0282_refined_visual_theme_visible',
+      '0283_refined_visual_theme_default_on',
     ])
     const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
     expect(verdict.ok).toBe(false)

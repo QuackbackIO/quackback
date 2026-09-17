@@ -1821,6 +1821,13 @@
       "when": 1789596900000,
       "tag": "0282_refined_visual_theme_visible",
       "breakpoints": true
+    },
+    {
+      "idx": 260,
+      "version": "7",
+      "when": 1789642200000,
+      "tag": "0283_refined_visual_theme_default_on",
+      "breakpoints": true
     }
   ]
 }

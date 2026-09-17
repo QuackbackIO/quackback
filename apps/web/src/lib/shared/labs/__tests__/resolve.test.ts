@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { REFINED_VISUAL_THEME_ID } from '../registry'
+import { NEW_WORKSPACE_LAB_DEFAULTS, REFINED_VISUAL_THEME_ID } from '../registry'
 import {
   experimentStateMap,
   getExperimentState,
@@ -7,6 +7,14 @@ import {
   resolveExperimentState,
   resolveVisualTheme,
 } from '../resolve'
+
+describe('NEW_WORKSPACE_LAB_DEFAULTS', () => {
+  it('turns Refreshed UI on for a newly created workspace', () => {
+    expect(NEW_WORKSPACE_LAB_DEFAULTS).toEqual([
+      { experimentId: REFINED_VISUAL_THEME_ID, visible: true, enabled: true },
+    ])
+  })
+})
 
 describe('resolveExperimentState', () => {
   it('treats missing rows and non-true values as both false', () => {

@@ -1,5 +1,6 @@
 export {
   LABS_REGISTRY,
+  NEW_WORKSPACE_LAB_DEFAULTS,
   REFINED_VISUAL_THEME_ID,
   getRegisteredExperiment,
   isRegisteredExperimentId,

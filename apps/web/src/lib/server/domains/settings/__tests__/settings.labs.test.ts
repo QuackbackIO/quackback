@@ -7,6 +7,7 @@ const mockUpdateReturning = vi.fn()
 const mockUpdateSet = vi.fn()
 const mockInsertReturning = vi.fn()
 const mockOnConflictDoUpdate = vi.fn()
+const mockOnConflictDoNothing = vi.fn()
 const mockCacheDel = vi.fn()
 const mockRecordAuditEvent = vi.fn()
 
@@ -67,6 +68,10 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
               returning: () => mockInsertReturning(),
             }
           },
+          onConflictDoNothing: (conflict: unknown) => {
+            mockOnConflictDoNothing(values, conflict)
+            return Promise.resolve()
+          },
         }),
       }),
     },
@@ -79,6 +84,7 @@ const {
   operatorConflictSet,
   workspaceEnableUpdateSet,
   loadLabsProjection,
+  ensureNewWorkspaceLabs,
 } = await import('../settings.labs')
 
 beforeEach(() => {
@@ -97,6 +103,23 @@ describe('column-specific updates', () => {
     expect(workspaceEnableUpdateSet()).toEqual(['enabled', 'updatedAt'])
     expect(operatorConflictSet('visible')).toEqual(['visible', 'updatedAt'])
     expect(operatorConflictSet('enabled')).toEqual(['enabled', 'updatedAt'])
+  })
+})
+
+describe('ensureNewWorkspaceLabs', () => {
+  it('inserts Refreshed UI on and does not overwrite an existing row', async () => {
+    await ensureNewWorkspaceLabs('workspace_1')
+    expect(mockOnConflictDoNothing).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          settingsId: 'workspace_1',
+          experimentId: 'refined-visual-theme',
+          visible: true,
+          enabled: true,
+        }),
+      ],
+      expect.objectContaining({ target: expect.anything() })
+    )
   })
 })
 
