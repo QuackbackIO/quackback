@@ -15,7 +15,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const hoisted = vi.hoisted(() => ({
   insertValuesCalls: [] as Array<Record<string, unknown>>,
   mockOnConflictDoNothing: vi.fn(),
-  ensureNewWorkspaceLabs: vi.fn(async () => {}),
+  ensureNewWorkspaceLabs: vi.fn(async (_settingsId: string) => {}),
 }))
 
 const mockValues = vi.fn((vals: Record<string, unknown>) => {
@@ -64,7 +64,7 @@ vi.mock('../report-status', () => ({
 }))
 
 vi.mock('@/lib/server/domains/settings/settings.labs', () => ({
-  ensureNewWorkspaceLabs: (...args: unknown[]) => hoisted.ensureNewWorkspaceLabs(...args),
+  ensureNewWorkspaceLabs: (settingsId: string) => hoisted.ensureNewWorkspaceLabs(settingsId),
 }))
 
 const { makeReconcileDeps } = await import('../deps')
