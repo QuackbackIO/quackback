@@ -165,6 +165,7 @@ describe('Widget Config Types', () => {
         avatarUrl: null,
       })
       expect('routing' in projected).toBe(false)
+      expect(projected.contactCapture).toEqual({ mode: 'off', askName: false })
     })
   })
 

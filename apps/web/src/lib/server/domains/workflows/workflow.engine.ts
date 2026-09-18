@@ -32,6 +32,7 @@ import { isUniqueViolation } from '@/lib/server/utils'
 import { applyAction, type ResolvedBlockDeps } from './action.executor'
 import { walkWorkflow, type WorkflowGraph, type WalkResult } from './graph'
 import type { ConditionContext, BlockAnswer, AssistantOutcome } from './condition.evaluator'
+import { customInactivityAllowed } from '@/lib/server/domains/conversation/conversation.inactivity-mode'
 import { getWorkflow } from './workflow.service'
 import { resolveConditionContext } from './condition.context'
 import { resolveWorkflowVariables } from './workflow-variables'
@@ -284,6 +285,13 @@ async function applyPlanAndSettle(
       ? await ensureDeps()
       : undefined
     for (const action of plan.actions) {
+      if (
+        workflow.triggerType === 'conversation.customer_unresponsive' &&
+        ((await currentRun(run.id))?.state !== 'running' ||
+          !(await customInactivityAllowed(conversationId)))
+      ) {
+        return await settleRunning(run.id, { state: 'interrupted', endedAt: new Date() })
+      }
       try {
         if (
           [

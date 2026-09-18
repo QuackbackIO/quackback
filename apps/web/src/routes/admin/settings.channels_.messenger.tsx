@@ -2,7 +2,7 @@ import { useState, useTransition } from 'react'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { createFileRoute, useRouter, Link, redirect } from '@tanstack/react-router'
-import { useSuspenseQuery } from '@tanstack/react-query'
+import { useSuspenseQuery, useQuery } from '@tanstack/react-query'
 import { ChatBubbleLeftRightIcon } from '@heroicons/react/24/solid'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { useUpdatePortalConfig, useUpdateWidgetConfig } from '@/lib/client/mutations/settings'
@@ -12,10 +12,15 @@ import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { Button } from '@/components/ui/button'
+import { fetchOfficeHoursFn } from '@/lib/server/functions/settings'
+import { VisitorContactCapture } from '@/components/shared/conversation/visitor-contact-capture'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/shared/utils'
 import { SUPPORTED_LOCALES } from '@/lib/shared/i18n'
 import { WIDGET_LOCALE_LABELS, type WidgetTranslations } from '@/lib/shared/widget/translations'
+import { ConversationInactivityCard } from '@/components/admin/settings/conversation-inactivity-card'
+import { DEFAULT_CONTACT_CAPTURE, type ContactCaptureMode } from '@/lib/shared/contact-capture'
 
 export const Route = createFileRoute('/admin/settings/channels_/messenger')({
   beforeLoad: ({ context }) => {
@@ -28,6 +33,7 @@ export const Route = createFileRoute('/admin/settings/channels_/messenger')({
     await Promise.all([
       context.queryClient.ensureQueryData(settingsQueries.widgetConfig()),
       context.queryClient.ensureQueryData(settingsQueries.portalConfig()),
+      context.queryClient.ensureQueryData(settingsQueries.conversationInactivity()),
     ])
     return {}
   },
@@ -43,6 +49,13 @@ export function MessengerChannelPage() {
   const config = widgetConfigQuery.data
   const messengerConfig = config.messenger
   const [isPending, startTransition] = useTransition()
+  const officeHours = useQuery({
+    queryKey: ['settings', 'officeHours'],
+    queryFn: () => fetchOfficeHoursFn(),
+  })
+  const [behaviorError, setBehaviorError] = useState<string | null>(null)
+  const [previewEmail, setPreviewEmail] = useState('')
+  const [previewName, setPreviewName] = useState('')
   const [savingField, setSavingField] = useState<string | null>(null)
   const [widgetMessenger, setWidgetMessenger] = useState(config.tabs?.messenger ?? true)
   const [portalSupportEnabled, setPortalSupportEnabled] = useState(
@@ -50,6 +63,12 @@ export function MessengerChannelPage() {
   )
   const [preventRepliesWhenClosed, setPreventRepliesWhenClosed] = useState(
     messengerConfig?.preventRepliesWhenClosed ?? false
+  )
+  const [contactCaptureMode, setContactCaptureMode] = useState<ContactCaptureMode>(
+    messengerConfig?.contactCapture?.mode ?? DEFAULT_CONTACT_CAPTURE.mode
+  )
+  const [contactCaptureAskName, setContactCaptureAskName] = useState(
+    messengerConfig?.contactCapture?.askName ?? DEFAULT_CONTACT_CAPTURE.askName
   )
   const [welcomeMessage, setWelcomeMessage] = useState(messengerConfig?.welcomeMessage ?? '')
   const [offlineMessage, setOfflineMessage] = useState(messengerConfig?.offlineMessage ?? '')
@@ -213,6 +232,86 @@ export function MessengerChannelPage() {
       </SettingsCard>
 
       <SettingsCard
+        title="Contact details"
+        description="Ask visitors for an email so your team can get back to them."
+      >
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="contact-capture-mode">When to ask</Label>
+            <select
+              id="contact-capture-mode"
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50"
+              value={contactCaptureMode}
+              disabled={isBusy}
+              onChange={(e) => {
+                const mode = e.target.value as ContactCaptureMode
+                setContactCaptureMode(mode)
+              }}
+            >
+              <option value="off">Off</option>
+              <option value="optional">Optional — visitors can skip</option>
+              <option value="required">Required before the first message</option>
+              <option value="outside_office_hours">Required only outside office hours</option>
+            </select>
+          </div>
+          {contactCaptureMode !== 'off' && (
+            <div className="flex items-center justify-between py-1">
+              <div className="pr-4">
+                <Label
+                  htmlFor="contact-capture-name"
+                  className="text-sm font-medium cursor-pointer"
+                >
+                  Also ask for a name
+                </Label>
+                <p className="mt-0.5 text-xs text-muted-foreground">A name is always optional.</p>
+              </div>
+              <Switch
+                id="contact-capture-name"
+                checked={contactCaptureAskName}
+                disabled={isBusy}
+                onCheckedChange={(checked) => {
+                  setContactCaptureAskName(checked)
+                }}
+              />
+            </div>
+          )}
+          {contactCaptureMode === 'outside_office_hours' && (
+            <p className="text-xs text-muted-foreground">
+              Uses your{' '}
+              <Link to="/admin/settings/office-hours" className="text-primary">
+                office-hours schedule
+              </Link>
+              {officeHours.data ? ` (${officeHours.data.timezone})` : ''}.{' '}
+              {officeHours.data?.enabled === false
+                ? 'Your schedule is 24/7, so the form will never appear.'
+                : 'The email is required only while your team is outside its scheduled hours.'}
+            </p>
+          )}
+          {contactCaptureMode !== 'off' && (
+            <div className="rounded-lg border border-border/50 overflow-hidden">
+              <p className="px-3 pt-3 text-xs font-medium text-muted-foreground">Visitor preview</p>
+              <VisitorContactCapture
+                required={contactCaptureMode !== 'optional'}
+                askName={contactCaptureAskName}
+                email={previewEmail}
+                name={previewName}
+                onEmailChange={setPreviewEmail}
+                onNameChange={setPreviewName}
+                onSkip={
+                  contactCaptureMode === 'optional'
+                    ? () => {
+                        setPreviewEmail('')
+                        setPreviewName('')
+                      }
+                    : undefined
+                }
+              />
+            </div>
+          )}
+        </div>
+      </SettingsCard>
+
+      <SettingsCard
         title="Reopen on reply"
         description="When a visitor replies to a closed Messenger conversation."
       >
@@ -230,14 +329,60 @@ export function MessengerChannelPage() {
             checked={preventRepliesWhenClosed}
             onCheckedChange={(checked) => {
               setPreventRepliesWhenClosed(checked)
-              persist('preventClosed', { messenger: { preventRepliesWhenClosed: checked } }, () =>
-                setPreventRepliesWhenClosed(!checked)
-              )
             }}
             disabled={isBusy}
           />
         </div>
       </SettingsCard>
+
+      <div className="space-y-2">
+        {behaviorError && (
+          <p role="alert" className="text-sm text-destructive">
+            {behaviorError}
+          </p>
+        )}
+        <div className="flex justify-end gap-2">
+          <Button
+            variant="outline"
+            disabled={isBusy}
+            onClick={() => {
+              setContactCaptureMode(messengerConfig?.contactCapture?.mode ?? 'off')
+              setContactCaptureAskName(messengerConfig?.contactCapture?.askName ?? false)
+              setPreventRepliesWhenClosed(messengerConfig?.preventRepliesWhenClosed ?? false)
+              setBehaviorError(null)
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            disabled={isBusy}
+            onClick={async () => {
+              setBehaviorError(null)
+              try {
+                await updateWidgetConfig.mutateAsync({
+                  messenger: {
+                    contactCapture: { mode: contactCaptureMode, askName: contactCaptureAskName },
+                    preventRepliesWhenClosed,
+                  },
+                })
+                await router.invalidate()
+              } catch (error) {
+                setBehaviorError(
+                  error instanceof Error
+                    ? error.message
+                    : 'Could not save. Your changes are still here.'
+                )
+              }
+            }}
+          >
+            Save contact and reply settings
+          </Button>
+        </div>
+      </div>
+      <ConversationInactivityCard
+        section="messenger"
+        preventRepliesWhenClosed={preventRepliesWhenClosed}
+      />
 
       <SettingsCard title="Quinn" description="Assistant identity is configured in Automation.">
         <div className="flex items-center justify-between py-1">

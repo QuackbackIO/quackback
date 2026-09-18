@@ -84,12 +84,14 @@ export function ClampedIntInput({
   max,
   onCommit,
   className,
+  disabled,
 }: {
   value: number
   min: number
   max: number
   onCommit: (value: number) => void
   className?: string
+  disabled?: boolean
 }) {
   // null = not mid-edit; the field shows `value`. A non-null string is the
   // in-progress, not-yet-clamped keystroke state.
@@ -115,6 +117,7 @@ export function ClampedIntInput({
         if (e.key === 'Enter') e.currentTarget.blur()
       }}
       className={className}
+      disabled={disabled}
     />
   )
 }

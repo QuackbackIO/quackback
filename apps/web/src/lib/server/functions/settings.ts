@@ -33,7 +33,7 @@ import {
 } from '@/lib/server/domains/settings/settings.media'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { actorFromAuth, recordAuditEvent, type AuditEventType } from '@/lib/server/audit/log'
-import { requireAuth } from './auth-helpers'
+import { requireAuth, assertPermission } from './auth-helpers'
 import { teamMemberWhere } from '@/lib/server/domains/principals/principal.service'
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
 import { getSession } from '@/lib/server/auth/session'
@@ -45,6 +45,7 @@ import { workflowAbandonedAutoCloseSchema } from '@/lib/shared/workflows/abandon
 import { workflowCloseSpamSchema } from '@/lib/shared/workflows/close-spam'
 import { defaultSlaPolicySchema } from '@/lib/shared/sla/default-policy'
 import { MAX_TRUSTED_SENDERS } from '@/lib/shared/trusted-senders'
+import { updateConversationInactivitySchema } from '@/lib/shared/conversation-inactivity'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'settings' })
@@ -751,6 +752,12 @@ const messengerConfigInputSchema = z.object({
   teamName: z.string().max(80).optional(),
   // Refuse visitor replies to closed conversations (Messenger only; §4.3).
   preventRepliesWhenClosed: z.boolean().optional(),
+  contactCapture: z
+    .object({
+      mode: z.enum(['off', 'optional', 'required', 'outside_office_hours']).optional(),
+      askName: z.boolean().optional(),
+    })
+    .optional(),
   assistant: z
     .object({
       enabled: z.boolean().optional(),
@@ -1038,6 +1045,60 @@ export const updateWorkflowCloseSpamFn = createServerFn({ method: 'POST' })
     const { updateWorkflowCloseSpamSettings } =
       await import('@/lib/server/domains/settings/settings.workflows')
     return await updateWorkflowCloseSpamSettings(data)
+  })
+
+// ============================================
+// Conversation inactivity (built-in close)
+// ============================================
+
+export const fetchConversationInactivityFn = createServerFn({ method: 'GET' }).handler(async () => {
+  log.debug('fetch conversation inactivity settings')
+  const ctx = await requireAuth()
+  const readable = [
+    PERMISSIONS.SETTINGS_MANAGE,
+    PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
+    PERMISSIONS.ASSISTANT_MANAGE,
+    PERMISSIONS.WORKFLOW_MANAGE,
+  ]
+  assertPermission(
+    ctx,
+    readable.find((permission) => ctx.permissions.includes(permission)) ??
+      PERMISSIONS.SETTINGS_MANAGE
+  )
+  const { getConversationInactivitySettings } =
+    await import('@/lib/server/domains/settings/settings.conversation-inactivity')
+  const { listLiveWorkflowsForTrigger } =
+    await import('@/lib/server/domains/workflows/workflow.service')
+  const { inactivityWorkflowChannels } = await import('@/lib/shared/conversation-inactivity')
+  const [settings, workflows] = await Promise.all([
+    getConversationInactivitySettings(),
+    listLiveWorkflowsForTrigger('conversation.customer_unresponsive'),
+  ])
+  return {
+    ...settings,
+    publishedWorkflows: workflows.map((w) => ({
+      id: w.id,
+      name: w.name,
+      channels: inactivityWorkflowChannels(w.triggerSettings),
+    })),
+  }
+})
+
+export const updateConversationInactivityFn = createServerFn({ method: 'POST' })
+  .validator(updateConversationInactivitySchema)
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth()
+    assertPermission(
+      ctx,
+      data.section === 'assistant'
+        ? PERMISSIONS.ASSISTANT_MANAGE
+        : data.section === 'email'
+          ? PERMISSIONS.CHANNEL_ACCOUNT_MANAGE
+          : PERMISSIONS.SETTINGS_MANAGE
+    )
+    const { updateConversationInactivitySettings } =
+      await import('@/lib/server/domains/settings/settings.conversation-inactivity')
+    return await updateConversationInactivitySettings(data)
   })
 
 // ============================================

@@ -16,6 +16,13 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import type { ConversationId, WorkflowId } from '@quackback/ids'
 import { makeConditionContext } from './workflow-test-utils'
 
+const { customInactivityAllowed } = vi.hoisted(() => ({
+  customInactivityAllowed: vi.fn(async () => true),
+}))
+vi.mock('@/lib/server/domains/conversation/conversation.inactivity-mode', () => ({
+  customInactivityAllowed,
+}))
+
 const { getWorkflow, listLiveWorkflowsForTrigger } = vi.hoisted(() => ({
   getWorkflow: vi.fn(),
   listLiveWorkflowsForTrigger: vi.fn(),
@@ -104,6 +111,7 @@ const trigger = (over: Partial<WorkflowTrigger> = {}): WorkflowTrigger => ({
 
 beforeEach(() => {
   vi.clearAllMocks()
+  customInactivityAllowed.mockResolvedValue(true)
   getWorkflow.mockResolvedValue(liveWorkflow)
   resolveConditionContext.mockResolvedValue(baseCtx)
   channelAllows.mockReturnValue(true)
@@ -117,6 +125,18 @@ beforeEach(() => {
 })
 
 describe('dispatchWorkflowTrigger (targetWorkflowId mode)', () => {
+  it('does not dispatch customer inactivity when built-in rules or Off owns the channel', async () => {
+    customInactivityAllowed.mockResolvedValue(false)
+    getWorkflow.mockResolvedValue({
+      ...liveWorkflow,
+      triggerType: 'conversation.customer_unresponsive',
+    })
+    await dispatchWorkflowTrigger(trigger({ triggerType: 'conversation.customer_unresponsive' }), {
+      targetWorkflowId: workflowId,
+    })
+    expect(runWorkflow).not.toHaveBeenCalled()
+  })
+
   it('runs the one targeted workflow when every gate passes, deriving the subject from the resolved conversation visitor', async () => {
     await dispatchWorkflowTrigger(trigger(), { targetWorkflowId: workflowId })
 

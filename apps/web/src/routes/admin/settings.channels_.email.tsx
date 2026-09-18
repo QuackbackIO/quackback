@@ -18,6 +18,7 @@ import { EmailChannelSettings } from '@/components/admin/channels/email-channel-
 import { EmailTransportCard } from '@/components/admin/channels/email-transport-card'
 import { fetchEmailAutoAckFn, updateEmailAutoAckFn } from '@/lib/server/functions/settings'
 import { listRecentEmailLogFn } from '@/lib/server/functions/channel-accounts'
+import { ConversationInactivityCard } from '@/components/admin/settings/conversation-inactivity-card'
 
 export const Route = createFileRoute('/admin/settings/channels_/email')({
   beforeLoad: ({ context }) => {
@@ -27,7 +28,10 @@ export const Route = createFileRoute('/admin/settings/channels_/email')({
   },
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.CHANNEL_ACCOUNT_MANAGE)
-    await context.queryClient.ensureQueryData(settingsQueries.spamFilterConfig())
+    await Promise.all([
+      context.queryClient.ensureQueryData(settingsQueries.spamFilterConfig()),
+      context.queryClient.ensureQueryData(settingsQueries.conversationInactivity()),
+    ])
     return {}
   },
   component: EmailChannelPage,
@@ -49,6 +53,7 @@ function EmailChannelPage() {
       <TrustedSendersSection />
       <AutoAckCard />
       <EmailActivityCard />
+      <ConversationInactivityCard section="email" />
       <SettingsCard
         title="Reopen on reply"
         description="Email replies always reopen a closed conversation."

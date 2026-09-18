@@ -17,6 +17,7 @@ import { AssistantIdentityCard } from '@/components/admin/automation/assistant-i
 import { AssistantVoiceCard } from '@/components/admin/automation/assistant-basics-card'
 import { AgentKnowledgeCard } from '@/components/admin/automation/assistant-knowledge-card'
 import { GuidanceRulesCard } from '@/components/admin/automation/guidance-rules-card'
+import { ConversationInactivityCard } from '@/components/admin/settings/conversation-inactivity-card'
 
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { DefaultErrorPage } from '@/components/shared/error-page'
@@ -24,6 +25,7 @@ import { BackLink } from '@/components/ui/back-link'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { assistantQueries } from '@/lib/client/queries/assistant'
+import { settingsQueries } from '@/lib/client/queries/settings'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 
@@ -46,7 +48,10 @@ export const Route = createFileRoute('/admin/automation/agent')({
     }
   },
   loader: async ({ context }) => {
-    await context.queryClient.ensureQueryData(assistantQueries.settings())
+    await Promise.all([
+      context.queryClient.ensureQueryData(assistantQueries.settings()),
+      context.queryClient.ensureQueryData(settingsQueries.conversationInactivity()),
+    ])
   },
   errorComponent: ({ error, reset }) => (
     <DefaultErrorPage error={error} reset={reset} fullPage={false} />
@@ -188,6 +193,12 @@ function AssistantAgentSettings() {
                 <AssistantIdentityCard />
                 <AssistantVoiceCard />
                 <AdditionalInstructionsCard />
+                <ConversationInactivityCard
+                  section="assistant"
+                  preventRepliesWhenClosed={
+                    settings?.publicWidgetConfig?.messenger?.preventRepliesWhenClosed ?? false
+                  }
+                />
               </TabsContent>
 
               <TabsContent value="knowledge" keepMounted className="space-y-6">

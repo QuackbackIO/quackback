@@ -2,7 +2,7 @@
  * Internal shared helpers for settings sub-modules.
  * NOT part of the public API — import from settings.service instead.
  */
-import { db, eq, settings } from '@/lib/server/db'
+import { db, eq, settings, sql } from '@/lib/server/db'
 import { cacheDel, CACHE_KEYS } from '@/lib/server/cache'
 import { DomainException, InternalError, NotFoundError } from '@/lib/shared/errors'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
@@ -145,19 +145,18 @@ export async function invalidateSettingsCache(): Promise<void> {
 
 /**
  * Read-modify-write one key in the `settings.metadata` JSON bag, preserving
- * sibling keys, then bust the settings cache. Non-atomic (last write wins) —
- * acceptable for the admin-driven settings families (office hours, tickets) that
- * ride in this generic bag rather than a dedicated column.
+ * sibling keys atomically, then bust the settings cache. Section-specific
+ * revision checks belong in the owning service.
  *
  * @internal
  */
 export async function writeMetadataKey(key: string, value: unknown): Promise<void> {
   const org = await requireSettings()
-  const meta = parseJsonOrNull<Record<string, unknown>>(org.metadata) ?? {}
-  meta[key] = value
   await db
     .update(settings)
-    .set({ metadata: JSON.stringify(meta) })
+    .set({
+      metadata: sql`jsonb_set(COALESCE(NULLIF(${settings.metadata}, '')::jsonb, '{}'::jsonb), ARRAY[${key}], ${JSON.stringify(value)}::jsonb)::text`,
+    })
     .where(eq(settings.id, org.id))
   await invalidateSettingsCache()
 }

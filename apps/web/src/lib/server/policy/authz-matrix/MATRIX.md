@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 708 surfaces
+### Server functions (`requireAuth`) — 710 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -601,6 +601,8 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/settings.ts`::updateWorkflowAbandonedAutoCloseFn | workflow.manage |
 | `lib/server/functions/settings.ts`::fetchWorkflowCloseSpamFn | routing.manage |
 | `lib/server/functions/settings.ts`::updateWorkflowCloseSpamFn | workflow.manage |
+| `lib/server/functions/settings.ts`::fetchConversationInactivityFn | DYNAMIC (settings.manage | channel_account.manage | assistant.manage | workflow.manage) |
+| `lib/server/functions/settings.ts`::updateConversationInactivityFn | DYNAMIC (settings.manage | channel_account.manage | assistant.manage) |
 | `lib/server/functions/settings.ts`::fetchDefaultSlaPolicyFn | sla.manage |
 | `lib/server/functions/settings.ts`::updateDefaultSlaPolicyFn | sla.manage |
 | `lib/server/functions/settings.ts`::getSpamFilterConfigFn | settings.manage |
@@ -1019,7 +1021,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-214 of 1033 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+214 of 1035 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 

@@ -80,6 +80,19 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/contact-email.ts::getEmailChangeStateFn': END_USER(
     'reads only the caller own address state'
   ),
+  'lib/server/functions/settings.ts::fetchConversationInactivityFn': DYNAMIC_PERMISSION(
+    [
+      PERMISSIONS.SETTINGS_MANAGE,
+      PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
+      PERMISSIONS.ASSISTANT_MANAGE,
+      PERMISSIONS.WORKFLOW_MANAGE,
+    ],
+    'read shared channel ownership and policy summaries from any authorized configuration page'
+  ),
+  'lib/server/functions/settings.ts::updateConversationInactivityFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.CHANNEL_ACCOUNT_MANAGE, PERMISSIONS.ASSISTANT_MANAGE],
+    'strict section discriminator chooses exactly the permission of the edited settings page; cross-section keys are rejected'
+  ),
   'lib/server/functions/contact-email.ts::sendCurrentAddressCodeFn': END_USER(
     'sends a code to the caller own current address; no input is taken'
   ),

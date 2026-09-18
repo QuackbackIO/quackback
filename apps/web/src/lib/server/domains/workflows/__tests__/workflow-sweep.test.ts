@@ -119,6 +119,15 @@ vi.mock('@/lib/server/domains/sla/ticket-sla.sweep', () => ({
   claimTicketSlaTimerTriggerMarker,
 }))
 
+vi.mock('@/lib/server/domains/settings/settings.conversation-inactivity', async (original) => ({
+  ...(await original<
+    typeof import('@/lib/server/domains/settings/settings.conversation-inactivity')
+  >()),
+  getConversationInactivitySettings: async () => ({
+    channels: { messenger: 'custom', email: 'custom' },
+  }),
+}))
+
 import { createWorkflow } from '../workflow.service'
 import {
   sweepStaleRunningRuns,

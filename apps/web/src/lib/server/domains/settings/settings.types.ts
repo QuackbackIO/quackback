@@ -11,6 +11,7 @@ import type { OfficeHoursConfig } from '@/lib/shared/conversation/types'
 import type { WidgetTranslations } from '@/lib/shared/widget/translations'
 import type { StatusSettings } from '@/lib/shared/status-settings'
 import type { OidcSignInButton } from '@/lib/shared/oidc-sign-in-button'
+import type { ContactCaptureSettings } from '@/lib/shared/contact-capture'
 
 // =============================================================================
 // Auth Configuration (Team sign-in settings)
@@ -585,6 +586,12 @@ export interface MessengerConfig {
     /** Only one strategy today: assign to an online agent. */
     strategy: 'auto_assign_active'
   }
+  /**
+   * Ask anonymous visitors for an email (and optionally a name) before the
+   * first message. Default off. Typed-in details are unproven contact only —
+   * they never identify or merge the visitor.
+   */
+  contactCapture?: ContactCaptureSettings
 }
 
 /** Client-safe subset of MessengerConfig (drops agent-only + deprecated fields). */
@@ -734,6 +741,7 @@ export const DEFAULT_MESSENGER_CONFIG: MessengerConfig = {
   // off until Support is turned on (or Show on your website) so a pasted
   // snippet does not go live by itself.
   assistant: { enabled: true, respond: true },
+  contactCapture: { mode: 'off', askName: false },
 }
 
 export const DEFAULT_WIDGET_CONFIG: WidgetConfig = {
@@ -791,7 +799,9 @@ export interface UpdateWidgetConfigInput {
     tickets?: boolean
     home?: boolean
   }
-  messenger?: Partial<MessengerConfig>
+  messenger?: Omit<Partial<MessengerConfig>, 'contactCapture'> & {
+    contactCapture?: Partial<ContactCaptureSettings>
+  }
   home?: WidgetHomeConfig
   translations?: WidgetTranslations
 }

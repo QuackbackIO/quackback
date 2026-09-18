@@ -13,6 +13,7 @@ vi.mock('@tanstack/react-router', async () => {
 })
 
 vi.mock('@tanstack/react-query', () => ({
+  useQuery: () => ({ data: { enabled: false, timezone: 'UTC' } }),
   useSuspenseQuery: (opts: { queryKey: string[] }) => {
     if (opts.queryKey.includes('widgetConfig')) {
       return {
@@ -44,6 +45,10 @@ vi.mock('@/lib/client/mutations/settings', () => ({
   useUpdatePortalConfig: () => ({ mutateAsync: vi.fn() }),
 }))
 
+vi.mock('@/components/admin/settings/conversation-inactivity-card', () => ({
+  ConversationInactivityCard: () => null,
+}))
+
 const { MessengerChannelPage } = await import('../settings.channels_.messenger')
 
 describe('Messenger Surfaces', () => {
@@ -62,5 +67,6 @@ describe('Messenger Surfaces', () => {
     expect(screen.queryByText('Widget settings')).not.toBeInTheDocument()
     expect(screen.queryByText('Portal Support')).not.toBeInTheDocument()
     expect(screen.getByText('Translations')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Contact details' })).toBeInTheDocument()
   })
 })

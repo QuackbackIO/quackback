@@ -7,6 +7,7 @@
  * canvas is the visual editor for that tree. All editing state lives in
  * useWorkflowBuilder; this component just wires it to the panels.
  */
+import { InactivityWorkflowNotice } from '../inactivity-workflow-notice'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { Loader2 } from 'lucide-react'
@@ -80,6 +81,9 @@ function WorkflowBuilderShell({ workflow }: { workflow: WorkflowDTO }) {
         onToggleOutline={b.toggleOutline}
         onOpenHistory={b.openHistorySheet}
       />
+      {workflow.triggerType === 'conversation.customer_unresponsive' && (
+        <InactivityWorkflowNotice triggerSettings={b.triggerSettings} />
+      )}
       <VersionHistorySheet
         workflowId={workflow.id}
         open={b.historySheetOpen}

@@ -31,6 +31,7 @@ import type { ConversationId, PrincipalId, WorkflowId } from '@quackback/ids'
 import type { PrincipalType } from '@/lib/server/policy/types'
 import type { Workflow } from '@/lib/server/db'
 import type { TicketStatusCategory } from '@/lib/shared/db-types'
+import { customInactivityAllowed } from '@/lib/server/domains/conversation/conversation.inactivity-mode'
 import { logger } from '@/lib/server/logger'
 import { listLiveWorkflowsForTrigger, getWorkflow } from './workflow.service'
 import { resolveConditionContext } from './condition.context'
@@ -276,6 +277,11 @@ export async function dispatchWorkflowTrigger(
         : hasActiveCustomerFacingRun(trigger.conversationId),
   ])
   if (!ctx) return
+  if (
+    trigger.triggerType === 'conversation.customer_unresponsive' &&
+    !(await customInactivityAllowed(trigger.conversationId))
+  )
+    return
 
   // See WorkflowTrigger.subjectPrincipalId's doc: omitted (undefined) means
   // "derive it from the conversation's visitor", explicit null means "no cap

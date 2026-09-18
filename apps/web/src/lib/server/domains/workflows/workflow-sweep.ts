@@ -537,7 +537,18 @@ async function scanUnresponsiveForWorkflow(workflow: Workflow, now: Date): Promi
     .limit(UNRESPONSIVE_BATCH_SIZE)
 
   let fired = 0
+  const inactivity = isTeammateUnresponsive
+    ? null
+    : await import('@/lib/server/domains/settings/settings.conversation-inactivity').then((m) =>
+        m.getConversationInactivitySettings()
+      )
   await mapWithConcurrency(rows, SWEEP_DISPATCH_CONCURRENCY, async (row) => {
+    if (
+      inactivity &&
+      ((row.channel !== 'messenger' && row.channel !== 'email') ||
+        inactivity.channels?.[row.channel as 'messenger' | 'email'] !== 'custom')
+    )
+      return
     if (!row.anchor) return // defensive: the NOT NULL filter above already excludes this
     const sinceAt = row.anchor.toISOString()
     const silenceMinutes = Math.floor((now.getTime() - row.anchor.getTime()) / 60_000)

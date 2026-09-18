@@ -678,13 +678,14 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
   },
   {
     id: 'auto-close-idle',
-    title: 'Auto-close idle conversations',
-    benefit: 'Nudge after the customer goes quiet, then close if silence continues.',
+    title: 'Custom idle handling',
+    benefit:
+      'Override the built-in inactivity defaults with your own nudge and close timing. Switch the built-in Messenger and email auto-close off when you install this.',
     categories: ['housekeeping'],
     icon: XCircleIcon,
     iconClassName: 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
     payload: {
-      name: 'Auto-close idle conversations',
+      name: 'Custom idle handling',
       class: 'background',
       triggerType: 'conversation.customer_unresponsive',
       triggerSettings: { inactivityMinutes: 3 * 24 * 60 },

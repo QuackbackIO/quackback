@@ -25,6 +25,7 @@ import {
   type AssistantIdentity,
 } from '@/lib/shared/assistant/config'
 import { isWidgetMessengerEnabled } from '@/lib/shared/support-surfaces'
+import { parseContactCapture } from '@/lib/shared/contact-capture'
 
 const log = logger.child({ component: 'settings-widget' })
 export const WIDGET_OBSERVATION_THROTTLE_MS = 15 * 60 * 1000
@@ -163,6 +164,7 @@ export function publicMessengerConfig(
             : identity.avatarUrl,
         }
       : undefined,
+    contactCapture: parseContactCapture(messenger.contactCapture),
   }
 }
 import {

@@ -65,6 +65,14 @@ import { WorkflowTemplateGallery } from './workflow-template-gallery'
 import type { WorkflowTemplate } from './workflow-templates'
 import { UpgradeModal } from '@/components/admin/upgrade'
 import { isPlanRefusal } from '@/lib/shared/describe-upgrade'
+import { InactivityWorkflowNotice } from './inactivity-workflow-notice'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
 import { WorkflowRunsSheet } from './workflow-runs-sheet'
 import { cn } from '@/lib/shared/utils'
 import { PageHeader } from '@/components/shared/page-header'
@@ -251,6 +259,7 @@ export function WorkflowsManager({
   const [typeFilter, setTypeFilter] = useState<'any' | (typeof CLASSES)[number]['value']>('any')
   const [galleryOpen, setGalleryOpen] = useState(false)
   const [upgradeOpen, setUpgradeOpen] = useState(false)
+  const [publishing, setPublishing] = useState<WorkflowDTO | null>(null)
   const [deleting, setDeleting] = useState<WorkflowDTO | null>(null)
   const [runsWorkflow, setRunsWorkflow] = useState<WorkflowDTO | null>(null)
 
@@ -336,8 +345,14 @@ export function WorkflowsManager({
     })
   }
 
-  const handleSetStatus = (id: string, status: StatusValue) =>
+  const handleSetStatus = (id: string, status: StatusValue) => {
+    const workflow = workflows?.find((w) => w.id === id)
+    if (status === 'live' && workflow?.triggerType === 'conversation.customer_unresponsive') {
+      setPublishing(workflow)
+      return
+    }
     setStatus.mutate({ id, status }, { onError: () => toast.error('Could not update status') })
+  }
 
   const handleDelete = () => {
     if (!deleting) return
@@ -583,6 +598,35 @@ export function WorkflowsManager({
         )}
       </div>
 
+      {publishing && (
+        <Dialog open onOpenChange={(open) => !open && setPublishing(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Publish {publishing.name}</DialogTitle>
+            </DialogHeader>
+            <InactivityWorkflowNotice triggerSettings={publishing.triggerSettings ?? {}} />
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setPublishing(null)}>
+                Cancel
+              </Button>
+              <Button
+                disabled={setStatus.isPending}
+                onClick={() =>
+                  setStatus.mutate(
+                    { id: publishing.id, status: 'live' },
+                    {
+                      onSuccess: () => setPublishing(null),
+                      onError: () => toast.error('Could not publish workflow'),
+                    }
+                  )
+                }
+              >
+                Publish workflow
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
       <WorkflowTemplateGallery
         open={galleryOpen}
         onOpenChange={setGalleryOpen}

@@ -25,6 +25,7 @@ import {
   updateCustomCssFn,
   updateWorkflowAbandonedAutoCloseFn,
   updateWorkflowCloseSpamFn,
+  updateConversationInactivityFn,
   updateDefaultSlaPolicyFn,
   updateSpamFilterConfigFn,
 } from '@/lib/server/functions/settings'
@@ -462,6 +463,20 @@ export function useUpdateWorkflowCloseSpam() {
       updateWorkflowCloseSpamFn({ data }),
     onSuccess: (saved) =>
       queryClient.setQueryData(settingsQueries.workflowCloseSpam().queryKey, saved),
+  })
+}
+
+export function useUpdateConversationInactivity() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (data: Parameters<typeof updateConversationInactivityFn>[0]['data']) =>
+      updateConversationInactivityFn({ data }),
+    onSuccess: (saved) =>
+      queryClient.setQueryData(settingsQueries.conversationInactivity().queryKey, (current) => ({
+        ...saved,
+        publishedWorkflows: current?.publishedWorkflows ?? [],
+      })),
   })
 }
 

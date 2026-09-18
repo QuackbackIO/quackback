@@ -14,6 +14,7 @@ import {
   fetchWidgetSecret,
   fetchWorkflowAbandonedAutoCloseFn,
   fetchWorkflowCloseSpamFn,
+  fetchConversationInactivityFn,
   fetchDefaultSlaPolicyFn,
   getSpamFilterConfigFn,
 } from '@/lib/server/functions/settings'
@@ -217,6 +218,13 @@ export const settingsQueries = {
     queryOptions({
       queryKey: ['settings', 'workflowCloseSpam'],
       queryFn: fetchWorkflowCloseSpamFn,
+      staleTime: STALE_TIME_MEDIUM,
+    }),
+
+  conversationInactivity: () =>
+    queryOptions({
+      queryKey: ['settings', 'conversationInactivity'],
+      queryFn: fetchConversationInactivityFn,
       staleTime: STALE_TIME_MEDIUM,
     }),
 
