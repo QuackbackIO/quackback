@@ -190,9 +190,11 @@ export function buildExtensions(
     onImageUpload?: (file: File) => Promise<string>
     /** When set, Enter submits (chat-send) instead of splitting the block. */
     onSubmit?: () => void
+    /** When set, Cmd/Ctrl+Shift+Enter sends and closes. */
+    onSubmitAndClose?: () => void
   }
 ) {
-  const { placeholder, onImageUpload, onSubmit } = options
+  const { placeholder, onImageUpload, onSubmit, onSubmitAndClose } = options
   return [
     StarterKit.configure({
       heading: features.headings ? { levels: [1, 2, 3] } : false,
@@ -314,7 +316,7 @@ export function buildExtensions(
     // a consumer that passes onSubmit gets Enter-to-send even when the preset also
     // sets enterAsHardBreak — Enter submits, Shift+Enter breaks. Both yield to an
     // open slash/mention/emoji popover via hasActiveSuggestion.
-    ...(onSubmit ? [createSubmitOnEnter(onSubmit)] : []),
+    ...(onSubmit ? [createSubmitOnEnter(onSubmit, onSubmitAndClose)] : []),
     ...(features.enterAsHardBreak ? [createEnterAsHardBreak()] : []),
     // Registered unless mentions are explicitly disabled (undefined = enabled), so
     // every existing consumer keeps the `@` menu while visitor-facing composers can
@@ -360,7 +362,7 @@ function createEnterAsHardBreak() {
 // returns true. ProseMirror runs keymap handlers before a suggestion popover's
 // handleKeyDown, so an open slash/mention/emoji menu keeps Enter — we yield by
 // returning false.
-function createSubmitOnEnter(onSubmit: () => void) {
+function createSubmitOnEnter(onSubmit: () => void, onSubmitAndClose?: () => void) {
   return Extension.create({
     name: 'submitOnEnter',
     priority: 1000,
@@ -374,6 +376,11 @@ function createSubmitOnEnter(onSubmit: () => void) {
         'Mod-Enter': () => {
           if (hasActiveSuggestion(this.editor)) return false
           onSubmit()
+          return true
+        },
+        'Mod-Shift-Enter': () => {
+          if (!onSubmitAndClose || hasActiveSuggestion(this.editor)) return false
+          onSubmitAndClose()
           return true
         },
         'Shift-Enter': () => this.editor.commands.setHardBreak(),
@@ -1325,6 +1332,9 @@ interface RichTextEditorProps {
    * refreshed by setOptions, so an unstable callback leaves Enter firing the
    * first render's stale closure forever. */
   onSubmit?: () => void
+  /** Cmd/Ctrl+Shift+Enter: send the reply and close. Same stability rule as
+   * onSubmit — wrap churning state in a ref. */
+  onSubmitAndClose?: () => void
   /** Publishes the imperative focus seam. Mutually exclusive editors may share
    * one ref object: whichever instance is mounted owns it. */
   editorRef?: React.RefObject<RichTextEditorHandle | null>
@@ -1348,6 +1358,7 @@ function RichTextEditorBase({
   features = {},
   onImageUpload,
   onSubmit,
+  onSubmitAndClose,
   editorRef,
 }: RichTextEditorProps) {
   // Memoize extensions keyed on individual feature flags.
@@ -1356,7 +1367,7 @@ function RichTextEditorBase({
   // Rebuilding the array on every render causes setOptions→transaction→onUpdate
   // on every keystroke, resulting in 300–400 ms input violations.
   const extensions = useMemo(
-    () => buildExtensions(features, { placeholder, onImageUpload, onSubmit }),
+    () => buildExtensions(features, { placeholder, onImageUpload, onSubmit, onSubmitAndClose }),
 
     [
       features.headings,
@@ -1374,6 +1385,7 @@ function RichTextEditorBase({
       features.mentions,
       onImageUpload,
       onSubmit,
+      onSubmitAndClose,
       placeholder,
     ]
   )
@@ -1736,6 +1748,7 @@ export const RichTextEditor = memo(RichTextEditorBase, (prev, next) => {
     prev.onChange !== next.onChange ||
     prev.onImageUpload !== next.onImageUpload ||
     prev.onSubmit !== next.onSubmit ||
+    prev.onSubmitAndClose !== next.onSubmitAndClose ||
     prev.disabled !== next.disabled ||
     prev.placeholder !== next.placeholder ||
     prev.minHeight !== next.minHeight ||

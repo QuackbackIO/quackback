@@ -267,16 +267,26 @@ describe('submitOnEnter (onSubmit)', () => {
     return { editor, setHardBreak }
   }
 
-  function submitExtension(features: EditorFeatures, onSubmit: () => void): KeymapExtension {
-    const ext = buildExtensions(features, { placeholder: '', onSubmit }).find(
+  function submitExtension(
+    features: EditorFeatures,
+    onSubmit: () => void,
+    onSubmitAndClose?: () => void
+  ): KeymapExtension {
+    const ext = buildExtensions(features, { placeholder: '', onSubmit, onSubmitAndClose }).find(
       (e) => (e as { name: string }).name === 'submitOnEnter'
     )
     if (!ext) throw new Error('submitOnEnter extension was not registered')
     return ext as unknown as KeymapExtension
   }
 
-  function handlersFor(mockEditor: unknown, onSubmit: () => void): KeyHandlers {
-    return submitExtension({}, onSubmit).config.addKeyboardShortcuts.call({ editor: mockEditor })
+  function handlersFor(
+    mockEditor: unknown,
+    onSubmit: () => void,
+    onSubmitAndClose?: () => void
+  ): KeyHandlers {
+    return submitExtension({}, onSubmit, onSubmitAndClose).config.addKeyboardShortcuts.call({
+      editor: mockEditor,
+    })
   }
 
   it('is absent when no onSubmit is provided (zero behavior change)', () => {
@@ -326,7 +336,7 @@ describe('submitOnEnter (onSubmit)', () => {
     expect(consumed).toBe(false) // let the popover's own onKeyDown pick the item
   })
 
-  it('Mod-Enter fires onSubmit (Slack-style send) and consumes the key', () => {
+  it('Mod-Enter fires onSubmit and consumes the key', () => {
     const onSubmit = vi.fn()
     const { editor, setHardBreak } = makeMockEditor()
     const consumed = handlersFor(editor, onSubmit)['Mod-Enter']()
@@ -339,6 +349,24 @@ describe('submitOnEnter (onSubmit)', () => {
     const onSubmit = vi.fn()
     const { editor } = makeMockEditor({ suggestion: true })
     const consumed = handlersFor(editor, onSubmit)['Mod-Enter']()
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(consumed).toBe(false)
+  })
+
+  it('Mod-Shift-Enter fires onSubmitAndClose when provided', () => {
+    const onSubmit = vi.fn()
+    const onSubmitAndClose = vi.fn()
+    const { editor } = makeMockEditor()
+    const consumed = handlersFor(editor, onSubmit, onSubmitAndClose)['Mod-Shift-Enter']()
+    expect(onSubmitAndClose).toHaveBeenCalledOnce()
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(consumed).toBe(true)
+  })
+
+  it('Mod-Shift-Enter is a no-op without onSubmitAndClose', () => {
+    const onSubmit = vi.fn()
+    const { editor } = makeMockEditor()
+    const consumed = handlersFor(editor, onSubmit)['Mod-Shift-Enter']()
     expect(onSubmit).not.toHaveBeenCalled()
     expect(consumed).toBe(false)
   })

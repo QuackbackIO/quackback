@@ -49,6 +49,9 @@ vi.mock('@/components/admin/users/block-person-control', () => ({
 vi.mock('@/lib/server/functions/conversation', () => ({
   listConversationsForUserFn: vi.fn().mockResolvedValue({ conversations: [], hasMore: false }),
   getConversationAssistantActivityFn: vi.fn().mockResolvedValue(null),
+  captureVisitorContactEmailFn: vi.fn(),
+  correctVisitorContactFn: vi.fn(),
+  lookupIdentifiedContactMatchFn: vi.fn().mockResolvedValue(null),
 }))
 vi.mock('@/lib/server/functions/admin', () => ({
   getPortalUserFn: vi.fn().mockResolvedValue(null),
@@ -122,10 +125,20 @@ function renderPanel(
   conversation: ConversationDTO = makeConversation(),
   extra: {
     openCopilotToken?: number
+    lead?: boolean
     issuePeople?: { principalId: string; displayName: string; avatarUrl: string | null }[]
   } = {}
 ) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  if (extra.lead !== undefined)
+    client.setQueryData(['admin', 'inbox', 'visitor', conversation.visitor.principalId], {
+      isLead: extra.lead,
+      email: extra.lead ? null : 'account@example.test',
+      segments: [],
+      postCount: 0,
+      commentCount: 0,
+      voteCount: 0,
+    })
   const ui = (props: { openCopilotToken?: number }) => (
     <QueryClientProvider client={client}>
       <InboxDetailPanel
@@ -295,5 +308,18 @@ describe('<InboxDetailPanel> GitHub issue people', () => {
       issuePeople: [{ principalId: 'p1', displayName: 'jane', avatarUrl: null }],
     })
     expect(screen.queryByText('On this issue')).not.toBeInTheDocument()
+  })
+})
+
+describe('anonymous contact correction', () => {
+  it('keeps an engaged anonymous lead editable after its People record is loaded', () => {
+    renderPanel(makeConversation(), { lead: true })
+    expect(screen.getByText('Edit name or email')).toBeInTheDocument()
+    expect(screen.getByText('Unverified')).toBeInTheDocument()
+  })
+  it('does not offer anonymous contact corrections on an identified account', () => {
+    renderPanel(makeConversation(), { lead: false })
+    expect(screen.queryByText('Edit name or email')).not.toBeInTheDocument()
+    expect(screen.queryByText('Unverified')).not.toBeInTheDocument()
   })
 })

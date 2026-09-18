@@ -127,13 +127,14 @@ import {
 
 /** Quinn-view outcome sub-filter. */
 const QUINN_BUCKETS: {
-  value: 'resolved' | 'escalated' | 'pending' | undefined
+  value: 'resolved' | 'escalated' | 'pending' | 'abandoned' | undefined
   label: string
 }[] = [
   { value: undefined, label: 'All' },
   { value: 'pending', label: 'Pending' },
   { value: 'escalated', label: 'Escalated' },
   { value: 'resolved', label: 'Resolved' },
+  { value: 'abandoned', label: 'Abandoned' },
 ]
 
 function QuinnBucketChips({
@@ -141,13 +142,13 @@ function QuinnBucketChips({
   counts,
   onChange,
 }: {
-  value?: 'resolved' | 'escalated' | 'pending'
-  counts?: { resolved: number; escalated: number; pending: number }
-  onChange: (value?: 'resolved' | 'escalated' | 'pending') => void
+  value?: 'resolved' | 'escalated' | 'pending' | 'abandoned'
+  counts?: { resolved: number; escalated: number; pending: number; abandoned: number }
+  onChange: (value?: 'resolved' | 'escalated' | 'pending' | 'abandoned') => void
 }) {
-  const countFor = (v?: 'resolved' | 'escalated' | 'pending'): number | undefined => {
+  const countFor = (v?: 'resolved' | 'escalated' | 'pending' | 'abandoned'): number | undefined => {
     if (!counts) return undefined
-    return v ? counts[v] : counts.resolved + counts.escalated + counts.pending
+    return v ? counts[v] : counts.resolved + counts.escalated + counts.pending + counts.abandoned
   }
   return (
     <div className="flex flex-wrap gap-1.5 px-3 pb-2 pt-1">
@@ -230,7 +231,10 @@ function validateInboxSearch(search: Record<string, unknown>): InboxSearch {
     ttype: coerceTicketTypeId(typeof search.ttype === 'string' ? search.ttype : undefined),
     // Quinn-view sub-filter by involvement outcome; only the canonical buckets.
     ai:
-      search.ai === 'resolved' || search.ai === 'escalated' || search.ai === 'pending'
+      search.ai === 'resolved' ||
+      search.ai === 'escalated' ||
+      search.ai === 'pending' ||
+      search.ai === 'abandoned'
         ? search.ai
         : undefined,
     q:

@@ -15,6 +15,7 @@
  * components' own behavior, and several of them fire unconditional queries
  * that would otherwise hit real server functions.
  */
+import type { JSONContent } from '@tiptap/core'
 import { createRef } from 'react'
 import { describe, expect, it, vi, afterEach } from 'vitest'
 import { act, render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
@@ -113,7 +114,8 @@ vi.mock('@/components/admin/conversation/share-post-dialog', () => ({
   SharePostDialog: () => null,
 }))
 vi.mock('@/components/admin/conversation/required-attributes-dialog', () => ({
-  RequiredAttributesDialog: () => null,
+  RequiredAttributesDialog: ({ messages }: { messages: string[] | null }) =>
+    messages ? <div data-testid="required-attributes">Required attributes</div> : null,
 }))
 vi.mock('@/components/admin/users/block-person-control', () => ({
   usePersonBlockStatus: () => ({ blocked: false, isLoading: false }),
@@ -146,13 +148,52 @@ vi.mock('@/components/ui/rich-text-editor', async () => {
     RichTextEditor: ({
       placeholder,
       editorRef,
+      value,
+      onChange,
+      onSubmit,
+      onSubmitAndClose,
     }: {
       placeholder?: string
-      editorRef?: React.RefObject<{ focus: () => void } | null>
+      value?: JSONContent | string
+      onChange?: (json: JSONContent, html: string, markdown: string) => void
+      onSubmit?: () => void
+      onSubmitAndClose?: () => void
+      editorRef?: React.RefObject<{ focus: () => void; clear: () => void } | null>
     }) => {
       const areaRef = useRef<HTMLTextAreaElement>(null)
-      useImperativeHandle(editorRef, () => ({ focus: () => areaRef.current?.focus() }))
-      return <textarea ref={areaRef} data-testid="editor" placeholder={placeholder} readOnly />
+      useImperativeHandle(editorRef, () => ({
+        focus: () => areaRef.current?.focus(),
+        clear: () => {},
+      }))
+      const text =
+        typeof value === 'string'
+          ? value
+          : (value?.content?.flatMap((p) => p.content?.map((t) => t.text ?? '') ?? []).join('') ??
+            '')
+      return (
+        <textarea
+          ref={areaRef}
+          data-testid="editor"
+          placeholder={placeholder}
+          value={text}
+          onChange={(e) =>
+            onChange?.(
+              {
+                type: 'doc',
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: e.target.value }] }],
+              },
+              '',
+              e.target.value
+            )
+          }
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && e.ctrlKey) {
+              if (e.shiftKey && onSubmitAndClose) onSubmitAndClose()
+              else onSubmit?.()
+            }
+          }}
+        />
+      )
     },
     RichTextContent: () => null,
   }
@@ -337,7 +378,7 @@ vi.mock('@/lib/client/queries/inbox', async (importOriginal) => ({
 vi.mock('@/lib/client/queries/conversation-inbox', () => ({
   conversationInboxQueries: {
     thread: (id: string) => ({
-      queryKey: ['conv-thread', id],
+      queryKey: ['admin', 'inbox', 'thread', id],
       queryFn: () =>
         Promise.resolve({
           hasMore: false,
@@ -350,7 +391,13 @@ vi.mock('@/lib/client/queries/conversation-inbox', () => ({
 
 import { AgentConversationThread } from '../agent-conversation-thread'
 import type { ThreadComposerHandle } from '../agent-conversation-thread'
-import { setConversationStatusFn } from '@/lib/server/functions/conversation'
+import { toast } from 'sonner'
+vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
+import {
+  sendAgentMessageFn,
+  addConversationNoteFn,
+  setConversationStatusFn,
+} from '@/lib/server/functions/conversation'
 import { setTicketStatusFn } from '@/lib/server/functions/tickets'
 
 afterEach(() => {
@@ -548,7 +595,7 @@ describe('AgentConversationThread — openCopilotToken forwarding', () => {
     // verbatim (no local counter merged in), so the panel's 0-sentinel
     // semantics read the route's real token.
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    client.setQueryData(['conv-thread', 'conversation_suggest'], {
+    client.setQueryData(['admin', 'inbox', 'thread', 'conversation_suggest'], {
       hasMore: false,
       conversation: makeConversation({ id: 'conversation_suggest' as ConversationDTO['id'] }),
       messages: [makeMessage({ id: 'conversation_msg_1' as never, senderType: 'visitor' })],
@@ -832,5 +879,89 @@ describe('AgentConversationThread — composer focus handle', () => {
     act(() => composerRef.current?.openMacros())
 
     expect(screen.queryByTestId('macro-picker')).not.toBeInTheDocument()
+  })
+})
+
+describe('send and close', () => {
+  async function compose() {
+    renderThread({ kind: 'conversation', id: 'conversation_1' })
+    const editor = await screen.findByTestId('editor')
+    fireEvent.change(editor, { target: { value: 'Here is the reply' } })
+    return editor
+  }
+  function sent() {
+    return {
+      conversation: makeConversation(),
+      message: makeMessage({
+        id: 'conversation_message_sent' as never,
+        senderType: 'agent',
+        content: 'Here is the reply',
+      }),
+    }
+  }
+  it('sends once and closes after the reply succeeds using the keyboard shortcut', async () => {
+    vi.mocked(sendAgentMessageFn).mockResolvedValueOnce(sent())
+    const editor = await compose()
+    fireEvent.keyDown(editor, { key: 'Enter', ctrlKey: true, shiftKey: true })
+    await waitFor(() => expect(setConversationStatusFn).toHaveBeenCalledTimes(1))
+    expect(sendAgentMessageFn).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(sendAgentMessageFn).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(setConversationStatusFn).mock.invocationCallOrder[0]
+    )
+  })
+  it('restores the draft after send failure and never closes', async () => {
+    vi.mocked(sendAgentMessageFn).mockRejectedValueOnce(new Error('send failed'))
+    fireEvent.keyDown(await compose(), { key: 'Enter', ctrlKey: true, shiftKey: true })
+    await waitFor(() => expect(screen.getByTestId('editor')).toHaveValue('Here is the reply'))
+    expect(setConversationStatusFn).not.toHaveBeenCalled()
+  })
+  it('retains the sent message and reports closure failure without restoring or resending the draft', async () => {
+    vi.mocked(sendAgentMessageFn).mockResolvedValueOnce(sent())
+    vi.mocked(setConversationStatusFn).mockRejectedValueOnce(new Error('close failed'))
+    fireEvent.keyDown(await compose(), { key: 'Enter', ctrlKey: true, shiftKey: true })
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith('Reply sent; conversation could not be closed')
+    )
+    expect(screen.getByTestId('editor')).toHaveValue('')
+    expect(screen.getByText('Here is the reply')).toBeInTheDocument()
+    expect(sendAgentMessageFn).toHaveBeenCalledTimes(1)
+  })
+  it('retains the required-attribute gate after sending', async () => {
+    vi.mocked(sendAgentMessageFn).mockResolvedValueOnce(sent())
+    vi.mocked(setConversationStatusFn).mockRejectedValueOnce(
+      new Error('Missing required attributes: Topic')
+    )
+    fireEvent.keyDown(await compose(), { key: 'Enter', ctrlKey: true, shiftKey: true })
+    expect(await screen.findByTestId('required-attributes')).toBeInTheDocument()
+    expect(screen.getByTestId('editor')).toHaveValue('')
+  })
+  it('requires linked-ticket confirmation after sending', async () => {
+    mockTicketLink.value = {
+      id: 'ticket_9' as never,
+      number: 1042,
+      title: 'Billing',
+      statusName: 'Open',
+      statusCategory: 'open',
+    }
+    vi.mocked(sendAgentMessageFn).mockResolvedValueOnce(sent())
+    fireEvent.keyDown(await compose(), { key: 'Enter', ctrlKey: true, shiftKey: true })
+    expect(await screen.findByText('Ticket #1042 is still open')).toBeInTheDocument()
+    expect(setConversationStatusFn).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Close conversation only' }))
+    await waitFor(() => expect(setConversationStatusFn).toHaveBeenCalledTimes(1))
+  })
+  it('keeps notes as notes even with the send-and-close shortcut', async () => {
+    await compose()
+    fireEvent.click(screen.getByRole('button', { name: 'Reply' }))
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Note' }))
+    fireEvent.change(screen.getByTestId('editor'), { target: { value: 'Internal note' } })
+    vi.mocked(addConversationNoteFn).mockResolvedValueOnce({
+      conversation: makeConversation(),
+      message: makeMessage({ isInternal: true, content: 'Internal note' }),
+    })
+    fireEvent.keyDown(screen.getByTestId('editor'), { key: 'Enter', ctrlKey: true, shiftKey: true })
+    await waitFor(() => expect(addConversationNoteFn).toHaveBeenCalledTimes(1))
+    expect(sendAgentMessageFn).not.toHaveBeenCalled()
+    expect(setConversationStatusFn).not.toHaveBeenCalled()
   })
 })

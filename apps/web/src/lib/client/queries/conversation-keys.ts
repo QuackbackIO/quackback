@@ -42,6 +42,10 @@ export const conversationKeys = {
   agentContactDetail: (principalId: PrincipalId | undefined) =>
     ['admin', 'inbox', 'visitor', principalId] as const,
 
+  /** Identified principal who already uses a captured (unproven) address. */
+  identifiedContactMatch: (email: string | null | undefined) =>
+    ['admin', 'inbox', 'contact-match', email ?? ''] as const,
+
   /** The detail panel's Quinn AI activity summary for one conversation. */
   agentAssistantActivity: (conversationId: ConversationId | undefined) =>
     ['admin', 'inbox', 'assistant-activity', conversationId] as const,

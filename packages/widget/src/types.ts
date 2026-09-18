@@ -47,9 +47,8 @@ export interface InitOptions {
  * backwards-compat with older integrations, but it's not in the type so
  * TypeScript users get nudged to the cleaner form.)
  */
-export type Identity =
-  | { ssoToken: string }
-  | ({ id: string; email: string; name?: string; avatarURL?: string } & Record<string, unknown>)
+/** HMAC-signed identify payload. Call `identify()` with no argument for anonymous. */
+export type Identity = { ssoToken: string }
 
 /**
  * Arguments to `Quackback.open(...)`. Discriminated on the target:
@@ -113,8 +112,6 @@ export interface EventMap {
     anonymous: boolean
     error?: string
   }
-  /** Fires when an anonymous user supplies an email inline. */
-  'email-submitted': { email: string }
   /** Total unread across the visitor's conversations changed. Lets a host page
    *  mirror the count in its own UI (e.g. a nav badge), same value that drives
    *  the launcher badge. */

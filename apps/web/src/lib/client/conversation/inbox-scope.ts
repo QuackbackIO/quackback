@@ -79,7 +79,7 @@ export function ticketTypeForView(view: TypedTicketInboxView): TicketType {
 }
 
 /** Quinn-inbox sub-filter by involvement outcome. */
-export type AiBucket = 'resolved' | 'escalated' | 'pending'
+export type AiBucket = 'resolved' | 'escalated' | 'pending' | 'abandoned'
 
 /**
  * The active left-nav selection — one built-in view, one label, one segment,

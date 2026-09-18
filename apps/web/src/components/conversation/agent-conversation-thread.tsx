@@ -691,6 +691,8 @@ export function AgentConversationThread({
   // new row exists in `rows` before we scroll (onSuccess appends it this tick,
   // when rows.length is still stale).
   const pendingOwnSendScroll = useRef(false)
+  const closeAfterSuccessfulSendRef = useRef<() => void>(() => {})
+  const sentReplyAwaitingClose = useRef(false)
   useLayoutEffect(() => {
     if (!pendingOwnSendScroll.current || rows.length === 0) return
     pendingOwnSendScroll.current = false
@@ -877,6 +879,7 @@ export function AgentConversationThread({
       // the typed reply back so a failed send never loses the draft. Not sent to
       // the server — consumed purely by onError.
       restoreDraft?: () => void
+      closeAfterSend?: boolean
     }) =>
       isTicket
         ? sendTicketMessageFn({
@@ -896,7 +899,7 @@ export function AgentConversationThread({
               skipTranslation: vars.skipTranslation,
             },
           }),
-    onSuccess: (res) => {
+    onSuccess: (res, vars) => {
       clearAttachments()
       // Our own send always lands at the bottom (followOnAppend only follows
       // when already at end); the layout effect scrolls once the row exists.
@@ -910,6 +913,7 @@ export function AgentConversationThread({
       // there, so hand it back — but only if the user hasn't since moved on
       // (e.g. clicked a triage control mid-flight); never yank focus back.
       if (isSendControlFocused()) activeEditorRef.current?.focus('end')
+      if (vars.closeAfterSend) closeAfterSuccessfulSendRef.current()
     },
     onError: (error, vars) => {
       // Restore the composer to the exact draft cleared at send time so a failed
@@ -1268,13 +1272,19 @@ export function AgentConversationThread({
         data: { conversationId: conversationId ?? INACTIVE_CONVERSATION_ID, status: next },
       }),
     onSuccess: (_data, next) => {
+      sentReplyAwaitingClose.current = false
       toast.success(channelCloseToast(conversation?.channel, next === 'closed'))
       refreshThread()
     },
     onError: (error, next) => {
       const message = error instanceof Error ? error.message : null
       if (message && isMissingRequiredAttributesMessage(message)) setCloseBlocked([message])
-      else toast.error(channelCloseFailureToast(conversation?.channel, next === 'closed'))
+      else
+        toast.error(
+          sentReplyAwaitingClose.current && next === 'closed'
+            ? 'Reply sent; conversation could not be closed'
+            : channelCloseFailureToast(conversation?.channel, next === 'closed')
+        )
     },
   })
   const resolveTicketMutation = useMutation({
@@ -1301,6 +1311,27 @@ export function AgentConversationThread({
   const primaryActionPending = isTicket
     ? resolveTicketMutation.isPending
     : closeConversationMutation.isPending || closeCheckPending
+  const checkBeforeClose = () => {
+    setCloseCheckPending(true)
+    queryClient
+      .fetchQuery({
+        ...inboxQueries.conversationTicketLink(conversationId ?? INACTIVE_CONVERSATION_ID),
+        staleTime: 0,
+      })
+      .then((linked) => {
+        if (linked && linked.statusCategory !== 'closed') setCloseConfirmTicket(linked)
+        else closeConversationMutation.mutate('closed')
+      })
+      // Preserve the confirmation gate when the current ticket cannot be read.
+      .catch(() =>
+        toast.error(
+          sentReplyAwaitingClose.current
+            ? 'Reply sent; conversation could not be closed'
+            : 'Could not check linked tickets. Please try closing again.'
+        )
+      )
+      .finally(() => setCloseCheckPending(false))
+  }
   const runPrimaryAction = useCallback(() => {
     if (isTicket) {
       const closedStatusId = resolveDefaultClosedStatusId(ticketStatusList)
@@ -1315,20 +1346,7 @@ export function AgentConversationThread({
       closeConversationMutation.mutate('open')
       return
     }
-    setCloseCheckPending(true)
-    queryClient
-      .fetchQuery({
-        ...inboxQueries.conversationTicketLink(conversationId ?? INACTIVE_CONVERSATION_ID),
-        staleTime: 0,
-      })
-      .then((linked) => {
-        if (linked && linked.statusCategory !== 'closed') setCloseConfirmTicket(linked)
-        else closeConversationMutation.mutate('closed')
-      })
-      // A failed freshness check must not block the close — fall back to the
-      // pre-guard behavior (close unconditionally).
-      .catch(() => closeConversationMutation.mutate('closed'))
-      .finally(() => setCloseCheckPending(false))
+    checkBeforeClose()
   }, [
     isTicket,
     isClosedConversation,
@@ -1338,6 +1356,10 @@ export function AgentConversationThread({
     queryClient,
     conversationId,
   ])
+  closeAfterSuccessfulSendRef.current = () => {
+    sentReplyAwaitingClose.current = true
+    checkBeforeClose()
+  }
   // The close confirm's two non-cancel actions. "Resolve ticket and close"
   // stamps the workspace's resolved closed-category status on the linked
   // ticket first and only then closes — a failed resolve leaves both sides
@@ -1505,8 +1527,8 @@ export function AgentConversationThread({
   // an attachment). Text/doc clear optimistically; tray attachments clear in the
   // mutation's onSuccess. `!capabilities.reply` forces note mode regardless of
   // `noteMode`'s own state (defense in depth alongside the effect above).
-  const sendRef = useRef<() => void>(() => {})
-  sendRef.current = () => {
+  const sendRef = useRef<(opts?: { close?: boolean }) => void>(() => {})
+  sendRef.current = (opts) => {
     const useNote = noteMode || !capabilities.reply
     const draft = useNote ? noteDraft : replyDraft
     const empty = isEmptyTiptapDoc(draft.json ?? undefined)
@@ -1566,12 +1588,18 @@ export function AgentConversationThread({
       // focus back once the new instance commits.
       requestAnimationFrame(() => activeEditorRef.current?.focus('end'))
     }
-    mutation.mutate({
+    const payload = {
       content: draft.markdown.trim(),
       contentJson: empty ? null : draft.json,
       attachments: hasAttachments ? pendingAttachments : undefined,
       restoreDraft,
-    })
+    }
+    if (useNote) noteMutation.mutate(payload)
+    else
+      sendMutation.mutate({
+        ...payload,
+        closeAfterSend: Boolean(opts?.close) && !isTicket,
+      })
     // Clear in place (no key bump): remounting would destroy the focused node
     // and drop focus to <body>. The view clears imperatively, the state mirrors
     // it, and focus never leaves the editing surface.
@@ -1584,6 +1612,13 @@ export function AgentConversationThread({
     activeEditorRef.current?.focus('end')
   }
   const onSend = useCallback(() => sendRef.current(), [])
+  const onSendAndClose = useCallback(() => sendRef.current({ close: true }), [])
+  const canSendAndClose =
+    !isTicket &&
+    !noteMode &&
+    capabilities.reply &&
+    !isClosedConversation &&
+    channelShowsEndConversation(conversation?.channel)
 
   const activeDraft = noteMode || !capabilities.reply ? noteDraft : replyDraft
   const activePending =
@@ -2174,6 +2209,7 @@ export function AgentConversationThread({
                 className="max-h-64 overflow-y-auto"
                 onChange={onReplyChange}
                 onSubmit={onSend}
+                onSubmitAndClose={canSendAndClose ? onSendAndClose : undefined}
               />
             )}
             <ComposerAttachmentTray attachments={pendingAttachments} onRemove={removeAttachment} />
@@ -2243,22 +2279,54 @@ export function AgentConversationThread({
                 onReplaceDraftText={replaceComposerText}
               />
               <div className="flex-1" />
-              <button
-                type="button"
-                onClick={onSend}
-                disabled={sendDisabled}
-                className={cn(
-                  'flex size-8 shrink-0 items-center justify-center rounded-md text-primary-foreground disabled:opacity-40 transition-opacity',
-                  noteMode || !capabilities.reply ? 'bg-amber-500 text-white' : 'bg-primary'
-                )}
-                aria-label={noteMode || !capabilities.reply ? 'Add note' : 'Send reply'}
-              >
-                {noteMode || !capabilities.reply ? (
-                  <PencilSquareIcon className="h-4 w-4" />
-                ) : (
-                  <PaperAirplaneIcon className="h-4 w-4" />
-                )}
-              </button>
+              {canSendAndClose ? (
+                <div className="flex overflow-hidden rounded-md">
+                  <button
+                    type="button"
+                    onClick={onSend}
+                    disabled={sendDisabled}
+                    className="flex size-8 shrink-0 items-center justify-center bg-primary text-primary-foreground disabled:opacity-40 transition-opacity"
+                    aria-label="Send reply"
+                  >
+                    <PaperAirplaneIcon className="h-4 w-4" />
+                  </button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        disabled={sendDisabled}
+                        className="flex size-8 shrink-0 items-center justify-center border-s border-primary-foreground/20 bg-primary text-primary-foreground disabled:opacity-40 transition-opacity"
+                        aria-label="More send options"
+                      >
+                        <ChevronDownIcon className="h-3.5 w-3.5" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={onSendAndClose} disabled={sendDisabled}>
+                        Send and close
+                        <span className="ms-auto ps-4 text-xs text-muted-foreground">⌘⇧Enter</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onSend}
+                  disabled={sendDisabled}
+                  className={cn(
+                    'flex size-8 shrink-0 items-center justify-center rounded-md text-primary-foreground disabled:opacity-40 transition-opacity',
+                    noteMode || !capabilities.reply ? 'bg-amber-500 text-white' : 'bg-primary'
+                  )}
+                  aria-label={noteMode || !capabilities.reply ? 'Add note' : 'Send reply'}
+                >
+                  {noteMode || !capabilities.reply ? (
+                    <PencilSquareIcon className="h-4 w-4" />
+                  ) : (
+                    <PaperAirplaneIcon className="h-4 w-4" />
+                  )}
+                </button>
+              )}
             </div>
           </div>
         </div>

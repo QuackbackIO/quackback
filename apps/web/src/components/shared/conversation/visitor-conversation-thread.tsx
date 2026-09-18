@@ -62,6 +62,8 @@ import { useVisitorSurfaceRpc } from '@/lib/client/visitor-surface-rpc'
 import { getWidgetCapabilitiesFn } from '@/lib/server/functions/widget-capabilities'
 import { TicketHeaderCard } from './ticket-header-card'
 import type { RequesterTicketDTO } from '@/lib/server/domains/tickets'
+import { VisitorContactCapture, contactCaptureReady } from './visitor-contact-capture'
+import type { ContactCapturePrompt } from '@/lib/shared/contact-capture'
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
@@ -214,11 +216,19 @@ export function VisitorConversationThread({
     name: string
     avatarUrl: string | null
   } | null>(null)
-  // Pre-chat email capture (anonymous visitors). Data-driven: identified
-  // visitors come back with visitorHasEmail=true, so the prompt never shows.
+  // Pre-chat contact capture (anonymous visitors without an email). Identified
+  // visitors and anyone with a contact address come back with the prompt hidden.
   // Whether an offline reply could actually reach this visitor by email — drives
   // the offline copy so the surface never promises email it can't send.
   const [canEmailReply, setCanEmailReply] = useState(false)
+  const [contactCapture, setContactCapture] = useState<ContactCapturePrompt>({
+    show: false,
+    required: false,
+    askName: false,
+  })
+  const [contactEmail, setContactEmail] = useState('')
+  const [contactName, setContactName] = useState('')
+  const [contactSkipped, setContactSkipped] = useState(false)
   // Whether the visitor rated in THIS session — enables the optional comment
   // follow-up. A returning, already-rated visitor goes straight to "thanks".
   const [csatJustRated, setCsatJustRated] = useState(false)
@@ -397,6 +407,7 @@ export function VisitorConversationThread({
         setTeamName(res.teamName)
         setAssistant(res.assistant ?? null)
         setCanEmailReply(res.canEmailVisitor)
+        if (res.contactCapture) setContactCapture(res.contactCapture)
         setLinkedTicket(res.linkedTicket ?? null)
         const conv = res.conversation
         if (conv) {
@@ -830,11 +841,14 @@ export function VisitorConversationThread({
     const doc = composer.docRef.current
     const hasAttachments = pendingAttachments.length > 0
     // Sendable when there's typed text, an inline embed, or a tray attachment.
+    const showContact = contactCapture.show && !conversationId && !contactSkipped
     if (
       (!text && !docHasContentNode(doc) && !hasAttachments) ||
       sending ||
       uploading ||
-      composerLock.disabled
+      composerLock.disabled ||
+      (showContact &&
+        !contactCaptureReady({ required: contactCapture.required, email: contactEmail }))
     ) {
       return
     }
@@ -873,6 +887,8 @@ export function VisitorConversationThread({
           contentJson: doc,
           attachments: hasAttachments ? pendingAttachments : undefined,
           blockReply,
+          visitorEmail: contactEmail.trim() || undefined,
+          visitorName: contactName.trim() || undefined,
         },
         headers: getAuthHeaders(),
       })
@@ -914,6 +930,10 @@ export function VisitorConversationThread({
     conversationStatus,
     blockStates,
     composerLock.disabled,
+    contactCapture,
+    contactEmail,
+    contactName,
+    contactSkipped,
   ])
 
   // Enter-to-send routes through the editor's keymap, whose closure is baked in
@@ -1297,6 +1317,17 @@ export function VisitorConversationThread({
         </div>
       )}
       <div className="border-t border-border/40 p-2 shrink-0">
+        {contactCapture.show && !conversationId && !contactSkipped && (
+          <VisitorContactCapture
+            required={contactCapture.required}
+            askName={contactCapture.askName}
+            email={contactEmail}
+            name={contactName}
+            onEmailChange={setContactEmail}
+            onNameChange={setContactName}
+            onSkip={contactCapture.required ? undefined : () => setContactSkipped(true)}
+          />
+        )}
         {/* Composer: a rich editor on top (the / menu inserts code blocks etc.,
               and post links become embed cards), actions (attach / send) on the
               row below. Enter sends; Shift+Enter or Alt+Enter inserts a newline and the
@@ -1401,7 +1432,14 @@ export function VisitorConversationThread({
                   pendingAttachments.length === 0) ||
                 sending ||
                 uploading ||
-                composerLock.disabled
+                composerLock.disabled ||
+                (contactCapture.show &&
+                  !conversationId &&
+                  !contactSkipped &&
+                  !contactCaptureReady({
+                    required: contactCapture.required,
+                    email: contactEmail,
+                  }))
               }
               className="shrink-0 flex items-center justify-center size-9 rounded-full bg-primary text-primary-foreground disabled:opacity-40 transition-opacity"
               aria-label={intl.formatMessage({

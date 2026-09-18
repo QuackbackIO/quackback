@@ -44,7 +44,7 @@ export interface UseInboxListSourceParams {
    *  pre-extraction `!!activeView` guard). */
   activeViewFilters?: ConversationViewFilters
   /** Quinn-view sub-filter (Resolved / Escalated / Pending) — legacy path only. */
-  aiBucket?: 'resolved' | 'escalated' | 'pending'
+  aiBucket?: 'resolved' | 'escalated' | 'pending' | 'abandoned'
   /** The "Saved for later" scope shows flagged MESSAGES, not a list — both
    *  queries stay idle there (the route renders `SavedMessagesColumn` instead). */
   isSaved: boolean

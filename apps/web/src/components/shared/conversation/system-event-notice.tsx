@@ -38,6 +38,28 @@ import type { ConversationSystemEvent } from '@/lib/shared/conversation/types'
 
 /** The localized sentence for a known kind, or null to fall back to content. */
 function noticeText(event: ConversationSystemEvent): ReactNode {
+  if (
+    (event.kind === 'assistant_auto_closed' || event.kind === 'auto_closed_inactive') &&
+    event.preventReplies
+  )
+    return (
+      <FormattedMessage
+        id="widget.messenger.system.inactiveStartNew"
+        defaultMessage="This conversation has been closed. Start a new conversation if you still need help."
+      />
+    )
+  if (event.kind === 'inactivity_check_in' && event.followUpPurpose)
+    return event.followUpPurpose === 'offer_human_help' ? (
+      <FormattedMessage
+        id="widget.messenger.system.offerHumanHelp"
+        defaultMessage="Still need help? Reply here and I can connect you with the team."
+      />
+    ) : (
+      <FormattedMessage
+        id="widget.messenger.system.checkResolution"
+        defaultMessage="Did that answer your question? Reply here if you still need help."
+      />
+    )
   switch (event.kind) {
     case 'chat_ended':
       return (
@@ -63,6 +85,27 @@ function noticeText(event: ConversationSystemEvent): ReactNode {
         <FormattedMessage
           id="widget.messenger.system.handoff"
           defaultMessage="Connecting you to the team"
+        />
+      )
+    case 'assistant_auto_closed':
+      return (
+        <FormattedMessage
+          id="widget.messenger.system.assistantAutoClosed"
+          defaultMessage="This conversation has been closed. Reply any time if you still need help."
+        />
+      )
+    case 'inactivity_check_in':
+      return (
+        <FormattedMessage
+          id="widget.messenger.system.inactivityCheckIn"
+          defaultMessage="Still need a hand? Just reply here and we'll pick it back up."
+        />
+      )
+    case 'auto_closed_inactive':
+      return (
+        <FormattedMessage
+          id="widget.messenger.system.autoClosedInactive"
+          defaultMessage="This conversation has been closed. Reply any time if you still need help."
         />
       )
     case 'ticket_created':
@@ -105,7 +148,7 @@ export function SystemEventNotice({
   /** The stored (English) content — rendered only for legacy/unknown kinds. */
   fallback: string
 }) {
-  const notice = (event && noticeText(event)) ?? fallback
+  const notice = (event && !event.customText && noticeText(event)) ?? fallback
   const workflowName = event?.workflowName?.trim()
   return (
     <div className="flex items-center gap-2 py-1" role="status">

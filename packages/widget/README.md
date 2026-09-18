@@ -17,8 +17,8 @@ import { Quackback } from '@quackback/widget'
 
 Quackback.init({ instanceUrl: 'https://feedback.yourcompany.com' })
 
-// When you know who the user is:
-Quackback.identify({ id: 'u_123', email: 'ada@example.com', name: 'Ada' })
+// When you know who the user is (HMAC-signed token from your backend):
+Quackback.identify({ ssoToken: 'eyJ...' })
 
 // Deep-link to a specific view:
 Quackback.open({ view: 'new-post', title: 'Bug:', board: 'bugs' })
@@ -34,7 +34,7 @@ function App() {
 
   useQuackbackInit({
     instanceUrl: 'https://feedback.yourcompany.com',
-    identity: user ? { id: user.id, email: user.email, name: user.name } : undefined,
+    identity: user ? { ssoToken: user.ssoToken } : undefined,
   })
 
   useQuackbackEvent('post:created', (post) => {
@@ -93,7 +93,7 @@ Quackback.init({
   defaultBoard: 'bugs', // filter widget to one board
   launcher: true, // false = hide default button
   locale: 'en' | 'fr' | 'de' | 'es' | 'ar' | 'ru' | 'pt-BR' | 'zh-CN' | 'zh-TW', // override auto-detect
-  identity: { id, email, name } | { ssoToken }, // bundle identify into init
+  identity: { ssoToken }, // bundle identify into init
 })
 ```
 
@@ -103,7 +103,6 @@ Theme colors and tab visibility come from your Quackback admin (Admin → Settin
 
 ```ts
 Quackback.identify() // anonymous
-Quackback.identify({ id: 'u_123', email: 'ada@x.com', name: 'Ada' }) // unverified
 Quackback.identify({ ssoToken: 'eyJ...' }) // verified
 ```
 
@@ -142,7 +141,6 @@ unsubscribe()
 | `vote`            | `{ postId, voted, voteCount }`             |
 | `comment:created` | `{ postId, commentId, parentId }`          |
 | `identify`        | `{ success, user, anonymous, error? }`     |
-| `email-submitted` | `{ email }`                                |
 
 ## Docs
 

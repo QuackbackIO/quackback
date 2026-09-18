@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { FormattedMessage } from 'react-intl'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useRouteContext } from '@tanstack/react-router'
 import {
   ArrowTopRightOnSquareIcon,
@@ -31,6 +31,8 @@ import type { TicketDTO } from '@/lib/server/domains/tickets'
 import {
   listConversationsForUserFn,
   getConversationAssistantActivityFn,
+  correctVisitorContactFn,
+  lookupIdentifiedContactMatchFn,
 } from '@/lib/server/functions/conversation'
 import { getPortalUserFn } from '@/lib/server/functions/admin'
 import { conversationKeys } from '@/lib/client/queries/conversation-keys'
@@ -60,6 +62,7 @@ import { TicketLinks } from '@/components/admin/inbox/ticket-links'
 import { TicketActivityTimeline } from '@/components/admin/inbox/ticket-activity-timeline'
 import { TicketTrackerLinks } from '@/components/admin/inbox/ticket-tracker-links'
 import { ticketQueries } from '@/lib/client/queries/inbox'
+import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -243,6 +246,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
     settings?: { featureFlags?: FeatureFlags } | null
   }
   const flags = settings?.featureFlags
+  const queryClient = useQueryClient()
   // The flag + copilot.use gate, shared with the inbox route's
   // `copilotAvailable` so the Ask Copilot affordances can never disagree
   // with the tab actually existing.
@@ -329,15 +333,21 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
     return [...(match?.fields ?? [])].sort((a, b) => a.order - b.order)
   }, [registryTypes, ticket?.ticketType])
 
+  const isIdentified = !!detail && !detail.isLead
   const email = detail?.email ?? (isTicketItem ? null : (conversation?.visitorEmail ?? null))
+  const { data: possibleMatch } = useQuery({
+    queryKey: conversationKeys.identifiedContactMatch(email),
+    queryFn: () => lookupIdentifiedContactMatchFn({ data: { email: email! } }),
+    enabled: isVisible && !!email && !isTicketItem && !isIdentified,
+    staleTime: 60_000,
+  })
   const currentConversationId = !isTicketItem ? conversation?.id : undefined
   const previous = useMemo(
     () => (history?.conversations ?? []).filter((c) => c.id !== currentConversationId),
     [history, currentConversationId]
   )
-  // `detail` is non-null only for identified portal users, so it doubles as the
-  // identified-vs-anonymous signal (anonymous visitors aren't portal users).
-  const isIdentified = !!detail
+  // Engaged anonymous contacts have a People record too. Its isLead flag,
+  // rather than the presence of that record, determines account identity.
   const convoCount = history?.conversations.length ?? 0
   const convoMore = history?.hasMore ?? false
   const firstSeen = detail?.createdAt ?? conversation?.createdAt
@@ -392,8 +402,8 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
                   email ? (
                     <p className="truncate text-xs text-muted-foreground">
                       {email}
-                      {!detail?.email && !isTicketItem && conversation?.visitorEmail && (
-                        <span className="ml-1 text-muted-foreground/50">(in conversation)</span>
+                      {!isIdentified && !isTicketItem && conversation?.visitorEmail && (
+                        <span className="ml-1 text-muted-foreground/50">Unverified</span>
                       )}
                     </p>
                   ) : getChannelDescriptor(conversation?.channel ?? '')?.addressing === 'thread' ? (
@@ -410,6 +420,25 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
                   <Badge variant="destructive" className="mt-1 text-[11px]">
                     Blocked
                   </Badge>
+                )}
+                {!isIdentified && !isTicketItem && conversation && (
+                  <AnonymousContactEditor
+                    conversationId={conversation.id}
+                    name={principalName}
+                    email={conversation.visitorEmail}
+                    possibleMatch={possibleMatch ?? null}
+                    onSaved={() => {
+                      onChanged()
+                      void queryClient.invalidateQueries({
+                        queryKey: conversationKeys.agentContactDetail(principalId),
+                      })
+                      if (email) {
+                        void queryClient.invalidateQueries({
+                          queryKey: conversationKeys.identifiedContactMatch(email),
+                        })
+                      }
+                    }}
+                  />
                 )}
               </div>
             </div>
@@ -893,3 +922,110 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
     </aside>
   )
 })
+
+function AnonymousContactEditor({
+  conversationId,
+  name,
+  email,
+  possibleMatch,
+  onSaved,
+}: {
+  conversationId: string
+  name: string
+  email: string | null
+  possibleMatch: { principalId: string; displayName: string | null } | null
+  onSaved: () => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [nameVal, setNameVal] = useState(name)
+  const [emailVal, setEmailVal] = useState(email ?? '')
+  const save = useMutation({
+    mutationFn: () =>
+      correctVisitorContactFn({
+        data: { conversationId, name: nameVal, email: emailVal.trim() || undefined },
+      }),
+    onSuccess: () => {
+      setEditing(false)
+      onSaved()
+    },
+  })
+
+  if (!editing) {
+    return (
+      <div className="mt-2 space-y-1">
+        {possibleMatch && (
+          <p className="text-[11px] text-amber-700 dark:text-amber-300">
+            May match{' '}
+            <Link
+              to="/admin/users"
+              search={{ selected: possibleMatch.principalId }}
+              className="font-medium hover:underline"
+            >
+              {possibleMatch.displayName ?? 'an identified user'}
+            </Link>
+            . Not merged — this address is unproven.
+          </p>
+        )}
+        <button
+          type="button"
+          className="text-[11px] font-medium text-primary hover:underline"
+          onClick={() => {
+            setNameVal(name)
+            setEmailVal(email ?? '')
+            setEditing(true)
+          }}
+        >
+          Edit name or email
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <form
+      className="mt-2 space-y-2"
+      onSubmit={(e) => {
+        e.preventDefault()
+        save.mutate()
+      }}
+    >
+      <Input
+        value={nameVal}
+        maxLength={80}
+        placeholder="Name"
+        onChange={(e) => setNameVal(e.target.value)}
+        className="h-8 text-xs"
+      />
+      <Input
+        type="email"
+        value={emailVal}
+        maxLength={254}
+        placeholder="Email"
+        onChange={(e) => setEmailVal(e.target.value)}
+        className="h-8 text-xs"
+      />
+      {save.isError && (
+        <p role="alert" className="text-xs text-destructive">
+          {save.error.message || 'Could not save contact details.'}
+        </p>
+      )}
+      <div className="flex gap-2">
+        <Button type="submit" size="sm" disabled={save.isPending}>
+          Save
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={() => {
+            setNameVal(name)
+            setEmailVal(email ?? '')
+            setEditing(false)
+          }}
+        >
+          Cancel
+        </Button>
+      </div>
+    </form>
+  )
+}

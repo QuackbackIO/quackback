@@ -43,17 +43,17 @@ describe('useQuackbackInit', () => {
 
   it('re-calls identify when the identity option changes', () => {
     const identify = vi.spyOn(Quackback, 'identify')
-    function C({ user }: { user: { id: string; email: string } | null }) {
+    function C({ user }: { user: { ssoToken: string } | null }) {
       useQuackbackInit({
         instanceUrl: ORIGIN,
-        identity: user ? { id: user.id, email: user.email } : undefined,
+        identity: user ? { ssoToken: user.ssoToken } : undefined,
       })
       return null
     }
-    const { rerender, unmount } = render(<C user={{ id: 'u1', email: 'a@b.c' }} />)
+    const { rerender, unmount } = render(<C user={{ ssoToken: 'token-a' }} />)
     identify.mockClear()
-    act(() => rerender(<C user={{ id: 'u2', email: 'x@y.z' }} />))
-    expect(identify).toHaveBeenCalledWith({ id: 'u2', email: 'x@y.z' })
+    act(() => rerender(<C user={{ ssoToken: 'token-b' }} />))
+    expect(identify).toHaveBeenCalledWith({ ssoToken: 'token-b' })
     unmount()
   })
 

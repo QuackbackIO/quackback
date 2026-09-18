@@ -1,6 +1,11 @@
 # Live Chat AI Layer — Design
 
-Status: **design only (not implemented)**. This document plans the AI layer for
+> **Superseded.** This document described an earlier JSON confidence / `needsHuman`
+> contract. Quinn's customer-support tools and the current prompt + tool-ledger
+> design are the source of truth — see `assistant.toolspec.ts` and
+> `assistant.system-prompt.ts`.
+
+Status: **superseded**. This document planned the AI layer for
 widget live chat: an agent **copilot** (reply suggestions + conversation
 summaries) and a customer-facing **resolution agent** (KB-grounded answers with
 human handoff). It builds entirely on infrastructure that already exists in the
