@@ -579,56 +579,28 @@ describe('runAssistantTurnForConversation escalation dispatch', () => {
   })
 })
 
-describe('runAssistantTurnForConversation preview retraction (invalidated attempt)', () => {
-  async function publishedEvents(): Promise<Array<Record<string, unknown>>> {
-    const { publishConversationOnlyEvent } =
-      await import('@/lib/server/realtime/conversation-channels')
-    return vi.mocked(publishConversationOnlyEvent).mock.calls.map(([, e]) => e as never)
-  }
-
-  it('retracts a streamed answer on retry and stays preview-silent for the rest of the turn', async () => {
-    assistantMock.runAssistantTurn.mockImplementation(
-      async (input: { onActivity: (a: unknown) => void; onTextDelta: (d: string) => void }) => {
-        // Attempt 1: streams a full answer, then the attempt fails after the
-        // fact (a structural rejection or a transport re-dial) — the retry
-        // starts with a fresh 'thinking'.
-        input.onActivity({ kind: 'thinking' })
-        input.onTextDelta('All systems are ')
-        input.onTextDelta('operational right now.')
-        // Attempt 2 (the retry): must never stream a second candidate the
-        // customer could watch get retracted again.
-        input.onActivity({ kind: 'thinking' })
-        input.onTextDelta('We currently have a degraded-performance incident.')
-        return answered({ text: 'We currently have a degraded-performance incident.' })
-      }
-    )
-    await runAssistantTurnForConversation(CONV)
-
-    const deltas = (await publishedEvents()).filter((e) => e.kind === 'assistant_delta')
-    // Attempt 1's preview streamed at least once.
-    expect(deltas.some((e) => (e.text as string).length > 0)).toBe(true)
-    // The invalidation retracted it with an explicit empty frame...
-    const retractionIndex = deltas.findIndex((e) => e.text === '')
-    expect(retractionIndex).toBeGreaterThan(-1)
-    // ...and nothing streamed after it: the retry's answer arrives only as
-    // the persisted, validated reply.
-    expect(deltas.slice(retractionIndex + 1)).toEqual([])
-  })
-
-  it('a clean single-attempt turn streams without any retraction frame', async () => {
-    assistantMock.runAssistantTurn.mockImplementation(
-      async (input: { onActivity: (a: unknown) => void; onTextDelta: (d: string) => void }) => {
-        input.onActivity({ kind: 'thinking' })
-        input.onTextDelta('Here is your answer.')
-        return answered({ text: 'Here is your answer.' })
-      }
-    )
-    await runAssistantTurnForConversation(CONV)
-
-    const deltas = (await publishedEvents()).filter((e) => e.kind === 'assistant_delta')
-    expect(deltas.length).toBeGreaterThan(0)
-    expect(deltas.every((e) => (e.text as string).length > 0)).toBe(true)
-  })
+describe('runAssistantTurnForConversation customer publication boundary', () => {
+  it.each([false, true])(
+    'never streams candidate text, including an internal-source failure (%s)',
+    async (internalSourced) => {
+      assistantMock.runAssistantTurn.mockImplementation(
+        async (input: { onActivity: (a: unknown) => void; onTextDelta?: (d: string) => void }) => {
+          input.onActivity({ kind: 'thinking' })
+          input.onTextDelta?.('Private or unvalidated candidate.')
+          input.onActivity({ kind: 'thinking' })
+          input.onTextDelta?.('Second unvalidated candidate.')
+          return answered({ text: 'Final answer.', internalSourced })
+        }
+      )
+      await runAssistantTurnForConversation(CONV)
+      const { publishConversationOnlyEvent } =
+        await import('@/lib/server/realtime/conversation-channels')
+      const events = vi.mocked(publishConversationOnlyEvent).mock.calls.map(([, e]) => e)
+      expect(events.some((e) => e.kind === 'assistant_activity')).toBe(true)
+      expect(events.some((e) => e.kind === 'assistant_delta')).toBe(false)
+      expect(assistantMock.runAssistantTurn.mock.calls[0][0].onTextDelta).toBeUndefined()
+    }
+  )
 })
 
 describe('runAssistantTurnForConversation activity snapshot (Redis mirror)', () => {

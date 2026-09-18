@@ -63,11 +63,13 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   isFeatureEnabled: (...args: unknown[]) => mockIsFeatureEnabled(...args),
 }))
 
+const mockFindToolCall = vi.fn()
 const mockClaimToolCall = vi.fn()
 const mockFinalizeToolCall = vi.fn()
 const mockRecordDeniedToolCall = vi.fn()
 vi.mock('../tool-audit', () => ({
   claimToolCall: (...args: unknown[]) => mockClaimToolCall(...args),
+  findToolCallByIdempotencyKey: (...args: unknown[]) => mockFindToolCall(...args),
   finalizeToolCall: (...args: unknown[]) => mockFinalizeToolCall(...args),
   recordDeniedToolCall: (...args: unknown[]) => mockRecordDeniedToolCall(...args),
 }))
@@ -658,6 +660,71 @@ describe('assembleAssistantToolset: write-tool pipeline (autonomous mode)', () =
     expect(out.status).toBe('skipped_duplicate')
     expect(mockWriteExecute).not.toHaveBeenCalled()
     expect(mockFinalizeToolCall).not.toHaveBeenCalled()
+  })
+
+  it.each(['started', 'failed', 'denied', 'succeeded'])(
+    'reports the stored %s disposition without repeating a write',
+    async (status) => {
+      mockClaimToolCall.mockResolvedValue(null)
+      mockFindToolCall.mockResolvedValue({ status })
+      const c = autonomousCtx()
+      const tool = await findTool(c, 'close_conversation', [makeFakeWriteSpec({ permissions: [] })])
+      const out = await tool.execute({ reason: 'resolved' }, toolCtx(c))
+      expect(out).toMatchObject({ status: 'skipped_duplicate', previousStatus: status })
+      expect(mockWriteExecute).not.toHaveBeenCalled()
+      expect(c.ledger.toolOutcomes).toEqual([{ name: 'close_conversation', outcome: 'failed' }])
+    }
+  )
+
+  it.each([
+    { ok: false, data: '', note: 'Provider rejected the operation.' },
+    { isError: true },
+    { simulated: true },
+    { status: 'denied' },
+  ])('does not count a fulfilled failure envelope as success: %j', async (result) => {
+    mockClaimToolCall.mockResolvedValue({ id: 'assistant_tool_call_1', status: 'started' })
+    mockWriteExecute.mockResolvedValue(result)
+    const c = autonomousCtx()
+    const tool = await findTool(c, 'close_conversation', [makeFakeWriteSpec({ permissions: [] })])
+    expect(await tool.execute({ reason: 'resolved' }, toolCtx(c))).toMatchObject({
+      status: 'failed',
+    })
+    expect(mockFinalizeToolCall).toHaveBeenCalledWith(
+      'assistant_tool_call_1',
+      expect.objectContaining({ status: 'failed' })
+    )
+    expect(c.ledger.toolOutcomes).toEqual([{ name: 'close_conversation', outcome: 'failed' }])
+  })
+
+  it.each([
+    ['end_conversation', { closed: false }],
+    ['set_attribute', { applied: false }],
+    ['create_ticket', { created: false }],
+    ['capture_contact_details', { captured: false }],
+    ['capture_feedback', { created: false }],
+    ['share_post', { shared: false }],
+  ] as const)('normalizes the registered %s failure contract', async (name, result) => {
+    mockClaimToolCall.mockResolvedValue({ id: 'assistant_tool_call_1', status: 'started' })
+    mockWriteExecute.mockResolvedValue(result)
+    const c = autonomousCtx()
+    const tool = await findTool(c, 'close_conversation', [
+      makeFakeWriteSpec({ name, permissions: [] }),
+    ])
+    expect(await tool.execute({}, toolCtx(c))).toMatchObject({ status: 'failed' })
+  })
+
+  it('treats a link to existing feedback as success without creating another post', async () => {
+    mockClaimToolCall.mockResolvedValue({ id: 'assistant_tool_call_1', status: 'started' })
+    mockWriteExecute.mockResolvedValue({ created: false, postId: 'post_existing' })
+    const c = autonomousCtx()
+    const tool = await findTool(c, 'close_conversation', [
+      makeFakeWriteSpec({ name: 'capture_feedback', permissions: [] }),
+    ])
+    expect(await tool.execute({}, toolCtx(c))).toEqual({ created: false, postId: 'post_existing' })
+    expect(mockFinalizeToolCall).toHaveBeenCalledWith(
+      'assistant_tool_call_1',
+      expect.objectContaining({ status: 'succeeded' })
+    )
   })
 
   it('finalizes failed and returns a graceful note when execute throws (never crashes the turn)', async () => {

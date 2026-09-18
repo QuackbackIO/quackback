@@ -568,6 +568,27 @@ describe('isSubstantiveAnswer', () => {
 })
 
 describe('structural completion check', () => {
+  it.each(['article', 'post', 'snippet', 'summary', 'ticket', 'changelog', 'document', 'webpage'])(
+    'accepts canonical %s citations',
+    (type) => {
+      expect(() =>
+        validateAssistantCompletion({
+          text: 'Supported answer.',
+          citations: [{ type, id: 'source_1' }],
+        })
+      ).not.toThrow()
+    }
+  )
+
+  it('rejects unknown citation types', () => {
+    expect(() =>
+      validateAssistantCompletion({
+        text: 'Answer.',
+        citations: [{ type: 'invented', id: 'source_1' }],
+      })
+    ).toThrow(AssistantCompletionError)
+  })
+
   it('accepts a parseable output with non-empty text', () => {
     expect(() =>
       validateAssistantCompletion({

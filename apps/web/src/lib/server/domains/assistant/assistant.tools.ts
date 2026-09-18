@@ -23,6 +23,7 @@ import type { AssistantToolContext, AssistantToolSpec } from './assistant.toolsp
 import { resolveToolSpecs, isNoParentResult, NO_CONVERSATION_NOTE } from './assistant.toolspec'
 import {
   claimToolCall,
+  findToolCallByIdempotencyKey,
   finalizeToolCall,
   recordDeniedToolCall,
   type AssistantToolCall,
@@ -58,7 +59,6 @@ function withDynamicPromptGuidance(
 const PENDING_APPROVAL_NOTE =
   'A teammate must approve this action; tell the customer it has been requested.'
 const DENIED_NOTE = 'This action is not permitted for the assistant.'
-const DUPLICATE_NOTE = 'This action was already performed for this message.'
 const FAILED_NOTE = 'This action could not be completed.'
 
 /**
@@ -274,7 +274,20 @@ async function runWithPipeline(
     })
     if (!claimed) {
       ctx.ledger.toolOutcomes.push({ name: spec.name, outcome: 'failed' })
-      return { status: 'skipped_duplicate', note: DUPLICATE_NOTE }
+      const key = resolveIdempotencyKey(spec, args, ctx)
+      const previous = key ? await findToolCallByIdempotencyKey(key) : null
+      return {
+        status: 'skipped_duplicate',
+        previousStatus: previous?.status ?? 'unknown',
+        note:
+          previous?.status === 'succeeded'
+            ? 'This action previously succeeded. It was not executed again.'
+            : previous?.status === 'failed'
+              ? 'The previous attempt failed. It was not executed again; do not claim completion.'
+              : previous?.status === 'denied'
+                ? 'The previous attempt was denied. It was not executed again.'
+                : 'An earlier attempt exists, but completion is unconfirmed. Do not claim completion or retry the action.',
+      }
     }
   }
 
@@ -284,6 +297,38 @@ async function runWithPipeline(
     outcome: settled.ok ? (spec.risk === 'read' ? 'read' : 'executed') : 'failed',
   })
   return settled.ok ? settled.result : { status: 'failed', note: FAILED_NOTE }
+}
+
+/** Interpret known result contracts, not promise fulfillment, as business success.
+ * Do not recursively inspect arbitrary business data (e.g. a service status).
+ */
+function toolResultFailure(spec: AssistantToolSpec, result: unknown): string | null {
+  if (isNoParentResult(result)) return NO_CONVERSATION_NOTE
+  if (!result || typeof result !== 'object') return null
+  const value = result as Record<string, unknown>
+  const successField: Record<string, string> = {
+    end_conversation: 'closed',
+    create_ticket: 'created',
+    capture_feedback: 'created',
+    share_post: 'shared',
+    capture_contact_details: 'captured',
+    set_attribute: 'applied',
+  }
+  const field = successField[spec.name]
+  // capture_feedback can link an existing post without creating another one.
+  const linkedPost = spec.name === 'capture_feedback' && typeof value.postId === 'string'
+  if (
+    value.ok === false ||
+    value.isError === true ||
+    value.simulated === true ||
+    ['failed', 'denied', 'pending_approval', 'in_progress', 'unknown'].includes(
+      String(value.status)
+    ) ||
+    (field && value[field] === false && !linkedPost)
+  ) {
+    return typeof value.note === 'string' ? value.note : FAILED_NOTE
+  }
+  return null
 }
 
 /**
@@ -305,15 +350,16 @@ async function executeAndFinalize(
     // is never a successful execution, even if it somehow ran — most notably
     // `executeApprovedPendingAction`, which runs a spec looked up straight off
     // a stored pending-action row rather than this turn's filtered catalogue.
-    if (isNoParentResult(result)) {
+    const failure = toolResultFailure(spec, result)
+    if (failure) {
       if (claimed) {
         await finalizeToolCall(claimed.id, {
           status: 'failed',
-          error: NO_CONVERSATION_NOTE,
+          error: failure,
           latencyMs: Date.now() - startedAt,
         })
       }
-      return { ok: false, error: NO_CONVERSATION_NOTE }
+      return { ok: false, error: failure }
     }
     if (claimed) {
       await finalizeToolCall(claimed.id, {

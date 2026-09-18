@@ -1,3 +1,4 @@
+import { ASSISTANT_CITATION_TYPES, type AssistantCitationType } from './citation-types'
 import type { Actor } from '@/lib/server/policy/types'
 /**
  * Quinn runtime seam.
@@ -355,7 +356,7 @@ export const ASSISTANT_MAX_ITERATIONS = 6
 export const SLACK_MAX_ITERATIONS = 3
 
 const citationInputSchema = z.object({
-  type: z.enum(['article', 'post', 'snippet', 'summary']),
+  type: z.enum(ASSISTANT_CITATION_TYPES),
   id: z.string(),
 })
 
@@ -514,7 +515,7 @@ export function respondEligible(messages: AssistantThreadMessage[]): boolean {
  * with the title + url from the ledger.
  */
 export function assembleCitations(
-  cited: Array<{ type: 'article' | 'post' | 'snippet' | 'summary'; id: string }>,
+  cited: Array<{ type: AssistantCitationType; id: string }>,
   ledger: Map<string, AssistantCitation>
 ): AssistantCitation[] {
   const seen = new Set<string>()
@@ -534,9 +535,7 @@ export function assembleCitations(
  * failure reads as no citations rather than throwing, since this only feeds
  * telemetry, never the answer itself.
  */
-function parseAttemptCitations(
-  final: unknown
-): Array<{ type: 'article' | 'post' | 'snippet' | 'summary'; id: string }> {
+function parseAttemptCitations(final: unknown): Array<{ type: AssistantCitationType; id: string }> {
   if (!final || typeof final !== 'object' || !('citations' in final)) return []
   const parsed = z.array(citationInputSchema).safeParse((final as { citations: unknown }).citations)
   return parsed.success ? parsed.data : []
@@ -551,7 +550,7 @@ function parseAttemptCitations(
  */
 export function relinkCitations(
   text: string,
-  modelCitations: Array<{ type: 'article' | 'post' | 'snippet' | 'summary'; id: string }>,
+  modelCitations: Array<{ type: AssistantCitationType; id: string }>,
   finalCitations: AssistantCitation[]
 ): string {
   // Empty finalCitations falls through cleanly: remap is empty, so every marker

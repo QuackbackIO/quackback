@@ -16,6 +16,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 
 import {
   claimToolCall,
+  findToolCallByIdempotencyKey,
   finalizeToolCall,
   recordDeniedToolCall,
   cleanupExpiredToolCalls,
@@ -66,6 +67,10 @@ describe.skipIf(!fixture.available)('tool-audit (real DB, rolled back)', () => {
       idempotencyKey: 'turn-1:refund_charge',
     })
     expect(first).not.toBeNull()
+    expect(await findToolCallByIdempotencyKey('turn-1:refund_charge')).toMatchObject({
+      id: first!.id,
+      status: 'started',
+    })
 
     const second = await claimToolCall({
       conversationId,

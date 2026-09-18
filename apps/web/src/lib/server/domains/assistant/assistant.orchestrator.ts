@@ -247,26 +247,8 @@ export async function runAssistantTurnForConversation(
   const latestCustomerMessageId =
     threadRows.filter((m) => m.senderType === 'visitor').at(-1)?.id ?? null
 
-  // Ephemeral turn signals for the widget's live trace + streamed answer. These
-  // go to the conversation channel ONLY (never the inbox) and are never
-  // persisted; the final reply below is the durable record. `assistant_delta`
-  // carries the FULL clean answer so far, reset per attempt via the `thinking`
-  // activity, so a retry or a dropped frame self-heals.
-  let streamed = ''
-  // The live preview is OPTIMISTIC: an attempt can still fail after its text
-  // streamed (a structural rejection of the decoded output, or a transport
-  // error that forces a re-dial). Once that happens the customer has already
-  // watched one answer get retracted — streaming a second candidate that could
-  // ALSO be retracted reads as the bot answering twice. From the first
-  // invalidation on, the turn goes preview-silent: activity statuses keep the
-  // typing indicator alive and the retry's answer arrives once, as the final
-  // reply.
-  let previewSilent = false
-  // Coalesce delta publishes: each carries the FULL answer so far, so publishing
-  // on every fragment is O(N^2) bytes + one realtime publish per token. Throttle to
-  // a smooth cadence — a dropped tail is harmless since the persisted reply is the
-  // ground truth that replaces the buffer moments later.
-  let lastDeltaAt = 0
+  // Customer turns expose activity only. Candidate text may contain internal
+  // sources or fail validation; only the persisted terminal reply is public.
   // Mirrored into the KV cache on every publish (and cleared when the turn ends, in
   // the finally below) so a subscriber that connects mid-turn can replay the
   // current state instead of missing it — see assistant-activity-snapshot.ts.
@@ -294,40 +276,7 @@ export async function runAssistantTurnForConversation(
       involvementId: active?.id ?? null,
       latestCustomerMessageId,
       stepInstructions: opts?.stepInstructions ?? null,
-      onActivity: (activity) => {
-        if (activity.kind === 'thinking') {
-          // A fresh 'thinking' after answer text already streamed is a retry:
-          // the finished attempt was invalidated after the fact. Retract the
-          // dead preview EXPLICITLY (the widget also clears on the activity
-          // event, but an empty delta closes the race for any consumer that
-          // handles only deltas) and go preview-silent for the rest of the
-          // turn — see `previewSilent`.
-          if (streamed.length > 0 && !previewSilent) {
-            previewSilent = true
-            publishConversationOnlyEvent(conversationId, {
-              kind: 'assistant_delta',
-              conversationId,
-              text: '',
-              at: new Date().toISOString(),
-            })
-          }
-          streamed = ''
-        }
-        publishActivity(activityToStatus(activity))
-      },
-      onTextDelta: (delta) => {
-        streamed += delta
-        if (previewSilent) return
-        const now = Date.now()
-        if (now - lastDeltaAt < 90) return
-        lastDeltaAt = now
-        publishConversationOnlyEvent(conversationId, {
-          kind: 'assistant_delta',
-          conversationId,
-          text: streamed,
-          at: new Date(now).toISOString(),
-        })
-      },
+      onActivity: (activity) => publishActivity(activityToStatus(activity)),
     })
     // Suppressed by the engine's own silence check — nothing to persist. An
     // honest cannot-answer outcome is still a customer-visible terminal reply

@@ -55,6 +55,19 @@ export async function claimToolCall(
   return row ?? null
 }
 
+/** Read the recorded disposition after losing an idempotency claim. */
+export async function findToolCallByIdempotencyKey(
+  key: string,
+  exec: Executor = db
+): Promise<AssistantToolCall | null> {
+  const [row] = await exec
+    .select()
+    .from(assistantToolCalls)
+    .where(eq(assistantToolCalls.idempotencyKey, key))
+    .limit(1)
+  return row ?? null
+}
+
 export interface FinalizeToolCallInput {
   status: Extract<AssistantToolCallStatus, 'succeeded' | 'failed' | 'denied'>
   resultSummary?: string
