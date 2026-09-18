@@ -43,7 +43,6 @@ import {
 } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumnNullable } from '@quackback/ids/drizzle'
-import { CONNECTOR_POLICY_PROFILES } from './connectors'
 import { conversations } from './conversation'
 import { tickets } from './tickets'
 import { assistantInvolvements } from './assistant'
@@ -102,7 +101,7 @@ export const assistantPendingActions = pgTable(
      * approval executor tell "nothing changed" from "changed since proposal"
      * without diffing two policy maps.
      */
-    originProfile: text('origin_profile', { enum: CONNECTOR_POLICY_PROFILES }),
+    originProfile: text('origin_profile', { enum: ['agent', 'copilot', 'workspace'] }),
     policyVersion: integer('policy_version'),
     status: text('status', { enum: ASSISTANT_PENDING_ACTION_STATUSES })
       .notNull()

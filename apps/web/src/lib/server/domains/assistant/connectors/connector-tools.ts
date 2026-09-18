@@ -24,6 +24,8 @@ import {
   type AssistantToolContext,
   type AssistantToolSpec,
 } from '../assistant.toolspec'
+import { analyzeToolInputSchema } from './tool-input-schema'
+import { toolInputZodSchema } from './tool-input-zod'
 import { openConnectorSession } from './mcp-client'
 import type { ConnectorRow } from './connectors.service'
 import { recordConnectorCall } from './connectors.health'
@@ -35,8 +37,20 @@ export const connectorToolOutputSchema = z.object({
   note: z.string().optional(),
 })
 
+/**
+ * The model-facing schema for a discovered tool.
+ *
+ * A contract this workspace can enforce is converted exactly, so the model
+ * sees the same enums, integer bounds, nested objects and array items the
+ * server declared and `validateToolInput` checks before dispatch. Anything
+ * outside that subset keeps the original permissive conversion: those tools
+ * never reach a customer or teammate turn (the connection gate makes them
+ * unavailable), and the first-party workspace MCP catalogue, which shares this
+ * function, must keep working exactly as it did.
+ */
 export function jsonSchemaToZod(schema: Record<string, unknown> | undefined): z.ZodTypeAny {
   if (!schema || typeof schema !== 'object') return z.record(z.string(), z.unknown())
+  if (analyzeToolInputSchema(schema).supported) return toolInputZodSchema(schema)
   if (schema.type === 'object' && schema.properties && typeof schema.properties === 'object') {
     const properties = schema.properties as Record<string, Record<string, unknown>>
     const required = new Set(

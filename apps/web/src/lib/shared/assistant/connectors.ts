@@ -47,6 +47,115 @@ export const connectorAssignmentsSchema = z.object({
 })
 export type ConnectorAssignments = z.infer<typeof connectorAssignmentsSchema>
 
+/**
+ * The uses a connector's tools are authorized for, one independent policy
+ * record each. Same vocabulary as `AssistantAgentKind`, deliberately: the
+ * runtime passes its agent kind straight through as the policy profile, so
+ * there is no second mapping to keep honest.
+ */
+export const CONNECTOR_POLICY_PROFILES = ['agent', 'copilot', 'workspace'] as const
+export const connectorPolicyProfileSchema = z.enum(CONNECTOR_POLICY_PROFILES)
+export type ConnectorPolicyProfile = z.infer<typeof connectorPolicyProfileSchema>
+
+export const connectorProfilePolicySchema = z.object({
+  groupDefaults: z.object({
+    read: connectorToolPolicySchema,
+    write: connectorToolPolicySchema,
+  }),
+  tools: z.record(z.string(), connectorToolPolicySchema),
+  origin: z.enum(['migrated_from_shared', 'explicit']).optional(),
+})
+export type ConnectorProfilePolicy = z.infer<typeof connectorProfilePolicySchema>
+
+/**
+ * Policies keyed by use. A missing key denies: an absent record is never a
+ * fallback to another use's record, which is the whole point of splitting the
+ * old shared map.
+ */
+export const connectorProfilePoliciesSchema = z.object({
+  agent: connectorProfilePolicySchema.optional(),
+  copilot: connectorProfilePolicySchema.optional(),
+  workspace: connectorProfilePolicySchema.optional(),
+})
+export type ConnectorProfilePolicies = z.infer<typeof connectorProfilePoliciesSchema>
+
+/**
+ * What a new policy record starts at: reads run, writes wait for a human.
+ * This is the record written when a use is first assigned, not a fallback
+ * anything reads when a record is missing.
+ */
+export const DEFAULT_CONNECTOR_PROFILE_POLICY: ConnectorProfilePolicy = {
+  groupDefaults: { read: 'always', write: 'approval' },
+  tools: {},
+}
+
+/**
+ * Project the pre-profile shared policy map onto the uses this connector is
+ * ALREADY assigned to.
+ *
+ * Two rules make this a migration rather than a grant: a use that is not
+ * assigned gets no record (so nothing becomes reachable that was not), and
+ * each record it does write says where it came from.
+ */
+export function projectSharedPoliciesToProfiles(
+  shared: ConnectorToolPoliciesInput | undefined | null,
+  assignments: ConnectorAssignments
+): ConnectorProfilePolicies {
+  const groupDefaults = shared?.groupDefaults ?? DEFAULT_CONNECTOR_PROFILE_POLICY.groupDefaults
+  const tools = shared?.tools ?? {}
+  const projected: ConnectorProfilePolicies = {}
+  for (const profile of CONNECTOR_POLICY_PROFILES) {
+    if (assignments[profile] !== true) continue
+    projected[profile] = {
+      groupDefaults: { ...groupDefaults },
+      tools: { ...tools },
+      origin: 'migrated_from_shared',
+    }
+  }
+  return projected
+}
+
+/** Why a tool resolved the way it did, for the admin UI and the audit trail. */
+export type ConnectorAccessReason =
+  'override' | 'group_default' | 'no_profile_policy' | 'tool_unreviewed' | 'schema_unsupported'
+
+export interface ConnectorToolAccess {
+  policy: ConnectorToolPolicy
+  reason: ConnectorAccessReason
+  isOverride: boolean
+}
+
+/**
+ * Resolve one tool for one use.
+ *
+ * Order matters and follows the specification: the hard availability gates
+ * (reviewed contract, supported input schema) run first, because no policy
+ * value can make an unreviewed contract callable; then the exact override;
+ * then the use's group default; and a use with no record at all denies.
+ *
+ * Connection-level facts (enabled, health, assignment) are NOT resolved here.
+ * They gate which connectors are loaded at all, one level up, so this stays a
+ * pure function the client can run to render the same answer the server did.
+ */
+export function resolveConnectorToolAccess(input: {
+  profilePolicies: ConnectorProfilePolicies | null | undefined
+  profile: ConnectorPolicyProfile
+  toolName: string
+  group: ConnectorToolGroup
+  reviewed: boolean
+  schemaSupported: boolean
+}): ConnectorToolAccess {
+  if (!input.reviewed) return { policy: 'never', reason: 'tool_unreviewed', isOverride: false }
+  if (!input.schemaSupported) {
+    return { policy: 'never', reason: 'schema_unsupported', isOverride: false }
+  }
+  const record = input.profilePolicies?.[input.profile]
+  if (!record) return { policy: 'never', reason: 'no_profile_policy', isOverride: false }
+  const override = record.tools[input.toolName]
+  if (override) return { policy: override, reason: 'override', isOverride: true }
+  return { policy: record.groupDefaults[input.group], reason: 'group_default', isOverride: false }
+}
+
 export const connectorToolPoliciesSchema = z.object({
   groupDefaults: z.object({
     read: connectorToolPolicySchema,
