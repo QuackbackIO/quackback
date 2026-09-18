@@ -27,6 +27,7 @@ const hoisted = vi.hoisted(() => ({
   requireAuth: vi.fn(),
   actorFromAuth: vi.fn(),
   getAssistantSettings: vi.fn(),
+  isAssistantConfigured: vi.fn(() => true),
   updateAssistantIdentity: vi.fn(),
   updateAssistantVoice: vi.fn(),
   updateWidgetAssistantDeployment: vi.fn(),
@@ -34,6 +35,10 @@ const hoisted = vi.hoisted(() => ({
     'user-agent': 'assistant-settings-test',
     'x-request-id': 'request_1',
   }),
+}))
+
+vi.mock('@/lib/server/domains/assistant/assistant.runtime', () => ({
+  isAssistantConfigured: hoisted.isAssistantConfigured,
 }))
 
 vi.mock('@/lib/server/functions/auth-helpers', () => ({
@@ -180,7 +185,10 @@ describe('assistant settings permission gates', () => {
 
 describe('assistant settings V2 boundary', () => {
   it('returns the complete config, revision, and managed paths from the strict read', async () => {
-    await expect(getAssistantSettingsFn()).resolves.toEqual(SETTINGS_RESULT)
+    await expect(getAssistantSettingsFn()).resolves.toEqual({
+      ...SETTINGS_RESULT,
+      configured: true,
+    })
     expect(hoisted.getAssistantSettings).toHaveBeenCalledOnce()
   })
 
@@ -282,4 +290,9 @@ describe('assistant settings V2 boundary', () => {
       { ...AUDIT_ACTOR, headers: hoisted.requestHeaders }
     )
   })
+})
+
+it('reports missing AI configuration without exposing credentials', async () => {
+  hoisted.isAssistantConfigured.mockReturnValueOnce(false)
+  await expect(getAssistantSettingsFn()).resolves.toEqual({ ...SETTINGS_RESULT, configured: false })
 })

@@ -1,3 +1,6 @@
+import { Link } from '@tanstack/react-router'
+import { usePermission } from '@/lib/client/hooks/use-permission'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { QuinnKnowledgeSources } from './quinn-knowledge-sources'
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -343,6 +346,7 @@ export function CopilotKnowledgeCard() {
 
 /** Side-by-side controls use the existing revision-aware per-profile mutations. */
 export function QuinnKnowledgeCard() {
+  const canManageArticles = usePermission(PERMISSIONS.HELP_CENTER_MANAGE)
   const query = useQuery(assistantQueries.settings())
   const updateCustomer = useUpdateAssistantAgentKnowledge()
   const updateTeam = useUpdateAssistantCopilotKnowledge()
@@ -378,6 +382,14 @@ export function QuinnKnowledgeCard() {
           <div>
             <h2 className="text-sm font-medium">{SOURCE_META[source].label}</h2>
             <p className="mt-1 text-xs text-muted-foreground">{SOURCE_META[source].description}</p>
+            {source === 'helpCenter' && canManageArticles && (
+              <Link
+                to="/admin/help-center"
+                className="mt-2 inline-block text-xs font-medium text-primary"
+              >
+                Manage articles →
+              </Link>
+            )}
           </div>
           {(['agent', 'copilot'] as const).map((use) => {
             const supported = source in config.agents[use].knowledge

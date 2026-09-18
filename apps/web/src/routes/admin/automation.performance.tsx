@@ -37,8 +37,7 @@ function AutomationPerformancePage() {
         })}
         description={intl.formatMessage({
           id: 'automation.performance.description',
-          defaultMessage:
-            'Understand how the AI agent and Copilot are helping over the last 30 days.',
+          defaultMessage: 'Understand how Quinn is helping over the last 30 days.',
         })}
       />
       <QuinnPerformanceCard />

@@ -572,6 +572,7 @@ async function executeSearchKnowledge(
     conversationId: ctx.conversationId,
     sourceTypes: narrowing,
     enabledSources: ctx.knowledge.sources,
+    customerSources: ctx.knowledge.customerSources,
     actor: ctx.actor,
     workspaceSearch: ctx.role === 'workspace_assistant',
     includeInternalNotes: ctx.knowledge.internalNotes,

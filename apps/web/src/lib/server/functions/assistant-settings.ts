@@ -20,7 +20,8 @@ export const getAssistantSettingsFn = createServerFn({ method: 'GET' }).handler(
   log.debug('fetch assistant settings')
   await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
   const { getAssistantSettings } = await import('@/lib/server/domains/settings/settings.assistant')
-  return getAssistantSettings()
+  const { isAssistantConfigured } = await import('@/lib/server/domains/assistant/assistant.runtime')
+  return { ...(await getAssistantSettings()), configured: isAssistantConfigured() }
 })
 
 function configActor(ctx: Awaited<ReturnType<typeof requireAuth>>) {

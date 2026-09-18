@@ -68,7 +68,7 @@ export function CopilotUsageCard({ showActionsFunnel }: CopilotUsageCardProps) {
 
   return (
     <SettingsCard
-      title="Copilot usage"
+      title="Teammate usage"
       description="Questions, transforms, and summaries from the inbox Copilot sidebar over the last 30 days, and whether the answers actually got used."
     >
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

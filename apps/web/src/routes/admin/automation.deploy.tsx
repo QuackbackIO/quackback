@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import {
@@ -29,6 +30,7 @@ export const Route = createFileRoute('/admin/automation/deploy')({
 })
 function DeployPage() {
   const { settings, permissions } = Route.useRouteContext()
+  const assistant = useQuery(assistantQueries.settings())
   const initial = settings?.publicWidgetConfig?.messenger?.assistant
   const [deployment, setDeployment] = useState<WidgetAssistantDeployment>({
     enabled: initial?.enabled ?? true,
@@ -40,12 +42,27 @@ function DeployPage() {
       title="Deploy"
       description="Choose where Quinn helps customers and teammates."
     >
+      {assistant.data?.configured === false && (
+        <p role="status" className="rounded-xl border p-4 text-sm text-muted-foreground">
+          Setup required: configure an AI model before Quinn can answer. You can still prepare
+          knowledge, guidance and deployment settings.
+        </p>
+      )}
       <section className="space-y-3">
         <h2 className="text-sm font-medium">Customer conversations</h2>
         <AssistantDeploymentCard
           deployment={deployment}
           onChange={setDeployment}
           available={Boolean(flags?.supportInbox)}
+          availabilityStatus={
+            assistant.isError
+              ? 'Unavailable'
+              : assistant.isPending
+                ? 'Loading…'
+                : !assistant.data.configured
+                  ? 'Setup required'
+                  : null
+          }
         />
         <WhoRepliesFirstCard />
       </section>

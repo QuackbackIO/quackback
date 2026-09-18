@@ -21,6 +21,13 @@ function QuinnOverview() {
     deployment?.enabled !== false &&
     deployment?.respond !== false
   const teamOn = assistant.data?.config.agents.copilot.capabilities.qa
+  const availability = assistant.isError
+    ? 'Unavailable'
+    : assistant.isPending
+      ? 'Loading…'
+      : !assistant.data.configured
+        ? 'Setup required'
+        : null
   return (
     <div className="max-w-4xl space-y-7">
       <div className="lg:hidden">
@@ -36,20 +43,12 @@ function QuinnOverview() {
       <div className="grid gap-4 sm:grid-cols-2">
         <UseCard
           title="Customer conversations"
-          status={customerOn ? 'On in Messenger' : 'Paused'}
+          status={availability ?? (customerOn ? 'On in Messenger' : 'Paused')}
           description="Answer customers using your approved knowledge and permitted actions."
         />
         <UseCard
           title="Support teammates"
-          status={
-            assistant.isError
-              ? 'Unavailable'
-              : assistant.isPending
-                ? 'Loading…'
-                : teamOn
-                  ? 'On in the inbox'
-                  : 'Off'
-          }
+          status={availability ?? (teamOn ? 'On in the inbox' : 'Off')}
           description="Private help and suggested replies alongside the conversation."
         />
       </div>

@@ -2304,6 +2304,7 @@ describe('runAssistantTurn: V2 prompt and config snapshot', () => {
         // compiles to this snapshot on a customer_support turn.
         knowledge: {
           sources: new Set(['article', 'document', 'snippet', 'webpage']),
+          customerSources: new Set(['article', 'document', 'snippet', 'webpage']),
           status: false,
         },
       }),

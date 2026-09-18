@@ -52,6 +52,7 @@ export function GuidanceList() {
   const deleteSkill = useDeleteSkill()
   const updateVoice = useUpdateAssistantVoice()
   const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState<'All' | 'Always' | 'Situations'>('All')
   const [draft, setDraft] = useState<Draft | null>(null)
   const [initial, setInitial] = useState('')
   const [error, setError] = useState('')
@@ -124,8 +125,10 @@ export function GuidanceList() {
           agent: entry?.source === 'rule' ? entry.rule.agent : draft.use,
           priority: entry?.source === 'rule' ? entry.rule.priority : 0,
         })
-        if (entry?.source === 'rule') await updateRule.mutateAsync({ id: entry.rule.id, ...value })
-        else await createRule.mutateAsync(value)
+        if (entry?.source === 'rule') {
+          const saved = await updateRule.mutateAsync({ id: entry.rule.id, ...value })
+          if (!saved) throw new Error('This guidance was removed. Reload the list.')
+        } else await createRule.mutateAsync(value)
       }
       setDraft(null)
     } catch (err) {
@@ -176,11 +179,14 @@ export function GuidanceList() {
     settings.data.revision,
     rules.data.rules,
     skills.data.skills
-  ).filter((entry) =>
-    [entry.name, entry.instruction, entry.condition ?? '']
-      .join(' ')
-      .toLocaleLowerCase()
-      .includes(query.trim().toLocaleLowerCase())
+  ).filter(
+    (entry) =>
+      (filter === 'All' ||
+        (filter === 'Always' ? entry.condition === null : entry.condition !== null)) &&
+      [entry.name, entry.instruction, entry.condition ?? '']
+        .join(' ')
+        .toLocaleLowerCase()
+        .includes(query.trim().toLocaleLowerCase())
   )
 
   return (
@@ -191,6 +197,19 @@ export function GuidanceList() {
           <PlusIcon className="size-4" />
           Add guidance
         </Button>
+      </div>
+      <div role="group" aria-label="Guidance type" className="flex gap-2">
+        {(['All', 'Always', 'Situations'] as const).map((value) => (
+          <Button
+            key={value}
+            size="sm"
+            variant={filter === value ? 'secondary' : 'ghost'}
+            aria-pressed={filter === value}
+            onClick={() => setFilter(value)}
+          >
+            {value}
+          </Button>
+        ))}
       </div>
       <div className="divide-y rounded-xl border border-border/50 bg-card">
         {entries.length === 0 && (

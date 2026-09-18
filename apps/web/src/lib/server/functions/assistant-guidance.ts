@@ -5,6 +5,7 @@
  * catalogue prompt assembly and the approval pipeline consume.
  */
 import { z } from 'zod'
+import { NotFoundError } from '@/lib/shared/errors'
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import type { AssistantGuidanceRuleId } from '@quackback/ids'
@@ -83,6 +84,8 @@ export const updateGuidanceRuleFn = createServerFn({ method: 'POST' })
       enabled: data.enabled,
       priority: data.priority,
     })
+    if (!rule)
+      throw new NotFoundError('GUIDANCE_NOT_FOUND', 'This guidance was removed. Reload the list.')
     await recordAuditEvent({
       event: 'assistant.guidance.updated',
       actor: actorFromAuth(ctx),
@@ -152,14 +155,12 @@ export const listAssistantToolsFn = createServerFn({ method: 'GET' }).handler(as
   // appear in the admin surface.
   return specs
     .filter((spec) => spec.risk !== 'control')
-    .map(
-      (spec): AssistantToolSummary => ({
-        name: spec.name,
-        label: spec.label,
-        description: spec.description,
-        // The filter above removes control tools; spell the narrowing here
-        // because Array.filter does not refine an object property union.
-        risk: spec.risk === 'write' ? 'write' : 'read',
-      })
-    )
+    .map((spec): AssistantToolSummary => ({
+      name: spec.name,
+      label: spec.label,
+      description: spec.description,
+      // The filter above removes control tools; spell the narrowing here
+      // because Array.filter does not refine an object property union.
+      risk: spec.risk === 'write' ? 'write' : 'read',
+    }))
 })

@@ -265,3 +265,12 @@ describe('listAssistantToolsFn', () => {
     ])
   })
 })
+
+it('rejects a concurrently removed rule before writing a success audit event', async () => {
+  hoisted.updateGuidanceRule.mockResolvedValueOnce(null)
+  hoisted.recordAuditEvent.mockClear()
+  await expect(
+    updateGuidanceRuleFn({ data: { id: 'assistant_guidance_1', enabled: false } })
+  ).rejects.toThrow('This guidance was removed')
+  expect(hoisted.recordAuditEvent).not.toHaveBeenCalled()
+})

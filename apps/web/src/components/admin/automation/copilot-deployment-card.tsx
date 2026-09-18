@@ -24,6 +24,8 @@ export function CopilotDeploymentCard({ available = true }: { available?: boolea
   const capabilities = settingsQuery.data?.config.agents.copilot.capabilities
   const revision = settingsQuery.data?.revision
   const on = Boolean(capabilities?.qa)
+  const configured = settingsQuery.data?.configured !== false
+  const ready = available && configured && !settingsQuery.isError && !settingsQuery.isPending
   const managedPaths = settingsQuery.data?.managedFieldPaths ?? []
   const capabilitiesManaged = isAssistantFieldManaged(
     managedPaths,
@@ -40,11 +42,11 @@ export function CopilotDeploymentCard({ available = true }: { available?: boolea
         confirmingEnabled
           ? intl.formatMessage({
               id: 'automation.copilot.deployment.enabledStatus',
-              defaultMessage: 'Copilot is on in the inbox.',
+              defaultMessage: 'Quinn is on in the inbox.',
             })
           : intl.formatMessage({
               id: 'automation.copilot.deployment.pausedStatus',
-              defaultMessage: 'Copilot is off.',
+              defaultMessage: 'Quinn is off.',
             })
       )
       setConfirmingEnabled(null)
@@ -52,7 +54,7 @@ export function CopilotDeploymentCard({ available = true }: { available?: boolea
       setMessage(
         intl.formatMessage({
           id: 'automation.copilot.deployment.error',
-          defaultMessage: 'Copilot could not be changed. Try again.',
+          defaultMessage: 'Quinn could not be changed. Try again.',
         })
       )
     }
@@ -70,38 +72,47 @@ export function CopilotDeploymentCard({ available = true }: { available?: boolea
               <h2 id="copilot-deployment-heading" className="text-sm font-medium">
                 {intl.formatMessage({
                   id: 'automation.copilot.deployment.heading',
-                  defaultMessage: 'Copilot in the inbox',
+                  defaultMessage: 'Quinn in the inbox',
                 })}
               </h2>
-              <Badge variant={!available ? 'outline' : on ? 'default' : 'secondary'} shape="pill">
-                {!available
-                  ? intl.formatMessage({
-                      id: 'automation.agent.status.unavailable',
-                      defaultMessage: 'Unavailable',
-                    })
-                  : on
-                    ? intl.formatMessage({ id: 'automation.agent.status.on', defaultMessage: 'On' })
-                    : intl.formatMessage({
-                        id: 'automation.copilot.status.off',
-                        defaultMessage: 'Off',
-                      })}
+              <Badge variant={!ready ? 'outline' : on ? 'default' : 'secondary'} shape="pill">
+                {settingsQuery.isError
+                  ? 'Unavailable'
+                  : settingsQuery.isPending
+                    ? 'Loading…'
+                    : !configured
+                      ? 'Setup required'
+                      : !available
+                        ? intl.formatMessage({
+                            id: 'automation.agent.status.unavailable',
+                            defaultMessage: 'Unavailable',
+                          })
+                        : on
+                          ? intl.formatMessage({
+                              id: 'automation.agent.status.on',
+                              defaultMessage: 'On',
+                            })
+                          : intl.formatMessage({
+                              id: 'automation.copilot.status.off',
+                              defaultMessage: 'Off',
+                            })}
               </Badge>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              {!available
+              {!ready
                 ? intl.formatMessage({
                     id: 'automation.copilot.deployment.unavailable',
-                    defaultMessage: 'Configure an AI model to let teammates use Copilot.',
+                    defaultMessage: 'Configure an AI model to let teammates use Quinn.',
                   })
                 : on
                   ? intl.formatMessage({
                       id: 'automation.copilot.deployment.onHelp',
-                      defaultMessage: 'Teammates can ask Copilot and accept its drafts.',
+                      defaultMessage: 'Teammates can ask Quinn and accept its drafts.',
                     })
                   : intl.formatMessage({
                       id: 'automation.copilot.deployment.offHelp',
                       defaultMessage:
-                        'You can keep configuring Copilot without teammates seeing it in the inbox.',
+                        'You can keep configuring Quinn without teammates seeing it in the inbox.',
                     })}
             </p>
           </div>
@@ -118,11 +129,11 @@ export function CopilotDeploymentCard({ available = true }: { available?: boolea
               {on
                 ? intl.formatMessage({
                     id: 'automation.copilot.deployment.turnOff',
-                    defaultMessage: 'Turn off Copilot',
+                    defaultMessage: 'Turn off Quinn',
                   })
                 : intl.formatMessage({
                     id: 'automation.copilot.deployment.turnOn',
-                    defaultMessage: 'Turn on Copilot',
+                    defaultMessage: 'Turn on Quinn',
                   })}
             </Button>
           ) : null}
@@ -151,11 +162,11 @@ export function CopilotDeploymentCard({ available = true }: { available?: boolea
           confirmingEnabled
             ? intl.formatMessage({
                 id: 'automation.copilot.deployment.turnOnConfirmTitle',
-                defaultMessage: 'Turn on Copilot in the inbox?',
+                defaultMessage: 'Turn on Quinn in the inbox?',
               })
             : intl.formatMessage({
                 id: 'automation.copilot.deployment.turnOffConfirmTitle',
-                defaultMessage: 'Turn off Copilot?',
+                defaultMessage: 'Turn off Quinn?',
               })
         }
         description={
@@ -163,23 +174,23 @@ export function CopilotDeploymentCard({ available = true }: { available?: boolea
             ? intl.formatMessage({
                 id: 'automation.copilot.deployment.turnOnConfirmDescription',
                 defaultMessage:
-                  'Teammates will be able to ask Copilot in the inbox and accept its drafted replies.',
+                  'Teammates will be able to ask Quinn in the inbox and accept its drafted replies.',
               })
             : intl.formatMessage({
                 id: 'automation.copilot.deployment.turnOffConfirmDescription',
                 defaultMessage:
-                  'Copilot will stop answering teammates and offering drafts. Your configuration is kept.',
+                  'Quinn will stop answering teammates and offering drafts. Your configuration is kept.',
               })
         }
         confirmLabel={
           confirmingEnabled
             ? intl.formatMessage({
                 id: 'automation.copilot.deployment.turnOn',
-                defaultMessage: 'Turn on Copilot',
+                defaultMessage: 'Turn on Quinn',
               })
             : intl.formatMessage({
                 id: 'automation.copilot.deployment.turnOff',
-                defaultMessage: 'Turn off Copilot',
+                defaultMessage: 'Turn off Quinn',
               })
         }
         cancelLabel={intl.formatMessage({

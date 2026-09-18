@@ -62,7 +62,7 @@ export function QuinnPerformanceCard() {
     <SettingsCard
       title={intl.formatMessage({
         id: 'automation.performance.agent.title',
-        defaultMessage: 'AI agent performance',
+        defaultMessage: 'Quinn performance',
       })}
       description={intl.formatMessage({
         id: 'automation.performance.agent.description',
@@ -74,7 +74,7 @@ export function QuinnPerformanceCard() {
           <p role="alert" className="text-sm text-destructive">
             {intl.formatMessage({
               id: 'automation.performance.agent.error',
-              defaultMessage: 'AI agent performance could not be loaded.',
+              defaultMessage: 'Quinn performance could not be loaded.',
             })}
           </p>
           <Button variant="outline" size="sm" onClick={() => void performanceQuery.refetch()}>

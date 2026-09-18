@@ -14,10 +14,12 @@ export interface WidgetAssistantDeployment {
 export function AssistantDeploymentCard({
   deployment,
   available = true,
+  availabilityStatus,
   onChange,
 }: {
   deployment: WidgetAssistantDeployment
   available?: boolean
+  availabilityStatus?: string | null
   onChange: (deployment: WidgetAssistantDeployment) => void
 }) {
   const intl = useIntl()
@@ -72,21 +74,27 @@ export function AssistantDeploymentCard({
                   defaultMessage: 'Messenger replies',
                 })}
               </h2>
-              <Badge variant={!available ? 'outline' : live ? 'default' : 'secondary'} shape="pill">
-                {!available
-                  ? intl.formatMessage({
-                      id: 'automation.agent.status.unavailable',
-                      defaultMessage: 'Unavailable',
-                    })
-                  : live
+              <Badge
+                variant={
+                  !available || availabilityStatus ? 'outline' : live ? 'default' : 'secondary'
+                }
+                shape="pill"
+              >
+                {availabilityStatus ??
+                  (!available
                     ? intl.formatMessage({
-                        id: 'automation.agent.status.on',
-                        defaultMessage: 'On',
+                        id: 'automation.agent.status.unavailable',
+                        defaultMessage: 'Unavailable',
                       })
-                    : intl.formatMessage({
-                        id: 'automation.agent.status.paused',
-                        defaultMessage: 'Paused',
-                      })}
+                    : live
+                      ? intl.formatMessage({
+                          id: 'automation.agent.status.on',
+                          defaultMessage: 'On',
+                        })
+                      : intl.formatMessage({
+                          id: 'automation.agent.status.paused',
+                          defaultMessage: 'Paused',
+                        }))}
               </Badge>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">

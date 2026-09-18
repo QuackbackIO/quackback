@@ -55,3 +55,11 @@ End-to-end validation is recorded in [the functional test report](quinn-product-
 - P9: channel-specific eligibility and richer procedures/follow-up.
 
 No publish/test controls, autonomous email, automatic internal feedback capture, or write-capable retries are enabled by these changes. No push, merge or deployment is authorized by the specification.
+
+## Critic corrections and mockup follow-up
+
+Customer-disabled source types now remain usable for teammate analysis while marking retrieved provenance internal, preventing those results from becoming insertable customer drafts. A guidance update after concurrent deletion rejects before success audit and keeps the editor draft. Overview and Deploy distinguish missing AI configuration from enabled deployment preferences.
+
+Added All/Always/Situations guidance filters, a permission-gated Help Center management link, and Quinn naming in deployment/performance copy and the English catalog. Regression coverage includes the real two-session deletion case. The remaining connected-screen work is tracked in [mockup parity](quinn-mockup-parity.md); this correction slice does not complete the later backend gates.
+
+Validation: 506 targeted tests, application/workspace and E2E typechecks, production build and server-function manifest verification pass. The expanded development browser suite passes all 25 checks (23 product scenarios plus setup/cleanup). A production run with configured storage exceeded the five-second upload assertion for PDF/DOCX, though both requests subsequently completed; isolated production verification disables external AI and storage. Changed-file lint has only existing oversized-file and explicit-any warnings in the toolspec/runtime test files.

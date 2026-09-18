@@ -482,3 +482,43 @@ describe('retrieveKnowledge', () => {
     )
   })
 })
+
+describe('customer type eligibility in teammate grounding', () => {
+  it.each(['copilot', 'workspace'] as const)(
+    'keeps excluded documents available to %s but marks their provenance internal',
+    async (agent) => {
+      const config = structuredClone(DEFAULT_ASSISTANT_CONFIG)
+      config.agents.agent.knowledge.documents = false
+      config.agents[agent].knowledge.documents = true
+      const snapshot = resolveAssistantKnowledgeSnapshot(agent, config, 'team')
+      const item = {
+        id: 'document_1',
+        sourceType: 'document' as const,
+        title: 'Policy',
+        excerpt: 'Policy text',
+        score: 1,
+        citation: { type: 'document' as const, id: 'document_1', title: 'Policy', url: '' },
+      }
+      mockDocumentsRetrieve.mockResolvedValue([item])
+      const items = await retrieveKnowledge('policy', 'team', {
+        enabledSources: snapshot.sources,
+        customerSources: snapshot.customerSources,
+      })
+      expect(items).toEqual([{ ...item, citation: { ...item.citation, internal: true } }])
+      expect(item.citation).not.toHaveProperty('internal')
+    }
+  )
+  it('tracks all customer type masters independently from teammate sources', () => {
+    const config = structuredClone(DEFAULT_ASSISTANT_CONFIG)
+    Object.assign(config.agents.agent.knowledge, {
+      helpCenter: false,
+      posts: false,
+      changelog: false,
+      documents: false,
+      webPages: false,
+    })
+    const snapshot = resolveAssistantKnowledgeSnapshot('copilot', config, 'team')
+    expect([...snapshot.customerSources!]).toEqual(['snippet'])
+    expect(snapshot.sources.has('document')).toBe(true)
+  })
+})

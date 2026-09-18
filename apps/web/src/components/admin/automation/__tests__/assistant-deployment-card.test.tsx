@@ -32,3 +32,20 @@ it('shows deployment as a compact channel-level control', () => {
   expect(screen.getByText('Paused')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Enable automatic replies' })).toBeInTheDocument()
 })
+
+it('shows setup status even when automatic replies are enabled, retaining pause control', () => {
+  render(
+    <IntlProvider locale="en">
+      <QueryClientProvider client={new QueryClient()}>
+        <AssistantDeploymentCard
+          deployment={{ enabled: true, respond: true }}
+          availabilityStatus="Setup required"
+          onChange={() => {}}
+        />
+      </QueryClientProvider>
+    </IntlProvider>
+  )
+  expect(screen.getByText('Setup required')).toBeInTheDocument()
+  expect(screen.queryByText('On')).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Pause automatic replies' })).toBeInTheDocument()
+})

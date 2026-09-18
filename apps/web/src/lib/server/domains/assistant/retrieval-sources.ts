@@ -155,6 +155,8 @@ export interface AssistantKnowledgeSnapshot {
   sources: ReadonlySet<AssistantCitationType>
   /** Whether the real-time `get_status` tool is registered this turn. */
   status: boolean
+  /** Customer eligibility is independent of teammate retrieval availability. */
+  customerSources?: ReadonlySet<AssistantCitationType>
   internalNotes?: boolean
   pastConversations?: boolean
 }
@@ -184,6 +186,13 @@ export function resolveAssistantKnowledgeSnapshot(
   // ceiling and a future ceiling-scoped source registration would use it.
   _audience: ContentAudience
 ): AssistantKnowledgeSnapshot {
+  const customerSources = new Set<AssistantCitationType>(['snippet'])
+  const customer = config.agents.agent.knowledge
+  if (customer.helpCenter) customerSources.add('article')
+  if (customer.posts) customerSources.add('post')
+  if (customer.changelog) customerSources.add('changelog')
+  if (customer.documents) customerSources.add('document')
+  if (customer.webPages !== false) customerSources.add('webpage')
   const sources = new Set<AssistantCitationType>()
   // Snippets: no per-agent toggle. Registered at every ceiling — the snippets
   // source's own audience predicate restricts the turn to rows no more
@@ -201,7 +210,7 @@ export function resolveAssistantKnowledgeSnapshot(
       if (k.posts) sources.add('post')
       if (k.changelog) sources.add('changelog')
       if (k.documents) sources.add('document')
-      return { sources, status: k.status }
+      return { sources, customerSources, status: k.status }
     }
     case 'workspace':
     case 'copilot': {
@@ -214,6 +223,7 @@ export function resolveAssistantKnowledgeSnapshot(
       if (k.documents) sources.add('document')
       return {
         sources,
+        customerSources,
         status: k.status,
         internalNotes: k.internalNotes,
         pastConversations: k.pastConversations,
@@ -371,6 +381,7 @@ export async function retrieveKnowledge(
     /** The turn's enabled retrieval sources (config v3); omitted only by legacy
      *  direct callers/tests, which then default to the KB-only pass-through. */
     enabledSources?: ReadonlySet<AssistantCitationType>
+    customerSources?: ReadonlySet<AssistantCitationType>
   } = {}
 ): Promise<RetrievedItem[]> {
   const topK = opts.topK ?? KNOWLEDGE_TOP_K
@@ -427,5 +438,11 @@ export async function retrieveKnowledge(
     merged.push(...tier)
   }
   merged.push(...unscored)
-  return merged.slice(0, topK)
+  return merged
+    .slice(0, topK)
+    .map((item) =>
+      opts.customerSources && !opts.customerSources.has(item.sourceType)
+        ? { ...item, citation: { ...item.citation, internal: true } }
+        : item
+    )
 }

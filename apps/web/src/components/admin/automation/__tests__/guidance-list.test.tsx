@@ -142,3 +142,58 @@ describe('Guidance compatibility editor', () => {
     expect(screen.getByLabelText('What should Quinn do?')).toHaveValue('Use plain English.')
   })
 })
+
+it('retains unsaved text when another session removes the rule', async () => {
+  mocks.rules.mockResolvedValue({
+    rules: [
+      {
+        id: 'rule_1',
+        name: 'Refunds',
+        instruction: 'Check policy',
+        appliesWhen: 'Refund requested',
+        agent: 'agent',
+        enabled: true,
+        priority: 0,
+      },
+    ],
+  })
+  mocks.saveRule.mockResolvedValueOnce(null)
+  show()
+  await screen.findByText('Refunds')
+  fireEvent.click(screen.getAllByRole('button', { name: 'Edit' })[1])
+  fireEvent.change(screen.getByLabelText('What should Quinn do?'), {
+    target: { value: 'Keep this unsaved instruction.' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('This guidance was removed')
+  expect(screen.getByLabelText('What should Quinn do?')).toHaveValue(
+    'Keep this unsaved instruction.'
+  )
+})
+it('combines the guidance type filter with search', async () => {
+  mocks.rules.mockResolvedValue({
+    rules: [
+      {
+        id: 'rule_1',
+        name: 'Refunds',
+        instruction: 'Check policy',
+        appliesWhen: 'Refund requested',
+        agent: 'agent',
+        enabled: true,
+        priority: 0,
+      },
+    ],
+  })
+  show()
+  await screen.findByText('Refunds')
+  fireEvent.click(screen.getByRole('button', { name: 'Always' }))
+  expect(screen.queryByText('Refunds')).not.toBeInTheDocument()
+  expect(screen.getByText('Everyday instructions')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Situations' }))
+  expect(screen.getByText('Refunds')).toBeInTheDocument()
+  expect(screen.queryByText('Everyday instructions')).not.toBeInTheDocument()
+  fireEvent.change(screen.getByPlaceholderText('Search guidance'), {
+    target: { value: 'unmatched' },
+  })
+  expect(screen.getByText('No matching guidance.')).toBeInTheDocument()
+})
