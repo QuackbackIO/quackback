@@ -13,6 +13,13 @@ const principalUpdatedSets: Record<string, unknown>[] = []
 // Drives the tx.select(...).limit() result for the existing-conversation path.
 let existingConversation: Record<string, unknown> | null = null
 
+// This file fakes the database, and durable Quinn intake writes run rows and a
+// queue job inside the send transaction — which needs a real one. The durable
+// path has its own committed-transaction suite
+// (assistant/__tests__/assistant-run.durability.db.test.ts); here the legacy
+// executor keeps the fake-database seam exactly as it was.
+process.env.ASSISTANT_EXECUTION_MODE = 'legacy'
+
 vi.mock('@/lib/server/realtime/conversation-channels', () => ({
   publishConversationEvent: vi.fn(),
   publishAgentConversationEvent: vi.fn(),
@@ -116,10 +123,14 @@ vi.mock('@/lib/server/db', () => {
   return {
     db: { transaction: async (fn: (t: unknown) => Promise<unknown>) => fn(tx) },
     eq: vi.fn(),
+    // The durable Quinn fence bumps conversations.assistant_revision inside
+    // the same UPDATE as each lifecycle change, so this partial mock has to
+    // carry `sql` now.
+    sql: vi.fn((...parts: unknown[]) => ({ __sql: parts })),
     and: vi.fn(),
     isNull: vi.fn(),
     settings: { __name: 'settings', id: 'id' },
-    conversations: { __name: 'conversations', id: 'id' },
+    conversations: { __name: 'conversations', id: 'id', assistantRevision: 'assistant_revision' },
     conversationMessages: { __name: 'conversation_messages', id: 'id' },
     principal: { __name: 'principal', id: 'id', contactEmail: 'contact_email' },
     user: { __name: 'user', id: 'id' },

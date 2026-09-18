@@ -129,7 +129,11 @@ vi.mock('@/lib/server/db', () => {
       update: vi.fn((table: { __name?: string }) => chain(table?.__name ?? 'unknown')),
     },
     eq: vi.fn(),
-    conversations: { __name: 'conversations', id: 'id' },
+    // The durable Quinn fence bumps conversations.assistant_revision inside
+    // the same UPDATE as each lifecycle change, so this partial mock has to
+    // carry `sql` now.
+    sql: vi.fn((...parts: unknown[]) => ({ __sql: parts })),
+    conversations: { __name: 'conversations', id: 'id', assistantRevision: 'assistant_revision' },
     conversationMessages: { __name: 'conversation_messages', id: 'id' },
   }
 })

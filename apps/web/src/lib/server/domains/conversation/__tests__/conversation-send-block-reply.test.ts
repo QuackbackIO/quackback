@@ -29,6 +29,13 @@ const emit = vi.hoisted(() => ({
   emitConversationCsatSubmitted: vi.fn(),
   emitConversationCsatCommentAdded: vi.fn(),
 }))
+// This file fakes the database, and durable Quinn intake writes run rows and a
+// queue job inside the send transaction — which needs a real one. The durable
+// path has its own committed-transaction suite
+// (assistant/__tests__/assistant-run.durability.db.test.ts); here the legacy
+// executor keeps the fake-database seam exactly as it was.
+process.env.ASSISTANT_EXECUTION_MODE = 'legacy'
+
 vi.mock('../conversation.webhooks', () => emit)
 
 vi.mock('@/lib/server/realtime/conversation-channels', () => ({

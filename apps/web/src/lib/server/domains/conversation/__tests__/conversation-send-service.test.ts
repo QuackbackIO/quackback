@@ -26,6 +26,13 @@ const emit = vi.hoisted(() => ({
   emitConversationCsatSubmitted: vi.fn(),
   emitConversationCsatCommentAdded: vi.fn(),
 }))
+// This file fakes the database, and durable Quinn intake writes run rows and a
+// queue job inside the send transaction — which needs a real one. The durable
+// path has its own committed-transaction suite
+// (assistant/__tests__/assistant-run.durability.db.test.ts); here the legacy
+// executor keeps the fake-database seam exactly as it was.
+process.env.ASSISTANT_EXECUTION_MODE = 'legacy'
+
 vi.mock('../conversation.webhooks', () => emit)
 
 vi.mock('@/lib/server/realtime/conversation-channels', () => ({
@@ -141,10 +148,14 @@ vi.mock('@/lib/server/db', () => {
       update: vi.fn((table: { __name?: string }) => chain(table?.__name ?? 'unknown')),
     },
     eq: vi.fn(),
+    // The durable Quinn fence bumps conversations.assistant_revision inside
+    // the same UPDATE as each lifecycle change, so this partial mock has to
+    // carry `sql` now.
+    sql: vi.fn((...parts: unknown[]) => ({ __sql: parts })),
     and: vi.fn(),
     isNull: vi.fn(),
     settings: { __name: 'settings' },
-    conversations: { __name: 'conversations', id: 'id' },
+    conversations: { __name: 'conversations', id: 'id', assistantRevision: 'assistant_revision' },
     conversationMessages: { __name: 'conversation_messages', id: 'id' },
     principal: { __name: 'principal', id: 'id', displayName: 'display_name' },
     withWorkflowAttribution: (event: unknown) => event,

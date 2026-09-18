@@ -68,10 +68,25 @@ const URL =
 const secondClient = postgres(URL, { max: 2, onnotice: () => {} })
 const second: Database = createDbFromSql(secondClient)
 
-const available = await db.execute(sql`SELECT to_regclass('public.assistant_runs') AS t`).then(
-  (result) => !!getExecuteRows<{ t: string | null }>(result)[0]?.t,
-  () => false
-)
+/**
+ * Opt-in on a DEDICATED database, following conversation-inactivity.db.test.ts.
+ *
+ * This suite commits rows rather than rolling them back, which is the whole
+ * point: a lease exists so work can outlive the transaction that claimed it, so
+ * a fixture that never commits cannot observe the property under test. Committed
+ * conversations and messages are visible to every other suite sharing the
+ * database, and several of those assert whole-table state, so this one runs
+ * against `quackback_quinn_runs` and is inert anywhere else.
+ */
+const dedicatedDatabase = !!process.env.TEST_DATABASE_URL?.includes('quinn_runs')
+
+const tableAvailable = dedicatedDatabase
+  ? await db.execute(sql`SELECT to_regclass('public.assistant_runs') AS t`).then(
+      (result) => !!getExecuteRows<{ t: string | null }>(result)[0]?.t,
+      () => false
+    )
+  : false
+const available = dedicatedDatabase && tableAvailable
 
 let visitorId: PrincipalId
 let quinnId: PrincipalId
@@ -247,6 +262,10 @@ describe.skipIf(!available)('durable Quinn turns on real PostgreSQL', () => {
     // `claimById` is FIFO per queue: one stale pending row makes every later
     // case unclaimable for a reason that has nothing to do with what it tests.
     await db.execute(sql`DELETE FROM job_queue WHERE queue = ${ASSISTANT_TURN_QUEUE}`)
+    // Same reasoning for the fixtures themselves: a suite that aborted in this
+    // hook never reached its cleanup, and its conversations would then be
+    // counted by every other suite that asserts whole-table state.
+    await db.delete(conversations).where(eq(conversations.subject, 'durable run fixture'))
   })
 
   afterEach(async () => {

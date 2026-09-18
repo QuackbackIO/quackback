@@ -147,39 +147,13 @@ import {
 const log = logger.child({ component: 'conversation' })
 
 /**
- * Invalidate any in-flight Quinn work for a conversation (QUINN-PRODUCT P2).
- *
- * Called by every transition that changes what Quinn may say next: a teammate
- * reply, an assignment or takeover, a handoff, a close, a reopen, a snooze or
- * wake, a spam filing, a restore, a deleted message. It bumps the
- * conversation's invalidation counter, which is the number a run compares
- * against before it may publish, and marks any open run superseded so an
- * operator can see why.
- *
- * Deliberately unconditional on the execution mode: a workspace that rolls back
- * to legacy still has runs in flight from before the switch, and they must
- * still be fenced.
- *
- * The lazy import keeps the assistant domain out of this module's static graph,
- * matching every other assistant reach-out here.
- */
-async function invalidateAssistantTurns(
-  exec: Database | Transaction,
-  conversationId: ConversationId,
-  reason: string
-): Promise<void> {
-  const { invalidateAssistantWork } =
-    await import('@/lib/server/domains/assistant/assistant-run.service')
-  await invalidateAssistantWork(exec, conversationId, reason)
-}
-
-/**
  * The invalidation-counter bump as a column patch.
  *
  * Folded INTO each lifecycle UPDATE rather than issued next to it, so the
  * transition and the fence it raises are one statement and cannot be separated
- * by a crash. `sendVisitorMessage` and `sendAgentMessage` own transactions and
- * call {@link invalidateAssistantTurns} instead.
+ * by a crash. Durable intake goes further and uses the assistant domain's
+ * `requestAssistantTurn`, which bumps the same counter and records why any
+ * older run lost.
  */
 function bumpsAssistantRevision() {
   return { assistantRevision: sql`${conversations.assistantRevision} + 1` }
@@ -962,17 +936,16 @@ export async function sendAgentMessage(
         // applyAgentReopenStatus.)
         waitingSince: null,
         inactivityCheckInAt: null,
+        // A teammate speaking IS the takeover boundary, so the invalidation
+        // rides the same statement: an answer already generating cannot land
+        // after the human reply.
+        ...bumpsAssistantRevision(),
         // Keep resolvedAt consistent with the new status (reopening clears it).
         resolvedAt: resolvedAtForStatus(agentNextStatus, message.createdAt),
         updatedAt: message.createdAt,
       })
       .where(eq(conversations.id, conversationId))
       .returning()
-
-    // A teammate speaking IS the takeover boundary. Invalidating here, on the
-    // same transaction, is what stops a Quinn answer that was already
-    // generating from landing after the human reply.
-    await invalidateAssistantTurns(tx, conversationId, 'human_reply')
 
     return {
       message,
@@ -2035,7 +2008,10 @@ export async function deleteConversationMessage(
 
   // Removing a message changes the transcript a turn was reasoning over, so any
   // answer still generating must not land against the old context.
-  await invalidateAssistantTurns(db, conversationId, 'message_deleted')
+  await db
+    .update(conversations)
+    .set(bumpsAssistantRevision())
+    .where(eq(conversations.id, conversationId))
 
   const deletedEvent = {
     kind: 'message_deleted' as const,
