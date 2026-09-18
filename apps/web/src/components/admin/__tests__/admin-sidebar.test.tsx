@@ -208,13 +208,11 @@ describe('AdminSidebar — AI & Automation visibility', () => {
 
   it('shows AI & Automation to admins, linking to the agent page', () => {
     const { container } = renderSidebar('admin')
-    expect(container.querySelectorAll('a[href="/admin/automation/agent"]').length).toBeGreaterThan(
-      0
-    )
+    expect(container.querySelectorAll('a[href="/admin/automation"]').length).toBeGreaterThan(0)
   })
 
   it('hides AI & Automation from non-admin team members', () => {
     const { container } = renderSidebar('member')
-    expect(container.querySelectorAll('a[href="/admin/automation/agent"]').length).toBe(0)
+    expect(container.querySelectorAll('a[href="/admin/automation"]').length).toBe(0)
   })
 })

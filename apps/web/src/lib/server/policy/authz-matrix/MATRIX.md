@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 712 surfaces
+### Server functions (`requireAuth`) — 714 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -248,6 +248,8 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/assistant-snippets.ts`::createSnippetFn | assistant.manage |
 | `lib/server/functions/assistant-snippets.ts`::updateSnippetFn | assistant.manage |
 | `lib/server/functions/assistant-snippets.ts`::deleteSnippetFn | assistant.manage |
+| `lib/server/functions/assistant-source-use.ts`::updateAssistantSourceUseFn | assistant.manage |
+| `lib/server/functions/assistant-source-use.ts`::getArticleAssistantUseLimitsFn | help_center.manage |
 | `lib/server/functions/assistant-tools-analytics.ts`::getQuinnToolMetricsFn | analytics.view |
 | `lib/server/functions/assistant-web-sources.ts`::listWebSourcesFn | assistant.manage |
 | `lib/server/functions/assistant-web-sources.ts`::addWebSourceFn | assistant.manage |
@@ -1023,7 +1025,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-214 of 1037 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+215 of 1040 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -1225,6 +1227,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `routes/api/widget/kb-ask.ts`::GET | route |
 | `routes/api/widget/kb-ask.ts`::POST | route |
 | `routes/api/widget/kb-search.ts`::GET | route |
+| `routes/api/widget/quinn-source.ts`::GET | route |
 | `routes/api/widget/sdk[.]js.ts`::GET | route |
 | `routes/api/widget/search.ts`::GET | route |
 | `routes/api/widget/session.ts`::GET | route |

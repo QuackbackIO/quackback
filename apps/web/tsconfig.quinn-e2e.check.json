@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["e2e/tests/admin/quinn-product.spec.ts"],
+  "compilerOptions": { "incremental": false }
+}

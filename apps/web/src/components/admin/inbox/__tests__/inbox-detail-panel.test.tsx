@@ -171,7 +171,7 @@ describe('<InboxDetailPanel> tab host', () => {
 
     expect(screen.getByRole('tablist')).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Details' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: /copilot/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /ask quinn/i })).toBeInTheDocument()
   })
 
   it('renders no Copilot tab when the viewer lacks copilot.use', () => {
@@ -180,7 +180,7 @@ describe('<InboxDetailPanel> tab host', () => {
     renderPanel()
 
     expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
-    expect(screen.queryByRole('tab', { name: /copilot/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: /ask quinn/i })).not.toBeInTheDocument()
     expect(screen.getByText('Properties')).toBeInTheDocument()
   })
 
@@ -189,7 +189,7 @@ describe('<InboxDetailPanel> tab host', () => {
 
     renderPanel()
 
-    fireEvent.click(screen.getByRole('tab', { name: /copilot/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /ask quinn/i }))
 
     // Both stay in the DOM (forceMount + CSS-hide) — Details content is still present.
     expect(screen.getByText('Properties')).toBeInTheDocument()
@@ -221,7 +221,7 @@ describe('<InboxDetailPanel> openCopilotToken ping (the Ask Copilot shortcut)', 
 
     rerenderWith({ openCopilotToken: 1 })
 
-    expect(screen.getByRole('tab', { name: /copilot/i })).toHaveAttribute('data-active')
+    expect(screen.getByRole('tab', { name: /ask quinn/i })).toHaveAttribute('data-active')
     // Focus lands after the rAF that waits for the tab content to un-hide.
     await waitFor(() => expect(screen.getByTestId('copilot-ask-stub')).toHaveFocus())
   })
@@ -242,7 +242,7 @@ describe('<InboxDetailPanel> openCopilotToken ping (the Ask Copilot shortcut)', 
     enableCopilot()
     renderPanel(makeConversation(), { openCopilotToken: 5 })
 
-    expect(screen.getByRole('tab', { name: /copilot/i })).toHaveAttribute('data-active')
+    expect(screen.getByRole('tab', { name: /ask quinn/i })).toHaveAttribute('data-active')
     await waitFor(() => expect(screen.getByTestId('copilot-ask-stub')).toHaveFocus())
   })
 

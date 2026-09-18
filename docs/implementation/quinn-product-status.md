@@ -43,6 +43,8 @@ Rollback: retain the unique index and serialization where possible. Removing the
 
 ## Outstanding acceptance gates
 
+End-to-end validation is recorded in [the functional test report](quinn-product-test-report.md): 21 product scenarios pass against both development and compiled production servers, and all 28 opt-in PostgreSQL lifecycle tests pass. Testing fixed article Markdown preservation and URL form submission. The full repository run has 15,634 passes and 13 failures reproduced on the pre-Quinn baseline; two live local-model tests also fail on both versions. These results do not close the unimplemented gates below.
+
 - P1–P2: durable intents/snapshots, transactional intake, publication and takeover fencing, independent-connection concurrency tests.
 - Connection gate: independent policies per use, reviewed catalog contracts and full input validation.
 - P3–P4: replayable receipts, uncertain-effect reconciliation, queued approvals, workflow delegation/recovery.
