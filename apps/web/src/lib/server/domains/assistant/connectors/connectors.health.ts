@@ -17,6 +17,13 @@ export async function refreshConnector(id: ConnectorId, execDb: Executor = defau
       .set({
         tools: diff.tools,
         toolPolicies: diff.toolPolicies,
+        // The per-use half of the diff: overrides pruned to the live catalog,
+        // reviews pruned with them, and the revision moved only when the
+        // catalog actually changed. Without this a re-discovery would leave
+        // the review gate looking at a revision nothing ever bumped.
+        profilePolicies: diff.profilePolicies,
+        toolReviews: diff.toolReviews,
+        catalogRevision: diff.catalogRevision,
         status: 'connected',
         lastSyncedAt: new Date(),
         lastError: null,
