@@ -33,6 +33,14 @@ Deployment prerequisite: migrate workspace databases through 0285 and set the co
 
 Remaining UX integration follows the later gates: canonical shared Guidance bindings; durable run/action inspection; exact-candidate evaluation/publication; in-flight evidence revocation fences; richer source views and authenticated teammate citation revalidation. Current customer source views serve plain text, never private original storage URLs.
 
+## P1 prerequisite — one active involvement
+
+Implemented in migration 0286 and the involvement service: serialize opens on the conversation row, return the existing active identity, and enforce a partial unique index in PostgreSQL. New opens join the caller transaction. The migration reports up to 20 conversation UUIDs with legacy active duplicates and stops; it never rewrites outcomes. Repair requires inspecting transcript/history and explicitly choosing the canonical active record while preserving audit history.
+
+Validation: 52 targeted concurrency/involvement/turn tests passed, including independent PostgreSQL connections, caller rollback, direct duplicate rejection, and duplicate-migration preflight. Full typechecking and a fresh-schema drift check pass. The broader assistant pass found only three Guidance assertions affected by the browser-created test rule; removing that test fixture and rerunning the Guidance service suite passes. Runtime retrying turns remains unchanged.
+
+Rollback: retain the unique index and serialization where possible. Removing the index permits duplicate active rows again; no history was rewritten by this migration.
+
 ## Outstanding acceptance gates
 
 - P1–P2: durable intents/snapshots, transactional intake, publication and takeover fencing, independent-connection concurrency tests.

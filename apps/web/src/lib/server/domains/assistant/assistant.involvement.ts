@@ -111,16 +111,28 @@ export function outcomeStatus(kind: 'confirmed' | 'assumed'): AssistantInvolveme
 
 // -------------------------------------------------------------- persistence ---
 
-/** Open a fresh involvement for a conversation Quinn is engaging. */
+/** Reuse the active involvement, or atomically open a new one. */
 export async function openInvolvement(
   input: { conversationId: ConversationId; triggeredBy: AssistantInvolvementTrigger },
   exec: Executor = db
 ): Promise<AssistantInvolvement> {
-  const [row] = await exec
-    .insert(assistantInvolvements)
-    .values({ conversationId: input.conversationId, triggeredBy: input.triggeredBy })
-    .returning()
-  return row
+  // The parent lock also works before the unique index is rolled out and
+  // joins an existing intake transaction via a savepoint when supplied one.
+  return exec.transaction(async (tx) => {
+    const [parent] = await tx
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(eq(conversations.id, input.conversationId))
+      .for('update')
+    if (!parent) throw new Error('Cannot open an involvement for a missing conversation')
+    const existing = await getActiveInvolvement(input.conversationId, tx)
+    if (existing) return existing
+    const [row] = await tx
+      .insert(assistantInvolvements)
+      .values({ conversationId: input.conversationId, triggeredBy: input.triggeredBy })
+      .returning()
+    return row
+  })
 }
 
 /** The currently-active involvement for a conversation, or null. */

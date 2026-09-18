@@ -1842,6 +1842,13 @@
       "when": 1789747200000,
       "tag": "0285_quinn_knowledge_use",
       "breakpoints": true
+    },
+    {
+      "idx": 263,
+      "version": "7",
+      "when": 1789747200001,
+      "tag": "0286_quinn_active_involvement",
+      "breakpoints": true
     }
   ]
 }

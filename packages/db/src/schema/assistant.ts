@@ -6,6 +6,7 @@ import {
   integer,
   boolean,
   index,
+  uniqueIndex,
   check,
   customType,
 } from 'drizzle-orm/pg-core'
@@ -99,6 +100,9 @@ export const assistantInvolvements = pgTable(
   },
   (t) => [
     index('assistant_involvements_conversation_id_idx').on(t.conversationId),
+    uniqueIndex('assistant_involvements_one_active_idx')
+      .on(t.conversationId)
+      .where(sql`${t.status} = 'active'`),
     // Drives the stale-involvement sweep, which scans active involvements by
     // last-answer time; partial so only active rows are indexed.
     index('assistant_involvements_active_answer_idx')
