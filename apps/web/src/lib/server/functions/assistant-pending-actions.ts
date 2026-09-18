@@ -40,6 +40,7 @@ function toDTO(row: AssistantPendingAction): AssistantPendingActionDTO {
     args: row.args as AssistantPendingActionDTO['args'],
     summary: row.summary,
     originRole: row.originRole,
+    originProfile: row.originProfile,
     status: row.status,
     proposedAt: row.proposedAt.toISOString(),
     expiresAt: row.expiresAt.toISOString(),

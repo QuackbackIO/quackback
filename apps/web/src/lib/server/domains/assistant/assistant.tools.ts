@@ -212,6 +212,12 @@ async function runWithPipeline(
       args: args as Record<string, unknown>,
       summary,
       originRole: ctx.role,
+      // The use this call was authorized under, and the policy version that
+      // said so. Approval re-resolves THIS use, never the approver's own, and
+      // a version that has moved since is a policy change the executor has to
+      // look at rather than assume away.
+      originProfile: spec.connectorPolicy?.profile,
+      policyVersion: spec.connectorPolicy?.policyVersion,
       // Same-shaped key as the autonomous branch's claim below: a synthesis
       // retry that re-runs this exact write-tool call for the same turn
       // dedupes onto the first proposal row instead of inserting a duplicate

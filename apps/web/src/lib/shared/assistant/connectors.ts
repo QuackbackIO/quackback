@@ -210,10 +210,34 @@ export const connectorUpdateInputSchema = z.object({
   bearerToken: z.string().max(CONNECTOR_BEARER_TOKEN_MAX_LENGTH).optional(),
   clearBearerToken: z.boolean().optional(),
   assignments: connectorAssignmentsSchema.optional(),
-  toolPolicies: connectorToolPoliciesSchema.optional(),
+  /**
+   * Per-use policies. Sent with the version they were edited from: the server
+   * refuses a write whose base version has moved, so a stale tab cannot
+   * silently reinstate the permissions somebody else just changed.
+   */
+  profilePolicies: connectorProfilePoliciesSchema.optional(),
+  expectedPolicyVersion: z.number().int().nonnegative().optional(),
   enabled: z.boolean().optional(),
 })
 export type ConnectorUpdateInput = z.infer<typeof connectorUpdateInputSchema>
+
+/**
+ * Mark the named tools reviewed at the contract the client actually saw.
+ * `expectedCatalogRevision` is what makes it a review rather than a rubber
+ * stamp: if discovery has moved since the page loaded, the reviewer is
+ * approving a contract they were never shown, and the server refuses.
+ */
+export const connectorReviewInputSchema = z.object({
+  id: z.string().min(1),
+  toolNames: z.array(z.string().min(1)).min(1).max(200),
+  expectedCatalogRevision: z.number().int().nonnegative(),
+})
+export type ConnectorReviewInput = z.infer<typeof connectorReviewInputSchema>
+
+export interface ConnectorToolReviewDTO {
+  state: 'reviewed' | 'new' | 'changed'
+  changes: string[]
+}
 
 export interface ConnectorToolDTO {
   name: string
@@ -221,8 +245,12 @@ export interface ConnectorToolDTO {
   description?: string
   group: ConnectorToolGroup
   destructive: boolean
-  policy: ConnectorToolPolicy
-  isOverride: boolean
+  /** One resolved decision per use. Independent by construction. */
+  policies: Record<ConnectorPolicyProfile, ConnectorToolAccess>
+  review: ConnectorToolReviewDTO
+  /** False when the declared input schema uses constructs this workspace cannot enforce. */
+  schemaSupported: boolean
+  schemaIssue?: string
   isNew: boolean
 }
 
@@ -236,9 +264,14 @@ export interface ConnectorDTO {
   status: ConnectorStatus
   enabled: boolean
   assignments: ConnectorAssignments
-  toolPolicies: ConnectorToolPoliciesInput
+  /** Resolved per-use policies, including the projection of any legacy shared map. */
+  profilePolicies: ConnectorProfilePolicies
+  policyVersion: number
+  catalogRevision: number
   tools: ConnectorToolDTO[]
   toolCount: number
+  /** Tools awaiting review; drives the connector page's review banner. */
+  unreviewedCount: number
   lastSyncedAt: string | null
   lastCallAt: string | null
   lastError: string | null

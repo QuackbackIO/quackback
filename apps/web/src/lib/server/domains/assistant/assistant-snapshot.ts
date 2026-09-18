@@ -34,8 +34,21 @@ export interface EffectiveSnapshotPayload {
   config: unknown
   guidance: Array<{ id: string; name: string; contentHash: string; updatedAt: string | null }>
   skills: Array<{ id: string; name: string; updatedAt: string | null }>
-  /** Contract fingerprints only. Never a credential, a token or a header value. */
-  connectors: Array<{ id: string; name: string; enabled: boolean; contractHash: string }>
+  /**
+   * Contract fingerprints and the policy the run resolved under. Never a
+   * credential, a token or a header value. `policyVersion` and `policyHash`
+   * are what make a run explainable after somebody edits permissions: the
+   * version says which edit, the hash says whether the content actually moved.
+   */
+  connectors: Array<{
+    id: string
+    name: string
+    enabled: boolean
+    contractHash: string
+    policyVersion: number
+    catalogRevision: number
+    policyHash: string
+  }>
   retrieval: { sourceTypes: string[] }
   validator: { mode: 'structural' }
 }
@@ -116,10 +129,22 @@ export async function buildEffectiveSnapshot(): Promise<EffectiveSnapshotPayload
   try {
     const { listConnectors } = await import('./connectors/connectors.service')
     for (const connector of await listConnectors()) {
+      const { effectiveConnectorPolicyState } = await import('./connectors/connector-policy-state')
+      const policyState = effectiveConnectorPolicyState(connector)
       connectors.push({
         id: connector.id,
         name: connector.name,
         enabled: connector.enabled !== false,
+        policyVersion: connector.policyVersion,
+        catalogRevision: connector.catalogRevision,
+        // Per-use policies and reviewed contracts together: two runs sharing
+        // this hash resolved every tool the same way for every use.
+        policyHash: shortHash(
+          canonicalJson({
+            policies: policyState.profilePolicies,
+            reviews: policyState.toolReviews,
+          })
+        ),
         // Identity and shape only. Credentials live in the connector's own
         // secret storage and are never read here.
         contractHash: shortHash(

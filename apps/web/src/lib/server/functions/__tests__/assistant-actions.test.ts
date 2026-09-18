@@ -39,7 +39,7 @@ const hoisted = vi.hoisted(() => ({
   markPendingActionExecuted: vi.fn(),
   markPendingActionFailed: vi.fn(),
   resolveToolSpecs: vi.fn(),
-  getConnectorSpecByToolName: vi.fn(),
+  resolveConnectorApprovalSpec: vi.fn(),
   getAssistantRuntimeConfig: vi.fn(),
   executeApprovedPendingAction: vi.fn(),
   ensureAssistantPrincipal: vi.fn(),
@@ -115,7 +115,7 @@ vi.mock('@/lib/server/domains/assistant/assistant.tools', () => ({
 }))
 
 vi.mock('@/lib/server/domains/assistant/connectors/connector-tools', () => ({
-  getConnectorSpecByToolName: hoisted.getConnectorSpecByToolName,
+  resolveConnectorApprovalSpec: hoisted.resolveConnectorApprovalSpec,
 }))
 
 vi.mock('@/lib/server/domains/settings/settings.assistant', () => ({
@@ -194,7 +194,7 @@ beforeEach(() => {
   hoisted.resolveToolSpecs.mockReturnValue([CLOSE_SPEC])
   // Custom-action resolver defaults: no dynamic spec, flag on. Built-in tests
   // (toolName without an `action_` prefix) never touch either.
-  hoisted.getConnectorSpecByToolName.mockResolvedValue(null)
+  hoisted.resolveConnectorApprovalSpec.mockResolvedValue({ status: 'absent' })
   hoisted.getAssistantRuntimeConfig.mockResolvedValue({})
   hoisted.ensureAssistantPrincipal.mockResolvedValue({ id: 'principal_quinn' })
   hoisted.assertConversationViewable.mockResolvedValue(undefined)
@@ -368,13 +368,69 @@ describe('approveAssistantActionFn', () => {
         pendingRow({ toolName: 'connector_acme__issue_refund' })
       )
       hoisted.resolveToolSpecs.mockReturnValue([])
-      hoisted.getConnectorSpecByToolName.mockResolvedValue(null)
+      hoisted.resolveConnectorApprovalSpec.mockResolvedValue({ status: 'absent' })
 
       await expect(approve({ pendingActionId: 'assistant_action_1' })).rejects.toMatchObject({
         statusCode: 410,
       })
       expect(hoisted.decidePendingAction).not.toHaveBeenCalled()
       expect(hoisted.executeApprovedPendingAction).not.toHaveBeenCalled()
+    })
+
+    it('conflicts and never executes when the policy moved to never since the proposal', async () => {
+      hoisted.getPendingActionById.mockResolvedValue(
+        pendingRow({ toolName: 'connector_acme__issue_refund' })
+      )
+      hoisted.resolveToolSpecs.mockReturnValue([])
+      hoisted.resolveConnectorApprovalSpec.mockResolvedValue({
+        status: 'denied',
+        reason: 'override',
+      })
+
+      await expect(approve({ pendingActionId: 'assistant_action_1' })).rejects.toMatchObject({
+        code: 'ASSISTANT_ACTION_POLICY_CHANGED',
+      })
+      expect(hoisted.decidePendingAction).not.toHaveBeenCalled()
+      expect(hoisted.executeApprovedPendingAction).not.toHaveBeenCalled()
+    })
+
+    it('conflicts when the tool contract changed and has not been reviewed since', async () => {
+      hoisted.getPendingActionById.mockResolvedValue(
+        pendingRow({ toolName: 'connector_acme__issue_refund' })
+      )
+      hoisted.resolveToolSpecs.mockReturnValue([])
+      hoisted.resolveConnectorApprovalSpec.mockResolvedValue({
+        status: 'denied',
+        reason: 'tool_unreviewed',
+      })
+
+      await expect(approve({ pendingActionId: 'assistant_action_1' })).rejects.toMatchObject({
+        code: 'ASSISTANT_ACTION_POLICY_CHANGED',
+        message: expect.stringContaining('review'),
+      })
+      expect(hoisted.executeApprovedPendingAction).not.toHaveBeenCalled()
+    })
+
+    it('re-resolves the use the proposal was made under, not the approver own', async () => {
+      hoisted.getPendingActionById.mockResolvedValue(
+        pendingRow({
+          toolName: 'connector_acme__issue_refund',
+          originRole: 'customer_support',
+          originProfile: 'agent',
+          policyVersion: 3,
+        })
+      )
+      hoisted.resolveToolSpecs.mockReturnValue([])
+      hoisted.resolveConnectorApprovalSpec.mockResolvedValue({ status: 'absent' })
+
+      await expect(approve({ pendingActionId: 'assistant_action_1' })).rejects.toMatchObject({
+        statusCode: 410,
+      })
+      expect(hoisted.resolveConnectorApprovalSpec).toHaveBeenCalledWith({
+        toolName: 'connector_acme__issue_refund',
+        profile: 'agent',
+        proposedPolicyVersion: 3,
+      })
     })
   })
 

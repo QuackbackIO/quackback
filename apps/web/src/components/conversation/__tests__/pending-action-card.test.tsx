@@ -38,6 +38,7 @@ function pendingRow(overrides: Partial<AssistantPendingActionDTO> = {}): Assista
     toolName: 'close_conversation',
     args: {},
     summary: 'Close conversation: resolved',
+    originProfile: null,
     originRole: 'customer_support',
     status: 'proposed',
     proposedAt: '2026-07-01T00:00:00.000Z',

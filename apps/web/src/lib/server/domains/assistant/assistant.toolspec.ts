@@ -459,6 +459,18 @@ export interface AssistantToolSpec<In = unknown, Out = unknown> {
    * `always` maps to autonomous. Policy `never` is filtered before assembly.
    */
   approvalPolicy?: 'always' | 'approval'
+  /**
+   * Where the dial above came from, for a connector tool: which connection,
+   * which use it was resolved for, and the policy version in force at that
+   * moment. A proposal records these so approval re-resolves the ORIGINAL
+   * use's policy rather than the approver's own, and can tell whether that
+   * policy has moved since. Built-ins leave it undefined.
+   */
+  connectorPolicy?: {
+    connectorId: string
+    profile: 'agent' | 'copilot' | 'workspace'
+    policyVersion: number
+  }
   /** Source chip for approval cards. Built-ins omit this. */
   connector?: { name: string; initials: string }
   /** The TanStack tool definition: model-facing name, description, and zod schemas. */

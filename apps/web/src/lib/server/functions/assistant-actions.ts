@@ -36,7 +36,7 @@ import {
   type AssistantToolContext,
 } from '@/lib/server/domains/assistant/assistant.toolspec'
 import { resolveContentAudience } from '@/lib/server/domains/assistant/audience'
-import { getConnectorSpecByToolName } from '@/lib/server/domains/assistant/connectors/connector-tools'
+import { resolveConnectorApprovalSpec } from '@/lib/server/domains/assistant/connectors/connector-tools'
 import { getWorkspaceMcpSpecByName } from '@/lib/server/domains/assistant/mcp-workspace-tools'
 import { roleToAgent } from '@/lib/shared/assistant/config'
 import { executeApprovedPendingAction } from '@/lib/server/domains/assistant/assistant.tools'
@@ -62,6 +62,7 @@ export interface AssistantPendingActionDTO {
   args: JsonValue
   summary: string
   originRole: AssistantPendingAction['originRole']
+  originProfile: AssistantPendingAction['originProfile']
   status: string
   proposedAt: string
   expiresAt: string
@@ -81,6 +82,7 @@ function toDTO(row: AssistantPendingAction): AssistantPendingActionDTO {
     args: row.args as JsonValue,
     summary: row.summary,
     originRole: row.originRole,
+    originProfile: row.originProfile,
     status: row.status,
     proposedAt: row.proposedAt.toISOString(),
     expiresAt: row.expiresAt.toISOString(),
@@ -171,9 +173,27 @@ export const decideAssistantAction = createServerOnlyFn(async function decideAss
   // getActionSpecByToolName). A definition since disabled, unassigned,
   // renamed, or removed resolves to null and reads as "no longer available",
   // exactly like a gone built-in.
+  // A connector proposal is re-resolved under the use it was PROPOSED for,
+  // taken from the row rather than from the approver: approving a customer's
+  // request must not quietly re-authorize it as a teammate action. A tool the
+  // current policy now refuses, or whose contract changed and has not been
+  // reviewed since, is a conflict rather than a silent execution.
+  const connector = await resolveConnectorApprovalSpec({
+    toolName: pending.toolName,
+    profile: pending.originProfile ?? roleToAgent(pending.originRole),
+    proposedPolicyVersion: pending.policyVersion,
+  })
+  if (connector.status === 'denied') {
+    throw new ConflictError(
+      'ASSISTANT_ACTION_POLICY_CHANGED',
+      connector.reason === 'tool_unreviewed'
+        ? 'This action changed since it was requested and needs review before it can run'
+        : 'This action is no longer permitted for the use it was requested under'
+    )
+  }
   const spec =
     (await getToolSpecByName(pending.toolName)) ??
-    (await getConnectorSpecByToolName(pending.toolName, roleToAgent(pending.originRole))) ??
+    (connector.status === 'ok' ? connector.spec : null) ??
     (pending.originRole === 'workspace_assistant'
       ? await getWorkspaceMcpSpecByName(pending.toolName, actor, 'Quinn')
       : null)

@@ -10,6 +10,13 @@
 import { z } from 'zod'
 import { isPlainObject, type Schema } from './tool-input-schema'
 
+/** A union of one is just that one schema; zod's union needs at least two. */
+function unionOf(options: z.ZodTypeAny[]): z.ZodTypeAny {
+  if (options.length === 0) return z.unknown()
+  if (options.length === 1) return options[0]!
+  return z.union(options as unknown as readonly [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]])
+}
+
 /** One declared type, as the model-facing zod schema. */
 function scalarZod(schema: Schema, type: string): z.ZodTypeAny {
   switch (type) {
@@ -83,13 +90,7 @@ export function toolInputZodSchema(schema: Schema | undefined | null): z.ZodType
     if (values.every((value) => typeof value === 'string')) {
       return z.enum(values as [string, ...string[]])
     }
-    return z.union(
-      values.map((value) => z.literal(value as string | number | boolean | null)) as [
-        z.ZodTypeAny,
-        z.ZodTypeAny,
-        ...z.ZodTypeAny[],
-      ]
-    )
+    return unionOf(values.map((value) => z.literal(value as string | number | boolean | null)))
   }
   if ('const' in schema) {
     return z.literal(schema.const as string | number | boolean | null)
@@ -101,8 +102,7 @@ export function toolInputZodSchema(schema: Schema | undefined | null): z.ZodType
     const options = branches.map((branch) =>
       isPlainObject(branch) ? toolInputZodSchema(branch) : z.unknown()
     )
-    if (options.length === 1) return options[0]!
-    return z.union(options as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]])
+    return unionOf(options)
   }
 
   const declaredTypes = schema.type
@@ -114,6 +114,5 @@ export function toolInputZodSchema(schema: Schema | undefined | null): z.ZodType
     return isPlainObject(schema.properties) ? objectZod(schema) : z.unknown()
   }
   if (types.length === 1) return scalarZod(schema, types[0]!)
-  const options = types.map((type) => scalarZod(schema, type))
-  return z.union(options as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]])
+  return unionOf(types.map((type) => scalarZod(schema, type)))
 }

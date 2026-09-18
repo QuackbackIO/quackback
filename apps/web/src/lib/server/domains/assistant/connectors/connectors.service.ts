@@ -4,27 +4,36 @@ import {
   db as defaultDb,
   connectors,
   type CachedConnectorTool,
+  type ConnectorProfilePolicies,
   type ConnectorToolPolicies,
 } from '@/lib/server/db'
 import type { Executor } from '@/lib/server/domains/principals/principal.factory'
 import type { ConnectorId, PrincipalId } from '@quackback/ids'
 import { encrypt, decrypt } from '@/lib/server/encryption'
-import { ValidationError } from '@/lib/shared/errors'
+import { ConflictError, ValidationError } from '@/lib/shared/errors'
 import { validationError } from '@/lib/server/domains/assistant/validation-error'
 import { checkUrlSafety } from '@/lib/server/content/ssrf-guard'
 import { logger } from '@/lib/server/logger'
 import {
   connectorCreateInputSchema,
   connectorUpdateInputSchema,
-  resolveToolPolicy,
   slugifyConnectorName,
+  CONNECTOR_POLICY_PROFILES,
+  DEFAULT_CONNECTOR_PROFILE_POLICY,
   DEFAULT_CONNECTOR_TOOL_POLICIES,
   type ConnectorCreateInput,
-  type ConnectorDTO,
-  type ConnectorToolDTO,
+  type ConnectorProfilePolicy,
   type ConnectorUpdateInput,
 } from '@/lib/shared/assistant/connectors'
-import { applyCatalogDiff, groupForCachedTool, isNewTool } from './discovery'
+// Re-exported so every existing caller keeps one import for "read a connector
+// and shape it for the client".
+export { toConnectorDTO } from './connector-dto'
+import {
+  effectiveConnectorPolicyState,
+  ensureConnectorPolicyState,
+  seedProfilePolicies,
+} from './connector-policy-state'
+import { applyConnectorCatalogDiff } from './discovery'
 import { openConnectorSession } from './mcp-client'
 import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js'
 
@@ -119,51 +128,11 @@ async function assertSlugUnique(
   }
 }
 
-function toToolDTO(
-  tool: CachedConnectorTool,
-  policies: ConnectorToolPolicies,
-  lastSyncedAt: Date | null
-): ConnectorToolDTO {
-  const group = groupForCachedTool(tool)
-  const policy = resolveToolPolicy(policies, tool.name, group)
-  return {
-    name: tool.name,
-    title: tool.title,
-    description: tool.description,
-    group,
-    destructive: tool.annotations.destructiveHint === true,
-    policy,
-    isOverride: policies.tools[tool.name] !== undefined,
-    isNew: isNewTool(tool, lastSyncedAt),
-  }
-}
-
-export function toConnectorDTO(row: ConnectorRow): ConnectorDTO {
-  const policies = row.toolPolicies ?? DEFAULT_CONNECTOR_TOOL_POLICIES
-  return {
-    id: row.id,
-    name: row.name,
-    slug: row.slug,
-    url: row.url,
-    authMode: row.authMode,
-    hasSecret: Boolean(row.secrets),
-    status: row.status,
-    enabled: row.enabled,
-    assignments: row.assignments,
-    toolPolicies: policies,
-    tools: row.tools.map((tool) => toToolDTO(tool, policies, row.lastSyncedAt)),
-    toolCount: row.tools.length,
-    lastSyncedAt: row.lastSyncedAt?.toISOString() ?? null,
-    lastCallAt: row.lastCallAt?.toISOString() ?? null,
-    lastError: row.lastError,
-    lastErrorAt: row.lastErrorAt?.toISOString() ?? null,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
-  }
-}
-
 export async function listConnectors(execDb: Executor = defaultDb): Promise<ConnectorRow[]> {
-  return execDb.select().from(connectors).orderBy(connectors.createdAt)
+  const rows = await execDb.select().from(connectors).orderBy(connectors.createdAt)
+  const migrated: ConnectorRow[] = []
+  for (const row of rows) migrated.push(await ensureConnectorPolicyState(row, execDb))
+  return migrated
 }
 
 export async function getConnector(
@@ -171,13 +140,24 @@ export async function getConnector(
   execDb: Executor = defaultDb
 ): Promise<ConnectorRow | null> {
   const [row] = await execDb.select().from(connectors).where(eq(connectors.id, id)).limit(1)
-  return row ?? null
+  return row ? ensureConnectorPolicyState(row, execDb) : null
 }
 
-export async function discoverInto(
-  row: Pick<ConnectorRow, 'id' | 'url' | 'authMode' | 'secrets' | 'tools' | 'toolPolicies'>,
-  execDb: Executor
-) {
+export type DiscoverIntoRow = Pick<
+  ConnectorRow,
+  | 'id'
+  | 'url'
+  | 'authMode'
+  | 'secrets'
+  | 'tools'
+  | 'toolPolicies'
+  | 'profilePolicies'
+  | 'toolReviews'
+  | 'catalogRevision'
+  | 'assignments'
+>
+
+export async function discoverInto(row: DiscoverIntoRow, execDb: Executor) {
   const { getValidConnectorAccessToken, createConnectorOAuthProvider } =
     await import('./oauth-provider')
   const token = await getValidConnectorAccessToken(row as ConnectorRow, execDb)
@@ -194,7 +174,17 @@ export async function discoverInto(
   })
   try {
     const discovered = await session.listTools()
-    return applyCatalogDiff(row.tools, discovered, row.toolPolicies)
+    return applyConnectorCatalogDiff(
+      {
+        tools: row.tools,
+        toolPolicies: row.toolPolicies,
+        profilePolicies: row.profilePolicies,
+        toolReviews: row.toolReviews,
+        catalogRevision: row.catalogRevision,
+        assignments: row.assignments,
+      },
+      discovered
+    )
   } finally {
     await session.close()
   }
@@ -220,6 +210,8 @@ async function insertPendingOAuthRow(
       status: 'error',
       tools: [],
       toolPolicies: { ...DEFAULT_CONNECTOR_TOOL_POLICIES },
+      profilePolicies: seedProfilePolicies(input.assignments),
+      toolReviews: {},
       assignments: input.assignments,
       lastError: 'Authorization required',
       lastErrorAt: new Date(),
@@ -274,6 +266,13 @@ export async function createConnector(
         secrets,
         tools: [],
         toolPolicies,
+        // A brand-new connector has no reviewed contracts, so everything it
+        // publishes starts unavailable until somebody reviews it: the
+        // specification's connect, discover, review, enable order.
+        profilePolicies: seedProfilePolicies(parsed.data.assignments),
+        toolReviews: {},
+        catalogRevision: 1,
+        assignments: parsed.data.assignments,
       },
       execDb
     )
@@ -311,6 +310,8 @@ export async function createConnector(
       status,
       tools,
       toolPolicies,
+      profilePolicies: seedProfilePolicies(parsed.data.assignments),
+      toolReviews: {},
       assignments: parsed.data.assignments,
       lastSyncedAt: new Date(),
       lastError,
@@ -342,6 +343,46 @@ export async function updateConnector(
   if (parsed.data.bearerToken) currentSecrets.bearerToken = parsed.data.bearerToken
   const nextSecrets = Object.keys(currentSecrets).length > 0 ? encryptSecrets(currentSecrets) : null
 
+  const nextAssignments = parsed.data.assignments ?? existing.assignments
+  const state = effectiveConnectorPolicyState(existing)
+  const liveTools = new Set(existing.tools.map((tool) => tool.name))
+  let policyEdited = false
+  const nextPolicies: ConnectorProfilePolicies = { ...state.profilePolicies }
+  if (parsed.data.profilePolicies) {
+    if (parsed.data.expectedPolicyVersion === undefined) {
+      throw new ValidationError(
+        'CONNECTOR_POLICY_VERSION_REQUIRED',
+        'Reload the connection before changing its permissions.'
+      )
+    }
+    policyEdited = true
+    // A patch, not a replacement: a client that sends one use's column must
+    // not reset the other use's policy to defaults by omission. Removing a
+    // use's access is what the assignment switch is for.
+    for (const profile of CONNECTOR_POLICY_PROFILES) {
+      const submitted = parsed.data.profilePolicies[profile]
+      if (!submitted) continue
+      // An override for a tool this catalog does not publish is dropped
+      // rather than stored: it could only re-apply to some future tool that
+      // happened to reuse the name.
+      const tools: ConnectorProfilePolicy['tools'] = {}
+      for (const [name, policy] of Object.entries(submitted.tools)) {
+        if (liveTools.has(name)) tools[name] = policy
+      }
+      nextPolicies[profile] = { groupDefaults: submitted.groupDefaults, tools, origin: 'explicit' }
+    }
+  }
+  // Assigning a use is an explicit act, so it writes that use's policy record
+  // at the recommended defaults. Un-assigning leaves the record alone: the
+  // assignment gate already denies, and keeping it means re-assigning restores
+  // the decisions somebody made rather than silently reopening everything.
+  for (const profile of CONNECTOR_POLICY_PROFILES) {
+    if (nextAssignments[profile] === true && !nextPolicies[profile]) {
+      nextPolicies[profile] = { ...DEFAULT_CONNECTOR_PROFILE_POLICY, tools: {}, origin: 'explicit' }
+      policyEdited = true
+    }
+  }
+
   const [row] = await execDb
     .update(connectors)
     .set({
@@ -350,13 +391,29 @@ export async function updateConnector(
       url: nextUrl,
       authMode: parsed.data.authMode ?? existing.authMode,
       secrets: nextSecrets,
-      assignments: parsed.data.assignments ?? existing.assignments,
-      toolPolicies: parsed.data.toolPolicies ?? existing.toolPolicies,
+      assignments: nextAssignments,
+      profilePolicies: nextPolicies,
+      toolReviews: state.toolReviews,
+      policyVersion: policyEdited ? existing.policyVersion + 1 : existing.policyVersion,
       enabled: parsed.data.enabled ?? existing.enabled,
       updatedAt: new Date(),
     })
-    .where(eq(connectors.id, id))
+    .where(
+      parsed.data.expectedPolicyVersion === undefined
+        ? eq(connectors.id, id)
+        : and(
+            eq(connectors.id, id),
+            eq(connectors.policyVersion, parsed.data.expectedPolicyVersion)
+          )
+    )
     .returning()
+
+  if (!row && parsed.data.expectedPolicyVersion !== undefined) {
+    throw new ConflictError(
+      'CONNECTOR_POLICY_CONFLICT',
+      'These permissions changed while you were editing them. Reload to see the current settings.'
+    )
+  }
 
   return row ?? null
 }

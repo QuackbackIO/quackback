@@ -23,6 +23,7 @@ import { quinnActor } from './assistant.actor'
 import { addTicketNote } from '@/lib/server/domains/tickets/ticket-message.service'
 import { logger } from '@/lib/server/logger'
 import type { AssistantRole } from '@/lib/shared/assistant/config'
+import type { ConnectorPolicyProfile } from '@/lib/shared/assistant/connectors'
 
 const log = logger.child({ component: 'assistant-pending-actions' })
 
@@ -47,6 +48,13 @@ export type ProposePendingActionInput = ProposePendingActionParent & {
   args: Record<string, unknown>
   summary: string
   originRole?: AssistantRole
+  /**
+   * For a connector tool: the policy use the proposal was authorized under and
+   * the connector's policy version at that moment. Both stay NULL for built-in
+   * tools, whose authority is the role policy and the approver's permissions.
+   */
+  originProfile?: ConnectorPolicyProfile
+  policyVersion?: number
   ttlHours?: number
   /**
    * A stable per-turn key, same shape as `assistant_tool_calls.idempotency_key`
@@ -89,6 +97,8 @@ export async function proposePendingAction(
       args: input.args,
       summary: input.summary,
       originRole: input.originRole ?? 'customer_support',
+      originProfile: input.originProfile ?? null,
+      policyVersion: input.policyVersion ?? null,
       expiresAt,
       idempotencyKey: input.idempotencyKey ?? null,
     })
