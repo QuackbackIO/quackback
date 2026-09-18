@@ -391,6 +391,7 @@ export const runSendConversationMessage = createServerOnlyFn(
         blockReply: data.blockReply,
         visitorEmail: data.visitorEmail,
         visitorName: data.visitorName,
+        clientMutationId: data.clientMutationId,
       },
       {
         principalId: ctx.principal.id,

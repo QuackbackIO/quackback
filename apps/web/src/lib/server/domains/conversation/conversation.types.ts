@@ -35,6 +35,16 @@ export interface SendVisitorMessageInput {
    *  error when invalid, stale, or a second reply to an already-answered
    *  block. */
   blockReply?: BlockReplyInput
+  /**
+   * Optional client-supplied idempotency handle for the HTTP retry boundary.
+   *
+   * Deduped with the authenticated principal, including the create-conversation
+   * case, so a retry after a lost response returns the original identities
+   * rather than creating a second conversation. Omitting it preserves the older
+   * client behaviour exactly; supplying it promises nothing about the
+   * transport, only that this server accepted the request once.
+   */
+  clientMutationId?: string
 }
 
 export interface SendVisitorMessageResult {

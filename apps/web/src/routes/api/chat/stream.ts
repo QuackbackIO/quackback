@@ -392,7 +392,26 @@ export const Route = createFileRoute('/api/chat/stream')({
               }
             }
 
-            const snapshot = activitySnapshot ? await activitySnapshot : null
+            // The ephemeral trace only exists while some process is publishing
+            // it, so a customer who reconnects after the worker died (or before
+            // it claimed the job at all) would see nothing while a durable turn
+            // is genuinely in flight. Fall back to the run row, which survives
+            // both — see assistant-run.repository's getOpenRunState. It carries
+            // lifecycle only: no trace text, no evidence, no model detail.
+            let snapshot = activitySnapshot ? await activitySnapshot : null
+            if (!snapshot && backfillConversationId) {
+              const { getOpenRunState } =
+                await import('@/lib/server/domains/assistant/assistant-run.repository')
+              const run = await getOpenRunState(backfillConversationId).catch(() => null)
+              if (run) {
+                snapshot = {
+                  kind: 'assistant_activity',
+                  conversationId: backfillConversationId,
+                  status: 'thinking',
+                  at: (run.startedAt ?? new Date()).toISOString(),
+                }
+              }
+            }
             if (snapshot) {
               const json = JSON.stringify(snapshot)
               const { frame } = formatFrame(json, parseConversationFrame(json))

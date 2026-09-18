@@ -45,6 +45,12 @@ export const sendMessageSchema = z.object({
   blockReply: blockReplySchema.optional(),
   visitorEmail: z.string().max(320).optional(),
   visitorName: z.string().max(80).optional(),
+  /**
+   * Optional idempotency handle for a retried send (HTTP retry boundary).
+   * Deduped with the authenticated principal; a client that omits it behaves
+   * exactly as before. Reusing one with different content is rejected.
+   */
+  clientMutationId: z.string().min(1).max(64).optional(),
 })
 export type SendConversationMessageInput = z.infer<typeof sendMessageSchema>
 

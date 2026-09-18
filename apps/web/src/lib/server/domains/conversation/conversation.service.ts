@@ -138,6 +138,11 @@ import {
   recordVisitorContact,
   subscribeCapturedContact,
 } from './conversation.contact'
+import {
+  claimRequestReceipt,
+  completeRequestReceipt,
+  requestDigest,
+} from './conversation.request-receipt'
 
 const log = logger.child({ component: 'conversation' })
 
@@ -311,6 +316,48 @@ export async function resolveVisitorBlockReply(
   return resolveBlockReply(belongsHere ? blockMessage : null, !!alreadyAnswered, input)
 }
 
+/**
+ * Rebuild the response a replayed send already produced.
+ *
+ * The receipt stores identities, not payloads, so the rows are read back and
+ * mapped through the same DTO builders the original response used. A receipt
+ * whose rows are gone (a permanently deleted conversation) is reported as a
+ * validation error rather than answered with a fabricated success.
+ */
+async function replayVisitorSendResult(
+  replay: { conversationId: ConversationId | null; messageId: ConversationMessageId | null },
+  author: ConversationAuthorInput
+): Promise<SendVisitorMessageResult> {
+  if (!replay.conversationId || !replay.messageId) {
+    throw new ValidationError(
+      'CLIENT_MUTATION_ID_REUSED',
+      'This request id was already used and its result is unavailable.'
+    )
+  }
+  const [conversation] = await db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.id, replay.conversationId))
+    .limit(1)
+  const [message] = await db
+    .select()
+    .from(conversationMessages)
+    .where(eq(conversationMessages.id, replay.messageId))
+    .limit(1)
+  if (!conversation || !message) {
+    throw new ValidationError(
+      'CLIENT_MUTATION_ID_REUSED',
+      'This request id was already used and its result is unavailable.'
+    )
+  }
+  return {
+    conversation: await conversationToDTO(conversation, 'visitor'),
+    message: toMessageDTO(message, authorFromInput(author)),
+    // The original send is what created the conversation, not this replay.
+    created: false,
+  }
+}
+
 /** Visitor send. Starts a conversation when no conversationId is supplied. */
 export async function sendVisitorMessage(
   input: SendVisitorMessageInput,
@@ -373,7 +420,29 @@ export async function sendVisitorMessage(
   // The conversation's status BEFORE this message, so the assistant trigger can
   // tell a genuinely reopened thread from one a human deliberately closed.
   let priorStatus: ConversationStatus | null = null
+  // HTTP retry boundary: when the client supplies a mutation id, the key is
+  // claimed in the same transaction as the message, so a retry whose response
+  // was lost returns the original identities instead of creating a second
+  // message (or, on the first send, a second conversation).
+  const digest = input.clientMutationId
+    ? requestDigest({
+        conversationId: input.conversationId ?? null,
+        content: input.content,
+        visitorEmail: input.visitorEmail ?? null,
+        visitorName: input.visitorName ?? null,
+        attachmentCount: attachments.length,
+        blockReplyMessageId: input.blockReply?.inReplyToMessageId ?? null,
+      })
+    : null
   const txResult = await db.transaction(async (tx) => {
+    if (input.clientMutationId && digest) {
+      const claim = await claimRequestReceipt(tx, {
+        principalId: author.principalId,
+        clientMutationId: input.clientMutationId,
+        digest,
+      })
+      if (claim.kind === 'replay') return { replay: claim }
+    }
     let conversation: Conversation
     if (input.conversationId) {
       const [existing] = await tx
@@ -541,7 +610,17 @@ export async function sendVisitorMessage(
       }
     }
 
+    if (input.clientMutationId) {
+      await completeRequestReceipt(tx, {
+        principalId: author.principalId,
+        clientMutationId: input.clientMutationId,
+        conversationId: conversation.id,
+        messageId: message.id,
+      })
+    }
+
     return {
+      replay: null,
       conversation: {
         ...updated,
         visitorEmail: contact.email ?? updated.visitorEmail,
@@ -550,6 +629,13 @@ export async function sendVisitorMessage(
       durableRunId,
     }
   })
+
+  // A replay: the original send already produced these identities, and nothing
+  // was written this time. Return the same response rather than a second
+  // message, and run none of the after-commit effects again.
+  if (txResult.replay) {
+    return replayVisitorSendResult(txResult.replay, author)
+  }
 
   if (txResult.conversation.visitorEmail) void subscribeCapturedContact(author.principalId)
   const messageDTO = toMessageDTO(txResult.message, authorFromInput(author))
