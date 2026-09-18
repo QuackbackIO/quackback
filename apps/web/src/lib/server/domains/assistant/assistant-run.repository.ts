@@ -35,6 +35,7 @@ import {
   and,
   desc,
   eq,
+  ne,
   sql,
   conversations,
   assistantRuns,
@@ -136,7 +137,7 @@ export async function supersedeOpenRuns(
       and(
         eq(assistantRuns.conversationId, conversationId),
         sql`${assistantRuns.status} IN ('queued', 'running', 'waiting_action')`,
-        opts.exceptRunId ? sql`${assistantRuns.id} <> ${opts.exceptRunId}` : undefined
+        opts.exceptRunId ? ne(assistantRuns.id, opts.exceptRunId) : undefined
       )
     )
     .returning({ id: assistantRuns.id })

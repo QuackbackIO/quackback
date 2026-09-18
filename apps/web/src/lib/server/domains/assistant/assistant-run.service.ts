@@ -25,7 +25,7 @@
  * and the customer is escalated, never that a half-dispatched turn runs twice.
  * Write-capable retries wait for replay-safe tool receipts (P3).
  */
-import { db, sql, conversations, eq } from '@/lib/server/db'
+import { db, sql, and, conversations, eq, ticketConversations } from '@/lib/server/db'
 import type { Executor } from '@/lib/server/domains/principals/principal.factory'
 import type { Conversation, ConversationMessage, Transaction } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
@@ -234,6 +234,16 @@ export async function commitAssistantOutcome(
   if (run.resultMessageId) {
     return { kind: 'already_published', messageId: run.resultMessageId }
   }
+  // The invalidation counter is compared FIRST, before the run's own status.
+  // Both reject, but this one names the reason an operator needs: the input
+  // moved on. Checking status first would report "this run is not running" for
+  // every superseded turn, which is the consequence, not the cause.
+  if (
+    conversation.assistantRevision !== input.expectedInputRevision ||
+    run.inputRevision !== input.expectedInputRevision
+  ) {
+    return { kind: 'rejected', reason: 'fence:input_revision' }
+  }
   if (run.status !== 'running') return { kind: 'rejected', reason: 'fence:run_status' }
   if (run.jobLeaseToken !== input.jobLeaseToken) {
     return { kind: 'rejected', reason: 'fence:lease_token' }
@@ -241,13 +251,26 @@ export async function commitAssistantOutcome(
   if (run.stateVersion !== input.expectedStateVersion) {
     return { kind: 'rejected', reason: 'fence:state_version' }
   }
-  // The single comparison that covers a newer customer message, a human reply,
-  // a takeover, a close, a snooze, a spam filing and an explicit handback.
-  if (
-    conversation.assistantRevision !== input.expectedInputRevision ||
-    run.inputRevision !== input.expectedInputRevision
-  ) {
-    return { kind: 'rejected', reason: 'fence:input_revision' }
+  // Third and last lock in the documented order: the queue row itself.
+  //
+  // The run's copy of the token is not sufficient on its own. The turn job runs
+  // at most once, so a reaped lease makes the job terminally failed rather than
+  // handing it to a new owner, and nothing would then overwrite the run's token
+  // for the zombie worker to notice. Taking the queue row here, inside the same
+  // transaction, is what makes "your lease is gone" a fact the publication can
+  // see; reading it before the transaction would only prove it was true then.
+  if (run.jobId) {
+    const leased = getExecuteRows<{ lease_token: string | null; expired: boolean }>(
+      await tx.execute(sql`
+        SELECT lease_token::text AS lease_token, (locked_until <= now()) AS expired
+        FROM job_queue
+        WHERE job_id = ${run.jobId} AND status = 'running'
+        FOR UPDATE
+      `)
+    )[0]
+    if (!leased || leased.lease_token !== input.jobLeaseToken || leased.expired) {
+      return { kind: 'rejected', reason: 'fence:lease_token' }
+    }
   }
   // Belt and braces for the states an operator would name directly, so a
   // missed revision bump anywhere still cannot produce a reply into a closed or
@@ -262,13 +285,16 @@ export async function commitAssistantOutcome(
   // Pair ownership: a conversation backing a customer ticket is the ticket's,
   // and Quinn must not front it. Re-read here rather than trusting the probe
   // that ran at intake, because the pair can be created mid-generation.
-  const paired = getExecuteRows(
-    await tx.execute(sql`
-      SELECT 1 FROM ticket_conversations
-      WHERE conversation_id = ${input.conversationId} AND ticket_type = 'customer'
-      LIMIT 1
-    `)
-  )
+  const paired = await tx
+    .select({ ticketId: ticketConversations.ticketId })
+    .from(ticketConversations)
+    .where(
+      and(
+        eq(ticketConversations.conversationId, input.conversationId),
+        eq(ticketConversations.ticketType, 'customer')
+      )
+    )
+    .limit(1)
   if (paired.length > 0) return { kind: 'rejected', reason: 'fence:paired_ticket' }
 
   const { getLatestInvolvement, openInvolvement, recordAssistantAnswer, recordHandoff } =
