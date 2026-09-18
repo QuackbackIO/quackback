@@ -9,6 +9,7 @@ export interface HelpCenterFilters {
   category?: string
   search?: string
   sort: 'newest' | 'oldest'
+  excludedFromQuinn?: boolean
   showDeleted?: boolean
   showPerformance?: boolean
 }
@@ -19,6 +20,7 @@ export function useHelpCenterFilters() {
 
   const filters: HelpCenterFilters = useMemo(
     () => ({
+      excludedFromQuinn: search.excludedFromQuinn,
       status: search.status ?? 'all',
       category: search.category,
       search: search.search,
@@ -26,7 +28,15 @@ export function useHelpCenterFilters() {
       showDeleted: search.deleted,
       showPerformance: search.performance,
     }),
-    [search.status, search.category, search.search, search.sort, search.deleted, search.performance]
+    [
+      search.excludedFromQuinn,
+      search.status,
+      search.category,
+      search.search,
+      search.sort,
+      search.deleted,
+      search.performance,
+    ]
   )
 
   const setFilters = useCallback(
@@ -35,6 +45,9 @@ export function useHelpCenterFilters() {
         to: '/admin/help-center',
         search: {
           ...search,
+          ...('excludedFromQuinn' in updates && {
+            excludedFromQuinn: updates.excludedFromQuinn || undefined,
+          }),
           ...('status' in updates && {
             status: updates.status === 'all' ? undefined : updates.status,
           }),
@@ -74,6 +87,7 @@ export function useHelpCenterFilters() {
 
   const hasActiveFilters = useMemo(() => {
     return (
+      !!filters.excludedFromQuinn ||
       filters.status !== 'all' ||
       !!filters.search ||
       !!filters.showDeleted ||
@@ -81,6 +95,7 @@ export function useHelpCenterFilters() {
       !!filters.category
     )
   }, [
+    filters.excludedFromQuinn,
     filters.status,
     filters.search,
     filters.showDeleted,

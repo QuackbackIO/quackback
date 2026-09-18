@@ -154,13 +154,25 @@ export function HelpCenterList() {
             selectedCategoryId={filters.category}
             onSelectCategory={(id) => setFilters({ category: id ?? undefined })}
             categoryActions={categoryActions}
+            excludedFromQuinn={filters.excludedFromQuinn}
+            onExcludedFromQuinnChange={(excludedFromQuinn) =>
+              setFilters({ excludedFromQuinn, showPerformance: undefined, showDeleted: undefined })
+            }
             showDeleted={filters.showDeleted}
             onShowDeletedChange={(showDeleted) =>
-              setFilters({ showDeleted: showDeleted ?? undefined })
+              setFilters({
+                showDeleted: showDeleted ?? undefined,
+                showPerformance: undefined,
+                excludedFromQuinn: undefined,
+              })
             }
             showPerformance={filters.showPerformance}
             onShowPerformanceChange={(showPerformance) =>
-              setFilters({ showPerformance: showPerformance ?? undefined })
+              setFilters({
+                showPerformance: showPerformance ?? undefined,
+                showDeleted: undefined,
+                excludedFromQuinn: undefined,
+              })
             }
           />
         }

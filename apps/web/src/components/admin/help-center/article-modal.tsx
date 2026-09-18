@@ -72,6 +72,8 @@ function ArticleModalContent({ articleId, onClose }: ArticleModalContentProps) {
       content: '',
       categoryId: '',
       segmentIds: [] as string[],
+      assistantCustomerUse: true,
+      assistantTeamUse: true,
     },
   })
 
@@ -89,6 +91,8 @@ function ArticleModalContent({ articleId, onClose }: ArticleModalContentProps) {
         content: article.content,
         categoryId: article.categoryId,
         segmentIds: article.segmentIds ?? [],
+        assistantCustomerUse: article.assistantCustomerUse,
+        assistantTeamUse: article.assistantTeamUse,
       })
       setContentJson(getInitialContentJson(article))
     }
@@ -134,6 +138,8 @@ function ArticleModalContent({ articleId, onClose }: ArticleModalContentProps) {
         contentJson: contentJson as TiptapContent | null,
         categoryId: data.categoryId,
         segmentIds: data.segmentIds ?? [],
+        assistantCustomerUse: data.assistantCustomerUse,
+        assistantTeamUse: data.assistantTeamUse,
       },
       {
         onSuccess: () => {
@@ -161,6 +167,12 @@ function ArticleModalContent({ articleId, onClose }: ArticleModalContentProps) {
   const sidebar = {
     categoryId,
     onCategoryChange: handleCategoryChange,
+    assistantCustomerUse: form.watch('assistantCustomerUse'),
+    assistantTeamUse: form.watch('assistantTeamUse'),
+    onAssistantUseChange: (use: 'customer' | 'team', enabled: boolean) =>
+      form.setValue(use === 'customer' ? 'assistantCustomerUse' : 'assistantTeamUse', enabled, {
+        shouldDirty: true,
+      }),
     isPublished,
     onPublishToggle: handlePublishToggle,
     authorName: article.author?.name,

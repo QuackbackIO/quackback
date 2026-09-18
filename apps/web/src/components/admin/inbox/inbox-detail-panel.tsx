@@ -891,7 +891,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
           <TabsTrigger value="details">Details</TabsTrigger>
           <TabsTrigger value="copilot">
             <SparklesIcon className="h-3.5 w-3.5" />
-            Copilot
+            Ask Quinn
           </TabsTrigger>
         </TabsList>
         {/* Both tabs stay mounted (keepMounted + CSS-hide instead of the

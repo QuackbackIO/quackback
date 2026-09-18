@@ -1,3 +1,4 @@
+import { sourceUseFilter } from './source-use'
 /**
  * Feedback-posts grounding source for Quinn.
  *
@@ -92,6 +93,7 @@ function postUrl(boardSlug: string, postId: string): string {
  */
 export function postsVisibilityConditions(ceiling: ContentAudience) {
   const base = [
+    sourceUseFilter(posts, ceiling),
     isNull(posts.deletedAt),
     isNull(posts.canonicalPostId),
     eq(posts.moderationState, 'published'),
@@ -108,7 +110,8 @@ const trimmedContent = () => sql<string>`left(${posts.content}, ${POSTS_ASK_CONT
 
 /** The same anonymous-viewable check the 'public' branch of
  *  {@link postsVisibilityConditions} filters on, computed per row. */
-const isPublicBoard = () => sql<boolean>`(${boards.access}->>'view' = 'anonymous')`
+const isPublicBoard = () =>
+  sql<boolean>`(${boards.access}->>'view' = 'anonymous' AND ${posts.assistantCustomerUse})`
 
 interface PostRetrievalRow {
   id: string
@@ -265,28 +268,26 @@ export const postsKnowledgeSource: KnowledgeSource = {
   sourceType: 'post',
   async retrieve(query, ceiling) {
     const rows = await retrievePosts(query, ceiling)
-    return rows.map(
-      (p): RetrievedItem => ({
+    return rows.map((p): RetrievedItem => ({
+      id: p.id,
+      sourceType: 'post' as const,
+      title: p.title,
+      // The status line leads the excerpt: a post's status is its roadmap
+      // state (roadmap columns derive from statuses), so "is X planned?"
+      // is answerable straight from the snippet.
+      excerpt: `${p.statusName ? `Status: ${p.statusName}\n` : ''}${p.content.slice(0, KNOWLEDGE_SNIPPET_CHARS)}`,
+      score: p.score,
+      updatedAt: p.updatedAt.toISOString(),
+      citation: {
+        type: 'post' as const,
         id: p.id,
-        sourceType: 'post' as const,
         title: p.title,
-        // The status line leads the excerpt: a post's status is its roadmap
-        // state (roadmap columns derive from statuses), so "is X planned?"
-        // is answerable straight from the snippet.
-        excerpt: `${p.statusName ? `Status: ${p.statusName}\n` : ''}${p.content.slice(0, KNOWLEDGE_SNIPPET_CHARS)}`,
-        score: p.score,
-        updatedAt: p.updatedAt.toISOString(),
-        citation: {
-          type: 'post' as const,
-          id: p.id,
-          title: p.title,
-          url: postUrl(p.boardSlug, p.id),
-          // Public at the 'public' ceiling is guaranteed by
-          // postsVisibilityConditions; on 'team'/'internal' this flags a post
-          // on a non-anonymous-viewable board for the copilot leak gate.
-          ...(p.isPublic ? {} : { internal: true }),
-        },
-      })
-    )
+        url: postUrl(p.boardSlug, p.id),
+        // Public at the 'public' ceiling is guaranteed by
+        // postsVisibilityConditions; on 'team'/'internal' this flags a post
+        // on a non-anonymous-viewable board for the copilot leak gate.
+        ...(p.isPublic ? {} : { internal: true }),
+      },
+    }))
   },
 }

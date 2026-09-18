@@ -1043,6 +1043,7 @@ export async function listConversationMessagesForGrounding(
       and(
         eq(conversationMessages.conversationId, conversationId),
         isNull(conversationMessages.deletedAt),
+        eq(conversationMessages.assistantTeamUse, true),
         opts?.includeInternal ? undefined : eq(conversationMessages.isInternal, false)
       )
     )

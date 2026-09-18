@@ -100,6 +100,8 @@ const mockAuthContext: ApiAuthContext = {
 }
 
 const mockArticle: HelpCenterArticleWithCategory = {
+  assistantCustomerUse: true,
+  assistantTeamUse: true,
   id: 'article_1' as KbArticleId,
   categoryId: 'kb_category_1' as KbCategoryId,
   slug: 'how-to-start',

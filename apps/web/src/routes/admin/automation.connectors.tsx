@@ -61,8 +61,8 @@ function ConnectorsPage() {
           <div>
             <h1 className="text-lg font-semibold">
               {intl.formatMessage({
-                id: 'automation.connectors.title',
-                defaultMessage: 'Connectors',
+                id: 'automation.connections.title',
+                defaultMessage: 'Connections',
               })}
             </h1>
             <p className="mt-0.5 text-xs text-muted-foreground">

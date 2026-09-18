@@ -1,3 +1,4 @@
+import { QuinnKnowledgeSources } from './quinn-knowledge-sources'
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useIntl } from 'react-intl'
@@ -68,6 +69,13 @@ const SOURCE_META = {
     label: 'Changelog',
     descriptionId: 'automation.knowledge.source.changelog.description',
     description: 'Published changelog entries.',
+    readiness: 'ready',
+  },
+  webPages: {
+    labelId: 'automation.knowledge.source.webPages.label',
+    label: 'Web pages',
+    descriptionId: 'automation.knowledge.source.webPages.description',
+    description: 'Public pages added by your team.',
     readiness: 'ready',
   },
   documents: {
@@ -330,5 +338,78 @@ export function CopilotKnowledgeCard() {
 
   return (
     <KnowledgeCard rows={rows} busy={update.isPending} onToggle={(s, n) => void toggle(s, n)} />
+  )
+}
+
+/** Side-by-side controls use the existing revision-aware per-profile mutations. */
+export function QuinnKnowledgeCard() {
+  const query = useQuery(assistantQueries.settings())
+  const updateCustomer = useUpdateAssistantAgentKnowledge()
+  const updateTeam = useUpdateAssistantCopilotKnowledge()
+  const busy = updateCustomer.isPending || updateTeam.isPending
+  if (query.isError) return <KnowledgeError onRetry={() => void query.refetch()} />
+  if (!query.data) return <KnowledgeLoading />
+  const { config, revision, managedFieldPaths } = query.data
+  async function toggle(source: string, use: 'agent' | 'copilot', next: boolean) {
+    try {
+      if (use === 'agent')
+        await updateCustomer.mutateAsync({
+          expectedRevision: revision,
+          knowledge: { ...config.agents.agent.knowledge, [source]: next },
+        })
+      else
+        await updateTeam.mutateAsync({
+          expectedRevision: revision,
+          knowledge: { ...config.agents.copilot.knowledge, [source]: next },
+        })
+    } catch {
+      toast.error('Knowledge sources could not be updated. Refresh and try again.')
+    }
+  }
+  return (
+    <div className="rounded-xl border border-border/50 bg-card divide-y">
+      <div className="hidden sm:grid grid-cols-[1fr_10rem_10rem] gap-3 p-4 text-xs font-medium text-muted-foreground">
+        <span>Source</span>
+        <span>Customer conversations</span>
+        <span>Support teammates</span>
+      </div>
+      {ASSISTANT_COPILOT_KNOWLEDGE_SOURCES.map((source) => (
+        <div key={source} className="grid gap-3 p-4 sm:grid-cols-[1fr_10rem_10rem] sm:items-center">
+          <div>
+            <h2 className="text-sm font-medium">{SOURCE_META[source].label}</h2>
+            <p className="mt-1 text-xs text-muted-foreground">{SOURCE_META[source].description}</p>
+          </div>
+          {(['agent', 'copilot'] as const).map((use) => {
+            const supported = source in config.agents[use].knowledge
+            const managed = isAssistantFieldManaged(
+              managedFieldPaths,
+              `agents.${use}.knowledge.${source}`
+            )
+            const enabled =
+              supported &&
+              Boolean((config.agents[use].knowledge as Record<string, boolean>)[source])
+            const label = use === 'agent' ? 'Customer conversations' : 'Support teammates'
+            return (
+              <div key={use} className="flex items-center gap-2 sm:block space-y-1">
+                <span className="sm:hidden text-xs flex-1">{label}</span>
+                <Switch
+                  checked={enabled}
+                  disabled={!supported || managed || busy}
+                  aria-label={`${SOURCE_META[source].label}: ${label}`}
+                  onCheckedChange={(next) => void toggle(source, use, next)}
+                />
+                {!supported && <p className="text-xs text-muted-foreground">Never for customers</p>}
+                {managed && <ManagedSettingHint />}
+              </div>
+            )
+          })}
+          {(source === 'documents' || source === 'webPages') && (
+            <div className="sm:col-span-3">
+              <QuinnKnowledgeSources kind={source === 'documents' ? 'document' : 'webpage'} />
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
   )
 }

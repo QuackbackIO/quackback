@@ -8,6 +8,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import { DEFAULT_CONVERSATION_INACTIVITY } from '@/lib/shared/conversation-inactivity'
+vi.mock('@/lib/client/hooks/use-permission', () => ({ usePermission: () => true }))
 const mock = vi.hoisted(() => ({ get: vi.fn(), save: vi.fn() }))
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
@@ -55,10 +56,10 @@ describe('conversation behavior drafts', () => {
   })
   it('edits locally and saves only the edited section with its revision', async () => {
     show()
-    const input = await screen.findByLabelText('Close after')
+    const input = (await screen.findAllByLabelText('Close after'))[0]
     fireEvent.change(input, { target: { value: '45' } })
     expect(mock.save).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Save changes' }).at(-1)!)
     await waitFor(() => expect(mock.save).toHaveBeenCalled())
     expect(mock.save.mock.calls[0][0]).toMatchObject({
       section: 'messenger',
@@ -70,24 +71,24 @@ describe('conversation behavior drafts', () => {
   it('keeps a failed draft and allows Cancel to restore saved values', async () => {
     mock.save.mockRejectedValue(new Error('Settings changed; reload before saving.'))
     show()
-    const input = await screen.findByLabelText('Close after')
+    const input = (await screen.findAllByLabelText('Close after'))[0]
     fireEvent.change(input, { target: { value: '45' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Save changes' }).at(-1)!)
     expect(await screen.findByRole('alert')).toHaveTextContent('Settings changed')
     expect(input).toHaveValue(45)
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Cancel' }).at(-1)!)
     expect(input).toHaveValue(30)
   })
   it('validates order inline while still allowing follow-up with auto-close off', async () => {
     show()
-    const close = await screen.findByLabelText('Close after')
+    const close = (await screen.findAllByLabelText('Close after'))[0]
     fireEvent.change(close, { target: { value: '10' } })
     expect(screen.getByRole('alert')).toHaveTextContent('earlier')
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
-    fireEvent.click(screen.getByRole('switch', { name: 'Auto-close' }))
+    expect(screen.getAllByRole('button', { name: 'Save changes' }).at(-1)!).toBeDisabled()
+    fireEvent.click(screen.getAllByRole('switch', { name: 'Auto-close' })[0])
     expect(screen.queryByRole('alert')).toBeNull()
-    expect(screen.getByLabelText('Follow-up after')).toHaveValue(15)
-    expect(screen.getByRole('button', { name: 'Save changes' })).not.toBeDisabled()
+    expect(screen.getAllByLabelText('Follow-up after')[0]).toHaveValue(15)
+    expect(screen.getAllByRole('button', { name: 'Save changes' }).at(-1)!).not.toBeDisabled()
   })
   it('shows custom workflow ownership without editable team rules', async () => {
     const saved = structuredClone(DEFAULT_CONVERSATION_INACTIVITY)
@@ -97,9 +98,26 @@ describe('conversation behavior drafts', () => {
     ]
     mock.get.mockResolvedValue(saved)
     show()
-    expect(await screen.findByText('VIP follow-up')).toBeInTheDocument()
+    expect((await screen.findAllByText('VIP follow-up'))[0]).toBeInTheDocument()
     expect(screen.queryByRole('switch', { name: 'Auto-close' })).toBeNull()
-    expect(screen.getByText(/outside these workflows/)).toBeInTheDocument()
+    expect(screen.getAllByText(/outside these workflows/)[0]).toBeInTheDocument()
+  })
+  it('retains the Quinn draft while channel settings are edited and canceled', async () => {
+    show()
+    const inputs = await screen.findAllByLabelText('Close after')
+    fireEvent.change(inputs[1], { target: { value: '20' } })
+    fireEvent.change(inputs[0], { target: { value: '45' } })
+    expect(inputs[1]).toHaveValue(20)
+    expect(inputs[1]).toBeDisabled()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Cancel' }).at(-1)!)
+    expect(inputs[1]).toHaveValue(20)
+    expect(inputs[1]).not.toBeDisabled()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Save changes' })[0])
+    await waitFor(() => expect(mock.save).toHaveBeenCalled())
+    expect(mock.save.mock.calls[0][0]).toMatchObject({
+      section: 'assistant',
+      policy: { closeMinutes: 20 },
+    })
   })
   it('shows separate Quinn chat and email clocks', async () => {
     show('assistant')

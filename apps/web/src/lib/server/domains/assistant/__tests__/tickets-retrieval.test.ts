@@ -9,6 +9,7 @@ vi.mock('@/lib/server/domains/embeddings/embedding.service', () => ({
 const mockLimit = vi.fn()
 
 vi.mock('@/lib/server/db', () => ({
+  eq: vi.fn((...args: unknown[]) => ({ op: 'eq', args })),
   db: {
     select: vi.fn(() => ({
       from: vi.fn().mockReturnValue({

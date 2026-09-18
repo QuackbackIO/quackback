@@ -124,6 +124,7 @@ function LiveHelpCenterFinder({
 
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteQuery({
     ...helpCenterQueries.articleList({
+      excludedFromQuinn: filters.excludedFromQuinn,
       categoryId: filters.category,
       status: filters.status === 'all' ? undefined : filters.status,
       search: filters.search,

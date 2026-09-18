@@ -13,6 +13,8 @@ import { principal } from './auth'
 export const assistantWebSources = pgTable(
   'assistant_web_sources',
   {
+    assistantCustomerUse: boolean('assistant_customer_use').notNull().default(true),
+    assistantTeamUse: boolean('assistant_team_use').notNull().default(true),
     id: typeIdWithDefault('assistant_web_source')('id').primaryKey(),
     url: text('url').notNull(),
     title: text('title').notNull(),

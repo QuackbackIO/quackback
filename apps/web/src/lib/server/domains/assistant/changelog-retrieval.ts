@@ -1,3 +1,4 @@
+import { sourceUseFilter } from './source-use'
 /**
  * Changelog grounding source for Quinn (Quinn Phase 4).
  *
@@ -65,7 +66,7 @@ function adminChangelogUrl(entryId: string): string {
  * relying on the per-row `isPublished` flag for the copilot leak gate.
  */
 export function changelogVisibilityConditions(ceiling: ContentAudience) {
-  const base = [isNull(changelogEntries.deletedAt)]
+  const base = [sourceUseFilter(changelogEntries, ceiling), isNull(changelogEntries.deletedAt)]
   if (ceiling === 'public') {
     return [
       ...base,
@@ -84,7 +85,7 @@ const trimmedContent = () =>
  *  computed per row so a `team` query can tell a published entry from a
  *  draft/scheduled one for the leak gate + URL choice. */
 const isPublished = () =>
-  sql<boolean>`(${changelogEntries.publishedAt} IS NOT NULL AND ${changelogEntries.publishedAt} <= now())`
+  sql<boolean>`(${changelogEntries.assistantCustomerUse} AND ${changelogEntries.publishedAt} IS NOT NULL AND ${changelogEntries.publishedAt} <= now())`
 
 export interface RetrievedChangelogEntry {
   id: string
@@ -231,25 +232,23 @@ export const changelogKnowledgeSource: KnowledgeSource = {
   sourceType: 'changelog',
   async retrieve(query, ceiling) {
     const rows = await retrieveChangelogEntries(query, ceiling)
-    return rows.map(
-      (e): RetrievedItem => ({
+    return rows.map((e): RetrievedItem => ({
+      id: e.id,
+      sourceType: 'changelog' as const,
+      title: e.title,
+      excerpt: e.content.slice(0, KNOWLEDGE_SNIPPET_CHARS),
+      score: e.score,
+      updatedAt: e.updatedAt.toISOString(),
+      citation: {
+        type: 'changelog' as const,
         id: e.id,
-        sourceType: 'changelog' as const,
         title: e.title,
-        excerpt: e.content.slice(0, KNOWLEDGE_SNIPPET_CHARS),
-        score: e.score,
-        updatedAt: e.updatedAt.toISOString(),
-        citation: {
-          type: 'changelog' as const,
-          id: e.id,
-          title: e.title,
-          // Published entries link to the public changelog and stay
-          // customer-visible; drafts/scheduled entries (only reachable at a
-          // team ceiling) link to the admin editor and trip the leak gate.
-          url: e.isPublished ? publicChangelogUrl(e.id) : adminChangelogUrl(e.id),
-          ...(e.isPublished ? {} : { internal: true }),
-        },
-      })
-    )
+        // Published entries link to the public changelog and stay
+        // customer-visible; drafts/scheduled entries (only reachable at a
+        // team ceiling) link to the admin editor and trip the leak gate.
+        url: e.isPublished ? publicChangelogUrl(e.id) : adminChangelogUrl(e.id),
+        ...(e.isPublished ? {} : { internal: true }),
+      },
+    }))
   },
 }

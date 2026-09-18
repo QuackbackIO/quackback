@@ -58,6 +58,8 @@ export interface HelpCenterCategoryWithCount extends HelpCenterCategory {
 // ============================================================================
 
 export interface HelpCenterArticle {
+  assistantCustomerUse: boolean
+  assistantTeamUse: boolean
   id: KbArticleId
   categoryId: KbCategoryId
   slug: string

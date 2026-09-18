@@ -99,7 +99,7 @@ const navItems: Array<{
   },
   { label: 'Status', href: '/admin/status', icon: SignalIconOutline, product: 'status' },
   { label: 'Analytics', href: '/admin/analytics', icon: ChartBarIcon },
-  { label: 'AI & Automation', href: '/admin/automation/agent', icon: CpuChipIcon },
+  { label: 'AI & Automation', href: '/admin/automation', icon: CpuChipIcon },
   { label: 'Users', href: '/admin/users', icon: UsersIcon },
 ]
 
@@ -221,7 +221,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
 
   const filteredNavItems = navItems.filter((item) => {
     if (item.product && !isProductEnabled(flags, item.product)) return false
-    if (item.href === '/admin/automation/agent') return canOpenAutomation
+    if (item.href === '/admin/automation') return canOpenAutomation
     return true
   })
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)

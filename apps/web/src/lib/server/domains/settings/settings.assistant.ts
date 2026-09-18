@@ -42,12 +42,12 @@ export const assistantVoiceUpdateSchema = z.object({
 
 export const assistantAgentKnowledgeUpdateSchema = z.object({
   expectedRevision: z.number().int().positive(),
-  knowledge: assistantAgentKnowledgeSchema,
+  knowledge: assistantAgentKnowledgeSchema.extend({ webPages: z.boolean().optional() }),
 })
 
 export const assistantCopilotKnowledgeUpdateSchema = z.object({
   expectedRevision: z.number().int().positive(),
-  knowledge: assistantCopilotKnowledgeSchema,
+  knowledge: assistantCopilotKnowledgeSchema.extend({ webPages: z.boolean().optional() }),
 })
 
 export const assistantCopilotCapabilitiesUpdateSchema = z.object({
@@ -321,8 +321,14 @@ export function updateAssistantVoice(
  * the write boundary.
  */
 export type AssistantKnowledgeUpdate =
-  | { agent: 'agent'; knowledge: AssistantAgentKnowledge }
-  | { agent: 'copilot'; knowledge: AssistantCopilotKnowledge }
+  | {
+      agent: 'agent'
+      knowledge: Omit<AssistantAgentKnowledge, 'webPages'> & { webPages?: boolean }
+    }
+  | {
+      agent: 'copilot'
+      knowledge: Omit<AssistantCopilotKnowledge, 'webPages'> & { webPages?: boolean }
+    }
 
 export function updateAssistantAgentKnowledge(
   expectedRevision: number,
@@ -338,7 +344,10 @@ export function updateAssistantAgentKnowledge(
             ...current,
             agents: {
               ...current.agents,
-              agent: { ...current.agents.agent, knowledge: update.knowledge },
+              agent: {
+                ...current.agents.agent,
+                knowledge: { ...current.agents[update.agent].knowledge, ...update.knowledge },
+              },
             },
           }
         case 'copilot':
@@ -346,7 +355,10 @@ export function updateAssistantAgentKnowledge(
             ...current,
             agents: {
               ...current.agents,
-              copilot: { ...current.agents.copilot, knowledge: update.knowledge },
+              copilot: {
+                ...current.agents.copilot,
+                knowledge: { ...current.agents[update.agent].knowledge, ...update.knowledge },
+              },
             },
           }
         default: {

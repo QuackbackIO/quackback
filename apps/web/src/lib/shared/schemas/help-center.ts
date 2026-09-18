@@ -61,6 +61,8 @@ export const createArticleSchema = z.object({
   position: z.number().int().optional(),
   description: z.string().max(300).optional(),
   segmentIds: z.array(z.string()).max(100).optional(),
+  assistantCustomerUse: z.boolean().optional(),
+  assistantTeamUse: z.boolean().optional(),
 })
 
 export const updateArticleSchema = z.object({
@@ -73,6 +75,8 @@ export const updateArticleSchema = z.object({
   position: z.number().int().optional(),
   description: z.string().max(300).optional(),
   segmentIds: z.array(z.string()).max(100).optional(),
+  assistantCustomerUse: z.boolean().optional(),
+  assistantTeamUse: z.boolean().optional(),
 })
 
 export const getArticleSchema = z.object({
@@ -84,6 +88,7 @@ export const deleteArticleSchema = z.object({
 })
 
 export const listArticlesSchema = z.object({
+  excludedFromQuinn: z.boolean().optional(),
   categoryId: z.string().optional(),
   status: z.enum(['draft', 'published', 'all']).optional(),
   search: z.string().optional(),

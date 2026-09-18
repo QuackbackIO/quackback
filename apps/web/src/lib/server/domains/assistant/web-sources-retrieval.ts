@@ -1,3 +1,5 @@
+import { sourceUseFilter } from './source-use'
+import type { ContentAudience } from './audience'
 /**
  * Web-source grounding for Quinn.
  *
@@ -7,10 +9,8 @@
  * over title/content scoring each row by how many query terms it covers
  * (the same ILIKE shape as the snippets keyword fallback); rows carry no
  * embedding column.
- * Every row is public by construction (the page was publicly fetchable), so
- * the source serves every retrieval ceiling and the turn's ceiling is not
- * consulted; the citation links back to the original external URL and is
- * never flagged internal.
+ * The selected customer or teammate use must be enabled independently of
+ * whether the original page was publicly fetchable.
  */
 import { db, assistantWebSources, and, desc, eq, ilike, or, sql } from '@/lib/server/db'
 import {
@@ -29,6 +29,7 @@ export interface RetrievedWebSource {
   content: string
   score: number
   updatedAt: Date
+  assistantCustomerUse: boolean
 }
 
 /**
@@ -42,7 +43,7 @@ export interface RetrievedWebSource {
  */
 export async function retrieveWebSources(
   query: string,
-  options: { topK?: number } = {}
+  options: { topK?: number; audience?: ContentAudience } = {}
 ): Promise<RetrievedWebSource[]> {
   const topK = options.topK ?? WEB_SOURCES_TOP_K
   const terms = query.split(/[^\p{L}\p{N}]+/u).filter((t) => t.length >= 3)
@@ -69,9 +70,16 @@ export async function retrieveWebSources(
       content: assistantWebSources.content,
       score: score.as('score'),
       updatedAt: assistantWebSources.updatedAt,
+      assistantCustomerUse: assistantWebSources.assistantCustomerUse,
     })
     .from(assistantWebSources)
-    .where(and(eq(assistantWebSources.enabled, true), or(...matchConds)))
+    .where(
+      and(
+        sourceUseFilter(assistantWebSources, options.audience ?? 'public'),
+        eq(assistantWebSources.enabled, true),
+        or(...matchConds)
+      )
+    )
     .orderBy(sql`score DESC`, desc(assistantWebSources.updatedAt))
     .limit(topK)
 
@@ -83,28 +91,27 @@ export async function retrieveWebSources(
  * rows onto `RetrievedItem`. Dynamically imported by `resolveKnowledgeSources`
  * only when 'webpage' is in the turn's enabled-source set. The citation URL
  * is the original external page URL — that is the whole point of the source
- * (the customer can open the page the answer came from) — so it is never
- * flagged internal.
+ * (the customer can open the page the answer came from). Sources excluded
+ * from customer use are flagged internal for draft validation.
  */
 export const webpageKnowledgeSource: KnowledgeSource = {
   sourceType: 'webpage',
-  async retrieve(query, _ceiling, opts) {
-    const rows = await retrieveWebSources(query, { topK: opts.topK })
-    return rows.map(
-      (w): RetrievedItem => ({
+  async retrieve(query, ceiling, opts) {
+    const rows = await retrieveWebSources(query, { topK: opts.topK, audience: ceiling })
+    return rows.map((w): RetrievedItem => ({
+      id: w.id,
+      sourceType: 'webpage' as const,
+      title: w.title,
+      excerpt: w.content.slice(0, KNOWLEDGE_SNIPPET_CHARS),
+      score: w.score,
+      updatedAt: w.updatedAt.toISOString(),
+      citation: {
+        ...(w.assistantCustomerUse === false ? { internal: true } : {}),
+        type: 'webpage' as const,
         id: w.id,
-        sourceType: 'webpage' as const,
         title: w.title,
-        excerpt: w.content.slice(0, KNOWLEDGE_SNIPPET_CHARS),
-        score: w.score,
-        updatedAt: w.updatedAt.toISOString(),
-        citation: {
-          type: 'webpage' as const,
-          id: w.id,
-          title: w.title,
-          url: w.url,
-        },
-      })
-    )
+        url: w.url,
+      },
+    }))
   },
 }

@@ -170,6 +170,7 @@ describe('resolveAssistantKnowledgeSnapshot', () => {
       helpCenter: true,
       posts: true,
       changelog: true,
+      webPages: true,
       documents: false,
       status: true,
     }
@@ -207,6 +208,7 @@ describe('resolveAssistantKnowledgeSnapshot', () => {
       internalNotes: false,
       tickets: false,
       changelog: false,
+      webPages: true,
       documents: false,
       status: false,
     }

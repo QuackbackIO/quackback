@@ -54,6 +54,8 @@ export interface ArticleListScope {
 // embedding, searchVector) — the list UI only needs metadata + a short
 // preview of `content`.
 const LIST_COLUMNS = {
+  assistantCustomerUse: true,
+  assistantTeamUse: true,
   id: true,
   urlId: true,
   categoryId: true,
@@ -84,6 +86,7 @@ export async function listArticles(
     cursor,
     limit = 20,
     showDeleted = false,
+    excludedFromQuinn = false,
     sort = 'newest',
   } = params
   const audience = scope.audience ?? 'team'
@@ -96,7 +99,7 @@ export async function listArticles(
   // The trash view keeps the plain keyword filter below: soft-deleted rows
   // are excluded from ranking by design.
   const searchTerm = search?.trim()
-  if (searchTerm && !showDeleted) {
+  if (searchTerm && !showDeleted && !excludedFromQuinn) {
     return listArticlesRanked(searchTerm, { categoryId, status, cursor, limit, audience, viewer })
   }
 
@@ -108,6 +111,11 @@ export async function listArticles(
         sql`${helpCenterArticles.deletedAt} >= ${thirtyDaysAgo}`,
       ]
     : [isNull(helpCenterArticles.deletedAt)]
+
+  if (excludedFromQuinn)
+    conditions.push(
+      sql`(${helpCenterArticles.assistantCustomerUse} = false OR ${helpCenterArticles.assistantTeamUse} = false)`
+    )
 
   if (categoryId) {
     conditions.push(eq(helpCenterArticles.categoryId, categoryId as KbCategoryId))

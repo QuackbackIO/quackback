@@ -143,6 +143,8 @@ export type AssistantSnippetAudience = (typeof ASSISTANT_SNIPPET_AUDIENCES)[numb
 export const assistantSnippets = pgTable(
   'assistant_snippets',
   {
+    assistantCustomerUse: boolean('assistant_customer_use').notNull().default(true),
+    assistantTeamUse: boolean('assistant_team_use').notNull().default(true),
     id: typeIdWithDefault('assistant_snippet')('id').primaryKey(),
     title: text('title').notNull(),
     content: text('content').notNull(),
@@ -198,6 +200,8 @@ export const assistantSnippetsRelations = relations(assistantSnippets, ({ one })
 export const assistantDocuments = pgTable(
   'assistant_documents',
   {
+    assistantCustomerUse: boolean('assistant_customer_use').notNull().default(true),
+    assistantTeamUse: boolean('assistant_team_use').notNull().default(true),
     id: typeIdWithDefault('assistant_document')('id').primaryKey(),
     title: text('title').notNull(),
     fileName: text('file_name').notNull(),

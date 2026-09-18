@@ -1,3 +1,5 @@
+import { getArticleAssistantUseLimitsFn } from '@/lib/server/functions/assistant-source-use'
+import { Checkbox } from '@/components/ui/checkbox'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { PlusIcon } from '@heroicons/react/24/solid'
@@ -34,6 +36,9 @@ interface HelpCenterMetadataSidebarProps {
   notHelpfulCount?: number
   onOpenFeedback?: () => void
   onOpenTranslations?: () => void
+  assistantCustomerUse?: boolean
+  assistantTeamUse?: boolean
+  onAssistantUseChange?: (use: 'customer' | 'team', enabled: boolean) => void
   publishPending?: boolean
 }
 
@@ -50,10 +55,21 @@ function SidebarContent({
   onOpenFeedback,
   onOpenTranslations,
   publishPending,
+  assistantCustomerUse,
+  assistantTeamUse,
+  onAssistantUseChange,
 }: HelpCenterMetadataSidebarProps) {
   const [createCategoryOpen, setCreateCategoryOpen] = useState(false)
   const { data: categories } = useQuery(helpCenterQueries.categories())
 
+  const limits = useQuery({
+    queryKey: ['assistant', 'articleUseLimits'],
+    queryFn: getArticleAssistantUseLimitsFn,
+    enabled: Boolean(onAssistantUseChange),
+  })
+  const category = categories?.find((item) => item.id === categoryId)
+  const audienceLimited =
+    !category?.isPublic || !!category.segmentIds.length || !!segmentIds?.length
   return (
     <>
       <SidebarRow label="Status">
@@ -134,6 +150,47 @@ function SidebarContent({
           </SidebarRow>
         </>
       ) : null}
+
+      {onAssistantUseChange && (
+        <>
+          <SidebarDivider />
+          <SidebarRow label="Quinn">
+            <div className="space-y-3">
+              {(['customer', 'team'] as const).map((use) => {
+                const reason =
+                  use === 'customer' && audienceLimited
+                    ? 'Not available to customers for this audience.'
+                    : limits.isError
+                      ? 'Could not load source settings.'
+                      : !limits.data
+                        ? 'Loading source settings…'
+                        : !limits.data[use]
+                          ? 'Help Center is off for this use in Knowledge.'
+                          : null
+                return (
+                  <div key={use} className="space-y-1">
+                    <label className="flex gap-2 text-xs items-start">
+                      <Checkbox
+                        checked={
+                          use === 'customer'
+                            ? assistantCustomerUse !== false
+                            : assistantTeamUse !== false
+                        }
+                        disabled={!!reason}
+                        onCheckedChange={(checked) => onAssistantUseChange(use, checked === true)}
+                      />
+                      {use === 'customer'
+                        ? 'Use in customer conversations'
+                        : 'Use for support teammates'}
+                    </label>
+                    {reason && <p className="text-xs text-muted-foreground">{reason}</p>}
+                  </div>
+                )
+              })}
+            </div>
+          </SidebarRow>
+        </>
+      )}
 
       {onOpenTranslations ? (
         <>

@@ -1,3 +1,4 @@
+import { sourceUseFilter } from './source-use'
 import type { Actor } from '@/lib/server/policy/types'
 import { conversationFilter } from '@/lib/server/policy/conversations'
 import {
@@ -35,6 +36,7 @@ export function workspaceConversationSource(
         .where(
           and(
             isNull(conversationMessages.deletedAt),
+            sourceUseFilter(conversationMessages, 'team'),
             conversationFilter(actor),
             notesOnly
               ? eq(conversationMessages.isInternal, true)

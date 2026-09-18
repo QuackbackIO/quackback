@@ -12,6 +12,8 @@ interface HelpCenterFiltersProps {
   selectedCategoryId: string | undefined
   onSelectCategory: (id: KbCategoryId | null) => void
   categoryActions: CategoryActions
+  excludedFromQuinn?: boolean
+  onExcludedFromQuinnChange?: (value: boolean) => void
   showDeleted?: boolean
   onShowDeletedChange?: (showDeleted: boolean | undefined) => void
   showPerformance?: boolean
@@ -30,6 +32,8 @@ export function HelpCenterFiltersPanel({
   selectedCategoryId,
   onSelectCategory,
   categoryActions,
+  excludedFromQuinn,
+  onExcludedFromQuinnChange,
   showDeleted,
   onShowDeletedChange,
   showPerformance,
@@ -71,15 +75,19 @@ export function HelpCenterFiltersPanel({
       <FilterSection title="Other">
         <FilterList
           items={[
+            { id: 'quinn', name: 'Excluded from Quinn' },
             { id: 'performance', name: 'Article performance' },
             { id: 'deleted', name: 'Deleted items' },
           ]}
           selectedIds={[
+            ...(excludedFromQuinn ? ['quinn'] : []),
             ...(showPerformance ? ['performance'] : []),
             ...(showDeleted ? ['deleted'] : []),
           ]}
           onSelect={(id) => {
-            if (id === 'deleted') {
+            if (id === 'quinn') {
+              onExcludedFromQuinnChange?.(!excludedFromQuinn)
+            } else if (id === 'deleted') {
               onShowDeletedChange?.(!showDeleted || undefined)
             } else {
               onShowPerformanceChange?.(!showPerformance || undefined)

@@ -78,6 +78,7 @@ export const ASSISTANT_AGENT_KNOWLEDGE_SOURCES = [
   'posts',
   'changelog',
   'documents',
+  'webPages',
   'status',
 ] as const
 export const ASSISTANT_COPILOT_KNOWLEDGE_SOURCES = [
@@ -88,6 +89,7 @@ export const ASSISTANT_COPILOT_KNOWLEDGE_SOURCES = [
   'tickets',
   'changelog',
   'documents',
+  'webPages',
   'status',
 ] as const
 
@@ -105,6 +107,7 @@ export const assistantAgentKnowledgeSchema = z.object({
   posts: z.boolean(),
   changelog: z.boolean(),
   documents: z.boolean().default(true),
+  webPages: z.boolean().default(true),
   status: z.boolean(),
 } satisfies Record<AssistantAgentKnowledgeSource, z.ZodType<boolean>>)
 export const assistantCopilotKnowledgeSchema = z.object({
@@ -115,6 +118,7 @@ export const assistantCopilotKnowledgeSchema = z.object({
   tickets: z.boolean(),
   changelog: z.boolean(),
   documents: z.boolean().default(true),
+  webPages: z.boolean().default(true),
   status: z.boolean(),
 } satisfies Record<AssistantCopilotKnowledgeSource, z.ZodType<boolean>>)
 
@@ -179,6 +183,7 @@ export const DEFAULT_WORKSPACE_ASSISTANT: AssistantWorkspaceConfig = {
     tickets: true,
     changelog: true,
     documents: true,
+    webPages: true,
     status: true,
   },
   toolRules: {},
@@ -254,6 +259,7 @@ export const DEFAULT_ASSISTANT_CONFIG: AssistantConfig = {
         posts: false,
         changelog: false,
         documents: true,
+        webPages: true,
         status: false,
       },
       toolRules: {},
@@ -270,6 +276,7 @@ export const DEFAULT_ASSISTANT_CONFIG: AssistantConfig = {
         tickets: true,
         changelog: true,
         documents: true,
+        webPages: true,
         status: true,
       },
       toolRules: {},

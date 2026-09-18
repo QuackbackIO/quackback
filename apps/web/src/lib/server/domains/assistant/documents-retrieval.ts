@@ -1,3 +1,4 @@
+import { sourceUseFilter } from './source-use'
 /**
  * Knowledge-document grounding source for Quinn.
  *
@@ -7,11 +8,8 @@
  * ILIKE keyword arm when a query embedding is available, keyword-only
  * otherwise. Documents are embedded at ingest by `document.service.ts`.
  *
- * VISIBILITY: documents are admin-curated, customer-answerable content with
- * no draft or audience state, so every non-deleted row is retrievable at
- * every ceiling — the Agent (public) and the copilot (team) ground on the
- * same corpus. A document has no public page, so its citation carries the
- * title with an empty URL and is never flagged internal.
+ * VISIBILITY: non-deleted documents must also permit the requested Quinn use.
+ * Team-only documents carry an internal citation and cannot enter customer drafts.
  */
 import { db, assistantDocuments, and, isNull, sql } from '@/lib/server/db'
 import { generateEmbedding } from '@/lib/server/domains/embeddings/embedding.service'
@@ -42,6 +40,7 @@ export interface RetrievedDocument {
   score: number
   /** The row's last-update timestamp, for the copilot citation freshness line. */
   updatedAt: Date
+  assistantCustomerUse: boolean
 }
 
 export interface RetrieveDocumentsOptions {
@@ -55,6 +54,7 @@ interface DocumentRow {
   content: string
   score: number
   updatedAt: Date
+  assistantCustomerUse: boolean
 }
 
 /** Select the document content pre-trimmed to the context budget. */
@@ -71,7 +71,8 @@ async function hybridQuery(
   query: string,
   embedding: number[],
   topK: number,
-  minScore: number
+  minScore: number,
+  ceiling: ContentAudience
 ): Promise<DocumentRow[]> {
   const vectorStr = `[${embedding.join(',')}]`
   const pattern = `%${query}%`
@@ -88,11 +89,13 @@ async function hybridQuery(
       content: trimmedContent(),
       score: combined.as('score'),
       updatedAt: assistantDocuments.updatedAt,
+      assistantCustomerUse: assistantDocuments.assistantCustomerUse,
     })
     .from(assistantDocuments)
     .where(
       and(
         isNull(assistantDocuments.deletedAt),
+        sourceUseFilter(assistantDocuments, ceiling),
         sql`(
           (${assistantDocuments.title} ILIKE ${pattern} OR ${assistantDocuments.content} ILIKE ${pattern})
           OR (
@@ -109,7 +112,11 @@ async function hybridQuery(
 /** Keyword-only fallback when embedding generation is unavailable. An ILIKE
  *  hit carries no relevance signal, so its score is 0 (see the changelog
  *  source for why a no-signal row must sort behind genuinely scored items). */
-async function keywordQuery(query: string, topK: number): Promise<DocumentRow[]> {
+async function keywordQuery(
+  query: string,
+  topK: number,
+  ceiling: ContentAudience
+): Promise<DocumentRow[]> {
   const pattern = `%${query}%`
 
   return db
@@ -119,11 +126,13 @@ async function keywordQuery(query: string, topK: number): Promise<DocumentRow[]>
       content: trimmedContent(),
       score: sql<number>`0`.as('score'),
       updatedAt: assistantDocuments.updatedAt,
+      assistantCustomerUse: assistantDocuments.assistantCustomerUse,
     })
     .from(assistantDocuments)
     .where(
       and(
         isNull(assistantDocuments.deletedAt),
+        sourceUseFilter(assistantDocuments, ceiling),
         sql`(${assistantDocuments.title} ILIKE ${pattern} OR ${assistantDocuments.content} ILIKE ${pattern})`
       )
     )
@@ -134,12 +143,11 @@ async function keywordQuery(query: string, topK: number): Promise<DocumentRow[]>
 /**
  * Retrieve the top-k most relevant knowledge documents for a query. Semantic
  * when a query embedding is available, keyword (ILIKE) otherwise. The ceiling
- * parameter is accepted for the `KnowledgeSource` contract but does not
- * narrow anything: the corpus is the same at every ceiling.
+ * selects the customer or teammate source-use filter.
  */
 export async function retrieveAssistantDocuments(
   query: string,
-  _ceiling: ContentAudience,
+  ceiling: ContentAudience,
   options: RetrieveDocumentsOptions = {}
 ): Promise<RetrievedDocument[]> {
   const topK = options.topK ?? DOCUMENTS_TOP_K
@@ -150,8 +158,8 @@ export async function retrieveAssistantDocuments(
   })
 
   const rows = embedding
-    ? await hybridQuery(query, embedding, topK, minScore)
-    : await keywordQuery(query, topK)
+    ? await hybridQuery(query, embedding, topK, minScore, ceiling)
+    : await keywordQuery(query, topK, ceiling)
 
   return rows.map((r) => ({
     id: r.id,
@@ -159,6 +167,7 @@ export async function retrieveAssistantDocuments(
     content: r.content ?? '',
     score: Number(r.score),
     updatedAt: r.updatedAt,
+    assistantCustomerUse: r.assistantCustomerUse,
   }))
 }
 
@@ -172,23 +181,22 @@ export const documentsKnowledgeSource: KnowledgeSource = {
   sourceType: 'document',
   async retrieve(query, ceiling) {
     const rows = await retrieveAssistantDocuments(query, ceiling)
-    return rows.map(
-      (d): RetrievedItem => ({
+    return rows.map((d): RetrievedItem => ({
+      id: d.id,
+      sourceType: 'document' as const,
+      title: d.title,
+      excerpt: d.content.slice(0, KNOWLEDGE_SNIPPET_CHARS),
+      score: d.score,
+      updatedAt: d.updatedAt.toISOString(),
+      citation: {
+        ...(d.assistantCustomerUse === false ? { internal: true } : {}),
+        type: 'document' as const,
         id: d.id,
-        sourceType: 'document' as const,
         title: d.title,
-        excerpt: d.content.slice(0, KNOWLEDGE_SNIPPET_CHARS),
-        score: d.score,
-        updatedAt: d.updatedAt.toISOString(),
-        citation: {
-          type: 'document' as const,
-          id: d.id,
-          title: d.title,
-          // No public page exists for an uploaded document: the citation
-          // carries its title with an empty URL and never trips the leak gate.
-          url: '',
-        },
-      })
-    )
+        // No public page exists for an uploaded document: the citation
+        // carries its title with an empty URL.
+        url: '',
+      },
+    }))
   },
 }

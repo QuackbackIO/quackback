@@ -35,6 +35,7 @@ export const helpCenterKeys = {
     categoryId?: string
     status?: string
     sort?: string
+    excludedFromQuinn?: boolean
     showDeleted?: boolean
   }) => [...helpCenterKeys.articleLists(), filters] as const,
   articlePerformance: () => [...helpCenterKeys.articles(), 'performance'] as const,
@@ -67,6 +68,7 @@ export const helpCenterQueries = {
     status?: 'draft' | 'published' | 'all'
     search?: string
     sort?: 'newest' | 'oldest'
+    excludedFromQuinn?: boolean
     showDeleted?: boolean
   }) =>
     infiniteQueryOptions({
@@ -81,6 +83,7 @@ export const helpCenterQueries = {
             cursor: pageParam,
             limit: 20,
             showDeleted: params.showDeleted,
+            excludedFromQuinn: params.excludedFromQuinn,
           },
         }),
       initialPageParam: undefined as string | undefined,

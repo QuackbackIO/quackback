@@ -1835,6 +1835,13 @@
       "when": 1789644000000,
       "tag": "0284_conversation_inactivity",
       "breakpoints": true
+    },
+    {
+      "idx": 262,
+      "version": "7",
+      "when": 1789747200000,
+      "tag": "0285_quinn_knowledge_use",
+      "breakpoints": true
     }
   ]
 }

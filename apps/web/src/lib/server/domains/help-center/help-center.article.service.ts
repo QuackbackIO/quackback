@@ -233,6 +233,8 @@ export async function createArticle(
       position: input.position ?? null,
       description: input.description?.trim() || null,
       segmentIds: input.segmentIds ?? [],
+      assistantCustomerUse: input.assistantCustomerUse ?? true,
+      assistantTeamUse: input.assistantTeamUse ?? true,
     })
     .returning()
 
@@ -271,6 +273,9 @@ export async function updateArticle(
     )
   if (input.position !== undefined) updateData.position = input.position
   if (input.description !== undefined) updateData.description = input.description?.trim() || null
+  if (input.assistantCustomerUse !== undefined)
+    updateData.assistantCustomerUse = input.assistantCustomerUse
+  if (input.assistantTeamUse !== undefined) updateData.assistantTeamUse = input.assistantTeamUse
   if (input.segmentIds !== undefined) updateData.segmentIds = input.segmentIds
   const updated = await db.transaction(async (tx) => {
     if (authorPrincipalId !== undefined) {

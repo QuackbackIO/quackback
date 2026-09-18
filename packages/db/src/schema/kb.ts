@@ -118,6 +118,8 @@ export const helpCenterCategories = pgTable(
 export const helpCenterArticles = pgTable(
   'kb_articles',
   {
+    assistantCustomerUse: boolean('assistant_customer_use').notNull().default(true),
+    assistantTeamUse: boolean('assistant_team_use').notNull().default(true),
     id: typeIdWithDefault('article')('id').primaryKey(),
     categoryId: typeIdColumn('kb_category')('category_id')
       .notNull()

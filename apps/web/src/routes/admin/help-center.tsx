@@ -4,6 +4,7 @@ import { blankOmittedSearchKeys } from '@/lib/shared/route-search'
 import { getFirstEnabledAdminProductPath, isProductEnabled } from '@/lib/shared/types/settings'
 
 const searchSchema = z.object({
+  excludedFromQuinn: z.boolean().optional(),
   status: z.enum(['draft', 'published']).optional().catch(undefined),
   category: z.string().optional(),
   search: z.string().optional(),

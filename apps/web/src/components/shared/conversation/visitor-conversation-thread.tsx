@@ -1,3 +1,4 @@
+import { customerCitationUrl } from '@/lib/shared/assistant/citation-url'
 import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react'
 import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FormattedMessage, useIntl } from 'react-intl'
@@ -997,7 +998,10 @@ export function VisitorConversationThread({
             content={m.content}
             contentJson={m.contentJson}
             attachments={m.attachments}
-            citations={m.citations}
+            citations={m.citations?.map((citation) => ({
+              ...citation,
+              url: customerCitationUrl(citation),
+            }))}
             time={formatTime(m.createdAt)}
             linkPreviews={linkPreviews}
             getAuthHeaders={getAuthHeaders}

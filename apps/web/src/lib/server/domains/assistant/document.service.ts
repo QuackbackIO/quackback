@@ -136,6 +136,8 @@ export async function listAssistantDocuments() {
   return db
     .select({
       id: assistantDocuments.id,
+      assistantCustomerUse: assistantDocuments.assistantCustomerUse,
+      assistantTeamUse: assistantDocuments.assistantTeamUse,
       title: assistantDocuments.title,
       fileName: assistantDocuments.fileName,
       mimeType: assistantDocuments.mimeType,

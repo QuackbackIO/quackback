@@ -172,9 +172,8 @@ export interface AssistantKnowledgeSnapshot {
  * predicate (snippetsVisibilityConditions) restricts a public-ceiling turn to
  * public-audience rows, so a snippet marked public grounds customer-facing
  * answers while team/internal snippets stay invisible there. Web sources
- * (admin-crawled public pages) likewise have no toggle: public by
- * construction, so registered for both agents at every ceiling — an empty
- * table simply retrieves nothing.
+ * have independent per-profile master switches. Every adapter also enforces
+ * the source row’s customer or teammate use selection.
  */
 export function resolveAssistantKnowledgeSnapshot(
   agent: AssistantAgentKind,
@@ -194,7 +193,7 @@ export function resolveAssistantKnowledgeSnapshot(
   // Web sources: no per-agent toggle either. Admin-curated PUBLIC content
   // (adding the URL is the opt-in; no rows means nothing to retrieve), so
   // they serve both agents at every ceiling.
-  sources.add('webpage')
+  if (config.agents[agent].knowledge.webPages !== false) sources.add('webpage')
   switch (agent) {
     case 'agent': {
       const k = config.agents.agent.knowledge

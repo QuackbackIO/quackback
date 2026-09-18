@@ -32,8 +32,8 @@ function AutomationPerformancePage() {
       <PageHeader
         icon={ChartBarIcon}
         title={intl.formatMessage({
-          id: 'automation.performance.title',
-          defaultMessage: 'AI performance',
+          id: 'automation.improve.title',
+          defaultMessage: 'Improve',
         })}
         description={intl.formatMessage({
           id: 'automation.performance.description',

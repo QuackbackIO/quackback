@@ -87,6 +87,7 @@ const CONFIG: AssistantConfig = {
         helpCenter: true,
         posts: false,
         changelog: false,
+        webPages: true,
         documents: true,
         status: false,
       },
@@ -101,6 +102,7 @@ const CONFIG: AssistantConfig = {
         internalNotes: true,
         tickets: false,
         changelog: false,
+        webPages: true,
         documents: true,
         status: true,
       },
@@ -492,6 +494,19 @@ describe('V2 assistant configuration writes', () => {
     expect(hoisted.recordAuditEventInTransaction).not.toHaveBeenCalled()
     expect(hoisted.invalidateSettingsCache).not.toHaveBeenCalled()
     expect(hoisted.events).toEqual(['begin', 'lock:update', 'commit'])
+  })
+
+  it('preserves a disabled web-page switch when an older client omits it', async () => {
+    const config = structuredClone(CONFIG)
+    config.agents.agent.knowledge.webPages = false
+    hoisted.txRow = transactionRow({ assistantConfig: config })
+    const { webPages: _webPages, ...knowledge } = config.agents.agent.knowledge
+    const result = await updateAssistantAgentKnowledge(
+      7,
+      { agent: 'agent', knowledge: { ...knowledge, posts: true } },
+      ACTOR
+    )
+    expect(result.config.agents.agent.knowledge.webPages).toBe(false)
   })
 
   it('writes an Agent knowledge change under the knowledge audit event', async () => {

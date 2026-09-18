@@ -76,6 +76,7 @@ describe('assistantConfigSchema', () => {
             helpCenter: true,
             posts: false,
             changelog: false,
+            webPages: true,
             documents: true,
             status: false,
           },
@@ -90,6 +91,7 @@ describe('assistantConfigSchema', () => {
             internalNotes: true,
             tickets: true,
             changelog: true,
+            webPages: true,
             documents: true,
             status: true,
           },
@@ -398,6 +400,7 @@ describe('v3 per-agent sub-config', () => {
       helpCenter: true,
       posts: false,
       changelog: false,
+      webPages: true,
       documents: true,
       status: false,
     })
@@ -408,6 +411,7 @@ describe('v3 per-agent sub-config', () => {
       internalNotes: true,
       tickets: true,
       changelog: true,
+      webPages: true,
       documents: true,
       status: true,
     })

@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, index, customType } from 'drizzle-orm/pg-core'
+import { pgTable, text, boolean, timestamp, index, customType } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn } from '@quackback/ids/drizzle'
 import { conversations } from './conversation'
@@ -31,6 +31,8 @@ const vector = customType<{ data: number[] }>({
 export const conversationSummaries = pgTable(
   'conversation_summaries',
   {
+    assistantCustomerUse: boolean('assistant_customer_use').notNull().default(true),
+    assistantTeamUse: boolean('assistant_team_use').notNull().default(true),
     id: typeIdWithDefault('conversation_summary')('id').primaryKey(),
     conversationId: typeIdColumn('conversation')('conversation_id')
       .notNull()

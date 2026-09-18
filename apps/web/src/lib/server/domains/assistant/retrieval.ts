@@ -1,3 +1,4 @@
+import { sourceUseFilter } from './source-use'
 /**
  * Shared knowledge-base retrieval for AI answers.
  *
@@ -153,7 +154,7 @@ interface RetrievalRow {
  *  segment-gated category is NOT public-to-everyone, so the copilot leak gate
  *  must treat it as internal on team-ceiling retrievals. */
 const isPublicRow = () =>
-  sql<boolean>`(${helpCenterCategories.isPublic} AND jsonb_array_length(${helpCenterCategories.segmentIds}) = 0 AND jsonb_array_length(${helpCenterArticles.segmentIds}) = 0 AND ${helpCenterArticles.publishedAt} IS NOT NULL AND ${helpCenterArticles.publishedAt} <= now())`
+  sql<boolean>`(${helpCenterCategories.isPublic} AND jsonb_array_length(${helpCenterCategories.segmentIds}) = 0 AND jsonb_array_length(${helpCenterArticles.segmentIds}) = 0 AND ${helpCenterArticles.assistantCustomerUse} AND ${helpCenterArticles.publishedAt} IS NOT NULL AND ${helpCenterArticles.publishedAt} <= now())`
 
 /**
  * Hybrid retrieval: an article matches on a keyword hit OR a semantic hit above
@@ -202,6 +203,7 @@ async function hybridQuery(
     .where(
       and(
         ...helpCenterVisibilityConditions(audience, viewer),
+        sourceUseFilter(helpCenterArticles, audience),
         // A keyword match must clear the same ts_rank floor as the keyword-only
         // path (OR-of-terms otherwise admits a lone incidental term); a semantic
         // match above the cosine floor always qualifies.
@@ -253,6 +255,7 @@ async function keywordQuery(
     .where(
       and(
         ...helpCenterVisibilityConditions(audience, viewer),
+        sourceUseFilter(helpCenterArticles, audience),
         sql`${helpCenterArticles.searchVector} @@ ${tsQuery}`,
         sql`ts_rank(${helpCenterArticles.searchVector}, ${tsQuery}) > ${rankFloor}`
       )

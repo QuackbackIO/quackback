@@ -56,6 +56,7 @@ export interface StoredAssistantConfig {
         helpCenter: boolean
         posts: boolean
         changelog: boolean
+        webPages: boolean
         documents: boolean
         status: boolean
       }
@@ -70,6 +71,7 @@ export interface StoredAssistantConfig {
         internalNotes: boolean
         tickets: boolean
         changelog: boolean
+        webPages: boolean
         documents: boolean
         status: boolean
       }
@@ -437,6 +439,7 @@ export const settings = pgTable('settings', {
             internalNotes: true,
             tickets: true,
             changelog: true,
+            webPages: true,
             documents: true,
             status: true,
           },
@@ -450,6 +453,7 @@ export const settings = pgTable('settings', {
             helpCenter: true,
             posts: false,
             changelog: false,
+            webPages: true,
             documents: true,
             status: false,
           },
@@ -464,6 +468,7 @@ export const settings = pgTable('settings', {
             internalNotes: true,
             tickets: true,
             changelog: true,
+            webPages: true,
             documents: true,
             status: true,
           },

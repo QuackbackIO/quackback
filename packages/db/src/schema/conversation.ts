@@ -268,6 +268,8 @@ export const conversations = pgTable(
 export const conversationMessages = pgTable(
   'conversation_messages',
   {
+    assistantCustomerUse: boolean('assistant_customer_use').notNull().default(true),
+    assistantTeamUse: boolean('assistant_team_use').notNull().default(true),
     id: typeIdWithDefault('conversation_msg')('id').primaryKey(),
     // Polymorphic parent: a message hangs off a conversation OR a ticket (support
     // platform §4.2). Both nullable at the column level; the exactly-one CHECK

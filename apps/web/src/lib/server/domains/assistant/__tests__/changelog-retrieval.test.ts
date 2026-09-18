@@ -75,12 +75,12 @@ describe('changelogVisibilityConditions', () => {
   it('adds the published-only predicate for the public ceiling', () => {
     const publicConditions = changelogVisibilityConditions('public')
     // deleted-at guard + published-not-null + published<=now
-    expect(publicConditions).toHaveLength(3)
+    expect(publicConditions).toHaveLength(4)
   })
 
   it('sees every non-deleted entry (incl. drafts) for team/internal ceilings', () => {
-    expect(changelogVisibilityConditions('team')).toHaveLength(1)
-    expect(changelogVisibilityConditions('internal')).toHaveLength(1)
+    expect(changelogVisibilityConditions('team')).toHaveLength(2)
+    expect(changelogVisibilityConditions('internal')).toHaveLength(2)
   })
 })
 

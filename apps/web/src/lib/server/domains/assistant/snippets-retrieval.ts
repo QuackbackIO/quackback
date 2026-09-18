@@ -1,3 +1,4 @@
+import { sourceUseFilter } from './source-use'
 /**
  * Snippets grounding source for Quinn.
  *
@@ -38,6 +39,7 @@ export interface RetrievedSnippet {
   /** The row's last-update timestamp, for the copilot citation freshness line
    *  (see RetrievedItem.updatedAt in retrieval-sources.ts). */
   updatedAt: Date
+  assistantCustomerUse: boolean
 }
 
 export interface RetrieveSnippetsOptions {
@@ -66,6 +68,7 @@ function audiencesUpTo(ceiling: ContentAudience): ContentAudience[] {
  */
 export function snippetsVisibilityConditions(ceiling: ContentAudience) {
   return [
+    sourceUseFilter(assistantSnippets, ceiling),
     eq(assistantSnippets.enabled, true),
     inArray(assistantSnippets.audience, audiencesUpTo(ceiling)),
   ]
@@ -78,6 +81,7 @@ interface SnippetRow {
   score: number
   audience: ContentAudience
   updatedAt: Date
+  assistantCustomerUse: boolean
 }
 
 /** Semantic path: cosine similarity over the stored embedding. */
@@ -98,6 +102,7 @@ async function hybridQuery(
       score: score.as('score'),
       audience: assistantSnippets.audience,
       updatedAt: assistantSnippets.updatedAt,
+      assistantCustomerUse: assistantSnippets.assistantCustomerUse,
     })
     .from(assistantSnippets)
     .where(
@@ -130,6 +135,7 @@ async function keywordQuery(
       score: score.as('score'),
       audience: assistantSnippets.audience,
       updatedAt: assistantSnippets.updatedAt,
+      assistantCustomerUse: assistantSnippets.assistantCustomerUse,
     })
     .from(assistantSnippets)
     .where(
@@ -171,6 +177,7 @@ export async function retrieveSnippets(
     score: Number(r.score),
     audience: r.audience,
     updatedAt: r.updatedAt,
+    assistantCustomerUse: r.assistantCustomerUse,
   }))
 }
 
@@ -185,25 +192,23 @@ export const snippetsKnowledgeSource: KnowledgeSource = {
   sourceType: 'snippet',
   async retrieve(query, ceiling) {
     const rows = await retrieveSnippets(query, ceiling)
-    return rows.map(
-      (s): RetrievedItem => ({
+    return rows.map((s): RetrievedItem => ({
+      id: s.id,
+      sourceType: 'snippet' as const,
+      title: s.title,
+      excerpt: s.content.slice(0, KNOWLEDGE_SNIPPET_CHARS),
+      score: s.score,
+      updatedAt: s.updatedAt.toISOString(),
+      citation: {
+        type: 'snippet' as const,
         id: s.id,
-        sourceType: 'snippet' as const,
         title: s.title,
-        excerpt: s.content.slice(0, KNOWLEDGE_SNIPPET_CHARS),
-        score: s.score,
-        updatedAt: s.updatedAt.toISOString(),
-        citation: {
-          type: 'snippet' as const,
-          id: s.id,
-          title: s.title,
-          url: '',
-          // A snippet is only ever surfaced to a viewer whose ceiling covers
-          // its audience, but 'team'/'internal' snippets are still not
-          // customer-safe: flag them for the copilot leak gate.
-          ...(s.audience === 'public' ? {} : { internal: true }),
-        },
-      })
-    )
+        url: '',
+        // A snippet is only ever surfaced to a viewer whose ceiling covers
+        // its audience, but 'team'/'internal' snippets are still not
+        // customer-safe: flag them for the copilot leak gate.
+        ...(s.audience === 'public' && s.assistantCustomerUse !== false ? {} : { internal: true }),
+      },
+    }))
   },
 }

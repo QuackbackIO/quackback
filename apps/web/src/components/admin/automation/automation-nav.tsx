@@ -6,7 +6,9 @@ import {
   ChartBarIcon,
   LinkIcon,
   SparklesIcon,
-  UserGroupIcon,
+  HomeIcon,
+  RocketLaunchIcon,
+  ChatBubbleLeftRightIcon,
 } from '@heroicons/react/24/solid'
 import { MENU_ICON, MENU_LABEL, MENU_ROW } from '@/components/ui/menu'
 import { usePermission } from '@/lib/client/hooks/use-permission'
@@ -22,9 +24,7 @@ interface NavItem {
 }
 
 /**
- * A titled cluster of nav rows. The Agents group holds the two peer agents
- * plus their shared catalog (Connectors, Skills); the trailing untitled group
- * holds standalone tools (Workflows, Performance).
+ * Quinn settings share one navigation group; Workflows remains a separate tool.
  */
 interface NavSection {
   labelId?: string
@@ -49,31 +49,44 @@ export function buildAutomationNavSections(
   const agents: NavItem[] = permissions.assistant
     ? [
         {
-          labelId: 'automation.nav.agent',
-          defaultLabel: 'Agent',
-          to: '/admin/automation/agent',
-          icon: SparklesIcon,
+          labelId: 'automation.nav.overview',
+          defaultLabel: 'Overview',
+          to: '/admin/automation',
+          icon: HomeIcon,
         },
         {
-          labelId: 'automation.nav.copilot',
-          defaultLabel: 'Copilot',
-          to: '/admin/automation/copilot',
-          icon: UserGroupIcon,
+          labelId: 'automation.nav.knowledge',
+          defaultLabel: 'Knowledge',
+          to: '/admin/automation/knowledge',
+          icon: BookOpenIcon,
         },
         {
-          labelId: 'automation.nav.connectors',
-          defaultLabel: 'Connectors',
+          labelId: 'automation.nav.guidance',
+          defaultLabel: 'Guidance',
+          to: '/admin/automation/guidance',
+          icon: ChatBubbleLeftRightIcon,
+        },
+        {
+          labelId: 'automation.nav.connections',
+          defaultLabel: 'Connections',
           to: '/admin/automation/connectors',
           icon: LinkIcon,
         },
         {
-          labelId: 'automation.nav.skills',
-          defaultLabel: 'Skills',
-          to: '/admin/automation/skills',
-          icon: BookOpenIcon,
+          labelId: 'automation.nav.deploy',
+          defaultLabel: 'Deploy',
+          to: '/admin/automation/deploy',
+          icon: RocketLaunchIcon,
         },
       ]
     : []
+  if (permissions.analytics)
+    agents.push({
+      labelId: 'automation.nav.improve',
+      defaultLabel: 'Improve',
+      to: '/admin/automation/performance',
+      icon: ChartBarIcon,
+    })
 
   const tools: NavItem[] = [
     permissions.workflows && flags?.supportInbox
@@ -84,21 +97,13 @@ export function buildAutomationNavSections(
           icon: BoltIcon,
         }
       : null,
-    permissions.analytics
-      ? {
-          labelId: 'automation.nav.performance',
-          defaultLabel: 'Performance',
-          to: '/admin/automation/performance',
-          icon: ChartBarIcon,
-        }
-      : null,
   ].filter((item): item is NavItem => item !== null)
 
   const sections: NavSection[] = []
   if (agents.length > 0) {
     sections.push({
-      labelId: 'automation.nav.group.agents',
-      defaultLabel: 'Agents',
+      labelId: 'automation.nav.group.quinnProduct',
+      defaultLabel: 'Quinn',
       items: agents,
     })
   }
@@ -134,7 +139,9 @@ export function AutomationNav() {
             </p>
           )}
           {section.items.map((item) => {
-            const isActive = pathname === item.to || pathname.startsWith(`${item.to}/`)
+            const isActive =
+              pathname.replace(/\/$/, '') === item.to ||
+              (item.to !== '/admin/automation' && pathname.startsWith(`${item.to}/`))
             const Icon = item.icon
             return (
               <Link

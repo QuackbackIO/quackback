@@ -1,5 +1,6 @@
 import {
   pgTable,
+  boolean,
   text,
   timestamp,
   integer,
@@ -29,6 +30,8 @@ const vector = customType<{ data: number[] }>({
 export const changelogEntries = pgTable(
   'changelog_entries',
   {
+    assistantCustomerUse: boolean('assistant_customer_use').notNull().default(true),
+    assistantTeamUse: boolean('assistant_team_use').notNull().default(true),
     id: typeIdWithDefault('changelog')('id').primaryKey(),
     title: text('title').notNull(),
     content: text('content').notNull(),

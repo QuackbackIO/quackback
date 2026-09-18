@@ -1,3 +1,5 @@
+import { usePermission } from '@/lib/client/hooks/use-permission'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
@@ -25,17 +27,27 @@ const selectClass = 'h-9 rounded-md border border-input bg-background px-3 text-
 
 export function ConversationInactivityCard({
   section,
+  fixedChannel,
+  disabled = false,
   preventRepliesWhenClosed = false,
 }: {
   section: Section
+  fixedChannel?: 'messenger' | 'email'
+  disabled?: boolean
   preventRepliesWhenClosed?: boolean
 }) {
+  const canManageAssistant = usePermission(PERMISSIONS.ASSISTANT_MANAGE)
   const query = useQuery(settingsQueries.conversationInactivity())
   const update = useUpdateConversationInactivity()
   const [draft, setDraft] = useState<ConversationInactivitySettings | null>(null)
   const [channel, setChannel] = useState<'messenger' | 'email'>('messenger')
   const settings = draft ?? query.data
-  const title = section === 'assistant' ? 'Follow-up and closure' : 'Conversation behavior'
+  const title =
+    section === 'assistant'
+      ? fixedChannel
+        ? 'Quinn conversations'
+        : 'Follow-up and closure'
+      : 'Conversation behavior'
   if (!settings)
     return (
       <SettingsCard title={title}>
@@ -53,7 +65,7 @@ export function ConversationInactivityCard({
         )}
       </SettingsCard>
     )
-  const group = section === 'assistant' ? channel : section
+  const group = section === 'assistant' ? (fixedChannel ?? channel) : section
   const owner = section === 'assistant' ? 'assistant' : 'team'
   const policy = inactivityPolicy(settings, owner, group)
   const raw =
@@ -93,7 +105,7 @@ export function ConversationInactivityCard({
     update.mutate(input as UpdateConversationInactivityInput, { onSuccess: () => setDraft(null) })
   }
   const workflows = query.data?.publishedWorkflows?.filter((w) => w.channels.includes(group)) ?? []
-  const editable = section === 'assistant' || policy.mode === 'built_in'
+  const editable = policy.mode === 'built_in'
   return (
     <SettingsCard
       title={title}
@@ -105,12 +117,14 @@ export function ConversationInactivityCard({
     >
       <div className="space-y-5">
         {section === 'assistant' ? (
-          <Tabs value={channel} onValueChange={(v) => setChannel(v as typeof channel)}>
-            <TabsList>
-              <TabsTrigger value="messenger">Chat</TabsTrigger>
-              <TabsTrigger value="email">Email</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          fixedChannel ? null : (
+            <Tabs value={channel} onValueChange={(v) => setChannel(v as typeof channel)}>
+              <TabsList>
+                <TabsTrigger value="messenger">Chat</TabsTrigger>
+                <TabsTrigger value="email">Email</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          )
         ) : (
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -176,7 +190,12 @@ export function ConversationInactivityCard({
           </div>
         )}
         {editable && (
-          <fieldset disabled={update.isPending} className="space-y-4 min-w-0">
+          <fieldset
+            disabled={
+              disabled || update.isPending || (section === 'assistant' && !canManageAssistant)
+            }
+            className="space-y-4 min-w-0"
+          >
             {section !== 'assistant' && <h3 className="text-sm font-medium">Team conversations</h3>}
             {section === 'assistant' ? (
               <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center">
@@ -343,14 +362,26 @@ export function ConversationInactivityCard({
             </details>
           </fieldset>
         )}
-        {section !== 'assistant' && policy.mode === 'built_in' && (
-          <div className="border-t pt-4 space-y-1">
-            <h3 className="text-sm font-medium">Quinn conversations</h3>
-            <p className="text-xs text-muted-foreground">{summary(settings, group)}</p>
-            <Link to="/admin/automation/agent" className="text-sm font-medium text-primary">
-              Configure Quinn
-            </Link>
+        {section !== 'assistant' && (
+          <div hidden={policy.mode !== 'built_in'}>
+            <ConversationInactivityCard
+              section="assistant"
+              fixedChannel={group}
+              disabled={!!draft || update.isPending}
+              preventRepliesWhenClosed={preventRepliesWhenClosed}
+            />
+            {draft && (
+              <p className="text-xs text-muted-foreground">
+                Save or cancel channel changes before editing Quinn’s follow-up and closure. Any
+                Quinn draft is retained.
+              </p>
+            )}
           </div>
+        )}
+        {section === 'assistant' && !canManageAssistant && (
+          <p className="text-xs text-muted-foreground">
+            You need permission to manage Quinn to change these settings.
+          </p>
         )}
         {update.isError && (
           <p role="alert" className="text-sm text-destructive">
@@ -368,19 +399,22 @@ export function ConversationInactivityCard({
           >
             Cancel
           </Button>
-          <Button disabled={!draft || !!validation || update.isPending} onClick={save}>
+          <Button
+            disabled={
+              disabled ||
+              (section === 'assistant' && !canManageAssistant) ||
+              !draft ||
+              !!validation ||
+              update.isPending
+            }
+            onClick={save}
+          >
             {update.isPending ? 'Saving…' : 'Save changes'}
           </Button>
         </div>
       </div>
     </SettingsCard>
   )
-}
-function summary(settings: ConversationInactivitySettings, group: 'messenger' | 'email') {
-  const p = inactivityPolicy(settings, 'assistant', group),
-    factor = group === 'email' ? 3_600_000 : 60_000,
-    unit = group === 'email' ? 'h' : 'm'
-  return `${p.followUpEnabled ? `Follow-up after ${p.followUpMs / factor}${unit}` : 'Follow-up off'} · ${p.closeEnabled ? `Close after ${p.closeMs / factor}${unit}` : 'Auto-close off'}`
 }
 function Toggle({
   id,
