@@ -17,6 +17,7 @@ import type {
   EventActor,
   EventConversationData,
   EventConversationRef,
+  EventData,
   EventMessageData,
 } from '@/lib/server/events/types'
 import { realEmail } from '@/lib/shared/anonymous-email'
@@ -112,6 +113,34 @@ export async function emitConversationCreated(
   await safe('conversation.created', () =>
     dispatchConversationCreated(toEventActor(actor, author), conversationData(conversation))
   )
+}
+
+/**
+ * Build the `message.created` event WITHOUT dispatching it.
+ *
+ * Durable Quinn publication writes the outbox row inside its own transaction
+ * (see assistant-run.service.ts) and runs the fire-and-forget side hooks after
+ * that commit, so it needs the event value rather than the dispatch. Legacy
+ * callers keep using {@link emitMessageCreated} and are unchanged.
+ */
+export function buildMessageCreatedEvent(
+  actor: Actor,
+  author: ConversationAuthorInput,
+  message: ConversationMessage,
+  conversation: Conversation,
+  isFirstMessage: boolean
+): EventData {
+  return {
+    id: globalThis.crypto.randomUUID(),
+    timestamp: new Date().toISOString(),
+    actor: toEventActor(actor, author),
+    type: 'message.created',
+    data: {
+      message: messageData(message, author, conversation),
+      conversation: conversationRef(conversation),
+      isFirstMessage,
+    },
+  } as unknown as EventData
 }
 
 export async function emitMessageCreated(

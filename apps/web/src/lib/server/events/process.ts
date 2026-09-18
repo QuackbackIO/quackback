@@ -32,6 +32,25 @@ export type { HookJobData }
  * Target resolution is awaited (~10-50ms). Hook execution runs in the background.
  */
 export async function processEvent(event: EventData): Promise<void> {
+  runEventSideHooks(event)
+
+  // EVENTING-V2 (WO-18 cutover): the durable outbox is the ONLY path. The event
+  // is written transactionally (closing the commit-vs-enqueue loss window) and
+  // `event-dispatch` resolves targets and enqueues onto the `events` queue.
+  // The legacy direct getHookTargets + bulk-add path is deleted.
+  const { writeEventToOutbox } = await import('./outbox-dispatch')
+  await writeEventToOutbox(event)
+}
+
+/**
+ * The fire-and-forget reactions that are NOT part of the durable outbox.
+ *
+ * Split out so a caller that writes the outbox row inside its own transaction
+ * (durable Quinn publication) can still run these, once, AFTER that commit.
+ * Running them earlier would have each one read a database that does not yet
+ * contain the message it is reacting to.
+ */
+export function runEventSideHooks(event: EventData): void {
   // EVENTING-V2 cutover: workflow triggers now ride the outbox → relay →
   // 'workflow' hook (workflowTriggerResolver), so the legacy fire-and-forget
   // enqueue-into-the-workflow-queue branch that used to live here is gone. The
@@ -91,13 +110,6 @@ export async function processEvent(event: EventData): Promise<void> {
         log.error({ err, event_type: event.type }, 'ticket summary hook failed to load')
       )
   }
-
-  // EVENTING-V2 (WO-18 cutover): the durable outbox is the ONLY path. The event
-  // is written transactionally (closing the commit-vs-enqueue loss window) and
-  // `event-dispatch` resolves targets and enqueues onto the `events` queue.
-  // The legacy direct getHookTargets + bulk-add path is deleted.
-  const { writeEventToOutbox } = await import('./outbox-dispatch')
-  await writeEventToOutbox(event)
 }
 
 /**

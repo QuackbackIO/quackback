@@ -24,7 +24,10 @@ import {
   principal,
   user,
   type Conversation,
+  type ConversationMessage,
+  type Database,
   type ConversationSystemEvent,
+  type Transaction,
   withWorkflowAttribution,
   type AssistantPendingActionSurface,
   type ConversationMessageMetadata,
@@ -34,7 +37,9 @@ import { isTeamMember } from '@/lib/shared/roles'
 import type { ConversationAttachment, ConversationMessageCitation, Team } from '@/lib/server/db'
 import { getTeam } from '@/lib/server/domains/teams'
 import { isBlocked } from '@/lib/server/domains/principals/blocking'
+import { assistantExecutionMode } from '@/lib/server/domains/assistant/assistant-execution-mode'
 import type {
+  AssistantRunId,
   ConversationId,
   ConversationMessageId,
   PrincipalId,
@@ -135,6 +140,45 @@ import {
 } from './conversation.contact'
 
 const log = logger.child({ component: 'conversation' })
+
+/**
+ * Invalidate any in-flight Quinn work for a conversation (QUINN-PRODUCT P2).
+ *
+ * Called by every transition that changes what Quinn may say next: a teammate
+ * reply, an assignment or takeover, a handoff, a close, a reopen, a snooze or
+ * wake, a spam filing, a restore, a deleted message. It bumps the
+ * conversation's invalidation counter, which is the number a run compares
+ * against before it may publish, and marks any open run superseded so an
+ * operator can see why.
+ *
+ * Deliberately unconditional on the execution mode: a workspace that rolls back
+ * to legacy still has runs in flight from before the switch, and they must
+ * still be fenced.
+ *
+ * The lazy import keeps the assistant domain out of this module's static graph,
+ * matching every other assistant reach-out here.
+ */
+async function invalidateAssistantTurns(
+  exec: Database | Transaction,
+  conversationId: ConversationId,
+  reason: string
+): Promise<void> {
+  const { invalidateAssistantWork } =
+    await import('@/lib/server/domains/assistant/assistant-run.service')
+  await invalidateAssistantWork(exec, conversationId, reason)
+}
+
+/**
+ * The invalidation-counter bump as a column patch.
+ *
+ * Folded INTO each lifecycle UPDATE rather than issued next to it, so the
+ * transition and the fence it raises are one statement and cannot be separated
+ * by a crash. `sendVisitorMessage` and `sendAgentMessage` own transactions and
+ * call {@link invalidateAssistantTurns} instead.
+ */
+function bumpsAssistantRevision() {
+  return { assistantRevision: sql`${conversations.assistantRevision} + 1` }
+}
 
 /** Actor for system-initiated events (auto-routing): no principal, service type. */
 function systemActor(): Actor {
@@ -468,12 +512,42 @@ export async function sendVisitorMessage(
       name: input.visitorName,
     })
 
+    // Durable Quinn intake (QUINN-PRODUCT P2). A customer message is an input
+    // change whether or not Quinn may answer it, so the invalidation counter
+    // moves either way: an answer being generated over the previous message can
+    // no longer publish as current. When Quinn MAY answer, the run intent and
+    // its job are written on this same transaction, so the commit that accepts
+    // the customer's message is the commit that makes the work claimable.
+    let durableRunId: string | null = null
+    if (assistantExecutionMode() === 'durable') {
+      const consider = shouldConsiderAssistant(updated, priorStatus)
+      // The pair probe moves inside the transaction in durable mode: a gate
+      // evaluated after the commit cannot take part in it.
+      const paired = consider ? await isPairedWithCustomerTicket(conversation.id, tx) : false
+      const { requestAssistantTurn, invalidateAssistantWork, customerMessageTriggerKey } =
+        await import('@/lib/server/domains/assistant/assistant-run.service')
+      if (consider && !paired) {
+        const requested = await requestAssistantTurn(tx, {
+          conversationId: conversation.id,
+          triggerKey: customerMessageTriggerKey(conversation.id, message.id),
+          triggerKind: 'customer_message',
+          surface: 'widget',
+          triggerMessageId: message.id,
+          requestedByPrincipalId: author.principalId,
+        })
+        durableRunId = requested.run.id
+      } else {
+        await invalidateAssistantWork(tx, conversation.id, 'customer_message')
+      }
+    }
+
     return {
       conversation: {
         ...updated,
         visitorEmail: contact.email ?? updated.visitorEmail,
       },
       message,
+      durableRunId,
     }
   })
 
@@ -545,7 +619,15 @@ export async function sendVisitorMessage(
   // `let_assistant_answer` action is NOT gated — a graph that deliberately
   // hands a thread to Quinn is the workspace's own choice, and the intake
   // table's "workflows FIRE" row keeps those graphs working.
-  if (shouldConsiderAssistant(txResult.conversation, priorStatus)) {
+  //
+  // DURABLE MODE (the default) does none of this: the run intent and its job
+  // were written inside the transaction above, and the job worker owns the
+  // turn from here. The branch below is the legacy executor, kept as the
+  // documented rollback position.
+  if (
+    assistantExecutionMode() === 'legacy' &&
+    shouldConsiderAssistant(txResult.conversation, priorStatus)
+  ) {
     void isPairedWithCustomerTicket(txResult.conversation.id)
       .then((paired) => {
         if (paired) return undefined
@@ -801,6 +883,11 @@ export async function sendAgentMessage(
       .where(eq(conversations.id, conversationId))
       .returning()
 
+    // A teammate speaking IS the takeover boundary. Invalidating here, on the
+    // same transaction, is what stops a Quinn answer that was already
+    // generating from landing after the human reply.
+    await invalidateAssistantTurns(tx, conversationId, 'human_reply')
+
     return {
       message,
       conversation: updated,
@@ -1010,6 +1097,7 @@ export async function setConversationStatus(
       // waitingOnly / longest-waiting sort. GitHub's native close already
       // did this; the other close paths must match.
       ...(status === 'closed' ? { waitingSince: null } : {}),
+      ...bumpsAssistantRevision(),
       updatedAt: now,
     })
     .where(eq(conversations.id, conversationId))
@@ -1100,7 +1188,13 @@ export async function snoozeConversation(
     .update(conversations)
     // Snoozing is never a resolution — clear resolvedAt if it was set (a closed
     // thread snoozed back into the queue).
-    .set({ status: 'snoozed', snoozedUntil: until, resolvedAt: null, updatedAt: now })
+    .set({
+      status: 'snoozed',
+      snoozedUntil: until,
+      resolvedAt: null,
+      ...bumpsAssistantRevision(),
+      updatedAt: now,
+    })
     .where(eq(conversations.id, conversationId))
     .returning()
   const dto = await conversationToDTO(updated, 'agent')
@@ -1122,7 +1216,7 @@ export async function sweepDueSnoozedConversations(): Promise<{ woken: number }>
   const now = new Date()
   const due = await db
     .update(conversations)
-    .set({ status: 'open', snoozedUntil: null, updatedAt: now })
+    .set({ status: 'open', snoozedUntil: null, ...bumpsAssistantRevision(), updatedAt: now })
     .where(
       and(
         eq(conversations.status, 'snoozed'),
@@ -1177,6 +1271,7 @@ export async function endConversation(
       // An agent's own spam filing is 'manual'; any other end clears a stale
       // marker (a re-ended thread is a new human decision).
       spamReason: reason === 'spam' ? 'manual' : null,
+      ...bumpsAssistantRevision(),
       updatedAt: now,
     })
     .where(eq(conversations.id, conversationId))
@@ -1235,6 +1330,7 @@ export async function restoreConversationFromSpam(
       endReason: null,
       endNote: null,
       spamReason: null,
+      ...bumpsAssistantRevision(),
       updatedAt: now,
     })
     .where(eq(conversations.id, conversationId))
@@ -1275,6 +1371,7 @@ export async function autoFileConversationAsSpam(
       endNote: `Auto-filed by the spam filter (${CONVERSATION_SPAM_FILED_BY_LABELS[filedBy]})`,
       spamReason: filedBy,
       waitingSince: null,
+      ...bumpsAssistantRevision(),
       updatedAt: now,
     })
     .where(eq(conversations.id, conversationId))
@@ -1546,6 +1643,9 @@ export async function assignConversation(
     .set({
       assignedAgentPrincipalId: agentPrincipalId,
       ...(wake ? { status: 'open' as const, snoozedUntil: null } : {}),
+      // A teammate taking the conversation is an authority change, so an
+      // answer already being generated must not land after it.
+      ...bumpsAssistantRevision(),
       updatedAt: new Date(),
     })
     .where(eq(conversations.id, conversationId))
@@ -1613,6 +1713,7 @@ export async function assignTeam(
       // (assigning a team never clears the existing agent).
       ...(distributedAgentId ? { assignedAgentPrincipalId: distributedAgentId } : {}),
       ...(wake ? { status: 'open' as const, snoozedUntil: null } : {}),
+      ...bumpsAssistantRevision(),
       updatedAt: new Date(),
     })
     .where(eq(conversations.id, conversationId))
@@ -1845,6 +1946,10 @@ export async function deleteConversationMessage(
     .update(conversationMessages)
     .set({ deletedAt: new Date(), deletedByPrincipalId: actor.principalId, updatedAt: new Date() })
     .where(and(eq(conversationMessages.id, messageId), isNull(conversationMessages.deletedAt)))
+
+  // Removing a message changes the transcript a turn was reasoning over, so any
+  // answer still generating must not land against the old context.
+  await invalidateAssistantTurns(db, conversationId, 'message_deleted')
 
   const deletedEvent = {
     kind: 'message_deleted' as const,
@@ -2119,8 +2224,11 @@ export function shouldConsiderAssistant(
  * `ticketConversations` is schema, not the domain. events/targets.ts carries
  * the identical probe for the team-bell suppression.
  */
-export async function isPairedWithCustomerTicket(conversationId: ConversationId): Promise<boolean> {
-  const [link] = await db
+export async function isPairedWithCustomerTicket(
+  conversationId: ConversationId,
+  exec: Database | Transaction = db
+): Promise<boolean> {
+  const [link] = await exec
     .select({ ticketId: ticketConversations.ticketId })
     .from(ticketConversations)
     .where(
@@ -2162,49 +2270,94 @@ export async function appendAssistantReply(
     metadata?: ConversationMessageMetadata | null
   }
 ): Promise<ConversationMessageDTO> {
-  const txResult = await db.transaction(async (tx) => {
-    const [existing] = await tx
-      .select()
-      .from(conversations)
-      .where(eq(conversations.id, conversationId))
-      .limit(1)
-      .for('update')
-    if (!existing) throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
-    const [message] = await tx
-      .insert(conversationMessages)
-      .values({
-        conversationId,
-        principalId: author.principalId,
-        senderType: 'agent',
-        content,
-        contentJson: opts.contentJson ?? null,
-        citations: opts.citations?.length ? opts.citations : null,
-        metadata: opts.metadata ?? null,
-      })
-      .returning()
-    const nextStatus = applyAgentReopenStatus(
-      existing.status,
-      getChannelDescriptor(existing.channel)?.reopenOnReply ?? 'always'
-    )
-    const [updated] = await tx
-      .update(conversations)
-      .set({
-        lastMessageAt: message.createdAt,
-        lastMessagePreview: preview(content, []),
-        status: nextStatus,
-        waitingSince: opts.waiting ? message.createdAt : null,
-        inactivityCheckInAt: null,
-        // An answer (not a handoff line) marks the agent side read so the
-        // unread badge does not stay lit on Quinn-handled threads.
-        ...(opts.waiting ? {} : { agentLastReadAt: message.createdAt }),
-        resolvedAt: resolvedAtForStatus(nextStatus, message.createdAt),
-        updatedAt: message.createdAt,
-      })
-      .where(eq(conversations.id, conversationId))
-      .returning()
-    return { conversation: updated, message }
-  })
+  const txResult = await db.transaction((tx) =>
+    appendAssistantReplyTx(tx, conversationId, content, author, opts)
+  )
+  return publishAssistantReplyEffects(txResult, author)
+}
 
+/**
+ * The transactional half of {@link appendAssistantReply}.
+ *
+ * Durable publication (assistant-run.service.ts) needs the message insert and
+ * the conversation update to commit in the SAME transaction as the run result,
+ * the involvement update and the outbox event, so this half is exported
+ * separately rather than the durable path opening a second transaction around
+ * a function that already committed. `assistantRunId` stamps the run identity
+ * the partial unique index dedupes a replayed publication by; legacy callers
+ * omit it and behave exactly as before.
+ *
+ * The conversation's inactivity owner and anchor are NOT written here on
+ * purpose: migration 0284's BEFORE INSERT trigger derives them from the
+ * message's own `assistantResponseKind`, in this same statement, so an answer
+ * and its answer clock can never disagree.
+ */
+export async function appendAssistantReplyTx(
+  tx: Transaction,
+  conversationId: ConversationId,
+  content: string,
+  author: ConversationAuthorInput,
+  opts: {
+    waiting: boolean
+    citations?: ConversationMessageCitation[]
+    contentJson?: TiptapContent | null
+    metadata?: ConversationMessageMetadata | null
+    assistantRunId?: AssistantRunId | null
+  }
+): Promise<{ conversation: Conversation; message: ConversationMessage }> {
+  const [existing] = await tx
+    .select()
+    .from(conversations)
+    .where(eq(conversations.id, conversationId))
+    .limit(1)
+    .for('update')
+  if (!existing) throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
+  const [message] = await tx
+    .insert(conversationMessages)
+    .values({
+      conversationId,
+      principalId: author.principalId,
+      senderType: 'agent',
+      content,
+      contentJson: opts.contentJson ?? null,
+      citations: opts.citations?.length ? opts.citations : null,
+      metadata: opts.metadata ?? null,
+      assistantRunId: opts.assistantRunId ?? null,
+    })
+    .returning()
+  const nextStatus = applyAgentReopenStatus(
+    existing.status,
+    getChannelDescriptor(existing.channel)?.reopenOnReply ?? 'always'
+  )
+  const [updated] = await tx
+    .update(conversations)
+    .set({
+      lastMessageAt: message.createdAt,
+      lastMessagePreview: preview(content, []),
+      status: nextStatus,
+      waitingSince: opts.waiting ? message.createdAt : null,
+      inactivityCheckInAt: null,
+      // An answer (not a handoff line) marks the agent side read so the
+      // unread badge does not stay lit on Quinn-handled threads.
+      ...(opts.waiting ? {} : { agentLastReadAt: message.createdAt }),
+      resolvedAt: resolvedAtForStatus(nextStatus, message.createdAt),
+      updatedAt: message.createdAt,
+    })
+    .where(eq(conversations.id, conversationId))
+    .returning()
+  return { conversation: updated, message }
+}
+
+/**
+ * The after-commit half: realtime publishes and the message.created event.
+ *
+ * Separate from the transaction so the durable path can run it once the
+ * outcome is durable, and never for a candidate the fences rejected.
+ */
+export async function publishAssistantReplyEffects(
+  txResult: { conversation: Conversation; message: ConversationMessage },
+  author: ConversationAuthorInput
+): Promise<ConversationMessageDTO> {
   const messageDTO = toMessageDTO(txResult.message, authorFromInput(author), author.principalId)
   const conversationDTO = await conversationToDTO(txResult.conversation, 'agent')
   publishConversationUpdate(conversationDTO.id, conversationDTO)
@@ -2321,6 +2474,9 @@ export async function executeAssistantHandoff(
       status: 'open',
       // Surface the handoff as unread so the team sees a new request.
       agentLastReadAt: null,
+      // The team owns the customer from here. Any other turn still generating
+      // is fenced by this bump before it can add a second voice.
+      ...bumpsAssistantRevision(),
       updatedAt: new Date(),
     })
     .where(eq(conversations.id, conversationId))
@@ -2420,6 +2576,7 @@ export async function autoCloseAssistantConversation(
       endReason,
       waitingSince: null,
       snoozedUntil: null,
+      ...bumpsAssistantRevision(),
       updatedAt: now,
     })
     .where(and(eq(conversations.id, conversationId), eq(conversations.status, 'open')))

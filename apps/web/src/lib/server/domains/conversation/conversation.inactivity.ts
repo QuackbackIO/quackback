@@ -280,7 +280,13 @@ async function executeInactivity(
     if (action === 'follow_up') {
       await tx
         .update(conversations)
-        .set({ inactivityCheckInAt: now, inactivityRetryAt: null })
+        // The follow-up is a new Quinn utterance, so it invalidates any turn
+        // still generating over the older state (QUINN-PRODUCT P2).
+        .set({
+          inactivityCheckInAt: now,
+          inactivityRetryAt: null,
+          assistantRevision: sql`${conversations.assistantRevision} + 1`,
+        })
         .where(eq(conversations.id, conversation.id))
       if (owner === 'assistant')
         await tx
@@ -301,6 +307,7 @@ async function executeInactivity(
           waitingSince: null,
           snoozedUntil: null,
           endReason: candidate.owner === 'assistant_answered' ? 'resolved' : 'no_response',
+          assistantRevision: sql`${conversations.assistantRevision} + 1`,
           updatedAt: now,
         })
         .where(eq(conversations.id, conversation.id))

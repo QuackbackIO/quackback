@@ -445,6 +445,19 @@ export {
   ASSISTANT_INVOLVEMENT_STATUSES,
   ASSISTANT_HANDOFF_REASONS,
   ASSISTANT_MODEL_HANDOFF_REASONS,
+  // Schema tables - durable assistant runs (QUINN-PRODUCT P1)
+  assistantRuns,
+  assistantRunsRelations,
+  assistantRunSteps,
+  assistantRunEvidence,
+  assistantEffectiveSnapshots,
+  assistantRequestReceipts,
+  ASSISTANT_RUN_STATUSES,
+  ASSISTANT_RUN_PHASES,
+  ASSISTANT_RUN_OUTCOMES,
+  ASSISTANT_RUN_TRIGGER_KINDS,
+  ASSISTANT_RUN_SURFACES,
+  ASSISTANT_RUN_STEP_STATUSES,
   // Schema tables - assistant guidance rules
   assistantGuidanceRules,
   connectors,
@@ -505,6 +518,18 @@ export {
 
 // Re-export schema types not covered by @quackback/db/types
 export type {
+  AssistantRun,
+  AssistantRunDelegation,
+  AssistantRunStatus,
+  AssistantRunPhase,
+  AssistantRunOutcome,
+  AssistantRunTriggerKind,
+  AssistantRunSurface,
+  AssistantRunStep,
+  AssistantRunStepStatus,
+  AssistantRunEvidence,
+  AssistantEffectiveSnapshot,
+  AssistantRequestReceipt,
   AssistantInvolvementSource,
   AssistantInvolvementStatus,
   AssistantInvolvementTrigger,

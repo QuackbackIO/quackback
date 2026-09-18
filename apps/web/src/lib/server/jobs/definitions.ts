@@ -231,6 +231,24 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       ),
   },
   {
+    // Durable Quinn turns (QUINN-PRODUCT P2). One attempt, deliberately: a turn
+    // can dispatch a real write, and the reaper's terminal branch is what stops
+    // a process death from repeating it. Retries wait for replay-safe receipts.
+    // The lease is long because a full agentic generation is, and the handler
+    // heartbeats through it; interactive work gets a small pool so a backlog
+    // cannot starve the rest of the tier.
+    name: 'assistant-turn',
+    concurrency: 2,
+    maxAttempts: 1,
+    leaseMs: 180_000,
+    retentionMs: DAY_MS,
+    failedRetentionMs: 14 * DAY_MS,
+    handler: () =>
+      import('@/lib/server/domains/assistant/assistant-turn-queue').then(
+        (m) => m.runAssistantTurnJob
+      ),
+  },
+  {
     name: 'snooze-sweep',
     cron: '* * * * *',
     maxAttempts: 3,

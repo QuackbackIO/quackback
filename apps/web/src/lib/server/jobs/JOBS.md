@@ -363,6 +363,7 @@ went stale the moment a queue moved.
 | `sla-breach-sweep`                     | `* * * * *`    | 1           | 3        | 60s   |
 | `conversation-inactivity-delivery`     | —              | 1           | 8        | 60s   |
 | `conversation-inactivity-continuation` | —              | 1           | 3        | 60s   |
+| `assistant-turn`                       | —              | 2           | 1        | 180s  |
 | `snooze-sweep`                         | `* * * * *`    | 1           | 3        | 60s   |
 | `workflow-sweep`                       | `*/5 * * * *`  | 1           | 3        | 60s   |
 | `workflow-retention`                   | `0 4 * * *`    | 1           | 3        | 60s   |

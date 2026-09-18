@@ -163,14 +163,33 @@ export async function previewAssistantTurnForConversation(
   return 'eligible'
 }
 
-export async function runAssistantTurnForConversation(
+/**
+ * Everything one turn needs that is decided BEFORE the model is called.
+ *
+ * Extracted so the durable executor (assistant-run.service.ts) runs exactly
+ * the same gates, silence rule, involvement revival and trigger-message
+ * resolution as the legacy path, rather than a second copy that can drift.
+ */
+export interface PreparedAssistantTurn {
+  assistantPrincipalId: PrincipalId
+  messages: Awaited<ReturnType<typeof mapRowsToThreadMessages>>
+  /** The active involvement, when Quinn is already engaged. */
+  activeInvolvement: { id: AssistantInvolvementId } | null
+  latestCustomerMessageId: string | null
+}
+
+/**
+ * Run the cheap gates and load the turn's context, or decline.
+ *
+ * Returns null for every reason Quinn must stay silent: not configured, not
+ * entitled, over budget, responding turned off, no transcript, a human is
+ * handling it, or the conversation was already handed to the team.
+ */
+export async function prepareAssistantTurn(
   conversationId: ConversationId,
-  opts?: {
-    surface?: 'widget' | 'workflow_step'
-    stepInstructions?: string | null
-  }
-): Promise<void> {
-  if (!isAssistantConfigured()) return
+  opts?: { surface?: 'widget' | 'workflow_step' }
+): Promise<PreparedAssistantTurn | null> {
+  if (!isAssistantConfigured()) return null
 
   try {
     const { requireEntitlement } = await import('@/lib/server/domains/settings/cloud/entitlements')
@@ -178,7 +197,7 @@ export async function runAssistantTurnForConversation(
   } catch (err) {
     if (err instanceof EntitlementRequiredError) {
       log.info({ conversationId }, 'assistant turn skipped: ai assistant not entitled')
-      return
+      return null
     }
     throw err
   }
@@ -188,7 +207,7 @@ export async function runAssistantTurnForConversation(
   } catch (err) {
     if (err instanceof TierLimitError) {
       log.info({ conversationId }, 'assistant turn skipped: ai token budget exceeded')
-      return
+      return null
     }
     throw err
   }
@@ -197,7 +216,7 @@ export async function runAssistantTurnForConversation(
   // above — so it costs a settings round trip solely when AI is set up.
   const { getMessengerConfig } = await import('@/lib/server/domains/settings/settings.widget')
   const messenger = await getMessengerConfig()
-  if (messenger.assistant?.respond !== true) return
+  if (messenger.assistant?.respond !== true) return null
 
   // Overlap the principal find-or-create with the thread read: the raw read is
   // principal-independent (only the pure mapping needs the id), so both run at
@@ -207,11 +226,11 @@ export async function runAssistantTurnForConversation(
     loadConversationThread(conversationId),
   ])
   const messages = mapRowsToThreadMessages(threadRows, assistantPrincipalId)
-  if (messages.length === 0) return
+  if (messages.length === 0) return null
 
   // Silence rule: a human is handling it. Bail before touching the involvement
   // record (no revive, no active lookup) or spending on the model.
-  if (!respondEligible(messages)) return
+  if (!respondEligible(messages)) return null
 
   // Phase 2 live re-check: fire-and-forget, independent of how this turn
   // resolves (answer, hand-off, or an internally-suppressed reply all still
@@ -235,7 +254,7 @@ export async function runAssistantTurnForConversation(
   // owns it — including the window before a teammate's first reply, which the
   // message-based silence rule above cannot see. Quinn never re-enters on its
   // own; a workflow step is the explicit re-engagement path and bypasses this.
-  if ((opts?.surface ?? 'widget') === 'widget' && latest?.status === 'handed_off') return
+  if ((opts?.surface ?? 'widget') === 'widget' && latest?.status === 'handed_off') return null
 
   // The customer message this turn answers, for the write-tool idempotency
   // key: a retried turn over the same message must key the same way. In-memory
@@ -247,37 +266,78 @@ export async function runAssistantTurnForConversation(
   const latestCustomerMessageId =
     threadRows.filter((m) => m.senderType === 'visitor').at(-1)?.id ?? null
 
-  // Customer turns expose activity only. Candidate text may contain internal
-  // sources or fail validation; only the persisted terminal reply is public.
-  // Mirrored into the KV cache on every publish (and cleared when the turn ends, in
-  // the finally below) so a subscriber that connects mid-turn can replay the
-  // current state instead of missing it — see assistant-activity-snapshot.ts.
-  const publishActivity = (status: 'thinking' | 'searching_kb' | 'reviewing_conversation') => {
-    const event = {
-      kind: 'assistant_activity' as const,
-      conversationId,
-      status,
-      at: new Date().toISOString(),
-    }
-    publishConversationOnlyEvent(conversationId, event)
-    void writeActivitySnapshot(conversationId, event)
+  return {
+    assistantPrincipalId,
+    messages,
+    activeInvolvement: active ? { id: active.id } : null,
+    latestCustomerMessageId,
   }
+}
+
+/**
+ * Publish one activity frame for a customer turn.
+ *
+ * Customer surfaces expose activity only. Candidate text may contain internal
+ * sources or fail validation; only the persisted terminal reply is public.
+ * Mirrored into the KV cache on every publish (and cleared when the turn ends)
+ * so a subscriber that connects mid-turn can replay the current state instead
+ * of missing it — see assistant-activity-snapshot.ts.
+ */
+export function publishAssistantActivity(
+  conversationId: ConversationId,
+  status: 'thinking' | 'searching_kb' | 'reviewing_conversation'
+): void {
+  const event = {
+    kind: 'assistant_activity' as const,
+    conversationId,
+    status,
+    at: new Date().toISOString(),
+  }
+  publishConversationOnlyEvent(conversationId, event)
+  void writeActivitySnapshot(conversationId, event)
+}
+
+/** Generate a candidate for a prepared turn. Never persists anything. */
+export async function generateAssistantCandidate(
+  conversationId: ConversationId,
+  prepared: PreparedAssistantTurn,
+  opts?: {
+    surface?: 'widget' | 'workflow_step'
+    stepInstructions?: string | null
+    signal?: AbortSignal
+  }
+): Promise<Awaited<ReturnType<typeof runAssistantTurn>>> {
+  return runAssistantTurn({
+    messages: prepared.messages,
+    assistantPrincipalId: prepared.assistantPrincipalId,
+    conversationId,
+    role: 'customer_support',
+    surface: opts?.surface ?? 'widget',
+    involvementId: prepared.activeInvolvement?.id ?? null,
+    latestCustomerMessageId: prepared.latestCustomerMessageId,
+    stepInstructions: opts?.stepInstructions ?? null,
+    signal: opts?.signal,
+    onActivity: (activity) => publishAssistantActivity(conversationId, activityToStatus(activity)),
+  })
+}
+
+export async function runAssistantTurnForConversation(
+  conversationId: ConversationId,
+  opts?: {
+    surface?: 'widget' | 'workflow_step'
+    stepInstructions?: string | null
+  }
+): Promise<void> {
+  const prepared = await prepareAssistantTurn(conversationId, opts)
+  if (!prepared) return
+  const { assistantPrincipalId } = prepared
+  const active = prepared.activeInvolvement
 
   // The finally is the single place the snapshot is cleared: every exit —
   // suppressed, hand-off, answered, or the failure floor below — must leave
   // no stale trace for a later subscriber to replay.
   try {
-    const result = await runAssistantTurn({
-      messages,
-      assistantPrincipalId,
-      conversationId,
-      role: 'customer_support',
-      surface: opts?.surface ?? 'widget',
-      involvementId: active?.id ?? null,
-      latestCustomerMessageId,
-      stepInstructions: opts?.stepInstructions ?? null,
-      onActivity: (activity) => publishActivity(activityToStatus(activity)),
-    })
+    const result = await generateAssistantCandidate(conversationId, prepared, opts)
     // Suppressed by the engine's own silence check — nothing to persist. An
     // honest cannot-answer outcome is still a customer-visible terminal reply
     // and must be persisted; it simply must not advance resolution state.
@@ -408,7 +468,7 @@ export async function runAssistantTurnForConversation(
 
 /** The defense-in-depth leak guard's own error type, so the failure floor can
  *  log it distinctly from an ordinary provider failure. */
-class InternalSourcedReplyError extends Error {
+export class InternalSourcedReplyError extends Error {
   constructor() {
     super('refusing to persist an internal-sourced customer reply')
   }
@@ -424,7 +484,7 @@ class InternalSourcedReplyError extends Error {
  * workflow-step turn serves the same waiting customer, so its failure
  * escalates identically.
  */
-async function runAssistantFailureFloor(
+export async function runAssistantFailureFloor(
   conversationId: ConversationId,
   assistantPrincipalId: PrincipalId
 ): Promise<void> {
@@ -454,7 +514,7 @@ async function runAssistantFailureFloor(
  * already ended the involvement), every conversation-side effect is skipped,
  * so the customer can never see a second "Connecting you to the team".
  */
-async function escalateToHuman(
+export async function escalateToHuman(
   conversationId: ConversationId,
   involvementId: AssistantInvolvementId,
   reason: AssistantHandoffReason,
