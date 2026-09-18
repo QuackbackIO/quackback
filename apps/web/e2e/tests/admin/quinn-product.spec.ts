@@ -36,11 +36,13 @@ async function addGuidance(page: Page) {
   await open(page, '/admin/automation/guidance', 'Guidance')
   // Retry the action only until hydrated; SSR markup can precede handlers.
   await expect(async () => {
-    if (!(await page.getByRole('dialog').isVisible()))
+    if (!(await page.getByRole('region', { name: 'Guidance editor' }).isVisible()))
       await page.getByRole('button', { name: 'Add guidance', exact: true }).click()
-    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 1000 })
+    await expect(page.getByRole('region', { name: 'Guidance editor' })).toBeVisible({
+      timeout: 1000,
+    })
   }).toPass({ timeout: 15000 })
-  return page.getByRole('dialog')
+  return page.getByRole('region', { name: 'Guidance editor' })
 }
 async function searchGuidance(page: Page, value: string) {
   await expect(async () => {
@@ -172,7 +174,7 @@ test.describe('Quinn implemented product acceptance', () => {
     await open(other, '/admin/automation/guidance', 'Guidance')
     await searchGuidance(other, tag + ' concurrent delete')
     await other.getByRole('button', { name: 'Edit', exact: true }).click()
-    const stale = other.getByRole('dialog')
+    const stale = other.getByRole('region', { name: 'Guidance editor' })
     await stale.getByLabel('What should Quinn do?').fill('Keep this unsaved draft.')
     await searchGuidance(page, tag + ' concurrent delete')
     await page.getByRole('button', { name: 'Edit', exact: true }).click()
@@ -223,7 +225,7 @@ test.describe('Quinn implemented product acceptance', () => {
     await open(page, '/admin/automation/guidance', 'Guidance')
     await searchGuidance(page, tag + ' legacy')
     await page.getByRole('button', { name: 'Edit', exact: true }).click()
-    const dialog = page.getByRole('dialog')
+    const dialog = page.getByRole('region', { name: 'Guidance editor' })
     await expect(dialog.getByLabel('What should Quinn do?')).toHaveValue(longInstructions)
     await expect(
       dialog.getByText('Customer conversations, Support teammates, Workspace and Slack', {
@@ -237,6 +239,72 @@ test.describe('Quinn implemented product acceptance', () => {
       await sql`SELECT instructions,assignments FROM agent_skills WHERE id=${ids.skill}`
     expect(saved.instructions).toBe(longInstructions.trim())
     expect(saved.assignments).toEqual({ agent: true, copilot: true, workspace: true })
+  })
+  test('built-in action permissions are independent for customers and teammates', async ({
+    page,
+  }) => {
+    await open(page, '/admin/automation/connectors', 'Connections')
+    const customer = page.getByRole('combobox', {
+      name: 'Capture feedback: Customer conversations',
+      exact: true,
+    })
+    const teammate = page.getByRole('combobox', {
+      name: 'Capture feedback: Support teammates',
+      exact: true,
+    })
+    await expect(customer).toBeEnabled()
+    await customer.selectOption('deny')
+    await expect
+      .poll(
+        async () =>
+          (
+            await sql`SELECT assistant_config->'agents'->'agent'->'toolRules'->>'capture_feedback' AS policy FROM settings LIMIT 1`
+          )[0].policy
+      )
+      .toBe('deny')
+    await expect(teammate).toBeEnabled()
+    await teammate.selectOption('ask')
+    await expect
+      .poll(
+        async () =>
+          (
+            await sql`SELECT assistant_config->'agents'->'copilot'->'toolRules'->>'capture_feedback' AS policy FROM settings LIMIT 1`
+          )[0].policy
+      )
+      .toBe('ask')
+    await page.reload()
+    await expect(customer).toHaveValue('deny')
+    await expect(teammate).toHaveValue('ask')
+    await customer.selectOption('default')
+    await expect
+      .poll(
+        async () =>
+          (
+            await sql`SELECT assistant_config->'agents'->'agent'->'toolRules'->>'capture_feedback' AS policy FROM settings LIMIT 1`
+          )[0].policy
+      )
+      .toBeNull()
+    await expect(teammate).toHaveValue('ask')
+  })
+  test('source previews show stored text and deny anonymous replay', async ({ page, browser }) => {
+    await open(page, '/admin/automation/knowledge', 'Knowledge')
+    const response = page.waitForResponse(
+      (response) =>
+        response.url().includes('/_serverFn/') &&
+        response.url().includes(fromUuid('assistant_document', ids.document))
+    )
+    await page.getByRole('button', { name: 'Open ' + tag + ' document', exact: true }).click()
+    const loaded = await response
+    const preview = page.getByRole('dialog')
+    await expect(preview).toContainText('Public document evidence for Quinn E2E.')
+    const anonymous = await browser.newContext({ storageState: { cookies: [], origins: [] } })
+    try {
+      const replay = await anonymous.request.get(loaded.url())
+      expect(await replay.text()).not.toContain('Public document evidence for Quinn E2E.')
+    } finally {
+      await anonymous.close()
+    }
+    await preview.getByRole('button', { name: 'Close', exact: true }).click()
   })
   test('document switches persist independently and revoke old citations', async ({
     page,
@@ -391,7 +459,7 @@ test.describe('Quinn implemented product acceptance', () => {
       await open(target, '/admin/automation/guidance', 'Guidance')
       await searchGuidance(target, 'Everyday instructions')
       await target.getByRole('button', { name: 'Edit', exact: true }).click()
-      return target.getByRole('dialog')
+      return target.getByRole('region', { name: 'Guidance editor' })
     }
     const first = await editVoice(page)
     const stale = await editVoice(other)

@@ -62,7 +62,7 @@ export function AssistantIdentityCard() {
           <p role="alert" className="text-sm text-destructive">
             {intl.formatMessage({
               id: 'automation.agent.loadError',
-              defaultMessage: 'AI agent settings could not be loaded.',
+              defaultMessage: 'Quinn settings could not be loaded.',
             })}
           </p>
           <Button variant="outline" size="sm" onClick={() => void settingsQuery.refetch()}>
@@ -84,7 +84,7 @@ export function AssistantIdentityCard() {
         <p role="status" className="text-sm text-muted-foreground">
           {intl.formatMessage({
             id: 'automation.agent.loading',
-            defaultMessage: 'Loading AI agent settings…',
+            defaultMessage: 'Loading Quinn settings…',
           })}
         </p>
       </SettingsCard>
@@ -103,7 +103,7 @@ export function AssistantIdentityCard() {
       : null
     : intl.formatMessage({
         id: 'automation.agent.identity.nameRequired',
-        defaultMessage: 'Enter a name for your AI agent.',
+        defaultMessage: 'Enter a name for Quinn.',
       })
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -204,7 +204,7 @@ export function AssistantIdentityCard() {
       })}
       description={intl.formatMessage({
         id: 'automation.agent.identity.description',
-        defaultMessage: 'Choose how the AI agent appears to customers.',
+        defaultMessage: 'Choose how Quinn appears to customers.',
       })}
     >
       <div className="space-y-5">

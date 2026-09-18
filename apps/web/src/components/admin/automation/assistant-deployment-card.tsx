@@ -107,7 +107,7 @@ export function AssistantDeploymentCard({
                 : live
                   ? intl.formatMessage({
                       id: 'automation.agent.deployment.liveHelp',
-                      defaultMessage: 'Saved settings affect new AI agent replies.',
+                      defaultMessage: 'Saved settings affect new Quinn replies.',
                     })
                   : intl.formatMessage({
                       id: 'automation.agent.deployment.pausedHelp',
@@ -186,12 +186,11 @@ export function AssistantDeploymentCard({
             ? intl.formatMessage({
                 id: 'automation.agent.deployment.enableConfirmDescription',
                 defaultMessage:
-                  'The AI agent will start answering new customer messages in Messenger using your saved settings.',
+                  'Quinn will start answering new customer messages in Messenger using your saved settings.',
               })
             : intl.formatMessage({
                 id: 'automation.agent.deployment.pauseConfirmDescription',
-                defaultMessage:
-                  'The AI agent will stop answering new customer messages automatically.',
+                defaultMessage: 'Quinn will stop answering new customer messages automatically.',
               })
         }
         confirmLabel={

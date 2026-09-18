@@ -79,7 +79,7 @@ function ToolGroup({
             >
               {defaultPolicy === 'always'
                 ? 'Always run'
-                : 'Automatic on Agent · Approval on Copilot'}
+                : 'Automatic for customers · Approval for teammates'}
             </Badge>
           ) : (
             defaultPolicy &&
@@ -120,12 +120,12 @@ function ToolGroup({
                 </Badge>
               ) : (
                 <>
-                  <Badge size="sm">Agent: automatic</Badge>
+                  <Badge size="sm">Customers: automatic</Badge>
                   <Badge
                     size="sm"
                     className="border-transparent bg-amber-500/10 text-amber-800 dark:text-amber-300"
                   >
-                    Copilot: approval
+                    Teammates: approval
                   </Badge>
                 </>
               )}
@@ -248,12 +248,12 @@ function ConnectorDetailPage() {
             >
               <div>
                 <div id={`connector-available-${agent}`} className="text-[13px] font-medium">
-                  {agent === 'agent' ? 'Agent' : 'Copilot'}
+                  {agent === 'agent' ? 'Customer conversations' : 'Support teammates'}
                 </div>
                 <p className="text-[11px] text-muted-foreground">
                   {agent === 'agent'
                     ? 'Customer-facing. Approvals land as inbox cards for your team.'
-                    : 'Teammate-facing. Approvals appear inline in the Copilot panel.'}
+                    : 'Teammate-facing. Approvals appear inline in the Quinn panel.'}
                 </p>
               </div>
               <Switch

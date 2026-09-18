@@ -1,3 +1,4 @@
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -12,7 +13,10 @@ import {
   deleteWebSourceFn,
   setWebSourceEnabledFn,
 } from '@/lib/server/functions/assistant-web-sources'
-import { updateAssistantSourceUseFn } from '@/lib/server/functions/assistant-source-use'
+import {
+  getAssistantKnowledgeSourceFn,
+  updateAssistantSourceUseFn,
+} from '@/lib/server/functions/assistant-source-use'
 import { assistantQueries } from '@/lib/client/queries/assistant'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -22,6 +26,13 @@ import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 const sourcesKey = ['assistant', 'knowledgeSources'] as const
 export function QuinnKnowledgeSources({ kind }: { kind: 'document' | 'webpage' }) {
   const cache = useQueryClient()
+  const [previewId, setPreviewId] = useState<string | null>(null)
+  const preview = useQuery({
+    queryKey: [...sourcesKey, 'preview', kind, previewId],
+    queryFn: () => getAssistantKnowledgeSourceFn({ data: { kind, id: previewId! } }),
+    enabled: previewId !== null,
+    staleTime: 0,
+  })
   const docs = useQuery({
     queryKey: [...sourcesKey, 'documents'],
     queryFn: listAssistantDocumentsFn,
@@ -121,7 +132,29 @@ export function QuinnKnowledgeSources({ kind }: { kind: 'document' | 'webpage' }
             )}
             {rows.map((row) => (
               <div key={row.id} className="border-t pt-3 space-y-2">
-                <p className="text-sm font-medium break-words">{row.title}</p>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium break-words">{row.title}</p>
+                    {('url' in row || row.fileName !== row.title) && (
+                      <p className="mt-1 text-xs text-muted-foreground break-words">
+                        {'url' in row ? row.url : row.fileName}
+                      </p>
+                    )}
+                    {'fetchedAt' in row && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Fetched {new Date(row.fetchedAt).toLocaleString()}
+                      </p>
+                    )}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`Open ${row.title}`}
+                    onClick={() => setPreviewId(row.id)}
+                  >
+                    Open
+                  </Button>
+                </div>
                 <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
                   {(['customer', 'team'] as const).map((use) => {
                     const allowed =
@@ -169,6 +202,7 @@ export function QuinnKnowledgeSources({ kind }: { kind: 'document' | 'webpage' }
             {kind === 'document' ? (
               <div className="space-y-1">
                 <Input
+                  id="quinn-document-upload"
                   type="file"
                   aria-label="Upload knowledge document"
                   accept=".pdf,.docx"
@@ -192,6 +226,7 @@ export function QuinnKnowledgeSources({ kind }: { kind: 'document' | 'webpage' }
                 }}
               >
                 <Input
+                  id="quinn-web-page-url"
                   aria-label="Web page URL"
                   type="url"
                   value={url}
@@ -208,6 +243,40 @@ export function QuinnKnowledgeSources({ kind }: { kind: 'document' | 'webpage' }
           </section>
         )
       })}
+      <Dialog
+        open={previewId !== null}
+        onOpenChange={(open) => {
+          if (!open) setPreviewId(null)
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl max-h-[85dvh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{preview.data?.title ?? 'Knowledge source'}</DialogTitle>
+          </DialogHeader>
+          {preview.isPending && <p role="status">Loading source…</p>}
+          {preview.isError && (
+            <div role="alert">
+              <p>This source could not be loaded.</p>
+              <Button variant="outline" onClick={() => void preview.refetch()}>
+                Try again
+              </Button>
+            </div>
+          )}
+          {preview.data && (
+            <>
+              <p className="break-words text-xs text-muted-foreground">
+                {preview.data.origin} · Updated {new Date(preview.data.updatedAt).toLocaleString()}
+              </p>
+              <p className="whitespace-pre-wrap break-words text-sm">{preview.data.text}</p>
+              {preview.data.truncated && (
+                <p className="text-xs text-muted-foreground">
+                  Showing the first 20,000 characters of the stored source.
+                </p>
+              )}
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
       <ConfirmDialog
         open={removing !== null}
         onOpenChange={(open) => {

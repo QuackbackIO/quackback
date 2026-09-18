@@ -1,3 +1,6 @@
+import { useState } from 'react'
+import { QuinnReviewQueue } from '@/components/admin/automation/quinn-review-queue'
+import { Button } from '@/components/ui/button'
 import { createFileRoute } from '@tanstack/react-router'
 import { useIntl } from 'react-intl'
 import { ChartBarIcon } from '@heroicons/react/24/solid'
@@ -21,6 +24,9 @@ export const Route = createFileRoute('/admin/automation/performance')({
 
 function AutomationPerformancePage() {
   const intl = useIntl()
+  const { permissions } = Route.useRouteContext()
+  const [days, setDays] = useState<7 | 30>(7)
+  const canViewConversations = (permissions ?? []).includes(PERMISSIONS.CONVERSATION_VIEW)
 
   return (
     <div className="max-w-5xl space-y-6">
@@ -40,6 +46,25 @@ function AutomationPerformancePage() {
           defaultMessage: 'Understand how Quinn is helping over the last 30 days.',
         })}
       />
+      {canViewConversations && (
+        <>
+          <div role="group" aria-label="Review period" className="flex gap-2">
+            {([7, 30] as const).map((value) => (
+              <Button
+                key={value}
+                size="sm"
+                variant={days === value ? 'secondary' : 'ghost'}
+                aria-pressed={days === value}
+                onClick={() => setDays(value)}
+              >
+                {value} days
+              </Button>
+            ))}
+          </div>
+          <QuinnReviewQueue days={days} />
+          <QuinnReviewQueue kind="live" title="Live now" days={days} />
+        </>
+      )}
       <QuinnPerformanceCard />
       <QuinnToolsCard />
       <CopilotUsageCard showActionsFunnel />

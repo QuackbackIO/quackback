@@ -1,3 +1,4 @@
+import { QuinnReviewQueue } from '@/components/admin/automation/quinn-review-queue'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { BookOpenIcon, ChatBubbleLeftRightIcon, LinkIcon } from '@heroicons/react/24/solid'
@@ -13,7 +14,7 @@ function OverviewPage() {
   return <QuinnOverview />
 }
 function QuinnOverview() {
-  const { settings } = Route.useRouteContext()
+  const { settings, permissions } = Route.useRouteContext()
   const assistant = useQuery(assistantQueries.settings())
   const deployment = settings?.publicWidgetConfig?.messenger?.assistant
   const customerOn =
@@ -48,10 +49,14 @@ function QuinnOverview() {
         />
         <UseCard
           title="Support teammates"
+          inbox={(permissions ?? []).includes(PERMISSIONS.CONVERSATION_VIEW)}
           status={availability ?? (teamOn ? 'On in the inbox' : 'Off')}
           description="Private help and suggested replies alongside the conversation."
         />
       </div>
+      {(permissions ?? []).includes(PERMISSIONS.CONVERSATION_VIEW) && (
+        <QuinnReviewQueue title="Needs attention" limit={5} />
+      )}
       <section className="space-y-3">
         <h2 className="text-sm font-medium">What Quinn works from</h2>
         <div className="divide-y rounded-xl border border-border/50 bg-card">
@@ -93,10 +98,12 @@ function UseCard({
   title,
   status,
   description,
+  inbox = false,
 }: {
   title: string
   status: string
   description: string
+  inbox?: boolean
 }) {
   return (
     <section className="rounded-xl border border-border/50 bg-card p-5 space-y-3">
@@ -107,6 +114,11 @@ function UseCard({
         </Badge>
       </div>
       <p className="text-xs text-muted-foreground">{description}</p>
+      {inbox && (
+        <Link to="/admin/inbox" className="me-4 inline-block text-sm font-medium text-primary">
+          Open the inbox
+        </Link>
+      )}
       <Link to="/admin/automation/deploy" className="inline-block text-sm font-medium text-primary">
         Manage deployment
       </Link>

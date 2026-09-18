@@ -90,3 +90,27 @@ The browser suite intentionally skips without `QUINN_E2E_DATABASE_URL`. A requir
 The production browser run used `BASE_URL=http://localhost:3019 PORT=3019 NITRO_PORT=3019 bun --env-file=.env apps/web/.output/server/index.mjs`, then the browser command above with port 3019. This was a local production build, not a deployment.
 
 Local raw logs from this run: `/tmp/quinn-e2e-final.log`, `/tmp/quinn-e2e-production.log`, `/tmp/quinn-full-suite-final.log`, `/tmp/quinn-baseline-tests.log`, `/tmp/quinn-lifecycle-tests.log`, `/tmp/quinn-live-model.log`, `/tmp/quinn-baseline-live.log`, `/tmp/quinn-build-final.log` and `/tmp/quinn-manifest-final.log`.
+
+## Critic corrections and expanded mockup pass
+
+The follow-up fixes customer-type exclusion provenance, concurrent guidance deletion/draft loss, and misleading availability indicators. The subsequent mockup pass adds the split Guidance editor, source previews and Add source menu, independent built-in policy columns, explicit channel/managed rows, and authorized review/live conversation lists.
+
+Current verification:
+
+| Check                                                             | Result                                                             |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Targeted assistant, settings, components and authorization matrix | 1,135 passed; 3 live-model tests skipped                           |
+| Expanded browser suite against development                        | 27 passed: 25 product scenarios plus setup/cleanup                 |
+| Same suite against final compiled production                      | 27 passed, none skipped                                            |
+| Application/workspace and E2E typechecks                          | Passed                                                             |
+| Production build and server-function manifest                     | Passed; 825 entries and 825 call sites                             |
+| Changed-file lint for the mockup pass                             | Clean                                                              |
+| Six Quinn pages at desktop and 390px mobile                       | No horizontal overflow, visible error alerts or browser exceptions |
+
+New browser scenarios cover concurrent deletion from a second session, Guidance filters/Help Center navigation, authorized source preview with anonymous replay denial, and independently persisted/reset built-in policies. New PostgreSQL tests exercise review-list row authorization, latest-involvement selection, closed/spam states, proposal expiry and 7/30-day filtering. The full repository suite and local live-model failures documented above were not rerun or reclassified by this targeted pass.
+
+An initial production run inherited configured object storage: its PDF/DOCX operations completed after the five-second assertion window. Final compiled-production verification explicitly blanked `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `AI_CHAT_MODEL`, `AI_ASSISTANT_MODEL` and `AI_EMBEDDING_MODEL` in the server process without editing the workspace environment file. That isolated run passed all 27 checks; it does not certify an external provider or storage service. The missing-model Overview status was separately checked in the rendered app.
+
+Logs: `/tmp/quinn-parity-broad.log`, `/tmp/quinn-parity-e2e.log`, `/tmp/quinn-parity-e2e-production.log`, `/tmp/quinn-parity-build.log`, `/tmp/quinn-parity-typecheck.log`, `/tmp/quinn-parity-e2e-typecheck.log`, `/tmp/quinn-parity-manifest.log`, `/tmp/quinn-parity-lint.log`. Local screenshots are `/tmp/quinn-parity-*.png` and `/tmp/quinn-parity-mobile-*.png`.
+
+This is not acceptance of all 17 mockups. Remaining capabilities and dependencies are tracked in [the parity checklist](quinn-mockup-parity.md).

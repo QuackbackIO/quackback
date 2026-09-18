@@ -197,3 +197,31 @@ it('combines the guidance type filter with search', async () => {
   })
   expect(screen.getByText('No matching guidance.')).toBeInTheDocument()
 })
+
+it('requires confirmation before switching away from unsaved guidance', async () => {
+  mocks.rules.mockResolvedValue({
+    rules: [
+      {
+        id: 'rule_1',
+        name: 'Refunds',
+        instruction: 'Check policy',
+        appliesWhen: 'Refund requested',
+        agent: 'agent',
+        enabled: true,
+        priority: 0,
+      },
+    ],
+  })
+  show()
+  await screen.findByText('Refunds')
+  fireEvent.click(screen.getAllByRole('button', { name: 'Edit' })[0])
+  fireEvent.change(screen.getByLabelText('What should Quinn do?'), {
+    target: { value: 'Keep my draft' },
+  })
+  fireEvent.click(screen.getAllByRole('button', { name: 'Edit' })[1])
+  expect(screen.getByRole('alertdialog')).toHaveTextContent('Discard unsaved changes?')
+  expect(screen.getByLabelText('What should Quinn do?')).toHaveValue('Keep my draft')
+  fireEvent.click(screen.getByRole('button', { name: 'Discard changes' }))
+  expect(screen.getByLabelText('Name')).toHaveValue('Refunds')
+  expect(screen.getByLabelText('What should Quinn do?')).toHaveValue('Check policy')
+})

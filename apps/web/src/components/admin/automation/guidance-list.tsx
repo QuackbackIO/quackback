@@ -19,13 +19,6 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { SearchInput } from '@/components/shared/search-input'
 import { isAssistantFieldManaged, useUnsavedChanges } from './assistant-form'
@@ -58,6 +51,9 @@ export function GuidanceList() {
   const [error, setError] = useState('')
   const [deleting, setDeleting] = useState(false)
   const [discarding, setDiscarding] = useState(false)
+  const [pendingSelection, setPendingSelection] = useState<{ entry: GuidanceEntry | null } | null>(
+    null
+  )
   const dirty = draft !== null && JSON.stringify(draft) !== initial
   useUnsavedChanges(dirty, 'guidance')
   const busy = [createRule, updateRule, deleteRule, updateSkill, deleteSkill, updateVoice].some(
@@ -78,7 +74,15 @@ export function GuidanceList() {
     setInitial(JSON.stringify(next))
     setError('')
   }
+  function select(entry: GuidanceEntry | null) {
+    if (busy) return
+    if (dirty) {
+      setPendingSelection({ entry })
+      setDiscarding(true)
+    } else open(entry)
+  }
   function close() {
+    setPendingSelection(null)
     if (busy) return
     if (dirty) setDiscarding(true)
     else setDraft(null)
@@ -193,184 +197,194 @@ export function GuidanceList() {
     <div className="space-y-4">
       <div className="flex flex-wrap gap-3 items-center justify-between">
         <SearchInput value={query} onChange={setQuery} placeholder="Search guidance" />
-        <Button onClick={() => open(null)}>
+        <Button onClick={() => select(null)}>
           <PlusIcon className="size-4" />
           Add guidance
         </Button>
       </div>
-      <div role="group" aria-label="Guidance type" className="flex gap-2">
-        {(['All', 'Always', 'Situations'] as const).map((value) => (
-          <Button
-            key={value}
-            size="sm"
-            variant={filter === value ? 'secondary' : 'ghost'}
-            aria-pressed={filter === value}
-            onClick={() => setFilter(value)}
-          >
-            {value}
-          </Button>
-        ))}
-      </div>
-      <div className="divide-y rounded-xl border border-border/50 bg-card">
-        {entries.length === 0 && (
-          <p className="p-5 text-sm text-muted-foreground">No matching guidance.</p>
-        )}
-        {entries.map((entry) => (
-          <div key={entry.key} className="flex items-center gap-3 p-4">
-            <div className="min-w-0 flex-1 space-y-1">
-              <p className="text-sm font-medium">{entry.name}</p>
-              <p className="truncate text-xs text-muted-foreground">
-                {entry.condition ?? 'Every conversation'}
-              </p>
-              <div className="flex flex-wrap gap-1">
-                {entry.uses.map((use) => (
-                  <Badge key={use} variant="outline" size="sm">
-                    {GUIDANCE_USE_LABELS[use]}
-                  </Badge>
-                ))}
-                {!entry.uses.length && (
-                  <Badge variant="outline" size="sm">
-                    Not assigned
-                  </Badge>
-                )}
-                {!entry.enabled && (
-                  <Badge variant="secondary" size="sm">
-                    Disabled
-                  </Badge>
-                )}
-                {entry.source === 'managed' && (
-                  <Badge variant="secondary" size="sm">
-                    Managed
-                  </Badge>
-                )}
-              </div>
-            </div>
-            <Button variant="ghost" size="sm" onClick={() => open(entry)}>
-              {entry.source === 'managed' ? 'View' : 'Edit'}
-            </Button>
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(14rem,18rem)_minmax(0,1fr)]">
+        <div className="min-w-0 space-y-3">
+          <div role="group" aria-label="Guidance type" className="flex gap-2">
+            {(['All', 'Always', 'Situations'] as const).map((value) => (
+              <Button
+                key={value}
+                size="sm"
+                variant={filter === value ? 'secondary' : 'ghost'}
+                aria-pressed={filter === value}
+                onClick={() => setFilter(value)}
+              >
+                {value}
+              </Button>
+            ))}
           </div>
-        ))}
-      </div>
-      <p className="text-xs text-muted-foreground">
-        Saved guidance takes effect immediately. Instructions cannot grant access to knowledge or
-        actions.
-      </p>
-      <Dialog
-        open={draft !== null}
-        onOpenChange={(open) => {
-          if (!open) close()
-        }}
-      >
-        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle>{draft?.entry ? 'Edit guidance' : 'Add guidance'}</DialogTitle>
-          </DialogHeader>
-          {draft && (
-            <fieldset disabled={busy || managed} className="space-y-4 min-w-0">
-              <div className="space-y-1.5">
-                <Label htmlFor="guidance-name">Name</Label>
-                <Input
-                  id="guidance-name"
-                  value={draft.name}
-                  disabled={draft.entry?.source === 'voice'}
-                  onChange={(e) => change({ name: e.target.value })}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="guidance-application">Applies when</Label>
-                <select
-                  id="guidance-application"
-                  className="w-full rounded-md border bg-background p-2 text-sm"
-                  value={draft.scenario ? 'scenario' : 'always'}
-                  disabled={draft.entry?.source === 'voice' || draft.entry?.source === 'skill'}
-                  onChange={(e) => change({ scenario: e.target.value === 'scenario' })}
-                >
-                  <option value="always">Every conversation</option>
-                  <option value="scenario">When a situation comes up</option>
-                </select>
-                {draft.scenario && (
-                  <Input
-                    aria-label="Situation"
-                    value={draft.condition}
-                    onChange={(e) => change({ condition: e.target.value })}
-                  />
-                )}
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="guidance-instruction">What should Quinn do?</Label>
-                <Textarea
-                  id="guidance-instruction"
-                  rows={9}
-                  value={draft.instruction}
-                  onChange={(e) => change({ instruction: e.target.value })}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="guidance-use">Uses</Label>
-                {!draft.entry ? (
-                  <select
-                    id="guidance-use"
-                    className="w-full rounded-md border bg-background p-2 text-sm"
-                    value={draft.use}
-                    onChange={(e) => change({ use: e.target.value as Draft['use'] })}
-                  >
-                    <option value="agent">Customer conversations</option>
-                    <option value="copilot">Support teammates</option>
-                  </select>
-                ) : (
-                  <p className="text-sm">
-                    {draft.entry.uses.map((use) => GUIDANCE_USE_LABELS[use]).join(', ') ||
-                      'Not assigned'}
+          <div className="divide-y rounded-xl border border-border/50 bg-card">
+            {entries.length === 0 && (
+              <p className="p-5 text-sm text-muted-foreground">No matching guidance.</p>
+            )}
+            {entries.map((entry) => (
+              <div
+                key={entry.key}
+                className={`flex items-center gap-3 p-4 ${draft?.entry?.key === entry.key ? 'bg-muted/50' : ''}`}
+              >
+                <div className="min-w-0 flex-1 space-y-1">
+                  <p className="text-sm font-medium">{entry.name}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {entry.condition ?? 'Every conversation'}
                   </p>
-                )}
-                <p className="text-xs text-muted-foreground">
-                  Existing scope is preserved. New guidance currently applies to one use.
-                </p>
+                  <div className="flex flex-wrap gap-1">
+                    {entry.uses.map((use) => (
+                      <Badge key={use} variant="outline" size="sm">
+                        {GUIDANCE_USE_LABELS[use]}
+                      </Badge>
+                    ))}
+                    {!entry.uses.length && (
+                      <Badge variant="outline" size="sm">
+                        Not assigned
+                      </Badge>
+                    )}
+                    {!entry.enabled && (
+                      <Badge variant="secondary" size="sm">
+                        Disabled
+                      </Badge>
+                    )}
+                    {entry.source === 'managed' && (
+                      <Badge variant="secondary" size="sm">
+                        Managed
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => select(entry)}>
+                  {entry.source === 'managed' ? 'View' : 'Edit'}
+                </Button>
               </div>
-              {draft.entry?.source !== 'voice' && (
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="guidance-enabled">Enabled</Label>
-                  <Switch
-                    id="guidance-enabled"
-                    checked={draft.enabled}
-                    onCheckedChange={(enabled) => change({ enabled })}
+            ))}
+          </div>
+        </div>
+        {draft ? (
+          <section
+            aria-label="Guidance editor"
+            className="min-w-0 rounded-xl border border-border/50 bg-card p-5 space-y-4"
+          >
+            <h2 className="text-sm font-semibold">
+              {draft.entry ? 'Edit guidance' : 'Add guidance'}
+            </h2>
+            {draft && (
+              <fieldset disabled={busy || managed} className="space-y-4 min-w-0">
+                <div className="space-y-1.5">
+                  <Label htmlFor="guidance-name">Name</Label>
+                  <Input
+                    id="guidance-name"
+                    value={draft.name}
+                    disabled={draft.entry?.source === 'voice'}
+                    onChange={(e) => change({ name: e.target.value })}
                   />
                 </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="guidance-application">Applies when</Label>
+                  <select
+                    id="guidance-application"
+                    className="w-full rounded-md border bg-background p-2 text-sm"
+                    value={draft.scenario ? 'scenario' : 'always'}
+                    disabled={draft.entry?.source === 'voice' || draft.entry?.source === 'skill'}
+                    onChange={(e) => change({ scenario: e.target.value === 'scenario' })}
+                  >
+                    <option value="always">Every conversation</option>
+                    <option value="scenario">When a situation comes up</option>
+                  </select>
+                  {draft.scenario && (
+                    <Input
+                      aria-label="Situation"
+                      value={draft.condition}
+                      onChange={(e) => change({ condition: e.target.value })}
+                    />
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="guidance-instruction">What should Quinn do?</Label>
+                  <Textarea
+                    id="guidance-instruction"
+                    rows={9}
+                    className="min-h-40"
+                    value={draft.instruction}
+                    onChange={(e) => change({ instruction: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="guidance-use">Uses</Label>
+                  {!draft.entry ? (
+                    <select
+                      id="guidance-use"
+                      className="w-full rounded-md border bg-background p-2 text-sm"
+                      value={draft.use}
+                      onChange={(e) => change({ use: e.target.value as Draft['use'] })}
+                    >
+                      <option value="agent">Customer conversations</option>
+                      <option value="copilot">Support teammates</option>
+                    </select>
+                  ) : (
+                    <p className="text-sm">
+                      {draft.entry.uses.map((use) => GUIDANCE_USE_LABELS[use]).join(', ') ||
+                        'Not assigned'}
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Existing scope is preserved. New guidance currently applies to one use.
+                  </p>
+                </div>
+                {draft.entry?.source !== 'voice' && (
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="guidance-enabled">Enabled</Label>
+                    <Switch
+                      id="guidance-enabled"
+                      checked={draft.enabled}
+                      onCheckedChange={(enabled) => change({ enabled })}
+                    />
+                  </div>
+                )}
+              </fieldset>
+            )}
+            {managed && (
+              <p className="text-xs text-muted-foreground">
+                These instructions are managed by your deployment configuration.
+              </p>
+            )}
+            {error && (
+              <p role="alert" className="text-sm text-destructive whitespace-pre-wrap">
+                {error}
+              </p>
+            )}
+            <div className="flex flex-wrap justify-end gap-2">
+              {draft?.entry && ['skill', 'rule'].includes(draft.entry.source) && (
+                <Button
+                  variant="outline"
+                  className="me-auto"
+                  disabled={busy}
+                  onClick={() => setDeleting(true)}
+                >
+                  Delete
+                </Button>
               )}
-            </fieldset>
-          )}
-          {managed && (
+              <Button variant="outline" disabled={busy} onClick={close}>
+                Cancel
+              </Button>
+              {!managed && (
+                <Button disabled={busy || !dirty} onClick={() => void save()}>
+                  {busy ? 'Saving…' : 'Save'}
+                </Button>
+              )}
+            </div>
             <p className="text-xs text-muted-foreground">
-              These instructions are managed by your deployment configuration.
+              Saved guidance takes effect immediately. Instructions cannot grant access to knowledge
+              or actions.
             </p>
-          )}
-          {error && (
-            <p role="alert" className="text-sm text-destructive whitespace-pre-wrap">
-              {error}
-            </p>
-          )}
-          <DialogFooter>
-            {draft?.entry && ['skill', 'rule'].includes(draft.entry.source) && (
-              <Button
-                variant="outline"
-                className="me-auto"
-                disabled={busy}
-                onClick={() => setDeleting(true)}
-              >
-                Delete
-              </Button>
-            )}
-            <Button variant="outline" disabled={busy} onClick={close}>
-              Cancel
-            </Button>
-            {!managed && (
-              <Button disabled={busy || !dirty} onClick={() => void save()}>
-                {busy ? 'Saving…' : 'Save'}
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </section>
+        ) : (
+          <div className="rounded-xl border border-dashed p-8 text-sm text-muted-foreground">
+            Choose guidance to edit, or add instructions for a new situation.
+          </div>
+        )}
+      </div>
       <ConfirmDialog
         open={deleting}
         onOpenChange={setDeleting}
@@ -390,7 +404,9 @@ export function GuidanceList() {
         variant="destructive"
         onConfirm={() => {
           setDiscarding(false)
-          setDraft(null)
+          if (pendingSelection) open(pendingSelection.entry)
+          else setDraft(null)
+          setPendingSelection(null)
         }}
       />
     </div>

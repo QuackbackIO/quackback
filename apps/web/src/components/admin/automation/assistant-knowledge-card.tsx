@@ -1,3 +1,9 @@
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Link } from '@tanstack/react-router'
 import { usePermission } from '@/lib/client/hooks/use-permission'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -371,57 +377,95 @@ export function QuinnKnowledgeCard() {
     }
   }
   return (
-    <div className="rounded-xl border border-border/50 bg-card divide-y">
-      <div className="hidden sm:grid grid-cols-[1fr_10rem_10rem] gap-3 p-4 text-xs font-medium text-muted-foreground">
-        <span>Source</span>
-        <span>Customer conversations</span>
-        <span>Support teammates</span>
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <DropdownMenu>
+          <DropdownMenuTrigger render={<Button variant="outline" />}>
+            Add source
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onClick={() => document.getElementById('quinn-document-upload')?.click()}
+            >
+              Upload document
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() =>
+                setTimeout(() => {
+                  const field = document.getElementById('quinn-web-page-url')
+                  field?.scrollIntoView({ block: 'center' })
+                  field?.focus()
+                }, 0)
+              }
+            >
+              Add web page
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
-      {ASSISTANT_COPILOT_KNOWLEDGE_SOURCES.map((source) => (
-        <div key={source} className="grid gap-3 p-4 sm:grid-cols-[1fr_10rem_10rem] sm:items-center">
-          <div>
-            <h2 className="text-sm font-medium">{SOURCE_META[source].label}</h2>
-            <p className="mt-1 text-xs text-muted-foreground">{SOURCE_META[source].description}</p>
-            {source === 'helpCenter' && canManageArticles && (
-              <Link
-                to="/admin/help-center"
-                className="mt-2 inline-block text-xs font-medium text-primary"
-              >
-                Manage articles →
-              </Link>
+      <div className="rounded-xl border border-border/50 bg-card divide-y">
+        <div className="hidden sm:grid grid-cols-[1fr_10rem_10rem] gap-3 p-4 text-xs font-medium text-muted-foreground">
+          <span>Source</span>
+          <span>Customer conversations</span>
+          <span>Support teammates</span>
+        </div>
+        {ASSISTANT_COPILOT_KNOWLEDGE_SOURCES.map((source) => (
+          <div
+            key={source}
+            className="grid gap-3 p-4 sm:grid-cols-[1fr_10rem_10rem] sm:items-center"
+          >
+            <div>
+              <h2 className="text-sm font-medium">{SOURCE_META[source].label}</h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {SOURCE_META[source].description}
+              </p>
+              {source === 'helpCenter' && canManageArticles && (
+                <Link
+                  to="/admin/help-center"
+                  className="mt-2 inline-block text-xs font-medium text-primary"
+                >
+                  Manage articles →
+                </Link>
+              )}
+            </div>
+            {(['agent', 'copilot'] as const).map((use) => {
+              const supported = source in config.agents[use].knowledge
+              const managed = isAssistantFieldManaged(
+                managedFieldPaths,
+                `agents.${use}.knowledge.${source}`
+              )
+              const enabled =
+                supported &&
+                Boolean((config.agents[use].knowledge as Record<string, boolean>)[source])
+              const label = use === 'agent' ? 'Customer conversations' : 'Support teammates'
+              return (
+                <div key={use} className="flex items-center gap-2 sm:block space-y-1">
+                  <span className="sm:hidden text-xs flex-1">{label}</span>
+                  <Switch
+                    checked={enabled}
+                    disabled={!supported || managed || busy}
+                    aria-label={`${SOURCE_META[source].label}: ${label}`}
+                    onCheckedChange={(next) => void toggle(source, use, next)}
+                  />
+                  {!supported && (
+                    <p className="text-xs text-muted-foreground">Never for customers</p>
+                  )}
+                  {managed && <ManagedSettingHint />}
+                </div>
+              )
+            })}
+            {(source === 'documents' || source === 'webPages') && (
+              <div className="sm:col-span-3">
+                <QuinnKnowledgeSources kind={source === 'documents' ? 'document' : 'webpage'} />
+              </div>
             )}
           </div>
-          {(['agent', 'copilot'] as const).map((use) => {
-            const supported = source in config.agents[use].knowledge
-            const managed = isAssistantFieldManaged(
-              managedFieldPaths,
-              `agents.${use}.knowledge.${source}`
-            )
-            const enabled =
-              supported &&
-              Boolean((config.agents[use].knowledge as Record<string, boolean>)[source])
-            const label = use === 'agent' ? 'Customer conversations' : 'Support teammates'
-            return (
-              <div key={use} className="flex items-center gap-2 sm:block space-y-1">
-                <span className="sm:hidden text-xs flex-1">{label}</span>
-                <Switch
-                  checked={enabled}
-                  disabled={!supported || managed || busy}
-                  aria-label={`${SOURCE_META[source].label}: ${label}`}
-                  onCheckedChange={(next) => void toggle(source, use, next)}
-                />
-                {!supported && <p className="text-xs text-muted-foreground">Never for customers</p>}
-                {managed && <ManagedSettingHint />}
-              </div>
-            )
-          })}
-          {(source === 'documents' || source === 'webPages') && (
-            <div className="sm:col-span-3">
-              <QuinnKnowledgeSources kind={source === 'documents' ? 'document' : 'webpage'} />
-            </div>
-          )}
-        </div>
-      ))}
+        ))}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Type switches limit every source in that type. Articles are managed in Help Center;
+        documents and web pages are managed here. Workspace and Slack use managed defaults.
+      </p>
     </div>
   )
 }

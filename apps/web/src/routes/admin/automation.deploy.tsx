@@ -1,3 +1,4 @@
+import { Badge } from '@/components/ui/badge'
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
@@ -64,14 +65,37 @@ function DeployPage() {
                   : null
           }
         />
+        <div className="rounded-xl border border-border/50 bg-card p-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-medium">Email</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Team replies stay in the same conversation. Automatic Quinn replies need their own
+              rollout.
+            </p>
+          </div>
+          <Badge variant="outline">Not available yet</Badge>
+        </div>
         <WhoRepliesFirstCard />
       </section>
       <section className="space-y-3">
         <h2 className="text-sm font-medium">Support teammates</h2>
         <CopilotDeploymentCard />
+        <div className="rounded-xl border border-border/50 bg-card p-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-medium">Workspace &amp; Slack</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Uses the linked teammate’s permissions and managed defaults, independently of inbox
+              settings.
+            </p>
+          </div>
+          <Badge variant="outline">Managed</Badge>
+        </div>
       </section>
-      <AssistantIdentityCard />
-      <AssistantVoiceCard />
+      <details className="space-y-4">
+        <summary className="cursor-pointer text-sm font-medium">Identity and voice</summary>
+        <AssistantIdentityCard />
+        <AssistantVoiceCard />
+      </details>
       <section className="rounded-xl border border-border/50 bg-card p-4 space-y-2">
         <h2 className="text-sm font-medium">Channels and appearance</h2>
         <p className="text-xs text-muted-foreground">

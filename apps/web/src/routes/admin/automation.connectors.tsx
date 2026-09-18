@@ -47,7 +47,7 @@ function ConnectorsPage() {
   const connectors = list.data?.connectors ?? []
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="max-w-4xl space-y-6">
       <div className="lg:hidden">
         <BackLink to="/admin/automation">
           {intl.formatMessage({ id: 'automation.nav.label', defaultMessage: 'AI & Automation' })}
@@ -68,15 +68,17 @@ function ConnectorsPage() {
             <p className="mt-0.5 text-xs text-muted-foreground">
               {intl.formatMessage({
                 id: 'automation.connectors.description',
-                defaultMessage:
-                  'Give Quinn tools from external MCP servers. One catalog, mapped onto each agent.',
+                defaultMessage: 'Choose the connected services and built-in actions Quinn can use.',
               })}
             </p>
           </div>
         </div>
         <Button size="sm" onClick={() => setAddOpen(true)}>
           <PlusIcon className="size-4" />
-          {intl.formatMessage({ id: 'automation.connectors.add', defaultMessage: 'Add connector' })}
+          {intl.formatMessage({
+            id: 'automation.connectors.add',
+            defaultMessage: 'Add connection',
+          })}
         </Button>
       </div>
 
@@ -96,6 +98,9 @@ function ConnectorsPage() {
         </p>
       ) : (
         <SettingsCard contentClassName="p-0">
+          {!connectors.length && (
+            <p className="p-4 text-sm text-muted-foreground">No external connections yet.</p>
+          )}
           {connectors.map((connector, index) => (
             <Link
               key={connector.id}
@@ -161,8 +166,8 @@ function ConnectorsPage() {
                         })}
                 </Button>
               )}
-              {connector.assignments.agent && <Badge size="sm">Agent</Badge>}
-              {connector.assignments.copilot && <Badge size="sm">Copilot</Badge>}
+              {connector.assignments.agent && <Badge size="sm">Customer conversations</Badge>}
+              {connector.assignments.copilot && <Badge size="sm">Support teammates</Badge>}
               <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground" />
             </Link>
           ))}
@@ -175,8 +180,7 @@ function ConnectorsPage() {
             'Connectors call external servers from your workspace. Only connect servers you trust.',
         })}
       </p>
-      <BuiltInToolsCard agent="agent" />
-      <BuiltInToolsCard agent="copilot" />
+      <BuiltInToolsCard />
       <AddConnectorDialog open={addOpen} onOpenChange={setAddOpen} />
       <UpdateBearerDialog
         connectorId={tokenConnectorId}

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import type { AssistantDocumentId, AssistantWebSourceId } from '@quackback/ids'
+import { isValidTypeId, type AssistantDocumentId, type AssistantWebSourceId } from '@quackback/ids'
 import { db, assistantDocuments, assistantWebSources, eq, and, isNull } from '@/lib/server/db'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { NotFoundError } from '@/lib/shared/errors'
@@ -55,3 +55,49 @@ export const getArticleAssistantUseLimitsFn = createServerFn({ method: 'GET' }).
     }
   }
 )
+
+/** An admin preview of stored grounding text; never return object-storage credentials or URLs. */
+export const getAssistantKnowledgeSourceFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ kind: z.enum(['document', 'webpage']), id: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
+    const prefix = data.kind === 'document' ? 'assistant_document' : 'assistant_web_source'
+    if (!isValidTypeId(data.id, prefix))
+      throw new NotFoundError('NOT_FOUND', 'Knowledge source not found')
+    const rows =
+      data.kind === 'document'
+        ? await db
+            .select({
+              title: assistantDocuments.title,
+              content: assistantDocuments.content,
+              updatedAt: assistantDocuments.updatedAt,
+              origin: assistantDocuments.fileName,
+            })
+            .from(assistantDocuments)
+            .where(
+              and(
+                eq(assistantDocuments.id, data.id as AssistantDocumentId),
+                isNull(assistantDocuments.deletedAt)
+              )
+            )
+            .limit(1)
+        : await db
+            .select({
+              title: assistantWebSources.title,
+              content: assistantWebSources.content,
+              updatedAt: assistantWebSources.fetchedAt,
+              origin: assistantWebSources.url,
+            })
+            .from(assistantWebSources)
+            .where(eq(assistantWebSources.id, data.id as AssistantWebSourceId))
+            .limit(1)
+    const row = rows[0]
+    if (!row) throw new NotFoundError('NOT_FOUND', 'Knowledge source not found')
+    return {
+      title: row.title,
+      origin: row.origin,
+      updatedAt: row.updatedAt.toISOString(),
+      text: row.content.slice(0, 20000),
+      truncated: row.content.length > 20000,
+    }
+  })

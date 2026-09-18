@@ -1,171 +1,99 @@
-/**
- * Per-tool permission dials for Quinn's BUILT-IN write tools, one card per
- * agent, sharing the remote-connector dial's vocabulary and control:
- * Always allow / Needs approval / Never. An absent rule leaves the turn's
- * role policy deciding, so the dial shows that default until a teammate
- * commits an explicit choice; Reset returns every tool to role policy.
- *
- * Read tools are deliberately not listed — the dial exists for writes, and a
- * read tool that could be denied would quietly hollow out answer quality.
- */
-import { useState } from 'react'
-import { useIntl } from 'react-intl'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Button } from '@/components/ui/button'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
-import { PolicyDial } from '@/components/admin/automation/connectors/policy-dial'
 import { assistantQueries } from '@/lib/client/queries/assistant'
 import { useUpdateAssistantToolRules } from '@/lib/client/mutations/assistant'
-import type { ConnectorToolPolicy } from '@/lib/shared/assistant/connectors'
-import type { AssistantAgentKind, AssistantToolRule } from '@/lib/shared/assistant/config'
+import type { AssistantToolRule } from '@/lib/shared/assistant/config'
+import { isAssistantFieldManaged } from './assistant-form'
 
-/** The dial renders the connector vocabulary; rules persist the built-in one. */
-const RULE_TO_DIAL: Record<AssistantToolRule, ConnectorToolPolicy> = {
-  allow: 'always',
-  ask: 'approval',
-  deny: 'never',
-}
-const DIAL_TO_RULE: Record<ConnectorToolPolicy, AssistantToolRule> = {
-  always: 'allow',
-  approval: 'ask',
-  never: 'deny',
-}
+const USES = [
+  ['agent', 'Customer conversations'],
+  ['copilot', 'Support teammates'],
+] as const
 
-type TenantEditableAgent = Exclude<AssistantAgentKind, 'workspace'>
-
-/** What role policy does when no rule is saved (D14). */
-function roleDefault(agent: TenantEditableAgent): AssistantToolRule {
-  return agent === 'copilot' ? 'ask' : 'allow'
-}
-
-export function BuiltInToolsCard({ agent }: { agent: TenantEditableAgent }) {
-  const intl = useIntl()
-  const settingsQuery = useQuery(assistantQueries.settings())
-  const toolsQuery = useQuery(assistantQueries.tools())
+/** Both columns write the existing independently authorized per-use policies. */
+export function BuiltInToolsCard() {
+  const settings = useQuery(assistantQueries.settings())
+  const tools = useQuery(assistantQueries.tools())
   const update = useUpdateAssistantToolRules()
-  const [pendingTool, setPendingTool] = useState<string | null>(null)
-
-  if (settingsQuery.isError || toolsQuery.isError) {
-    return (
-      <SettingsCard
-        title={intl.formatMessage({
-          id: 'automation.builtinTools.title',
-          defaultMessage: 'Built-in actions',
-        })}
-      >
-        <p className="text-sm text-destructive">
-          {intl.formatMessage({
-            id: 'automation.builtinTools.loadError',
-            defaultMessage: 'Could not load the tool catalogue.',
-          })}
-        </p>
-      </SettingsCard>
-    )
-  }
-  if (settingsQuery.isPending || toolsQuery.isPending) return null
-
-  const revision = settingsQuery.data.revision
-  const rules = settingsQuery.data.config.agents[agent].toolRules
-  const writeTools = toolsQuery.data.filter((tool) => tool.risk === 'write')
-  const hasExplicitRules = Object.keys(rules).length > 0
-
-  async function save(toolRules: Record<string, AssistantToolRule>, tool: string | null) {
-    setPendingTool(tool)
-    try {
-      await update.mutateAsync({ expectedRevision: revision, agent, toolRules })
-    } catch {
-      toast.error(
-        intl.formatMessage({
-          id: 'automation.builtinTools.saveError',
-          defaultMessage: 'Tool permissions could not be updated.',
-        })
-      )
-    } finally {
-      setPendingTool(null)
-    }
-  }
+  if (settings.isError || tools.isError)
+    return <p role="alert">Built-in actions could not be loaded.</p>
+  if (!settings.data || !tools.data) return <p role="status">Loading built-in actions…</p>
+  const { config, revision, managedFieldPaths } = settings.data
+  const writeTools = tools.data.filter((tool) => tool.risk === 'write')
 
   return (
     <SettingsCard
-      title={
-        agent === 'copilot'
-          ? intl.formatMessage({
-              id: 'automation.builtinTools.titleCopilot',
-              defaultMessage: 'Built-in actions (Copilot)',
-            })
-          : intl.formatMessage({
-              id: 'automation.builtinTools.titleAgent',
-              defaultMessage: 'Built-in actions (Agent)',
-            })
-      }
-      description={intl.formatMessage({
-        id: 'automation.builtinTools.description',
-        defaultMessage:
-          'What each built-in write tool may do on this agent. "Never" removes the tool from its turns entirely.',
-      })}
-      action={
-        hasExplicitRules ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            disabled={update.isPending}
-            onClick={() => void save({}, null)}
-          >
-            {intl.formatMessage({
-              id: 'automation.builtinTools.reset',
-              defaultMessage: 'Reset to defaults',
-            })}
-          </Button>
-        ) : undefined
-      }
+      title="Quackback built-in actions"
+      description="No external connection needed. Each use has its own permissions."
       contentClassName="p-0"
     >
-      {writeTools.map((tool, index) => {
-        const effective = rules[tool.name] ?? roleDefault(agent)
-        const explicit = tool.name in rules
-        return (
-          <div
-            key={tool.name}
-            className={
-              index === 0
-                ? 'flex items-center gap-3 px-4 py-3 sm:px-[18px]'
-                : 'flex items-center gap-3 border-t border-border/60 px-4 py-3 sm:px-[18px]'
-            }
-          >
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 text-[13.5px] font-medium">
-                {tool.label}
-                {!explicit && (
-                  <span className="text-[11px] text-muted-foreground">
-                    {intl.formatMessage({
-                      id: 'automation.builtinTools.default',
-                      defaultMessage: 'Default',
-                    })}
-                  </span>
-                )}
-              </div>
-              <p className="truncate text-xs text-muted-foreground">{tool.description}</p>
-            </div>
-            {pendingTool === tool.name ? (
-              <span className="text-xs text-muted-foreground">
-                {intl.formatMessage({
-                  id: 'automation.builtinTools.saving',
-                  defaultMessage: 'Saving…',
-                })}
-              </span>
-            ) : null}
-            <PolicyDial
-              value={RULE_TO_DIAL[effective]}
-              labelledBy={tool.label}
-              onChange={(next) =>
-                void save({ ...rules, [tool.name]: DIAL_TO_RULE[next] }, tool.name)
-              }
-            />
+      <div className="hidden sm:grid grid-cols-[minmax(0,1fr)_11rem_11rem] gap-3 border-b p-4 text-xs text-muted-foreground">
+        <span>Action</span>
+        <span>Customer conversations</span>
+        <span>Support teammates</span>
+      </div>
+      {writeTools.map((tool) => (
+        <div
+          key={tool.name}
+          className="grid gap-3 border-b last:border-b-0 p-4 sm:grid-cols-[minmax(0,1fr)_11rem_11rem] sm:items-center"
+        >
+          <div className="min-w-0">
+            <h3 className="text-sm font-medium">{tool.label}</h3>
+            <p className="mt-1 text-xs text-muted-foreground">{tool.description}</p>
           </div>
-        )
-      })}
+          {USES.map(([agent, label]) => {
+            const rules = config.agents[agent].toolRules
+            const effective = rules[tool.name] ?? (agent === 'copilot' ? 'ask' : 'allow')
+            const managed = isAssistantFieldManaged(
+              managedFieldPaths,
+              `agents.${agent}.toolRules.${tool.name}`
+            )
+            return (
+              <label key={agent} className="flex flex-col gap-1 text-xs">
+                <span className="sm:hidden">{label}</span>
+                <select
+                  className="w-full rounded-md border bg-background p-2 text-sm"
+                  aria-label={`${tool.label}: ${label}`}
+                  value={effective}
+                  disabled={managed || update.isPending}
+                  onChange={(event) => {
+                    const toolRules = { ...rules }
+                    if (event.target.value === 'default') delete toolRules[tool.name]
+                    else toolRules[tool.name] = event.target.value as AssistantToolRule
+                    update.mutate(
+                      {
+                        expectedRevision: revision,
+                        agent,
+                        toolRules,
+                      },
+                      {
+                        onError: () =>
+                          toast.error(
+                            'Action permissions could not be updated. Refresh and try again.'
+                          ),
+                      }
+                    )
+                  }}
+                >
+                  <option value="default">Reset to default</option>
+                  <option value="allow">Always allow</option>
+                  <option value="ask">Needs approval</option>
+                  <option value="deny">Never</option>
+                </select>
+                {managed ? (
+                  <span className="text-muted-foreground">Managed</span>
+                ) : (
+                  !(tool.name in rules) && <span className="text-muted-foreground">Default</span>
+                )}
+              </label>
+            )
+          })}
+        </div>
+      ))}
+      <p className="border-t p-4 text-xs text-muted-foreground">
+        Saved permissions take effect immediately. Instructions cannot grant additional access.
+      </p>
     </SettingsCard>
   )
 }

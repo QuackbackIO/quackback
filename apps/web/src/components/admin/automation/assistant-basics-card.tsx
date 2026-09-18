@@ -86,7 +86,7 @@ export function AssistantVoiceCard() {
           <p role="alert" className="text-sm text-destructive">
             {intl.formatMessage({
               id: 'automation.agent.loadError',
-              defaultMessage: 'AI agent settings could not be loaded.',
+              defaultMessage: 'Quinn settings could not be loaded.',
             })}
           </p>
           <Button variant="outline" size="sm" onClick={() => void settingsQuery.refetch()}>
@@ -108,7 +108,7 @@ export function AssistantVoiceCard() {
         <p role="status" className="text-sm text-muted-foreground">
           {intl.formatMessage({
             id: 'automation.agent.loading',
-            defaultMessage: 'Loading AI agent settings…',
+            defaultMessage: 'Loading Quinn settings…',
           })}
         </p>
       </SettingsCard>
