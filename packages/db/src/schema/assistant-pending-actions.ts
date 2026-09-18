@@ -33,6 +33,7 @@
 import {
   pgTable,
   text,
+  integer,
   timestamp,
   jsonb,
   index,
@@ -42,6 +43,7 @@ import {
 } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumnNullable } from '@quackback/ids/drizzle'
+import { CONNECTOR_POLICY_PROFILES } from './connectors'
 import { conversations } from './conversation'
 import { tickets } from './tickets'
 import { assistantInvolvements } from './assistant'
@@ -89,6 +91,19 @@ export const assistantPendingActions = pgTable(
     originRole: text('origin_role', { enum: ASSISTANT_PENDING_ACTION_ORIGIN_ROLES })
       .notNull()
       .default('customer_support'),
+    /**
+     * The connector policy use this proposal was made under, and the policy
+     * version in force at that moment. Both are NULL for a built-in tool and
+     * for every proposal that predates the connection gate.
+     *
+     * The profile is immutable: approving a customer-origin request must
+     * re-resolve the CUSTOMER policy, never the approver's own teammate one
+     * (the spec's "keep the approval origin immutable"). The version lets the
+     * approval executor tell "nothing changed" from "changed since proposal"
+     * without diffing two policy maps.
+     */
+    originProfile: text('origin_profile', { enum: CONNECTOR_POLICY_PROFILES }),
+    policyVersion: integer('policy_version'),
     status: text('status', { enum: ASSISTANT_PENDING_ACTION_STATUSES })
       .notNull()
       .default('proposed'),

@@ -1856,6 +1856,13 @@
       "when": 1789747200002,
       "tag": "0287_quinn_durable_runs",
       "breakpoints": true
+    },
+    {
+      "idx": 265,
+      "version": "7",
+      "when": 1789747200003,
+      "tag": "0288_quinn_connector_policies",
+      "breakpoints": true
     }
   ]
 }

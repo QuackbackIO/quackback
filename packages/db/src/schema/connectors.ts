@@ -51,6 +51,52 @@ export interface ConnectorToolPolicies {
   tools: Record<string, ConnectorToolPolicy>
 }
 
+/** The uses a connector's tools can be authorized for, one policy record each. */
+export const CONNECTOR_POLICY_PROFILES = ['agent', 'copilot', 'workspace'] as const
+export type ConnectorPolicyProfile = (typeof CONNECTOR_POLICY_PROFILES)[number]
+
+/**
+ * One use's policy. `origin` records how the record came to exist: a record
+ * projected from the pre-profile shared map says so, so an operator can tell a
+ * migrated default from a decision somebody made.
+ */
+export interface ConnectorProfilePolicy {
+  groupDefaults: { read: ConnectorToolPolicy; write: ConnectorToolPolicy }
+  tools: Record<string, ConnectorToolPolicy>
+  origin?: 'migrated_from_shared' | 'explicit'
+}
+
+/**
+ * Policies keyed by use. A MISSING key is a denial, never a fallback to
+ * another use: an unassigned use has no policy and resolves to never.
+ */
+export type ConnectorProfilePolicies = Partial<
+  Record<ConnectorPolicyProfile, ConnectorProfilePolicy>
+>
+
+/**
+ * The reviewed contract of one discovered tool.
+ *
+ * A tool is available only while its live contract still matches the reviewed
+ * one, so this records the contract itself (the cached input-schema hash plus
+ * the annotation hints that decide its group and destructiveness) rather than
+ * a bare "reviewed" flag. `grandfathered` marks the tools carried over when
+ * the review gate was introduced: they were already callable under the shared
+ * policy map, so the migration records their contract as reviewed rather than
+ * revoking working connectors.
+ */
+export interface ConnectorToolReview {
+  schemaHash: string | null
+  readOnlyHint: boolean
+  destructiveHint: boolean
+  catalogRevision: number
+  reviewedAt: string
+  reviewedByPrincipalId: string | null
+  origin: 'grandfathered' | 'reviewed'
+}
+
+export type ConnectorToolReviews = Record<string, ConnectorToolReview>
+
 export interface ConnectorAssignments {
   agent: boolean
   copilot: boolean
@@ -86,6 +132,19 @@ export const connectors = pgTable(
       .$type<ConnectorToolPolicies>()
       .notNull()
       .default(DEFAULT_CONNECTOR_TOOL_POLICIES),
+    /**
+     * Per-use policies. NULL means "not projected from `toolPolicies` yet":
+     * migration 0288 deliberately carries no backfill (it must replay as a
+     * no-op), so `ensureConnectorPolicyState` projects the shared map into the
+     * uses this connector is already assigned to on first read.
+     */
+    profilePolicies: jsonb('profile_policies').$type<ConnectorProfilePolicies>(),
+    /** Reviewed tool contracts, keyed by tool name. NULL like the column above. */
+    toolReviews: jsonb('tool_reviews').$type<ConnectorToolReviews>(),
+    /** Bumped by every discovery that adds, removes or changes a tool contract. */
+    catalogRevision: integer('catalog_revision').notNull().default(1),
+    /** Bumped by every policy write; the base version a client edit must match. */
+    policyVersion: integer('policy_version').notNull().default(1),
     assignments: jsonb('assignments')
       .$type<ConnectorAssignments>()
       .notNull()
