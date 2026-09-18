@@ -18,6 +18,7 @@ import {
   sendStaleAssistantFollowUps,
 } from '@/lib/server/domains/assistant'
 import { sweepAndNotifyExpiredPendingActions } from '@/lib/server/domains/assistant/pending-actions.service'
+import { nextInactivityDeadline } from './conversation.inactivity'
 import { sweepDueSnoozedConversations } from './conversation.service'
 import { sweepIdleTeamConversations } from './conversation.idle-sweep'
 
@@ -40,7 +41,6 @@ const log = logger.child({ component: 'snooze-sweep' })
  * `LEAST` ignores NULLs; nextInactivityDeadline shares the worker predicates.
  */
 async function nextSnoozeTickAt(): Promise<Date | null> {
-  const { nextInactivityDeadline } = await import('./conversation.inactivity')
   const inactivityAt = await nextInactivityDeadline()
   const result = await db.execute(sql`SELECT LEAST(
     (SELECT min(snoozed_until) FROM conversations WHERE status = 'snoozed' AND snoozed_until IS NOT NULL),

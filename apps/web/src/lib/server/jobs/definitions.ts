@@ -218,7 +218,7 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
     maxAttempts: 8,
     retryBackoffMs: 30_000,
     handler: () =>
-      import('@/lib/server/domains/conversation/conversation.inactivity').then(
+      import('@/lib/server/domains/conversation/conversation-inactivity-delivery-queue').then(
         (m) => m.deliverInactivity
       ),
   },
@@ -226,7 +226,7 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
     name: 'conversation-inactivity-continuation',
     maxAttempts: 3,
     handler: () =>
-      import('@/lib/server/domains/conversation/conversation.inactivity').then(
+      import('@/lib/server/domains/conversation/conversation-inactivity-continuation-queue').then(
         (m) => m.continueInactivity
       ),
   },
