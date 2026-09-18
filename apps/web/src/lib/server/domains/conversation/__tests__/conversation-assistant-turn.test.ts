@@ -26,6 +26,7 @@ const assistantMock = vi.hoisted(() => ({
   // CAS override this per-case.
   recordHandoff: vi.fn(async () => ({ id: 'assistant_involvement_1', status: 'handed_off' })),
   recordAssistantAnswer: vi.fn(async () => {}),
+  recordOutcome: vi.fn(async () => {}),
   setInvolvementRating: vi.fn(async () => {}),
   // Mirrors the real assistant.runtime.ts mapping (thinking -> thinking; any
   // tool -> searching_kb for search, else reviewing_conversation) so
@@ -125,6 +126,7 @@ vi.mock('../conversation.query', () => ({
   loadAuthors: vi.fn(async () => new Map()),
 }))
 
+const mockEndConversation = vi.hoisted(() => vi.fn(async () => {}))
 const mockAppendAssistantHandoffNote = vi.hoisted(() =>
   vi.fn(async (..._args: unknown[]): Promise<void> => {})
 )
@@ -133,6 +135,7 @@ vi.mock('@/lib/server/domains/conversation/conversation.service', async (importO
     typeof import('@/lib/server/domains/conversation/conversation.service')
   >()),
   appendAssistantHandoffNote: mockAppendAssistantHandoffNote,
+  endConversation: mockEndConversation,
 }))
 
 const insertedMessages: Record<string, unknown>[] = []
@@ -168,7 +171,10 @@ vi.mock('@/lib/server/db', () => {
     })
     c.where = vi.fn(() => c)
     c.orderBy = vi.fn(() => c)
-    c.limit = vi.fn(async () => (label === 'conversations' ? [conversationRow()] : []))
+    c.limit = vi.fn(() => c)
+    c.for = vi.fn(() => c)
+    c.then = (resolve: (value: unknown) => unknown) =>
+      Promise.resolve(label === 'conversations' ? [conversationRow()] : []).then(resolve)
     c.returning = vi.fn(async () => {
       if (label === 'conversation_messages') {
         return [{ ...row, id: 'conversation_msg_new', createdAt: new Date() }]
@@ -258,7 +264,7 @@ function delivered(extra: Partial<DeliveredFields> = {}): DeliveredFields {
 }
 
 function answered(extra: Partial<DeliveredFields> = {}): AnsweredTurn {
-  return { status: 'answered', ...delivered(extra) }
+  return { status: 'answered', responseKind: 'answer', ...delivered(extra) }
 }
 
 /** Latest-involvement fixture: the orchestrator derives engaged ('active') vs
@@ -406,6 +412,30 @@ describe('runAssistantTurnForConversation gate', () => {
 })
 
 describe('runAssistantTurnForConversation escalation dispatch', () => {
+  it('persists the final response before fulfilling explicit closure, with no answer appended afterward', async () => {
+    assistantMock.runAssistantTurn.mockResolvedValue(
+      answered({
+        text: 'Glad that helped. Goodbye!',
+        closeRequest: { reason: 'Customer confirmed resolution' },
+      })
+    )
+    mockEndConversation.mockImplementationOnce(async () => {
+      expect(insertedMessages).toHaveLength(1)
+      expect(insertedMessages[0].content).toBe('Glad that helped. Goodbye!')
+    })
+    await runAssistantTurnForConversation(CONV)
+    expect(mockEndConversation).toHaveBeenCalledWith(
+      CONV,
+      'resolved',
+      'Customer confirmed resolution',
+      expect.objectContaining({ principalType: 'service' })
+    )
+    expect(insertedMessages).toHaveLength(1)
+    expect(assistantMock.recordOutcome).toHaveBeenCalledWith('assistant_involvement_1', 'confirmed')
+    expect(assistantMock.recordAssistantAnswer).not.toHaveBeenCalled()
+    expect(assistantMock.recordHandoff).not.toHaveBeenCalled()
+  })
+
   it('persists an honest inability without opening involvement or stamping an answer', async () => {
     assistantMock.runAssistantTurn.mockResolvedValue(
       cannotAnswer({ text: 'I could not find that. I can connect you with a teammate.' })

@@ -103,6 +103,15 @@ export const conversations = pgTable(
     // Read receipts power unread badges on each side independently.
     visitorLastReadAt: timestamp('visitor_last_read_at', { withTimezone: true }),
     agentLastReadAt: timestamp('agent_last_read_at', { withTimezone: true }),
+    // Built-in inactivity check-in: stamped when the team-handled idle sweep
+    // posts its once-per-silence nudge. Cleared on any visitor or agent
+    // message so a new silence can check in again.
+    inactivityCheckInAt: timestamp('inactivity_check_in_at', { withTimezone: true }),
+    inactivityOwner: text('inactivity_owner').$type<
+      'team' | 'assistant_answered' | 'assistant_waiting' | 'handoff'
+    >(),
+    inactivityAnchorAt: timestamp('inactivity_anchor_at', { withTimezone: true }),
+    inactivityRetryAt: timestamp('inactivity_retry_at', { withTimezone: true }),
     // Post-conversation CSAT rating (1-5), submitted by the visitor.
     csatRating: integer('csat_rating'),
     csatComment: text('csat_comment'),
@@ -172,6 +181,9 @@ export const conversations = pgTable(
     }).onDelete('set null'),
     index('conversations_channel_account_id_idx').on(table.channelAccountId),
     // Inbox feed: list by status, newest activity first.
+    index('conversations_inactivity_idx')
+      .on(table.channel, table.inactivityOwner, table.inactivityAnchorAt, table.id)
+      .where(sql`status = 'open' AND inactivity_anchor_at IS NOT NULL`),
     index('conversations_status_last_message_idx').on(table.status, table.lastMessageAt),
     // Cross-status keyset feed (D17): last activity first with an id tiebreak, so
     // the unfiltered inbox pages deterministically without leaning on the status

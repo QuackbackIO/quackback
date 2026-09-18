@@ -56,9 +56,7 @@ import {
 } from '@/lib/shared/assistant/config'
 import { SKILL_LOADS_PER_TURN } from '@/lib/shared/assistant/skills'
 import { setConversationAttribute } from '@/lib/server/domains/conversation-attributes/set-attribute.service'
-import { classifyConversationAttributes } from '@/lib/server/domains/conversation-attributes/ai-classification.service'
 import { readAttributeValue } from '@/lib/shared/conversation/attribute-values'
-import { setConversationStatus } from '@/lib/server/domains/conversation/conversation.service'
 import { createTicket } from '@/lib/server/domains/tickets/ticket.service'
 import { linkTicketToConversation } from '@/lib/server/domains/tickets/ticket-conversation-link.service'
 import { formatTicketNumber } from '@/lib/shared/tickets'
@@ -168,6 +166,7 @@ export interface AssistantToolLedger {
   toolOutcomes: AssistantToolOutcome[]
   /** Set only by the handoff_to_human control tool. */
   handoffRequest: AssistantHandoffRequest | null
+  closeRequest: { reason: string } | null
   /** Set only by the report_inability control tool. */
   inabilityReport: { reason: AssistantInabilityReason } | null
   /**
@@ -194,6 +193,7 @@ export function makeAssistantToolLedger(): AssistantToolLedger {
     toolCalls: [],
     toolOutcomes: [],
     handoffRequest: null,
+    closeRequest: null,
     inabilityReport: null,
     proposedActions: [],
     searchCalls: 0,
@@ -242,6 +242,10 @@ export interface AssistantToolContext {
    * fall back to unscoped.
    */
   customerPrincipalId?: PrincipalId
+  /** True when the conversation visitor is an anonymous principal. */
+  visitorIsAnonymous?: boolean
+  /** True when a reachable (non-placeholder) email is already on file. */
+  visitorHasContactEmail?: boolean
   /**
    * Per-request NARROWING filter over the grounding sources search
    * consults (the copilot Answer-sources picker); undefined means every
@@ -332,6 +336,8 @@ export function makeAssistantToolContext(init: {
   conversationId: ConversationId | null
   ticketId?: TicketId | null
   customerPrincipalId?: PrincipalId | null
+  visitorIsAnonymous?: boolean
+  visitorHasContactEmail?: boolean
   sourceTypes?: RetrievedItem['sourceType'][]
   knowledge?: AssistantKnowledgeSnapshot
   involvementId?: AssistantInvolvementId | null
@@ -354,6 +360,8 @@ export function makeAssistantToolContext(init: {
     conversationId: init.conversationId,
     ticketId: init.ticketId ?? null,
     customerPrincipalId: init.customerPrincipalId ?? undefined,
+    visitorIsAnonymous: init.visitorIsAnonymous,
+    visitorHasContactEmail: init.visitorHasContactEmail,
     sourceTypes: init.sourceTypes,
     // Non-runtime callers (the approved-action executor) never retrieve, so the
     // KB-only default is a safe floor; the turn runtime always passes a real
@@ -877,6 +885,38 @@ export const createTicketTool = toolDefinition({
   outputSchema: withGateEnvelope(createTicketOutputSchema),
 })
 
+const captureContactDetailsOutputSchema = z.object({
+  captured: z.boolean(),
+  email: z.string().optional(),
+  name: z.string().optional(),
+  note: z.string().optional(),
+})
+
+export const captureContactDetailsTool = toolDefinition({
+  name: 'capture_contact_details',
+  description:
+    'Record a name and/or email the customer just gave you so the team can reach them later. Use this only for an anonymous visitor with no email on file. Do not invent an address. The address is unproven and does not identify or merge the visitor.',
+  inputSchema: z
+    .object({
+      email: z
+        .string()
+        .trim()
+        .max(254)
+        .optional()
+        .describe('A real email the customer provided in this conversation.'),
+      name: z
+        .string()
+        .trim()
+        .max(80)
+        .optional()
+        .describe('The name the customer said to call them.'),
+    })
+    .refine((value) => Boolean(value.email?.trim() || value.name?.trim()), {
+      message: 'Provide an email or a name.',
+    }),
+  outputSchema: withGateEnvelope(captureContactDetailsOutputSchema),
+})
+
 const captureFeedbackOutputSchema = z.object({
   created: z.boolean(),
   postId: z.string().optional(),
@@ -1014,22 +1054,11 @@ async function executeEndConversation(
     return { closed: false, note: NO_CONVERSATION_NOTE }
   }
   const row = await getConversationSnapshot(ctx, conversationId)
-  // setConversationStatus does not throw on a closed -> closed transition, it
-  // just re-applies the same status with no transcript notice or webhook —
-  // checking first avoids that pointless write and reports it plainly.
+  ctx.ledger.closeRequest = { reason: _args.reason ?? 'Customer confirmed resolution' }
+  // endConversation is idempotent on an already-closed thread except for
+  // rewriting endReason; checking first avoids that pointless write.
   if (row?.status === 'closed') {
     return { closed: true, note: 'Conversation was already closed.' }
-  }
-  await setConversationStatus(conversationId, 'closed', ctx.actor)
-  // AI attribute classification (AI-ATTRIBUTES-PARITY-SPEC.md Phase 1): one
-  // of the "job done" moments. Flag-gated and non-blocking inside the
-  // service itself; the extra catch here is defense in depth so a
-  // classification failure can never turn a successful close into a failed
-  // tool call.
-  try {
-    await classifyConversationAttributes(conversationId, { trigger: 'assistant_closed' })
-  } catch (err) {
-    log.warn({ err, conversationId }, 'post-close attribute classification failed')
   }
   return { closed: true }
 }
@@ -1311,6 +1340,39 @@ async function executeUseSkill(
   return { name: args.name, instructions: body }
 }
 
+type CaptureContactDetailsArgs = InferToolInput<typeof captureContactDetailsTool>
+type CaptureContactDetailsOutput = z.infer<typeof captureContactDetailsOutputSchema>
+
+async function executeCaptureContactDetails(
+  args: CaptureContactDetailsArgs,
+  ctx: AssistantToolContext
+): Promise<CaptureContactDetailsOutput> {
+  const conversationId = ctx.conversationId
+  if (!conversationId) {
+    return { captured: false, note: NO_CONVERSATION_NOTE }
+  }
+  const { recordVisitorContact } =
+    await import('@/lib/server/domains/conversation/conversation.contact')
+  const result = await recordVisitorContact(
+    conversationId,
+    { email: args.email, name: args.name },
+    { refuseTeamEmail: true }
+  )
+  if (!result.captured) {
+    return {
+      captured: false,
+      note: args.email
+        ? 'That email could not be recorded. Ask for a personal address the team can reply to.'
+        : 'No new contact details were stored.',
+    }
+  }
+  return {
+    captured: true,
+    email: result.email ?? undefined,
+    name: result.name ?? undefined,
+  }
+}
+
 const SPECS: readonly AssistantToolSpec[] = [
   defineToolSpec({
     label: 'Search knowledge',
@@ -1437,6 +1499,26 @@ const SPECS: readonly AssistantToolSpec[] = [
     execute: executeCreateTicket,
     summarize: (args, ctx) =>
       `Create a ${ctx?.role === 'workspace_assistant' ? 'back_office' : args.type} ticket: "${args.title}"`,
+  }),
+  defineToolSpec({
+    label: 'Capture contact details',
+    description:
+      'Record a name and/or email the anonymous visitor provided so the team can reach them.',
+    promptGuidance:
+      'Ask conversationally, once, when handing off while the team is offline or outside office hours, creating a customer ticket, the customer asks to be followed up, or a teammate must get back to them. Never gate the first answer on it. Never ask if an email is already on file. Call this before handoff_to_human in those cases.',
+    risk: 'write',
+    permissions: [PERMISSIONS.CONVERSATION_SET_ATTRIBUTES],
+    definition: captureContactDetailsTool,
+    execute: executeCaptureContactDetails,
+    summarize: (args) =>
+      args.email
+        ? `Record contact details${args.name ? ` for ${args.name}` : ''}`
+        : `Record name ${args.name ?? ''}`.trim(),
+    availableWhen: (ctx) =>
+      ctx.audience === 'public' &&
+      ctx.conversationId !== null &&
+      ctx.visitorIsAnonymous === true &&
+      ctx.visitorHasContactEmail !== true,
   }),
   defineToolSpec({
     label: 'Share feedback post',

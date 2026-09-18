@@ -104,12 +104,16 @@ function messageBodyHtml(content: string, contentJson?: JSONContent | null): str
  * started). In-Reply-To is the latest inbound id when one exists, else the
  * latest outbound. Absent when no sending domain is configured.
  */
-async function outboundThreading(conversationId: ConversationId): Promise<{
+async function outboundThreading(
+  conversationId: ConversationId,
+  deliveryKey?: string
+): Promise<{
   messageId?: string
   inReplyTo?: string
   references?: string[]
 }> {
-  const messageId = mintOutboundMessageId(conversationId)
+  const minted = mintOutboundMessageId(conversationId)
+  const messageId = minted && deliveryKey ? `c.${deliveryKey}@${minted.split('@')[1]}` : minted
   if (!messageId) return {}
   const thread = await threadIdsForOutbound(conversationId)
   return assembleOutboundThreading({
@@ -362,6 +366,8 @@ async function sendWithRetry<T>(
  * visitor. The two callers differ only in `direction`.
  */
 export async function sendVisitorConversationEmail(opts: {
+  deliveryKey?: string
+  strictDelivery?: boolean
   conversationId: ConversationId
   visitorPrincipalId: PrincipalId
   recipient: string
@@ -382,7 +388,7 @@ export async function sendVisitorConversationEmail(opts: {
   const replyTo = isEmailInboundConfigured()
     ? (inboundReplyToAddress(opts.conversationId, currentMailSlug()) ?? undefined)
     : undefined
-  const threading = await outboundThreading(opts.conversationId)
+  const threading = await outboundThreading(opts.conversationId, opts.deliveryKey)
   const mailCtx = await loadConversationMailContext(opts.conversationId)
   const channel = opts.channel ?? mailCtx.channel
   const descriptor = channel ? getChannelDescriptor(channel) : undefined
@@ -427,6 +433,7 @@ export async function sendVisitorConversationEmail(opts: {
     })
   )
   if (result && result.sent === false) {
+    if (opts.strictDelivery) throw new Error(`Email not sent: ${result.reason}`)
     log.warn(
       { conversation_id: opts.conversationId, direction: opts.direction, reason: result.reason },
       'conversation email not sent'
@@ -456,6 +463,7 @@ export async function sendVisitorConversationEmail(opts: {
  * pre-chat email they captured on the conversation.
  */
 export async function notifyAgentReply(opts: {
+  strictDelivery?: boolean
   conversationId: ConversationId
   visitorPrincipalId: PrincipalId
   content: string
@@ -495,6 +503,8 @@ export async function notifyAgentReply(opts: {
       .limit(1)
 
     const recipient = resolveReplyRecipient(visitor, visitor?.contactEmail, opts.capturedEmail)
+    if (!recipient && opts.strictDelivery)
+      throw new Error('No email address is available for this contact.')
     if (!recipient) {
       // The visitor is unreachable — surface it instead of dropping silently
       // (the inbox can flag conversations with no reply-to address). `channel`
@@ -509,7 +519,10 @@ export async function notifyAgentReply(opts: {
     }
 
     const ctx = await buildHookContext()
-    if (!ctx) return
+    if (!ctx) {
+      if (opts.strictDelivery) throw new Error('Email delivery context is unavailable.')
+      return
+    }
     // Deep-link to the visitor's conversation surface (portal Support thread
     // when enabled, else the widget messenger view). The thread is surfaced from
     // the visitor's own session (or a re-identify in the host app), so the URL
@@ -521,6 +534,7 @@ export async function notifyAgentReply(opts: {
       await adapter.deliverAgentMessage({
         conversationId: opts.conversationId,
         messageId: opts.messageId,
+        strictDelivery: opts.strictDelivery,
         visitorPrincipalId: opts.visitorPrincipalId,
         content: opts.content,
         contentJson: opts.contentJson,
@@ -550,6 +564,7 @@ export async function notifyAgentReply(opts: {
           await adapter.deliverAgentMessage({
             conversationId: opts.conversationId,
             messageId: opts.messageId,
+            strictDelivery: opts.strictDelivery,
             visitorPrincipalId: participant.principalId,
             content: opts.content,
             contentJson: opts.contentJson,
@@ -571,6 +586,7 @@ export async function notifyAgentReply(opts: {
       log.warn({ err, conversation_id: opts.conversationId }, 'participant reply fan-out failed')
     }
   } catch (err) {
+    if (opts.strictDelivery) throw err
     log.warn({ err }, 'notify agent reply failed')
   }
 }

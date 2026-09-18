@@ -22,6 +22,9 @@ const log = logger.child({ component: 'conversation-notify-closed' })
  * email adapter's deliverLifecycleEvent.
  */
 export async function notifyConversationClosed(opts: {
+  messageId?: string
+  content?: string
+  strictDelivery?: boolean
   conversationId: ConversationId
   variant: 'closed' | 'auto_closed'
   closerPrincipalId?: PrincipalId | null
@@ -51,10 +54,16 @@ export async function notifyConversationClosed(opts: {
       .where(eq(principal.id, conv.visitorPrincipalId))
       .limit(1)
     const recipient = resolveReplyRecipient(visitor, visitor?.contactEmail, conv.visitorEmail)
-    if (!recipient) return
+    if (!recipient) {
+      if (opts.strictDelivery) throw new Error('No email address is available for this contact.')
+      return
+    }
 
     const ctx = await buildHookContext()
-    if (!ctx) return
+    if (!ctx) {
+      if (opts.strictDelivery) throw new Error('Email delivery context is unavailable.')
+      return
+    }
 
     const { isPortalSupportEnabled } =
       await import('@/lib/server/domains/settings/settings.support')
@@ -64,6 +73,23 @@ export async function notifyConversationClosed(opts: {
       await isPortalSupportEnabled()
     )
 
+    if (opts.content !== undefined) {
+      const { sendVisitorConversationEmail } = await import('./conversation.notify')
+      await sendVisitorConversationEmail({
+        conversationId: opts.conversationId,
+        visitorPrincipalId: conv.visitorPrincipalId,
+        recipient,
+        direction: 'agent_reply',
+        senderName: ctx.workspaceName,
+        content: opts.content,
+        ctaUrl,
+        ctx,
+        channel: 'email',
+        deliveryKey: opts.messageId,
+        strictDelivery: opts.strictDelivery,
+      })
+      return
+    }
     const replyTo = isEmailInboundConfigured()
       ? (inboundReplyToAddress(opts.conversationId, currentMailSlug()) ?? undefined)
       : undefined
@@ -111,6 +137,7 @@ export async function notifyConversationClosed(opts: {
       result?.messageId === undefined ? messageId : (result.messageId ?? undefined)
     if (outboundMessageId) await recordOutboundEmail(outboundMessageId, opts.conversationId)
   } catch (err) {
+    if (opts.strictDelivery) throw err
     log.warn({ err, conversationId: opts.conversationId }, 'notify conversation closed failed')
   }
 }

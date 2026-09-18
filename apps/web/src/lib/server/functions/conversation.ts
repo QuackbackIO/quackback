@@ -71,6 +71,48 @@ import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'conversation' })
 
+async function loadPrincipalContactEmail(principalId: PrincipalId): Promise<string | null> {
+  const { db, principal, eq } = await import('@/lib/server/db')
+  const [row] = await db
+    .select({ contactEmail: principal.contactEmail })
+    .from(principal)
+    .where(eq(principal.id, principalId))
+    .limit(1)
+  return realEmail(row?.contactEmail)
+}
+
+async function resolveVisitorHasEmail(
+  ctx: AuthContext,
+  conversationEmail?: string | null
+): Promise<boolean> {
+  if (realEmail(ctx.user?.email)) return true
+  if (realEmail(conversationEmail)) return true
+  return Boolean(await loadPrincipalContactEmail(ctx.principal.id))
+}
+
+async function resolveVisitorContactCapture(
+  messengerConfig: { contactCapture?: unknown },
+  isAnonymous: boolean,
+  visitorHasEmail: boolean
+) {
+  const { parseContactCapture, resolveContactCapturePrompt } =
+    await import('@/lib/shared/contact-capture')
+  const settings = parseContactCapture(messengerConfig.contactCapture)
+  if (settings.mode === 'off' || !isAnonymous || visitorHasEmail) {
+    return { show: false, required: false, askName: false }
+  }
+  const { getOfficeHoursSchedule } =
+    await import('@/lib/server/domains/settings/settings.office-hours')
+  const { isWithinOfficeHours } = await import('@/lib/shared/office-hours')
+  const schedule = await getOfficeHoursSchedule()
+  return resolveContactCapturePrompt({
+    settings,
+    isAnonymous,
+    visitorHasEmail,
+    officeHoursOpen: isWithinOfficeHours(schedule, new Date()),
+  })
+}
+
 /**
  * The pair's requester-audience ticket for the converged Messages thread
  * header — null when tickets are off, no pair exists, or the ticket isn't the
@@ -127,7 +169,7 @@ const listConversationsSchema = z.object({
   // first message is agent-authored by them).
   view: z.enum(['all', 'mentions', 'quinn', 'spam', 'created_by_me']).optional(),
   // Quinn-inbox sub-filter by involvement outcome; omitted = any Quinn-engaged.
-  ai: z.enum(['resolved', 'escalated', 'pending']).optional(),
+  ai: z.enum(['resolved', 'escalated', 'pending', 'abandoned']).optional(),
   before: z.string().optional(),
   // Custom-attribute view rules (§C2.7): each ANDs a jsonb predicate against
   // custom_attributes. The key isn't checked against the live registry here —
@@ -347,6 +389,8 @@ export const runSendConversationMessage = createServerOnlyFn(
         content: data.content,
         attachments: data.attachments as ConversationAttachment[] | undefined,
         blockReply: data.blockReply,
+        visitorEmail: data.visitorEmail,
+        visitorName: data.visitorName,
       },
       {
         principalId: ctx.principal.id,
@@ -470,6 +514,7 @@ export const runGetMyConversation = createServerOnlyFn(async function runGetMyCo
       : null,
     // Whether we already have a contact email for this visitor.
     visitorHasEmail: false,
+    contactCapture: { show: false, required: false, askName: false },
     // Whether an offline reply could actually reach this visitor by email —
     // the widget shows a non-promising offline message when false.
     canEmailVisitor: canEmailVisitor({ emailConfigured, visitorHasEmail: false }),
@@ -482,7 +527,10 @@ export const runGetMyConversation = createServerOnlyFn(async function runGetMyCo
   }
 
   if (!enabled || !ctx?.principal) {
-    return { ...base, conversation: null, messages: [], hasMore: false }
+    const contactCapture = enabled
+      ? await resolveVisitorContactCapture(messengerConfig, true, false)
+      : base.contactCapture
+    return { ...base, contactCapture, conversation: null, messages: [], hasMore: false }
   }
 
   // Gate reads behind portal access for non-team callers (degrade gracefully
@@ -500,10 +548,16 @@ export const runGetMyConversation = createServerOnlyFn(async function runGetMyCo
   // "New conversation": config + greeting, no thread. The first send creates
   // it (sendVisitorMessage with no conversationId).
   if (target === null) {
-    const visitorHasEmail = Boolean(realEmail(ctx.user?.email))
+    const visitorHasEmail = await resolveVisitorHasEmail(ctx)
+    const contactCapture = await resolveVisitorContactCapture(
+      messengerConfig,
+      ctx.principal.type === 'anonymous',
+      visitorHasEmail
+    )
     return {
       ...base,
       visitorHasEmail,
+      contactCapture,
       canEmailVisitor: canEmailVisitor({ emailConfigured, visitorHasEmail }),
       conversation: null,
       messages: [],
@@ -525,13 +579,20 @@ export const runGetMyConversation = createServerOnlyFn(async function runGetMyCo
   const conversation = active.conversation
   // Anonymous visitors carry a synthetic placeholder email — it must not count
   // as a real address (else the widget promises an email reply it can't send).
-  const visitorHasEmail =
-    Boolean(realEmail(ctx.user?.email)) || Boolean(realEmail(conversation?.visitorEmail))
+  // principal.contact_email is the reusable unproven address and must agree
+  // with resolveReplyRecipient / canEmailVisitor.
+  const visitorHasEmail = await resolveVisitorHasEmail(ctx, conversation?.visitorEmail)
+  const contactCapture = await resolveVisitorContactCapture(
+    messengerConfig,
+    ctx.principal.type === 'anonymous',
+    visitorHasEmail
+  )
   const canEmail = canEmailVisitor({ emailConfigured, visitorHasEmail })
   if (!conversation) {
     return {
       ...base,
       visitorHasEmail,
+      contactCapture,
       canEmailVisitor: canEmail,
       conversation: null,
       messages: [],
@@ -547,6 +608,7 @@ export const runGetMyConversation = createServerOnlyFn(async function runGetMyCo
   return {
     ...base,
     visitorHasEmail,
+    contactCapture,
     canEmailVisitor: canEmail,
     isReadOnly: active.isReadOnly,
     conversation: dto,
@@ -1188,22 +1250,51 @@ export const createPostFromConversationFn = createServerFn({ method: 'POST' })
 // block the track action it rides alongside.
 const captureContactEmailSchema = z.object({
   conversationId: z.string(),
-  email: z.string().max(320),
+  email: z.string().max(320).optional(),
+  name: z.string().max(80).optional(),
 })
 
-/** Agent action: store a contact email for a conversation's anonymous visitor. */
+/** Agent action: store a contact email and/or name for a conversation's anonymous visitor. */
 export const captureVisitorContactEmailFn = createServerFn({ method: 'POST' })
   .validator(captureContactEmailSchema)
   .handler(async ({ data }) => {
     const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
     const actor = await policyActorFromAuth(ctx)
-    const { captureVisitorContactEmail } =
+    const { captureVisitorContact } =
       await import('@/lib/server/domains/conversation/conversation.service')
-    return await captureVisitorContactEmail(
+    return await captureVisitorContact(
       data.conversationId as ConversationId,
-      data.email,
+      { email: data.email, name: data.name },
       actor
     )
+  })
+
+export const correctVisitorContactFn = createServerFn({ method: 'POST' })
+  .validator(captureContactEmailSchema)
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
+    const actor = await policyActorFromAuth(ctx)
+    const { correctVisitorContact } =
+      await import('@/lib/server/domains/conversation/conversation.service')
+    return correctVisitorContact(
+      data.conversationId as ConversationId,
+      { email: data.email, name: data.name },
+      actor
+    )
+  })
+
+const identifiedContactMatchSchema = z.object({
+  email: z.string().max(320),
+})
+
+/** Inbox hint: an identified principal who already uses this unproven address. */
+export const lookupIdentifiedContactMatchFn = createServerFn({ method: 'GET' })
+  .validator(identifiedContactMatchSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.PEOPLE_VIEW })
+    const { lookupIdentifiedContactMatch } =
+      await import('@/lib/server/domains/conversation/conversation.contact')
+    return lookupIdentifiedContactMatch(data.email)
   })
 
 const sharePostSchema = z.object({

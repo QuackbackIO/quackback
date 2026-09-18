@@ -59,6 +59,7 @@ export {
   recordOutcome,
   voidAssumedResolutionForConversation,
   finalizeStaleAssistantInvolvements,
+  sendStaleAssistantFollowUps,
   setInvolvementRating,
   assumedResolutionEligible,
   confirmedResolutionEligible,

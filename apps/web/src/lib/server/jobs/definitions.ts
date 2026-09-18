@@ -214,6 +214,23 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       ),
   },
   {
+    name: 'conversation-inactivity-delivery',
+    maxAttempts: 8,
+    retryBackoffMs: 30_000,
+    handler: () =>
+      import('@/lib/server/domains/conversation/conversation.inactivity').then(
+        (m) => m.deliverInactivity
+      ),
+  },
+  {
+    name: 'conversation-inactivity-continuation',
+    maxAttempts: 3,
+    handler: () =>
+      import('@/lib/server/domains/conversation/conversation.inactivity').then(
+        (m) => m.continueInactivity
+      ),
+  },
+  {
     name: 'snooze-sweep',
     cron: '* * * * *',
     maxAttempts: 3,

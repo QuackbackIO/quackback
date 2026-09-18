@@ -27,9 +27,14 @@ vi.mock('@/lib/server/domains/conversation-attributes/set-attribute.service', ()
   setConversationAttribute: (...args: unknown[]) => mockSetConversationAttribute(...args),
 }))
 
-const mockSetConversationStatus = vi.fn()
+const mockEndConversation = vi.fn()
 vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
-  setConversationStatus: (...args: unknown[]) => mockSetConversationStatus(...args),
+  endConversation: (...args: unknown[]) => mockEndConversation(...args),
+}))
+
+const mockRecordOutcome = vi.fn()
+vi.mock('../assistant.involvement', () => ({
+  recordOutcome: (...args: unknown[]) => mockRecordOutcome(...args),
 }))
 
 const mockClassifyConversationAttributes = vi.fn()
@@ -252,20 +257,19 @@ describe('end_conversation', () => {
   it('reports no linked conversation without a conversationId', async () => {
     const out = await spec.execute({}, ctx())
     expect(out).toEqual({ closed: false, note: 'No linked conversation.' })
-    expect(mockSetConversationStatus).not.toHaveBeenCalled()
+    expect(mockEndConversation).not.toHaveBeenCalled()
   })
 
-  it('closes the conversation on the happy path', async () => {
+  it('defers closure until the final reply has been persisted', async () => {
     const c = ctx({
       conversationId: 'conversation_1' as never,
+      involvementId: 'assistant_involvement_1' as never,
       db: fakeDbReturning({ status: 'open' }) as never,
     })
     const out = await spec.execute({ reason: 'resolved' }, c)
-    expect(mockSetConversationStatus).toHaveBeenCalledWith(
-      'conversation_1',
-      'closed',
-      expect.objectContaining({ principalType: 'service' })
-    )
+    expect(mockEndConversation).not.toHaveBeenCalled()
+    expect(mockRecordOutcome).not.toHaveBeenCalled()
+    expect(c.ledger.closeRequest).toEqual({ reason: 'resolved' })
     expect(out).toEqual({ closed: true })
   })
 
@@ -276,18 +280,18 @@ describe('end_conversation', () => {
     })
     const out = await spec.execute({}, c)
     expect(out).toEqual({ closed: true, note: 'Conversation was already closed.' })
-    expect(mockSetConversationStatus).not.toHaveBeenCalled()
+    expect(mockEndConversation).not.toHaveBeenCalled()
+    expect(mockRecordOutcome).not.toHaveBeenCalled()
   })
 
-  it('classifies attributes (trigger assistant_closed) when the conversation actually closes', async () => {
+  it('defers close-time classification until persistence', async () => {
     const c = ctx({
       conversationId: 'conversation_1' as never,
       db: fakeDbReturning({ status: 'open' }) as never,
     })
     await spec.execute({ reason: 'resolved' }, c)
-    expect(mockClassifyConversationAttributes).toHaveBeenCalledWith('conversation_1', {
-      trigger: 'assistant_closed',
-    })
+    expect(mockClassifyConversationAttributes).not.toHaveBeenCalled()
+    expect(c.ledger.closeRequest).toEqual({ reason: 'resolved' })
   })
 
   it('does not classify again when the conversation was already closed', async () => {

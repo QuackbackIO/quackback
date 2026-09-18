@@ -95,7 +95,10 @@ vi.mock('@/lib/server/db', () => {
       return c
     })
     c.where = vi.fn(() => c)
-    c.limit = vi.fn(async () => [])
+    c.from = vi.fn(() => c)
+    c.limit = vi.fn(() => c)
+    c.for = vi.fn(() => c)
+    c.then = (resolve: (value: unknown) => unknown) => Promise.resolve([]).then(resolve)
     c.orderBy = vi.fn(() => c)
     c.returning = vi.fn(async () => {
       if (label === 'conversations') {
@@ -140,6 +143,7 @@ vi.mock('@/lib/server/db', () => {
     eq: vi.fn(),
     and: vi.fn(),
     isNull: vi.fn(),
+    settings: { __name: 'settings' },
     conversations: { __name: 'conversations', id: 'id' },
     conversationMessages: { __name: 'conversation_messages', id: 'id' },
     principal: { __name: 'principal', id: 'id', displayName: 'display_name' },

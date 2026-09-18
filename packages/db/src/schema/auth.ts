@@ -843,13 +843,10 @@ export const principal = pgTable(
      */
     lastSsoSignInAt: timestamp('last_sso_sign_in_at', { withTimezone: true }),
     // A reachable address for a principal whose account email cannot receive
-    // mail. Two populations arrive here:
-    //   - an anonymous visitor, captured in the messenger by an agent, so an
-    //     offline reply can reach them across conversations. Agent-only: the
-    //     principal stays anonymous and this is never shown back to them.
-    //   - a signed-in person whose identity provider released no address, so
-    //     their account holds a minted placeholder. They supply this one
-    //     themselves and confirm it by mail before it is written.
+    // mail. Written by a pre-chat form, the assistant, or an agent in the
+    // inbox for an anonymous visitor (unproven; the principal stays anonymous
+    // and is never merged), or by a signed-in person whose identity provider
+    // released no address and who confirmed a replacement by mail.
     // Delivery precedence lives in `resolveReplyRecipient`, which places this
     // above the per-conversation capture and below a real account email.
     contactEmail: text('contact_email'),

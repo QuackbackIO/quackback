@@ -145,7 +145,9 @@ describe('assistant production system prompt', () => {
       '{"text": string, "citations": [{"type": "article"|"post"|"snippet"|"summary", "id": string}]}'
     const copilotContract = `${customerContract.slice(0, -1)}, "answerType": "draft_reply"|"analysis"}`
 
-    expect(joined()).toContain(customerContract)
+    expect(joined()).toContain(
+      `${customerContract.slice(0, -1)}, "responseKind": "answer"|"clarification"|"greeting"}`
+    )
     expect(joined({ role: 'copilot_qa' })).toContain(copilotContract)
     expect(joined()).not.toContain('"skip"')
   })
@@ -271,6 +273,32 @@ describe('assistant production system prompt', () => {
     expect(withHandoff).toContain('handoff_to_human')
     expect(withHandoff).toContain('customerNeed')
     expect(withHandoff).toContain('recommendedNextStep')
+  })
+
+  it('adds contact-details guidance only when capture_contact_details is assembled', () => {
+    const without = joined()
+    const withCapture = joined({
+      tools: [
+        {
+          name: 'capture_contact_details',
+          promptGuidance: 'Record a name or email the customer provided.',
+        },
+      ],
+    })
+    expect(without).not.toContain('# Contact details')
+    expect(withCapture).toContain('# Contact details')
+    expect(withCapture).toContain('Never gate the first answer on it')
+    expect(withCapture).toContain('capture_contact_details')
+  })
+
+  it('adds closing guidance only when end_conversation is assembled', () => {
+    const without = joined()
+    const withClose = joined({
+      tools: [{ name: 'end_conversation', promptGuidance: 'Close when the customer confirms.' }],
+    })
+    expect(without).not.toContain('# Closing the conversation')
+    expect(withClose).toContain('# Closing the conversation')
+    expect(withClose).toContain('Never close on your own judgement')
   })
 
   it('adds the live attribute catalogue only when set_attribute is assembled', () => {

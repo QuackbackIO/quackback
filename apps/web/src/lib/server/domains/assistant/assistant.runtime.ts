@@ -15,7 +15,9 @@ import type { Actor } from '@/lib/server/policy/types'
 import { parsePartialJSON, maxIterations, type StreamChunk } from '@tanstack/ai'
 import { z } from 'zod'
 import { config } from '@/lib/server/config'
-import { db, conversations, principal, eq } from '@/lib/server/db'
+import { db, conversations, principal, user, eq } from '@/lib/server/db'
+import { realEmail } from '@/lib/shared/anonymous-email'
+import { isGeneratedAnonymousName } from '@/lib/shared/anonymous-names'
 import type { Executor } from '@/lib/server/domains/principals/principal.factory'
 import { isAiClientConfigured, stripCodeFences } from '@/lib/server/domains/ai/config'
 import { getChatModel, isVisionCapableModel } from '@/lib/server/domains/ai/models'
@@ -162,6 +164,9 @@ export type AssistantCannotAnswerReason = AssistantInabilityReason
 
 /** Fields shared by every customer-visible terminal outcome. */
 interface AssistantDeliveredFields {
+  responseKind?: 'answer' | 'clarification' | 'greeting'
+  closeRequest?: { reason: string }
+
   text: string
   /** Reply-draft vs analysis intent for this turn's `text` (copilot surface
    *  only); `draft_reply` whenever the model didn't classify. */
@@ -362,6 +367,7 @@ const assistantOutputSchema = z.object({
   // salvage paths only recover `text` — so every omission falls back to
   // `draft_reply` at the return sites rather than failing validation.
   answerType: z.enum(['draft_reply', 'analysis']).optional(),
+  responseKind: z.enum(['answer', 'clarification', 'greeting']).optional(),
   // Slack thread listening. Optional everywhere; ignored off Slack. `leave`
   // means the teammate told the assistant to stop following the thread.
   listen: z.enum(['continue', 'leave']).optional(),
@@ -572,9 +578,9 @@ export function relinkCitations(
 export function isSubstantiveAnswer(turn: {
   text: string
   citations: AssistantCitation[]
+  responseKind?: 'answer' | 'clarification' | 'greeting'
 }): boolean {
-  if (turn.citations.length > 0) return true
-  return turn.text.trim().length >= 40
+  return turn.responseKind === 'answer'
 }
 
 /**
@@ -717,6 +723,27 @@ export interface ConversationGroundingFacts {
  * prompt. The thread body is separately fenced via `wrapUntrustedText`; this
  * guards the one place a caller-authored value sits on a trusted line.
  */
+export function formatCustomerIdentityLine(input: {
+  isAnonymous: boolean
+  displayName: string | null
+  email: string | null
+  userId?: string | null
+  principalId: string
+}): string {
+  const generated = isGeneratedAnonymousName(input.displayName, [input.userId, input.principalId])
+  const name = generated ? null : input.displayName?.trim() || null
+  if (input.isAnonymous && !input.email) {
+    return 'Customer identity: anonymous visitor, no email on file.'
+  }
+  if (input.isAnonymous) {
+    const nameBit = name ? `name ${sanitizeFactValue(name, 80)}, ` : ''
+    return `Customer identity: anonymous visitor, ${nameBit}email ${sanitizeFactValue(input.email!, 160)} (unverified).`
+  }
+  const nameBit = name ? ` ${sanitizeFactValue(name, 80)}` : ''
+  const emailBit = input.email ? `, email ${sanitizeFactValue(input.email, 160)}` : ''
+  return `Customer identity: identified user${nameBit}${emailBit}.`
+}
+
 function sanitizeFactValue(value: string, max = 200): string {
   // oxlint-disable-next-line no-control-regex
   const flattened = value.replace(/[\u0000-\u001F\u007F]+/g, ' ').trim()
@@ -900,22 +927,44 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
   // `customerPrincipalId` for the past-conversation source.
   let customerPrincipalId: PrincipalId | undefined
   let conversationFacts: ConversationGroundingFacts | null = null
+  let visitorIsAnonymous: boolean | undefined
+  let visitorHasContactEmail: boolean | undefined
+  let customerIdentityLine: string | null = null
   if (conversationId) {
-    if (surface === 'copilot') {
-      const [conversationRow] = await execDb
-        .select({
-          visitorPrincipalId: conversations.visitorPrincipalId,
-          customer: principal.displayName,
-          subject: conversations.subject,
-          status: conversations.status,
-          channel: conversations.channel,
-        })
-        .from(conversations)
-        .leftJoin(principal, eq(principal.id, conversations.visitorPrincipalId))
-        .where(eq(conversations.id, conversationId))
-        .limit(1)
-      customerPrincipalId = conversationRow?.visitorPrincipalId
-      if (conversationRow) {
+    const [conversationRow] = await execDb
+      .select({
+        visitorPrincipalId: conversations.visitorPrincipalId,
+        visitorEmail: conversations.visitorEmail,
+        customer: principal.displayName,
+        visitorType: principal.type,
+        visitorContactEmail: principal.contactEmail,
+        visitorUserId: principal.userId,
+        accountEmail: user.email,
+        subject: conversations.subject,
+        status: conversations.status,
+        channel: conversations.channel,
+      })
+      .from(conversations)
+      .leftJoin(principal, eq(principal.id, conversations.visitorPrincipalId))
+      .leftJoin(user, eq(user.id, principal.userId))
+      .where(eq(conversations.id, conversationId))
+      .limit(1)
+    customerPrincipalId = conversationRow?.visitorPrincipalId
+    if (conversationRow) {
+      visitorIsAnonymous = conversationRow.visitorType === 'anonymous'
+      const reachable =
+        realEmail(conversationRow.accountEmail) ??
+        realEmail(conversationRow.visitorContactEmail) ??
+        realEmail(conversationRow.visitorEmail)
+      visitorHasContactEmail = Boolean(reachable)
+      customerIdentityLine = formatCustomerIdentityLine({
+        isAnonymous: visitorIsAnonymous,
+        displayName: conversationRow.customer,
+        email: reachable,
+        userId: conversationRow.visitorUserId,
+        principalId: conversationRow.visitorPrincipalId,
+      })
+      if (surface === 'copilot') {
         conversationFacts = {
           customer: conversationRow.customer ?? 'None',
           subject: conversationRow.subject,
@@ -923,13 +972,6 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
           channel: conversationRow.channel,
         }
       }
-    } else {
-      const [conversationRow] = await execDb
-        .select({ visitorPrincipalId: conversations.visitorPrincipalId })
-        .from(conversations)
-        .where(eq(conversations.id, conversationId))
-        .limit(1)
-      customerPrincipalId = conversationRow?.visitorPrincipalId
     }
   }
 
@@ -986,6 +1028,8 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     conversationId,
     ticketId,
     customerPrincipalId,
+    visitorIsAnonymous,
+    visitorHasContactEmail,
     sourceTypes: input.sourceTypes,
     knowledge: knowledgeSnapshot,
     involvementId: input.involvementId,
@@ -1134,6 +1178,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     }
 
     const trustedContextParts: string[] = []
+    if (customerIdentityLine) trustedContextParts.push(customerIdentityLine)
     if (role === 'workspace_assistant') {
       try {
         const identity = await loadAskingTeammateIdentity(input.actor)
@@ -1426,6 +1471,8 @@ ${runtimeConfig.config.agents.workspace.instructions}`)
         : {}),
     }
     const delivered = {
+      responseKind: parsed.responseKind ?? ('clarification' as const),
+      ...(toolContext.ledger.closeRequest ? { closeRequest: toolContext.ledger.closeRequest } : {}),
       text: relinkCitations(parsed.text, parsed.citations, citations),
       // Quinn's self-classification (copilot surface only); every other surface
       // omits it, and so does a model that didn't bother — both land on the

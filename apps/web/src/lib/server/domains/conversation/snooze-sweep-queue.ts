@@ -14,11 +14,12 @@ import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { logger } from '@/lib/server/logger'
 import { dueWithin, registerWorkspaceDeadline } from '@/lib/server/jobs/deadlines'
 import {
-  ASSUMED_RESOLUTION_INACTIVITY_MINUTES,
   finalizeStaleAssistantInvolvements,
+  sendStaleAssistantFollowUps,
 } from '@/lib/server/domains/assistant'
 import { sweepAndNotifyExpiredPendingActions } from '@/lib/server/domains/assistant/pending-actions.service'
 import { sweepDueSnoozedConversations } from './conversation.service'
+import { sweepIdleTeamConversations } from './conversation.idle-sweep'
 
 const log = logger.child({ component: 'snooze-sweep' })
 
@@ -26,42 +27,34 @@ const log = logger.child({ component: 'snooze-sweep' })
  * When this workspace's snooze tick next has anything to do — or null, if it never
  * does.
  *
- * Three independent clocks ride this one job, so the answer is the earliest of
- * three, and **all three must be here**. A deadline source left out would be one
- * whose work is silently deferred to the rescan interval on an idle workspace,
- * which is the failure mode this whole mechanism has to not have. Each arm
- * mirrors its sweep's own predicate exactly:
+ * Independent clocks ride this one job, so the answer is the earliest of
+ * every arm, and **all of them must be here**. A deadline source left out
+ * would be deferred to the rescan interval on an idle workspace. Each arm
+ * mirrors its sweep's own predicate:
  *
  * - `sweepDueSnoozedConversations` wakes `status='snoozed' AND snoozed_until <= now`
- * - `finalizeStaleAssistantInvolvements` closes `status='active'` involvements
- *   whose `last_assistant_answer_at` is older than the inactivity threshold, so
- *   the deadline is that timestamp *plus* the threshold
+ * - Quinn and team follow-up/closure share the persisted inactivity owner and
+ *   activity anchor, channel ownership, snooze and interactive-workflow guards.
  * - `expireStalePendingActions` expires `status='proposed' AND expires_at < now`
  *
- * One statement rather than three round trips, each arm on the partial index its
- * sweep already scans. `LEAST` ignores NULLs, so a workspace with only one kind of
- * pending work gets that one's instant rather than null.
+ * `LEAST` ignores NULLs; nextInactivityDeadline shares the worker predicates.
  */
 async function nextSnoozeTickAt(): Promise<Date | null> {
-  const result = await db.execute(sql`
-    SELECT LEAST(
-      (SELECT min(snoozed_until) FROM conversations
-        WHERE status = 'snoozed' AND snoozed_until IS NOT NULL),
-      (SELECT min(last_assistant_answer_at)
-              + make_interval(mins => ${ASSUMED_RESOLUTION_INACTIVITY_MINUTES})
-         FROM assistant_involvements WHERE status = 'active'),
-      (SELECT min(expires_at) FROM assistant_pending_actions WHERE status = 'proposed')
-    ) AS due_at
-  `)
-  const rows = getExecuteRows<{ due_at: Date | string | null }>(result)
-  const value = rows[0]?.due_at ?? null
-  return value === null ? null : value instanceof Date ? value : new Date(value)
+  const { nextInactivityDeadline } = await import('./conversation.inactivity')
+  const inactivityAt = await nextInactivityDeadline()
+  const result = await db.execute(sql`SELECT LEAST(
+    (SELECT min(snoozed_until) FROM conversations WHERE status = 'snoozed' AND snoozed_until IS NOT NULL),
+    (SELECT min(expires_at) FROM assistant_pending_actions WHERE status = 'proposed'),
+    ${inactivityAt?.toISOString() ?? null}::timestamptz
+  ) AS due_at`)
+  const value = getExecuteRows<{ due_at: Date | string | null }>(result)[0]?.due_at
+  return value ? new Date(value) : null
 }
 
 registerWorkspaceDeadline('snooze-sweep', nextSnoozeTickAt)
 
 /**
- * The cron gate: is any of the three clocks due inside the next slot?
+ * The cron gate: is any clock due inside the next slot?
  *
  * The window is the schedule's own minute, so this can only ever suppress a tick
  * that would have found nothing — a snooze still reopens within a minute of its
@@ -77,16 +70,34 @@ export async function runSnoozeSweep(): Promise<void> {
     log.debug({ woken: result.woken }, 'snooze-sweep run complete')
   }
 
-  // Ride the same per-minute tick to close out assistant involvements that have
-  // gone quiet (assumed resolution). Best-effort: an assistant sweep failure
-  // must not fail the snooze wake.
+  // Ride the same per-minute tick: Quinn follow-up, then assumed/abandoned
+  // close, then team-handled idle check-in/close. Best-effort — none of these
+  // may fail the snooze wake.
   try {
-    const { resolved } = await finalizeStaleAssistantInvolvements()
-    if (resolved > 0) {
-      log.debug({ resolved }, 'assistant assumed-resolution sweep complete')
+    const followedUp = await sendStaleAssistantFollowUps()
+    if (followedUp > 0) {
+      log.debug({ followedUp }, 'assistant follow-up sweep complete')
+    }
+  } catch (err) {
+    log.warn({ err }, 'assistant follow-up sweep failed')
+  }
+
+  try {
+    const { resolved, abandoned } = await finalizeStaleAssistantInvolvements()
+    if (resolved > 0 || abandoned > 0) {
+      log.debug({ resolved, abandoned }, 'assistant assumed-resolution sweep complete')
     }
   } catch (err) {
     log.warn({ err }, 'assistant assumed-resolution sweep failed')
+  }
+
+  try {
+    const { checkedIn, closed } = await sweepIdleTeamConversations()
+    if (checkedIn > 0 || closed > 0) {
+      log.debug({ checkedIn, closed }, 'team idle sweep complete')
+    }
+  } catch (err) {
+    log.warn({ err }, 'team idle sweep failed')
   }
 
   // Also expire pending actions nobody approved in time, and let the customer

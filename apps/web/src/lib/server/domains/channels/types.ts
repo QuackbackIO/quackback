@@ -5,6 +5,7 @@ import type { JSONContent } from '@tiptap/core'
 export type LifecycleKind = 'closed' | 'auto_closed' | 'reopened'
 
 export interface AgentMessageDeliveryCtx {
+  strictDelivery?: boolean
   conversationId: ConversationId
   /** The agent message this send is delivering. Thread-addressed channels
    *  use it to move pending → sent/failed on that row. */
@@ -32,6 +33,9 @@ export interface CsatDeliveryCtx {
 }
 
 export interface LifecycleDeliveryCtx {
+  messageId?: ConversationMessageId
+  content?: string
+  strictDelivery?: boolean
   conversationId: ConversationId
   closerPrincipalId?: PrincipalId | null
 }

@@ -97,7 +97,10 @@ vi.mock('@/lib/server/db', () => {
     c.set = vi.fn(() => c)
     c.from = vi.fn(() => c)
     c.where = vi.fn(() => c)
-    c.limit = vi.fn(async () => [conversationRow])
+    c.limit = vi.fn(() => c)
+    c.for = vi.fn(() => c)
+    c.then = (resolve: (value: unknown) => unknown) =>
+      Promise.resolve([conversationRow]).then(resolve)
     c.orderBy = vi.fn(() => c)
     c.returning = vi.fn(async () => {
       if (label === 'conversation_messages') {

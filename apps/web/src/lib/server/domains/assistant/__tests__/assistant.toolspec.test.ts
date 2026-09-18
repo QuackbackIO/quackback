@@ -167,6 +167,7 @@ describe('resolveToolSpecs', () => {
   it('returns exactly the read, control, and write specs that exist today', async () => {
     const names = (await resolveToolSpecs()).map((s) => s.name).sort()
     expect(names).toEqual([
+      'capture_contact_details',
       'capture_feedback',
       'create_ticket',
       'end_conversation',

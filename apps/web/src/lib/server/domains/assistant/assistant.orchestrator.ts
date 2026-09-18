@@ -47,6 +47,7 @@ import {
   voidAssumedResolutionForConversation,
   recordHandoff,
   recordAssistantAnswer,
+  recordOutcome,
   setInvolvementRating,
   isAssistantConfigured,
   respondEligible,
@@ -373,6 +374,12 @@ export async function runAssistantTurnForConversation(
     await appendAssistantReply(conversationId, result.text, author, {
       waiting: result.escalation?.mode === 'handoff',
       citations: persistedCitations,
+      metadata: {
+        assistantResponseKind:
+          result.escalation?.mode === 'handoff'
+            ? 'handoff'
+            : (result.responseKind ?? 'clarification'),
+      },
     })
 
     if (result.escalation?.mode === 'handoff') {
@@ -392,7 +399,26 @@ export async function runAssistantTurnForConversation(
       return
     }
 
-    if (result.status === 'answered') {
+    if (result.closeRequest) {
+      const { endConversation } =
+        await import('@/lib/server/domains/conversation/conversation.service')
+      await endConversation(conversationId, 'resolved', result.closeRequest.reason, {
+        principalId: assistantPrincipalId,
+        principalType: 'service',
+        role: 'member',
+        segmentIds: new Set(),
+      })
+      const { classifyConversationAttributes } =
+        await import('@/lib/server/domains/conversation-attributes/ai-classification.service')
+      await classifyConversationAttributes(conversationId, { trigger: 'assistant_closed' }).catch(
+        (err) => log.warn({ err }, 'post-close classification failed')
+      )
+      if (involvement) {
+        await recordOutcome(involvement.id, 'confirmed')
+      }
+      return
+    }
+    if (result.status === 'answered' && result.responseKind === 'answer') {
       if (!involvement) {
         throw new Error('assistant answer requires an involvement')
       }

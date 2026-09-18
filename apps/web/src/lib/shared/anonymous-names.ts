@@ -173,3 +173,17 @@ export function generateAnonymousName(id: string): string {
   const animal = ANIMALS[Math.floor(hash / ADJECTIVES.length) % ANIMALS.length]
   return `${adjective} ${animal}`
 }
+
+/**
+ * True when `name` is empty, the generic "Visitor" fallback, or the
+ * deterministic adjective-animal name for any of the supplied ids.
+ */
+export function isGeneratedAnonymousName(
+  name: string | null | undefined,
+  ids: Array<string | null | undefined>
+): boolean {
+  if (!name) return true
+  const trimmed = name.trim()
+  if (!trimmed || trimmed === 'Visitor') return true
+  return ids.some((id) => !!id && generateAnonymousName(id) === trimmed)
+}

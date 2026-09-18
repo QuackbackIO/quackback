@@ -118,10 +118,10 @@ export interface AssistantPromptBuildResult {
 }
 
 const CUSTOMER_RESPONSE_CONTRACT =
-  '{"text": string, "citations": [{"type": "article"|"post"|"snippet"|"summary", "id": string}]}'
+  '{"text": string, "citations": [{"type": "article"|"post"|"snippet"|"summary", "id": string}], "responseKind": "answer"|"clarification"|"greeting"}. Use answer only for a substantive answer to the customer. A request for information is clarification and a welcome is greeting, regardless of length.'
 
 const CUSTOMER_RESPONSE_EXAMPLE =
-  '{"text": "You can export your workspace data from Settings under Data Export [1]. The export arrives by email as a ZIP within a few minutes.", "citations": [{"type": "article", "id": "art_01h4kxt2e8z9y3b1n72k9q5m8p"}]}'
+  '{"text": "You can export your workspace data from Settings under Data Export [1]. The export arrives by email as a ZIP within a few minutes.", "citations": [{"type": "article", "id": "art_01h4kxt2e8z9y3b1n72k9q5m8p"}], "responseKind": "answer"}'
 
 const COPILOT_RESPONSE_CONTRACT =
   '{"text": string, "citations": [{"type": "article"|"post"|"snippet"|"summary", "id": string}], "answerType": "draft_reply"|"analysis"}'
@@ -212,6 +212,22 @@ export function buildAssistantRoleProfile(
 - If human support is required but no handoff capability is available this turn, explain that
   limitation honestly and never claim that a transfer happened.`
 
+      const closing = toolNames.has('end_conversation')
+        ? `# Closing the conversation
+- After a substantive answer, briefly check that it landed. Do not ask "anything else?" more than once.
+- When the customer confirms the issue is resolved or clearly says they are done, call end_conversation.
+- Never close on your own judgement. Silence after an answer is not confirmation — the platform will close that later.
+- Do not close while a teammate still needs to take over; use handoff_to_human instead.`
+        : ''
+
+      const contact = toolNames.has('capture_contact_details')
+        ? `# Contact details
+- Trusted runtime context says whether this visitor is anonymous and whether an email is on file.
+- Ask for an email (and a name if useful) conversationally, once, when (a) handing off while the team is offline or outside office hours, (b) creating a customer ticket, (c) the customer asks to be followed up, or (d) a teammate must get back to them.
+- Never gate the first answer on it. Never ask if an email is already known.
+- Call capture_contact_details with what they give you before handoff_to_human in those cases.`
+        : ''
+
       return `# Active role
 You are ${assistantName}, ${workspaceName}'s AI customer-support agent. You are speaking directly
 with a customer.
@@ -220,7 +236,9 @@ Help the customer make progress now. Speak as the support team only when doing s
 human performed an action or made a commitment. Never pretend to be a human.
 
 # Human support
-${humanSupport}`
+${humanSupport}
+${contact}
+${closing}`
     }
     case 'workspace_assistant':
       return WORKSPACE_ROLE_PROMPT
@@ -290,6 +308,11 @@ and be explicit about anything you cannot verify or do.`
   if (names.has('handoff_to_human') && role === 'customer_support') {
     lines.push(
       '- handoff_to_human: Use it only under the active customer-support role handoff policy and provide reason, customerNeed, attempted, and recommendedNextStep. This tool decides that a handoff is needed; platform routing decides where it goes.'
+    )
+  }
+  if (names.has('capture_contact_details') && role === 'customer_support') {
+    lines.push(
+      '- capture_contact_details: Record a name or email the customer just provided. Call it before handoff_to_human when the team may need to reach them later and no email is on file.'
     )
   }
 

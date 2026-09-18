@@ -1,6 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ConversationId, PrincipalId } from '@quackback/ids'
 
+const { sendVisitorConversationEmail } = vi.hoisted(() => ({
+  sendVisitorConversationEmail: vi.fn(async () => {}),
+}))
+vi.mock('../conversation.notify', async (original) => ({
+  ...(await original<typeof import('../conversation.notify')>()),
+  sendVisitorConversationEmail,
+}))
+
 const sendConversationClosedEmail = vi.fn(async (_opts: unknown) => ({ sent: true }))
 const enforceEmailBudget = vi.fn(async () => undefined)
 const buildHookContext = vi.fn(async () => ({
@@ -86,6 +94,36 @@ beforeEach(() => {
 })
 
 describe('notifyConversationClosed', () => {
+  it('delivers a custom Quinn closing message through the lifecycle adapter without automatic CSAT', async () => {
+    limitQueue = [
+      [
+        {
+          id: 'conversation_1',
+          channel: 'email',
+          visitorPrincipalId: 'principal_v',
+          visitorEmail: 'visitor@example.test',
+        },
+      ],
+      [{ type: 'anonymous', contactEmail: 'visitor@example.test' }],
+    ]
+    const { emailAdapter } = await import('@/lib/server/domains/channels/email')
+    await emailAdapter.deliverLifecycleEvent('auto_closed', {
+      conversationId: 'conversation_1' as ConversationId,
+      messageId: 'conversation_message_close' as never,
+      content: 'Custom closing message',
+      strictDelivery: true,
+    })
+    expect(sendVisitorConversationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: 'Custom closing message',
+        deliveryKey: 'conversation_message_close',
+        strictDelivery: true,
+        channel: 'email',
+      })
+    )
+    expect(sendConversationClosedEmail).not.toHaveBeenCalled()
+  })
+
   it('sends a resolved close email for an email-channel conversation', async () => {
     limitQueue = [
       [

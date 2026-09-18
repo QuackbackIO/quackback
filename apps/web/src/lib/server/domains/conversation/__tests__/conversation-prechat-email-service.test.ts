@@ -9,6 +9,7 @@ import type { Actor } from '@/lib/server/policy/types'
 
 const insertedConversations: Record<string, unknown>[] = []
 const updatedSets: Record<string, unknown>[] = []
+const principalUpdatedSets: Record<string, unknown>[] = []
 // Drives the tx.select(...).limit() result for the existing-conversation path.
 let existingConversation: Record<string, unknown> | null = null
 
@@ -31,6 +32,10 @@ vi.mock('@/lib/server/config', () => ({
 vi.mock('../conversation.notify', () => ({
   notifyVisitorMessage: vi.fn(),
   notifyAgentReply: vi.fn(),
+}))
+
+vi.mock('@/lib/server/domains/changelog/changelog-subscription.service', () => ({
+  ensureAutoSubscribed: vi.fn(async () => {}),
 }))
 
 vi.mock('../conversation.query', () => ({
@@ -68,14 +73,32 @@ vi.mock('@/lib/server/db', () => {
     }
     c.set = (vals: Record<string, unknown>) => {
       if (label === 'conversations') updatedSets.push(vals)
+      if (label === 'principal') principalUpdatedSets.push(vals)
       return c
     }
     // tx.select() has no table; .from(conversations) relabels so limit() resolves.
     c.from = (t: { __name?: string }) => chain(t?.__name ?? label)
+    c.innerJoin = () => c
     c.where = () => c
-    c.limit = async () =>
-      label === 'conversations' && existingConversation ? [existingConversation] : []
+    const rows = () =>
+      label === 'conversations' && existingConversation
+        ? [existingConversation]
+        : label === 'principal'
+          ? [
+              {
+                id: 'principal_visitor',
+                type: 'anonymous',
+                displayName: 'Visitor',
+                contactEmail: null,
+                userId: 'user_visitor',
+              },
+            ]
+          : []
+    c.limit = () => c
+    c.for = () => c
+    c.then = (resolve: (value: unknown) => unknown) => Promise.resolve(rows()).then(resolve)
     c.returning = async () => {
+      if (label === 'principal') return [{ id: 'principal_visitor' }]
       if (label === 'conversations') return [freshConversation()]
       if (label === 'conversation_messages')
         return [{ id: 'conversation_msg_new', createdAt: new Date() }]
@@ -95,9 +118,11 @@ vi.mock('@/lib/server/db', () => {
     eq: vi.fn(),
     and: vi.fn(),
     isNull: vi.fn(),
+    settings: { __name: 'settings', id: 'id' },
     conversations: { __name: 'conversations', id: 'id' },
     conversationMessages: { __name: 'conversation_messages', id: 'id' },
     principal: { __name: 'principal', id: 'id', contactEmail: 'contact_email' },
+    user: { __name: 'user', id: 'id' },
   }
 })
 
@@ -114,6 +139,7 @@ const visitorActor: Actor = {
 beforeEach(() => {
   insertedConversations.length = 0
   updatedSets.length = 0
+  principalUpdatedSets.length = 0
   existingConversation = null
   vi.clearAllMocks()
 })
@@ -125,8 +151,7 @@ describe('sendVisitorMessage pre-chat email capture', () => {
       { principalId: visitor },
       visitorActor
     )
-    expect(updatedSets).toHaveLength(1)
-    expect(updatedSets[0].visitorEmail).toBe('jane@example.com')
+    expect(updatedSets.some((row) => row.visitorEmail === 'jane@example.com')).toBe(true)
   })
 
   it('ignores a malformed email', async () => {
@@ -135,8 +160,7 @@ describe('sendVisitorMessage pre-chat email capture', () => {
       { principalId: visitor },
       visitorActor
     )
-    expect(updatedSets).toHaveLength(1)
-    expect('visitorEmail' in updatedSets[0]).toBe(false)
+    expect(updatedSets.some((row) => 'visitorEmail' in row)).toBe(false)
   })
 
   it('does not overwrite an email already on the conversation', async () => {
@@ -164,13 +188,20 @@ describe('sendVisitorMessage pre-chat email capture', () => {
       { principalId: visitor },
       visitorActor
     )
-    expect(updatedSets).toHaveLength(1)
-    expect('visitorEmail' in updatedSets[0]).toBe(false)
+    expect(updatedSets.filter((row) => 'visitorEmail' in row)).toHaveLength(0)
   })
 
   it('does not write an email when none is provided', async () => {
     await sendVisitorMessage({ content: 'hello' }, { principalId: visitor }, visitorActor)
-    expect(updatedSets).toHaveLength(1)
-    expect('visitorEmail' in updatedSets[0]).toBe(false)
+    expect(updatedSets.filter((row) => 'visitorEmail' in row)).toHaveLength(0)
+  })
+
+  it('stores a name on an anonymous visitor whose current name is generated', async () => {
+    await sendVisitorMessage(
+      { content: 'hello', visitorName: '  Ada Lovelace  ' },
+      { principalId: visitor },
+      visitorActor
+    )
+    expect(principalUpdatedSets.some((row) => row.displayName === 'Ada Lovelace')).toBe(true)
   })
 })

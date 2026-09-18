@@ -43,6 +43,8 @@ export const sendMessageSchema = z.object({
   contentJson: z.unknown().nullable().optional(),
   attachments: z.array(conversationAttachmentSchema).max(MAX_CONVERSATION_ATTACHMENTS).optional(),
   blockReply: blockReplySchema.optional(),
+  visitorEmail: z.string().max(320).optional(),
+  visitorName: z.string().max(80).optional(),
 })
 export type SendConversationMessageInput = z.infer<typeof sendMessageSchema>
 

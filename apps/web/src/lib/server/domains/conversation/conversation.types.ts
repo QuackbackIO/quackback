@@ -24,6 +24,8 @@ export interface SendVisitorMessageInput {
   attachments?: ConversationAttachment[]
   /** Optional pre-chat email; stored on the conversation if not already set. */
   visitorEmail?: string
+  /** Optional pre-chat name; stored on the anonymous principal when the current name is generated. */
+  visitorName?: string
   /** Channel provenance (e.g. inbound email message-id) persisted on the message. */
   metadata?: ConversationMessageMetadata
   /** A structured reply to a conversational block (Phase C, slice C-1) — the

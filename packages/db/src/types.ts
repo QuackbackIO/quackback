@@ -770,6 +770,9 @@ export type ConversationSystemEventKind =
   | 'chat_reopened'
   | 'assigned'
   | 'assistant_handoff'
+  | 'assistant_auto_closed'
+  | 'inactivity_check_in'
+  | 'auto_closed_inactive'
   | 'ticket_status_changed'
   | 'ticket_linked'
   | 'ticket_created'
@@ -782,6 +785,10 @@ export type ConversationSystemEventKind =
   | 'csat_submitted'
 
 export interface ConversationSystemEvent {
+  customText?: boolean
+  preventReplies?: boolean
+  followUpPurpose?: 'check_resolution' | 'offer_human_help'
+
   kind: ConversationSystemEventKind
   /** Assignee display name for 'assigned'. */
   agentName?: string
@@ -969,6 +976,10 @@ export interface ChannelDelivery {
 }
 
 export interface ConversationMessageMetadata {
+  /** Stable lifecycle action identity. Automated messages never restart inactivity. */
+  inactivity?: { key: string; anchor: string; owner: string; action: 'follow_up' | 'close' }
+  assistantResponseKind?: 'answer' | 'clarification' | 'greeting' | 'handoff'
+
   /** The channel this message arrived through, when not the in-app messenger. */
   source?: 'email' | 'github'
   /** GitHub issue comment REST id, used to dedupe webhook retries. */

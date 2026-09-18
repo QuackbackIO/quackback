@@ -60,6 +60,7 @@ import { nextSlaDue } from '@/lib/shared/conversation/sla'
 import type { SlaApplied } from '@/lib/server/domains/sla/sla.service'
 import { assistantPrincipalIdOnce } from '@/lib/server/messages/assistant-principal'
 import { hasLinkedCustomerTicketSql } from '@/lib/server/messages/pair-link'
+import { notHandledByAssistantSql } from '@/lib/server/messages/assistant-involvement-sql'
 import { conversationFilter } from '@/lib/server/policy/conversations'
 import type { Actor } from '@/lib/server/policy/types'
 import { priorityRankSql } from '@/lib/server/utils/priority-rank'
@@ -1604,7 +1605,9 @@ export async function listConversationsForAgent(
         filter.assignedAgentPrincipalId
           ? eq(conversations.assignedAgentPrincipalId, filter.assignedAgentPrincipalId)
           : undefined,
-        filter.unassignedOnly ? isNull(conversations.assignedAgentPrincipalId) : undefined,
+        filter.unassignedOnly
+          ? and(isNull(conversations.assignedAgentPrincipalId), notHandledByAssistantSql())
+          : undefined,
         // Per-team inbox. A raw predicate on assigned_team_id keeps this read
         // decoupled from the sibling team-assignment schema change; only set
         // once teams exist, so the default inbox never touches the column.

@@ -107,7 +107,10 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
     const c: Record<string, unknown> = {}
     c.from = () => c
     c.where = () => c
-    c.limit = async () => (label === 'conversations' ? [conversationRow] : [])
+    c.limit = () => c
+    c.for = () => c
+    c.then = (resolve: (value: unknown) => unknown) =>
+      Promise.resolve(label === 'conversations' ? [conversationRow] : []).then(resolve)
     c.values = (row: Record<string, unknown>) => {
       if (label === 'conversation_messages') insertedMessage.current = row
       return c

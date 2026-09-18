@@ -20,6 +20,7 @@ import {
   conversations,
   conversationMessages,
   ticketConversations,
+  settings as workspaceSettings,
   principal,
   user,
   type Conversation,
@@ -126,6 +127,12 @@ import type {
   SendAgentMessageResult,
 } from './conversation.types'
 import { logger } from '@/lib/server/logger'
+import { DEFAULT_ASSISTANT_CLOSING_MESSAGE } from '@/lib/shared/conversation-inactivity'
+import {
+  applyVisitorContact,
+  recordVisitorContact,
+  subscribeCapturedContact,
+} from './conversation.contact'
 
 const log = logger.child({ component: 'conversation' })
 
@@ -137,13 +144,6 @@ function systemActor(): Actor {
     principalType: 'service',
     segmentIds: new Set<SegmentId>(),
   }
-}
-
-/** Normalize a captured email; returns undefined when it isn't plausibly one. */
-function normalizeEmail(raw: string | undefined): string | undefined {
-  const email = raw?.trim().toLowerCase() ?? ''
-  if (!email || email.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return undefined
-  return email
 }
 
 async function loadConversationOr404(conversationId: ConversationId): Promise<Conversation> {
@@ -175,45 +175,42 @@ export async function assertConversationViewable(
 }
 
 /**
- * Agent action: record a contact email for a conversation's (typically
- * anonymous) visitor so status updates can reach them — e.g. captured inline
- * when tracking the conversation as a post. Reuses the same reusable
- * `principal.contact_email` slot as pre-chat capture and never overwrites an
- * address already on file. A non-plausible email is a no-op (`captured: false`),
- * so a stray value can't block the caller.
+ * Agent action: record a contact email and/or name for a conversation's
+ * (typically anonymous) visitor. Never overwrites an address already on file.
+ * A non-plausible email is ignored so a stray value can't block the caller.
  */
+export async function captureVisitorContact(
+  conversationId: ConversationId,
+  input: { email?: string; name?: string },
+  actor: Actor
+): Promise<{ captured: boolean; email: string | null; name: string | null }> {
+  const decision = canActAsAgent(actor)
+  if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
+  await assertConversationViewable(conversationId, actor)
+  const result = await recordVisitorContact(conversationId, input, { overwriteName: true })
+  return { captured: result.captured, email: result.email, name: result.name }
+}
+
+/** Agent correction is distinct from non-overwriting visitor/Quinn capture. */
+export async function correctVisitorContact(
+  conversationId: ConversationId,
+  input: { email?: string; name?: string },
+  actor: Actor
+) {
+  const decision = canActAsAgent(actor)
+  if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
+  await assertConversationViewable(conversationId, actor)
+  return recordVisitorContact(conversationId, input, { overwriteName: true, correct: true })
+}
+
+/** Agent action: store a contact email for a conversation's anonymous visitor. */
 export async function captureVisitorContactEmail(
   conversationId: ConversationId,
   rawEmail: string,
   actor: Actor
 ): Promise<{ captured: boolean }> {
-  const decision = canActAsAgent(actor)
-  if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
-  const email = normalizeEmail(rawEmail)
-  if (!email) return { captured: false }
-  const conversation = await assertConversationViewable(conversationId, actor)
-  await db.transaction(async (tx) => {
-    // Reusable contact on the visitor principal (survives across conversations).
-    await tx
-      .update(principal)
-      .set({ contactEmail: email })
-      .where(and(eq(principal.id, conversation.visitorPrincipalId), isNull(principal.contactEmail)))
-    // Mirror onto the conversation so the agent inbox surfaces the address too.
-    await tx
-      .update(conversations)
-      .set({ visitorEmail: email })
-      .where(and(eq(conversations.id, conversationId), isNull(conversations.visitorEmail)))
-  })
-
-  // Changelog auto-subscribe touchpoint (Changelog Settings §2): "conversation
-  // contact" — the moment a previously-anonymous visitor's email becomes known.
-  const { ensureAutoSubscribed } =
-    await import('@/lib/server/domains/changelog/changelog-subscription.service')
-  ensureAutoSubscribed(conversation.visitorPrincipalId).catch((err) =>
-    log.error({ err }, 'failed to auto-subscribe to changelog on contact capture')
-  )
-
-  return { captured: true }
+  const result = await captureVisitorContact(conversationId, { email: rawEmail }, actor)
+  return { captured: result.captured }
 }
 
 /**
@@ -340,6 +337,7 @@ export async function sendVisitorMessage(
         .from(conversations)
         .where(eq(conversations.id, input.conversationId))
         .limit(1)
+        .for('update')
       if (!existing) {
         throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
       }
@@ -354,6 +352,39 @@ export async function sendVisitorMessage(
       conversation = existing
       priorStatus = existing.status
     } else {
+      // Enforce pre-chat capture before inserting anything. Lock the identity so
+      // a concurrent identify/correction cannot turn typed contact into identity.
+      const [workspace] = await tx.select().from(workspaceSettings).limit(1).for('share')
+      const [identity] = await tx
+        .select()
+        .from(principal)
+        .where(eq(principal.id, author.principalId))
+        .limit(1)
+        .for('update')
+      const { parseWidgetConfig } = await import('@/lib/server/domains/settings/settings.helpers')
+      const { resolveOfficeHoursSchedule } =
+        await import('@/lib/server/domains/settings/settings.office-hours')
+      const { resolveContactCapturePrompt, parseContactCapture } =
+        await import('@/lib/shared/contact-capture')
+      const { isWithinOfficeHours } = await import('@/lib/shared/office-hours')
+      const { acceptableContactEmail } =
+        await import('@/lib/server/domains/principals/contact-email')
+      const prompt = resolveContactCapturePrompt({
+        settings: parseContactCapture(
+          parseWidgetConfig(workspace?.widgetConfig ?? null).messenger?.contactCapture
+        ),
+        isAnonymous: identity?.type === 'anonymous',
+        visitorHasEmail: !!acceptableContactEmail(identity?.contactEmail),
+        officeHoursOpen: isWithinOfficeHours(
+          resolveOfficeHoursSchedule(workspace?.metadata ?? null, workspace?.widgetConfig ?? null),
+          new Date()
+        ),
+      })
+      if (prompt.required && !acceptableContactEmail(input.visitorEmail))
+        throw new ValidationError(
+          'CONTACT_EMAIL_REQUIRED',
+          'Leave a valid email so we can get back to you.'
+        )
       const start = canStartConversation(actor)
       if (!start.allowed) throw new ForbiddenError('FORBIDDEN', start.reason)
       const [createdConv] = await tx
@@ -381,13 +412,6 @@ export async function sendVisitorMessage(
         metadata: messageMetadata,
       })
       .returning()
-
-    // Capture a pre-chat email once, only when none is recorded yet — a later
-    // send can't overwrite an address the visitor already gave.
-    const captureEmail =
-      !conversation.visitorEmail && input.visitorEmail
-        ? normalizeEmail(input.visitorEmail)
-        : undefined
 
     // SF3: a matched structured reply (resolvedBlockReply non-null) answering
     // a block posted on an already-closed conversation is the intended
@@ -422,7 +446,7 @@ export async function sendVisitorMessage(
             ? conversation.resolvedAt
             : resolvedAtForStatus(visitorNextStatus, message.createdAt),
         updatedAt: message.createdAt,
-        ...(captureEmail ? { visitorEmail: captureEmail } : {}),
+        inactivityCheckInAt: null,
         // `channel` is the surface this conversation is CURRENTLY conducted on,
         // not the one it arrived on (that is `source`, which stays immutable
         // provenance). A widget thread whose customer replies by email must
@@ -436,18 +460,24 @@ export async function sendVisitorMessage(
       .where(eq(conversations.id, conversation.id))
       .returning()
 
-    // Also stash the captured email at the principal level so it survives across
-    // conversations (reusable contact). Don't overwrite an existing address.
-    if (captureEmail) {
-      await tx
-        .update(principal)
-        .set({ contactEmail: captureEmail })
-        .where(and(eq(principal.id, author.principalId), isNull(principal.contactEmail)))
-    }
+    const contact = await applyVisitorContact(tx, {
+      conversationId: conversation.id,
+      visitorPrincipalId: author.principalId,
+      existingVisitorEmail: conversation.visitorEmail,
+      email: input.visitorEmail,
+      name: input.visitorName,
+    })
 
-    return { conversation: updated, message }
+    return {
+      conversation: {
+        ...updated,
+        visitorEmail: contact.email ?? updated.visitorEmail,
+      },
+      message,
+    }
   })
 
+  if (txResult.conversation.visitorEmail) void subscribeCapturedContact(author.principalId)
   const messageDTO = toMessageDTO(txResult.message, authorFromInput(author))
 
   // A new conversation appears in the agent inbox; publish the agent-side DTO
@@ -720,6 +750,7 @@ export async function sendAgentMessage(
       .from(conversations)
       .where(eq(conversations.id, conversationId))
       .limit(1)
+      .for('update')
     if (!existing) {
       throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
     }
@@ -762,6 +793,7 @@ export async function sendAgentMessage(
         // snoozed thread stays snoozed on ANY teammate reply: send-and-stay, per
         // applyAgentReopenStatus.)
         waitingSince: null,
+        inactivityCheckInAt: null,
         // Keep resolvedAt consistent with the new status (reopening clears it).
         resolvedAt: resolvedAtForStatus(agentNextStatus, message.createdAt),
         updatedAt: message.createdAt,
@@ -974,6 +1006,10 @@ export async function setConversationStatus(
       status,
       snoozedUntil: null,
       resolvedAt: resolvedAtForStatus(status, now),
+      // A closed thread is no longer waiting on anyone — drop it from
+      // waitingOnly / longest-waiting sort. GitHub's native close already
+      // did this; the other close paths must match.
+      ...(status === 'closed' ? { waitingSince: null } : {}),
       updatedAt: now,
     })
     .where(eq(conversations.id, conversationId))
@@ -1137,6 +1173,7 @@ export async function endConversation(
       resolvedAt: now,
       endReason: reason,
       endNote,
+      waitingSince: null,
       // An agent's own spam filing is 'manual'; any other end clears a stale
       // marker (a re-ended thread is a new human decision).
       spamReason: reason === 'spam' ? 'manual' : null,
@@ -1237,6 +1274,7 @@ export async function autoFileConversationAsSpam(
       endReason: 'spam',
       endNote: `Auto-filed by the spam filter (${CONVERSATION_SPAM_FILED_BY_LABELS[filedBy]})`,
       spamReason: filedBy,
+      waitingSince: null,
       updatedAt: now,
     })
     .where(eq(conversations.id, conversationId))
@@ -2130,6 +2168,7 @@ export async function appendAssistantReply(
       .from(conversations)
       .where(eq(conversations.id, conversationId))
       .limit(1)
+      .for('update')
     if (!existing) throw new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
     const [message] = await tx
       .insert(conversationMessages)
@@ -2154,6 +2193,10 @@ export async function appendAssistantReply(
         lastMessagePreview: preview(content, []),
         status: nextStatus,
         waitingSince: opts.waiting ? message.createdAt : null,
+        inactivityCheckInAt: null,
+        // An answer (not a handoff line) marks the agent side read so the
+        // unread badge does not stay lit on Quinn-handled threads.
+        ...(opts.waiting ? {} : { agentLastReadAt: message.createdAt }),
         resolvedAt: resolvedAtForStatus(nextStatus, message.createdAt),
         updatedAt: message.createdAt,
       })
@@ -2276,6 +2319,8 @@ export async function executeAssistantHandoff(
     .update(conversations)
     .set({
       status: 'open',
+      // Surface the handoff as unread so the team sees a new request.
+      agentLastReadAt: null,
       updatedAt: new Date(),
     })
     .where(eq(conversations.id, conversationId))
@@ -2328,4 +2373,79 @@ export async function executeAssistantHandoff(
     conversationId,
     reason
   )
+}
+
+const DEFAULT_ASSISTANT_AUTO_CLOSE_MESSAGE = DEFAULT_ASSISTANT_CLOSING_MESSAGE
+
+export type AssistantAutoCloseKind = 'assumed' | 'abandoned'
+
+/**
+ * Close a conversation Quinn finished with (assumed resolution or abandoned).
+ * Skips closed/snoozed threads and threads a human has already spoken into —
+ * those belong to the team-handled idle sweep, not Quinn's involvement clock.
+ * Used by `finalizeStaleAssistantInvolvements`.
+ */
+export async function autoCloseAssistantConversation(
+  conversationId: ConversationId,
+  kind: AssistantAutoCloseKind,
+  closingMessage: string = DEFAULT_ASSISTANT_AUTO_CLOSE_MESSAGE
+): Promise<boolean> {
+  const existing = await loadConversationOr404(conversationId)
+  if (existing.status !== 'open') return false
+
+  const { assistantPrincipalIdOnce } = await import('@/lib/server/messages/assistant-principal')
+  const quinnId = await assistantPrincipalIdOnce()
+  const [humanReply] = await db
+    .select({ id: conversationMessages.id })
+    .from(conversationMessages)
+    .where(
+      and(
+        eq(conversationMessages.conversationId, conversationId),
+        eq(conversationMessages.senderType, 'agent'),
+        eq(conversationMessages.isInternal, false),
+        quinnId ? sql`${conversationMessages.principalId} IS DISTINCT FROM ${quinnId}` : sql`true`,
+        isNull(conversationMessages.deletedAt)
+      )
+    )
+    .limit(1)
+  if (humanReply) return false
+
+  const now = new Date()
+  const endReason: ConversationEndReason = kind === 'abandoned' ? 'no_response' : 'resolved'
+  const [updated] = await db
+    .update(conversations)
+    .set({
+      status: 'closed',
+      resolvedAt: now,
+      endReason,
+      waitingSince: null,
+      snoozedUntil: null,
+      updatedAt: now,
+    })
+    .where(and(eq(conversations.id, conversationId), eq(conversations.status, 'open')))
+    .returning()
+  if (!updated) return false
+
+  await emitSystemMessage(
+    conversationId,
+    closingMessage.trim() || DEFAULT_ASSISTANT_AUTO_CLOSE_MESSAGE,
+    {
+      kind: 'assistant_auto_closed',
+    }
+  )
+  const dto = await conversationToDTO(updated, 'agent')
+  publishConversationUpdate(conversationId, dto)
+  const actor = systemActor()
+  void emitConversationStatusChanged(actor, updated, existing.status)
+  void import('@/lib/server/domains/channels')
+    .then(({ requireChannelAdapter }) =>
+      requireChannelAdapter(updated.channel).deliverLifecycleEvent('auto_closed', {
+        conversationId,
+        closerPrincipalId: actor.principalId,
+      })
+    )
+    .catch((err) => {
+      log.warn({ err, conversationId }, 'assistant auto-close lifecycle delivery failed')
+    })
+  return true
 }

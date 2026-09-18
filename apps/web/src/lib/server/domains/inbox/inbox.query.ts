@@ -49,6 +49,7 @@ import { can } from '@/lib/server/policy/authorize'
 import { conversationFilter } from '@/lib/server/policy/conversations'
 import { ticketFilter } from '@/lib/server/policy/tickets'
 import { hasLinkedCustomerTicketSql } from '@/lib/server/messages/pair-link'
+import { notHandledByAssistantSql } from '@/lib/server/messages/assistant-involvement-sql'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { Actor } from '@/lib/server/policy/types'
 import type { TicketAssigneeFilter } from '@/lib/server/domains/tickets/ticket.types'
@@ -536,7 +537,9 @@ async function countConversationScope(
         opts.assignedAgentPrincipalId
           ? eq(conversations.assignedAgentPrincipalId, opts.assignedAgentPrincipalId)
           : undefined,
-        opts.unassignedOnly ? isNull(conversations.assignedAgentPrincipalId) : undefined
+        opts.unassignedOnly
+          ? and(isNull(conversations.assignedAgentPrincipalId), notHandledByAssistantSql())
+          : undefined
       )
     )
   return row?.c ?? 0

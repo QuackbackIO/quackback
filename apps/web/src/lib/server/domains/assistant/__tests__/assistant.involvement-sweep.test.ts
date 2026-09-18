@@ -1,94 +1,48 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-
-// Table sentinels + operator stubs; the service passes an explicit `exec`, so
-// the mocked `db` is only a fallback and the operators just need to not throw.
-const notExistsSpy = vi.fn((q: unknown) => ({ notExists: q }))
-// Spread the real db module so tables/operators stay current; override only what this suite drives.
-vi.mock('@/lib/server/db', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/server/db')>()),
-  db: {},
-  and: (...a: unknown[]) => ({ and: a }),
-  eq: (...a: unknown[]) => ({ eq: a }),
-  gt: (...a: unknown[]) => ({ gt: a }),
-  lt: (...a: unknown[]) => ({ lt: a }),
-  isNull: (...a: unknown[]) => ({ isNull: a }),
-  notExists: (q: unknown) => notExistsSpy(q),
-  desc: (...a: unknown[]) => ({ desc: a }),
-  sql: (strings: TemplateStringsArray) => ({ sql: strings }),
-}))
-
-const mockClassifyConversationAttributes = vi.fn()
-vi.mock('@/lib/server/domains/conversation-attributes/ai-classification.service', () => ({
-  classifyConversationAttributes: (...args: unknown[]) =>
-    mockClassifyConversationAttributes(...args),
-}))
-
-import { finalizeStaleAssistantInvolvements } from '../assistant.involvement'
-
-/**
- * A minimal drizzle-shaped executor: the correlated NOT EXISTS subquery is built
- * via select().from().where() (not awaited), and the sweep's set-based UPDATE
- * resolves through update().set().where().returning() to `resolvedRows`.
- */
-function makeExec(resolvedRows: Array<{ id: string; conversationId: string }>) {
-  return {
-    select: () => ({ from: () => ({ where: () => ({ __subquery: true }) }) }),
-    update: () => ({
-      set: () => ({ where: () => ({ returning: async () => resolvedRows }) }),
-    }),
-  } as never
+import { describe, expect, it } from 'vitest'
+import { inactivityAction, type InactivityState } from '../../conversation/conversation.inactivity'
+import { DEFAULT_CONVERSATION_INACTIVITY } from '@/lib/shared/conversation-inactivity'
+const now = new Date('2026-09-18T12:00:00Z')
+const state: InactivityState = {
+  channel: 'messenger',
+  status: 'open',
+  inactivityOwner: 'assistant_answered',
+  inactivityAnchorAt: new Date(now.getTime() - 16 * 60_000),
+  inactivityCheckInAt: null,
 }
-
-beforeEach(() => {
-  vi.clearAllMocks()
-  mockClassifyConversationAttributes.mockResolvedValue([])
-})
-
-describe('finalizeStaleAssistantInvolvements', () => {
-  it('resolves in one set-based UPDATE, returning the count of rows it flipped', async () => {
-    const exec = makeExec([
-      { id: 'assistant_involvement_1', conversationId: 'conversation_1' },
-      { id: 'assistant_involvement_2', conversationId: 'conversation_2' },
+const settings = () => structuredClone(DEFAULT_CONVERSATION_INACTIVITY)
+describe('assistant inactivity closure policy', () => {
+  it('closes after a substantive answer', () =>
+    expect(inactivityAction(state, settings(), now)).toBe('close'))
+  it('can keep answered conversations open while closing unanswered waits', () => {
+    const s = settings()
+    s.assistant.closeWhenAnswered = false
+    s.assistant.followUpEnabled = false
+    expect(inactivityAction(state, s, now)).toBeNull()
+    expect(inactivityAction({ ...state, inactivityOwner: 'assistant_waiting' }, s, now)).toBe(
+      'close'
+    )
+  })
+  it('can close answered conversations without closing clarification waits', () => {
+    const s = settings()
+    s.assistant.closeWhenUnanswered = false
+    expect(inactivityAction({ ...state, inactivityOwner: 'assistant_waiting' }, s, now)).toBeNull()
+  })
+  it('does not act on a handoff, snooze, closed thread or cancelled period', () => {
+    for (const patch of [
+      { inactivityOwner: 'handoff' as const },
+      { status: 'snoozed' },
+      { status: 'closed' },
+      { inactivityAnchorAt: null },
     ])
-    const { resolved } = await finalizeStaleAssistantInvolvements(10, exec)
-    expect(resolved).toBe(2)
-    // The "customer returned" guard rides a correlated NOT EXISTS subquery.
-    expect(notExistsSpy).toHaveBeenCalledTimes(1)
+      expect(inactivityAction({ ...state, ...patch }, settings(), now)).toBeNull()
   })
-
-  it('is 0 when nothing is stale (the UPDATE matches no rows)', async () => {
-    const exec = makeExec([])
-    const { resolved } = await finalizeStaleAssistantInvolvements(10, exec)
-    expect(resolved).toBe(0)
-  })
-
-  it('classifies attributes (trigger inactivity) for every conversation resolved this sweep', async () => {
-    const exec = makeExec([
-      { id: 'assistant_involvement_1', conversationId: 'conversation_1' },
-      { id: 'assistant_involvement_2', conversationId: 'conversation_2' },
-    ])
-    await finalizeStaleAssistantInvolvements(10, exec)
-    // Fire-and-forget: give the un-awaited classify calls a tick to fire.
-    await new Promise((resolve) => setTimeout(resolve, 0))
-    expect(mockClassifyConversationAttributes).toHaveBeenCalledWith('conversation_1', {
-      trigger: 'inactivity',
-    })
-    expect(mockClassifyConversationAttributes).toHaveBeenCalledWith('conversation_2', {
-      trigger: 'inactivity',
-    })
-  })
-
-  it('does not classify anything when no involvement was resolved', async () => {
-    const exec = makeExec([])
-    await finalizeStaleAssistantInvolvements(10, exec)
-    await new Promise((resolve) => setTimeout(resolve, 0))
-    expect(mockClassifyConversationAttributes).not.toHaveBeenCalled()
-  })
-
-  it('never lets a classification failure affect the sweep result', async () => {
-    mockClassifyConversationAttributes.mockRejectedValue(new Error('classifier exploded'))
-    const exec = makeExec([{ id: 'assistant_involvement_1', conversationId: 'conversation_1' }])
-    const { resolved } = await finalizeStaleAssistantInvolvements(10, exec)
-    expect(resolved).toBe(1)
+  it('uses the email closure window independently', () =>
+    expect(inactivityAction({ ...state, channel: 'email' }, settings(), now)).toBeNull())
+  it('has no built-in fallback under custom workflows or Off', () => {
+    for (const mode of ['custom', 'off'] as const) {
+      const s = settings()
+      s.channels!.messenger = mode
+      expect(inactivityAction(state, s, now)).toBeNull()
+    }
   })
 })

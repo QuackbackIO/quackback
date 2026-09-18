@@ -1093,3 +1093,109 @@ describe('threading headers (P4.6 regression guard)', () => {
     })
   })
 })
+
+describe('durable inactivity email delivery', () => {
+  beforeEach(() => {
+    vi.stubEnv('EMAIL_INBOUND_DOMAIN', 'mail.example.test')
+    vi.stubEnv('EMAIL_INBOUND_SIGNING_SECRET', 'test-signing-secret')
+    visitorRows = [{ type: 'anonymous', contactEmail: 'visitor@example.test' }]
+    threadIdsForOutbound.mockResolvedValue({ inbound: [], outbound: [], merged: [] })
+  })
+  afterEach(() => vi.unstubAllEnvs())
+  const send = () =>
+    notifyAgentReply({
+      conversationId,
+      visitorPrincipalId: 'principal_visitor' as PrincipalId,
+      channel: 'email',
+      content: 'A custom follow-up',
+      agentName: 'Support',
+      messageId: 'conversation_message_stable' as never,
+      strictDelivery: true,
+    })
+  it('uses the actual email sender with a stable Message-ID across queue retries', async () => {
+    await send()
+    await send()
+    expect(sendConversationMessageEmail).toHaveBeenCalledTimes(2)
+    const first = sendConversationMessageEmail.mock.calls[0][0]
+    expect(first).toMatchObject({
+      to: 'visitor@example.test',
+      bodyHtml: '<p>A custom follow-up</p>',
+      channel: 'email',
+      messageId: 'c.conversation_message_stable@mail.example.test',
+    })
+    expect(sendConversationMessageEmail.mock.calls[1][0].messageId).toBe(first.messageId)
+  })
+  it('delivers the rendered follow-up through a real local SMTP transport', async () => {
+    const { createServer } = await import('node:net')
+    const sockets = new Set<import('node:net').Socket>()
+    const messages: string[] = []
+    const server = createServer((socket) => {
+      sockets.add(socket)
+      socket.on('close', () => sockets.delete(socket))
+      socket.write('220 local-test ESMTP\r\n')
+      let pending = '',
+        data = false,
+        body = ''
+      socket.on('data', (chunk) => {
+        pending += chunk.toString()
+        let end: number
+        while ((end = pending.indexOf('\r\n')) >= 0) {
+          const line = pending.slice(0, end)
+          pending = pending.slice(end + 2)
+          if (data) {
+            if (line === '.') {
+              messages.push(body)
+              body = ''
+              data = false
+              socket.write('250 accepted\r\n')
+            } else body += line + '\r\n'
+          } else if (line.startsWith('EHLO')) socket.write('250 local-test\r\n')
+          else if (line === 'DATA') {
+            data = true
+            socket.write('354 send message\r\n')
+          } else if (line === 'QUIT') socket.end('221 bye\r\n')
+          else socket.write('250 OK\r\n')
+        }
+      })
+    })
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject)
+      server.listen(0, '127.0.0.1', resolve)
+    })
+    try {
+      const address = server.address() as import('node:net').AddressInfo
+      vi.stubEnv('EMAIL_SES_ACCESS_KEY_ID', '')
+      vi.stubEnv('EMAIL_SES_SECRET_ACCESS_KEY', '')
+      vi.stubEnv('EMAIL_SMTP_HOST', '127.0.0.1')
+      vi.stubEnv('EMAIL_SMTP_PORT', String(address.port))
+      vi.stubEnv('EMAIL_SMTP_SECURE', 'false')
+      vi.stubEnv('EMAIL_SMTP_USER', '')
+      vi.stubEnv('EMAIL_SMTP_PASS', '')
+      vi.stubEnv('EMAIL_FROM', 'Support <support@example.test>')
+      const email = await vi.importActual<typeof import('@quackback/email')>('@quackback/email')
+      sendConversationMessageEmail.mockImplementationOnce((opts) =>
+        email.sendConversationMessageEmail(
+          opts as unknown as Parameters<typeof email.sendConversationMessageEmail>[0]
+        )
+      )
+      await send()
+      expect(messages).toHaveLength(1)
+      expect(messages[0]).toContain('A custom follow-up')
+      expect(messages[0]).toContain('To: visitor@example.test')
+      expect(messages[0]).toContain('Message-ID: <c.conversation_message_stable@example.test>')
+    } finally {
+      for (const socket of sockets) socket.destroy()
+      await new Promise<void>((resolve) => server.close(() => resolve()))
+    }
+  })
+  it('propagates reported delivery refusal so the durable queue retries it', async () => {
+    sendConversationMessageEmail.mockResolvedValue({ sent: false, reason: 'provider unavailable' })
+    await expect(send()).rejects.toThrow('Email not sent: provider unavailable')
+    expect(recordOutboundEmail).not.toHaveBeenCalled()
+  })
+  it('propagates an unreachable contact instead of marking delivery sent', async () => {
+    visitorRows = []
+    await expect(send()).rejects.toThrow('No email address')
+    expect(sendConversationMessageEmail).not.toHaveBeenCalled()
+  })
+})

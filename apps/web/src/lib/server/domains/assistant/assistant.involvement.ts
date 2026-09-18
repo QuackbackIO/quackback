@@ -2,21 +2,16 @@
  * Assistant involvement service — the audit/KPI unit for Quinn.
  *
  * One `assistant_involvements` row per conversation Quinn engages. The locked
- * outcome semantics (converged across the market references) live here as pure,
- * unit-tested functions; persistence is a thin layer over them. The inactivity
- * TIMER that drives an assumed resolution is wired in the next wave — this wave
- * only encodes the rule that decides whether one may be recorded.
+ * outcome semantics live here as pure, unit-tested functions; persistence is a
+ * thin layer over them. The inactivity sweep records assumed / abandoned
+ * outcomes and, when settings allow, closes the conversation.
  */
 import {
   db,
   assistantInvolvements,
-  conversationMessages,
+  conversations,
   and,
   eq,
-  gt,
-  lt,
-  isNull,
-  notExists,
   desc,
   sql,
   type AssistantInvolvementSource,
@@ -27,11 +22,9 @@ import {
 import type { Executor } from '@/lib/server/domains/principals/principal.factory'
 import { logger } from '@/lib/server/logger'
 import type { AssistantInvolvementId, ConversationId } from '@quackback/ids'
-import { classifyConversationAttributes } from '@/lib/server/domains/conversation-attributes/ai-classification.service'
+export type AssistantInvolvement = typeof assistantInvolvements.$inferSelect
 
 const log = logger.child({ component: 'assistant-involvement' })
-
-export type AssistantInvolvement = typeof assistantInvolvements.$inferSelect
 
 /**
  * Inactivity window before a thread with no customer reply after Quinn's last
@@ -39,7 +32,7 @@ export type AssistantInvolvement = typeof assistantInvolvements.$inferSelect
  * (`finalizeStaleAssistantInvolvements`) trips it; the pure eligibility rule
  * defaults to the same window. Single source for both.
  */
-export const ASSUMED_RESOLUTION_INACTIVITY_MINUTES = 10
+export const ASSUMED_RESOLUTION_INACTIVITY_MINUTES = 15
 
 /**
  * The Quinn-inbox buckets, mapped to involvement lifecycle statuses — the
@@ -49,6 +42,7 @@ export const AI_INBOX_BUCKETS = {
   resolved: ['resolved_confirmed', 'resolved_assumed'],
   escalated: ['handed_off'],
   pending: ['active'],
+  abandoned: ['abandoned'],
 } as const satisfies Record<string, AssistantInvolvementStatus[]>
 
 export type AiInboxBucket = keyof typeof AI_INBOX_BUCKETS
@@ -72,6 +66,7 @@ export async function countAssistantInboxBuckets(
     resolved: sum(AI_INBOX_BUCKETS.resolved),
     escalated: sum(AI_INBOX_BUCKETS.escalated),
     pending: sum(AI_INBOX_BUCKETS.pending),
+    abandoned: sum(AI_INBOX_BUCKETS.abandoned),
   }
 }
 
@@ -178,6 +173,7 @@ export async function recordAssistantAnswer(
     .set({
       sources: input.sources,
       lastAssistantAnswerAt: at,
+      followUpSentAt: null,
     })
     .where(eq(assistantInvolvements.id, id))
 }
@@ -199,6 +195,16 @@ export async function recordHandoff(
     .set({ status: 'handed_off', handoffReason: reason, endedAt: new Date() })
     .where(and(eq(assistantInvolvements.id, id), eq(assistantInvolvements.status, 'active')))
     .returning()
+  if (row)
+    await exec
+      .update(conversations)
+      .set({ inactivityOwner: 'handoff', inactivityAnchorAt: null, inactivityCheckInAt: null })
+      .where(
+        and(
+          eq(conversations.id, row.conversationId),
+          sql`${conversations.inactivityOwner} IN ('assistant_answered', 'assistant_waiting')`
+        )
+      )
   return row ?? null
 }
 
@@ -225,25 +231,33 @@ export async function recordOutcome(
     )
     .returning()
   if (row) {
-    try {
-      const { dispatchAssistantResolved, buildEventActor } =
-        await import('@/lib/server/events/dispatch')
-      const { ensureAssistantPrincipal } =
-        await import('@/lib/server/domains/assistant/assistant.principal')
-      const assistant = await ensureAssistantPrincipal()
-      await dispatchAssistantResolved(
-        buildEventActor({
-          principalId: assistant.id,
-          displayName: assistant.displayName ?? undefined,
-        }),
-        row.conversationId,
-        row.status
-      )
-    } catch (err) {
-      log.warn({ err, id }, 'assistant.resolved dispatch failed')
-    }
+    await dispatchResolvedEvent(row.conversationId, row.status, row.id)
   }
   return row ?? null
+}
+
+async function dispatchResolvedEvent(
+  conversationId: ConversationId,
+  status: AssistantInvolvementStatus,
+  involvementId?: AssistantInvolvementId
+): Promise<void> {
+  try {
+    const { dispatchAssistantResolved, buildEventActor } =
+      await import('@/lib/server/events/dispatch')
+    const { ensureAssistantPrincipal } =
+      await import('@/lib/server/domains/assistant/assistant.principal')
+    const assistant = await ensureAssistantPrincipal()
+    await dispatchAssistantResolved(
+      buildEventActor({
+        principalId: assistant.id,
+        displayName: assistant.displayName ?? undefined,
+      }),
+      conversationId,
+      status
+    )
+  } catch (err) {
+    log.warn({ err, id: involvementId }, 'assistant.resolved dispatch failed')
+  }
 }
 
 /**
@@ -303,61 +317,26 @@ export async function voidAssumedResolutionForConversation(
 }
 
 /**
- * Sweep active involvements whose last answer has gone quiet and record an
- * assumed resolution on each, in one set-based UPDATE. An involvement qualifies
- * when it is still active (the at-most-one guard — a resolved/handed-off one is
- * excluded), its last real answer is older than the inactivity window (a NULL
- * answer time fails the `<` and is excluded too), and no non-deleted customer
- * message has arrived since (a later one means they returned needing help, which
- * voids the assumption). Returns how many were resolved. Called from the
- * periodic snooze-sweep tick.
+ * Sweep stale Quinn involvements: assumed-resolve threads that went quiet
+ * after a real answer, and abandon threads that never got one. Then close
+ * the conversation itself (unless a human has already spoken, or it is
+ * already closed/snoozed). Returns how many involvements flipped. Called
+ * from the periodic snooze-sweep tick.
  */
 export async function finalizeStaleAssistantInvolvements(
-  thresholdMinutes: number = ASSUMED_RESOLUTION_INACTIVITY_MINUTES,
-  exec: Executor = db
-): Promise<{ resolved: number }> {
-  const cutoff = new Date(Date.now() - thresholdMinutes * 60_000)
-  const laterCustomerMessage = exec
-    .select({ one: sql`1` })
-    .from(conversationMessages)
-    .where(
-      and(
-        eq(conversationMessages.conversationId, assistantInvolvements.conversationId),
-        eq(conversationMessages.senderType, 'visitor'),
-        isNull(conversationMessages.deletedAt),
-        gt(conversationMessages.createdAt, assistantInvolvements.lastAssistantAnswerAt)
-      )
-    )
-  const resolvedRows = await exec
-    .update(assistantInvolvements)
-    .set({ status: 'resolved_assumed', endedAt: new Date() })
-    .where(
-      and(
-        eq(assistantInvolvements.status, 'active'),
-        lt(assistantInvolvements.lastAssistantAnswerAt, cutoff),
-        notExists(laterCustomerMessage)
-      )
-    )
-    .returning({
-      id: assistantInvolvements.id,
-      conversationId: assistantInvolvements.conversationId,
-    })
-  // AI attribute classification (AI-ATTRIBUTES-PARITY-SPEC.md Phase 1): the
-  // inactivity "job done" moment. Fire-and-forget per conversation — the
-  // classifier is itself flag-gated and never throws, so this never slows
-  // down or risks the sweep tick itself; the extra catch here is defense in
-  // depth in case that contract is ever violated.
-  for (const row of resolvedRows) {
-    void classifyConversationAttributes(row.conversationId, { trigger: 'inactivity' }).catch(
-      (err) => {
-        log.warn(
-          { err, conversationId: row.conversationId },
-          'inactivity-close attribute classification failed'
-        )
-      }
-    )
-  }
-  return { resolved: resolvedRows.length }
+  _thresholdMinutes?: number,
+  _exec: Executor = db
+): Promise<{ resolved: number; abandoned: number }> {
+  const { sweepInactivity } =
+    await import('@/lib/server/domains/conversation/conversation.inactivity')
+  const result = await sweepInactivity({ owner: 'assistant', action: 'close' })
+  return { resolved: result.resolved, abandoned: result.abandoned }
+}
+
+export async function sendStaleAssistantFollowUps(_exec: Executor = db): Promise<number> {
+  const { sweepInactivity } =
+    await import('@/lib/server/domains/conversation/conversation.inactivity')
+  return (await sweepInactivity({ owner: 'assistant', action: 'follow_up' })).followedUp
 }
 
 /** Attach a CSAT rating (recorded when Quinn was the last handler). */

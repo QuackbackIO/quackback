@@ -44,15 +44,16 @@ const mockConversationLookupLimit = vi.fn()
 vi.mock('@/lib/server/db', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/server/db')>()
   const limitStep = { limit: (...args: unknown[]) => mockConversationLookupLimit(...args) }
-  const whereStep = { where: vi.fn(() => limitStep) }
+  const joinable = {
+    where: vi.fn(() => limitStep),
+    leftJoin: vi.fn(),
+  }
+  joinable.leftJoin.mockImplementation(() => joinable)
   return {
     ...actual,
     db: {
       select: vi.fn(() => ({
-        from: vi.fn(() => ({
-          leftJoin: vi.fn(() => whereStep),
-          where: vi.fn(() => limitStep),
-        })),
+        from: vi.fn(() => joinable),
       })),
     },
   }
@@ -545,10 +546,11 @@ describe('assembleCitations', () => {
 })
 
 describe('isSubstantiveAnswer', () => {
-  it('is true when there are citations', () => {
+  it('is true for an explicitly classified substantive answer', () => {
     expect(
       isSubstantiveAnswer({
         text: 'ok',
+        responseKind: 'answer',
         citations: [{ type: 'article', id: 'x', title: 't', url: 'u' }],
       })
     ).toBe(true)
@@ -558,8 +560,10 @@ describe('isSubstantiveAnswer', () => {
     expect(isSubstantiveAnswer({ text: 'Hi there!', citations: [] })).toBe(false)
   })
 
-  it('is true for a long uncited answer', () => {
-    expect(isSubstantiveAnswer({ text: 'x'.repeat(50), citations: [] })).toBe(true)
+  it('does not infer an answer from length', () => {
+    expect(
+      isSubstantiveAnswer({ text: 'x'.repeat(500), responseKind: 'clarification', citations: [] })
+    ).toBe(false)
   })
 })
 
@@ -1659,6 +1663,29 @@ describe('runAssistantTurn: customer-scoped retrieval context (P2-A.4)', () => {
     expect(capturedCtx?.customerPrincipalId).toBe('principal_customer_1')
     expect(capturedCtx?.conversationId).toBe('conversation_42')
     expect(mockConversationSummariesRetrieve).not.toHaveBeenCalled()
+  })
+
+  it('puts anonymous-no-email identity in trusted runtime context and never quotes a placeholder address', async () => {
+    mockRetrieve.mockResolvedValue([])
+    mockConversationLookupLimit.mockResolvedValue([
+      {
+        visitorPrincipalId: 'principal_customer_1',
+        visitorType: 'anonymous',
+        visitorContactEmail: null,
+        visitorEmail: null,
+        accountEmail: 'temp-abc@anon.quackback.io',
+        customer: 'Swift Falcon',
+      },
+    ])
+    await runAssistantTurn({
+      ...baseInput,
+      messages: customerAsks('question'),
+      conversationId: 'conversation_42' as never,
+    })
+    const opts = mockChat.mock.calls.at(-1)?.[0] as { systemPrompts: string[] }
+    const trusted = opts.systemPrompts.find((p) => p.includes('<trusted_runtime_context'))
+    expect(trusted).toContain('Customer identity: anonymous visitor, no email on file.')
+    expect(trusted).not.toContain('temp-abc@')
   })
 
   it('never queries the conversation row when there is no conversationId (sandbox)', async () => {

@@ -90,6 +90,10 @@ export const assistantInvolvements = pgTable(
     // When Quinn last gave a substantive answer. Drives the assumed-resolution
     // inactivity sweep — a quiet thread past the window is resolved as assumed.
     lastAssistantAnswerAt: timestamp('last_assistant_answer_at', { withTimezone: true }),
+    // When Quinn posted its inactivity follow-up nudge. A nudge is not an
+    // answer — this column, not lastAssistantAnswerAt, records it so the
+    // assumed-resolution clock stays put.
+    followUpSentAt: timestamp('follow_up_sent_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     endedAt: timestamp('ended_at', { withTimezone: true }),
   },

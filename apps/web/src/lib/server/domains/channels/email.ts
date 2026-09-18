@@ -19,6 +19,9 @@ export const emailAdapter: ChannelAdapter = {
       conversationId: ctx.conversationId,
       variant: kind,
       closerPrincipalId: ctx.closerPrincipalId,
+      messageId: ctx.messageId,
+      content: ctx.content,
+      strictDelivery: ctx.strictDelivery,
     })
   },
 

@@ -57,7 +57,8 @@ vi.mock('@/lib/server/db', () => {
     // Tables — only __name matters for routing the chain.
     principal: { __name: 'principal' },
     user: { __name: 'user', id: 'id', image: 'image', imageKey: 'image_key' },
-    conversations: { __name: 'conversations' },
+    conversations: { __name: 'conversations', id: 'id' },
+    assistantInvolvements: { __name: 'assistant_involvements' },
     conversationMessages: { __name: 'conversation_messages' },
     conversationMessageMentions: { __name: 'conversation_message_mentions' },
     conversationMessageReactions: {
