@@ -89,6 +89,15 @@ export const ID_PREFIXES = {
   assistant_document: 'assistant_document',
   assistant_web_source: 'assistant_web_source',
   assistant_event: 'assistant_event',
+  // Durable execution records for one Quinn turn (P1/P2). The run is the unit
+  // of computation; the involvement above stays the business/KPI unit.
+  assistant_run: 'assistant_run',
+  assistant_run_step: 'assistant_run_step',
+  assistant_run_evidence: 'assistant_run_evidence',
+  // Immutable resolved behaviour a run executed under, deduplicated by hash.
+  assistant_snapshot: 'assistant_snapshot',
+  // HTTP retry receipt binding a client mutation id to one accepted request.
+  assistant_request_receipt: 'assistant_request_receipt',
 
   // Tickets (support platform §4.2)
   ticket: 'ticket',

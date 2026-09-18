@@ -6,6 +6,7 @@ import {
   uniqueIndex,
   jsonb,
   integer,
+  bigint as pgBigint,
   boolean,
   primaryKey,
   foreignKey,
@@ -112,6 +113,15 @@ export const conversations = pgTable(
     >(),
     inactivityAnchorAt: timestamp('inactivity_anchor_at', { withTimezone: true }),
     inactivityRetryAt: timestamp('inactivity_retry_at', { withTimezone: true }),
+    // Monotonic invalidation counter for durable Quinn execution (P1/P2).
+    // Bumped inside EVERY transaction that changes what Quinn may say next: a
+    // customer message, a human reply or takeover, assignment, handoff,
+    // close/reopen, snooze/unsnooze, spam filing, inactivity mode change and
+    // explicit handback. A run may only publish while the revision it was
+    // created for still matches. Deliberately NOT the activity anchor and NOT
+    // updated_at: those answer lifecycle questions, this answers "is the answer
+    // that is being generated still about the current state?".
+    assistantRevision: pgBigint('assistant_revision', { mode: 'number' }).notNull().default(0),
     // Post-conversation CSAT rating (1-5), submitted by the visitor.
     csatRating: integer('csat_rating'),
     csatComment: text('csat_comment'),
@@ -296,6 +306,18 @@ export const conversationMessages = pgTable(
     // Channel provenance (e.g. inbound email message-id for retry dedupe); null
     // for ordinary in-app messenger messages.
     metadata: jsonb('metadata').$type<ConversationMessageMetadata>(),
+    // The durable Quinn run that authored this message (P1/P2), or null for
+    // every human, system and legacy assistant message. The partial unique
+    // index below is the idempotency key for a replayed publication: one
+    // customer-visible message per run. Internal notes are excluded from it on
+    // purpose, so a run may also leave a keyed handoff note.
+    //
+    // Deliberately NOT a drizzle foreign key. assistant_runs already FKs this
+    // table in both directions it needs (trigger and result message), and a
+    // second edge back would make the two table types circular, which
+    // TypeScript cannot infer. Integrity is preserved anyway: runs and messages
+    // share one parent conversation and are cascade-deleted together.
+    assistantRunId: typeIdColumnNullable('assistant_run')('assistant_run_id'),
     // FTS over message content; backs ticket search + the inbox FTS upgrade.
     searchVector: tsvector('search_vector').generatedAlwaysAs(
       sql`to_tsvector('english', coalesce(content, ''))`
@@ -390,6 +412,13 @@ export const conversationMessages = pgTable(
     uniqueIndex('conversation_messages_inbound_delivery_key_idx')
       .using('btree', table.ticketId, sql`(metadata ->> 'inboundDeliveryKey')`)
       .where(sql`(metadata ->> 'inboundDeliveryKey') IS NOT NULL`),
+    // One terminal customer-visible message per durable Quinn run. A replayed
+    // publication (the job was retried after the outcome committed) hits this
+    // index rather than posting the answer twice, and no text comparison is
+    // involved: the key is the run identity the server owns.
+    uniqueIndex('conversation_messages_assistant_run_terminal_idx')
+      .on(table.assistantRunId)
+      .where(sql`${table.assistantRunId} IS NOT NULL AND ${table.isInternal} = false`),
   ]
 )
 

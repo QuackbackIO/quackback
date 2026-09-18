@@ -1849,6 +1849,13 @@
       "when": 1789747200001,
       "tag": "0286_quinn_active_involvement",
       "breakpoints": true
+    },
+    {
+      "idx": 264,
+      "version": "7",
+      "when": 1789747200002,
+      "tag": "0287_quinn_durable_runs",
+      "breakpoints": true
     }
   ]
 }

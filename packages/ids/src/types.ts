@@ -226,6 +226,21 @@ export type AssistantWebSourceId = TypeId<'assistant_web_source'>
 /** Assistant usage-event ID - e.g., assistant_event_01h455vb4pex5vsknk084sn02q */
 export type AssistantEventId = TypeId<'assistant_event'>
 
+/** Durable Quinn run ID - e.g., assistant_run_01h455vb4pex5vsknk084sn02q */
+export type AssistantRunId = TypeId<'assistant_run'>
+
+/** Durable Quinn run step ID - e.g., assistant_run_step_01h455vb4pex5vsknk084sn02q */
+export type AssistantRunStepId = TypeId<'assistant_run_step'>
+
+/** Durable Quinn run evidence ID - e.g., assistant_run_evidence_01h455vb4pex5vsknk084sn02q */
+export type AssistantRunEvidenceId = TypeId<'assistant_run_evidence'>
+
+/** Effective behaviour snapshot ID - e.g., assistant_snapshot_01h455vb4pex5vsknk084sn02q */
+export type AssistantSnapshotId = TypeId<'assistant_snapshot'>
+
+/** Client-mutation receipt ID - e.g., assistant_request_receipt_01h455vb4pex5vsknk084sn02q */
+export type AssistantRequestReceiptId = TypeId<'assistant_request_receipt'>
+
 /** Ticket ID - e.g., ticket_01h455vb4pex5vsknk084sn02q */
 export type TicketId = TypeId<'ticket'>
 
@@ -455,6 +470,11 @@ export interface EntityIdMap {
   assistant_document: AssistantDocumentId
   assistant_web_source: AssistantWebSourceId
   assistant_event: AssistantEventId
+  assistant_run: AssistantRunId
+  assistant_run_step: AssistantRunStepId
+  assistant_run_evidence: AssistantRunEvidenceId
+  assistant_snapshot: AssistantSnapshotId
+  assistant_request_receipt: AssistantRequestReceiptId
   ticket: TicketId
   ticket_status: TicketStatusId
   ticket_type: TicketTypeId
