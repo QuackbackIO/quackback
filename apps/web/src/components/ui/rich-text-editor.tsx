@@ -1303,6 +1303,8 @@ export interface RichTextEditorHandle {
 interface RichTextEditorProps {
   value?: string | JSONContent
   onChange?: (json: JSONContent, html: string, markdown: string) => void
+  /** Explicit opt-in for wrappers whose function arity is not preserved. */
+  emitMarkdown?: boolean
   placeholder?: string
   className?: string
   disabled?: boolean
@@ -1347,6 +1349,7 @@ interface RichTextEditorProps {
 function RichTextEditorBase({
   value,
   onChange,
+  emitMarkdown,
   placeholder = 'Write something...',
   className,
   disabled = false,
@@ -1459,12 +1462,12 @@ function RichTextEditorBase({
       // recursive tree-walk that @tiptap/markdown does on every keystroke.
       const markdown = markdownFromEditor(
         editor,
-        onChange.length,
+        emitMarkdown ? 3 : onChange.length,
         lastSuccessfulMarkdownRef.current,
         json
       )
       lastEmittedMarkdownRef.current = markdown
-      if (onChange.length >= 3) lastSuccessfulMarkdownRef.current = markdown
+      if (emitMarkdown || onChange.length >= 3) lastSuccessfulMarkdownRef.current = markdown
       onChange(json, html, markdown)
     },
     editorProps,

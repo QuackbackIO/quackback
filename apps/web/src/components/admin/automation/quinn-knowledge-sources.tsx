@@ -200,7 +200,7 @@ export function QuinnKnowledgeSources({ kind }: { kind: 'document' | 'webpage' }
                   placeholder="https://example.com/help"
                   disabled={addPage.isPending}
                 />
-                <Button disabled={addPage.isPending || !url}>
+                <Button type="submit" disabled={addPage.isPending || !url}>
                   {addPage.isPending ? 'Adding…' : 'Add page'}
                 </Button>
               </form>
