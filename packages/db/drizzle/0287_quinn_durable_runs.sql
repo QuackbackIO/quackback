@@ -2,6 +2,8 @@
 -- Durable Quinn execution (QUINN-PRODUCT P1). Expand-only: every column is
 -- nullable or defaulted, and no existing reader changes meaning. Apply before
 -- deploying the durable execution selector; legacy execution ignores all of it.
+-- Foreign keys are declared inline so every statement replays as a no-op
+-- (a bare ADD CONSTRAINT errors on a second run and breaks the ledger heal).
 CREATE TABLE IF NOT EXISTS "assistant_effective_snapshots" (
   "id" uuid PRIMARY KEY NOT NULL,
   "content_hash" text NOT NULL,
@@ -42,30 +44,15 @@ CREATE TABLE IF NOT EXISTS "assistant_runs" (
   "started_at" timestamp with time zone,
   "finished_at" timestamp with time zone,
   "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-  CONSTRAINT "assistant_runs_parent_check" CHECK (num_nonnulls("conversation_id", "ticket_id", "workspace_thread_key") = 1)
+  CONSTRAINT "assistant_runs_parent_check" CHECK (num_nonnulls("conversation_id", "ticket_id", "workspace_thread_key") = 1),
+  CONSTRAINT "assistant_runs_conversation_id_conversations_id_fk" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE cascade ON UPDATE no action,
+  CONSTRAINT "assistant_runs_ticket_id_tickets_id_fk" FOREIGN KEY ("ticket_id") REFERENCES "tickets"("id") ON DELETE cascade ON UPDATE no action,
+  CONSTRAINT "assistant_runs_trigger_message_id_conversation_messages_id_fk" FOREIGN KEY ("trigger_message_id") REFERENCES "conversation_messages"("id") ON DELETE set null ON UPDATE no action,
+  CONSTRAINT "assistant_runs_requested_by_principal_id_principal_id_fk" FOREIGN KEY ("requested_by_principal_id") REFERENCES "principal"("id") ON DELETE set null ON UPDATE no action,
+  CONSTRAINT "assistant_runs_involvement_id_assistant_involvements_id_fk" FOREIGN KEY ("involvement_id") REFERENCES "assistant_involvements"("id") ON DELETE set null ON UPDATE no action,
+  CONSTRAINT "assistant_runs_snapshot_id_assistant_effective_snapshots_id_fk" FOREIGN KEY ("snapshot_id") REFERENCES "assistant_effective_snapshots"("id") ON DELETE set null ON UPDATE no action,
+  CONSTRAINT "assistant_runs_result_message_id_conversation_messages_id_fk" FOREIGN KEY ("result_message_id") REFERENCES "conversation_messages"("id") ON DELETE set null ON UPDATE no action
 );
---> statement-breakpoint
-ALTER TABLE "assistant_runs" ADD CONSTRAINT "assistant_runs_conversation_id_conversations_id_fk"
-  FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE cascade ON UPDATE no action;
---> statement-breakpoint
-ALTER TABLE "assistant_runs" ADD CONSTRAINT "assistant_runs_ticket_id_tickets_id_fk"
-  FOREIGN KEY ("ticket_id") REFERENCES "tickets"("id") ON DELETE cascade ON UPDATE no action;
---> statement-breakpoint
-ALTER TABLE "assistant_runs" ADD CONSTRAINT "assistant_runs_trigger_message_id_conversation_messages_id_fk"
-  FOREIGN KEY ("trigger_message_id") REFERENCES "conversation_messages"("id") ON DELETE set null ON UPDATE no action;
---> statement-breakpoint
-ALTER TABLE "assistant_runs" ADD CONSTRAINT "assistant_runs_requested_by_principal_id_principal_id_fk"
-  FOREIGN KEY ("requested_by_principal_id") REFERENCES "principal"("id") ON DELETE set null ON UPDATE no action;
---> statement-breakpoint
-ALTER TABLE "assistant_runs" ADD CONSTRAINT "assistant_runs_involvement_id_assistant_involvements_id_fk"
-  FOREIGN KEY ("involvement_id") REFERENCES "assistant_involvements"("id") ON DELETE set null ON UPDATE no action;
---> statement-breakpoint
-ALTER TABLE "assistant_runs" ADD CONSTRAINT "assistant_runs_snapshot_id_assistant_effective_snapshots_id_fk"
-  FOREIGN KEY ("snapshot_id") REFERENCES "assistant_effective_snapshots"("id") ON DELETE set null ON UPDATE no action;
---> statement-breakpoint
-ALTER TABLE "assistant_runs" ADD CONSTRAINT "assistant_runs_result_message_id_conversation_messages_id_fk"
-  FOREIGN KEY ("result_message_id") REFERENCES "conversation_messages"("id") ON DELETE set null ON UPDATE no action;
---> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "assistant_runs_trigger_key_idx" ON "assistant_runs" ("trigger_key");
 --> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "assistant_runs_one_executing_idx" ON "assistant_runs" ("conversation_id")
@@ -91,12 +78,9 @@ CREATE TABLE IF NOT EXISTS "assistant_run_steps" (
   "tool_call_id" text,
   "validator" jsonb,
   "started_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "finished_at" timestamp with time zone
+  "finished_at" timestamp with time zone,
+  CONSTRAINT "assistant_run_steps_run_id_assistant_runs_id_fk" FOREIGN KEY ("run_id") REFERENCES "assistant_runs"("id") ON DELETE cascade ON UPDATE no action
 );
---> statement-breakpoint
-ALTER TABLE "assistant_run_steps" ADD CONSTRAINT "assistant_run_steps_run_id_assistant_runs_id_fk"
-  FOREIGN KEY ("run_id") REFERENCES "assistant_runs"("id") ON DELETE cascade ON UPDATE no action;
---> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "assistant_run_steps_identity_idx" ON "assistant_run_steps" ("run_id", "step_key", "attempt_number");
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "assistant_run_steps_run_idx" ON "assistant_run_steps" ("run_id");
@@ -115,12 +99,9 @@ CREATE TABLE IF NOT EXISTS "assistant_run_evidence" (
   "retrieval_rank" integer,
   "rerank_rank" integer,
   "citation_index" integer,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL
+  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+  CONSTRAINT "assistant_run_evidence_run_id_assistant_runs_id_fk" FOREIGN KEY ("run_id") REFERENCES "assistant_runs"("id") ON DELETE cascade ON UPDATE no action
 );
---> statement-breakpoint
-ALTER TABLE "assistant_run_evidence" ADD CONSTRAINT "assistant_run_evidence_run_id_assistant_runs_id_fk"
-  FOREIGN KEY ("run_id") REFERENCES "assistant_runs"("id") ON DELETE cascade ON UPDATE no action;
---> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "assistant_run_evidence_run_idx" ON "assistant_run_evidence" ("run_id", "attempt_number");
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "assistant_run_evidence_source_idx" ON "assistant_run_evidence" ("source_type", "source_id");
@@ -132,20 +113,11 @@ CREATE TABLE IF NOT EXISTS "assistant_request_receipts" (
   "request_digest" text NOT NULL,
   "conversation_id" uuid,
   "message_id" uuid,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL
+  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+  CONSTRAINT "assistant_request_receipts_principal_id_principal_id_fk" FOREIGN KEY ("principal_id") REFERENCES "principal"("id") ON DELETE cascade ON UPDATE no action,
+  CONSTRAINT "assistant_request_receipts_conversation_id_conversations_id_fk" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE cascade ON UPDATE no action,
+  CONSTRAINT "assistant_request_receipts_message_id_fkey" FOREIGN KEY ("message_id") REFERENCES "conversation_messages"("id") ON DELETE cascade ON UPDATE no action
 );
---> statement-breakpoint
-ALTER TABLE "assistant_request_receipts" ADD CONSTRAINT "assistant_request_receipts_principal_id_principal_id_fk"
-  FOREIGN KEY ("principal_id") REFERENCES "principal"("id") ON DELETE cascade ON UPDATE no action;
---> statement-breakpoint
-ALTER TABLE "assistant_request_receipts" ADD CONSTRAINT "assistant_request_receipts_conversation_id_conversations_id_fk"
-  FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE cascade ON UPDATE no action;
---> statement-breakpoint
--- Named explicitly: the derived name would be 65 characters and PostgreSQL
--- truncates identifiers at 63, which then reads as permanent schema drift.
-ALTER TABLE "assistant_request_receipts" ADD CONSTRAINT "assistant_request_receipts_message_id_fkey"
-  FOREIGN KEY ("message_id") REFERENCES "conversation_messages"("id") ON DELETE cascade ON UPDATE no action;
---> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "assistant_request_receipts_key_idx" ON "assistant_request_receipts" ("principal_id", "client_mutation_id");
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "assistant_request_receipts_created_idx" ON "assistant_request_receipts" ("created_at");
