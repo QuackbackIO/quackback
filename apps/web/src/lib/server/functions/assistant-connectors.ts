@@ -9,6 +9,7 @@ import type { ConnectorId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   connectorCreateInputSchema,
+  connectorReviewInputSchema,
   connectorUpdateInputSchema,
   type BuiltinConnectorDTO,
 } from '@/lib/shared/assistant/connectors'
@@ -111,7 +112,47 @@ export const updateConnectorFn = createServerFn({ method: 'POST' })
       actor: actorFromAuth(ctx),
       headers: getRequestHeaders(),
       target: { type: 'connector', id },
-      after: row ? { name: row.name, enabled: row.enabled, assignments: row.assignments } : null,
+      after: row
+        ? {
+            name: row.name,
+            enabled: row.enabled,
+            assignments: row.assignments,
+            // Permissions are the part of this row worth reconstructing later,
+            // so the version and the resolved per-use policies both land in
+            // the trail. No secret material is in either.
+            policyVersion: row.policyVersion,
+            profilePolicies: row.profilePolicies,
+          }
+        : null,
+    })
+    return row ? toConnectorDTO(row) : null
+  })
+
+/**
+ * Mark tool contracts reviewed. Same gate as every other connector write:
+ * reviewing is what makes a new or changed tool callable, so it is an
+ * authorized act, not a dismissal of a banner.
+ */
+export const reviewConnectorToolsFn = createServerFn({ method: 'POST' })
+  .validator(connectorReviewInputSchema)
+  .handler(async ({ data }) => {
+    log.info('review connector tools')
+    const ctx = await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
+    const { toConnectorDTO } =
+      await import('@/lib/server/domains/assistant/connectors/connectors.service')
+    const { reviewConnectorTools } =
+      await import('@/lib/server/domains/assistant/connectors/connector-review.service')
+    const row = await reviewConnectorTools(
+      data.id as ConnectorId,
+      { toolNames: data.toolNames, expectedCatalogRevision: data.expectedCatalogRevision },
+      ctx.principal.id
+    )
+    await recordAuditEvent({
+      event: 'assistant.connector.tools_reviewed',
+      actor: actorFromAuth(ctx),
+      headers: getRequestHeaders(),
+      target: { type: 'connector', id: data.id },
+      after: row ? { toolNames: data.toolNames, catalogRevision: row.catalogRevision } : null,
     })
     return row ? toConnectorDTO(row) : null
   })

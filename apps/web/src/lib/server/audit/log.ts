@@ -131,6 +131,7 @@ export type AuditEventType =
   | 'assistant.connector.updated'
   | 'assistant.connector.deleted'
   | 'assistant.connector.refreshed'
+  | 'assistant.connector.tools_reviewed'
   | 'assistant.skill.created'
   | 'assistant.skill.updated'
   | 'assistant.skill.deleted'

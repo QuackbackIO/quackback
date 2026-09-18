@@ -3,10 +3,15 @@ import {
   createConnectorFn,
   deleteConnectorFn,
   refreshConnectorFn,
+  reviewConnectorToolsFn,
   startConnectorOAuthFn,
   updateConnectorFn,
 } from '@/lib/server/functions/assistant-connectors'
-import type { ConnectorCreateInput, ConnectorUpdateInput } from '@/lib/shared/assistant/connectors'
+import type {
+  ConnectorCreateInput,
+  ConnectorReviewInput,
+  ConnectorUpdateInput,
+} from '@/lib/shared/assistant/connectors'
 import { connectorKeys } from '@/lib/client/queries/assistant-connectors'
 
 export function useCreateConnector() {
@@ -23,6 +28,17 @@ export function useUpdateConnector() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (input: ConnectorUpdateInput) => updateConnectorFn({ data: input }),
+    onSuccess: (_row, input) => {
+      void queryClient.invalidateQueries({ queryKey: connectorKeys.all() })
+      void queryClient.invalidateQueries({ queryKey: connectorKeys.detail(input.id) })
+    },
+  })
+}
+
+export function useReviewConnectorTools() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: ConnectorReviewInput) => reviewConnectorToolsFn({ data: input }),
     onSuccess: (_row, input) => {
       void queryClient.invalidateQueries({ queryKey: connectorKeys.all() })
       void queryClient.invalidateQueries({ queryKey: connectorKeys.detail(input.id) })

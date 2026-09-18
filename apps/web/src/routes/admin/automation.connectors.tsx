@@ -117,6 +117,7 @@ function ConnectorsPage() {
                 <div className="flex flex-wrap items-center gap-2 text-[13.5px] font-semibold">
                   {connector.name}
                   <ConnectorStatusBadge status={connector.status} />
+                  {connector.unreviewedCount > 0 && <Badge size="sm">Needs review</Badge>}
                 </div>
                 <p className="truncate font-mono text-xs text-muted-foreground">
                   {connector.status === 'error' && connector.lastError

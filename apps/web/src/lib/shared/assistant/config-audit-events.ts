@@ -27,6 +27,7 @@ export const ASSISTANT_CONFIG_EVENT_LABELS: Record<
   'assistant.connector.updated': 'Connector updated',
   'assistant.connector.deleted': 'Connector removed',
   'assistant.connector.refreshed': 'Connector tools refreshed',
+  'assistant.connector.tools_reviewed': 'Connector tools reviewed',
   'assistant.skill.created': 'Skill added',
   'assistant.skill.updated': 'Skill updated',
   'assistant.skill.deleted': 'Skill deleted',
