@@ -1,5 +1,5 @@
 /**
- * Effective behaviour snapshots — what a run actually executed under.
+ * Effective behaviour snapshots: what a run actually executed under.
  *
  * A configuration revision number alone cannot explain a run after somebody
  * edits a guidance rule or a connector's schema changes: the number moves, the
@@ -66,10 +66,7 @@ function shortHash(value: string): string {
  * a source that cannot be read contributes nothing rather than failing the
  * turn, and the omission is visible in the snapshot as an absent section.
  */
-export async function buildEffectiveSnapshot(opts?: {
-  role?: 'customer_support'
-}): Promise<EffectiveSnapshotPayload> {
-  const role = opts?.role ?? 'customer_support'
+export async function buildEffectiveSnapshot(): Promise<EffectiveSnapshotPayload> {
   const { getAssistantRuntimeConfig } =
     await import('@/lib/server/domains/settings/settings.assistant')
   let config: unknown = null
@@ -85,9 +82,10 @@ export async function buildEffectiveSnapshot(opts?: {
   const guidance: EffectiveSnapshotPayload['guidance'] = []
   try {
     const { listEnabledGuidanceCandidates } = await import('./guidance.service')
-    const rules = await listEnabledGuidanceCandidates({
-      agent: role === 'customer_support' ? 'agent' : 'agent',
-    })
+    // Customer-support runs are the only durable ones today, and they resolve
+    // the `agent` profile. A second role gets its own call when it gets a
+    // durable path, rather than a parameter nothing passes.
+    const rules = await listEnabledGuidanceCandidates({ agent: 'agent' })
     for (const rule of rules) {
       guidance.push({
         id: rule.id,

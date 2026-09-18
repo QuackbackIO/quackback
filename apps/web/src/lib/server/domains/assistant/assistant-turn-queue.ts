@@ -32,7 +32,7 @@ export const ASSISTANT_TURN_LEASE_MS = 180_000
 /** Interactive work, so a small pool: two turns per process, not a backlog drain. */
 export const ASSISTANT_TURN_CONCURRENCY = 2
 
-/** The queue handler. Never throws for an ordinary lost race — see advanceAssistantRun. */
+/** The queue handler. Never throws for an ordinary lost race; see advanceAssistantRun. */
 export async function runAssistantTurnJob(job: ClaimedJob): Promise<void> {
   const disposition = await advanceAssistantRun(job)
   log.info(

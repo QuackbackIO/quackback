@@ -28,6 +28,17 @@ vi.mock('@/lib/server/domains/conversation/conversation.notify', () => ({
   notifyVisitorMessage: vi.fn(),
   notifyConversationStarted: vi.fn(),
 }))
+vi.mock('@/lib/server/domains/settings/settings.widget', async (original) => ({
+  ...(await original<typeof import('@/lib/server/domains/settings/settings.widget')>()),
+  getMessengerConfig: vi.fn(async () => ({ assistant: { respond: true } })),
+}))
+// The fake model, for the end-to-end executor cases at the bottom of this file.
+// `runAssistantTurn` is re-exported through the domain barrel the orchestrator
+// imports, so replacing it here replaces it for the real code path under test.
+vi.mock('../assistant.runtime', async (original) => {
+  const actual = await original<typeof import('../assistant.runtime')>()
+  return { ...actual, isAssistantConfigured: () => true, runAssistantTurn: vi.fn() }
+})
 
 // The lint rule reserves @quackback/db/client for db.ts; a fixture that needs
 // its own independent connection is a sanctioned caller, like db-test-fixture.
@@ -62,6 +73,8 @@ import {
   ASSISTANT_TURN_QUEUE,
 } from '../assistant-run.service'
 import { claimRunForExecution, loadRun } from '../assistant-run.repository'
+import { runAssistantTurn } from '../assistant.runtime'
+import { advanceAssistantRun } from '../assistant-run.executor'
 
 const URL =
   process.env.DATABASE_URL ?? 'postgresql://postgres:password@localhost:5432/quackback_test'
@@ -224,7 +237,11 @@ async function publish(
 
 async function publicMessages(conversationId: ConversationId) {
   return db
-    .select({ id: conversationMessages.id, runId: conversationMessages.assistantRunId })
+    .select({
+      id: conversationMessages.id,
+      runId: conversationMessages.assistantRunId,
+      content: conversationMessages.content,
+    })
     .from(conversationMessages)
     .where(
       and(
@@ -235,53 +252,56 @@ async function publicMessages(conversationId: ConversationId) {
     )
 }
 
+// File-level fixtures: both suites below share one visitor and one Quinn
+// service principal, and the second would otherwise run against rows the
+// first's teardown had already removed.
+beforeAll(async () => {
+  const [visitor] = await db
+    .insert(principal)
+    .values({ role: 'user', type: 'anonymous', createdAt: new Date() })
+    .returning()
+  visitorId = visitor.id
+  const [quinn] = await db
+    .insert(principal)
+    .values({
+      role: 'member',
+      type: 'service',
+      displayName: 'Quinn',
+      // Migration 0284's inactivity trigger identifies Quinn by exactly this
+      // marker, so the fixture provisions the principal the same way
+      // ensureAssistantPrincipal does. Without it the answer clock would
+      // silently never move and this suite would prove nothing about it.
+      serviceMetadata: { kind: 'integration', integrationType: 'assistant' },
+      createdAt: new Date(),
+    })
+    .returning()
+  quinnId = quinn.id
+  // No worker runs against the test database, so every `assistant-turn` row
+  // in it was left by an earlier run of this suite. They matter because
+  // `claimById` is FIFO per queue: one stale pending row makes every later
+  // case unclaimable for a reason that has nothing to do with what it tests.
+  await db.execute(sql`DELETE FROM job_queue WHERE queue = ${ASSISTANT_TURN_QUEUE}`)
+  // Same reasoning for the fixtures themselves: a suite that aborted in this
+  // hook never reached its cleanup, and its conversations would then be
+  // counted by every other suite that asserts whole-table state.
+  await db.delete(conversations).where(eq(conversations.subject, 'durable run fixture'))
+})
+
+afterEach(async () => {
+  await clearTurnJobs()
+})
+
+afterAll(async () => {
+  await clearTurnJobs()
+  for (const id of createdConversations) {
+    await db.delete(conversations).where(eq(conversations.id, id))
+  }
+  if (quinnId) await db.delete(principal).where(eq(principal.id, quinnId))
+  if (visitorId) await db.delete(principal).where(eq(principal.id, visitorId))
+  await secondClient.end({ timeout: 5 }).catch(() => {})
+})
+
 describe.skipIf(!available)('durable Quinn turns on real PostgreSQL', () => {
-  beforeAll(async () => {
-    const [visitor] = await db
-      .insert(principal)
-      .values({ role: 'user', type: 'anonymous', createdAt: new Date() })
-      .returning()
-    visitorId = visitor.id
-    const [quinn] = await db
-      .insert(principal)
-      .values({
-        role: 'member',
-        type: 'service',
-        displayName: 'Quinn',
-        // Migration 0284's inactivity trigger identifies Quinn by exactly this
-        // marker, so the fixture provisions the principal the same way
-        // ensureAssistantPrincipal does. Without it the answer clock would
-        // silently never move and this suite would prove nothing about it.
-        serviceMetadata: { kind: 'integration', integrationType: 'assistant' },
-        createdAt: new Date(),
-      })
-      .returning()
-    quinnId = quinn.id
-    // No worker runs against the test database, so every `assistant-turn` row
-    // in it was left by an earlier run of this suite. They matter because
-    // `claimById` is FIFO per queue: one stale pending row makes every later
-    // case unclaimable for a reason that has nothing to do with what it tests.
-    await db.execute(sql`DELETE FROM job_queue WHERE queue = ${ASSISTANT_TURN_QUEUE}`)
-    // Same reasoning for the fixtures themselves: a suite that aborted in this
-    // hook never reached its cleanup, and its conversations would then be
-    // counted by every other suite that asserts whole-table state.
-    await db.delete(conversations).where(eq(conversations.subject, 'durable run fixture'))
-  })
-
-  afterEach(async () => {
-    await clearTurnJobs()
-  })
-
-  afterAll(async () => {
-    await clearTurnJobs()
-    for (const id of createdConversations) {
-      await db.delete(conversations).where(eq(conversations.id, id))
-    }
-    if (quinnId) await db.delete(principal).where(eq(principal.id, quinnId))
-    if (visitorId) await db.delete(principal).where(eq(principal.id, visitorId))
-    await secondClient.end({ timeout: 5 }).catch(() => {})
-  })
-
   it('rolls the run and its job back with the message when intake fails', async () => {
     const conversationId = await newConversation()
     const before = await getAssistantRevision(conversationId)
@@ -554,5 +574,136 @@ describe.skipIf(!available)('durable Quinn turns on real PostgreSQL', () => {
       .from(assistantInvolvements)
       .where(eq(assistantInvolvements.conversationId, conversationId))
     expect(involvement.lastAssistantAnswerAt).not.toBeNull()
+  })
+})
+
+function answer(text: string) {
+  return {
+    status: 'answered' as const,
+    responseKind: 'answer' as const,
+    text,
+    answerType: 'draft_reply' as const,
+    citations: [],
+    internalSourced: false,
+    proposedActions: [],
+    identity: { name: 'Quinn', avatarUrl: null },
+    trace: {
+      promptVersion: 'test',
+      configRevision: 1,
+      role: 'customer_support',
+      appliedGuidance: [],
+      toolCalls: [],
+    },
+  }
+}
+
+async function seedTurn(): Promise<{ conversationId: ConversationId; runId: string }> {
+  const conversationId = await newConversation()
+  return db.transaction(async (tx) => {
+    const [message] = await tx
+      .insert(conversationMessages)
+      .values({
+        conversationId,
+        principalId: visitorId,
+        senderType: 'visitor',
+        content: 'where is my order?',
+      })
+      .returning()
+    const requested = await requestAssistantTurn(tx, {
+      conversationId,
+      triggerKey: customerMessageTriggerKey(conversationId, message.id),
+      triggerKind: 'customer_message',
+      surface: 'widget',
+      triggerMessageId: message.id,
+      requestedByPrincipalId: visitorId,
+    })
+    return { conversationId, runId: requested.run.id }
+  })
+}
+
+describe.skipIf(!available)('the durable turn executor on real PostgreSQL', () => {
+  afterEach(() => {
+    vi.mocked(runAssistantTurn).mockReset()
+  })
+
+  it('claims, freezes the behaviour, publishes once and settles the run', async () => {
+    const { conversationId, runId } = await seedTurn()
+    vi.mocked(runAssistantTurn).mockResolvedValue(
+      answer('Your order is on its way.') as unknown as Awaited<ReturnType<typeof runAssistantTurn>>
+    )
+
+    const job = await claimTurn(runId)
+    expect(await advanceAssistantRun(job)).toBe('published')
+
+    const replies = await publicMessages(conversationId)
+    expect(replies).toHaveLength(1)
+    expect(replies[0].content).toBe('Your order is on its way.')
+
+    const [run] = await db
+      .select()
+      .from(assistantRuns)
+      .where(eq(assistantRuns.id, runId as never))
+    expect(run.status).toBe('succeeded')
+    expect(run.outcome).toBe('answer')
+    expect(run.resultMessageId).toBe(replies[0].id)
+    // The behaviour the run executed under is recorded, not inferred later.
+    expect(run.snapshotId).not.toBeNull()
+    expect(run.jobLeaseToken).toBe(job.leaseToken)
+  })
+
+  it('publishes nothing when a teammate takes over mid-generation', async () => {
+    const { conversationId, runId } = await seedTurn()
+
+    // The barrier: the fake model blocks until the takeover has committed, so
+    // the interleaving under test is the real one rather than a lucky ordering.
+    let releaseModel: () => void = () => {}
+    const modelBlocked = new Promise<void>((resolve) => {
+      releaseModel = resolve
+    })
+    let generationStarted: () => void = () => {}
+    const started = new Promise<void>((resolve) => {
+      generationStarted = resolve
+    })
+    vi.mocked(runAssistantTurn).mockImplementation(async () => {
+      generationStarted()
+      await modelBlocked
+      return answer('Here is the answer nobody should see.') as unknown as Awaited<
+        ReturnType<typeof runAssistantTurn>
+      >
+    })
+
+    const job = await claimTurn(runId)
+    const turn = advanceAssistantRun(job)
+    await started
+    await invalidateAssistantWork(db, conversationId, 'human_reply')
+    releaseModel()
+
+    expect(await turn).toBe('fence:input_revision')
+    expect(await publicMessages(conversationId)).toHaveLength(0)
+    const [run] = await db
+      .select()
+      .from(assistantRuns)
+      .where(eq(assistantRuns.id, runId as never))
+    expect(run.status).toBe('superseded')
+    expect(run.disposition).toBe('fence:input_revision')
+    expect(run.resultMessageId).toBeNull()
+  })
+
+  it('records a suppressed run when the engine declines to speak', async () => {
+    const { conversationId, runId } = await seedTurn()
+    vi.mocked(runAssistantTurn).mockResolvedValue({
+      status: 'suppressed',
+      reason: 'silence',
+    } as unknown as Awaited<ReturnType<typeof runAssistantTurn>>)
+
+    const job = await claimTurn(runId)
+    expect(await advanceAssistantRun(job)).toBe('suppressed')
+    expect(await publicMessages(conversationId)).toHaveLength(0)
+    const [run] = await db
+      .select()
+      .from(assistantRuns)
+      .where(eq(assistantRuns.id, runId as never))
+    expect(run.status).toBe('suppressed')
+    expect(run.outcome).toBeNull()
   })
 })

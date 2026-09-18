@@ -1,5 +1,5 @@
 /**
- * Durable Quinn turns — intake, execution and fenced publication.
+ * Durable Quinn turns: intake, execution and fenced publication.
  *
  * Three seams, in the order a turn travels through them:
  *
@@ -121,7 +121,7 @@ export async function requestAssistantTurn(
   if (created) {
     // Same transaction as the run row: a failed job insert rolls the intent
     // back with it, so there is no accepted message whose mandatory work
-    // silently vanished. maxAttempts is explicit and is 1 — see the module doc.
+    // silently vanished. maxAttempts is explicit and is 1; see the module doc.
     await enqueueJob({
       queue: ASSISTANT_TURN_QUEUE,
       payload: {

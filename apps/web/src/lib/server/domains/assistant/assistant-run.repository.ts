@@ -1,5 +1,5 @@
 /**
- * Durable Quinn run records — the transaction-aware primitives.
+ * Durable Quinn run records: the transaction-aware primitives.
  *
  * ## One lock order, everywhere
  *
