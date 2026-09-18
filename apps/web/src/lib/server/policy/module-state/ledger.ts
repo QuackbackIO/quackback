@@ -536,6 +536,18 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'identical for every workspace.',
   },
   {
+    file: 'apps/web/src/lib/server/domains/assistant/assistant-execution-mode.ts',
+    name: 'warned',
+    category: 'process-lifetime',
+    reason:
+      'Warn-once latch for an unrecognised ASSISTANT_EXECUTION_MODE, the same shape as ' +
+      'process-role.ts warnedInvalid. The value it describes is read from process.env, which has ' +
+      'no workspace dimension: every workspace in this process sees the same mode and the same ' +
+      'typo. A cross-workspace hit therefore suppresses one duplicate log line and nothing else, ' +
+      'and the selector itself re-reads the environment on every call rather than caching the ' +
+      'answer, so no workspace can be served a mode another workspace resolved.',
+  },
+  {
     file: 'apps/web/src/lib/server/domains/conversation/conversation.email-imap-queue.ts',
     name: 'warnedPooled',
     category: 'process-lifetime',
