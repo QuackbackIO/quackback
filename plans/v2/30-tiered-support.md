@@ -2,7 +2,7 @@
 
 > **Status:** v2 (round 2 + staff review, `03-staff-review.md` + intranet revision, `04-intranet-deployment.md`) — supersedes
 > `plans/v1/tiered-support-helpdesk-plan.md`. Plan only; nothing is implemented.
-> **Depends on:** Foundations (fork migration lineage, `fork_settings`, shared seams F-1…F-8, F-10, F-12, `SEAMS.md`);
+> **Depends on:** Foundations (fork migration lineage, `fork_settings`, shared seams F-1…F-8, F-10, `SEAMS.md`; F-12 indirectly, because saving the intranet IdP needs it);
 > `10-rbac-persona-extensions.md` Phase 1a (custom roles on REST/MCP) and Phase 2 (team-scoped RBAC, `canInTeam`) (D-T4);
 > the `04-intranet-deployment.md` §3 baseline (SSO-only portal sign-in, IMAP inbound, SMTP outbound).
 > **Decisions applied:** D1, D2, D3, D4, D-T1 … D-T14, D-A8 (tier roll-up), D-A11 (account-action escalation), D-E1 … D-E4
@@ -136,22 +136,36 @@ OI-15 row (T-12). See the next table.
 - **Widened-actor precedent:** `ticketActionActor` (`action.executor.ts:130-136`) + `TICKET_ACTION_PERMISSIONS` (`workflow-actor-permissions.ts:44-47`).
 - **Routing settings:** `ConversationRoutingConfig { enabled, strategy }` (`settings.conversation-routing.ts:15-23`);
   `updateConversationRoutingFn` (`functions/settings.ts:936`, `settings.manage`).
-- **Passwordless auth (D-T12):** Better-Auth `magicLink` and `emailOTP` plugins (`lib/server/auth/index.ts:5,7`, configured at
-  `:647-700`). The portal's own sign-in is `POST /api/auth/portal-signin` (`routes/api/auth/portal-signin.ts:85-106`: it rate-limits,
-  then calls `requestEmailSignin`). `requestEmailSignin` (`auth/email-signin.ts:36`) sends one email containing both a link and a
-  6-digit code. It first checks `isAccountCreationAllowed(email, 'portal')` (`:66`; `signup-policy.ts:191`) and does not
-  enumerate: a refused address gets a "sign-up not allowed" email instead.
-- **Private-portal gate:** `evaluatePortalAccess` (`domains/settings/portal-access.ts:149-213`). On a private portal it grants
-  access to team members, a verified email on an allowed domain, an accepted invite, an allowed segment, or a widget handoff.
-  Everyone else is `unauthorized`. It is enforced for the whole `_portal` layout (`routes/_portal.tsx:121`) and again in the
-  visitor server functions (`functions/conversation.ts:261-266` `assertVisitorConversationAccess`; `runGetMyConversations`
-  `:582-586` returns empty when access is not granted).
-- **Requester-scoped reads:** `listConversationsForVisitor(principalId, …)` (`conversation.query`, used at `functions/conversation.ts:590`),
-  `listMyTicketSummaries` (`requester.service.ts:239`), and `loadOwnedTicketOr404` (`:114-118`, requires `requesterPrincipalId === me`).
-- **Email-only requesters:** a cold inbound email with no matching user becomes an **anonymous lead principal with no user row**
-  that carries `contactEmail` (`conversation.email-cold-inbound.ts:99-139`; later mail reuses it via `type='anonymous' AND
-  user_id IS NULL AND contact_email=…`, `:113-121`, which is what keeps a block on a cold sender). A weak-DMARC conversation carries
-  `customAttributes.unverifiedSender` (`:229`). Signing in later creates a separate user principal. No automatic merge exists
+- **SSO sign-in (D-E3):** the company IdP is a generic OIDC provider with JIT provisioning (`build-oauth-configs.ts:195-260`;
+  `autoCreateUsers`, `04-…` §3). The adapter sets `emailVerified` from the IdP's `email_verified` claim, strictly coerced
+  (`build-oauth-configs.ts:290-317`, `map-profile-claims.ts:45-50`). `findProviderForDomainEmail` (`auth/provider-ids.ts:100`) returns the
+  provider that owns an address's **verified** domain. The Better-Auth after-hook `hooksAfter` (`auth/hooks.ts:1556`) runs on
+  every sign-in. On the OIDC callback paths (`SESSION_CREATING_CALLBACK_PATHS`, `:148`) it loads the providers and runs
+  auto-provisioning (`:1618`). There is no fork extension point in it. The principal already exists by then, because
+  `databaseHooks.user.create.after` creates it (`auth/index.ts:587`).
+- **Portal access (D-E3):** `evaluatePortalAccess` grants everyone on a **public** portal (`domains/settings/portal-access.ts:151-152`).
+  The whole `_portal` layout (`routes/_portal.tsx:121`) and the visitor server functions (`runGetMyConversations`,
+  `functions/conversation.ts:584`) therefore let every signed-in employee through. The layout loader already builds the
+  branding (theme CSS, custom CSS, fonts; `routes/_portal.tsx:218-259`) and renders `PortalHeader` (`:381`). The portal's sign-in
+  prompt is `useAuthPopoverSafe` (used by `routes/_portal/support.index.tsx:70`). It offers only the enabled methods, which is SSO
+  alone under the baseline.
+- **Requester surfaces:** `getMyConversationsFn` (`functions/conversation.ts:616`) returns the caller's conversations
+  (`listConversationsForVisitor`), each with `csatRating`, plus a `linkedTickets` stage map (`getRequesterTicketSummaries`,
+  `:601-607`). `createMyTicket` (`requester.service.ts:305`) always creates a backing conversation, so every requester ticket has
+  a `/support/$conversationId` thread. There is no standalone portal ticket page (`notification-target.ts:62-67`).
+  `createMyTicketFn`, `getMyTicketFormFn` and `submitCsatFn` are already END_USER-classified (`classifications.ts:153,166,172`).
+- **Portal nav:** `portalConfig.nav.items` accepts admin `link` items with an absolute http(s) URL, a label and `newTab`
+  (`settings.types.ts:288-313`; rendered by `resolvePortalNavItems`, `components/public/portal-header-nav.ts:116-125`).
+- **Ask AI:** `/api/widget/kb-ask` checks the `helpCenter` flag (`kb-ask.ts:143`) and needs no identity. It resolves the viewer
+  from the widget session, or `ANONYMOUS_ACTOR`, and answers from `audience: 'public'` articles only (`:209-212`;
+  `widget/widget-viewer.ts:16-35`).
+- **Email-only requesters:** inbound mail arrives over IMAP from the internal mail server (`conversation.email-imap.ts`, which
+  parses with the shared `parseRawEmail`, which reads `Authentication-Results`, `conversation.email-inbound.ts:351`). A cold email
+  attaches to an existing user **only** under a DMARC pass (`conversation.email-cold-inbound.ts:87-99`). Otherwise it becomes an
+  **anonymous lead principal with no user row** that carries `contactEmail` (`:131-139`; later mail reuses it via
+  `type='anonymous' AND user_id IS NULL AND contact_email=…`, `:113-121`, which is what keeps a block on a cold sender). Mail with
+  no `Authentication-Results` header is `unverified` (`email-auth.ts:268-274`). An unverified conversation carries
+  `customAttributes.unverifiedSender` (`:229`). The first SSO sign-in creates a separate user principal. No automatic merge exists
   for this case, and the admin merge `mergeLeadIntoUser` **cannot** be used: it rejects a lead with no `userId`
   (`domains/users/user.merge.ts:61`) and tears down a user identity (`:85`). The registry itself, `repointPrincipalActivity(tx,
   from, to)` (`principals/principal-repoint.ts:552`), is exported and transaction-scoped. It transfers `blocked_at` fill-if-empty
@@ -404,68 +418,82 @@ return immediately after one flag read, so upstream behaviour is unchanged.
 
 ### 4.10 End-user hub (D-T11 ✅ option B)
 
-**Prototype:** https://claude.ai/artifact/XAn1u4GewieesuMGHsua43
+**Prototype:** https://claude.ai/artifact/XAn1u4GewieesuMGHsua43 (a planning reference, not a runtime dependency)
 
-**Shape.** A new hub landing page, plus a widget Home section. Both link into the existing upstream pages, which stay unchanged.
-The landing runs one chain, top to bottom:
+**Shape.** A new hub landing page inside the portal, plus a widget Home section. Both link into the existing upstream pages,
+which stay unchanged. The landing runs one chain, top to bottom:
 
 | # | Section | Content | Backed by (no upstream edit) |
 | --- | --- | --- | --- |
-| 0 | Announcements strip | 60's banner | `<ForkAnnouncementsBanner/>` (fork component from 60), mounted in the hub layout. There is no N-1 dependency because the hub is outside `_portal`. |
-| 1 | Find an answer | KB search, Ask AI, help-center collections | Upstream `components/help-center/help-center-search.tsx` and `ask-ai.tsx` imported as-is. Collection cards link to `/hc/$locale/collections/$idSlug`. **Shown only when the viewer has portal access** (OI-15 🟡). `/hc` is behind the `_portal` gate. Ask AI posts to `/api/widget/kb-ask`, which checks only the `helpCenter` flag (`kb-ask.ts:141-145`). Hiding the section is **not** a control, so seam T-12 adds the backend gate (§4.11 step 8). **Deferred capability:** ungranted requesters on private portals get no self-service answers in v1. |
-| 2 | Still need help | Start a chat · Submit a request | "Start a chat" links to `/support` (granted viewers) or opens the widget messenger. "Submit a request" uses a hub form → `createMyTicket` (`requester.service.ts:305`), so ungranted passwordless requesters can file too. |
-| 3 | Track | My requests, including chats, with stage chips and "View all" | `listConversationsForVisitor(me)` + `getRequesterTicketSummaries` / `listMyTicketSummaries` with `StageChip`. Rows open `/hub/requests/$id` (hub detail and reply, §4.11). "View all" goes to `/hub/requests`. Granted viewers also get a link to `/support`. |
-| 4 | Rate | CSAT for the most recently resolved request | The upstream CSAT submission domain call (as `submitCsatFn`, `functions/conversation.ts:808`) behind a hub function (§4.11). |
+| 0 | Announcements strip | 60's banner | Inherited from the `_portal` layout, where 60's seam N-1 mounts `<ForkAnnouncementsBanner/>`. The hub does not mount it a second time. Until N-1 ships there is no strip. |
+| 1 | Find an answer | KB search, Ask AI, help-center collections | Upstream `components/help-center/help-center-search.tsx` and `ask-ai.tsx` imported as-is. Collection cards link to `/hc/$locale/collections/$idSlug`. Shown to **every** viewer, signed in or not: the portal is public inside the intranet (D-E3), and Ask AI (`/api/widget/kb-ask`) needs no identity (§3). |
+| 2 | Still need help | Start a chat · Submit a request | "Start a chat" links to `/support`. "Submit a request" is a hub form that calls upstream `getMyTicketFormFn` / `createMyTicketFn` (`functions/tickets.ts:850,1100`). A signed-out viewer gets the portal sign-in prompt (SSO) first. |
+| 3 | Track | My requests, including chats, with stage chips and "View all" | Upstream `getMyConversationsFn` (`functions/conversation.ts:616`): conversations plus the `linkedTickets` stage map, rendered with `StageChip`. Rows open `/support/$conversationId`, and "View all" opens `/support`. Every requester ticket has a backing conversation (§3), so this covers tickets too. |
+| 4 | Rate | CSAT for the most recently resolved request | The first closed row from section 3 with `csatRating` null, submitted with upstream `submitCsatFn` (`functions/conversation.ts:808`). |
 
-**Routes.** `routes/_fork-hub.tsx` (a pathless layout) plus `routes/_fork-hub/hub.tsx`, `hub.requests.tsx` and
-`hub.requests.$id.tsx`, giving URLs `/hub`, `/hub/requests` and `/hub/requests/$id`. New route files never conflict because
-`routeTree.gen.ts` is gitignored. The hub sits **outside** `_portal` because the `_portal` gate (`routes/_portal.tsx:121`) would
-wall off a passwordless requester with no portal grant on a private portal (§4.11). The layout composes the portal look by
-importing `PortalHeader` (`components/public/portal-header.tsx:63`) and the portal intl/theme helpers (no seam).
+The hub adds **no** server read or write of its own apart from the claim trigger (§4.11). Every portal and visitor check
+(enabled flags, ownership, `isBlocked`) is upstream's, because the hub calls upstream's functions.
 
-**Branding (D-X1, conventions §11).** The hub must look like the rest of that app's portal and change with it. The
-`_fork-hub` layout loader builds exactly what the portal loader builds (`routes/_portal.tsx:217-260`):
-`generateWorkspaceThemeCSS(brandingConfig, visualTheme)`, `customCss` (applied after the theme), `themeMode`, logo,
-favicon, and fonts via `PortalBrandingFontLoader` / `readFontSans`. All hub and widget-section components use only
-theme tokens (`bg-background`, `bg-card`, `text-foreground`, `bg-primary`, `border-border`, `rounded-[var(--radius)]`,
-…) and upstream `components/ui/*` primitives. The prototype's colours are illustrative. Validation: change an app's
-primary colour, font and custom CSS once in admin branding and confirm `/hub`, the widget Home section and `/support`
-all change together, in light and dark mode.
+**Route.** `routes/_portal/hub.tsx` (URL `/hub`), a child of the `_portal` layout. New route files never conflict, because
+`routeTree.gen.ts` is gitignored. The hub used to sit outside `_portal` to avoid the private-portal gate. Portals are now public
+(D-E3), so the gate grants everyone (`portal-access.ts:151-152`), and living inside the layout removes the fork layout, its
+copy of the portal loader and the separate banner mount.
+
+**Branding (D-X1, conventions §11).** The hub inherits the portal layout's branding, so it cannot drift: theme CSS, custom CSS,
+`themeMode`, logo, favicon, fonts and header all come from `routes/_portal.tsx:218-259,372-381`. All hub and widget-section
+components use only theme tokens (`bg-background`, `bg-card`, `text-foreground`, `bg-primary`, `border-border`,
+`rounded-[var(--radius)]`, …) and upstream `components/ui/*` primitives. The prototype's colours are illustrative. Validation:
+change an app's primary colour, font and custom CSS once in admin branding and confirm that `/hub`, the widget Home section and
+`/support` all change together, in light and dark mode.
+
+**Signed-out state.** A viewer who has passed the edge SSO but has no Quackback session sees sections 0 and 1. Sections 2–4 show a
+"Sign in to see your requests" card that opens the portal's standard sign-in prompt (`useAuthPopoverSafe`). Under the baseline
+that prompt offers only the company SSO (D-E3). The hub has no sign-in UI of its own.
 
 **Entry points.**
 
-- The portal header gets a "Help hub" link (T-6).
+- **Portal nav (config, no seam).** The hub settings offer "Add Help hub to portal nav". This reads `portalConfig.nav`, appends
+  a `link` item (`id: 'fork-hub'`, `url: <portal base URL>/hub`, `newTab: false`, label "Help hub") and saves it through
+  `updatePortalConfig` (`settings.service.ts:629`). The admin can reorder, relabel or hide it in the upstream nav editor.
+  Turning the hub off offers to remove the item. Link labels are single-language plain text (`settings.types.ts:294-297`, OI-20 🟡).
 - The widget Home (`widget-overview.tsx`) gets a section after the recent-tickets card (T-5). It shows "Find an answer" (opens
-  the widget Help tab), "Still need help" (opens Messages / new ticket), and "Your requests" (opens the Tickets tab, or `/hub` in
-  a new tab for anonymous widget visitors). The section is lean, with no Tiptap, to respect the widget bundle budget.
-- Phase 8 stage emails (deferred) will link to `/hub/requests/$id`.
+  the widget Help tab), "Still need help" (opens Messages / new ticket), "Your requests" (opens the Tickets tab) and "Open help
+  hub" (`/hub` in a new tab). The section is lean, with no Tiptap, to respect the widget bundle budget. Widget visitors are
+  identified employees (`hmacRequired`, `04-…` §3), so there is no anonymous-visitor branch.
+- Phase 8 stage emails (deferred) will link to the request's `/support/$conversationId` thread on the intranet portal URL.
 
 **Rejected alternative (A):** replace `/support`, `/hc` and the widget tabs with one hub. That meant about 10 seams in hot
-portal and widget files, versus 4 hub seams (T-3…T-6) plus T-12 for B.
+portal and widget files, versus 3 hub seams (T-4, T-5, T-13) for B.
 
-### 4.11 Passwordless requester access (D-T12, private portals D-N5)
+### 4.11 Requester identity and the email-only claim (D-T12, D-E1, D-E3, D-E4)
 
-**Goal:** a signed-out visitor, or someone who has only ever emailed support, can open `/hub`, prove ownership of their email,
-and see **only their own** conversations and tickets. They get no other portal access, not even on private portals.
+**Goal:** an employee who emailed support before they ever signed in to Quackback sees those requests as their own, in `/hub`,
+`/support` and the widget, as soon as they sign in with SSO.
 
-1. **Sign-in.** The hub's signed-out state is an email form that posts to upstream `POST /api/auth/portal-signin` with
-   `callbackURL=/hub` (`portal-signin.ts:85-106`). That route applies rate limiting and does not enumerate addresses. The
-   requester clicks the link or enters the 6-digit code (Better-Auth `magicLink` / `emailOTP` `sign-in`). The resulting session is a
-   normal portal user (`role: 'user'`) whose address is verified by inbox proof. **The Phase 7 gate asserts `emailVerified=true`
-   after both paths.**
-2. **Closed sign-up.** If `openSignup` is false for the portal (likely on private portals), `isAccountCreationAllowed` refuses an
-   address that has no user row. Its exemptions are an existing user, a pending invite, an allowed domain, or bootstrap
-   (`signup-policy.ts:191-250`). An email-only requester is a lead with no user row, so they would receive "sign-up not allowed".
-   **Seam T-3** adds one exemption line:
-   `if (await forkIsKnownRequester(normalised)) return true`.
-   It is true when an anonymous lead principal with `userId IS NULL` and `contactEmail = email` exists and owns at least one
-   conversation or ticket. The same no-enumeration property holds, because the caller's behaviour (one email) is unchanged.
+1. **Sign-in.** SSO only (D-E3), through the portal's existing prompt. The first sign-in creates the user and its principal by
+   JIT provisioning (`autoCreateUsers`, `role: 'user'`). There is no magic link, email code or fork sign-up path.
+2. **Account creation.** JIT provisioning creates every employee's account, so the closed-sign-up exemption for email-only
+   requesters (old seam T-3) is **not needed** and is removed.
 3. **Claim leads (T1).** `mergeLeadIntoUser` is **not** used. It rejects leads without a `userId` (`user.merge.ts:61`), and
-   cold-email leads never have one. Instead, `claimRequesterLeads(session)` (`lib/server/fork/hub/lead-claim.service.ts`) is called
-   by `claimMyRequesterLeadsFn` on every authenticated hub load and right after both the OTP and magic-link sign-ins:
-   - **Preconditions.** The session principal is `type='user'`, `role='user'` (never a teammate), and not anonymous.
-     `user.emailVerified = true` (inbox proof). The claim address is the session user's own `user.email`, normalized the same way
-     as `normalizeSenderAddress`. It is never taken from input.
+   cold-email leads never have one. `claimRequesterLeads(userId, trigger)` (`lib/server/fork/hub/lead-claim.service.ts`) runs:
+   - **on SSO sign-in**, from `forkAfterSignIn(ctx, providers, registeredOidcIds)`. Seam **T-13** calls it in `hooksAfter`
+     (`auth/hooks.ts:1556`) right after `handleAutoProvisionAfter` (`:1618`), only on `SESSION_CREATING_CALLBACK_PATHS`. It is
+     wrapped in try/catch and logs: a failed claim never fails a sign-in;
+   - **on each authenticated hub load**, through `claimMyRequesterLeadsFn`. Mail that fails DMARC keeps creating leads after the
+     first sign-in (`conversation.email-cold-inbound.ts:87-99`), and SSO sessions are long-lived, so the hub picks up new leads
+     between sign-ins.
+
+   The rules:
+   - **Preconditions.** The principal is `type='user'`, `role='user'` (never a teammate), and not anonymous. The claim address is
+     the user's own `user.email`, normalized the same way as `normalizeSenderAddress`. It is never taken from input. The address
+     must be **IdP-verified**, which means one of:
+     - `user.emailVerified = true` (the IdP asserted `email_verified`); or
+     - the user signed in through, or has an `account` row for, the provider that `findProviderForDomainEmail(user.email)` returns
+       for the address's **verified** domain (`provider-ids.ts:100`). That IdP is authoritative for the company domain even if it
+       does not release `email_verified` (OI-19 🟡).
+
+     A placeholder address (`allowMissingEmail`) is never verified (`build-oauth-configs.ts:290-293`) and is never on a verified
+     domain, so it never claims.
    - **Select and lock.** In one transaction: `SELECT … FROM principal WHERE type='anonymous' AND user_id IS NULL AND
      contact_email = $email ORDER BY id FOR UPDATE`. Leads that carry a `userId` (widget visitors with a pre-chat email, which is an
      unverified claim) are **never** included, matching the security clause at `conversation.email-cold-inbound.ts:104-121`.
@@ -476,37 +504,25 @@ and see **only their own** conversations and tickets. They get no other portal a
    - **Teardown (principal-only).** For an **unblocked** lead: `DELETE FROM principal WHERE id=$lead AND type='anonymous' AND
      user_id IS NULL`. It must delete exactly one row, or the transaction rolls back. There is no user or session to delete.
      A **blocked** lead (`blocked_at IS NOT NULL`) is **kept** as an activity-free block anchor. The registry has already copied the
-     block onto the user (`blocked_at` fill-if-empty, `:420-428`). Keeping the lead means later weak-DMARC mail from the address
-     still reuses a blocked lead (`:113-121`) instead of minting a fresh, unblocked one. `forkIsKnownRequester` ignores anchors
-     (they own no activity). A later claim re-points only new activity.
+     block onto the user (`blocked_at` fill-if-empty, `:420-428`). Keeping the lead means later unverified mail from the address
+     still reuses a blocked lead (`:113-121`) instead of minting a fresh, unblocked one. A later claim re-points only new activity.
    - **Provenance.** `customAttributes.unverifiedSender` lives on the conversation row, so the "unverified sender" badge stays
-     after re-point (OI-14 🟡: weak-DMARC leads are claimed by default).
-   - **Concurrency and idempotency.** Two tabs claiming at once serialize on the row locks. The second finds nothing, or only
-     anchors with no activity. Re-running is a no-op. A cold email that arrives mid-claim either lands before the lock (and is
-     claimed) or reuses or creates a lead afterwards (and is claimed on the next hub load).
+     after re-point, exactly as upstream computed it (OI-14 🟡: unverified leads are claimed by default).
+   - **Concurrency and idempotency.** A sign-in and a hub load (or two tabs) claiming at once serialize on the row locks. The
+     second finds nothing, or only anchors with no activity. Re-running is a no-op. A cold email that arrives mid-claim either
+     lands before the lock (and is claimed) or reuses or creates a lead afterwards (and is claimed on the next sign-in or hub load).
    - **Downstream.** 40's cold-email requesters become targets once claimed (their ticket now has a user principal).
-4. **Scope, not portal access.** Hub server functions (`lib/server/fork/hub/functions.ts`) use bare `requireAuth()` and reject
-   team members and anonymous principals. They **do not** call `resolvePortalAccessForRequest`. Instead they call the upstream
-   domain reads that are already scoped to the caller: `listConversationsForVisitor(me)`, `listMyTicketSummaries`, and the
-   `loadOwnedTicketOr404` / visitor-conversation ownership checks. Writes (reply, CSAT, new ticket) call the same domain entry points
-   the upstream visitor functions call **after** their portal gate. They also keep upstream's other visitor checks:
-   conversations/tickets enabled, and `isBlocked` (as in `functions/conversation.ts:275-281`). A claimed blocked lead makes the user
-   blocked, so the user can **read** their own requests but cannot reply, file or rate (🟡 default). The requester therefore reaches their
-   own requests and nothing else. `evaluatePortalAccess` is **unchanged**, so `/support`, `/hc`, the boards and the other `_portal`
-   routes still show the private-portal wall to this user.
-5. **Authz matrix.** Bare `requireAuth()` gates need `END_USER` classifications (upstream precedent:
-   `classifications.ts:166,172` for `createMyTicketFn` / `getMyTicketFormFn`). Entries go in the fork list behind shared
-   seam **F-10** (`...FORK_CLASSIFICATIONS`). This is not an own seam.
-6. **Widget.** Widget sessions (`scope === 'widget'`) already bypass the portal gate upstream, so their requests show in the
-   widget. The Home section links anonymous widget visitors to `/hub`, which opens in a new tab on the portal domain.
-7. **Drift guard.** A fork test mirrors the upstream visitor functions' check list (enabled flags, `isBlocked`, ownership). It
-   fails if upstream adds a check to `runSendConversationMessage` / `runGetMyConversation` that the hub does not replicate.
-8. **Knowledge base and Ask AI.** `/hc` stays behind the private-portal gate. For requesters without a grant, the hub hides
-   "Find an answer" (OI-15 🟡). Upstream `/api/widget/kb-ask` does not check portal access, so hiding the section is not
-   enough. **Seam T-12** adds `if (!(await forkKbAskAllowed(request))) return widgetJsonError(404, …)` after the `helpCenter`
-   check in `handleKbAsk` (`kb-ask.ts:141-145`). On a **private** portal it allows a widget session, which already bypasses the
-   portal gate upstream (step 6), or a request whose `resolvePortalAccessForRequest` grants access. Everyone else gets 404. On a
-   public portal nothing changes.
+4. **Scope.** Once claimed, the requests belong to the user's principal. `/support`, the widget and the hub all read them through
+   upstream's own ownership-scoped functions (§4.10). The fork adds no requester read path and no second authorization rule. A
+   claimed blocked lead makes the user blocked, so upstream's `isBlocked` checks let them **read** their requests but not reply,
+   file or rate (OI-18 🟡).
+5. **Authz matrix.** `claimMyRequesterLeadsFn` uses bare `requireAuth()` and rejects teammates and anonymous principals. It needs
+   an `END_USER` classification (precedent: `classifications.ts:166,172`), which goes in the fork list behind shared seam
+   **F-10**. This is not an own seam.
+6. **Widget.** Widget sessions are identified employees (`hmacRequired`). Claimed requests show in the widget Tickets and
+   Messages tabs through upstream's functions.
+7. **Knowledge base and Ask AI.** `/hc` and Ask AI are open to every portal viewer (D-E3). The edge SSO keeps out anyone who is
+   not an employee (D-E1). No fork gate is needed (old seam T-12 removed).
 
 ### 4.12 Tier agent assignment (for 10's `assignTierAgentFn` and 20's `sync-members`)
 
@@ -603,7 +619,7 @@ Readers (timeline, T-1, write guard, reports) consider only `state IN ('applied'
 | `ticket.escalate` (new, F-7 block) | `support` | ✓ (computed) | **✓ workspace-wide (D-T7)** — not in the `WORKSPACE_ADMIN_PERMISSIONS` exclusion | ✗ | Tier 1/2/3 Agent: **team-scoped** to their tier team (D-T4). T3 needs it too, for de-escalation (D-T8). | `escalateTicketFn` → `assertCanEscalate` (`canInTeam` + roll-up) |
 | `team.manage` (existing) | | ✓ | ✗ | ✗ | ✗ | Tiers settings functions |
 | `ticket.view` / `ticket.assign` / `analytics.view` (existing) | | | | | | fn gate / override target / report |
-| — (bare `requireAuth()`, END_USER) | | | | | | Hub functions: requester-only, own items (§4.11) |
+| — (bare `requireAuth()`, END_USER) | | | | | | `claimMyRequesterLeadsFn`: requester-only, claims the caller's own address (§4.11). Hub reads and writes use upstream's END_USER visitor functions. |
 
 - **Gate shape (OI-2 resolved by 10 §4.4).** Team-scoped rows are invisible to upstream resolution, so `requireAuth({ permission:
   'ticket.escalate' })` would reject a tier agent. `escalateTicketFn` therefore gates on `requireAuth({ permission: ticket.view })`,
@@ -622,7 +638,8 @@ Readers (timeline, T-1, write guard, reports) consider only `state IN ('applied'
 
 IDs follow `SEAMS.md` (X-6). T-7… is reserved there for the deferred later-phase seams, so the new seams start at T-8. The
 staff review asked for the seams that correctness needs rather than a small count. Tiered support now has **6 core seams
-(Phases 1–5: T-1, T-2, T-8…T-11)** and **5 hub seams (Phase 7: T-3…T-6, T-12)**. Before the review the counts were 2 and 4.
+(Phases 1–5: T-1, T-2, T-8…T-11)** and **3 hub seams (Phase 7: T-4, T-5, T-13)**. Before the staff review the counts were 2 and 4;
+after it, 6 and 5. The intranet revision (D-E1…D-E4) removed T-3, T-6 and T-12 and added T-13.
 
 **Core (Phases 1–5).**
 
@@ -636,26 +653,29 @@ staff review asked for the seams that correctness needs rather than a small coun
 | T-11 | `apps/web/src/lib/server/domains/settings/settings.conversation-routing.ts` (—) | In `updateConversationRouting` (`:75`): `if (input.enabled) await forkAssertRoutingMayEnable()` before the write, plus `await forkVerifyRoutingAfterWrite()` after it | T3/D-T5: routing must be **enforced** off while tiers are on; all writers go through this domain function | 3 | Re-add around the settings write. Test: `routing-guard.test.ts` |
 
 **Shared, not counted:** `ticket.escalate` in the F-7 block; the Tiers page through F-4; MCP tool (6c) through F-3; re-point
-exemptions through F-5; migrations through F-1/F-2; the recovery and intake jobs through F-8; hub END_USER classifications
-through F-10.
+exemptions through F-5; migrations through F-1/F-2; the recovery and intake jobs through F-8; the END_USER classification for
+`claimMyRequesterLeadsFn` through F-10. This plan's fork code makes no outbound HTTP call, so it does not call F-12 itself (conventions §11a).
 
 **Upgrade watch-list (review practice).** T-8 and T-9 make every upstream assignment writer a fork contract. On each upstream
 sync, grep for new writers of `tickets.assignee_team_id` / `conversations.assigned_team_id` and new callers of
 `assignTicket`/`assignTeam`. Also re-check the fork primitives against the columns they update. A new writer that skips the hooks
 breaks the invariant, and `assignment-hooks.test.ts` includes a grep-based guard that fails when one appears.
 
-**Phase 7 hub (D-T11 B): 5 seams.**
+**Phase 7 hub (D-T11 B): 3 seams.**
 
 | # | Upstream file (90-d commits) | Change (one-liner) | Why | Phase | Re-apply |
 | --- | --- | --- | --- | --- | --- |
-| T-3 | `apps/web/src/lib/server/auth/signup-policy.ts` (2) | `if (await forkIsKnownRequester(normalised)) return true` in `isAccountCreationAllowed` before the invite lookup | D-T12: an email-only requester has no user row, so closed sign-up would refuse them | 7a | Re-add before the invitation branch |
 | T-4 | `apps/web/src/locales/*.json` (9 files, count as one) | Append `portal.forkHub.*` keys | Portal i18n coverage test | 7b | Re-append; take upstream's version first |
 | T-5 | `apps/web/src/components/widget/widget-overview.tsx` (14) | `<ForkHubHomeSection …/>` after `<WidgetRecentTicketsCard/>` (`:368`) | B: widget Home section | 7b | Place it after the recent-tickets card. Watch the widget bundle budget. |
-| T-6 | `apps/web/src/components/public/portal-header-nav.ts` (5) | "Help hub" item → `/hub` | Hub discoverability from the portal | 7b | Re-add to the item map/order |
-| T-12 | `apps/web/src/routes/api/widget/kb-ask.ts` (—) | `if (!(await forkKbAskAllowed(request))) return widgetJsonError(404, …)` after the `helpCenter` check in `handleKbAsk` | OI-15/D-N5: hiding "Find an answer" does not protect Ask AI on private portals | 7b | Re-add after the flag check |
+| T-13 | `apps/web/src/lib/server/auth/hooks.ts` (27) | `await forkAfterSignIn(ctx, providers, registeredOidcIds)` in `hooksAfter` right after `handleAutoProvisionAfter` (`:1618`), plus an import. The fork function returns at once off the OIDC callback paths and never throws. | D-E4/T1: employees who emailed before their first SSO sign-in get their requests on sign-in. Upstream has no post-sign-in extension point. | 7a | Re-add after the auto-provision call. Test: `fork/hub/__tests__/lead-claim.sso.test.ts` (the claim runs after an OIDC callback and not after other paths) |
 
-T-12 also closes a gap that existed before the fork: Ask AI on private portals ignores portal access for every caller. It ships
-with 7b at the latest.
+**Removed by the intranet revision (not to be implemented):**
+
+| # | Was | Why removed |
+| --- | --- | --- |
+| T-3 | `signup-policy.ts`: exempt known email-only requesters from closed sign-up | SSO JIT provisioning creates every employee's account. No email sign-in path is left (D-E3). |
+| T-6 | `portal-header-nav.ts`: built-in "Help hub" item | Upstream `portalConfig.nav` link items cover it as configuration (§4.10, OI-20). |
+| T-12 | `kb-ask.ts`: private-portal gate on Ask AI | Portals are public inside the intranet (D-E3). The edge SSO is the perimeter (D-E1). |
 
 **Later phases (deferred; they do not deliver automated escalation or stage email until they ship):**
 
@@ -679,9 +699,9 @@ Generated files are regenerated, never merged: `permissions.ts`, `MATRIX.md`, `p
 | 4 Queues | Seeded per-tier views | T2 agents see exactly T2 items |
 | 5 Reporting | Timeline + report from the ledger | Reconciles with a fixture that includes ordinary assignments and conversation-only moves before conversion. A carried SLA breach is attributed to the tier at breach time. |
 | 6 Automation (**deferred**; until it ships, no automated escalation exists) | Up-only `escalate` action (+ macro, + MCP via F-3) → `escalateTicket` with `source='workflow'` and a key derived from the workflow run and step | `sla.approaching_breach` → escalate is audited and the SLA carries. No action can move down. Seam count re-verified. |
-| 7a Requester access | Hub layout outside `_portal`; passwordless sign-in; T-3; lead claim service; hub functions (F-10) | On a **private** portal with closed sign-up, an email-only requester signs in by link **and** by code, sees their prior emailed requests (including weak-DMARC ones, with the badge), can reply, and gets the wall on `/support`, `/hc` and boards. Another user's ticket id returns 404. A blocked lead's user cannot send, and later weak-DMARC mail from the address still lands on a blocked lead. `emailVerified=true`. The drift-guard test passes. |
-| 7b Hub landing | `/hub` chain (announcements → find an answer → still need help → track → rate) per the prototype; widget Home section (T-5); header link (T-6); T-4 locales; Ask AI gate (T-12) | Walkthrough in the widget and portal as a granted user (all sections) and as an ungranted passwordless requester (no "Find an answer"; track, submit and rate work; a direct POST to `/api/widget/kb-ask` returns 404 on a private portal). Widget bundle budget and i18n coverage pass. |
-| 8 Stage email (**deferred**; until it ships, non-close stage changes send no email) | Requester email on non-close public stage crossings, with a link to `/hub/requests/$id` | An email for each crossing; none for the same stage or a null stage |
+| 7a Requester access | Lead claim service; SSO sign-in trigger (T-13); `claimMyRequesterLeadsFn` (F-10); IdP-verification rule (OI-19) | An employee who emailed support before their first SSO sign-in signs in through the company IdP (JIT) and immediately sees those requests in `/support` and the widget. Unverified ones (including mail with no `Authentication-Results`) keep the badge. They can reply. A mail that arrives after sign-in and fails DMARC is claimed on the next hub load. A blocked lead's user can read but not send, and later unverified mail from the address still lands on the blocked anchor. A user whose address is neither IdP-asserted verified nor on the IdP's verified domain claims nothing. A teammate claims nothing. A failing claim does not fail the sign-in. |
+| 7b Hub landing | `routes/_portal/hub.tsx` chain (announcements → find an answer → still need help → track → rate) per the prototype; widget Home section (T-5); "Add Help hub to portal nav" action; T-4 locales | Walkthrough signed out (sections 0–1 plus the SSO sign-in card), signed in (all sections; rows open `/support/$conversationId`), and from the widget. The hub shows the portal header, the N-1 banner and the app's branding with no hub-specific loader. The nav action adds a working link and the upstream nav editor can reorder or hide it. Widget bundle budget and i18n coverage pass. |
+| 8 Stage email (**deferred**; until it ships, non-close stage changes send no email) | Requester email on non-close public stage crossings, sent through the configured SMTP transport (internal relay or SES SMTP VPC endpoint), with a link to the request's `/support/$conversationId` thread on the intranet portal URL | An email for each crossing; none for the same stage or a null stage. No link or image in the email points outside the intranet. |
 
 ## 9. Testing strategy
 
@@ -719,27 +739,27 @@ Generated files are regenerated, never merged: `permissions.ts`, `MATRIX.md`, `p
 - **Policy:** T-1 predicate (escalator + watching ✓; unwatched ✗; other watcher ✗; `view_all` path unchanged; `claimed`/`rejected`
   operation rows grant nothing). Upstream `policy/__tests__` re-run.
 - **Hub/auth:**
-  - `forkIsKnownRequester`: a lead with activity ✓; a lead with none or a block anchor ✗; an address with a user row → unchanged path.
-  - No-enumeration: identical response and email count for known, unknown and refused addresses.
-  - **Lead claim (mandatory, T1), through both the OTP and the magic-link sign-in:**
+  - **Lead claim (mandatory, T1), through both triggers (the SSO callback via T-13, and the hub load):**
     - a standalone lead (no user row) is re-pointed and deleted;
-    - a weak-DMARC lead keeps `unverifiedSender`;
-    - a blocked lead → the user is blocked and the anchor is kept, and a new weak-DMARC mail reuses the blocked anchor;
+    - an unverified lead (weak DMARC, or no `Authentication-Results` header) keeps `unverifiedSender`;
+    - a blocked lead → the user is blocked and the anchor is kept, and a new unverified mail reuses the blocked anchor;
     - a lead with a `userId` (widget pre-chat) is never claimed;
-    - `emailVerified=false` → no claim;
+    - IdP verification: `emailVerified=true` → claim; `emailVerified=false` but the sign-in provider owns the verified
+      domain → claim (OI-19); `emailVerified=false` and no owning provider → no claim; a placeholder address → no claim;
     - a teammate session → no claim;
+    - T-13 runs only on the OIDC callback paths, and a throwing claim still completes the sign-in;
     - subscription/vote collisions → the user's row wins;
-    - two concurrent claims → one moves the rows, the other is a no-op;
+    - a sign-in claim and a hub-load claim at the same time → one moves the rows, the other is a no-op;
     - idempotent re-run;
     - fork tables re-pointed via F-5.
-  - Ownership 404s.
-  - The private-portal wall still shows for `_portal` routes, and `/api/widget/kb-ask` returns 404 for ungranted non-widget
-    callers on a private portal (T-12).
-  - The drift-guard test.
+  - A JIT first sign-in (no user row before the callback) claims in the same request.
+  - The hub calls only upstream visitor functions plus `claimMyRequesterLeadsFn` (a static import check), so upstream's
+    ownership 404s and `isBlocked` checks apply unchanged.
 - **Guardrails:** module-state scan, authz matrix and classifications reconciliation, dep-graph, fork drift/journal tests,
   single + pooled tenancy, widget bundle budget, portal i18n coverage.
 - **GUI walkthrough:** configure tiers → a new chat lands in T1 → escalate → T2 queue → the escalator still sees the ticket
-  read-only → T2 de-escalates → report. Separately: a signed-out requester → `/hub` → code sign-in → sees and replies.
+  read-only → T2 de-escalates → report. Separately: an employee emails support → signs in with SSO for the first time →
+  `/hub` shows the emailed request → replies from `/support`.
 
 ## 10. Open items
 
@@ -750,9 +770,11 @@ Each 🟡 row has an adopted default that the design implements now. The owner c
 | OI-16 🟡 | Are tiers an operational routing convention (team queues, not isolation; escalators read-only after handoff) rather than a strict read/write restriction on every path? **Default: routing convention + read-only after handoff.** | §4.5, X-3 |
 | D-T8 🟡 | May higher-tier agents outside the team that holds the ticket (roll-up) and Managers de-escalate, as well as the holding team itself? **Default: yes.** | §4.2, 01 |
 | OI-17 🟡 | Should escalating a ticket count as its first response? **Default: no** (escalation never stamps `firstResponseAt`). | §4.2 step 4, T3 |
-| OI-14 🟡 | When an email-only requester signs in, should earlier weak-DMARC messages from that address be claimed into their account? **Default: yes, keeping the "unverified sender" badge.** | §4.11 step 3 |
-| OI-15 🟡 | Should hub users without portal access on a private portal see "Find an answer" (KB search, Ask AI)? **Default: hidden, and Ask AI is gated on the backend (T-12).** | §4.10, §4.11 step 8 |
-| OI-18 🟡 | How does a blocked lead stay blocked once its owner signs in and claims it? **Default: the block moves to the user (the user can read their requests but cannot reply, file or rate), and the lead stays as a block anchor for future weak-DMARC mail.** | §4.11 step 3 |
+| OI-14 🟡 | When an employee signs in, should earlier **unverified** messages from their address be claimed into their account? On the internal mail server this includes every message that has no `Authentication-Results` header, not only weak-DMARC mail. **Default: yes, keeping the "unverified sender" badge exactly as upstream computes it.** Deployment note (config, not code): have the internal MTA stamp `Authentication-Results` with a DMARC result, so that mail from employees who already have an account attaches directly and carries no badge. | §3, §4.11 step 3 |
+| ~~OI-15~~ ✅ | ~~Hide "Find an answer" for hub users without portal access?~~ **Closed as moot (D-E3, D-E4):** every signed-in employee has portal access on a public portal. The section is shown to all, and T-12 is removed. | §4.10 |
+| OI-18 🟡 | How does a blocked lead stay blocked once its owner signs in and claims it? **Default: the block moves to the user (the user can read their requests but cannot reply, file or rate), and the lead stays as a block anchor for future unverified mail.** | §4.11 step 3 |
+| OI-19 🟡 | The company IdP may not release `email_verified`. May the claim trust an address when the sign-in provider owns that address's **verified** domain (`findProviderForDomainEmail`)? **Default: yes.** The IdP is authoritative for company addresses (D-E1). Without this, no claim would ever run against such an IdP. | §4.11 step 3 |
+| OI-20 🟡 | Is a `portalConfig.nav` link item enough for "Help hub"? Its label is single-language and its URL is absolute per app. **Default: yes (no seam).** Restore a built-in nav item seam only if portals need a localized label. | §4.10 |
 
 ## 11. Relationship to other v2 plans
 
@@ -774,8 +796,12 @@ Each 🟡 row has an adopted default that the design implements now. The owner c
   - Also exported: `listTierMemberships(principalId)` → `[{teamId, tier}]`, plus `getEffectiveTier(principalId)` built on it,
     `getTeamTier(teamId)` and `resolveTeamForTier(minTier, fromTeamId?)`. For `account.execute`, some membership must satisfy
     `tier ≥ min_tier` **and** `canInTeam(actor, 'account.execute', teamId)`.
-  - Cold-email requesters become user principals only after the hub claim (§4.11 step 3).
+  - Cold-email requesters become user principals only after the claim, which runs on SSO sign-in and on hub load (§4.11 step 3).
 - **20-control-tower:** `sync-members` assigns Tier bundles through `assignTierAgent` / `removeTierAgent` (§4.12), via the fork
   MCP tools `fork_assign_tier_agent` / `fork_remove_tier_agent` (F-3, `member.manage`), acting as the human admin (D-C2). The
   tools take a tier **team** id, not a template key.
 - **60-announcements:** T-4 (locales) edits the same 9 locale files as 60's locale seam. The key blocks are separate and namespaced.
+  The hub's announcements strip is 60's N-1 mount in `_portal.tsx`, inherited because the hub is now inside `_portal`.
+- **20-control-tower:** provisioning applies the `04-…` §3 sign-in baseline (public portal, anonymous off, SSO-only, JIT). The
+  claim relies on it. The "Help hub" nav link is portal configuration, so provisioning may set it when it enables the hub.
+- **04-intranet-deployment:** the hub adds no outbound call and no inbound webhook. Email is upstream SMTP out and IMAP in.

@@ -25,7 +25,7 @@
 | Saved **text templates** (`fork_settings` key `announcement_templates`) with `{placeholder}` substitution done **in the editor at authoring time**; stored announcements are plain text only. | D-N4 |
 | Embed/portal chrome strings are English literals in `components/fork/**`; **locale seam dropped** (9 files), open item N-1 removed, no `init({ labels })`. | D-N1 |
 | **Anonymous audience removed.** `audience.tier ∈ authenticated \| segments`; feed fails closed for non-`user` actors. The anonymous, edge-cached `active.json` is **removed**. Embed exchanges the host's signed widget identity JWT (`ssoToken`) for a short-lived viewer token and reads an authenticated, `no-store` feed. N-3 and N-6 closed. **Partly reversed by the intranet revision** (D-E3): a cached, identity-free feed serves audience-all items; identity is needed only for segment items. | D-N5 (superseded) |
-| Embed viewer resolves to the same principal, segment memberships and portal-access decision as the portal; banner refetches when the widget emits `identify`. | D-N7 🟡 |
+| Embed viewer resolves to the same principal, segment memberships and portal-access decision as the portal; banner refetches when the widget emits `identify`. (Intranet revision: portal-access replication dropped; identity optional, for segment items only.) | D-N7 🟡 |
 | **Instant push:** writes publish a content-free `revision` event on logical channel `fork:announcements` via upstream `pubsub.publish`; portal and embed hold an SSE stream (new fork route reusing `subscribe`, `createSseStream`, `startStreamHeartbeat`, `createStreamLimiter`, HMAC stream-token pattern) and refetch on change. 30 s TTL / SWR design removed (N-5 closed). Scheduled go-live/expiry handled by a client timer at `nextTransitionAt` (still no jobs). | D-N6 |
 | New seam: module-state ledger entry for a **dedicated** banner stream limiter (embeds on busy internal apps must not exhaust the chat stream budget). | D-N6 + module-state rule |
 | `announcement.manage` granted to Manager (system) and the **"Fleet Agent"** custom-role template; Admin (fleet owner) holds it by construction. N-8 closed. | D-N8 |
@@ -59,7 +59,7 @@ stream tokens are gone.
 | **Private-portal checks removed where moot:** embed no longer replicates `resolvePortalAccessForRequest`'s invite / allowed-segment / widget-marker composition through `evaluatePortalAccess` (public portal ⇒ `granted: 'public'`, `domains/settings/portal-access.ts:149-153`). Replaced by a one-line guard: embed is served only when portal visibility is `public` (`getPortalConfig()`, `settings.service.ts:619`; default read as in `functions/portal-access.ts:197`); otherwise embed is off. **Kept:** the portal banner's `resolvePortalAccessForRequest()` call (harmless on a public portal) and the fail-closed non-user rule for the portal actor. NQ-12 closed. | D-E3 | §4.4, §4.7, §4.8 |
 | **Fonts:** the embed uses the **same bundled `@fontsource` woff2 files** upstream already self-hosts (`globals.css:17` Inter; per-family `styles/fonts/*.css` loaded by `lib/shared/theme/font-loader.ts:20`), served from the instance by the fork font route. No remote font loads, no CDN. | D-E2 | §4.2 |
 | **Realtime stays on the intranet:** push is upstream `pg_notify` pub/sub + SSE from the Quackback instance to intranet browsers; no external push service, no internet egress from any component. | D-E2 | §4.6 |
-| New open item: the **edge SSO proxy** must let cross-origin, credential-less requests from other intranet apps reach the four embed paths (`banner.js`, `everyone.json`, `stream`, font), or share its cookie domain with host apps. 🟡 NQ-15. | D-E1 | §4.7, §10 |
+| New open item: the **edge SSO proxy** must let cross-origin, credential-less requests from other intranet apps reach the six embed paths (`banner.js`, `everyone.json`, `stream`, font, and the optional `embed/session` + `embed/feed`), or share its cookie domain with host apps. 🟡 NQ-15. | D-E1 | §4.7, §10 |
 | Seams: **none removed, none added** (N-1, N-3, N-5 all still needed). Fork-only removals: stream-token module usage, the `PortalAccessContext` replication in `embed-viewer.ts` and its contract-test coverage. | — | §7 |
 
 ## 1. Changes from v1
@@ -355,86 +355,115 @@ upstream's primitives unchanged.
     gauge, same category `workspace-keyed` as `ledger.ts:196-205`) → ledger seam N-5 + `MODULE-STATE.md`
     regeneration. Global FD headroom: 500 (chat) + 300 (banner) per process — to be confirmed in load test (NQ-11).
 
-### 4.7 Embeddable banner (Phase 3) — identified viewers only (D-N5, D-N7)
+### 4.7 Embeddable banner on internal apps (Phase 3) — everyone by default, identity for segments (D-E3, D-N7 🟡)
 
-**Identity.** The host page passes the **same** signed identity JWT it gives the widget (HS256 over
-`settings.widget_secret`, `lib/server/widget/identity-token.ts:27,54`): `QuackbackBanner('identify', { ssoToken })`
-or `init({ ssoToken })`. Reusing the widget's session is **not feasible**: the host SDK forwards `identify` to
-the iframe over postMessage (`packages/widget/src/core/sdk.ts:83,211`) and only receives the resulting user
-object (`:119-131`); the session token lives inside the iframe origin. The banner subscribes to
-`window.Quackback('on', 'identify', …)` (`sdk.ts:379-380`) when the widget is present and **re-exchanges** (not
-merely refetches) after it fires — see the lifecycle below.
+**Model (intranet revision, 🟡 NQ-14).** Embeds run on internal apps. Every host-page user is an SSO-authenticated
+employee (D-E1), but the banner SDK cannot know *who* without an identity token. So:
 
-**Identity lifecycle (N1).** The viewer token always names a principal; it is never minted for an identity
-Quackback does not know.
+- **(a) Audience-all ("Everyone") items need no identity.** Any request that reaches the instance is from an
+  employee (network + edge SSO restrict reach), so the banner fetches them from a simple, cacheable GET. This is
+  the default path and works on any internal app, with or without the widget.
+- **(b) Segment-targeted items need identity.** When the host supplies the widget's signed identity JWT, the
+  banner exchanges it for a viewer token and reads the identified feed, which returns everything the portal shows
+  that user (audience-all + their segments). Optional; hosts that never identify simply never see segment items.
+- **Guard:** the embed serves anything only when `announcements.embedEnabled` and the portal's visibility is
+  `public` (`getPortalConfig()`, `settings.service.ts:619`, read the way `functions/portal-access.ts:197` does,
+  missing → `public`). If a deployment deviates from the D-E3 baseline and makes a portal private, the embed
+  returns `{ enabled: false }` rather than re-implementing private-portal access off-portal. No invite /
+  allowed-segment / widget-marker composition is replicated (removed; NQ-12 closed).
+
+**Identity-free feed — `GET /api/fork-announcements/embed/everyone.json[?rev=<rev>]`:**
+- No custom request headers → no CORS preflight. `enforcePerIpLimit` (`widget/public-endpoint.ts:45`,
+  `keyPrefix 'fork-ann-everyone'`, 120/min). Embed or Labs off, or portal not `public` → `{ enabled:false }`.
+- Body: `buildBannerFeed({ kind: 'everyone' }, 'embed')` → `{ enabled, revision, nextTransitionAt, items, theme,
+  font }` (theme/font per §4.2; identical for every viewer).
+- Headers: `Access-Control-Allow-Origin: *`, `Content-Type: application/json`,
+  `...publicWorkspaceCacheHeaders(30)` (`workspaces/http-cache.ts:35`; precedent `routes/api/widget/config[.]json.ts:10`)
+  so the host-vary guard stays green. The client always appends the latest `rev` from the stream (and, for a
+  `nextTransitionAt` refetch, `&t=<nextTransitionAt>`), so a cached body is never older than the last known
+  revision; the 30 s TTL only affects the very first load before the stream's initial frame.
+
+**Identified path (optional) — identity.** The host page passes the **same** signed identity JWT it gives the
+widget (HS256 over `settings.widget_secret`, `lib/server/widget/identity-token.ts:27,54`):
+`QuackbackBanner('identify', { ssoToken })` or `init({ ssoToken })`. Reusing the widget's session is **not
+feasible**: the host SDK forwards `identify` to the iframe over postMessage (`packages/widget/src/core/sdk.ts:83,211`)
+and only receives the resulting user object (`:119-131`); the session token lives inside the iframe origin. The
+banner subscribes to `window.Quackback('on', 'identify', …)` (`sdk.ts:379-380`) when the widget is present and
+**re-exchanges** after it fires.
+
+**Identity lifecycle (N1, simplified).** The viewer token always names a principal; it is never minted for an
+identity Quackback does not know. Any state without a valid viewer token **falls back to the everyone feed** — it
+never blanks the banner.
 
 | Situation | Behaviour |
 | --- | --- |
-| Identity known (user by `externalId`, then email, has a principal) | Session returns `{ status: 'ok', viewerToken, expiresAt, theme, font }`. |
-| Identity not yet known (first visit; banner-only embed, or banner initialised before widget identify creates the user) | Session returns `{ status: 'unknown' }`, **no token, nothing rendered, no data**. The banner never creates users (that stays with widget identify, `routes/api/widget/identify.ts`). |
-| Widget `identify` event with a `user` (created or changed) | Banner re-runs the session exchange with a fresh host JWT (next row); a first-visit user therefore sees segment-targeted items as soon as widget identify has created them (D-N7). |
-| Host JWT needed (unknown → retry, viewer-token expiry, `401 reidentify`) | `ssoToken` from the last `identify`/`init` if its `exp` is > 30 s away; otherwise `await getIdentityToken()` — a new optional `init({ getIdentityToken: async () => jwt })` host callback (the host JWT is normally 5 min, `widget/identity-token.ts:3`, far shorter than the viewer token). No callback and no fresh JWT → clear and wait for the host's next `identify`. |
-| Logout / account switch: `QuackbackBanner('logout')`, widget `identify` with `user: null`, or a `user.email` differing (case-insensitive) from the viewer's | **Synchronously** remove rendered items, close the stream, drop viewer + stream tokens and cancel timers; then, for a switch, exchange for the new identity. Dismissal state is per browser (D-N2) and is not cleared. |
-| Principal deleted, blocked, or `externalId`/email now resolving to a different principal (deleted + recreated) | Feed returns `401 { error: 'reidentify' }`; banner clears and re-exchanges once (backoff 60 s on repeat). |
+| No `ssoToken` ever supplied | Everyone feed only (default). |
+| Identity known (user by `externalId`, then email, has a principal) | Session returns `{ status: 'ok', viewerToken, expiresAt }`; banner switches to the identified feed (audience-all + segments). |
+| Identity not yet known (banner initialised before widget identify creates the user; banner-only host) | Session returns `{ status: 'unknown' }`, no token; banner **stays on the everyone feed**. The banner never creates users (that stays with widget identify, `routes/api/widget/identify.ts`). |
+| Widget `identify` event with a `user` (created or changed) | Re-run the exchange with a fresh host JWT (next row); a first-visit user gains segment items as soon as widget identify has created them. |
+| Host JWT needed (unknown → retry, viewer-token expiry, `401 reidentify`) | `ssoToken` from the last `identify`/`init` if its `exp` is > 30 s away; otherwise `await getIdentityToken()` — optional `init({ getIdentityToken: async () => jwt })` host callback (host JWT is normally 5 min, `widget/identity-token.ts:3`). No callback and no fresh JWT → drop the viewer token and fall back to the everyone feed until the next `identify`. |
+| Logout / account switch: `QuackbackBanner('logout')`, widget `identify` with `user: null`, or a `user.email` differing (case-insensitive) from the viewer's | **Synchronously** remove segment-only items, drop the viewer token and cancel identity timers, render the everyone feed; for a switch, exchange for the new identity. Audience-all items may stay on screen (every employee sees them). Dismissal state is per browser (D-N2) and is not cleared. |
+| Principal deleted, blocked, or `externalId`/email now resolving to a different principal | Feed returns `401 { error: 'reidentify' }`; banner falls back to the everyone feed and re-exchanges once (backoff 60 s on repeat). |
 
 - **`POST /api/fork-announcements/embed/session`** `{ ssoToken }` (JSON → CORS preflight; `OPTIONS` via the
   existing `preflightResponse()`/`corsHeaders()` in `lib/server/integrations/apps/cors.ts:15-21`, precedent
   `routes/api/track.ts:17`):
-  1. `enforcePerIpLimit` (`widget/public-endpoint.ts:45`, `keyPrefix 'fork-ann-session'`, 30/min); embed or
-     Labs off → `{ enabled:false }`.
+  1. `enforcePerIpLimit` (`keyPrefix 'fork-ann-session'`, 30/min); embed or Labs off, or portal not `public` →
+     `{ enabled:false }`.
   2. `getWidgetSecret()` (`settings.widget.ts:426`) + `verifyHS256JWT` (`identity-token.ts:54`); require
      `sub|id` and `email` — the same claims `/api/widget/identify` requires (`routes/api/widget/identify.ts:195-213`).
-  3. `embed-viewer.ts` resolves the principal **read-only** (user by `externalId = sub`, then
-     `lower(email)`; principal by `userId`) — no user creation, no segment reconcile, no session, no
-     changelog auto-subscribe (those stay with widget identify). Not found → `{ status: 'unknown' }`.
-     Blocked principal (`isBlocked`, `domains/principals/blocking.ts:39`) → `{ status: 'unknown' }` too (no
-     oracle).
-  4. Returns `{ status: 'ok', viewerToken, expiresAt, theme, font }`: fork HMAC token (`viewer-token.ts`, pattern
-     of `realtime/stream-token.ts`, domain tag `fork-announcements-viewer:v1`, `activeSecretKey()`, TTL 12 h;
-     refresh per the lifecycle above) over `{ principalId, email, externalId }`
-     (`principalId` required). Held in memory only (not `localStorage`); a page load re-exchanges.
+     Bad/expired JWT → 403 (banner stays on the everyone feed).
+  3. `embed-viewer.ts` resolves the principal **read-only** (user by `externalId = sub`, then `lower(email)`;
+     principal by `userId`) — no user creation, no segment reconcile, no session, no changelog auto-subscribe.
+     Not found or blocked (`isBlocked`, `domains/principals/blocking.ts:39`) → `{ status: 'unknown' }` (no oracle).
+  4. Returns `{ status: 'ok', viewerToken, expiresAt }`: fork HMAC token (`viewer-token.ts`, pattern of
+     `realtime/stream-token.ts`, domain tag `fork-announcements-viewer:v1`, `activeSecretKey()`, TTL 12 h) over
+     `{ principalId, email, externalId }` (`principalId` required). Held in memory only; a page load re-exchanges.
 - **`GET /api/fork-announcements/embed/feed`** with `Authorization: Bearer <viewerToken>` (preflighted):
   re-validates on every call — principal still exists and is not blocked, and re-resolving the token's
-  `externalId`/email still yields the same principal (else `401 reidentify`); embed enabled — then builds the
-  actor — `principalType 'user'`, `role 'user'` (non-dashboard audiences are portal-tier, as
+  `externalId`/email still yields the same principal (else `401 reidentify`); embed enabled and portal `public` —
+  then builds the actor — `principalType 'user'`, `role 'user'` (non-dashboard audiences are portal-tier, as
   `chat/stream.ts:125`), `segmentIds = segmentIdsForPrincipal(principalId)` (`segment-membership.service.ts:232`,
-  read fresh per call, so membership changes apply on the next refetch) — and the **portal-access decision** via `evaluatePortalAccess`
-  (`domains/settings/portal-access.ts:149`) with `isAuthenticated: true`, `emailVerified: true` (signed by the
-  customer's backend), `hasViaWidgetMarker: true`, `identifyVerificationEnabled: true`, plus the same invite and
-  allowed-segment lookups `resolvePortalAccessForRequest` performs (`functions/portal-access.ts:120-196`).
-  Then `buildBannerFeed(actor, 'embed', decision)`. Response adds a 2-minute `streamToken`
-  (`fork-announcements-stream:v1`, bound to `principalId`, `exp = min(now + 2 min, viewer exp)`). Headers
-  `corsHeaders()` (`no-store, private`).
-- The replicated access composition is pinned by `embed-viewer.contract.test.ts` over `PortalAccessContext`
-  fields; open item NQ-12 offers upstream a principal-based `resolvePortalAccessForIdentity` export.
+  read fresh per call) — and calls `buildBannerFeed({ kind: 'actor', actor, access: { granted: true } }, 'embed')`.
+  Headers `corsHeaders()` (`no-store, private`). No stream token (the stream is identity-free, §4.6).
 - **Bundle:** tsup IIFE entry `banner: 'packages/widget/src/fork/banner/banner-queue.ts'`,
   `globalName: 'QuackbackBanner'`, `dist/banner.js`, ≤ 10 KB gz (presets + SSE client), no deps; size test in
-  `packages/widget/src/fork/banner/__tests__/size.test.ts`. Built by `Dockerfile:41`.
+  `packages/widget/src/fork/banner/__tests__/size.test.ts`. Built by `Dockerfile:41` from the build network's
+  package mirror (nothing fetched at runtime).
 - **Serve** `routes/api/fork-announcements/banner[.]js.ts`: inlines `dist/banner.js?raw` with prelude
   `window.__QUACKBACK_BANNER__={url,config:{placement}}`; headers `Content-Type`, `Access-Control-Allow-Origin: *`,
-  `...publicWorkspaceCacheHeaders(300, 'Accept-Encoding')` (code only, no data — the one cacheable route).
-  Disabled → no-op script (mirrors `sdk[.]js.ts:74-79`). Without `identify`, the banner renders nothing and
-  makes no data request.
+  `...publicWorkspaceCacheHeaders(300, 'Accept-Encoding')`. Disabled → no-op script (mirrors `sdk[.]js.ts:74-79`).
+  On load the banner fetches `everyone.json` and opens the stream; it calls `embed/session` only after an
+  `ssoToken` is supplied.
 - **Client:** shadow root on a host `<div>` at `body` start (or `container`); theme variables on `:host` and
-  branding font per §4.2 (no `customCss`); presets per kind; `textContent` only; links `rel="noopener noreferrer"`, http(s) only; dismissal in host `localStorage` (`qb.banner.*`,
-  try/catch); English chrome ("Dismiss", "View details", "N more"); stream per §4.6.
+  branding font per §4.2 (no `customCss`); presets per kind; `textContent` only; links `rel="noopener noreferrer"`,
+  http(s) only; dismissal in host `localStorage` (`qb.banner.*`, try/catch); English chrome ("Dismiss",
+  "View details", "N more"); stream per §4.6. All requests go to the instance URL from the prelude — nothing else.
 - **Coexistence with the widget:** separate global, prelude key and storage keys; optional read-only use of
   `window.Quackback('on','identify')`.
+- **Edge SSO (🟡 NQ-15):** requests are credential-less cross-origin (`fetch` without cookies, plain
+  `EventSource`, `FontFace`), so the edge SSO proxy in front of the instance must let `banner.js`,
+  `embed/everyone.json`, `embed/session`, `embed/feed`, `stream` and the font route through from intranet
+  origins (network restriction only), or else host apps must share the proxy's cookie domain and the SDK switches
+  to `credentials: 'include'` with an origin allow-list instead of `*`.
 - **CSP (install page):** `script-src <instance>`; `connect-src <instance>` (fetch + `EventSource`); styles via
   constructable stylesheets (`adoptedStyleSheets`), fallback `<style>` in the shadow root needs
   `'unsafe-inline'` or `init({ nonce })` (the widget already injects a `<style>`, `packages/widget/src/core/style.ts:8-13`);
-  `font-src <instance>` (branding font, §4.2); no `frame-src`, no `img-src` (inline SVG icons).
-- **Install page** `settings.fork-announcements.install.tsx`: snippet showing `ssoToken` reuse from the widget
-  identify call **and a `getIdentityToken` callback** hitting the host's own JWT-minting endpoint, `logout` on
-  sign-out, CSP block, note that the embed shows nothing to unidentified visitors or to users Quackback does not
-  know yet (widget identify creates them), and that `customCss` is not applied off-site.
+  `font-src <instance>` (branding font, §4.2); no `frame-src`, no `img-src` (inline SVG icons), no third-party
+  origins.
+- **Install page** `settings.fork-announcements.install.tsx`: minimal snippet (script tag only → everyone items);
+  an optional "segment-targeted items" snippet showing `ssoToken` reuse from the widget identify call, a
+  `getIdentityToken` callback hitting the host app's own JWT-minting endpoint, and `logout` on sign-out; CSP block;
+  the edge-proxy note (NQ-15); and that `customCss` is not applied in the embed.
 
 ### 4.8 Portal banner (Phase 2)
 
 - `getPortalBannerFn` (`createServerFn GET`): `getOptionalAuth()` + `policyActorFromAuth()`
-  (`functions/auth-helpers.ts:240,341`) + `resolvePortalAccessForRequest()` → `buildBannerFeed(actor,'portal', decision)`.
-  No `requireAuth` (non-user actors get `[]` inside), so it appears in `MATRIX.md` §4 "entry points without a
-  gate"; no `classifications.ts` entry.
+  (`functions/auth-helpers.ts:240,341`) + `resolvePortalAccessForRequest()` →
+  `buildBannerFeed({ kind: 'actor', actor, access: decision }, 'portal')`. Uses the **portal session** (Quackback
+  SSO sign-in) as before; the access call is kept even though a D-E3 public portal always grants (harmless, and
+  correct if a portal is ever made private). No `requireAuth` (non-user actors get `[]` inside), so it appears in
+  `MATRIX.md` §4 "entry points without a gate"; no `classifications.ts` entry.
 - `portal-banner.tsx` is self-fetching (`useQuery`, `staleTime: Infinity`, invalidated by the stream's
   `revision`, window focus, `nextTransitionAt` timer); the `_portal.tsx` seam is one JSX line + import between
   `<PortalHeader …/>` and `<main>` (`routes/_portal.tsx:381-390`).
@@ -542,8 +571,9 @@ no templates table.
   are `10-…`'s (listed under *Depends on*). Invariant (unit test): every system role or template holding
   `announcement.manage` also holds `announcement.view`.
 - Labs toggling stays with upstream's Labs permission.
-- The embed session/feed/stream endpoints are viewer reads (no permission key); gated by JWT verification +
-  portal access.
+- The embed endpoints are viewer reads (no permission key): `everyone.json` and `stream` are identity-free
+  (audience-all / content-free; network + edge SSO restrict reach, D-E1); `embed/session` + `embed/feed` are
+  gated by widget-JWT verification and the viewer token. All require `embedEnabled` and a `public` portal.
 - After editing: `bun run db:permissions`; regenerate `MATRIX.md`.
 
 ## 7. Seams
@@ -563,7 +593,12 @@ F-9 (`fork_announcement.*` audit members).
 permission keys ride **F-7**. Staff-review corrections add **no** seams: identity lifecycle is fork SDK +
 fork routes; the resolved-at status read is a fork query + exported `getPublicStatusIncident` (pinned by
 contract test, not an edit); transactional audit uses the existing `recordAuditEventInTransaction`; embed fonts
-are a fork route. Generated (regenerate): `lib/shared/permissions.ts`, `MATRIX.md`, `MODULE-STATE.md`,
+are a fork route. **Intranet revision: no seams removed, none added** — N-1 (portal mount), N-3 (banner build
+entry) and N-5 (dedicated limiter; still needed because identity-free embed streams on busy internal apps would
+exhaust chat's budget) all remain. The removals are fork-only: stream-token minting/verification, the
+`PortalAccessContext` replication in `embed-viewer.ts` (and its contract-test coverage). The new
+`everyone[.]json.ts` route uses the existing `publicWorkspaceCacheHeaders` helper, so the host-vary guard covers
+it without an edit. Generated (regenerate): `lib/shared/permissions.ts`, `MATRIX.md`, `MODULE-STATE.md`,
 `GRAPH.md`. Not touched: `settings` schema, `classifications.ts`, `hook-job.ts`, `startup.ts`,
 `jobs/deadlines.ts`, `routes/api/chat/stream.ts`, `realtime/*`, `events/targets.ts`, `domains/status/*`,
 `packages/widget/src/core/*`, `packages/widget/package.json`, locale files.
@@ -573,8 +608,8 @@ are a fork route. Generated (regenerate): `lib/shared/permissions.ts`, `MATRIX.m
 | Phase | Deliverable | Gate |
 | --- | --- | --- |
 | **1. Data + authoring** | Table + migration, service, `visibility.ts`, `presets.ts`, `placeholders.ts`, templates key + page, config, key via F-7, Labs via F-6, page via F-4, re-point exemption via F-5, audit members (F-9), transactional audit, both keys, revision publish | Fork drift clean; `isLive` + placeholder unit tests; Manager and a Fleet-Agent-template role can author; Contributor reads the list but write fns 403; audit rows name the author; injected audit-insert failure rolls back the write and publishes nothing; `MATRIX.md` regenerated; module-state green |
-| **2. Portal banner + push + status** | `feed.ts`, `status-feed.ts`, `getPortalBannerFn`, `portal-banner.tsx`, `_portal.tsx` mount, `stream.ts` route, dedicated limiter (N-5), resolved-at status read | `check:widget-bundle` passes; unauthenticated / access-denied → nothing; segment row only to members; publish in admin appears in an open portal tab < 2 s without reload; archive disappears likewise; scheduled item appears at `publish_at` via timer; hidden tab closes the stream; limiter refusal falls back to polling; open incident appears / resolves; a >14-day-old incident resolved now shows `success` for 1 h then disappears on the `nextTransitionAt` timer; maintenance appears on lead-window entry |
-| **3. Embed** | tsup entry (N-3), `banner[.]js.ts`, `embed/session.ts`, `embed/feed.ts`, font route, viewer/stream tokens, identity lifecycle + `getIdentityToken`, shadow-DOM renderer + SSE client, install page | host-vary green; no request without `identify`; bad/expired `ssoToken` → 403; unknown identity → nothing rendered, no user created; identified user sees the same items as in the portal incl. segments (D-N7); banner initialised before widget identify shows segment items after it; account switch never shows the previous user's items; viewer-token expiry recovers via `getIdentityToken`; deleted/recreated principal → `reidentify`; token from workspace A rejected on B; preflight OK; strict-CSP page (incl. `font-src`) renders with the branding font; widget + banner coexist; publish reaches the embed instantly |
+| **2. Portal banner + push + status** | `feed.ts`, `status-feed.ts`, `getPortalBannerFn`, `portal-banner.tsx`, `_portal.tsx` mount, `stream.ts` route, dedicated limiter (N-5), resolved-at status read | `check:widget-bundle` passes; non-user actor → nothing; segment row only to members; publish in admin appears in an open portal tab < 2 s without reload; archive disappears likewise; scheduled item appears at `publish_at` via timer; hidden tab closes the stream; limiter refusal falls back to polling; open incident appears / resolves; a >14-day-old incident resolved now shows `success` for 1 h then disappears on the `nextTransitionAt` timer; maintenance appears on lead-window entry |
+| **3. Embed** | tsup entry (N-3), `banner[.]js.ts`, `embed/everyone[.]json.ts`, `embed/session.ts`, `embed/feed.ts`, font route (bundled `@fontsource` files), viewer token, optional identity lifecycle + `getIdentityToken`, shadow-DOM renderer + SSE client, install page | host-vary green (incl. `everyone.json`); script-tag-only install shows audience-all embed items and never segment items; `everyone.json` needs no preflight and a new `rev` bypasses the cached body; portal not `public` or embed off → nothing; bad/expired `ssoToken` → 403 and everyone feed stays; unknown identity → everyone feed, no user created; identified user sees the same items as in the portal incl. segments (D-N7); banner initialised before widget identify gains segment items after it; account switch never shows the previous user's segment items; viewer-token expiry recovers via `getIdentityToken`, or falls back to everyone without it; deleted/recreated principal → `reidentify`; viewer token from workspace A rejected on B; strict-CSP page (incl. `font-src <instance>`) renders with the branding font and makes no request to any other origin; widget + banner coexist; publish reaches the embed instantly |
 | **4. Tower** | MCP tools (F-3), tower UI (`20-…`) | Needs `10-…` Phase 1a + `20-…` OAuth. Publish to A only; broadcast A+B arrives instantly on both; retry idempotent (no second row/audit); timeout after tenant commit reported `uncertain` then reconciled `succeeded`; fleet owner and Fleet Agent publish; Fleet Observer lists announcements/templates but upsert/archive denied; tenant audit names the human |
 | **5. Notifications — deferred, not planned in detail** | `announcement.published` event → in-app/email for `critical` | **Not delivered by Phases 1–4**: nothing notifies users outside an open portal/embed. Would need a `notified_at` claim in `side-effect-ledger.ts` plus events-catalogue + template seams, none counted in §7. |
 
@@ -583,11 +618,13 @@ are a fork route. Generated (regenerate): `lib/shared/permissions.ts`, `MATRIX.m
 - **Unit:** `isLive` boundaries; `nextTransitionAt`; sorting/capping by kind rank; audience × actor via
   `tierAllows` (non-user → empty, authenticated, segment member/non-member, team); status mapping incl.
   `success`; presets parity (app vs widget copy); placeholder extraction/substitution (unknown tokens left
-  untouched, max 32-char names); zod rejects `javascript:` links and over-length text; viewer/stream token
-  sign/verify/expiry/domain separation; viewer token cannot be minted without `principalId`; stream token
-  `exp ≤` viewer `exp`; `nextTransitionAt` includes success expiry and maintenance lead-window entry; theme
+  untouched, max 32-char names); zod rejects `javascript:` links and over-length text; viewer token
+  sign/verify/expiry/domain separation; viewer token cannot be minted without `principalId`; `everyone` viewer
+  returns only `tier='authenticated'` embed rows (never segment rows, even for rows also on `portal`) and status
+  items as an anonymous actor; `nextTransitionAt` includes success expiry and maintenance lead-window entry; theme
   selector rewrite (`:root`/`.dark` → `:host`/`:host(.qb-dark)`); font payload `null` for `inter`/`system`,
-  allow-listed ids only; role invariant `manage ⇒ view`.
+  allow-listed ids only; every font face URL is on the instance origin and maps to a bundled `@fontsource` file;
+  role invariant `manage ⇒ view`.
 - **DB (fork lineage):** journal integrity; broadcast unique index; CHECKs (`kind`, lengths, expiry).
 - **Transactional audit (mandatory, N3):** for each write (upsert create/update, archive, draft delete, config,
   templates) — audit row exists iff the data change committed; forcing the audit insert to fail rolls back the
@@ -597,25 +634,30 @@ are a fork route. Generated (regenerate): `lib/shared/permissions.ts`, `MATRIX.m
   resolved 61 min ago → absent; resolved incident whose components are all segment-restricted → absent for a
   non-member, present for a member; deleted incident → absent; active + resolved duplicates collapse.
 - **Contract:** `status-feed.contract.test.ts` (incl. `getPublicStatusIncident` and the `status_incidents`
-  columns read); `embed-viewer.contract.test.ts` (`PortalAccessContext` fields,
-  `evaluatePortalAccess` signature, `verifyHS256JWT`, `getWidgetSecret`, `segmentIdsForPrincipal`);
+  columns read); `embed-viewer.contract.test.ts` (`verifyHS256JWT`, `getWidgetSecret`,
+  `segmentIdsForPrincipal`, `getPortalConfig().access.visibility`) — the `PortalAccessContext` /
+  `evaluatePortalAccess` pins are removed with the replication;
   realtime primitives (`subscribe`, `publish`, `createStreamLimiter`, `startStreamHeartbeat`, `createSseStream`).
-- **Route:** stream — 401 without auth, 404 on private-portal denial, initial `revision` frame, forwards a
-  published revision, releases slot on abort, 503 at limiter cap; embed session/feed — preflight headers,
+- **Route:** stream — no auth required, `Access-Control-Allow-Origin: *`, 404 when Labs/`enabled` off,
+  initial `revision` frame, forwards a published revision, frames contain no announcement content, releases slot
+  on abort, 503 at limiter cap; `everyone.json` — `Vary: Host` + `public, max-age=30`, ACAO `*`, rate limit,
+  `{ enabled:false }` when embed off or portal visibility `private`, no segment rows; embed session/feed — preflight headers,
   `no-store`, rate limit, blocked principal → `unknown`, unknown principal → `{ status: 'unknown' }` with no
   token and no user row created; feed `401 reidentify` for a deleted principal and for an email that now
   resolves to a recreated principal; font route — CORS + immutable headers, 404 for non-allow-listed ids;
   `banner.js` prelude uses `__QUACKBACK_BANNER__` only.
-- **Identity lifecycle (mandatory, N1):** banner `init` before widget `identify` for a first-visit user →
-  nothing, then segment-targeted items after widget identify; account switch A → B (widget `identify` with a
-  different email, and `QuackbackBanner('logout')` then `identify`) never renders A's items after the switch
-  starts and closes A's stream; widget logout (`identify` with `user: null`) clears; viewer-token expiry →
-  `getIdentityToken` called once and feed resumes, without the callback → cleared; deleted then recreated
-  principal (same email/externalId) → reidentify → new principal's segments.
+- **Identity lifecycle (mandatory, N1 as simplified):** no `ssoToken` → everyone feed only, `embed/session`
+  never called; banner `init` before widget `identify` for a first-visit user → everyone feed, then
+  segment-targeted items after widget identify; account switch A → B (widget `identify` with a different email,
+  and `QuackbackBanner('logout')` then `identify`) never renders A's segment items after the switch starts;
+  widget logout (`identify` with `user: null`) → segment items removed, everyone items remain; viewer-token
+  expiry → `getIdentityToken` called once and identified feed resumes, without the callback → everyone feed;
+  deleted then recreated principal (same email/externalId) → reidentify → new principal's segments.
 - **Realtime DB test (pooled):** two workspaces on the fleet harness; a revision published in A is never
   delivered to B's stream (extends the `pubsub.db.test.ts` pattern).
 - **Guardrails in CI:** host-vary, module-state (with the new ledger entry), authz-matrix, `check:widget-bundle`.
-- **Embed (Playwright):** host page with widget + banner sharing one `ssoToken`; strict CSP incl. `font-src`;
+- **Embed (Playwright):** script-tag-only host page (everyone items, no identity requests); host page with
+  widget + banner sharing one `ssoToken`; network log shows requests only to the instance origin (D-E2); strict CSP incl. `font-src`;
   branding font applied inside the shadow root and host fonts unchanged; `customCss` rule absent from the
   embed; live update on publish; tab hide/show reconnect; account switch.
 - **Isolation probe (pooled):** row in A never served under B's Host (portal, embed, MCP list).
@@ -628,22 +670,27 @@ are a fork route. Generated (regenerate): `lib/shared/permissions.ts`, `MATRIX.m
 
 | ID | Question | Proposed default |
 | --- | --- | --- |
-| D-N7 | Should an embed on a customer site show a signed-in user exactly the announcements they see in the portal, including segment-targeted ones — and show nothing to users Quackback does not know yet? | 🟡 yes to both — §4.7 (no user creation by the banner) |
+| D-N7 | On internal apps, should the embedded banner show every employee the "Everyone" announcements without identifying them, and show segment-targeted announcements only when the host app identifies the user (then exactly what the portal shows them)? | 🟡 yes — §4.7 (no user creation by the banner; unknown users see the "Everyone" items) |
+| NQ-14 | Confirm the new embed model: "Everyone" items are served to any request that reaches the instance (relying on the intranet network + edge SSO), segment items need the optional identity token; and without identity, status items appear only if the status page audience is public. | 🟡 adopt |
+| NQ-15 | Will the edge SSO proxy let other internal apps' pages load the banner's script, feed, live-update stream and font from the Quackback instance without a Quackback-domain login cookie? | 🟡 yes — exempt the six embed paths at the proxy (network restriction only); fallback: shared cookie domain + `credentials: 'include'` with an origin allow-list |
 | NQ-4 | Ask upstream for a slim exported `getActiveStatusNotices(actor)` (snapshot also computes history per refetch). | 🟡 offer upstream; tolerate cost meanwhile |
 | NQ-7 | Do you want a banner strip inside the support widget panel too (in addition to the portal and the on-site banner)? | 🟡 no — `widget` surface value reserved, not built; **deferred, not delivered** by any phase |
 | NQ-10 | Is it acceptable that a new, changed or resolved status incident can take up to 5 minutes to appear in an already-open banner (instant on page load or tab focus)? | 🟡 yes; faster needs an upstream `events/targets.ts` hook seam |
-| NQ-11 | Dedicated banner stream limiter sizes (300 global / 200 per workspace / 20 per IP) and FD headroom next to chat's 500; and acceptance that an embed on a busy site keeps the tenant's compute warm via the LISTEN connection. | 🟡 adopt; confirm in pooled load test |
-| NQ-12 | Offer upstream an exported `resolvePortalAccessForIdentity({ principalId, email, emailVerified, viaWidget })` so `embed-viewer.ts` stops replicating the invite/segment composition of `resolvePortalAccessForRequest`. | 🟡 offer upstream; contract test meanwhile |
-| NQ-13 | On customers' own sites, should the banner use only the app's theme colours and font — not its custom CSS (which then styles the portal only, incl. any custom kind colours)? | 🟡 yes — custom CSS is portal/hub only |
+| NQ-11 | Dedicated banner stream limiter sizes (300 global / 200 per workspace / 20 per IP) and FD headroom next to chat's 500; and acceptance that an embed on a busy internal app keeps the tenant's compute warm via the LISTEN connection. | 🟡 adopt; confirm in pooled load test |
+| NQ-13 | On other internal apps, should the banner use only the app's theme colours and font — not its custom CSS (which then styles the portal only, incl. any custom kind colours)? | 🟡 yes — custom CSS is portal/hub only |
 
 Open-item IDs use `NQ-` so they don't collide with seam IDs N-1/N-3/N-5; the `N-x` references in the Round-2
 table are earlier open-item IDs. Closed in round 2: N-1 (D-N1), N-2 (D-N4), N-3 (D-N5), N-5 (D-N6), N-6
-(D-N5/D-N7), N-8 (D-N8), N-9 (D-C2).
+(D-N5/D-N7), N-8 (D-N8), N-9 (D-C2). Closed by the intranet revision: **NQ-12** (moot — the embed no longer
+replicates private-portal access; portals are public under D-E3).
 
 ## 11. Relationship to other v2 plans
 
 - **Foundations / `02-fork-conventions.md`:** fork lineage, `fork_settings`, shared seams F-1..F-9, re-point
-  registry, branding §11 (narrowed for the embed per X-4, §4.2).
+  registry, branding §11 (narrowed for the embed per X-4, §4.2), no-egress rule §11a.
+- **`04-intranet-deployment.md`:** the deployment baseline (public portal, anonymous off, SSO-only) this plan's
+  embed guard and everyone feed rely on; its row for plan 60 (fonts self-hosted, revisit embed identity) is
+  addressed by the intranet revision. This plan needs none of E-1/E-2/E-3 (no outbound calls; F-12 unused).
 - **`10-rbac-persona-extensions.md`:** Phase 1a MCP permission enforcement and the "Fleet Agent" (`view` +
   `manage`) / "Fleet Observer" (`view`) templates are prerequisites for Phase 4.
 - **`20-control-tower.md`:** tower compose/target picker/broadcast/`tower_audit` is the client of this plan's

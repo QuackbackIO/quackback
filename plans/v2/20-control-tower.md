@@ -1,19 +1,22 @@
 # Fleet Control Tower (separate app) + Provisioner — Design Plan v2
 
-> **Status:** v2 (round-2 + staff-review revision) — supersedes `plans/v1/multi-tenant-control-tower-plan.md`. Planning only.
+> **Status:** v2 (round-2 + staff-review + intranet revision) — supersedes `plans/v1/multi-tenant-control-tower-plan.md`. Planning only.
 > **Depends on:** Foundations (F-1 fork migration lineage, F-3 fork MCP registration, F-7 catalogue fence,
-> `fork_settings`); `10-rbac-persona-extensions.md` Phase 1a (D3: custom roles enforced on MCP, argument-aware
+> `fork_settings`, **F-12 SSRF allow-list — hard prerequisite for any app SSO against the intranet IdP**);
+> `04-intranet-deployment.md` (baseline §3, blockers E-1…E-3); `10-rbac-persona-extensions.md` Phase 1a (D3: custom roles enforced on MCP, argument-aware
 > MCP permission map), its persona templates and its grant-reconcile primitives (plan 10 §reconcile);
 > `60-announcements-banner.md` (`list_announcements` gated by `announcement.view`, write tools gated by
 > `announcement.manage`) for Phase 6; `50-prioritization-scoring.md` (batch MCP tool `list_post_prioritization`)
 > for Phase 7; `30-tiered-support.md` (tier teams + tier-membership service) for Tier bundles.
 > **Decisions applied:** D1, D2, D3, D4, **D-C1** (separate app), **D-C2** (human-attributed actions via app
 > MCP + per-user OAuth), **D-C3** (one shared Aurora cluster, DB + role per app), **D-C4** (root key in AWS
-> Secrets Manager, tower never holds it), 🟡 **D-C5** (seed role mapping), **D-C6** (wildcard subdomains +
-> ACM), **D-C7** (OIDC or SAML IdP), **D-C8** (fleet-level backups), **D-C9** (configurable role bundles),
-> **D-C10** (one S3 bucket, per-app prefix), **D-C11** (per-app inbound email), **D-C12** (no consent screens,
-> silent "connect all"), **D-N8** (Fleet Agents publish announcements). Build position: last (README build
-> order); Phase 8 (inbound email) may run in parallel once Phase 2 is done.
+> Secrets Manager, tower never holds it), 🟡 **D-C5** (seed role mapping), **D-C6** (wildcard subdomains —
+> on the intranet: internal DNS + an internally trusted certificate, O-14), **D-C7** (OIDC or SAML IdP, on the
+> intranet), **D-C8** (fleet-level backups), **D-C9** (configurable role bundles), **D-C10** (one S3 bucket,
+> per-app prefix), **D-C11** (per-app inbound email), **D-C12** (no consent screens, silent "connect all"),
+> **D-N8** (Fleet Agents publish announcements), **D-E1…D-E6** (intranet only, no internet egress, public +
+> anonymous-off + SSO-only portals, all users employees; D-E3 supersedes D-N5). Build position: last (README
+> build order); Phase 8 (inbound email) may run in parallel once Phase 2 is done.
 
 ## Round-2 changes
 
@@ -25,7 +28,7 @@
 | One shared Aurora cluster (control DB in it too); "or separate instance" option dropped.                                                                                                                                | D-C3        |
 | Backups: fleet cluster only (snapshots + PITR). Per-app backup/restore removed.                                                                                                                                         | D-C8        |
 | Storage: one fleet S3 bucket, per-app prefix `w/<settings.id>/` applied by upstream; no per-app bucket credentials.                                                                                                     | D-C10       |
-| **New §4.11 + Phase 8: per-app inbound email** (fork seam IE-1 + an SES edge). Replaces the "inbound email off" caveat. Permanently fork-only.                                                                        | D-C11, D1   |
+| **New §4.11 + Phase 8: per-app inbound email** (fork seam IE-1 + an SES edge — the SES edge is replaced by the intranet IMAP router, see Intranet changes). Replaces the "inbound email off" caveat. Permanently fork-only. | D-C11, D1   |
 | Announcements: Fleet Agent seed bundle may publish (was owner-only). Tool names aligned with 60 (`list_/upsert_/archive_announcement`).                                                                                 | D-N8        |
 | MCP registration line is now shared seam F-3 (not counted here). Old S-2 renamed to C-1 (matches `SEAMS.md`).                                                                                                          | 02 §10      |
 | Open items reduced to D-C5 plus two new items. V-1 (RDS Proxy pinning) and V-4 (token lifetimes) stay as Phase 0 validations. O-4 closed by 02 §3.3 / X-R1; O-7 closed by X-R6.                                          | 01 Still open |
@@ -37,10 +40,24 @@
 | F1 (1) | Production artifact defined: fork-owned `apps/web/Dockerfile.fork` layers `/app/drizzle-fork` + bundled `/app/fork-provision.mjs` + `FORK_MIGRATIONS_FOLDER=/app/drizzle-fork` onto the upstream-built image (no Dockerfile seam). Fork journal is statically imported (inlined by bundling) and the folder comes from the env var, mirroring `MIGRATIONS_FOLDER` (`packages/db/src/schema-version.ts:48`). The provisioner refuses to start if the folder's journal ≠ the inlined journal. CI image-content gate. | §4.4.1, §8 Phase 2/9 |
 | F1 (2) | `fork-migrate` no longer applies only fork SQL: per workspace it runs `runMigrations(direct)` (upstream no-op, fork lineage via F-1, `seedSystemData` → fork keys, preset bundles incl. Manager exclusions) + plan 10 §reconcile template reconcile, but only when the upstream ledger is already at the fleet target (never bypasses fleet-migrator cohorts). Records `cp_fork_schema_state`. | §4.4.2 |
 | F1 (3) | Fork schema **floor**: shared seam **F-11** in `fleet/schema-floor.ts` checks `drizzle.__fork_migrations` against `FORK_MIN_SCHEMA_VERSION` and `fork_settings.fork.catalogue_version` against `FORK_MIN_CATALOGUE_VERSION`; refusal reuses the upstream 503 path. Suspended tenants are caught up by `resume` before hostnames are republished (fail closed). Deploy steps + four mandatory rehearsals. | §4.4.3–4.4.5, §7, §9 |
-| C1 | Provisioning writes an explicit **private access profile** (portal `visibility:'private'`, `allowAnonymous:false`, portal + team `openSignup:false`, configured domain/widget/segment rules) instead of `DEFAULT_PORTAL_CONFIG` (public, `settings.types.ts:370-381`). The previous "`authConfig` without `openSignup`" was wrong: absent means `true` (`settings.types.ts:172-196`). Hostnames are published **last**, after in-scope checks; HTTP negative probes then run and a failure unpublishes. Resume re-verifies. | §4.3 steps 4–8, §4.3.1 |
+| C1 (access profile superseded by D-E3 — see Intranet changes; fail-closed publish-last kept) | Provisioning writes an explicit **private access profile** (portal `visibility:'private'`, `allowAnonymous:false`, portal + team `openSignup:false`, configured domain/widget/segment rules) instead of `DEFAULT_PORTAL_CONFIG` (public, `settings.types.ts:370-381`). The previous "`authConfig` without `openSignup`" was wrong: absent means `true` (`settings.types.ts:172-196`). Hostnames are published **last**, after in-scope checks; HTTP negative probes then run and a failure unpublishes. Resume re-verifies. | §4.3 steps 4–8, §4.3.1 |
 | C2 | Tower-owned grant **provenance** in the tenant DB (`fork_tower_principals`, `fork_tower_assignments`), tower rows written with the app's tower-sync service principal as grantor; removals driven by provenance, not by "template currently named by a tower role". Per-app team mappings (`tower_role_app_teams`). Atomic per-principal reconcile (legacy role, preset rows, workspace-wide + team grants, provenance) via plan 10 §reconcile; zero-role ⇒ legacy `user` (never a `member` with zero workspace-wide rows, which falls back to Manager: `policy/permissions.ts:58-75`, `principal.factory.ts:357-398`). Deletion/retarget/demotion and local-vs-tower ownership defined. | §4.3.2, §5.2, §5.3, §9 |
 | C3 | Explicit identity chain (tower user ↔ IdP/broker subject ↔ tenant `user.id` (= MCP token `sub`, `mcp/handler.ts:98-99,122`) ↔ tenant principal), stored in `tower_user_idp_links` + `tower_user_app_identities`; connect-chain check compares `sub`/`principalId`, not email; stray email-linked accounts removed by sync. Portfolio uses `list_post_prioritization`; Observer uses `list_announcements` (`announcement.view`, `read:feedback`) — `announcements.view` no longer maps to `write:feedback`; broadcast outcomes are `succeeded`/`failed`/`uncertain`, uncertain reconciled by `broadcastId`. Sync authority split (provisioner vs human MCP) and a shared capability → tool/args → permission → scope contract. IdP revocation bound ≤ 15 min (🟡). | §4.5.1, §4.5.3, §4.5.4, §4.6, §4.8, §4.9, §6, §6.1 |
 | X-6 / X-7 | Coordination requests to other plans removed (dependencies stated as consumed contracts). Phases 6–7 labelled as not delivering R10/R11 until they ship. | §2, §8, §11 |
+
+## Intranet changes (D-E1…D-E6)
+
+| Change | Decision | Where |
+| --- | --- | --- |
+| Provisioning writes the **04 §3 sign-in baseline** instead of a private portal: `access.visibility:'public'`, `allowAnonymous:false`, portal + team `openSignup:false`, `oauth` = password/magic link/every social provider `false`, OIDC to the intranet IdP with JIT (`autoCreateUsers:true`, `autoProvisionRole:'user'`), company domain verified + enforced, `widgetConfig.hmacRequired:true`. Fail-closed publish-last kept. Probes now assert, at Quackback level, that **writes** are refused without a session, that every non-SSO sign-in/sign-up door is closed and that SSO starts; read protection is the edge SSO's job (D-E3) and is checked by a separate edge probe. `tower_app_access_profiles` (domains/segments/widget sign-in per app) **removed** — every app gets the same baseline. | D-E1, D-E3, D-E4 | §2 R12, §4.3 steps 4–8, §4.3.1, §5.1–5.2, §8 Phase 2, §9 |
+| **F-12 (SSRF allow-list) is a hard prerequisite** for app SSO: saving the provider, the SSO test, enforcement **and** every runtime sign-in (discovery + userinfo are fetched through `safeFetch`, `auth/index.ts:222-239`, `auth/hooks.ts:815-816,832-833`) reject intranet addresses without it. | D-E1, D-E2 | header, §4.5.1, §7, §8 Phase 0/3 |
+| SSO-only is reached **without faking upstream attestations**: the provisioner mints break-glass recovery codes first (upstream refuses SSO-only without them, `sign-in-method-availability.ts:84-93,203-209`), verifies the domain through the real `_quackback-verify` TXT lookup on internal DNS, and turns `enforced` on only once upstream's own unlock rule holds (`sso-gates.ts:77-87`). Until then the app is already SSO-only because every other method is off. | D-E3 | §4.3 step 6, §4.3.1, O-12 |
+| JIT portal users coexist with tower-managed users: `sync-members` adopts an existing tenant user **by SSO subject** (`account.accountId`), never by email. | D-E4 | §4.3.2 step 1 |
+| **Inbound email redesigned for the internal mail server.** Upstream IMAP is process-wide env and **refuses to schedule under pooled tenancy** (`conversation.email-imap-queue.ts:47-60`), so it cannot serve per-app mail as is. Default: **one fleet mailbox** on the internal mail server receiving `*@<inbound domain>`, polled by a fork **mail router** (ECS service from the fork image, reusing upstream's exported `createImapClient`/`pollOnce`/`workspaceSlugFromInboundAddress`) that routes by `mail_slug` and POSTs raw MIME to the app's existing raw-MIME door. `apps/mail-edge` (SES receipt rule + Lambda + SQS DLQ) **removed**. **IE-1 kept** (D-C11 per-app address key is transport-independent). | D-E2, D-C11 | §3, §4.11, §5.1, §7, §8 Phase 8, §9, O-3, O-11 |
+| Outbound email: SMTP to the SES SMTP VPC endpoint or an internal relay (`EMAIL_SMTP_*`); SES/SNS delivery events disabled (E-3). | D-E2 | §4.10, §4.11 |
+| No internet anywhere: tower, provisioner, mail router, IdP/broker, SCIM and all AWS calls (RDS, Secrets Manager, KMS, ECS, S3, SES) go to intranet hosts or VPC endpoints. Cognito dropped as a broker example (its OAuth endpoints are public); the broker must be intranet-hosted. S3 via VPC endpoint with fleet static keys in Secrets Manager (E-2); bytes stream through the app (`S3_PROXY=true`), no CDN; **V-7** updated. | D-E2 | §4.3 step 5, §4.5.1, §4.10, §8 Phase 0 |
+| Internet-facing pieces removed: public DNS / public ACM validation, CDN origin, SES receipt, public custom domains. App and tower hostnames live in internal DNS with an internally trusted wildcard certificate on the internal ALB (ACM-imported private-CA cert or ACM Private CA). In-VPC callers (tower, provisioner, mail router) reach apps via a private DNS zone that resolves the same hostnames to the internal ALB, bypassing the edge SSO proxy (O-13). | D-E1, D-E2, D-C6 | §3, §4.1, O-13, O-14 |
+| Seams table corrected to match `SEAMS.md`: the schema-floor hook is shared **F-11** (was listed as C-2 here); plan-owned count is **1 seam (IE-1) + 1 conditional (C-1)**. | 02 §10 | §7 |
 
 ## 1. Changes from v1
 
@@ -52,7 +69,7 @@
 | **Major:** in-process fan-out shares the per-request auth memo (`functions/auth-request-cache.ts:26`) across tenants                            | **Eliminated.** The tower never enters an app process; each call is an independent HTTPS MCP call authenticated by that app.                                                                                                                                                                                                 |
 | **Major:** contract requires distinct pooled/direct endpoints and matching role/db (`vendor/contract.ts:422-438, 446-451`); role per tenant      | D-C3: pooled DSN → RDS Proxy endpoint, direct → writer endpoint (different hosts), one DB role + DB per app, password-less DSNs with `role@…/db` matching `db_role`/`db_name`. §4.2.                                                                                                                                             |
 | **Major:** second Better Auth instance needs its own tables                                                                                      | The tower runs its own Better Auth with its own tables (`tower_auth_*`) in the control DB, own lineage in `apps/control-tower/migrations`. §4.5.                                                                                                                                                                              |
-| **Major:** fleet code would trip module-state / authz CI                                                                                         | Tower code is outside `apps/web` scan roots. Fork code inside `apps/web`: provisioner (`lib/server/fork/provisioner/`), inbound-email key (`lib/server/fork/inbound-email/`), one public API route, and fork MCP tools under `mcp/tools/fork-*.ts` (attested by `policy/authz-matrix/scan.ts:321` `scanAllMcpTools`). No module state. |
+| **Major:** fleet code would trip module-state / authz CI                                                                                         | Tower code is outside `apps/web` scan roots. Fork code inside `apps/web`: provisioner (`lib/server/fork/provisioner/`), inbound-email key + mail router (`lib/server/fork/inbound-email/`, `lib/server/fork/mail-router/`), one unauthenticated fork API route, and fork MCP tools under `mcp/tools/fork-*.ts` (attested by `policy/authz-matrix/scan.ts:321` `scanAllMcpTools`). No module state. |
 | **Wrong fact:** fingerprint columns 0251/0252                                                                                                    | Real: `0255_settings_cloud_tenant_id.sql` → renamed by `0256_workspace_key_columns.sql` (`cloud_workspace_key`); canary `0266_settings_cloud_secret_canary.sql`. Not in the Drizzle schema; read via `to_jsonb(s) ->> …` (`fingerprint.ts:262-263`).                                                                           |
 | **Wrong fact:** `OSS_TIER_LIMITS` location; service names                                                                                        | Moot: seat/plan limits do not apply (D4), and the tower calls MCP tools, not services.                                                                                                                                                                                                                                         |
 | **Wrong fact:** `env://` refs                                                                                                                    | `env://` only accepts `QUACKBACK_TENANT_SECRET_[A-Z0-9_]+` (`vendor/secret-ref.ts:141-142`). v2 uses `sealed+aead://` for DB passwords, so onboarding an app needs no task-definition change (§4.2).                                                                                                                             |
@@ -63,15 +80,16 @@
 | v1 control DB schema in `packages/`                                                                                                              | Control-DB migrations are their own lineage in `apps/control-tower/migrations/`, never in `packages/db`.                                                                                                                                                                                                                      |
 | v1 fan-out design (in-process, limit 5)                                                                                                          | MCP fan-out with bounded concurrency, per-app timeouts, partial results, explicit dormancy policy (§4.7).                                                                                                                                                                                                                      |
 | v1 surfaces assumed domain services for every action                                                                                             | Verified MCP coverage table (§4.6); gaps become fork MCP tools registered through shared seam F-3.                                                                                                                                                                                                                             |
-| Caveats (inbound email, `PLATFORM_CREDENTIALS_SOURCE`)                                                                                           | Inbound email is now built (D-C11, §4.11). Platform credentials re-verified (§4.10).                                                                                                                                                                                                                                            |
+| Caveats (inbound email, `PLATFORM_CREDENTIALS_SOURCE`)                                                                                           | Inbound email is now built (D-C11, §4.11; IMAP from the internal mail server). Platform credentials re-verified (§4.10).                                                                                                                                                                                                                                            |
 | Fleet migrator + fork lineage                                                                                                                    | Fork-only releases are not claimed by the fleet migrator; the provisioner's `fork-migrate` command (fork SQL + catalogue reconcile + fork floor, §4.4) covers them.                                                                                                                                                         |
 
 ## 2. Requirements
 
 - **R1** Each app is an isolated Quackback workspace served by the upstream pooled runtime
   (`QUACKBACK_TENANCY=pooled`) in `apps/web`; end users never see another app.
-- **R2** Fleet users sign in **once** to the tower through the org IdP, which may be **OIDC or SAML** (D-C7).
-  Each app is configured with the same IdP by the provisioner.
+- **R2** Fleet users sign in **once** to the tower through the org IdP on the intranet, which may be **OIDC or
+  SAML** (D-C7). Each app is configured with the same IdP by the provisioner; it is also how every employee
+  (all end users, D-E4) signs in to app portals.
 - **R3** The tower aggregates support inbox, tickets, feedback, roadmap, changelog and per-app counts across
   all active apps; it degrades per app (partial results).
 - **R4** The tower acts on one app at a time; **every action is attributable to the human** in both the tower
@@ -84,9 +102,13 @@
 - **R7** Provisioning, suspension and member sync are privileged jobs holding the root key; the tower never
   holds `QUACKBACK_FLEET_ROOT_KEY` nor any app DSN credential (D-C4).
 - **R8** Each app receives inbound email on its own address, verified with its own key (D-C11).
-- **R9** Upgrade safety: 2 upstream seams owned by this plan (+1 conditional); upstream registry drift caught
+- **R9** Upgrade safety: 1 upstream seam owned by this plan (+1 conditional; F-11/F-12 shared); upstream registry drift caught
   by a test; fork-only releases reach every tenant (active now, suspended on resume) with catalogue reconciled.
-- **R12** Every provisioned portal is **private** from the moment its hostname is published (D-N5).
+- **R12** Every provisioned app carries the **04 §3 sign-in baseline** from the moment its hostname is published:
+  public visibility, anonymous off, sign-up closed except IdP JIT, SSO the only sign-in method, widget HMAC
+  required (D-E3; supersedes D-N5). Readers are kept out by the edge SSO + Quackback SSO (D-E1).
+- **R14** No component makes an internet connection (D-E2): tower, provisioner, mail router, IdP/broker and
+  every AWS dependency are intranet hosts or VPC endpoints.
 - **R13** Removing a user from an IdP group removes the matching app grants within **≤ 15 min** (🟡 default,
   §4.5.4).
 - **Later (not delivered by Phases 0–5):** R10 announcements across apps (Phase 6, D-N8); R11 read-only
@@ -95,22 +117,26 @@
 ## 3. Architecture
 
 ```
-              org IdP (OIDC or SAML)      SAML only: OIDC broker in front of the IdP for apps (§4.5.1)
+     intranet org IdP (OIDC or SAML)     SAML only: intranet OIDC broker in front of the IdP for apps (§4.5.1)
                │                │
   tower login  │                │  app SSO (pre-linked account; silent while IdP session is live)
-  (OIDC/SAML)  ▼                ▼
+  (OIDC/SAML)  ▼                ▼          employees ──▶ edge SSO proxy / VPN ──▶ internal ALB
  ┌────────────────────┐  HTTPS MCP (Bearer = user's per-app token)  ┌────────────────────────────┐
- │ apps/control-tower │ ─────────────────────────────────────────▶ │ apps/web (pooled, N hosts) │
+ │ apps/control-tower │ ─── private DNS → internal ALB ───────────▶ │ apps/web (pooled, N hosts) │
  │  Better Auth + SSO │                                             │  /api/mcp, /api/auth/oauth2 │
  │  tower_* tables    │◀── column-limited SELECT ── control DB ───▶ │  registry reader            │
  └────────┬───────────┘                                             └──────┬───────────▲──────────┘
-          │ ECS RunTask (no secrets)                                        │           │ raw MIME + HMAC
+          │ ECS RunTask (no secrets; ECS VPC endpoint)                      │           │ raw MIME + HMAC
           ▼                                                                 ▼           │
- provisioner task (apps/web image, root key) ──▶ one Aurora cluster: DB per app   apps/mail-edge (SES → Lambda)
-                                                 + fleet S3 bucket (w/<settings.id>/)
+ provisioner task (fork image, root key) ──▶ one Aurora cluster: DB per app    mail router (fork image, ECS)
+                                             + fleet S3 bucket via VPC endpoint      ▲ IMAP (TLS)
+                                               (w/<settings.id>/)                    │
+                                                                        internal mail server: fleet mailbox
+                                                                        for *@<inbound domain>
 ```
 
-Two planes; the tower is a pure **client** of the app plane.
+Two planes; the tower is a pure **client** of the app plane. Nothing in the picture has an internet route
+(D-E2); AWS APIs are reached through VPC endpoints and every other host is on the intranet.
 
 ## 4. Design
 
@@ -119,9 +145,20 @@ Two planes; the tower is a pure **client** of the app plane.
 `apps/web` runs pooled exactly as upstream documents (`workspaces/TENANCY.md`): Host → registry
 (`resolveWorkspaceByHostname`, `registry.ts:265`) → pool (`pool-cache.ts`) → fingerprint. Web/worker/migrator
 tasks get `QUACKBACK_CONTROL_DATABASE_URL` (role `cp_reader`) and `QUACKBACK_FLEET_ROOT_KEY` from Secrets
-Manager. App hostnames (D-C6): `<slug>.<fleet-domain>` on an ALB with an ACM wildcard certificate; tower on
-`tower.<fleet-domain>` behind a separate internal ALB/VPN listener. Custom domains per app come later
-(`kind = 'custom'` hostnames).
+Manager. App hostnames (D-C6): `<slug>.<fleet-domain>` on an **internal** ALB, where `<fleet-domain>` is an
+intranet domain in internal DNS (no public DNS records) and the wildcard certificate is internally trusted —
+a private-CA certificate imported into ACM, or ACM Private CA (a public ACM certificate would need public DNS
+validation; O-14). Tower on `tower.<fleet-domain>` behind a separate internal ALB listener. Employees reach
+both through the edge SSO proxy / VPN (D-E1). In-VPC callers (tower, provisioner, mail router) resolve the
+**same hostnames** through a private DNS zone straight to the internal ALB, so Host-based registry routing and
+the MCP token audience (`${baseUrl}/api/mcp`) are unchanged while server-to-server calls skip the edge proxy,
+which has no session for them (O-13). Custom domains per app come later (`kind = 'custom'` hostnames) and are
+likewise internal DNS names with private-CA certificates.
+
+Web/worker env follows the 04 §3 baseline: `DISABLE_TELEMETRY=true`; `QUACKBACK_CONTROL_PLANE_URL`,
+`QUACKBACK_CP_STATUS_URL`, `INTEGRATION_OAUTH_GATEWAY_URL`, `EMAIL_RESEND_API_KEY` unset; AI (when enabled) via
+the internal OpenAI-compatible proxy; `SSRF_ALLOWED_CIDRS` / `SSRF_ALLOWED_HOSTS` (F-12) naming the IdP/broker
+and other intranet services.
 
 ### 4.2 AWS database layout (D-C3, D-C8)
 
@@ -169,10 +206,11 @@ Commands: `create`, `sync-members`, `suspend`, `resume`, `deprovision`, `rotate-
 3. Derive the workspace `SECRET_KEY` via vendored `fleet-secrets.ts` (`deriveWorkspaceSecret`, `:137`) from
    `derived+hkdf://v1/<key>/app-secrets`.
 4. In one transaction on the direct DSN, insert the **settings row**, mirroring `functions/onboarding.ts:265-279`
-   (`id = generateId('workspace')`, name, slug, `DEFAULT_WIDGET_CONFIG`, `DEFAULT_ASSISTANT_CONFIG`,
-   `featureFlags`) **but with the private access profile of §4.3.1 instead of `DEFAULT_PORTAL_CONFIG`**, and
-   `authConfig = { ...DEFAULT_AUTH_CONFIG, openSignup: false }` written explicitly (an absent `openSignup`
-   means `true`, `settings.types.ts:172-196`), with `setupState` = all steps complete,
+   (`id = generateId('workspace')`, name, slug, `DEFAULT_ASSISTANT_CONFIG`, `featureFlags`) **but with the
+   sign-in baseline of §4.3.1 instead of `DEFAULT_PORTAL_CONFIG`, `DEFAULT_AUTH_CONFIG` and
+   `DEFAULT_WIDGET_CONFIG`** — every baseline field written explicitly, because the upstream defaults are open
+   (an absent `openSignup` means `true`, `settings.types.ts:166-197`; `DEFAULT_AUTH_CONFIG.oauth` turns
+   `google`/`github`/`password` on, `:167-171`), with `setupState` = all steps complete,
    `completionSource: 'managed'` (`packages/db/src/types.ts:353`) so `isOnboardingComplete` (`types.ts:561`)
    is true; then
    - fingerprint stamp `{ v: 1, workspaceKey, stampedAt }` (`vendor/contract.ts:524-545`) into
@@ -183,7 +221,11 @@ Commands: `create`, `sync-members`, `suspend`, `resume`, `deprovision`, `rotate-
    (target = image max) + `cp_fork_schema_state` — **no `cp_workspace_hostnames` row yet**, so the app is not
    routable (`resolveWorkspaceByHostname` finds nothing) while it is being configured.
    - `storage` (D-C10) = the **fleet-bucket form**: `{ provider: 'r2', bucket: <fleet bucket>, endpoint:
-     https://s3.<region>.amazonaws.com, region, forcePathStyle: false, publicUrl: <fleet CDN origin> }` with
+     <S3 VPC endpoint URL — the regional endpoint behind a gateway endpoint, or the interface endpoint's
+     DNS name>, region, forcePathStyle: <per V-7>, publicUrl: https://<slug>.<fleet-domain>/api/storage }`
+     (`publicUrl` is required and pinned, `vendor/contract.ts:75-86,290`; pointing it at the app's own
+     `/api/storage` route with `S3_PROXY=true` (`routes/api/storage/$.ts:245`) streams bytes through the app, so
+     browsers never need an S3 or CDN route — there is no CDN on the intranet) with
      **no `credentialRef`** — absent is the documented pooled default ("the isolation is in the key rather
      than in the key pair", `vendor/contract.ts:88-102`). Every object name is composed under
      `w/<settings.id>/` by `storage/namespace.ts` (`WORKSPACE_NAMESPACE_ROOT = 'w'` `:61`,
@@ -200,52 +242,92 @@ Commands: `create`, `sync-members`, `suspend`, `resume`, `deprovision`, `rotate-
    - create the **tower-sync service principal** (`createServicePrincipal`, `principal.factory.ts:186`; name
      "Control Tower sync", no role assignments, no API key) and record its id in `fork_settings`
      `tower.sync_principal_id`; it is the grantor of every tower-owned assignment (§4.3.2);
-   - create the app **identity_provider** row (`packages/db/src/schema/auth.ts:682`; `enabled`,
-     `autoCreateUsers=false`, `showButton=true`) pointing at the org IdP (OIDC) or the OIDC broker (SAML IdP,
-     §4.5.1), + `sso_verified_domain` for the org email domain; client secret via the identity-provider
-     credential service (encrypted under the workspace key);
+   - create the app **identity_provider** row (`packages/db/src/schema/auth.ts:682-741`; `enabled`,
+     `autoCreateUsers=true` (JIT, D-E4), `autoProvisionRole='user'` (portal user; no promotion,
+     `auth/hooks.ts:652-665`), `claimMapping=null` (tower roles come only from `sync-members`), `showButton=true`)
+     pointing at the intranet org IdP (OIDC) or the intranet OIDC broker (SAML IdP, §4.5.1), through the
+     identity-provider service so its URL check (`identity-providers.service.ts:384-395`, needs **F-12**) and
+     client-secret encryption apply;
+   - **break-glass before publish:** create a dedicated break-glass admin user (legacy `admin`, no SSO account;
+     not tower-managed) and mint its recovery codes (`generateRecoveryCode` /
+     `hashRecoveryCode`, `auth/recovery-codes.ts:48,81`), store the plaintext in Secrets Manager
+     `quackback/tenant/<key>/break-glass` (provisioner and ops only). Upstream will not let a workspace become
+     SSO-only without active codes (`assertBreakGlassAvailable`, `sign-in-method-availability.ts:203-209`); the
+     provisioner writes settings directly (step 4 already made the still-unpublished app SSO-only), so it upholds
+     that invariant itself before step 7;
+   - `sso_verified_domain` for the company email domain (`schema/auth.ts:756-785`) linked to the provider, with
+     the **fleet verification token** (the same token in every app, so one internal-DNS TXT record
+     `_quackback-verify.<domain>` = `qb-domain-verify=<token>` serves the fleet, `functions/sso.ts:614-615`);
+     the provisioner runs the same `lookupVerificationTxt` check (`auth/dns-verify.ts:22`, system resolver →
+     internal DNS) before stamping `verifiedAt`, and leaves `enforced=false` until §4.3.1 "enforcement";
    - `sync-members` (§4.3.2);
    - register the tower's **OAuth client** and set `skip_consent` (§4.5.2); write `fork_settings` keys
      `tower.oauth_client_id`, `tower.redirect_uri`, `tower.sso_provider_id` (read by §4.5.3);
    - ensure `developerConfig.mcpEnabled` (default `true`, `settings.types.ts:509`);
-   - **in-scope access check** (§4.3.1): re-read the stored portal/auth config and assert the private profile
-     field by field; evaluate the portal access policy for an anonymous viewer and for a signed-in non-member
-     outside `allowedDomains` — both must be denied.
+   - **in-scope baseline check** (§4.3.1): re-read the stored portal/auth/widget config, the provider row and
+     the verified domain, and assert the baseline field by field; evaluate the upstream gates in-process —
+     `workspaceAllowsAnonymous` (`settings.types.ts:394`) false, `isSsoOnlySignIn` (`sign-in-method-
+     availability.ts:84`) true, `isAccountCreationAllowed(<non-domain email>, 'portal')`
+     (`auth/signup-policy.ts:191`) false, `hasActiveRecoveryCodes()` (`auth/recovery-codes-status.ts:8`) true —
+     all must hold.
 7. **Publish:** insert `cp_workspace_hostnames` (`kind = 'platform'`, `<slug>.<fleet-domain>`), then run the
-   **HTTP negative probes** of §4.3.1 against the public hostname. Any probe that is not denied → delete the
-   hostname row, set `state = 'suspended'`, `state_reason = 'access_probe_failed'`, exit non-zero.
-8. `verify`: `resolveWorkspaceById` ok, `verify-workspace-secrets.ts` passes, `GET https://<host>/` answers with
-   the private-portal sign-in gate (not board content), tower client has `skip_consent = true`, storage
-   write/read round-trip lands under `w/<settings.id>/`, fork floor satisfied (§4.4.3).
+   **HTTP probes** of §4.3.1 against that hostname (in-VPC, via the private DNS zone — i.e. at Quackback level,
+   without the edge proxy). Any probe that does not get the expected refusal → delete the hostname row, set
+   `state = 'suspended'`, `state_reason = 'access_probe_failed'`, exit non-zero.
+8. `verify`: `resolveWorkspaceById` ok, `verify-workspace-secrets.ts` passes, the SSO start redirects to the
+   intranet IdP (proves F-12 + discovery), tower client has `skip_consent = true`, storage write/read
+   round-trip lands under `w/<settings.id>/` and reads back through `/api/storage`, fork floor satisfied
+   (§4.4.3), enforcement state reported (§4.3.1).
 
 Any failure in steps 4–7 leaves the app unpublished (no hostname row) or suspended; `create` is re-runnable
 from the failed step.
 
-#### 4.3.1 Private access profile (D-N5, C1)
+#### 4.3.1 Sign-in baseline (D-E3, 04 §3; C1 fail-closed rules kept)
 
-`DEFAULT_PORTAL_CONFIG` is **public** (`settings.types.ts:370-381`: `features.allowAnonymous: true`,
-`access.visibility: 'public'`), so the provisioner never writes it unmodified. It writes
-`fork/provisioner/access-profile.ts` → `privatePortalConfig(appConfig)`:
+The upstream defaults are open — `DEFAULT_PORTAL_CONFIG` has `allowAnonymous: true`
+(`settings.types.ts:370-383`), `DEFAULT_AUTH_CONFIG` has `openSignup: true` and password/Google/GitHub on
+(`:166-197`) — so the provisioner never writes them unmodified. `fork/provisioner/access-profile.ts` →
+`signInBaseline()` (one value for every app; there is no per-app access input any more):
 
 | Field | Value |
 | ----- | ----- |
-| `access.visibility` | `'private'` |
-| `features.allowAnonymous` | `false` (also the fail-closed read in `workspaceAllowsAnonymous`, `:394`) |
-| `openSignup` (portal) and `authConfig.openSignup` (team) | `false`, both explicit |
-| `access.allowedDomains` | the app's configured end-user domains (default: none — invite/segment only) |
-| `access.widgetSignIn` | per app (default `false`; `true` only for apps whose widget identifies users, D-N5/D-N7) |
-| `access.allowedSegmentIds` | per app (default `[]`); segments are created in-scope before the config write |
-| `support`, help center, status page | upstream defaults (help center and status page are off by default); when enabled later they sit behind the same portal gate |
+| `portalConfig.access.visibility` | `'public'` (D-E3; readers are kept out by edge SSO + Quackback SSO, D-E1) |
+| `portalConfig.access.allowedDomains` / `allowedSegmentIds` / `widgetSignIn` | `[]` / `[]` / `false` (private-portal controls, unused under public visibility) |
+| `portalConfig.features.allowAnonymous` | `false` (also the fail-closed read in `workspaceAllowsAnonymous`, `:394`) |
+| `portalConfig.openSignup` and `authConfig.openSignup` | `false`, both explicit. JIT still works: IdP callbacks for a provider with `autoCreateUsers` at a verified domain are exempt (`isSsoAutoProvisionGrant`, `auth/signup-policy.ts:398-421`) |
+| `authConfig.oauth` | `password: false`, `magicLink: false`, every social provider key `false` (`lib/shared/signin-methods.ts:7-15`) |
+| Identity provider | intranet OIDC IdP or broker, `autoCreateUsers: true`, `autoProvisionRole: 'user'`, `claimMapping: null` (§4.3 step 6) |
+| `sso_verified_domain` | company domain, verified via internal DNS TXT, then `enforced: true` (below) |
+| `widgetConfig.hmacRequired` | `true` (identified employees only, `settings.types.ts:723`) |
+| `support`, help center, status page | upstream defaults; they inherit the same sign-in rules |
 
-Per-app access input (`allowedDomains`, `widgetSignIn`, segment rules) comes from the `create` arguments / a
-`tower_app_access_profiles` row; missing input means the most restrictive value above, never the upstream
-default. `suspend`/`resume` and a `verify --access` command re-assert the profile and re-run the probes.
+**Enforcement.** `enforced=true` hard-binds the domain to the provider (`isHardBound`,
+`auth/auth-restrictions.ts:173-188`). Upstream only allows it after SSO is proven working for that provider
+(`isSsoEnforcementUnlocked`, `sso-gates.ts:77-87`: a successful test or a real SSO sign-in after the last
+details change) and with break-glass codes present (`functions/sso.ts:703-718`). The provisioner never stamps
+a test result it did not run: `verify --access` (run by `create`, `resume`, the 15-minute `sync-members`
+schedule and on demand) sets `enforced=true` as soon as the unlock rule holds — normally the first
+connect-all or portal SSO sign-in after provisioning. Until then the app is already SSO-only, because every
+other method is off (the step-6 check). O-12.
 
-**HTTP negative probes** (no cookie, no token; and with a session for a non-member principal): portal root,
-a board, a post, roadmap, changelog, support/tickets pages, help-center home + article (for apps with the help
-center enabled), the public REST read endpoints and the widget bootstrap endpoint.
-Each must return the sign-in gate / 401 / 403 / 404, never content. The probe list lives next to the private
-portal negative-access tests the review requires (§9) so both change together.
+**Email OTP.** 04 §3 leaves "how email OTP is gated" as an open verification item. The probe below tries it;
+if upstream does not refuse it under this baseline the probe fails and the app is not published (fail
+closed) until 04 resolves the item.
+
+**HTTP probes** (Quackback level: no cookie/token, and with an anonymous session minted at
+`/api/auth/sign-in/anonymous`, which stays registered — `auth/index.ts:767`, optional seam E-4):
+
+- **Writes refused:** create post, vote, comment, submit a support conversation/ticket, widget identify
+  without a valid HMAC, public REST write endpoints → 401/403, never a created row (checked in-scope after).
+- **Non-SSO doors closed:** email/password sign-in and sign-up, magic-link send, email-OTP send, social
+  sign-in for each upstream provider id → refused.
+- **SSO works:** the provider's sign-in start returns a redirect to the intranet IdP/broker authorize URL.
+
+Reads are **not** probed for denial at Quackback level: public visibility serves them by design (D-E3). A
+separate **edge probe** (when the provisioner has a route to the edge proxy; O-13) asserts that an
+unauthenticated request to the hostname through the edge gets the edge SSO challenge, never app content. The
+probe list lives next to the sign-in baseline tests (§9) so both change together. `suspend`/`resume` and
+`verify --access` re-assert the baseline and re-run the probes.
 
 #### 4.3.2 `sync-members` (privileged; the only writer of tower-managed grants)
 
@@ -254,7 +336,11 @@ Runs per app from the provisioner (never from a human MCP token): on every chang
 read with the `cp_provisioner` grant. For each active tower user:
 
 1. **Identity (C3, §4.5.4):** upsert `user` (email, name, `emailVerified`) and `principal` keyed by the
-   recorded `tower_user_app_identities.tenant_user_id` (created on first sync, never re-matched by email);
+   recorded `tower_user_app_identities.tenant_user_id` (never re-matched by email). On first sync, if the user
+   already exists in the app through JIT (a tower user who signed in to the portal first, D-E4), it is
+   **adopted by subject**: the `account` row with `providerId = tower.sso_provider_id` and `accountId = ` the
+   app-facing subject identifies it; otherwise it is created. A same-email user with a different or no SSO
+   subject is never merged — it is reported `identity_conflict` and skipped;
    ensure exactly one `account` row for the app's SSO provider with `accountId = ` the user's app-IdP subject
    (`tower_user_idp_links`); delete any other `account` row for that provider on this user (e.g. created by
    email auto-linking, `auth/index.ts:524-531`) and revoke its sessions. Write `fork_tower_principals` and the
@@ -307,14 +393,16 @@ The web, worker, migrator and provisioner tasks run one image. Upstream's `apps/
 `packages/db/drizzle` to `/app/drizzle` (`:119`) and bundles `migrate.mjs`/`fleet-migrator.mjs` (`:72-95`), so the
 fork adds a fork-owned **`apps/web/Dockerfile.fork`** (not a seam) built after the upstream image:
 `ARG BASE` (= the upstream-Dockerfile image of the same commit); a builder stage bundles
-`apps/web/scripts/fork-provision.ts` exactly as upstream bundles `fleet-migrator.ts` (`bun build --target=bun`);
+`apps/web/scripts/fork-provision.ts` and `apps/web/scripts/fork-mail-router.ts` exactly as upstream bundles
+`fleet-migrator.ts` (`bun build --target=bun`);
 the final stage is `FROM ${BASE}` + `COPY packages/db/drizzle-fork /app/drizzle-fork` + `COPY
-/tmp/fork-provision.mjs /app/fork-provision.mjs` + `ENV FORK_MIGRATIONS_FOLDER=/app/drizzle-fork`. The fork
+/tmp/fork-provision.mjs /app/fork-provision.mjs` + the same for `/app/fork-mail-router.mjs` + `ENV FORK_MIGRATIONS_FOLDER=/app/drizzle-fork`. The fork
 lineage module statically imports the fork journal (inlined by bundling, like `schema-version.ts:36`) and
 resolves the folder from `FORK_MIGRATIONS_FOLDER` (fallback: path relative to the module, as upstream does for
 `MIGRATIONS_FOLDER`, `schema-version.ts:48`). `fork-provision` refuses to start if the folder's
 `meta/_journal.json` differs from the inlined journal. **CI image gate:** the built image contains
-`/app/drizzle-fork/meta/_journal.json`, `/app/fork-provision.mjs`, `/app/fleet-migrator.mjs`, and
+`/app/drizzle-fork/meta/_journal.json`, `/app/fork-provision.mjs`, `/app/fork-mail-router.mjs`,
+`/app/fleet-migrator.mjs`, and
 `fork-provision.mjs self-check` passes inside the image.
 
 #### 4.4.2 `fork-migrate` (fork SQL **and** catalogue)
@@ -364,8 +452,8 @@ Upstream's runtime floor (`fleet/schema-floor.ts:144-150`, called on every pool 
 `suspend` sets `state = 'suspended'`. `resume --key` runs, in order: (1) `fleet-migrator run --workspace <key>`
 (upstream to target; F-1 + seed ride along); (2) `fork-migrate --workspace <key> --include-suspended` on the
 direct DSN; (3) parks the hostname rows (moved to `cp_parked_hostnames`), sets `state = 'active'` — unroutable
-while parked; (4) in scope: `sync-members`, access-profile assertion (§4.3.1), fork-floor check; (5)
-re-inserts the hostnames and runs the HTTP negative probes. Any failure → hostnames restored, `state =
+while parked; (4) in scope: `sync-members`, sign-in baseline assertion (§4.3.1), fork-floor check; (5)
+re-inserts the hostnames and runs the §4.3.1 HTTP probes. Any failure → hostnames restored, `state =
 'suspended'`, `state_reason = 'resume_failed:<code>'`. `create` follows the same publish-last rule.
 
 #### 4.4.5 Deployment order
@@ -388,7 +476,8 @@ re-inserts the hostnames and runs the HTTP negative probes. Any failure → host
 `workspaces: ["apps/*"]` glob; `bun.lock` regenerated on merge). Better Auth with the **SSO plugin
 (`@better-auth/sso`)**, which registers OIDC and SAML 2.0 providers from configuration; tables
 `tower_auth_user|session|account|verification|sso_provider` via `modelName` mapping. The IdP (either protocol)
-is configuration, not code. No self-signup: a subject with no role after claim mapping is refused. Cookie on
+is an **intranet** service and is configuration, not code; the tower fetches its metadata/JWKS/token endpoint
+directly on the intranet (the tower is outside `apps/web`, so the upstream SSRF guard does not apply to it). No self-signup: a subject with no role after claim mapping is refused. Cookie on
 `tower.<fleet-domain>` only; MFA enforced at the IdP. Plugin version and SAML feature set verified in Phase 4
 (**V-8**).
 
@@ -405,11 +494,17 @@ bridges" (`auth/map-profile-claims.ts:13`, `lib/shared/oidc-claim-mapping.ts:205
 `apps/web/package.json`. So:
 
 - **OIDC IdP:** each app's `identity_provider` points straight at it.
-- **SAML IdP:** apps point at an **OIDC broker** that federates the SAML IdP (e.g. Keycloak or an AWS Cognito
-  user pool). Zero seams; the broker session makes app SSO silent exactly as a native OIDC session would. The
+- **SAML IdP:** apps point at an **intranet-hosted OIDC broker** that federates the SAML IdP (e.g. Keycloak, or
+  the IdP product's own OIDC side). A cloud broker whose OAuth endpoints are on the public internet (e.g.
+  Cognito hosted UI) is ruled out by D-E2. Zero seams; the broker session makes app SSO silent exactly as a native OIDC session would. The
   tower may use the SAML IdP natively or the same broker.
 - Rejected: native SAML in `apps/web` (adding the SSO plugin to `auth/index.ts`, a SAML shape on the upstream
   `identity_provider` schema, login UI) — several seams in high-churn upstream auth files. See **O-2**.
+- **F-12 prerequisite (verified):** every app-side call to the IdP/broker goes through the SSRF guard —
+  provider save (`identity-providers.service.ts:384-395`), the SSO test (`auth/sso-test-handshake.ts:187-190`),
+  and **every runtime sign-in** (discovery + userinfo via `safeFetch`, `auth/index.ts:222-239`,
+  `auth/hooks.ts:815-816,832-833`). Without the F-12 allow-list naming the IdP/broker, app SSO does not work at
+  all; Phase 3 cannot start before F-12 ships.
 
 #### 4.5.2 Per-app OAuth grant (D-C2, D-C12)
 
@@ -435,7 +530,7 @@ Design:
 
 - **Client registration:** the provisioner registers one confidential client per app ("Quackback Control
   Tower", `redirect_uri = https://tower.<fleet-domain>/oauth/callback/<key>`, `client_secret_basic`,
-  `authorization_code refresh_token`) through the app's public RFC 7591 endpoint, then — inside the workspace
+  `authorization_code refresh_token`) through the app's unauthenticated RFC 7591 endpoint (via the private DNS zone), then — inside the workspace
   scope — sets **`skip_consent = true`** on that one `oauth_client` row (D-C12: the tower is a trusted
   first-party client). `client_id/secret` go to the tower sealed with the tower's KMS key into
   `tower_tenant_clients`. Attribution is unchanged: the human still authenticates to the app.
@@ -490,6 +585,11 @@ page appears (client lacks `skip_consent`) → user may approve, and `verify` re
 OAuth `error=` on the callback → `failed: <error>`; user abandons mid-chain → the run stays open and the tower
 home offers "resume" (next hop continues from the queue). A failed app never blocks the rest of the chain.
 
+**Edge SSO proxy (D-E1).** The browser hops pass through the edge proxy like any employee request; while the
+edge session is live (normally one IdP session covers edge, tower and apps) the proxy adds at most a silent
+redirect per new host. The tower's server-side calls (code exchange, refresh, MCP) and the `/api/health`
+pre-check use the private DNS zone to the internal ALB (§4.1, O-13).
+
 #### 4.5.4 Identity mapping, sync authority and revocation (C3)
 
 **Identity chain** (email is an attribute on every hop, never the link):
@@ -522,9 +622,9 @@ Human MCP tokens are never used to change roles or membership, and the provision
 action on a user's behalf.
 
 **Revocation bound (🟡, O-9):** claim refresh at tower login alone is not prompt revocation. Default: the
-tower exposes a **SCIM 2.0** endpoint (`/scim/v2/Users|Groups`, bearer secret in Secrets Manager) for IdPs that
-push; independently, a **reconcile job every 15 minutes** re-reads group membership (SCIM pull / IdP
-directory API where available; otherwise forces a silent IdP re-authentication by capping tower sessions at
+tower exposes a **SCIM 2.0** endpoint (`/scim/v2/Users|Groups`, bearer secret in Secrets Manager) for the
+intranet IdP to push to; independently, a **reconcile job every 15 minutes** re-reads group membership (SCIM pull / IdP
+intranet directory API where available; otherwise forces a silent IdP re-authentication by capping tower sessions at
 15 min idle-refresh with `prompt=none`, which fails for removed users). Any change marks the user and triggers
 `sync-members --user` for all apps. **Target: ≤ 15 min** from IdP removal to loss of app access (app sessions
 deleted, tower-client OAuth tokens revoked, tower grants `revoked`); SCIM push typically ≤ 1 min. An IdP with
@@ -592,38 +692,74 @@ read-only. Until Phase 6 ships the tower has no announcements surface (R10).
 ### 4.10 Caveats (re-verified)
 
 - **Platform credentials:** `config.platformCredentialsSource` returns `'control-plane'` whenever
-  `QUACKBACK_TENANCY=pooled` (`config.ts:635-637`); with `QUACKBACK_CONTROL_PLANE_URL` unset, integration OAuth
-  apps relying on platform credentials are unavailable. Validate per integration (V-6); app SSO sign-in is
-  **not** affected (identity_provider credentials are per-workspace).
-- **Fleet S3 credential:** with no `credentialRef`, `s3.ts:210-219` uses `S3_ACCESS_KEY_ID`/`S3_SECRET_ACCESS_KEY`
-  (no AWS default credential chain), so the fleet uses one IAM user scoped by bucket policy to the fleet bucket,
-  keys in Secrets Manager. `provider` must be the literal `'r2'` (`vendor/contract.ts:286`); **V-7** confirms
-  AWS S3 works through it (the client is generic S3; endpoint/region/path style come from the record).
-- Process-wide AI keys / SMTP shared across apps (acceptable for one operator).
+  `QUACKBACK_TENANCY=pooled` (`config.ts:635-637`); `QUACKBACK_CONTROL_PLANE_URL` stays unset (04 §3), so
+  integration OAuth apps relying on platform credentials are unavailable. SaaS integrations are not used on the
+  intranet anyway (04 §4); **V-6** only confirms that the intranet integrations in use (self-hosted GitLab / n8n /
+  ntfy, after F-12) do not rely on platform credentials. App SSO sign-in is **not** affected (identity_provider
+  credentials are per-workspace).
+- **Fleet S3 credential (E-2):** with no `credentialRef`, `resolveStorageCredentials` (`s3.ts:210-222`) uses
+  `S3_ACCESS_KEY_ID`/`S3_SECRET_ACCESS_KEY` — static keys only, no AWS default credential chain — so the fleet
+  uses one IAM user scoped by bucket policy (and a `aws:SourceVpce` condition) to the fleet bucket, keys in
+  Secrets Manager injected into the task env. If IAM roles are mandatory, conditional seam **E-2a** (owned by 04)
+  applies instead. `provider` must be the literal `'r2'` (`vendor/contract.ts:71,285`); **V-7** confirms AWS S3
+  works through that record shape against the **S3 VPC endpoint** (the client is generic S3;
+  endpoint/region/path style come from the record) with `S3_PROXY=true` and `publicUrl` on the app's own
+  `/api/storage`.
+- **Email (process-wide, acceptable for one operator):** outbound via SMTP to the SES SMTP VPC endpoint or an
+  internal relay (`EMAIL_SMTP_HOST/_PORT/_USER/_PASS`, `packages/email/src/index.ts:181-195`; SES SMTP
+  credentials are static and live in Secrets Manager, E-2); the SES-API variables and `EMAIL_RESEND_API_KEY` stay
+  unset (SES API would take precedence over SMTP, `index.ts:170-174`). SES/SNS delivery-event ingestion is
+  **disabled** (E-3): bounces/complaints are not tracked in-app; SES account-level suppression still applies.
+  Each app's `email_from` is on an internal domain. Set a workspace logo (the default template logo is an
+  internet URL, 04 §3).
+- **AI:** process-wide, through the internal OpenAI-compatible proxy (D-E5/D-E6, 04 §3); `ai_enabled` per app in
+  the registry is unchanged.
+- **AWS access without internet:** the provisioner's and tower's AWS calls (RDS/RDS Proxy API, Secrets Manager,
+  KMS, ECS `RunTask`, S3, CloudWatch Logs) use VPC interface/gateway endpoints; no task has a NAT or internet
+  gateway route.
 - Root-key blast radius (D-C4): Secrets Manager + KMS, only web/worker/migrator/provisioner task roles;
   rotation by bumping `v<gen>` (requires re-encryption; `stored-ciphertext.ts` — never re-stamp the canary over
   un-re-encrypted data). Rotating an app's `SECRET_KEY` also rotates its inbound address key (§4.11).
 
 ### 4.11 Per-app inbound email (D-C11; permanently fork-only per D1)
 
+Mail arrives from the company's **internal mail server** (D-E2): there is no SES receiving, no internet MX and no
+provider webhook.
+
 **Upstream today (verified):**
 
 - Reply addresses are `<mailSlug>+<c|t><id-suffix>.<tag>@<inbound domain>`; the tag is
-  `HMAC-SHA256(key, "<slug>\0<id>")` (`conversation.email-channel.ts:413-417`), minted by
+  `HMAC-SHA256(key, "<slug>\0<id>")` (`signInboundTag`, `conversation.email-channel.ts:413-417`), minted by
   `inboundReplyToAddress`/`inboundTicketReplyToAddress` and verified by `claimVerifies` (`:546-552`). The key
   comes from `signingKey(env)` (`:243-248`), which reads the **process-wide** `EMAIL_INBOUND_SIGNING_SECRET`
-  (`:143`). `TENANCY.md:673-676` calls one shared secret the blocker for enabling email on a pooled fleet.
+  (`:143`). `TENANCY.md:673-676` calls one shared secret the blocker for enabling email on a pooled fleet. The
+  bare `<mailSlug>@<inbound domain>` is each workspace's platform inbox (cold mail).
 - The mail slug is a registry field (`registry.ts:459`, `vendor/contract.ts:197`) read by `currentMailSlug()`
   from the current workspace scope (`conversation.mail-slug.ts`).
-- Two front doors on `POST /api/chat/email/inbound`: the Resend webhook (Svix-verified with the same env secret,
+- **IMAP inbound is process-wide and refuses pooled tenancy.** `readImapConfig` reads one mailbox from
+  `EMAIL_INBOUND_PROVIDER=imap` + `IMAP_HOST/PORT/USER/PASSWORD/TLS/MAILBOX` env (`conversation.email-imap.ts:53-70`);
+  `isEmailImapPollable` returns false under `QUACKBACK_TENANCY=pooled` and logs why — every workspace loop would
+  poll the same mailbox and ingest the same message into its own database (`conversation.email-imap-queue.ts:17-24,
+  47-60`). The pieces are reusable, though: `createImapClient` (`conversation.email-imap.ts:241`) and `pollOnce`
+  (`:78-96`, ingest callback; a throw leaves the message unseen for retry, a return marks it seen) are exported
+  and have no workspace dependency.
+- Two front doors on `POST /api/chat/email/inbound`: the Resend webhook (Svix-verified with the inbound secret,
   `email-webhook-handler.ts:37`) and the raw-MIME edge door (`email-cloudflare-handler.ts`), authenticated by a
   separate fleet key `INBOUND_HMAC_SECRET` (`:99`) over `timestamp.mailSlug.body`; it refuses mail whose signed
-  slug is not this host's workspace (`deliveryNamesThisWorkspace`, `:374`, called at `:551`).
+  slug is not this host's workspace (`deliveryNamesThisWorkspace`, `:374`, called at `:551`); it is live when
+  the inbound domain, inbound secret and edge key are set (`:226-228`).
 - CSAT email links already use the workspace `SECRET_KEY` (`csat-email-token.ts:35-39`), not the inbound secret.
 
-**Fork change:**
+**Choice of per-app mailbox model.** Two ways to give each app its own inbound address on the internal server:
 
-1. **Per-app address key.** New `apps/web/src/lib/server/fork/inbound-email/address-key.ts`:
+| Model | What it needs | Verdict |
+| --- | --- | --- |
+| **A. One fleet mailbox + per-app plus-addressing by `mail_slug`** (default) | Mail team, once: a dedicated inbound mail domain (e.g. `qb-mail.<company>`) whose every recipient is delivered into one mailbox, with the envelope recipient stamped in a header (V-9). Fork: the mail router below. | Zero seams, no per-app mail-server work, reuses the upstream address grammar and the upstream raw-MIME door with its slug binding. |
+| B. One mailbox per app | Mail team: a mailbox + credentials per app. Fork: a per-workspace poll job (shared seam F-8) reading sealed per-app IMAP credentials from `fork_settings`, reusing `createImapClient`/`pollOnce`/`ingestParsedEmail` in scope. | Fallback only if the mail team cannot provide a catch-all domain (O-11). |
+
+**Fork change (model A):**
+
+1. **Per-app address key (kept; D-C11).** New `apps/web/src/lib/server/fork/inbound-email/address-key.ts`:
    `forkInboundAddressKey(): Buffer | null | undefined` — `undefined` when not pooled (upstream path
    unchanged for single-tenant); otherwise `HKDF-SHA256(getWorkspaceSecretKey(), salt 'quackback-fork',
    info 'fork:inbound-address:v1:<workspaceKey>:<currentMailSlug()>', 32)`, or `null` with no workspace scope
@@ -631,25 +767,48 @@ read-only. Until Phase 6 ships the tower has no announcements surface (R10).
    and is itself `HKDF(root key, <key>, 'app-secrets')` (`vendor/fleet-secrets.ts:120-138`), so the address key
    is derived from the fleet root key without the app ever handling the root key and **without** adding a
    purpose to the vendored closed list `FLEET_SECRET_PURPOSES` (`fleet-secrets.ts:87`, which would be a seam in
-   the vendored contract). No module state; pure function.
+   the vendored contract). No module state; pure function. The transport change does not touch this: the key
+   signs and verifies addresses, whoever delivers the mail.
 2. **Seam IE-1** — first line of `signingKey()` in `conversation.email-channel.ts`:
    `const forkKey = forkInboundAddressKey(); if (forkKey !== undefined) return forkKey`. Both minting
    (`signInboundTag`) and verification (`claimVerifies`) go through `signingKey`, so both become per-app.
    Mint and verify run inside the app's scope (senders via `currentMailSlug()`; the inbound door is resolved by
    Host), so the same key is derived on both sides.
-3. **Routing by mail slug.** New fork app `apps/mail-edge/` (Lambda, fork-owned, no seam): SES receipt rule for
-   `*@<inbound domain>` → raw message to S3 → Lambda reads the envelope recipient, normalises the slug exactly
-   as `workspaceSlugFromInboundAddress` does (`conversation.email-channel.ts:612-617`), resolves
-   `mail_slug → primary_hostname, state` through a column-limited control-DB role `cp_mail_router`, and POSTs
-   the raw MIME to `https://<host>/api/chat/email/inbound` with the upstream edge wire contract
-   (`email-cloudflare-handler.ts:10-20`). Unknown slug or non-active app → SES bounce; 5xx → retry via SQS DLQ.
-   The edge key `INBOUND_HMAC_SECRET` stays fleet-wide: it only authenticates the edge, and because the slug
+3. **Mail router (replaces `apps/mail-edge`).** Logic `apps/web/src/lib/server/fork/mail-router/*`, entry
+   `apps/web/scripts/fork-mail-router.ts`, bundled as `/app/fork-mail-router.mjs` by `Dockerfile.fork` (§4.4.1).
+   Runs as one ECS service (singleton by a Postgres advisory lock in the control DB; a second task idles).
+   Every `FORK_MAIL_ROUTER_POLL_MS` (default 15 s) it opens the fleet mailbox with `createImapClient` (TLS to
+   the internal mail server; credentials `FORK_MAIL_ROUTER_IMAP_*` from Secrets Manager) and runs `pollOnce`
+   with a routing callback instead of upstream ingest:
+   1. recipients = the envelope-recipient header(s) configured in `FORK_MAIL_ROUTER_RCPT_HEADERS` (default
+      `Delivered-To, X-Original-To`), else `To`/`Cc` addresses at the inbound domain (via `parseRawEmail`,
+      `conversation.email-inbound.ts:694`);
+   2. per distinct slug (`workspaceSlugFromInboundAddress`, `conversation.email-channel.ts:612-617`) resolve
+      `mail_slug → primary_hostname, state` through the column-limited control-DB role `cp_mail_router`;
+   3. POST the raw message to `https://<primary_hostname>/api/chat/email/inbound` (private DNS → internal ALB,
+      §4.1) with the upstream edge wire contract (`email-cloudflare-handler.ts:10-20`), `x-qb-envelope-to` = the
+      recipient that named the slug, signed with `INBOUND_HMAC_SECRET`;
+   4. every slug 2xx → return (message marked seen); unknown slug or non-active app → recorded `unroutable`
+      and returned (marked seen; alarm metric; no bounce is generated — the sender is an employee on the same
+      mail system and gets no reply, O-11); timeout/5xx → throw (left unseen, retried next poll). Per-slug
+      outcomes are kept in `cp_mail_deliveries(message_key, mail_slug, status, attempts, first_seen_at,
+      last_error)` (`message_key` = Message-ID, else a SHA-256 of the raw message) so a retry never re-posts to
+      a slug that already succeeded; after 24 h of failures the message is marked seen, status `dead`, alarm.
+   The router inherits upstream IMAP's text decoding (`socket.setEncoding('utf8')`, `conversation.email-imap.ts:122`)
+   and signs exactly the bytes it sends, so the door's byte signature verifies; fidelity for non-UTF-8 8-bit
+   bodies is the same as single-tenant IMAP. Friendly per-app addresses (e.g. `payroll-help@<company>`) are
+   aliases on the mail server that forward to `<mail_slug>@<inbound domain>`.
+   The edge key `INBOUND_HMAC_SECRET` stays fleet-wide: it only authenticates the router, and because the slug
    is inside its signature a captured delivery cannot be re-aimed at another app (handler note 3). See **O-3**.
-4. **Configuration.** `EMAIL_INBOUND_DOMAIN` = fleet inbound domain; `INBOUND_HMAC_SECRET` (edge key);
-   `EMAIL_INBOUND_SIGNING_SECRET` must still be set (a random fleet value, never shared) because the
-   "configured" gates test for it (`:270-271`, `:296-297`); under pooled it signs no addresses. The Resend door
-   is unused on AWS. Set `EMAIL_EVENTS_SIGNING_SECRET` explicitly so SES/SNS delivery events do not fall back
-   to it (`email/email-delivery-webhook.ts:32-35`).
+4. **Configuration.** Web/worker: `EMAIL_INBOUND_DOMAIN` = the inbound mail domain; `INBOUND_HMAC_SECRET`
+   (router key); `EMAIL_INBOUND_SIGNING_SECRET` must still be set (a random fleet value, never shared) because
+   the "configured" gates test for it (`:270-271`, `:296-297`); under pooled it signs no addresses.
+   **Leave `EMAIL_INBOUND_PROVIDER` / `IMAP_*` unset on web/worker** — upstream's poller would refuse pooled
+   anyway (with an error log); the mailbox credentials exist only in the router task. The Resend door is unused:
+   it stays reachable with the fleet inbound secret, which never leaves Secrets Manager; the internal ALB may
+   additionally drop requests on that path carrying `svix-*` headers. Set `EMAIL_EVENTS_SIGNING_SECRET` to its
+   own random value so the (disabled, E-3) delivery-event route never falls back to the inbound secret
+   (`email/email-delivery-webhook.ts:32-35`); no SNS subscription is created.
 5. **Rotation.** Bumping an app's `app-secrets` generation changes its address key; old Reply-To addresses
    then fail verification and replies fall back to `In-Reply-To`/`References` threading or a new conversation
    (the documented degradation, `conversation.email-channel.ts:275-295`). Acceptable given rare rotations.
@@ -701,12 +860,15 @@ the CP-0054 rename the upstream test reproduces (`schema-state.test.ts`): `cp_te
 `0004_fork_state.sql` (fork-only, §4.4): `cp_fork_schema_state(workspace_key pk fk, fork_version int, fork_tag
 text, catalogue_version int, status text check in (ok,failed,upstream_pending,deferred_until_resume),
 last_error text, updated_at)`; `cp_parked_hostnames` (same columns as `cp_workspace_hostnames` + `parked_at`,
-`reason`) for publish-last on create/resume.
+`reason`) for publish-last on create/resume; `cp_mail_deliveries(message_key text, mail_slug text, status text
+check in (delivered,retrying,unroutable,dead), attempts int, first_seen_at, last_error text, updated_at; pk
+(message_key, mail_slug))` for the mail router (§4.11), pruned after 30 days.
 
 Grants: `cp_reader` (web/worker): SELECT registry/hostnames, INSERT/UPDATE activity; `cp_migrator`: + RW
 schema_state; `cp_provisioner`: RW all `cp_*` + SELECT `tower_users`, `tower_roles`, `tower_role_members`,
-`tower_role_app_teams`, `tower_app_access_profiles`, `tower_user_idp_links` + RW `tower_user_app_identities`;
-`cp_mail_router` (mail edge): column SELECT `(mail_slug, primary_hostname, state)`; `tower_app`: column SELECT
+`tower_role_app_teams`, `tower_user_idp_links` + RW `tower_user_app_identities`;
+`cp_mail_router` (mail router): column SELECT `(mail_slug, primary_hostname, state)` on the registry + RW
+`cp_mail_deliveries`; `tower_app`: column SELECT
 on registry (`workspace_key, state, state_reason, primary_hostname, base_url, revision`), SELECT
 hostnames/activity, RW `tower_*`.
 
@@ -717,7 +879,6 @@ hostnames/activity, RW `tower_*`.
 | `tower_users`               | `id uuid pk`, `idp_subject text unique`, `email citext unique`, `name`, `status text check in (active,disabled)`, `last_login_at`, timestamps (replaces v2-r1 `tower_admins`); `idp_subject` is a denormalised copy of the `tower` row in `tower_user_idp_links` |
 | `tower_roles`               | `id uuid pk`, `key text unique`, `name`, `description`, `capabilities text[]` (⊆ code catalogue §6, checked on write), `tenant_template_key text null` (workspace-wide `fork_role_templates.template_key` from 10; null ⇒ none, e.g. Fleet Owner = legacy Admin), `tenant_team_template_key text null` (team-scoped template; non-null requires `tenant_template_key` non-null or legacy `admin`, CHECK), `tenant_legacy_role text check in (admin,member) default 'member'`, `is_seed bool`, `retired_at timestamptz null` (soft delete, §4.3.2), timestamps |
 | `tower_role_app_teams`      | `role_id fk`, `workspace_key fk`, `tenant_team_id text` (verified to exist at every sync; missing ⇒ `unmapped_team`), `set_by uuid`, timestamps; pk (`role_id`,`workspace_key`) |
-| `tower_app_access_profiles` | `workspace_key pk fk`, `allowed_domains text[] default '{}'`, `widget_sign_in bool default false`, `allowed_segments jsonb default '[]'` (segment definitions created in-app by the provisioner), timestamps (§4.3.1) |
 | `tower_user_idp_links`      | `user_id fk`, `provider_key text check in (tower,app)`, `issuer text`, `subject text`, `linked_at`; pk (`user_id`,`provider_key`); unique (`issuer`,`subject`) |
 | `tower_user_app_identities` | `user_id fk`, `workspace_key fk`, `tenant_user_id text`, `tenant_principal_id text`, `linked_at`, `verified_at`; pk (`user_id`,`workspace_key`); unique (`workspace_key`,`tenant_user_id`), unique (`workspace_key`,`tenant_principal_id`) — written only by the provisioner |
 | `tower_role_members`        | `user_id fk`, `role_id fk`, `source text check in (claim,manual)`, `granted_by uuid null`, `created_at`; pk (`user_id`,`role_id`,`source`) — multi-role (D-R4)                   |
@@ -811,14 +972,18 @@ suggestion and widget tools, tier escalation and account actions.
 | # | Upstream file | Change (one line) | Why unavoidable | Re-apply on conflict |
 | - | ------------- | ----------------- | --------------- | -------------------- |
 | IE-1 | `apps/web/src/lib/server/domains/conversation/conversation.email-channel.ts` (`signingKey`, `:243`) | `const forkKey = forkInboundAddressKey(); if (forkKey !== undefined) return forkKey` (`FORK-SEAM(inbound-email)`) + its import | The address key is read from process env in the one function both mint and verify use; no injection point exists. Permanently fork-only (D1). | Re-add as the first statement of whatever function returns the HMAC key for `signInboundTag`/`claimVerifies`. |
-| C-2 | `apps/web/src/lib/server/fleet/schema-floor.ts` (`assertSchemaFloor`, `:144`) | first statement `await forkAssertSchemaFloor(workspaceKey, sql)` (`FORK-SEAM(fork-floor)`) + its import | The only per-workspace pre-serve schema gate is this function (sole caller `pool-cache.ts:308`); it reads only the upstream ledger, so fork-only drift and un-reconciled catalogues would otherwise be served. Fork function has no module state (env resolved per call against the inlined fork journal). | Re-add as the first statement of whatever function `pool-cache` awaits for the schema floor. |
+| shared | `apps/web/src/lib/server/fleet/schema-floor.ts` (`assertSchemaFloor`, `:144`) | first statement `await forkAssertSchemaFloor(workspaceKey, sql)` (`FORK-SEAM(fork-floor)`) | **F-11** (shared, `SEAMS.md`; previously listed here as C-2). The fork function (`fork/fleet/fork-schema-floor.ts`) is owned by this plan; not counted here. | — |
+| shared (prerequisite) | `apps/web/src/lib/server/content/ssrf-guard.ts` (+ webhook write check) | env allow-list for intranet CIDRs/hosts | **F-12** (Foundations, E-1). Without it app SSO against the intranet IdP cannot be saved, tested, enforced or used (§4.5.1). Not counted here. | — |
 | C-1 (conditional, V-1) | `apps/web/src/lib/server/workspaces/pool-cache.ts` | `prepare: config.workspacePoolPrepare` at `:179`/`:402` (env `WORKSPACE_POOL_PREPARE`, default true) | Only if RDS Proxy pins on prepared statements. | Replace the two literals again. |
 | shared | `mcp/tools/index.ts` | `registerForkTools` | **F-3**, not counted here. | — |
 | dep | `packages/db/src/migrate-runtime.ts`; MCP actor construction | fork lineage; custom-role enforcement | **F-1** (Foundations) and R-3…R-5 (10-rbac); not counted here. | — |
 
-**Count: 2 seams (+1 conditional).** Everything else is new files: `apps/control-tower/**`, `apps/mail-edge/**`,
-`apps/web/src/lib/server/fork/{provisioner,inbound-email,fleet}/**`, `apps/web/src/routes/api/fork/tower-connect.ts`,
-`apps/web/scripts/fork-provision.ts`, `apps/web/Dockerfile.fork`, `apps/web/src/lib/server/mcp/tools/fork-fleet.ts`,
+**Count: 1 seam (IE-1) (+1 conditional, C-1).** Removed by the intranet revision: nothing that was a seam —
+the deleted `apps/mail-edge/**` (SES receipt + Lambda + SQS DLQ) was fork-owned; the mail router that replaces it
+is new files and needs no seam (it only imports upstream's exported IMAP client and address parser). Model B
+(per-app mailboxes, O-11) would add a use of shared seam F-8. Everything else is new files: `apps/control-tower/**`,
+`apps/web/src/lib/server/fork/{provisioner,inbound-email,mail-router,fleet}/**`, `apps/web/src/routes/api/fork/tower-connect.ts`,
+`apps/web/scripts/fork-provision.ts`, `apps/web/scripts/fork-mail-router.ts`, `apps/web/Dockerfile.fork`, `apps/web/src/lib/server/mcp/tools/fork-fleet.ts`,
 fork migrations for §5.3. Generated: `MATRIX.md` (fork tools), `GRAPH.md`, `bun.lock`. Upstream's
 `apps/web/Dockerfile` is **not** edited (§4.4.1).
 
@@ -826,15 +991,15 @@ fork migrations for §5.3. Generated: `MATRIX.md` (fork tools), `GRAPH.md`, `bun
 
 | Phase | Deliverable | Validation gate |
 | ----- | ----------- | --------------- |
-| **0. AWS spikes** | Shared Aurora cluster + RDS Proxy + fleet S3 bucket + 1 hand-made app | V-1 pinning measured (C-1 decision recorded); V-2 password auth; V-3 DSN/OID via proxy; V-7 S3 via `provider:'r2'` record; V-4 token TTLs + `skip_consent` behaviour |
+| **0. AWS spikes** (in the no-egress VPC) | Shared Aurora cluster + RDS Proxy + fleet S3 bucket + VPC endpoints (S3, Secrets Manager, KMS, ECS, RDS, Logs, SES SMTP) + internal ALB, internal DNS/private-CA certificate + 1 hand-made app | V-1 pinning measured (C-1 decision recorded); V-2 password auth; V-3 DSN/OID via proxy; V-7 S3 via `provider:'r2'` record through the VPC endpoint with static keys + `S3_PROXY=true`; V-4 token TTLs + `skip_consent` behaviour; V-9 envelope-recipient header from the internal mail server; V-10 private-DNS bypass of the edge proxy keeps Host/audience; no task has an internet route (egress test) |
 | **1. Control DB** | `apps/control-tower/migrations` 0001–0004 + migrate script + grants | Registry parity test green; `apps/web` boots pooled against a hand-seeded row; `fleet-migrator status/enrol` work |
-| **2. Provisioner** | `Dockerfile.fork` + image gate; `fork-provision create/verify/suspend/resume/deprovision/fork-migrate`; private access profile; seam C-2 + fork floor; `cp_fork_schema_state` | Two apps provisioned; `verify` passes (secrets, storage prefix, `skip_consent`, private portal); HTTP negative probes denied on every listed route; forced probe failure unpublishes + suspends; fingerprint refusals on a mis-wired row = 503 with the right code; `workspace-probe` isolation passes; mail slug > 13 chars refused; the four F1 rehearsals (§9) pass |
-| **3. App SSO + members** | IdP rows (OIDC direct or via broker), `sync-members` with bundles + multi-role, `tower-connect` route | User signs into both apps via the IdP (direct OIDC and via broker) and lands on the mapped principal (no duplicate user, no email-linked extra account); the C2 grant tests (§9) pass; disabled / IdP-removed user loses app access within the bound; `tower-connect` rejects a foreign `client_id`/`redirect_uri` |
+| **2. Provisioner** | `Dockerfile.fork` + image gate; `fork-provision create/verify/suspend/resume/deprovision/fork-migrate`; sign-in baseline (§4.3.1) + break-glass codes; F-11 fork floor; `cp_fork_schema_state` | Two apps provisioned; `verify` passes (secrets, storage prefix + `/api/storage` read-back, `skip_consent`, baseline fields); Quackback-level probes: writes refused without a session and with an anonymous session, every non-SSO sign-in/sign-up door refused; edge probe gets the SSO challenge; forced probe failure unpublishes + suspends; fingerprint refusals on a mis-wired row = 503 with the right code; `workspace-probe` isolation passes; mail slug > 13 chars refused; the four F1 rehearsals (§9) pass |
+| **3. App SSO + members** (after **F-12**) | IdP rows (OIDC direct or via intranet broker), verified domain, enforcement flip, `sync-members` with bundles + multi-role + adopt-by-subject, `tower-connect` route | SSO start reaches the intranet IdP (F-12 allow-list; fails without it); user signs into both apps via the IdP (direct OIDC and via broker) and lands on the mapped principal (no duplicate user, no email-linked extra account); a non-tower employee is JIT-created as portal `user`; a tower user who JIT-signed-in first is adopted by subject; `enforced` flips after the first real SSO sign-in; the C2 grant tests (§9) pass; disabled / IdP-removed user loses app access within the bound; `tower-connect` rejects a foreign `client_id`/`redirect_uri` |
 | **4. Tower shell** | Better Auth + SSO plugin (OIDC and SAML), `tower_roles`/members/claim mappings + roles UI, silent "connect all", grants (KMS), `tower_audit` | Sign-in via an OIDC IdP and via a SAML IdP; claim-mapped roles applied, unknown subject refused; connect-all across 2 apps with **no consent screen and no click**; one app down → skipped, chain continues; identity mismatch → revoked; token refresh + `needs_reconnect`; tower task has no root-key/DSN access (IAM policy test) |
 | **5. Read + act** (after 10-rbac 1a) | `fork-fleet.ts` tools, unified inbox/tickets/feedback/roadmap/changelog/dashboard, actions | One app down → partial result; dormant app skipped; reply in A + status change in B from one screen; `tower_audit` + app activity both name the human; Fleet Observer write via MCP denied by the app; capability hidden in UI and refused server-side |
 | **6. Announcements** (after 60; later — R10 not delivered before it ships) | Tower announcements page over `fork-announcements.ts` | Fleet Owner **and** Fleet Agent publish to 2 apps; per-app `succeeded/failed/uncertain`; a timeout after tenant commit shows `uncertain` then reconciles to `succeeded` with no duplicate row; Fleet Observer lists but cannot publish (token has no write scope); bundle without `announcements.publish` cannot |
 | **7. Portfolio** (after 50; later — R11 not delivered before it ships) | Read-only cross-app views over `list_post_prioritization` | Scores match app UI; bundle template lacking `post.view_private` → app denies and `verify --contract` reports it; no write path |
-| **8. Per-app inbound email** (after Phase 2; parallel to 3–7) | `fork/inbound-email/address-key.ts`, seam IE-1, `apps/mail-edge` (SES + Lambda + DLQ), `cp_mail_router` grant | Reply to app A's address lands in A; an address minted in A, re-slugged to B, fails verification in B; A's key ≠ B's key; single-tenant install unchanged (env key); unknown slug bounces; edge signature matches the upstream contract test vectors |
+| **8. Per-app inbound email** (after Phase 2; parallel to 3–7) | `fork/inbound-email/address-key.ts`, seam IE-1, mail router (`fork/mail-router/`, `/app/fork-mail-router.mjs`, ECS service), `cp_mail_router` grant + `cp_mail_deliveries`, fleet mailbox + inbound domain on the internal mail server | Reply to app A's address lands in A; an address minted in A, re-slugged to B, fails verification in B; A's key ≠ B's key; single-tenant install unchanged (env key); unknown slug recorded `unroutable` + alarm; app 5xx → retried, no duplicate delivery to a slug that succeeded; mail to A and B in one message lands in both; router signature matches the upstream contract test vectors; web/worker have no `IMAP_*` |
 | **9. Ops hardening** | Deploy runbook (§4.4.5), cluster backup/PITR + restore drill (D-C8), rate limits, alarms (fork-migrate failures, `schema_below_floor`, sync drift, revocation lag > bound) | Upgrade rehearsal on a **populated** fleet (active + suspended apps): merge upstream, image gate, migrate fleet, fork-migrate, probe + tower e2e + inbound email e2e green |
 
 ## 9. Testing
@@ -857,10 +1022,16 @@ fork migrations for §5.3. Generated: `MATRIX.md` (fork tools), `GRAPH.md`, `bun
   4. *Previous-code / new-schema:* old image serves every surface against the new upstream + fork schema
      (additive rule), then new image rolls.
   Plus: image gate (files present, journal match, `self-check`); `fork-migrate` skips `upstream_pending`.
-- **Private portal (C1, mandatory):** freshly provisioned app — anonymous and non-member sessions denied on
-  portal root, board, post, roadmap, changelog, support/tickets, help center (enabled), public REST reads and
-  widget bootstrap; allowed-domain user and allowed-segment member admitted; `openSignup` false on both
-  configs; partial config (profile write fails mid-way) → no hostname published; `resume` re-asserts.
+- **Sign-in baseline (C1 fail-closed rules + D-E3, mandatory):** freshly provisioned app — every §4.3.1 field
+  stored explicitly (no upstream default leaks through: `allowAnonymous`, both `openSignup`, every `oauth` key,
+  `hmacRequired`); without a session and with an anonymous session, create post / vote / comment / support
+  submit / widget identify without HMAC / public REST writes are refused and no row is created; email/password
+  sign-in + sign-up, magic link, email OTP and each social provider refused; SSO start redirects to the IdP;
+  a non-domain email cannot sign up; a domain employee is JIT-created as portal `user` despite closed sign-up;
+  `enforced` stays false until the unlock rule holds, then flips, and a non-SSO method for the domain is then
+  hard-blocked; no SSO-only state without active break-glass codes; partial config (write fails mid-way) → no
+  hostname published; `resume` re-asserts. Edge probe (deployment test): unauthenticated request through the
+  edge gets the SSO challenge.
 - **Tower-managed grants (C2, mandatory):** initial Fleet Observer provisioning (exactly the Observer row +
   provenance, no Manager row, legacy `member`); last-role removal (all tower rows gone, legacy `user`, no
   Manager fallback — `permissionsForPrincipal` returns ∅ teammate permissions); template replacement
@@ -877,29 +1048,34 @@ fork migrations for §5.3. Generated: `MATRIX.md` (fork tools), `GRAPH.md`, `bun
   scope and permission (`scan.ts` output) and read capabilities never request a write scope.
 - **Inbound email (fork `__tests__`):** mint/verify round-trip under two scoped workspaces with distinct keys;
   cross-workspace forgery refused; `forkInboundAddressKey()` returns `undefined` when not pooled and `null`
-  unscoped; seam present (grep test on `FORK-SEAM(inbound-email)`); mail-edge slug normalisation parity with
-  `workspaceSlugFromInboundAddress`.
+  unscoped; seam present (grep test on `FORK-SEAM(inbound-email)`). Mail router (fake `ImapClient`, as upstream
+  tests `pollOnce`): recipient extraction from `Delivered-To`/`X-Original-To` and the `To`/`Cc` fallback; slug
+  normalisation parity with `workspaceSlugFromInboundAddress`; unknown/suspended slug → `unroutable`, marked
+  seen; 5xx → left unseen, retried, no re-post to an already-delivered slug; 24 h → `dead`; request bytes and
+  headers match the upstream edge contract vectors; singleton lock.
 - **tower-connect route:** open-redirect cases (foreign host, foreign `client_id`, foreign `redirect_uri`),
   session-present shortcut, failure bounce to the tower.
 - **MCP fork tools:** per-tool scope, teamOnly, D3 permission denial; authz-matrix snapshot regenerated;
-  C-2 seam present (grep `FORK-SEAM(fork-floor)`).
+  F-11 seam present (grep `FORK-SEAM(fork-floor)`).
 - **Tower:** capability union from multiple bundles; claim mapping (OIDC claim, SAML attribute); fan-out
   (timeouts, partials, cursor merge); grant crypto (KMS mocked); e2e with two apps and a Keycloak container
-  acting as OIDC IdP and as SAML IdP (plus broker) covering connect-all → act → dual audit.
+  acting as OIDC IdP and as SAML IdP (plus broker) on a private address (F-12 allow-list set) covering
+  connect-all → act → dual audit, run in a network with no internet route.
 - **Isolation:** `apps/web/workspace-probe/` after every tenancy change and upstream sync.
 
 ## 10. Open items
 
 - **D-C5 (🟡)** Are the seed bundles in §6 (capabilities and app roles, e.g. Fleet Owner → app Admin, Fleet
   Observer → "Fleet Observer" read-only incl. `announcement.view`) the right defaults? Seeds stay editable.
-- **O-2 (new)** D-C7 says every app supports OIDC **and** SAML. Upstream `apps/web` is OIDC-only; this plan
+- **O-2 (🟡)** D-C7 says every app supports OIDC **and** SAML. Upstream `apps/web` is OIDC-only; this plan
   meets SAML for apps through an OIDC broker (zero seams) rather than native SAML in `apps/web` (several auth
-  seams). 🟡 default: broker. Question: is signing in to apps through an OIDC broker (e.g. Keycloak/Cognito)
-  in front of a SAML IdP acceptable?
-- **O-3 (new)** D-C11 is met by per-app **address** keys (IE-1). The edge→app key `INBOUND_HMAC_SECRET` stays
-  fleet-wide (slug-bound, so not re-aimable). Making it per-app too would require the edge to hold per-app
-  keys. 🟡 default: one fleet-wide edge→app HMAC secret. Question: is a shared edge-to-app inbound HMAC secret
-  acceptable (address keys stay per-app)?
+  seams). Narrowed by D-E2: the broker must be **intranet-hosted** (e.g. Keycloak), not a cloud broker with
+  public endpoints. 🟡 default: intranet broker. Question: is signing in to apps through an intranet OIDC broker
+  (e.g. Keycloak) in front of a SAML IdP acceptable?
+- **O-3 (🟡)** D-C11 is met by per-app **address** keys (IE-1). The router→app key `INBOUND_HMAC_SECRET` stays
+  fleet-wide (slug-bound, so not re-aimable). Making it per-app too would require the mail router to hold
+  per-app keys. 🟡 default: one fleet-wide router-to-app HMAC secret. Question: is a shared router-to-app inbound
+  HMAC secret acceptable (address keys stay per-app)?
 - **O-8 (🟡)** Default: the tower is authoritative for tower-managed users' tower-owned grants and legacy role
   (local edits are reverted at next sync); local admins may add other roles, and a local grant that pre-dates
   the tower's is kept. Question: should app admins instead be able to override tower-managed grants locally?
@@ -908,6 +1084,23 @@ fork migrations for §5.3. Generated: `MATRIX.md` (fork tools), `GRAPH.md`, `bun
 - **O-10 (🟡)** Default: Tier bundles need an explicit per-app team mapping (`tower_role_app_teams`) and
   grant nothing in apps without one. Question: is per-app team mapping for Tier bundles, maintained in the
   tower by `roles.manage`, acceptable?
+- **O-11 (🟡, new)** Default: inbound email uses **one fleet mailbox** on the internal mail server for a
+  dedicated inbound mail domain (every recipient delivered into it, envelope recipient stamped in a header),
+  routed per app by `mail_slug` by the fork mail router; unroutable mail is logged and alarmed, not bounced.
+  Fallback: one mailbox per app (model B, §4.11; uses F-8). Question: can the mail team provide a catch-all
+  inbound domain into one mailbox, or must each app have its own mailbox?
+- **O-12 (🟡, new)** Default: apps are SSO-only from publish (every other method off); domain `enforced` is
+  switched on by the provisioner only after upstream's own unlock rule holds (first real SSO sign-in), and
+  break-glass recovery codes for each app are held by fleet ops in Secrets Manager. Question: is it acceptable
+  that the domain hard-bind lands after the first SSO sign-in rather than at provisioning, and that ops hold the
+  break-glass codes?
+- **O-13 (🟡, new)** Default: in-VPC callers (tower, provisioner, mail router) reach apps through a private DNS
+  zone that resolves the same hostnames to the internal ALB, bypassing the edge SSO proxy; each app still
+  authenticates them (per-user OAuth tokens, HMAC). Employees always go through the edge. Question: may these
+  server-to-server paths bypass the edge SSO proxy, or must the proxy carry an allow-list for them instead?
+- **O-14 (🟡, new)** Default: `<fleet-domain>` is an intranet-only DNS domain and the wildcard certificate comes
+  from the company's private CA (imported into ACM, or ACM Private CA) on the internal ALB; per-app custom
+  domains, when they come, are internal names too. Question: which internal domain and CA should the fleet use?
 
 ## 11. Relationship to other v2 plans
 
@@ -924,6 +1117,10 @@ Contracts this plan **consumes** (stated here, owned elsewhere):
 - **60-announcements:** `list_announcements` (`announcement.view`), `upsert_announcement` /
   `archive_announcement` / `list_announcement_templates` (`announcement.manage`), `broadcastId` idempotent
   upsert and uncertain-outcome reconciliation, for Phase 6.
-- **Foundations (02):** F-1 (fork lineage in `runMigrations`), F-3 (MCP registration), F-7 (catalogue fence),
+- **04-intranet-deployment:** the §3 configuration baseline (sign-in, AI proxy, SMTP, telemetry off, unset
+  internet URLs), E-1/F-12 (prerequisite for app SSO), E-2 static keys (conditional E-2a), E-3 delivery events
+  disabled, optional E-4 (anonymous plugin gate) and the open email-OTP verification item (the §4.3.1 probe
+  fails closed on it).
+- **Foundations (02):** F-1 (fork lineage in `runMigrations`), F-3 (MCP registration), F-7 (catalogue fence), F-12 (SSRF allow-list),
   `fork_settings`, the fork migrations folder. `fork-migrate`, the fork floor (F-11) and `Dockerfile.fork` are
   owned by this plan.

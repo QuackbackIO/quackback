@@ -178,11 +178,30 @@
 | O-P11 | 50 | After a framework switch, decide "needs re-scoring" once, from each post's status at the switch, or re-check it from the current status every time? | Once, at the switch |
 | O-P12 | 50 | Should posts keeping an old-framework score show it frozen as it was at the switch, or keep recalculating it from new votes with the old formula? | Frozen |
 | O-N10 | 60 | Is it acceptable for a new, changed or resolved **status incident** to take up to 5 minutes to reach an already-open banner (announcements themselves are instant)? | Yes |
-| O-N11 | 60 | On customers' sites, should the embedded banner use only the app's theme colours and font, not its custom CSS (custom CSS applies in portal and hub)? | Yes |
+| O-N11 | 60 | On internal apps, should the embedded banner use only the app's theme colours and font, not its custom CSS (custom CSS applies in portal and hub)? | Yes |
 | O-N12 | 60 | Do you also want a banner strip inside the support widget panel? | No (reserved, deferred) |
 
-D-N7 default is refined by the staff review: the embed shows an identified user exactly what the portal shows
-(including segment-targeted items) and shows **nothing** to identities Quackback doesn't know yet (no user is created).
+D-N7 default (after D-E3): on internal apps every employee sees "Everyone" announcements without being identified;
+segment-targeted items appear only when the host app identifies the user, and then match the portal.
 D-T8 default: higher-tier agents outside the owning team, and Managers, may de-escalate.
+
+
+## Raised by the intranet revisions (owner input needed; plans use the stated default meanwhile)
+
+| ID    | Plan | Question | Default in plan |
+| ----- | ---- | -------- | --------------- |
+| O-C11 | 20 | Incoming support email: one catch-all fleet mailbox on the internal mail server, read by a fork mail router that routes each message to its app (upstream IMAP can't run per app under pooled tenancy), or one mailbox per app? | One fleet mailbox + router |
+| O-C12 | 20 | SSO-only sign-in: is it acceptable that domain SSO **enforcement** switches on after each app's first real SSO sign-in (upstream requires a successful SSO login first), and that fleet ops hold each app's break-glass recovery codes in Secrets Manager? | Yes |
+| O-C13 | 20 | May the tower, provisioner and mail router reach apps through a private DNS zone that bypasses the edge SSO proxy (same hostnames; they authenticate with their own tokens)? | Yes |
+| O-C14 | 20 | Which internal domain and private certificate authority should the fleet use for app hostnames? | ⏳ needs your values |
+| O-T19 | 30 | If the company IdP doesn't send `email_verified`, may Quackback trust an email on the verified company domain that the IdP owns? (Otherwise earlier email requests can't be claimed at sign-in.) | Yes |
+| O-T20 | 30 | Is a plain nav link "Help hub" (not translated) enough, avoiding an upstream edit? | Yes |
+| O-A12 | 40 | Connected internal apps must use HTTPS with a certificate from the company CA (trusted via `NODE_EXTRA_CA_CERTS`), with no option to skip certificate checks. OK? | Yes |
+| O-A13 | 40 | Apps resolve the customer's account in this order: SSO subject → employee ID (if you map it from an IdP claim) → external user ID → verified email. OK? | Yes |
+| O-N14 | 60 | Embedded banners on internal apps: "Everyone" announcements show to anyone reaching the app without identifying them; segment-targeted ones only when the host app identifies the user. OK? | Yes |
+| O-N15 | 60 | The edge SSO proxy must let six banner embed paths through without Quackback's login cookie (script, "everyone" feed, live-update stream, fonts, and two optional identity endpoints) — or use a shared cookie domain across internal apps. Which? | Proxy exemption for those paths |
+
+**Ask of the mail team:** have the internal mail server stamp an `Authentication-Results` header on inbound mail; without
+it Quackback treats every internal email as unverified.
 
 Verification tasks recorded in the plans (not decisions): RDS Proxy pinning (20 V-1); MCP token lifetimes and `skip_consent` behaviour (20 V-4, V-8); AWS S3 through the registry's storage record, which today only accepts `provider: 'r2'` and static keys (20 V-7); whether `/api/widget/kb-ask` respects private-portal/help-center audience rules (30); banner stream limiter sizing (60 N-11).

@@ -52,11 +52,9 @@ The fork's production image is a fork-owned `apps/web/Dockerfile.fork` layered o
 | T-9 | `apps/web/src/lib/server/domains/conversation/conversation.service.ts` | `assignTeam` pre/post tier hooks; export two system-message helpers | 30 / 2 | planned |
 | T-10 | `apps/web/src/lib/server/domains/tickets/ticket-message.service.ts` | Read-only-escalator write guard in `insertTicketMessage` | 30 / 2 | planned |
 | T-11 | `apps/web/src/lib/server/domains/settings/settings.conversation-routing.ts` | Refuse enabling auto-routing while tiers are on | 30 / 3 | planned |
-| T-3 | `apps/web/src/lib/server/auth/signup-policy.ts` | Allow known email-only requesters to sign in when sign-up is closed | 30 / 7a | planned |
 | T-4 | apps/web/src/locales/*.json (9) | `portal.forkHub.*` keys | 30 / 7b | planned |
 | T-5 | `apps/web/src/components/widget/widget-overview.tsx` | Hub section on widget Home | 30 / 7b | planned |
-| T-6 | `apps/web/src/components/public/portal-header-nav.ts` | "Help hub" link | 30 / 7b | planned |
-| T-12 | `apps/web/src/routes/api/widget/kb-ask.ts` | Private-portal access gate for Ask AI | 30 / 7b | planned |
+| T-13 | `apps/web/src/lib/server/auth/hooks.ts` | `await forkAfterSignIn(ctx, providers, registeredOidcIds)` after `handleAutoProvisionAfter` — claims email-only leads on SSO sign-in | 30 / 7a | planned |
 | T-7… | Workflow `escalate` action (~15 sites), macro action (3), `events/targets.ts` stage email | Deferred phases; see `30-…` | 30 / 6, 8 (deferred) | planned |
 | A-2 | `apps/web/src/components/admin/inbox/inbox-detail-panel.tsx` | Uses the T-2 slot (no extra edit if T-2 lands first) | 40 / 5 | planned |
 | A-4 | `apps/web/src/components/admin/settings/security/audit-log-page.tsx` | Fork event labels in the filter (optional) | 40 / 5 (optional) | planned |
@@ -81,8 +79,8 @@ The fork's production image is a fork-owned `apps/web/Dockerfile.fork` layered o
 
 ## Totals (core phases, excluding conditional / optional / deferred)
 
-Foundations 12 (incl. F-12 SSRF allow-list, a blocker for intranet SSO) · RBAC 11 (R-10 spans 10 files) · Control tower 1 (+1 conditional) · Tiered support 11 (6 core +
-5 hub) · Account actions 0 own (uses T-2's slot; +1 optional, +1 deferred) · Prioritization 11 · Announcements 3.
+Foundations 12 (incl. F-12 SSRF allow-list, a blocker for intranet SSO) · RBAC 11 (R-10 spans 10 files) · Control tower 1 (+1 conditional) · Tiered support 9 (6 core +
+3 hub) · Account actions 0 own (uses T-2's slot; +1 optional, +1 deferred) · Prioritization 11 · Announcements 3.
 
 Per the staff review, these counts are an estimate of merge surface, not a target: add a seam whenever an
 essential fix needs one. Each seam needs a named owner and a test that fails if it is lost on merge

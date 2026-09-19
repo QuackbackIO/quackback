@@ -50,8 +50,10 @@
 
 - Outbound: SMTP to the SES SMTP VPC endpoint or an internal relay — `EMAIL_SMTP_HOST/_PORT/_USER/_PASS`
   (`packages/email/src/index.ts:187`). Leave `EMAIL_RESEND_API_KEY` unset.
-- Inbound: **IMAP against the internal mail server** — `IMAP_*` (`domains/conversation/conversation.email-imap.ts:56`).
-  The webhook inbound routes (Cloudflare / SES→webhook) are unused. See `20-control-tower.md` for per-app inbound.
+- Inbound: from the **internal mail server over IMAP**. Single-tenant deployments can use upstream `IMAP_*`
+  (`domains/conversation/conversation.email-imap.ts:53`); upstream's IMAP poller refuses pooled tenancy, so the pooled
+  fleet uses the fork **mail router** (`20-control-tower.md`) and leaves `IMAP_*` unset. Internet webhook inbound
+  routes (Cloudflare / SES→webhook) are unused. Ask the mail team to stamp `Authentication-Results` on inbound mail.
 - Set a workspace logo; the default email template logo is `https://quackback.io/logo.png`
   (`packages/email/src/templates/shared-styles.ts:8`), which renders broken offline (optional fork default change).
 
@@ -105,8 +107,8 @@ egress-restricting CSP can be added at the edge proxy.
 | --- | --- |
 | 02 conventions | New rule: fork code makes **no internet calls**; every outbound HTTP call goes through the SSRF guard (with the E-1 allow-list) or is to a configured intranet/AWS-private endpoint. Shared seam F-12. |
 | 10 RBAC | No change beyond SSO-only sign-in (no anonymous principals in practice). |
-| 20 control tower | IdP is intranet (needs E-1). Provisioning applies the §3 sign-in baseline instead of "private portal". Per-app inbound email via IMAP (no SES→Lambda mail edge). S3/SES keys per E-2. No internet anywhere in tower or provisioner. |
-| 30 tiered support | Hub users sign in with SSO (no magic link / email code). Email-only claim happens on SSO sign-in with a verified email. Private-portal-specific pieces become unnecessary. |
+| 20 control tower | IdP is intranet (needs E-1, also at every sign-in: discovery/userinfo go through the SSRF guard). Provisioning applies the §3 sign-in baseline instead of "private portal". Upstream IMAP is process-wide and **refuses pooled tenancy** (`conversation.email-imap-queue.ts:17-24,47-60`), so per-app inbound uses a fork **mail router**: one fleet mailbox read over IMAP, routed to each app by `mail_slug` (replaces the SES→Lambda mail edge). S3/SES keys per E-2. No internet anywhere in tower, provisioner or router. |
+| 30 tiered support | Hub moves inside `_portal`; users sign in with SSO (no magic link / email code). Email-only claim runs on SSO sign-in (seam T-13). Private-portal pieces removed (T-3, T-6, T-12). **Ask the mail team to stamp `Authentication-Results` on internal mail**, or every inbound email is treated as unverified. |
 | 40 account actions | Connected apps are intranet hosts → require E-1 allow-list entries; configuration UI validates hosts against it. |
 | 50 prioritization | No change (optional AI score suggestions use the proxy). |
-| 60 announcements | Fonts already self-hosted. Embeds run on intranet apps; revisit identity/audience in light of D-E3 (portal public inside the intranet). |
+| 60 announcements | Fonts served from the instance. Embeds on internal apps show "Everyone" items without identity; segment items need the optional identity token. The edge SSO proxy must let six embed paths through without cookies (or use a shared cookie domain). |
