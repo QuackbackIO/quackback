@@ -53,7 +53,7 @@ vi.mock('@/lib/server/domains/help-center/help-center-embedding.service', async 
   generateKbQueryEmbedding: kbQueryEmbedding,
 }))
 
-import { retrieveKnowledge } from '../retrieval-sources'
+import { retrieveKnowledge, type RetrievalTelemetry } from '../retrieval-sources'
 import { indexKnowledgeSource } from '../knowledge-index.service'
 import { listKnowledgeSourceHealth } from '../knowledge-index.reads'
 
@@ -200,14 +200,16 @@ describe.skipIf(!fixture.available)('derived passage index (real DB)', () => {
     const document = await seedDocument(longBody())
     await indexKnowledgeSource({ sourceType: 'document', sourceId: document.id })
 
-    const telemetry = { embeddingModel: null, degradedReason: null, evidence: [] }
+    const telemetry: RetrievalTelemetry = {
+      embeddingModel: null,
+      degradedReason: null,
+      evidence: [],
+    }
     await retrieveKnowledge(LATE_QUERY, 'public', {
       enabledSources: new Set(['document' as const]),
       telemetry,
     })
-    const evidence = telemetry.evidence.find(
-      (row: { sourceId: string }) => row.sourceId === document.id
-    ) as { passage: string; provenance: string; chunkId: string | null } | undefined
+    const evidence = telemetry.evidence.find((row) => row.sourceId === document.id)
     expect(evidence).toBeDefined()
     expect(evidence!.passage).toContain('fourteen complimentary Zephyr passes')
     expect(evidence!.provenance).toBe('index')
@@ -215,7 +217,11 @@ describe.skipIf(!fixture.available)('derived passage index (real DB)', () => {
   })
 
   it('records a lexical-only turn as degraded rather than as an empty corpus', async () => {
-    const telemetry = { embeddingModel: null, degradedReason: null, evidence: [] }
+    const telemetry: RetrievalTelemetry = {
+      embeddingModel: null,
+      degradedReason: null,
+      evidence: [],
+    }
     await retrieveKnowledge('anything', 'public', {
       enabledSources: new Set(['document' as const]),
       telemetry,

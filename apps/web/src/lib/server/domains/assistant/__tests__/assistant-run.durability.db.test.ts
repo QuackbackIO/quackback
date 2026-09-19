@@ -55,6 +55,7 @@ import {
   conversations,
   conversationMessages,
   assistantRuns,
+  assistantRunSteps,
   assistantInvolvements,
   principal,
   workflows,
@@ -562,6 +563,58 @@ describe.skipIf(!available)('durable Quinn turns on real PostgreSQL', () => {
     ).rejects.toThrow()
   })
 
+  it('P6: refuses to publish an answer citing a source revoked mid-generation', async () => {
+    const conversationId = await newConversation()
+    const { runId } = await intake(conversationId)
+    const job = await claimTurn(runId)
+    const run = await loadRun(db, runId as Parameters<typeof loadRun>[1])
+
+    // The citation and its evidence are both real: the source was retrieved
+    // while the turn was generating, and only then stopped being serveable.
+    const citation = {
+      type: 'article' as const,
+      id: 'article_revoked',
+      title: 'Refunds',
+      url: '/x',
+    }
+    const outcome = await db.transaction((tx) =>
+      commitAssistantOutcome(tx, {
+        runId: run!.id,
+        conversationId,
+        expectedInputRevision: run!.inputRevision,
+        expectedStateVersion: run!.stateVersion,
+        jobLeaseToken: job.leaseToken,
+        author: { principalId: quinnId, displayName: 'Quinn' },
+        candidate: { ...candidate, citations: [citation] },
+        evidence: [
+          {
+            sourceType: 'article',
+            sourceId: 'article_revoked',
+            passage: 'Refunds land within ten days.',
+            audience: 'public',
+            provenance: 'index',
+            retrievalRank: 0,
+          },
+        ],
+      })
+    )
+    expect(outcome).toEqual({ kind: 'rejected', reason: 'validation:revoked_evidence' })
+    expect(await publicMessages(conversationId)).toHaveLength(0)
+
+    // And the refusal is inspectable as a validator decision, not as silence.
+    const [step] = await db
+      .select({ validator: assistantRunSteps.validator, status: assistantRunSteps.status })
+      .from(assistantRunSteps)
+      .where(
+        and(
+          eq(assistantRunSteps.runId, runId as never),
+          eq(assistantRunSteps.stepKey, 'publication_validation')
+        )
+      )
+    expect(step.status).toBe('failed')
+    expect(step.validator).toMatchObject({ layer: 'deterministic', code: 'revoked_evidence' })
+  })
+
   it('stamps the answer clock and the assistant inactivity owner in the same commit', async () => {
     const conversationId = await newConversation()
     await customerMessage(conversationId)
@@ -597,6 +650,10 @@ function answer(text: string) {
     internalSourced: false,
     proposedActions: [],
     identity: { name: 'Quinn', avatarUrl: null },
+    // The real turn always carries these; a fake that omitted them would let
+    // the executor's evidence hand-off break without any case noticing.
+    evidence: [],
+    retrieval: { embeddingModel: null, degradedReason: null },
     trace: {
       promptVersion: 'test',
       configRevision: 1,

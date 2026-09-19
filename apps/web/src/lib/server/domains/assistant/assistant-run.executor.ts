@@ -239,8 +239,24 @@ export async function advanceAssistantRun(job: ClaimedJob): Promise<string> {
         expectedStateVersion: run.stateVersion,
         jobLeaseToken: job.leaseToken,
         author,
+        // The exact passages the generator saw, in supply order, with the ones
+        // the answer cited marked. Recorded with the outcome so a published
+        // answer can be checked against the evidence it was allowed to use.
+        evidence: result.evidence.map((row) => ({
+          sourceType: row.sourceType,
+          sourceId: row.sourceId,
+          sourceVersion: row.sourceVersion,
+          chunkId: row.chunkId,
+          passage: row.passage,
+          audience: row.audience,
+          provenance: row.provenance,
+          retrievalRank: row.retrievalRank,
+          citationIndex: row.citationIndex,
+          internal: row.internal,
+        })),
         candidate: {
           text: result.text,
+          closeRequest: result.closeRequest !== undefined,
           // Mirrors the legacy orchestrator exactly: an unclassified reply is a
           // clarification, which keeps it out of the assumed-resolution path.
           responseKind: result.responseKind ?? 'clarification',

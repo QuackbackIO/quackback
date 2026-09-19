@@ -259,6 +259,8 @@ function delivered(extra: Partial<DeliveredFields> = {}): DeliveredFields {
     proposedActions: [],
     identity: V2_IDENTITY,
     trace: PRIVACY_SAFE_TRACE,
+    evidence: [],
+    retrieval: { embeddingModel: null, degradedReason: null },
     ...extra,
   }
 }

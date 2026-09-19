@@ -74,7 +74,11 @@ import {
 } from './mcp-workspace-tools'
 import { formatAskingTeammateContext } from './workspace-prompt'
 import { compileSkillCatalogue, countAssignedSkills } from './skills.service'
-import { resolveAssistantKnowledgeSnapshot, type RetrievedItem } from './retrieval-sources'
+import {
+  resolveAssistantKnowledgeSnapshot,
+  type RetrievalEvidence,
+  type RetrievedItem,
+} from './retrieval-sources'
 import { listEnabledGuidanceCandidates, type GuidanceCandidate } from './guidance.service'
 import { selectApplicableGuidance, splitGuidanceCandidates } from './guidance-selector'
 import {
@@ -169,6 +173,12 @@ export type AssistantAnswerType = 'draft_reply' | 'analysis'
 /** Why Quinn completed a turn without claiming it had answered the question. */
 export type AssistantCannotAnswerReason = AssistantInabilityReason
 
+/** One passage the generator was given, plus where it landed in the answer. */
+export interface AssistantTurnEvidence extends RetrievalEvidence {
+  /** Index into the final citation list, or null when the answer did not cite it. */
+  citationIndex: number | null
+}
+
 /** Fields shared by every customer-visible terminal outcome. */
 interface AssistantDeliveredFields {
   responseKind?: 'answer' | 'clarification' | 'greeting'
@@ -196,6 +206,16 @@ interface AssistantDeliveredFields {
   proposedActions: AssistantProposedAction[]
   identity: AssistantIdentity
   trace: AssistantTurnTrace
+  /**
+   * The exact passages retrieval supplied to the generator this attempt, with
+   * `citationIndex` filled in for the ones that survived into the answer.
+   * Recorded on the run (P5/P6): a source id alone cannot say what the model
+   * read, and the publication validator checks claims against these rather
+   * than against the citation list the model chose to print.
+   */
+  evidence: AssistantTurnEvidence[]
+  /** The embedding space retrieval ran in, and why it had none when it had none. */
+  retrieval: { embeddingModel: string | null; degradedReason: string | null }
   escalation?: EscalationOutcome
   /** Slack-only: whether to keep following the thread after this turn. */
   listen?: 'continue' | 'leave'
@@ -1496,6 +1516,15 @@ ${runtimeConfig.config.agents.workspace.instructions}`)
         ? { configFallbackReason: runtimeConfig.configFallbackReason }
         : {}),
     }
+    // The evidence package as it was supplied, with the citations the answer
+    // actually kept mapped onto it. A passage the model never cited is kept
+    // deliberately: it is what the answer was allowed to be grounded in, which
+    // is exactly what an unsupported-claim check needs to see.
+    const citationIndexById = new Map(citations.map((citation, index) => [citation.id, index]))
+    const evidence: AssistantTurnEvidence[] = toolContext.ledger.evidence.map((row) => ({
+      ...row,
+      citationIndex: citationIndexById.get(row.sourceId) ?? null,
+    }))
     const delivered = {
       responseKind: parsed.responseKind ?? ('clarification' as const),
       ...(toolContext.ledger.closeRequest ? { closeRequest: toolContext.ledger.closeRequest } : {}),
@@ -1511,6 +1540,11 @@ ${runtimeConfig.config.agents.workspace.instructions}`)
       proposedActions: [...toolContext.ledger.proposedActions],
       identity: runtimeConfig.config.identity,
       trace,
+      evidence,
+      retrieval: {
+        embeddingModel: toolContext.ledger.retrievalEmbeddingModel,
+        degradedReason: toolContext.ledger.retrievalDegradedReason,
+      },
       ...(escalation && { escalation }),
       ...(parsed.listen ? { listen: parsed.listen } : {}),
     }

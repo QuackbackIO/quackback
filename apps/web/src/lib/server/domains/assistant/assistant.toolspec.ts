@@ -43,6 +43,8 @@ import { type ContentAudience } from './audience'
 import type { AssistantAttributeCatalogueEntry } from './prompt-catalogues'
 import {
   retrieveKnowledge,
+  type RetrievalEvidence,
+  type RetrievalTelemetry,
   type RetrievedItem,
   type AssistantKnowledgeSnapshot,
 } from './retrieval-sources'
@@ -179,6 +181,17 @@ export interface AssistantToolLedger {
   proposedActions: AssistantProposedAction[]
   /** search calls made this attempt, for the server-side search budget. */
   searchCalls: number
+  /**
+   * The exact passages retrieval supplied this attempt, in the order they were
+   * supplied. The specification's evidence package: source ids alone cannot
+   * say what the model actually read, and a citation to a real document is not
+   * proof that the document supports the claim.
+   */
+  evidence: RetrievalEvidence[]
+  /** The embedding space this attempt's retrieval ran in, null when lexical only. */
+  retrievalEmbeddingModel: string | null
+  /** Why retrieval ran without a vector arm, when it did. */
+  retrievalDegradedReason: string | null
 }
 
 /**
@@ -197,6 +210,9 @@ export function makeAssistantToolLedger(): AssistantToolLedger {
     inabilityReport: null,
     proposedActions: [],
     searchCalls: 0,
+    evidence: [],
+    retrievalEmbeddingModel: null,
+    retrievalDegradedReason: null,
   }
 }
 
@@ -623,7 +639,9 @@ async function executeSearchKnowledge(
     ctx.sourceTypes,
     requestedSources?.length ? requestedSources : undefined
   )
+  const telemetry: RetrievalTelemetry = { embeddingModel: null, degradedReason: null, evidence: [] }
   const items = await retrieveKnowledge(args.query, ctx.audience, {
+    telemetry,
     customerPrincipalId: ctx.customerPrincipalId,
     conversationId: ctx.conversationId,
     sourceTypes: narrowing,
@@ -643,6 +661,12 @@ async function executeSearchKnowledge(
       item.updatedAt ? { ...item.citation, updatedAt: item.updatedAt } : item.citation
     )
   }
+  // The evidence package accumulates across every search this attempt made, in
+  // supply order, because that is what the generator read. A second search for
+  // the same source records a second passage rather than replacing the first.
+  ctx.ledger.evidence.push(...telemetry.evidence)
+  ctx.ledger.retrievalEmbeddingModel = telemetry.embeddingModel
+  if (telemetry.degradedReason) ctx.ledger.retrievalDegradedReason = telemetry.degradedReason
   return {
     results: items.map((item) => ({
       id: item.id,
