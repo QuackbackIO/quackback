@@ -112,6 +112,9 @@ describe('kbKnowledgeSource', () => {
     expect(mockRetrieveKbArticles).toHaveBeenCalledWith('reset password', {
       audience: 'public',
       topK: 5,
+      // The turn's one query embedding, resolved by the composer rather than
+      // re-requested per adapter; null here because this suite has no provider.
+      embedding: null,
     })
     expect(items).toHaveLength(1)
     expect(items[0]).toEqual({
@@ -139,13 +142,18 @@ describe('kbKnowledgeSource', () => {
     expect(mockRetrieveKbArticles).toHaveBeenCalledWith('escalation policy', {
       audience: 'team',
       topK: 5,
+      embedding: null,
     })
   })
 
   it('maps the internal ceiling to the team HelpCenterAudience (no internal KB tier)', async () => {
     mockRetrieveKbArticles.mockResolvedValue([])
     await kbKnowledgeSource.retrieve('q', 'internal', { topK: 5 })
-    expect(mockRetrieveKbArticles).toHaveBeenCalledWith('q', { audience: 'team', topK: 5 })
+    expect(mockRetrieveKbArticles).toHaveBeenCalledWith('q', {
+      audience: 'team',
+      topK: 5,
+      embedding: null,
+    })
   })
 
   it('flags a team-only article as internal (isPublic: false)', async () => {

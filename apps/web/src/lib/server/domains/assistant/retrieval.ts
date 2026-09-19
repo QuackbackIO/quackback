@@ -81,6 +81,13 @@ export interface RetrieveKbArticlesOptions {
    * an empty result meaningful ("nothing relevant") on the keyword-only path.
    */
   keywordRankFloor?: number
+  /**
+   * The turn's shared query embedding. `undefined` means this function was
+   * called directly (the help centre's own Ask AI does) and resolves its own;
+   * `null` means the turn has no vector arm and the keyword path is the whole
+   * answer.
+   */
+  embedding?: number[] | null
 }
 
 /** Default number of articles stuffed into the synthesis context. */
@@ -111,9 +118,10 @@ export async function retrieveKbArticles(
   const minScore = options.minScore ?? SEMANTIC_SIMILARITY_FLOOR
   const keywordRankFloor = options.keywordRankFloor ?? KEYWORD_RANK_FLOOR
 
-  const embedding = await generateKbQueryEmbedding(query, {
-    pipelineStep: 'kb_retrieval_query_embedding',
-  })
+  const embedding =
+    options.embedding !== undefined
+      ? options.embedding
+      : await generateKbQueryEmbedding(query, { pipelineStep: 'kb_retrieval_query_embedding' })
 
   const rows = embedding
     ? await hybridQuery(query, embedding, audience, viewer, topK, minScore, keywordRankFloor)

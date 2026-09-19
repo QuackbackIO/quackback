@@ -259,6 +259,7 @@ export const kbKnowledgeSource: KnowledgeSource = {
         const articles = await retrieveKbArticles(query, {
           audience: toHelpCenterAudience(ceiling),
           topK: opts.topK,
+          embedding: embedding?.vector ?? null,
         })
         return articles.map((a) => ({
           id: a.id,

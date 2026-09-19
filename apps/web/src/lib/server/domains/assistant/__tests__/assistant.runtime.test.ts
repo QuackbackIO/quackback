@@ -714,6 +714,7 @@ describe('runAssistantTurn', () => {
     expect(mockRetrieve).toHaveBeenCalledWith('reset password', {
       audience: 'public',
       topK: 5,
+      embedding: null,
     })
   })
 
@@ -864,6 +865,7 @@ describe('runAssistantTurn', () => {
     expect(mockRetrieve).toHaveBeenCalledWith('internal escalation policy', {
       audience: 'team',
       topK: 5,
+      embedding: null,
     })
   })
 
