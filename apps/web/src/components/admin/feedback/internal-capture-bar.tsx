@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ArrowTopRightOnSquareIcon, LockClosedIcon } from '@heroicons/react/24/solid'
-import type { PostId } from '@quackback/ids'
+import type { ConversationId, PostId } from '@quackback/ids'
 import { publishCaptureToBoardFn } from '@/lib/server/functions/conversation'
 import { Button } from '@/components/ui/button'
 import {
@@ -16,6 +16,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { LinkCaptureDialog } from './link-capture-dialog'
 
 export interface InternalCaptureBarProps {
   postId: PostId
@@ -54,6 +55,7 @@ export function InternalCaptureBar({
 }: InternalCaptureBarProps) {
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
+  const [linking, setLinking] = useState(false)
   const [reviewedTitle, setReviewedTitle] = useState(title)
   const [reviewedContent, setReviewedContent] = useState(content)
 
@@ -90,19 +92,40 @@ export function InternalCaptureBar({
         </a>
       )}
       {canPublish && (
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="ml-auto h-7"
-          onClick={() => {
-            setReviewedTitle(title)
-            setReviewedContent(content)
-            setOpen(true)
-          }}
-        >
-          Publish to board
-        </Button>
+        <div className="ml-auto flex items-center gap-2">
+          {sourceConversationId && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7"
+              onClick={() => setLinking(true)}
+            >
+              Link to a request
+            </Button>
+          )}
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7"
+            onClick={() => {
+              setReviewedTitle(title)
+              setReviewedContent(content)
+              setOpen(true)
+            }}
+          >
+            Publish to board
+          </Button>
+        </div>
+      )}
+
+      {sourceConversationId && (
+        <LinkCaptureDialog
+          open={linking}
+          onOpenChange={setLinking}
+          conversationId={sourceConversationId as ConversationId}
+        />
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>

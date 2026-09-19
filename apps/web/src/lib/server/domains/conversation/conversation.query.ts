@@ -666,17 +666,17 @@ export interface LinkedConversationSummary {
 export async function getLinkedConversationsForPost(
   postId: PostId
 ): Promise<LinkedConversationSummary[]> {
-  const rows = await db
-    .select({
-      conversationId: conversations.id,
-      subject: conversations.subject,
-      status: conversations.status,
-    })
+  // Two reads rather than a join, because the two columns are not the same
+  // type: `external_id` is text holding a TypeID string, and `conversations.id`
+  // is a uuid the TypeID helpers encode into. Joining them directly is a
+  // `text = uuid` comparison PostgreSQL refuses outright.
+  //
+  // Deliberately NO integrations read either: a 'live_chat' link has a null
+  // integrationId, so requiring one would drop every conversation link. The
+  // externalId IS the conversation id for these rows.
+  const links = await db
+    .select({ externalId: postExternalLinks.externalId })
     .from(postExternalLinks)
-    // Deliberately NO innerJoin(integrations): a 'live_chat' link has a null
-    // integrationId, so joining integrations would silently drop every conversation
-    // link. The externalId IS the conversation id for these rows.
-    .innerJoin(conversations, eq(postExternalLinks.externalId, conversations.id))
     .where(
       and(
         eq(postExternalLinks.postId, postId),
@@ -684,6 +684,16 @@ export async function getLinkedConversationsForPost(
         eq(postExternalLinks.status, 'active')
       )
     )
+  const ids = links.map((row) => row.externalId as ConversationId)
+  if (ids.length === 0) return []
+  const rows = await db
+    .select({
+      conversationId: conversations.id,
+      subject: conversations.subject,
+      status: conversations.status,
+    })
+    .from(conversations)
+    .where(inArray(conversations.id, ids))
   return rows.map((r) => ({
     conversationId: r.conversationId as ConversationId,
     subject: r.subject,

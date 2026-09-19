@@ -4,6 +4,7 @@ import { Suspense, useState, useEffect, useCallback } from 'react'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { CustomerContextPanel } from '@/components/admin/feedback/customer-context-panel'
 import { InternalCaptureBar } from '@/components/admin/feedback/internal-capture-bar'
+import { PostFollowupBar } from '@/components/admin/feedback/post-followup-bar'
 import { ModalFooter } from '@/components/shared/modal-footer'
 import { useUrlModal } from '@/lib/client/hooks/use-url-modal'
 import { useSuspenseQuery, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -390,6 +391,7 @@ function PostModalContent({
                 canPublish={canModerate}
                 onPublished={onClose}
               />
+              <PostFollowupBar postId={post.id as PostId} canSend={canModerate} />
               {post.moderationState === 'pending' && (
                 <InlineModerationActions
                   pending

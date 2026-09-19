@@ -40,6 +40,10 @@ const MAIL_CLASS: Record<string, 'account' | 'sealed' | 'contact' | 'unused'> = 
   sendStatusIncidentPublishedEmail: 'contact',
   sendStatusMaintenanceScheduledEmail: 'contact',
   sendTicketEventEmail: 'contact',
+  // A reviewed follow-up to the customer whose conversation was the evidence.
+  // No capability, and the recipient is resolved from that customer's own
+  // principal, so it follows the contact address like every other notice.
+  sendPostUpdateEmail: 'contact',
   // Proves control of an address someone is claiming. The code confirms the
   // address; it grants nothing on its own, so it is not a capability.
   sendVerifyAddressEmail: 'contact',

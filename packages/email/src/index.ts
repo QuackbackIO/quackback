@@ -49,6 +49,7 @@ import { NoteMentionEmail } from './templates/note-mention'
 import { TicketEventEmail } from './templates/ticket-event'
 import { ChangelogPublishedEmail } from './templates/changelog-published'
 import { FeedbackLinkedEmail } from './templates/feedback-linked'
+import { PostUpdateEmail } from './templates/post-update'
 import { PasswordResetEmail } from './templates/password-reset'
 import { RecoveryCodeUsedEmail } from './templates/recovery-code-used'
 import { NewSignInEmail } from './templates/new-sign-in'
@@ -1491,6 +1492,59 @@ export async function sendFeedbackLinkedEmail(
   })
 }
 
+interface SendPostUpdateParams {
+  to: string
+  recipientName?: string
+  postTitle: string
+  postUrl: string
+  message: string
+  statusLabel?: string
+  workspaceName: string
+  unsubscribeUrl: string
+  preferencesUrl?: string
+  logoUrl?: string
+}
+
+/**
+ * A reviewed follow-up to one customer about a request they asked for.
+ *
+ * Sent only by an explicit reviewer action, one recipient at a time, carrying
+ * the message that reviewer wrote. It is not a subscription and it never fires
+ * from a status change on its own.
+ */
+export async function sendPostUpdateEmail(params: SendPostUpdateParams): Promise<EmailResult> {
+  const {
+    to,
+    recipientName,
+    postTitle,
+    postUrl,
+    message,
+    statusLabel,
+    workspaceName,
+    unsubscribeUrl,
+    preferencesUrl,
+    logoUrl,
+  } = params
+
+  return sendEmail({
+    to,
+    subject: `An update on "${postTitle}"`,
+    react: PostUpdateEmail({
+      recipientName,
+      postTitle,
+      postUrl,
+      message,
+      statusLabel,
+      workspaceName,
+      unsubscribeUrl,
+      preferencesUrl,
+      logoUrl,
+    }),
+    emailType: 'PostUpdateEmail',
+    preview: { postUrl },
+  })
+}
+
 // ============================================================================
 // Status Incident Published Email
 // ============================================================================
@@ -1666,6 +1720,7 @@ export { NewCommentEmail } from './templates/new-comment'
 export { PostMentionEmail } from './templates/post-mention'
 export { ChangelogPublishedEmail } from './templates/changelog-published'
 export { FeedbackLinkedEmail } from './templates/feedback-linked'
+export { PostUpdateEmail } from './templates/post-update'
 export { PasswordResetEmail } from './templates/password-reset'
 export { RecoveryCodeUsedEmail } from './templates/recovery-code-used'
 export { NewSignInEmail } from './templates/new-sign-in'

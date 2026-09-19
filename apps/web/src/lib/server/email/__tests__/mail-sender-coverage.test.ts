@@ -49,6 +49,9 @@ const MAIL_FROM_CLASS: Record<string, 'platform' | 'workspace-identity'> = {
   sendPostMentionEmail: 'platform',
   sendNoteMentionEmail: 'platform',
   sendStatusIncidentPublishedEmail: 'platform',
+  // A reviewed follow-up about a board post. It is not part of a customer's
+  // support thread, so it has no reason to claim the workspace's own domain.
+  sendPostUpdateEmail: 'platform',
   sendStatusMaintenanceScheduledEmail: 'platform',
 
   // May leave as an address the workspace proved it owns, so the From is
