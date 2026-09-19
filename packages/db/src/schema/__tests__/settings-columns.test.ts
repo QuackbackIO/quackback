@@ -39,6 +39,8 @@ export const SETTINGS_SQL_COLUMNS = [
   'setup_state',
   'assistant_config',
   'assistant_config_revision',
+  'assistant_release_management',
+  'assistant_published_release_id',
   'widget_config',
   'widget_secret',
   'widget_installed_first_seen_at',

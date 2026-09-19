@@ -420,8 +420,16 @@ export async function selectRunBehaviour(): Promise<{
   config: AssistantConfig | null
   configRevision: number
 }> {
-  const row = await settingsRow()
-  if (row.assistantReleaseManagement && row.assistantPublishedReleaseId) {
+  // Best effort in the same direction the snapshot builder already fails: a
+  // settings row this process cannot read must not stop a turn recording what
+  // it ran under, it just means no release could have been selected.
+  let row: Awaited<ReturnType<typeof settingsRow>> | null = null
+  try {
+    row = await settingsRow()
+  } catch (err) {
+    log.warn({ err }, 'run behaviour could not read the settings row')
+  }
+  if (row?.assistantReleaseManagement && row.assistantPublishedReleaseId) {
     const release = await readRelease(row.assistantPublishedReleaseId as AssistantReleaseId)
     if (release) {
       const config = await releaseConfig(release.snapshotId)
@@ -440,7 +448,12 @@ export async function selectRunBehaviour(): Promise<{
     }
   }
   const snapshotId = await persistEffectiveSnapshot(await buildEffectiveSnapshot())
-  return { snapshotId, releaseId: null, config: null, configRevision: row.assistantConfigRevision }
+  return {
+    snapshotId,
+    releaseId: null,
+    config: null,
+    configRevision: row?.assistantConfigRevision ?? 0,
+  }
 }
 
 /** The workspace name a frozen configuration is rendered with. Live, like every other identity read. */
