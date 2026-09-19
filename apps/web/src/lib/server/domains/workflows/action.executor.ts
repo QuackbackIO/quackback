@@ -29,10 +29,11 @@
  * (variables interpolated server-side; see workflow-variables.ts +
  * lib/shared/workflows/interpolate.ts) as contentJson and an honest plain-text
  * fallback as content, plus the metadata.block payload the DTO projects.
- * `let_assistant_answer` hands the turn to Quinn via the same out-of-band seam
- * sendVisitorMessage uses for an ordinary customer message
- * (assistant.orchestrator's runAssistantTurnForConversation) — see that case's
- * comment for why it's a dynamic import. `record_csat` writes through
+ * `let_assistant_answer` checks Quinn's eligibility and then returns the
+ * delegation to the engine, which persists the run request in the same
+ * transaction as the wait it parks at (P4). It launches nothing itself, except
+ * under the legacy execution selector, which restores the previous
+ * out-of-band call. `record_csat` writes through
  * conversation.service.ts's recordCsat (amendment 1: latest-wins, not a
  * parallel system) — the engine calls this action with the conversation's
  * VISITOR as the actor (recordCsat requires the caller to BE the visitor),
@@ -251,9 +252,11 @@ export type WorkflowAction =
   // only producer of these three; macros never emit them).
   | { type: 'send_block'; nodeId: string; block: BlockSendSpec }
   // `instructions` (Phase C, slice C-6): the node's own per-step instruction,
-  // if authored — folded into just this turn's system prompt (see
-  // runAssistantTurnForConversation's opts below), never persisted config.
-  | { type: 'let_assistant_answer'; instructions?: string }
+  // if authored — folded into just this turn's system prompt, never persisted
+  // config. `nodeId` (P4) is half of the delegation identity the engine
+  // persists with the park; the walker is the only producer of this action, so
+  // it is always present.
+  | { type: 'let_assistant_answer'; nodeId: string; instructions?: string }
   | { type: 'record_csat'; rating: number; comment?: string }
   // Plain-text v1 internal note — see the module doc's `add_note` paragraph.
   | { type: 'add_note'; body: string }
@@ -275,6 +278,12 @@ export interface ActionResult {
   /** Set by `let_assistant_answer` when Quinn will not run (greet-only,
    *  unconfigured, token budget, silence). The engine resumes escalated. */
   assistantDeclined?: boolean
+  /** Set by `let_assistant_answer` in durable mode: the turn has NOT been
+   *  launched, and the engine must request it inside the park transaction so
+   *  no worker can answer a wait that does not exist yet. Carries the node
+   *  half of the delegation identity; the engine owns the run and visit
+   *  halves. */
+  assistantDelegation?: { nodeId: string; instructions?: string }
 }
 
 const label = (label: string | null): ActionResult => ({ label })
@@ -616,8 +625,7 @@ export async function applyAction(
     }
     case 'let_assistant_answer': {
       // Preview is awaited so a decline can resume the escalated edge
-      // immediately. The LLM turn stays fire-and-forget (and the import
-      // stays dynamic) so a successful hand-off never blocks the walk.
+      // immediately. It is a read: nothing about Quinn's state changes here.
       const orchestrator = await import('@/lib/server/domains/assistant/assistant.orchestrator')
       const eligibility = await orchestrator.previewAssistantTurnForConversation(conversationId, {
         surface: 'workflow_step',
@@ -625,13 +633,28 @@ export async function applyAction(
       if (eligibility === 'declined') {
         return { label: 'assistant declined', assistantDeclined: true }
       }
-      void orchestrator
-        .runAssistantTurnForConversation(conversationId, {
-          surface: 'workflow_step',
-          stepInstructions: action.instructions,
-        })
-        .catch((err) => log.warn({ err, conversationId }, 'let_assistant_answer turn failed'))
-      return label('handed to assistant')
+      const { assistantExecutionMode } =
+        await import('@/lib/server/domains/assistant/assistant-execution-mode')
+      if (assistantExecutionMode() === 'legacy') {
+        // The rollback position, unchanged: an out-of-band turn that can
+        // finish before the engine has parked. Kept only so reverting the
+        // selector restores the pre-P4 behaviour exactly.
+        void orchestrator
+          .runAssistantTurnForConversation(conversationId, {
+            surface: 'workflow_step',
+            stepInstructions: action.instructions,
+          })
+          .catch((err) => log.warn({ err, conversationId }, 'let_assistant_answer turn failed'))
+        return label('handed to assistant')
+      }
+      // Durable mode: hand the delegation back to the engine, which persists
+      // the run intent and its job in the same transaction as the wait. A turn
+      // started here could hand off before the park committed, and that
+      // completion would have nothing to resume.
+      return {
+        label: 'delegated to assistant',
+        assistantDelegation: { nodeId: action.nodeId, instructions: action.instructions },
+      }
     }
     case 'record_csat':
       // recordCsat requires the caller to BE the visitor (amendment 1); the

@@ -1382,6 +1382,8 @@ describe.skipIf(!fixture.available)('runWorkflow (real DB, rolled back)', () => 
       expect(applyAction).toHaveBeenCalledTimes(1)
       expect(applyAction.mock.calls[0][0]).toEqual({
         type: 'let_assistant_answer',
+        // The node half of the delegation identity the park persists (P4).
+        nodeId: 'la',
         instructions: 'Focus on billing only',
       })
       // The defining behavior of a non-timer wait: no BullMQ timer scheduled.

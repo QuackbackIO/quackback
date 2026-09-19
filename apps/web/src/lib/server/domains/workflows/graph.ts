@@ -280,10 +280,16 @@ export function walkWorkflow(
           assistantOutcome = undefined
           break
         }
-        // Fresh: invoke Quinn's turn (out-of-band, same as before) and PARK —
-        // see the module doc for why this is a third parking kind, not a
-        // pass-through SEND kind.
-        actions.push({ type: 'let_assistant_answer', instructions: node.instructions })
+        // Fresh: ask for Quinn's turn and PARK — see the module doc for why
+        // this is a third parking kind, not a pass-through SEND kind. The node
+        // id travels on the action because it is half of the delegation
+        // identity the engine persists with the park (workflow run, node,
+        // visit); the executor itself never launches the turn.
+        actions.push({
+          type: 'let_assistant_answer',
+          nodeId: node.id,
+          instructions: node.instructions,
+        })
         return {
           actions,
           status: 'waiting',

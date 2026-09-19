@@ -64,6 +64,24 @@ export interface WaitCursor {
   resumedAt?: string
   /** Assistant waits (and input waits) expire down the escalated edge. */
   expiresAt?: string | null
+  /**
+   * Assistant waits only (P4): the durable Quinn run this wait delegated to,
+   * written in the same transaction as the park. Its presence is what tells
+   * the rest of the system that this wait has a correlated owner, so a
+   * completion event from some OTHER Quinn turn must not resume it; a wait
+   * parked under the legacy selector has no owner and keeps the old
+   * event-driven resume. Null when the delegation could not be requested.
+   */
+  delegatedRunId?: string | null
+  /**
+   * Assistant waits only (P4): the absolute moment this wait stops being
+   * deferrable. `expiresAt` asks "should this wait end now?", and the answer is
+   * no while Quinn is still executing, still owes an approved action's result,
+   * or has answered and the customer simply has not come back. This is the
+   * ceiling on that deferral, so a live engagement cannot hold the
+   * customer-facing slot indefinitely.
+   */
+  expiryCeilingAt?: string | null
 }
 
 /**

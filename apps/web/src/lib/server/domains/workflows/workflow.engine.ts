@@ -20,6 +20,7 @@ import {
   inArray,
   sql,
   workflowRuns,
+  type Transaction,
   type Workflow,
   type WorkflowRun,
   type WorkflowRunState,
@@ -50,6 +51,19 @@ import { hasFrequencyCap, claimFrequencyCapSlot } from './dispatcher.guards'
 import { getWorkflowAbandonedAutoCloseSettings } from '@/lib/server/domains/settings/settings.workflows'
 
 const log = logger.child({ component: 'workflow-engine' })
+
+/**
+ * How long an assistant wait may keep being deferred past its own expiry while
+ * the engagement it delegated to is still alive (workflow-sweep.ts decides;
+ * this is only the ceiling it reads off the cursor).
+ *
+ * A day. Long enough that the slowest lifecycle default in the product, email
+ * closure at 72 hours aside, can produce its own outcome, and short enough that
+ * a conversation nobody ever came back to stops holding the customer-facing
+ * exclusive slot. Stamped at park time so a change to this constant never
+ * moves a wait that is already parked.
+ */
+const ASSISTANT_WAIT_CEILING_MS = 24 * 60 * 60 * 1000
 
 function workflowActor(): Actor {
   return boundedServiceActor(AUTOMATION_PERMISSIONS)
@@ -104,9 +118,10 @@ async function currentRun(runId: WorkflowRun['id']): Promise<WorkflowRun | null>
  */
 export async function settleRunning(
   runId: WorkflowRun['id'],
-  patch: { state: WorkflowRunState; endedAt?: Date; cursor?: Record<string, unknown> }
+  patch: { state: WorkflowRunState; endedAt?: Date; cursor?: Record<string, unknown> },
+  exec: typeof db | Transaction = db
 ): Promise<WorkflowRun | null> {
-  const [settled] = await db
+  const [settled] = await exec
     .update(workflowRuns)
     .set(patch)
     .where(and(eq(workflowRuns.id, runId), eq(workflowRuns.state, 'running')))
@@ -250,6 +265,9 @@ async function applyPlanAndSettle(
   // InputWaitCursor below as the correlation key a customer's reply matches.
   let blockMessageId: string | null = null
   let assistantDeclined = false
+  // Set by a `let_assistant_answer` action in durable mode: the turn has not
+  // been launched, and this park transaction is what requests it.
+  let assistantDelegation: { nodeId: string; instructions?: string } | null = null
   // Once a non-idempotent action starts, a later failure must interrupt the
   // run instead of reverting to its old cursor and replaying customer-visible
   // work. Set before execution because an action may commit and then throw.
@@ -319,6 +337,7 @@ async function applyPlanAndSettle(
         })
         if (result.blockMessageId) blockMessageId = result.blockMessageId
         if (result.assistantDeclined) assistantDeclined = true
+        if (result.assistantDelegation) assistantDelegation = result.assistantDelegation
       } catch (err) {
         log.error({ err, action: action.type, workflowId: workflow.id }, 'workflow action failed')
         await logRunEvent(run.id, workflow.id, subjectPrincipalId, `action_failed:${action.type}`)
@@ -375,12 +394,11 @@ async function applyPlanAndSettle(
     // stamp beyond the node to resume at.
     const waitSeq = (readCursor(run).waitSeq ?? 0) + 1
     // Abandoned-journey auto-close (rides the sweeper's expiry pass,
-    // workflow-sweep.ts): only an 'input' park is ever abandoned by the
-    // customer — an 'assistant' park ends via Quinn's own hand-off/close
-    // signal, never customer silence, so it is never stamped with an
-    // expiry regardless of this setting. Read once, only for an 'input'
-    // park, so an 'assistant' park never pays for a settings lookup it
-    // can't use.
+    // workflow-sweep.ts): an 'input' park is abandoned by the customer, and
+    // the configured wait minutes decide when. An 'assistant' park is not
+    // about customer silence at all, so it carries its own default deadline
+    // instead: the moment the sweeper should ask whether this delegation is
+    // still alive (see sweepExpiredAssistantWaits, which defers while it is).
     const expiresAt = await (async () => {
       const autoClose = await getWorkflowAbandonedAutoCloseSettings()
       if (!autoClose.enabled) {
@@ -393,34 +411,64 @@ async function applyPlanAndSettle(
       }
       return new Date(Date.now() + autoClose.waitMinutes * 60_000).toISOString()
     })()
-    const cursor: WaitCursor | InputWaitCursor =
-      plan.waitKind === 'input'
-        ? {
-            waitKind: 'input',
-            resumeNodeId: plan.resumeNodeId!,
-            blockMessageId: blockMessageId ?? '',
-            blockKind: plan.blockKind!,
-            allowTypingInterrupt: plan.allowTypingInterrupt ?? false,
-            expiresAt,
-            waitSeconds: 0,
-            waitSeq,
-            waitStartedAt: new Date().toISOString(),
-          }
-        : {
-            waitKind: 'assistant',
-            resumeNodeId: plan.resumeNodeId!,
-            waitSeconds: 0,
-            waitSeq,
-            waitStartedAt: new Date().toISOString(),
-            expiresAt,
-          }
-    const waiting = await settleRunning(run.id, {
-      state: 'waiting',
-      cursor: cursor as unknown as Record<string, unknown>,
-    })
-    if (!waiting) return currentRun(run.id)
-    await logRunEvent(run.id, workflow.id, subjectPrincipalId, 'waiting')
-    return waiting
+    if (plan.waitKind === 'input') {
+      const cursor: InputWaitCursor = {
+        waitKind: 'input',
+        resumeNodeId: plan.resumeNodeId!,
+        blockMessageId: blockMessageId ?? '',
+        blockKind: plan.blockKind!,
+        allowTypingInterrupt: plan.allowTypingInterrupt ?? false,
+        expiresAt,
+        waitSeconds: 0,
+        waitSeq,
+        waitStartedAt: new Date().toISOString(),
+      }
+      const waiting = await settleRunning(run.id, {
+        state: 'waiting',
+        cursor: cursor as unknown as Record<string, unknown>,
+      })
+      if (!waiting) return currentRun(run.id)
+      await logRunEvent(run.id, workflow.id, subjectPrincipalId, 'waiting')
+      return waiting
+    }
+
+    // The assistant park and the Quinn turn that answers it commit together
+    // (P4). Ordering is the whole point: a turn requested before the park
+    // could hand off while this run was still 'running', and that completion
+    // would find no wait to resume. Requesting it here means the job becomes
+    // claimable only once the wait it answers is durable.
+    //
+    // The trigger key (workflow run, node, visit) is the per-step receipt:
+    // replaying this park — a retried wait job, a re-walked resume — resolves
+    // to the same run instead of delegating a second time.
+    try {
+      return await parkAtAssistantWait({
+        run,
+        workflow,
+        conversationId,
+        subjectPrincipalId,
+        resumeNodeId: plan.resumeNodeId!,
+        waitSeq,
+        expiresAt,
+        delegation: assistantDelegation,
+      })
+    } catch (err) {
+      // The park did not commit, so there is no wait and no delegated run:
+      // both halves rolled back together. Interrupting is the documented
+      // atomic result. Retrying the walk would re-run the actions that
+      // already committed before this park, and holding the run 'running'
+      // would keep the customer-facing slot until the stale sweep.
+      log.error(
+        { err, workflowId: workflow.id, runId: run.id },
+        'assistant delegation could not be parked; interrupting the run'
+      )
+      await logRunEvent(run.id, workflow.id, subjectPrincipalId, 'delegation_park_failed')
+      const interrupted = await settleRunning(run.id, {
+        state: 'interrupted',
+        endedAt: new Date(),
+      })
+      return interrupted ?? (await currentRun(run.id))
+    }
   }
 
   if (plan.status === 'waiting') {
@@ -449,6 +497,85 @@ async function applyPlanAndSettle(
   if (!done) return currentRun(run.id)
   await logRunEvent(run.id, workflow.id, subjectPrincipalId, 'completed')
   return done
+}
+
+/**
+ * Park at a `let_assistant_answer` wait and request the turn that answers it,
+ * in one transaction (P4).
+ *
+ * Ordering is the whole point. A turn requested before the park could hand off
+ * while this run was still 'running', and that completion would find no wait to
+ * resume; requesting it here means the job becomes claimable only once the wait
+ * it answers is durable. The delegation identity it carries (workflow run,
+ * node, visit) is also the per-step receipt: replaying this park, after a
+ * retried wait job or a re-walked resume, resolves to the same run through the
+ * unique trigger key instead of delegating a second time.
+ *
+ * `delegation` is null under the legacy execution selector, where the executor
+ * launched the turn out of band. The park still happens, and the wait still
+ * ends the way it did before P4, through the completion events.
+ */
+async function parkAtAssistantWait(input: {
+  run: WorkflowRun
+  workflow: Workflow
+  conversationId: ConversationId
+  subjectPrincipalId: PrincipalId | null
+  resumeNodeId: string
+  waitSeq: number
+  expiresAt: string | null
+  delegation: { nodeId: string; instructions?: string } | null
+}): Promise<WorkflowRun | null> {
+  const { run, workflow, conversationId, subjectPrincipalId, waitSeq } = input
+  return db.transaction(async (tx) => {
+    const parkedAt = new Date()
+    const cursor: WaitCursor = {
+      waitKind: 'assistant',
+      resumeNodeId: input.resumeNodeId,
+      waitSeconds: 0,
+      waitSeq,
+      waitStartedAt: parkedAt.toISOString(),
+      expiresAt: input.expiresAt,
+      expiryCeilingAt: new Date(parkedAt.getTime() + ASSISTANT_WAIT_CEILING_MS).toISOString(),
+      delegatedRunId: null,
+    }
+    let waiting = await settleRunning(
+      run.id,
+      { state: 'waiting', cursor: cursor as unknown as Record<string, unknown> },
+      tx
+    )
+    if (!waiting) return currentRun(run.id)
+
+    if (input.delegation) {
+      const { requestAssistantTurn, workflowDelegationTriggerKey } =
+        await import('@/lib/server/domains/assistant/assistant-run.service')
+      const delegation = {
+        workflowRunId: run.id as string,
+        nodeId: input.delegation.nodeId,
+        waitSeq,
+      }
+      const requested = await requestAssistantTurn(tx, {
+        conversationId,
+        triggerKey: workflowDelegationTriggerKey(
+          delegation.workflowRunId,
+          delegation.nodeId,
+          delegation.waitSeq
+        ),
+        triggerKind: 'workflow_delegation',
+        surface: 'workflow_step',
+        delegation,
+        stepInstructions: input.delegation.instructions ?? null,
+      })
+      const [stamped] = await tx
+        .update(workflowRuns)
+        .set({ cursor: { ...cursor, delegatedRunId: requested.run.id } })
+        .where(and(eq(workflowRuns.id, run.id), eq(workflowRuns.state, 'waiting')))
+        .returning()
+      if (stamped) waiting = stamped
+    }
+
+    await logRunEvent(run.id, workflow.id, subjectPrincipalId, 'waiting', tx)
+    return waiting
+  })
 }
 
 /** Settle a claimed run straight to a terminal state with no further actions

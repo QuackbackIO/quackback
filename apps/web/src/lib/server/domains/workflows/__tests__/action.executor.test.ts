@@ -6,7 +6,7 @@
  * behavior is covered end-to-end by sla.service.test). Failures propagate —
  * the caller owns best-effort vs fail-fast.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type {
   ConversationId,
   PrincipalId,
@@ -785,51 +785,71 @@ describe('applyAction', () => {
   })
 
   describe('let_assistant_answer', () => {
-    it('hands the turn to Quinn out-of-band and returns immediately', async () => {
+    afterEach(() => {
+      delete process.env.ASSISTANT_EXECUTION_MODE
+    })
+
+    it('returns the delegation and launches nothing (P4): the engine owns the turn request', async () => {
+      const result = await applyAction({ type: 'let_assistant_answer', nodeId: 'la' }, ctx)
+      expect(result).toMatchObject({
+        label: 'delegated to assistant',
+        assistantDelegation: { nodeId: 'la' },
+      })
+      // The defining property: no turn is in flight when this returns, so
+      // nothing can complete before the engine has parked.
+      expect(runAssistantTurnForConversation).not.toHaveBeenCalled()
+    })
+
+    it('carries a node-authored instructions field on the delegation rather than on a call', async () => {
+      const result = await applyAction(
+        { type: 'let_assistant_answer', nodeId: 'la', instructions: 'Focus only on billing' },
+        ctx
+      )
+      expect(result).toMatchObject({
+        assistantDelegation: { nodeId: 'la', instructions: 'Focus only on billing' },
+      })
+      expect(runAssistantTurnForConversation).not.toHaveBeenCalled()
+    })
+
+    it('legacy selector: hands the turn to Quinn out-of-band and returns immediately', async () => {
+      process.env.ASSISTANT_EXECUTION_MODE = 'legacy'
       let resolveTurn: () => void = () => {}
       runAssistantTurnForConversation.mockReturnValue(
         new Promise<void>((resolve) => {
           resolveTurn = resolve
         })
       )
-      const result = await applyAction({ type: 'let_assistant_answer' }, ctx)
+      const result = await applyAction(
+        { type: 'let_assistant_answer', nodeId: 'la', instructions: 'Focus only on billing' },
+        ctx
+      )
       expect(result).toMatchObject({ label: 'handed to assistant' })
+      expect(result).not.toHaveProperty('assistantDelegation')
       // The action already resolved even though the assistant's own turn has
       // not — the dynamic import + call happen on a later microtask, so wait
       // for it rather than asserting synchronously.
       await vi.waitFor(() =>
         expect(runAssistantTurnForConversation).toHaveBeenCalledWith(conversationId, {
           surface: 'workflow_step',
-          stepInstructions: undefined,
+          stepInstructions: 'Focus only on billing',
         })
       )
       resolveTurn()
     })
 
-    it('Phase C, slice C-6: a node-authored instructions field reaches runAssistantTurnForConversation as stepInstructions', async () => {
-      runAssistantTurnForConversation.mockResolvedValue(undefined)
-      await applyAction(
-        { type: 'let_assistant_answer', instructions: 'Focus only on billing questions' },
-        ctx
-      )
-      await vi.waitFor(() =>
-        expect(runAssistantTurnForConversation).toHaveBeenCalledWith(conversationId, {
-          surface: 'workflow_step',
-          stepInstructions: 'Focus only on billing questions',
-        })
-      )
-    })
-
-    it('never throws into the caller when the assistant turn itself fails', async () => {
+    it('legacy selector: never throws into the caller when the assistant turn itself fails', async () => {
+      process.env.ASSISTANT_EXECUTION_MODE = 'legacy'
       runAssistantTurnForConversation.mockRejectedValue(new Error('llm down'))
-      await expect(applyAction({ type: 'let_assistant_answer' }, ctx)).resolves.toMatchObject({
-        label: 'handed to assistant',
-      })
+      await expect(
+        applyAction({ type: 'let_assistant_answer', nodeId: 'la' }, ctx)
+      ).resolves.toMatchObject({ label: 'handed to assistant' })
     })
 
     it('returns assistantDeclined when the orchestrator preview says Quinn will not run', async () => {
       previewAssistantTurnForConversation.mockResolvedValueOnce('declined')
-      await expect(applyAction({ type: 'let_assistant_answer' }, ctx)).resolves.toMatchObject({
+      await expect(
+        applyAction({ type: 'let_assistant_answer', nodeId: 'la' }, ctx)
+      ).resolves.toMatchObject({
         label: 'assistant declined',
         assistantDeclined: true,
       })
