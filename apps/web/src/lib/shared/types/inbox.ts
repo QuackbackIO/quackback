@@ -5,7 +5,7 @@
  * Moved here to centralize domain types and fix import direction.
  */
 
-import type { Board, PostTag } from '@/lib/shared/db-types'
+import type { Board, PostAudience, PostCaptureProvenance, PostTag } from '@/lib/shared/db-types'
 import type { PostId, PostStatusId, PostCommentId, PrincipalId } from '@quackback/ids'
 import type { CommentTreeNode, CommentReactionCount } from '@/lib/shared'
 
@@ -65,6 +65,12 @@ export interface PostDetails {
   /** Whether comments are locked (portal users can't comment) */
   isCommentsLocked?: boolean
   moderationState?: 'published' | 'pending' | string
+  /** 'internal' when this is a captured record rather than a board post. */
+  audience?: PostAudience | null
+  /** Who captured it, when somebody did. */
+  capturedByName?: string | null
+  /** What captured it and from where. */
+  captureProvenance?: PostCaptureProvenance | null
   /** Map of principalId to avatar URL (base64 or external URL) */
   avatarUrls?: Record<string, string | null>
   /** AI-generated post summary */

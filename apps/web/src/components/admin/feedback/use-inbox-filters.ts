@@ -40,6 +40,7 @@ export function useInboxFilters() {
       hasDuplicates: search.hasDuplicates,
       sort: search.sort ?? 'newest',
       showDeleted: search.deleted,
+      audience: search.audience,
     }),
     [search]
   )
@@ -66,6 +67,7 @@ export function useInboxFilters() {
           ...('hasDuplicates' in updates && { hasDuplicates: updates.hasDuplicates || undefined }),
           ...('sort' in updates && { sort: updates.sort }),
           ...('showDeleted' in updates && { deleted: updates.showDeleted || undefined }),
+          ...('audience' in updates && { audience: updates.audience }),
         },
         replace: true,
       })
@@ -98,7 +100,8 @@ export function useInboxFilters() {
       (filters.responded && filters.responded !== 'all') ||
       filters.updatedBefore ||
       filters.hasDuplicates ||
-      filters.showDeleted
+      filters.showDeleted ||
+      filters.audience
     )
   }, [filters])
 

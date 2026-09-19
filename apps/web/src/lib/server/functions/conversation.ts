@@ -1215,6 +1215,81 @@ export const addConversationNoteFn = createServerFn({ method: 'POST' })
     )
   })
 
+const captureFeedbackSchema = z.object({
+  conversationId: z.string(),
+  boardId: z.string(),
+  title: z.string().min(1).max(200),
+  content: z.string().max(10000).optional(),
+  /** The customer's own words, kept as private team-only evidence. */
+  sourceMessageContent: z.string().max(10000).optional(),
+})
+
+/**
+ * Record an internal feedback capture for a conversation's customer.
+ *
+ * The teammate counterpart of Quinn's capture_feedback. The customer comes
+ * from the authorized conversation, never from the request. The capture key
+ * is derived from the conversation, the board and the title, so the same
+ * dialog submitted twice records one post rather than two.
+ */
+export const captureInternalFeedbackFn = createServerFn({ method: 'POST' })
+  .validator(captureFeedbackSchema)
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth({ permission: PERMISSIONS.POST_CREATE })
+    const actor = await policyActorFromAuth(ctx)
+    const conversationId = data.conversationId as ConversationId
+    const { assertConversationViewable } =
+      await import('@/lib/server/domains/conversation/conversation.service')
+    const conversation = await assertConversationViewable(conversationId, actor)
+
+    const { captureInternalFeedback } = await import('@/lib/server/domains/posts/post.capture')
+    const { digestOf } = await import('@/lib/server/domains/assistant/tool-receipts')
+    const result = await captureInternalFeedback(
+      {
+        conversationId,
+        boardId: data.boardId as BoardId,
+        title: data.title,
+        content: data.content,
+        captureKey: `capture:${conversationId}:${digestOf({ boardId: data.boardId, title: data.title.trim() })}`,
+        kind: 'agent',
+      },
+      {
+        actor,
+        capturedByPrincipalId: ctx.principal.id,
+        customerPrincipalId: conversation.visitorPrincipalId,
+      }
+    )
+    // The quote is evidence, attached separately so capture stays one thing.
+    if (data.sourceMessageContent?.trim()) {
+      const { attachPrivateSourceQuote } =
+        await import('@/lib/server/domains/conversation/conversation.convert')
+      await attachPrivateSourceQuote(
+        { postId: result.postId, quote: data.sourceMessageContent },
+        { agentActor: actor, agentPrincipalId: ctx.principal.id, agent: agentFromCtx(ctx) }
+      )
+    }
+    return result
+  })
+
+const publishCaptureSchema = z.object({
+  postId: z.string(),
+  title: z.string().min(1).max(200),
+  content: z.string().max(10000).default(''),
+})
+
+/** Publish a reviewed internal capture to its board. */
+export const publishCaptureToBoardFn = createServerFn({ method: 'POST' })
+  .validator(publishCaptureSchema)
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth({ permission: PERMISSIONS.POST_APPROVE })
+    const actor = await policyActorFromAuth(ctx)
+    const { publishCaptureToBoard } = await import('@/lib/server/domains/posts/post.capture')
+    return await publishCaptureToBoard(
+      { postId: data.postId as PostId, title: data.title, content: data.content },
+      actor
+    )
+  })
+
 const convertSchema = z.object({
   conversationId: z.string(),
   boardId: z.string(),

@@ -181,6 +181,13 @@ export function InboxFiltersPanel({
       {/* Other Filters */}
       <FilterSection title="Other">
         <FilterList
+          items={[{ id: 'internal', name: 'Internal captures' }]}
+          selectedIds={filters.audience === 'internal' ? ['internal'] : []}
+          onSelect={() => {
+            onFiltersChange({ audience: filters.audience === 'internal' ? undefined : 'internal' })
+          }}
+        />
+        <FilterList
           items={[{ id: 'deleted', name: 'Deleted posts' }]}
           selectedIds={filters.showDeleted ? ['deleted'] : []}
           onSelect={() => {

@@ -32,6 +32,38 @@ export interface ConvertConversationToPostResult {
   boardSlug: string | null
 }
 
+/**
+ * Attach the customer's own words to a post as private, team-only evidence.
+ *
+ * Lives in the conversation domain rather than beside `linkConversationToPost`
+ * (posts/post.capture.ts) because a private comment is a comment-domain write,
+ * and reaching for it from the posts domain would put the two into a cycle.
+ * The comment is always private: the post may be board-visible, and a support
+ * excerpt is not something a reviewer chose to publish.
+ */
+export async function attachPrivateSourceQuote(
+  input: { postId: PostId; quote: string },
+  ctx: { agentActor: Actor; agentPrincipalId: PrincipalId; agent: ConversationAuthorInput }
+): Promise<void> {
+  const quote = input.quote.trim()
+  if (!quote) return
+  const { createComment } = await import('@/lib/server/domains/comments/comment.service')
+  await createComment(
+    {
+      postId: input.postId,
+      content: `Tracked from a support conversation:\n\n${quote}`,
+      isPrivate: true,
+    },
+    {
+      principalId: ctx.agentPrincipalId,
+      role: ctx.agentActor.role as 'admin' | 'member',
+      name: ctx.agent.displayName ?? undefined,
+      email: ctx.agent.email ?? undefined,
+    },
+    ctx.agentActor
+  )
+}
+
 export async function createPostFromConversation(
   input: ConvertConversationToPostInput,
   ctx: { agentActor: Actor; agentPrincipalId: PrincipalId; agent: ConversationAuthorInput }

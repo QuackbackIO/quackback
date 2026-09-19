@@ -11,6 +11,7 @@ import {
   ChatBubbleOvalLeftIcon,
   Square2StackIcon,
   TrashIcon,
+  LockClosedIcon,
   PlusIcon,
   ChevronRightIcon,
 } from '@heroicons/react/24/solid'
@@ -42,6 +43,7 @@ interface ActiveFilter {
     | 'responded'
     | 'hasDuplicates'
     | 'deleted'
+    | 'audience'
   label: string
   value: string
   valueId: string
@@ -360,6 +362,7 @@ function getFilterIcon(type: ActiveFilter['type']): IconComponent {
     responded: ChatBubbleLeftRightIcon,
     hasDuplicates: Square2StackIcon,
     deleted: TrashIcon,
+    audience: LockClosedIcon,
   }
   return icons[type]
 }
@@ -645,6 +648,18 @@ function computeActiveFilters(
       value: 'Has duplicates',
       valueId: 'hasDuplicates',
       onRemove: () => onFiltersChange({ hasDuplicates: undefined }),
+    })
+  }
+
+  // Audience filter
+  if (filters.audience === 'internal') {
+    result.push({
+      key: 'audience',
+      type: 'audience',
+      label: '',
+      value: 'Internal captures',
+      valueId: 'internal',
+      onRemove: () => onFiltersChange({ audience: undefined }),
     })
   }
 

@@ -37,6 +37,7 @@ import {
   type AssistantPendingActionSurface,
   type AssistantInvolvementStatus,
   type TranslatedFromMetadata,
+  type PostAudience,
 } from '@/lib/server/db'
 import {
   toUuid,
@@ -621,6 +622,8 @@ export interface LinkedPostSummary {
   postId: PostId
   title: string
   boardSlug: string
+  /** 'internal' for a capture: it has no portal page to link to. */
+  audience: PostAudience
 }
 
 /** Posts this conversation was converted into (conversation.convert writes the link). */
@@ -628,7 +631,12 @@ export async function getLinkedPostsForConversation(
   conversationId: ConversationId
 ): Promise<LinkedPostSummary[]> {
   const rows = await db
-    .select({ postId: posts.id, title: posts.title, boardSlug: boards.slug })
+    .select({
+      postId: posts.id,
+      title: posts.title,
+      boardSlug: boards.slug,
+      audience: posts.audience,
+    })
     .from(postExternalLinks)
     .innerJoin(posts, eq(postExternalLinks.postId, posts.id))
     .innerJoin(boards, eq(posts.boardId, boards.id))
@@ -640,7 +648,12 @@ export async function getLinkedPostsForConversation(
         isNull(posts.deletedAt)
       )
     )
-  return rows.map((r) => ({ postId: r.postId as PostId, title: r.title, boardSlug: r.boardSlug }))
+  return rows.map((r) => ({
+    postId: r.postId as PostId,
+    title: r.title,
+    boardSlug: r.boardSlug,
+    audience: r.audience,
+  }))
 }
 
 export interface LinkedConversationSummary {

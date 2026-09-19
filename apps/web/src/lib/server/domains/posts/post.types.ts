@@ -111,6 +111,8 @@ export interface PostWithDetails extends Post {
   authorName: string | null
   /** Author email resolved from member->user relation */
   authorEmail: string | null
+  /** Display name of the teammate or assistant that captured this post. */
+  capturedByName: string | null
 }
 
 /**

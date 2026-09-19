@@ -20,6 +20,7 @@ const searchSchema = z.object({
   sort: z.enum(['newest', 'oldest', 'votes', 'priority']).optional().catch(undefined),
   hasDuplicates: z.boolean().optional().catch(undefined),
   deleted: z.boolean().optional().catch(undefined),
+  audience: z.enum(['board', 'internal']).optional().catch(undefined),
   post: z.string().optional(),
   // Roadmap-specific
   roadmap: z.string().optional(),

@@ -27,6 +27,8 @@ export interface InboxFilters {
   hasDuplicates?: boolean
   sort?: 'newest' | 'oldest' | 'votes' | 'priority'
   showDeleted?: boolean
+  /** Narrow to one post audience. Unset shows both, which is the default. */
+  audience?: 'board' | 'internal'
 }
 
 /**

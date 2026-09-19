@@ -8,6 +8,7 @@ import {
 } from '@heroicons/react/24/solid'
 import type { BoardId, ConversationId, PostId } from '@quackback/ids'
 import {
+  captureInternalFeedbackFn,
   captureVisitorContactEmailFn,
   createPostFromConversationFn,
   sharePostFn,
@@ -54,7 +55,13 @@ interface ConvertToPostDialogProps {
   onOpenChange?: (open: boolean) => void
 }
 
-/** Agent action: turn the conversation into a feedback post (new or upvote). */
+/**
+ * Agent action: record the conversation's feedback, or upvote an existing post.
+ *
+ * Recording is internal by default. A capture is evidence about this customer
+ * and is not something to make public on their behalf without a look; putting
+ * it on a board is the second, explicitly labelled action beside it.
+ */
 export function ConvertToPostDialog({
   conversationId,
   defaultTitle,
@@ -108,6 +115,27 @@ export function ConvertToPostDialog({
     staleTime: 30_000,
   })
 
+  const captureInternally = useMutation({
+    mutationFn: () =>
+      captureInternalFeedbackFn({
+        data: {
+          conversationId,
+          boardId: boardId as BoardId,
+          title: title.trim(),
+          content: content.trim() || undefined,
+          sourceMessageContent: defaultContent || undefined,
+        },
+      }),
+    onSuccess: (res) => {
+      toast.success(
+        res.outcome === 'already_captured' ? 'Already recorded' : 'Recorded for the product team'
+      )
+      setOpen(false)
+      onConverted?.()
+    },
+    onError: () => toast.error('Failed to record feedback'),
+  })
+
   const convert = useMutation({
     mutationFn: (vars: { asUpvoteOfPostId?: PostId; sourceMessageContent?: string }) =>
       createPostFromConversationFn({
@@ -153,7 +181,7 @@ export function ConvertToPostDialog({
     if (showEmailCapture && trimmed) captureContact.mutate(trimmed)
   }
 
-  const busy = convert.isPending || share.isPending
+  const busy = convert.isPending || share.isPending || captureInternally.isPending
   // Title must be at least 3 characters before the action enables.
   const canCreate = useMemo(() => title.trim().length >= 3 && boardId, [title, boardId])
 
@@ -165,16 +193,16 @@ export function ConvertToPostDialog({
             type="button"
             className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
           >
-            <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" /> Track as feedback
+            <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" /> Record feedback
           </button>
         </DialogTrigger>
       )}
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Track as a feedback post</DialogTitle>
+          <DialogTitle>Record this feedback</DialogTitle>
           <DialogDescription>
-            Create a post from this conversation, attributed to the customer — they'll see it in the
-            conversation and get status updates.
+            Attributed to the customer. Recording keeps it internal; publishing puts it on the
+            board, where they can see and vote on it.
           </DialogDescription>
         </DialogHeader>
 
@@ -279,13 +307,24 @@ export function ConvertToPostDialog({
           </Button>
           <Button
             type="button"
+            variant="outline"
             disabled={!canCreate || busy}
             onClick={() => {
               maybeCaptureEmail()
               convert.mutate({})
             }}
           >
-            Track as feedback
+            Publish to board
+          </Button>
+          <Button
+            type="button"
+            disabled={!canCreate || busy}
+            onClick={() => {
+              maybeCaptureEmail()
+              captureInternally.mutate()
+            }}
+          >
+            Record internally
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -129,7 +129,7 @@ export async function captureInternalFeedback(
   const existing = await findCapturedPost(input.captureKey)
   if (existing) {
     log.debug({ post_id: existing.id }, 'capture already recorded')
-    await linkConversationToPost({ conversationId: input.conversationId, postId: existing.id }, ctx)
+    await linkConversationToPost({ conversationId: input.conversationId, postId: existing.id })
     return { outcome: 'already_captured', postId: existing.id, title: existing.title }
   }
 
@@ -171,7 +171,7 @@ export async function captureInternalFeedback(
     created = false
   }
 
-  await linkConversationToPost({ conversationId: input.conversationId, postId }, ctx)
+  await linkConversationToPost({ conversationId: input.conversationId, postId })
 
   log.info({ post_id: postId, created }, 'internal feedback captured')
   return { outcome: created ? 'captured' : 'already_captured', postId, title }
@@ -180,12 +180,6 @@ export async function captureInternalFeedback(
 export interface LinkConversationInput {
   conversationId: ConversationId
   postId: PostId
-  /**
-   * The customer's own words, attached as a private (team-only) comment so
-   * the original context survives. Only ever private: this is evidence, and
-   * the post may be board-visible.
-   */
-  sourceQuote?: string
   /** The conversation's subject, for the link's display label. */
   displayId?: string | null
 }
@@ -197,11 +191,13 @@ export interface LinkConversationInput {
  * records that this conversation is evidence for that request; voting on the
  * customer's behalf is a separate authorized action with its own permission,
  * and rolling it into a link would inflate a public count from a private act.
+ *
+ * The customer's own words are evidence rather than a link, and attaching
+ * them is `attachPrivateSourceQuote` in the conversation domain: a private
+ * comment is a comment-domain write, and reaching for it from here would put
+ * the posts domain into a cycle with it.
  */
-export async function linkConversationToPost(
-  input: LinkConversationInput,
-  ctx: Pick<CaptureContext, 'actor' | 'capturedByPrincipalId'>
-): Promise<void> {
+export async function linkConversationToPost(input: LinkConversationInput): Promise<void> {
   await db
     .insert(postExternalLinks)
     .values({
@@ -212,22 +208,6 @@ export async function linkConversationToPost(
       externalDisplayId: input.displayId ?? null,
     })
     .onConflictDoNothing()
-
-  const quote = input.sourceQuote?.trim()
-  if (!quote) return
-  const { createComment } = await import('@/lib/server/domains/comments/comment.service')
-  await createComment(
-    {
-      postId: input.postId,
-      content: `Tracked from a support conversation:\n\n${quote}`,
-      isPrivate: true,
-    },
-    {
-      principalId: ctx.capturedByPrincipalId,
-      role: ctx.actor.role as 'admin' | 'member',
-    },
-    ctx.actor
-  )
 }
 
 export interface PublishCaptureInput {

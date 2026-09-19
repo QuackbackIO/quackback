@@ -93,6 +93,8 @@ const listInboxPostsSchema = z.object({
   updatedBefore: z.string().optional(),
   sort: z.enum(['newest', 'oldest', 'votes', 'priority']).optional().default('newest'),
   showDeleted: z.boolean().optional(),
+  /** 'all' (the default) is what this list has always shown. */
+  audience: z.enum(['all', 'board', 'internal']).optional(),
   cursor: z.string().optional(),
   limit: z.number().int().min(1).max(100).optional().default(20),
 })
@@ -214,6 +216,7 @@ export const fetchInboxPostsForAdmin = createServerFn({ method: 'GET' })
       updatedBefore: data.updatedBefore ? new Date(data.updatedBefore) : undefined,
       sort: data.sort,
       showDeleted: data.showDeleted,
+      audience: data.audience,
       cursor: data.cursor,
       limit: data.limit,
     })
@@ -255,6 +258,7 @@ export const fetchInboxFilterCounts = createServerFn({ method: 'GET' })
       responded: data.responded,
       updatedBefore: data.updatedBefore ? new Date(data.updatedBefore) : undefined,
       showDeleted: data.showDeleted,
+      audience: data.audience,
     })
   })
 

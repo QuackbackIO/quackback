@@ -3,6 +3,7 @@
 import { Suspense, useState, useEffect, useCallback } from 'react'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { CustomerContextPanel } from '@/components/admin/feedback/customer-context-panel'
+import { InternalCaptureBar } from '@/components/admin/feedback/internal-capture-bar'
 import { ModalFooter } from '@/components/shared/modal-footer'
 import { useUrlModal } from '@/lib/client/hooks/use-url-modal'
 import { useSuspenseQuery, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -379,6 +380,16 @@ function PostModalContent({
           <div className="flex-1 min-w-0">
             {/* Editor area */}
             <div className="p-6" onKeyDown={handleKeyDown}>
+              <InternalCaptureBar
+                postId={post.id as PostId}
+                audience={post.audience}
+                capturedByName={post.capturedByName ?? null}
+                sourceConversationId={post.captureProvenance?.conversationId ?? null}
+                title={title}
+                content={post.content}
+                canPublish={canModerate}
+                onPublished={onClose}
+              />
               {post.moderationState === 'pending' && (
                 <InlineModerationActions
                   pending

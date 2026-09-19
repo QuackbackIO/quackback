@@ -86,6 +86,8 @@ export async function getPostWithDetails(
       summaryJson: true,
       summaryUpdatedAt: true,
       audience: true,
+      captureProvenance: true,
+      trackedByPrincipalId: true,
     },
     where: opts?.audience
       ? and(eq(posts.id, postId), eq(posts.audience, opts.audience))
@@ -186,6 +188,13 @@ export async function getPostWithDetails(
     authorName: post.author?.displayName ?? null,
     // Sanitize at the source so every consumer (admin detail, v1 API, …) is safe.
     authorEmail: realEmail(post.author?.user?.email),
+    // Who captured this post, when somebody did. Team-only by construction:
+    // every reader of this function is team-gated, and an internal post is
+    // unreachable from the published surfaces (they pass audience: 'board').
+    capturedByName: post.trackedByPrincipalId
+      ? ((await loadAuthors([post.trackedByPrincipalId])).get(post.trackedByPrincipalId)
+          ?.displayName ?? null)
+      : null,
   } as unknown as PostWithDetails
 
   return postWithDetails
