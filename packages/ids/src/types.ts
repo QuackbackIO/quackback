@@ -211,6 +211,12 @@ export type ConnectorId = TypeId<'connector'>
 /** Agent skill (packaged procedure) ID - e.g., skill_01h455vb4pex5vsknk084sn02q */
 export type SkillId = TypeId<'skill'>
 
+/** Canonical guidance entry ID - e.g., guidance_entry_01h455vb4pex5vsknk084sn02q */
+export type GuidanceEntryId = TypeId<'guidance_entry'>
+
+/** Guidance role binding ID - e.g., guidance_binding_01h455vb4pex5vsknk084sn02q */
+export type GuidanceBindingId = TypeId<'guidance_binding'>
+
 /** Assistant tool-call audit ID - e.g., assistant_tool_call_01h455vb4pex5vsknk084sn02q */
 export type AssistantToolCallId = TypeId<'assistant_tool_call'>
 
@@ -465,6 +471,8 @@ export interface EntityIdMap {
   assistant_action: AssistantPendingActionId
   connector: ConnectorId
   skill: SkillId
+  guidance_entry: GuidanceEntryId
+  guidance_binding: GuidanceBindingId
   assistant_tool_call: AssistantToolCallId
   assistant_snippet: AssistantSnippetId
   assistant_document: AssistantDocumentId

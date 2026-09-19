@@ -84,6 +84,11 @@ export const ID_PREFIXES = {
   connector: 'connector',
   // Packaged agent procedure (name + when-to-use + markdown body).
   skill: 'skill',
+  // Canonical authored guidance and its separately authorized role bindings.
+  // One entry holds the full authored text; one binding says which profile
+  // applies it, so a shared entry is two bindings and never a "both" role.
+  guidance_entry: 'guidance_entry',
+  guidance_binding: 'guidance_binding',
   assistant_tool_call: 'assistant_tool_call',
   assistant_snippet: 'assistant_snippet',
   assistant_document: 'assistant_document',

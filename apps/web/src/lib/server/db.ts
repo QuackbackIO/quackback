@@ -460,6 +460,17 @@ export {
   ASSISTANT_RUN_STEP_STATUSES,
   // Schema tables - assistant guidance rules
   assistantGuidanceRules,
+  // Schema tables - canonical guidance entries and their role bindings
+  assistantGuidanceEntries,
+  assistantGuidanceEntriesRelations,
+  assistantGuidanceBindings,
+  assistantGuidanceBindingsRelations,
+  GUIDANCE_ENTRY_KINDS,
+  GUIDANCE_ENTRY_OWNERS,
+  GUIDANCE_LEGACY_SOURCES,
+  type GuidanceEntryKind,
+  type GuidanceEntryOwner,
+  type GuidanceLegacySource,
   connectors,
   connectorsRelations,
   type CachedConnectorTool,

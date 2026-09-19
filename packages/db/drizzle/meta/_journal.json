@@ -1877,6 +1877,13 @@
       "when": 1789747200006,
       "tag": "0290_quinn_internal_feedback",
       "breakpoints": true
+    },
+    {
+      "idx": 268,
+      "version": "7",
+      "when": 1789747200007,
+      "tag": "0291_quinn_guidance_entries",
+      "breakpoints": true
     }
   ]
 }
