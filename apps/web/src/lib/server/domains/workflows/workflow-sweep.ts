@@ -12,6 +12,7 @@ import {
   db,
   and,
   eq,
+  ne,
   lt,
   gt,
   lte,
@@ -22,6 +23,7 @@ import {
   inArray,
   workflowRuns,
   workflows,
+  assistantRuns,
   conversations,
   conversationMessages,
   principal,
@@ -62,6 +64,17 @@ import {
   dispatchSlaBreached,
 } from '@/lib/server/events/dispatch'
 import {
+  classifyAssistantWaitExpiry,
+  deferAssistantWait,
+  releaseAssistantWait,
+} from './assistant-delegation'
+import {
+  readAssistantEngagementState,
+  settleRun,
+} from '@/lib/server/domains/assistant/assistant-run.repository'
+import { ASSISTANT_TURN_QUEUE } from '@/lib/server/domains/assistant/assistant-run.service'
+import { findJobByDedupeKey } from '@/lib/server/jobs/job-queue'
+import {
   claimSlaTimerTriggerMarker,
   sweepApproachingSlaBreaches,
   sweepSlaBreachTriggers,
@@ -81,6 +94,26 @@ const STALE_RUNNING_MS = 15 * 60 * 1000
 /** Cap on rows handled per sweep pass, so a large backlog is worked down over
  *  successive ticks instead of one tick scanning everything. */
 const SWEEP_BATCH_SIZE = 200
+
+/** How far an expired assistant wait's deadline moves when the delegation it
+ *  is waiting on is still alive. Short enough that the wait ends promptly once
+ *  the engagement does, long enough that the sweep is not re-asking every
+ *  tick. */
+const ASSISTANT_WAIT_GRACE_MS = 5 * 60 * 1000
+
+/** The fallback ceiling for a wait parked before ceilings were stamped. Mirrors
+ *  workflow.engine.ts's own constant; a legacy cursor gets the same day. */
+const ASSISTANT_WAIT_CEILING_MS = 24 * 60 * 60 * 1000
+
+/** How long a delegated run may look stalled before the stranded pass will
+ *  reconcile it. Also the age at which a queued run with no live job is
+ *  presumed never to run. */
+const STRANDED_DELEGATION_GRACE_MS = 5 * 60 * 1000
+
+/** Terminal run statuses that mean the delegation produced nothing at all.
+ *  'superseded' is absent on purpose: a newer turn took over and owes the
+ *  answer instead. */
+const DEAD_RUN_STATUSES: ReadonlySet<string> = new Set(['failed', 'suppressed', 'cancelled'])
 
 /** When a parked run's timer fires (or fired): the park moment — waitStartedAt,
  *  or started_at for a legacy cursor that never recorded one — plus the wait
@@ -375,7 +408,28 @@ export async function sweepExpiredInputWaits(now: Date): Promise<number> {
   return swept
 }
 
-/** Expired `let_assistant_answer` parks resume down the escalated edge. */
+/**
+ * Expired `let_assistant_answer` parks (P4).
+ *
+ * A deadline is a question, not a verdict: has this delegation run out of
+ * time, or is it still going? The answer comes from Quinn's own side of the
+ * conversation (readAssistantEngagementState) and is classified by
+ * classifyAssistantWaitExpiry, which separates an execution that died from a
+ * customer who has not resolved anything:
+ *
+ *  - still generating, still owing an approved action's result, or answered
+ *    and waiting on the customer: the deadline moves out by one grace window,
+ *    bounded by the ceiling stamped at park time. No worker is held open for
+ *    any of this; the wait is simply asked again on a later tick.
+ *  - a human took over, or the ceiling passed on a conversation Quinn did
+ *    answer: the wait ends without taking either edge. Escalating there would
+ *    route a customer who was already helped, or already has a human.
+ *  - anything else: the escalated edge, and Quinn's authority is taken away in
+ *    the same transaction as the claim, so a late answer cannot publish into a
+ *    conversation the workflow has just handed on.
+ *
+ * Returns how many waits actually ended; a deferral is not a sweep result.
+ */
 export async function sweepExpiredAssistantWaits(now: Date): Promise<number> {
   const isExpiredAssistantWait = and(
     eq(workflowRuns.state, 'waiting'),
@@ -394,12 +448,142 @@ export async function sweepExpiredAssistantWaits(now: Date): Promise<number> {
   const { resumeWorkflowRun } = await import('./workflow.engine')
   let swept = 0
   for (const run of candidates) {
-    const resumed = await resumeWorkflowRun(run.id, { assistantOutcome: 'escalated' })
+    const cursor = readCursor(run)
+    const state = run.conversationId
+      ? await readAssistantEngagementState(run.conversationId)
+      : { executing: false, awaitingAction: false, answered: false, takenOver: false }
+    const ceilingMs = cursor.expiryCeilingAt
+      ? new Date(cursor.expiryCeilingAt).getTime()
+      : (cursor.waitStartedAt
+          ? new Date(cursor.waitStartedAt).getTime()
+          : run.startedAt.getTime()) + ASSISTANT_WAIT_CEILING_MS
+    const verdict = classifyAssistantWaitExpiry(state, { pastCeiling: now.getTime() >= ceilingMs })
+
+    if (verdict === 'defer') {
+      await deferAssistantWait(
+        run.id,
+        cursor.waitSeq,
+        new Date(Math.min(now.getTime() + ASSISTANT_WAIT_GRACE_MS, ceilingMs))
+      )
+      continue
+    }
+    if (verdict === 'release') {
+      if (!(await releaseAssistantWait(run.id, cursor.waitSeq, now))) continue
+      await logRunEvent(run.id, run.workflowId, run.subjectPrincipalId, 'swept_assistant_released')
+      swept++
+      continue
+    }
+    const resumed = await resumeWorkflowRun(run.id, {
+      assistantOutcome: 'escalated',
+      ...(cursor.waitSeq != null ? { expectedWaitSeq: cursor.waitSeq } : {}),
+      fenceAssistantWork: 'workflow_wait_expired',
+    })
     if (!resumed) continue
     await logRunEvent(run.id, run.workflowId, run.subjectPrincipalId, 'swept_assistant_expired')
     swept++
   }
   return swept
+}
+
+/**
+ * Reconcile a terminal Quinn run against the wait it was still owing (P4).
+ *
+ * The delegated run settles and then tells its workflow, in two transactions,
+ * so a process death between them leaves a wait whose answer will never come.
+ * The wait's own deadline is the floor under that, but it can be ten minutes
+ * away; this pass closes the gap, and it is also what recovers a delegation
+ * whose turn job was lost entirely, where no wake is ever coming.
+ *
+ * Deliberately narrow. Only a run that produced nothing counts as death: a
+ * superseded run means a newer turn took over, and an answered one means the
+ * wait is correctly still parked. A conversation with any open run is skipped
+ * outright, because that run carries the delegation forward and will complete
+ * it itself.
+ */
+export async function sweepStrandedAssistantDelegations(now: Date): Promise<number> {
+  const parked = await db
+    .select()
+    .from(workflowRuns)
+    .where(
+      and(
+        eq(workflowRuns.state, 'waiting'),
+        sql`coalesce(${workflowRuns.cursor}->>'waitKind', 'timer') = 'assistant'`,
+        sql`(${workflowRuns.cursor}->>'delegatedRunId') IS NOT NULL`,
+        sql`coalesce((${workflowRuns.cursor}->>'waitStartedAt')::timestamptz, ${workflowRuns.startedAt}) <= ${new Date(now.getTime() - STRANDED_DELEGATION_GRACE_MS).toISOString()}::timestamptz`
+      )
+    )
+    .orderBy(asc(workflowRuns.startedAt))
+    .limit(SWEEP_BATCH_SIZE)
+  if (parked.length === 0) return 0
+
+  const delegatedIds = parked
+    .map((run) => readCursor(run).delegatedRunId)
+    .filter((id): id is string => !!id)
+  const runs = await db
+    .select({
+      id: assistantRuns.id,
+      status: assistantRuns.status,
+      updatedAt: assistantRuns.updatedAt,
+    })
+    .from(assistantRuns)
+    .where(inArray(assistantRuns.id, delegatedIds as never[]))
+  const byId = new Map(runs.map((row) => [row.id as string, row]))
+
+  const { resumeWorkflowRun } = await import('./workflow.engine')
+  let recovered = 0
+  for (const run of parked) {
+    const cursor = readCursor(run)
+    const delegated = cursor.delegatedRunId ? byId.get(cursor.delegatedRunId) : undefined
+    if (!delegated) continue
+    const died =
+      DEAD_RUN_STATUSES.has(delegated.status) ||
+      (delegated.status === 'queued' &&
+        now.getTime() - delegated.updatedAt.getTime() > STRANDED_DELEGATION_GRACE_MS &&
+        !(await turnJobStillLive(cursor.delegatedRunId!)))
+    if (!died) continue
+    // Any OTHER open run on this conversation carries the delegation forward
+    // and completes it itself; this pass must not race it. The delegated run
+    // is excluded from that question because its own state is what was just
+    // judged dead.
+    if (run.conversationId) {
+      const others = await db
+        .select({ id: assistantRuns.id })
+        .from(assistantRuns)
+        .where(
+          and(
+            eq(assistantRuns.conversationId, run.conversationId),
+            ne(assistantRuns.id, delegated.id),
+            sql`${assistantRuns.status} IN ('queued', 'running', 'waiting_action')`
+          )
+        )
+        .limit(1)
+      if (others.length > 0) continue
+    }
+    if (delegated.status === 'queued') {
+      await settleRun(db, {
+        runId: delegated.id,
+        status: 'failed',
+        disposition: 'stranded:no_turn_job',
+        errorReason: 'the delegated turn never ran',
+      })
+    }
+    const resumed = await resumeWorkflowRun(run.id, {
+      assistantOutcome: 'escalated',
+      ...(cursor.waitSeq != null ? { expectedWaitSeq: cursor.waitSeq } : {}),
+      fenceAssistantWork: 'workflow_delegation_stranded',
+    })
+    if (!resumed) continue
+    await logRunEvent(run.id, run.workflowId, run.subjectPrincipalId, 'swept_delegation_stranded')
+    recovered++
+  }
+  return recovered
+}
+
+/** Is the turn job for this delegated run still able to run? */
+async function turnJobStillLive(delegatedRunId: string): Promise<boolean> {
+  const job = await findJobByDedupeKey(ASSISTANT_TURN_QUEUE, `assistant-turn:${delegatedRunId}`)
+  if (!job) return false
+  return job.status !== 'succeeded' && job.status !== 'failed'
 }
 
 // ---------------------------------------------------------------------------
@@ -796,6 +980,7 @@ export async function sweepWorkflowRuns(): Promise<void> {
   const rescheduledCount = await sweepOrphanedWaitingRuns(now)
   const expiredCount = await sweepExpiredInputWaits(now)
   const assistantExpiredCount = await sweepExpiredAssistantWaits(now)
+  const strandedDelegationCount = await sweepStrandedAssistantDelegations(now)
   const unresponsiveCount = await sweepUnresponsiveConversations(now)
   const slaTimerCount = await sweepSlaTimerTriggers(now)
   if (
@@ -803,6 +988,7 @@ export async function sweepWorkflowRuns(): Promise<void> {
     rescheduledCount > 0 ||
     expiredCount > 0 ||
     assistantExpiredCount > 0 ||
+    strandedDelegationCount > 0 ||
     unresponsiveCount > 0 ||
     slaTimerCount > 0
   ) {
@@ -812,6 +998,7 @@ export async function sweepWorkflowRuns(): Promise<void> {
         rescheduledCount,
         expiredCount,
         assistantExpiredCount,
+        strandedDelegationCount,
         unresponsiveCount,
         slaTimerCount,
       },

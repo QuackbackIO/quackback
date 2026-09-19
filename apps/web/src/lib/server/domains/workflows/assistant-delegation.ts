@@ -22,6 +22,7 @@
 import { db, and, desc, eq, sql, workflowRuns, type AssistantRunDelegation } from '@/lib/server/db'
 import type { ConversationId } from '@quackback/ids'
 import type { Executor } from '@/lib/server/domains/principals/principal.factory'
+import type { AssistantEngagementState } from '@/lib/server/domains/assistant/assistant-run.repository'
 import { logger } from '@/lib/server/logger'
 import type { AssistantOutcome } from './condition.evaluator'
 import { readCursor } from './workflow-wait-queue'
@@ -29,6 +30,88 @@ import { logRunEvent } from './workflow-run-events'
 import { resumeWorkflowRun } from './workflow.engine'
 
 const log = logger.child({ component: 'assistant-delegation' })
+
+/**
+ * What an expired assistant wait should do about it.
+ *
+ * The distinction the specification asks for is between an execution that died
+ * and a customer who has not resolved anything, and they are not the same
+ * ending:
+ *
+ * - **defer** — the engagement is alive. A turn is generating, a turn owes the
+ *   result of an approved action, or Quinn answered and the customer simply has
+ *   not come back yet. None of those is a failure, and none of them holds a
+ *   worker: the wait is simply asked again later, up to its ceiling.
+ * - **escalate** — nothing was ever delivered and nothing is coming. This is
+ *   the wait's existing default fallback, the escalated edge, and it takes
+ *   Quinn's authority with it.
+ * - **release** — a human owns the customer, or the ceiling passed on a
+ *   conversation Quinn did answer. Neither branch is true: the workflow stops
+ *   waiting and takes neither the resolved nor the escalated edge, rather than
+ *   claiming an escalation nobody asked for or a resolution nobody confirmed.
+ */
+export type AssistantWaitExpiry = 'defer' | 'escalate' | 'release'
+
+export function classifyAssistantWaitExpiry(
+  state: AssistantEngagementState,
+  opts: { pastCeiling: boolean }
+): AssistantWaitExpiry {
+  if (state.takenOver) return 'release'
+  if (opts.pastCeiling) return state.answered ? 'release' : 'escalate'
+  if (state.executing || state.awaitingAction || state.answered) return 'defer'
+  return 'escalate'
+}
+
+/**
+ * End a wait without taking either edge.
+ *
+ * Guarded on the exact visit, so a resume or an interrupt that landed between
+ * the sweep's read and this update wins. Quinn is deliberately NOT fenced: a
+ * release does not remove its authority, it only stops the workflow waiting,
+ * and an approval still owed a result stays owed.
+ */
+export async function releaseAssistantWait(
+  runId: string,
+  waitSeq: number | null | undefined,
+  now: Date
+): Promise<boolean> {
+  const filters = [eq(workflowRuns.id, runId as never), eq(workflowRuns.state, 'waiting')]
+  if (waitSeq != null) {
+    filters.push(sql`(${workflowRuns.cursor}->>'waitSeq')::int = ${waitSeq}`)
+  }
+  const [row] = await db
+    .update(workflowRuns)
+    .set({ state: 'interrupted', endedAt: now })
+    .where(and(...filters))
+    .returning({ id: workflowRuns.id })
+  return !!row
+}
+
+/**
+ * Push an expired wait's deadline out by one grace window.
+ *
+ * Guarded on the visit for the same reason as the release above. Nothing else
+ * on the cursor is rewritten, so the ceiling stamped at park time keeps
+ * counting from the park rather than from the last deferral.
+ */
+export async function deferAssistantWait(
+  runId: string,
+  waitSeq: number | null | undefined,
+  until: Date
+): Promise<boolean> {
+  const filters = [eq(workflowRuns.id, runId as never), eq(workflowRuns.state, 'waiting')]
+  if (waitSeq != null) {
+    filters.push(sql`(${workflowRuns.cursor}->>'waitSeq')::int = ${waitSeq}`)
+  }
+  const [row] = await db
+    .update(workflowRuns)
+    .set({
+      cursor: sql`coalesce(${workflowRuns.cursor}, '{}'::jsonb) || jsonb_build_object('expiresAt', ${until.toISOString()}::text)`,
+    })
+    .where(and(...filters))
+    .returning({ id: workflowRuns.id })
+  return !!row
+}
 
 /**
  * The delegation a conversation is currently parked on, if any.

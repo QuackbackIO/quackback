@@ -503,6 +503,60 @@ export async function getOpenRunState(
   return row ?? null
 }
 
+/**
+ * What a delegating workflow needs to know about Quinn's side of the
+ * conversation before deciding that a wait has run out of time (P4).
+ *
+ * Four facts, each one a different reason not to treat a deadline as "the
+ * execution died": a turn is still generating, a turn is parked on a decision
+ * somebody owes an answer to, Quinn answered and the customer simply has not
+ * come back, or a human took the conversation over and the wait is moot.
+ */
+export interface AssistantEngagementState {
+  /** A run is queued or generating right now. */
+  executing: boolean
+  /** A run published an acknowledgement and owes the result of an approved action. */
+  awaitingAction: boolean
+  /** Quinn delivered a substantive answer and the involvement is still open. */
+  answered: boolean
+  /** A teammate owns the customer: assigned, or an involvement handed off. */
+  takenOver: boolean
+}
+
+export async function readAssistantEngagementState(
+  conversationId: ConversationId,
+  exec: Executor = db
+): Promise<AssistantEngagementState> {
+  const [runs] = await exec
+    .select({
+      executing: sql<number>`count(*) FILTER (WHERE ${assistantRuns.status} IN ('queued', 'running'))`,
+      awaitingAction: sql<number>`count(*) FILTER (WHERE ${assistantRuns.status} = 'waiting_action')`,
+    })
+    .from(assistantRuns)
+    .where(eq(assistantRuns.conversationId, conversationId))
+  const [conversation] = await exec
+    .select({
+      assignedAgentPrincipalId: conversations.assignedAgentPrincipalId,
+      inactivityOwner: conversations.inactivityOwner,
+    })
+    .from(conversations)
+    .where(eq(conversations.id, conversationId))
+    .limit(1)
+  const { getLatestInvolvement } = await import('./assistant.involvement')
+  const latest = await getLatestInvolvement(conversationId, exec)
+  return {
+    executing: Number(runs?.executing ?? 0) > 0,
+    awaitingAction: Number(runs?.awaitingAction ?? 0) > 0,
+    // The involvement's own answer stamp, not the run's outcome: a follow-up
+    // nudge and a clarification deliberately leave it where it was.
+    answered: latest?.status === 'active' && latest.lastAssistantAnswerAt !== null,
+    takenOver:
+      !!conversation?.assignedAgentPrincipalId ||
+      latest?.status === 'handed_off' ||
+      conversation?.inactivityOwner === 'handoff',
+  }
+}
+
 /** A stable execution token for callers that need one outside the queue (tests, recovery). */
 export function newExecutionToken(): string {
   return randomUUID()

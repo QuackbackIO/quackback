@@ -638,20 +638,46 @@ export async function resumeWorkflowRun(
     blockAnswer?: BlockAnswer
     assistantOutcome?: AssistantOutcome
     expectedWaitSeq?: number
+    /**
+     * Take Quinn's authority away in the SAME transaction as this claim, with
+     * the reason recorded on whatever it fences (P4). The expiry sweep passes
+     * it: the escalated edge routes the customer to a human, so a Quinn turn
+     * that was generating when the wait expired must not be able to publish
+     * afterwards. Any other resume leaves Quinn alone.
+     */
+    fenceAssistantWork?: string
   }
 ): Promise<WorkflowRun | null> {
   const claimFilters = [eq(workflowRuns.id, runId), eq(workflowRuns.state, 'waiting')]
   if (opts?.expectedWaitSeq !== undefined) {
     claimFilters.push(sql`(${workflowRuns.cursor}->>'waitSeq')::int = ${opts.expectedWaitSeq}`)
   }
-  const [claimed] = await db
-    .update(workflowRuns)
-    .set({
-      state: 'running',
-      cursor: sql`coalesce(${workflowRuns.cursor}, '{}'::jsonb) || jsonb_build_object('resumedAt', ${new Date().toISOString()}::text)`,
-    })
-    .where(and(...claimFilters))
-    .returning()
+  const claimPatch = {
+    state: 'running' as const,
+    cursor: sql`coalesce(${workflowRuns.cursor}, '{}'::jsonb) || jsonb_build_object('resumedAt', ${new Date().toISOString()}::text)`,
+  }
+  const fenceReason = opts?.fenceAssistantWork
+  const claimed = fenceReason
+    ? await db.transaction(async (tx) => {
+        const [row] = await tx
+          .update(workflowRuns)
+          .set(claimPatch)
+          .where(and(...claimFilters))
+          .returning()
+        if (row?.conversationId) {
+          const { invalidateAssistantWork } =
+            await import('@/lib/server/domains/assistant/assistant-run.service')
+          await invalidateAssistantWork(tx, row.conversationId, fenceReason)
+        }
+        return row ?? null
+      })
+    : ((
+        await db
+          .update(workflowRuns)
+          .set(claimPatch)
+          .where(and(...claimFilters))
+          .returning()
+      )[0] ?? null)
   if (!claimed) return null // already claimed / interrupted / handled
 
   try {

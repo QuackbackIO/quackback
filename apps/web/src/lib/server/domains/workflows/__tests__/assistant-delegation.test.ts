@@ -12,10 +12,18 @@
  * fire-and-forget entry point, which several cases assert is never called.
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest'
-import { createId, type PrincipalId, type UserId, type ConversationId } from '@quackback/ids'
+import {
+  createId,
+  type AssistantRunId,
+  type PrincipalId,
+  type UserId,
+  type ConversationId,
+  type WorkflowRunId,
+} from '@quackback/ids'
 
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
+  assistantInvolvements,
   assistantRuns,
   conversations,
   principal,
@@ -78,7 +86,9 @@ import { createWorkflow, setWorkflowStatus } from '../workflow.service'
 import { runWorkflow } from '../workflow.engine'
 import { readCursor } from '../workflow-wait-queue'
 import { completeAssistantDelegation } from '../assistant-delegation'
+import { sweepExpiredAssistantWaits, sweepStrandedAssistantDelegations } from '../workflow-sweep'
 import {
+  commitAssistantOutcome,
   requestAssistantTurn,
   workflowDelegationTriggerKey,
 } from '@/lib/server/domains/assistant/assistant-run.service'
@@ -310,6 +320,274 @@ describe.skipIf(!fixture.available)('durable workflow delegation', () => {
       })
     )
     expect(next.run.delegation).toBeNull()
+  })
+
+  describe('expiry', () => {
+    /** Park, make the wait due, and hand back everything the cases poke at. */
+    async function dueWait(opts: { ceilingPassed?: boolean } = {}) {
+      const conversationId = await seedConversation()
+      const wf = await createWorkflow({
+        name: 'Let Quinn answer',
+        class: 'customer_facing',
+        triggerType: 'conversation.created',
+        graph: assistantGraph(),
+      })
+      await setWorkflowStatus(wf.id, 'live')
+      const run = await runWorkflow(wf, ctx(), { conversationId })
+      const cursor = readCursor(run!)
+      const past = new Date(Date.now() - 60_000).toISOString()
+      await testDb
+        .update(workflowRuns)
+        .set({
+          cursor: {
+            ...cursor,
+            expiresAt: past,
+            ...(opts.ceilingPassed ? { expiryCeilingAt: past } : {}),
+          },
+        })
+        .where(eq(workflowRuns.id, run!.id))
+      const [delegated] = await testDb
+        .select()
+        .from(assistantRuns)
+        .where(eq(assistantRuns.conversationId, conversationId))
+      applyAction.mockClear()
+      return { conversationId, runId: run!.id, delegatedRunId: delegated.id }
+    }
+
+    async function stateOf(runId: WorkflowRunId) {
+      const [row] = await testDb.select().from(workflowRuns).where(eq(workflowRuns.id, runId))
+      return row
+    }
+
+    async function settleDelegated(
+      id: AssistantRunId,
+      status: 'failed' | 'succeeded' | 'waiting_action'
+    ) {
+      await testDb.update(assistantRuns).set({ status }).where(eq(assistantRuns.id, id))
+    }
+
+    it('defers while the delegated turn is still executing', async () => {
+      const { runId } = await dueWait()
+      // The run is 'queued' from the park: the turn has not even started, let
+      // alone died.
+      expect(await sweepExpiredAssistantWaits(new Date())).toBe(0)
+      const after = await stateOf(runId)
+      expect(after.state).toBe('waiting')
+      expect(new Date(readCursor(after).expiresAt!).getTime()).toBeGreaterThan(Date.now())
+      expect(applyAction).not.toHaveBeenCalled()
+    })
+
+    it('defers while Quinn owes the result of an approved action', async () => {
+      const { runId, delegatedRunId } = await dueWait()
+      await settleDelegated(delegatedRunId, 'waiting_action')
+      expect(await sweepExpiredAssistantWaits(new Date())).toBe(0)
+      expect((await stateOf(runId)).state).toBe('waiting')
+      expect(applyAction).not.toHaveBeenCalled()
+    })
+
+    it('defers while Quinn has answered and the customer has not come back', async () => {
+      const { conversationId, runId, delegatedRunId } = await dueWait()
+      await settleDelegated(delegatedRunId, 'succeeded')
+      await testDb.insert(assistantInvolvements).values({
+        conversationId,
+        triggeredBy: 'first_touch',
+        status: 'active',
+        lastAssistantAnswerAt: new Date(),
+      })
+      expect(await sweepExpiredAssistantWaits(new Date())).toBe(0)
+      expect((await stateOf(runId)).state).toBe('waiting')
+    })
+
+    it('escalates when the execution died with nothing delivered, and fences Quinn in the same claim', async () => {
+      const { conversationId, runId, delegatedRunId } = await dueWait()
+      await settleDelegated(delegatedRunId, 'failed')
+      const [before] = await testDb
+        .select({ revision: conversations.assistantRevision })
+        .from(conversations)
+        .where(eq(conversations.id, conversationId))
+
+      expect(await sweepExpiredAssistantWaits(new Date())).toBe(1)
+      const after = await stateOf(runId)
+      expect(after.state).toBe('done')
+      expect(applyAction.mock.calls[0][0]).toMatchObject({ type: 'set_priority' })
+      const [now] = await testDb
+        .select({ revision: conversations.assistantRevision })
+        .from(conversations)
+        .where(eq(conversations.id, conversationId))
+      expect(now.revision).toBeGreaterThan(before.revision)
+    })
+
+    it('a late answer cannot publish after the expiry took Quinn authority', async () => {
+      const { conversationId, runId, delegatedRunId } = await dueWait()
+      // A worker that was mid-generation when the wait expired: it holds the
+      // revision it started with.
+      const [claimed] = await testDb
+        .update(assistantRuns)
+        .set({ status: 'running', jobLeaseToken: 'lease-1' })
+        .where(eq(assistantRuns.id, delegatedRunId))
+        .returning()
+
+      await sweepExpiredAssistantWaits(new Date())
+      const deferred = await stateOf(runId)
+      expect(deferred.state).toBe('waiting') // executing: deferred, not escalated
+
+      // The worker dies. The next tick past the new deadline finds nothing
+      // alive and takes the escalated edge.
+      await settleDelegated(delegatedRunId, 'failed')
+      await testDb
+        .update(workflowRuns)
+        .set({
+          cursor: { ...readCursor(deferred), expiresAt: new Date(Date.now() - 1000).toISOString() },
+        })
+        .where(eq(workflowRuns.id, runId))
+      expect(await sweepExpiredAssistantWaits(new Date())).toBe(1)
+
+      const outcome = await testDb.transaction((tx) =>
+        commitAssistantOutcome(tx, {
+          runId: claimed.id,
+          conversationId,
+          expectedInputRevision: claimed.inputRevision,
+          expectedStateVersion: claimed.stateVersion,
+          jobLeaseToken: 'lease-1',
+          author: {
+            principalId: (claimed.requestedByPrincipalId ?? createId('principal')) as PrincipalId,
+            displayName: 'Quinn',
+          },
+          candidate: {
+            text: 'Here is your answer',
+            responseKind: 'answer',
+            outcome: 'answer',
+            citations: [],
+            handoff: null,
+          },
+        })
+      )
+      expect(outcome).toMatchObject({ kind: 'rejected', reason: 'fence:input_revision' })
+    })
+
+    it('releases without taking either edge once a teammate has taken over', async () => {
+      const { conversationId, runId, delegatedRunId } = await dueWait()
+      await settleDelegated(delegatedRunId, 'failed')
+      const [agent] = await testDb
+        .select({ id: conversations.visitorPrincipalId })
+        .from(conversations)
+        .where(eq(conversations.id, conversationId))
+      await testDb
+        .update(conversations)
+        .set({ assignedAgentPrincipalId: agent.id as PrincipalId })
+        .where(eq(conversations.id, conversationId))
+
+      expect(await sweepExpiredAssistantWaits(new Date())).toBe(1)
+      expect((await stateOf(runId)).state).toBe('interrupted')
+      // Neither branch ran: an escalation nobody asked for would route a
+      // customer a human already has.
+      expect(applyAction).not.toHaveBeenCalled()
+    })
+
+    it('releases at the ceiling when Quinn answered, rather than claiming an escalation', async () => {
+      const { conversationId, runId, delegatedRunId } = await dueWait({ ceilingPassed: true })
+      await settleDelegated(delegatedRunId, 'succeeded')
+      await testDb.insert(assistantInvolvements).values({
+        conversationId,
+        triggeredBy: 'first_touch',
+        status: 'active',
+        lastAssistantAnswerAt: new Date(),
+      })
+      expect(await sweepExpiredAssistantWaits(new Date())).toBe(1)
+      expect((await stateOf(runId)).state).toBe('interrupted')
+      expect(applyAction).not.toHaveBeenCalled()
+    })
+
+    it('escalates at the ceiling when nothing was ever delivered, even mid-execution', async () => {
+      const { runId } = await dueWait({ ceilingPassed: true })
+      expect(await sweepExpiredAssistantWaits(new Date())).toBe(1)
+      expect((await stateOf(runId)).state).toBe('done')
+      expect(applyAction.mock.calls[0][0]).toMatchObject({ type: 'set_priority' })
+    })
+  })
+
+  describe('stranded recovery', () => {
+    async function parkedLongAgo() {
+      const conversationId = await seedConversation()
+      const wf = await createWorkflow({
+        name: 'Let Quinn answer',
+        class: 'customer_facing',
+        triggerType: 'conversation.created',
+        graph: assistantGraph(),
+      })
+      await setWorkflowStatus(wf.id, 'live')
+      const run = await runWorkflow(wf, ctx(), { conversationId })
+      const cursor = readCursor(run!)
+      const old = new Date(Date.now() - 30 * 60_000).toISOString()
+      await testDb
+        .update(workflowRuns)
+        .set({ cursor: { ...cursor, waitStartedAt: old } })
+        .where(eq(workflowRuns.id, run!.id))
+      const [delegated] = await testDb
+        .select()
+        .from(assistantRuns)
+        .where(eq(assistantRuns.conversationId, conversationId))
+      applyAction.mockClear()
+      return { conversationId, runId: run!.id, delegatedRunId: delegated.id }
+    }
+
+    it('resumes a wait whose delegated run died without telling it', async () => {
+      const { runId, delegatedRunId } = await parkedLongAgo()
+      // The run settled and the process died before it could resume the wait.
+      await testDb
+        .update(assistantRuns)
+        .set({ status: 'failed', disposition: 'error' })
+        .where(eq(assistantRuns.id, delegatedRunId))
+
+      expect(await sweepStrandedAssistantDelegations(new Date())).toBe(1)
+      const [after] = await testDb.select().from(workflowRuns).where(eq(workflowRuns.id, runId))
+      expect(after.state).toBe('done')
+      expect(applyAction.mock.calls[0][0]).toMatchObject({ type: 'set_priority' })
+    })
+
+    it('recovers a delegation whose turn job never ran', async () => {
+      const { runId, delegatedRunId } = await parkedLongAgo()
+      // The missing wake: the job row is gone and the run is still queued, so
+      // nothing will ever claim it.
+      await testDb.execute(
+        sql`DELETE FROM job_queue WHERE dedupe_key = ${`assistant-turn:${delegatedRunId}`}`
+      )
+      await testDb
+        .update(assistantRuns)
+        .set({ updatedAt: new Date(Date.now() - 30 * 60_000) })
+        .where(eq(assistantRuns.id, delegatedRunId))
+
+      expect(await sweepStrandedAssistantDelegations(new Date())).toBe(1)
+      const [after] = await testDb.select().from(workflowRuns).where(eq(workflowRuns.id, runId))
+      expect(after.state).toBe('done')
+      const [run] = await testDb
+        .select()
+        .from(assistantRuns)
+        .where(eq(assistantRuns.id, delegatedRunId))
+      expect(run.status).toBe('failed')
+      expect(run.disposition).toBe('stranded:no_turn_job')
+    })
+
+    it('leaves a wait alone while any Quinn run on the conversation is still open', async () => {
+      const { conversationId, runId, delegatedRunId } = await parkedLongAgo()
+      await testDb
+        .update(assistantRuns)
+        .set({ status: 'failed' })
+        .where(eq(assistantRuns.id, delegatedRunId))
+      // A later turn inherited the delegation and is still going; it owes the
+      // completion, not this sweep.
+      await testDb.insert(assistantRuns).values({
+        conversationId,
+        surface: 'widget',
+        triggerKind: 'customer_message',
+        triggerKey: `conversation:${conversationId}:message:later`,
+        status: 'running',
+      })
+
+      expect(await sweepStrandedAssistantDelegations(new Date())).toBe(0)
+      const [after] = await testDb.select().from(workflowRuns).where(eq(workflowRuns.id, runId))
+      expect(after.state).toBe('waiting')
+    })
   })
 
   describe('completing a delegation', () => {
