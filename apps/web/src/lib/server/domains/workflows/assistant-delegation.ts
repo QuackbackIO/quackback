@@ -19,10 +19,22 @@
  * that died, and on the lifecycle's own resolution or close (those still arrive
  * as events, see event-trigger.ts).
  */
-import { db, and, desc, eq, sql, workflowRuns, type AssistantRunDelegation } from '@/lib/server/db'
+import {
+  db,
+  and,
+  desc,
+  eq,
+  sql,
+  workflowRuns,
+  type AssistantRunDelegation,
+  type Transaction,
+} from '@/lib/server/db'
 import type { ConversationId } from '@quackback/ids'
-import type { Executor } from '@/lib/server/domains/principals/principal.factory'
 import type { AssistantEngagementState } from '@/lib/server/domains/assistant/assistant-run.repository'
+
+/** The same local executor alias workflow-run-events.ts uses, so this module
+ *  needs no import from another domain just to name a transaction. */
+type Executor = typeof db | Transaction
 import { logger } from '@/lib/server/logger'
 import type { AssistantOutcome } from './condition.evaluator'
 import { readCursor } from './workflow-wait-queue'
