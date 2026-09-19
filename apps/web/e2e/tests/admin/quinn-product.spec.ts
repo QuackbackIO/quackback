@@ -44,6 +44,17 @@ async function addGuidance(page: Page) {
   }).toPass({ timeout: 15000 })
   return page.getByRole('region', { name: 'Guidance editor' })
 }
+async function chooseAppliesWhen(page: Page, dialog: ReturnType<Page['getByRole']>, label: string) {
+  await dialog.getByLabel('Applies when').click()
+  await page.getByRole('option', { name: label, exact: true }).click()
+}
+async function guidanceEntry(title: string) {
+  return (
+    await sql<
+      { kind: string; enabled: boolean; body: string; uses: string[] | null }[]
+    >`SELECT e.kind, e.enabled, e.body, (SELECT array_agg(b.profile ORDER BY b.profile) FROM assistant_guidance_bindings b WHERE b.entry_id=e.id) AS uses FROM assistant_guidance_entries e WHERE e.title=${title}`
+  )[0]
+}
 async function searchGuidance(page: Page, value: string) {
   await expect(async () => {
     await page.getByPlaceholder('Search guidance').fill('')
@@ -92,6 +103,7 @@ test.describe('Quinn implemented product acceptance', () => {
       await bustWorkspaceSettings(sql)
     }
     await sql`DELETE FROM assistant_guidance_rules WHERE name LIKE ${tag + '%'}`
+    await sql`DELETE FROM assistant_guidance_entries WHERE title LIKE ${tag + '%'}`
     await sql`DELETE FROM agent_skills WHERE id=${ids.skill}`
     await sql`DELETE FROM assistant_documents WHERE id=${ids.document} OR title LIKE ${tag + '%'}`
     await sql`DELETE FROM assistant_web_sources WHERE id=${ids.webpage} OR url=${publicUrl}`
@@ -124,9 +136,11 @@ test.describe('Quinn implemented product acceptance', () => {
   test('Guidance create, edit, disable, search and delete persist', async ({ page }) => {
     const dialog = await addGuidance(page)
     await dialog.getByLabel('Name', { exact: true }).fill(tag + ' rule')
-    await dialog.getByLabel('Applies when').selectOption('always')
+    await chooseAppliesWhen(page, dialog, 'Every conversation')
     await dialog.getByLabel('What should Quinn do?').fill('Explain the next step clearly.')
-    await dialog.getByLabel('Uses', { exact: true }).selectOption('copilot')
+    // New entries start bound to customer conversations; move it to teammates only.
+    await dialog.getByLabel('Support teammates', { exact: true }).check()
+    await dialog.getByLabel('Customer conversations', { exact: true }).uncheck()
     await dialog.getByRole('button', { name: 'Save', exact: true }).click()
     await expect(dialog).toBeHidden()
     await page.reload()
@@ -139,16 +153,12 @@ test.describe('Quinn implemented product acceptance', () => {
     await dialog.getByRole('button', { name: 'Save', exact: true }).click()
     await expect(dialog).toBeHidden()
     await expect
-      .poll(
-        async () =>
-          (
-            await sql`SELECT agent,enabled,instruction FROM assistant_guidance_rules WHERE name=${tag + ' rule'}`
-          )[0]
-      )
+      .poll(async () => guidanceEntry(tag + ' rule'))
       .toEqual({
-        agent: 'copilot',
+        kind: 'always',
         enabled: false,
-        instruction: 'Explain the next step and verify the result.',
+        body: 'Explain the next step and verify the result.',
+        uses: ['copilot'],
       })
     await page.getByRole('button', { name: 'Edit', exact: true }).click()
     await dialog.getByRole('button', { name: 'Delete', exact: true }).click()
@@ -156,7 +166,7 @@ test.describe('Quinn implemented product acceptance', () => {
     await expect
       .poll(
         async () =>
-          (await sql`SELECT id FROM assistant_guidance_rules WHERE name=${tag + ' rule'}`).length
+          (await sql`SELECT id FROM assistant_guidance_entries WHERE title=${tag + ' rule'}`).length
       )
       .toBe(0)
   })
@@ -166,7 +176,7 @@ test.describe('Quinn implemented product acceptance', () => {
   }) => {
     const dialog = await addGuidance(page)
     await dialog.getByLabel('Name', { exact: true }).fill(tag + ' concurrent delete')
-    await dialog.getByLabel('Applies when').selectOption('always')
+    await chooseAppliesWhen(page, dialog, 'Every conversation')
     await dialog.getByLabel('What should Quinn do?').fill('Original instruction.')
     await dialog.getByRole('button', { name: 'Save', exact: true }).click()
     await expect(dialog).toBeHidden()
@@ -185,7 +195,7 @@ test.describe('Quinn implemented product acceptance', () => {
     await expect(stale.getByRole('alert')).toContainText('This guidance was removed')
     await expect(stale.getByLabel('What should Quinn do?')).toHaveValue('Keep this unsaved draft.')
     expect(
-      await sql`SELECT id FROM assistant_guidance_rules WHERE name=${tag + ' concurrent delete'}`
+      await sql`SELECT id FROM assistant_guidance_entries WHERE title=${tag + ' concurrent delete'}`
     ).toHaveLength(0)
     other.on('dialog', (dialog) => dialog.accept())
     await other.close()
@@ -218,7 +228,7 @@ test.describe('Quinn implemented product acceptance', () => {
     await confirm.getByRole('button', { name: 'Discard changes', exact: true }).click()
     await expect(dialog).toBeHidden()
     expect(
-      await sql`SELECT id FROM assistant_guidance_rules WHERE name=${tag + ' invalid'}`
+      await sql`SELECT id FROM assistant_guidance_entries WHERE title=${tag + ' invalid'}`
     ).toHaveLength(0)
   })
   test('legacy guidance preserves long content and all assignments', async ({ page }) => {
@@ -227,18 +237,21 @@ test.describe('Quinn implemented product acceptance', () => {
     await page.getByRole('button', { name: 'Edit', exact: true }).click()
     const dialog = page.getByRole('region', { name: 'Guidance editor' })
     await expect(dialog.getByLabel('What should Quinn do?')).toHaveValue(longInstructions)
-    await expect(
-      dialog.getByText('Customer conversations, Support teammates, Workspace and Slack', {
-        exact: true,
-      })
-    ).toBeVisible()
+    await expect(dialog.getByLabel('When to use')).toHaveValue('When preserving a legacy procedure')
+    for (const use of ['Customer conversations', 'Support teammates', 'Workspace and Slack'])
+      await expect(dialog.getByLabel(use, { exact: true })).toBeChecked()
     await dialog.getByLabel('Name', { exact: true }).fill(tag + ' legacy edited')
     await dialog.getByRole('button', { name: 'Save', exact: true }).click()
     await expect(dialog).toBeHidden()
-    const [saved] =
-      await sql`SELECT instructions,assignments FROM agent_skills WHERE id=${ids.skill}`
-    expect(saved.instructions).toBe(longInstructions.trim())
-    expect(saved.assignments).toEqual({ agent: true, copilot: true, workspace: true })
+    // The legacy skill was converted losslessly into a canonical entry; the
+    // edit lands there with every binding intact and the full body preserved.
+    const saved = await guidanceEntry(tag + ' legacy edited')
+    expect(saved.kind).toBe('procedure')
+    // The editor trims on save, exactly as the legacy skill editor did.
+    expect(saved.body).toBe(longInstructions.trim())
+    expect(saved.uses).toEqual(['agent', 'copilot', 'workspace'])
+    const [legacy] = await sql`SELECT instructions FROM agent_skills WHERE id=${ids.skill}`
+    expect(legacy.instructions).toBe(longInstructions)
   })
   test('built-in action permissions are independent for customers and teammates', async ({
     page,

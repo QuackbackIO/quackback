@@ -119,6 +119,10 @@ import {
   and,
   eq,
 } from '@/lib/server/db'
+// Straight from the package: the partial db mock above spreads the module
+// namespace before the run table's circular import with conversations has
+// settled, so it captures undefined for this one export.
+import { assistantRuns } from '@quackback/db'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
 import { appendInboundTicketReply } from '../requester.service'
 import { createTicket, createTicketCore } from '../ticket.service'
@@ -242,6 +246,13 @@ async function readTicket(ticketId: TicketId) {
  * control: once the control's chain has resolved (vi.waitFor), the gated
  * chain — started in the same window — has resolved too.
  */
+/**
+ * Durable execution records a run intent in the intake transaction instead of
+ * calling the orchestrator, so the Quinn gate is observed on the run table.
+ */
+async function assistantRunsFor(conversationId: ConversationId) {
+  return testDb.select().from(assistantRuns).where(eq(assistantRuns.conversationId, conversationId))
+}
 async function flushAssistantChain() {
   for (let i = 0; i < 10; i++) await new Promise((r) => setImmediate(r))
 }
@@ -465,6 +476,7 @@ describe.skipIf(!fixture.available)('convergence Phase 1b (real DB, rolled back)
       expect(conversation.assignedAgentPrincipalId).toBeNull()
       // Quinn is gated out at intake.
       expect(assistant.runAssistantTurnForConversation).not.toHaveBeenCalled()
+      expect(await assistantRunsFor(link!.conversationId)).toHaveLength(0)
       // The opening message itself went through the pipeline (message.created
       // fired exactly once, for it).
       expect(convEmit.emitMessageCreated).toHaveBeenCalledTimes(1)
@@ -519,6 +531,7 @@ describe.skipIf(!fixture.available)('convergence Phase 1b (real DB, rolled back)
       expect(message.ticketId).toBeNull()
       expect(message.senderType).toBe('visitor')
       expect(assistant.runAssistantTurnForConversation).not.toHaveBeenCalled()
+      expect(await assistantRunsFor(link!.conversationId)).toHaveLength(0)
       // The ticket side of the matrix still fires: ticket.replied alongside
       // message.created (watcher fan-out preserved).
       expect(ticketEmit.emitTicketReplied).toHaveBeenCalledTimes(1)
@@ -568,16 +581,13 @@ describe.skipIf(!fixture.available)('convergence Phase 1b (real DB, rolled back)
         requesterActor(requesterP)
       )
 
-      // The control proves the flush window is long enough: once ITS chain
-      // resolved, the pair's chain (started earlier) has resolved too.
-      await vi.waitFor(() =>
-        expect(assistant.runAssistantTurnForConversation).toHaveBeenCalledWith(
-          controlConversationId
-        )
-      )
+      // Durable intake writes the run intent inside the send's own transaction,
+      // so the gate is visible on the run table as soon as the sends return.
       await flushAssistantChain()
-      expect(assistant.runAssistantTurnForConversation).toHaveBeenCalledTimes(1)
-      expect(assistant.runAssistantTurnForConversation).not.toHaveBeenCalledWith(pairConversationId)
+      expect(await assistantRunsFor(controlConversationId)).toHaveLength(1)
+      expect(await assistantRunsFor(pairConversationId)).toHaveLength(0)
+      // The legacy executor is never reached on either path.
+      expect(assistant.runAssistantTurnForConversation).not.toHaveBeenCalled()
       // The suppressed turn changes nothing about the send itself: the
       // message landed and the pipeline ran (the agent seed exists only so
       // team-side reads inside the pipeline resolve).

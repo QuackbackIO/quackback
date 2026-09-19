@@ -63,6 +63,9 @@ import {
   isNull,
   sql,
   type Transaction,
+  assistantRuns,
+  assistantRequestReceipts,
+  assistantPendingActions,
 } from '@/lib/server/db'
 
 export interface RepointOptions {
@@ -441,6 +444,25 @@ export const REPOINT_STEPS: RepointStep[] = [
     [],
     'Status page subscriber state; unique on principal_id alone, same shape as changelog_subscriptions. Only self-serve subscribe is wired up today (and it rejects anonymous callers directly), but the source enum also carries auto/csv_import for parity with the changelog pipeline, so a future anon-eligible subscribe path is one merge decision away from being silently stranded without this step. Transfers to the target, but only when the target has no row of its own (the identified subscription/unsubscribe state wins).'
   ),
+  simpleRepoint(
+    'assistant_runs',
+    assistantRuns,
+    'requested_by_principal_id',
+    'The customer whose message requested a durable Quinn turn; an anonymous visitor who later identifies keeps their run history. No unique constraint on the column.'
+  ),
+  collisionRepoint(
+    'assistant_request_receipts',
+    assistantRequestReceipts,
+    'principal_id',
+    ['client_mutation_id'],
+    'Client mutation receipts; unique (principal_id, client_mutation_id). A colliding anon receipt is dropped so the identified principal keeps its own replay answer; the rest transfer so a retry after the merge still finds its original message.'
+  ),
+  simpleRepoint(
+    'assistant_pending_actions',
+    assistantPendingActions,
+    'requested_by_id',
+    'The customer on whose behalf Quinn proposed an action; the approval executor re-resolves the requester, so the merged identity must own the proposal. Decision attribution stays on decided_by_id, which is a teammate.'
+  ),
 ]
 
 /**
@@ -535,6 +557,18 @@ export const REPOINT_EXEMPTIONS: Record<string, string> = {
     'skill authors are team members with assistant.manage, never anonymous',
   'assistant_pending_actions.decided_by_id':
     'the agent who approves/rejects a pending action is a team member, never anonymous',
+  'assistant_tool_calls.reconciled_by_id':
+    'the teammate who records a verdict on an unconfirmed action; anonymous principals cannot reach the reconciliation controls',
+  'assistant_guidance_entries.created_by_id':
+    'guidance authors are team members with assistant.manage, never anonymous (same reasoning as assistant_guidance_rules.created_by_id)',
+  'assistant_releases.created_by_principal_id':
+    'release candidates are saved by team members with assistant.manage, never anonymous',
+  'assistant_releases.published_by_principal_id':
+    'publication and rollback are team actions gated on assistant.manage, never anonymous',
+  'assistant_release_checks.ran_by_principal_id':
+    'release checks are run from the Test Quinn page by team members, never anonymous',
+  'assistant_regression_cases.created_by_principal_id':
+    'regression cases are recorded from an answer correction by a team member, never anonymous',
   'assistant_tool_calls.principal_id':
     'the actor attributed to a tool call is a team member or the assistant itself, never the anonymous merge source',
   'import_runs.initiated_by_principal_id':
