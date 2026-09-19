@@ -36,10 +36,29 @@
   and `/v1/embeddings` (with `dimensions: 1536`). No Responses/Assistants/audio/image/moderation APIs. **The proxy
   must support:** strict `json_schema` structured output, tool calling, streaming, and the `dimensions` parameter
   (or ignore it for a native-1536 model).
-- Models: `AI_CHAT_MODEL`, `AI_EMBEDDING_MODEL`, and per-feature overrides (`AI_ASSISTANT_MODEL` for Quinn and Ask AI,
-  `AI_SUMMARY_MODEL`, `AI_CLASSIFICATION_MODEL`, `AI_MERGE_MODEL`, `AI_HELP_CENTER_MODEL`, …;
-  `lib/server/domains/ai/models.ts:54-72`). Leaving a feature's model unset disables that feature. Tune
-  `AI_COMBINED_TOOLS_AND_SCHEMA` / `AI_REASONING_EFFORT` to the proxy's models.
+- **Model resolution (second-pass R2-9, verified `lib/server/domains/ai/models.ts:13,39-67`):** each chat feature
+  resolves `featureOverride ?? AI_CHAT_MODEL`. **An unset override inherits `AI_CHAT_MODEL`; it does not disable the
+  feature.** To disable a feature explicitly, set its override to a disable sentinel: `off`, `none` or `false`
+  (`AI_CHAT_MODEL=off` / `AI_EMBEDDING_MODEL=off` disable everything / embeddings). Feature → variable:
+
+  | Feature | Variable |
+  | --- | --- |
+  | Quinn assistant (inbox copilot / customer assistant) | `AI_ASSISTANT_MODEL` |
+  | Help-center answers (Ask AI / `kb-ask`) | `AI_HELP_CENTER_MODEL` |
+  | Help-center auto-translate | `AI_HELP_CENTER_TRANSLATE_MODEL` |
+  | Summaries (post / conversation / ticket) | `AI_SUMMARY_MODEL` |
+  | Sentiment | `AI_SENTIMENT_MODEL` |
+  | Field/attribute extraction | `AI_EXTRACTION_MODEL` |
+  | Quality gate | `AI_QUALITY_GATE_MODEL` |
+  | Interpretation | `AI_INTERPRETATION_MODEL` |
+  | Merge assessment | `AI_MERGE_MODEL` |
+  | Inbox translation | `AI_INBOX_TRANSLATION_MODEL` |
+  | Classification / autotag / spam filter | `AI_CLASSIFICATION_MODEL` |
+  | Embeddings (search, similar posts, assistant retrieval) | `AI_EMBEDDING_MODEL` |
+
+  Tune `AI_COMBINED_TOOLS_AND_SCHEMA` / `AI_REASONING_EFFORT` to the proxy's models. **Before claiming offline parity,
+  test the chosen proxy models against every enabled feature** (structured `json_schema` output, tool calling,
+  streaming, 1536-d embeddings); disable any feature whose model fails, with its sentinel.
 - **Embedding dimension is fixed at 1536** (`vector(1536)` in `packages/db/src/schema/assistant.ts:120`,
   `changelog.ts:25`, `conversation-summary.ts:12`; migrations 0015/0170/0171/0203/0235;
   `embedding.service.ts:18`). The proxy must serve a **1536-dimension** embedding model (e.g. Titan Embeddings G1

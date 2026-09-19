@@ -37,6 +37,8 @@
 | D-C10 | **One shared S3 bucket** with per-app prefix isolation (Q6).                                                                                                                                                                                                                   | ✅     |
 | D-C11 | **Per-app inbound email is required**, built in the fork (Q7): per-app inbound signing secret derived from the fleet root key, like app secrets.                                                                                                                             | ✅     |
 | D-C12 | **No per-app consent screens** (Q8, Q9): the tower is a trusted first-party client (`skip_consent`); a "connect all apps" flow obtains each app's token via silent SSO sign-in. Attribution unaffected (the human still authenticates).                                      | ✅     |
+| D-C15 | **The tower owns the entire app role set of every tower-managed person** (owner, round 4; resolves second-pass R2-3). At each sync the tower sets their complete role set in every app; roles granted locally by an app admin are removed. There are no locally adopted roles for managed principals. Unmanaged people (not in the tower) are untouched. Supersedes the O-C8 question. | ✅     |
+| D-C16 | **The IdP supports SCIM or a directory API** (owner, round 4; R2-4). Revocation is driven by directory sync, not by login-time claims. Disabling a person produces a tenant-level denial on every auth path (sessions, OAuth/MCP tokens, API keys they created), independent of grant bookkeeping. The revocation bound must be stated as target vs hard maximum with polling/queue/retry budget. | ✅     |
 
 ## RBAC / personas (`10-rbac-persona-extensions.md`)
 
@@ -165,8 +167,8 @@
 | O-R6  | 10 | Should an API key created by a team-restricted agent act only on its creator's teams' tickets and conversations (needs extra upstream seams), or stay workspace-wide with no ticket/conversation access at all? | Workspace-wide, no ticket/conversation access |
 | O-R7  | 10 | Upstream lets any teammate with `conversation.view` open any conversation by ID, while ticket reads by ID become team-limited. Keep upstream's conversation behaviour for Tier agents? | Keep upstream behaviour |
 | O-C3  | 20 | Accept one shared edge-to-app HMAC secret for inbound mail delivery, while reply-address keys stay per app? | Accept |
-| O-C8  | 20 | When an app admin edits a tower-managed role grant locally, should the tower revert it at the next sync, or should local edits win? | Tower wins |
-| O-C9  | 20 | Maximum delay for an IdP group removal to take effect in every app? | 15 minutes (SCIM push or 15-min reconcile) |
+| O-C8  | 20 | ~~Local edits vs tower~~ — **answered by D-C15** (tower owns the whole role set). | — |
+| O-C9  | 20 | Maximum delay for an IdP disable/group removal to take effect in every app — a target or a hard maximum? (Mechanism is now D-C16.) | 15-minute target |
 | O-C10 | 20 | Tier bundles need an explicit per-app team mapping maintained in the tower, and grant nothing in apps without one. Acceptable? | Yes |
 | O-T16 | 30 | Are tiers an operational routing convention (any agent with ticket access can still act), or a strict read/write restriction per tier? | Routing convention; escalators become read-only after handoff |
 | O-T17 | 30 | Does escalating a ticket count as its first response for SLA purposes? | No |

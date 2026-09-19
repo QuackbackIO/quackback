@@ -200,6 +200,21 @@ A **seam** is any edit to an upstream-owned file. Rules:
 10. Deployment gates: image contents, both migration ledgers at or above their floors, catalogue seeded, workspace
     isolation probe green.
 
+### 7a. Behavioural contracts to test on every upstream update (second-pass review)
+
+Beyond the repository's own guardrails, run fork contract tests for: legacy-role fallback and `seedSystemData`
+healing; MCP token and permission enforcement (incl. the denial check); principal re-point registry coverage;
+ticket/conversation assignment and event semantics (incl. the transactional assignment integration); migration
+runner and pool-acquisition catch-up behaviour; inbound MIME/signature handling (mail router); auth/provider bootstrap.
+
+**Decisive upgrade rehearsal:** a populated fleet with active **and** suspended tenants, local and tower-owned grants,
+pending escalations and account actions, and existing prioritization history. Apply an upstream migration plus
+fork/catalogue changes, then resume an old suspended tenant. Validate tenant isolation, grants, data, recovery, and
+old-code/new-schema compatibility. Passing only a new empty installation does not establish upgradeability.
+
+Prefer a narrow, documented transactional integration seam over an incorrect two-call design kept only to minimise
+changed lines.
+
 ## 8. Principal references in fork tables
 
 Upstream merges anonymous principals into identified ones via the re-point registry
