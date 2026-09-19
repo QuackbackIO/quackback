@@ -479,6 +479,24 @@ export const settings = pgTable('settings', {
   /** Optimistic-concurrency token incremented with every assistant config write. */
   assistantConfigRevision: integer('assistant_config_revision').notNull().default(1),
   /**
+   * Opt-in release management (QUINN-PRODUCT P7). Off means the assistant
+   * config above IS the live behaviour and a save takes effect immediately,
+   * which is what every install did before releases existed. On means the row
+   * is the draft and `assistantPublishedReleaseId` below selects what new runs
+   * execute under.
+   */
+  assistantReleaseManagement: boolean('assistant_release_management').notNull().default(false),
+  /**
+   * The published Quinn release. Deliberately carries no foreign key: the
+   * releases table references `principal` in this same module and a constraint
+   * back the other way would close a cycle drizzle cannot order. Publication
+   * moves this pointer and the release row's status in one transaction, so the
+   * two cannot disagree.
+   */
+  assistantPublishedReleaseId: typeIdColumnNullable('assistant_release')(
+    'assistant_published_release_id'
+  ),
+  /**
    * Widget configuration (JSON)
    * Structure: { enabled, defaultBoard?, position?, buttonText?, identifyVerification? }
    */

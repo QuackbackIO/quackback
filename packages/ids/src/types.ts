@@ -256,6 +256,12 @@ export type AssistantSnapshotId = TypeId<'assistant_snapshot'>
 /** Client-mutation receipt ID - e.g., assistant_request_receipt_01h455vb4pex5vsknk084sn02q */
 export type AssistantRequestReceiptId = TypeId<'assistant_request_receipt'>
 
+/** Quinn release ID - e.g., assistant_release_01h455vb4pex5vsknk084sn02q */
+export type AssistantReleaseId = TypeId<'assistant_release'>
+
+/** Release check result ID - e.g., assistant_release_check_01h455vb4pex5vsknk084sn02q */
+export type AssistantReleaseCheckId = TypeId<'assistant_release_check'>
+
 /** Ticket ID - e.g., ticket_01h455vb4pex5vsknk084sn02q */
 export type TicketId = TypeId<'ticket'>
 
@@ -495,6 +501,8 @@ export interface EntityIdMap {
   assistant_chunk: AssistantChunkId
   assistant_snapshot: AssistantSnapshotId
   assistant_request_receipt: AssistantRequestReceiptId
+  assistant_release: AssistantReleaseId
+  assistant_release_check: AssistantReleaseCheckId
   ticket: TicketId
   ticket_status: TicketStatusId
   ticket_type: TicketTypeId

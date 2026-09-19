@@ -175,6 +175,12 @@ export const SIDE_EFFECT_LEDGER: readonly LedgerRegistration[] = [
     reason:
       'Publication state of the article. Nothing is dispatched off it, so a rewind changes what is visible in the help center and nothing else.',
   },
+  {
+    column: schema.assistantReleases.publishedAt,
+    policy: 'preserve',
+    reason:
+      'Publication state of a Quinn release: when this configuration became the one new runs select. Nothing outbound hangs off it, and the pointer that actually selects behaviour is settings.assistant_published_release_id, restored alongside it. Settling it would date every superseded release to the restore instant and destroy the history a rollback review reads.',
+  },
 
   // -- preserve: settling would cause the worse failure ---------------------
   {

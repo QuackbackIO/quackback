@@ -107,6 +107,10 @@ export const ID_PREFIXES = {
   assistant_chunk: 'assistant_chunk',
   // Immutable resolved behaviour a run executed under, deduplicated by hash.
   assistant_snapshot: 'assistant_snapshot',
+  // Draft, published and rollback release records over those snapshots (P7),
+  // and the evidence a candidate earned before it could be published.
+  assistant_release: 'assistant_release',
+  assistant_release_check: 'assistant_release_check',
   // HTTP retry receipt binding a client mutation id to one accepted request.
   assistant_request_receipt: 'assistant_request_receipt',
 
