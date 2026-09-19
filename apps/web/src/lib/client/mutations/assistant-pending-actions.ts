@@ -11,6 +11,7 @@ import {
   approveAssistantActionFn,
   rejectAssistantActionFn,
 } from '@/lib/server/functions/assistant-actions'
+import { reconcileAssistantActionFn } from '@/lib/server/functions/assistant-pending-actions'
 import { assistantPendingActionKeys } from '@/lib/client/queries/assistant-pending-actions'
 import { conversationKeys } from '@/lib/client/queries/conversation-keys'
 
@@ -34,4 +35,33 @@ export function useApproveAssistantAction() {
 
 export function useRejectAssistantAction() {
   return useDecideAssistantAction(rejectAssistantActionFn)
+}
+
+/**
+ * Record a person's verdict on an unconfirmed effect.
+ *
+ * Invalidates the action's own row and the review queue, because both are
+ * showing a state the verdict has just left. There is no optimistic update: an
+ * unconfirmed effect is the last place to guess at an outcome.
+ */
+export function useReconcileAssistantAction() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (vars: {
+      pendingActionId?: AssistantPendingActionId
+      receiptId?: string
+      verdict: 'resolved' | 'failed'
+      note: string
+    }) => reconcileAssistantActionFn({ data: vars }),
+    onSuccess: (_result, vars) => {
+      if (vars.pendingActionId) {
+        void queryClient.invalidateQueries({
+          queryKey: assistantPendingActionKeys.detail(vars.pendingActionId),
+        })
+      }
+      void queryClient.invalidateQueries({
+        queryKey: assistantPendingActionKeys.reviewQueue(),
+      })
+    },
+  })
 }

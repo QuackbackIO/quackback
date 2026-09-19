@@ -19,6 +19,7 @@ import {
   RectangleStackIcon,
   NoSymbolIcon,
   PencilSquareIcon,
+  ShieldExclamationIcon,
 } from '@heroicons/react/24/solid'
 import { StarIcon as StarOutlineIcon } from '@heroicons/react/24/outline'
 import type { ConversationTagId, SegmentId, TeamId, ConversationViewId } from '@quackback/ids'
@@ -84,6 +85,17 @@ export const CONVERSATION_VIEWS = [
 
 const QUINN_VIEW = { view: 'quinn', label: 'Quinn activity', Icon: SparklesIcon } as const
 
+/**
+ * The Quinn review queue (P3). Sits beside Quinn activity because it is the
+ * same section's other half: activity is what Quinn did, this is what Quinn
+ * is waiting on somebody to decide.
+ */
+const NEEDS_APPROVAL_VIEW = {
+  view: 'needs_approval',
+  label: 'Needs approval',
+  Icon: ShieldExclamationIcon,
+} as const
+
 /** The Tickets nav section (UNIFIED-INBOX-SPEC.md §2.3), visible only when
  *  `supportTickets` is enabled — see `useSupportTicketsEnabled`. */
 export const TICKET_INBOX_VIEWS = [
@@ -105,7 +117,8 @@ export function isInboxView(v: unknown): v is InboxView {
     typeof v === 'string' &&
     (CONVERSATION_VIEWS.some((c) => c.view === v) ||
       TICKET_INBOX_VIEWS.some((c) => c.view === v) ||
-      v === QUINN_VIEW.view)
+      v === QUINN_VIEW.view ||
+      v === NEEDS_APPROVAL_VIEW.view)
   )
 }
 
@@ -206,6 +219,8 @@ export function scopeLabelFor(
       return 'Spam'
     case 'quinn':
       return 'Quinn activity'
+    case 'needs_approval':
+      return 'Needs approval'
     case 'saved':
       return 'Saved messages'
     case 'mine':
@@ -547,6 +562,8 @@ export function InboxNavSidebar({
   const teamRows = teamNavRows(teams)
   const quinnItem: InboxNavItem = { kind: 'view', view: QUINN_VIEW.view }
   const quinnActive = activeKey === inboxNavKey(quinnItem)
+  const approvalItem: InboxNavItem = { kind: 'view', view: NEEDS_APPROVAL_VIEW.view }
+  const approvalActive = activeKey === inboxNavKey(approvalItem)
 
   return (
     <nav
@@ -628,6 +645,17 @@ export function InboxNavSidebar({
             >
               <QUINN_VIEW.Icon className={cn('size-4 shrink-0', quinnActive && 'text-primary')} />
               {QUINN_VIEW.label}
+            </button>
+            <button
+              type="button"
+              onClick={() => onSelect(approvalItem)}
+              data-active={approvalActive || undefined}
+              className={itemClass(approvalActive)}
+            >
+              <NEEDS_APPROVAL_VIEW.Icon
+                className={cn('size-4 shrink-0', approvalActive && 'text-primary')}
+              />
+              {NEEDS_APPROVAL_VIEW.label}
             </button>
           </FilterSection>
 

@@ -40,6 +40,7 @@ import {
   SavedMessagesColumn,
   type SavedMessageTarget,
 } from '@/components/admin/conversation/saved-messages-column'
+import { NeedsApprovalColumn } from '@/components/admin/conversation/needs-approval-column'
 import { BulkActionBar, type BulkMenuId } from '@/components/admin/conversation/bulk-action-bar'
 import { InboxCommandBar } from '@/components/admin/conversation/inbox-command-bar'
 import { ShortcutHelpPanel } from '@/components/admin/conversation/shortcut-help-panel'
@@ -294,9 +295,13 @@ export const Route = createFileRoute('/admin/inbox')({
     const searchTerm = (search.q ?? '').trim()
     const sort = search.sort ?? defaultConversationSort(!!searchTerm)
     const isSaved = nav.kind === 'view' && nav.view === 'saved'
+    // Needs approval lists ACTIONS, not conversations, and its own column owns
+    // that read; prefetching the conversation list for it would fetch a list
+    // nothing renders.
+    const isNeedsApproval = nav.kind === 'view' && nav.view === 'needs_approval'
     // A custom view's list depends on its rule set (loaded client-side from the
     // views list), so — like Saved — it hydrates client-side, not here.
-    const skipListPrefetch = isSaved || nav.kind === 'custom'
+    const skipListPrefetch = isSaved || isNeedsApproval || nav.kind === 'custom'
     const useUnified = usesUnifiedInboxList(nav)
     // A `?company=` deep link SSR-prefetches the FILTERED list under the same
     // factory key the component reads, so the filtered view hydrates too.
@@ -625,6 +630,10 @@ function InboxPage() {
   // conversation-list query is idle there. The query options come from the shared
   // factory so the route loader's SSR prefetch (same key) hydrates this read.
   const isSaved = nav.kind === 'view' && nav.view === 'saved'
+  // The Quinn review queue (P3) renders its own column over pending actions,
+  // so the conversation-list query stays idle there for the same reason Saved
+  // does: a row is an action, not a thread.
+  const isNeedsApproval = nav.kind === 'view' && nav.view === 'needs_approval'
 
   // Company refinement: a picker in the list header + the deep-link from the
   // conversation CompanyCard. The picker only appears when companies exist.
@@ -797,7 +806,7 @@ function InboxPage() {
     ticketTypeId: urlTicketType,
     activeViewFilters: activeView?.filters,
     aiBucket: nav.kind === 'view' && nav.view === 'quinn' ? urlAi : undefined,
-    isSaved,
+    isSaved: isSaved || isNeedsApproval,
     streamConnected,
     channel: urlChannel,
   })
@@ -1497,6 +1506,8 @@ function InboxPage() {
       />
       {isSaved ? (
         <SavedMessagesColumn selectedId={selectedId} onSelect={selectSavedMessage} />
+      ) : isNeedsApproval ? (
+        <NeedsApprovalColumn selectedId={selectedId} onSelect={setSelectedId} />
       ) : (
         <ConversationListColumn
           nav={nav}

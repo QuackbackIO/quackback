@@ -217,6 +217,50 @@ async function surfacePendingActionNote(row: AssistantPendingAction): Promise<vo
   }
 }
 
+/**
+ * The live proposals a reviewer could decide, newest first.
+ *
+ * Deliberately unscoped by viewer: authority here is per row, not per query,
+ * and the caller filters by the parent each proposal actually hangs off. A
+ * query that tried to encode visibility would have to reimplement both the
+ * conversation and the ticket rules, and would drift from them.
+ */
+export async function listDecidablePendingActions(
+  limit = 100,
+  exec: Executor = db
+): Promise<AssistantPendingAction[]> {
+  return exec
+    .select()
+    .from(assistantPendingActions)
+    .where(
+      and(
+        eq(assistantPendingActions.status, 'proposed'),
+        gt(assistantPendingActions.expiresAt, new Date())
+      )
+    )
+    .orderBy(desc(assistantPendingActions.proposedAt))
+    .limit(limit)
+}
+
+/**
+ * Approved actions whose execution nobody can confirm.
+ *
+ * The other half of the review queue: a decision that was made, an effect that
+ * may or may not have happened, and no answer yet. Read alongside the
+ * unreconciled receipts, which carry the provider detail.
+ */
+export async function listUnconfirmedPendingActions(
+  limit = 50,
+  exec: Executor = db
+): Promise<AssistantPendingAction[]> {
+  return exec
+    .select()
+    .from(assistantPendingActions)
+    .where(eq(assistantPendingActions.executionState, 'unknown'))
+    .orderBy(desc(assistantPendingActions.proposedAt))
+    .limit(limit)
+}
+
 /** Load a pending action by id, or null when it does not exist. */
 export async function getPendingActionById(
   id: AssistantPendingActionId,
@@ -392,6 +436,40 @@ export async function refusePendingAction(
       result: { error: input.note },
     })
     .where(and(eq(assistantPendingActions.id, id), eq(assistantPendingActions.status, 'approved')))
+    .returning()
+  return row ?? null
+}
+
+/**
+ * Settle an approved action whose unconfirmed effect a person has now judged.
+ *
+ * The verdict is about the effect, so the proposal follows it rather than
+ * being decided again: `resolved` means it happened after all, `failed` means
+ * it did not. Either way the action leaves the review queue, and neither
+ * repeats the write.
+ */
+export async function settleReconciledPendingAction(
+  id: AssistantPendingActionId,
+  verdict: 'resolved' | 'failed',
+  note: string,
+  exec: Executor = db
+): Promise<AssistantPendingAction | null> {
+  const [row] = await exec
+    .update(assistantPendingActions)
+    .set({
+      status: verdict === 'resolved' ? 'executed' : 'failed',
+      executionState: verdict === 'resolved' ? 'succeeded' : 'failed',
+      executedAt: new Date(),
+      executionError: note,
+      disposition: `reconciled:${verdict}`,
+    })
+    .where(
+      and(
+        eq(assistantPendingActions.id, id),
+        eq(assistantPendingActions.status, 'approved'),
+        eq(assistantPendingActions.executionState, 'unknown')
+      )
+    )
     .returning()
   return row ?? null
 }

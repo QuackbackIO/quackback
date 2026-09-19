@@ -110,6 +110,19 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
       [PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.TICKET_VIEW],
       'caller must be able to view the pending action parent'
     ),
+  // The review queue and the reconciliation verdict are the same shape: the
+  // base gate says inbox teammate, and every row is kept or refused by whether
+  // this caller can see the item the action belongs to.
+  'lib/server/functions/assistant-pending-actions.ts::listAssistantReviewQueueFn':
+    DYNAMIC_PERMISSION(
+      [PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.TICKET_VIEW],
+      'each row is kept only when the caller can view its parent'
+    ),
+  'lib/server/functions/assistant-pending-actions.ts::reconcileAssistantActionFn':
+    DYNAMIC_PERMISSION(
+      [PERMISSIONS.CONVERSATION_VIEW],
+      'caller must be able to view the conversation the effect was taken in'
+    ),
   'lib/server/functions/assistant-actions.ts::rejectAssistantActionFn': DYNAMIC_PERMISSION(
     [PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.TICKET_VIEW],
     'caller must be able to view the pending action parent'

@@ -43,6 +43,11 @@ export type InboxView =
   | 'mentions'
   | 'saved'
   | 'quinn'
+  // The Quinn review queue (P3): proposals a teammate may decide and
+  // executions nobody has confirmed. Its own middle column rather than a
+  // conversation list, because a row is an ACTION, not a thread; selecting one
+  // opens the thread it belongs to.
+  | 'needs_approval'
   | 'spam'
   | 'created_by_me'
   // UNIFIED-INBOX-SPEC.md §2.3: the Tickets nav section. A separate group in
@@ -232,6 +237,9 @@ export function buildListParams(
   // status/priority chips.
   if (nav.view === 'created_by_me')
     return { view: 'created_by_me' as const, search: q, companyId: company, sort: sortParam }
+  // needs_approval never reaches the conversation list: the route renders its
+  // own column (see NeedsApprovalColumn). Falling through to the assignee
+  // branch below would quietly show "All conversations" under the wrong label.
   if (nav.view === 'quinn')
     return {
       view: 'quinn' as const,

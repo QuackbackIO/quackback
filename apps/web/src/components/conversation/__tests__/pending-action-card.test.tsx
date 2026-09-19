@@ -92,9 +92,12 @@ describe('<PendingActionCard>', () => {
     expect(screen.queryByRole('button', { name: /reject/i })).not.toBeInTheDocument()
   })
 
-  it('approving calls the server fn and swaps to the executed terminal state', async () => {
+  it('renders approved and queued as two readings, and never as completed', async () => {
     getAssistantPendingActionFn.mockResolvedValue(pendingRow())
-    approveAssistantActionFn.mockResolvedValue(pendingRow({ status: 'executed' }))
+    // What approving actually returns now: a decision and a scheduled job.
+    approveAssistantActionFn.mockResolvedValue(
+      pendingRow({ status: 'approved', executionState: 'queued', executedAt: null })
+    )
 
     renderCard()
     const approveButton = await screen.findByRole('button', { name: /approve/i })
@@ -105,10 +108,41 @@ describe('<PendingActionCard>', () => {
         data: { pendingActionId: 'assistant_action_1' },
       })
     )
-    expect(await screen.findByText('Approved and executed')).toBeInTheDocument()
+    expect(await screen.findByText('Approved')).toBeInTheDocument()
+    expect(screen.getByText('Queued')).toBeInTheDocument()
+    // The decision is not the effect. A card that said this was done would be
+    // claiming an outcome nobody has yet.
+    expect(screen.queryByText(/done/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/executed/i)).not.toBeInTheDocument()
   })
 
-  it('rejecting calls the server fn and swaps to the rejected terminal state', async () => {
+  it('renders a settled execution as done, separately from the decision', async () => {
+    getAssistantPendingActionFn.mockResolvedValue(
+      pendingRow({ status: 'executed', executionState: 'succeeded' })
+    )
+
+    renderCard()
+
+    expect(await screen.findByText('Approved')).toBeInTheDocument()
+    expect(screen.getByText('Done')).toBeInTheDocument()
+  })
+
+  it('offers a verdict, and no repeat, for an execution nobody could confirm', async () => {
+    getAssistantPendingActionFn.mockResolvedValue(
+      pendingRow({ status: 'approved', executionState: 'unknown' })
+    )
+
+    renderCard()
+
+    expect(await screen.findByText('Not confirmed')).toBeInTheDocument()
+    // The one affordance an unconfirmed effect may have.
+    expect(screen.getByRole('button', { name: /record what happened/i })).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /retry|try again|repeat/i })
+    ).not.toBeInTheDocument()
+  })
+
+  it('rejecting calls the server fn and swaps to the declined reading', async () => {
     getAssistantPendingActionFn.mockResolvedValue(pendingRow())
     rejectAssistantActionFn.mockResolvedValue(pendingRow({ status: 'rejected' }))
 
@@ -121,7 +155,7 @@ describe('<PendingActionCard>', () => {
         data: { pendingActionId: 'assistant_action_1' },
       })
     )
-    expect(await screen.findByText('Rejected')).toBeInTheDocument()
+    expect(await screen.findByText('Declined')).toBeInTheDocument()
   })
 
   it('shows the server error inline when the approver lacks the permission (403)', async () => {

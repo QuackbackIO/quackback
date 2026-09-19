@@ -128,6 +128,20 @@ export async function findToolReceipt(
   return null
 }
 
+/** The receipt an approved action's execution wrote, if it got that far. */
+export async function findReceiptForPendingAction(
+  pendingActionId: AssistantPendingActionId,
+  exec: Executor = db
+): Promise<AssistantToolCall | null> {
+  const [row] = await exec
+    .select()
+    .from(assistantToolCalls)
+    .where(eq(assistantToolCalls.pendingActionId, pendingActionId))
+    .orderBy(desc(assistantToolCalls.createdAt))
+    .limit(1)
+  return row ?? null
+}
+
 /** Load one receipt by id. */
 export async function getToolCallById(
   id: AssistantToolCallId,
