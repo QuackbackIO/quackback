@@ -6,11 +6,11 @@
 > **request→approve escalation** path when a lower tier lacks the permission, full **audit**, and support
 > for acting on **Quackback-native identities** and/or the **customer's external product** account system.
 > This is the "account unlock/create tooling" layer of the tiered helpdesk
-> (`docs/tiered-support-helpdesk-plan.md`).
+> (`plans/v1/tiered-support-helpdesk-plan.md`).
 
 ## 0. Relationship to the tiered-support plan
 
-This extends `docs/tiered-support-helpdesk-plan.md`. That plan adds tiers (as typed teams) + an escalate
+This extends `plans/v1/tiered-support-helpdesk-plan.md`. That plan adds tiers (as typed teams) + an escalate
 primitive; **this plan adds the tier-gated _actions_ agents perform on accounts**, and reuses the
 escalation/approval idea so an over-tier action (T1 → create) becomes a **request approved by T2**.
 
@@ -305,7 +305,7 @@ Reuse (existing):
 - Audit: `schema/audit-log.ts`, `audit/log.ts`
 - External backends: `domains/assistant/connectors/*`, `schema/connectors.ts`, `domains/webhooks/*`,
   `workflows/action.executor.ts`
-- Escalation tie-in: `docs/tiered-support-helpdesk-plan.md` (`domains/support/escalation.service.ts`)
+- Escalation tie-in: `plans/v1/tiered-support-helpdesk-plan.md` (`domains/support/escalation.service.ts`)
 
 New (to build, additive):
 
@@ -319,6 +319,6 @@ New (to build, additive):
 
 ## 12. Relationship to other plans
 
-- **Extends** `docs/tiered-support-helpdesk-plan.md` (tiers + escalation) — this is its account-tooling layer.
-- **Composes** with `docs/multi-tenant-control-tower-plan.md` (per-app actions; fleet-wide audit).
+- **Extends** `plans/v1/tiered-support-helpdesk-plan.md` (tiers + escalation) — this is its account-tooling layer.
+- **Composes** with `plans/v1/multi-tenant-control-tower-plan.md` (per-app actions; fleet-wide audit).
 - Independent of the announcements and prioritization plans.

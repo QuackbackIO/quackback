@@ -5,7 +5,7 @@
 > publishes **time-sensitive alerts** (e.g. "we're aware of an issue", scheduled maintenance
 > notices) to users **inside the app/portal and as an embeddable banner** on customers' own
 > sites. Alerts are **authored/managed centrally from the Tier-B fleet control tower** (see
-> `docs/multi-tenant-control-tower-plan.md`) but are **app-specific** — each app's users see
+> `plans/v1/multi-tenant-control-tower-plan.md`) but are **app-specific** — each app's users see
 > only that app's alerts.
 
 ## 1. Requirements
@@ -169,7 +169,7 @@ Mirror the widget's serve/config/versioning, but render a **shadow-DOM bar** inj
 
 This is where R4 + R3 meet, and it falls out of the earlier plan's architecture:
 
-- The control tower (`docs/multi-tenant-control-tower-plan.md`) adds an **Announcements** surface. A fleet-admin composes an alert and chooses **one app** or **multiple apps** (or "all").
+- The control tower (`plans/v1/multi-tenant-control-tower-plan.md`) adds an **Announcements** surface. A fleet-admin composes an alert and chooses **one app** or **multiple apps** (or "all").
 - **Write path:** for each target app, `withWorkspaceScopeById(workspaceKey, baseUrl, () => createAnnouncement(input, fleetAdminPrincipalInThatTenant))` — reusing the new `domains/announcements` **service layer** (actor-parameterized), not the RPC layer. Broadcasts stamp a shared `origin.broadcastId` so they can be edited/expired together across apps.
 - **App-specificity is inherent:** each announcement row lives in its target app's DB; the public banner endpoint resolves per `Host` → that app's workspace, so an end user only ever sees their app's alerts. No cross-app leakage is possible through the normal request path.
 - **Audit:** every publish/edit/expire is written to `cp_fleet_audit` (from the control-tower plan).
@@ -252,7 +252,7 @@ Reuse (existing):
 - Status/maintenance: `packages/db/src/schema/status.ts`, `domains/status/*` (esp. `status.maintenance.ts`, `status.public.ts`, `status.audience.ts`).
 - Scheduling/notify: `events/scheduler.ts`, `events/process.ts`, `events/hook-job.ts`, `cron/fleet-jobs.ts`, `startup.ts`, `jobs/deadlines.ts`, `jobs/job-queue.ts`, `events/handlers/notification.ts`, `events/handlers/email.ts`, `domains/subscriptions/notification-matrix.ts`, `packages/email/src/templates/*`.
 - Portal slot + sanitize: `apps/web/src/routes/_portal.tsx`, `apps/web/src/lib/server/sanitize-tiptap.ts`.
-- Cross-tenant: `workspaces/workspace-context.ts` (`withWorkspaceScopeById`), `workspaces/registry.ts` (`listActiveWorkspaces`), and the control-tower plan (`docs/multi-tenant-control-tower-plan.md`).
+- Cross-tenant: `workspaces/workspace-context.ts` (`withWorkspaceScopeById`), `workspaces/registry.ts` (`listActiveWorkspaces`), and the control-tower plan (`plans/v1/multi-tenant-control-tower-plan.md`).
 
 New (to build, additive):
 
@@ -267,5 +267,5 @@ New (to build, additive):
 
 ## 18. Relationship to the other plans
 
-- **Depends on / complements** `docs/multi-tenant-control-tower-plan.md` for R4 (central management) and R3 (app-specific rendering via pooled per-`Host` resolution).
+- **Depends on / complements** `plans/v1/multi-tenant-control-tower-plan.md` for R4 (central management) and R3 (app-specific rendering via pooled per-`Host` resolution).
 - Standalone-usable in single-tenant mode too: the portal banner + embed work without pooling; the control-tower integration is the multi-app layer on top.
