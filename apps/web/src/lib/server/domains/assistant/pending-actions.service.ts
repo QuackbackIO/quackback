@@ -6,7 +6,7 @@
  * callers can never both "win" the same transition, and an UPDATE that
  * matches no row simply returns null instead of throwing.
  */
-import { db, eq, and, lt, gt, desc, assistantPendingActions } from '@/lib/server/db'
+import { db, eq, ne, and, lt, gt, desc, assistantPendingActions } from '@/lib/server/db'
 import type {
   AssistantPendingActionId,
   AssistantInvolvementId,
@@ -29,6 +29,16 @@ import type { ConnectorPolicyProfile } from '@/lib/shared/assistant/connectors'
 const log = logger.child({ component: 'assistant-pending-actions' })
 
 export type AssistantPendingAction = typeof assistantPendingActions.$inferSelect
+
+// The execution-side writes live next door (pending-actions.execution.ts) and
+// are re-exported here so every existing importer of this module is unaffected.
+export {
+  markPendingActionRunning,
+  markPendingActionUnknown,
+  refusePendingAction,
+  settleReconciledPendingAction,
+  supersedePendingActions,
+} from './pending-actions.execution'
 
 /** Default time an unattended proposal stays decidable before the sweep expires it. */
 const DEFAULT_TTL_HOURS = 24
@@ -129,6 +139,7 @@ export async function proposePendingAction(
     .onConflictDoNothing()
     .returning()
   if (row) {
+    await supersedeReplacedProposals(row, exec)
     await surfacePendingActionNote(row)
     return row
   }
@@ -144,6 +155,54 @@ export async function proposePendingAction(
     )
   }
   return existing
+}
+
+/**
+ * Retire the proposal a fresh one replaces.
+ *
+ * "Changed intent supersedes an undispatched proposal", read from the rows
+ * rather than guessed at. The scope is deliberately narrow: only a proposal
+ * from an EARLIER durable run, for the same item and the same tool, is
+ * replaced. Two proposals of one tool inside a single turn are two genuinely
+ * different requests (refund this order and that one) and both survive; a
+ * later turn proposing the same tool is the customer having restated what they
+ * want, and leaving the old card decidable would let a reviewer approve a
+ * request that no longer exists.
+ *
+ * Only an undispatched proposal can be replaced. Once a decision has scheduled
+ * execution, cancelling the intent cannot undo an effect, and reconciliation
+ * owns that case instead.
+ */
+async function supersedeReplacedProposals(
+  fresh: AssistantPendingAction,
+  exec: Executor
+): Promise<void> {
+  if (!fresh.runId) return
+  const scope = fresh.conversationId
+    ? eq(assistantPendingActions.conversationId, fresh.conversationId)
+    : fresh.ticketId
+      ? eq(assistantPendingActions.ticketId, fresh.ticketId)
+      : null
+  if (!scope) return
+  const replaced = await exec
+    .update(assistantPendingActions)
+    .set({ status: 'expired', disposition: 'superseded:changed_request' })
+    .where(
+      and(
+        scope,
+        eq(assistantPendingActions.toolName, fresh.toolName),
+        eq(assistantPendingActions.status, 'proposed'),
+        ne(assistantPendingActions.id, fresh.id),
+        ne(assistantPendingActions.runId, fresh.runId)
+      )
+    )
+    .returning({ id: assistantPendingActions.id })
+  if (replaced.length > 0) {
+    log.info(
+      { pendingActionId: fresh.id, replaced: replaced.length },
+      'superseded earlier proposals for the same tool'
+    )
+  }
 }
 
 /**
@@ -375,131 +434,6 @@ export async function decideAndEnqueuePendingAction(
       .returning()
     return { action: queued ?? decided, enqueued: job.inserted }
   })
-}
-
-/** Take execution ownership. Only an approved, not-yet-running action moves. */
-export async function markPendingActionRunning(
-  id: AssistantPendingActionId,
-  exec: Executor = db
-): Promise<AssistantPendingAction | null> {
-  const [row] = await exec
-    .update(assistantPendingActions)
-    .set({ executionState: 'running' })
-    .where(and(eq(assistantPendingActions.id, id), eq(assistantPendingActions.status, 'approved')))
-    .returning()
-  return row ?? null
-}
-
-/**
- * Record that an approved action was dispatched and never confirmed.
- *
- * Deliberately NOT `failed`: the decision stands, the effect may have
- * happened, and the only honest next step is a person looking at it. The
- * proposal therefore stays `approved` with its execution marked unknown,
- * rather than moving to a terminal status that would invite a fresh approval
- * of the same operation.
- */
-export async function markPendingActionUnknown(
-  id: AssistantPendingActionId,
-  note: string,
-  exec: Executor = db
-): Promise<AssistantPendingAction | null> {
-  const [row] = await exec
-    .update(assistantPendingActions)
-    .set({ executionState: 'unknown', executionError: note })
-    .where(and(eq(assistantPendingActions.id, id), eq(assistantPendingActions.status, 'approved')))
-    .returning()
-  return row ?? null
-}
-
-/**
- * Record that the pre-dispatch recheck refused an approved action.
- *
- * Terminal, and deliberately distinct from an execution failure: nothing was
- * attempted, so there is nothing to reconcile, and the reason names the gate
- * rather than a provider. A reviewer who still wants it issues a new request,
- * which is a new proposal and a new decision.
- */
-export async function refusePendingAction(
-  id: AssistantPendingActionId,
-  input: { reason: string; note: string },
-  exec: Executor = db
-): Promise<AssistantPendingAction | null> {
-  const [row] = await exec
-    .update(assistantPendingActions)
-    .set({
-      status: 'failed',
-      executedAt: new Date(),
-      executionState: 'failed',
-      executionError: input.note,
-      disposition: `refused:${input.reason}`,
-      result: { error: input.note },
-    })
-    .where(and(eq(assistantPendingActions.id, id), eq(assistantPendingActions.status, 'approved')))
-    .returning()
-  return row ?? null
-}
-
-/**
- * Settle an approved action whose unconfirmed effect a person has now judged.
- *
- * The verdict is about the effect, so the proposal follows it rather than
- * being decided again: `resolved` means it happened after all, `failed` means
- * it did not. Either way the action leaves the review queue, and neither
- * repeats the write.
- */
-export async function settleReconciledPendingAction(
-  id: AssistantPendingActionId,
-  verdict: 'resolved' | 'failed',
-  note: string,
-  exec: Executor = db
-): Promise<AssistantPendingAction | null> {
-  const [row] = await exec
-    .update(assistantPendingActions)
-    .set({
-      status: verdict === 'resolved' ? 'executed' : 'failed',
-      executionState: verdict === 'resolved' ? 'succeeded' : 'failed',
-      executedAt: new Date(),
-      executionError: note,
-      disposition: `reconciled:${verdict}`,
-    })
-    .where(
-      and(
-        eq(assistantPendingActions.id, id),
-        eq(assistantPendingActions.status, 'approved'),
-        eq(assistantPendingActions.executionState, 'unknown')
-      )
-    )
-    .returning()
-  return row ?? null
-}
-
-/**
- * Supersede the live proposals on an item because the request itself changed.
- *
- * Only an undispatched proposal can be superseded, which is what the
- * `status = 'proposed'` guard means: once a decision has scheduled execution,
- * cancelling the intent cannot undo an effect, and the reconciliation path
- * owns that case instead. The status moves to `expired` because the column's
- * CHECK cannot carry a new word without a constraint rewrite no migration here
- * may replay; `disposition` is what the surfaces read.
- */
-export async function supersedePendingActions(
-  parent: { conversationId?: ConversationId; ticketId?: TicketId },
-  reason: string,
-  exec: Executor = db
-): Promise<AssistantPendingAction[]> {
-  const scope = parent.conversationId
-    ? eq(assistantPendingActions.conversationId, parent.conversationId)
-    : parent.ticketId
-      ? eq(assistantPendingActions.ticketId, parent.ticketId)
-      : null
-  if (!scope) return []
-  return exec
-    .update(assistantPendingActions)
-    .set({ status: 'expired', disposition: `superseded:${reason}` })
-    .where(and(scope, eq(assistantPendingActions.status, 'proposed')))
-    .returning()
 }
 
 /** Settle an approved action into a terminal execution outcome. */

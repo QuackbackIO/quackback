@@ -74,15 +74,22 @@ import { loadRun } from '../assistant-run.repository'
 import type { AssistantToolContext, AssistantToolSpec } from '../assistant.toolspec'
 
 /**
- * Opt-in on the dedicated database Step 3's durability suite already uses.
+ * Opt-in, on a database of its own: `quackback_quinn_s5`.
  *
- * This suite commits rows on purpose: a receipt exists so an effect can outlive
+ * This suite commits rows on purpose. A receipt exists so an effect can outlive
  * the transaction that recorded it, so a fixture that rolled everything back
- * could not observe the property under test. Several suites that share the
+ * could not observe the property under test; several suites sharing the
  * ordinary test database assert whole-table state, so this one is inert
  * anywhere else.
+ *
+ * It does not share Step 3's `quackback_quinn_runs` either, and the reason is
+ * specific: a continuation enqueues an `assistant-turn` job, the queue poller
+ * is FIFO per queue, and vitest runs the two files in parallel workers. One
+ * row of this suite's in-flight work would make one of that suite's claims
+ * fail for a reason that has nothing to do with what it tests, intermittently.
+ * Separate databases are the only cleanup that does not depend on timing.
  */
-const dedicated = !!process.env.TEST_DATABASE_URL?.includes('quinn_runs')
+const dedicated = !!process.env.TEST_DATABASE_URL?.includes('quinn_s5')
 const tableAvailable = dedicated
   ? await db.execute(sql`SELECT to_regclass('public.assistant_tool_calls') AS t`).then(
       (result) => !!getExecuteRows<{ t: string | null }>(result)[0]?.t,
@@ -605,6 +612,85 @@ describe.skipIf(!available)('continuation and ownership', () => {
       expect(continued.run.run.id).not.toBe(requested.run.id)
       expect(continued.run.inputRevision).toBeGreaterThan(requested.inputRevision)
     }
+  })
+
+  it('a customer message during the approval supersedes the parked run and strands nothing', async () => {
+    const conversationId = await newConversation()
+    const first = await db.transaction((tx) =>
+      requestAssistantTurn(tx, {
+        conversationId,
+        triggerKey: `conversation:${conversationId}:message:kp-strand-1`,
+        triggerKind: 'customer_message',
+        surface: 'widget',
+      })
+    )
+    await db
+      .update(assistantRuns)
+      .set({ status: 'running' })
+      .where(eq(assistantRuns.id, first.run.id))
+    const action = await proposal(conversationId, {
+      runId: first.run.id,
+    } as Partial<AssistantPendingAction>)
+    await parkRunForAction(db, first.run.id, action.id)
+
+    // The customer keeps talking while the approval is outstanding.
+    await db.transaction((tx) =>
+      requestAssistantTurn(tx, {
+        conversationId,
+        triggerKey: `conversation:${conversationId}:message:kp-strand-2`,
+        triggerKind: 'customer_message',
+        surface: 'widget',
+      })
+    )
+
+    // The parked run loses, as any open run does against newer input.
+    expect((await loadRun(db, first.run.id))?.status).toBe('superseded')
+    // The ACTION does not. It is still decidable, which is the whole reason
+    // the result arrives as its own continuation rather than as a resumption
+    // of a run a later message may already have taken away.
+    expect((await getPendingActionById(action.id))?.status).toBe('proposed')
+  })
+
+  it('a later turn proposing the same tool supersedes the undispatched card', async () => {
+    const conversationId = await newConversation()
+    const firstRun = await db.transaction((tx) =>
+      requestAssistantTurn(tx, {
+        conversationId,
+        triggerKey: `conversation:${conversationId}:message:kp-replace-1`,
+        triggerKind: 'customer_message',
+        surface: 'widget',
+      })
+    )
+    const original = await proposePendingAction({
+      conversationId,
+      toolName: 'issue_refund',
+      args: { orderId: 'A1' },
+      summary: 'Issue refund for A1',
+      runId: firstRun.run.id,
+      argsDigest: digestOf({ orderId: 'A1' }),
+    })
+    const secondRun = await db.transaction((tx) =>
+      requestAssistantTurn(tx, {
+        conversationId,
+        triggerKey: `conversation:${conversationId}:message:kp-replace-2`,
+        triggerKind: 'customer_message',
+        surface: 'widget',
+      })
+    )
+    const replacement = await proposePendingAction({
+      conversationId,
+      toolName: 'issue_refund',
+      args: { orderId: 'B2' },
+      summary: 'Issue refund for B2',
+      runId: secondRun.run.id,
+      argsDigest: digestOf({ orderId: 'B2' }),
+    })
+
+    expect(await getPendingActionById(original.id)).toMatchObject({
+      status: 'expired',
+      disposition: 'superseded:changed_request',
+    })
+    expect((await getPendingActionById(replacement.id))?.status).toBe('proposed')
   })
 
   it('a late result after takeover becomes private context, never a customer message', async () => {

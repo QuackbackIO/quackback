@@ -7,10 +7,11 @@
  * would run the imported module's top level under whichever workspace claimed
  * the first job (jobs/__tests__/handler-imports.test.ts is the guard).
  *
- * The turn job runs with `maxAttempts: 1`. That is not a throughput choice: a
- * turn can dispatch a real write, and the queue's at-most-once property is what
- * keeps a process death from repeating it. Retries become available once tool
- * receipts are replay-safe (P3).
+ * The turn job still runs with `maxAttempts: 1`. The reason has changed: tool
+ * receipts are replay-safe now (P3), so a second attempt can no longer repeat
+ * an effect, and the remaining gate is the one P4 names, which is confirming
+ * durable customer mode under two workers before more than one attempt is
+ * allowed to generate into the same conversation.
  */
 import type { ClaimedJob } from '@/lib/server/jobs/job-queue'
 import { logger } from '@/lib/server/logger'
