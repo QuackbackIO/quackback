@@ -25,7 +25,15 @@
  * and the customer is escalated, never that a half-dispatched turn runs twice.
  * Write-capable retries wait for replay-safe tool receipts (P3).
  */
-import { db, sql, and, conversations, eq, ticketConversations } from '@/lib/server/db'
+import {
+  db,
+  sql,
+  and,
+  assistantRuns,
+  conversations,
+  eq,
+  ticketConversations,
+} from '@/lib/server/db'
 import type { Executor } from '@/lib/server/domains/principals/principal.factory'
 import type { Conversation, ConversationMessage, Transaction } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
@@ -70,6 +78,15 @@ export function workflowDelegationTriggerKey(
   waitSeq: number
 ): string {
   return `workflow:${workflowRunId}:${nodeId}:${waitSeq}`
+}
+
+/**
+ * Stable business identity of the continuation an approved action's result
+ * triggers. Keyed by the action, so a retried settlement resolves to the same
+ * continuation run rather than asking Quinn to report the same result twice.
+ */
+export function actionResultTriggerKey(pendingActionId: string): string {
+  return `action:${pendingActionId}:result`
 }
 
 export interface RequestAssistantTurnInput {
@@ -414,6 +431,37 @@ export async function commitAssistantOutcome(
     // commit; see advanceAssistantRun.
     sideHookEvent: event,
   }
+}
+
+/**
+ * Park a run that has published its acknowledgement and now owes a result.
+ *
+ * The run keeps the message it already committed and stops owning a worker:
+ * `waiting_action` is a terminal state for this attempt and an open one for the
+ * conversation, which is exactly what the single-executing-run index needs it
+ * to be. A customer message during the wait supersedes the parked row in the
+ * ordinary way, and the action survives that, because the action's result
+ * arrives as its own continuation rather than as a resumption of this run.
+ */
+export async function parkRunForAction(
+  exec: Executor,
+  runId: AssistantRunId,
+  pendingActionId: string
+): Promise<AssistantRunRow | null> {
+  const [row] = await exec
+    .update(assistantRuns)
+    .set({
+      status: 'waiting_action',
+      phase: 'publication',
+      disposition: `waiting_action:${pendingActionId}`,
+      stateVersion: sql`${assistantRuns.stateVersion} + 1`,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(eq(assistantRuns.id, runId), sql`${assistantRuns.status} IN ('running', 'succeeded')`)
+    )
+    .returning()
+  return row ?? null
 }
 
 /**

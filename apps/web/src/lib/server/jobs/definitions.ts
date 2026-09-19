@@ -249,6 +249,23 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       ),
   },
   {
+    name: 'assistant-action',
+    concurrency: 2,
+    // The one Quinn queue that retries. Execution is claimed on the receipt's
+    // logical action key, so a second attempt reads the first attempt's receipt
+    // instead of dispatching again; retrying can only finish the bookkeeping
+    // around an effect, never repeat it.
+    maxAttempts: 3,
+    retryBackoffMs: 5_000,
+    leaseMs: 120_000,
+    retentionMs: DAY_MS,
+    failedRetentionMs: 14 * DAY_MS,
+    handler: () =>
+      import('@/lib/server/domains/assistant/assistant-action-queue').then(
+        (m) => m.runAssistantActionJob
+      ),
+  },
+  {
     name: 'snooze-sweep',
     cron: '* * * * *',
     maxAttempts: 3,

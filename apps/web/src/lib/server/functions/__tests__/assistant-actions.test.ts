@@ -2,10 +2,12 @@
  * Tests for approveAssistantActionFn / rejectAssistantActionFn.
  *
  * Orchestration only: the fns resolve the tool spec, gate on the approver
- * holding every permission the tool declares, decide, and (on approve) run
- * the same execute-approved pipeline seam autonomous mode uses. Domain
- * services are mocked at their module boundary; `can` runs for real against a
- * constructed actor so the permission gate is meaningfully exercised.
+ * holding every permission the tool declares, decide, and (on approve) commit
+ * the decision together with the execution job. Nothing is dispatched here
+ * any more; the worker owns that, and re-resolves every gate again at the
+ * moment of the effect. Domain services are mocked at their module boundary;
+ * `can` runs for real against a constructed actor so the permission gate is
+ * meaningfully exercised.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { z } from 'zod'
@@ -36,12 +38,10 @@ const hoisted = vi.hoisted(() => ({
   policyActorFromAuth: vi.fn(),
   getPendingActionById: vi.fn(),
   decidePendingAction: vi.fn(),
-  markPendingActionExecuted: vi.fn(),
-  markPendingActionFailed: vi.fn(),
+  decideAndEnqueuePendingAction: vi.fn(),
   resolveToolSpecs: vi.fn(),
   resolveConnectorApprovalSpec: vi.fn(),
   getAssistantRuntimeConfig: vi.fn(),
-  executeApprovedPendingAction: vi.fn(),
   ensureAssistantPrincipal: vi.fn(),
   assertConversationViewable: vi.fn(),
   assertTicketVisible: vi.fn(),
@@ -70,8 +70,7 @@ vi.mock('@/lib/server/functions/auth-helpers', () => ({
 vi.mock('@/lib/server/domains/assistant/pending-actions.service', () => ({
   getPendingActionById: hoisted.getPendingActionById,
   decidePendingAction: hoisted.decidePendingAction,
-  markPendingActionExecuted: hoisted.markPendingActionExecuted,
-  markPendingActionFailed: hoisted.markPendingActionFailed,
+  decideAndEnqueuePendingAction: hoisted.decideAndEnqueuePendingAction,
 }))
 
 vi.mock('@/lib/server/domains/assistant/assistant.toolspec', () => ({
@@ -108,10 +107,6 @@ vi.mock('@/lib/server/domains/assistant/assistant.toolspec', () => ({
       permissions: new Set(),
     },
   }),
-}))
-
-vi.mock('@/lib/server/domains/assistant/assistant.tools', () => ({
-  executeApprovedPendingAction: hoisted.executeApprovedPendingAction,
 }))
 
 vi.mock('@/lib/server/domains/assistant/connectors/connector-tools', () => ({
@@ -199,93 +194,69 @@ beforeEach(() => {
   hoisted.ensureAssistantPrincipal.mockResolvedValue({ id: 'principal_quinn' })
   hoisted.assertConversationViewable.mockResolvedValue(undefined)
   hoisted.assertTicketVisible.mockResolvedValue(undefined)
+  hoisted.decideAndEnqueuePendingAction.mockImplementation(
+    async (input: { id: string; decision: string }) => ({
+      action: {
+        ...fakePendingActionRow({ originRole: 'customer_support' }),
+        status: input.decision,
+        decidedById: 'principal_agent1',
+        executionState: 'queued',
+      },
+      enqueued: true,
+    })
+  )
 })
 
 describe('approveAssistantActionFn', () => {
-  it('executes via the same pipeline seam, links the audit row, and settles the row', async () => {
+  it('commits the decision and the execution job together, and returns approved-and-queued', async () => {
     const pending = pendingRow()
     const approver = actorWith([PERMISSIONS.CONVERSATION_SET_STATUS])
     hoisted.policyActorFromAuth.mockResolvedValue(approver)
     hoisted.getPendingActionById.mockResolvedValue(pending)
-    const decided = { ...pending, status: 'approved', decidedById: 'principal_agent1' }
-    hoisted.decidePendingAction.mockResolvedValue(decided)
-    hoisted.executeApprovedPendingAction.mockResolvedValue({
-      status: 'executed',
-      result: { closed: true },
-    })
-    const settled = { ...decided, status: 'executed', result: { closed: true } }
-    hoisted.markPendingActionExecuted.mockResolvedValue(settled)
+    const queued = {
+      ...pending,
+      status: 'approved',
+      decidedById: 'principal_agent1',
+      executionState: 'queued',
+      executionJobId: 'job_1',
+    }
+    hoisted.decideAndEnqueuePendingAction.mockResolvedValue({ action: queued, enqueued: true })
 
     const out = await approve({ pendingActionId: 'assistant_action_1' })
 
-    expect(hoisted.decidePendingAction).toHaveBeenCalledWith(
-      'assistant_action_1',
-      'approved',
-      'principal_agent1'
-    )
-    expect(hoisted.executeApprovedPendingAction).toHaveBeenCalledWith(
-      CLOSE_SPEC,
-      decided,
-      expect.objectContaining({
-        assistantPrincipalId: 'principal_quinn',
-        role: 'customer_support',
-        conversationId: 'conversation_1',
-        involvementId: 'assistant_involvement_1',
-        simulate: false,
-        actor: approver,
-      })
-    )
-    expect(hoisted.markPendingActionExecuted).toHaveBeenCalledWith('assistant_action_1', {
-      closed: true,
+    expect(hoisted.decideAndEnqueuePendingAction).toHaveBeenCalledWith({
+      id: 'assistant_action_1',
+      decision: 'approved',
+      decidedById: 'principal_agent1',
+      // The exact operation the reviewer approved, digested from the PARSED
+      // arguments, so what the worker compares is what would actually run.
+      approvedArgsDigest: expect.stringMatching(/^[0-9a-f]{64}$/),
     })
-    expect(hoisted.markPendingActionFailed).not.toHaveBeenCalled()
+    // Nothing was dispatched inside the request, and the answer says queued,
+    // not completed.
+    expect(out).toEqual(
+      expect.objectContaining({ status: 'approved', executionState: 'queued', executedAt: null })
+    )
     expect(hoisted.requireAuth).toHaveBeenCalledWith()
-    expect(out).toEqual(expect.objectContaining(expectDTOFrom(settled)))
   })
 
-  it('threads the ticket parent onto the execution context for a ticket-scoped pending action (unified inbox §2.9)', async () => {
-    const pending = pendingRow({ conversationId: null, ticketId: 'ticket_1' })
-    hoisted.getPendingActionById.mockResolvedValue(pending)
-    const decided = { ...pending, status: 'approved', decidedById: 'principal_agent1' }
-    hoisted.decidePendingAction.mockResolvedValue(decided)
-    hoisted.executeApprovedPendingAction.mockResolvedValue({
-      status: 'executed',
-      result: { created: true },
-    })
-    hoisted.markPendingActionExecuted.mockResolvedValue({
-      ...decided,
-      status: 'executed',
-      result: { created: true },
-    })
+  it('conflicts rather than queueing when the row is no longer decidable', async () => {
+    hoisted.getPendingActionById.mockResolvedValue(pendingRow())
+    hoisted.decideAndEnqueuePendingAction.mockResolvedValue(null)
 
-    await approve({ pendingActionId: 'assistant_action_1' })
-
-    expect(hoisted.executeApprovedPendingAction).toHaveBeenCalledWith(
-      CLOSE_SPEC,
-      decided,
-      expect.objectContaining({
-        conversationId: null,
-        ticketId: 'ticket_1',
-      })
-    )
+    await expect(approve({ pendingActionId: 'assistant_action_1' })).rejects.toMatchObject({
+      statusCode: 409,
+    })
   })
 
-  it('settles failed when execution fails, without throwing', async () => {
-    const pending = pendingRow()
-    hoisted.getPendingActionById.mockResolvedValue(pending)
-    const decided = { ...pending, status: 'approved' }
-    hoisted.decidePendingAction.mockResolvedValue(decided)
-    hoisted.executeApprovedPendingAction.mockResolvedValue({
-      status: 'failed',
-      error: 'boom',
+  it('refuses when the discovered contract moved since the proposal was rendered', async () => {
+    hoisted.getPendingActionById.mockResolvedValue(pendingRow({ contractDigest: 'old' }))
+    hoisted.resolveToolSpecs.mockReturnValue([{ ...CLOSE_SPEC, contractDigest: 'new' }])
+
+    await expect(approve({ pendingActionId: 'assistant_action_1' })).rejects.toMatchObject({
+      statusCode: 409,
     })
-    const settled = { ...decided, status: 'failed', result: { error: 'boom' } }
-    hoisted.markPendingActionFailed.mockResolvedValue(settled)
-
-    const out = await approve({ pendingActionId: 'assistant_action_1' })
-
-    expect(hoisted.markPendingActionFailed).toHaveBeenCalledWith('assistant_action_1', 'boom')
-    expect(out).toEqual(expect.objectContaining(expectDTOFrom(settled)))
+    expect(hoisted.decideAndEnqueuePendingAction).not.toHaveBeenCalled()
   })
 
   it('rejects with no execution unless the approver holds every permission the tool declares', async () => {
@@ -302,8 +273,7 @@ describe('approveAssistantActionFn', () => {
       /conversation\.reply/
     )
 
-    expect(hoisted.decidePendingAction).not.toHaveBeenCalled()
-    expect(hoisted.executeApprovedPendingAction).not.toHaveBeenCalled()
+    expect(hoisted.decideAndEnqueuePendingAction).not.toHaveBeenCalled()
   })
 
   it('rejects when the current tool spec is read-only', async () => {
@@ -332,18 +302,16 @@ describe('approveAssistantActionFn', () => {
     await expect(approve({ pendingActionId: 'assistant_action_1' })).rejects.toMatchObject({
       statusCode: 409,
     })
-    expect(hoisted.decidePendingAction).not.toHaveBeenCalled()
-    expect(hoisted.executeApprovedPendingAction).not.toHaveBeenCalled()
+    expect(hoisted.decideAndEnqueuePendingAction).not.toHaveBeenCalled()
   })
 
   it('conflicts when the proposal was already decided or has expired', async () => {
     hoisted.getPendingActionById.mockResolvedValue(pendingRow())
-    hoisted.decidePendingAction.mockResolvedValue(null)
+    hoisted.decideAndEnqueuePendingAction.mockResolvedValue(null)
 
     await expect(approve({ pendingActionId: 'assistant_action_1' })).rejects.toThrow(
       /already decided or has expired/
     )
-    expect(hoisted.executeApprovedPendingAction).not.toHaveBeenCalled()
   })
 
   it('rejects with a 410-style error when the tool spec no longer exists in the catalogue', async () => {
@@ -374,7 +342,6 @@ describe('approveAssistantActionFn', () => {
         statusCode: 410,
       })
       expect(hoisted.decidePendingAction).not.toHaveBeenCalled()
-      expect(hoisted.executeApprovedPendingAction).not.toHaveBeenCalled()
     })
 
     it('conflicts and never executes when the policy moved to never since the proposal', async () => {
@@ -391,7 +358,6 @@ describe('approveAssistantActionFn', () => {
         code: 'ASSISTANT_ACTION_POLICY_CHANGED',
       })
       expect(hoisted.decidePendingAction).not.toHaveBeenCalled()
-      expect(hoisted.executeApprovedPendingAction).not.toHaveBeenCalled()
     })
 
     it('conflicts when the tool contract changed and has not been reviewed since', async () => {
@@ -408,7 +374,6 @@ describe('approveAssistantActionFn', () => {
         code: 'ASSISTANT_ACTION_POLICY_CHANGED',
         message: expect.stringContaining('review'),
       })
-      expect(hoisted.executeApprovedPendingAction).not.toHaveBeenCalled()
     })
 
     it('re-resolves the use the proposal was made under, not the approver own', async () => {
@@ -438,12 +403,10 @@ describe('approveAssistantActionFn', () => {
     it('authorizes against the conversation the pending action is scoped to, before deciding', async () => {
       const pending = pendingRow({ conversationId: 'conversation_1', ticketId: null })
       hoisted.getPendingActionById.mockResolvedValue(pending)
-      hoisted.decidePendingAction.mockResolvedValue({ ...pending, status: 'approved' })
-      hoisted.executeApprovedPendingAction.mockResolvedValue({
-        status: 'executed',
-        result: { closed: true },
+      hoisted.decideAndEnqueuePendingAction.mockResolvedValue({
+        action: { ...pending, status: 'approved', executionState: 'queued' },
+        enqueued: true,
       })
-      hoisted.markPendingActionExecuted.mockResolvedValue({ ...pending, status: 'executed' })
 
       await approve({ pendingActionId: 'assistant_action_1' })
 
@@ -457,12 +420,10 @@ describe('approveAssistantActionFn', () => {
     it('authorizes against the ticket the pending action is scoped to, before deciding', async () => {
       const pending = pendingRow({ conversationId: null, ticketId: 'ticket_1' })
       hoisted.getPendingActionById.mockResolvedValue(pending)
-      hoisted.decidePendingAction.mockResolvedValue({ ...pending, status: 'approved' })
-      hoisted.executeApprovedPendingAction.mockResolvedValue({
-        status: 'executed',
-        result: { created: true },
+      hoisted.decideAndEnqueuePendingAction.mockResolvedValue({
+        action: { ...pending, status: 'approved', executionState: 'queued' },
+        enqueued: true,
       })
-      hoisted.markPendingActionExecuted.mockResolvedValue({ ...pending, status: 'executed' })
 
       await approve({ pendingActionId: 'assistant_action_1' })
 
@@ -485,7 +446,6 @@ describe('approveAssistantActionFn', () => {
       })
 
       expect(hoisted.decidePendingAction).not.toHaveBeenCalled()
-      expect(hoisted.executeApprovedPendingAction).not.toHaveBeenCalled()
     })
 
     it('404s (never executing or deciding) when the approver cannot view the conversation this row is scoped to', async () => {
@@ -522,7 +482,6 @@ describe('rejectAssistantActionFn', () => {
     )
     expect(hoisted.requireAuth).toHaveBeenCalledWith()
     expect(hoisted.resolveToolSpecs).not.toHaveBeenCalled()
-    expect(hoisted.executeApprovedPendingAction).not.toHaveBeenCalled()
     expect(out).toEqual(expect.objectContaining(expectDTOFrom(rejected)))
   })
 })

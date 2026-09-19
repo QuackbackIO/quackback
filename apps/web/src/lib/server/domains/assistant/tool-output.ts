@@ -10,8 +10,30 @@ import { z } from 'zod'
  */
 export const assistantGateEnvelopeSchema = z.union([
   z.object({
-    status: z.enum(['pending_approval', 'denied', 'skipped_duplicate', 'failed']),
+    status: z.enum([
+      'pending_approval',
+      'denied',
+      'skipped_duplicate',
+      'failed',
+      // An effect somebody else already owns, and an effect that was sent and
+      // never confirmed. Both exist so the model has a word for "not finished"
+      // that is not "failed", which it would otherwise report as done-and-wrong
+      // or retry.
+      'in_progress',
+      'unknown',
+    ]),
     note: z.string(),
+    /** The receipt a person reconciles, when there is one. */
+    receiptId: z.string().optional(),
+    /** The proposal a reviewer decides, when the gate was an approval. */
+    actionId: z.string().optional(),
+    /** The coarse status of the receipt a duplicate call found. */
+    previousStatus: z.string().optional(),
+    /** The normalized outcome of that receipt. */
+    outcomeStatus: z.string().optional(),
+    /** The bounded stored result of an action that already succeeded. */
+    result: z.unknown().optional(),
+    reconciliationRequired: z.literal(true).optional(),
   }),
   z.object({ simulated: z.literal(true), summary: z.string() }),
 ])

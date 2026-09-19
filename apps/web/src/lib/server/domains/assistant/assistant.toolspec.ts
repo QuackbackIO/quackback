@@ -36,6 +36,7 @@ import {
   type ConversationId,
   type TicketId,
   type AssistantInvolvementId,
+  type AssistantRunId,
   type SegmentId,
 } from '@quackback/ids'
 import { type ContentAudience } from './audience'
@@ -318,6 +319,18 @@ export interface AssistantToolContext {
   mcpSession?: import('./connectors/mcp-client').ConnectorMcpSession
   /** Connector MCP sessions reused across tool calls this turn, keyed by connector id. */
   mcpConnectorSessions?: Map<string, import('./connectors/mcp-client').ConnectorMcpSession>
+  /**
+   * The durable run this turn belongs to, recorded on every receipt and
+   * proposal so an effect stays explainable after the turn is long finished.
+   * Null on the legacy executor and in the sandbox.
+   */
+  runId?: AssistantRunId | null
+  /**
+   * Who the action is being taken for: the customer whose message triggered
+   * the turn, or the teammate who asked. Recorded on a proposal so a reviewer
+   * is shown the requester rather than inferring one from the thread.
+   */
+  requestedByPrincipalId?: PrincipalId | null
 }
 
 /**
@@ -349,6 +362,8 @@ export function makeAssistantToolContext(init: {
   attributeCatalogue?: readonly AssistantAttributeCatalogueEntry[]
   mcpSession?: import('./connectors/mcp-client').ConnectorMcpSession
   mcpConnectorSessions?: Map<string, import('./connectors/mcp-client').ConnectorMcpSession>
+  runId?: AssistantRunId | null
+  requestedByPrincipalId?: PrincipalId | null
 }): AssistantToolContext {
   return {
     db: init.db,
@@ -380,6 +395,8 @@ export function makeAssistantToolContext(init: {
     attributeCatalogue: init.attributeCatalogue,
     mcpSession: init.mcpSession,
     mcpConnectorSessions: init.mcpConnectorSessions,
+    runId: init.runId ?? null,
+    requestedByPrincipalId: init.requestedByPrincipalId ?? null,
   }
 }
 
@@ -473,6 +490,23 @@ export interface AssistantToolSpec<In = unknown, Out = unknown> {
   }
   /** Source chip for approval cards. Built-ins omit this. */
   connector?: { name: string; initials: string }
+  /**
+   * A fingerprint of the input contract this spec was built from.
+   *
+   * Only a spec built from a DISCOVERED contract carries one: the remote
+   * server's schema is data that can change under a stored proposal, and the
+   * digest is how execution notices. A built-in's contract lives in this
+   * repository, so a change to it is a deploy, and the live zod parse the
+   * approval path already runs is the stronger check.
+   */
+  contractDigest?: string
+  /**
+   * How an interrupted or duplicated call of this tool may be recovered. Left
+   * undefined for anything whose class `replayStrategyFor` can read off the
+   * spec; set explicitly where it cannot (an MCP session that happens to write
+   * to this database is still uncertain, because there is no status query).
+   */
+  replayStrategy?: import('@/lib/server/db').AssistantToolReplayStrategy
   /** The TanStack tool definition: model-facing name, description, and zod schemas. */
   definition: ToolDefinition<any, any, string>
   execute(args: In, ctx: AssistantToolContext): Promise<Out>

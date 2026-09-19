@@ -64,13 +64,17 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
 }))
 
 const mockFindToolCall = vi.fn()
+const mockFindToolReceipt = vi.fn()
 const mockClaimToolCall = vi.fn()
-const mockFinalizeToolCall = vi.fn()
+const mockSettleToolCall = vi.fn()
+const mockMarkDispatched = vi.fn()
 const mockRecordDeniedToolCall = vi.fn()
 vi.mock('../tool-audit', () => ({
   claimToolCall: (...args: unknown[]) => mockClaimToolCall(...args),
   findToolCallByIdempotencyKey: (...args: unknown[]) => mockFindToolCall(...args),
-  finalizeToolCall: (...args: unknown[]) => mockFinalizeToolCall(...args),
+  findToolReceipt: (...args: unknown[]) => mockFindToolReceipt(...args),
+  settleToolCall: (...args: unknown[]) => mockSettleToolCall(...args),
+  markToolCallDispatched: (...args: unknown[]) => mockMarkDispatched(...args),
   recordDeniedToolCall: (...args: unknown[]) => mockRecordDeniedToolCall(...args),
 }))
 
@@ -421,20 +425,29 @@ describe('assembleAssistantToolset: write-tool pipeline (propose mode)', () => {
       note: string
     }
 
-    expect(mockProposePendingAction).toHaveBeenCalledWith({
-      conversationId: 'conversation_1',
-      involvementId: 'assistant_involvement_1',
-      toolName: 'close_conversation',
-      args: { reason: 'resolved' },
-      summary: 'Close conversation: resolved',
-      originRole: 'customer_support',
-      // Same-shaped key as the autonomous branch's claim (S1); this context
-      // has no latestCustomerMessageId override, so it threads through as
-      // the literal "null" segment.
-      idempotencyKey: expect.stringMatching(
-        /^conversation_1:null:close_conversation:[0-9a-f]{64}$/
-      ),
-    })
+    expect(mockProposePendingAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'conversation_1',
+        involvementId: 'assistant_involvement_1',
+        toolName: 'close_conversation',
+        args: { reason: 'resolved' },
+        summary: 'Close conversation: resolved',
+        originRole: 'customer_support',
+        // Same-shaped key as the autonomous branch's claim (S1); this context
+        // has no latestCustomerMessageId override, so it threads through as
+        // the literal "null" segment.
+        idempotencyKey: expect.stringMatching(
+          /^conversation_1:null:close_conversation:[0-9a-f]{64}$/
+        ),
+        // The logical identity the receipt will carry, scoped to the
+        // engagement rather than to the message, so an approval executed in a
+        // later turn is still the same action.
+        actionKey: expect.stringMatching(
+          /^conversation_1:inv:assistant_involvement_1:close_conversation:[0-9a-f]{64}$/
+        ),
+        argsDigest: expect.stringMatching(/^[0-9a-f]{64}$/),
+      })
+    )
     expect(out.status).toBe('pending_approval')
     expect(typeof out.note).toBe('string')
     expect(mockWriteExecute).not.toHaveBeenCalled()
@@ -521,18 +534,23 @@ describe('assembleAssistantToolset: write-tool pipeline (propose mode)', () => {
     ])
     await tool.execute({ reason: 'resolved' }, toolCtx(c))
 
-    expect(mockProposePendingAction).toHaveBeenCalledWith({
-      ticketId: 'ticket_1',
-      involvementId: 'assistant_involvement_1',
-      toolName: 'close_conversation',
-      args: { reason: 'resolved' },
-      summary: 'Close conversation: resolved',
-      originRole: 'customer_support',
-      // Falls back to ticketId (not the bare "null" a naive conversationId-only
-      // key would produce) so two different tickets proposing the same tool
-      // with the same args never collide — see resolveIdempotencyKey's doc.
-      idempotencyKey: expect.stringMatching(/^ticket_1:null:close_conversation:[0-9a-f]{64}$/),
-    })
+    expect(mockProposePendingAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ticketId: 'ticket_1',
+        involvementId: 'assistant_involvement_1',
+        toolName: 'close_conversation',
+        args: { reason: 'resolved' },
+        summary: 'Close conversation: resolved',
+        originRole: 'customer_support',
+        // Falls back to ticketId (not the bare "null" a naive conversationId-only
+        // key would produce) so two different tickets proposing the same tool
+        // with the same args never collide — see resolveIdempotencyKey's doc.
+        idempotencyKey: expect.stringMatching(/^ticket_1:null:close_conversation:[0-9a-f]{64}$/),
+        actionKey: expect.stringMatching(
+          /^ticket_1:inv:assistant_involvement_1:close_conversation:[0-9a-f]{64}$/
+        ),
+      })
+    )
   })
 })
 
@@ -581,6 +599,9 @@ describe('assembleAssistantToolset: propose policy (copilot Q&A)', () => {
       expect(out).toEqual({
         status: 'pending_approval',
         note: expect.any(String),
+        // The proposal a reviewer decides, so the card the model describes and
+        // the row the queue shows are the same one.
+        actionId: expect.any(String),
       })
       expect(mockProposePendingAction).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -643,9 +664,14 @@ describe('assembleAssistantToolset: write-tool pipeline (autonomous mode)', () =
     expect(claimArgs.idempotencyKey).toMatch(
       /^conversation_1:conversation_message_1:close_conversation:[0-9a-f]{64}$/
     )
-    expect(mockFinalizeToolCall).toHaveBeenCalledWith(
+    // A local built-in mutation is never stamped as dispatched: it and its
+    // receipt are written by the same process against the same database, so
+    // there is no window an interruption could leave behind.
+    expect(mockMarkDispatched).not.toHaveBeenCalled()
+    expect(mockSettleToolCall).toHaveBeenCalledWith(
       'assistant_tool_call_1',
-      expect.objectContaining({ status: 'succeeded', latencyMs: expect.any(Number) })
+      expect.objectContaining({ status: 'succeeded' }),
+      expect.objectContaining({ latencyMs: expect.any(Number) })
     )
     expect(c.ledger.toolOutcomes).toEqual([{ name: 'close_conversation', outcome: 'executed' }])
   })
@@ -659,22 +685,86 @@ describe('assembleAssistantToolset: write-tool pipeline (autonomous mode)', () =
 
     expect(out.status).toBe('skipped_duplicate')
     expect(mockWriteExecute).not.toHaveBeenCalled()
-    expect(mockFinalizeToolCall).not.toHaveBeenCalled()
+    expect(mockSettleToolCall).not.toHaveBeenCalled()
   })
 
   it.each(['started', 'failed', 'denied', 'succeeded'])(
     'reports the stored %s disposition without repeating a write',
     async (status) => {
       mockClaimToolCall.mockResolvedValue(null)
-      mockFindToolCall.mockResolvedValue({ status })
+      mockFindToolReceipt.mockResolvedValue({
+        id: 'assistant_tool_call_1',
+        status,
+        outcomeStatus: null,
+        result: null,
+        error: null,
+        retryable: null,
+        reconciliationState: null,
+        dispatchedAt: null,
+        settledAt: status === 'started' ? null : new Date(),
+        pendingActionId: null,
+      })
       const c = autonomousCtx()
       const tool = await findTool(c, 'close_conversation', [makeFakeWriteSpec({ permissions: [] })])
       const out = await tool.execute({ reason: 'resolved' }, toolCtx(c))
       expect(out).toMatchObject({ status: 'skipped_duplicate', previousStatus: status })
       expect(mockWriteExecute).not.toHaveBeenCalled()
-      expect(c.ledger.toolOutcomes).toEqual([{ name: 'close_conversation', outcome: 'failed' }])
+      expect(c.ledger.toolOutcomes).toEqual([
+        {
+          name: 'close_conversation',
+          outcome: status === 'succeeded' ? 'executed' : 'failed',
+        },
+      ])
     }
   )
+
+  it('hands the stored result back when the duplicate already succeeded', async () => {
+    mockClaimToolCall.mockResolvedValue(null)
+    mockFindToolReceipt.mockResolvedValue({
+      id: 'assistant_tool_call_1',
+      status: 'succeeded',
+      outcomeStatus: 'succeeded',
+      result: { closed: true },
+      error: null,
+      retryable: null,
+      reconciliationState: null,
+      dispatchedAt: null,
+      settledAt: new Date(),
+      pendingActionId: null,
+    })
+    const c = autonomousCtx()
+    const tool = await findTool(c, 'close_conversation', [makeFakeWriteSpec({ permissions: [] })])
+    expect(await tool.execute({ reason: 'resolved' }, toolCtx(c))).toMatchObject({
+      status: 'skipped_duplicate',
+      outcomeStatus: 'succeeded',
+      result: { closed: true },
+    })
+    expect(mockWriteExecute).not.toHaveBeenCalled()
+  })
+
+  it('answers a dispatched-but-unsettled duplicate with unknown, never a retry or a completion', async () => {
+    mockClaimToolCall.mockResolvedValue(null)
+    mockFindToolReceipt.mockResolvedValue({
+      id: 'assistant_tool_call_1',
+      status: 'started',
+      outcomeStatus: null,
+      result: null,
+      error: null,
+      retryable: null,
+      reconciliationState: null,
+      dispatchedAt: new Date(),
+      settledAt: null,
+      pendingActionId: null,
+    })
+    const c = autonomousCtx()
+    const tool = await findTool(c, 'close_conversation', [makeFakeWriteSpec({ permissions: [] })])
+    expect(await tool.execute({ reason: 'resolved' }, toolCtx(c))).toMatchObject({
+      status: 'skipped_duplicate',
+      outcomeStatus: 'unknown',
+      reconciliationRequired: true,
+    })
+    expect(mockWriteExecute).not.toHaveBeenCalled()
+  })
 
   it.each([
     { ok: false, data: '', note: 'Provider rejected the operation.' },
@@ -689,9 +779,10 @@ describe('assembleAssistantToolset: write-tool pipeline (autonomous mode)', () =
     expect(await tool.execute({ reason: 'resolved' }, toolCtx(c))).toMatchObject({
       status: 'failed',
     })
-    expect(mockFinalizeToolCall).toHaveBeenCalledWith(
+    expect(mockSettleToolCall).toHaveBeenCalledWith(
       'assistant_tool_call_1',
-      expect.objectContaining({ status: 'failed' })
+      expect.objectContaining({ status: 'failed', retryable: false }),
+      expect.anything()
     )
     expect(c.ledger.toolOutcomes).toEqual([{ name: 'close_conversation', outcome: 'failed' }])
   })
@@ -721,9 +812,10 @@ describe('assembleAssistantToolset: write-tool pipeline (autonomous mode)', () =
       makeFakeWriteSpec({ name: 'capture_feedback', permissions: [] }),
     ])
     expect(await tool.execute({}, toolCtx(c))).toEqual({ created: false, postId: 'post_existing' })
-    expect(mockFinalizeToolCall).toHaveBeenCalledWith(
+    expect(mockSettleToolCall).toHaveBeenCalledWith(
       'assistant_tool_call_1',
-      expect.objectContaining({ status: 'succeeded' })
+      expect.objectContaining({ status: 'succeeded' }),
+      expect.anything()
     )
   })
 
@@ -736,9 +828,12 @@ describe('assembleAssistantToolset: write-tool pipeline (autonomous mode)', () =
     const out = (await tool.execute({ reason: 'resolved' }, toolCtx(c))) as { status: string }
 
     expect(out.status).toBe('failed')
-    expect(mockFinalizeToolCall).toHaveBeenCalledWith(
+    // A local mutation that threw left no effect behind, so the outcome is a
+    // definite failure rather than an uncertainty.
+    expect(mockSettleToolCall).toHaveBeenCalledWith(
       'assistant_tool_call_1',
-      expect.objectContaining({ status: 'failed', error: expect.stringContaining('boom') })
+      expect.objectContaining({ status: 'failed', reason: expect.stringContaining('boom') }),
+      expect.anything()
     )
   })
 
@@ -750,7 +845,7 @@ describe('assembleAssistantToolset: write-tool pipeline (autonomous mode)', () =
     await tool.execute({ query: 'x' }, toolCtx(c))
 
     expect(mockClaimToolCall).not.toHaveBeenCalled()
-    expect(mockFinalizeToolCall).not.toHaveBeenCalled()
+    expect(mockSettleToolCall).not.toHaveBeenCalled()
   })
 })
 
@@ -923,21 +1018,30 @@ describe('executeApprovedPendingAction', () => {
     const pending = fakePendingAction()
     const out = await executeApprovedPendingAction(makeFakeWriteSpec(), pending, ctx())
 
-    expect(mockClaimToolCall).toHaveBeenCalledWith({
-      conversationId: 'conversation_1',
-      involvementId: 'assistant_involvement_1',
-      pendingActionId: 'assistant_action_1',
-      toolName: 'close_conversation',
-      args: { reason: 'resolved' },
-      idempotencyKey: 'pending:assistant_action_1',
-      principalId: 'principal_assistant',
-    })
-    expect(mockWriteExecute).toHaveBeenCalledWith({ reason: 'resolved' }, expect.anything())
-    expect(mockFinalizeToolCall).toHaveBeenCalledWith(
-      'assistant_tool_call_1',
-      expect.objectContaining({ status: 'succeeded' })
+    expect(mockClaimToolCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'conversation_1',
+        involvementId: 'assistant_involvement_1',
+        pendingActionId: 'assistant_action_1',
+        toolName: 'close_conversation',
+        args: { reason: 'resolved' },
+        // The decision is the idempotency boundary, on both identities.
+        idempotencyKey: 'pending:assistant_action_1',
+        actionKey: 'pending:assistant_action_1',
+        principalId: 'principal_assistant',
+      })
     )
-    expect(out).toEqual({ status: 'executed', result: { closed: true } })
+    expect(mockWriteExecute).toHaveBeenCalledWith({ reason: 'resolved' }, expect.anything())
+    expect(mockSettleToolCall).toHaveBeenCalledWith(
+      'assistant_tool_call_1',
+      expect.objectContaining({ status: 'succeeded' }),
+      expect.anything()
+    )
+    expect(out).toEqual({
+      status: 'executed',
+      result: { closed: true },
+      receiptId: 'assistant_tool_call_1',
+    })
   })
 
   it('finalizes failed and returns the error when execute throws', async () => {
@@ -947,22 +1051,24 @@ describe('executeApprovedPendingAction', () => {
     const { executeApprovedPendingAction } = await import('../assistant.tools')
     const out = await executeApprovedPendingAction(makeFakeWriteSpec(), fakePendingAction(), ctx())
 
-    expect(mockFinalizeToolCall).toHaveBeenCalledWith(
+    expect(mockSettleToolCall).toHaveBeenCalledWith(
       'assistant_tool_call_1',
-      expect.objectContaining({ status: 'failed', error: 'boom' })
+      expect.objectContaining({ status: 'failed', reason: 'boom' }),
+      expect.anything()
     )
-    expect(out).toEqual({ status: 'failed', error: 'boom' })
+    expect(out).toEqual({ status: 'failed', error: 'boom', receiptId: 'assistant_tool_call_1' })
   })
 
   it('skips execution when the claim is already taken (duplicate approve)', async () => {
     mockClaimToolCall.mockResolvedValue(null)
+    mockFindToolReceipt.mockResolvedValue(null)
 
     const { executeApprovedPendingAction } = await import('../assistant.tools')
     const out = await executeApprovedPendingAction(makeFakeWriteSpec(), fakePendingAction(), ctx())
 
     expect(mockWriteExecute).not.toHaveBeenCalled()
-    expect(mockFinalizeToolCall).not.toHaveBeenCalled()
-    expect(out).toEqual({ status: 'skipped_duplicate' })
+    expect(mockSettleToolCall).not.toHaveBeenCalled()
+    expect(out).toEqual({ status: 'skipped_duplicate', previous: null })
   })
 
   it('never marks a no-parent no-op result as executed (defense in depth alongside the parents catalogue gate)', async () => {
@@ -976,10 +1082,15 @@ describe('executeApprovedPendingAction', () => {
     const { executeApprovedPendingAction } = await import('../assistant.tools')
     const out = await executeApprovedPendingAction(makeFakeWriteSpec(), fakePendingAction(), ctx())
 
-    expect(out).toEqual({ status: 'failed', error: 'No linked conversation.' })
-    expect(mockFinalizeToolCall).toHaveBeenCalledWith(
+    expect(out).toEqual({
+      status: 'failed',
+      error: 'No linked conversation.',
+      receiptId: 'assistant_tool_call_1',
+    })
+    expect(mockSettleToolCall).toHaveBeenCalledWith(
       'assistant_tool_call_1',
-      expect.objectContaining({ status: 'failed', error: 'No linked conversation.' })
+      expect.objectContaining({ status: 'failed', reason: 'No linked conversation.' }),
+      expect.anything()
     )
   })
 })

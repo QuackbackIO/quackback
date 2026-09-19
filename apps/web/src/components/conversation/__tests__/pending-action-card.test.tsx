@@ -47,6 +47,10 @@ function pendingRow(overrides: Partial<AssistantPendingActionDTO> = {}): Assista
     decidedAt: null,
     executedAt: null,
     result: null,
+    executionState: null,
+    executionError: null,
+    disposition: null,
+    requestedById: null,
     ...overrides,
   }
 }

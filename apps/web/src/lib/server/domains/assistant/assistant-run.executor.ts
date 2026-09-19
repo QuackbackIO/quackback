@@ -10,8 +10,8 @@
  * gets; every fenced outcome is therefore reported as a disposition string and
  * recorded on the run.
  */
-import { db } from '@/lib/server/db'
-import type { AssistantRunId } from '@quackback/ids'
+import { db, and, eq, assistantPendingActions } from '@/lib/server/db'
+import type { AssistantRunId, ConversationId } from '@quackback/ids'
 import type { ConversationAuthorInput } from '@/lib/server/domains/conversation/conversation.types'
 import type { ClaimedJob } from '@/lib/server/jobs/job-queue'
 import { logger } from '@/lib/server/logger'
@@ -22,9 +22,37 @@ import {
   claimRunForExecution,
 } from './assistant-run.repository'
 import { buildEffectiveSnapshot, persistEffectiveSnapshot } from './assistant-snapshot'
-import { commitAssistantOutcome } from './assistant-run.service'
+import { commitAssistantOutcome, parkRunForAction } from './assistant-run.service'
 
 const log = logger.child({ component: 'assistant-run-executor' })
+
+/**
+ * Park the run when the turn it just published left a live proposal behind.
+ *
+ * Read from the rows rather than from the generation's own report: a proposal
+ * is a committed row, and a run that published an acknowledgement for one it
+ * cannot see afterwards would be a run that quietly finished owing a result.
+ * Returns the proposal's id when the run was parked.
+ */
+async function parkRunIfActionPending(
+  runId: AssistantRunId,
+  conversationId: ConversationId
+): Promise<string | null> {
+  const [pending] = await db
+    .select({ id: assistantPendingActions.id })
+    .from(assistantPendingActions)
+    .where(
+      and(
+        eq(assistantPendingActions.conversationId, conversationId),
+        eq(assistantPendingActions.runId, runId),
+        eq(assistantPendingActions.status, 'proposed')
+      )
+    )
+    .limit(1)
+  if (!pending) return null
+  const parked = await parkRunForAction(db, runId, pending.id)
+  return parked ? pending.id : null
+}
 
 /**
  * Execute one claimed turn job.
@@ -120,6 +148,8 @@ export async function advanceAssistantRun(job: ClaimedJob): Promise<string> {
       result = await generateAssistantCandidate(conversationId, prepared, {
         surface: run.surface,
         stepInstructions,
+        runId: run.id,
+        requestedByPrincipalId: run.requestedByPrincipalId,
       })
     } catch (err) {
       await recordRunStep(db, {
@@ -271,6 +301,21 @@ export async function advanceAssistantRun(job: ClaimedJob): Promise<string> {
         ),
         executeAssistantHandoff(conversationId, outcome.handoff.reason, author),
       ])
+    }
+
+    // The turn published an acknowledgement and now owes a result: a write tool
+    // resolved to a proposal that is still waiting on a teammate. Park the run
+    // so the worker slot is released while the decision is outstanding, and so
+    // the conversation records that Quinn owes something. The result arrives as
+    // its own continuation run, not as a resumption of this one, which is what
+    // keeps a customer message during the wait from stranding the action.
+    const parked = await parkRunIfActionPending(run.id, conversationId)
+    if (parked) {
+      runLog.info(
+        { event: 'assistant_run.waiting_action', pending_action_id: parked },
+        'assistant run parked on an approval'
+      )
+      return 'waiting_action'
     }
 
     runLog.info(

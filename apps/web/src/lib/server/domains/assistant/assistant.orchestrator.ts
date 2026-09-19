@@ -305,6 +305,10 @@ export async function generateAssistantCandidate(
     surface?: 'widget' | 'workflow_step'
     stepInstructions?: string | null
     signal?: AbortSignal
+    /** The durable run this generation belongs to, stamped on its receipts and proposals. */
+    runId?: import('@quackback/ids').AssistantRunId | null
+    /** The customer the turn is answering, recorded as a proposal's requester. */
+    requestedByPrincipalId?: import('@quackback/ids').PrincipalId | null
   }
 ): Promise<Awaited<ReturnType<typeof runAssistantTurn>>> {
   return runAssistantTurn({
@@ -316,6 +320,8 @@ export async function generateAssistantCandidate(
     involvementId: prepared.activeInvolvement?.id ?? null,
     latestCustomerMessageId: prepared.latestCustomerMessageId,
     stepInstructions: opts?.stepInstructions ?? null,
+    runId: opts?.runId ?? null,
+    requestedByPrincipalId: opts?.requestedByPrincipalId ?? null,
     signal: opts?.signal,
     onActivity: (activity) => publishAssistantActivity(conversationId, activityToStatus(activity)),
   })

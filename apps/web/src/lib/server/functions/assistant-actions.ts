@@ -8,13 +8,16 @@ import { toolPermissions } from '@/lib/server/domains/assistant/tool-permissions
  * conversation or ticket visibility check (`assertConversationViewable` /
  * `assertTicketVisible`), not just the base permission — and (2) the approver
  * must hold every permission the proposed tool declares, so approval can
- * never grant more than the approver already has themself. Approve executes
- * immediately via the same claim/execute/finalize pipeline autonomous mode
- * uses.
+ * never grant more than the approver already has themself.
+ *
+ * Approve no longer executes inside the request. The decision and an execution
+ * job commit in one transaction (`decideAndEnqueuePendingAction`) and a worker
+ * carries the effect out, re-resolving every gate at the moment of dispatch.
+ * What comes back here is approved-and-queued, which is what happened; the card
+ * updates through its own refetch when the execution settles.
  */
 import { z } from 'zod'
 import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
-import { db } from '@/lib/server/db'
 import type { AssistantPendingActionId, PrincipalId } from '@quackback/ids'
 import { requireAuth, policyActorFromAuth } from './auth-helpers'
 import type { Actor } from '@/lib/server/policy/types'
@@ -26,21 +29,14 @@ import { assertTicketVisible } from '@/lib/server/domains/tickets/ticket.service
 import {
   getPendingActionById,
   decidePendingAction,
-  markPendingActionExecuted,
-  markPendingActionFailed,
+  decideAndEnqueuePendingAction,
   type AssistantPendingAction,
 } from '@/lib/server/domains/assistant/pending-actions.service'
-import {
-  getToolSpecByName,
-  makeAssistantToolContext,
-  type AssistantToolContext,
-} from '@/lib/server/domains/assistant/assistant.toolspec'
-import { resolveContentAudience } from '@/lib/server/domains/assistant/audience'
+import { getToolSpecByName } from '@/lib/server/domains/assistant/assistant.toolspec'
 import { resolveConnectorApprovalSpec } from '@/lib/server/domains/assistant/connectors/connector-tools'
 import { getWorkspaceMcpSpecByName } from '@/lib/server/domains/assistant/mcp-workspace-tools'
 import { roleToAgent } from '@/lib/shared/assistant/config'
-import { executeApprovedPendingAction } from '@/lib/server/domains/assistant/assistant.tools'
-import { ensureAssistantPrincipal } from '@/lib/server/domains/assistant/assistant.principal'
+import { digestOf } from '@/lib/server/domains/assistant/tool-receipts'
 
 const PendingActionInput = z.object({ pendingActionId: z.string() })
 
@@ -70,6 +66,18 @@ export interface AssistantPendingActionDTO {
   decidedAt: string | null
   executedAt: string | null
   result: JsonValue | null
+  /**
+   * Execution, as its own dimension. The card renders decision, execution and
+   * customer outcome separately, so approved-and-queued is never drawn as
+   * completed; `null` means nothing has been dispatched.
+   */
+  executionState: AssistantPendingAction['executionState']
+  /** The recorded reason a pre-dispatch recheck refused, for the reviewer. */
+  executionError: string | null
+  /** Why a proposal stopped being decidable without a decision (superseded, refused). */
+  disposition: string | null
+  /** Who the action is being taken for. Never the approver. */
+  requestedById: string | null
 }
 
 function toDTO(row: AssistantPendingAction): AssistantPendingActionDTO {
@@ -90,6 +98,10 @@ function toDTO(row: AssistantPendingAction): AssistantPendingActionDTO {
     decidedAt: row.decidedAt?.toISOString() ?? null,
     executedAt: row.executedAt?.toISOString() ?? null,
     result: (row.result as JsonValue | null) ?? null,
+    executionState: row.executionState,
+    executionError: row.executionError,
+    disposition: row.disposition,
+    requestedById: row.requestedById,
   }
 }
 
@@ -101,38 +113,24 @@ class ToolSpecGoneError extends DomainException {
   }
 }
 
-/** Build the tool-execution context for an approved action. Records remain
- * attributed to Quinn, while authorization and domain writes use the approving
- * teammate's actor. */
-async function buildExecutionContext(
-  pending: AssistantPendingAction,
-  approver: Actor
-): Promise<AssistantToolContext> {
-  const assistant = await ensureAssistantPrincipal()
-  // simulate is explicit: the conversation id is always set here, but this
-  // path executes for real regardless of how the default would derive.
-  return makeAssistantToolContext({
-    db,
-    assistantPrincipalId: assistant.id,
-    assistantName: assistant.displayName ?? 'Quinn',
-    role: pending.originRole,
-    audience: resolveContentAudience(
-      pending.originRole === 'customer_support' ? 'widget' : 'copilot'
-    ),
-    conversationId: pending.conversationId,
-    ticketId: pending.ticketId,
-    involvementId: pending.involvementId,
-    workspaceThreadKey: pending.workspaceThreadKey ?? undefined,
-    simulate: false,
-    actor: approver,
-  })
-}
-
 /**
- * Decide a proposal and, on approval, execute it. Shared by approve/reject so
- * the load -> authorize -> decide sequencing (and its error mapping) lives in
- * exactly one place. `actor` is the approver's own resolved policy actor —
- * the permission check below can never authorize more than they already hold.
+ * Decide a proposal and, on approval, schedule its execution.
+ *
+ * Shared by approve/reject so the load -> authorize -> decide sequencing (and
+ * its error mapping) lives in exactly one place. `actor` is the approver's own
+ * resolved policy actor, and the checks below can never authorize more than
+ * they already hold.
+ *
+ * Approving no longer executes here. The decision and the execution job commit
+ * in one transaction and the worker does the rest, so this returns as soon as
+ * the row moves: the reviewer is told approved-and-queued, which is what
+ * actually happened, rather than waiting on a provider inside their request and
+ * being told "completed" by a promise that resolved.
+ *
+ * The checks that remain here are the ones a reviewer must not get past
+ * without an answer: a tool that is gone, a use whose policy has moved, an
+ * input the current contract rejects, a permission they do not hold. The worker
+ * re-resolves every one of them again at dispatch, because minutes may pass.
  */
 export const decideAssistantAction = createServerOnlyFn(async function decideAssistantAction(
   pendingActionId: AssistantPendingActionId,
@@ -212,6 +210,19 @@ export const decideAssistantAction = createServerOnlyFn(async function decideAss
       'This action no longer matches the current input contract'
     )
   }
+  // The contract the card was rendered from, against the one that would run.
+  // Only a discovered contract carries a digest; a built-in's lives in this
+  // repository, where the parse above is the stronger check.
+  if (
+    pending.contractDigest &&
+    spec.contractDigest &&
+    pending.contractDigest !== spec.contractDigest
+  ) {
+    throw new ConflictError(
+      'ASSISTANT_ACTION_INPUT_CHANGED',
+      'This action changed since it was requested and needs a new decision'
+    )
+  }
 
   for (const permission of toolPermissions(spec, !!pending.workspaceThreadKey)) {
     if (!can(actor, permission)) {
@@ -222,29 +233,25 @@ export const decideAssistantAction = createServerOnlyFn(async function decideAss
     }
   }
 
-  const decided = await decidePendingAction(pendingActionId, decision, approverPrincipalId)
-  if (!decided) {
+  // The decision and the execution job commit together. A crash after this
+  // returns leaves work that is still claimable, which is the property the
+  // previous execute-inside-the-request version could not have.
+  const settled = await decideAndEnqueuePendingAction({
+    id: pendingActionId,
+    decision,
+    decidedById: approverPrincipalId,
+    // The exact operation the reviewer approved, taken from the parsed args
+    // rather than the raw row, so what is compared at dispatch is what would
+    // actually run.
+    approvedArgsDigest: digestOf(parsedArgs.data as Record<string, unknown>),
+  })
+  if (!settled) {
     throw new ConflictError(
       'PENDING_ACTION_NOT_DECIDABLE',
       'This request was already decided or has expired'
     )
   }
-  const validated = { ...decided, args: parsedArgs.data as Record<string, unknown> }
-  const ctx = await buildExecutionContext(validated, actor)
-  const outcome = await executeApprovedPendingAction(spec, validated, ctx)
-  if (outcome.status === 'executed') {
-    return (
-      (await markPendingActionExecuted(
-        pendingActionId,
-        (outcome.result as Record<string, unknown> | null) ?? null
-      )) ?? decided
-    )
-  }
-  if (outcome.status === 'failed') {
-    return (await markPendingActionFailed(pendingActionId, outcome.error)) ?? decided
-  }
-  // skipped_duplicate: a racing call already executed this proposal.
-  return decided
+  return settled.action
 })
 
 export const approveAssistantActionFn = createServerFn({ method: 'POST' })

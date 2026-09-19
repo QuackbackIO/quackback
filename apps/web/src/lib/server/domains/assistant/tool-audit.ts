@@ -7,9 +7,14 @@
  * stable idempotency key always land — the partial unique index only applies
  * where the key is non-null, so two NULLs never conflict.
  */
-import { db, eq, sql, assistantToolCalls } from '@/lib/server/db'
-import type { AssistantToolCallStatus } from '@/lib/server/db'
+import { db, and, desc, eq, isNull, or, sql, assistantToolCalls } from '@/lib/server/db'
 import type {
+  AssistantToolCallStatus,
+  AssistantToolReconciliationState,
+  AssistantToolReplayStrategy,
+} from '@/lib/server/db'
+import type {
+  AssistantRunId,
   AssistantToolCallId,
   AssistantInvolvementId,
   AssistantPendingActionId,
@@ -18,10 +23,16 @@ import type {
 } from '@quackback/ids'
 import type { Executor } from '@/lib/server/domains/principals/principal.factory'
 import { logger } from '@/lib/server/logger'
+import {
+  boundedResult,
+  settlementFor,
+  type AssistantToolCall,
+  type ToolOutcome,
+} from './tool-receipts'
 
 const log = logger.child({ component: 'assistant-tool-calls-retention' })
 
-export type AssistantToolCall = typeof assistantToolCalls.$inferSelect
+export type { AssistantToolCall }
 
 export interface ClaimToolCallInput {
   conversationId?: ConversationId
@@ -31,9 +42,28 @@ export interface ClaimToolCallInput {
   args: Record<string, unknown>
   idempotencyKey?: string
   principalId?: PrincipalId
+  /** The durable run and step this effect belongs to. */
+  runId?: AssistantRunId
+  runStepKey?: string
+  /**
+   * The stable logical identity of the business action. The insert conflicts on
+   * this as well as on the per-turn key, so two workers that computed the same
+   * action cannot both dispatch it even when their turn keys differ.
+   */
+  actionKey?: string
+  argsDigest?: string
+  schemaDigest?: string
+  replayStrategy?: AssistantToolReplayStrategy
+  providerIdempotencyKey?: string
 }
 
-/** Claim a tool call before running its side-effect. Null means a call already claimed this idempotency key. */
+/**
+ * Claim a tool call before running its side-effect.
+ *
+ * Null means somebody already claimed this action, on either of the two unique
+ * keys. The caller reads the existing receipt (`findToolReceipt`) and answers
+ * from it rather than executing.
+ */
 export async function claimToolCall(
   input: ClaimToolCallInput,
   exec: Executor = db
@@ -48,6 +78,13 @@ export async function claimToolCall(
       args: input.args,
       idempotencyKey: input.idempotencyKey ?? null,
       principalId: input.principalId ?? null,
+      runId: input.runId ?? null,
+      runStepKey: input.runStepKey ?? null,
+      actionKey: input.actionKey ?? null,
+      argsDigest: input.argsDigest ?? null,
+      schemaDigest: input.schemaDigest ?? null,
+      replayStrategy: input.replayStrategy ?? null,
+      providerIdempotencyKey: input.providerIdempotencyKey ?? null,
       status: 'started',
     })
     .onConflictDoNothing()
@@ -68,11 +105,77 @@ export async function findToolCallByIdempotencyKey(
   return row ?? null
 }
 
+/**
+ * The receipt for a logical action, by either identity.
+ *
+ * The action key is asked for first because it is the one that survives a run
+ * continuation: the per-turn key changes when the customer message does, and a
+ * continuation after an approval is a different message for the same action.
+ */
+export async function findToolReceipt(
+  keys: { actionKey?: string | null; idempotencyKey?: string | null },
+  exec: Executor = db
+): Promise<AssistantToolCall | null> {
+  if (keys.actionKey) {
+    const [row] = await exec
+      .select()
+      .from(assistantToolCalls)
+      .where(eq(assistantToolCalls.actionKey, keys.actionKey))
+      .limit(1)
+    if (row) return row
+  }
+  if (keys.idempotencyKey) return findToolCallByIdempotencyKey(keys.idempotencyKey, exec)
+  return null
+}
+
+/** Load one receipt by id. */
+export async function getToolCallById(
+  id: AssistantToolCallId,
+  exec: Executor = db
+): Promise<AssistantToolCall | null> {
+  const [row] = await exec
+    .select()
+    .from(assistantToolCalls)
+    .where(eq(assistantToolCalls.id, id))
+    .limit(1)
+  return row ?? null
+}
+
+/**
+ * Record that the effect is about to leave this database.
+ *
+ * This is the intent commit: it runs BEFORE the provider call, so a process
+ * death in the window leaves a row that says "attempted, never confirmed"
+ * rather than a row that says nothing. Only stamps once, so a retry inside the
+ * same receipt does not move the first attempt's instant.
+ */
+export async function markToolCallDispatched(
+  id: AssistantToolCallId,
+  input: { providerIdempotencyKey?: string | null } = {},
+  exec: Executor = db
+): Promise<void> {
+  await exec
+    .update(assistantToolCalls)
+    .set({
+      dispatchedAt: new Date(),
+      ...(input.providerIdempotencyKey !== undefined
+        ? { providerIdempotencyKey: input.providerIdempotencyKey }
+        : {}),
+    })
+    .where(and(eq(assistantToolCalls.id, id), isNull(assistantToolCalls.dispatchedAt)))
+}
+
 export interface FinalizeToolCallInput {
-  status: Extract<AssistantToolCallStatus, 'succeeded' | 'failed' | 'denied'>
+  status: Extract<AssistantToolCallStatus, 'started' | 'succeeded' | 'failed' | 'denied'>
   resultSummary?: string
-  error?: string
+  error?: string | null
   latencyMs?: number
+  outcomeStatus?: NonNullable<AssistantToolCall['outcomeStatus']> | null
+  retryable?: boolean | null
+  reconciliationState?: AssistantToolReconciliationState | null
+  result?: Record<string, unknown> | null
+  providerReceipt?: Record<string, unknown> | null
+  settledAt?: Date | null
 }
 
 /** Fill in the terminal status once a claimed tool call settles. Only the
@@ -86,7 +189,125 @@ export async function finalizeToolCall(
   if (input.resultSummary !== undefined) values.resultSummary = input.resultSummary
   if (input.error !== undefined) values.error = input.error
   if (input.latencyMs !== undefined) values.latencyMs = input.latencyMs
+  if (input.outcomeStatus !== undefined) values.outcomeStatus = input.outcomeStatus
+  if (input.retryable !== undefined) values.retryable = input.retryable
+  if (input.reconciliationState !== undefined) {
+    values.reconciliationState = input.reconciliationState
+  }
+  if (input.result !== undefined) values.result = input.result
+  if (input.providerReceipt !== undefined) values.providerReceipt = input.providerReceipt
+  if (input.settledAt !== undefined) values.settledAt = input.settledAt
   await exec.update(assistantToolCalls).set(values).where(eq(assistantToolCalls.id, id))
+}
+
+/**
+ * Settle a receipt from a normalized outcome.
+ *
+ * The single writer for a tool's terminal state, so the projection onto the two
+ * status columns (`settlementFor`) happens in one place and cannot drift. An
+ * unknown outcome settles with no `settled_at`: there is nothing settled about
+ * it, and the stamp is what the reconciliation queue reads as "resolved".
+ */
+export async function settleToolCall(
+  id: AssistantToolCallId,
+  outcome: ToolOutcome,
+  extras: {
+    resultSummary?: string
+    latencyMs?: number
+    providerReceipt?: Record<string, unknown> | null
+  } = {},
+  exec: Executor = db
+): Promise<void> {
+  const settlement = settlementFor(outcome)
+  if (!settlement) return
+  await finalizeToolCall(
+    id,
+    {
+      status: settlement.status,
+      outcomeStatus: settlement.outcomeStatus,
+      retryable: settlement.retryable,
+      reconciliationState: settlement.reconciliationState,
+      error: settlement.error,
+      result: outcome.status === 'succeeded' ? boundedResult(outcome.value) : null,
+      settledAt: outcome.status === 'unknown' ? null : new Date(),
+      ...(extras.resultSummary !== undefined ? { resultSummary: extras.resultSummary } : {}),
+      ...(extras.latencyMs !== undefined ? { latencyMs: extras.latencyMs } : {}),
+      ...(extras.providerReceipt !== undefined ? { providerReceipt: extras.providerReceipt } : {}),
+    },
+    exec
+  )
+}
+
+/**
+ * The receipts nobody can confirm: an effect was attempted and never settled.
+ *
+ * Read by the reconciliation surface. Two shapes reach it, and both matter: a
+ * row the executor itself marked `unknown`, and a row a crash left with a
+ * dispatch stamp and no outcome at all, which nobody was alive to label.
+ */
+export async function listUnreconciledToolCalls(
+  limit = 50,
+  exec: Executor = db
+): Promise<AssistantToolCall[]> {
+  return exec
+    .select()
+    .from(assistantToolCalls)
+    .where(
+      or(
+        eq(assistantToolCalls.reconciliationState, 'required'),
+        and(
+          eq(assistantToolCalls.status, 'started'),
+          sql`${assistantToolCalls.dispatchedAt} IS NOT NULL`,
+          isNull(assistantToolCalls.settledAt),
+          isNull(assistantToolCalls.reconciliationState)
+        )
+      )
+    )
+    .orderBy(desc(assistantToolCalls.createdAt))
+    .limit(limit)
+}
+
+/**
+ * Record a person's verdict on an unconfirmed effect.
+ *
+ * Deliberately only two verdicts, and neither of them repeats the write. An
+ * operator who wants the effect to happen after all issues a new command; a
+ * button that re-sent an unconfirmed mutation is the thing this whole path
+ * exists to prevent.
+ */
+export async function reconcileToolCall(
+  id: AssistantToolCallId,
+  input: {
+    verdict: Extract<AssistantToolReconciliationState, 'resolved' | 'failed'>
+    note: string
+    principalId: PrincipalId
+  },
+  exec: Executor = db
+): Promise<AssistantToolCall | null> {
+  const [row] = await exec
+    .update(assistantToolCalls)
+    .set({
+      reconciliationState: input.verdict,
+      reconciliationNote: input.note,
+      reconciledAt: new Date(),
+      reconciledById: input.principalId,
+      settledAt: new Date(),
+      status: input.verdict === 'resolved' ? 'succeeded' : 'failed',
+      outcomeStatus: input.verdict === 'resolved' ? 'succeeded' : 'failed',
+      retryable: false,
+    })
+    .where(
+      and(
+        eq(assistantToolCalls.id, id),
+        or(
+          eq(assistantToolCalls.reconciliationState, 'required'),
+          isNull(assistantToolCalls.reconciliationState)
+        ),
+        sql`${assistantToolCalls.dispatchedAt} IS NOT NULL`
+      )
+    )
+    .returning()
+  return row ?? null
 }
 
 export interface RecordDeniedToolCallInput {

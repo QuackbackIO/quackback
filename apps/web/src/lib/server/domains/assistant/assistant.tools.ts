@@ -15,19 +15,30 @@ import { toolPermissions } from './tool-permissions'
  * into the model loop; it settles the audit row and returns a graceful note
  * instead.
  */
-import { createHash } from 'node:crypto'
 import { can } from '@/lib/server/policy/authorize'
 import { logger } from '@/lib/server/logger'
 import type { ConversationId, TicketId } from '@quackback/ids'
+import type { AssistantToolReplayStrategy } from '@/lib/server/db'
 import type { AssistantToolContext, AssistantToolSpec } from './assistant.toolspec'
 import { resolveToolSpecs, isNoParentResult, NO_CONVERSATION_NOTE } from './assistant.toolspec'
 import {
   claimToolCall,
-  findToolCallByIdempotencyKey,
-  finalizeToolCall,
+  findToolReceipt,
+  markToolCallDispatched,
+  settleToolCall,
   recordDeniedToolCall,
   type AssistantToolCall,
 } from './tool-audit'
+import {
+  boundedResult,
+  digestOf,
+  logicalActionKey,
+  outcomeForInterruptedDispatch,
+  pendingActionKey,
+  replayOutcomeFor,
+  OUTCOME_NOTES,
+  type ToolOutcome,
+} from './tool-receipts'
 import { proposePendingAction, type AssistantPendingAction } from './pending-actions.service'
 import { describeEnabledKnowledgeSources } from './retrieval-sources'
 
@@ -128,20 +139,58 @@ function previewArgs(args: unknown): Record<string, string> | undefined {
   return Object.keys(out).length > 0 ? out : undefined
 }
 
-/** JSON.stringify with object keys sorted, so equivalent args always hash the same. */
-function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
-  if (value !== null && typeof value === 'object') {
-    const keys = Object.keys(value as Record<string, unknown>).sort()
-    return `{${keys
-      .map((k) => `${JSON.stringify(k)}:${canonicalJson((value as Record<string, unknown>)[k])}`)
-      .join(',')}}`
-  }
-  return JSON.stringify(value)
+function hashArgs(args: unknown): string {
+  return digestOf(args)
 }
 
-function hashArgs(args: unknown): string {
-  return createHash('sha256').update(canonicalJson(args)).digest('hex')
+/**
+ * The item a logical action belongs to, and the engagement inside it.
+ *
+ * The involvement is the engagement when there is one: it spans an approval
+ * wait and every continuation after it, which is exactly the window in which
+ * repeating the same action would be a duplicate effect rather than a new
+ * request. Without one, the customer message is the next best boundary.
+ */
+function actionScope(ctx: AssistantToolContext): { parentKey: string; engagement: string } {
+  return {
+    parentKey: String(ctx.conversationId ?? ctx.ticketId ?? ctx.workspaceThreadKey ?? 'none'),
+    engagement: ctx.involvementId
+      ? `inv:${ctx.involvementId}`
+      : `msg:${ctx.latestCustomerMessageId ?? 'none'}`,
+  }
+}
+
+/**
+ * The stable logical identity of the action this call would perform.
+ *
+ * Only write-risk tools have one: a read has no effect to deduplicate, and
+ * giving it a key would make a second, legitimate search of the same query
+ * read as a replay.
+ */
+function resolveActionKey(
+  spec: AssistantToolSpec,
+  args: unknown,
+  ctx: AssistantToolContext
+): string | undefined {
+  if (spec.risk !== 'write') return undefined
+  const scope = actionScope(ctx)
+  return logicalActionKey({ ...scope, toolName: spec.name, argsDigest: hashArgs(args) })
+}
+
+/**
+ * How an interrupted or duplicated call of this tool may be recovered.
+ *
+ * A spec may say so itself. Otherwise: a read has nothing to recover, anything
+ * that reaches a remote or an MCP session is uncertain because neither offers
+ * an idempotency or status-query contract this code could rely on, and the
+ * remaining built-in writes mutate this database through the same domain
+ * services the receipt is written by.
+ */
+export function replayStrategyFor(spec: AssistantToolSpec): AssistantToolReplayStrategy {
+  if (spec.replayStrategy) return spec.replayStrategy
+  if (spec.risk !== 'write') return 'local_transactional'
+  if (spec.connector) return 'external_uncertain'
+  return 'local_transactional'
 }
 
 /**
@@ -196,6 +245,7 @@ async function runWithPipeline(
 
   if (mode === 'propose') {
     const summary = spec.summarize(args, ctx)
+    const scope = actionScope(ctx)
     // Polymorphic parent (unified inbox §3.3): whichever item this turn is
     // grounded on. `ctx.conversationId` wins when both happen to be set (never
     // true today — a turn grounds on exactly one item), matching every
@@ -226,6 +276,16 @@ async function runWithPipeline(
       // spec (reads never support it), and resolveIdempotencyKey always
       // returns a key for a write-risk spec.
       idempotencyKey: resolveIdempotencyKey(spec, args, ctx),
+      // The exact operation a reviewer will be shown, digested now. Execution
+      // compares both against the live tool before it dispatches, so a
+      // rediscovered contract or a rewritten argument needs a new decision
+      // rather than riding this one.
+      actionKey: resolveActionKey(spec, args, ctx),
+      argsDigest: hashArgs(args),
+      contractDigest: spec.contractDigest,
+      runId: ctx.runId ?? undefined,
+      runStepKey: `tool:${spec.name}:${scope.engagement}`,
+      requestedById: ctx.requestedByPrincipalId ?? undefined,
     })
     // Mirrors how search records onto ctx.ledger.sources: the caller (the
     // copilot route, today) reads this ledger off the tool context after the
@@ -246,7 +306,7 @@ async function runWithPipeline(
         : {}),
     })
     ctx.ledger.toolOutcomes.push({ name: spec.name, outcome: 'proposed' })
-    return { status: 'pending_approval', note: PENDING_APPROVAL_NOTE }
+    return { status: 'pending_approval', note: PENDING_APPROVAL_NOTE, actionId: pending.id }
   }
 
   // mode === 'autonomous' from here: simulate and propose both returned above.
@@ -268,41 +328,105 @@ async function runWithPipeline(
   // ai_usage_log already covers reads. Writes with no conversation (should
   // not happen outside simulate, but stay defensive) skip the claim too.
   const shouldClaim = spec.risk === 'write' && ctx.conversationId != null
+  const idempotencyKey = resolveIdempotencyKey(spec, args, ctx)
+  const actionKey = resolveActionKey(spec, args, ctx)
   let claimed: AssistantToolCall | null = null
   if (shouldClaim) {
+    const scope = actionScope(ctx)
     claimed = await claimToolCall({
       conversationId: ctx.conversationId as ConversationId,
       involvementId: ctx.involvementId ?? undefined,
       toolName: spec.name,
       args: args as Record<string, unknown>,
-      idempotencyKey: resolveIdempotencyKey(spec, args, ctx),
+      idempotencyKey,
+      actionKey,
+      argsDigest: hashArgs(args),
+      schemaDigest: spec.contractDigest,
+      replayStrategy: replayStrategyFor(spec),
+      runId: ctx.runId ?? undefined,
+      runStepKey: `tool:${spec.name}:${scope.engagement}`,
       principalId: ctx.assistantPrincipalId,
     })
     if (!claimed) {
-      ctx.ledger.toolOutcomes.push({ name: spec.name, outcome: 'failed' })
-      const key = resolveIdempotencyKey(spec, args, ctx)
-      const previous = key ? await findToolCallByIdempotencyKey(key) : null
-      return {
-        status: 'skipped_duplicate',
-        previousStatus: previous?.status ?? 'unknown',
-        note:
-          previous?.status === 'succeeded'
-            ? 'This action previously succeeded. It was not executed again.'
-            : previous?.status === 'failed'
-              ? 'The previous attempt failed. It was not executed again; do not claim completion.'
-              : previous?.status === 'denied'
-                ? 'The previous attempt was denied. It was not executed again.'
-                : 'An earlier attempt exists, but completion is unconfirmed. Do not claim completion or retry the action.',
-      }
+      // Somebody already owns this action, on either key. The receipt decides
+      // what happens next; nothing here executes a second time.
+      const previous = await findToolReceipt({ actionKey, idempotencyKey })
+      const replay: ToolOutcome = previous
+        ? replayOutcomeFor(previous)
+        : { status: 'in_progress', receiptId: '' }
+      ctx.ledger.toolOutcomes.push({
+        name: spec.name,
+        outcome: replay.status === 'succeeded' ? 'executed' : 'failed',
+      })
+      return duplicateEnvelope(replay, previous)
     }
   }
 
-  const settled = await executeAndFinalize(spec, args, claimed, ctx)
+  const outcome = await executeAndSettle(spec, args, claimed, ctx)
   ctx.ledger.toolOutcomes.push({
     name: spec.name,
-    outcome: settled.ok ? (spec.risk === 'read' ? 'read' : 'executed') : 'failed',
+    outcome:
+      outcome.status === 'succeeded' ? (spec.risk === 'read' ? 'read' : 'executed') : 'failed',
   })
-  return settled.ok ? settled.result : { status: 'failed', note: FAILED_NOTE }
+  return outcomeEnvelope(spec, outcome)
+}
+
+/**
+ * What the model is told about a completed call.
+ *
+ * A success hands back the tool's own result, unchanged, because every caller
+ * and every output schema in the tree is written against it. Everything else
+ * becomes a gate envelope whose `status` is the normalized outcome, so an
+ * unconfirmed effect can never be read as a completed one.
+ */
+function outcomeEnvelope(spec: AssistantToolSpec, outcome: ToolOutcome): unknown {
+  if (outcome.status === 'succeeded') return outcome.value
+  if (outcome.status === 'denied') return { status: 'denied', note: DENIED_NOTE }
+  if (outcome.status === 'unknown') {
+    return {
+      status: 'unknown',
+      note: OUTCOME_NOTES.unknown,
+      receiptId: outcome.receiptId,
+      reconciliationRequired: true,
+    }
+  }
+  if (outcome.status === 'in_progress') {
+    return { status: 'in_progress', note: OUTCOME_NOTES.in_progress, receiptId: outcome.receiptId }
+  }
+  if (outcome.status === 'pending_approval') {
+    return { status: 'pending_approval', note: PENDING_APPROVAL_NOTE, actionId: outcome.actionId }
+  }
+  return { status: 'failed', note: FAILED_NOTE }
+}
+
+/**
+ * What the model is told when it asked for an action somebody already owns.
+ *
+ * The shape stays `skipped_duplicate`, which is what the prompt and the
+ * existing surfaces are written against; the truthful part is what rides with
+ * it. A stored success carries the recorded result, so the model can report
+ * the real outcome instead of guessing. An unconfirmed one says so and says
+ * not to repeat it.
+ */
+function duplicateEnvelope(replay: ToolOutcome, previous: AssistantToolCall | null): unknown {
+  const note =
+    replay.status === 'succeeded'
+      ? 'This action previously succeeded. It was not executed again.'
+      : replay.status === 'failed'
+        ? 'The previous attempt failed. It was not executed again; do not claim completion.'
+        : replay.status === 'denied'
+          ? 'The previous attempt was denied. It was not executed again.'
+          : replay.status === 'unknown'
+            ? OUTCOME_NOTES.unknown
+            : 'An earlier attempt exists, but completion is unconfirmed. Do not claim completion or retry the action.'
+  return {
+    status: 'skipped_duplicate',
+    previousStatus: previous?.status ?? 'unknown',
+    outcomeStatus: replay.status,
+    note,
+    ...(replay.status === 'succeeded' ? { result: boundedResult(replay.value) } : {}),
+    ...(replay.status === 'unknown' ? { reconciliationRequired: true } : {}),
+  }
 }
 
 /** Interpret known result contracts, not promise fulfillment, as business success.
@@ -338,17 +462,31 @@ function toolResultFailure(spec: AssistantToolSpec, result: unknown): string | n
 }
 
 /**
- * The shared execute step: run the tool, settle any claimed audit row with the
- * outcome and latency, and never throw. Both the autonomous pipeline and the
- * teammate-approved path end here, so finalize semantics live once.
+ * The shared execute step: commit the dispatch intent, run the tool, settle the
+ * receipt with a normalized outcome, and never throw.
+ *
+ * The order is the point. For anything whose effect leaves this database the
+ * dispatch stamp is written BEFORE the call, so a process death in the window
+ * leaves a receipt that says "attempted, never confirmed" rather than a receipt
+ * that says nothing; `replayOutcomeFor` reads exactly that shape as `unknown`.
+ * A local mutation needs no stamp: it and its receipt are written by the same
+ * process against the same database, so an interruption leaves neither.
  */
-async function executeAndFinalize(
+async function executeAndSettle(
   spec: AssistantToolSpec,
   args: unknown,
   claimed: AssistantToolCall | null,
   ctx: AssistantToolContext
-): Promise<{ ok: true; result: unknown } | { ok: false; error: string }> {
+): Promise<ToolOutcome> {
   const startedAt = Date.now()
+  // With no receipt there is nothing to reconcile and nobody to tell, so an
+  // interruption can only be reported as a plain failure. This is the read
+  // path and the no-parent write path, neither of which dispatches an effect.
+  const strategy = claimed ? replayStrategyFor(spec) : 'local_transactional'
+  const receiptId = claimed?.id ?? ''
+  if (claimed && strategy !== 'local_transactional') {
+    await markToolCallDispatched(claimed.id)
+  }
   try {
     const result = await spec.execute(args, ctx)
     // Defense in depth alongside the `parents` catalogue gate (assembleAssistantToolset):
@@ -357,60 +495,66 @@ async function executeAndFinalize(
     // `executeApprovedPendingAction`, which runs a spec looked up straight off
     // a stored pending-action row rather than this turn's filtered catalogue.
     const failure = toolResultFailure(spec, result)
-    if (failure) {
-      if (claimed) {
-        await finalizeToolCall(claimed.id, {
-          status: 'failed',
-          error: failure,
-          latencyMs: Date.now() - startedAt,
-        })
-      }
-      return { ok: false, error: failure }
-    }
+    const outcome: ToolOutcome = failure
+      ? // A declared failure envelope IS the provider's answer, so the effect
+        // is known not to have happened and this is a definite failure, not an
+        // uncertainty. It is never retried automatically all the same.
+        { status: 'failed', reason: failure, retryable: false }
+      : { status: 'succeeded', value: result, receiptId }
     if (claimed) {
-      await finalizeToolCall(claimed.id, {
-        status: 'succeeded',
-        resultSummary: spec.summarize(args, ctx),
+      await settleToolCall(claimed.id, outcome, {
+        resultSummary: failure ? undefined : spec.summarize(args, ctx),
         latencyMs: Date.now() - startedAt,
+        providerReceipt: providerReceiptFrom(result),
       })
     }
-    return { ok: true, result }
+    return outcome
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     log.error({ err: error, tool: spec.name }, 'assistant tool execution failed')
+    const outcome = outcomeForInterruptedDispatch(strategy, receiptId, message)
     if (claimed) {
-      await finalizeToolCall(claimed.id, {
-        status: 'failed',
-        error: message,
-        latencyMs: Date.now() - startedAt,
-      })
+      await settleToolCall(claimed.id, outcome, { latencyMs: Date.now() - startedAt })
     }
-    return { ok: false, error: message }
+    return outcome
   }
+}
+
+/** What the provider itself said, kept small: a receipt, not a second copy of the payload. */
+function providerReceiptFrom(result: unknown): Record<string, unknown> | null {
+  if (!result || typeof result !== 'object') return null
+  const value = result as Record<string, unknown>
+  const receipt: Record<string, unknown> = {}
+  for (const key of ['ok', 'id', 'requestId', 'idempotencyKey', 'note']) {
+    if (value[key] !== undefined) receipt[key] = value[key]
+  }
+  return Object.keys(receipt).length > 0 ? receipt : null
 }
 
 /** Outcome of running a teammate-approved pending action through the pipeline. */
 export type ExecuteApprovedActionResult =
-  | { status: 'executed'; result: unknown }
-  | { status: 'failed'; error: string }
-  | { status: 'skipped_duplicate' }
+  | { status: 'executed'; result: unknown; receiptId: string }
+  | { status: 'failed'; error: string; receiptId: string }
+  /** Dispatched, never confirmed. A person decides; nothing resends it. */
+  | { status: 'unknown'; receiptId: string }
+  | { status: 'skipped_duplicate'; previous: ToolOutcome | null }
 
 /**
  * Execute a pending action a teammate approved, via the same claim/execute/
- * finalize steps autonomous mode runs in `runWithPipeline` — but keyed by the
+ * settle steps autonomous mode runs in `runWithPipeline` — but keyed by the
  * pending action id rather than the customer message (the approval decision
  * is itself the idempotency boundary a resubmitted approve request must not
  * cross), and with the audit row linked back to the proposal it settles. No
  * permission check here: approval mode never checks `spec.permissions` at
  * proposal time because the approving human authorizes it, and the caller
- * (the approve server fn) already asserted the approver holds every declared
- * permission before calling this.
+ * (the approval executor) already re-resolved every gate before calling.
  */
 export async function executeApprovedPendingAction(
   spec: AssistantToolSpec,
   pendingAction: AssistantPendingAction,
   ctx: AssistantToolContext
 ): Promise<ExecuteApprovedActionResult> {
+  const key = pendingActionKey(pendingAction.id)
   const claimed = await claimToolCall({
     // Ticket-scoped pending actions (unified inbox §3.3) have no
     // conversationId; the tool-call audit trail doesn't thread a ticket
@@ -420,15 +564,30 @@ export async function executeApprovedPendingAction(
     pendingActionId: pendingAction.id,
     toolName: spec.name,
     args: pendingAction.args,
-    idempotencyKey: `pending:${pendingAction.id}`,
+    idempotencyKey: key,
+    actionKey: key,
+    argsDigest: hashArgs(pendingAction.args),
+    schemaDigest: spec.contractDigest,
+    replayStrategy: replayStrategyFor(spec),
+    runId: pendingAction.runId ?? undefined,
+    runStepKey: pendingAction.runStepKey ?? undefined,
     principalId: ctx.assistantPrincipalId,
   })
-  if (!claimed) return { status: 'skipped_duplicate' }
+  if (!claimed) {
+    const previous = await findToolReceipt({ actionKey: key, idempotencyKey: key })
+    return { status: 'skipped_duplicate', previous: previous ? replayOutcomeFor(previous) : null }
+  }
 
-  const settled = await executeAndFinalize(spec, pendingAction.args, claimed, ctx)
-  return settled.ok
-    ? { status: 'executed', result: settled.result }
-    : { status: 'failed', error: settled.error }
+  const outcome = await executeAndSettle(spec, pendingAction.args, claimed, ctx)
+  if (outcome.status === 'succeeded') {
+    return { status: 'executed', result: outcome.value, receiptId: claimed.id }
+  }
+  if (outcome.status === 'unknown') return { status: 'unknown', receiptId: claimed.id }
+  return {
+    status: 'failed',
+    error: outcome.status === 'failed' ? outcome.reason : 'This action could not be completed.',
+    receiptId: claimed.id,
+  }
 }
 
 type AssembledServerTool = ReturnType<AssistantToolSpec['definition']['server']>

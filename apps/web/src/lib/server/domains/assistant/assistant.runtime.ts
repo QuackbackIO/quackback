@@ -27,7 +27,13 @@ import type { AiAnswerKind } from '@/lib/server/domains/ai/usage-log'
 import { getAssistantRuntimeConfig } from '@/lib/server/domains/settings/settings.assistant'
 import { logger } from '@/lib/server/logger'
 import type { AssistantHandoffReason } from '@/lib/server/db'
-import type { PrincipalId, ConversationId, TicketId, AssistantInvolvementId } from '@quackback/ids'
+import type {
+  PrincipalId,
+  ConversationId,
+  TicketId,
+  AssistantInvolvementId,
+  AssistantRunId,
+} from '@quackback/ids'
 import type { AssistantSurface } from '@/lib/shared/assistant/surfaces'
 import {
   DEFAULT_ASSISTANT_CONFIG,
@@ -267,6 +273,19 @@ interface AssistantTurnCommonInput {
    * caller.
    */
   stepInstructions?: string | null
+  /**
+   * The durable run this turn belongs to (P1/P2). Recorded on every tool
+   * receipt and every proposal the turn produces, so an effect stays
+   * explainable, and so a proposal can name the run that parked on it. Null
+   * on the legacy executor and every non-durable caller.
+   */
+  runId?: AssistantRunId | null
+  /**
+   * The principal the action is being taken for: the customer whose message
+   * triggered the turn. Recorded on a proposal so a reviewer is shown the
+   * requester rather than inferring one from the thread.
+   */
+  requestedByPrincipalId?: PrincipalId | null
   /**
    * Force write tools to report what they would do instead of running, even
    * with a real `conversationId` (which otherwise implies a live run; see
@@ -1033,6 +1052,8 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     knowledge: knowledgeSnapshot,
     involvementId: input.involvementId,
     latestCustomerMessageId: input.latestCustomerMessageId,
+    runId: input.runId,
+    requestedByPrincipalId: input.requestedByPrincipalId,
     simulate: input.simulate,
     workspaceThreadKey: input.workspaceThreadKey,
     writeToolPolicy: input.simulate === true ? 'simulate' : rolePolicy.writeToolPolicy,

@@ -474,6 +474,11 @@ export interface DurableRunState {
  * exists while some process is publishing it, so a customer who reconnects
  * after a worker died would otherwise see nothing at all. Returns only
  * lifecycle facts. No trace text, no evidence, no model detail.
+ *
+ * `waiting_action` is deliberately NOT here. A parked run is waiting on a
+ * person, not generating, and the customer has already been told so in the
+ * thread; reporting it as in flight would leave a typing indicator running for
+ * as long as the approval took.
  */
 export async function getOpenRunState(
   conversationId: ConversationId,
@@ -490,7 +495,7 @@ export async function getOpenRunState(
     .where(
       and(
         eq(assistantRuns.conversationId, conversationId),
-        sql`${assistantRuns.status} IN ('queued', 'running', 'waiting_action')`
+        sql`${assistantRuns.status} IN ('queued', 'running')`
       )
     )
     .orderBy(desc(assistantRuns.createdAt))

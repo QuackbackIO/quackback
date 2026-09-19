@@ -48,6 +48,10 @@ function toDTO(row: AssistantPendingAction): AssistantPendingActionDTO {
     decidedAt: row.decidedAt?.toISOString() ?? null,
     executedAt: row.executedAt?.toISOString() ?? null,
     result: (row.result as AssistantPendingActionDTO['result']) ?? null,
+    executionState: row.executionState,
+    executionError: row.executionError,
+    disposition: row.disposition,
+    requestedById: row.requestedById,
   }
 }
 

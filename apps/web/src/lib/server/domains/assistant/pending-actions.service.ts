@@ -10,6 +10,7 @@ import { db, eq, and, lt, gt, desc, assistantPendingActions } from '@/lib/server
 import type {
   AssistantPendingActionId,
   AssistantInvolvementId,
+  AssistantRunId,
   ConversationId,
   TicketId,
   PrincipalId,
@@ -69,6 +70,23 @@ export type ProposePendingActionInput = ProposePendingActionParent & {
    * another NULL), matching every caller that predates this field.
    */
   idempotencyKey?: string
+  /**
+   * The durable run that parked on this proposal and the step it parked at, so
+   * the executor can resume the right continuation after a decision.
+   */
+  runId?: AssistantRunId
+  runStepKey?: string
+  /** Who the action is being taken for. Never the approver. */
+  requestedById?: PrincipalId
+  /**
+   * The stable logical action identity, and the exact operation proposed.
+   * Execution compares the digests against the live tool before it dispatches,
+   * so a rewritten argument or a rediscovered contract needs a fresh decision
+   * rather than riding this one.
+   */
+  actionKey?: string
+  argsDigest?: string
+  contractDigest?: string
 }
 
 /**
@@ -101,6 +119,12 @@ export async function proposePendingAction(
       policyVersion: input.policyVersion ?? null,
       expiresAt,
       idempotencyKey: input.idempotencyKey ?? null,
+      runId: input.runId ?? null,
+      runStepKey: input.runStepKey ?? null,
+      requestedById: input.requestedById ?? null,
+      actionKey: input.actionKey ?? null,
+      argsDigest: input.argsDigest ?? null,
+      contractDigest: input.contractDigest ?? null,
     })
     .onConflictDoNothing()
     .returning()
@@ -210,16 +234,26 @@ export async function getPendingActionById(
  * Move a proposal to approved/rejected. Only a still-`proposed`,
  * not-yet-expired action is decidable; returns null otherwise (already
  * decided, or the sweep beat this call to expiring it).
+ *
+ * `approvedArgsDigest` records the exact operation the reviewer was shown.
+ * Execution compares it against the arguments it is about to dispatch, so an
+ * approval authorizes the recorded operation and never a substitute.
  */
 export async function decidePendingAction(
   id: AssistantPendingActionId,
   decision: 'approved' | 'rejected',
   decidedById: PrincipalId,
-  exec: Executor = db
+  exec: Executor = db,
+  approvedArgsDigest?: string
 ): Promise<AssistantPendingAction | null> {
   const [row] = await exec
     .update(assistantPendingActions)
-    .set({ status: decision, decidedById, decidedAt: new Date() })
+    .set({
+      status: decision,
+      decidedById,
+      decidedAt: new Date(),
+      ...(approvedArgsDigest !== undefined ? { approvedArgsDigest } : {}),
+    })
     .where(
       and(
         eq(assistantPendingActions.id, id),
@@ -231,6 +265,165 @@ export async function decidePendingAction(
   return row ?? null
 }
 
+/** The queue an approved action's durable execution runs on. */
+export const ASSISTANT_ACTION_QUEUE = 'assistant-action'
+
+/** Stable job identity for one decision. A resubmitted approve never enqueues twice. */
+export function assistantActionDedupeKey(id: AssistantPendingActionId): string {
+  return `assistant-action:${id}`
+}
+
+export interface DecideAndEnqueueResult {
+  action: AssistantPendingAction
+  /** True when this call is the one that scheduled execution. */
+  enqueued: boolean
+}
+
+/**
+ * Record the decision and schedule the execution in ONE transaction.
+ *
+ * This is the whole point of the durable approval path. Before it, approving
+ * WAS executing: the request that carried the decision also carried the
+ * mutation, so a process death between the two lost the action entirely and a
+ * slow provider held an HTTP request open. Now the decision and the job commit
+ * together, so a crash after the decision leaves work that is still claimable,
+ * and the reviewer gets an answer as soon as the row moves.
+ *
+ * The job is deduplicated on the action id, so a second approve request cannot
+ * schedule a second execution even if it somehow passed the status guard.
+ */
+export async function decideAndEnqueuePendingAction(
+  input: {
+    id: AssistantPendingActionId
+    decision: 'approved' | 'rejected'
+    decidedById: PrincipalId
+    approvedArgsDigest?: string
+  },
+  exec: Executor = db
+): Promise<DecideAndEnqueueResult | null> {
+  return exec.transaction(async (tx) => {
+    const decided = await decidePendingAction(
+      input.id,
+      input.decision,
+      input.decidedById,
+      tx,
+      input.approvedArgsDigest
+    )
+    if (!decided) return null
+    if (input.decision !== 'approved') return { action: decided, enqueued: false }
+
+    const { enqueueJob } = await import('@/lib/server/jobs/job-queue')
+    const job = await enqueueJob({
+      queue: ASSISTANT_ACTION_QUEUE,
+      payload: { pendingActionId: input.id },
+      dedupeKey: assistantActionDedupeKey(input.id),
+      // More than one attempt is safe here and nowhere else in this feature:
+      // execution is claimed on the receipt's action key, so a retry after a
+      // worker death finds the receipt and answers from it. A retry can never
+      // repeat a dispatched effect, only finish the bookkeeping around one.
+      maxAttempts: 3,
+      executor: tx,
+    })
+    const [queued] = await tx
+      .update(assistantPendingActions)
+      .set({ executionState: 'queued', executionJobId: job.jobId })
+      .where(eq(assistantPendingActions.id, input.id))
+      .returning()
+    return { action: queued ?? decided, enqueued: job.inserted }
+  })
+}
+
+/** Take execution ownership. Only an approved, not-yet-running action moves. */
+export async function markPendingActionRunning(
+  id: AssistantPendingActionId,
+  exec: Executor = db
+): Promise<AssistantPendingAction | null> {
+  const [row] = await exec
+    .update(assistantPendingActions)
+    .set({ executionState: 'running' })
+    .where(and(eq(assistantPendingActions.id, id), eq(assistantPendingActions.status, 'approved')))
+    .returning()
+  return row ?? null
+}
+
+/**
+ * Record that an approved action was dispatched and never confirmed.
+ *
+ * Deliberately NOT `failed`: the decision stands, the effect may have
+ * happened, and the only honest next step is a person looking at it. The
+ * proposal therefore stays `approved` with its execution marked unknown,
+ * rather than moving to a terminal status that would invite a fresh approval
+ * of the same operation.
+ */
+export async function markPendingActionUnknown(
+  id: AssistantPendingActionId,
+  note: string,
+  exec: Executor = db
+): Promise<AssistantPendingAction | null> {
+  const [row] = await exec
+    .update(assistantPendingActions)
+    .set({ executionState: 'unknown', executionError: note })
+    .where(and(eq(assistantPendingActions.id, id), eq(assistantPendingActions.status, 'approved')))
+    .returning()
+  return row ?? null
+}
+
+/**
+ * Record that the pre-dispatch recheck refused an approved action.
+ *
+ * Terminal, and deliberately distinct from an execution failure: nothing was
+ * attempted, so there is nothing to reconcile, and the reason names the gate
+ * rather than a provider. A reviewer who still wants it issues a new request,
+ * which is a new proposal and a new decision.
+ */
+export async function refusePendingAction(
+  id: AssistantPendingActionId,
+  input: { reason: string; note: string },
+  exec: Executor = db
+): Promise<AssistantPendingAction | null> {
+  const [row] = await exec
+    .update(assistantPendingActions)
+    .set({
+      status: 'failed',
+      executedAt: new Date(),
+      executionState: 'failed',
+      executionError: input.note,
+      disposition: `refused:${input.reason}`,
+      result: { error: input.note },
+    })
+    .where(and(eq(assistantPendingActions.id, id), eq(assistantPendingActions.status, 'approved')))
+    .returning()
+  return row ?? null
+}
+
+/**
+ * Supersede the live proposals on an item because the request itself changed.
+ *
+ * Only an undispatched proposal can be superseded, which is what the
+ * `status = 'proposed'` guard means: once a decision has scheduled execution,
+ * cancelling the intent cannot undo an effect, and the reconciliation path
+ * owns that case instead. The status moves to `expired` because the column's
+ * CHECK cannot carry a new word without a constraint rewrite no migration here
+ * may replay; `disposition` is what the surfaces read.
+ */
+export async function supersedePendingActions(
+  parent: { conversationId?: ConversationId; ticketId?: TicketId },
+  reason: string,
+  exec: Executor = db
+): Promise<AssistantPendingAction[]> {
+  const scope = parent.conversationId
+    ? eq(assistantPendingActions.conversationId, parent.conversationId)
+    : parent.ticketId
+      ? eq(assistantPendingActions.ticketId, parent.ticketId)
+      : null
+  if (!scope) return []
+  return exec
+    .update(assistantPendingActions)
+    .set({ status: 'expired', disposition: `superseded:${reason}` })
+    .where(and(scope, eq(assistantPendingActions.status, 'proposed')))
+    .returning()
+}
+
 /** Settle an approved action into a terminal execution outcome. */
 async function settleApprovedAction(
   id: AssistantPendingActionId,
@@ -240,7 +433,12 @@ async function settleApprovedAction(
 ): Promise<AssistantPendingAction | null> {
   const [row] = await exec
     .update(assistantPendingActions)
-    .set({ status, executedAt: new Date(), result })
+    .set({
+      status,
+      executedAt: new Date(),
+      result,
+      executionState: status === 'executed' ? 'succeeded' : 'failed',
+    })
     .where(and(eq(assistantPendingActions.id, id), eq(assistantPendingActions.status, 'approved')))
     .returning()
   return row ?? null

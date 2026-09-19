@@ -2506,6 +2506,48 @@ export async function appendAssistantPendingActionNote(
   publishAgentConversationEvent({ kind: 'message', conversationId, message: messageDTO })
 }
 
+/**
+ * Post an agent-only internal note authored by Quinn, on the caller's
+ * transaction.
+ *
+ * The transactional twin of `appendAssistantPendingActionNote`, for the one
+ * case that must commit with something else: an action result that arrives
+ * after a teammate took the conversation over. It is private context for that
+ * teammate, so it is written in the same transaction that settles the action,
+ * and it is never a customer-visible message. The realtime fan-out runs after
+ * the caller commits, because it reads what the transaction has not published
+ * yet.
+ */
+export async function appendAssistantInternalNoteTx(
+  tx: Transaction,
+  conversationId: ConversationId,
+  content: string
+): Promise<{ notify: () => void }> {
+  const { assistantPrincipalIdOnce } = await import('@/lib/server/messages/assistant-principal')
+  const principalId = await assistantPrincipalIdOnce()
+  if (!principalId) return { notify: () => {} }
+  const [message] = await tx
+    .insert(conversationMessages)
+    .values({
+      conversationId,
+      principalId,
+      senderType: 'agent',
+      isInternal: true,
+      content,
+    })
+    .returning()
+  return {
+    notify: () => {
+      const messageDTO = toMessageDTO(
+        message,
+        authorFromInput({ principalId, displayName: 'Quinn' }),
+        principalId
+      )
+      publishAgentConversationEvent({ kind: 'message', conversationId, message: messageDTO })
+    },
+  }
+}
+
 /** "This request timed out…" customer-visible notice when a pending action expires unattended. */
 export async function emitAssistantActionExpiredSystemMessage(
   conversationId: ConversationId
