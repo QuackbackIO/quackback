@@ -42,6 +42,7 @@ vi.mock('@/lib/server/db', () => ({
     deletedAt: 'deleted_at',
     canonicalPostId: 'canonical_post_id',
     moderationState: 'moderation_state',
+    audience: 'audience',
     searchVector: 'search_vector',
     embedding: 'embedding',
   },
@@ -94,9 +95,15 @@ describe('postsVisibilityConditions', () => {
     expect(conditions).toHaveLength(5)
   })
 
-  it('adds the public-board predicate only for the public ceiling', () => {
+  it('adds the public-board and board-audience predicates only for the public ceiling', () => {
     const publicConditions = postsVisibilityConditions('public')
-    expect(publicConditions).toHaveLength(6)
+    // Five shared, plus the anonymous-viewable board narrowing and the board
+    // audience (a capture never grounds a customer-facing answer). The audience
+    // clause is built by policy/posts.ts against the real drizzle `eq`, so it
+    // does not land on this module's mocked one; the count and the team-ceiling
+    // comparison below are what pin it.
+    expect(publicConditions).toHaveLength(7)
+    expect(postsVisibilityConditions('team')).toHaveLength(5)
     const boardCheck = vi
       .mocked(sql)
       .mock.calls.find(

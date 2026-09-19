@@ -137,10 +137,12 @@ describe('postsVisibilityConditions ceiling relaxation (D8)', () => {
   it('adds the anonymous-viewable board filter for the public ceiling only', () => {
     const publicConditions = postsVisibilityConditions('public')
     const teamConditions = postsVisibilityConditions('team')
-    // The public ceiling carries exactly one extra predicate over the team
+    // The public ceiling carries exactly two extra predicates over the team
     // ceiling: the anonymous-viewable board narrowing (the Agent sees public
-    // boards only, D8). Team sees any non-deleted board.
-    expect(publicConditions.length).toBe(teamConditions.length + 1)
+    // boards only, D8) and the board audience (an internal capture is customer
+    // evidence, never customer-answer knowledge). Team sees any non-deleted
+    // board and may read a capture for product analysis.
+    expect(publicConditions.length).toBe(teamConditions.length + 2)
   })
 })
 

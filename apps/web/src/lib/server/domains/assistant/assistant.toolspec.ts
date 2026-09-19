@@ -62,7 +62,6 @@ import { createTicket } from '@/lib/server/domains/tickets/ticket.service'
 import { linkTicketToConversation } from '@/lib/server/domains/tickets/ticket-conversation-link.service'
 import { formatTicketNumber } from '@/lib/shared/tickets'
 import { ConflictError } from '@/lib/shared/errors'
-import { createPostFromConversation } from '@/lib/server/domains/conversation/conversation.convert'
 import { sharePost, shareTicket } from '@/lib/server/domains/conversation/conversation.cards'
 import { quinnActor } from './assistant.actor'
 import { RETRIEVED_CONTENT_NOTE } from './injection-guard'
@@ -331,6 +330,17 @@ export interface AssistantToolContext {
    * is shown the requester rather than inferring one from the thread.
    */
   requestedByPrincipalId?: PrincipalId | null
+  /**
+   * The logical identity of the action this call performs, stamped by the
+   * pipeline just before `execute` runs (see `resolveActionKey` and
+   * `pendingActionKey` in assistant.tools.ts). Write tools only; undefined
+   * for a read, for the sandbox preview, and for a proposal nobody approved.
+   *
+   * A tool whose effect must survive a replay keys its own row by this, so
+   * the receipt's identity and the row's identity are one value rather than
+   * two that can drift apart.
+   */
+  actionKey?: string
 }
 
 /**
@@ -964,20 +974,42 @@ export const captureContactDetailsTool = toolDefinition({
   outputSchema: withGateEnvelope(captureContactDetailsOutputSchema),
 })
 
+/**
+ * The capture outcome, normalized. `created` stays for every existing reader,
+ * and `outcome` is what says which of the two happened, so a retry that
+ * resolves to the first capture is never reported as a failure.
+ */
 const captureFeedbackOutputSchema = z.object({
   created: z.boolean(),
+  outcome: z.enum(['captured', 'already_captured']).optional(),
   postId: z.string().optional(),
   note: z.string().optional(),
 })
 
+/**
+ * The contract marker for the internal-capture meaning of this tool.
+ *
+ * Built-ins do not normally declare a digest (see `contractDigest` on
+ * AssistantToolSpec). This one does because the tool's MEANING changed: it
+ * used to create a public post under the customer's identity and now records
+ * a team-only capture. A proposal a reviewer approved under the old card
+ * carries no digest, so the executor refuses it and Quinn proposes again with
+ * the new text rather than quietly doing something else.
+ */
+export const CAPTURE_FEEDBACK_CONTRACT_DIGEST = 'capture_feedback:internal-capture:v1'
+
 export const captureFeedbackTool = toolDefinition({
   name: 'capture_feedback',
   description:
-    "Turn a feature request or product suggestion from this conversation into a public feedback post attributed to the customer, so it joins the roadmap the team tracks. Use this for ideas and suggestions, not for problems that need a fix; use create_ticket for those. This posts publicly under the customer's identity, so only use it to capture a request the customer actually made.",
+    'Record a feature request or product suggestion from this conversation for the product team, attributed to the customer. The record is INTERNAL: the customer cannot see it, it is not a public post, it does not vote, and it makes no promise that the request will be built. Use it for ideas and suggestions, not for problems that need a fix; use create_ticket for those. Tell the customer you have recorded it for the product team, and nothing more than that. If the team later decides to publish the request, a teammate does that separately.',
   inputSchema: z.object({
-    boardId: z.string().min(1).describe('The board TypeID to post the feedback to.'),
-    title: z.string().min(1).max(200).describe('A short, specific title for the feedback post.'),
-    content: z.string().max(2000).optional().describe('Additional detail from the conversation.'),
+    boardId: z.string().min(1).describe('The board TypeID this feedback belongs to.'),
+    title: z.string().min(1).max(200).describe('A short, specific title for the request.'),
+    content: z
+      .string()
+      .max(2000)
+      .optional()
+      .describe("The request in the customer's own terms, from this conversation."),
   }),
   outputSchema: withGateEnvelope(captureFeedbackOutputSchema),
 })
@@ -1220,24 +1252,22 @@ async function executeCreateTicket(
 type CaptureFeedbackArgs = InferToolInput<typeof captureFeedbackTool>
 type CaptureFeedbackOutput = z.infer<typeof captureFeedbackOutputSchema>
 
+/**
+ * The identity this capture is keyed by.
+ *
+ * The receipt's own logical action key when the pipeline computed one, which
+ * is every real turn and every approved proposal. Nothing else: a fallback
+ * derived from the arguments would give two genuinely different captures in
+ * one conversation the same key, and a random one would defeat the point.
+ */
+function captureKeyFor(ctx: AssistantToolContext): string | null {
+  return ctx.actionKey ?? null
+}
+
 async function executeCaptureFeedback(
   args: CaptureFeedbackArgs,
   ctx: AssistantToolContext
 ): Promise<CaptureFeedbackOutput> {
-  if (ctx.role === 'workspace_assistant' && ctx.workspaceThreadKey) {
-    if (!isTypeId(args.boardId, 'board') || !ctx.actor.principalId)
-      return { created: false, note: 'Invalid board or approver.' }
-    const { createPost } = await import('@/lib/server/domains/posts/post.service')
-    const post = await createPost(
-      { boardId: args.boardId, title: args.title, content: args.content },
-      { principalId: ctx.actor.principalId, actor: ctx.actor }
-    )
-    return { created: true, postId: post.id }
-  }
-  const conversationId = ctx.conversationId
-  if (!conversationId) {
-    return { created: false, note: NO_CONVERSATION_NOTE }
-  }
   // The model sends the board id as a free string (inputSchema is z.string()),
   // so validate the TypeID format before handing it to the service rather than
   // casting an unchecked string into a branded BoardId. A malformed id fails
@@ -1245,20 +1275,54 @@ async function executeCaptureFeedback(
   if (!isTypeId(args.boardId, 'board')) {
     return { created: false, note: 'Unknown or invalid board id.' }
   }
-  const result = await createPostFromConversation(
+  const conversationId = ctx.conversationId
+  if (!conversationId) {
+    // Including the workspace-assistant thread, which has no customer to
+    // attribute a capture to. Creating a post under the approver's own
+    // identity instead, which is what this used to do, silently answers a
+    // different question: whose request is this?
+    return { created: false, note: NO_CONVERSATION_NOTE }
+  }
+  const captureKey = captureKeyFor(ctx)
+  if (!captureKey) {
+    return { created: false, note: 'This capture has no stable identity to record it under.' }
+  }
+
+  // The customer comes from the AUTHORIZED conversation, never from an
+  // argument: a customer must not be able to name another customer, and a
+  // teammate approving an action must not become the customer either.
+  const snapshot = await getConversationSnapshot(ctx, conversationId)
+  if (!snapshot) {
+    return { created: false, note: NO_CONVERSATION_NOTE }
+  }
+
+  const { captureInternalFeedback } = await import('@/lib/server/domains/posts/post.capture')
+  const result = await captureInternalFeedback(
     {
       conversationId,
       boardId: args.boardId,
       title: args.title,
       content: args.content,
+      captureKey,
+      kind: 'assistant',
+      runId: ctx.runId ?? null,
+      involvementId: ctx.involvementId ?? null,
     },
     {
-      agentActor: ctx.actor,
-      agentPrincipalId: ctx.assistantPrincipalId,
-      agent: { principalId: ctx.assistantPrincipalId, displayName: ctx.assistantName },
+      actor: ctx.actor,
+      capturedByPrincipalId: ctx.assistantPrincipalId,
+      customerPrincipalId: snapshot.visitorPrincipalId,
     }
   )
-  return { created: result.created, postId: result.postId }
+  return {
+    created: result.outcome === 'captured',
+    outcome: result.outcome,
+    postId: result.postId,
+    note:
+      result.outcome === 'already_captured'
+        ? 'This feedback was already recorded for the product team. It was not recorded twice.'
+        : 'Recorded for the product team. This is an internal record, not a public post or a commitment.',
+  }
 }
 
 type SharePostArgs = InferToolInput<typeof sharePostTool>
@@ -1324,6 +1388,8 @@ function defineToolSpec<TDef extends ToolDefinition<any, any, string>>(spec: {
   promptGuidance: string
   risk: ToolRiskClass
   permissions: readonly PermissionKey[]
+  /** See `contractDigest` on `AssistantToolSpec`. */
+  contractDigest?: string
   /** Defaults to `['conversation']` — every write tool defined below predates
    *  ticket-scoped turns; see the field's doc on `AssistantToolSpec`. */
   parents?: readonly ('conversation' | 'ticket')[]
@@ -1587,14 +1653,18 @@ const SPECS: readonly AssistantToolSpec[] = [
   defineToolSpec({
     label: 'Capture feedback',
     description:
-      'Create a public feedback post from the conversation, attributed to the customer, for the team roadmap.',
+      'Record a feature request from the conversation for the product team, attributed to the customer. Internal: the customer cannot see it and it is not a public post.',
     promptGuidance:
-      'Use for a feature request or suggestion the customer raises, not for a problem that needs a fix. Pick boardId from the workspace board catalogue below; never guess one. If search already surfaced a matching post, use share_post instead of capturing a duplicate.',
+      'Use for a feature request or suggestion the customer raises, not for a problem that needs a fix. Pick boardId from the workspace board catalogue below; never guess one. If search already surfaced a matching post, use share_post instead of capturing a duplicate. Tell the customer it is recorded for the product team. Never say it is on the roadmap, public, or going to be built.',
     risk: 'write',
-    permissions: [PERMISSIONS.POST_CREATE, PERMISSIONS.POST_VOTE_ON_BEHALF],
+    // No POST_VOTE_ON_BEHALF: an internal capture casts no vote, and asking
+    // for a permission the command cannot use would let the dial look like it
+    // controls something it does not.
+    permissions: [PERMISSIONS.POST_CREATE],
+    contractDigest: CAPTURE_FEEDBACK_CONTRACT_DIGEST,
     definition: captureFeedbackTool,
     execute: executeCaptureFeedback,
-    summarize: (args) => `Capture feedback: "${args.title}"`,
+    summarize: (args) => `Record feedback for the product team: "${args.title}"`,
   }),
   defineToolSpec({
     label: 'Use skill',

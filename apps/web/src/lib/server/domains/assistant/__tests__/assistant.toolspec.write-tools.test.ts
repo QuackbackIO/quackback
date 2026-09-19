@@ -53,6 +53,11 @@ vi.mock('@/lib/server/domains/tickets/ticket-conversation-link.service', () => (
   linkTicketToConversation: (...args: unknown[]) => mockLinkTicketToConversation(...args),
 }))
 
+const mockCaptureInternalFeedback = vi.fn()
+vi.mock('@/lib/server/domains/posts/post.capture', () => ({
+  captureInternalFeedback: (...args: unknown[]) => mockCaptureInternalFeedback(...args),
+}))
+
 const mockCreatePostFromConversation = vi.fn()
 vi.mock('@/lib/server/domains/conversation/conversation.convert', () => ({
   createPostFromConversation: (...args: unknown[]) => mockCreatePostFromConversation(...args),
@@ -67,7 +72,7 @@ vi.mock('@/lib/server/domains/conversation/conversation.cards', () => ({
   sharePost: (...args: unknown[]) => mockSharePost(...args),
 }))
 
-import { ASSISTANT_TOOL_SPECS } from '../assistant.toolspec'
+import { ASSISTANT_TOOL_SPECS, CAPTURE_FEEDBACK_CONTRACT_DIGEST } from '../assistant.toolspec'
 import { makeToolTestContext } from './assistant-tool-fixtures'
 
 const ctx = makeToolTestContext
@@ -523,19 +528,39 @@ describe('create_ticket', () => {
 
 describe('capture_feedback', () => {
   const spec = ASSISTANT_TOOL_SPECS.capture_feedback
+  const CAPTURE_KEY = 'conversation_1:inv:x:capture_feedback:digest'
 
   it('has the expected spec shape', () => {
     expect(spec.risk).toBe('write')
-    expect(spec.permissions).toEqual([PERMISSIONS.POST_CREATE, PERMISSIONS.POST_VOTE_ON_BEHALF])
+    // No vote-on-behalf: an internal capture casts no vote.
+    expect(spec.permissions).toEqual([PERMISSIONS.POST_CREATE])
+  })
+
+  it('declares a contract digest, so a proposal approved under the old card is refused', () => {
+    // Built-ins normally carry none. This one does because its meaning moved
+    // from "post this publicly" to "record this internally"; the executor
+    // reads an absent stored digest against a declared one as a refusal.
+    expect(spec.contractDigest).toBe(CAPTURE_FEEDBACK_CONTRACT_DIGEST)
+  })
+
+  it('describes an internal record, and says what it is not', () => {
+    // The old contract told the model this posted publicly under the
+    // customer's identity and joined the roadmap. Both are now false, and a
+    // model reading a stale description would tell the customer so.
+    const description = spec.definition.description.toLowerCase()
+    expect(description).toContain('internal')
+    expect(description).toContain('not a public post')
+    expect(description).toContain('cannot see it')
+    expect(description).not.toContain('joins the roadmap')
   })
 
   it('is conversation-only (unified inbox §2.9): never offered on a ticket-scoped turn', () => {
     expect(spec.parents).toEqual(['conversation'])
   })
 
-  it('summarizes with the post title', () => {
+  it('summarizes with the request title', () => {
     expect(spec.summarize({ boardId: 'board_1', title: 'Add dark mode' })).toBe(
-      'Capture feedback: "Add dark mode"'
+      'Record feedback for the product team: "Add dark mode"'
     )
   })
 
@@ -562,48 +587,95 @@ describe('capture_feedback', () => {
   })
 
   it('reports no linked conversation without a conversationId', async () => {
-    const out = await spec.execute({ boardId: 'board_1', title: 'Add dark mode' }, ctx())
+    const out = await spec.execute(
+      { boardId: 'board_01h455vb4pex5vsknk084sn02q', title: 'Add dark mode' },
+      ctx({ actionKey: CAPTURE_KEY })
+    )
     expect(out).toEqual({ created: false, note: 'No linked conversation.' })
-    expect(mockCreatePostFromConversation).not.toHaveBeenCalled()
+    expect(mockCaptureInternalFeedback).not.toHaveBeenCalled()
   })
 
-  it('creates the post attributed to Quinn as agent on the happy path', async () => {
-    mockCreatePostFromConversation.mockResolvedValue({
+  it('records the capture for the conversation customer, keyed by the receipt action key', async () => {
+    mockCaptureInternalFeedback.mockResolvedValue({
+      outcome: 'captured',
       postId: 'post_1',
-      created: true,
-      boardSlug: 'feature-requests',
+      title: 'Add dark mode',
     })
     const c = ctx({
       conversationId: 'conversation_1' as never,
       assistantPrincipalId: 'principal_assistant' as never,
+      involvementId: 'involvement_1' as never,
+      actionKey: CAPTURE_KEY,
+      db: fakeDbReturning({ status: 'open', visitorPrincipalId: 'principal_visitor' }) as never,
     })
     const boardId = 'board_01h455vb4pex5vsknk084sn02q'
     const out = await spec.execute({ boardId, title: 'Add dark mode' }, c)
-    expect(mockCreatePostFromConversation).toHaveBeenCalledWith(
+
+    expect(mockCaptureInternalFeedback).toHaveBeenCalledWith(
       expect.objectContaining({
         conversationId: 'conversation_1',
         boardId,
         title: 'Add dark mode',
+        captureKey: CAPTURE_KEY,
+        kind: 'assistant',
+        involvementId: 'involvement_1',
       }),
       expect.objectContaining({
-        agentPrincipalId: 'principal_assistant',
-        agent: expect.objectContaining({
-          principalId: 'principal_assistant',
-          displayName: 'Quinn',
-        }),
+        capturedByPrincipalId: 'principal_assistant',
+        // The customer comes from the conversation row, never the arguments.
+        customerPrincipalId: 'principal_visitor',
       })
     )
-    expect(out).toEqual({ created: true, postId: 'post_1' })
+    expect(out).toMatchObject({ created: true, outcome: 'captured', postId: 'post_1' })
+  })
+
+  it('reports a repeat as already recorded rather than as a failure', async () => {
+    mockCaptureInternalFeedback.mockResolvedValue({
+      outcome: 'already_captured',
+      postId: 'post_1',
+      title: 'Add dark mode',
+    })
+    const c = ctx({
+      conversationId: 'conversation_1' as never,
+      assistantPrincipalId: 'principal_assistant' as never,
+      actionKey: CAPTURE_KEY,
+      db: fakeDbReturning({ status: 'open', visitorPrincipalId: 'principal_visitor' }) as never,
+    })
+    const out = await spec.execute(
+      { boardId: 'board_01h455vb4pex5vsknk084sn02q', title: 'Add dark mode' },
+      c
+    )
+    expect(out).toMatchObject({
+      created: false,
+      outcome: 'already_captured',
+      postId: 'post_1',
+    })
+    expect((out as { note?: string }).note).toMatch(/already recorded/i)
+  })
+
+  it('refuses to capture without a stable identity to record it under', async () => {
+    const c = ctx({
+      conversationId: 'conversation_1' as never,
+      assistantPrincipalId: 'principal_assistant' as never,
+      db: fakeDbReturning({ status: 'open', visitorPrincipalId: 'principal_visitor' }) as never,
+    })
+    const out = await spec.execute(
+      { boardId: 'board_01h455vb4pex5vsknk084sn02q', title: 'Add dark mode' },
+      c
+    )
+    expect(out).toMatchObject({ created: false })
+    expect(mockCaptureInternalFeedback).not.toHaveBeenCalled()
   })
 
   it('fails gracefully on a malformed board id instead of calling the service', async () => {
     const c = ctx({
       conversationId: 'conversation_1' as never,
       assistantPrincipalId: 'principal_assistant' as never,
+      actionKey: CAPTURE_KEY,
     })
     const out = await spec.execute({ boardId: 'not-a-board-id', title: 'Add dark mode' }, c)
     expect(out).toEqual({ created: false, note: 'Unknown or invalid board id.' })
-    expect(mockCreatePostFromConversation).not.toHaveBeenCalled()
+    expect(mockCaptureInternalFeedback).not.toHaveBeenCalled()
   })
 })
 

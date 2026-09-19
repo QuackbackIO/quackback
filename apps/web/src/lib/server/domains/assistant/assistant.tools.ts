@@ -479,6 +479,10 @@ async function executeAndSettle(
   ctx: AssistantToolContext
 ): Promise<ToolOutcome> {
   const startedAt = Date.now()
+  // The identity this effect is claimed under, handed to the executor. A tool
+  // whose row must survive a replay keys it by this, so the receipt and the
+  // row it created carry one identity rather than two that can drift.
+  ctx.actionKey = claimed?.actionKey ?? undefined
   // With no receipt there is nothing to reconcile and nobody to tell, so an
   // interruption can only be reported as a plain failure. This is the read
   // path and the no-parent write path, neither of which dispatches an effect.

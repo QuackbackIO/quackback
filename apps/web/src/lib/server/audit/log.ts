@@ -85,6 +85,8 @@ export type AuditEventType =
   | 'post.moderation.approved'
   | 'post.moderation.rejected'
   | 'post.moderation.held'
+  // An internal capture reviewed and moved to its board (Quinn feedback gate)
+  | 'post.capture.published'
   | 'comment.moderation.approved'
   | 'comment.moderation.rejected'
   | 'comment.moderation.held'

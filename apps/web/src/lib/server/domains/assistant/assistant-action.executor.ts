@@ -178,9 +178,16 @@ export async function resolveApprovedAction(
     return { ok: false, refusal: 'policy_changed' }
   }
   // The contract the reviewer was shown, against the one that would run now.
-  // Only a spec built from a discovered contract carries a digest; a built-in's
+  // A discovered contract carries a digest because the remote schema is data
+  // that can move under a stored proposal. A built-in normally does not: its
   // contract lives in this repository and the live parse below is the check.
-  if (action.contractDigest && spec.contractDigest && action.contractDigest !== spec.contractDigest)
+  //
+  // A built-in that DOES declare one is saying its meaning changed, not just
+  // its shape, and a proposal that predates the declaration carries no digest
+  // at all. Running it would execute the new meaning under the old card, so
+  // an absent digest against a declared one is refused too: the reviewer
+  // decides again, on a proposal that says what will actually happen.
+  if (spec.contractDigest && action.contractDigest !== spec.contractDigest)
     return { ok: false, refusal: 'contract_changed' }
 
   const parsed = spec.definition.inputSchema.safeParse(action.args)
