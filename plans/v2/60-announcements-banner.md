@@ -121,18 +121,18 @@ module-state roots.
   | --- | --- | --- | --- |
   | `info` | `--fork-info` (blue) | info-circle | dismissible, `aria-live=polite` |
   | `warning` | `--fork-warning` (amber) | exclamation-triangle | dismissible, polite |
-  | `critical` (incident) | `--destructive` (red) | x-octagon | **not** dismissible, `role=alert` |
+  | `critical` (incident) | `--destructive` (red) | x-octagon | dismissible, `role=alert` |
   | `maintenance` | `--fork-maintenance` (violet) | wrench | time window from `publishAt`/`expiresAt` appended to the text; dismissible, polite |
   | `success` (resolved) | `--success` (green) | check-circle | dismissible, polite; `expires_at` defaulted to +24 h in the editor |
 
   **One component, one layout for every kind** (mockup: https://claude.ai/artifact/XAn1u4GewieesuMGHsua43, board
-  "Announcements — standard banner types"): icon · bold type title · text · optional link · dismiss (or an empty
-  slot of the same width when not dismissible). Same height, padding, type sizes, link and dismiss styling across
+  "Announcements — standard banner types"): icon · bold type title · text · optional link · dismiss. **Every banner of every
+  kind is dismissible by the user** (D-N9); there is no author-side "not dismissible" option. Same height, padding, type sizes, link and dismiss styling across
   kinds; the kind changes only the colour token and icon. Background = 10 % tint of the kind colour over
   `--background` (16 % in dark mode), border = 35 % (40 % dark), title/link = kind colour mixed toward
   `--foreground` for contrast. Placement variants only: full-width strip in the portal/hub; rounded floating bar
   (with `--radius` and shadow) in the embed.
-  Authors cannot change colours, icons or layout; `dismissible` is only overridable for `critical`.
+  Authors cannot change colours, icons, layout or dismissibility.
 - **Branding (D-X1, conventions §11).** Kind colours are **semantic and consistent across apps** (info is always
   blue, incident always red) so users read them the same way everywhere; they are fork tokens with light and dark
   values, overridable per app via `customCss`. Everything else — background, foreground, font, radius, dark mode —
@@ -187,7 +187,7 @@ isLive(a, now) = a.status === 'published' && a.publishAt <= now && (a.expiresAt 
 5. Sort (kind rank, `priority desc`, `publishAt desc`), cap 5; UI shows first + "N more".
 
 `BannerItem`: `{ id, source: 'announcement' | 'status', kind, title, body, link: {url,label} | null,
-dismissible, priority, publishAt, expiresAt, updatedAt }`. Feed response:
+priority, publishAt, expiresAt, updatedAt }`. Feed response:
 `{ enabled, revision, nextTransitionAt, items }`.
 
 ### 4.5 Status fold-in (D-N3)
@@ -343,7 +343,7 @@ fires, so a first-visit user created by widget identify sees segment-targeted it
   guarded by `announcement.manage`; shows an "enable in Labs" notice when the experiment is off.
 - List (derived-state chips), editor: **kind picker with live preset preview** (same `banner-bar.tsx`),
   "Start from template" (placeholder inputs, §4.2), title, body, link, priority, surfaces, audience (all /
-  segments, reusing the existing segment list fn), publish-now / schedule / expire, dismissible (critical only).
+  segments, reusing the existing segment list fn), publish-now / schedule / expire (no dismissibility control — every banner is dismissible, D-N9).
 - Templates page; config panel (`enabled`, `embedEnabled`, `foldInStatus`, `statusLeadHours`, `placement: 'top'`).
 - Server fns, each `requireAuth({ permission: PERMISSIONS.ANNOUNCEMENT_MANAGE })`: `listAnnouncementsFn`,
   `getAnnouncementFn`, `upsertAnnouncementFn`, `archiveAnnouncementFn`, `deleteDraftAnnouncementFn`,
@@ -385,7 +385,6 @@ fires, so a first-visit user created by widget identify sees segment-targeted it
 | `status` | `text not null default 'draft'` CHECK in (`draft`,`published`,`archived`) | |
 | `publish_at` | `timestamptz not null default now()` | |
 | `expires_at` | `timestamptz null` | CHECK `expires_at IS NULL OR expires_at > publish_at` |
-| `dismissible` | `boolean not null default true` | editor forces preset default except for `critical` |
 | `priority` | `integer not null default 0` | |
 | `surfaces` | `jsonb not null default '["portal"]'` | subset of `portal`,`embed` (`widget` reserved, N-7) |
 | `audience` | `jsonb not null default '{"tier":"authenticated","segmentIds":[]}'` | `tier` ∈ authenticated/segments |

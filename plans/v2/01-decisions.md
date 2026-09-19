@@ -110,6 +110,7 @@
 | D-N6 | **Instant push** of publish/update/archive to open portals and embeds (Q53), using upstream's realtime pub/sub + stream infrastructure (`lib/server/realtime/*`).                                                         | ✅     |
 | D-N7 | On sites also running the widget, the banner shows **the same announcements** the identified user sees in the portal, including segment-targeted ones (Q54, read together with D-N5).                                    | 🟡     |
 | D-N8 | **Fleet owners and Fleet Agents** may create and publish announcements (Q55).                                                                                                                                             | ✅     |
+| D-N9 | **Every banner is dismissible by the user**, including incidents; no author-side option to make a banner non-dismissible. Dismissal is per browser (D-N2). | ✅     |
 
 ## Resolved while writing the v2 plans (traceability)
 
