@@ -399,12 +399,12 @@ export const Route = createFileRoute('/api/chat/stream')({
             // it, so a customer who reconnects after the worker died (or before
             // it claimed the job at all) would see nothing while a durable turn
             // is genuinely in flight. Fall back to the run row, which survives
-            // both — see assistant-run.repository's getOpenRunState. It carries
+            // both, see assistant-run.state's getOpenRunState. It carries
             // lifecycle only: no trace text, no evidence, no model detail.
             let snapshot = activitySnapshot ? await activitySnapshot : null
             if (!snapshot && backfillConversationId) {
               const { getOpenRunState } =
-                await import('@/lib/server/domains/assistant/assistant-run.repository')
+                await import('@/lib/server/domains/assistant/assistant-run.state')
               const run = await getOpenRunState(backfillConversationId).catch(() => null)
               // durableActivityFrame is the pinned lifecycle-only projection:
               // the one place a run row reaches a visitor, and the only shape

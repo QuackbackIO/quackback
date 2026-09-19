@@ -18,7 +18,7 @@
 import { cacheGet, cacheSet, cacheDel } from '@/lib/server/cache'
 import type { ConversationId } from '@quackback/ids'
 import type { ConversationStreamEvent } from '@/lib/shared/conversation/types'
-import type { DurableRunState } from './assistant-run.repository'
+import type { DurableRunState } from './assistant-run.state'
 
 /** Comfortably longer than the gap between activity publishes in a live turn;
  *  refreshed on every write, so this only bounds how long a crashed turn's

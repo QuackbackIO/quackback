@@ -15,12 +15,8 @@ import type { AssistantRunId, ConversationId } from '@quackback/ids'
 import type { ConversationAuthorInput } from '@/lib/server/domains/conversation/conversation.types'
 import type { ClaimedJob } from '@/lib/server/jobs/job-queue'
 import { logger } from '@/lib/server/logger'
-import {
-  settleRun,
-  attachSnapshot,
-  recordRunStep,
-  claimRunForExecution,
-} from './assistant-run.repository'
+import { settleRun, attachSnapshot, claimRunForExecution } from './assistant-run.repository'
+import { recordRunStep } from './assistant-run.ledger'
 import { selectRunBehaviour } from './assistant-release.service'
 import { verifyAndMaybeRepair } from './assistant-run.validation'
 import { commitAssistantOutcome, parkRunForAction } from './assistant-run.service'

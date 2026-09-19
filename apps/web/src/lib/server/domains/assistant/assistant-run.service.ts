@@ -55,10 +55,9 @@ import {
   loadRun,
   settleRun,
   supersedeOpenRuns,
-  recordRunEvidence,
   type AssistantRunRow,
-  type RunEvidenceInput,
 } from './assistant-run.repository'
+import { recordRunEvidence, type RunEvidenceInput } from './assistant-run.ledger'
 import { runPublicationValidation } from './assistant-run.validation'
 import type { PublicationValidationCode } from './publication-validation'
 

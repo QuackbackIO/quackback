@@ -39,7 +39,7 @@ vi.mock('../assistant.principal', () => ({
   getAssistantPrincipal: (...args: unknown[]) => mockAssistantPrincipal(...args),
 }))
 
-import { getOpenRunState } from '../assistant-run.repository'
+import { getOpenRunState } from '../assistant-run.state'
 import {
   STRANDED_GRACE_MS,
   cancelAssistantRun,

@@ -50,10 +50,10 @@ import {
   bumpAssistantRevision,
   lockConversationForRun,
   lockRun,
-  releaseParkedRun,
   settleRun,
   type AssistantRunRow,
 } from './assistant-run.repository'
+import { releaseParkedRun } from './assistant-run.state'
 import {
   ASSISTANT_TURN_QUEUE,
   requestAssistantTurn,

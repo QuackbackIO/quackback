@@ -523,7 +523,7 @@ export async function sweepAndNotifyExpiredPendingActions(
   // while Quinn owes something: without it, an undecided proposal would hold
   // its conversation open forever. The customer notice below is the same
   // announcement it always was.
-  const { releaseParkedRun } = await import('./assistant-run.repository')
+  const { releaseParkedRun } = await import('./assistant-run.state')
   for (const row of expired) {
     if (row.runId) await releaseParkedRun(exec, row.runId, `action:expired:${row.id}`)
   }

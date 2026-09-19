@@ -68,10 +68,8 @@ import {
   deferAssistantWait,
   releaseAssistantWait,
 } from './assistant-delegation'
-import {
-  readAssistantEngagementState,
-  settleRun,
-} from '@/lib/server/domains/assistant/assistant-run.repository'
+import { settleRun } from '@/lib/server/domains/assistant/assistant-run.repository'
+import { readAssistantEngagementState } from '@/lib/server/domains/assistant/assistant-run.state'
 import { ASSISTANT_TURN_QUEUE } from '@/lib/server/domains/assistant/assistant-run.service'
 import { findJobByDedupeKey } from '@/lib/server/jobs/job-queue'
 import {

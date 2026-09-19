@@ -30,7 +30,7 @@ import {
   type Transaction,
 } from '@/lib/server/db'
 import type { ConversationId } from '@quackback/ids'
-import type { AssistantEngagementState } from '@/lib/server/domains/assistant/assistant-run.repository'
+import type { AssistantEngagementState } from '@/lib/server/domains/assistant/assistant-run.state'
 import { logger } from '@/lib/server/logger'
 import type { AssistantOutcome } from './condition.evaluator'
 import { readCursor } from './workflow-wait-queue'
