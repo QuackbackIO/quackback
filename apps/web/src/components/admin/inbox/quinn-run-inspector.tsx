@@ -73,6 +73,26 @@ export function dispositionNote(disposition: string | null): string | null {
   return disposition
 }
 
+/** Statuses that mean a run is still moving and the surface must keep looking. */
+const OPEN_STATUSES = ['queued', 'running', 'waiting_action']
+
+/**
+ * The teammate side of the durable status, and its polling fallback.
+ *
+ * The admin inbox deliberately ignores Quinn's realtime activity frames, which
+ * are the customer's. A teammate's view of a turn in flight is therefore the
+ * run row itself, and it has to keep looking while one is open: an SSE frame
+ * that never arrives, or a worker that dies mid-turn, must still resolve to the
+ * real state within a few seconds rather than leaving the panel saying Working
+ * for ever. A settled list stops polling, because it can no longer change.
+ */
+export function runListPollInterval(
+  runs: ReadonlyArray<{ status: string }> | undefined
+): number | false {
+  if (!runs) return false
+  return runs.some((run) => OPEN_STATUSES.includes(run.status)) ? 5_000 : false
+}
+
 function duration(ms: number | null): string | null {
   if (ms === null) return null
   if (ms < 1_000) return `${ms}ms`
@@ -97,9 +117,7 @@ function RunDetail({ runId, onClosed }: { runId: string; onClosed: () => void })
     staleTime: 0,
     // Only while something is still moving: a settled run never changes again.
     refetchInterval: (query) =>
-      query.state.data && ['queued', 'running', 'waiting_action'].includes(query.state.data.status)
-        ? 3_000
-        : false,
+      query.state.data && OPEN_STATUSES.includes(query.state.data.status) ? 3_000 : false,
   })
 
   const invalidate = () => {
@@ -271,6 +289,7 @@ export function QuinnRunInspector({ conversationId, ticketId }: QuinnRunInspecto
       }),
     enabled: !!(conversationId ?? ticketId),
     staleTime: 15_000,
+    refetchInterval: (query) => runListPollInterval(query.state.data),
   })
 
   if (runs.isPending || runs.isError) return null

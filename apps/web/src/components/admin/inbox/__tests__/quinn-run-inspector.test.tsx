@@ -23,7 +23,7 @@ vi.mock('@/lib/server/functions/assistant-runs', () => ({
   retryAssistantRunFn: vi.fn(),
 }))
 
-import { QuinnRunInspector, dispositionNote } from '../quinn-run-inspector'
+import { QuinnRunInspector, dispositionNote, runListPollInterval } from '../quinn-run-inspector'
 
 afterEach(cleanup)
 
@@ -97,6 +97,16 @@ describe('dispositionNote', () => {
     // An unrecognised disposition is information, not something to hide.
     expect(dispositionNote('something_new')).toBe('something_new')
     expect(dispositionNote(null)).toBeNull()
+  })
+})
+
+describe('runListPollInterval', () => {
+  it('keeps looking while a run is open and stops once everything has settled', () => {
+    expect(runListPollInterval(undefined)).toBe(false)
+    expect(runListPollInterval([{ status: 'succeeded' }, { status: 'failed' }])).toBe(false)
+    expect(runListPollInterval([{ status: 'succeeded' }, { status: 'running' }])).toBe(5_000)
+    // A run parked on an approval is still owed a result, so it is still open.
+    expect(runListPollInterval([{ status: 'waiting_action' }])).toBe(5_000)
   })
 })
 

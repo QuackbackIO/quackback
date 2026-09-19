@@ -39,6 +39,7 @@ vi.mock('../assistant.principal', () => ({
   getAssistantPrincipal: (...args: unknown[]) => mockAssistantPrincipal(...args),
 }))
 
+import { getOpenRunState } from '../assistant-run.repository'
 import {
   STRANDED_GRACE_MS,
   cancelAssistantRun,
@@ -317,6 +318,33 @@ describe.skipIf(!fixture.available)('sweepStrandedApprovedActions', () => {
   })
 })
 
+describe.skipIf(!fixture.available)('the durable state a reconnect reads', () => {
+  beforeEach(fixture.begin)
+  afterEach(fixture.rollback)
+
+  it('says a turn is in flight while one is', async () => {
+    const conversationId = await seedConversation()
+    await seedRun(conversationId, { status: 'running' })
+    expect(await getOpenRunState(conversationId)).toMatchObject({ status: 'running' })
+  })
+
+  it('says nothing once the run has settled, whatever it settled as', async () => {
+    const conversationId = await seedConversation()
+    await seedRun(conversationId, { status: 'succeeded', finishedAt: new Date() })
+    // The phantom this exists to prevent: a reconnect after the answer landed
+    // must not replay a typing indicator over a conversation that has its reply.
+    expect(await getOpenRunState(conversationId)).toBeNull()
+  })
+
+  it('says nothing while a run is parked on an approval nobody has decided', async () => {
+    const conversationId = await seedConversation()
+    await seedRun(conversationId, { status: 'waiting_action' })
+    // A wait can last hours. A customer is not kept looking at a typing
+    // indicator for it; the acknowledgement in the thread is what they read.
+    expect(await getOpenRunState(conversationId)).toBeNull()
+  })
+})
+
 describe.skipIf(!fixture.available)('operator recovery controls', () => {
   beforeEach(fixture.begin)
   afterEach(fixture.rollback)
@@ -370,7 +398,12 @@ describe.skipIf(!fixture.available)('operator recovery controls', () => {
     const jobs = await testDb
       .select()
       .from(jobQueue)
-      .where(and(eq(jobQueue.queue, 'assistant-turn'), eq(jobQueue.dedupeKey, `assistant-turn:${retry.id}`)))
+      .where(
+        and(
+          eq(jobQueue.queue, 'assistant-turn'),
+          eq(jobQueue.dedupeKey, `assistant-turn:${retry.id}`)
+        )
+      )
     expect(jobs).toHaveLength(1)
   })
 
