@@ -71,7 +71,7 @@
 | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
 | D-A1  | Accounts live in the customer's own connected apps, not Quackback.                                                                                                                                                         | ✅     |
 | D-A2  | Requester ≠ approver, enforced (Q31).                                                                                                                                                                                       | ✅     |
-| D-A3  | Approver must be on the owning tier's team; fallback "holds the permission + is a team member" until team-scoped RBAC ships (Q32).                                                                                         | ✅     |
+| D-A3  | Approver must hold `account.execute` **through a team-scoped grant** on the owning tier's team (`canInTeam`); no workspace-wide fallback (staff review A1). Team-scoped RBAC (`10-…` Phase 2) is a prerequisite of account actions. | ✅     |
 | D-A4  | Managers do **not** get account-action permissions (Q34).                                                                                                                                                                  | ✅     |
 | D-A5  | **No external-account-link table** (Q35). The customer's identity (email + identify-time external user id / attributes) is sent to the app's API, which resolves its own account.                                          | ✅     |
 | D-A6  | **Extensible without code per action** (Q29): per-app actions are configuration (and/or advertised by the app's API), each with a **minimum tier**; permission keys are generic, not one per action.                      | ✅     |
@@ -110,6 +110,7 @@
 | D-N6 | **Instant push** of publish/update/archive to open portals and embeds (Q53), using upstream's realtime pub/sub + stream infrastructure (`lib/server/realtime/*`).                                                         | ✅     |
 | D-N7 | On sites also running the widget, the banner shows **the same announcements** the identified user sees in the portal, including segment-targeted ones (Q54, read together with D-N5).                                    | 🟡     |
 | D-N8 | **Fleet owners and Fleet Agents** may create and publish announcements (Q55).                                                                                                                                             | ✅     |
+| D-N9 | **Every banner is dismissible by the user**, including incidents; no author-side option to make a banner non-dismissible. Dismissal is per browser (D-N2). | ✅     |
 
 ## Resolved while writing the v2 plans (traceability)
 
@@ -140,7 +141,7 @@
 | ID    | Plan | Question                                                                                                                                                                                                                    | Default in plan                                |
 | ----- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
 | O-C1  | 20   | Upstream apps support only OIDC sign-in. Is it acceptable for apps to reach a SAML identity provider through an OIDC broker (e.g. Keycloak, Cognito), with only the tower supporting SAML natively? Native SAML in every app would need several upstream auth seams. | Broker                                         |
-| O-P10 | 50   | After a framework switch, old scores (e.g. "12.4 · RICE v1") sort numerically alongside current-framework scores, though they aren't strictly comparable. Accept, or sort old-framework scores after current ones?       | Accept, with the framework label shown          |
+| O-P10 | 50   | Old-framework scores are not strictly comparable with current ones. Sort current-framework scores first and frozen old ones after them, or mix them numerically? | Current first, old after |
 | O-R3  | 10   | Owner and Admin hold every permission by design, so "only the UX team scores" means UX Team + Owner/Admin. Acceptable, or add a fork-side exclusion so even Admins can't score?                                           | UX Team + Owner/Admin                          |
 | O-R4  | 10   | The Dev Team can't be limited to drafting changelog entries: upstream's single `changelog.manage` covers create, edit and publish. Grant full `changelog.manage` to Dev Team, or leave changelog out of Dev Team?        | Grant `changelog.manage`                       |
 | O-R5  | 10   | Strict read-only (D-R6) blocks commenting, but voting and emoji reactions by read-only teammates stay ungated. Also block those?                                                                                          | Leave ungated                                  |
@@ -149,5 +150,33 @@
 | O-A3  | 40   | Beyond break-glass **approval** (D-A10), may Owner/Admin also **run** any account action directly regardless of tier?                                                                                                     | Yes, audited                                   |
 | O-A4  | 40   | Should actions that a connected app newly advertises arrive **disabled** until an admin enables them?                                                                                                                     | Disabled                                       |
 | O-A5  | 40   | Which customer attributes (beyond email, name and external user id) may be sent to a connected app? Per-app allow-list.                                                                                                     | None (empty allow-list)                        |
+
+
+## Raised by the staff review (owner input needed; plans use the stated default meanwhile)
+
+| ID    | Plan | Question | Default in plan |
+| ----- | ---- | -------- | --------------- |
+| O-R6  | 10 | Should an API key created by a team-restricted agent act only on its creator's teams' tickets and conversations (needs extra upstream seams), or stay workspace-wide with no ticket/conversation access at all? | Workspace-wide, no ticket/conversation access |
+| O-R7  | 10 | Upstream lets any teammate with `conversation.view` open any conversation by ID, while ticket reads by ID become team-limited. Keep upstream's conversation behaviour for Tier agents? | Keep upstream behaviour |
+| O-C3  | 20 | Accept one shared edge-to-app HMAC secret for inbound mail delivery, while reply-address keys stay per app? | Accept |
+| O-C8  | 20 | When an app admin edits a tower-managed role grant locally, should the tower revert it at the next sync, or should local edits win? | Tower wins |
+| O-C9  | 20 | Maximum delay for an IdP group removal to take effect in every app? | 15 minutes (SCIM push or 15-min reconcile) |
+| O-C10 | 20 | Tier bundles need an explicit per-app team mapping maintained in the tower, and grant nothing in apps without one. Acceptable? | Yes |
+| O-T16 | 30 | Are tiers an operational routing convention (any agent with ticket access can still act), or a strict read/write restriction per tier? | Routing convention; escalators become read-only after handoff |
+| O-T17 | 30 | Does escalating a ticket count as its first response for SLA purposes? | No |
+| O-T18 | 30 | When a blocked email-only lead is claimed by a signed-in requester, how does the block carry over? | Block moves to the user (read-only; can't reply, file or rate); lead kept as a block anchor for future mail |
+| O-A9  | 40 | If a ticket moves teams after an account-action request, does approval follow the ticket's current team (re-routing if its tier is too low)? | Yes, follows current team |
+| O-A10 | 40 | Which changes invalidate an approval and require re-approval? | Any change to the customer's identifiers or allowed attributes, inputs, app base URL, config or signing-secret version, or action definition version |
+| O-A11 | 40 | May a customer known only by email (no account) be an account-action target? | Only after they verify by signing in to the help hub |
+| O-A12 | 40 | Reuse the existing `ticket_note_added` notification type for request-expiry notices (no new notification type)? | Yes |
+| O-P11 | 50 | After a framework switch, decide "needs re-scoring" once, from each post's status at the switch, or re-check it from the current status every time? | Once, at the switch |
+| O-P12 | 50 | Should posts keeping an old-framework score show it frozen as it was at the switch, or keep recalculating it from new votes with the old formula? | Frozen |
+| O-N10 | 60 | Is it acceptable for a new, changed or resolved **status incident** to take up to 5 minutes to reach an already-open banner (announcements themselves are instant)? | Yes |
+| O-N11 | 60 | On customers' sites, should the embedded banner use only the app's theme colours and font, not its custom CSS (custom CSS applies in portal and hub)? | Yes |
+| O-N12 | 60 | Do you also want a banner strip inside the support widget panel? | No (reserved, deferred) |
+
+D-N7 default is refined by the staff review: the embed shows an identified user exactly what the portal shows
+(including segment-targeted items) and shows **nothing** to identities Quackback doesn't know yet (no user is created).
+D-T8 default: higher-tier agents outside the owning team, and Managers, may de-escalate.
 
 Verification tasks recorded in the plans (not decisions): RDS Proxy pinning (20 V-1); MCP token lifetimes and `skip_consent` behaviour (20 V-4, V-8); AWS S3 through the registry's storage record, which today only accepts `provider: 'r2'` and static keys (20 V-7); whether `/api/widget/kb-ask` respects private-portal/help-center audience rules (30); banner stream limiter sizing (60 N-11).

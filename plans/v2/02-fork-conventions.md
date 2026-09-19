@@ -11,6 +11,10 @@
   merges that are mechanical.
 - Upstream moves fast (~1,100 commits / 90 days at time of writing). Assume every upstream file we
   touch will conflict eventually. The goal is that each conflict is **small, obvious, and grep-able**.
+- **What we promise:** a *maintained, tested fork that can take upstream releases* — not conflict-free
+  upgrades (staff review, `03-staff-review.md`). Sidecar tables and fork modules still depend on upstream tables,
+  domain internals and a reserved upstream column; a clean Git merge is not proof of behavioural safety. Keeping
+  seam counts small is a goal, never a reason to skip an essential fix: add the seam.
 - **Upstream PRs are case by case** (D1). Default is fork-only. Currently: the 2FA-reset / force-sign-out
   target guard **is** offered upstream (D-A14); the custom-roles-on-REST/MCP fix and per-app inbound email
   are **not** — they are permanent fork patches.
@@ -70,9 +74,34 @@ runs under the same advisory lock the upstream step already holds.
 is behind target (`fleet/schema-state.ts:121`) and refuses targets beyond the image's own version
 (`fleet/migrator.ts:882`). A release that adds **only fork migrations** would therefore never reach
 tenant databases through it. Pooled deployments must run an explicit **`fork-migrate`** step after
-`fleet-migrator run`: a fork command that iterates every registered workspace and applies the fork
-lineage only (idempotent, same advisory lock). It is owned by the provisioner CLI
+`fleet-migrator run`: a fork command that iterates every registered workspace (active **and** suspended; see
+§3.3a) and applies the fork lineage **then catalogue reconciliation** (idempotent, same advisory lock). It is owned by the provisioner CLI
 (`20-control-tower.md`). Single-tenant deployments are unaffected (boot `runMigrations` covers them).
+
+### 3.3a Production rollout of the fork lineage (staff review F1)
+
+Adding a call to `runMigrations` is not sufficient on its own. Foundations must also deliver:
+
+1. **Image contents.** The upstream image copies only `packages/db/drizzle` to `/app/drizzle`
+   (`apps/web/Dockerfile:119`) and bundled scripts resolve SQL via `MIGRATIONS_FOLDER`
+   (`packages/db/src/schema-version.ts:44-52`). The fork adds a **fork-owned `apps/web/Dockerfile.fork`** layered on
+   the upstream image of the same commit (not a seam; upstream's Dockerfile is never edited): it adds
+   `/app/drizzle-fork`, sets `FORK_MIGRATIONS_FOLDER`, and ships the bundled fork CLIs (`fork-provision.mjs`, which
+   includes `fork-migrate`). The provisioner refuses to run if the folder's journal differs from the one compiled into
+   it; a CI image gate asserts both SQL folders and the CLIs are present (`20-control-tower.md` §4.4.1).
+2. **Catalogue reconciliation on fork-only releases.** New fork permission keys, Manager exclusions and role-template
+   changes live in code and reach a database only when `seedSystemData` runs (`packages/db/src/seed-system.ts:47`).
+   `fork-migrate` therefore runs **fork SQL, then `seedSystemData`**, for every tenant, on every release — not SQL only.
+3. **Fork schema floor.** The runtime floor (`apps/web/src/lib/server/fleet/schema-floor.ts`) checks only the upstream
+   ledger, so a workspace can pass it while missing fork tables. Add `FORK_MIN_SCHEMA_VERSION` checked against
+   `drizzle.__fork_migrations` on pool checkout, refusing that workspace (503, same semantics) when below the floor.
+   Shared seam **F-11** (first statement of `assertSchemaFloor`; `20-…` §4.4.3).
+4. **Suspended tenants.** `fork-migrate` includes suspended tenants where their database is reachable, and
+   resuming any tenant must first run `fork-migrate --workspace <key>` (fork SQL + catalogue) and verify both floors,
+   failing closed if either fails. The provisioner's `resume` command owns this.
+5. **Rehearsals before first production use:** a fork-only permission release; a suspended-then-resumed tenant;
+   partial failure mid-fleet (some tenants migrated); previous code running against the new fork schema
+   (expand-only discipline applies to fork migrations too).
 
 ### 3.4 Drift checking
 
@@ -107,7 +136,8 @@ A **seam** is any edit to an upstream-owned file. Rules:
 
 1. **Every seam is marked** with a comment `FORK-SEAM(<feature>): <one-line why>` on or directly above
    the changed lines (for JSON/Markdown files that can't carry comments, record it in the registry only).
-2. **Every seam is registered** in `plans/v2/SEAMS.md` (file, feature, what, how to re-apply) — the
+2. **Every seam is registered** in `plans/v2/SEAMS.md` — **the registry is authoritative** for seam IDs and counts,
+   and every seam has a named owner and a test that fails if the seam is lost on merge (file, feature, what, how to re-apply) — the
    merge checklist is `grep -rn "FORK-SEAM" apps packages` + that table.
 3. **Seams are one-liners where humanly possible:** a mount point (`<ForkSlot name="…" />`), a registry
    call, an import, an enum member. Logic lives in fork directories.
@@ -160,6 +190,15 @@ A **seam** is any edit to an upstream-owned file. Rules:
 5. Pooled rehearsal (staging): run the fleet migrator, then the workspace isolation probe
    (`apps/web/workspace-probe/`).
 6. Update `SEAMS.md` if a seam moved.
+7. **Semantic review, not just merge review** (staff review): for every upstream change touching a domain contract
+   the fork calls, a role resolver, an assignment writer, an auth flow or an FK target, review it even where no seam
+   conflicted — including seam call sites whose callees changed behaviour.
+8. After regenerating golden files, run the fork's **negative authorization tests and feature contract tests**; an
+   updated snapshot is not proof of safety.
+9. Rehearse both an **empty install** and an **upgrade of a populated fork database** (fork-only release,
+   old-code/new-schema, suspended tenant, failure recovery).
+10. Deployment gates: image contents, both migration ledgers at or above their floors, catalogue seeded, workspace
+    isolation probe green.
 
 ## 8. Principal references in fork tables
 
@@ -198,6 +237,7 @@ Foundations phase and every plan registers into fork-owned lists instead:
 | F-8 | `apps/web/src/lib/server/jobs/definitions.ts`                        | `...FORK_JOB_DEFINITIONS` spread at the end of `JOB_DEFINITIONS`                                        | `lib/server/fork/jobs/definitions.ts`                           |
 | F-9 | `apps/web/src/lib/server/audit/log.ts`                               | One fenced block of fork members in the `AuditEventType` union                                         | — (members live in the block; one per feature prefix)           |
 | F-10 | `apps/web/src/lib/server/policy/authz-matrix/classifications.ts`  | `...FORK_CLASSIFICATIONS` spread                                                                        | `lib/server/fork/authz/classifications.ts`                      |
+| F-11 | `apps/web/src/lib/server/fleet/schema-floor.ts`                      | Also check `FORK_MIN_SCHEMA_VERSION` against the fork ledger (§3.3a)                                     | `packages/db/src/fork/schema-version.ts`                        |
 
 Where a v2 plan's seam table lists a settings-nav entry, an MCP registration line, a Labs line or a
 catalogue edit, a scheduled job or audit event types, **that entry is satisfied by F-3/F-4/F-6/F-7/F-8/F-9/F-10** and is not an additional seam.
@@ -224,7 +264,9 @@ app's branding**, so setting it once in the app changes it everywhere (decision 
   fork token file, so they still shift with the app's palette and dark mode.
 - **Dark mode** follows the app's `themeMode` exactly as the portal does.
 - **Off-app surfaces** (the embeddable banner on customers' sites) receive the app's generated theme
-  variables with their payload and apply them inside their shadow root, so the embed matches the app too.
+  variables **and font configuration** with their payload and apply them inside their shadow root. The app's
+  `customCss` is **not** applied off-site (it targets portal DOM and could affect the host page); this is a
+  deliberate narrowing of the promise for the embed only (see `60-…`).
 - The Design-canvas prototype's hard-coded palette is illustrative only; implementation uses tokens.
 
 ## 12. Checklist for every fork PR
