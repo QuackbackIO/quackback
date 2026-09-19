@@ -12,13 +12,13 @@
 import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest'
 import type { ConversationId, PrincipalId } from '@quackback/ids'
 
-import { jobQueue } from '@quackback/db'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
   assistantPendingActions,
   assistantRuns,
   assistantToolCalls,
   conversations,
+  jobQueue,
   principal,
   and,
   eq,

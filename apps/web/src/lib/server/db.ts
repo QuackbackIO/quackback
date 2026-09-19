@@ -470,6 +470,10 @@ export {
   assistantRegressionCasesRelations,
   ASSISTANT_REGRESSION_EXPECTATIONS,
   ASSISTANT_REGRESSION_ORIGINS,
+  // The Postgres job queue's own table. Read directly by the Quinn recovery
+  // sweeps, which ask whether a run or an approved action still has a
+  // claimable job behind it.
+  jobQueue,
   // Schema tables - derived passage index (QUINN-PRODUCT P5)
   assistantKnowledgeSources,
   assistantSourceVersions,
@@ -590,6 +594,11 @@ export type {
   MacroPriority,
   MacroSnoozePreset,
   MacroAction,
+} from '@quackback/db'
+export type {
+  AssistantRegressionCase,
+  AssistantRegressionExpectation,
+  AssistantRegressionOrigin,
 } from '@quackback/db'
 export type { ServiceMetadata } from '@quackback/db'
 export type { IdentityProviderClaimMapping, ClaimRoleMapping } from '@quackback/db'

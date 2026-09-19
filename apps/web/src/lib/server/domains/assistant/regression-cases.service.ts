@@ -13,9 +13,8 @@
  * index is the guarantee, and the lost race is collected by catching it, which
  * is the shape Step 7 established for the capture key.
  */
-import { db, desc, eq } from '@/lib/server/db'
-import { assistantRegressionCases } from '@/lib/server/db'
-import type { AssistantRegressionCase, AssistantRegressionExpectation } from '@quackback/db'
+import { db, desc, eq, assistantRegressionCases } from '@/lib/server/db'
+import type { AssistantRegressionCase, AssistantRegressionExpectation } from '@/lib/server/db'
 import type {
   AssistantRegressionCaseId,
   AssistantRunId,
