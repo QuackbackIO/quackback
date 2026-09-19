@@ -30,6 +30,7 @@ import {
   type SeededConversation,
 } from './seed'
 import { gradeStructural, type TurnCapture } from './grade'
+import type { AssistantRuntimeConfig } from '@/lib/server/domains/assistant/assistant.runtime'
 import { judgeSingle, judgeContrast } from './judge'
 import {
   surfaceForRole,
@@ -40,6 +41,27 @@ import {
   type ToolsetScenario,
   type TurnScenario,
 } from '../types'
+
+/**
+ * Run a suite against an EXACT candidate rather than against whatever the
+ * settings row resolves to (QUINN-PRODUCT P7).
+ *
+ * A turn scenario carries it as the runtime's configuration override, so the
+ * model sees the candidate's identity, voice and knowledge map; a toolset
+ * scenario assembles from the same configuration. The scenario's own
+ * `config` still seeds fixtures (connectors, skills, articles) because those
+ * are the world the candidate runs in, not part of the candidate itself.
+ */
+export interface CandidateTarget {
+  /** A release candidate's frozen configuration, and the revision it came from. */
+  runtimeConfig: AssistantRuntimeConfig
+  /** The candidate hash a stored result is bound to. */
+  candidateHash: string
+}
+
+export interface RunOptions {
+  candidate?: CandidateTarget
+}
 
 export interface RunOutcome {
   failures: string[]
@@ -74,7 +96,8 @@ async function buildTurnInput(
   role: AssistantRole,
   assistantPrincipalId: PrincipalId,
   conversation: SeededConversation | undefined,
-  teammate: SlackMember | undefined
+  teammate: SlackMember | undefined,
+  candidate: CandidateTarget | undefined
 ): Promise<AssistantTurnInput> {
   const surface = surfaceForRole(scenario, role)
   const messages = threadFor(scenario)
@@ -84,12 +107,14 @@ async function buildTurnInput(
     conversationId: conversation?.conversationId ?? null,
     involvementId: conversation?.involvementId ?? null,
     latestCustomerMessageId: conversation?.latestCustomerMessageId ?? null,
+    runtimeConfigOverride: candidate?.runtimeConfig,
   }
   if (role === 'workspace_assistant') {
     if (!teammate) throw new Error('workspace_assistant scenarios need a seeded teammate')
     return {
       assistantPrincipalId,
       db: testDb,
+      runtimeConfigOverride: candidate?.runtimeConfig,
       role,
       // Same on-behalf-of shape the Slack handler builds for a linked member.
       actor: await slackMemberActor(teammate),
@@ -147,7 +172,11 @@ function captureFrom(
 }
 
 /** One turn attempt: seed, run, capture, grade, judge. */
-async function runTurnOnce(scenario: TurnScenario, role: AssistantRole): Promise<RunOutcome> {
+async function runTurnOnce(
+  scenario: TurnScenario,
+  role: AssistantRole,
+  options: RunOptions = {}
+): Promise<RunOutcome> {
   let seeded
   let teammate: SlackMember | undefined
   try {
@@ -167,7 +196,8 @@ async function runTurnOnce(scenario: TurnScenario, role: AssistantRole): Promise
       role,
       seeded.assistantPrincipalId,
       seeded.conversation,
-      teammate
+      teammate,
+      options.candidate
     )
     result = await runAssistantTurn({
       ...input,
@@ -216,14 +246,15 @@ async function runTurnOnce(scenario: TurnScenario, role: AssistantRole): Promise
 /** Turn scenario with repeats + stability threshold (§7.3 #8). */
 export async function runTurnScenario(
   scenario: TurnScenario,
-  role: AssistantRole
+  role: AssistantRole,
+  options: RunOptions = {}
 ): Promise<RunOutcome> {
   const repeats = scenario.repeats ?? 1
-  if (repeats === 1) return runTurnOnce(scenario, role)
+  if (repeats === 1) return runTurnOnce(scenario, role, options)
 
   const threshold = scenario.stabilityThreshold ?? 1
   const runs: RunOutcome[] = []
-  for (let i = 0; i < repeats; i++) runs.push(await runTurnOnce(scenario, role))
+  for (let i = 0; i < repeats; i++) runs.push(await runTurnOnce(scenario, role, options))
 
   const errored = runs.some((r) => r.errored)
   const passes = runs.filter((r) => r.failures.length === 0).length
@@ -249,7 +280,8 @@ export async function runTurnScenario(
 /** Toolset scenario: assert on the assembled tool set, no model call. */
 export async function runToolsetScenario(
   scenario: ToolsetScenario,
-  role: AssistantRole
+  role: AssistantRole,
+  options: RunOptions = {}
 ): Promise<RunOutcome> {
   let seeded
   try {
@@ -273,7 +305,8 @@ export async function runToolsetScenario(
     // turn's enabled retrieval sources + status flag.
     knowledge: resolveAssistantKnowledgeSnapshot(
       roleToAgent(role),
-      buildScenarioAssistantConfig(scenario.config ?? {}),
+      options.candidate?.runtimeConfig.config ??
+        buildScenarioAssistantConfig(scenario.config ?? {}),
       audience
     ),
     // Mirror the runtime's own selection: simulate forces 'simulate', else the
@@ -291,7 +324,7 @@ export async function runToolsetScenario(
   const failures = gradeStructural(scenario.structural, { kind: 'toolset', toolNames })
   return {
     failures,
-    detail: { toolNames, role },
+    detail: { toolNames, role, candidateHash: options.candidate?.candidateHash },
     errored: false,
   }
 }
@@ -337,8 +370,12 @@ export async function runContrastScenario(
   }
 }
 
-export async function runScenario(scenario: Scenario, role: AssistantRole): Promise<RunOutcome> {
-  if (scenario.kind === 'toolset') return runToolsetScenario(scenario, role)
+export async function runScenario(
+  scenario: Scenario,
+  role: AssistantRole,
+  options: RunOptions = {}
+): Promise<RunOutcome> {
+  if (scenario.kind === 'toolset') return runToolsetScenario(scenario, role, options)
   if (scenario.kind === 'contrast') return runContrastScenario(scenario, role)
-  return runTurnScenario(scenario, role)
+  return runTurnScenario(scenario, role, options)
 }
