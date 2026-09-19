@@ -18,8 +18,8 @@ import { boards, postTags } from './boards'
 import { postStatuses } from './statuses'
 import { postExternalLinks } from './external-links'
 import { principal } from './auth'
-import { MODERATION_STATES } from '../types'
-import type { CustomFieldValues, TiptapContent } from '../types'
+import { MODERATION_STATES, POST_AUDIENCES } from '../types'
+import type { CustomFieldValues, PostCaptureProvenance, TiptapContent } from '../types'
 
 // Custom tsvector type for full-text search
 const tsvector = customType<{ data: string }>({
@@ -93,6 +93,18 @@ export const posts = pgTable(
     })
       .default('published')
       .notNull(),
+    // Audience: the second privacy axis, independent of moderation. 'board'
+    // delegates to the board's access matrix, which is what every pre-existing
+    // row means. 'internal' is team-only evidence, denied to every actor
+    // without the private-post capability including the attributed author.
+    audience: text('audience', { enum: POST_AUDIENCES }).default('board').notNull(),
+    // The logical identity of the capture that created this post, when one
+    // did: the assistant receipt's own action key. The partial unique index
+    // below is what makes a replayed capture resolve to this row rather than
+    // write a second post.
+    captureKey: text('capture_key'),
+    // What captured this post and from where. See PostCaptureProvenance.
+    captureProvenance: jsonb('capture_provenance').$type<PostCaptureProvenance>(),
     // Key-value metadata attached by the widget SDK
     widgetMetadata: jsonb('widget_metadata').$type<Record<string, string>>(),
     // Validated answers to the board's configured custom fields
@@ -181,9 +193,19 @@ export const posts = pgTable(
     index('posts_eta_idx')
       .on(table.eta)
       .where(sql`"eta" IS NOT NULL`),
+    // A capture key identifies one logical capture; the unique index is what
+    // stops a replayed capture writing a second post.
+    uniqueIndex('posts_capture_key_uidx')
+      .on(table.captureKey)
+      .where(sql`"capture_key" IS NOT NULL`),
+    // Internal posts are a small minority and are listed on their own.
+    index('posts_internal_audience_idx')
+      .on(table.createdAt)
+      .where(sql`"audience" <> 'board'`),
     // CHECK constraints to ensure counts are never negative
     check('vote_count_non_negative', sql`vote_count >= 0`),
     check('comment_count_non_negative', sql`comment_count >= 0`),
+    check('posts_audience_check', sql`audience IN ('board', 'internal')`),
   ]
 )
 

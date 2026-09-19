@@ -76,6 +76,35 @@ export const MODERATION_STATES = [
 ] as const
 export type ModerationState = (typeof MODERATION_STATES)[number]
 
+// Post audience — the second, independent privacy axis, kept in sync with the
+// posts.audience column CHECK (schema.test.ts pins the match). Moderation says
+// whether a post has cleared review; audience says who the post is for at all.
+// 'board' delegates to the board's own access matrix (the pre-existing
+// behaviour of every row); 'internal' is team-only evidence, denied to every
+// actor without the private-post capability including the attributed author.
+export const POST_AUDIENCES = ['board', 'internal'] as const
+export type PostAudience = (typeof POST_AUDIENCES)[number]
+
+/**
+ * How a post came to exist, when something other than a plain submission
+ * created it. Small on purpose: the customer is `principal_id` and the
+ * capturing teammate or assistant is `tracked_by_principal_id`, so this only
+ * carries what those two cannot say.
+ */
+export interface PostCaptureProvenance {
+  /** 'assistant' when Quinn captured it, 'agent' when a teammate did. */
+  kind: 'assistant' | 'agent'
+  /** The conversation the feedback was captured from. */
+  conversationId?: string
+  /** The involvement the capture belonged to, when there was one. */
+  involvementId?: string
+  /** The durable assistant run that captured it. */
+  runId?: string
+  /** The tool receipt whose action key is this post's `capture_key`. */
+  toolCallId?: string
+  capturedAt: string
+}
+
 // Board types
 export type Board = InferSelectModel<typeof boards>
 export type NewBoard = InferInsertModel<typeof boards>

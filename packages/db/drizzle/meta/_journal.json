@@ -1870,6 +1870,13 @@
       "when": 1789747200005,
       "tag": "0289_quinn_replayable_actions",
       "breakpoints": true
+    },
+    {
+      "idx": 267,
+      "version": "7",
+      "when": 1789747200006,
+      "tag": "0290_quinn_internal_feedback",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,41 @@
+-- @contract: additive
+-- Internal feedback capture: post audience, capture identity and provenance
+-- (QUINN-PRODUCT Step 7).
+--
+-- Expand-only and replay-safe: every statement is ADD COLUMN IF NOT EXISTS or
+-- CREATE INDEX IF NOT EXISTS, so a second run against a database that already
+-- carries the effect changes nothing. The audience CHECK rides inline on the
+-- column, named, because a bare ADD CONSTRAINT errors on a second run; when the
+-- column is already there the whole statement is skipped and the constraint
+-- with it.
+--
+-- No backfill. `audience` defaults to 'board', which is exactly what every
+-- existing row already means: privacy today is moderation_state composed with
+-- board access, and this column adds a second, independent axis rather than
+-- reinterpreting the first. Only the new capture path writes 'internal'.
+
+-- The audience axis. 'board' delegates to the board's own access matrix and is
+-- the pre-existing behaviour for every row. 'internal' is team-only evidence:
+-- it is denied to every actor without the private-post capability, including
+-- the customer the post is attributed to.
+ALTER TABLE "posts" ADD COLUMN IF NOT EXISTS "audience" text DEFAULT 'board' NOT NULL CONSTRAINT "posts_audience_check" CHECK ("audience" IN ('board', 'internal'));
+--> statement-breakpoint
+-- The stable logical identity of the capture that created this post. It is the
+-- assistant receipt's own action key (parent, engagement, tool, argument
+-- digest) when Quinn captured it, so a replayed turn resolves to this row
+-- instead of writing a second post. The unique index is the guarantee; the
+-- lookup before the insert is only the fast path.
+ALTER TABLE "posts" ADD COLUMN IF NOT EXISTS "capture_key" text;
+--> statement-breakpoint
+-- Who captured this post and from what, kept small: the capture kind, the
+-- conversation it came from, and the run/receipt references that explain it
+-- after the turn is long finished. The customer stays `principal_id` and the
+-- capturing teammate or assistant stays `tracked_by_principal_id`; this column
+-- adds only what those two cannot say.
+ALTER TABLE "posts" ADD COLUMN IF NOT EXISTS "capture_provenance" jsonb;
+--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "posts_capture_key_uidx" ON "posts" ("capture_key") WHERE "capture_key" IS NOT NULL;
+--> statement-breakpoint
+-- Internal posts are a small minority and are listed on their own, so the
+-- index only covers them.
+CREATE INDEX IF NOT EXISTS "posts_internal_audience_idx" ON "posts" ("created_at") WHERE "audience" <> 'board';
