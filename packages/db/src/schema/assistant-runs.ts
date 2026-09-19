@@ -202,6 +202,10 @@ export const assistantRuns = pgTable(
       .on(t.conversationId)
       .where(sql`${t.status} IN ('running', 'waiting_action') AND ${t.conversationId} IS NOT NULL`),
     index('assistant_runs_conversation_created_idx').on(t.conversationId, t.createdAt),
+    // Leads on created_at, which the composite above cannot serve: the Improve
+    // page scans a date range across every run, and the retention pass deletes
+    // by age (QUINN-PRODUCT P8).
+    index('assistant_runs_created_at_idx').on(t.createdAt),
     // The recovery sweep's scan: non-terminal runs, oldest first.
     index('assistant_runs_open_idx')
       .on(t.updatedAt)
@@ -258,6 +262,8 @@ export const assistantRunSteps = pgTable(
   (t) => [
     uniqueIndex('assistant_run_steps_identity_idx').on(t.runId, t.stepKey, t.attemptNumber),
     index('assistant_run_steps_run_idx').on(t.runId),
+    // The retention sweep's own scan: steps past the window, by age.
+    index('assistant_run_steps_started_at_idx').on(t.startedAt),
   ]
 )
 
@@ -290,6 +296,8 @@ export const assistantRunEvidence = pgTable(
   (t) => [
     index('assistant_run_evidence_run_idx').on(t.runId, t.attemptNumber),
     index('assistant_run_evidence_source_idx').on(t.sourceType, t.sourceId),
+    // The retention sweep's own scan: evidence past the window, by age.
+    index('assistant_run_evidence_created_at_idx').on(t.createdAt),
   ]
 )
 
