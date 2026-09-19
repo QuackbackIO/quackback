@@ -22,6 +22,7 @@ import {
   saveGuidanceEntryFn,
   deleteGuidanceEntryFn,
 } from '@/lib/server/functions/assistant-guidance-entries'
+import { updateAssistantEmailChannelFn } from '@/lib/server/functions/assistant-channels'
 import type { GuidanceEntrySaveInput } from '@/lib/shared/assistant/guidance-entry'
 import {
   publishAssistantReleaseFn,
@@ -173,6 +174,16 @@ export function useUpdateAssistantCopilotCapabilities() {
     mutationFn: (data: Parameters<typeof updateAssistantCopilotCapabilitiesFn>[0]['data']) =>
       updateAssistantCopilotCapabilitiesFn({ data }),
     onSuccess: (result) => setAssistantConfig(queryClient, result),
+  })
+}
+
+export function useUpdateAssistantEmailChannel() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (enabled: boolean) => updateAssistantEmailChannelFn({ data: { enabled } }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: assistantKeys.emailChannel() })
+    },
   })
 }
 

@@ -94,7 +94,7 @@ export interface RequestAssistantTurnInput {
   conversationId: ConversationId
   triggerKey: string
   triggerKind: 'customer_message' | 'workflow_delegation' | 'agent_handback'
-  surface: 'widget' | 'workflow_step'
+  surface: 'widget' | 'email' | 'workflow_step'
   triggerMessageId?: ConversationMessageId | null
   delegation?: { workflowRunId: string; nodeId: string; waitSeq: number } | null
   requestedByPrincipalId?: PrincipalId | null
@@ -389,6 +389,11 @@ export async function commitAssistantOutcome(
     throw new Error('assistant handoff requires an involvement')
   }
 
+  // An answer on a channel the customer does not have open has to be carried
+  // to them (P9). The pending record is written with the message, in this
+  // transaction, so a delivery is always something a person can see the state
+  // of rather than a job that may or may not exist.
+  const deliversByEmail = run.surface === 'email'
   const { appendAssistantReplyTx } =
     await import('@/lib/server/domains/conversation/conversation.service')
   const publication = await appendAssistantReplyTx(
@@ -402,9 +407,34 @@ export async function commitAssistantOutcome(
       assistantRunId: run.id,
       metadata: {
         assistantResponseKind: input.candidate.handoff ? 'handoff' : input.candidate.responseKind,
+        ...(deliversByEmail
+          ? {
+              channelDelivery: {
+                channel: 'email' as const,
+                status: 'pending' as const,
+                at: new Date().toISOString(),
+              },
+            }
+          : {}),
       },
     }
   )
+  if (deliversByEmail) {
+    const { enqueueJob } = await import('@/lib/server/jobs/job-queue')
+    const { ASSISTANT_EMAIL_DELIVERY_QUEUE, assistantEmailDeliveryDedupeKey } =
+      await import('@/lib/server/domains/conversation/assistant-email-delivery')
+    await enqueueJob({
+      queue: ASSISTANT_EMAIL_DELIVERY_QUEUE,
+      payload: {
+        messageId: publication.message.id,
+        conversationId: input.conversationId,
+        agentName: input.author.displayName ?? 'Quinn',
+      },
+      dedupeKey: assistantEmailDeliveryDedupeKey(publication.message.id),
+      maxAttempts: 5,
+      executor: tx,
+    })
+  }
 
   // Involvement transitions ride the same transaction as the message, so an
   // answer and its answer clock can never disagree after a crash.

@@ -77,8 +77,16 @@ export const ASSISTANT_RUN_TRIGGER_KINDS = [
   'agent_handback',
 ] as const
 
-/** The product surface the run serves. */
-export const ASSISTANT_RUN_SURFACES = ['widget', 'workflow_step'] as const
+/**
+ * The product surface the run serves.
+ *
+ * `email` is a customer-facing turn on the support email channel, which only
+ * exists once the workspace enables that channel for Quinn and the
+ * conversation passes its eligibility rules (QUINN-PRODUCT P9). The column is
+ * plain text with no CHECK, deliberately: the vocabulary is a TypeScript fact
+ * and a new member must not need a constraint swap that cannot replay.
+ */
+export const ASSISTANT_RUN_SURFACES = ['widget', 'email', 'workflow_step'] as const
 
 export type AssistantRunStatus = (typeof ASSISTANT_RUN_STATUSES)[number]
 export type AssistantRunPhase = (typeof ASSISTANT_RUN_PHASES)[number]

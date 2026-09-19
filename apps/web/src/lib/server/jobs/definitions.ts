@@ -291,6 +291,27 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       ),
   },
   {
+    // Carries one committed Quinn answer out over the email channel
+    // (QUINN-PRODUCT P9). Separate from the turn because the transcript
+    // message is already durable when this runs: a provider outage delays a
+    // delivery rather than losing an answer. Retrying is safe because the
+    // worker reads the message's own delivery record first and re-checks the
+    // channel rules, so a second attempt either sends the one unsent reply or
+    // records why it must not.
+    name: 'assistant-email-delivery',
+    workload: 'interactive',
+    concurrency: 2,
+    maxAttempts: 5,
+    retryBackoffMs: 30_000,
+    leaseMs: 60_000,
+    retentionMs: DAY_MS,
+    failedRetentionMs: 14 * DAY_MS,
+    handler: () =>
+      import('@/lib/server/domains/conversation/assistant-email-delivery-queue').then(
+        (m) => m.deliverAssistantEmail
+      ),
+  },
+  {
     // Builds the derived passage index (QUINN-PRODUCT P5). Background work at
     // concurrency 1 so a large help centre being indexed cannot compete with
     // interactive turns for the process or the embedding provider. Retries are

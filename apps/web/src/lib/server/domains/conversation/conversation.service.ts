@@ -563,18 +563,18 @@ export async function sendVisitorMessage(
     // the customer's message is the commit that makes the work claimable.
     let durableRunId: string | null = null
     if (assistantExecutionMode() === 'durable') {
-      const consider = shouldConsiderAssistant(updated, priorStatus)
+      const surface = await assistantTurnSurfaceFor(updated, priorStatus, tx)
       // The pair probe moves inside the transaction in durable mode: a gate
       // evaluated after the commit cannot take part in it.
-      const paired = consider ? await isPairedWithCustomerTicket(conversation.id, tx) : false
+      const paired = surface ? await isPairedWithCustomerTicket(conversation.id, tx) : false
       const { requestAssistantTurn, invalidateAssistantWork, customerMessageTriggerKey } =
         await import('@/lib/server/domains/assistant/assistant-run.service')
-      if (consider && !paired) {
+      if (surface && !paired) {
         const requested = await requestAssistantTurn(tx, {
           conversationId: conversation.id,
           triggerKey: customerMessageTriggerKey(conversation.id, message.id),
           triggerKind: 'customer_message',
-          surface: 'widget',
+          surface,
           triggerMessageId: message.id,
           requestedByPrincipalId: author.principalId,
         })
@@ -2249,9 +2249,15 @@ function assistantActor(principalId: PrincipalId): Actor {
 }
 
 /**
- * Cheap synchronous gate before spending on an assistant turn: only the widget
- * channel triggers Quinn today (email + other sources join later phases), and a
- * thread a human deliberately closed must not summon Quinn on the reopen.
+ * Cheap synchronous gate before spending on an assistant turn: the widget
+ * channel always triggers Quinn, and a thread a human deliberately closed must
+ * not summon Quinn on the reopen.
+ *
+ * Every other source is refused here. A source becomes autonomous only through
+ * `assistantChannelEligibility` (QUINN-PRODUCT P9), which is async because it
+ * reads the workspace's channel switch and the thread, so it cannot live in
+ * this sync gate: the dispatch site asks it for anything this function turns
+ * down. Naming a surface is deliberately not enough.
  *
  * CONVERGENCE PHASE 1b: a conversation PAIRED with a customer ticket (a
  * "backing conversation") is additionally gated out at the dispatch site via
@@ -2267,6 +2273,27 @@ export function shouldConsiderAssistant(
   if (conversation.source !== 'widget') return false
   if (priorStatus === 'closed') return false
   return true
+}
+
+/**
+ * The full intake gate: the sync one above, or an explicit channel rule.
+ *
+ * Returns the surface the run should be recorded under, or null. The surface
+ * is an OUTPUT of the decision rather than an input to it, which is the point:
+ * an email run is labelled `email` because the email rules passed, never the
+ * other way round.
+ */
+export async function assistantTurnSurfaceFor(
+  conversation: Conversation,
+  priorStatus: ConversationStatus | null,
+  exec: Database | Transaction = db
+): Promise<'widget' | 'email' | null> {
+  if (priorStatus === 'closed') return null
+  if (shouldConsiderAssistant(conversation, priorStatus)) return 'widget'
+  const { assistantChannelEligibility } = await import('./assistant-channel-eligibility')
+  const verdict = await assistantChannelEligibility(conversation, exec)
+  if (!verdict.eligible) return null
+  return 'email'
 }
 
 /**

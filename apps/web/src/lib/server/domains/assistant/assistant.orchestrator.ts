@@ -128,7 +128,7 @@ export type AssistantTurnEligibility = 'eligible' | 'declined'
  */
 export async function previewAssistantTurnForConversation(
   conversationId: ConversationId,
-  opts?: { surface?: 'widget' | 'workflow_step' }
+  opts?: { surface?: 'widget' | 'email' | 'workflow_step' }
 ): Promise<AssistantTurnEligibility> {
   if (!isAssistantConfigured()) return 'declined'
   try {
@@ -187,7 +187,7 @@ export interface PreparedAssistantTurn {
  */
 export async function prepareAssistantTurn(
   conversationId: ConversationId,
-  opts?: { surface?: 'widget' | 'workflow_step' }
+  opts?: { surface?: 'widget' | 'email' | 'workflow_step' }
 ): Promise<PreparedAssistantTurn | null> {
   if (!isAssistantConfigured()) return null
 
@@ -302,7 +302,7 @@ export async function generateAssistantCandidate(
   conversationId: ConversationId,
   prepared: PreparedAssistantTurn,
   opts?: {
-    surface?: 'widget' | 'workflow_step'
+    surface?: 'widget' | 'email' | 'workflow_step'
     stepInstructions?: string | null
     signal?: AbortSignal
     /** The durable run this generation belongs to, stamped on its receipts and proposals. */
@@ -340,7 +340,7 @@ export async function generateAssistantCandidate(
 export async function runAssistantTurnForConversation(
   conversationId: ConversationId,
   opts?: {
-    surface?: 'widget' | 'workflow_step'
+    surface?: 'widget' | 'email' | 'workflow_step'
     stepInstructions?: string | null
   }
 ): Promise<void> {

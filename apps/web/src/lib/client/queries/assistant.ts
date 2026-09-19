@@ -7,6 +7,7 @@ import {
 import { getGuidanceRuleStatsFn } from '@/lib/server/functions/assistant-guidance-stats'
 import { listGuidanceEntriesFn } from '@/lib/server/functions/assistant-guidance-entries'
 import { getAssistantReleaseStateFn } from '@/lib/server/functions/assistant-releases'
+import { getAssistantEmailChannelFn } from '@/lib/server/functions/assistant-channels'
 
 const STALE_TIME = 30 * 1000
 // The tool catalogue is static, so it can sit stale far longer than settings
@@ -20,6 +21,7 @@ export const assistantKeys = {
   guidanceRuleStats: () => ['assistant', 'guidanceRuleStats'] as const,
   tools: () => ['assistant', 'tools'] as const,
   releaseState: () => ['assistant', 'releaseState'] as const,
+  emailChannel: () => ['assistant', 'emailChannel'] as const,
 }
 
 /** AI agent settings, guidance, and action-catalogue queries. */
@@ -70,5 +72,12 @@ export const assistantQueries = {
       queryKey: assistantKeys.releaseState(),
       queryFn: getAssistantReleaseStateFn,
       staleTime: 0,
+    }),
+
+  emailChannel: () =>
+    queryOptions({
+      queryKey: assistantKeys.emailChannel(),
+      queryFn: getAssistantEmailChannelFn,
+      staleTime: STALE_TIME,
     }),
 }

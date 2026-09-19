@@ -10,6 +10,7 @@ import { CopilotDeploymentCard } from '@/components/admin/automation/copilot-dep
 import { AssistantIdentityCard } from '@/components/admin/automation/assistant-identity-card'
 import { AssistantVoiceCard } from '@/components/admin/automation/assistant-basics-card'
 import { WhoRepliesFirstCard } from '@/components/admin/automation/who-replies-first-card'
+import { QuinnEmailChannelCard } from '@/components/admin/automation/quinn-email-channel-card'
 import { QuinnReleaseCard } from '@/components/admin/automation/quinn-release-card'
 import { QuinnSettingsPage } from '@/components/admin/automation/quinn-settings-page'
 import { DefaultErrorPage } from '@/components/shared/error-page'
@@ -69,16 +70,7 @@ function DeployPage() {
                   : null
           }
         />
-        <div className="rounded-xl border border-border/50 bg-card p-4 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-medium">Email</h3>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Team replies stay in the same conversation. Automatic Quinn replies need their own
-              rollout.
-            </p>
-          </div>
-          <Badge variant="outline">Not available yet</Badge>
-        </div>
+        <QuinnEmailChannelCard />
         <WhoRepliesFirstCard />
       </section>
       <section className="space-y-3">
@@ -107,8 +99,7 @@ function DeployPage() {
       <section className="rounded-xl border border-border/50 bg-card p-4 space-y-2">
         <h2 className="text-sm font-medium">Channels and appearance</h2>
         <p className="text-xs text-muted-foreground">
-          Contact capture, follow-up and closure are configured in channel settings. Automatic
-          customer replies currently run in Messenger.
+          Contact capture, follow-up and closure are configured in channel settings.
         </p>
         <div className="flex flex-wrap gap-4 text-sm text-primary">
           {(permissions ?? []).includes(PERMISSIONS.SETTINGS_MANAGE) && (

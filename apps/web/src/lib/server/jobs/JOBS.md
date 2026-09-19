@@ -365,6 +365,7 @@ went stale the moment a queue moved.
 | `conversation-inactivity-continuation` | —              | 1           | 3        | 60s   |
 | `assistant-turn`                       | —              | 2           | 1        | 180s  |
 | `assistant-action`                     | —              | 2           | 3        | 120s  |
+| `assistant-email-delivery`             | —              | 2           | 5        | 60s   |
 | `assistant-knowledge-index`            | `15 3 * * *`   | 1           | 3        | 120s  |
 | `snooze-sweep`                         | `* * * * *`    | 1           | 3        | 60s   |
 | `workflow-sweep`                       | `*/5 * * * *`  | 1           | 3        | 60s   |
@@ -464,7 +465,8 @@ Three things follow from a class, and all three are inert by default:
   `JOB_INTERACTIVE_CONCURRENCY`, `JOB_INGESTION_CONCURRENCY` and
   `JOB_EVALUATION_CONCURRENCY`.
 
-`assistant-turn` and `assistant-action` are interactive;
+`assistant-turn`, `assistant-action` and `assistant-email-delivery` are
+interactive;
 `assistant-knowledge-index` is ingestion. The `evaluation` class is declared and
 carried by no queue today, because the evaluation suites run out of process; it
 is here so a suite that does move onto the queue is budgeted from its first line
