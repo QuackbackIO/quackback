@@ -1,4 +1,5 @@
 import { QuinnReviewQueue } from '@/components/admin/automation/quinn-review-queue'
+import { QuinnUnconfirmedSignal } from '@/components/admin/automation/quinn-unconfirmed-signal'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { BookOpenIcon, ChatBubbleLeftRightIcon, LinkIcon } from '@heroicons/react/24/solid'
@@ -55,7 +56,10 @@ function QuinnOverview() {
         />
       </div>
       {(permissions ?? []).includes(PERMISSIONS.CONVERSATION_VIEW) && (
-        <QuinnReviewQueue title="Needs attention" limit={5} />
+        <>
+          <QuinnUnconfirmedSignal />
+          <QuinnReviewQueue title="Needs attention" limit={5} />
+        </>
       )}
       <section className="space-y-3">
         <h2 className="text-sm font-medium">What Quinn works from</h2>

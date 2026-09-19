@@ -8,6 +8,7 @@ import { Link } from '@tanstack/react-router'
 import { usePermission } from '@/lib/client/hooks/use-permission'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { QuinnKnowledgeSources } from './quinn-knowledge-sources'
+import { QuinnArticleHealth } from './quinn-article-health'
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useIntl } from 'react-intl'
@@ -419,6 +420,7 @@ export function QuinnKnowledgeCard() {
               <p className="mt-1 text-xs text-muted-foreground">
                 {SOURCE_META[source].description}
               </p>
+              {source === 'helpCenter' && <QuinnArticleHealth />}
               {source === 'helpCenter' && canManageArticles && (
                 <Link
                   to="/admin/help-center"

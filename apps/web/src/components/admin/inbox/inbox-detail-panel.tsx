@@ -73,6 +73,8 @@ import { MENU_LABEL } from '@/components/ui/menu'
 import { DetailRow as Row, formatDate } from '@/components/shared/detail-row'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
+import { QuinnRunInspector } from './quinn-run-inspector'
+import { QuinnAnswerCorrection } from './quinn-answer-correction'
 
 const RESOLVED_META = {
   label: 'Resolved',
@@ -857,6 +859,16 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
                 ))}
               </div>
             )}
+            {/* Run inspection (QUINN-PRODUCT P8): the durable record of each
+                turn, read through the same visibility as this conversation.
+                Renders nothing at all when there is no run to inspect. */}
+            {conversation && (
+              <div className="space-y-1">
+                <p className="text-[11px] text-muted-foreground">Runs</p>
+                <QuinnRunInspector conversationId={conversation.id} />
+              </div>
+            )}
+            {conversation && <QuinnAnswerCorrection conversationId={conversation.id} />}
           </div>
         )}
       </div>

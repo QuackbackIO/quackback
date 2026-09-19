@@ -3,6 +3,9 @@ import { Link } from '@tanstack/react-router'
 import { getQuinnReviewQueueFn } from '@/lib/server/functions/assistant-review'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { useHasPermission } from '@/lib/client/use-permissions'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import { QuinnGuidanceDraftDialog } from './quinn-guidance-draft-dialog'
 
 export function QuinnReviewQueue({
   kind = 'review',
@@ -15,6 +18,10 @@ export function QuinnReviewQueue({
   limit?: number
   title?: string
 }) {
+  // The improvement loop's authoring half is only offered to somebody who could
+  // actually act on it: writing guidance is assistant.manage, and a reviewer
+  // without it sees the row exactly as before.
+  const canWriteGuidance = useHasPermission(PERMISSIONS.ASSISTANT_MANAGE)
   const query = useQuery({
     queryKey: ['assistant', 'reviewQueue', kind, days, limit],
     queryFn: () => getQuinnReviewQueueFn({ data: { kind, days, limit } }),
@@ -59,6 +66,9 @@ export function QuinnReviewQueue({
               </p>
             </div>
             <Badge variant="outline">{row.reason}</Badge>
+            {kind === 'review' && canWriteGuidance && (
+              <QuinnGuidanceDraftDialog conversationId={row.id} subject={row.subject} />
+            )}
             <Link
               to="/admin/inbox"
               search={{ i: row.id }}

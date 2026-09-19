@@ -8,6 +8,7 @@ import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { CopilotUsageCard } from '@/components/admin/automation/copilot-usage-card'
 import { QuinnPerformanceCard } from '@/components/admin/automation/quinn-performance-card'
+import { QuinnOperationsCard } from '@/components/admin/automation/quinn-operations-card'
 import { QuinnToolsCard } from '@/components/admin/automation/quinn-tools-card'
 import { SupportPerformanceCard } from '@/components/admin/automation/support-performance-card'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
@@ -66,6 +67,7 @@ function AutomationPerformancePage() {
         </>
       )}
       <QuinnPerformanceCard />
+      <QuinnOperationsCard />
       <QuinnToolsCard />
       <CopilotUsageCard showActionsFunnel />
       <SupportPerformanceCard />
