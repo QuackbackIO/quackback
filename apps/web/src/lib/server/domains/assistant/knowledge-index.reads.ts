@@ -101,6 +101,93 @@ export async function listKnowledgeSourceHealth(
 }
 
 /**
+ * Help-center articles, summarized rather than listed (QUINN-PRODUCT P8).
+ *
+ * Articles are indexed and served from passages exactly as documents and web
+ * pages are, but the Knowledge page does not list them: they live on their own
+ * screens and there can be hundreds. So this answers the question that page can
+ * actually act on — is anything wrong, and which ones — and stays silent when
+ * nothing is.
+ *
+ * `total` counts the articles a workspace has, not the projection rows, so an
+ * article the projection has never seen is visible as one that is not indexed
+ * rather than absent from both numbers. The unhealthy list is bounded and
+ * carries titles, because an id is not something anybody can act on.
+ */
+export interface ArticleIndexHealthSummary {
+  /** Articles that exist, deleted ones excluded. */
+  total: number
+  /** Articles with a complete generation serving right now. */
+  serving: number
+  /** Articles the projection has never successfully indexed. */
+  notIndexed: number
+  /** Articles whose last refresh failed while an older generation keeps serving. */
+  staleAfterFailure: number
+  /** Articles indexed without vectors, so only keyword search reaches them. */
+  keywordOnly: number
+  /** The ones a person can do something about, newest first. */
+  unhealthy: Array<{
+    id: string
+    title: string
+    status: KnowledgeSourceHealth['status']
+    serving: boolean
+    degraded: string | null
+  }>
+}
+
+export async function getArticleIndexHealthSummary(
+  unhealthyLimit = 10,
+  exec: Executor = db
+): Promise<ArticleIndexHealthSummary> {
+  const rows = await exec
+    .select({
+      id: helpCenterArticles.id,
+      title: helpCenterArticles.title,
+      status: assistantKnowledgeSources.indexingStatus,
+      activeVersionId: assistantKnowledgeSources.activeVersionId,
+      degradedReason: assistantSourceVersions.degradedReason,
+    })
+    .from(helpCenterArticles)
+    .leftJoin(
+      assistantKnowledgeSources,
+      and(
+        eq(assistantKnowledgeSources.sourceType, 'article'),
+        eq(assistantKnowledgeSources.sourceId, helpCenterArticles.id),
+        isNull(assistantKnowledgeSources.tombstonedAt)
+      )
+    )
+    .leftJoin(
+      assistantSourceVersions,
+      eq(assistantSourceVersions.id, assistantKnowledgeSources.activeVersionId)
+    )
+    .where(isNull(helpCenterArticles.deletedAt))
+
+  const summary: ArticleIndexHealthSummary = {
+    total: rows.length,
+    serving: 0,
+    notIndexed: 0,
+    staleAfterFailure: 0,
+    keywordOnly: 0,
+    unhealthy: [],
+  }
+  for (const row of rows) {
+    const serving = row.activeVersionId !== null
+    const status = row.status ?? 'pending'
+    const degraded = row.degradedReason ?? null
+    if (serving) summary.serving += 1
+    if (status === 'failed' && serving) summary.staleAfterFailure += 1
+    else if (!serving) summary.notIndexed += 1
+    if (serving && degraded === 'embeddings_unavailable') summary.keywordOnly += 1
+
+    const healthy = serving && status === 'indexed' && degraded === null
+    if (!healthy && summary.unhealthy.length < unhealthyLimit) {
+      summary.unhealthy.push({ id: row.id, title: row.title, status, serving, degraded })
+    }
+  }
+  return summary
+}
+
+/**
  * One bounded page of sources the projection has never seen, oldest first.
  *
  * The backfill's read half, and the reason it needs no cursor: requesting an

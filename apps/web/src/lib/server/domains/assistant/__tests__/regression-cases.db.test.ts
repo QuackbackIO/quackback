@@ -6,7 +6,12 @@
  * it created, and graded structurally so a failure can say why.
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest'
-import type { ConversationId, ConversationMessageId, PrincipalId } from '@quackback/ids'
+import type {
+  AssistantRegressionCaseId,
+  ConversationId,
+  ConversationMessageId,
+  PrincipalId,
+} from '@quackback/ids'
 
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
@@ -51,13 +56,13 @@ async function seedConversation(): Promise<ConversationId> {
 async function seedMessage(conversationId: ConversationId): Promise<ConversationMessageId> {
   const [row] = await testDb
     .insert(conversationMessages)
-    .values({ conversationId, senderType: 'assistant', content: 'the wrong answer' })
+    .values([{ conversationId, senderType: 'agent', content: 'the wrong answer' }])
     .returning()
   return row.id
 }
 
 describe('gradeRegressionCase', () => {
-  const base = { id: 'case_1', title: 'Refunds' }
+  const base = { id: 'assistant_regression_case_1' as AssistantRegressionCaseId, title: 'Refunds' }
 
   it('passes an answer when the case only asks for one', () => {
     const verdict = gradeRegressionCase(

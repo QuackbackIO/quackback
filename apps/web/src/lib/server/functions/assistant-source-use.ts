@@ -6,6 +6,19 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { NotFoundError } from '@/lib/shared/errors'
 import { requireAuth } from './auth-helpers'
 
+/**
+ * The typeid prefix each indexed source type's rows carry.
+ *
+ * Restated here rather than imported from the domain module, which every other
+ * read in this file reaches through a dynamic import so the assistant domain
+ * stays out of anything this file is bundled into.
+ */
+const SOURCE_ID_PREFIX = {
+  article: 'article',
+  document: 'assistant_document',
+  webpage: 'assistant_web_source',
+} as const
+
 const sourceUseInput = z.object({
   kind: z.enum(['document', 'webpage']),
   id: z.string().min(1),
@@ -111,10 +124,15 @@ export const getAssistantKnowledgeSourceFn = createServerFn({ method: 'GET' })
  * rather than as a failure: the backfill has not reached it yet.
  */
 export const listAssistantSourceHealthFn = createServerFn({ method: 'GET' })
-  .validator(z.object({ kind: z.enum(['document', 'webpage']), ids: z.array(z.string()).max(200) }))
+  .validator(
+    z.object({
+      kind: z.enum(['article', 'document', 'webpage']),
+      ids: z.array(z.string()).max(200),
+    })
+  )
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
-    const prefix = data.kind === 'document' ? 'assistant_document' : 'assistant_web_source'
+    const prefix = SOURCE_ID_PREFIX[data.kind]
     const ids = data.ids.filter((id) => isValidTypeId(id, prefix))
     const { listKnowledgeSourceHealth } =
       await import('@/lib/server/domains/assistant/knowledge-index.reads')
@@ -140,10 +158,10 @@ export const listAssistantSourceHealthFn = createServerFn({ method: 'GET' })
  * pressing this can never take a working source out of retrieval.
  */
 export const refreshAssistantSourceIndexFn = createServerFn({ method: 'POST' })
-  .validator(z.object({ kind: z.enum(['document', 'webpage']), id: z.string().min(1) }))
+  .validator(z.object({ kind: z.enum(['article', 'document', 'webpage']), id: z.string().min(1) }))
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
-    const prefix = data.kind === 'document' ? 'assistant_document' : 'assistant_web_source'
+    const prefix = SOURCE_ID_PREFIX[data.kind]
     if (!isValidTypeId(data.id, prefix))
       throw new NotFoundError('NOT_FOUND', 'Knowledge source not found')
     const { requestKnowledgeIndexing } =
@@ -151,3 +169,20 @@ export const refreshAssistantSourceIndexFn = createServerFn({ method: 'POST' })
     await requestKnowledgeIndexing({ sourceType: data.kind, sourceId: data.id })
     return { ok: true }
   })
+
+/**
+ * Whether Quinn can read the help centre, summarized (QUINN-PRODUCT P8).
+ *
+ * Step 9 indexed articles and surfaced health for the two source types the
+ * Knowledge page lists. Articles are indexed the same way and were the gap: they
+ * live on their own screens and there can be hundreds of them, so the page
+ * cannot show a row each. This answers what it can act on instead, and the card
+ * stays silent when every article is healthy, which is the same rule the
+ * per-row note follows.
+ */
+export const getArticleIndexHealthFn = createServerFn({ method: 'GET' }).handler(async () => {
+  await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
+  const { getArticleIndexHealthSummary } =
+    await import('@/lib/server/domains/assistant/knowledge-index.reads')
+  return getArticleIndexHealthSummary()
+})
