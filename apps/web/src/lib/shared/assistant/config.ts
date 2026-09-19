@@ -262,7 +262,20 @@ export const DEFAULT_ASSISTANT_CONFIG: AssistantConfig = {
         webPages: true,
         status: false,
       },
-      toolRules: {},
+      // The one explicit default in this map. Recording a customer's feature
+      // request is a team-only note about them: no public post, no vote, no
+      // subscription and no notification, so holding each one for a human
+      // adds a queue without adding a decision. Publishing it to a board is
+      // the decision, and that is a separate, permission-gated action.
+      //
+      // The value is stated rather than left absent because the workspace has
+      // to be able to see the policy on the tools dial and change it. It does
+      // not widen anything by itself: the customer role already executes
+      // write tools on a real turn. It leaves the copilot alone (that agent
+      // has its own map, and still proposes), and the admin sandbox still
+      // previews, because a preview is the only honest outcome where there is
+      // no conversation to act on.
+      toolRules: { capture_feedback: 'allow' },
     },
     copilot: {
       capabilities: {

@@ -25,6 +25,11 @@ function ctxWith(policy: 'propose' | 'execute'): AssistantToolContext {
   return { writeToolPolicy: policy === 'propose' ? 'propose' : undefined } as AssistantToolContext
 }
 
+/** The admin sandbox: no conversation, every write previewed. */
+function sandboxCtx(): AssistantToolContext {
+  return { simulate: true, writeToolPolicy: 'simulate' } as AssistantToolContext
+}
+
 describe('applyBuiltInToolRules', () => {
   it('returns the catalogue untouched when no rules are saved', () => {
     const specs = resolveToolSpecs()
@@ -52,6 +57,16 @@ describe('applyBuiltInToolRules', () => {
     const stamped = out.find((spec) => spec.name === writeSpec!.name)!
     expect(stamped.approvalPolicy).toBe('always')
     expect(resolveEffectiveToolMode(stamped, ctxWith('propose'))).toBe('autonomous')
+  })
+
+  it('allow still previews in the sandbox, where there is nothing to act on', () => {
+    // The dial says what a real turn does. The sandbox has no conversation to
+    // attach a claim, an approval or a denial to, so a preview is the only
+    // honest outcome there; a dial that could make the preview real would make
+    // the sandbox a way to write to the workspace by accident.
+    const out = applyBuiltInToolRules(resolveToolSpecs(), { [writeSpec!.name]: 'allow' })
+    const stamped = out.find((spec) => spec.name === writeSpec!.name)!
+    expect(resolveEffectiveToolMode(stamped, sandboxCtx())).toBe('simulate')
   })
 
   it('an unruled write tool keeps deciding by role policy', () => {

@@ -103,6 +103,14 @@ export function resolveEffectiveToolMode(
   ctx: AssistantToolContext
 ): ToolExecutionMode {
   if (spec.risk === 'control') return 'autonomous'
+  // The sandbox previews every write BEFORE any dial is consulted. A dial says
+  // what a real turn does; the sandbox has no conversation to attach a claim,
+  // an approval or a denial to, so a preview is the only honest outcome there,
+  // and an `allow` rule that could make the preview real would turn the
+  // sandbox into a way to write to the workspace by accident.
+  if (spec.risk === 'write' && ctx.simulate && (ctx.writeToolPolicy ?? 'simulate') === 'simulate') {
+    return 'simulate'
+  }
   if (spec.approvalPolicy === 'always') return 'autonomous'
   if (spec.approvalPolicy === 'approval') return 'propose'
   if (spec.risk !== 'write') return 'autonomous'

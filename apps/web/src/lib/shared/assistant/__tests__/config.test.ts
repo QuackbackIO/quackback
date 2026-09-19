@@ -80,7 +80,10 @@ describe('assistantConfigSchema', () => {
             documents: true,
             status: false,
           },
-          toolRules: {},
+          // Recording a customer's feature request is a team-only note with
+          // no public effect, so the shipped customer policy allows it
+          // outright; publishing it to a board is the separate decision.
+          toolRules: { capture_feedback: 'allow' },
         },
         copilot: {
           capabilities: { qa: true },
