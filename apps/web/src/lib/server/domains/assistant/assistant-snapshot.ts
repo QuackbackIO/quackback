@@ -24,6 +24,10 @@ import type { Executor } from '@/lib/server/domains/principals/principal.factory
 import type { AssistantSnapshotId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
 import { ASSISTANT_PROMPT_VERSION } from './assistant.system-prompt'
+import { answerValidationMode, type AnswerValidationMode } from './answer-validation'
+import { CHUNKER_VERSION } from './chunking'
+import { INDEX_PARSER_VERSION } from './knowledge-index.service'
+import { KNOWLEDGE_TOP_K, resolveAssistantKnowledgeSnapshot } from './retrieval-sources'
 
 const log = logger.child({ component: 'assistant-snapshot' })
 
@@ -72,8 +76,25 @@ export interface EffectiveSnapshotPayload {
     catalogRevision: number
     policyHash: string
   }>
-  retrieval: { sourceTypes: string[] }
-  validator: { mode: 'structural' }
+  /**
+   * How this run would retrieve: which source types were registered, which
+   * embedding space the vector arm ran in, and the chunker and parser versions
+   * behind any passage it was given. A generation rebuilt under a new chunker
+   * is a different corpus, and this is what says so afterwards.
+   */
+  retrieval: {
+    sourceTypes: string[]
+    embeddingModel: string | null
+    parserVersion: string
+    chunkerVersion: string
+    topK: number
+  }
+  /**
+   * Which validation layers were in force. `deterministic` is always on;
+   * `semantic` records the mode the run executed under, so a run from before
+   * enforcement is never mistaken for one that passed a check that was off.
+   */
+  validator: { deterministic: true; semantic: AnswerValidationMode }
 }
 
 /** Stable JSON: object keys sorted at every depth, so an unordered read still hashes alike. */
@@ -204,6 +225,30 @@ export async function buildEffectiveSnapshot(): Promise<EffectiveSnapshotPayload
     log.warn({ err }, 'snapshot could not read connectors')
   }
 
+  // The registered source types, read from the same resolver the turn uses, so
+  // a snapshot cannot claim a source the run would not have consulted.
+  let sourceTypes: string[] = []
+  try {
+    if (config) {
+      const snapshot = resolveAssistantKnowledgeSnapshot(
+        'agent',
+        config as Parameters<typeof resolveAssistantKnowledgeSnapshot>[1],
+        'public'
+      )
+      sourceTypes = [...snapshot.sources].sort()
+    }
+  } catch (err) {
+    log.warn({ err }, 'snapshot could not resolve the retrieval sources')
+  }
+
+  let embeddingModel: string | null = null
+  try {
+    const { getEmbeddingModel } = await import('@/lib/server/domains/ai/models')
+    embeddingModel = getEmbeddingModel()
+  } catch (err) {
+    log.warn({ err }, 'snapshot could not read the embedding model')
+  }
+
   return {
     promptVersion: ASSISTANT_PROMPT_VERSION,
     configRevision,
@@ -211,11 +256,14 @@ export async function buildEffectiveSnapshot(): Promise<EffectiveSnapshotPayload
     guidance,
     skills,
     connectors,
-    retrieval: { sourceTypes: [] },
-    // Structural validation is what ships today. The semantic verifier arrives
-    // in shadow mode later; recording the mode now means an old run is never
-    // mistaken for one that passed a check that did not exist.
-    validator: { mode: 'structural' },
+    retrieval: {
+      sourceTypes,
+      embeddingModel,
+      parserVersion: INDEX_PARSER_VERSION,
+      chunkerVersion: CHUNKER_VERSION,
+      topK: KNOWLEDGE_TOP_K,
+    },
+    validator: { deterministic: true, semantic: answerValidationMode() },
   }
 }
 

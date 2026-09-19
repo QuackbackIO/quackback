@@ -309,6 +309,8 @@ export async function generateAssistantCandidate(
     runId?: import('@quackback/ids').AssistantRunId | null
     /** The customer the turn is answering, recorded as a proposal's requester. */
     requestedByPrincipalId?: import('@quackback/ids').PrincipalId | null
+    /** P6's constrained repair: assemble no write tool, so it cannot repeat one. */
+    readOnlyTools?: boolean
   }
 ): Promise<Awaited<ReturnType<typeof runAssistantTurn>>> {
   return runAssistantTurn({
@@ -322,6 +324,7 @@ export async function generateAssistantCandidate(
     stepInstructions: opts?.stepInstructions ?? null,
     runId: opts?.runId ?? null,
     requestedByPrincipalId: opts?.requestedByPrincipalId ?? null,
+    readOnlyTools: opts?.readOnlyTools === true,
     signal: opts?.signal,
     onActivity: (activity) => publishAssistantActivity(conversationId, activityToStatus(activity)),
   })

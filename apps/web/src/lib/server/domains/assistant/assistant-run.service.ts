@@ -30,7 +30,6 @@ import {
   sql,
   and,
   assistantRuns,
-  assistantToolCalls,
   conversations,
   eq,
   ticketConversations,
@@ -54,14 +53,14 @@ import {
   lockConversationForRun,
   lockRun,
   loadRun,
-  recordRunStep,
   settleRun,
   supersedeOpenRuns,
   recordRunEvidence,
   type AssistantRunRow,
   type RunEvidenceInput,
 } from './assistant-run.repository'
-import type { PublicationValidationCode, PublicationVerdict } from './publication-validation'
+import { runPublicationValidation } from './assistant-run.validation'
+import type { PublicationValidationCode } from './publication-validation'
 
 /** The queue a durable customer turn runs on. */
 export const ASSISTANT_TURN_QUEUE = 'assistant-turn'
@@ -489,82 +488,6 @@ export async function commitAssistantOutcome(
     // commit; see advanceAssistantRun.
     sideHookEvent: event,
   }
-}
-
-/**
- * Run the deterministic validator for one candidate and record its verdict.
- *
- * The verdict is written to the run's own step ledger whichever way it goes, so
- * a refused publication is inspectable as a validator decision rather than as a
- * turn that silently produced nothing. The step write shares this transaction,
- * so a rejection's record commits with the rejection.
- */
-async function runPublicationValidation(
-  tx: Transaction,
-  run: AssistantRunRow,
-  input: CommitAssistantOutcomeInput
-): Promise<PublicationVerdict> {
-  const citations = input.candidate.citations.map((citation) => ({
-    type: citation.type,
-    id: citation.id,
-    // A persisted citation carries no internal flag by construction: the
-    // orchestrator strips it before a customer turn is committed. The internal
-    // check therefore reads the evidence rows, which still know.
-    internal: input.evidence?.some((row) => row.sourceId === citation.id && row.internal === true),
-  }))
-  const { eligibleCustomerCitationIds } = await import('./publication-recheck')
-  const [eligibleSourceIds, receipts] = await Promise.all([
-    citations.length > 0 ? eligibleCustomerCitationIds(citations) : Promise.resolve(null),
-    loadRunReceipts(tx, run.id),
-  ])
-
-  const { validateCustomerPublication } = await import('./publication-validation')
-  const verdict = validateCustomerPublication({
-    candidate: {
-      text: input.candidate.text,
-      responseKind: input.candidate.responseKind,
-      outcome: input.candidate.outcome,
-      citations,
-      handoff: input.candidate.handoff !== null,
-      closeRequest: input.candidate.closeRequest === true,
-    },
-    evidence: (input.evidence ?? []).map((row) => ({
-      sourceType: row.sourceType,
-      sourceId: row.sourceId,
-      internal: row.internal === true,
-    })),
-    receipts,
-    eligibleSourceIds,
-  })
-
-  await recordRunStep(tx, {
-    runId: run.id,
-    stepKey: 'publication_validation',
-    attemptNumber: run.attemptCount,
-    stepKind: 'validation',
-    status: verdict.ok ? 'succeeded' : 'failed',
-    validator: verdict.ok
-      ? { layer: 'deterministic', verdict: 'passed' }
-      : { layer: 'deterministic', verdict: 'rejected', code: verdict.code, detail: verdict.detail },
-    finishedAt: new Date(),
-  })
-  return verdict
-}
-
-/** This run's tool receipts, reduced to what the validator's receipt rule reads. */
-async function loadRunReceipts(
-  tx: Transaction,
-  runId: AssistantRunId
-): Promise<Array<{ toolName: string; status: string }>> {
-  const rows = await tx
-    .select({
-      toolName: assistantToolCalls.toolName,
-      status: assistantToolCalls.status,
-      outcomeStatus: assistantToolCalls.outcomeStatus,
-    })
-    .from(assistantToolCalls)
-    .where(eq(assistantToolCalls.runId, runId))
-  return rows.map((row) => ({ toolName: row.toolName, status: row.outcomeStatus ?? row.status }))
 }
 
 /**

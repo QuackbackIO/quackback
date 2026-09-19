@@ -315,6 +315,16 @@ interface AssistantTurnCommonInput {
    */
   simulate?: boolean
   /**
+   * Assemble no write tool at all for this turn (P6's constrained repair).
+   *
+   * The repair pass re-answers a candidate the semantic verifier refused, and
+   * it must not be able to repeat a business write while doing so. That is
+   * enforced structurally, by removing every write-risk tool from the assembled
+   * set, rather than by a prompt asking the model not to: the model never sees
+   * a write tool, so there is nothing for it to call twice.
+   */
+  readOnlyTools?: boolean
+  /**
    * The teammate who asked this turn's question — Copilot only.
    * `assistantPrincipalId` always identifies Quinn itself, never the human on
    * the other end, so per-teammate usage reporting (analytics/copilot-usage.ts)
@@ -894,6 +904,20 @@ function deriveAnswerKind(
  * where possible and retried once. Exhausted failure throws: a caller may
  * retry or surface an error, but the server never authors words as Quinn.
  */
+/**
+ * Drop every write-risk tool when the caller asked for a read-only turn.
+ *
+ * Structural rather than instructional: the constrained repair pass must not be
+ * able to repeat a business write, and the only way to guarantee that is for
+ * the model never to be shown one.
+ */
+function withoutWriteTools(
+  specs: readonly AssistantToolSpec[],
+  readOnly: boolean
+): AssistantToolSpec[] {
+  return readOnly ? specs.filter((spec) => spec.risk !== 'write') : [...specs]
+}
+
 export async function runAssistantTurn(input: AssistantTurnInput): Promise<AssistantTurnResult> {
   const surface = input.surface
   const role = input.role
@@ -1165,15 +1189,16 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
   // catalogue before assembly: deny never reaches the model, ask/allow ride
   // the same approvalPolicy seam the connector dial uses, and an empty map
   // leaves role policy deciding exactly as before the dial existed.
-  const builtInSpecs = applyBuiltInToolRules(
-    resolveToolSpecs(),
-    runtimeConfig.config.agents[agentKind].toolRules
+  const builtInSpecs = withoutWriteTools(
+    applyBuiltInToolRules(resolveToolSpecs(), runtimeConfig.config.agents[agentKind].toolRules),
+    input.readOnlyTools === true
   )
   try {
-    let { tools, activeSpecs } = await assembleAssistantToolset(toolContext, builtInSpecs, [
-      ...workspaceMcpSpecs,
-      ...connectorSpecs,
-    ])
+    let { tools, activeSpecs } = await assembleAssistantToolset(
+      toolContext,
+      builtInSpecs,
+      withoutWriteTools([...workspaceMcpSpecs, ...connectorSpecs], input.readOnlyTools === true)
+    )
     let toolNames = new Set(tools.map((t) => t.name))
 
     // Live attribute catalogue (P0 catalogue injection): fetched only when

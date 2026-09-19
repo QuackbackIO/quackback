@@ -11,7 +11,7 @@
  * conversation domain, because neither participates in the transaction and
  * both need a live pub/sub connection. The database writes are all real.
  */
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import postgres from 'postgres'
 
 process.env.BASE_URL = 'http://localhost:4319'
@@ -38,6 +38,18 @@ vi.mock('@/lib/server/domains/settings/settings.widget', async (original) => ({
   ...(await original<typeof import('@/lib/server/domains/settings/settings.widget')>()),
   getMessengerConfig: vi.fn(async () => ({ assistant: { respond: true } })),
 }))
+// The semantic verifier, stubbed so a case can choose a verdict without a
+// model. The real `verificationBlocksPublication` still decides what a verdict
+// means, so a case that forces one is still exercising the executor's rule.
+const verifyAnswerSupportMock = vi.fn()
+vi.mock('../answer-validation', async (original) => {
+  const actual = await original<typeof import('../answer-validation')>()
+  return {
+    ...actual,
+    verifyAnswerSupport: (...args: unknown[]) => verifyAnswerSupportMock(...args),
+  }
+})
+
 // The fake model, for the end-to-end executor cases at the bottom of this file.
 // `runAssistantTurn` is re-exported through the domain barrel the orchestrator
 // imports, so replacing it here replaces it for the real code path under test.
@@ -688,9 +700,90 @@ async function seedTurn(): Promise<{ conversationId: ConversationId; runId: stri
   })
 }
 
+const shadowVerification = {
+  mode: 'shadow' as const,
+  ran: false,
+  verdict: null,
+  skippedReason: 'mode_off' as const,
+  reason: null,
+  evidenceRefs: [],
+  model: null,
+}
+
+function enforced(verdict: 'supported' | 'unsupported') {
+  return {
+    mode: 'enforce' as const,
+    ran: true,
+    verdict,
+    skippedReason: null,
+    reason: 'test verdict',
+    evidenceRefs: [],
+    model: 'quality-gate-test',
+  }
+}
+
 describe.skipIf(!available)('the durable turn executor on real PostgreSQL', () => {
+  beforeEach(() => {
+    // Shadow, which is the default, so every existing case is unaffected.
+    verifyAnswerSupportMock.mockReset()
+    verifyAnswerSupportMock.mockResolvedValue(shadowVerification)
+  })
+
   afterEach(() => {
     vi.mocked(runAssistantTurn).mockReset()
+  })
+
+  it('P6: an enforced refusal gets exactly one repair, with no write tool', async () => {
+    const { conversationId, runId } = await seedTurn()
+    vi.mocked(runAssistantTurn).mockResolvedValue(
+      answer('Refunds take three days.') as unknown as Awaited<ReturnType<typeof runAssistantTurn>>
+    )
+    verifyAnswerSupportMock
+      .mockResolvedValueOnce(enforced('unsupported'))
+      .mockResolvedValueOnce(enforced('supported'))
+
+    const job = await claimTurn(runId)
+    expect(await advanceAssistantRun(job)).toBe('published')
+
+    // Two generations: the original and the repair. The repair assembles no
+    // write tool at all, which is what stops it repeating a business write.
+    expect(vi.mocked(runAssistantTurn)).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(runAssistantTurn).mock.calls[0][0].readOnlyTools).toBe(false)
+    expect(vi.mocked(runAssistantTurn).mock.calls[1][0].readOnlyTools).toBe(true)
+    expect(await publicMessages(conversationId)).toHaveLength(1)
+  })
+
+  it('P6: an unsupported answer that survives its repair is never published', async () => {
+    const { conversationId, runId } = await seedTurn()
+    vi.mocked(runAssistantTurn).mockResolvedValue(
+      answer('Refunds take three days.') as unknown as Awaited<ReturnType<typeof runAssistantTurn>>
+    )
+    verifyAnswerSupportMock.mockResolvedValue(enforced('unsupported'))
+
+    const job = await claimTurn(runId)
+    expect(await advanceAssistantRun(job)).toBe('validation:unsupported')
+
+    const run = await loadRun(db, runId as Parameters<typeof loadRun>[1])
+    expect(run!.status).toBe('suppressed')
+    expect(run!.disposition).toBe('validation:unsupported')
+    // No answer reached the customer, and nothing recorded a resolution.
+    expect(
+      (await publicMessages(conversationId)).some((m) => m.content.includes('Refunds take three'))
+    ).toBe(false)
+    expect(run!.outcome).not.toBe('resolution')
+  })
+
+  it('P6: a shadow verdict never changes what the customer sees', async () => {
+    const { conversationId, runId } = await seedTurn()
+    vi.mocked(runAssistantTurn).mockResolvedValue(
+      answer('Refunds take three days.') as unknown as Awaited<ReturnType<typeof runAssistantTurn>>
+    )
+    verifyAnswerSupportMock.mockResolvedValue({ ...enforced('unsupported'), mode: 'shadow' })
+
+    const job = await claimTurn(runId)
+    expect(await advanceAssistantRun(job)).toBe('published')
+    expect(vi.mocked(runAssistantTurn)).toHaveBeenCalledTimes(1)
+    expect(await publicMessages(conversationId)).toHaveLength(1)
   })
 
   it('claims, freezes the behaviour, publishes once and settles the run', async () => {

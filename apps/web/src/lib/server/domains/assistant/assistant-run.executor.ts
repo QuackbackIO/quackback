@@ -10,7 +10,13 @@
  * gets; every fenced outcome is therefore reported as a disposition string and
  * recorded on the run.
  */
-import { db, and, eq, assistantPendingActions, type AssistantRunDelegation } from '@/lib/server/db'
+import {
+  db,
+  and,
+  eq,
+  assistantPendingActions,
+  type AssistantRunDelegation,
+} from '@/lib/server/db'
 import type { AssistantRunId, ConversationId } from '@quackback/ids'
 import type { ConversationAuthorInput } from '@/lib/server/domains/conversation/conversation.types'
 import type { ClaimedJob } from '@/lib/server/jobs/job-queue'
@@ -22,6 +28,7 @@ import {
   claimRunForExecution,
 } from './assistant-run.repository'
 import { buildEffectiveSnapshot, persistEffectiveSnapshot } from './assistant-snapshot'
+import { verifyAndMaybeRepair } from './assistant-run.validation'
 import { commitAssistantOutcome, parkRunForAction } from './assistant-run.service'
 
 const log = logger.child({ component: 'assistant-run-executor' })
@@ -224,6 +231,37 @@ export async function advanceAssistantRun(job: ClaimedJob): Promise<string> {
     // reached the model, even when the model omitted that source from its
     // final citations.
     if (result.internalSourced) throw new InternalSourcedReplyError()
+
+    // The semantic layer. Shadow by default: it records a verdict and changes
+    // nothing. In enforced mode it gets one constrained repair, and a candidate
+    // that is still unsupported goes to the handoff floor rather than being
+    // published or being recorded as a resolution.
+    const verified = await verifyAndMaybeRepair({
+      run,
+      conversationId,
+      prepared,
+      stepInstructions,
+      result,
+    })
+    if (verified.kind === 'blocked') {
+      await settleRun(db, {
+        runId,
+        status: 'suppressed',
+        phase: 'validation',
+        disposition: `validation:${verified.verdict}`,
+        expectedLeaseToken: job.leaseToken,
+      })
+      runLog.info(
+        { event: 'assistant_run.unsupported', verdict: verified.verdict },
+        'assistant candidate refused by the semantic verifier'
+      )
+      // Not a resolution and not an answer: the customer is handed to a person.
+      const { runAssistantFailureFloor } = await import('./assistant.orchestrator')
+      await runAssistantFailureFloor(conversationId, prepared.assistantPrincipalId)
+      await completeDelegation(run, 'escalated')
+      return `validation:${verified.verdict}`
+    }
+    result = verified.result
 
     const author: ConversationAuthorInput = {
       principalId: prepared.assistantPrincipalId,
