@@ -17,11 +17,15 @@ export function QuinnEmailChannelCard() {
   const channel = useQuery(assistantQueries.emailChannel())
   const update = useUpdateAssistantEmailChannel()
   const state = channel.data
-  const blocked = !state?.inboundConfigured
-    ? 'Set up an inbound email address first.'
-    : !state.respondsToCustomers
-      ? 'Turn on Quinn for customer conversations first.'
-      : null
+  // Only once the state is known. A row that has not loaded yet must not tell
+  // an operator to go and set something up.
+  const blocked = !state
+    ? null
+    : !state.inboundConfigured
+      ? 'Set up an inbound email address first.'
+      : !state.respondsToCustomers
+        ? 'Turn on Quinn for customer conversations first.'
+        : null
 
   return (
     <section
@@ -45,12 +49,14 @@ export function QuinnEmailChannelCard() {
                     : 'Off'}
           </Badge>
         </div>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {blocked ??
-            'Quinn answers verified senders in their own thread. Team replies are unaffected.'}
-        </p>
+        {state && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            {blocked ??
+              'Quinn answers verified senders in their own thread. Team replies are unaffected.'}
+          </p>
+        )}
       </div>
-      {blocked && state?.inboundConfigured === false ? (
+      {state && !state.inboundConfigured ? (
         <Link to="/admin/settings/channels/email" className="text-sm font-medium text-primary">
           Email settings
         </Link>
