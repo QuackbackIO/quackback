@@ -4,13 +4,16 @@ import {
   conversations,
   principal,
   user,
+  tickets,
+  ticketStatuses,
   assistantInvolvements,
   assistantPendingActions,
+  assistantRuns,
   eq,
 } from '@/lib/server/db'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { Actor } from '@/lib/server/policy/types'
-import type { ConversationId } from '@quackback/ids'
+import type { ConversationId, TicketId } from '@quackback/ids'
 vi.mock('@/lib/server/db', async (original) => ({
   ...(await original<typeof import('@/lib/server/db')>()),
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
@@ -63,6 +66,36 @@ async function world() {
     .returning()
   return { actor, mine, hidden }
 }
+/** A ticket this actor can see, with one Quinn run against it. */
+async function ticketWith(
+  actor: Actor,
+  run: { status: 'failed' | 'succeeded' | 'running'; disposition?: string }
+): Promise<TicketId> {
+  const [status] = await testDb
+    .insert(ticketStatuses)
+    .values({ name: 'Open', slug: `open-${Math.random().toString(36).slice(2, 8)}`, position: 1 })
+    .returning()
+  const [ticket] = await testDb
+    .insert(tickets)
+    .values({
+      title: 'Broken export',
+      statusId: status.id,
+      assigneePrincipalId: actor.principalId as never,
+      updatedAt: now,
+    })
+    .returning()
+  await testDb.insert(assistantRuns).values({
+    ticketId: ticket.id,
+    surface: 'widget',
+    triggerKind: 'customer_message',
+    triggerKey: `ticket:${ticket.id}:${Math.random().toString(36).slice(2, 8)}`,
+    status: run.status,
+    ...(run.disposition ? { disposition: run.disposition } : {}),
+    createdAt: hourAgo,
+  })
+  return ticket.id
+}
+
 async function handoff(id: ConversationId, at = hourAgo) {
   await testDb.insert(assistantInvolvements).values({
     conversationId: id,
@@ -87,6 +120,64 @@ describe.skipIf(!fixture.available)('Quinn review queue', () => {
       await getQuinnReviewQueue({ ...actor, permissions: new Set() }, 'review', 7, 10, now)
     ).toEqual([])
   })
+  it('includes a ticket whose Quinn run failed, and says which reason', async () => {
+    const { actor } = await world()
+    const ticketId = await ticketWith(
+      { ...actor, permissions: new Set([...actor.permissions!, 'ticket.view' as never]) },
+      { status: 'failed' }
+    )
+    const rows = await getQuinnReviewQueue(
+      { ...actor, permissions: new Set([...actor.permissions!, 'ticket.view' as never]) },
+      'review',
+      7,
+      10,
+      now
+    )
+    expect(rows).toEqual([
+      expect.objectContaining({ id: ticketId, parent: 'ticket', reason: 'Answer refused' }),
+    ])
+  })
+
+  it('includes a ticket whose answer the validator refused', async () => {
+    const { actor } = await world()
+    const withTickets = {
+      ...actor,
+      permissions: new Set([...actor.permissions!, 'ticket.view' as never]),
+    }
+    const ticketId = await ticketWith(withTickets, {
+      status: 'succeeded',
+      disposition: 'validation:unsupported',
+    })
+    expect((await getQuinnReviewQueue(withTickets, 'review', 7, 10, now)).map((r) => r.id)).toEqual(
+      [ticketId]
+    )
+  })
+
+  it('leaves out a ticket whose run was fine, and one this actor cannot see', async () => {
+    const { actor } = await world()
+    const withTickets = {
+      ...actor,
+      permissions: new Set([...actor.permissions!, 'ticket.view' as never]),
+    }
+    await ticketWith(withTickets, { status: 'succeeded' })
+    expect(await getQuinnReviewQueue(withTickets, 'review', 7, 10, now)).toEqual([])
+    // The same ticket, read by somebody with no ticket permission at all.
+    await ticketWith(withTickets, { status: 'failed' })
+    expect(await getQuinnReviewQueue(actor, 'review', 7, 10, now)).toEqual([])
+  })
+
+  it('lists a ticket with a run in flight under the live view', async () => {
+    const { actor } = await world()
+    const withTickets = {
+      ...actor,
+      permissions: new Set([...actor.permissions!, 'ticket.view' as never]),
+    }
+    const ticketId = await ticketWith(withTickets, { status: 'running' })
+    expect((await getQuinnReviewQueue(withTickets, 'live', 7, 10, now)).map((r) => r.id)).toEqual([
+      ticketId,
+    ])
+  })
+
   it('does not treat a historical handoff as the current involvement', async () => {
     const { actor, mine } = await world()
     await handoff(mine.id)

@@ -32,19 +32,18 @@ export function QuinnReviewQueue({
       <h2 className="text-sm font-medium">{title}</h2>
       {kind === 'review' && (
         <p className="text-xs text-muted-foreground">
-          Pending approvals, recent handoffs and low customer ratings in conversations you can
-          access.
+          Pending approvals, handoffs, low ratings and refused answers on items you can access.
         </p>
       )}
       <div className="divide-y rounded-xl border border-border/50 bg-card">
         {query.isPending && (
           <p role="status" className="p-4 text-sm">
-            Loading conversations…
+            Loading…
           </p>
         )}
         {query.isError && (
           <div role="alert" className="p-4 space-y-2">
-            <p>Conversations could not be loaded.</p>
+            <p>That could not be loaded.</p>
             <Button variant="outline" onClick={() => void query.refetch()}>
               Try again
             </Button>
@@ -52,9 +51,7 @@ export function QuinnReviewQueue({
         )}
         {query.data?.length === 0 && (
           <p className="p-4 text-sm text-muted-foreground">
-            {kind === 'live'
-              ? 'No active Quinn conversations.'
-              : 'No conversations need review in this period.'}
+            {kind === 'live' ? 'Nothing active.' : 'Nothing needs review in this period.'}
           </p>
         )}
         {query.data?.map((row) => (
@@ -66,7 +63,7 @@ export function QuinnReviewQueue({
               </p>
             </div>
             <Badge variant="outline">{row.reason}</Badge>
-            {kind === 'review' && canWriteGuidance && (
+            {kind === 'review' && canWriteGuidance && row.parent === 'conversation' && (
               <QuinnGuidanceDraftDialog conversationId={row.id} subject={row.subject} />
             )}
             <Link
@@ -80,9 +77,7 @@ export function QuinnReviewQueue({
         ))}
       </div>
       {query.data?.length === limit && (
-        <p className="text-xs text-muted-foreground">
-          Showing the {limit} most recently active conversations.
-        </p>
+        <p className="text-xs text-muted-foreground">Showing the {limit} most recently active.</p>
       )}
     </section>
   )
