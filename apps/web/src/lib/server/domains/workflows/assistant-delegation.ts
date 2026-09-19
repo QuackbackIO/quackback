@@ -31,10 +31,6 @@ import {
 } from '@/lib/server/db'
 import type { ConversationId } from '@quackback/ids'
 import type { AssistantEngagementState } from '@/lib/server/domains/assistant/assistant-run.repository'
-
-/** The same local executor alias workflow-run-events.ts uses, so this module
- *  needs no import from another domain just to name a transaction. */
-type Executor = typeof db | Transaction
 import { logger } from '@/lib/server/logger'
 import type { AssistantOutcome } from './condition.evaluator'
 import { readCursor } from './workflow-wait-queue'
@@ -42,6 +38,10 @@ import { logRunEvent } from './workflow-run-events'
 import { resumeWorkflowRun } from './workflow.engine'
 
 const log = logger.child({ component: 'assistant-delegation' })
+
+/** The same local executor alias workflow-run-events.ts uses, so this module
+ *  needs no import from another domain just to name a transaction. */
+type Executor = typeof db | Transaction
 
 /**
  * What an expired assistant wait should do about it.
