@@ -101,3 +101,53 @@ export const getAssistantKnowledgeSourceFn = createServerFn({ method: 'GET' })
       truncated: row.content.length > 20000,
     }
   })
+
+/**
+ * Index health for the rows the Knowledge page is showing.
+ *
+ * Returned per source id rather than as a list, because the page already has
+ * the sources and only needs to know which of them Quinn can currently read.
+ * A row with no entry has never been indexed, which the page reads as "queued"
+ * rather than as a failure: the backfill has not reached it yet.
+ */
+export const listAssistantSourceHealthFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ kind: z.enum(['document', 'webpage']), ids: z.array(z.string()).max(200) }))
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
+    const prefix = data.kind === 'document' ? 'assistant_document' : 'assistant_web_source'
+    const ids = data.ids.filter((id) => isValidTypeId(id, prefix))
+    const { listKnowledgeSourceHealth } =
+      await import('@/lib/server/domains/assistant/knowledge-index.reads')
+    const health = await listKnowledgeSourceHealth(data.kind, ids)
+    return ids.map((id) => {
+      const row = health.get(id)
+      return {
+        id,
+        status: row?.status ?? ('pending' as const),
+        serving: row?.serving ?? false,
+        generation: row?.generation ?? null,
+        degraded: row?.degradedReason ?? null,
+        failure: row?.lastFailureReason ?? null,
+      }
+    })
+  })
+
+/**
+ * Ask for a staged refresh of one source's passages.
+ *
+ * Staged in the ordinary sense the whole projection is: the new generation is
+ * built alongside the current one and only replaces it when it is complete, so
+ * pressing this can never take a working source out of retrieval.
+ */
+export const refreshAssistantSourceIndexFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ kind: z.enum(['document', 'webpage']), id: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
+    const prefix = data.kind === 'document' ? 'assistant_document' : 'assistant_web_source'
+    if (!isValidTypeId(data.id, prefix))
+      throw new NotFoundError('NOT_FOUND', 'Knowledge source not found')
+    const { requestKnowledgeIndexing } =
+      await import('@/lib/server/domains/assistant/knowledge-index.service')
+    await requestKnowledgeIndexing({ sourceType: data.kind, sourceId: data.id })
+    return { ok: true }
+  })

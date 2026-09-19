@@ -15,6 +15,8 @@ import {
 } from '@/lib/server/functions/assistant-web-sources'
 import {
   getAssistantKnowledgeSourceFn,
+  listAssistantSourceHealthFn,
+  refreshAssistantSourceIndexFn,
   updateAssistantSourceUseFn,
 } from '@/lib/server/functions/assistant-source-use'
 import { assistantQueries } from '@/lib/client/queries/assistant'
@@ -24,6 +26,28 @@ import { Switch } from '@/components/ui/switch'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 
 const sourcesKey = ['assistant', 'knowledgeSources'] as const
+
+/**
+ * What a row says about its passages, and nothing when there is nothing to say.
+ *
+ * A source Quinn can read is the normal case and gets no label: the row is the
+ * name and the switches, as it always was. Only the two states a person can act
+ * on are named, and each one says what Quinn is doing about it rather than what
+ * the index thinks of itself.
+ */
+export function indexNote(health?: {
+  status: string
+  serving: boolean
+  degraded: string | null
+}): string | null {
+  if (!health) return null
+  if (health.status === 'failed' && health.serving) return 'Update failed, using the last version'
+  if (health.status === 'failed') return 'Not indexed'
+  if (!health.serving) return 'Indexing'
+  if (health.degraded === 'embeddings_unavailable') return 'Keyword search only'
+  return null
+}
+
 export function QuinnKnowledgeSources({ kind }: { kind: 'document' | 'webpage' }) {
   const cache = useQueryClient()
   const [previewId, setPreviewId] = useState<string | null>(null)
@@ -44,6 +68,18 @@ export function QuinnKnowledgeSources({ kind }: { kind: 'document' | 'webpage' }
     enabled: kind === 'webpage',
   })
   const settings = useQuery(assistantQueries.settings())
+  const sourceIds = ((kind === 'document' ? docs.data : pages.data) ?? []).map((row) => row.id)
+  const health = useQuery({
+    queryKey: [...sourcesKey, 'health', kind, sourceIds],
+    queryFn: () => listAssistantSourceHealthFn({ data: { kind, ids: sourceIds } }),
+    enabled: sourceIds.length > 0,
+  })
+  const healthById = new Map((health.data ?? []).map((row) => [row.id, row]))
+  const refresh_ = useMutation({
+    mutationFn: (id: string) => refreshAssistantSourceIndexFn({ data: { kind, id } }),
+    onSuccess: () => cache.invalidateQueries({ queryKey: [...sourcesKey, 'health'] }),
+    onError: (error: Error) => toast.error(error.message || 'Could not refresh this source.'),
+  })
   const [url, setUrl] = useState('')
   const [removing, setRemoving] = useState<{
     kind: 'document' | 'webpage'
@@ -145,6 +181,11 @@ export function QuinnKnowledgeSources({ kind }: { kind: 'document' | 'webpage' }
                         Fetched {new Date(row.fetchedAt).toLocaleString()}
                       </p>
                     )}
+                    {indexNote(healthById.get(row.id)) && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {indexNote(healthById.get(row.id))}
+                      </p>
+                    )}
                   </div>
                   <Button
                     variant="ghost"
@@ -189,6 +230,14 @@ export function QuinnKnowledgeSources({ kind }: { kind: 'document' | 'webpage' }
                       Enable source
                     </Button>
                   )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={refresh_.isPending}
+                    onClick={() => refresh_.mutate(row.id)}
+                  >
+                    Refresh
+                  </Button>
                   <Button
                     variant="ghost"
                     size="sm"
