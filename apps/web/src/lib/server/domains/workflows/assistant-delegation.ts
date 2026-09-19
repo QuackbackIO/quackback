@@ -57,10 +57,11 @@ const log = logger.child({ component: 'assistant-delegation' })
  * - **escalate** — nothing was ever delivered and nothing is coming. This is
  *   the wait's existing default fallback, the escalated edge, and it takes
  *   Quinn's authority with it.
- * - **release** — a human owns the customer, or the ceiling passed on a
- *   conversation Quinn did answer. Neither branch is true: the workflow stops
- *   waiting and takes neither the resolved nor the escalated edge, rather than
- *   claiming an escalation nobody asked for or a resolution nobody confirmed.
+ * - **release** — a human owns the customer, the conversation is no longer
+ *   open, or the ceiling passed on a conversation Quinn did answer. Neither
+ *   branch is true: the workflow stops waiting and takes neither the resolved
+ *   nor the escalated edge, rather than claiming an escalation nobody asked
+ *   for or a resolution nobody confirmed.
  */
 export type AssistantWaitExpiry = 'defer' | 'escalate' | 'release'
 
@@ -68,7 +69,10 @@ export function classifyAssistantWaitExpiry(
   state: AssistantEngagementState,
   opts: { pastCeiling: boolean }
 ): AssistantWaitExpiry {
-  if (state.takenOver) return 'release'
+  // A closed or snoozed conversation is nobody's to escalate into. The close
+  // itself normally resumes the wait down its own edge long before this
+  // (event-trigger.ts); reaching here means that never happened.
+  if (state.takenOver || !state.open) return 'release'
   if (opts.pastCeiling) return state.answered ? 'release' : 'escalate'
   if (state.executing || state.awaitingAction || state.answered) return 'defer'
   return 'escalate'

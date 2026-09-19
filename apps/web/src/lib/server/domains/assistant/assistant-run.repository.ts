@@ -550,6 +550,8 @@ export interface AssistantEngagementState {
   answered: boolean
   /** A teammate owns the customer: assigned, or an involvement handed off. */
   takenOver: boolean
+  /** The conversation is still open. A closed or snoozed one is nobody's to answer. */
+  open: boolean
 }
 
 export async function readAssistantEngagementState(
@@ -565,6 +567,7 @@ export async function readAssistantEngagementState(
     .where(eq(assistantRuns.conversationId, conversationId))
   const [conversation] = await exec
     .select({
+      status: conversations.status,
       assignedAgentPrincipalId: conversations.assignedAgentPrincipalId,
       inactivityOwner: conversations.inactivityOwner,
     })
@@ -583,6 +586,7 @@ export async function readAssistantEngagementState(
       !!conversation?.assignedAgentPrincipalId ||
       latest?.status === 'handed_off' ||
       conversation?.inactivityOwner === 'handoff',
+    open: conversation?.status === 'open',
   }
 }
 

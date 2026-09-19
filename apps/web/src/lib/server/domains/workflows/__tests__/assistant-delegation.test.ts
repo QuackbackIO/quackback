@@ -465,6 +465,19 @@ describe.skipIf(!fixture.available)('durable workflow delegation', () => {
       expect(outcome).toMatchObject({ kind: 'rejected', reason: 'fence:input_revision' })
     })
 
+    it('releases rather than escalating into a conversation that is no longer open', async () => {
+      const { conversationId, runId, delegatedRunId } = await dueWait()
+      await settleDelegated(delegatedRunId, 'failed')
+      await testDb
+        .update(conversations)
+        .set({ status: 'closed' })
+        .where(eq(conversations.id, conversationId))
+
+      expect(await sweepExpiredAssistantWaits(new Date())).toBe(1)
+      expect((await stateOf(runId)).state).toBe('interrupted')
+      expect(applyAction).not.toHaveBeenCalled()
+    })
+
     it('releases without taking either edge once a teammate has taken over', async () => {
       const { conversationId, runId, delegatedRunId } = await dueWait()
       await settleDelegated(delegatedRunId, 'failed')

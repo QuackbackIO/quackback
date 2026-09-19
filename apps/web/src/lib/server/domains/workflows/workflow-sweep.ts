@@ -451,7 +451,7 @@ export async function sweepExpiredAssistantWaits(now: Date): Promise<number> {
     const cursor = readCursor(run)
     const state = run.conversationId
       ? await readAssistantEngagementState(run.conversationId)
-      : { executing: false, awaitingAction: false, answered: false, takenOver: false }
+      : { executing: false, awaitingAction: false, answered: false, takenOver: false, open: true }
     const ceilingMs = cursor.expiryCeilingAt
       ? new Date(cursor.expiryCeilingAt).getTime()
       : (cursor.waitStartedAt
