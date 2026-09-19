@@ -22,6 +22,7 @@ import {
   desc,
   isNull,
   count,
+  type PostAudience,
 } from '@/lib/server/db'
 import { loadAuthors } from '@/lib/server/domains/principals/principal-display'
 import { realEmail } from '@/lib/shared/anonymous-email'
@@ -47,10 +48,19 @@ import { contentJsonForClient } from '@/lib/server/content/storage-read-urls'
  * to take an `Actor` parameter — otherwise team-only board metadata
  * leaks to portal viewers.
  *
+ * `audience` narrows the read to one audience, which the published REST and
+ * MCP readers pass as 'board'. Those surfaces are a contract their consumers
+ * were never told about an internal audience on, so widening what an existing
+ * API key returns is the wrong default; the admin surfaces pass nothing and
+ * see every audience, gated as before by the caller's team role.
+ *
  * @param postId - Post ID to fetch
  * @returns Result containing the post with details or an error
  */
-export async function getPostWithDetails(postId: PostId): Promise<PostWithDetails> {
+export async function getPostWithDetails(
+  postId: PostId,
+  opts?: { audience?: PostAudience }
+): Promise<PostWithDetails> {
   // Get the post with author relation (exclude internal/heavy fields)
   const post = await db.query.posts.findFirst({
     columns: {
@@ -75,8 +85,11 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
       mergedAt: true,
       summaryJson: true,
       summaryUpdatedAt: true,
+      audience: true,
     },
-    where: eq(posts.id, postId),
+    where: opts?.audience
+      ? and(eq(posts.id, postId), eq(posts.audience, opts.audience))
+      : eq(posts.id, postId),
     with: {
       author: {
         columns: { displayName: true },

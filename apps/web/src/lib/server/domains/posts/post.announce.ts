@@ -18,7 +18,10 @@ import { syncPostMentions } from './sync-post-mentions'
 import { buildPostUrl } from '@/lib/server/integrations/message-utils'
 import { getBaseUrl } from '@/lib/server/config'
 
-type PostSnapshot = Pick<Post, 'id' | 'title' | 'content' | 'boardId' | 'contentJson' | 'voteCount'>
+type PostSnapshot = Pick<
+  Post,
+  'id' | 'title' | 'content' | 'boardId' | 'contentJson' | 'voteCount' | 'audience'
+>
 type AuthorSnapshot = {
   principalId: PrincipalId
   userId?: UserId
@@ -69,6 +72,7 @@ export async function announcePublishedPost(
       boardId: postRow.boardId,
       contentJson: postRow.contentJson,
       voteCount: postRow.voteCount,
+      audience: postRow.audience,
     }
     board = { slug: boardRow.slug, name: boardRow.name }
     author = {
@@ -79,6 +83,12 @@ export async function announcePublishedPost(
       displayName: authorRow?.displayName ?? undefined,
     }
   }
+
+  // An internal capture has no announcement. dispatchEvent refuses its events
+  // anyway, but the mention sync below is not an event, and the honest reading
+  // of this function's name is that there is nothing here to announce yet.
+  // Publishing the capture to a board is what announces it, later and by hand.
+  if (post.audience === 'internal') return
 
   const actorName = author.displayName ?? author.name
   if (!opts?.skipCreatedWebhook) {

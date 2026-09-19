@@ -106,6 +106,18 @@ export async function mergePost(
     )
   }
 
+  // Merge moves content and rolls counts across the two rows: the source's
+  // comments join the canonical's thread and its unique voters are added to
+  // the canonical's vote count. Across an audience boundary that is a leak in
+  // one direction and a silent hiding in the other, so the boundary is simply
+  // not crossable. Publish the capture to the board first, and then merge.
+  if (duplicatePost.audience !== canonicalPost.audience) {
+    throw new ValidationError(
+      'INVALID_MERGE_AUDIENCE',
+      'These posts have different audiences. Publish the internal one to a board before merging.'
+    )
+  }
+
   // Atomic merge-link + vote recalc. These two writes must commit
   // together: if the merge link lands without the recalc, the canonical's
   // voteCount stays stale until the next vote toggles it; if the recalc

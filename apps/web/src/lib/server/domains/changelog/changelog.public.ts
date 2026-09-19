@@ -21,6 +21,7 @@ import { NotFoundError } from '@/lib/shared/errors'
 import { computeStatus } from './changelog.service'
 import { getCategoriesForEntries, categoryGateAllows } from './changelog-category.service'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
+import { boardAudienceOnly } from '@/lib/server/policy/posts'
 import type { PublicChangelogEntry, PublicChangelogListResult } from './changelog.types'
 import { contentJsonForClient } from '@/lib/server/content/storage-read-urls'
 import { resignStoredAssetUrl } from '@/lib/server/storage/s3'
@@ -134,6 +135,7 @@ export async function getPublicChangelogById(
         eq(changelogEntryPosts.changelogEntryId, id),
         isNull(posts.deletedAt),
         eq(posts.moderationState, 'published'),
+        boardAudienceOnly(),
         isNull(boards.deletedAt),
         sql`${boards.access}->>'view' = 'anonymous'`
       )
@@ -254,6 +256,7 @@ export async function listPublicChangelogs(
               inArray(changelogEntryPosts.changelogEntryId, entryIds),
               isNull(posts.deletedAt),
               eq(posts.moderationState, 'published'),
+              boardAudienceOnly(),
               isNull(boards.deletedAt),
               sql`${boards.access}->>'view' = 'anonymous'`
             )

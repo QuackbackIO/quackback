@@ -420,6 +420,10 @@ Examples:
     scope: 'read:feedback',
     teamOnly: true,
     handler: async (args) => {
+      // Board audience only: an internal capture is not addressable through
+      // the published tool surface, so its activity is not either.
+      const { assertPostOnBoardAudience } = await import('@/lib/server/domains/posts/post.access')
+      await assertPostOnBoardAudience(args.postId as PostId)
       const activities = await getActivityForPost(args.postId as PostId)
 
       return jsonResult({

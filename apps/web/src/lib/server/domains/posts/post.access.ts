@@ -36,6 +36,29 @@ export async function loadBoardAccessForPost(postId: PostId) {
   return rows[0]?.access ?? null
 }
 
+/**
+ * Refuse a post that is not on the board audience.
+ *
+ * The chokepoint for the published REST and MCP readers that hang off a post
+ * id without re-reading the post itself: its comments, its activity, its
+ * voters. Those surfaces are a contract whose consumers were never told about
+ * an internal audience, so an internal capture is simply not addressable
+ * through them; the admin surfaces do not call this.
+ *
+ * Throws the same NotFoundError shape as the other assertions here, so a
+ * denied caller cannot tell an internal post from one that does not exist.
+ */
+export async function assertPostOnBoardAudience(postId: PostId): Promise<void> {
+  const rows = await db
+    .select({ audience: posts.audience })
+    .from(posts)
+    .where(and(eq(posts.id, postId), isNull(posts.deletedAt)))
+    .limit(1)
+  if (rows[0]?.audience !== 'board') {
+    throw new NotFoundError('POST_NOT_FOUND', `Post ${postId} not found`)
+  }
+}
+
 export async function assertPostViewable(postId: PostId, actor: Actor): Promise<void> {
   // Fetch only the fields the policy needs. Soft-deleted post or board
   // is treated as "doesn't exist" — the join uses INNER + isNull
@@ -108,7 +131,11 @@ export async function assertPostVotable(postId: PostId, actor: Actor): Promise<v
     // NotFoundError shape — only "viewable but not votable" lands here.
     const viewDecision = canViewPost(
       actor,
-      { moderationState: row.moderationState, principalId: row.principalId, audience: row.audience },
+      {
+        moderationState: row.moderationState,
+        principalId: row.principalId,
+        audience: row.audience,
+      },
       { access: row.access }
     )
     if (!viewDecision.allowed) {

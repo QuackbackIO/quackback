@@ -172,6 +172,7 @@ export async function getLinkedPosts(input: {
     WHERE pel.integration_type = ${input.integrationType}
       AND pel.external_id = ${input.externalId}
       AND p.deleted_at IS NULL
+      AND p.audience = 'board'
     ORDER BY pel.created_at DESC
   `)
 

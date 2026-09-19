@@ -29,6 +29,10 @@ export const Route = createFileRoute('/api/v1/posts/$postId/voters')({
           const cursorVoteId =
             cursor && isValidTypeId(cursor, 'post_vote') ? (cursor as PostVoteId) : undefined
 
+          const { assertPostOnBoardAudience } =
+            await import('@/lib/server/domains/posts/post.access')
+          await assertPostOnBoardAudience(postId)
+
           const { listPostVoters } = await import('@/lib/server/domains/posts/post.voting')
           const result = await listPostVoters(postId, { limit, cursor: cursorVoteId })
 

@@ -37,6 +37,10 @@ export const Route = createFileRoute('/api/v1/posts/$postId/comments')({
 
           const postId = parseTypeId<PostId>(params.postId, 'post', 'post ID')
 
+          const { assertPostOnBoardAudience } =
+            await import('@/lib/server/domains/posts/post.access')
+          await assertPostOnBoardAudience(postId)
+
           const { getCommentsWithReplies } = await import('@/lib/server/domains/posts/post.query')
 
           const comments = await getCommentsWithReplies(postId)
@@ -166,8 +170,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId/comments')({
               postId,
               content: parsed.data.content,
               contentJson: (parsed.data.contentJson ?? undefined) as
-                | import('@/lib/shared/db-types').TiptapContent
-                | undefined,
+                import('@/lib/shared/db-types').TiptapContent | undefined,
               parentId,
               isPrivate: parsed.data.isPrivate,
               createdAt,

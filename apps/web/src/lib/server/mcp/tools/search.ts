@@ -320,6 +320,10 @@ async function searchPosts(args: SearchArgs, auth: McpAuthContext): Promise<Call
     })(),
     showDeleted: args.showDeleted || undefined,
     sort: args.sort,
+    // Board audience only. This tool is a published contract, and an internal
+    // capture is team-only evidence about a named customer rather than a
+    // feedback item an agent was asked to search.
+    audience: 'board',
     cursor: cursorValue,
     limit: args.limit,
     ...author,
@@ -471,7 +475,10 @@ function serializeMcpComment(c: CommentTreeNode): Record<string, unknown> {
 
 async function getPostDetails(postId: PostId): Promise<CallToolResult> {
   const [post, comments, mergedPosts] = await Promise.all([
-    getPostWithDetails(postId),
+    // Board audience only: see the note in searchPosts. getPostWithDetails
+    // throws NotFound when the audience does not match, so an internal
+    // capture is simply not addressable here.
+    getPostWithDetails(postId, { audience: 'board' }),
     getCommentsWithReplies(postId),
     getMergedPosts(postId),
   ])

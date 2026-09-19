@@ -14,6 +14,7 @@ import { sourceUseFilter } from './source-use'
  * grounding source yet — deferred, not in scope here.
  */
 import { db, posts, boards, postStatuses, and, eq, isNull, sql } from '@/lib/server/db'
+import { boardAudienceOnly } from '@/lib/server/policy'
 import { generateEmbedding } from '@/lib/server/domains/embeddings/embedding.service'
 import { orTermsTsQuery } from '@/lib/server/domains/help-center/help-center-search.service'
 import type { ContentAudience } from './audience'
@@ -100,7 +101,10 @@ export function postsVisibilityConditions(ceiling: ContentAudience) {
     isNull(boards.deletedAt),
   ]
   if (ceiling === 'public') {
-    return [...base, sql`${boards.access}->>'view' = 'anonymous'`]
+    // A private capture is customer evidence, not approved product truth. It
+    // never grounds a customer-facing answer, whatever the feedback knowledge
+    // toggle says; the team ceiling may still read it for product analysis.
+    return [...base, boardAudienceOnly(), sql`${boards.access}->>'view' = 'anonymous'`]
   }
   return base
 }
@@ -111,7 +115,7 @@ const trimmedContent = () => sql<string>`left(${posts.content}, ${POSTS_ASK_CONT
 /** The same anonymous-viewable check the 'public' branch of
  *  {@link postsVisibilityConditions} filters on, computed per row. */
 const isPublicBoard = () =>
-  sql<boolean>`(${boards.access}->>'view' = 'anonymous' AND ${posts.assistantCustomerUse})`
+  sql<boolean>`(${boards.access}->>'view' = 'anonymous' AND ${posts.assistantCustomerUse} AND ${posts.audience} = 'board')`
 
 interface PostRetrievalRow {
   id: string

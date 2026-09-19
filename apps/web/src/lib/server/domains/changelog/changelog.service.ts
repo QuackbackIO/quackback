@@ -567,9 +567,13 @@ export async function reconcileChangelogNotifications(): Promise<number> {
  * Link posts to a changelog entry
  */
 async function linkPostsToChangelog(changelogId: ChangelogId, postIds: PostId[]): Promise<void> {
-  // Validate posts exist
+  // Validate posts exist, and refuse an internal capture outright rather than
+  // relying on the public changelog reader to filter it out later. A changelog
+  // entry is a statement about delivered work; an internal capture has not
+  // been reviewed for publication, and linking it would put its title one
+  // filter-regression away from a public page.
   const existingPosts = await db.query.posts.findMany({
-    where: inArray(posts.id, postIds),
+    where: and(inArray(posts.id, postIds), eq(posts.audience, 'board')),
     columns: { id: true },
   })
 

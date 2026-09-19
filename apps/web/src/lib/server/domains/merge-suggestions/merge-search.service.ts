@@ -5,9 +5,10 @@
  * parallel vector + FTS queries, score merging, hybrid threshold filtering.
  */
 
-import { db, posts, and, isNull, isNotNull, ne, desc, asc, sql } from '@/lib/server/db'
+import { db, posts, and, eq, isNull, isNotNull, ne, desc, asc, sql } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 import type { PostId } from '@quackback/ids'
+import type { PostAudience } from '@/lib/server/db'
 
 const log = logger.child({ component: 'merge-search' })
 
@@ -33,7 +34,10 @@ const DEFAULT_LIMIT = 5
  */
 export async function findMergeCandidates(
   postId: PostId,
-  opts?: { limit?: number; sourcePost?: { title: string; embedding: unknown } }
+  opts?: {
+    limit?: number
+    sourcePost?: { title: string; embedding: unknown; audience?: PostAudience | null }
+  }
 ): Promise<MergeCandidate[]> {
   log.debug({ post_id: postId, limit: opts?.limit ?? DEFAULT_LIMIT }, 'find merge candidates')
   const limit = opts?.limit ?? DEFAULT_LIMIT
@@ -44,7 +48,7 @@ export async function findMergeCandidates(
     opts?.sourcePost ??
     (await db.query.posts.findFirst({
       where: (p, { eq }) => eq(p.id, postId),
-      columns: { title: true, embedding: true },
+      columns: { title: true, embedding: true, audience: true },
     }))
 
   if (!sourcePost?.embedding) {
@@ -53,6 +57,10 @@ export async function findMergeCandidates(
 
   const embedding = sourcePost.embedding
   const title = sourcePost.title
+  // A merge cannot cross the audience boundary (post.merge.ts refuses one), so
+  // a candidate on the other side of it is not a candidate. Suggesting one
+  // would also name an internal capture to a reviewer looking at a board post.
+  const sameAudience = eq(posts.audience, sourcePost.audience ?? 'board')
 
   // Run vector + FTS searches in parallel
   const vectorStr = `[${(embedding as unknown as string).replace(/^\[|\]$/g, '')}]`
@@ -76,6 +84,7 @@ export async function findMergeCandidates(
         isNull(posts.canonicalPostId),
         isNotNull(posts.embedding),
         ne(posts.id, postId),
+        sameAudience,
         sql`${posts.searchVector} @@ plainto_tsquery('english', ${title})`
       )
     )
@@ -99,6 +108,7 @@ export async function findMergeCandidates(
         isNull(posts.canonicalPostId),
         isNotNull(posts.embedding),
         ne(posts.id, postId),
+        sameAudience,
         sql`1 - (${posts.embedding} <=> ${vectorStr}::vector) >= ${VECTOR_THRESHOLD}`
       )
     )

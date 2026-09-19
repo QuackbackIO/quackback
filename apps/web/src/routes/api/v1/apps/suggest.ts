@@ -6,7 +6,7 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { db, posts, boards } from '@/lib/server/db'
 import { and, asc, eq, isNull, sql } from 'drizzle-orm'
 import { appJsonResponse, preflightResponse } from '@/lib/server/integrations/apps/cors'
-import type { Actor } from '@/lib/server/policy'
+import { boardAudienceOnly, type Actor } from '@/lib/server/policy'
 
 export const Route = createFileRoute('/api/v1/apps/suggest')({
   server: {
@@ -79,6 +79,7 @@ export const Route = createFileRoute('/api/v1/apps/suggest')({
             .where(
               and(
                 isNull(posts.deletedAt),
+                boardAudienceOnly(),
                 sql`${posts.embedding} IS NOT NULL`,
                 sql`1 - (${posts.embedding} <=> ${vectorStr}::vector) >= ${minSimilarity}`
               )

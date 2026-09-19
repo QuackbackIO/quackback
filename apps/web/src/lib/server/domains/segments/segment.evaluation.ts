@@ -19,11 +19,16 @@ const OPERATOR_SQL: Record<string, string> = {
   gte: '>=',
 }
 
-/** Activity count subquery for post_count, vote_count, comment_count */
+/** Activity count subquery for post_count, vote_count, comment_count.
+ *
+ * Posts carry an audience: an internal capture is a record the team wrote
+ * ABOUT this person, so counting it here would let evidence they cannot read
+ * move them into a segment, and segments gate board access. */
 function activityCountSql(table: string, hasSoftDelete: boolean): ReturnType<typeof sql> {
-  const whereClause = hasSoftDelete
-    ? sql.raw(`WHERE ${table}.principal_id = p.id AND ${table}.deleted_at IS NULL`)
-    : sql.raw(`WHERE ${table}.principal_id = p.id`)
+  const clauses = [`WHERE ${table}.principal_id = p.id`]
+  if (hasSoftDelete) clauses.push(`AND ${table}.deleted_at IS NULL`)
+  if (table === 'posts') clauses.push(`AND ${table}.audience = 'board'`)
+  const whereClause = sql.raw(clauses.join(' '))
   return sql`(SELECT COUNT(*)::int FROM ${sql.raw(table)} ${whereClause})`
 }
 

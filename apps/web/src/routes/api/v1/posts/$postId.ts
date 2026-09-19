@@ -54,7 +54,8 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
           const { getMergedPosts } = await import('@/lib/server/domains/posts/post.merge')
 
           const [post, mergedPosts] = await Promise.all([
-            getPostWithDetails(postId),
+            // Board audience only: see the note on the list endpoint.
+            getPostWithDetails(postId, { audience: 'board' }),
             getMergedPosts(postId),
           ])
 

@@ -96,10 +96,13 @@ async function collectUrls(baseUrl: string): Promise<SitemapUrl[]> {
   // should not be discoverable via Google.
   const publicPosts = flags.feedback
     ? await db.query.posts.findMany({
-        where: (table, { and, isNull }) =>
+        where: (table, { and, eq: equals, isNull }) =>
           and(
             isNull(table.deletedAt),
             eq(table.moderationState, 'published'),
+            // Internal captures are team-only evidence and must never be
+            // offered to a crawler, whatever their board's view tier says.
+            equals(table.audience, 'board'),
             isNull(table.canonicalPostId)
           ),
         columns: { id: true, updatedAt: true },

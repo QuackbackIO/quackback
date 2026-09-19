@@ -115,7 +115,7 @@ beforeEach(() => {
  * row second so the fast-path triggers and the mentioned principal
  * passes the audience filter.
  */
-function setupMentionDbChain(rows: unknown[]) {
+function setupMentionDbChain(rows: unknown[], audience: 'board' | 'internal' = 'board') {
   // mockReset (vs clearAllMocks in beforeEach) so leftover
   // mockResolvedValueOnce queues from prior tests don't carry over.
   mockLimit.mockReset()
@@ -123,6 +123,7 @@ function setupMentionDbChain(rows: unknown[]) {
     {
       moderationState: 'published',
       principalId: 'prn_author',
+      audience,
       access: {
         view: 'anonymous',
         vote: 'anonymous',
@@ -158,6 +159,28 @@ function makePostMentionedEvent() {
 }
 
 describe('post.mentioned target resolution', () => {
+  it('drops every target when the post is an internal capture', async () => {
+    setupMentionDbChain(
+      [
+        {
+          id: 'principal_mentioned',
+          type: 'user',
+          role: 'user',
+          email: 'alice@example.com',
+        },
+      ],
+      'internal'
+    )
+
+    const targets = await getHookTargets(makePostMentionedEvent())
+
+    // An internal capture is team-only evidence. Mentioning somebody inside
+    // one must not put its title in a notification or an email subject, and
+    // the mentioned principal here is an ordinary portal user.
+    expect(targets.filter((t) => t.type === 'notification')).toHaveLength(0)
+    expect(targets.filter((t) => t.type === 'email')).toHaveLength(0)
+  })
+
   it('returns one notification target and one email target when principal has email', async () => {
     setupMentionDbChain([
       {

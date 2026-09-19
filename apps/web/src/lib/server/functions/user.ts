@@ -353,7 +353,15 @@ export const runGetUserStats = createServerOnlyFn(async function runGetUserStats
     db
       .select({ count: count() })
       .from(posts)
-      .where(and(eq(posts.principalId, principalId), isNull(posts.deletedAt))),
+      // The person's own idea count. An internal capture is attributed to them
+      // but is not theirs to see, so it must not move a number they read.
+      .where(
+        and(
+          eq(posts.principalId, principalId),
+          isNull(posts.deletedAt),
+          eq(posts.audience, 'board')
+        )
+      ),
     db.select({ count: count() }).from(postVotes).where(eq(postVotes.principalId, principalId)),
     db
       .select({ count: count() })

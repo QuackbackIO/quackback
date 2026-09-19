@@ -91,6 +91,9 @@ export async function createPost(
 ): Promise<CreatePostResult> {
   log.info({ board_id: input.boardId }, 'create post')
 
+  const audience = input.audience ?? 'board'
+  const isInternal = audience === 'internal'
+
   // Validate input before the tier gate — invalid input doesn't deserve a
   // count(*) query.
   const title = input.title?.trim()
@@ -238,6 +241,9 @@ export async function createPost(
     const [newPost] = await tx
       .insert(posts)
       .values({
+        audience,
+        captureKey: input.captureKey ?? null,
+        captureProvenance: input.captureProvenance ?? null,
         boardId: input.boardId,
         title,
         // Store the markdown projection of the canonical contentJson so every
@@ -249,7 +255,10 @@ export async function createPost(
         widgetMetadata: input.widgetMetadata ?? null,
         customFieldValues,
         trackedByPrincipalId: input.trackedByPrincipalId ?? null,
-        voteCount: 1,
+        // An internal capture is not a vote. The author's automatic upvote is
+        // the one side effect that lives inside this transaction, so it is
+        // suppressed here rather than by the caller.
+        voteCount: isInternal ? 0 : 1,
         moderationState,
         ...(input.createdAt && { createdAt: input.createdAt }),
       })
@@ -262,12 +271,14 @@ export async function createPost(
         .values(input.tagIds.map((tagId) => ({ postId: newPost.id, tagId })))
     }
 
-    // Auto-upvote by the author
-    await tx.insert(postVotes).values({
-      id: createId('post_vote'),
-      postId: newPost.id,
-      principalId: author.principalId,
-    })
+    // Auto-upvote by the author, for a board post only.
+    if (!isInternal) {
+      await tx.insert(postVotes).values({
+        id: createId('post_vote'),
+        postId: newPost.id,
+        principalId: author.principalId,
+      })
+    }
 
     return newPost
   })
@@ -299,7 +310,10 @@ export async function createPost(
     .then(({ autoTagPost }) => autoTagPost(post.id, post.title, post.content ?? ''))
     .catch((err) => log.error({ err, post_id: post.id }, 'ai auto-tag failed'))
 
-  if (!options?.skipDispatch) {
+  // Every fan-out below is suppressed for an internal capture, derived from
+  // the audience rather than from the caller passing skipDispatch. The
+  // caller's flag stays honoured on top of it.
+  if (!options?.skipDispatch && !isInternal) {
     // Auto-subscribe the author to their own post. Runs even when held for
     // moderation so the author receives notifications on approval/rejection.
     await subscribeToPost(author.principalId, post.id, 'author')
@@ -323,6 +337,7 @@ export async function createPost(
           boardId: post.boardId,
           contentJson: post.contentJson,
           voteCount: post.voteCount,
+          audience: post.audience,
         },
         board: { slug: board.slug, name: board.name },
         author,

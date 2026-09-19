@@ -87,6 +87,11 @@ export const Route = createFileRoute('/api/v1/posts/')({
             dateTo: dateTo && !isNaN(dateTo.getTime()) ? dateTo : undefined,
             sort,
             showDeleted: showDeleted || undefined,
+            // This is a published contract. Internal captures are team-only
+            // evidence and are not part of what an existing API key asked for,
+            // so they stay out of it until a version of this endpoint offers
+            // them explicitly.
+            audience: 'board',
             limit,
             cursor,
           })

@@ -2,7 +2,15 @@
  * Input/Output types for PostService operations
  */
 
-import type { Post, Board, BoardAccess, PostTag, TiptapContent } from '@/lib/server/db'
+import type {
+  Post,
+  Board,
+  BoardAccess,
+  PostAudience,
+  PostCaptureProvenance,
+  PostTag,
+  TiptapContent,
+} from '@/lib/server/db'
 import type {
   PostId,
   BoardId,
@@ -31,6 +39,20 @@ export interface CreatePostInput {
   /** Answers to the board's configured custom fields (boards.settings.customFields),
    *  keyed by field key. Validated against the board's declaration on write. */
   customFields?: Record<string, unknown>
+  /**
+   * The post's audience. Defaults to 'board', which is every ordinary
+   * submission. 'internal' is team-only evidence, and createPost derives the
+   * whole side-effect suppression from it rather than from a separate flag:
+   * no author vote, no subscription, no activity row, no announcement. That
+   * is deliberate, so a future side effect added to createPost cannot leak
+   * out of an internal capture by being added before someone remembers a
+   * second flag exists.
+   */
+  audience?: PostAudience
+  /** The logical identity of the capture that created this post; see posts.capture_key. */
+  captureKey?: string
+  /** What captured this post and from where; see posts.capture_provenance. */
+  captureProvenance?: PostCaptureProvenance
 }
 
 /**
@@ -146,6 +168,15 @@ export interface InboxPostListParams {
   sort?: 'newest' | 'oldest' | 'votes' | 'priority'
   /** Show only soft-deleted posts (within 30-day restorable window) */
   showDeleted?: boolean
+  /**
+   * Which audience to list. 'board' is the ordinary feedback list, 'internal'
+   * is the captured-evidence list, and 'all' is both. Undefined means 'all',
+   * which is what the admin inbox has always shown; the surfaces that must
+   * never show evidence (the public REST list, MCP search) pass 'board'
+   * explicitly, because a default that quietly widened an existing contract
+   * would be the wrong failure direction.
+   */
+  audience?: PostAudience | 'all'
   cursor?: string
   limit?: number
 }

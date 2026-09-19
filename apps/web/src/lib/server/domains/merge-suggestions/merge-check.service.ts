@@ -38,6 +38,7 @@ export async function checkPostForMergeCandidates(postId: PostId): Promise<void>
       deletedAt: true,
       canonicalPostId: true,
       embedding: true,
+      audience: true,
     },
   })
 
@@ -52,7 +53,7 @@ export async function checkPostForMergeCandidates(postId: PostId): Promise<void>
 
   // Step 1: Hybrid search (pass already-fetched post to avoid redundant DB query)
   const candidates = await findMergeCandidates(postId, {
-    sourcePost: { title: post.title, embedding: post.embedding },
+    sourcePost: { title: post.title, embedding: post.embedding, audience: post.audience },
   })
   if (candidates.length === 0) {
     await updateMergeCheckedAt(postId)

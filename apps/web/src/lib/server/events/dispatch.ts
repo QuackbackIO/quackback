@@ -115,8 +115,54 @@ function eventEnvelope(actor: EventActor) {
  * Awaiting ensures targets are resolved and jobs enqueued.
  * Hook execution runs in the background via BullMQ.
  */
+/**
+ * The post this event is about, when it is about one.
+ *
+ * Every post-shaped event and every comment event carries the post under
+ * `data.post`, so one reader covers them all rather than a per-type list that
+ * a new event type could be added beside.
+ */
+function eventPostId(event: EventData): PostId | null {
+  const data = event.data as { post?: { id?: unknown } } | undefined
+  const id = data?.post?.id
+  return typeof id === 'string' ? (id as PostId) : null
+}
+
+/**
+ * Whether this event may leave the feedback console at all.
+ *
+ * An internal capture is team-only evidence. Every consumer downstream of
+ * `processEvent` is a fan-out: outbound webhooks, Slack and Discord cards,
+ * remote status pushes, subscriber emails, mention notifications. None of
+ * them has an audience concept of its own, and the webhook payload carries
+ * the post's title and content verbatim, so the honest place to stop is
+ * before targets are resolved.
+ *
+ * Publication is the event that matters, and it is explicit: moving a capture
+ * to a board announces it at that moment, under a person's decision.
+ */
+async function eventEscapesInternalAudience(event: EventData): Promise<boolean> {
+  const postId = eventPostId(event)
+  if (!postId) return true
+  const { db, posts, eq } = await import('@/lib/server/db')
+  const [row] = await db
+    .select({ audience: posts.audience })
+    .from(posts)
+    .where(eq(posts.id, postId))
+    .limit(1)
+  // An absent row is a deleted post; its event keeps its existing behaviour.
+  return row?.audience !== 'internal'
+}
+
 async function dispatchEvent(event: EventData, opts?: { rethrow?: boolean }): Promise<void> {
   log.debug({ event_type: event.type, event_id: event.id }, 'dispatching event')
+  if (!(await eventEscapesInternalAudience(event))) {
+    log.debug(
+      { event_type: event.type, event_id: event.id },
+      'event suppressed: the post is internal'
+    )
+    return
+  }
   try {
     const { processEvent } = await import('./process')
     await processEvent(event)

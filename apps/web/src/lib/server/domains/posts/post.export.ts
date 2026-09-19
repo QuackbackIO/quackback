@@ -8,6 +8,7 @@ import { db, posts, postStatuses, and, inArray, desc, isNull } from '@/lib/serve
 import { type BoardId } from '@quackback/ids'
 import type { PostForExport } from './post.types'
 import { realEmail } from '@/lib/shared/anonymous-email'
+import { boardAudienceOnly } from '@/lib/server/policy'
 
 /**
  * List posts for export (all posts with full details)
@@ -46,7 +47,10 @@ export async function listPostsForExport(boardId: BoardId | undefined): Promise<
       deletedAt: true,
       canonicalPostId: true,
     },
-    where: and(inArray(posts.boardId, allBoardIds), isNull(posts.deletedAt)),
+    // The feedback export is an artifact people share. Internal captures are
+    // evidence about a named customer and stay out of it; the workspace backup
+    // export (domains/export) is a restore payload and keeps every row.
+    where: and(inArray(posts.boardId, allBoardIds), isNull(posts.deletedAt), boardAudienceOnly()),
     orderBy: desc(posts.createdAt),
     limit: MAX_EXPORT_POSTS,
     with: {
@@ -84,24 +88,22 @@ export async function listPostsForExport(boardId: BoardId | undefined): Promise<
   const statusMap = new Map(statusDetails.map((s) => [s.id, { name: s.name, color: s.color }]))
 
   // Transform to export format
-  return rawPosts.map(
-    (post): PostForExport => ({
-      id: post.id,
-      title: post.title,
-      content: post.content,
-      statusId: post.statusId,
-      voteCount: post.voteCount,
-      authorName: post.author?.displayName ?? null,
-      authorEmail: realEmail(post.author?.user?.email),
-      createdAt: post.createdAt,
-      updatedAt: post.updatedAt,
-      board: {
-        id: post.board.id,
-        name: post.board.name,
-        slug: post.board.slug,
-      },
-      tags: post.tags.map((pt) => pt.tag),
-      statusDetails: post.statusId ? statusMap.get(post.statusId) : undefined,
-    })
-  )
+  return rawPosts.map((post): PostForExport => ({
+    id: post.id,
+    title: post.title,
+    content: post.content,
+    statusId: post.statusId,
+    voteCount: post.voteCount,
+    authorName: post.author?.displayName ?? null,
+    authorEmail: realEmail(post.author?.user?.email),
+    createdAt: post.createdAt,
+    updatedAt: post.updatedAt,
+    board: {
+      id: post.board.id,
+      name: post.board.name,
+      slug: post.board.slug,
+    },
+    tags: post.tags.map((pt) => pt.tag),
+    statusDetails: post.statusId ? statusMap.get(post.statusId) : undefined,
+  }))
 }

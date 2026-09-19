@@ -132,9 +132,23 @@ export function postViewFilter(actor: Actor): SQL {
   )!
 }
 
+/**
+ * The audience half of {@link postViewFilter}, on its own.
+ *
+ * `postViewFilter` is the right predicate wherever a reader has an `Actor`.
+ * A handful of readers do not: the sitemap is anonymous by definition, the
+ * roadmap's team branch takes no actor, the changelog's public reader
+ * hand-rolls its own four guards, and Quinn's retrieval owns a single
+ * ceiling-parameterized predicate. Those spell the audience clause with this
+ * function rather than with a bare `eq`, so `boardAudienceOnly` is greppable
+ * and there is one place that says what 'board' means.
+ */
+export function boardAudienceOnly(): SQL {
+  return eq(posts.audience, 'board')
+}
+
 export type CommentCreateDecision =
-  | { allowed: true; requiresApproval: boolean }
-  | { allowed: false; reason: string }
+  { allowed: true; requiresApproval: boolean } | { allowed: false; reason: string }
 
 /** Action-specific copy for the (unreachable) anonymous deny branch. */
 const ANON_DENY_MESSAGE: Record<'comment' | 'vote' | 'submit', string> = {
@@ -225,8 +239,7 @@ export function canVotePost(actor: Actor, post: PostShape, board: BoardShape): V
 }
 
 export type CreateDecision =
-  | { allowed: true; requiresApproval: boolean }
-  | { allowed: false; reason: string }
+  { allowed: true; requiresApproval: boolean } | { allowed: false; reason: string }
 
 export function canCreatePost(
   actor: Actor,

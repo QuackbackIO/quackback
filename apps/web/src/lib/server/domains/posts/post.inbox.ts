@@ -78,6 +78,7 @@ export function inboxFilterConditions(params: InboxPostListParams, omit?: InboxF
     responded,
     updatedBefore,
     showDeleted,
+    audience,
   } = params
 
   const conditions = []
@@ -95,6 +96,13 @@ export function inboxFilterConditions(params: InboxPostListParams, omit?: InboxF
 
   // Exclude merged/duplicate posts from inbox listing
   conditions.push(isNull(posts.canonicalPostId))
+
+  // The audience dimension. It is never omitted for a facet count: a facet
+  // count is an offer to widen a filter, and an internal capture must not be
+  // counted into an offer made on the board list.
+  if (audience && audience !== 'all') {
+    conditions.push(eq(posts.audience, audience))
+  }
 
   if (omit !== 'board' && boardIds?.length) {
     conditions.push(inArray(posts.boardId, boardIds))

@@ -20,7 +20,13 @@ import {
 } from '@/lib/server/db'
 import { type RoadmapId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
-import { ANONYMOUS_ACTOR, boardViewFilter, canViewRoadmap, type Actor } from '@/lib/server/policy'
+import {
+  ANONYMOUS_ACTOR,
+  boardAudienceOnly,
+  boardViewFilter,
+  canViewRoadmap,
+  type Actor,
+} from '@/lib/server/policy'
 import { publicTagCondition } from '@/lib/server/domains/posts/post.public'
 import {
   parseRoadmapDateBucket,
@@ -162,7 +168,14 @@ async function queryRoadmapPosts(
   publicActor?: Actor
 ): Promise<RoadmapPostsListResult> {
   const { limit = 20, offset = 0 } = options
-  const conditions: SQL[] = [isNull(posts.deletedAt), isNull(posts.canonicalPostId)]
+  // An internal capture is evidence, not a plan. It is excluded from every
+  // roadmap read, including the actor-less team branch that the permission-free
+  // API-key route reaches: internal capture alone is not a roadmap commitment.
+  const conditions: SQL[] = [
+    isNull(posts.deletedAt),
+    isNull(posts.canonicalPostId),
+    boardAudienceOnly(),
+  ]
   if (publicActor) {
     conditions.push(eq(posts.moderationState, 'published'), boardViewFilter(publicActor))
   } else {
@@ -237,7 +250,11 @@ async function dateBucketsFor(roadmapId: RoadmapId, actor?: Actor): Promise<Road
     throw new NotFoundError('ROADMAP_NOT_FOUND', `Roadmap with ID ${roadmapId} not found`)
   }
 
-  const conditions: SQL[] = [isNull(posts.deletedAt), isNull(posts.canonicalPostId)]
+  const conditions: SQL[] = [
+    isNull(posts.deletedAt),
+    isNull(posts.canonicalPostId),
+    boardAudienceOnly(),
+  ]
   if (actor) {
     conditions.push(eq(posts.moderationState, 'published'), boardViewFilter(actor))
   } else {

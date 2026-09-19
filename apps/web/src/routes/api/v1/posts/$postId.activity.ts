@@ -18,6 +18,10 @@ export const Route = createFileRoute('/api/v1/posts/$postId/activity')({
 
           const postId = parseTypeId<PostId>(params.postId, 'post', 'post ID')
 
+          const { assertPostOnBoardAudience } =
+            await import('@/lib/server/domains/posts/post.access')
+          await assertPostOnBoardAudience(postId)
+
           const { getActivityForPost } =
             await import('@/lib/server/domains/activity/activity.service')
 
