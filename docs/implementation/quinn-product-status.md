@@ -41,20 +41,24 @@ Validation: 52 targeted concurrency/involvement/turn tests passed, including ind
 
 Rollback: retain the unique index and serialization where possible. Removing the index permits duplicate active rows again; no history was rewritten by this migration.
 
-## Outstanding acceptance gates
+## Status summary (19 September 2026)
 
-End-to-end validation is recorded in [the functional test report](quinn-product-test-report.md): 21 product scenarios pass against both development and compiled production servers, and all 28 opt-in PostgreSQL lifecycle tests pass. Testing fixed article Markdown preservation and URL form submission. The full repository run has 15,634 passes and 13 failures reproduced on the pre-Quinn baseline; two live local-model tests also fail on both versions. These results do not close the unimplemented gates below.
+Every ordered step of the specification, Step 1 through Step 12, is implemented on this branch and recorded in its own section below, each with the files it changed, the tests it ran, its effective gates and its rollback. The earlier functional test report covers Steps 1 and 2; Steps 3 to 12 each carry their own PostgreSQL proofs, and the final pass on the whole branch ran the full repository suite, typecheck (application, workspace probe and evals), the production build and the server-function manifest check.
 
-- P1–P2: durable intents/snapshots, transactional intake, publication and takeover fencing, independent-connection concurrency tests.
-- Connection gate: independent policies per use, reviewed catalog contracts and full input validation.
-- P3–P4: replayable receipts, uncertain-effect reconciliation, queued approvals, workflow delegation/recovery.
-- Feedback gate: internal post audience/provenance and every public reader/side-effect boundary before automatic capture.
-- Guidance gate: lossless canonical entries and atomic role bindings before shared authoring.
-- P5–P6: passage indexing and evidence/answer validation.
-- P7–P8: exact-candidate evaluation/publication, rollback, run inspection and operations.
-- P9: channel-specific eligibility and richer procedures/follow-up.
+Default posture after this branch, so a reviewer can see what a deploy turns on:
 
-No publish/test controls, autonomous email, automatic internal feedback capture, or write-capable retries are enabled by these changes. No push, merge or deployment is authorized by the specification.
+- On by default with no selector: replayable tool receipts and truthful outcomes, atomic approve-and-enqueue, per-use connector policies with a reviewed catalog, the internal feedback audience, passage retrieval for articles, documents and web pages, the deterministic customer publication validator, run inspection and recovery controls, workflow procedure steps.
+- On by default behind a rollback selector: durable customer turns (`ASSISTANT_EXECUTION_MODE=legacy` restores the previous path), the canonical guidance store (`ASSISTANT_GUIDANCE_SOURCE=legacy`).
+- Off by default, opted in per workspace: release management (draft, candidate checks, publish and rollback), autonomous email replies (channel switch plus per-conversation eligibility), the enforced semantic verifier (`ASSISTANT_ANSWER_VALIDATION=enforce`, shadow otherwise).
+- Never automatic: the customer follow-up after a capture is published, which requires a reviewer and authorized recipients.
+
+Deployment prerequisites: migrate every workspace database through 0294 before deploying this build and raise the consuming build's schema floor accordingly. Migration 0286 halts on legacy duplicate active involvements and requires a reviewed repair. A workspace served by this build before 0291 is applied resolves no guidance rather than falling back; that is visible, not silent. Every migration from 0287 onward replays as a no-op, which the fleet ledger heal depends on.
+
+Rollback caveats that are not policy-preserving: reverting Step 4 restores the shared connector policy map for a workspace that has since set customer and teammate policies apart; reverting Step 7 makes internal captures board-visible, so hide or delete them first; an email answer with a pending delivery record needs the channel switch turned off first so its queue drains.
+
+Remaining work is listed per step below and consolidated in [mockup parity](quinn-mockup-parity.md). The largest open items are: a versioned history for guidance bodies and connector contracts so a release can freeze them rather than only record their versions; an asynchronous check runner for release evaluations; connector tools and step-to-step arguments in workflow procedures; customer subject binding for external reads; calibration of the semantic verifier against reviewed cases before it is enforced; and the remaining rich views (source passage display, saved scenario library, per-run deep links).
+
+No push, merge or deployment has been performed; none is authorized by the specification.
 
 ## Critic corrections and mockup follow-up
 
