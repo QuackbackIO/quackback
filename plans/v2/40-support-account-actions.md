@@ -269,14 +269,14 @@ Every requester is an employee who signs in with the company IdP (D-E1, D-E4), s
 SSO account rather than on email proofs. The customer is the anchor ticket's `requester_principal_id` (`packages/db/src/schema/tickets.ts:110`). Identity is
 **always server-derived** from that principal and the app's configuration; the caller supplies only `ticketId`,
 `definitionId`, `inputs`, `clientRequestId` and the binding hash it was shown (§4.6). Input schemas may not declare
-identity-bearing properties (`email`, `user_id`, `external_user_id`, `account_id`, `principal_id`, `customer*`; rejected at
+identity-bearing properties (`email`, `user_id`, `external_user_id`, `account_id`, `principal_id`, `sso_subject`, `employee_id`, `customer*`; rejected at
 sync/save with the §4.3 subset rules), and the contract requires receivers to resolve the target account **only** from
 `customer`, never from `inputs`.
 
 **Eligibility** (else the panel explains why and offers no Run/Request):
 
 1. The ticket has a requester that is not a team member or service principal (`isTeamMember`, `lib/shared/roles.ts:53` —
-   prevents acting on colleagues or oneself).
+   prevents acting on another agent or oneself; every requester is an employee, but agents are not targets).
 2. The requester principal has a **user** row (`principal.user_id`, `schema/auth.ts:818`) — true for every employee who
    has signed in once via SSO (JIT provisioning, `04-…` §3). The only remaining non-user requester is a lead that carries
    only `contactEmail`, created by inbound mail (IMAP) from an employee who has never signed in
@@ -637,7 +637,8 @@ carry a permission gate, so they appear in the authz matrix without an F-10 clas
 
 Shared seams used, not counted here: **F-4** (settings page), **F-5** (re-point `customer_principal_id`), **F-7** (two
 keys), **F-8** (`fork-account-actions-sweep` job), **F-9** (`account_action.requested/approved/rejected/cancelled/expired/
-executed/rebound/rerouted/reconciled/resolved/config_changed` in the fenced `AuditEventType` block).
+executed/rebound/rerouted/reconciled/resolved/config_changed` in the fenced `AuditEventType` block), **F-12** (SSRF
+allow-list for intranet hosts; hard prerequisite, I-1 — this plan adds no SSRF change of its own).
 
 | ID  | Upstream file | Change (one line) | Why unavoidable | Re-apply on conflict | Phase |
 | --- | --- | --- | --- | --- | --- |
@@ -647,7 +648,9 @@ executed/rebound/rerouted/reconciled/resolved/config_changed` in the fenced `Aud
 
 The staff-review corrections (team-aware auth, row shapes, reconciliation, resumable routing, transactional notification,
 identity binding) need **no new upstream seams**: they use existing upstream exports (`assertTicketVisible`,
-`createNotification(…, tx)`, `realEmail`, `requireAuth`) and fork-owned code. Removed: old **A-3** (People-profile slot,
+`createNotification(…, tx)`, `realEmail`, `requireAuth`) and fork-owned code. The intranet revision (I-1…I-7) removes
+no seam here (none of A-2/A-4/A-5 depends on the network environment) and adds none; it depends on shared F-12 and
+reads the upstream `account` / `identity_provider` tables and user attributes without edits. Removed: old **A-3** (People-profile slot,
 D-A12); old A-1 → F-9; old A-5 (job spread) → F-8; old A-6 → A-5. Generated: `lib/shared/permissions.ts`
 (`db:permissions`), `policy/authz-matrix/MATRIX.md` (16 gated fns), `policy/dep-graph/GRAPH.md`.
 
@@ -659,9 +662,9 @@ Authorization is team-aware in every runnable phase (A1); there is no interim wo
 
 | Phase | Deliverable | Validation gate |
 | --- | --- | --- |
-| **0. Prerequisites** | Foundations (lineage, F-4/F-5/F-7/F-8/F-9); 10 keys block + Tier templates **and 10 Phase 2 (`canInTeam`, team-scoped grants)**; 30 `fork_team_tiers`, `listTierMemberships`, `getTeamTier`, idempotent `escalateTicket` (`idempotencyKey`) | Fork drift check green; Tier templates grant `account.request` + `account.execute` team-scoped; `canInTeam` truth table green in 10 |
-| **1. Keys, schema, connected apps** | 2 keys (Manager-excluded); 3 tables + migration (row-shape checks, `min_tier` 1..3); re-point registry entry; apps CRUD, secret generate/rotate (`secret_version`), `config_version` bumps, sync, manual actions, settings page | `db:permissions` diff = 2 keys; Manager lacks both; journal-integrity test; sync against stub receiver upserts/disables correctly and keeps admin overrides; suggested tier 7 → stored 3; subset validator rejects nested/secret/identity fields; unsafe URL rejected |
-| **2. Direct run** | `client.ts` execute + status lookup; `authorize.ts` (`execTeams`, `canInTeam`, visibility); eligibility + binding snapshot; state machine run path; reconciliation in the sweep; audit in tx | Stub receiver verifies HMAC + timestamp and enforces idempotency; full §4.3 outcome table incl. malformed 2xx/409 → `unknown`; `unknown` reconciled via lookup with the original id; retry refused while `unknown`; T2 team-scoped grant runs `min_tier=2`, T1 → 403, workspace-wide custom grant → 403; invisible ticket → 404; Owner out-of-tier run = `direct` + `break_glass` + NULL approver; cold-email lead not eligible; double-submit same `client_request_id` = one call |
+| **0. Prerequisites** | Foundations (lineage, F-4/F-5/F-7/F-8/F-9) **and F-12** (SSRF allow-list; deployment sets `SSRF_ALLOWED_HOSTS`/`SSRF_ALLOWED_CIDRS` and `NODE_EXTRA_CA_CERTS`); 10 keys block + Tier templates **and 10 Phase 2 (`canInTeam`, team-scoped grants)**; 30 `fork_team_tiers`, `listTierMemberships`, `getTeamTier`, idempotent `escalateTicket` (`idempotencyKey`) | Fork drift check green; F-12 tests green (allow-listed intranet host passes, loopback/link-local still blocked); Tier templates grant `account.request` + `account.execute` team-scoped; `canInTeam` truth table green in 10 |
+| **1. Keys, schema, connected apps** | 2 keys (Manager-excluded); 3 tables + migration (row-shape checks, `min_tier` 1..3); re-point registry entry; apps CRUD, secret generate/rotate (`secret_version`), `config_version` bumps, sync, manual actions, settings page | `db:permissions` diff = 2 keys; Manager lacks both; journal-integrity test; sync against stub receiver upserts/disables correctly and keeps admin overrides; suggested tier 7 → stored 3; subset validator rejects nested/secret/identity fields; `http:` URL, non-resolving host, loopback/link-local (even if allow-listed) and non-allow-listed host each rejected with their §4.2 message; allow-listed `https` host with a company-CA certificate syncs; untrusted certificate reports the CA hint |
+| **2. Direct run** | `client.ts` execute + status lookup; `authorize.ts` (`execTeams`, `canInTeam`, visibility); eligibility + binding snapshot; state machine run path; reconciliation in the sweep; audit in tx | Stub receiver verifies HMAC + timestamp and enforces idempotency; full §4.3 outcome table incl. malformed 2xx/409 → `unknown`; `unknown` reconciled via lookup with the original id; retry refused while `unknown`; T2 team-scoped grant runs `min_tier=2`, T1 → 403, workspace-wide custom grant → 403; invisible ticket → 404; Owner out-of-tier run = `direct` + `break_glass` + NULL approver; payload carries `sso_subject` (and `employee_id` when configured); stub resolves by `sso_subject` first; never-signed-in email lead not eligible; double-submit same `client_request_id` = one call |
 | **3. Request → approve** | Request/approve/reject/cancel; resumable routing + `escalateTicket`; current-team approval + re-route; break-glass; binding re-check | T1 requests `min_tier=2` → ticket on T2, T1 watches → T2 member approves → executes, both recorded; self-approve 403 (incl. Owner); non-team T2 403; Owner off-team approves with `break_glass`; concurrent approvals → 200 + 409; identity/URL/secret/definition change → `BINDING_CHANGED` and re-approval; crash after insert → routing resumed by replay and sweep, one escalation; ticket moved to another T2 team → that team approves; de-escalated to T1 → re-routed; ticket already on T3 → no escalation |
 | **4. Expiry** | Sweep expiry + transactional notification, stuck-execution settle | Request at `expires_at` is `expired` within one cron tick; exactly one notification, rolled back with the transition on failure; approve after expiry → 409; stuck `executing` → `unknown` |
 | **5. UI** | Slot A-2, panel, dialog, approval card (diff, unknown actions), queue page | Manual GUI walkthrough on ticket and paired conversation; unpaired conversation shows convert hint; panel invisible when off or without a team-scoped grant; queue hides tickets the viewer cannot see |
@@ -672,14 +675,19 @@ Authorization is team-aware in every runnable phase (A1); there is no interim wo
 - **Unit**: state transitions table-driven (every from/to incl. illegal); `execTeams` / `canDecide` matrix (roll-up across
   several memberships, requester, Owner break-glass, member without team grant, team grant without membership,
   workspace-wide custom grant inert, Manager, raised `min_tier`, ticket on a different/lower team); eligibility (team
-  member, service principal, no requester, cold-email lead, unverified email, placeholder email, verified `contactEmail`,
-  external id only); binding hash (each material field changes the hash; `name` does not); input-schema subset compiler
+  member, service principal, no requester, never-signed-in email lead, unverified email, placeholder email, verified
+  `contactEmail`, external id only); `sso_subject` selection (one enabled-IdP account → sent; no account, accounts at two
+  enabled IdPs, disabled IdP, or a duplicate `(provider_id, account_id)` held by another user → `null`); `employee_id`
+  (setting unset → `null`, attribute present/absent); binding hash (each material field incl. `sso_subject` and
+  `employee_id` changes the hash; `name` / `sso_provider` do not); input-schema subset compiler
   incl. identity-field rejection; sync merge rules; `min_tier` clamp 1..3.
 - **Contract**: zod contract schemas; a stub receiver that verifies signature and timestamp, reserves the idempotency key
   before side effects and serves the status lookup; **full response mapping table** — each row, plus malformed 2xx,
   malformed 409, `409 in_progress`, non-contract 4xx, 5xx, timeout, reset, oversize → `unknown`, and only contract
   rejections / pre-connect failures → `failed`; lookup `not_received` only after the 5-minute window; identity payload
-  (widget `external_id` vs REST `_externalUserId` precedence and source; `email_verified`; attribute allow-list).
+  (`sso_subject` / `employee_id` present; widget `external_id` vs REST `_externalUserId` precedence and source;
+  `email_verified`; attribute allow-list); stub receiver resolution order `sso_subject` → `employee_id` →
+  `external_user_id` → verified email, and `customer_ambiguous` when two identifiers disagree.
 - **Authorization (mandatory, A1)**: every server fn with a Tier agent holding only team-scoped grants (allowed where
   §4.5 says so — proves no static `account.*` gate); with a workspace-wide custom-role grant only (denied); with a
   ticket the actor cannot see (404) for panel, request, run, approve, reject, cancel, resolve, re-send, check now; queue
@@ -692,14 +700,19 @@ Authorization is team-aware in every runnable phase (A1); there is no interim wo
   `routed`), after `executing` (before the call), after the call (before settle), and during expiry — each recovers via
   replay/sweep with exactly one escalation, at most one external execution per idempotency key, and exactly one expiry
   notification. Concurrent approve vs expire vs cancel.
-- **Security**: SSRF (private IP at save and at call), no redirect follow, response cap, secret never in DTOs or logs,
-  identity never taken from `inputs`.
+- **Security**: SSRF with F-12 — non-allow-listed private IP rejected at save and at call, allow-listed intranet host
+  accepted, loopback / 169.254.169.254 / fe80:: rejected even when inside an allow-listed CIDR, host re-resolving to a
+  non-allow-listed IP between save and call → `failed` / `NOT_SENT`; `http:` refused; TLS verification never disabled
+  (self-signed without the CA → error); no redirect follow, response cap, secret never in DTOs or logs, identity never
+  taken from `inputs`.
+- **Offline**: the test suite and stub receiver run with no internet access (no external hosts in fixtures).
 - **Guardrails**: authz-matrix snapshot, module-state scan, permissions mirror, dep-graph, 10's "no `can()` with a
   scopable key" lint, `single` + `pooled` runs.
 - **Regression**: no rows in `assistant_pending_actions` / `assistant_tool_calls` after an account action; 30's escalation
   tests unaffected by `source: 'account_action'`.
 - **Manual**: recorded walkthrough — T1 direct run, T1 request → T2 approve, reject, expire + notification, unknown →
-  reconcile and → resolve, identity change → re-approval, admin sync with an action removed upstream.
+  reconcile and → resolve, identity change → re-approval, admin sync with an action removed upstream, registering an app on a non-allow-listed
+  host (clear error) and on an allow-listed host with a company-CA certificate.
 
 ## 10. Open items
 
@@ -713,10 +726,16 @@ No `D-A*` item is open in `01-decisions.md` "Still open". Items with an adopted 
 | **A-Q5** | Which customer attributes beyond email, name and external user id may be sent to an app? (O-A5) | 🟡 adopted: none (empty per-app allow-list) |
 | **A-Q9** | If a ticket moves teams after an account-action request, should approval follow the ticket's **current** team (re-routing the request if that team's tier is too low) rather than the team it was first routed to? | 🟡 adopted: current team; re-route |
 | **A-Q10** | Which changes between request and execution require a fresh approval? | 🟡 adopted: any change to the customer's identifiers or allow-listed attributes, the inputs, the app's base URL / configuration version / signing-secret version, or the action definition version |
-| **A-Q11** | May a customer known only by an email address (cold inbound email, no account) be the target of an account action? | 🟡 adopted: only after they verify the address by signing in to the help hub (OTP / magic link); otherwise not eligible |
+| **A-Q12** | Must connected apps use HTTPS, given internal apps may use certificates from the company's private CA? | 🟡 adopted: HTTPS required (`http:` refused); the company root CA is trusted process-wide via `NODE_EXTRA_CA_CERTS`; no per-app "skip TLS verification" option |
+| **A-Q13** | Which identifier do connected apps resolve the employee by? | 🟡 adopted: the SSO subject (`account.account_id` at the enabled company IdP) first, then an optional employee id copied from an IdP claim into a workspace-configured user attribute, then external user id, then verified email; all sent, receiver uses the first present |
 
 Closed (X-6): A-Q2 (job spread is shared F-8), A-Q6 (path fixed by contract; no per-definition override in v1), A-Q7
 (30 exports `listTierMemberships` and aligned §4.2), A-Q8 (10 uses `account.request` / `account.execute`).
+
+Closed (intranet, D-E3/D-E4): **A-Q11** (cold-email requesters) — moot: every requester is an employee with an SSO
+account; a never-signed-in email lead becomes eligible on their first SSO sign-in (§4.4), with no OTP / magic-link step.
+A-Q5 stands (attribute allow-list still defaults to empty; `employee_id` is sent through its own field, not the
+allow-list).
 
 ## 11. Relationship to other v2 plans
 
@@ -724,7 +743,9 @@ Closed (X-6): A-Q2 (job spread is shared F-8), A-Q6 (path fixed by contract; no 
   `account.request` + `account.execute`, and Phase 2's `canInTeam`, which every runnable phase here depends on (§8 Phase 0).
 - **30-tiered-support** — tiers (`fork_team_tiers`; this plan uses 1..3, X-2), `listTierMemberships` / `getTeamTier` /
   current-team rule (30 §4.1), and `escalateTicket` with `source: 'account_action'`, `targetTier` and `idempotencyKey`
-  returning the escalation id (30 §11); D-T1/D-T2/D-T3/D-T12 semantics, including the hub sign-in that makes a cold-email
-  requester eligible (§4.4). This plan is its account-tooling layer.
+  returning the escalation id (30 §11); D-T1/D-T2/D-T3 semantics, and 30's claim on SSO sign-in that makes a
+  never-signed-in email requester eligible (§4.4). This plan is its account-tooling layer.
+- **04-intranet-deployment** — E-1 / shared seam **F-12** (SSRF allow-list) is a prerequisite; deployment also sets
+  `NODE_EXTRA_CA_CERTS` for the company CA and the SSO-only sign-in baseline this plan's identity model relies on.
 - **20-control-tower** — no surface in v1. A later MCP tool would register via F-3 and inherit human attribution (D-C2).
 - **50 / 60** — independent (60 shares the fenced `AuditEventType` block, F-9).

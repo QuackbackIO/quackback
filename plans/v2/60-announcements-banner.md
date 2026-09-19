@@ -27,7 +27,7 @@
 | **Anonymous audience removed.** `audience.tier ∈ authenticated \| segments`; feed fails closed for non-`user` actors. The anonymous, edge-cached `active.json` is **removed**. Embed exchanges the host's signed widget identity JWT (`ssoToken`) for a short-lived viewer token and reads an authenticated, `no-store` feed. N-3 and N-6 closed. **Partly reversed by the intranet revision** (D-E3): a cached, identity-free feed serves audience-all items; identity is needed only for segment items. | D-N5 (superseded) |
 | Embed viewer resolves to the same principal, segment memberships and portal-access decision as the portal; banner refetches when the widget emits `identify`. | D-N7 🟡 |
 | **Instant push:** writes publish a content-free `revision` event on logical channel `fork:announcements` via upstream `pubsub.publish`; portal and embed hold an SSE stream (new fork route reusing `subscribe`, `createSseStream`, `startStreamHeartbeat`, `createStreamLimiter`, HMAC stream-token pattern) and refetch on change. 30 s TTL / SWR design removed (N-5 closed). Scheduled go-live/expiry handled by a client timer at `nextTransitionAt` (still no jobs). | D-N6 |
-| New seam: module-state ledger entry for a **dedicated** banner stream limiter (embeds on busy customer sites must not exhaust the chat stream budget). | D-N6 + module-state rule |
+| New seam: module-state ledger entry for a **dedicated** banner stream limiter (embeds on busy internal apps must not exhaust the chat stream budget). | D-N6 + module-state rule |
 | `announcement.manage` granted to Manager (system) and the **"Fleet Agent"** custom-role template; Admin (fleet owner) holds it by construction. N-8 closed. | D-N8 |
 | MCP registration, settings nav, Labs entry, catalogue edit now satisfied by shared seams F-3/F-4/F-6/F-7 — not counted. Tenant audit seam kept (N-9 → decided) and moved to Phase 1 so admin writes are audited from day one. | `02-…` §10, D-C2 |
 | `created_by/updated_by_principal_id` declared as **exemptions** (staff-only) in the fork re-point registry (via F-5). | `02-…` §8 |
@@ -57,7 +57,7 @@ stream tokens are gone.
 | N1 flows simplified: "show nothing to unknown identities" is **no longer the default** for audience-all items. Unknown identity, no identity, logout, account switch, `reidentify` and viewer-token expiry without `getIdentityToken` all **fall back to the everyone feed** (only segment items disappear). | D-E3, D-N7 🟡 | §4.7 identity lifecycle, §9 |
 | **Stream tokens removed.** The SSE stream carries only content-free `revision` frames, so it no longer authenticates embed callers (it must serve identity-free embeds anyway); the portal still uses its session. Dedicated limiter (N-5) kept and is now the stream's only guard. | D-E1, D-N6 | §4.6, §4.7 |
 | **Private-portal checks removed where moot:** embed no longer replicates `resolvePortalAccessForRequest`'s invite / allowed-segment / widget-marker composition through `evaluatePortalAccess` (public portal ⇒ `granted: 'public'`, `domains/settings/portal-access.ts:149-153`). Replaced by a one-line guard: embed is served only when portal visibility is `public` (`getPortalConfig()`, `settings.service.ts:619`; default read as in `functions/portal-access.ts:197`); otherwise embed is off. **Kept:** the portal banner's `resolvePortalAccessForRequest()` call (harmless on a public portal) and the fail-closed non-user rule for the portal actor. NQ-12 closed. | D-E3 | §4.4, §4.7, §4.8 |
-| **Fonts:** the embed uses the **same bundled `@fontsource` woff2 files** upstream already self-hosts (`globals.css:17` Inter; per-family `styles/fonts/*.css` loaded by `lib/shared/theme/font-loader.ts:24`), served from the instance by the fork font route. No remote font loads, no CDN. | D-E2 | §4.2 |
+| **Fonts:** the embed uses the **same bundled `@fontsource` woff2 files** upstream already self-hosts (`globals.css:17` Inter; per-family `styles/fonts/*.css` loaded by `lib/shared/theme/font-loader.ts:20`), served from the instance by the fork font route. No remote font loads, no CDN. | D-E2 | §4.2 |
 | **Realtime stays on the intranet:** push is upstream `pg_notify` pub/sub + SSE from the Quackback instance to intranet browsers; no external push service, no internet egress from any component. | D-E2 | §4.6 |
 | New open item: the **edge SSO proxy** must let cross-origin, credential-less requests from other intranet apps reach the four embed paths (`banner.js`, `everyone.json`, `stream`, font), or share its cookie domain with host apps. 🟡 NQ-15. | D-E1 | §4.7, §10 |
 | Seams: **none removed, none added** (N-1, N-3, N-5 all still needed). Fork-only removals: stream-token module usage, the `PortalAccessContext` replication in `embed-viewer.ts` and its contract-test coverage. | — | §7 |
@@ -188,7 +188,7 @@ module-state roots.
      `font: { family: 'qb-brand-<id>', fallback, faces: [{ url, weight, style }] } | null` (`null` for
      `inter`/`system`/unknown → fallback stack). Faces are the **same bundled woff2 files** upstream already
      self-hosts for branding — Inter via `@fontsource-variable/inter` (`globals.css:17`), other families via the
-     `@fontsource/*` imports in `styles/fonts/*.css` loaded by `loadBrandingFont` (`lib/shared/theme/font-loader.ts:24`)
+     `@fontsource/*` imports in `styles/fonts/*.css` loaded by `loadBrandingFont` (`lib/shared/theme/font-loader.ts:20`)
      — latin 400 + 600 only. They are served **from the Quackback instance** by fork route
      `GET /api/fork-announcements/embed/font/$fontId/$weight.woff2` (`font/woff2`, `Access-Control-Allow-Origin: *`
      because `FontFace` loads are CORS-mode, `public, max-age=31536000, immutable`); `embed-fonts.ts` maps the
@@ -236,16 +236,27 @@ isLive(a, now) = a.status === 'published' && a.publishAt <= now && (a.expiresAt 
 
 ### 4.4 Feed builder and audience
 
-`feed.ts` — `buildBannerFeed(actor: Actor, surface: 'portal' | 'embed', access: PortalAccessDecision)`:
+`feed.ts` — `buildBannerFeed(viewer: BannerViewer, surface: 'portal' | 'embed')`, where
+`BannerViewer = { kind: 'actor', actor: Actor, access: PortalAccessDecision } | { kind: 'everyone' }`:
 
-1. If `!access.granted` → `[]` (D-N5: every portal is private; the caller supplies the decision, §4.6/§4.7).
-2. If `actor.principalType !== 'user'` and `!isTeamActor(actor)` → `[]` (fails closed even if a workspace's
-   portal is misconfigured as public — there is no anonymous audience).
-3. Load live rows where `surfaces ? surface`, filter `tierAllows(actor, audience.tier, audience.segmentIds)`
-   (`policy/access.ts:19`). `audience.tier ∈ 'authenticated' | 'segments'` (UI: "Everyone with portal
-   access" / "Specific segments"); `isTeamActor` short-circuits to all (team preview).
-4. If `announcements.foldInStatus`, append `status-feed.ts` items.
-5. Sort (kind rank, `priority desc`, `publishAt desc`), cap 5; UI shows first + "N more".
+- **`actor`** (portal session, or the optional identified embed viewer):
+  1. If `!access.granted` → `[]`. Portal: the decision from `resolvePortalAccessForRequest()` (always `public`
+     under D-E3; kept as a harmless guard). Identified embed: the caller passes `{ granted: true }` after the
+     portal-visibility guard (§4.7).
+  2. If `actor.principalType !== 'user'` and `!isTeamActor(actor)` → `[]` (fail closed; with anonymous off and
+     SSO-only sign-in every portal actor is a `user`).
+  3. Load live rows where `surfaces ? surface`, filter `tierAllows(actor, audience.tier, audience.segmentIds)`
+     (`policy/access.ts:19`); `isTeamActor` short-circuits to all (team preview).
+- **`everyone`** (identity-free embed, §4.7): load live rows where `surfaces ? 'embed'` **and**
+  `audience->>'tier' = 'authenticated'` only — never segment rows. No `tierAllows` call (there is no actor); the
+  request is treated as "some employee" because only employees can reach it (D-E1).
+- Then, for both: if `announcements.foldInStatus`, append `status-feed.ts` items (the `everyone` viewer is
+  projected with an anonymous actor — `principalId: null`, `principalType: 'anonymous'`, no segments — so it gets
+  status items only when the status page audience is `public` and only unrestricted components; 🟡 NQ-14);
+  sort (kind rank, `priority desc`, `publishAt desc`), cap 5; UI shows first + "N more".
+
+`audience.tier ∈ 'authenticated' | 'segments'`, labelled "Everyone" / "Specific segments" in the editor
+(on the intranet "everyone" = every SSO-authenticated employee; no anonymous tier exists).
 
 `BannerItem`: `{ id, source: 'announcement' | 'status', kind, title, body, link: {url,label} | null,
 priority, publishAt, expiresAt, updatedAt }`. Feed response:
@@ -303,9 +314,10 @@ upstream's primitives unchanged.
   7,800-byte inline limit (`pubsub.ts:62`). Called inside the request's workspace scope (admin server fn or MCP
   request), which `publishAsync` requires (`currentWorkspaceNamespace()`, `pubsub.ts:312`).
 - **Stream** `routes/api/fork-announcements/stream.ts` (GET, SSE), mirroring `chat/stream.ts`:
-  1. Authenticate: `?token=` → `verifyBannerStreamToken` (embed, §4.7); otherwise the session cookie via
-     `auth.api.getSession` + `resolvePortalAccessForRequest()` (portal, same-origin `EventSource` sends
-     cookies). Unauthenticated or access denied → 401/404. Labs/`enabled` off → 404.
+  1. **No viewer authentication** (intranet revision): frames carry only a content hash, never announcement
+     content, and identity-free embeds (§4.7) must be able to subscribe, so the stream token of the staff-review
+     design is dropped. Reach is restricted by the network and edge SSO (D-E1); abuse is bounded by the
+     dedicated limiter (step 2) and per-IP cap. Labs/`enabled` off → 404.
   2. Reserve a slot on the **dedicated** `announcementStreamLimiter` (`createStreamLimiter` from
      `realtime/stream-connection-limit.ts:77`; e.g. `maxGlobal 300, maxPerWorkspace 200, maxPerIp 20`). Refused →
      503; the client falls back to a 60 s poll of the feed.
@@ -315,25 +327,30 @@ upstream's primitives unchanged.
   4. `subscribe(['fork:announcements'], …)` (`pubsub.ts:256`) forwards each payload as `event: revision`.
   5. `startStreamHeartbeat` (`realtime/stream-heartbeat.ts:40`) reaps abandoned tabs; teardown releases the
      slot and unsubscribes, re-entering the captured workspace scope exactly as `chat/stream.ts:252-281`.
-  6. Headers: `SSE_RESPONSE_HEADERS`; token requests add `Access-Control-Allow-Origin: *` (no credentials, so a
-     plain cross-origin `EventSource` works without preflight).
+  6. Headers: `SSE_RESPONSE_HEADERS` + `Access-Control-Allow-Origin: *` (no credentials, so a plain
+     cross-origin `EventSource` from an internal app works without preflight; the portal's same-origin
+     `EventSource` is unaffected).
+- **Intranet only (D-E2):** push is upstream `pg_notify` pub/sub inside the deployment plus SSE from the
+  Quackback instance to intranet browsers. No external push/WebSocket service, no internet egress.
 - **Client** (`use-banner-stream.ts` for the portal; `packages/widget/src/fork/banner/stream.ts` for the
   embed): opens the stream only while `document.visibilityState === 'visible'`, closes it when hidden and
   refetches on return; on a `revision` different from the last feed's, refetches after 0–2 s random jitter
-  (broadcast fan-out would otherwise stampede the tenant DB); re-mints the embed stream token on reconnect via a
-  feed call (which also re-validates the viewer, §4.7); a stream token never outlives its viewer token.
+  (broadcast fan-out would otherwise stampede the tenant DB). The embed refetches `everyone.json?rev=<rev>` and,
+  when identified, the identified feed (which re-validates the viewer, §4.7). Identity changes never touch the
+  stream: it is shared by the identified and identity-free paths.
 - **Pooled tenancy:**
   - Isolation is upstream's: the logical channel rides inside the per-workspace envelope; the registry is keyed
     by `(namespace, channel)` and `dispatch` refuses envelopes naming another workspace (`pubsub.ts:121-150`).
     No workspace id in the channel name is needed.
   - One refcounted session-mode LISTEN connection per workspace per replica (`pubsub.ts:194-245`), shared with
     chat. It **pins the tenant's compute while any viewer is connected** (`chat/stream.ts:411-414`); closing
-    streams on hidden tabs and heartbeat reaping bound this, but a workspace with an embed on a busy site will
-    effectively stay warm. Accepted consequence of D-N6.
-  - Stream-token signing uses `activeSecretKey()` (`lib/server/secret-key.ts:37`), per workspace under pooling,
-    so a token minted under workspace A fails verification under B.
+    streams on hidden tabs and heartbeat reaping bound this, but a workspace with an embed on a busy internal app
+    will effectively stay warm. Accepted consequence of D-N6.
+  - The stream resolves its workspace from `Host` like every request; with no token there is nothing to
+    cross-verify. Viewer-token signing (§4.7) uses `activeSecretKey()` (`lib/server/secret-key.ts:37`), per
+    workspace under pooling, so a viewer token minted under workspace A fails verification under B.
   - Why a dedicated limiter: the shared `streamLimiter` (`stream-connection-limit.ts:151`) allows 100 streams
-    per workspace; embed viewers on a customer's site would exhaust it and refuse agents' inbox and visitors'
+    per workspace; embed viewers on busy internal apps would exhaust it and refuse agents' inbox and visitors'
     chat streams. The dedicated instance is module-level state by necessity (a process-local concurrency
     gauge, same category `workspace-keyed` as `ledger.ts:196-205`) → ledger seam N-5 + `MODULE-STATE.md`
     regeneration. Global FD headroom: 500 (chat) + 300 (banner) per process — to be confirmed in load test (NQ-11).

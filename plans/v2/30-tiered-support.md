@@ -1,12 +1,16 @@
 # Tiered Support (Tier 1/2/3) + Support Hub — v2 Design Plan
 
-> **Status:** v2 (round 2 + staff review, `03-staff-review.md`) — supersedes `plans/v1/tiered-support-helpdesk-plan.md`. Plan only; nothing is implemented.
-> **Depends on:** Foundations (fork migration lineage, `fork_settings`, shared seams F-1…F-7, `SEAMS.md`);
-> `10-rbac-persona-extensions.md` Phase 1a (custom roles on REST/MCP) and Phase 2 (team-scoped RBAC, `canInTeam`) (D-T4).
-> **Decisions applied:** D1, D2, D3, D4, D-T1 … D-T14, D-A8 (tier roll-up), D-A11 (account-action escalation), D-N5 (private
-> portals). D-T8 is 🟡 (default adopted, flagged). D-T11 is decided: option B (hub landing + links).
+> **Status:** v2 (round 2 + staff review, `03-staff-review.md` + intranet revision, `04-intranet-deployment.md`) — supersedes
+> `plans/v1/tiered-support-helpdesk-plan.md`. Plan only; nothing is implemented.
+> **Depends on:** Foundations (fork migration lineage, `fork_settings`, shared seams F-1…F-8, F-10, F-12, `SEAMS.md`);
+> `10-rbac-persona-extensions.md` Phase 1a (custom roles on REST/MCP) and Phase 2 (team-scoped RBAC, `canInTeam`) (D-T4);
+> the `04-intranet-deployment.md` §3 baseline (SSO-only portal sign-in, IMAP inbound, SMTP outbound).
+> **Decisions applied:** D1, D2, D3, D4, D-T1 … D-T14, D-A8 (tier roll-up), D-A11 (account-action escalation), D-E1 … D-E4
+> (intranet-only, no egress, public portals with anonymous off and SSO-only sign-in, employee requesters; D-E3 supersedes
+> D-N5). D-T8 is 🟡 (default adopted, flagged). D-T11 is decided: option B (hub landing + links).
 > Baseline: upstream `780a7b577`. Claims that are new in round 2 were checked against `92fb29335`; claims new in the staff-review
-> revision were checked against the current checkout (`eb7914767`).
+> revision were checked against `eb7914767`; claims new in the intranet revision were checked against the current checkout
+> (`d23ceb673`).
 > **Conventions:** `02-fork-conventions.md` is binding.
 
 ## Round-2 changes
@@ -33,7 +37,8 @@
 | Seam IDs are aligned with `SEAMS.md` (S1→T-1, S2→T-2). | — |
 
 Rows above that the staff review changed (the auto-routing warning banner, the `setTeamMembers` membership write, the
-`mergeLeadIntoUser` claim, the sequential escalation steps) are superseded by the table below; the body reflects the new design only.
+`mergeLeadIntoUser` claim, the sequential escalation steps) are superseded by the table below. The D-T12 row (passwordless
+sign-in, private portals) is superseded by the intranet table. The body reflects the current design only.
 
 ## Staff-review changes
 
@@ -48,6 +53,26 @@ Rows above that the staff review changed (the auto-routing warning banner, the `
 | X-6 | Coordination notes addressed to other plans were removed. Seam IDs now follow `SEAMS.md` (T-3 signup-policy, T-4 locales, T-5 widget, T-6 header; the classifications spread is shared seam F-10; T-7… later phases). New seams start at T-8. | §4.8, §7, §11 |
 | X-7 | Deferred phases (6 automation, 8 stage email) and the hidden "Find an answer" section for ungranted requesters are labelled as **not** delivering the full capability. | §2, §4.10, §8 |
 | Owner Q (OI-15) | Hiding "Find an answer" in the UI does not secure `/api/widget/kb-ask`, which checks only the `helpCenter` flag (`kb-ask.ts:141-145`) and never checks portal access. Seam **T-12** adds a private-portal gate there (`forkKbAskAllowed`), shipped with Phase 7b. | §4.10, §4.11 step 8, §7 |
+
+The intranet revision keeps T1 (the claim service and its provenance rules), T2, T3, X-1, X-2 and X-3 unchanged. It
+supersedes the OTP/magic-link parts of T1, the T-3 and T-6 entries of X-6, the "hidden Find an answer" part of X-7, and the
+OI-15 row (T-12). See the next table.
+
+## Intranet changes (D-E1…D-E6)
+
+| Change | Decision | Where |
+| --- | --- | --- |
+| Hub users sign in with **SSO only**, through the portal's standard sign-in prompt. The hub has no email form, magic link or 6-digit code. | D-E1, D-E3 | §3, §4.10, §4.11 step 1 |
+| The hub moves **inside `_portal`** (`routes/_portal/hub.tsx`). It sat outside only to escape the private-portal gate. On a public portal `evaluatePortalAccess` grants everyone (`portal-access.ts:151-152`), so the hub now inherits the portal loader's branding, fonts, custom CSS, intl, header and N-1 announcements banner. The fork `_fork-hub` layout, its duplicated branding loader and the separate banner mount are removed. | D-E3 | §4.10 |
+| The hub uses the upstream visitor surfaces directly: rows open `/support/$conversationId`, "View all" opens `/support`, and it calls the upstream `getMyConversationsFn`, `createMyTicketFn` and `submitCsatFn`. The `/hub/requests` and `/hub/requests/$id` routes, the fork hub read/write functions and the drift-guard test are removed. | D-E3 | §4.10, §4.11 steps 4–7, §9 |
+| **Email-only claim (T1) runs on SSO sign-in.** An employee may have emailed support before their first SSO sign-in (JIT provisioning). The claim now runs from a best-effort call in the sign-in after-hook (**new seam T-13**), and again on each hub load. It uses the address from the company IdP: `emailVerified` asserted by the IdP, **or** the callback provider owns the verified company domain (`findProviderForDomainEmail`, `provider-ids.ts:100`). The principal-only teardown, `FOR UPDATE`, block anchor and `unverifiedSender` provenance are unchanged. | D-E1, D-E4 | §4.11 step 3, §7 |
+| **Seam T-3 is removed** (the signup-policy exemption for known requesters). SSO JIT provisioning creates the account (`autoCreateUsers`, `04-…` §3). No email sign-in path is left for T-3 to unlock. | D-E3 | §4.11 step 2, §7 |
+| **Seam T-12 is removed** (the kb-ask private-portal gate). Portals are public inside the intranet, and the edge SSO keeps out unauthenticated readers. `kb-ask` does not need an identified visitor. It resolves the viewer from the widget session and falls back to `ANONYMOUS_ACTOR`, which sees only ungated articles (`kb-ask.ts:209-212`, `widget-viewer.ts:16-35`). `allowAnonymous=false` does not change this. | D-E1, D-E3 | §4.10, §7 |
+| **OI-15 is closed as moot.** Every signed-in employee has portal access, so "Find an answer" is shown to everyone. | D-E3, D-E4 | §4.10, §10 |
+| **Seam T-6 is removed** (the portal-header "Help hub" item). Upstream `portalConfig.nav` already supports admin link items (`portal-header-nav.ts:116-125`, `settings.types.ts:288-313`). Enabling the hub offers "Add Help hub to portal nav", which appends a link item through `updatePortalConfig` (`settings.service.ts:629`). | D-E3 | §4.10, §7, OI-20 |
+| **OI-14 is re-framed for the internal mail server.** Upstream's verdict is kept as computed: mail with no `Authentication-Results` header is `unverified` (`email-auth.ts:268-274`), so it creates or reuses a lead with the badge even when the sender already has an account (`conversation.email-cold-inbound.ts:87-99`). The default stays "claim, keep the badge". The deployment note asks the internal MTA to stamp `Authentication-Results` so that mail from existing employees attaches directly. | D-E1, D-E2 | §4.11 step 3, §10 |
+| Email (the existing resolution email, deferred Phase 8 stage email) goes through upstream's configured transport: SMTP to the internal relay or the SES SMTP VPC endpoint. Inbound email is IMAP. The fork adds no mail transport, no inbound webhook and no internet call, and hub links use the intranet portal URL. | D-E2 | §4.10, §8 |
+| New 🟡 items: OI-19 (accept an IdP address without `email_verified` when the IdP owns the verified domain) and OI-20 (nav link item instead of a localized built-in). | — | §10 |
 
 ## 1. Changes from v1
 
@@ -83,7 +108,7 @@ Rows above that the staff review changed (the auto-routing warning banner, the `
 | R5 | Everything starts at T1 via workflows and the ticket intake sweep. Auto-routing is enforced off while tiers are on (D-T5, D-T10). Every team-assignment path keeps ticket and conversation on the same team and writes the ledger. | 2–3 |
 | R6 | Tier queues (seeded views) and per-tier reporting. | 4–5 |
 | R7 | Automated escalation (workflow/macro action; up only, D-T9). **Deferred:** until Phase 6 ships, escalation is manual, MCP or account-action only, and automation can only move teams via `assign_team` (recorded by the T-9 hook, never downward). | 6 |
-| R8 | End-user hub (D-T11 B) with passwordless access to own requests for signed-out and email-only requesters (D-T12). No extra channels (D-T13). **Deferred:** email on non-close stage changes (Phase 8). Until then, requesters see stage changes only in the hub, widget and existing emails. | 7–8 |
+| R8 | End-user hub (D-T11 B) inside the portal, for SSO-signed-in employees (D-E1, D-E3). Requests an employee emailed in before their first SSO sign-in are claimed into their account at sign-in (D-T12, D-E4). No extra channels (D-T13). **Deferred:** email on non-close stage changes (Phase 8). Until then, requesters see stage changes only in the hub, `/support`, the widget and existing emails. | 7–8 |
 | R9 | Single and pooled tenancy; passes all upstream CI guardrails; ships dark behind `fork_settings`. | all |
 
 ## 3. What already exists (reused, not rebuilt)
