@@ -718,9 +718,10 @@ describe('the bounded pool', () => {
   })
 
   it('defaults every class budget to its own declared sum, so nothing moves', () => {
-    // Quinn's interactive pair is assistant-turn (2) + assistant-action (2).
+    // Quinn's interactive queues are assistant-turn (2), assistant-action (2)
+    // and assistant-email-delivery (2).
     const config = runnerConfig()
-    expect(config.workloadBudgets.interactive).toBe(4)
+    expect(config.workloadBudgets.interactive).toBe(6)
     expect(config.workloadBudgets.ingestion).toBe(1)
     __setJobDefinitionsForTests([
       {
