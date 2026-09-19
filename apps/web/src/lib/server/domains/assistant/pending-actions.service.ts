@@ -396,6 +396,27 @@ export interface DecideAndEnqueueResult {
  * The job is deduplicated on the action id, so a second approve request cannot
  * schedule a second execution even if it somehow passed the status guard.
  */
+/**
+ * Tell a workflow procedure step parked on this proposal how it ended (P9).
+ *
+ * Best effort and never fatal: the decision, the execution and the expiry are
+ * all already recorded, and a workflow that cannot be resumed has its own
+ * expiry. Lazily imported so the assistant domain does not take a load-time
+ * dependency on the workflow engine.
+ */
+async function resumeWorkflowApproval(
+  id: AssistantPendingActionId,
+  reason: import('@/lib/server/domains/workflows/workflow-approval').WorkflowApprovalReason
+): Promise<void> {
+  try {
+    const { completeWorkflowApproval } =
+      await import('@/lib/server/domains/workflows/workflow-approval')
+    await completeWorkflowApproval(id, reason)
+  } catch (err) {
+    log.warn({ err, pending_action_id: id }, 'could not resume the workflow parked on this action')
+  }
+}
+
 export async function decideAndEnqueuePendingAction(
   input: {
     id: AssistantPendingActionId
@@ -414,7 +435,14 @@ export async function decideAndEnqueuePendingAction(
       input.approvedArgsDigest
     )
     if (!decided) return null
-    if (input.decision !== 'approved') return { action: decided, enqueued: false }
+    if (input.decision !== 'approved') {
+      // A workflow procedure step parked on this proposal takes its declined
+      // edge now: a rejection is a final answer, and there is no execution
+      // coming that could report anything else. Best effort, and after the
+      // decision has committed, because the decision is the record.
+      void resumeWorkflowApproval(input.id, 'rejected')
+      return { action: decided, enqueued: false }
+    }
 
     const { enqueueJob } = await import('@/lib/server/jobs/job-queue')
     const job = await enqueueJob({
@@ -526,6 +554,9 @@ export async function sweepAndNotifyExpiredPendingActions(
   const { releaseParkedRun } = await import('./assistant-run.state')
   for (const row of expired) {
     if (row.runId) await releaseParkedRun(exec, row.runId, `action:expired:${row.id}`)
+    // And a workflow procedure step parked on it takes its declined edge, for
+    // the same reason: nobody is going to answer this one either (P9).
+    await resumeWorkflowApproval(row.id, 'expired')
   }
 
   const conversationExpired = expired.filter(

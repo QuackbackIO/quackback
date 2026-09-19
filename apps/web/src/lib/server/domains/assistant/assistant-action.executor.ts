@@ -234,6 +234,31 @@ async function buildExecutionContext(action: AssistantPendingAction, actor: Acto
  * ordinary refusal: a refusal is a recorded answer a reviewer reads, not a
  * queue failure to retry.
  */
+/** How an execution's own reading maps onto the workflow approval ledger. */
+const WORKFLOW_APPROVAL_REASON = {
+  succeeded: 'executed',
+  failed: 'failed',
+  unknown: 'unconfirmed',
+  refused: 'refused',
+} as const satisfies Record<
+  ActionReport['kind'],
+  import('@/lib/server/domains/workflows/workflow-approval').WorkflowApprovalReason
+>
+
+/** Best effort, and never fatal: the receipt is already the record. */
+async function resumeWorkflowApproval(
+  id: AssistantPendingActionId,
+  reason: import('@/lib/server/domains/workflows/workflow-approval').WorkflowApprovalReason
+): Promise<void> {
+  try {
+    const { completeWorkflowApproval } =
+      await import('@/lib/server/domains/workflows/workflow-approval')
+    await completeWorkflowApproval(id, reason)
+  } catch (err) {
+    log.warn({ err, pending_action_id: id }, 'could not resume the workflow parked on this action')
+  }
+}
+
 export async function runApprovedAssistantAction(job: ClaimedJob): Promise<string> {
   const pendingActionId = job.payload.pendingActionId as AssistantPendingActionId | undefined
   if (!pendingActionId) throw new Error('assistant-action job has no pendingActionId')
@@ -325,6 +350,11 @@ async function reportActionOutcome(
   action: AssistantPendingAction,
   report: ActionReport
 ): Promise<void> {
+  // A workflow procedure step parked on this proposal is told first, because
+  // its edges are what decide what the customer is told next (P9). Only a
+  // confirmed success is the approved edge; a refusal, a failure and an
+  // unconfirmed effect all take the declined one.
+  await resumeWorkflowApproval(action.id, WORKFLOW_APPROVAL_REASON[report.kind])
   if (!action.conversationId) return
   const { ownershipForActionResult } = await import('./assistant-action.continuation')
   await ownershipForActionResult(action, report)

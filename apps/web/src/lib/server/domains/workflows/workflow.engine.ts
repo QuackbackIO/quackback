@@ -32,7 +32,13 @@ import { logger } from '@/lib/server/logger'
 import { isUniqueViolation } from '@/lib/server/utils'
 import { applyAction, type ResolvedBlockDeps } from './action.executor'
 import { walkWorkflow, type WorkflowGraph, type WalkResult } from './graph'
-import type { ConditionContext, BlockAnswer, AssistantOutcome } from './condition.evaluator'
+import type {
+  ConditionContext,
+  BlockAnswer,
+  AssistantOutcome,
+  ApprovalOutcome,
+  ToolStepOutcome,
+} from './condition.evaluator'
 import { customInactivityAllowed } from '@/lib/server/domains/conversation/conversation.inactivity-mode'
 import { getWorkflow } from './workflow.service'
 import { resolveConditionContext } from './condition.context'
@@ -268,6 +274,16 @@ async function applyPlanAndSettle(
   // Set by a `let_assistant_answer` action in durable mode: the turn has not
   // been launched, and this park transaction is what requests it.
   let assistantDelegation: { nodeId: string; instructions?: string } | null = null
+  // Set by a `call_tool` action: the verdict of its own receipt, which this
+  // function re-walks with immediately. Never persisted as a wait.
+  let toolStepOutcome: ToolStepOutcome | null = null
+  // Set by a `request_approval` action: the proposal to park on, or null when
+  // the step could not open one at all.
+  let approvalProposal: { pendingActionId: string } | null = null
+  let approvalRequested = false
+  // The visit a procedure step's receipt is keyed by: the cursor's current
+  // waitSeq, stable across every retry of this same resume.
+  const toolStepVisit = readCursor(run).waitSeq ?? 0
   // Once a non-idempotent action starts, a later failure must interrupt the
   // run instead of reverting to its old cursor and replaying customer-visible
   // work. Set before execution because an action may commit and then throw.
@@ -318,6 +334,8 @@ async function applyPlanAndSettle(
             'record_csat',
             'send_webhook',
             'let_assistant_answer',
+            'call_tool',
+            'request_approval',
           ].includes(action.type)
         ) {
           sideEffectExecutedOnce = true
@@ -334,10 +352,16 @@ async function applyPlanAndSettle(
           workflowName: workflow.name,
           subjectPrincipalId,
           resolvedBlockDeps,
+          toolStepVisit,
         })
         if (result.blockMessageId) blockMessageId = result.blockMessageId
         if (result.assistantDeclined) assistantDeclined = true
         if (result.assistantDelegation) assistantDelegation = result.assistantDelegation
+        if (result.toolStepOutcome) toolStepOutcome = result.toolStepOutcome
+        if (action.type === 'request_approval') {
+          approvalRequested = true
+          approvalProposal = result.approvalProposal ?? null
+        }
       } catch (err) {
         log.error({ err, action: action.type, workflowId: workflow.id }, 'workflow action failed')
         await logRunEvent(run.id, workflow.id, subjectPrincipalId, `action_failed:${action.type}`)
@@ -367,6 +391,26 @@ async function applyPlanAndSettle(
     return interrupted ?? (await currentRun(run.id))
   }
 
+  // A `call_tool` step never parks. The walk stopped at it because only this
+  // function knows the receipt's verdict; re-walking from the node with that
+  // verdict in scope is the whole resume. A step that produced no verdict at
+  // all (the action threw and was caught above) reads as failed, so the run
+  // takes the failed edge rather than parking on a wait nothing resumes.
+  if (plan.status === 'waiting' && plan.waitKind === 'tool_step' && plan.resumeNodeId) {
+    const outcome: ToolStepOutcome = toolStepOutcome ?? 'failed'
+    const resumeCtx = { ...ctx, toolStepOutcome: outcome }
+    const next = walkWorkflow(readGraph(workflow.graph), resumeCtx, plan.resumeNodeId)
+    return applyPlanAndSettle(run, workflow, next, conversationId, subjectPrincipalId, resumeCtx)
+  }
+
+  // An approval step that could not open a proposal has nothing to decide, so
+  // it takes the declined edge now rather than parking forever.
+  if (plan.status === 'waiting' && approvalRequested && !approvalProposal && plan.resumeNodeId) {
+    const resumeCtx = { ...ctx, approvalOutcome: 'declined' as ApprovalOutcome }
+    const next = walkWorkflow(readGraph(workflow.graph), resumeCtx, plan.resumeNodeId)
+    return applyPlanAndSettle(run, workflow, next, conversationId, subjectPrincipalId, resumeCtx)
+  }
+
   if (
     assistantDeclined &&
     plan.status === 'waiting' &&
@@ -382,6 +426,30 @@ async function applyPlanAndSettle(
       ...ctx,
       assistantOutcome: 'escalated',
     })
+  }
+
+  if (plan.status === 'waiting' && plan.waitKind === 'approval' && approvalProposal) {
+    // Park on a person's decision. No timer: the proposal's own expiry sweep
+    // is what ends a wait nobody answered, and it resumes down the declined
+    // edge. The cursor carries the proposal id, which is how the decision
+    // finds this run again.
+    const waitSeq = (readCursor(run).waitSeq ?? 0) + 1
+    const cursor: WaitCursor = {
+      waitKind: 'approval',
+      resumeNodeId: plan.resumeNodeId!,
+      waitSeconds: 0,
+      waitSeq,
+      waitStartedAt: new Date().toISOString(),
+      expiresAt: null,
+      pendingActionId: approvalProposal.pendingActionId,
+    }
+    const waiting = await settleRunning(run.id, {
+      state: 'waiting',
+      cursor: cursor as unknown as Record<string, unknown>,
+    })
+    if (!waiting) return currentRun(run.id)
+    await logRunEvent(run.id, workflow.id, subjectPrincipalId, 'waiting')
+    return waiting
   }
 
   if (plan.status === 'waiting' && (plan.waitKind === 'input' || plan.waitKind === 'assistant')) {
@@ -637,6 +705,7 @@ export async function resumeWorkflowRun(
   opts?: {
     blockAnswer?: BlockAnswer
     assistantOutcome?: AssistantOutcome
+    approvalOutcome?: ApprovalOutcome
     expectedWaitSeq?: number
     /**
      * Take Quinn's authority away in the SAME transaction as this claim, with
@@ -696,6 +765,7 @@ export async function resumeWorkflowRun(
       ? await resolveConditionContext(claimed.conversationId, {
           blockAnswer: opts?.blockAnswer,
           assistantOutcome: opts?.assistantOutcome,
+          approvalOutcome: opts?.approvalOutcome,
         })
       : null
     if (!workflow || !claimed.conversationId || !ctx) {
@@ -737,7 +807,8 @@ export async function resumeWorkflowRun(
  * default, since a reply or close interrupting every OTHER pending wait is
  * still exactly the right behavior:
  *
- *  - `excludeWaitKind` — event-trigger.ts passes `'assistant'` ONLY on a
+ *  - `excludeWaitKind` — one kind or several. event-trigger.ts passes
+ *    `'assistant'` and `'approval'` ONLY on a
  *    VISITOR message.created: a multi-turn conversation with Quinn is normal,
  *    so a visitor's message must never end a parked let_assistant_answer
  *    wait. A teammate message passes no exclusion (a human taking over ends
@@ -756,17 +827,21 @@ export async function resumeWorkflowRun(
  */
 export async function interruptWaitingRuns(
   conversationId: ConversationId,
-  opts?: { excludeRunId?: WorkflowRun['id']; excludeWaitKind?: WaitKind }
+  opts?: { excludeRunId?: WorkflowRun['id']; excludeWaitKind?: WaitKind | readonly WaitKind[] }
 ): Promise<number> {
   const filters = [
     eq(workflowRuns.conversationId, conversationId),
     inArray(workflowRuns.state, ['running', 'waiting']),
   ]
   if (opts?.excludeRunId) filters.push(ne(workflowRuns.id, opts.excludeRunId))
-  if (opts?.excludeWaitKind) {
-    filters.push(
-      sql`coalesce(${workflowRuns.cursor}->>'waitKind', 'timer') <> ${opts.excludeWaitKind}`
-    )
+  const excluded =
+    opts?.excludeWaitKind === undefined
+      ? []
+      : Array.isArray(opts.excludeWaitKind)
+        ? opts.excludeWaitKind
+        : [opts.excludeWaitKind as WaitKind]
+  for (const kind of excluded) {
+    filters.push(sql`coalesce(${workflowRuns.cursor}->>'waitKind', 'timer') <> ${kind}`)
   }
   const interrupted = await db
     .update(workflowRuns)

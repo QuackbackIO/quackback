@@ -153,6 +153,8 @@ export async function resolveConditionContext(
     /** Threaded straight onto the returned snapshot — see ConditionContext's
      *  doc (Phase C, slice C-6). Only resumeWorkflowRun ever passes this. */
     assistantOutcome?: ConditionContext['assistantOutcome']
+    approvalOutcome?: ConditionContext['approvalOutcome']
+    toolStepOutcome?: ConditionContext['toolStepOutcome']
     /**
      * Whether to run resolvePersonCompanyContext's principal->user->companies
      * join at all. Default true. The dispatcher (dispatcher.ts) is the one
@@ -243,5 +245,7 @@ export async function resolveConditionContext(
     csatRating: conv.csatRating ?? null,
     blockAnswer: opts.blockAnswer ?? null,
     assistantOutcome: opts.assistantOutcome ?? null,
+    approvalOutcome: opts.approvalOutcome ?? null,
+    toolStepOutcome: opts.toolStepOutcome ?? null,
   }
 }

@@ -29,13 +29,14 @@ const log = logger.child({ component: 'workflow-wait-queue' })
 /** The logical queue name. Matches the definition in `jobs/definitions.ts`. */
 export const WORKFLOW_WAIT_QUEUE = 'workflow-wait'
 
-/** The three kinds of wait a run can park at — a plain timer, an interactive
- *  block awaiting a structured reply (input), or a `let_assistant_answer` park
- *  (assistant). Exported so call sites that need to name a kind (e.g.
- *  interruptWaitingRuns's excludeWaitKind) stay future-proof against a new
- *  kind being added here, instead of hand-rolling their own narrower literal
- *  union that would silently fail to accept it. */
-export type WaitKind = 'timer' | 'input' | 'assistant'
+/** The four kinds of wait a run can park at — a plain timer, an interactive
+ *  block awaiting a structured reply (input), a `let_assistant_answer` park
+ *  (assistant), or an `approval` step parked on a teammate's decision
+ *  (approval, QUINN-PRODUCT P9). Exported so call sites that need to name a
+ *  kind (e.g. interruptWaitingRuns's excludeWaitKind) stay future-proof
+ *  against a new kind being added here, instead of hand-rolling their own
+ *  narrower literal union that would silently fail to accept it. */
+export type WaitKind = 'timer' | 'input' | 'assistant' | 'approval'
 
 /** The run cursor's shape while parked at a wait: the node to resume from, how
  *  long it waited, a monotonic per-run sequence number that gives each wait in
@@ -82,6 +83,13 @@ export interface WaitCursor {
    * customer-facing slot indefinitely.
    */
   expiryCeilingAt?: string | null
+  /**
+   * Approval waits only (P9): the proposal this run parked on. It is how a
+   * decision, an execution result or an expiry finds the run again, and it is
+   * compared alongside `waitSeq` so a late answer to an earlier visit resumes
+   * nothing.
+   */
+  pendingActionId?: string | null
 }
 
 /**

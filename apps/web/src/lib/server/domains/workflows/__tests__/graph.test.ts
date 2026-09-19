@@ -7,7 +7,13 @@
  */
 import { describe, it, expect } from 'vitest'
 import { walkWorkflow, type WorkflowGraph } from '../graph'
-import type { ConditionContext, BlockAnswer, AssistantOutcome } from '../condition.evaluator'
+import type {
+  ConditionContext,
+  BlockAnswer,
+  AssistantOutcome,
+  ApprovalOutcome,
+  ToolStepOutcome,
+} from '../condition.evaluator'
 import { makeConditionContext } from './workflow-test-utils'
 
 // This suite only ever branches on conversation.priority and ticket.type (see
@@ -35,6 +41,16 @@ const ctxWithAnswer = (blockAnswer: BlockAnswer): ConditionContext => ({
 const ctxWithAssistantOutcome = (assistantOutcome: AssistantOutcome): ConditionContext => ({
   ...ctx(),
   assistantOutcome,
+})
+
+const ctxWithApprovalOutcome = (approvalOutcome: ApprovalOutcome): ConditionContext => ({
+  ...ctx(),
+  approvalOutcome,
+})
+
+const ctxWithToolStepOutcome = (toolStepOutcome: ToolStepOutcome): ConditionContext => ({
+  ...ctx(),
+  toolStepOutcome,
 })
 
 const doc = { type: 'doc', content: [{ type: 'text', text: 'Hi there' }] }
@@ -379,6 +395,130 @@ describe('walkWorkflow — conversational block kinds (Phase C, slice C-1)', () 
     expect(walkWorkflow(graph, ctx())).toMatchObject({
       status: 'completed',
       actions: [{ type: 'close' }],
+    })
+  })
+
+  describe('call_tool (QUINN-PRODUCT P9: runs an action, then routes on its receipt)', () => {
+    const graph: WorkflowGraph = {
+      nodes: [
+        { id: 't', type: 'trigger' },
+        { id: 'ct', type: 'call_tool', tool: 'set_attribute', args: { key: 'tier', value: 'pro' } },
+        { id: 'a_done', type: 'action', action: { type: 'close' } },
+        { id: 'a_failed', type: 'action', action: { type: 'set_priority', priority: 'urgent' } },
+      ],
+      edges: [
+        { from: 't', to: 'ct' },
+        { from: 'ct', to: 'a_done' },
+        { from: 'ct', to: 'a_failed', branch: 'failed' },
+      ],
+    }
+
+    it('reached fresh: pushes its action and stops, because only the engine knows the verdict', () => {
+      expect(walkWorkflow(graph, ctx())).toMatchObject({
+        status: 'waiting',
+        waitKind: 'tool_step',
+        resumeNodeId: 'ct',
+        actions: [
+          {
+            type: 'call_tool',
+            nodeId: 'ct',
+            tool: 'set_attribute',
+            args: { key: 'tier', value: 'pro' },
+          },
+        ],
+      })
+    })
+
+    it('re-walked with a done verdict: takes the default edge and runs no second call', () => {
+      expect(walkWorkflow(graph, ctxWithToolStepOutcome('done'), 'ct')).toEqual({
+        status: 'completed',
+        actions: [{ type: 'close' }],
+      })
+    })
+
+    it('re-walked with a failed verdict: takes the failed edge', () => {
+      expect(walkWorkflow(graph, ctxWithToolStepOutcome('failed'), 'ct')).toEqual({
+        status: 'completed',
+        actions: [{ type: 'set_priority', priority: 'urgent' }],
+      })
+    })
+
+    it('ends the path when the failed edge is unwired rather than continuing as if it worked', () => {
+      const unwired: WorkflowGraph = { ...graph, edges: graph.edges.filter((e) => !e.branch) }
+      expect(walkWorkflow(unwired, ctxWithToolStepOutcome('failed'), 'ct')).toEqual({
+        status: 'completed',
+        actions: [],
+      })
+    })
+  })
+
+  describe('approval (QUINN-PRODUCT P9: parks on a teammate decision)', () => {
+    const graph: WorkflowGraph = {
+      nodes: [
+        { id: 't', type: 'trigger' },
+        {
+          id: 'ap',
+          type: 'approval',
+          tool: 'end_conversation',
+          args: { reason: 'resolved' },
+          summary: 'Close this conversation',
+        },
+        { id: 'a_approved', type: 'action', action: { type: 'add_note', body: 'done' } },
+        { id: 'a_declined', type: 'action', action: { type: 'set_priority', priority: 'urgent' } },
+      ],
+      edges: [
+        { from: 't', to: 'ap' },
+        { from: 'ap', to: 'a_approved' },
+        { from: 'ap', to: 'a_declined', branch: 'declined' },
+      ],
+    }
+
+    it('reached fresh: pushes the proposal action and PARKS with waitKind approval', () => {
+      expect(walkWorkflow(graph, ctx())).toMatchObject({
+        status: 'waiting',
+        waitKind: 'approval',
+        resumeNodeId: 'ap',
+        actions: [
+          {
+            type: 'request_approval',
+            nodeId: 'ap',
+            tool: 'end_conversation',
+            summary: 'Close this conversation',
+          },
+        ],
+      })
+    })
+
+    it('resumed approved: takes the default edge', () => {
+      expect(walkWorkflow(graph, ctxWithApprovalOutcome('approved'), 'ap')).toEqual({
+        status: 'completed',
+        actions: [{ type: 'add_note', body: 'done' }],
+      })
+    })
+
+    it('resumed declined: takes the declined edge', () => {
+      expect(walkWorkflow(graph, ctxWithApprovalOutcome('declined'), 'ap')).toEqual({
+        status: 'completed',
+        actions: [{ type: 'set_priority', priority: 'urgent' }],
+      })
+    })
+
+    it('consume-once: a second approval node later in the same walk parks fresh', () => {
+      const two: WorkflowGraph = {
+        nodes: [
+          ...graph.nodes,
+          {
+            id: 'ap2',
+            type: 'approval',
+            tool: 'end_conversation',
+            args: { reason: 'resolved' },
+            summary: 'And again',
+          },
+        ],
+        edges: [...graph.edges, { from: 'a_approved', to: 'ap2' }],
+      }
+      const result = walkWorkflow(two, ctxWithApprovalOutcome('approved'), 'ap')
+      expect(result).toMatchObject({ status: 'waiting', waitKind: 'approval', resumeNodeId: 'ap2' })
     })
   })
 

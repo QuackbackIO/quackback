@@ -207,6 +207,27 @@ const blockBodySchema: z.ZodType<{
  *  MAX_WAIT_SECONDS/MAX_FREQUENCY_CAP_COUNT above. */
 export const MAX_ASSISTANT_STEP_INSTRUCTIONS = 2000
 
+/** What a reviewer reads on the approval card an `approval` node opens. */
+export const MAX_TOOL_STEP_SUMMARY = 200
+
+/** How many arguments one procedure step may carry, and how long each may be. */
+export const MAX_TOOL_STEP_ARGS = 20
+export const MAX_TOOL_STEP_ARG_LENGTH = 2000
+
+/**
+ * A procedure step's arguments.
+ *
+ * Authored as flat named values, interpolated with the same workflow variables
+ * every message body uses, and parsed against the tool's own zod contract at
+ * dispatch. Deliberately not a free-form nested object: the builder has one
+ * field per argument, and a shape the editor cannot render is a shape nobody
+ * can review before it runs.
+ */
+const toolArgsSchema = z.record(
+  z.string().min(1).max(64),
+  z.union([z.string().max(MAX_TOOL_STEP_ARG_LENGTH), z.number(), z.boolean()])
+)
+
 const buttonOptionSchema = z.object({ key: z.string().min(1), label: z.string().min(1).max(80) })
 const attributeOptionSchema = z.object({ id: z.string().min(1), label: z.string().min(1) })
 
@@ -277,6 +298,26 @@ const nodeSchema = z.discriminatedUnion('type', [
     allowTypingInterrupt: z.boolean(),
     commentPrompt: z.string().max(200).optional(),
   }),
+  // ── Procedure steps (QUINN-PRODUCT P9) ───────────────────────────────────
+  // Two kinds that reach Quinn's own action machinery rather than the
+  // conversation: one runs a built-in write tool now, one asks a teammate
+  // first. Both are receipted by (workflow run, node, visit), which is what
+  // makes a re-walked visit read the first attempt's receipt instead of
+  // dispatching a second effect.
+  z.object({
+    id: z.string().min(1),
+    type: z.literal('call_tool'),
+    tool: z.string().min(1).max(64),
+    args: toolArgsSchema,
+  }),
+  z.object({
+    id: z.string().min(1),
+    type: z.literal('approval'),
+    tool: z.string().min(1).max(64),
+    args: toolArgsSchema,
+    /** What the reviewer reads on the approval card. */
+    summary: z.string().min(1).max(MAX_TOOL_STEP_SUMMARY),
+  }),
 ])
 
 /** The 8 conversational-block node kinds (Phase C, slice C-1) — every
@@ -295,6 +336,8 @@ export const BLOCK_NODE_TYPES = [
   'collect_data',
   'collect_reply',
   'request_csat',
+  'call_tool',
+  'approval',
 ] as const
 
 const edgeSchema = z.object({
@@ -413,6 +456,10 @@ export const PARKING_BLOCK_KINDS: ReadonlySet<string> = new Set([
   'request_csat',
   'let_assistant_answer',
   'disable_composer',
+  // An approval parks on a person's decision, which only a customer-facing run
+  // can ever be resumed from. A `call_tool` step runs and continues, so it is
+  // legal in either class.
+  'approval',
 ])
 
 /**

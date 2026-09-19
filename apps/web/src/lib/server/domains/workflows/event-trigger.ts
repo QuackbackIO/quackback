@@ -520,7 +520,7 @@ function isRunStillActive(resumed: WorkflowRun | null): boolean {
  * Everything else (a non-matching reply, free-typed text, a teammate
  * message, a close with nothing parked at an assistant-wait) falls through to
  * the interrupt path unchanged — except that a VISITOR message never
- * interrupts a parked assistant-wait either way (excludeWaitKind: 'assistant'
+ * interrupts a parked assistant or approval wait either way (excludeWaitKind
  * below): a multi-turn conversation with Quinn is normal, so only a teammate
  * message or the two resume triggers above can ever end one. Either way,
  * other triggers for this same event still dispatch afterward.
@@ -606,7 +606,10 @@ export async function dispatchWorkflowsForEvent(event: EventData): Promise<void>
   let activeCustomerFacingRunHint: boolean | undefined
   if (!inputResume && !assistantResume && isInterruptingEvent(event)) {
     await interruptWaitingRuns(trigger.conversationId, {
-      excludeWaitKind: isVisitorMessage ? 'assistant' : undefined,
+      // Neither of these waits is about the customer. An assistant wait is
+      // Quinn's own turn, and an approval wait is a teammate's decision the
+      // customer cannot make, so a visitor message must not end either one.
+      excludeWaitKind: isVisitorMessage ? (['assistant', 'approval'] as const) : undefined,
     })
     activeCustomerFacingRunHint = false
   } else if (assistantResume && isClose) {

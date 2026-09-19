@@ -80,6 +80,7 @@ import type {
   ConversationMessageId,
   TicketStatusId,
   TicketTypeId,
+  AssistantPendingActionId,
 } from '@quackback/ids'
 import type {
   ConversationPriority,
@@ -114,6 +115,8 @@ import { setConversationAttribute } from '@/lib/server/domains/conversation-attr
 import { ensureAssistantPrincipal } from '@/lib/server/domains/assistant/assistant.principal'
 import { resolveWorkflowVariables, type WorkflowVariables } from './workflow-variables'
 import { logRunEvent } from './workflow-run-events'
+import type { WorkflowToolStepArgs } from './graph'
+import type { ToolStepOutcome } from './condition.evaluator'
 import { interpolateTiptapContent } from '@/lib/shared/workflows/interpolate'
 import { tiptapJsonToText } from '@/lib/server/markdown-tiptap'
 import { logger } from '@/lib/server/logger'
@@ -184,6 +187,11 @@ export interface WorkflowContext {
    *  sendBlock falls back to resolving lazily itself in that case, exactly
    *  as it always has. */
   resolvedBlockDeps?: ResolvedBlockDeps
+  /** The logical visit a procedure step's receipt is keyed by, set only by the
+   *  engine (QUINN-PRODUCT P9). The run cursor's current `waitSeq`, which is
+   *  stable across every retry of the same resume and moves on the next park,
+   *  so a replayed segment reads the effect it already had. */
+  toolStepVisit?: number
 }
 
 /** What `send_block` posts, per block kind — the unresolved template as
@@ -267,6 +275,17 @@ export type WorkflowAction =
   // Optional ticketTypeId (Phase 4): absent = the customer-category default
   // type; existing graphs convert exactly as before.
   | { type: 'convert_to_ticket'; ticketTypeId?: string }
+  // Procedure steps (QUINN-PRODUCT P9), engine-only like the block layer: the
+  // graph walker is the only producer. `nodeId` is half of the receipt
+  // identity (workflow run, node, visit); the engine owns the other two.
+  | { type: 'call_tool'; nodeId: string; tool: string; args: WorkflowToolStepArgs }
+  | {
+      type: 'request_approval'
+      nodeId: string
+      tool: string
+      args: WorkflowToolStepArgs
+      summary: string
+    }
 
 export interface ActionResult {
   /** A short label of what happened, or null for a deferred no-op. */
@@ -284,6 +303,13 @@ export interface ActionResult {
    *  half of the delegation identity; the engine owns the run and visit
    *  halves. */
   assistantDelegation?: { nodeId: string; instructions?: string }
+  /** Set by `call_tool`: the verdict of this step's own receipt, which the
+   *  engine re-walks with. Never a park. */
+  toolStepOutcome?: ToolStepOutcome
+  /** Set by `request_approval`: the proposal the engine parks on, or null when
+   *  the step could not open one at all (an unavailable tool, a rejected
+   *  argument), which the engine reads as declined without ever parking. */
+  approvalProposal?: { pendingActionId: AssistantPendingActionId } | null
 }
 
 const label = (label: string | null): ActionResult => ({ label })
@@ -656,6 +682,50 @@ export async function applyAction(
         assistantDelegation: { nodeId: action.nodeId, instructions: action.instructions },
       }
     }
+    case 'call_tool': {
+      // A procedure step's effect, receipted by (run, node, visit) so a
+      // re-walked visit reads the first attempt rather than dispatching
+      // again. Every verdict other than a confirmed success takes the
+      // `failed` edge, including an effect nobody could confirm.
+      const { runWorkflowToolStep } = await import('./workflow-tool-step')
+      const step = await runWorkflowToolStep({
+        runId: ctx.runId ?? '',
+        nodeId: action.nodeId,
+        visit: ctx.toolStepVisit ?? 0,
+        tool: action.tool,
+        args: action.args,
+        conversationId,
+        variables: ctx.resolvedBlockDeps?.variables,
+      })
+      if (ctx.runId && ctx.workflowId) {
+        await logRunEvent(
+          ctx.runId,
+          ctx.workflowId,
+          ctx.subjectPrincipalId ?? null,
+          `tool_step:${step.outcome}:${step.detail}`.slice(0, 120)
+        )
+      }
+      return { label: `${action.tool}: ${step.detail}`, toolStepOutcome: step.outcome }
+    }
+
+    case 'request_approval': {
+      const { proposeWorkflowApproval } = await import('./workflow-tool-step')
+      const proposal = await proposeWorkflowApproval({
+        runId: ctx.runId ?? '',
+        nodeId: action.nodeId,
+        visit: ctx.toolStepVisit ?? 0,
+        tool: action.tool,
+        args: action.args,
+        summary: action.summary,
+        conversationId,
+        variables: ctx.resolvedBlockDeps?.variables,
+      })
+      return {
+        label: proposal ? 'approval requested' : 'approval could not be requested',
+        approvalProposal: proposal,
+      }
+    }
+
     case 'record_csat':
       // recordCsat requires the caller to BE the visitor (amendment 1); the
       // engine passes a visitor-scoped actor for this action specifically,

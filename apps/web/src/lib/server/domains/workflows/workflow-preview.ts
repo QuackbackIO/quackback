@@ -98,6 +98,12 @@ function describeNode(node: WorkflowNode): { summary: string; parks: boolean } {
       return { summary: 'Disable composer', parks: false }
     case 'let_assistant_answer':
       return { summary: 'Let assistant answer', parks: true }
+    case 'call_tool':
+      // Runs and continues: the engine re-walks with the receipt's verdict in
+      // the same pass, so a preview stops at nothing here.
+      return { summary: `Run action: ${node.tool}`, parks: false }
+    case 'approval':
+      return { summary: `Ask a teammate to approve: ${node.tool}`, parks: true }
     case 'reply_buttons':
       return { summary: 'Reply buttons (awaiting customer)', parks: true }
     case 'collect_data':

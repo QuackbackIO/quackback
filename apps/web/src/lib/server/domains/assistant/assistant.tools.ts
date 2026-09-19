@@ -602,6 +602,66 @@ export async function executeApprovedPendingAction(
   }
 }
 
+/** Outcome of running one named built-in under a caller-supplied identity. */
+export type ReceiptedToolActionResult =
+  | { status: 'executed'; result: unknown; receiptId: string }
+  | { status: 'failed'; error: string; receiptId: string }
+  | { status: 'unknown'; receiptId: string }
+  /** The action key was already claimed: this is what the first attempt did. */
+  | { status: 'replayed'; previous: ToolOutcome | null }
+
+/**
+ * Run a built-in tool under an identity the caller owns (QUINN-PRODUCT P9).
+ *
+ * The same claim, execute and settle steps `executeApprovedPendingAction`
+ * runs, keyed by an action key the caller computed rather than by a pending
+ * action. A workflow procedure step's key is (workflow run, node, visit), so a
+ * re-walked visit loses the claim and reads the first attempt's receipt
+ * instead of dispatching a second effect.
+ *
+ * No permission check here. The caller has already resolved the tool against
+ * the workspace's own dial and decided this effect may run without a person,
+ * exactly as the approval executor does before it calls its own counterpart.
+ */
+export async function executeReceiptedToolAction(input: {
+  spec: AssistantToolSpec
+  args: Record<string, unknown>
+  actionKey: string
+  ctx: AssistantToolContext
+  conversationId?: ConversationId
+  runStepKey?: string
+}): Promise<ReceiptedToolActionResult> {
+  const claimed = await claimToolCall({
+    conversationId: input.conversationId,
+    toolName: input.spec.name,
+    args: input.args,
+    idempotencyKey: input.actionKey,
+    actionKey: input.actionKey,
+    argsDigest: hashArgs(input.args),
+    schemaDigest: input.spec.contractDigest,
+    replayStrategy: replayStrategyFor(input.spec),
+    runStepKey: input.runStepKey,
+    principalId: input.ctx.assistantPrincipalId,
+  })
+  if (!claimed) {
+    const previous = await findToolReceipt({
+      actionKey: input.actionKey,
+      idempotencyKey: input.actionKey,
+    })
+    return { status: 'replayed', previous: previous ? replayOutcomeFor(previous) : null }
+  }
+  const outcome = await executeAndSettle(input.spec, input.args, claimed, input.ctx)
+  if (outcome.status === 'succeeded') {
+    return { status: 'executed', result: outcome.value, receiptId: claimed.id }
+  }
+  if (outcome.status === 'unknown') return { status: 'unknown', receiptId: claimed.id }
+  return {
+    status: 'failed',
+    error: outcome.status === 'failed' ? outcome.reason : 'This action could not be completed.',
+    receiptId: claimed.id,
+  }
+}
+
 type AssembledServerTool = ReturnType<AssistantToolSpec['definition']['server']>
 
 /**

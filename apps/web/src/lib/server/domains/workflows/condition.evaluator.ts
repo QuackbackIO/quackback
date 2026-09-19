@@ -105,10 +105,27 @@ export interface ConditionContext {
    *  while parked there (read as "Quinn resolved it" — the classic
    *  resolved-then-follow-up pattern). Absent on every ordinary trigger walk. */
   assistantOutcome?: AssistantOutcome | null
+  /** How a teammate's decision on an `approval` node ended, threaded in ONLY
+   *  when resuming a run parked at one (QUINN-PRODUCT P9). 'approved' means
+   *  the action was approved AND its execution reported success; every other
+   *  reading, a rejection, an expiry, a refusal at dispatch, a failure and an
+   *  effect nobody could confirm, is 'declined', because none of them is the
+   *  procedure's happy path and the run event records which it was. */
+  approvalOutcome?: ApprovalOutcome | null
+  /** The verdict of a `call_tool` step's own receipt, threaded in by the
+   *  engine when it re-walks from that node. Never persisted: the engine has
+   *  the verdict in hand the moment the action settles. */
+  toolStepOutcome?: ToolStepOutcome | null
 }
 
 /** See ConditionContext.assistantOutcome's doc. */
 export type AssistantOutcome = 'escalated' | 'resolved'
+
+/** See ConditionContext.approvalOutcome's doc. */
+export type ApprovalOutcome = 'approved' | 'declined'
+
+/** See ConditionContext.toolStepOutcome's doc. */
+export type ToolStepOutcome = 'done' | 'failed'
 
 /** The customer's structured reply to a parked interactive block, resolved
  *  from its stored BlockReplyMetadata (event-trigger.ts) and threaded into a

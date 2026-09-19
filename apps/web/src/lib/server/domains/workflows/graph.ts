@@ -125,6 +125,14 @@ export type WorkflowNode =
       allowTypingInterrupt: boolean
       commentPrompt?: string
     }
+  // Procedure steps (QUINN-PRODUCT P9). `call_tool` runs a built-in write tool
+  // and continues; `approval` opens a proposal and parks until a teammate
+  // decides. Both are receipted by (workflow run, node, visit).
+  | { id: string; type: 'call_tool'; tool: string; args: WorkflowToolStepArgs }
+  | { id: string; type: 'approval'; tool: string; args: WorkflowToolStepArgs; summary: string }
+
+/** One procedure step's authored arguments, before interpolation. */
+export type WorkflowToolStepArgs = Record<string, string | number | boolean>
 
 export interface WorkflowGraph {
   nodes: WorkflowNode[]
@@ -151,8 +159,12 @@ export interface WalkResult {
    *  'assistant' = a `let_assistant_answer` parked awaiting Quinn's own
    *  outcome (no timer either — resumed by event-trigger.ts on
    *  assistant.handed_off or the conversation closing, see graph.ts's module
-   *  doc). Undefined when status !== 'waiting'. */
-  waitKind?: 'timer' | 'input' | 'assistant'
+   *  doc); 'approval' = an `approval` node parked on a teammate's decision
+   *  (no timer either — resumed when the proposal is decided, executed or
+   *  expires); 'tool_step' = a `call_tool` node waiting for its own receipt's
+   *  verdict, which the engine has in hand and re-walks with immediately, so
+   *  it is never persisted as a wait. Undefined when status !== 'waiting'. */
+  waitKind?: 'timer' | 'input' | 'assistant' | 'approval' | 'tool_step'
   /** Set alongside waitKind 'input' — the block kind the engine stamps onto
    *  the InputWaitCursor. */
   blockKind?: WorkflowBlockKind
@@ -169,6 +181,12 @@ const MAX_STEPS = 1000
  *  (same literal, not imported: that module is client-side and already
  *  hardcodes it too, same as every template's `branch: 'escalated'`). */
 const LET_ASSISTANT_ESCALATED_BRANCH = 'escalated'
+
+/** The labelled edge an `approval` node takes when the effect did not happen. */
+const APPROVAL_DECLINED_BRANCH = 'declined'
+
+/** The labelled edge a `call_tool` node takes when the effect did not happen. */
+const TOOL_STEP_FAILED_BRANCH = 'failed'
 
 /** Where to start a walk: the trigger node, or an explicit node when resuming. */
 function startNode(graph: WorkflowGraph, startNodeId?: string): WorkflowNode | undefined {
@@ -202,6 +220,8 @@ export function walkWorkflow(
   // later in this same walk never mistakes itself for already answered.
   let blockAnswer = ctx.blockAnswer
   let assistantOutcome = ctx.assistantOutcome
+  let approvalOutcome = ctx.approvalOutcome
+  let toolStepOutcome = ctx.toolStepOutcome
 
   for (let step = 0; step < MAX_STEPS && node; step++) {
     // A cycle (or a re-entered node) ends the path rather than looping forever.
@@ -296,6 +316,48 @@ export function walkWorkflow(
           waitKind: 'assistant',
           resumeNodeId: node.id,
         }
+      }
+
+      case 'call_tool': {
+        if (toolStepOutcome) {
+          // Resume, in the same process: the engine re-walks from this node as
+          // soon as the receipt has a verdict. The default edge is the tool
+          // having done what it said; `failed` covers every other reading, and
+          // an unwired one ends the path rather than continuing as if it
+          // worked.
+          nextId =
+            toolStepOutcome === 'done'
+              ? successorId(graph, node.id)
+              : successorId(graph, node.id, TOOL_STEP_FAILED_BRANCH)
+          toolStepOutcome = undefined
+          break
+        }
+        actions.push({ type: 'call_tool', nodeId: node.id, tool: node.tool, args: node.args })
+        // The successor depends on the receipt, which only the engine has, so
+        // the walk stops here and the engine re-walks with the verdict. This
+        // is never persisted as a wait: `waitKind: 'tool_step'` is a signal to
+        // the caller, and the engine treats a missing verdict as `failed`.
+        return { actions, status: 'waiting', waitKind: 'tool_step', resumeNodeId: node.id }
+      }
+
+      case 'approval': {
+        if (approvalOutcome) {
+          nextId =
+            approvalOutcome === 'approved'
+              ? successorId(graph, node.id)
+              : successorId(graph, node.id, APPROVAL_DECLINED_BRANCH)
+          // Consume-once, for the same reason every other resume kind does it.
+          approvalOutcome = undefined
+          break
+        }
+        actions.push({
+          type: 'request_approval',
+          nodeId: node.id,
+          tool: node.tool,
+          args: node.args,
+          summary: node.summary,
+        })
+        return { actions, status: 'waiting', waitKind: 'approval', resumeNodeId: node.id }
       }
 
       case 'disable_composer':
