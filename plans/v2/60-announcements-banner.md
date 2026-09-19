@@ -1,6 +1,6 @@
 # Announcements Banner (Portal + Embeddable) — Design Plan v2
 
-> **Status:** v2 (round 2 + staff review 2026-09-19) — supersedes `plans/v1/announcements-banner-widget-plan.md`. Planning only; nothing implemented.
+> **Status:** v2 (round 2 + staff review + intranet revision 2026-09-19) — supersedes `plans/v1/announcements-banner-widget-plan.md`. Planning only; nothing implemented.
 > **Depends on:** Foundations (fork migration lineage, `fork_settings`, shared seams F-1..F-7, fork re-point
 > registry — `02-fork-conventions.md` §3, §8, §10); `10-rbac-persona-extensions.md` Phase 1a (custom roles +
 > permission keys enforced on MCP; "Fleet Agent" template holding `announcement.view` + `announcement.manage`, "Fleet
@@ -8,13 +8,14 @@
 > per-admin OAuth → tenant MCP) for Phase 4.
 > **Decisions applied:** D1, D2, D-C1/D-C2 (tower acts through tenant MCP as the human; dual audit), D-N1
 > (no localised content; English-only labels), D-N2 (browser-only dismissal), D-N3 (status fold-in), D-N4
-> (plain text + per-type style presets + saved text templates), D-N5 (all portals private; no anonymous
-> audience; embed identifies the viewer), D-N6 (instant push via `lib/server/realtime/*`), D-N7 🟡 (embed shows
-> the identified user the same items as the portal, incl. segments), D-N8 (Fleet owners **and** Fleet Agents
-> publish), D-N9 (every banner dismissible), D-X1 (app branding; narrowed off-site by X-4 🟡).
-> **Goal:** Time-sensitive, typed alerts ("we're aware of an issue", maintenance notices) shown in the private
-> portal and as an embeddable banner on customers' sites for identified users, authored per workspace in admin
-> and centrally from the control tower, pushed to open viewers instantly.
+> (plain text + per-type style presets + saved text templates), D-N6 (instant push via `lib/server/realtime/*`),
+> D-N7 🟡 (re-worded for the intranet, §10), D-N8 (Fleet owners **and** Fleet Agents publish), D-N9 (every banner
+> dismissible), D-X1 (app branding; narrowed in the embed by X-4 🟡), **D-E1…D-E6** (intranet-only, every user an
+> SSO-authenticated employee, no internet egress, portals public + anonymous off + SSO-only — **D-E3 supersedes
+> D-N5**).
+> **Goal:** Time-sensitive, typed alerts ("we're aware of an issue", maintenance notices) shown in the portal and
+> as an embeddable banner on internal (intranet) apps, authored per workspace in admin and centrally from the
+> control tower, pushed to open viewers instantly.
 
 ## Round-2 changes
 
@@ -23,7 +24,7 @@
 | `severity` column → `kind` (`info`, `warning`, `critical`, `maintenance`, `success`) with **fixed presets** (colour tokens, icon, layout, dismiss/aria defaults) in code; authors only pick a kind and type text (+ optional link). No custom colours. | D-N4 |
 | Saved **text templates** (`fork_settings` key `announcement_templates`) with `{placeholder}` substitution done **in the editor at authoring time**; stored announcements are plain text only. | D-N4 |
 | Embed/portal chrome strings are English literals in `components/fork/**`; **locale seam dropped** (9 files), open item N-1 removed, no `init({ labels })`. | D-N1 |
-| **Anonymous audience removed.** `audience.tier ∈ authenticated \| segments`; feed fails closed for non-`user` actors. The anonymous, edge-cached `active.json` is **removed**. Embed exchanges the host's signed widget identity JWT (`ssoToken`) for a short-lived viewer token and reads an authenticated, `no-store` feed. N-3 and N-6 closed. | D-N5 |
+| **Anonymous audience removed.** `audience.tier ∈ authenticated \| segments`; feed fails closed for non-`user` actors. The anonymous, edge-cached `active.json` is **removed**. Embed exchanges the host's signed widget identity JWT (`ssoToken`) for a short-lived viewer token and reads an authenticated, `no-store` feed. N-3 and N-6 closed. **Partly reversed by the intranet revision** (D-E3): a cached, identity-free feed serves audience-all items; identity is needed only for segment items. | D-N5 (superseded) |
 | Embed viewer resolves to the same principal, segment memberships and portal-access decision as the portal; banner refetches when the widget emits `identify`. | D-N7 🟡 |
 | **Instant push:** writes publish a content-free `revision` event on logical channel `fork:announcements` via upstream `pubsub.publish`; portal and embed hold an SSE stream (new fork route reusing `subscribe`, `createSseStream`, `startStreamHeartbeat`, `createStreamLimiter`, HMAC stream-token pattern) and refetch on change. 30 s TTL / SWR design removed (N-5 closed). Scheduled go-live/expiry handled by a client timer at `nextTransitionAt` (still no jobs). | D-N6 |
 | New seam: module-state ledger entry for a **dedicated** banner stream limiter (embeds on busy customer sites must not exhaust the chat stream budget). | D-N6 + module-state rule |
@@ -43,6 +44,24 @@
 | X-6 | Seam IDs aligned with `SEAMS.md` (N-1, N-3, N-5; audit union is shared F-9, not a plan seam). Notes asking other plans to change removed from §6/§11. | §7, §6, §11 |
 | X-7 | Phase 5 and the in-widget strip (NQ-7) labelled as deferred and **not** delivering notifications / an in-widget surface. | §8, §10 |
 
+The N1 lifecycle above still applies, but only to the **optional** identified path after the intranet revision
+(below): an unknown or cleared identity now falls back to the audience-all feed instead of showing nothing, and
+stream tokens are gone.
+
+## Intranet changes (D-E1…D-E6)
+
+| Change | Decision | Where |
+| --- | --- | --- |
+| Embeds run on **internal apps**, not customer sites; every host-page user is an SSO-authenticated employee (edge SSO proxy + Quackback SSO). All "customer site / external site / customer backend" wording removed. | D-E1, D-E4 | header, §2, §4.2, §4.7 |
+| **Embed identity model re-decided.** (a) Audience-**all** items ("Everyone") are served to any request that reaches the embed feed, via a simple, cacheable, identity-free `GET /api/fork-announcements/embed/everyone.json` (no preflight, `Access-Control-Allow-Origin: *`, `publicWorkspaceCacheHeaders`, cache-busted by `?rev=`) — network + edge SSO already restrict reach. (b) **Segment-targeted** items still require identity: the staff-review `ssoToken` → viewer-token exchange is kept but **optional**. 🟡 NQ-14 (confirm with owner). | D-E3 (supersedes D-N5), D-N7 🟡 | §4.4, §4.7, §10 |
+| N1 flows simplified: "show nothing to unknown identities" is **no longer the default** for audience-all items. Unknown identity, no identity, logout, account switch, `reidentify` and viewer-token expiry without `getIdentityToken` all **fall back to the everyone feed** (only segment items disappear). | D-E3, D-N7 🟡 | §4.7 identity lifecycle, §9 |
+| **Stream tokens removed.** The SSE stream carries only content-free `revision` frames, so it no longer authenticates embed callers (it must serve identity-free embeds anyway); the portal still uses its session. Dedicated limiter (N-5) kept and is now the stream's only guard. | D-E1, D-N6 | §4.6, §4.7 |
+| **Private-portal checks removed where moot:** embed no longer replicates `resolvePortalAccessForRequest`'s invite / allowed-segment / widget-marker composition through `evaluatePortalAccess` (public portal ⇒ `granted: 'public'`, `domains/settings/portal-access.ts:149-153`). Replaced by a one-line guard: embed is served only when portal visibility is `public` (`getPortalConfig()`, `settings.service.ts:619`; default read as in `functions/portal-access.ts:197`); otherwise embed is off. **Kept:** the portal banner's `resolvePortalAccessForRequest()` call (harmless on a public portal) and the fail-closed non-user rule for the portal actor. NQ-12 closed. | D-E3 | §4.4, §4.7, §4.8 |
+| **Fonts:** the embed uses the **same bundled `@fontsource` woff2 files** upstream already self-hosts (`globals.css:17` Inter; per-family `styles/fonts/*.css` loaded by `lib/shared/theme/font-loader.ts:24`), served from the instance by the fork font route. No remote font loads, no CDN. | D-E2 | §4.2 |
+| **Realtime stays on the intranet:** push is upstream `pg_notify` pub/sub + SSE from the Quackback instance to intranet browsers; no external push service, no internet egress from any component. | D-E2 | §4.6 |
+| New open item: the **edge SSO proxy** must let cross-origin, credential-less requests from other intranet apps reach the four embed paths (`banner.js`, `everyone.json`, `stream`, font), or share its cookie domain with host apps. 🟡 NQ-15. | D-E1 | §4.7, §10 |
+| Seams: **none removed, none added** (N-1, N-3, N-5 all still needed). Fork-only removals: stream-token module usage, the `PortalAccessContext` replication in `embed-viewer.ts` and its contract-test coverage. | — | §7 |
+
 ## 1. Changes from v1
 
 | v1 issue (review §3.2 + coordinator findings) | v2 resolution |
@@ -50,9 +69,9 @@
 | Over-built lifecycle: `scheduled`/`expired` states, publish/expire jobs, sweep, deadline provider | **Visibility derived from time at read**: `status = 'published' AND publish_at <= now AND (expires_at IS NULL OR expires_at > now)` — changelog precedent (`changelog.public.ts:39`, `changelog.query.ts:56`). States `draft \| published \| archived` only. No jobs, no sweep, no `hook-job.ts` case, no `startup.ts` arming. Viewers learn about time transitions from `nextTransitionAt` (§4.3). |
 | v1 planned a new `earliestWorkspaceDeadline` provider | Not needed: nothing is scheduled server-side. |
 | `notified_at` claim column | Dropped from Phases 1–4; optional Phase 5 registers a claim in `packages/db/src/side-effect-ledger.ts`. |
-| Cached public `active.json` with `widgetCorsHeaders()` / `publicWorkspaceCacheHeaders` | **Removed (D-N5/D-N6).** All data endpoints are authenticated and `no-store`; freshness comes from push, not TTL. Only `banner.js` (code, no data) stays edge-cacheable. |
+| Cached public `active.json` with `widgetCorsHeaders()` / `publicWorkspaceCacheHeaders` | Removed in round 2 (D-N5), **re-introduced narrowly by the intranet revision (D-E3)**: `embed/everyone.json` carries only audience-all, embed-surface items, is cacheable with `Vary: Host`, and is cache-busted by the pushed `revision` (`?rev=`), so freshness still comes from push, not TTL. The identified feed stays `no-store`. |
 | "Sanitize rich body with `sanitize-tiptap`" | **Plain text + optional link** (D-N4). Clients insert text nodes only. |
-| No private-portal / audience enforcement | Portal: `resolvePortalAccessForRequest()` (`functions/portal-access.ts:63`). Embed: same decision via exported `evaluatePortalAccess` (`domains/settings/portal-access.ts:149`) for the JWT-verified viewer (§4.7). Audience via `tierAllows` (`policy/access.ts:19`). |
+| No portal-access / audience enforcement | Portal: `resolvePortalAccessForRequest()` (`functions/portal-access.ts:63`; always `granted` on the D-E3 public portal, kept as a harmless guard). Embed: served only when portal visibility is `public` (D-E3 baseline); no private-portal composition (§4.7). Audience via `tierAllows` (`policy/access.ts:19`). |
 | Prelude reused `window.__QUACKBACK_URL__` / `__QUACKBACK_CONFIG__` | Banner prelude sets `window.__QUACKBACK_BANNER__ = { url, config }`; IIFE global `QuackbackBanner`. |
 | Widget bundle budget ignored | Portal banner component is lean; `bun run check:widget-bundle` is a Phase 2 gate. |
 | No locale strings | Superseded by D-N1: English-only chrome, no locale files touched. |
@@ -64,21 +83,22 @@
 | "Reuses `publish-widget.yml`" | New IIFE entry in `packages/widget/tsup.config.ts`, built by `apps/web/Dockerfile:41`; served by the app, no npm publish. |
 | CSP unstated | §4.7. |
 | Status fold-in coupled to raw tables | Only via `getStatusPageSnapshot()` (`domains/status/status.public.ts:123`) + exported gate helpers. |
-| Widget identity reuse for embeds | **Designed (D-N5/D-N7), §4.7** — was open item N-6. |
+| Widget identity reuse for embeds | **Designed (D-N7), §4.7** — was open item N-6; optional after the intranet revision (segment items only). |
 
 ## 2. Requirements
 
 | #   | Requirement |
 | --- | --- |
 | R1  | Publish time-sensitive alerts of a fixed **kind** (info, warning, critical, maintenance, success) with optional link, schedule and expiry; styling comes from the kind's preset only. |
-| R2  | Render in the **portal** (above `<main>`) and as an **embeddable banner** on external sites, for identified viewers only. |
+| R2  | Render in the **portal** (above `<main>`) and as an **embeddable banner** on internal (intranet) apps: audience-all items for every employee without identification; segment-targeted items only when the host identifies the viewer. |
 | R3  | App-specific: rows live in the workspace's own DB; every read resolves the workspace per `Host`. |
 | R4  | Central management from the control tower (single app or broadcast), attributable to the human (D-C2); Fleet owners and Fleet Agents may publish (D-N8). |
-| R5  | Time-based visibility without jobs; client-side dismissal; audience = all portal-authorised users or segments; private portal respected on both surfaces. |
+| R5  | Time-based visibility without jobs; client-side dismissal; audience = everyone (all employees) or segments. |
 | R6  | Live status incidents / maintenance appear in the same strip (D-N3). |
 | R7  | Publish/update/archive reach open portals and embeds instantly (D-N6). |
 | R8  | Saved text templates for common notices; placeholders filled at authoring time. |
 | R9  | Fork-safe: fork dirs, fork lineage, minimal seams; pass module-state / authz / host-vary / bundle guardrails. |
+| R10 | No internet egress (D-E2): fonts, scripts and realtime are served from the instance; nothing is loaded from a CDN or third party. |
 
 ## 3. Architecture overview
 
@@ -91,11 +111,16 @@ flowchart LR
   T --> FEED[buildBannerFeed actor]
   ST[getStatusPageSnapshot + status gate] --> FEED
   FEED --> PF[getPortalBannerFn → PortalBanner in _portal.tsx]
-  FEED --> EF[/api/fork-announcements/embed/feed  Bearer viewer token, no-store/]
-  PS --> SS[/api/fork-announcements/stream  SSE: revision frames/]
-  SS --> PB[portal banner] & BJ[banner.js on host sites]
-  HOST[host page ssoToken] --> SX[/embed/session → viewer token/] --> EF
+  FEED --> EV[/api/fork-announcements/embed/everyone.json  no identity, audience-all, cacheable ?rev=/]
+  FEED --> EF[/api/fork-announcements/embed/feed  Bearer viewer token, no-store — optional/]
+  PS --> SS[/api/fork-announcements/stream  SSE: content-free revision frames/]
+  SS --> PB[portal banner] & BJ[banner.js on internal apps]
+  EV --> BJ
+  HOST[host page ssoToken — optional] --> SX[/embed/session → viewer token/] --> EF --> BJ
 ```
+
+Everything runs inside the intranet (D-E1/D-E2): the browsers, the internal host apps and the Quackback instance.
+No component calls the internet.
 
 One feed builder (`buildBannerFeed(actor, surface)`) serves both surfaces so they never diverge. The stream
 carries **no content** — only "revision changed" — so audience filtering stays in the feed read.
@@ -108,17 +133,18 @@ carries **no content** — only "revision changed" — so audience filtering sta
 | --- | --- |
 | Schema | `packages/db/src/fork/schema/announcements.ts` (barrel `packages/db/src/fork/index.ts`) |
 | Migration | `packages/db/drizzle-fork/NNNN_fork_announcements.sql` |
-| Domain | `apps/web/src/lib/server/fork/announcements/{announcements.service.ts, feed.ts, status-feed.ts, config.ts, templates.ts, revision.ts, embed-viewer.ts, viewer-token.ts, stream-limit.ts, embed-theme.ts, embed-fonts.ts}` |
+| Domain | `apps/web/src/lib/server/fork/announcements/{announcements.service.ts, feed.ts, status-feed.ts, config.ts, templates.ts, revision.ts, embed-viewer.ts, viewer-token.ts, stream-limit.ts, embed-theme.ts, embed-fonts.ts}` (no stream-token module — removed by the intranet revision) |
 | Server fns | `apps/web/src/lib/server/fork/announcements/functions.ts` |
 | MCP tools | `apps/web/src/lib/server/mcp/tools/fork-announcements.ts`, listed in `mcp/tools/fork-index.ts` (F-3) |
 | Shared | `apps/web/src/lib/shared/fork/announcements/{types.ts, schema.ts (zod), visibility.ts, presets.ts, placeholders.ts}` |
 | Components | `apps/web/src/components/fork/announcements/{portal-banner.tsx, banner-bar.tsx, editor-form.tsx, template-picker.tsx, preview.tsx, use-banner-stream.ts}` |
 | Settings registration | `components/fork/settings/fork-settings-modules.ts` (F-4); Labs `fork-announcements` in `lib/shared/fork/labs.ts` (F-6) |
-| Routes | `routes/admin/settings.fork-announcements.tsx` (+ `.templates.tsx`, `.install.tsx`); `routes/api/fork-announcements/{stream.ts, banner[.]js.ts, embed/session.ts, embed/feed.ts, embed/font.$fontId.$weight[.]woff2.ts}` |
+| Routes | `routes/admin/settings.fork-announcements.tsx` (+ `.templates.tsx`, `.install.tsx`); `routes/api/fork-announcements/{stream.ts, banner[.]js.ts, embed/everyone[.]json.ts, embed/session.ts, embed/feed.ts, embed/font.$fontId.$weight[.]woff2.ts}` |
 | Embed SDK | `packages/widget/src/fork/banner/{banner-queue.ts, render.ts, dismiss.ts, styles.ts, stream.ts, presets.ts}` |
 
 Module state: all fork server code is request-scoped except **one** deliberate instance — the dedicated
-stream limiter in `stream-limit.ts` (§4.6, seam N-5). `embed-fonts.ts` is a lazily imported constant byte table (no mutable state). No feed caches, no revision memo, no compressed-bundle
+stream limiter in `stream-limit.ts` (§4.6, seam N-5). `embed-fonts.ts` is a lazily imported constant map from
+allow-listed `(fontId, weight)` to the bundled `@fontsource` woff2 file (no mutable state). No feed caches, no revision memo, no compressed-bundle
 `Map` (`banner[.]js.ts` compresses per request, unlike `sdk[.]js.ts:17`). `packages/widget` is outside the
 module-state roots.
 
@@ -155,19 +181,25 @@ module-state roots.
   **Embed (narrowed promise, X-4 🟡):** the embed applies exactly two things from the app's branding —
   1. **Theme variables:** `generateWorkspaceThemeCSS` output (`lib/shared/theme/generator.ts:505`) with its `:root` /
      `.dark` selectors rewritten server-side to `:host` / `:host(.qb-dark)`; the SDK toggles `qb-dark` from the app's
-     theme mode (or host `prefers-color-scheme` when the app follows system). Delivered in the session payload.
-  2. **Font:** `resolveBrandingFontId(customCss, configFontSans)` (`lib/shared/theme/fonts.ts:57`) picks the id;
-     the payload carries `font: { family: 'qb-brand-<id>', fallback, faces: [{ url, weight, style }] } | null`
-     (`null` for `inter`/`system`/unknown → fallback stack). Faces are the latin 400 + 600 woff2 files from the
-     same `@fontsource/*` packages upstream self-hosts (`lib/shared/theme/font-loader.ts:20`), served by fork route
-     `GET /api/fork-announcements/embed/font/$fontId/$weight.woff2` (`font/woff2`, `Access-Control-Allow-Origin: *`,
-     `public, max-age=31536000, immutable`; bytes from a lazily imported fork module `embed-fonts.ts`, allow-list =
-     `BRANDING_FONTS`). The SDK registers them with `new FontFace(...)` + `document.fonts.add()` at **document
-     level** (fonts declared inside a shadow root are not reliably usable) under the namespaced family, so it never
-     overrides a same-named host font, then sets `--font-sans` inside the shadow root. Failure → fallback stack.
-  **`customCss` is not applied off-site**: arbitrary author CSS targets portal markup, and injecting it into a
-  customer's page (even into a shadow root) is unscoped risk. Consequence: per-app `customCss` overrides of the
-  `--fork-*` kind tokens show in the portal but the embed uses the default kind colours.
+     theme mode (or host `prefers-color-scheme` when the app follows system). Delivered in the `everyone.json`
+     and session payloads (identical for every viewer of the workspace).
+  2. **Font (no remote loads, D-E2):** `resolveBrandingFontId(customCss, configFontSans)`
+     (`lib/shared/theme/fonts.ts:57`) picks the id; the payload carries
+     `font: { family: 'qb-brand-<id>', fallback, faces: [{ url, weight, style }] } | null` (`null` for
+     `inter`/`system`/unknown → fallback stack). Faces are the **same bundled woff2 files** upstream already
+     self-hosts for branding — Inter via `@fontsource-variable/inter` (`globals.css:17`), other families via the
+     `@fontsource/*` imports in `styles/fonts/*.css` loaded by `loadBrandingFont` (`lib/shared/theme/font-loader.ts:24`)
+     — latin 400 + 600 only. They are served **from the Quackback instance** by fork route
+     `GET /api/fork-announcements/embed/font/$fontId/$weight.woff2` (`font/woff2`, `Access-Control-Allow-Origin: *`
+     because `FontFace` loads are CORS-mode, `public, max-age=31536000, immutable`); `embed-fonts.ts` maps the
+     allow-listed `(fontId, weight)` (ids from `BRANDING_FONTS`, `fonts.ts:14`) to the `@fontsource` file resolved
+     at build time — no new font dependency, no CDN, nothing downloaded at runtime. The SDK registers them with
+     `new FontFace(...)` + `document.fonts.add()` at **document level** (fonts declared inside a shadow root are
+     not reliably usable) under the namespaced family, so it never overrides a same-named host font, then sets
+     `--font-sans` inside the shadow root. Failure → fallback stack.
+  **`customCss` is not applied in the embed**: arbitrary author CSS targets portal markup, and injecting it into
+  another team's internal app (even into a shadow root) is unscoped risk. Consequence: per-app `customCss`
+  overrides of the `--fork-*` kind tokens show in the portal but the embed uses the default kind colours.
   Sort rank: critical > maintenance (active) > warning > info > success.
 - **Saved templates** (`fork_settings` key `announcement_templates`, zod-validated, ≤ 50 entries):
   `{ id: uuid, name, kind, title, body?, linkUrl?, linkLabel? }`. When the key is absent, three code-defined

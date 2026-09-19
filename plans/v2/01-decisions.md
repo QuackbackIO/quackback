@@ -14,6 +14,12 @@
 | D3  | Enforce custom roles on the REST API and MCP. Carried permanently as a fork patch (seams R-1…R-5).                                                                                                                                                                                               | ✅     |
 | D4  | **Seat limits and paid-plan limits do not apply** to any deployment (Q10, Q14). Plans must not rely on or build seat mechanics.                                                                                                                                                                    | ✅     |
 | D-X1 | **All fork UI inherits each app's branding** (owner, round 2): hub pages, banners (incl. the external embed) and fork panels use the app's own design tokens (`brandingConfig` + `customCss` via upstream's theme generator), so branding set once in an app applies everywhere in that app (`02-fork-conventions.md` §11). | ✅     |
+| D-E1 | **Intranet-only deployment** (owner, round 3): every app, portal, widget, the control tower and all end users live on the company intranet. **All users are authenticated employees**: sign-in is enforced **both** at the network edge (SSO proxy/VPN) **and** by Quackback's own SSO login. | ✅     |
+| D-E2 | **No outbound internet connections** from any component (no third-party SaaS, CDNs, public AI APIs, public email services or webhooks to the internet). Only intranet services and AWS services reachable privately (VPC endpoints / PrivateLink) may be used. | ✅     |
+| D-E3 | **Portal setting = public visibility, anonymous posting/voting OFF, SSO-only sign-in** (owner chose option (a) over private + domain allow-list). Supersedes D-N5 ("all portals private"). Protection against unauthenticated readers relies on the edge SSO + Quackback SSO (D-E1). | ✅     |
+| D-E4 | **All end users are employees**; there are no external requesters. | ✅     |
+| D-E5 | **AI features run on AWS Bedrock (via PrivateLink) and/or the company's internal LLM proxy** — never a public AI API. Covers the Quinn assistant, Ask AI, embeddings/search, classification and summaries. | ✅     |
+| D-E6 | The internal LLM proxy is **OpenAI-compatible** (`/v1/chat/completions`, `/v1/embeddings`). Default AI path: point Quackback's OpenAI client at the proxy (which may itself front Bedrock); a native Bedrock adapter is only built if the proxy can't serve a required model. | ✅     |
 
 ## Control tower (`20-control-tower.md`)
 
@@ -106,7 +112,7 @@
 | D-N2 | Dismissal stored in the browser only.                                                                                                                                                                                     | ✅     |
 | D-N3 | Live status incidents fold into the banner.                                                                                                                                                                               | ✅     |
 | D-N4 | **Plain-text body with templated styling**: fixed per-type presets (colour, icon, layout) so authors only type text; optional saved text templates for common notices (Q50).                                             | ✅     |
-| D-N5 | **All app portals are private** (Q52) ⇒ no anonymous/public banners. The embeddable banner must identify the viewer (widget identity / signed identity token); there is no anonymous mode.                               | ✅     |
+| D-N5 | ~~All app portals are private~~ — **superseded by D-E3** (public visibility on an SSO-only intranet, anonymous off). | ✅     |
 | D-N6 | **Instant push** of publish/update/archive to open portals and embeds (Q53), using upstream's realtime pub/sub + stream infrastructure (`lib/server/realtime/*`).                                                         | ✅     |
 | D-N7 | On sites also running the widget, the banner shows **the same announcements** the identified user sees in the portal, including segment-targeted ones (Q54, read together with D-N5).                                    | 🟡     |
 | D-N8 | **Fleet owners and Fleet Agents** may create and publish announcements (Q55).                                                                                                                                             | ✅     |

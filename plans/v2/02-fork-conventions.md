@@ -238,9 +238,10 @@ Foundations phase and every plan registers into fork-owned lists instead:
 | F-9 | `apps/web/src/lib/server/audit/log.ts`                               | One fenced block of fork members in the `AuditEventType` union                                         | — (members live in the block; one per feature prefix)           |
 | F-10 | `apps/web/src/lib/server/policy/authz-matrix/classifications.ts`  | `...FORK_CLASSIFICATIONS` spread                                                                        | `lib/server/fork/authz/classifications.ts`                      |
 | F-11 | `apps/web/src/lib/server/fleet/schema-floor.ts`                      | Also check `FORK_MIN_SCHEMA_VERSION` against the fork ledger (§3.3a)                                     | `packages/db/src/fork/schema-version.ts`                        |
+| F-12 | `apps/web/src/lib/server/content/ssrf-guard.ts` (+ webhook write check `events/integrations/webhook/constants.ts`) | Env allow-list `SSRF_ALLOWED_CIDRS` / `SSRF_ALLOWED_HOSTS` for intranet targets; loopback and link-local always blocked (`04-intranet-deployment.md` E-1) | `lib/server/fork/network/allow-list.ts`                         |
 
 Where a v2 plan's seam table lists a settings-nav entry, an MCP registration line, a Labs line or a
-catalogue edit, a scheduled job or audit event types, **that entry is satisfied by F-3/F-4/F-6/F-7/F-8/F-9/F-10** and is not an additional seam.
+catalogue edit, a scheduled job or audit event types, **that entry is satisfied by F-3/F-4/F-6/F-7/F-8/F-9/F-10/F-11/F-12** and is not an additional seam.
 
 ## 11. Branding and theming (all fork UI)
 
@@ -269,6 +270,17 @@ app's branding**, so setting it once in the app changes it everywhere (decision 
   deliberate narrowing of the promise for the embed only (see `60-…`).
 - The Design-canvas prototype's hard-coded palette is illustrative only; implementation uses tokens.
 
+## 11a. Intranet, no internet egress (D-E1, D-E2)
+
+- **Fork code makes no internet calls.** Every outbound HTTP call from fork code either goes through upstream's SSRF
+  guard (`safeFetch` / `checkUrlSafety`, with the F-12 allow-list for intranet hosts) or targets a configured
+  intranet or AWS-private (VPC endpoint) service. No SaaS APIs, CDNs, public AI APIs or remote fonts/scripts.
+- AI calls go through upstream's OpenAI-compatible clients pointed at the internal proxy (`OPENAI_BASE_URL`), with
+  1536-dimension embeddings (`04-intranet-deployment.md` §3).
+- Browser assets used by fork UI are bundled or self-hosted (upstream already self-hosts branding fonts).
+- Every fork feature must work with the deployment baseline in `04-intranet-deployment.md` (SSO-only, anonymous off,
+  telemetry off, IMAP inbound, SMTP outbound).
+
 ## 12. Checklist for every fork PR
 
 - [ ] No new files in `packages/db/drizzle/`, no edits to upstream schema files.
@@ -278,4 +290,5 @@ app's branding**, so setting it once in the app changes it everywhere (decision 
 - [ ] Every server fn gated by `requireAuth({ permission })`; `MATRIX.md` regenerated.
 - [ ] No module-level mutable state in fork server code.
 - [ ] Works under both `QUACKBACK_TENANCY=single` and `pooled`.
+- [ ] No internet egress; intranet targets go through the SSRF guard + F-12 allow-list (§11a).
 - [ ] UI uses only theme tokens / upstream UI primitives and inherits the app's branding (§11).

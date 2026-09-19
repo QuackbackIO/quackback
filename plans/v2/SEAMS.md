@@ -21,9 +21,10 @@
 | F-9 | `apps/web/src/lib/server/audit/log.ts`                            | One fenced block of fork members in `AuditEventType` (`account_action.*`, `fork_announcement.*`) | 40, 60 | planned |
 | F-10 | `apps/web/src/lib/server/policy/authz-matrix/classifications.ts` | `...FORK_CLASSIFICATIONS` spread for fork gates that use bare `requireAuth()` | 30 (+ any plan with non-permission gates) | planned |
 | F-11 | `apps/web/src/lib/server/fleet/schema-floor.ts` | First statement of `assertSchemaFloor` checks the fork ledger + catalogue version (`FORK_MIN_SCHEMA_VERSION`) | 20 (all pooled) | planned |
+| F-12 | `apps/web/src/lib/server/content/ssrf-guard.ts` (+ `events/integrations/webhook/constants.ts` write check) | Env allow-list for intranet CIDRs/hosts; loopback + link-local always blocked (`04-…` E-1) | all (blocker for intranet SSO, 40, webhooks) | planned |
 
 Plan seam tables that list a settings-nav entry, an MCP registration line, a Labs line or catalogue
-keys, a scheduled job or audit event types are **satisfied by F-3 / F-4 / F-6 / F-7 / F-8 / F-9 / F-10 / F-11** and are not counted again below.
+keys, a scheduled job or audit event types are **satisfied by F-3 / F-4 / F-6 / F-7 / F-8 / F-9 / F-10 / F-11 / F-12** and are not counted again below.
 
 The fork's production image is a fork-owned `apps/web/Dockerfile.fork` layered on the upstream image; upstream's
 `apps/web/Dockerfile` is **not** edited (`02-fork-conventions.md` §3.3a).
@@ -70,6 +71,8 @@ The fork's production image is a fork-owned `apps/web/Dockerfile.fork` layered o
 | N-1 | `apps/web/src/routes/_portal.tsx` | `<ForkAnnouncementsBanner/>` mount | 60 / 2 | planned |
 | N-3 | `packages/widget/tsup.config.ts` | `banner` IIFE entry | 60 / 3 | planned |
 | N-5 | `apps/web/src/lib/server/policy/module-state/ledger.ts` | Ledger entry for banner stream limiter (+ regenerate `MODULE-STATE.md`) | 60 / 2 | planned |
+| E-2a | `apps/web/src/lib/server/storage/s3.ts`, `packages/email/src/ses.ts` | Fall back to the AWS default credential chain when static keys are unset | 04 (conditional: only if IAM roles are mandatory) | planned |
+| E-4 | `apps/web/src/lib/server/auth/index.ts` | Don't register the anonymous sign-in plugin when `allowAnonymous=false` | 04 (optional) | planned |
 
 ## Generated files (regenerate, never hand-merge)
 
@@ -78,7 +81,7 @@ The fork's production image is a fork-owned `apps/web/Dockerfile.fork` layered o
 
 ## Totals (core phases, excluding conditional / optional / deferred)
 
-Foundations 11 · RBAC 11 (R-10 spans 10 files) · Control tower 1 (+1 conditional) · Tiered support 11 (6 core +
+Foundations 12 (incl. F-12 SSRF allow-list, a blocker for intranet SSO) · RBAC 11 (R-10 spans 10 files) · Control tower 1 (+1 conditional) · Tiered support 11 (6 core +
 5 hub) · Account actions 0 own (uses T-2's slot; +1 optional, +1 deferred) · Prioritization 11 · Announcements 3.
 
 Per the staff review, these counts are an estimate of merge surface, not a target: add a seam whenever an

@@ -12,6 +12,7 @@ releases keep merging cleanly.
 | 01  | [`01-decisions.md`](01-decisions.md)                                 | Owner answers (✅), proposed defaults awaiting confirmation (🟡), pending (⏳). |
 | 02  | [`02-fork-conventions.md`](02-fork-conventions.md)                   | **Binding** rules for all fork code: layout, migrations, seams, merge steps. |
 | 03  | [`03-staff-review.md`](03-staff-review.md) · [original](REVIEW-2026-09-19.md) | Staff engineer review of v2 (summary + full original) and how each finding was resolved. |
+| 04  | [`04-intranet-deployment.md`](04-intranet-deployment.md)             | Intranet, no-internet deployment: required fork changes, config baseline, features to disable. |
 | —   | [`SEAMS.md`](SEAMS.md)                                               | Registry of every planned edit to upstream-owned files (merge checklist).     |
 | 10  | [`10-rbac-persona-extensions.md`](10-rbac-persona-extensions.md)     | Custom roles on REST/MCP, fork permission keys, team-scoped RBAC, personas.  |
 | 20  | [`20-control-tower.md`](20-control-tower.md)                         | Multi-app fleet: provisioner + separate control-tower app acting via MCP.   |
