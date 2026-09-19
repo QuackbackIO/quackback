@@ -544,7 +544,7 @@ describe('assembleAssistantToolset: write-tool pipeline (propose mode)', () => {
         originRole: 'customer_support',
         // Falls back to ticketId (not the bare "null" a naive conversationId-only
         // key would produce) so two different tickets proposing the same tool
-        // with the same args never collide — see resolveIdempotencyKey's doc.
+        // with the same args never collide. See resolveIdempotencyKey's doc.
         idempotencyKey: expect.stringMatching(/^ticket_1:null:close_conversation:[0-9a-f]{64}$/),
         actionKey: expect.stringMatching(
           /^ticket_1:inv:assistant_involvement_1:close_conversation:[0-9a-f]{64}$/

@@ -1,7 +1,7 @@
 /**
  * The Approve/Reject card for a Quinn write-tool proposal, rendered on the
  * internal note that announced it (mirrors the postSuggestion chip in
- * message-bubble.tsx — same mount point, same visual language). The note's
+ * message-bubble.tsx, same mount point, same visual language). The note's
  * metadata is only a point-in-time pointer (pendingActionId + toolName +
  * summary); this card fetches the LIVE pending-action row (via
  * usePendingActionDecision) so the buttons reflect current status rather

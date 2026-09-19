@@ -541,7 +541,7 @@ export type ExecuteApprovedActionResult =
 
 /**
  * Execute a pending action a teammate approved, via the same claim/execute/
- * settle steps autonomous mode runs in `runWithPipeline` — but keyed by the
+ * settle steps autonomous mode runs in `runWithPipeline`, but keyed by the
  * pending action id rather than the customer message (the approval decision
  * is itself the idempotency boundary a resubmitted approve request must not
  * cross), and with the audit row linked back to the proposal it settles. No
