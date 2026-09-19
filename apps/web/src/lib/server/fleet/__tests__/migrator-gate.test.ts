@@ -368,6 +368,7 @@ describe('replayGateVerdict', () => {
       '0291_quinn_guidance_entries',
       '0292_quinn_knowledge_index',
       '0293_quinn_releases',
+      '0294_quinn_operations',
     ])
     const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
     expect(verdict.ok).toBe(false)
