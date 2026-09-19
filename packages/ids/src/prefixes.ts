@@ -111,6 +111,9 @@ export const ID_PREFIXES = {
   // and the evidence a candidate earned before it could be published.
   assistant_release: 'assistant_release',
   assistant_release_check: 'assistant_release_check',
+  // A question a release candidate is checked against, kept from a teammate's
+  // own correction of a real answer (P8).
+  assistant_regression_case: 'assistant_regression_case',
   // HTTP retry receipt binding a client mutation id to one accepted request.
   assistant_request_receipt: 'assistant_request_receipt',
 

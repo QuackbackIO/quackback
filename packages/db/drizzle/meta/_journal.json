@@ -1898,6 +1898,13 @@
       "when": 1789747200009,
       "tag": "0293_quinn_releases",
       "breakpoints": true
+    },
+    {
+      "idx": 271,
+      "version": "7",
+      "when": 1789747200010,
+      "tag": "0294_quinn_operations",
+      "breakpoints": true
     }
   ]
 }

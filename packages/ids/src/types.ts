@@ -262,6 +262,9 @@ export type AssistantReleaseId = TypeId<'assistant_release'>
 /** Release check result ID - e.g., assistant_release_check_01h455vb4pex5vsknk084sn02q */
 export type AssistantReleaseCheckId = TypeId<'assistant_release_check'>
 
+/** Regression case ID - e.g., assistant_regression_case_01h455vb4pex5vsknk084sn02q */
+export type AssistantRegressionCaseId = TypeId<'assistant_regression_case'>
+
 /** Ticket ID - e.g., ticket_01h455vb4pex5vsknk084sn02q */
 export type TicketId = TypeId<'ticket'>
 
@@ -503,6 +506,7 @@ export interface EntityIdMap {
   assistant_request_receipt: AssistantRequestReceiptId
   assistant_release: AssistantReleaseId
   assistant_release_check: AssistantReleaseCheckId
+  assistant_regression_case: AssistantRegressionCaseId
   ticket: TicketId
   ticket_status: TicketStatusId
   ticket_type: TicketTypeId

@@ -65,6 +65,14 @@ export const assistantGuidanceEntries = pgTable(
     version: integer('version').notNull().default(1),
     legacySource: text('legacy_source').$type<GuidanceLegacySource>(),
     legacyId: text('legacy_id'),
+    /**
+     * The conversation a draft was written from, when a teammate turned a real
+     * exchange into guidance (P8). A backlink a reader resolves, never a join:
+     * it carries no foreign key, because a constraint added to an existing
+     * table needs an ALTER TABLE that cannot replay, and a deleted conversation
+     * should resolve to nothing rather than take the authored entry with it.
+     */
+    sourceConversationId: typeIdColumnNullable('conversation')('source_conversation_id'),
     // Nulled on the author's deletion — the entry outlives them.
     createdById: typeIdColumnNullable('principal')('created_by_id').references(() => principal.id, {
       onDelete: 'set null',
