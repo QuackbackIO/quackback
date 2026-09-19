@@ -81,6 +81,19 @@ export function inactivityAction(
   return null
 }
 
+/**
+ * Quinn published an acknowledgement and still owes the result of an approved
+ * action (P4).
+ *
+ * The acknowledgement is an ordinary assistant message, so the ownership
+ * trigger reads it as an answer and the clock starts. Acting on that clock
+ * would either nudge a customer who is already being helped or, worse, close
+ * the thread and record an assumed resolution for an answer that has not
+ * happened. The parked run is bounded by the proposal's own expiry, so this
+ * gate cannot hold a conversation open indefinitely.
+ */
+const quinnOwesResult = sql`SELECT 1 FROM assistant_runs ar WHERE ar.conversation_id = c.id AND ar.status = 'waiting_action'`
+
 /** Same predicates for min(deadline), bounded scans and worker revalidation. */
 function dueQuery(
   settings: ConversationInactivitySettings,
@@ -105,7 +118,8 @@ function dueQuery(
         ${follow ? sql`CASE WHEN c.inactivity_check_in_at IS NULL THEN GREATEST(c.inactivity_anchor_at + ${p.followUpMs} * interval '1 millisecond', c.inactivity_retry_at) END` : sql`NULL::timestamptz`}) AS due_at
       FROM conversations c WHERE c.status = 'open' AND c.snoozed_until IS NULL
         AND c.channel = ${channel} AND c.inactivity_owner = ${kind} AND c.inactivity_anchor_at IS NOT NULL
-        AND NOT EXISTS (SELECT 1 FROM workflow_runs r WHERE r.conversation_id = c.id AND r.customer_facing AND r.state IN ('running','waiting') AND (r.state = 'running' OR r.cursor->>'waitKind' = 'input'))`)
+        AND NOT EXISTS (SELECT 1 FROM workflow_runs r WHERE r.conversation_id = c.id AND r.customer_facing AND r.state IN ('running','waiting') AND (r.state = 'running' OR r.cursor->>'waitKind' = 'input'))
+        AND NOT EXISTS (${quinnOwesResult})`)
     }
   return arms.length
     ? sql.join(arms, sql` UNION ALL `)
@@ -204,6 +218,14 @@ async function executeInactivity(
       )
     )
     if (protectedRuns.length) return null
+    // Re-read under the lock, like every other consequential fact here: a
+    // proposal can be made between the scan and this transaction.
+    const owedResult = getExecuteRows(
+      await tx.execute(
+        sql`SELECT 1 FROM assistant_runs WHERE conversation_id = ${candidate.id} AND status = 'waiting_action' LIMIT 1`
+      )
+    )
+    if (owedResult.length) return null
     const action = inactivityAction(conversation, settings, now)
     if (!action || (requestedAction && requestedAction !== action)) return null
     if (

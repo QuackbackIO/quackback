@@ -33,6 +33,7 @@ import {
   user,
   settings,
   assistantInvolvements,
+  assistantRuns,
   workflows,
   workflowRuns,
   eq,
@@ -487,6 +488,35 @@ describe.skipIf(!enabled)('durable conversation inactivity on migrated PostgreSQ
     expect((await row(c.id)).status).toBe('open')
     expect((await row(native.id)).status).toBe('open')
     expect(await nextInactivityDeadline()).toBeNull()
+  })
+  it('does not act while Quinn owes the result of an approved action', async () => {
+    // The acknowledgement Quinn published for a proposal reads like an answer
+    // to the trigger, so without this gate the close pass would record an
+    // assumed resolution for a conversation whose real answer has not
+    // happened yet (P4).
+    const c = await conversation('messenger', 'assistant_answered', hour)
+    const [parked] = await db
+      .insert(assistantRuns)
+      .values({
+        conversationId: c.id,
+        surface: 'widget',
+        triggerKind: 'customer_message',
+        triggerKey: `conversation:${c.id}:message:ack`,
+        status: 'waiting_action',
+      })
+      .returning()
+    await sweepInactivity()
+    expect((await row(c.id)).status).toBe('open')
+    expect(await nextInactivityDeadline()).toBeNull()
+
+    // Once the result is settled the ordinary clock applies again: the gate
+    // is bounded by the proposal, not open ended.
+    await db
+      .update(assistantRuns)
+      .set({ status: 'succeeded' })
+      .where(eq(assistantRuns.id, parked.id))
+    await sweepInactivity()
+    expect((await row(c.id)).status).toBe('closed')
   })
   it('does not race a customer reply holding the conversation lock', async () => {
     const c = await conversation('messenger', 'team', hour)

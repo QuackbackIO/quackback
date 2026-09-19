@@ -517,6 +517,16 @@ export async function sweepAndNotifyExpiredPendingActions(
   const expired = await expireStalePendingActions(exec)
   if (expired.length === 0) return expired
 
+  // A run parked on one of these is owed a result that will never arrive
+  // (P4). Releasing it is what bounds the inactivity gate that stands down
+  // while Quinn owes something: without it, an undecided proposal would hold
+  // its conversation open forever. The customer notice below is the same
+  // announcement it always was.
+  const { releaseParkedRun } = await import('./assistant-run.repository')
+  for (const row of expired) {
+    if (row.runId) await releaseParkedRun(exec, row.runId, `action:expired:${row.id}`)
+  }
+
   const conversationExpired = expired.filter(
     (
       row

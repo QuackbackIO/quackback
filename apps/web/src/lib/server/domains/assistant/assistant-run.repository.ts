@@ -504,6 +504,35 @@ export async function getOpenRunState(
 }
 
 /**
+ * Release a run parked on an action whose result is never coming (P4).
+ *
+ * A proposal that expired undecided, or was otherwise settled without ever
+ * producing an outcome, leaves `waiting_action` behind. That status means
+ * "Quinn owes a result", and the inactivity clock stands down while it is
+ * true, so something has to end it or the conversation is held open forever.
+ * Guarded on the status, so a result that arrives in the same moment wins.
+ */
+export async function releaseParkedRun(
+  exec: Executor,
+  runId: AssistantRunId,
+  disposition: string
+): Promise<AssistantRunRow | null> {
+  const [row] = await exec
+    .update(assistantRuns)
+    .set({
+      status: 'cancelled',
+      phase: 'publication',
+      disposition,
+      finishedAt: new Date(),
+      updatedAt: new Date(),
+      stateVersion: sql`${assistantRuns.stateVersion} + 1`,
+    })
+    .where(and(eq(assistantRuns.id, runId), eq(assistantRuns.status, 'waiting_action')))
+    .returning()
+  return row ?? null
+}
+
+/**
  * What a delegating workflow needs to know about Quinn's side of the
  * conversation before deciding that a wait has run out of time (P4).
  *
