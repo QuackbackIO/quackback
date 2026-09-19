@@ -17,6 +17,8 @@
  */
 import { cacheGet, cacheSet, cacheDel } from '@/lib/server/cache'
 import type { ConversationId } from '@quackback/ids'
+import type { ConversationStreamEvent } from '@/lib/shared/conversation/types'
+import type { DurableRunState } from './assistant-run.repository'
 
 /** Comfortably longer than the gap between activity publishes in a live turn;
  *  refreshed on every write, so this only bounds how long a crashed turn's
@@ -56,4 +58,27 @@ export async function clearActivitySnapshot(conversationId: ConversationId): Pro
  *  flight. Null on a miss (no turn running) or a cache error. */
 export async function readActivitySnapshot(conversationId: ConversationId): Promise<unknown> {
   return cacheGet<unknown>(activitySnapshotKey(conversationId))
+}
+
+/**
+ * The reconnect frame a customer gets when the ephemeral trace is gone but a
+ * durable run is genuinely still in flight.
+ *
+ * Lifecycle ONLY, and that is the whole point of it being a function rather
+ * than an object literal inside the stream route: this is the one place a run
+ * row reaches a visitor, so the projection is pinned by its own test. No run
+ * id, no phase, no disposition, no evidence, no model detail. A customer learns
+ * that Quinn is working, which is the same thing the live trace tells them.
+ */
+export function durableActivityFrame(
+  conversationId: ConversationId,
+  run: Pick<DurableRunState, 'startedAt'>,
+  now = new Date()
+): Extract<ConversationStreamEvent, { kind: 'assistant_activity' }> {
+  return {
+    kind: 'assistant_activity',
+    conversationId,
+    status: 'thinking',
+    at: (run.startedAt ?? now).toISOString(),
+  }
 }

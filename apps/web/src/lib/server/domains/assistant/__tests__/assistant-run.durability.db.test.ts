@@ -671,6 +671,7 @@ function answer(text: string) {
       configRevision: 1,
       role: 'customer_support',
       appliedGuidance: [],
+      omittedGuidance: [],
       toolCalls: [],
     },
   }

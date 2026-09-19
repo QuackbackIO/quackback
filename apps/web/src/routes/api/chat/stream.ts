@@ -23,7 +23,10 @@ import {
 } from '@/lib/server/realtime/conversation-channels'
 import { subscribe } from '@/lib/server/realtime/pubsub'
 import { markPresent, refreshPresence, clearPresence } from '@/lib/server/realtime/presence'
-import { readActivitySnapshot } from '@/lib/server/domains/assistant/assistant-activity-snapshot'
+import {
+  durableActivityFrame,
+  readActivitySnapshot,
+} from '@/lib/server/domains/assistant/assistant-activity-snapshot'
 import { canViewConversation } from '@/lib/server/policy/conversation'
 import { assertTicketVisible } from '@/lib/server/domains/tickets/ticket.service'
 import { NotFoundError } from '@/lib/shared/errors'
@@ -403,14 +406,10 @@ export const Route = createFileRoute('/api/chat/stream')({
               const { getOpenRunState } =
                 await import('@/lib/server/domains/assistant/assistant-run.repository')
               const run = await getOpenRunState(backfillConversationId).catch(() => null)
-              if (run) {
-                snapshot = {
-                  kind: 'assistant_activity',
-                  conversationId: backfillConversationId,
-                  status: 'thinking',
-                  at: (run.startedAt ?? new Date()).toISOString(),
-                }
-              }
+              // durableActivityFrame is the pinned lifecycle-only projection:
+              // the one place a run row reaches a visitor, and the only shape
+              // the allowlist test allows it to take.
+              if (run) snapshot = durableActivityFrame(backfillConversationId, run)
             }
             if (snapshot) {
               const json = JSON.stringify(snapshot)

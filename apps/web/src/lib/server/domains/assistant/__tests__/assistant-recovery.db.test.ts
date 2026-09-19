@@ -111,7 +111,7 @@ async function seedJobRow(input: {
   })
 }
 
-async function readRun(id: string) {
+async function readRun(id: (typeof assistantRuns.$inferSelect)['id']) {
   const [row] = await testDb.select().from(assistantRuns).where(eq(assistantRuns.id, id))
   return row
 }
@@ -209,7 +209,7 @@ async function seedApprovedAction(
   return row
 }
 
-async function readAction(id: string) {
+async function readAction(id: (typeof assistantPendingActions.$inferSelect)['id']) {
   const [row] = await testDb
     .select()
     .from(assistantPendingActions)

@@ -118,6 +118,17 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
       [PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.TICKET_VIEW],
       'each row is kept only when the caller can view its parent'
     ),
+  // The run inspector. A run is a record ABOUT an item rather than a thing a
+  // teammate holds a permission for, so the base gate says inbox teammate and
+  // the authority is the visibility of the run's real parent, read off the row.
+  'lib/server/functions/assistant-runs.ts::listAssistantRunsFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.TICKET_VIEW],
+    'caller must be able to view the conversation or ticket the runs belong to'
+  ),
+  'lib/server/functions/assistant-runs.ts::getAssistantRunFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.TICKET_VIEW],
+    "caller must be able to view the run's own parent, taken from the row"
+  ),
   'lib/server/functions/assistant-pending-actions.ts::reconcileAssistantActionFn':
     DYNAMIC_PERMISSION(
       [PERMISSIONS.CONVERSATION_VIEW],

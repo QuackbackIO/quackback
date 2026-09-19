@@ -148,6 +148,14 @@ export interface AssistantTurnTrace {
   tone?: AssistantTone
   responseLength?: AssistantResponseLength
   appliedGuidance: Array<{ id: string; name: string }>
+  /**
+   * Guidance that was in scope and did not fit the character budget.
+   *
+   * Recorded rather than dropped silently (QUINN-PRODUCT P8): an authorized
+   * inspection has to be able to say an instruction was left out for room
+   * rather than for scope, which are very different things to read.
+   */
+  omittedGuidance: Array<{ id: string; name: string }>
   toolCalls: AssistantToolOutcome[]
   configFallbackReason?: string
 }
@@ -1347,6 +1355,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     const guidanceAppliedIds = selectedGuidance.map((rule) => rule.id)
     const guidanceOmittedIds = omittedGuidance.map((rule) => rule.id)
     const appliedGuidance = selectedGuidance.map((rule) => ({ id: rule.id, name: rule.name }))
+    const omittedGuidanceTrace = omittedGuidance.map((rule) => ({ id: rule.id, name: rule.name }))
     const systemPrompts = buildAssistantSystemMessages({
       role,
       // The pure prompt module takes a flat `{ identity, voice }`; voice always
@@ -1548,6 +1557,7 @@ ${runtimeConfig.config.agents.workspace.instructions}`)
           }
         : {}),
       appliedGuidance,
+      omittedGuidance: omittedGuidanceTrace,
       toolCalls: [...toolContext.ledger.toolOutcomes],
       ...(runtimeConfig.configFallbackReason
         ? { configFallbackReason: runtimeConfig.configFallbackReason }

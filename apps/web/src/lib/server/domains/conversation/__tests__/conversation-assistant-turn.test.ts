@@ -240,6 +240,7 @@ const PRIVACY_SAFE_TRACE: DeliveredFields['trace'] = {
   tone: 'balanced',
   responseLength: 'brief',
   appliedGuidance: [],
+  omittedGuidance: [],
   toolCalls: [],
 }
 

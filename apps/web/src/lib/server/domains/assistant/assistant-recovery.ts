@@ -160,7 +160,7 @@ export async function sweepStrandedAssistantRuns(
         import('./assistant.orchestrator'),
       ])
       const quinn = await getAssistantPrincipal()
-      await runAssistantFailureFloor(run.conversationId!, quinn.id)
+      if (quinn) await runAssistantFailureFloor(run.conversationId!, quinn.id)
     } catch (err) {
       // Bookkeeping already landed; the hand-off is best effort, exactly as it
       // is on the live failure path.

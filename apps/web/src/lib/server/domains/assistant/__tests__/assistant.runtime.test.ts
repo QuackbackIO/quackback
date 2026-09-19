@@ -707,6 +707,7 @@ describe('runAssistantTurn', () => {
         tone: 'balanced',
         responseLength: 'balanced',
         appliedGuidance: [],
+        omittedGuidance: [],
       },
     })
     expect(deltas.join('')).toBe('Use the reset link.')
@@ -2323,6 +2324,7 @@ describe('runAssistantTurn: V2 prompt and config snapshot', () => {
         tone: 'warm',
         responseLength: 'brief',
         appliedGuidance: [],
+        omittedGuidance: [],
       },
     })
     expect(lastLoggedMetadata).toMatchObject({
@@ -2376,6 +2378,7 @@ describe('runAssistantTurn: V2 prompt and config snapshot', () => {
     expect(result.status !== 'suppressed' && result.trace).toMatchObject({
       role: 'copilot_qa',
       appliedGuidance: [],
+      omittedGuidance: [],
     })
     expect(result.status !== 'suppressed' && result.trace).not.toHaveProperty('tone')
     expect(lastLoggedMetadata).not.toHaveProperty('tone')

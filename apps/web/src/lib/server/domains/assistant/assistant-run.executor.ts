@@ -220,6 +220,15 @@ export async function advanceAssistantRun(job: ClaimedJob): Promise<string> {
       output: {
         status: result.status,
         responseKind: result.status === 'suppressed' ? null : (result.responseKind ?? null),
+        // What guidance this turn actually carried, and what the character
+        // budget left out. The inspector reads these off the step rather than
+        // guessing from the snapshot, which records what was available.
+        ...(result.status === 'suppressed'
+          ? {}
+          : {
+              guidanceAppliedIds: result.trace.appliedGuidance.map((entry) => entry.id),
+              guidanceOmittedIds: result.trace.omittedGuidance.map((entry) => entry.id),
+            }),
       },
       finishedAt: new Date(),
     })

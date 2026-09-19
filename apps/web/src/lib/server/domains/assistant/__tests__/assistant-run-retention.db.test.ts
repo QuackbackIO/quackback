@@ -9,7 +9,7 @@
  * so it is asserted against a real cascade.
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest'
-import type { ConversationId, PrincipalId } from '@quackback/ids'
+import type { AssistantRunId, ConversationId, PrincipalId } from '@quackback/ids'
 
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
@@ -69,7 +69,7 @@ async function seedRun(conversationId: ConversationId) {
   return row
 }
 
-async function seedStep(runId: string, startedAt: Date, stepKey = `step-${suffix()}`) {
+async function seedStep(runId: AssistantRunId, startedAt: Date, stepKey = `step-${suffix()}`) {
   const [row] = await testDb
     .insert(assistantRunSteps)
     .values({ runId, stepKey, stepKind: 'generation', status: 'succeeded', startedAt })
@@ -77,7 +77,7 @@ async function seedStep(runId: string, startedAt: Date, stepKey = `step-${suffix
   return row
 }
 
-async function seedEvidence(runId: string, createdAt: Date) {
+async function seedEvidence(runId: AssistantRunId, createdAt: Date) {
   const [row] = await testDb
     .insert(assistantRunEvidence)
     .values({
@@ -91,8 +91,16 @@ async function seedEvidence(runId: string, createdAt: Date) {
   return row
 }
 
-async function countOf(table: typeof assistantRunSteps | typeof assistantRunEvidence, id: string) {
-  const rows = await testDb.select().from(table).where(eq(table.id, id))
+async function countSteps(id: (typeof assistantRunSteps.$inferSelect)['id']) {
+  const rows = await testDb.select().from(assistantRunSteps).where(eq(assistantRunSteps.id, id))
+  return rows.length
+}
+
+async function countEvidence(id: (typeof assistantRunEvidence.$inferSelect)['id']) {
+  const rows = await testDb
+    .select()
+    .from(assistantRunEvidence)
+    .where(eq(assistantRunEvidence.id, id))
   return rows.length
 }
 
@@ -110,8 +118,8 @@ describe.skipIf(!fixture.available)('sweepExpiredAssistantRunHistory', () => {
 
     expect(result.steps).toBeGreaterThanOrEqual(1)
     expect(result.evidence).toBeGreaterThanOrEqual(1)
-    expect(await countOf(assistantRunSteps, step.id)).toBe(0)
-    expect(await countOf(assistantRunEvidence, evidence.id)).toBe(0)
+    expect(await countSteps(step.id)).toBe(0)
+    expect(await countEvidence(evidence.id)).toBe(0)
   })
 
   it('leaves everything inside the window alone', async () => {
@@ -122,8 +130,8 @@ describe.skipIf(!fixture.available)('sweepExpiredAssistantRunHistory', () => {
 
     await sweepExpiredAssistantRunHistory()
 
-    expect(await countOf(assistantRunSteps, step.id)).toBe(1)
-    expect(await countOf(assistantRunEvidence, evidence.id)).toBe(1)
+    expect(await countSteps(step.id)).toBe(1)
+    expect(await countEvidence(evidence.id)).toBe(1)
   })
 
   it('keeps the run itself, which is the outcome record the reporting reads', async () => {
@@ -192,8 +200,8 @@ describe.skipIf(!fixture.available)("deleting a customer's history", () => {
     expect(
       await testDb.select().from(assistantRuns).where(eq(assistantRuns.id, run.id))
     ).toHaveLength(0)
-    expect(await countOf(assistantRunSteps, step.id)).toBe(0)
-    expect(await countOf(assistantRunEvidence, evidence.id)).toBe(0)
+    expect(await countSteps(step.id)).toBe(0)
+    expect(await countEvidence(evidence.id)).toBe(0)
     expect(
       await testDb.select().from(assistantToolCalls).where(eq(assistantToolCalls.id, receipt.id))
     ).toHaveLength(0)
