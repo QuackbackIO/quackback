@@ -718,6 +718,34 @@ describe('runAssistantTurn', () => {
     })
   })
 
+  // P7: a run that has already selected its release carries the exact
+  // configuration through the turn, so a publication landing mid-generation
+  // cannot change what it is executing.
+  it('runs under an exact configuration override without reading the live one', async () => {
+    const frozen = structuredClone(DEFAULT_RUNTIME_CONFIG.config)
+    frozen.identity = { name: 'Released Quinn', avatarUrl: null }
+    frozen.agents.agent.voice = { ...frozen.agents.agent.voice, tone: 'professional' }
+    mockGetAssistantRuntimeConfig.mockClear()
+    mockChat.mockImplementation(() =>
+      (async function* () {
+        yield* completeRun({ text: 'Hello', citations: [] })
+      })()
+    )
+
+    const result = await runAssistantTurn({
+      ...baseInput,
+      messages: customerAsks('hello'),
+      runtimeConfigOverride: { config: frozen, revision: 7, workspaceName: 'Quackback' },
+    })
+
+    expect(mockGetAssistantRuntimeConfig).not.toHaveBeenCalled()
+    expect(result).toMatchObject({
+      status: 'answered',
+      identity: { name: 'Released Quinn', avatarUrl: null },
+      trace: { configRevision: 7, tone: 'professional' },
+    })
+  })
+
   it('rejects workspace assistant on a public surface before inference', async () => {
     await expect(
       runAssistantTurn({

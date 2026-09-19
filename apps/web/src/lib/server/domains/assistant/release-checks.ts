@@ -270,8 +270,13 @@ export interface SandboxTurnResult {
   status: 'answered' | 'cannot_answer' | 'suppressed'
   text: string
   citations: Array<{ type: string; id: string; internal: boolean }>
-  /** Tools the turn PROPOSED or previewed. A sandbox executes nothing. */
-  simulatedTools: string[]
+  /**
+   * The turn's tool ledger, verbatim. The outcome matters as much as the name:
+   * a sandbox write must read as `simulated`, and a `failed` in its place means
+   * the tool actually tried to run and could not, which is a different and much
+   * worse thing for a preview to have done.
+   */
+  tools: Array<{ name: string; outcome: 'read' | 'simulated' | 'proposed' | 'executed' | 'failed' }>
   /** Anything that reported itself as executed. Always empty, and asserted to be. */
   executedTools: string[]
   handoff: boolean
@@ -308,7 +313,7 @@ export async function runCandidateSandboxTurn(input: {
       status: 'suppressed',
       text: '',
       citations: [],
-      simulatedTools: [],
+      tools: [],
       executedTools: [],
       handoff: false,
       suppressedReason: result.reason,
@@ -323,9 +328,7 @@ export async function runCandidateSandboxTurn(input: {
       id: citation.id,
       internal: citation.internal === true,
     })),
-    simulatedTools: outcomes
-      .filter((outcome) => outcome.outcome !== 'executed')
-      .map((outcome) => outcome.name),
+    tools: outcomes.map((outcome) => ({ name: outcome.name, outcome: outcome.outcome })),
     executedTools: outcomes
       .filter((outcome) => outcome.outcome === 'executed')
       .map((outcome) => outcome.name),
