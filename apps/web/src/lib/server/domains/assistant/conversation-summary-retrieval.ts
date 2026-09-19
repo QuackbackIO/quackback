@@ -66,6 +66,12 @@ export interface RetrievedConversationSummary {
 }
 
 export interface RetrieveConversationSummariesOptions {
+  /**
+   * The turn's shared query embedding. `undefined` means this adapter was
+   * called directly and resolves its own; `null` means the turn has no vector
+   * arm and the keyword path is the whole answer.
+   */
+  embedding?: number[] | null
   topK?: number
   minScore?: number
   /** The current conversation's customer. Absent means no results — see the module doc. */
@@ -184,9 +190,10 @@ export async function retrieveConversationSummaries(
   const minScore = options.minScore ?? CONVERSATION_SUMMARIES_SEMANTIC_SIMILARITY_FLOOR
   const excludeConversationId = options.conversationId ?? null
 
-  const embedding = await generateEmbedding(query, {
-    pipelineStep: 'assistant_summaries_query',
-  })
+  const embedding =
+    options.embedding !== undefined
+      ? options.embedding
+      : await generateEmbedding(query, { pipelineStep: 'assistant_summaries_query' })
 
   const rows = embedding
     ? await hybridQuery(embedding, customerPrincipalId, excludeConversationId, topK, minScore)
@@ -216,6 +223,8 @@ export const conversationSummariesKnowledgeSource: KnowledgeSource = {
       topK: opts.topK,
       customerPrincipalId: opts.customerPrincipalId,
       conversationId: opts.conversationId,
+      embedding:
+        opts.queryEmbedding !== undefined ? (opts.queryEmbedding?.vector ?? null) : undefined,
     })
     return rows.map((r): RetrievedItem => ({
       id: r.conversationId,

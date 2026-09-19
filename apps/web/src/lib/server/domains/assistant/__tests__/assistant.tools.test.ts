@@ -203,7 +203,7 @@ describe('search', () => {
       results: Array<{ id: string; title: string; snippet: string }>
     }
 
-    expect(mockRetrieve).toHaveBeenCalledWith('billing', { audience: 'team' })
+    expect(mockRetrieve).toHaveBeenCalledWith('billing', { audience: 'team', topK: 5 })
     expect(out.results).toHaveLength(1)
     expect(out.results[0]).toEqual({
       id: 'article_1',

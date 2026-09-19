@@ -28,6 +28,7 @@
 import {
   pgTable,
   text,
+  uuid,
   timestamp,
   integer,
   index,
@@ -87,8 +88,12 @@ export const assistantKnowledgeSources = pgTable(
     id: typeIdWithDefault('assistant_knowledge_source')('id').primaryKey(),
     /** Canonical citation source type, so a passage maps back to the citation contract. */
     sourceType: text('source_type', { enum: ASSISTANT_INDEXED_SOURCE_TYPES }).notNull(),
-    /** The source row's own id, as text: three different id spaces share this column. */
-    sourceId: text('source_id').notNull(),
+    /**
+     * The source row's own primary key, as a uuid rather than the prefixed id
+     * string: three id spaces share this column and the retrieval join has to
+     * be an indexed uuid comparison against the source table.
+     */
+    sourceId: uuid('source_id').notNull(),
     /**
      * The generation retrieval reads. Deliberately NOT a declared foreign key:
      * the two tables reference each other, and an inline circular constraint

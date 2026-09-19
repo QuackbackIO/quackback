@@ -244,6 +244,7 @@ export async function createArticle(
   generateArticleEmbedding(article.id, title, content, resolved.category?.name).catch((err) =>
     log.error({ article_id: article.id, err }, 'article embedding generation failed')
   )
+  requestArticleIndexing(article.id, article.updatedAt)
 
   return resolved
 }
@@ -319,9 +320,36 @@ export async function updateArticle(
     generateArticleEmbedding(id, resolved.title, resolved.content, resolved.category?.name).catch(
       (err) => log.error({ article_id: id, err }, 'article embedding generation failed')
     )
+    requestArticleIndexing(id, updated.updatedAt)
   }
 
   return resolved
+}
+
+/**
+ * Ask Quinn's passage index to rebuild this article's generation.
+ *
+ * Fire and forget, and dynamically imported: an article save must not fail
+ * because the index queue is unavailable, and the help-center domain must not
+ * take a static dependency on the assistant domain for it. The backfill pass
+ * collects anything a lost request left behind.
+ */
+function requestArticleIndexing(id: KbArticleId, updatedAt: Date | null): void {
+  import('@/lib/server/domains/assistant/knowledge-index.service')
+    .then((m) =>
+      m.requestKnowledgeIndexingSoon(
+        { sourceType: 'article', sourceId: id },
+        { revision: updatedAt ? updatedAt.toISOString() : null }
+      )
+    )
+    .catch((err) => log.error({ article_id: id, err }, 'knowledge index request failed'))
+}
+
+/** Take a deleted article out of the passage index. */
+function tombstoneArticleIndex(id: KbArticleId): void {
+  import('@/lib/server/domains/assistant/knowledge-index.service')
+    .then((m) => m.tombstoneKnowledgeSourceSoon({ sourceType: 'article', sourceId: id }))
+    .catch((err) => log.error({ article_id: id, err }, 'knowledge index tombstone failed'))
 }
 
 export async function publishArticle(id: KbArticleId): Promise<HelpCenterArticleWithCategory> {
@@ -361,6 +389,8 @@ export async function deleteArticle(id: KbArticleId): Promise<void> {
   if (result.length === 0) {
     throw new NotFoundError('ARTICLE_NOT_FOUND', `Article ${id} not found`)
   }
+
+  tombstoneArticleIndex(id)
 
   // No DB-level FK on redirect rules (polymorphic target) -- remove any rule
   // pointing at this article explicitly (domains/languages §2).

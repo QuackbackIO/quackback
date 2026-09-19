@@ -63,6 +63,12 @@ export interface RetrievedTicketSummary {
 }
 
 export interface RetrieveTicketSummariesOptions {
+  /**
+   * The turn's shared query embedding. `undefined` means this adapter was
+   * called directly and resolves its own; `null` means the turn has no vector
+   * arm and the keyword path is the whole answer.
+   */
+  embedding?: number[] | null
   topK?: number
   minScore?: number
 }
@@ -145,9 +151,10 @@ export async function retrieveTicketSummaries(
   const topK = options.topK ?? TICKETS_TOP_K
   const minScore = options.minScore ?? TICKETS_SEMANTIC_SIMILARITY_FLOOR
 
-  const embedding = await generateEmbedding(query, {
-    pipelineStep: 'assistant_tickets_query',
-  })
+  const embedding =
+    options.embedding !== undefined
+      ? options.embedding
+      : await generateEmbedding(query, { pipelineStep: 'assistant_tickets_query' })
 
   const rows = embedding
     ? await hybridQuery(embedding, topK, minScore)
@@ -171,7 +178,11 @@ export async function retrieveTicketSummaries(
 export const ticketsKnowledgeSource: KnowledgeSource = {
   sourceType: 'ticket',
   async retrieve(query, ceiling, opts) {
-    const rows = await retrieveTicketSummaries(query, ceiling, { topK: opts.topK })
+    const rows = await retrieveTicketSummaries(query, ceiling, {
+      topK: opts.topK,
+      embedding:
+        opts.queryEmbedding !== undefined ? (opts.queryEmbedding?.vector ?? null) : undefined,
+    })
     return rows.map((r): RetrievedItem => ({
       id: r.ticketId,
       sourceType: 'ticket' as const,

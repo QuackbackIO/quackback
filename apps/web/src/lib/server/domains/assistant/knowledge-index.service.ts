@@ -47,6 +47,7 @@ import {
   type AssistantKnowledgeSource,
 } from '@/lib/server/db'
 import { createHash } from 'node:crypto'
+import { toUuid } from '@quackback/ids'
 import type {
   AssistantDocumentId,
   AssistantKnowledgeSourceId,
@@ -201,7 +202,7 @@ export async function ensureKnowledgeSourceRow(
     .insert(assistantKnowledgeSources)
     .values({
       sourceType: ref.sourceType,
-      sourceId: ref.sourceId,
+      sourceId: toUuid(ref.sourceId),
       sourceRevision: revision,
       indexingStatus: 'pending',
     })
@@ -271,7 +272,7 @@ export async function tombstoneKnowledgeSource(
     .where(
       and(
         eq(assistantKnowledgeSources.sourceType, ref.sourceType),
-        eq(assistantKnowledgeSources.sourceId, ref.sourceId)
+        eq(assistantKnowledgeSources.sourceId, toUuid(ref.sourceId))
       )
     )
 }

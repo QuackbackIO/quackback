@@ -107,7 +107,12 @@ describe('kbKnowledgeSource', () => {
       topK: 5,
     })
 
-    expect(mockRetrieveKbArticles).toHaveBeenCalledWith('reset password', { audience: 'public' })
+    // The requested candidate budget is forwarded: raising the outer topK used
+    // to leave this adapter's own inner default in place (QUINN-PRODUCT P6).
+    expect(mockRetrieveKbArticles).toHaveBeenCalledWith('reset password', {
+      audience: 'public',
+      topK: 5,
+    })
     expect(items).toHaveLength(1)
     expect(items[0]).toEqual({
       id: 'article_1',
@@ -131,13 +136,16 @@ describe('kbKnowledgeSource', () => {
   it('maps the team ceiling to the team HelpCenterAudience', async () => {
     mockRetrieveKbArticles.mockResolvedValue([])
     await kbKnowledgeSource.retrieve('escalation policy', 'team', { topK: 5 })
-    expect(mockRetrieveKbArticles).toHaveBeenCalledWith('escalation policy', { audience: 'team' })
+    expect(mockRetrieveKbArticles).toHaveBeenCalledWith('escalation policy', {
+      audience: 'team',
+      topK: 5,
+    })
   })
 
   it('maps the internal ceiling to the team HelpCenterAudience (no internal KB tier)', async () => {
     mockRetrieveKbArticles.mockResolvedValue([])
     await kbKnowledgeSource.retrieve('q', 'internal', { topK: 5 })
-    expect(mockRetrieveKbArticles).toHaveBeenCalledWith('q', { audience: 'team' })
+    expect(mockRetrieveKbArticles).toHaveBeenCalledWith('q', { audience: 'team', topK: 5 })
   })
 
   it('flags a team-only article as internal (isPublic: false)', async () => {

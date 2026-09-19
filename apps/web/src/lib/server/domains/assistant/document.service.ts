@@ -17,6 +17,10 @@ import type { AssistantDocumentId, PrincipalId } from '@quackback/ids'
 import { generateEmbedding } from '@/lib/server/domains/embeddings/embedding.service'
 import { getEmbeddingModel } from '@/lib/server/domains/ai/models'
 import { isS3Usable, uploadObject, generateStorageKey } from '@/lib/server/storage/s3'
+import {
+  requestKnowledgeIndexingSoon,
+  tombstoneKnowledgeSourceSoon,
+} from './knowledge-index.service'
 import { extractPdfText } from './pdf-text'
 import { extractDocxText } from './docx-text'
 import { logger } from '@/lib/server/logger'
@@ -114,6 +118,12 @@ export async function ingestAssistantDocument(input: IngestAssistantDocumentInpu
     .returning()
 
   await embedAssistantDocument(row.id, row.title, row.content)
+  // The extracted text is the grounding source of truth, so the passage
+  // generation is built from it and never needs the original bytes back.
+  requestKnowledgeIndexingSoon(
+    { sourceType: 'document', sourceId: row.id },
+    { revision: row.updatedAt.toISOString() }
+  )
 
   log.info(
     { assistant_document_id: row.id, chars: content.length, stored: storageKey !== null },
@@ -128,6 +138,7 @@ export async function deleteAssistantDocument(id: AssistantDocumentId) {
     .update(assistantDocuments)
     .set({ deletedAt: new Date() })
     .where(eq(assistantDocuments.id, id))
+  tombstoneKnowledgeSourceSoon({ sourceType: 'document', sourceId: id })
   log.info({ assistant_document_id: id }, 'assistant document deleted')
 }
 

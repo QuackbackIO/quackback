@@ -62,6 +62,12 @@ export interface RetrievedPost {
 }
 
 export interface RetrievePostsOptions {
+  /**
+   * The turn's shared query embedding. `undefined` means this adapter was
+   * called directly and resolves its own; `null` means the turn has no vector
+   * arm and the keyword path is the whole answer.
+   */
+  embedding?: number[] | null
   topK?: number
   minScore?: number
   keywordRankFloor?: number
@@ -242,9 +248,10 @@ export async function retrievePosts(
   const minScore = options.minScore ?? POSTS_SEMANTIC_SIMILARITY_FLOOR
   const keywordRankFloor = options.keywordRankFloor ?? POSTS_KEYWORD_RANK_FLOOR
 
-  const embedding = await generateEmbedding(query, {
-    pipelineStep: 'assistant_posts_query',
-  })
+  const embedding =
+    options.embedding !== undefined
+      ? options.embedding
+      : await generateEmbedding(query, { pipelineStep: 'assistant_posts_query' })
 
   const rows = embedding
     ? await hybridQuery(query, embedding, ceiling, topK, minScore, keywordRankFloor)
@@ -270,8 +277,12 @@ export async function retrievePosts(
  */
 export const postsKnowledgeSource: KnowledgeSource = {
   sourceType: 'post',
-  async retrieve(query, ceiling) {
-    const rows = await retrievePosts(query, ceiling)
+  async retrieve(query, ceiling, opts) {
+    const rows = await retrievePosts(query, ceiling, {
+      topK: opts.topK,
+      embedding:
+        opts.queryEmbedding !== undefined ? (opts.queryEmbedding?.vector ?? null) : undefined,
+    })
     return rows.map((p): RetrievedItem => ({
       id: p.id,
       sourceType: 'post' as const,

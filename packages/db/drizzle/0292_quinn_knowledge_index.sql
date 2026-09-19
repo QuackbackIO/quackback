@@ -37,8 +37,10 @@ CREATE TABLE IF NOT EXISTS "assistant_knowledge_sources" (
   -- article, document or webpage: the canonical citation source type, so a
   -- passage maps back to the existing citation contract server-side.
   "source_type" text NOT NULL,
-  -- The source row's own id, as text: three id spaces share this column.
-  "source_id" text NOT NULL,
+  -- The source row's own primary key. A uuid rather than the application's
+  -- prefixed id string, so the retrieval join is an indexed uuid comparison
+  -- against whichever of the three source tables this row projects.
+  "source_id" uuid NOT NULL,
   "active_version_id" uuid,
   -- Durable revision of the content the last index request observed.
   "source_revision" text,

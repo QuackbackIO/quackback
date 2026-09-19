@@ -11,6 +11,10 @@
  * fetchable without credentials), so rows carry no audience tier.
  */
 import { db, eq, desc, assistantWebSources, type AssistantWebSource } from '@/lib/server/db'
+import {
+  requestKnowledgeIndexingSoon,
+  tombstoneKnowledgeSourceSoon,
+} from './knowledge-index.service'
 import type { AssistantWebSourceId, PrincipalId } from '@quackback/ids'
 import { ValidationError, NotFoundError } from '@/lib/shared/errors'
 import { safeFetch } from '@/lib/server/content/ssrf-guard'
@@ -29,16 +33,18 @@ const CRAWL_MAX_PAGES_CEILING = 100
 
 /** Decode the handful of named/numeric entities readable page text contains. */
 function decodeEntities(text: string): string {
-  return text
-    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;|&apos;/g, "'")
-    .replace(/&nbsp;/g, ' ')
-    // Last, so `&amp;lt;` decodes to the literal `&lt;` instead of `<`.
-    .replace(/&amp;/g, '&')
+  return (
+    text
+      .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+      .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;|&apos;/g, "'")
+      .replace(/&nbsp;/g, ' ')
+      // Last, so `&amp;lt;` decodes to the literal `&lt;` instead of `<`.
+      .replace(/&amp;/g, '&')
+  )
 }
 
 /**
@@ -156,6 +162,14 @@ async function insertPage(
     // A page already stored by an earlier source/crawl is left untouched.
     .onConflictDoNothing({ target: assistantWebSources.url })
     .returning()
+  // Only a page this call actually inserted is indexed; a conflict means an
+  // earlier add already owns that URL and already asked for its generation.
+  if (row) {
+    requestKnowledgeIndexingSoon(
+      { sourceType: 'webpage', sourceId: row.id },
+      { revision: row.updatedAt.toISOString() }
+    )
+  }
   return row
 }
 
@@ -192,6 +206,10 @@ export async function addWebSourceFromUrl(input: AddWebSourceInput): Promise<Ass
       })
       .returning()
     log.info({ id: row.id, url: input.url }, 'web source added')
+    requestKnowledgeIndexingSoon(
+      { sourceType: 'webpage', sourceId: row.id },
+      { revision: row.updatedAt.toISOString() }
+    )
     return row
   }
 
@@ -272,5 +290,6 @@ export async function setWebSourceEnabled(
 
 export async function deleteWebSource(id: AssistantWebSourceId): Promise<void> {
   await db.delete(assistantWebSources).where(eq(assistantWebSources.id, id))
+  tombstoneKnowledgeSourceSoon({ sourceType: 'webpage', sourceId: id })
   log.info({ id }, 'web source deleted')
 }

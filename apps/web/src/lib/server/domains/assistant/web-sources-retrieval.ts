@@ -15,9 +15,11 @@ import type { ContentAudience } from './audience'
 import { db, assistantWebSources, and, desc, eq, ilike, or, sql } from '@/lib/server/db'
 import {
   KNOWLEDGE_SNIPPET_CHARS,
+  withIndexedPassages,
   type KnowledgeSource,
   type RetrievedItem,
 } from './retrieval-sources'
+import { resolveQueryEmbedding } from './retrieval-embedding'
 
 /** Default number of web sources retrieved per query. */
 export const WEB_SOURCES_TOP_K = 5
@@ -97,21 +99,31 @@ export async function retrieveWebSources(
 export const webpageKnowledgeSource: KnowledgeSource = {
   sourceType: 'webpage',
   async retrieve(query, ceiling, opts) {
-    const rows = await retrieveWebSources(query, { topK: opts.topK, audience: ceiling })
-    return rows.map((w): RetrievedItem => ({
-      id: w.id,
-      sourceType: 'webpage' as const,
-      title: w.title,
-      excerpt: w.content.slice(0, KNOWLEDGE_SNIPPET_CHARS),
-      score: w.score,
-      updatedAt: w.updatedAt.toISOString(),
-      citation: {
-        ...(w.assistantCustomerUse === false ? { internal: true } : {}),
-        type: 'webpage' as const,
-        id: w.id,
-        title: w.title,
-        url: w.url,
-      },
-    }))
+    const embedding =
+      opts.queryEmbedding !== undefined
+        ? opts.queryEmbedding
+        : (await resolveQueryEmbedding(query)).embedding
+    return withIndexedPassages(
+      'webpage',
+      { query, ceiling, topK: opts.topK, embedding },
+      async () => {
+        const rows = await retrieveWebSources(query, { topK: opts.topK, audience: ceiling })
+        return rows.map((w): RetrievedItem => ({
+          id: w.id,
+          sourceType: 'webpage' as const,
+          title: w.title,
+          excerpt: w.content.slice(0, KNOWLEDGE_SNIPPET_CHARS),
+          score: w.score,
+          updatedAt: w.updatedAt.toISOString(),
+          citation: {
+            ...(w.assistantCustomerUse === false ? { internal: true } : {}),
+            type: 'webpage' as const,
+            id: w.id,
+            title: w.title,
+            url: w.url,
+          },
+        }))
+      }
+    )
   },
 }

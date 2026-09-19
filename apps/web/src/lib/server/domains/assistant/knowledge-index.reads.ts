@@ -20,8 +20,16 @@ import {
   helpCenterArticles,
   type AssistantIndexedSourceType,
 } from '@/lib/server/db'
+import { fromUuid, toUuid } from '@quackback/ids'
 import type { Executor } from '@/lib/server/domains/principals/principal.factory'
 import type { KnowledgeSourceRef } from './knowledge-index.service'
+
+/** The id prefix each indexed source type's rows carry, for reading a uuid back. */
+export const SOURCE_ID_PREFIX = {
+  article: 'article',
+  document: 'assistant_document',
+  webpage: 'assistant_web_source',
+} as const
 
 export interface KnowledgeSourceHealth {
   sourceType: AssistantIndexedSourceType
@@ -69,16 +77,17 @@ export async function listKnowledgeSourceHealth(
     .where(
       and(
         eq(assistantKnowledgeSources.sourceType, sourceType),
-        inArray(assistantKnowledgeSources.sourceId, [...sourceIds]),
+        inArray(assistantKnowledgeSources.sourceId, sourceIds.map(toUuid)),
         isNull(assistantKnowledgeSources.tombstonedAt)
       )
     )
+  const prefix = SOURCE_ID_PREFIX[sourceType]
   return new Map(
     rows.map((row) => [
-      row.sourceId,
+      fromUuid(prefix, row.sourceId),
       {
         sourceType,
-        sourceId: row.sourceId,
+        sourceId: fromUuid(prefix, row.sourceId),
         status: row.status,
         serving: row.activeVersionId !== null,
         generation: row.generation ?? null,
@@ -111,7 +120,7 @@ export async function pageUnindexedSources(limit: number): Promise<KnowledgeSour
     .where(
       and(
         isNull(helpCenterArticles.deletedAt),
-        sql`NOT EXISTS (SELECT 1 FROM assistant_knowledge_sources k WHERE k.source_type = 'article' AND k.source_id = ${helpCenterArticles.id}::text)`
+        sql`NOT EXISTS (SELECT 1 FROM assistant_knowledge_sources k WHERE k.source_type = 'article' AND k.source_id = ${helpCenterArticles.id})`
       )
     )
     .orderBy(asc(helpCenterArticles.createdAt))
@@ -125,7 +134,7 @@ export async function pageUnindexedSources(limit: number): Promise<KnowledgeSour
     .where(
       and(
         isNull(assistantDocuments.deletedAt),
-        sql`NOT EXISTS (SELECT 1 FROM assistant_knowledge_sources k WHERE k.source_type = 'document' AND k.source_id = ${assistantDocuments.id}::text)`
+        sql`NOT EXISTS (SELECT 1 FROM assistant_knowledge_sources k WHERE k.source_type = 'document' AND k.source_id = ${assistantDocuments.id})`
       )
     )
     .orderBy(asc(assistantDocuments.createdAt))
@@ -137,7 +146,7 @@ export async function pageUnindexedSources(limit: number): Promise<KnowledgeSour
     .select({ id: assistantWebSources.id })
     .from(assistantWebSources)
     .where(
-      sql`NOT EXISTS (SELECT 1 FROM assistant_knowledge_sources k WHERE k.source_type = 'webpage' AND k.source_id = ${assistantWebSources.id}::text)`
+      sql`NOT EXISTS (SELECT 1 FROM assistant_knowledge_sources k WHERE k.source_type = 'webpage' AND k.source_id = ${assistantWebSources.id})`
     )
     .orderBy(asc(assistantWebSources.createdAt))
     .limit(limit - refs.length)

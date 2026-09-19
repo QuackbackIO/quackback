@@ -711,7 +711,10 @@ describe('runAssistantTurn', () => {
     })
     expect(deltas.join('')).toBe('Use the reset link.')
     // Retrieval was called through the tool, audience-scoped.
-    expect(mockRetrieve).toHaveBeenCalledWith('reset password', { audience: 'public' })
+    expect(mockRetrieve).toHaveBeenCalledWith('reset password', {
+      audience: 'public',
+      topK: 5,
+    })
   })
 
   it('rejects workspace assistant on a public surface before inference', async () => {
@@ -858,7 +861,10 @@ describe('runAssistantTurn', () => {
     // the KB's own 'team' HelpCenterAudience at the toolspec boundary — never
     // a caller-suppliable value, since AssistantTurnInput has no audience
     // field at all.
-    expect(mockRetrieve).toHaveBeenCalledWith('internal escalation policy', { audience: 'team' })
+    expect(mockRetrieve).toHaveBeenCalledWith('internal escalation policy', {
+      audience: 'team',
+      topK: 5,
+    })
   })
 
   it('sets internalSourced when retrieval returns mixed public/internal sources but the final cites only public', async () => {

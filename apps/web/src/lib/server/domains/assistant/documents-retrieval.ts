@@ -16,9 +16,11 @@ import { generateEmbedding } from '@/lib/server/domains/embeddings/embedding.ser
 import type { ContentAudience } from './audience'
 import {
   KNOWLEDGE_SNIPPET_CHARS,
+  withIndexedPassages,
   type KnowledgeSource,
   type RetrievedItem,
 } from './retrieval-sources'
+import { resolveQueryEmbedding } from './retrieval-embedding'
 
 /** Blend weights for the hybrid score. Mirrors the changelog retrieval tuning. */
 export const DOCUMENTS_KEYWORD_WEIGHT = 0.4
@@ -46,6 +48,12 @@ export interface RetrievedDocument {
 export interface RetrieveDocumentsOptions {
   topK?: number
   minScore?: number
+  /**
+   * The turn's shared query embedding. `undefined` means this adapter was
+   * called directly and resolves its own; `null` means the turn has no vector
+   * arm and the keyword path is the whole answer.
+   */
+  embedding?: number[] | null
 }
 
 interface DocumentRow {
@@ -153,9 +161,10 @@ export async function retrieveAssistantDocuments(
   const topK = options.topK ?? DOCUMENTS_TOP_K
   const minScore = options.minScore ?? DOCUMENTS_SEMANTIC_SIMILARITY_FLOOR
 
-  const embedding = await generateEmbedding(query, {
-    pipelineStep: 'assistant_document_query',
-  })
+  const embedding =
+    options.embedding !== undefined
+      ? options.embedding
+      : await generateEmbedding(query, { pipelineStep: 'assistant_document_query' })
 
   const rows = embedding
     ? await hybridQuery(query, embedding, topK, minScore, ceiling)
@@ -179,24 +188,37 @@ export async function retrieveAssistantDocuments(
  */
 export const documentsKnowledgeSource: KnowledgeSource = {
   sourceType: 'document',
-  async retrieve(query, ceiling) {
-    const rows = await retrieveAssistantDocuments(query, ceiling)
-    return rows.map((d): RetrievedItem => ({
-      id: d.id,
-      sourceType: 'document' as const,
-      title: d.title,
-      excerpt: d.content.slice(0, KNOWLEDGE_SNIPPET_CHARS),
-      score: d.score,
-      updatedAt: d.updatedAt.toISOString(),
-      citation: {
-        ...(d.assistantCustomerUse === false ? { internal: true } : {}),
-        type: 'document' as const,
-        id: d.id,
-        title: d.title,
-        // No public page exists for an uploaded document: the citation
-        // carries its title with an empty URL.
-        url: '',
-      },
-    }))
+  async retrieve(query, ceiling, opts) {
+    const embedding =
+      opts.queryEmbedding !== undefined
+        ? opts.queryEmbedding
+        : (await resolveQueryEmbedding(query)).embedding
+    return withIndexedPassages(
+      'document',
+      { query, ceiling, topK: opts.topK, embedding },
+      async () => {
+        const rows = await retrieveAssistantDocuments(query, ceiling, {
+          topK: opts.topK,
+          embedding: embedding?.vector ?? null,
+        })
+        return rows.map((d): RetrievedItem => ({
+          id: d.id,
+          sourceType: 'document' as const,
+          title: d.title,
+          excerpt: d.content.slice(0, KNOWLEDGE_SNIPPET_CHARS),
+          score: d.score,
+          updatedAt: d.updatedAt.toISOString(),
+          citation: {
+            ...(d.assistantCustomerUse === false ? { internal: true } : {}),
+            type: 'document' as const,
+            id: d.id,
+            title: d.title,
+            // No public page exists for an uploaded document: the citation
+            // carries its title with an empty URL.
+            url: '',
+          },
+        }))
+      }
+    )
   },
 }

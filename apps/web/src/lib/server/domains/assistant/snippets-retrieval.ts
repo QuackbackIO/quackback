@@ -43,6 +43,12 @@ export interface RetrievedSnippet {
 }
 
 export interface RetrieveSnippetsOptions {
+  /**
+   * The turn's shared query embedding. `undefined` means this adapter was
+   * called directly and resolves its own; `null` means the turn has no vector
+   * arm and the keyword path is the whole answer.
+   */
+  embedding?: number[] | null
   topK?: number
   minScore?: number
 }
@@ -162,9 +168,10 @@ export async function retrieveSnippets(
   const topK = options.topK ?? SNIPPETS_ASK_TOP_K
   const minScore = options.minScore ?? SNIPPETS_SEMANTIC_SIMILARITY_FLOOR
 
-  const embedding = await generateEmbedding(query, {
-    pipelineStep: 'assistant_snippets_query',
-  })
+  const embedding =
+    options.embedding !== undefined
+      ? options.embedding
+      : await generateEmbedding(query, { pipelineStep: 'assistant_snippets_query' })
 
   const rows = embedding
     ? await hybridQuery(embedding, ceiling, topK, minScore)
@@ -190,8 +197,12 @@ export async function retrieveSnippets(
  */
 export const snippetsKnowledgeSource: KnowledgeSource = {
   sourceType: 'snippet',
-  async retrieve(query, ceiling) {
-    const rows = await retrieveSnippets(query, ceiling)
+  async retrieve(query, ceiling, opts) {
+    const rows = await retrieveSnippets(query, ceiling, {
+      topK: opts.topK,
+      embedding:
+        opts.queryEmbedding !== undefined ? (opts.queryEmbedding?.vector ?? null) : undefined,
+    })
     return rows.map((s): RetrievedItem => ({
       id: s.id,
       sourceType: 'snippet' as const,

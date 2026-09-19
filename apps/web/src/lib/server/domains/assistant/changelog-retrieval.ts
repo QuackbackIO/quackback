@@ -100,6 +100,12 @@ export interface RetrievedChangelogEntry {
 }
 
 export interface RetrieveChangelogOptions {
+  /**
+   * The turn's shared query embedding. `undefined` means this adapter was
+   * called directly and resolves its own; `null` means the turn has no vector
+   * arm and the keyword path is the whole answer.
+   */
+  embedding?: number[] | null
   topK?: number
   minScore?: number
 }
@@ -205,9 +211,10 @@ export async function retrieveChangelogEntries(
   const topK = options.topK ?? CHANGELOG_TOP_K
   const minScore = options.minScore ?? CHANGELOG_SEMANTIC_SIMILARITY_FLOOR
 
-  const embedding = await generateEmbedding(query, {
-    pipelineStep: 'assistant_changelog_query',
-  })
+  const embedding =
+    options.embedding !== undefined
+      ? options.embedding
+      : await generateEmbedding(query, { pipelineStep: 'assistant_changelog_query' })
 
   const rows = embedding
     ? await hybridQuery(query, embedding, ceiling, topK, minScore)
@@ -230,8 +237,12 @@ export async function retrieveChangelogEntries(
  */
 export const changelogKnowledgeSource: KnowledgeSource = {
   sourceType: 'changelog',
-  async retrieve(query, ceiling) {
-    const rows = await retrieveChangelogEntries(query, ceiling)
+  async retrieve(query, ceiling, opts) {
+    const rows = await retrieveChangelogEntries(query, ceiling, {
+      topK: opts.topK,
+      embedding:
+        opts.queryEmbedding !== undefined ? (opts.queryEmbedding?.vector ?? null) : undefined,
+    })
     return rows.map((e): RetrievedItem => ({
       id: e.id,
       sourceType: 'changelog' as const,
