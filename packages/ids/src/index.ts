@@ -153,6 +153,7 @@ export type {
   AssistantRequestReceiptId,
   AssistantReleaseId,
   AssistantReleaseCheckId,
+  AssistantRegressionCaseId,
   TicketId,
   TicketStatusId,
   TicketTypeId,

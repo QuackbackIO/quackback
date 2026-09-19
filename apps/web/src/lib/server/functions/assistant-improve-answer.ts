@@ -7,7 +7,12 @@
  */
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import type { ConversationId, TicketId } from '@quackback/ids'
+import type {
+  AssistantRunId,
+  ConversationId,
+  ConversationMessageId,
+  TicketId,
+} from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { logger } from '@/lib/server/logger'
 import { requireAuth } from './auth-helpers'
@@ -22,6 +27,9 @@ const improveAnswerSchema = z.object({
   ticketId: z.string().optional(),
   messageId: z.string().optional(),
   audience: z.enum(['public', 'team', 'internal']).optional(),
+  /** Also keep the question as a regression case a release candidate is run against. */
+  addRegressionCase: z.boolean().optional(),
+  runId: z.string().optional(),
 })
 
 export const improveAssistantAnswerFn = createServerFn({ method: 'POST' })
@@ -37,8 +45,10 @@ export const improveAssistantAnswerFn = createServerFn({ method: 'POST' })
       reason: data.reason,
       conversationId: data.conversationId as ConversationId | undefined,
       ticketId: data.ticketId as TicketId | undefined,
-      messageId: data.messageId,
+      messageId: data.messageId as ConversationMessageId | undefined,
       audience: data.audience,
       principalId: ctx.principal.id,
+      addRegressionCase: data.addRegressionCase ?? false,
+      runId: data.runId as AssistantRunId | undefined,
     })
   })

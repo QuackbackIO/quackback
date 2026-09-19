@@ -19,7 +19,7 @@ import {
   assistantGuidanceBindings,
 } from '@/lib/server/db'
 import type { Executor } from '@/lib/server/domains/principals/principal.factory'
-import type { GuidanceEntryId, PrincipalId } from '@quackback/ids'
+import type { ConversationId, GuidanceEntryId, PrincipalId } from '@quackback/ids'
 import { ConflictError, NotFoundError, ValidationError } from '@/lib/shared/errors'
 import type { AssistantAgentKind } from '@/lib/shared/assistant/config'
 import {
@@ -253,6 +253,14 @@ export interface SaveGuidanceEntryInput {
   expectedVersion?: number
   entry: GuidanceEntryInput
   createdById?: PrincipalId
+  /**
+   * The conversation a draft was written from (QUINN-PRODUCT P8).
+   *
+   * Recorded on creation only, never on an edit: it says where the instruction
+   * came from, not what it currently says, so an edit must not silently move it
+   * to whatever conversation the editor happened to have open.
+   */
+  sourceConversationId?: ConversationId | null
 }
 
 async function writeBindings(
@@ -301,6 +309,7 @@ export async function saveGuidanceEntry(
           enabled: entry.enabled,
           priority: entry.priority,
           createdById: input.createdById ?? null,
+          sourceConversationId: input.sourceConversationId ?? null,
         })
         .returning()
       await writeBindings(created.id, entry.uses, tx)

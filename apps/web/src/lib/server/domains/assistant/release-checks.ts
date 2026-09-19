@@ -43,6 +43,11 @@ import {
   type AssistantThreadMessage,
 } from './assistant.runtime'
 import { ensureAssistantPrincipal } from './assistant.principal'
+import {
+  gradeRegressionCase,
+  listEnabledRegressionCases,
+  type RegressionCaseVerdict,
+} from './regression-cases.service'
 
 const log = logger.child({ component: 'assistant-release-checks' })
 
@@ -248,6 +253,64 @@ async function checkAnswerSandbox(candidate: CandidateBehaviour): Promise<Releas
   }
 }
 
+/**
+ * Every enabled regression case, run against the candidate and graded
+ * structurally (QUINN-PRODUCT P8).
+ *
+ * The same sandbox seam the sample answer uses, so a case costs no conversation
+ * row, no involvement and no transcript message, and every write tool previews
+ * before any dial is consulted. Bounded at REGRESSION_CASE_RUN_LIMIT, because
+ * each case is a real generation.
+ *
+ * A workspace with no cases is `skipped`, never `passed`: an empty suite is not
+ * evidence, and the gate reads those two words very differently.
+ */
+async function checkRegressionCases(candidate: CandidateBehaviour): Promise<ReleaseCheckOutcome> {
+  const cases = await listEnabledRegressionCases()
+  if (cases.length === 0) {
+    return {
+      status: 'skipped',
+      summary: 'No regression cases have been kept yet.',
+      detail: { reason: 'no_cases' },
+    }
+  }
+  if (!isAssistantConfigured()) {
+    return {
+      status: 'skipped',
+      summary: 'No AI model is configured, so no case could be run.',
+      detail: { reason: 'no_model', cases: cases.length },
+    }
+  }
+
+  const verdicts: RegressionCaseVerdict[] = []
+  for (const testCase of cases) {
+    let turn: Awaited<ReturnType<typeof runCandidateSandboxTurn>>
+    try {
+      turn = await runCandidateSandboxTurn({
+        messages: [{ sender: 'customer', content: testCase.question }],
+        candidate,
+      })
+    } catch (err) {
+      return {
+        status: 'inconclusive',
+        summary: 'A regression case could not be run.',
+        detail: { case: testCase.title, error: err instanceof Error ? err.message : String(err) },
+      }
+    }
+    verdicts.push(gradeRegressionCase(testCase, turn))
+  }
+
+  const failed = verdicts.filter((verdict) => !verdict.passed)
+  return {
+    status: failed.length === 0 ? 'passed' : 'failed',
+    summary:
+      failed.length === 0
+        ? `All ${verdicts.length} regression cases still hold.`
+        : `${failed.length} of ${verdicts.length} regression cases no longer hold.`,
+    detail: { cases: verdicts },
+  }
+}
+
 export async function runReleaseCheck(
   key: ReleaseCheckKey,
   candidate: CandidateBehaviour
@@ -259,6 +322,8 @@ export async function runReleaseCheck(
       return checkToolset(candidate)
     case 'answer_sandbox':
       return checkAnswerSandbox(candidate)
+    case 'regression_cases':
+      return checkRegressionCases(candidate)
     default: {
       const exhaustive: never = key
       throw new Error(`unknown release check "${String(exhaustive)}"`)

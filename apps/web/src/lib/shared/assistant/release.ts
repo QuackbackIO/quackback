@@ -11,7 +11,7 @@
 export type ReleaseCheckStatus =
   'running' | 'passed' | 'failed' | 'skipped' | 'inconclusive' | 'cancelled'
 
-export type ReleaseCheckKey = 'configuration' | 'toolset' | 'answer_sandbox'
+export type ReleaseCheckKey = 'configuration' | 'toolset' | 'answer_sandbox' | 'regression_cases'
 
 export interface ReleaseCheckDefinition {
   key: ReleaseCheckKey
@@ -35,6 +35,12 @@ export const RELEASE_CHECKS: readonly ReleaseCheckDefinition[] = [
   { key: 'configuration', label: 'Configuration', required: true },
   { key: 'toolset', label: 'Actions', required: true },
   { key: 'answer_sandbox', label: 'Sample answer', required: false },
+  // Corrections a teammate kept as cases (QUINN-PRODUCT P8). Not required, for
+  // the same reason the sandbox is not: it needs a model, and a provider outage
+  // must not decide whether a workspace may ship a wording change. A workspace
+  // with no cases records the check as skipped rather than as passed, so an
+  // empty suite never reads as evidence.
+  { key: 'regression_cases', label: 'Regression cases', required: false },
 ]
 
 export interface ReleaseCheckResult {
