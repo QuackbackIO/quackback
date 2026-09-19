@@ -1,4 +1,11 @@
-/** Situational-guidance persistence and deterministic role prefiltering. */
+/**
+ * Situational-guidance persistence and deterministic role prefiltering.
+ *
+ * The write side still owns the legacy rule table: it is the rollback
+ * authoring path, and the canonical editor writes entries directly. The read
+ * the runtime makes, `listEnabledGuidanceCandidates`, resolves through
+ * whichever store the cutover flag names, never both.
+ */
 import { db, eq, and, inArray, asc, assistantGuidanceRules } from '@/lib/server/db'
 import type { AssistantGuidanceRuleId, PrincipalId } from '@quackback/ids'
 import { positionCaseSql } from '@/lib/server/utils'
@@ -13,8 +20,12 @@ import {
   type AssistantGuidanceRuleInput,
   type AssistantGuidanceRulePatch,
 } from '@/lib/shared/assistant/guidance'
+import { guidanceSource } from './guidance-source'
+import { ensureCanonicalGuidance } from './guidance-conversion'
+import { listCanonicalGuidanceCandidates, type GuidanceCandidate } from './guidance-entries.service'
 
 export type AssistantGuidanceRule = typeof assistantGuidanceRules.$inferSelect
+export type { GuidanceCandidate }
 export type GuidanceRuleInput = AssistantGuidanceRuleInput
 
 export const GUIDANCE_MAX_ENABLED_PER_ROLE_CHANNEL = ASSISTANT_GUIDANCE_MAX_ENABLED_CANDIDATES
@@ -55,14 +66,28 @@ export async function listGuidanceRules(
     .orderBy(asc(assistantGuidanceRules.priority), asc(assistantGuidanceRules.createdAt))
 }
 
-/** Enabled candidates owned by one resolved agent, in application priority order. */
+/**
+ * Enabled candidates owned by one resolved agent, in application priority order.
+ *
+ * One store answers this, decided by the cutover flag. Under `canonical` the
+ * legacy rows are converted first (idempotently, and only when something is
+ * actually unconverted), then the entries bound to this profile are returned;
+ * under `legacy` the rule table answers exactly as it always did. Reading both
+ * would put a converted instruction in the prompt twice, so neither branch
+ * falls back to the other.
+ */
 export async function listEnabledGuidanceCandidates(opts: {
   agent: AssistantGuidanceAgent
-}): Promise<AssistantGuidanceRule[]> {
+}): Promise<GuidanceCandidate[]> {
   const agent = assistantGuidanceAgentSchema.safeParse(opts.agent)
   if (!agent.success) validationError(agent.error)
 
-  return db
+  if (guidanceSource() === 'canonical') {
+    await ensureCanonicalGuidance()
+    return listCanonicalGuidanceCandidates(agent.data)
+  }
+
+  const rows = await db
     .select()
     .from(assistantGuidanceRules)
     .where(
@@ -70,6 +95,20 @@ export async function listEnabledGuidanceCandidates(opts: {
     )
     .orderBy(asc(assistantGuidanceRules.priority), asc(assistantGuidanceRules.createdAt))
     .limit(ASSISTANT_GUIDANCE_MAX_ENABLED_CANDIDATES)
+
+  return rows.map((rule) => ({
+    id: rule.id,
+    name: rule.name,
+    appliesWhen: rule.appliesWhen,
+    instruction: rule.instruction,
+    priority: rule.priority,
+    // The legacy table has no revision of its own, and inventing one would
+    // make two different instructions look like the same one in a snapshot.
+    version: 0,
+    createdAt: rule.createdAt,
+    updatedAt: rule.updatedAt,
+    source: 'legacy' as const,
+  }))
 }
 
 export async function updateGuidanceRule(

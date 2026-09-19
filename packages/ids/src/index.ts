@@ -136,6 +136,8 @@ export type {
   AssistantPendingActionId,
   ConnectorId,
   SkillId,
+  GuidanceEntryId,
+  GuidanceBindingId,
   AssistantEventId,
   AssistantToolCallId,
   AssistantSnippetId,

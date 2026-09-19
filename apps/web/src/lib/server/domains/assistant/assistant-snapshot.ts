@@ -32,8 +32,31 @@ export interface EffectiveSnapshotPayload {
   configRevision: number
   /** The resolved assistant configuration, exactly as the turn would read it. */
   config: unknown
-  guidance: Array<{ id: string; name: string; contentHash: string; updatedAt: string | null }>
-  skills: Array<{ id: string; name: string; updatedAt: string | null }>
+  /**
+   * The guidance this profile would apply, by canonical entry identity.
+   *
+   * `version` is the entry revision the run resolved: an edit bumps it, so two
+   * runs sharing an id and a version read the same instruction even after the
+   * text has moved on. A run recorded while the rollback reader was active
+   * carries the legacy rule ids and version 0, which is what the legacy tables
+   * can honestly say about themselves.
+   */
+  guidance: Array<{
+    id: string
+    name: string
+    contentHash: string
+    version: number
+    source: 'canonical' | 'legacy'
+    updatedAt: string | null
+  }>
+  /** Packaged procedures the turn could load, by the same identity. */
+  skills: Array<{
+    id: string
+    name: string
+    version: number
+    source: 'canonical' | 'legacy'
+    updatedAt: string | null
+  }>
   /**
    * Contract fingerprints and the policy the run resolved under. Never a
    * credential, a token or a header value. `policyVersion` and `policyHash`
@@ -104,6 +127,8 @@ export async function buildEffectiveSnapshot(): Promise<EffectiveSnapshotPayload
         id: rule.id,
         name: rule.name,
         contentHash: shortHash(rule.instruction ?? ''),
+        version: rule.version,
+        source: rule.source,
         updatedAt: rule.updatedAt ? new Date(rule.updatedAt).toISOString() : null,
       })
     }
@@ -113,13 +138,32 @@ export async function buildEffectiveSnapshot(): Promise<EffectiveSnapshotPayload
 
   const skills: EffectiveSnapshotPayload['skills'] = []
   try {
-    const { listSkills } = await import('./skills.service')
-    for (const skill of await listSkills()) {
-      skills.push({
-        id: skill.id,
-        name: skill.name,
-        updatedAt: skill.updatedAt ? new Date(skill.updatedAt).toISOString() : null,
-      })
+    const { guidanceSource } = await import('./guidance-source')
+    if (guidanceSource() === 'canonical') {
+      const { listCanonicalProcedures } = await import('./guidance-entries.service')
+      // Same profile as the guidance above: customer-support runs are the only
+      // durable ones today, and a procedure bound to another profile is not
+      // part of what this run could have loaded.
+      for (const procedure of await listCanonicalProcedures('agent')) {
+        skills.push({
+          id: procedure.id,
+          name: procedure.name,
+          version: procedure.version,
+          source: 'canonical',
+          updatedAt: procedure.updatedAt ? new Date(procedure.updatedAt).toISOString() : null,
+        })
+      }
+    } else {
+      const { listSkills } = await import('./skills.service')
+      for (const skill of await listSkills()) {
+        skills.push({
+          id: skill.id,
+          name: skill.name,
+          version: 0,
+          source: 'legacy',
+          updatedAt: skill.updatedAt ? new Date(skill.updatedAt).toISOString() : null,
+        })
+      }
     }
   } catch (err) {
     log.warn({ err }, 'snapshot could not read skills')

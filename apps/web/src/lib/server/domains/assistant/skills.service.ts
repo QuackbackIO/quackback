@@ -19,6 +19,9 @@ import {
   type SkillDTO,
   type SkillInput,
 } from '@/lib/shared/assistant/skills'
+import { guidanceSource } from './guidance-source'
+import { ensureCanonicalGuidance } from './guidance-conversion'
+import { listCanonicalProcedures } from './guidance-entries.service'
 
 export type SkillRow = typeof agentSkills.$inferSelect
 
@@ -126,13 +129,21 @@ export async function deleteSkill(id: SkillId, execDb: Executor = defaultDb): Pr
   await execDb.delete(agentSkills).where(eq(agentSkills.id, id))
 }
 
+/**
+ * One catalogue line per procedure this profile may load, under the char cap.
+ *
+ * The three runtime reads below resolve through whichever store the cutover
+ * flag names. Under `canonical` a procedure is a guidance entry with a role
+ * binding, and its legacy skill row is converted first; the packing loop is
+ * unchanged either way, so the catalogue the model reads is byte for byte the
+ * one it read before the conversion.
+ */
 export async function compileSkillCatalogue(
   agent: AgentKind,
   execDb: Executor = defaultDb,
   budget = SKILL_CATALOGUE_CHAR_BUDGET
 ): Promise<SkillCatalogueLine[]> {
-  const rows = await execDb.select().from(agentSkills).where(eq(agentSkills.enabled, true))
-  const assigned = rows.filter((row) => row.assignments[agent] === true)
+  const assigned = await assignedProcedures(agent, execDb)
   const lines: SkillCatalogueLine[] = []
   let used = 0
   for (const row of assigned) {
@@ -149,20 +160,42 @@ export async function getSkillBody(
   agent: AgentKind,
   execDb: Executor = defaultDb
 ): Promise<string | null> {
-  const rows = await execDb.select().from(agentSkills).where(eq(agentSkills.enabled, true))
-  const row = rows.find(
-    (candidate) =>
-      candidate.name.trim().toLowerCase() === name.trim().toLowerCase() &&
-      candidate.assignments[agent] === true
+  const assigned = await assignedProcedures(agent, execDb)
+  const row = assigned.find(
+    (candidate) => candidate.name.trim().toLowerCase() === name.trim().toLowerCase()
   )
   if (!row) return null
-  return row.instructions.slice(0, SKILL_INSTRUCTIONS_MAX_LENGTH)
+  return row.body.slice(0, SKILL_INSTRUCTIONS_MAX_LENGTH)
 }
 
 export async function countAssignedSkills(
   agent: AgentKind,
   execDb: Executor = defaultDb
 ): Promise<number> {
+  return (await assignedProcedures(agent, execDb)).length
+}
+
+interface AssignedProcedure {
+  name: string
+  whenToUse: string
+  body: string
+}
+
+async function assignedProcedures(
+  agent: AgentKind,
+  execDb: Executor
+): Promise<AssignedProcedure[]> {
+  if (guidanceSource() === 'canonical') {
+    await ensureCanonicalGuidance(execDb)
+    const procedures = await listCanonicalProcedures(agent, execDb)
+    return procedures.map((procedure) => ({
+      name: procedure.name,
+      whenToUse: procedure.whenToUse,
+      body: procedure.body,
+    }))
+  }
   const rows = await execDb.select().from(agentSkills).where(eq(agentSkills.enabled, true))
-  return rows.filter((row) => row.assignments[agent] === true).length
+  return rows
+    .filter((row) => row.assignments[agent] === true)
+    .map((row) => ({ name: row.name, whenToUse: row.whenToUse, body: row.instructions }))
 }

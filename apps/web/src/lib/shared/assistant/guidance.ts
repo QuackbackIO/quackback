@@ -104,19 +104,41 @@ export interface GuidanceInstruction {
   instruction: string
 }
 
-/** Keeps whole instructions within the block budget, skipping oversized rules instead of stopping. */
-export function applyGuidanceBudget<T extends GuidanceInstruction>(
+/**
+ * Keeps whole instructions within the block budget, skipping oversized rules
+ * instead of stopping, and says which ones it skipped.
+ *
+ * Canonical entries may carry a body far longer than this budget, because the
+ * authored text is never truncated to fit a field. What the budget decides is
+ * whether a whole instruction rides this turn, and an instruction left out for
+ * room is reported rather than silently trimmed: the caller records the
+ * omitted ids so an authorized run inspection can say why an instruction was
+ * not used.
+ */
+export function selectWithinGuidanceBudget<T extends GuidanceInstruction>(
   rules: readonly T[],
   budget = ASSISTANT_GUIDANCE_CHAR_BUDGET
-): T[] {
+): { selected: T[]; omitted: T[] } {
   const selected: T[] = []
+  const omitted: T[] = []
   let used = 0
 
   for (const rule of rules) {
-    if (used + rule.instruction.length > budget) continue
+    if (used + rule.instruction.length > budget) {
+      omitted.push(rule)
+      continue
+    }
     selected.push(rule)
     used += rule.instruction.length
   }
 
-  return selected
+  return { selected, omitted }
+}
+
+/** The selection alone, for callers with nothing to report omissions to. */
+export function applyGuidanceBudget<T extends GuidanceInstruction>(
+  rules: readonly T[],
+  budget = ASSISTANT_GUIDANCE_CHAR_BUDGET
+): T[] {
+  return selectWithinGuidanceBudget(rules, budget).selected
 }

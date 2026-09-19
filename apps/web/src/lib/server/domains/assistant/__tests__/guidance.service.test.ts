@@ -68,7 +68,10 @@ describe('guidance shared contract', () => {
 
 describe.skipIf(!fixture.available)('guidance.service (real DB, rolled back)', () => {
   beforeEach(fixture.begin)
-  afterEach(fixture.rollback)
+  afterEach(async () => {
+    delete process.env.ASSISTANT_GUIDANCE_SOURCE
+    await fixture.rollback()
+  })
   afterAll(fixture.close)
 
   it('creates normalized V3 guidance with defaults and lists by priority', async () => {
@@ -121,8 +124,18 @@ describe.skipIf(!fixture.available)('guidance.service (real DB, rolled back)', (
       enabled: false,
     })
 
-    const candidates = await listEnabledGuidanceCandidates({ agent: 'agent' })
-    expect(candidates.map((rule) => rule.id)).toEqual([everywhere.id, alsoScoped.id])
+    // The rollback reader answers with the rule rows themselves, so their ids
+    // are the candidate ids.
+    process.env.ASSISTANT_GUIDANCE_SOURCE = 'legacy'
+    const legacy = await listEnabledGuidanceCandidates({ agent: 'agent' })
+    expect(legacy.map((rule) => rule.id)).toEqual([everywhere.id, alsoScoped.id])
+
+    // The canonical reader converts first and answers with entries, which have
+    // their own ids. The scope it resolves has to be the same one.
+    delete process.env.ASSISTANT_GUIDANCE_SOURCE
+    const canonical = await listEnabledGuidanceCandidates({ agent: 'agent' })
+    expect(canonical.map((entry) => entry.name)).toEqual(['Everywhere', 'Also scoped'])
+    expect(canonical.every((entry) => entry.source === 'canonical')).toBe(true)
   })
 
   it('orders candidate ties by createdAt and caps the list at 25', async () => {

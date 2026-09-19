@@ -44,7 +44,7 @@ import {
   type AssistantTone,
   type AssistantResponseLength,
 } from '@/lib/shared/assistant/config'
-import { applyGuidanceBudget } from '@/lib/shared/assistant/guidance'
+import { selectWithinGuidanceBudget } from '@/lib/shared/assistant/guidance'
 import type {
   AssistantActivityStatus,
   ConversationAttachment,
@@ -75,7 +75,7 @@ import {
 import { formatAskingTeammateContext } from './workspace-prompt'
 import { compileSkillCatalogue, countAssignedSkills } from './skills.service'
 import { resolveAssistantKnowledgeSnapshot, type RetrievedItem } from './retrieval-sources'
-import { listEnabledGuidanceCandidates, type AssistantGuidanceRule } from './guidance.service'
+import { listEnabledGuidanceCandidates, type GuidanceCandidate } from './guidance.service'
 import { selectApplicableGuidance, splitGuidanceCandidates } from './guidance-selector'
 import {
   ASSISTANT_PROMPT_VERSION,
@@ -1062,7 +1062,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
   })
   const promptChannel = surface === 'widget' || surface === 'email' ? surface : null
   const guidanceChannel = surface
-  let guidanceCandidates: AssistantGuidanceRule[] = []
+  let guidanceCandidates: GuidanceCandidate[] = []
   try {
     guidanceCandidates = await listEnabledGuidanceCandidates({ agent: roleToAgent(role) })
   } catch (error) {
@@ -1094,7 +1094,11 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
   })
   const selectedConditionalIdSet = new Set(selectedConditionalIds)
   const alwaysOnIds = new Set(alwaysOn.map((rule) => rule.id))
-  const selectedGuidance = applyGuidanceBudget(
+  // An entry the selector chose but the character budget cannot fit is
+  // reported, not silently dropped: canonical bodies may be far longer than
+  // this block's budget, and an authorized run inspection has to be able to
+  // say that an instruction was left out for room rather than for scope.
+  const { selected: selectedGuidance, omitted: omittedGuidance } = selectWithinGuidanceBudget(
     guidanceCandidates.filter(
       (rule) => alwaysOnIds.has(rule.id) || selectedConditionalIdSet.has(rule.id)
     )
@@ -1284,6 +1288,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
 
     const guidanceCandidateIds = guidanceCandidates.map((rule) => rule.id)
     const guidanceAppliedIds = selectedGuidance.map((rule) => rule.id)
+    const guidanceOmittedIds = omittedGuidance.map((rule) => rule.id)
     const appliedGuidance = selectedGuidance.map((rule) => ({ id: rule.id, name: rule.name }))
     const systemPrompts = buildAssistantSystemMessages({
       role,
@@ -1378,6 +1383,7 @@ ${runtimeConfig.config.agents.workspace.instructions}`)
             : {}),
           ...(guidanceCandidateIds.length > 0 ? { guidanceCandidateIds } : {}),
           ...(guidanceAppliedIds.length > 0 ? { guidanceAppliedIds } : {}),
+          ...(guidanceOmittedIds.length > 0 ? { guidanceOmittedIds } : {}),
           ...(runtimeConfig.configFallbackReason
             ? { configFallbackReason: runtimeConfig.configFallbackReason }
             : {}),
