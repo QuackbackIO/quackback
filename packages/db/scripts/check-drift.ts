@@ -201,7 +201,7 @@ const EXEMPTIONS: { reason: string; pattern: RegExp; optional?: boolean }[] = [
     pattern: /^DROP INDEX "conversation_tags_name_lower_key"/,
   },
   {
-    // HNSW cosine indexes over embedding columns (migrations 0203 + 0209).
+    // HNSW cosine indexes over embedding columns (migrations 0203, 0209, 0292).
     // drizzle-kit cannot round-trip an hnsw partial index (vector_cosine_ops
     // opclass + partial predicate), so it emits a spurious drop/create pair for
     // every one. Each listed index is created by a migration, so a genuinely
@@ -209,13 +209,13 @@ const EXEMPTIONS: { reason: string; pattern: RegExp; optional?: boolean }[] = [
     reason:
       'hnsw vector_cosine_ops partial index is not faithfully round-tripped by drizzle-kit; drop half of the spurious pair',
     pattern:
-      /^DROP INDEX "(posts|kb_articles|feedback_signals|feedback_suggestions|assistant_snippets|assistant_documents|conversation_summaries|ticket_summaries|changelog)_embedding_hnsw_idx"/,
+      /^DROP INDEX "(posts|kb_articles|feedback_signals|feedback_suggestions|assistant_snippets|assistant_documents|assistant_chunks|conversation_summaries|ticket_summaries|changelog)_embedding_hnsw_idx"/,
   },
   {
     reason:
       'hnsw vector_cosine_ops partial index is not faithfully round-tripped by drizzle-kit; create half of the spurious pair',
     pattern:
-      /^CREATE INDEX "(posts|kb_articles|feedback_signals|feedback_suggestions|assistant_snippets|assistant_documents|conversation_summaries|ticket_summaries|changelog)_embedding_hnsw_idx" ON "\w+" USING hnsw /,
+      /^CREATE INDEX "(posts|kb_articles|feedback_signals|feedback_suggestions|assistant_snippets|assistant_documents|assistant_chunks|conversation_summaries|ticket_summaries|changelog)_embedding_hnsw_idx" ON "\w+" USING hnsw /,
   },
   {
     // Same empty text[] default false positive as invitation.magic_link_tokens

@@ -99,6 +99,12 @@ export const ID_PREFIXES = {
   assistant_run: 'assistant_run',
   assistant_run_step: 'assistant_run_step',
   assistant_run_evidence: 'assistant_run_evidence',
+  // Derived passage index over the existing knowledge sources (P5). The
+  // source row is a projection key, never a second copy of the source: the
+  // help-center article, uploaded document or web page stays authoritative.
+  assistant_knowledge_source: 'assistant_knowledge_source',
+  assistant_source_version: 'assistant_source_version',
+  assistant_chunk: 'assistant_chunk',
   // Immutable resolved behaviour a run executed under, deduplicated by hash.
   assistant_snapshot: 'assistant_snapshot',
   // HTTP retry receipt binding a client mutation id to one accepted request.
