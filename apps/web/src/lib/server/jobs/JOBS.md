@@ -445,6 +445,31 @@ reference allowed (one `Worker` per queue at its own concurrency), so the
 default binds nothing. It exists because a pooled process runs one loop per
 workspace, and an operator sizing connections cares about the product.
 
+### Workload classes (QUINN-PRODUCT P8)
+
+A definition may declare a `workload`: `interactive`, `ingestion` or
+`evaluation`. Per-queue concurrency cannot express "background work may never
+take the seats a customer is waiting on", because that one global ceiling is
+spent across the queues in registry order, so whichever is declared first gets
+it. A class can.
+
+Three things follow from a class, and all three are inert by default:
+
+- interactive queues are asked for their slots **first**;
+- the seats interactive work could take and has not taken are **reserved**, so a
+  background queue computes its limit against the ceiling minus that
+  reservation, and a turn arriving mid-pass still has somewhere to go;
+- each class has a budget, defaulting to the sum of its own members' declared
+  concurrency (which binds nothing) and overridable with
+  `JOB_INTERACTIVE_CONCURRENCY`, `JOB_INGESTION_CONCURRENCY` and
+  `JOB_EVALUATION_CONCURRENCY`.
+
+`assistant-turn` and `assistant-action` are interactive;
+`assistant-knowledge-index` is ingestion. The `evaluation` class is declared and
+carried by no queue today, because the evaluation suites run out of process; it
+is here so a suite that does move onto the queue is budgeted from its first line
+rather than after it has starved a conversation.
+
 ### What the move fixed rather than preserved
 
 - **`workflow-dispatch`'s dedupe never worked.** The comment promised that

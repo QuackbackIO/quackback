@@ -2,8 +2,8 @@
  * Quinn's operational metrics: what the runtime did, as opposed to what the
  * conversations became (QUINN-PRODUCT Step 11, P8).
  *
- * `quinn-performance.ts` next door answers the product question — involvement,
- * resolution, escalation, CSAT — from the involvement rows. This module answers
+ * `quinn-performance.ts` next door answers the product question, involvement,
+ * resolution, escalation and CSAT, from the involvement rows. This module answers
  * the operator's: how long work waited, how often it failed or was superseded,
  * how often an answer could not be supported, whether actions landed or went
  * unconfirmed, and whether approvals are being completed. Both read real rows
@@ -12,8 +12,8 @@
  * measured to be expensive, not before.
  *
  * Every rate is `ratePctOrNull`, so an empty range reports null rather than
- * zero. A surface renders null as an em-free dash and explains the next useful
- * step; a zero would be a claim nobody made.
+ * zero. A surface renders null as the same placeholder every other metric tile
+ * uses and explains the next useful step; a zero would be a claim nobody made.
  *
  * The run rows are fetched and summarized in memory, following
  * `summarizeQuinnPerformance`: the volume is the same order, the rate maths is

@@ -33,7 +33,7 @@ export function QuinnArticleHealth() {
         {unhealthy.map((article) => (
           <li key={article.id} className="truncate">
             {article.title}
-            {' — '}
+            {': '}
             {indexNote({
               status: article.status,
               serving: article.serving,
