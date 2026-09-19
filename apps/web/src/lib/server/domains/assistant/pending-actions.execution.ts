@@ -32,6 +32,32 @@ export async function markPendingActionRunning(
 }
 
 /**
+ * Point an approved action at the job that will actually run it.
+ *
+ * Written by the recovery sweep when the original queue row aged out. Guarded
+ * on `execution_state = 'queued'` as well as on the status, so a row an
+ * executor has meanwhile claimed keeps the job id it is running under.
+ */
+export async function markPendingActionRequeued(
+  id: AssistantPendingActionId,
+  executionJobId: string,
+  exec: Executor = db
+): Promise<AssistantPendingAction | null> {
+  const [row] = await exec
+    .update(assistantPendingActions)
+    .set({ executionJobId })
+    .where(
+      and(
+        eq(assistantPendingActions.id, id),
+        eq(assistantPendingActions.status, 'approved'),
+        eq(assistantPendingActions.executionState, 'queued')
+      )
+    )
+    .returning()
+  return row ?? null
+}
+
+/**
  * Record that an approved action was dispatched and never confirmed.
  *
  * Deliberately NOT `failed`: the decision stands, the effect may have

@@ -33,6 +33,7 @@ export type AssistantPendingAction = typeof assistantPendingActions.$inferSelect
 // The execution-side writes live next door (pending-actions.execution.ts) and
 // are re-exported here so every existing importer of this module is unaffected.
 export {
+  markPendingActionRequeued,
   markPendingActionRunning,
   markPendingActionUnknown,
   refusePendingAction,
