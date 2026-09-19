@@ -44,6 +44,17 @@ export const ASSISTANT_KNOWLEDGE_INDEX_LEASE_MS = 120_000
 /** How many sources one backfill pass claims. */
 export const BACKFILL_PAGE_SIZE = 25
 
+/**
+ * Whether a backfill pass has anything to do.
+ *
+ * The cron gate, evaluated per tick in the same module as the handler it gates,
+ * so a workspace whose corpus is fully indexed writes no row at all rather than
+ * waking to be told so.
+ */
+export async function isKnowledgeBackfillDue(): Promise<boolean> {
+  return (await pageUnindexedSources(1)).length > 0
+}
+
 /** Start (or resume) the bounded backfill over sources the projection has never seen. */
 export async function enqueueKnowledgeBackfill(): Promise<void> {
   await enqueueJob({
@@ -63,8 +74,11 @@ export async function enqueueKnowledgeBackfill(): Promise<void> {
  * Only an unexpected throw reaches the queue's retry policy.
  */
 export async function runKnowledgeIndexJob(job: ClaimedJob): Promise<void> {
+  // Anything that is not an explicit source request is a backfill pass. That
+  // includes the daily cron row, whose payload carries only its slot, so the
+  // schedule and the self-continuation are the same code path.
   const kind = job.payload.kind as string | undefined
-  if (kind === 'backfill') {
+  if (kind !== 'source') {
     const refs = await pageUnindexedSources(BACKFILL_PAGE_SIZE)
     for (const ref of refs) await requestKnowledgeIndexing(ref)
     log.info(

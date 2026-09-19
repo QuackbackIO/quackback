@@ -273,6 +273,15 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
     // second attempt rebuilds rather than doubling, and an identical rebuild is
     // recognised by its content hash and skipped.
     name: 'assistant-knowledge-index',
+    // The daily pass is the backfill's resumption point: a source write asks
+    // for its own index immediately, and this collects whatever a lost request
+    // or an upgrade into this step left behind. The gate keeps a workspace
+    // whose corpus is fully indexed from waking at all.
+    cron: '15 3 * * *',
+    cronEnabled: () =>
+      import('@/lib/server/domains/assistant/knowledge-ingest-queue').then((m) =>
+        m.isKnowledgeBackfillDue()
+      ),
     concurrency: 1,
     maxAttempts: 3,
     retryBackoffMs: 10_000,
