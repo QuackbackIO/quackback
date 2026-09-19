@@ -50,6 +50,7 @@ export async function runDailyMaintenance(): Promise<void> {
     { pruneEventsOutbox },
     { cleanupExpiredLogs },
     { cleanupExpiredToolCalls, cleanupExpiredAssistantEvents },
+    { sweepExpiredAssistantRunHistory },
     { cleanupExpiredMessageTranslations },
     { withSweepLock },
   ] = await Promise.all([
@@ -58,6 +59,7 @@ export async function runDailyMaintenance(): Promise<void> {
     import('@/lib/server/events/events-sweep'),
     import('@/lib/server/domains/ai/usage-log'),
     import('@/lib/server/domains/assistant/tool-audit'),
+    import('@/lib/server/domains/assistant/assistant-run-retention'),
     import('@/lib/server/domains/conversation/conversation-translation.service'),
     import('@/lib/server/sweep-lock'),
   ])
@@ -74,12 +76,17 @@ export async function runDailyMaintenance(): Promise<void> {
     await pruneEventsOutbox().catch((err) => log.error({ err }, 'events outbox prune failed'))
   })
   // ai_usage_log + operational tables (hook deliveries, unsubscribe tokens,
-  // in-app notifications), assistant tool-audit + events, message translations.
+  // in-app notifications), assistant tool-audit + events, Quinn run steps and
+  // evidence excerpts, message translations. Run steps, evidence and tool
+  // results age out under one lock on purpose (QUINN-PRODUCT P8): they are three
+  // halves of one record, and staggering them would leave a run explainable in
+  // pieces.
   await withSweepLock('logs_retention', ONE_HOUR, async () => {
     await Promise.all([
       cleanupExpiredLogs(),
       cleanupExpiredToolCalls(),
       cleanupExpiredAssistantEvents(),
+      sweepExpiredAssistantRunHistory(),
       cleanupExpiredMessageTranslations(),
     ]).catch((err) => log.error({ err }, 'logs retention cleanup failed'))
   })

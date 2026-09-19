@@ -24,6 +24,7 @@ const {
   cleanupExpiredLogs,
   cleanupExpiredToolCalls,
   cleanupExpiredAssistantEvents,
+  sweepExpiredAssistantRunHistory,
   cleanupExpiredMessageTranslations,
   startTelemetry,
   enrolActiveWorkspaces,
@@ -46,6 +47,7 @@ const {
     cleanupExpiredLogs: vi.fn(),
     cleanupExpiredToolCalls: vi.fn(),
     cleanupExpiredAssistantEvents: vi.fn(),
+    sweepExpiredAssistantRunHistory: vi.fn(),
     cleanupExpiredMessageTranslations: vi.fn(),
     startTelemetry: vi.fn(),
     enrolActiveWorkspaces: vi.fn(),
@@ -90,6 +92,9 @@ vi.mock('@/lib/server/domains/ai/usage-log', () => ({ cleanupExpiredLogs }))
 vi.mock('@/lib/server/domains/assistant/tool-audit', () => ({
   cleanupExpiredToolCalls,
   cleanupExpiredAssistantEvents,
+}))
+vi.mock('@/lib/server/domains/assistant/assistant-run-retention', () => ({
+  sweepExpiredAssistantRunHistory,
 }))
 vi.mock('@/lib/server/domains/conversation/conversation-translation.service', () => ({
   cleanupExpiredMessageTranslations,
@@ -137,6 +142,7 @@ beforeEach(() => {
     cleanupExpiredLogs,
     cleanupExpiredToolCalls,
     cleanupExpiredAssistantEvents,
+    sweepExpiredAssistantRunHistory,
     cleanupExpiredMessageTranslations,
     startTelemetry,
     enrolActiveWorkspaces,
@@ -165,6 +171,9 @@ describe('housekeeping', () => {
     expect(sweepExpiredPortalInvites).toHaveBeenCalledTimes(1)
     expect(pruneEventsOutbox).toHaveBeenCalledTimes(1)
     expect(cleanupExpiredLogs).toHaveBeenCalledTimes(1)
+    // Quinn run steps and evidence age out in the same group as the tool
+    // receipts they belong to (QUINN-PRODUCT P8).
+    expect(sweepExpiredAssistantRunHistory).toHaveBeenCalledTimes(1)
 
     // Hourly bodies are not gated by the 23 h claim: they run every tick.
     expect(sweepExpiredKv).toHaveBeenCalledTimes(2)
@@ -216,6 +225,7 @@ describe('housekeeping', () => {
     cleanupExpiredLogs.mockImplementation(reject('logs'))
     cleanupExpiredToolCalls.mockImplementation(reject('tool-calls'))
     cleanupExpiredAssistantEvents.mockImplementation(reject('assistant'))
+    sweepExpiredAssistantRunHistory.mockImplementation(reject('run-history'))
     cleanupExpiredMessageTranslations.mockImplementation(reject('translations'))
 
     expect(await runFleetCronJob('housekeeping')).toBe(true)

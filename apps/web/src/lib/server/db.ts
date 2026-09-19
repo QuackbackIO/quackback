@@ -465,6 +465,11 @@ export {
   ASSISTANT_RELEASE_STATUSES,
   ASSISTANT_RELEASE_ORIGINS,
   ASSISTANT_RELEASE_CHECK_STATUSES,
+  // Schema tables - regression cases and the improvement loop (QUINN-PRODUCT P8)
+  assistantRegressionCases,
+  assistantRegressionCasesRelations,
+  ASSISTANT_REGRESSION_EXPECTATIONS,
+  ASSISTANT_REGRESSION_ORIGINS,
   // Schema tables - derived passage index (QUINN-PRODUCT P5)
   assistantKnowledgeSources,
   assistantSourceVersions,
