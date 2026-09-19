@@ -117,18 +117,27 @@ module-state roots.
 - **Presets** (`lib/shared/fork/announcements/presets.ts`, mirrored byte-for-byte in
   `packages/widget/src/fork/banner/presets.ts`; a unit test asserts equality): one entry per kind —
 
-  | Kind | Colour tokens (light/dark bg, fg, border) | Icon (inline SVG) | Layout | Defaults |
-  | --- | --- | --- | --- | --- |
-  | `info` | `--primary` tint | info-circle | single-line strip | dismissible, `aria-live=polite` |
-  | `warning` | fork `--fork-warning` (derived from theme) | exclamation-triangle | strip, bold title | dismissible, polite |
-  | `critical` (incident) | `--destructive` tint | x-octagon | emphasis strip (taller, left bar) | **not** dismissible, `role=alert` |
-  | `maintenance` | `--accent` / `--muted` tint | wrench | strip + optional time line from `publishAt`/`expiresAt` | dismissible, polite |
-  | `success` (resolved) | `--success` tint | check-circle | single-line strip | dismissible, polite; `expires_at` defaulted to +24 h in the editor |
+  | Kind | Colour token | Icon (inline SVG) | Defaults |
+  | --- | --- | --- | --- |
+  | `info` | `--fork-info` (blue) | info-circle | dismissible, `aria-live=polite` |
+  | `warning` | `--fork-warning` (amber) | exclamation-triangle | dismissible, polite |
+  | `critical` (incident) | `--destructive` (red) | x-octagon | **not** dismissible, `role=alert` |
+  | `maintenance` | `--fork-maintenance` (violet) | wrench | time window from `publishAt`/`expiresAt` appended to the text; dismissible, polite |
+  | `success` (resolved) | `--success` (green) | check-circle | dismissible, polite; `expires_at` defaulted to +24 h in the editor |
 
+  **One component, one layout for every kind** (mockup: https://claude.ai/artifact/XAn1u4GewieesuMGHsua43, board
+  "Announcements — standard banner types"): icon · bold type title · text · optional link · dismiss (or an empty
+  slot of the same width when not dismissible). Same height, padding, type sizes, link and dismiss styling across
+  kinds; the kind changes only the colour token and icon. Background = 10 % tint of the kind colour over
+  `--background` (16 % in dark mode), border = 35 % (40 % dark), title/link = kind colour mixed toward
+  `--foreground` for contrast. Placement variants only: full-width strip in the portal/hub; rounded floating bar
+  (with `--radius` and shadow) in the embed.
   Authors cannot change colours, icons or layout; `dismissible` is only overridable for `critical`.
-- **Branding (D-X1, conventions §11).** Preset colours are **not fixed hex values**: each kind maps to the app's
-  theme tokens (above), with tints/borders derived via `color-mix()` in one fork token file, so an app's brand
-  colours, font, radius, dark mode and `customCss` restyle its banners automatically. The portal banner inherits
+- **Branding (D-X1, conventions §11).** Kind colours are **semantic and consistent across apps** (info is always
+  blue, incident always red) so users read them the same way everywhere; they are fork tokens with light and dark
+  values, overridable per app via `customCss`. Everything else — background, foreground, font, radius, dark mode —
+  comes from the app's theme, and tints/borders are derived with `color-mix()` against the app's `--background`, so
+  each app's branding restyles its banners automatically. The portal banner inherits
   the portal's injected theme. The **embed** receives the app's generated theme variables
   (`generateWorkspaceThemeCSS` output, plus font family) in its session/feed payload and applies them to `:host` in its
   shadow root, so a banner on a customer's own site matches that app's branding too.
