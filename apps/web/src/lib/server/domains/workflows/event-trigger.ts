@@ -445,13 +445,21 @@ async function tryResumeInputWait(event: MessageCreatedEvent): Promise<ResumeAtt
  */
 async function tryResumeAssistantWait(
   conversationId: ConversationId,
-  outcome: AssistantOutcome
+  outcome: AssistantOutcome,
+  opts?: { fromAssistantRun?: boolean }
 ): Promise<ResumeAttempt | null> {
   const run = await findWaitingCustomerFacingRun(conversationId)
   if (!run) return null
 
   const cursor = readCursor(run)
   if (cursor.waitKind !== 'assistant') return null
+  // A delegated wait is resumed by the run that owes it an answer, naming the
+  // visit it answers (assistant-delegation.ts). This event carries no such
+  // identity, so honouring it would let a turn that finished late resume a
+  // newer wait it knows nothing about. The lifecycle's own signals (a
+  // resolution, a close) are not assistant-run completions and still resume
+  // here, as does any wait parked under the legacy selector (P4).
+  if (cursor.delegatedRunId && opts?.fromAssistantRun) return null
 
   const resumed = await resumeWorkflowRun(run.id, { assistantOutcome: outcome })
   // Funnel: only 'escalated' (assistant.handed_off — Quinn escalating mid-
@@ -579,7 +587,9 @@ export async function dispatchWorkflowsForEvent(event: EventData): Promise<void>
           : null
   const assistantResume =
     !inputResume && assistantOutcome
-      ? await tryResumeAssistantWait(trigger.conversationId, assistantOutcome)
+      ? await tryResumeAssistantWait(trigger.conversationId, assistantOutcome, {
+          fromAssistantRun: event.type === 'assistant.handed_off',
+        })
       : null
 
   // Advisory hint for dispatchWorkflowTrigger's own active-customer-facing-run

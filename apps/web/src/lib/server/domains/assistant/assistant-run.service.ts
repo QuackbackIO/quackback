@@ -124,13 +124,20 @@ export async function requestAssistantTurn(
   // run is already dead by the revision comparison, and this only records why.
   await supersedeOpenRuns(tx, input.conversationId, { disposition: 'fence:newer_input' })
 
+  // A workflow that delegated to Quinn is still waiting while the customer and
+  // Quinn keep talking, so every turn in that engagement carries the wait's
+  // identity: without it, a hand-off two turns later would have nothing to
+  // resume. Read live rather than copied from the previous run, so a workflow
+  // that has since moved on hands out no identity at all (P4).
+  const delegation = input.delegation ?? (await inheritedDelegation(tx, input.conversationId))
+
   const { run, created } = await insertRunIntent(tx, {
     conversationId: input.conversationId,
     surface: input.surface,
     triggerKind: input.triggerKind,
     triggerKey: input.triggerKey,
     triggerMessageId: input.triggerMessageId ?? null,
-    delegation: input.delegation ?? null,
+    delegation,
     requestedByPrincipalId: input.requestedByPrincipalId ?? null,
     inputRevision,
   })
@@ -153,6 +160,29 @@ export async function requestAssistantTurn(
   }
 
   return { run, created, inputRevision }
+}
+
+/**
+ * The workflow wait this conversation is parked on, when a caller did not name
+ * one itself.
+ *
+ * Dynamically imported because the workflows domain imports the assistant
+ * domain to delegate in the first place; this is the only edge in the other
+ * direction. A failure here is never allowed to stop an accepted customer
+ * message from getting a turn: the worst case is a wait that ends at its own
+ * expiry instead of at Quinn's hand-off.
+ */
+async function inheritedDelegation(
+  tx: Transaction,
+  conversationId: ConversationId
+): Promise<{ workflowRunId: string; nodeId: string; waitSeq: number } | null> {
+  try {
+    const { findLiveAssistantDelegation } =
+      await import('@/lib/server/domains/workflows/assistant-delegation')
+    return await findLiveAssistantDelegation(conversationId, tx)
+  } catch {
+    return null
+  }
 }
 
 /**

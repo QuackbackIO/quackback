@@ -543,6 +543,48 @@ describe('dispatchWorkflowsForEvent', () => {
       )
     })
 
+    it('P4: assistant.handed_off does NOT resume a DELEGATED wait, which its own run resumes by wait sequence', async () => {
+      // A delegated wait names the visit it is waiting on, and the run that
+      // owes it an answer names the same one. This event names neither, so
+      // honouring it would let a turn that finished late resume a newer wait.
+      findWaitingCustomerFacingRun.mockResolvedValue({
+        id: 'workflow_run_assistant',
+        cursor: { waitKind: 'assistant', waitSeq: 2, delegatedRunId: 'assistant_run_b' },
+      })
+      await dispatchWorkflowsForEvent({
+        ...base,
+        type: 'assistant.handed_off',
+        actor: { type: 'service' as const, principalId: 'principal_assistant' },
+        data: { conversationId: 'conversation_1', reason: 'frustration' },
+      } as unknown as EventData)
+
+      expect(resumeWorkflowRun).not.toHaveBeenCalled()
+      expect(interruptWaitingRuns).not.toHaveBeenCalled()
+      expect(order).toEqual(['dispatch'])
+    })
+
+    it('P4: a close still resumes a delegated wait, because the lifecycle is not an assistant-run completion', async () => {
+      findWaitingCustomerFacingRun.mockResolvedValue({
+        id: 'workflow_run_assistant',
+        cursor: { waitKind: 'assistant', waitSeq: 2, delegatedRunId: 'assistant_run_b' },
+      })
+      resumeWorkflowRun.mockResolvedValue({
+        id: 'workflow_run_assistant',
+        workflowId: 'workflow_abc',
+        subjectPrincipalId: 'principal_visitor',
+        state: 'done',
+      })
+      await dispatchWorkflowsForEvent({
+        ...base,
+        type: 'conversation.status_changed',
+        data: { conversation: { id: 'conversation_1' }, newStatus: 'closed' },
+      } as unknown as EventData)
+
+      expect(resumeWorkflowRun).toHaveBeenCalledWith('workflow_run_assistant', {
+        assistantOutcome: 'resolved',
+      })
+    })
+
     it('a close resumes the parked assistant-wait down the default edge INSTEAD of interrupting it, but still interrupts every other waiting run, and does NOT log the funnel event', async () => {
       findWaitingCustomerFacingRun.mockResolvedValue(assistantWaitingRun)
       // A close still claims/resumes the run (resumed is truthy) — the point

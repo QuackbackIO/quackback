@@ -10,7 +10,7 @@
  * gets; every fenced outcome is therefore reported as a disposition string and
  * recorded on the run.
  */
-import { db, and, eq, assistantPendingActions } from '@/lib/server/db'
+import { db, and, eq, assistantPendingActions, type AssistantRunDelegation } from '@/lib/server/db'
 import type { AssistantRunId, ConversationId } from '@quackback/ids'
 import type { ConversationAuthorInput } from '@/lib/server/domains/conversation/conversation.types'
 import type { ClaimedJob } from '@/lib/server/jobs/job-queue'
@@ -52,6 +52,36 @@ async function parkRunIfActionPending(
   if (!pending) return null
   const parked = await parkRunForAction(db, runId, pending.id)
   return parked ? pending.id : null
+}
+
+/**
+ * Tell the workflow that delegated this run that Quinn is done with it.
+ *
+ * Only for an outcome that actually ends the wait: a hand-off, or an execution
+ * that produced nothing. An ordinary answer leaves the wait parked, because
+ * Quinn answering is not the workflow's resolution branch, and a run parked on
+ * an approval still owes a result.
+ *
+ * Best effort by design. The completion is a second transaction after the run
+ * settled, so a process death between them is possible; the workflow sweep
+ * reconciles a terminal run against its stranded wait, and the wait's own
+ * expiry is the floor under both.
+ */
+async function completeDelegation(
+  run: { id: AssistantRunId; delegation: AssistantRunDelegation | null },
+  outcome: 'escalated' | 'resolved'
+): Promise<void> {
+  if (!run.delegation) return
+  try {
+    const { completeAssistantDelegation } =
+      await import('@/lib/server/domains/workflows/assistant-delegation')
+    await completeAssistantDelegation(run.delegation, outcome)
+  } catch (err) {
+    log.warn(
+      { err, event: 'assistant_run.delegation_completion_failed', run_id: run.id },
+      'could not resume the delegating workflow wait'
+    )
+  }
 }
 
 /**
@@ -132,6 +162,9 @@ export async function advanceAssistantRun(job: ClaimedJob): Promise<string> {
         expectedLeaseToken: job.leaseToken,
       })
       runLog.info({ event: 'assistant_run.declined' }, 'assistant run declined at the gates')
+      // Quinn will not answer this turn at all, so a workflow waiting on it
+      // takes the escalated edge, the same answer the pre-park decline gives.
+      await completeDelegation(run, 'escalated')
       return 'declined'
     }
 
@@ -184,6 +217,7 @@ export async function advanceAssistantRun(job: ClaimedJob): Promise<string> {
         disposition: 'engine:suppressed',
         expectedLeaseToken: job.leaseToken,
       })
+      await completeDelegation(run, 'escalated')
       return 'suppressed'
     }
     // Defense in depth: public delivery is forbidden if any internal context
@@ -301,6 +335,9 @@ export async function advanceAssistantRun(job: ClaimedJob): Promise<string> {
         ),
         executeAssistantHandoff(conversationId, outcome.handoff.reason, author),
       ])
+      // The delegating workflow's escalated edge, named by this run's own
+      // delegation rather than by whichever wait happens to be parked now.
+      await completeDelegation(run, 'escalated')
     }
 
     // The turn published an acknowledgement and now owes a result: a write tool
@@ -352,6 +389,8 @@ export async function advanceAssistantRun(job: ClaimedJob): Promise<string> {
     } catch (floorErr) {
       runLog.error({ err: floorErr }, 'assistant failure floor could not hand off')
     }
+    // Execution died: the workflow's escalated edge, not a resolution.
+    await completeDelegation(run, 'escalated')
     return 'failed'
   } finally {
     await clearActivitySnapshot(conversationId)
