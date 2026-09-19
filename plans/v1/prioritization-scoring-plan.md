@@ -221,7 +221,7 @@ Client mutations (`apps/web/src/lib/client/mutations/posts.ts`): `useSetPostPrio
 - **AI-suggested score:** reuse the existing AI/PM-triage infra (`posts.summaryJson`, assistant domain)
   to propose RICE/BRICE factor values a human confirms.
 - **Cross-app rollup (Tier B):** surface/compare scores across apps in the fleet control tower
-  (`docs/multi-tenant-control-tower-plan.md`) for portfolio prioritization — read-only fan-out.
+  (`plans/v1/multi-tenant-control-tower-plan.md`) for portfolio prioritization — read-only fan-out.
 - **Consensus scoring:** per-reviewer scores averaged into a consensus (would make the table
   per-(post,reviewer) instead of 1:1) — only if the team wants multi-voter RICE.
 - **Roadmap auto-promotion:** suggest promoting top-scored Under-Review posts to Planned.

@@ -137,9 +137,9 @@ Start with **Phase 0** (zero code) to validate whether custom roles alone meet t
 
 ## 10. Relationship to other plans
 
-- **Tiered support** (`docs/tiered-support-helpdesk-plan.md`): tiers = teams; this doc's Phase 3 (team-scoped
+- **Tiered support** (`plans/v1/tiered-support-helpdesk-plan.md`): tiers = teams; this doc's Phase 3 (team-scoped
   RBAC) is what would let tier _permissions_ be team-scoped rather than workspace-wide.
-- **Account actions** (`docs/support-account-actions-plan.md`): the new `support.account.*` keys and the
+- **Account actions** (`plans/v1/support-account-actions-plan.md`): the new `support.account.*` keys and the
   T1/T2 role bundles are the Phase 0/1 deliverables here.
-- **Multi-app control tower** (`docs/multi-tenant-control-tower-plan.md`): its fleet-admin identity is a
+- **Multi-app control tower** (`plans/v1/multi-tenant-control-tower-plan.md`): its fleet-admin identity is a
   **separate realm**; these workspace personas are per-app and unaffected by it.

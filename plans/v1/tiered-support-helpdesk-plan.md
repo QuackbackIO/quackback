@@ -244,7 +244,7 @@ All ship via the standard migrator and the fleet migrator (`apps/web/scripts/fle
 
 - **Multi-tenant:** everything is per-workspace (teams, SLA, routing config, views) and ships via the
   fleet migrator; nothing tenancy-specific. Composes with the control-tower plan
-  (`docs/multi-tenant-control-tower-plan.md`) — a fleet admin could view tiered support across apps.
+  (`plans/v1/multi-tenant-control-tower-plan.md`) — a fleet admin could view tiered support across apps.
 - **Upgrade-safety:** almost entirely **additive** — new columns on `teams`, a new `support_escalations`
   table, a new escalation service, a new routing strategy, a new workflow/macro action, a new view rule,
   new analytics, and new/re-composed UI surfaces. Localized edits to shared enums (view rules, macro
@@ -320,7 +320,7 @@ New (to build, additive):
 
 ## 14. Relationship to other plans
 
-- Composes with the **multi-app control tower** (`docs/multi-tenant-control-tower-plan.md`): tiered
+- Composes with the **multi-app control tower** (`plans/v1/multi-tenant-control-tower-plan.md`): tiered
   support is per-app, and the Tier-B console can aggregate support/tiers across apps.
 - Independent of the announcements and prioritization plans, though a status/announcements banner and
   RICE scoring both complement a support+product workflow.
