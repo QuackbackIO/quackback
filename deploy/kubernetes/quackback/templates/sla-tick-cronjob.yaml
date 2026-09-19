@@ -1,0 +1,54 @@
+{{/*
+Optional replacement for the pg_cron-driven SLA tick described in
+deploy/self-hosted/README.md ("Scheduled Jobs (pg_cron)"): that doc
+explicitly calls out a Kubernetes CronJob as the alternative for operators
+not running pg_cron. Disabled by default — enable it only if you're not
+running pg_cron against the database Quackback uses.
+*/}}
+{{- if .Values.slaTickCronJob.enabled }}
+{{- if not .Values.internalTaskSecret }}
+{{- fail "internalTaskSecret is required when slaTickCronJob.enabled=true" }}
+{{- end }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "quackback.fullname" . }}-sla-tick
+  labels:
+    {{- include "quackback.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sla-tick
+spec:
+  schedule: {{ .Values.slaTickCronJob.schedule | quote }}
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            {{- include "quackback.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: sla-tick
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: sla-tick
+              image: curlimages/curl:8.11.1
+              env:
+                - name: INTERNAL_TASK_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "quackback.fullname" . }}-secret
+                      key: INTERNAL_TASK_SECRET
+              args:
+                - -fsS
+                - -X
+                - POST
+                - {{ printf "%s/api/v1/internal/sla-tick" .Values.baseUrl }}
+                - -H
+                - "content-type: application/json"
+                - -H
+                - "x-internal-secret: $(INTERNAL_TASK_SECRET)"
+                - -d
+                - "{}"
+              resources:
+                {{- toYaml .Values.slaTickCronJob.resources | nindent 16 }}
+{{- end }}
