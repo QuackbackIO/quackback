@@ -3,46 +3,65 @@ import { ZodError } from 'zod'
 import { useQuery } from '@tanstack/react-query'
 import { PlusIcon } from '@heroicons/react/24/solid'
 import { assistantQueries } from '@/lib/client/queries/assistant'
-import { skillQueries } from '@/lib/client/queries/assistant-skills'
 import {
-  useCreateGuidanceRule,
-  useUpdateGuidanceRule,
-  useDeleteGuidanceRule,
+  useSaveGuidanceEntry,
+  useDeleteGuidanceEntry,
   useUpdateAssistantVoice,
 } from '@/lib/client/mutations/assistant'
-import { useUpdateSkill, useDeleteSkill } from '@/lib/client/mutations/assistant-skills'
-import { assistantGuidanceRuleInputSchema } from '@/lib/shared/assistant/guidance'
-import { skillInputSchema } from '@/lib/shared/assistant/skills'
+import {
+  guidanceEntryInputSchema,
+  GUIDANCE_PROFILES,
+  GUIDANCE_USE_LABELS,
+  type GuidanceEntryDTO,
+  type GuidanceEntryKind,
+} from '@/lib/shared/assistant/guidance-entry'
+import type { AssistantAgentKind } from '@/lib/shared/assistant/config'
+import { ASSISTANT_ADDITIONAL_INSTRUCTIONS_MAX_LENGTH } from '@/lib/shared/assistant/config'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { SearchInput } from '@/components/shared/search-input'
-import { isAssistantFieldManaged, useUnsavedChanges } from './assistant-form'
-import { guidanceEntries, GUIDANCE_USE_LABELS, type GuidanceEntry } from './guidance-entries'
+import { useUnsavedChanges } from './assistant-form'
 
 interface Draft {
-  entry: GuidanceEntry | null
-  name: string
-  instruction: string
+  entry: GuidanceEntryDTO | null
+  title: string
+  body: string
   condition: string
-  scenario: boolean
+  kind: GuidanceEntryKind
   enabled: boolean
-  use: 'agent' | 'copilot'
+  uses: AssistantAgentKind[]
+}
+
+function newDraft(entry: GuidanceEntryDTO | null): Draft {
+  return {
+    entry,
+    title: entry?.title ?? '',
+    body: entry?.body ?? '',
+    condition: entry?.appliesWhen ?? '',
+    kind: entry?.kind ?? 'situational',
+    enabled: entry?.enabled ?? true,
+    uses: entry ? entry.uses : ['agent'],
+  }
 }
 
 export function GuidanceList() {
   const settings = useQuery(assistantQueries.settings())
-  const rules = useQuery(assistantQueries.guidanceRules())
-  const skills = useQuery(skillQueries.list())
-  const createRule = useCreateGuidanceRule()
-  const updateRule = useUpdateGuidanceRule()
-  const deleteRule = useDeleteGuidanceRule()
-  const updateSkill = useUpdateSkill()
-  const deleteSkill = useDeleteSkill()
+  const entries = useQuery(assistantQueries.guidanceEntries())
+  const saveEntry = useSaveGuidanceEntry()
+  const deleteEntry = useDeleteGuidanceEntry()
   const updateVoice = useUpdateAssistantVoice()
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<'All' | 'Always' | 'Situations'>('All')
@@ -51,30 +70,20 @@ export function GuidanceList() {
   const [error, setError] = useState('')
   const [deleting, setDeleting] = useState(false)
   const [discarding, setDiscarding] = useState(false)
-  const [pendingSelection, setPendingSelection] = useState<{ entry: GuidanceEntry | null } | null>(
-    null
-  )
+  const [pendingSelection, setPendingSelection] = useState<{
+    entry: GuidanceEntryDTO | null
+  } | null>(null)
   const dirty = draft !== null && JSON.stringify(draft) !== initial
   useUnsavedChanges(dirty, 'guidance')
-  const busy = [createRule, updateRule, deleteRule, updateSkill, deleteSkill, updateVoice].some(
-    (m) => m.isPending
-  )
+  const busy = [saveEntry, deleteEntry, updateVoice].some((mutation) => mutation.isPending)
 
-  function open(entry: GuidanceEntry | null) {
-    const next: Draft = {
-      entry,
-      name: entry?.name ?? '',
-      instruction: entry?.instruction ?? '',
-      condition: entry?.condition ?? '',
-      scenario: entry ? entry.condition !== null : true,
-      enabled: entry?.enabled ?? true,
-      use: entry?.uses[0] === 'copilot' ? 'copilot' : 'agent',
-    }
+  function open(entry: GuidanceEntryDTO | null) {
+    const next = newDraft(entry)
     setDraft(next)
     setInitial(JSON.stringify(next))
     setError('')
   }
-  function select(entry: GuidanceEntry | null) {
+  function select(entry: GuidanceEntryDTO | null) {
     if (busy) return
     if (dirty) {
       setPendingSelection({ entry })
@@ -91,48 +100,58 @@ export function GuidanceList() {
     setDraft((current) => (current ? { ...current, ...patch } : null))
     setError('')
   }
-  const managed =
-    draft?.entry?.source === 'managed' ||
-    (draft?.entry?.source === 'voice' &&
-      isAssistantFieldManaged(
-        settings.data?.managedFieldPaths ?? [],
-        'agents.agent.voice.additionalInstructions'
-      ))
+  function toggleUse(use: AssistantAgentKind, checked: boolean) {
+    setDraft((current) => {
+      if (!current) return current
+      const uses = checked
+        ? GUIDANCE_PROFILES.filter((profile) => profile === use || current.uses.includes(profile))
+        : current.uses.filter((profile) => profile !== use)
+      return { ...current, uses }
+    })
+    setError('')
+  }
+
+  // The two config-owned entries are the assistant configuration's, not this
+  // table's: the workspace's writing guidelines save through the config write
+  // funnel with its revision check, and the managed workspace instructions are
+  // pinned by the deployment and only shown here.
+  const configOwned = draft?.entry?.owner === 'config'
+  const readOnly = draft?.entry?.managed === true || draft?.entry?.legacySource === 'managed'
 
   async function save() {
-    if (!draft || managed || busy) return
+    if (!draft || readOnly || busy) return
     setError('')
     try {
       const entry = draft.entry
-      if (entry?.source === 'voice') {
-        if (draft.instruction.length > 2000) throw new Error('Use 2,000 characters or fewer.')
+      if (entry && entry.owner === 'config') {
+        if (draft.body.length > ASSISTANT_ADDITIONAL_INSTRUCTIONS_MAX_LENGTH) {
+          throw new Error(
+            `Use ${ASSISTANT_ADDITIONAL_INSTRUCTIONS_MAX_LENGTH.toLocaleString()} characters or fewer.`
+          )
+        }
+        if (!settings.data) throw new Error('Settings are still loading. Try again in a moment.')
         await updateVoice.mutateAsync({
-          expectedRevision: entry.revision,
-          voice: { ...entry.voice, additionalInstructions: draft.instruction },
+          expectedRevision: settings.data.revision,
+          voice: {
+            ...settings.data.config.agents.agent.voice,
+            additionalInstructions: draft.body,
+          },
         })
-      } else if (entry?.source === 'skill') {
-        const value = skillInputSchema.parse({
-          ...entry.skill,
-          name: draft.name,
-          whenToUse: draft.condition,
-          instructions: draft.instruction,
-          enabled: draft.enabled,
-        })
-        const saved = await updateSkill.mutateAsync({ id: entry.skill.id, ...value })
-        if (!saved) throw new Error('This guidance was removed. Reload the list.')
+        await entries.refetch()
       } else {
-        const value = assistantGuidanceRuleInputSchema.parse({
-          name: draft.name,
-          instruction: draft.instruction,
-          appliesWhen: draft.scenario ? draft.condition : null,
+        const value = guidanceEntryInputSchema.parse({
+          kind: draft.kind,
+          title: draft.title,
+          body: draft.body,
+          appliesWhen: draft.kind === 'always' ? null : draft.condition,
           enabled: draft.enabled,
-          agent: entry?.source === 'rule' ? entry.rule.agent : draft.use,
-          priority: entry?.source === 'rule' ? entry.rule.priority : 0,
+          priority: entry?.priority ?? 0,
+          uses: draft.uses,
         })
-        if (entry?.source === 'rule') {
-          const saved = await updateRule.mutateAsync({ id: entry.rule.id, ...value })
-          if (!saved) throw new Error('This guidance was removed. Reload the list.')
-        } else await createRule.mutateAsync(value)
+        await saveEntry.mutateAsync({
+          ...(entry ? { id: entry.id, expectedVersion: entry.version } : {}),
+          entry: value,
+        })
       }
       setDraft(null)
     } catch (err) {
@@ -145,11 +164,11 @@ export function GuidanceList() {
       )
     }
   }
+
   async function remove() {
-    if (!draft?.entry || busy) return
+    if (!draft?.entry || draft.entry.owner === 'config' || busy) return
     try {
-      if (draft.entry.source === 'skill') await deleteSkill.mutateAsync(draft.entry.skill.id)
-      else if (draft.entry.source === 'rule') await deleteRule.mutateAsync(draft.entry.rule.id)
+      await deleteEntry.mutateAsync(draft.entry.id)
       setDeleting(false)
       setDraft(null)
     } catch (err) {
@@ -158,10 +177,7 @@ export function GuidanceList() {
     }
   }
 
-  if (
-    (!settings.data || !rules.data || !skills.data) &&
-    (settings.isError || rules.isError || skills.isError)
-  )
+  if ((!settings.data || !entries.data) && (settings.isError || entries.isError))
     return (
       <div role="alert" className="space-y-3">
         <p>Guidance could not be loaded.</p>
@@ -169,25 +185,20 @@ export function GuidanceList() {
           variant="outline"
           onClick={() => {
             void settings.refetch()
-            void rules.refetch()
-            void skills.refetch()
+            void entries.refetch()
           }}
         >
           Try again
         </Button>
       </div>
     )
-  if (!settings.data || !rules.data || !skills.data) return <p role="status">Loading guidance…</p>
-  const entries = guidanceEntries(
-    settings.data.config,
-    settings.data.revision,
-    rules.data.rules,
-    skills.data.skills
-  ).filter(
+  if (!settings.data || !entries.data) return <p role="status">Loading guidance…</p>
+
+  const visible = entries.data.entries.filter(
     (entry) =>
       (filter === 'All' ||
-        (filter === 'Always' ? entry.condition === null : entry.condition !== null)) &&
-      [entry.name, entry.instruction, entry.condition ?? '']
+        (filter === 'Always' ? entry.kind === 'always' : entry.kind !== 'always')) &&
+      [entry.title, entry.body, entry.appliesWhen ?? '']
         .join(' ')
         .toLocaleLowerCase()
         .includes(query.trim().toLocaleLowerCase())
@@ -218,18 +229,18 @@ export function GuidanceList() {
             ))}
           </div>
           <div className="divide-y rounded-xl border border-border/50 bg-card">
-            {entries.length === 0 && (
+            {visible.length === 0 && (
               <p className="p-5 text-sm text-muted-foreground">No matching guidance.</p>
             )}
-            {entries.map((entry) => (
+            {visible.map((entry) => (
               <div
-                key={entry.key}
-                className={`flex items-center gap-3 p-4 ${draft?.entry?.key === entry.key ? 'bg-muted/50' : ''}`}
+                key={entry.id}
+                className={`flex items-center gap-3 p-4 ${draft?.entry?.id === entry.id ? 'bg-muted/50' : ''}`}
               >
                 <div className="min-w-0 flex-1 space-y-1">
-                  <p className="text-sm font-medium">{entry.name}</p>
+                  <p className="text-sm font-medium">{entry.title}</p>
                   <p className="truncate text-xs text-muted-foreground">
-                    {entry.condition ?? 'Every conversation'}
+                    {entry.appliesWhen ?? 'Every conversation'}
                   </p>
                   <div className="flex flex-wrap gap-1">
                     {entry.uses.map((use) => (
@@ -247,7 +258,7 @@ export function GuidanceList() {
                         Disabled
                       </Badge>
                     )}
-                    {entry.source === 'managed' && (
+                    {entry.managed && (
                       <Badge variant="secondary" size="sm">
                         Managed
                       </Badge>
@@ -255,7 +266,7 @@ export function GuidanceList() {
                   </div>
                 </div>
                 <Button variant="ghost" size="sm" onClick={() => select(entry)}>
-                  {entry.source === 'managed' ? 'View' : 'Edit'}
+                  {entry.managed ? 'View' : 'Edit'}
                 </Button>
               </div>
             ))}
@@ -269,82 +280,100 @@ export function GuidanceList() {
             <h2 className="text-sm font-semibold">
               {draft.entry ? 'Edit guidance' : 'Add guidance'}
             </h2>
-            {draft && (
-              <fieldset disabled={busy || managed} className="space-y-4 min-w-0">
-                <div className="space-y-1.5">
-                  <Label htmlFor="guidance-name">Name</Label>
-                  <Input
-                    id="guidance-name"
-                    value={draft.name}
-                    disabled={draft.entry?.source === 'voice'}
-                    onChange={(e) => change({ name: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="guidance-application">Applies when</Label>
-                  <select
-                    id="guidance-application"
-                    className="w-full rounded-md border bg-background p-2 text-sm"
-                    value={draft.scenario ? 'scenario' : 'always'}
-                    disabled={draft.entry?.source === 'voice' || draft.entry?.source === 'skill'}
-                    onChange={(e) => change({ scenario: e.target.value === 'scenario' })}
-                  >
-                    <option value="always">Every conversation</option>
-                    <option value="scenario">When a situation comes up</option>
-                  </select>
-                  {draft.scenario && (
+            <fieldset disabled={busy || readOnly} className="space-y-4 min-w-0">
+              <div className="space-y-1.5">
+                <Label htmlFor="guidance-name">Name</Label>
+                <Input
+                  id="guidance-name"
+                  value={draft.title}
+                  disabled={configOwned}
+                  onChange={(event) => change({ title: event.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                {draft.kind === 'procedure' ? (
+                  <>
+                    <Label htmlFor="guidance-when-to-use">When to use</Label>
                     <Input
-                      aria-label="Situation"
+                      id="guidance-when-to-use"
                       value={draft.condition}
-                      onChange={(e) => change({ condition: e.target.value })}
+                      onChange={(event) => change({ condition: event.target.value })}
                     />
-                  )}
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="guidance-instruction">What should Quinn do?</Label>
-                  <Textarea
-                    id="guidance-instruction"
-                    rows={9}
-                    className="min-h-40"
-                    value={draft.instruction}
-                    onChange={(e) => change({ instruction: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="guidance-use">Uses</Label>
-                  {!draft.entry ? (
-                    <select
-                      id="guidance-use"
-                      className="w-full rounded-md border bg-background p-2 text-sm"
-                      value={draft.use}
-                      onChange={(e) => change({ use: e.target.value as Draft['use'] })}
-                    >
-                      <option value="agent">Customer conversations</option>
-                      <option value="copilot">Support teammates</option>
-                    </select>
-                  ) : (
-                    <p className="text-sm">
-                      {draft.entry.uses.map((use) => GUIDANCE_USE_LABELS[use]).join(', ') ||
-                        'Not assigned'}
+                    <p className="text-xs text-muted-foreground">
+                      Quinn loads these steps on request.
                     </p>
-                  )}
-                  <p className="text-xs text-muted-foreground">
-                    Existing scope is preserved. New guidance currently applies to one use.
+                  </>
+                ) : (
+                  <>
+                    <Label htmlFor="guidance-application">Applies when</Label>
+                    <Select
+                      value={draft.kind}
+                      onValueChange={(value) => change({ kind: value as GuidanceEntryKind })}
+                      disabled={configOwned}
+                    >
+                      <SelectTrigger id="guidance-application">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="always">Every conversation</SelectItem>
+                        <SelectItem value="situational">When a situation comes up</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {draft.kind === 'situational' && (
+                      <Input
+                        aria-label="Situation"
+                        value={draft.condition}
+                        onChange={(event) => change({ condition: event.target.value })}
+                      />
+                    )}
+                  </>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="guidance-instruction">What should Quinn do?</Label>
+                <Textarea
+                  id="guidance-instruction"
+                  rows={9}
+                  className="min-h-40"
+                  value={draft.body}
+                  onChange={(event) => change({ body: event.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Uses</Label>
+                {configOwned ? (
+                  <p className="text-sm">
+                    {draft.uses.map((use) => GUIDANCE_USE_LABELS[use]).join(', ')}
                   </p>
-                </div>
-                {draft.entry?.source !== 'voice' && (
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="guidance-enabled">Enabled</Label>
-                    <Switch
-                      id="guidance-enabled"
-                      checked={draft.enabled}
-                      onCheckedChange={(enabled) => change({ enabled })}
-                    />
+                ) : (
+                  <div className="space-y-2">
+                    {GUIDANCE_PROFILES.map((use) => (
+                      <div key={use} className="flex items-center gap-2">
+                        <Checkbox
+                          id={`guidance-use-${use}`}
+                          checked={draft.uses.includes(use)}
+                          onCheckedChange={(checked) => toggleUse(use, checked === true)}
+                        />
+                        <Label htmlFor={`guidance-use-${use}`} className="font-normal">
+                          {GUIDANCE_USE_LABELS[use]}
+                        </Label>
+                      </div>
+                    ))}
                   </div>
                 )}
-              </fieldset>
-            )}
-            {managed && (
+              </div>
+              {!configOwned && (
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="guidance-enabled">Enabled</Label>
+                  <Switch
+                    id="guidance-enabled"
+                    checked={draft.enabled}
+                    onCheckedChange={(enabled) => change({ enabled })}
+                  />
+                </div>
+              )}
+            </fieldset>
+            {readOnly && (
               <p className="text-xs text-muted-foreground">
                 These instructions are managed by your deployment configuration.
               </p>
@@ -355,7 +384,7 @@ export function GuidanceList() {
               </p>
             )}
             <div className="flex flex-wrap justify-end gap-2">
-              {draft?.entry && ['skill', 'rule'].includes(draft.entry.source) && (
+              {draft.entry && draft.entry.owner === 'canonical' && (
                 <Button
                   variant="outline"
                   className="me-auto"
@@ -368,7 +397,7 @@ export function GuidanceList() {
               <Button variant="outline" disabled={busy} onClick={close}>
                 Cancel
               </Button>
-              {!managed && (
+              {!readOnly && (
                 <Button disabled={busy || !dirty} onClick={() => void save()}>
                   {busy ? 'Saving…' : 'Save'}
                 </Button>

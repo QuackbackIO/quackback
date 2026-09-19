@@ -5,6 +5,7 @@ import {
   listAssistantToolsFn,
 } from '@/lib/server/functions/assistant-guidance'
 import { getGuidanceRuleStatsFn } from '@/lib/server/functions/assistant-guidance-stats'
+import { listGuidanceEntriesFn } from '@/lib/server/functions/assistant-guidance-entries'
 
 const STALE_TIME = 30 * 1000
 // The tool catalogue is static, so it can sit stale far longer than settings
@@ -14,6 +15,7 @@ const TOOLS_STALE_TIME = 5 * 60 * 1000
 export const assistantKeys = {
   settings: () => ['assistant', 'settings'] as const,
   guidanceRules: () => ['assistant', 'guidanceRules'] as const,
+  guidanceEntries: () => ['assistant', 'guidanceEntries'] as const,
   guidanceRuleStats: () => ['assistant', 'guidanceRuleStats'] as const,
   tools: () => ['assistant', 'tools'] as const,
 }
@@ -31,6 +33,14 @@ export const assistantQueries = {
     queryOptions({
       queryKey: assistantKeys.guidanceRules(),
       queryFn: listGuidanceRulesFn,
+      staleTime: STALE_TIME,
+    }),
+
+  /** Canonical authored guidance with its role bindings resolved. */
+  guidanceEntries: () =>
+    queryOptions({
+      queryKey: assistantKeys.guidanceEntries(),
+      queryFn: listGuidanceEntriesFn,
       staleTime: STALE_TIME,
     }),
 

@@ -1,39 +1,96 @@
 // @vitest-environment happy-dom
+import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
 import { DEFAULT_ASSISTANT_CONFIG } from '@/lib/shared/assistant/config'
-import { GuidanceList } from '../guidance-list'
+import type { GuidanceEntryDTO } from '@/lib/shared/assistant/guidance-entry'
+import { GUIDANCE_RUNTIME_BUDGETS } from '@/lib/shared/assistant/guidance-entry'
 
 const mocks = vi.hoisted(() => ({
   settings: vi.fn(),
-  rules: vi.fn(),
-  skills: vi.fn(),
-  saveRule: vi.fn(),
-  createRule: vi.fn(),
-  saveSkill: vi.fn(),
+  entries: vi.fn(),
+  saveEntry: vi.fn(),
+  deleteEntry: vi.fn(),
   saveVoice: vi.fn(),
 }))
 vi.mock('@/lib/client/queries/assistant', () => ({
   assistantQueries: {
     settings: () => ({ queryKey: ['settings'], queryFn: mocks.settings }),
-    guidanceRules: () => ({ queryKey: ['rules'], queryFn: mocks.rules }),
+    guidanceEntries: () => ({ queryKey: ['entries'], queryFn: mocks.entries }),
   },
 }))
-vi.mock('@/lib/client/queries/assistant-skills', () => ({
-  skillQueries: { list: () => ({ queryKey: ['skills'], queryFn: mocks.skills }) },
-}))
 vi.mock('@/lib/client/mutations/assistant', () => ({
-  useCreateGuidanceRule: () => ({ mutateAsync: mocks.createRule }),
-  useUpdateGuidanceRule: () => ({ mutateAsync: mocks.saveRule }),
-  useDeleteGuidanceRule: () => ({ mutateAsync: vi.fn() }),
+  useSaveGuidanceEntry: () => ({ mutateAsync: mocks.saveEntry }),
+  useDeleteGuidanceEntry: () => ({ mutateAsync: mocks.deleteEntry }),
   useUpdateAssistantVoice: () => ({ mutateAsync: mocks.saveVoice }),
 }))
-vi.mock('@/lib/client/mutations/assistant-skills', () => ({
-  useUpdateSkill: () => ({ mutateAsync: mocks.saveSkill }),
-  useDeleteSkill: () => ({ mutateAsync: vi.fn() }),
+// The select relies on pointer/layout APIs happy-dom lacks; render it as a
+// native one so the applies-when picker is drivable with fireEvent.change.
+vi.mock('@/components/ui/select', () => ({
+  Select: ({
+    value,
+    onValueChange,
+    children,
+    disabled,
+  }: {
+    value: string
+    onValueChange: (v: string) => void
+    children: ReactNode
+    disabled?: boolean
+  }) => (
+    <select
+      aria-label="Applies when"
+      value={value}
+      disabled={disabled}
+      onChange={(event) => onValueChange(event.target.value)}
+    >
+      {children}
+    </select>
+  ),
+  SelectTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
+  SelectValue: () => null,
+  SelectContent: ({ children }: { children: ReactNode }) => <>{children}</>,
+  SelectItem: ({ value, children }: { value: string; children: ReactNode }) => (
+    <option value={value}>{children}</option>
+  ),
 }))
+
+import { GuidanceList } from '../guidance-list'
+
+function entry(overrides: Partial<GuidanceEntryDTO> = {}): GuidanceEntryDTO {
+  return {
+    id: 'guidance_entry_1',
+    kind: 'situational',
+    owner: 'canonical',
+    title: 'Refunds',
+    body: 'Check policy',
+    appliesWhen: 'Refund requested',
+    enabled: true,
+    priority: 0,
+    version: 3,
+    uses: ['agent'],
+    legacySource: null,
+    legacyId: null,
+    managed: false,
+    updatedAt: '2026-09-01T00:00:00.000Z',
+    ...overrides,
+  }
+}
+
+const writingGuidelines = entry({
+  id: 'guidance_entry_voice',
+  kind: 'always',
+  owner: 'config',
+  title: 'Everyday instructions',
+  body: '',
+  appliesWhen: null,
+  version: 1,
+  legacySource: 'voice',
+  legacyId: 'agents.agent.voice.additionalInstructions',
+})
+
 function show() {
   render(
     <IntlProvider locale="en">
@@ -45,6 +102,15 @@ function show() {
     </IntlProvider>
   )
 }
+
+function listEntries(...rows: GuidanceEntryDTO[]) {
+  mocks.entries.mockResolvedValue({
+    entries: rows,
+    configRevision: 7,
+    budgets: GUIDANCE_RUNTIME_BUDGETS,
+  })
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.settings.mockResolvedValue({
@@ -52,48 +118,13 @@ beforeEach(() => {
     revision: 7,
     managedFieldPaths: [],
   })
-  mocks.rules.mockResolvedValue({ rules: [] })
-  mocks.skills.mockResolvedValue({ skills: [] })
-  mocks.saveSkill.mockResolvedValue({ id: 'skill_legacy' })
+  listEntries(writingGuidelines)
+  mocks.saveEntry.mockResolvedValue(entry())
 })
 afterEach(cleanup)
 
-describe('Guidance compatibility editor', () => {
-  it('keeps a long legacy body and every existing role assignment when edited', async () => {
-    const body = 'A'.repeat(7900)
-    mocks.skills.mockResolvedValue({
-      skills: [
-        {
-          id: 'skill_legacy',
-          name: 'Refunds',
-          whenToUse: 'Duplicate payment',
-          instructions: body,
-          enabled: false,
-          assignments: { agent: true, copilot: true, workspace: true },
-          createdAt: '',
-          updatedAt: '',
-        },
-      ],
-    })
-    show()
-    await screen.findByText('Refunds')
-    fireEvent.click(screen.getAllByRole('button', { name: 'Edit' })[1])
-    expect(screen.getByLabelText('What should Quinn do?')).toHaveValue(body)
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Refund review' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-    await waitFor(() =>
-      expect(mocks.saveSkill).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: 'skill_legacy',
-          instructions: body,
-          enabled: false,
-          assignments: { agent: true, copilot: true, workspace: true },
-        })
-      )
-    )
-    expect(mocks.saveRule).not.toHaveBeenCalled()
-  })
-  it('creates one scoped rule, never independent writes pretending to be shared guidance', async () => {
+describe('Guidance canonical editor', () => {
+  it('saves one entry and every role it applies to in a single write', async () => {
     show()
     fireEvent.click(await screen.findByRole('button', { name: 'Add guidance' }))
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Refund policy' } })
@@ -103,17 +134,62 @@ describe('Guidance compatibility editor', () => {
     fireEvent.change(screen.getByLabelText('What should Quinn do?'), {
       target: { value: 'Look up the current policy before answering.' },
     })
-    fireEvent.change(screen.getByLabelText('Uses'), { target: { value: 'copilot' } })
+    fireEvent.click(screen.getByLabelText('Support teammates'))
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-    await waitFor(() => expect(mocks.createRule).toHaveBeenCalledTimes(1))
-    expect(mocks.createRule).toHaveBeenCalledWith(
-      expect.objectContaining({
-        agent: 'copilot',
+
+    await waitFor(() => expect(mocks.saveEntry).toHaveBeenCalledTimes(1))
+    expect(mocks.saveEntry).toHaveBeenCalledWith({
+      entry: expect.objectContaining({
+        kind: 'situational',
+        title: 'Refund policy',
         appliesWhen: 'When a customer asks for a refund',
+        uses: ['agent', 'copilot'],
+      }),
+    })
+  })
+
+  it('keeps a long body and the roles it already had when only the name changes', async () => {
+    const body = 'A'.repeat(7_900)
+    listEntries(
+      writingGuidelines,
+      entry({
+        id: 'guidance_entry_procedure',
+        kind: 'procedure',
+        title: 'Refund procedure',
+        appliesWhen: 'Duplicate payment',
+        body,
+        enabled: false,
+        uses: ['agent', 'copilot', 'workspace'],
+        version: 5,
+      })
+    )
+    show()
+    await screen.findByText('Refund procedure')
+    fireEvent.click(screen.getAllByRole('button', { name: 'Edit' })[1])
+    expect(screen.getByLabelText('What should Quinn do?')).toHaveValue(body)
+    // A procedure keeps its own application: its body is loaded on request, so
+    // the editor offers its when-to-use line rather than the always/situation
+    // choice, which would put 7,900 characters in every prompt.
+    expect(screen.getByLabelText('When to use')).toHaveValue('Duplicate payment')
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Refund review' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(mocks.saveEntry).toHaveBeenCalledWith({
+        id: 'guidance_entry_procedure',
+        expectedVersion: 5,
+        entry: expect.objectContaining({
+          kind: 'procedure',
+          title: 'Refund review',
+          body,
+          enabled: false,
+          uses: ['agent', 'copilot', 'workspace'],
+        }),
       })
     )
   })
-  it('keeps the opening config revision for an everyday-instruction edit', async () => {
+
+  it('sends the everyday instructions through the config write with its revision', async () => {
     show()
     fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
     fireEvent.change(screen.getByLabelText('What should Quinn do?'), {
@@ -129,61 +205,57 @@ describe('Guidance compatibility editor', () => {
         },
       })
     )
+    expect(mocks.saveEntry).not.toHaveBeenCalled()
   })
-  it('leaves a rejected edit available for correction', async () => {
-    mocks.saveVoice.mockRejectedValue(new Error('Settings changed; reload before saving.'))
+
+  it('keeps the draft when another session moved the version', async () => {
+    listEntries(writingGuidelines, entry())
+    mocks.saveEntry.mockRejectedValue(
+      new Error('This guidance changed in another session. Reload it and apply your edit again.')
+    )
     show()
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    await screen.findByText('Refunds')
+    fireEvent.click(screen.getAllByRole('button', { name: 'Edit' })[1])
     fireEvent.change(screen.getByLabelText('What should Quinn do?'), {
-      target: { value: 'Use plain English.' },
+      target: { value: 'Keep this unsaved instruction.' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('Settings changed')
-    expect(screen.getByLabelText('What should Quinn do?')).toHaveValue('Use plain English.')
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('changed in another session')
+    expect(screen.getByLabelText('What should Quinn do?')).toHaveValue(
+      'Keep this unsaved instruction.'
+    )
+  })
+
+  it('shows managed workspace instructions without an edit path', async () => {
+    listEntries(
+      writingGuidelines,
+      entry({
+        id: 'guidance_entry_managed',
+        kind: 'always',
+        owner: 'config',
+        title: 'Workspace and Slack instructions',
+        body: 'Summarize for the team.',
+        appliesWhen: null,
+        uses: ['workspace'],
+        legacySource: 'managed',
+        legacyId: 'agents.workspace.instructions',
+        managed: true,
+      })
+    )
+    show()
+    await screen.findByText('Workspace and Slack instructions')
+    fireEvent.click(screen.getByRole('button', { name: 'View' }))
+    expect(
+      screen.getByText('These instructions are managed by your deployment configuration.')
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
   })
 })
 
-it('retains unsaved text when another session removes the rule', async () => {
-  mocks.rules.mockResolvedValue({
-    rules: [
-      {
-        id: 'rule_1',
-        name: 'Refunds',
-        instruction: 'Check policy',
-        appliesWhen: 'Refund requested',
-        agent: 'agent',
-        enabled: true,
-        priority: 0,
-      },
-    ],
-  })
-  mocks.saveRule.mockResolvedValueOnce(null)
-  show()
-  await screen.findByText('Refunds')
-  fireEvent.click(screen.getAllByRole('button', { name: 'Edit' })[1])
-  fireEvent.change(screen.getByLabelText('What should Quinn do?'), {
-    target: { value: 'Keep this unsaved instruction.' },
-  })
-  fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-  expect(await screen.findByRole('alert')).toHaveTextContent('This guidance was removed')
-  expect(screen.getByLabelText('What should Quinn do?')).toHaveValue(
-    'Keep this unsaved instruction.'
-  )
-})
 it('combines the guidance type filter with search', async () => {
-  mocks.rules.mockResolvedValue({
-    rules: [
-      {
-        id: 'rule_1',
-        name: 'Refunds',
-        instruction: 'Check policy',
-        appliesWhen: 'Refund requested',
-        agent: 'agent',
-        enabled: true,
-        priority: 0,
-      },
-    ],
-  })
+  listEntries(writingGuidelines, entry())
   show()
   await screen.findByText('Refunds')
   fireEvent.click(screen.getByRole('button', { name: 'Always' }))
@@ -199,19 +271,7 @@ it('combines the guidance type filter with search', async () => {
 })
 
 it('requires confirmation before switching away from unsaved guidance', async () => {
-  mocks.rules.mockResolvedValue({
-    rules: [
-      {
-        id: 'rule_1',
-        name: 'Refunds',
-        instruction: 'Check policy',
-        appliesWhen: 'Refund requested',
-        agent: 'agent',
-        enabled: true,
-        priority: 0,
-      },
-    ],
-  })
+  listEntries(writingGuidelines, entry())
   show()
   await screen.findByText('Refunds')
   fireEvent.click(screen.getAllByRole('button', { name: 'Edit' })[0])

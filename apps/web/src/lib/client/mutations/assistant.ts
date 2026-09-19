@@ -18,6 +18,11 @@ import {
   updateAssistantCopilotCapabilitiesFn,
   updateWidgetAssistantDeploymentFn,
 } from '@/lib/server/functions/assistant-settings'
+import {
+  saveGuidanceEntryFn,
+  deleteGuidanceEntryFn,
+} from '@/lib/server/functions/assistant-guidance-entries'
+import type { GuidanceEntrySaveInput } from '@/lib/shared/assistant/guidance-entry'
 import { assistantKeys } from '@/lib/client/queries/assistant'
 import { settingsQueries } from '@/lib/client/queries/settings'
 
@@ -40,6 +45,32 @@ function setAssistantConfig(
   queryClient.setQueryData<AssistantSettings>(assistantKeys.settings(), (current) =>
     current ? { ...current, ...result } : current
   )
+}
+
+/**
+ * One save for the entry and every role it applies to.
+ *
+ * The server writes both in one transaction, so the mutation has nothing to
+ * sequence and a refused save leaves the editor's draft untouched.
+ */
+export function useSaveGuidanceEntry() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: GuidanceEntrySaveInput) => saveGuidanceEntryFn({ data: input }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: assistantKeys.guidanceEntries() })
+    },
+  })
+}
+
+export function useDeleteGuidanceEntry() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => deleteGuidanceEntryFn({ data: { id } }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: assistantKeys.guidanceEntries() })
+    },
+  })
 }
 
 export function useCreateGuidanceRule() {

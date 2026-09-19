@@ -3,7 +3,6 @@ import { GuidanceList } from '@/components/admin/automation/guidance-list'
 import { QuinnSettingsPage } from '@/components/admin/automation/quinn-settings-page'
 import { DefaultErrorPage } from '@/components/shared/error-page'
 import { assistantQueries } from '@/lib/client/queries/assistant'
-import { skillQueries } from '@/lib/client/queries/assistant-skills'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 
 export const Route = createFileRoute('/admin/automation/guidance')({
@@ -14,8 +13,7 @@ export const Route = createFileRoute('/admin/automation/guidance')({
   loader: async ({ context }) => {
     await Promise.all([
       context.queryClient.ensureQueryData(assistantQueries.settings()),
-      context.queryClient.ensureQueryData(assistantQueries.guidanceRules()),
-      context.queryClient.ensureQueryData(skillQueries.list()),
+      context.queryClient.ensureQueryData(assistantQueries.guidanceEntries()),
     ])
   },
   errorComponent: ({ error, reset }) => (
