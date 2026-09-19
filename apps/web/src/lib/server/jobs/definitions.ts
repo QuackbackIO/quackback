@@ -266,6 +266,25 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       ),
   },
   {
+    // Builds the derived passage index (QUINN-PRODUCT P5). Background work at
+    // concurrency 1 so a large help centre being indexed cannot compete with
+    // interactive turns for the process or the embedding provider. Retries are
+    // safe: a generation is staged and only activated once complete, so a
+    // second attempt rebuilds rather than doubling, and an identical rebuild is
+    // recognised by its content hash and skipped.
+    name: 'assistant-knowledge-index',
+    concurrency: 1,
+    maxAttempts: 3,
+    retryBackoffMs: 10_000,
+    leaseMs: 120_000,
+    retentionMs: DAY_MS,
+    failedRetentionMs: 14 * DAY_MS,
+    handler: () =>
+      import('@/lib/server/domains/assistant/knowledge-ingest-queue').then(
+        (m) => m.runKnowledgeIndexJob
+      ),
+  },
+  {
     name: 'snooze-sweep',
     cron: '* * * * *',
     maxAttempts: 3,

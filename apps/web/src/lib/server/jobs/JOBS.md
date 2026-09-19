@@ -365,6 +365,7 @@ went stale the moment a queue moved.
 | `conversation-inactivity-continuation` | —              | 1           | 3        | 60s   |
 | `assistant-turn`                       | —              | 2           | 1        | 180s  |
 | `assistant-action`                     | —              | 2           | 3        | 120s  |
+| `assistant-knowledge-index`            | —              | 1           | 3        | 120s  |
 | `snooze-sweep`                         | `* * * * *`    | 1           | 3        | 60s   |
 | `workflow-sweep`                       | `*/5 * * * *`  | 1           | 3        | 60s   |
 | `workflow-retention`                   | `0 4 * * *`    | 1           | 3        | 60s   |

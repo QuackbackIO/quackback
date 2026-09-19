@@ -458,6 +458,15 @@ export {
   ASSISTANT_RUN_TRIGGER_KINDS,
   ASSISTANT_RUN_SURFACES,
   ASSISTANT_RUN_STEP_STATUSES,
+  // Schema tables - derived passage index (QUINN-PRODUCT P5)
+  assistantKnowledgeSources,
+  assistantSourceVersions,
+  assistantChunks,
+  assistantSourceVersionsRelations,
+  assistantChunksRelations,
+  ASSISTANT_INDEXED_SOURCE_TYPES,
+  ASSISTANT_INDEX_STATUSES,
+  ASSISTANT_SOURCE_VERSION_STATUSES,
   // Schema tables - assistant guidance rules
   assistantGuidanceRules,
   // Schema tables - canonical guidance entries and their role bindings
@@ -544,6 +553,12 @@ export type {
   AssistantRunStep,
   AssistantRunStepStatus,
   AssistantRunEvidence,
+  AssistantKnowledgeSource,
+  AssistantSourceVersion,
+  AssistantChunk,
+  AssistantIndexedSourceType,
+  AssistantIndexStatus,
+  AssistantSourceVersionStatus,
   AssistantEffectiveSnapshot,
   AssistantRequestReceipt,
   AssistantInvolvementSource,
