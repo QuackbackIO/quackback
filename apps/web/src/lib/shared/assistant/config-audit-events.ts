@@ -42,4 +42,7 @@ export const ASSISTANT_CONFIG_EVENT_LABELS: Record<
   'assistant.tools.changed': 'Tool permissions changed',
   'assistant.channels.changed': 'Channel guidance changed',
   'assistant.deployment.changed': 'Automatic replies changed',
+  'assistant.release.published': 'Release published',
+  'assistant.release.rolled_back': 'Release rolled back',
+  'assistant.release.management_changed': 'Release management changed',
 }

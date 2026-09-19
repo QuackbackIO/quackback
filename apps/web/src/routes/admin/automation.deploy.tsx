@@ -10,6 +10,7 @@ import { CopilotDeploymentCard } from '@/components/admin/automation/copilot-dep
 import { AssistantIdentityCard } from '@/components/admin/automation/assistant-identity-card'
 import { AssistantVoiceCard } from '@/components/admin/automation/assistant-basics-card'
 import { WhoRepliesFirstCard } from '@/components/admin/automation/who-replies-first-card'
+import { QuinnReleaseCard } from '@/components/admin/automation/quinn-release-card'
 import { QuinnSettingsPage } from '@/components/admin/automation/quinn-settings-page'
 import { DefaultErrorPage } from '@/components/shared/error-page'
 import { assistantQueries } from '@/lib/client/queries/assistant'
@@ -22,7 +23,10 @@ export const Route = createFileRoute('/admin/automation/deploy')({
       throw new Error('Access denied: requires assistant.manage')
   },
   loader: async ({ context }) => {
-    await context.queryClient.ensureQueryData(assistantQueries.settings())
+    await Promise.all([
+      context.queryClient.ensureQueryData(assistantQueries.settings()),
+      context.queryClient.ensureQueryData(assistantQueries.releaseState()),
+    ])
   },
   errorComponent: ({ error, reset }) => (
     <DefaultErrorPage error={error} reset={reset} fullPage={false} />
@@ -90,6 +94,10 @@ function DeployPage() {
           </div>
           <Badge variant="outline">Managed</Badge>
         </div>
+      </section>
+      <section className="space-y-3">
+        <h2 className="text-sm font-medium">Changes</h2>
+        <QuinnReleaseCard />
       </section>
       <details className="space-y-4">
         <summary className="cursor-pointer text-sm font-medium">Identity and voice</summary>

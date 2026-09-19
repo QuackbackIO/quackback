@@ -148,6 +148,10 @@ export type AuditEventType =
   | 'assistant.tools.changed'
   | 'assistant.channels.changed'
   | 'assistant.deployment.changed'
+  // Quinn releases: reviewed publication, rollback and the opt-in itself
+  | 'assistant.release.published'
+  | 'assistant.release.rolled_back'
+  | 'assistant.release.management_changed'
   // Verified-email assertion. `emailVerified: true` is a trust decision, not a
   // data field — it grants the same portal access as a confirmed email
   // (domain-match, invite claim, segment portal-access grants). Every path

@@ -6,6 +6,7 @@ import {
 } from '@/lib/server/functions/assistant-guidance'
 import { getGuidanceRuleStatsFn } from '@/lib/server/functions/assistant-guidance-stats'
 import { listGuidanceEntriesFn } from '@/lib/server/functions/assistant-guidance-entries'
+import { getAssistantReleaseStateFn } from '@/lib/server/functions/assistant-releases'
 
 const STALE_TIME = 30 * 1000
 // The tool catalogue is static, so it can sit stale far longer than settings
@@ -18,6 +19,7 @@ export const assistantKeys = {
   guidanceEntries: () => ['assistant', 'guidanceEntries'] as const,
   guidanceRuleStats: () => ['assistant', 'guidanceRuleStats'] as const,
   tools: () => ['assistant', 'tools'] as const,
+  releaseState: () => ['assistant', 'releaseState'] as const,
 }
 
 /** AI agent settings, guidance, and action-catalogue queries. */
@@ -57,5 +59,16 @@ export const assistantQueries = {
       queryKey: assistantKeys.tools(),
       queryFn: listAssistantToolsFn,
       staleTime: TOOLS_STALE_TIME,
+    }),
+
+  /**
+   * Draft, live, evidence and gate. Never cached: the whole point is to show
+   * whether the evidence still belongs to the candidate in front of you.
+   */
+  releaseState: () =>
+    queryOptions({
+      queryKey: assistantKeys.releaseState(),
+      queryFn: getAssistantReleaseStateFn,
+      staleTime: 0,
     }),
 }

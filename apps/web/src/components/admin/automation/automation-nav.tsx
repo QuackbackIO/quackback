@@ -9,6 +9,7 @@ import {
   HomeIcon,
   RocketLaunchIcon,
   ChatBubbleLeftRightIcon,
+  BeakerIcon,
 } from '@heroicons/react/24/solid'
 import { MENU_ICON, MENU_LABEL, MENU_ROW } from '@/components/ui/menu'
 import { usePermission } from '@/lib/client/hooks/use-permission'
@@ -77,6 +78,12 @@ export function buildAutomationNavSections(
           defaultLabel: 'Deploy',
           to: '/admin/automation/deploy',
           icon: RocketLaunchIcon,
+        },
+        {
+          labelId: 'automation.nav.test',
+          defaultLabel: 'Test Quinn',
+          to: '/admin/automation/test',
+          icon: BeakerIcon,
         },
       ]
     : []

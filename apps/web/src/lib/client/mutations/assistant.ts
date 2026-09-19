@@ -23,6 +23,14 @@ import {
   deleteGuidanceEntryFn,
 } from '@/lib/server/functions/assistant-guidance-entries'
 import type { GuidanceEntrySaveInput } from '@/lib/shared/assistant/guidance-entry'
+import {
+  publishAssistantReleaseFn,
+  rollbackAssistantReleaseFn,
+  runAssistantCandidateSandboxFn,
+  runAssistantReleaseCheckFn,
+  setAssistantReleaseManagementFn,
+} from '@/lib/server/functions/assistant-releases'
+import type { ReleaseCheckKey } from '@/lib/shared/assistant/release'
 import { assistantKeys } from '@/lib/client/queries/assistant'
 import { settingsQueries } from '@/lib/client/queries/settings'
 
@@ -176,5 +184,63 @@ export function useUpdateWidgetAssistantDeployment() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: settingsQueries.widgetConfig().queryKey })
     },
+  })
+}
+
+/**
+ * Release actions (QUINN-PRODUCT P7). Each one returns fresh release state or
+ * a refusal carrying the version that moved, so nothing is written
+ * optimistically: a publication is not a draft interaction.
+ */
+export function useRunAssistantReleaseCheck() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { checkKey: ReleaseCheckKey }) => runAssistantReleaseCheckFn({ data }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: assistantKeys.releaseState() })
+    },
+  })
+}
+
+export function usePublishAssistantRelease() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { expectedCandidateHash: string; note?: string }) =>
+      publishAssistantReleaseFn({ data }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: assistantKeys.releaseState() })
+      void queryClient.invalidateQueries({ queryKey: assistantKeys.settings() })
+    },
+  })
+}
+
+export function useRollbackAssistantRelease() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { releaseId: string; expectedLiveReleaseId: string | null }) =>
+      rollbackAssistantReleaseFn({ data }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: assistantKeys.releaseState() })
+      void queryClient.invalidateQueries({ queryKey: assistantKeys.settings() })
+    },
+  })
+}
+
+export function useSetAssistantReleaseManagement() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { enabled: boolean }) => setAssistantReleaseManagementFn({ data }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: assistantKeys.releaseState() })
+    },
+  })
+}
+
+export function useRunAssistantSandboxTurn() {
+  return useMutation({
+    mutationFn: (data: {
+      messages: Array<{ sender: 'customer' | 'assistant'; content: string }>
+      target: 'candidate' | 'live'
+    }) => runAssistantCandidateSandboxFn({ data }),
   })
 }

@@ -170,3 +170,21 @@ export const RELEASE_USE_LABELS: Record<ReleaseUse, string> = {
   teammate: 'Support teammates',
   workspace: 'Workspace and Slack',
 }
+
+/**
+ * How a check reads on screen.
+ *
+ * "Out of date" rather than "stale" because the thing a reviewer has to do
+ * about it is run it again, and "Not run" is kept distinct from it: one has
+ * never been checked, the other was checked against something else.
+ */
+export const RELEASE_READING_LABELS: Record<ReleaseBlockReason | 'passed', string> = {
+  passed: 'Passed',
+  failed: 'Failed',
+  skipped: 'Skipped',
+  inconclusive: 'Inconclusive',
+  running: 'Running',
+  cancelled: 'Cancelled',
+  not_run: 'Not run',
+  stale: 'Out of date',
+}

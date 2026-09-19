@@ -34,12 +34,14 @@ vi.mock('@/lib/server/domains/ai/models', () => ({
 
 import {
   getReleaseState,
-  publishCandidate,
   recordReleaseCheckResult,
-  rollbackToRelease,
   selectRunBehaviour,
-  setReleaseManagement,
 } from '../assistant-release.service'
+import {
+  publishCandidate,
+  rollbackToRelease,
+  setReleaseManagement,
+} from '../assistant-release.publish'
 import { RELEASE_CHECKS } from '@/lib/shared/assistant/release'
 import {
   getAssistantRuntimeConfig,
