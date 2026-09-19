@@ -88,6 +88,10 @@ function queue(label: string): string {
 }
 
 const CONFIG = { ...runnerConfig(), batchSize: 10 }
+const BUDGET_CONFIG = {
+  ...CONFIG,
+  workloadBudgets: { interactive: 8, ingestion: 8, evaluation: 8 },
+}
 
 beforeAll(async () => {
   await ensureJobQueueSchema()
@@ -616,6 +620,130 @@ describe('the bounded pool', () => {
     expect(
       claimSpecsFor(pool, { ...CONFIG, maxConcurrency: 5 }).reduce((n, s) => n + s.limit, 0)
     ).toBe(5)
+  })
+
+  it('asks the interactive queues first, whatever order they are registered in', () => {
+    __setJobDefinitionsForTests([
+      {
+        name: 'budget-ingest',
+        concurrency: 2,
+        workload: 'ingestion',
+        handler: async () => async () => {},
+      },
+      { name: 'budget-plain', concurrency: 1, handler: async () => async () => {} },
+      {
+        name: 'budget-turn',
+        concurrency: 2,
+        workload: 'interactive',
+        handler: async () => async () => {},
+      },
+    ])
+    const pool = createJobPool()
+    expect(claimSpecsFor(pool, BUDGET_CONFIG).map((s) => s.queue)).toEqual([
+      'budget-turn',
+      'budget-ingest',
+      'budget-plain',
+    ])
+  })
+
+  it('keeps the interactive budget out of reach of background work when the ceiling binds', () => {
+    // The protection P8 asks for: ingestion and evaluation may not take the
+    // seats interactive turns are entitled to. Declared concurrency alone does
+    // not give this — the pool consumes one global ceiling in registry order.
+    __setJobDefinitionsForTests([
+      {
+        name: 'budget-turn',
+        concurrency: 2,
+        workload: 'interactive',
+        handler: async () => async () => {},
+      },
+      {
+        name: 'budget-ingest',
+        concurrency: 4,
+        workload: 'ingestion',
+        handler: async () => async () => {},
+      },
+    ])
+    const pool = createJobPool()
+    const specs = claimSpecsFor(pool, { ...BUDGET_CONFIG, maxConcurrency: 4 })
+    expect(specs.map((s) => [s.queue, s.limit])).toEqual([
+      ['budget-turn', 2],
+      // 4 total, 2 reserved for interactive whether or not a turn is waiting.
+      ['budget-ingest', 2],
+    ])
+  })
+
+  it('caps a class at its own budget even when the ceiling is wide open', () => {
+    __setJobDefinitionsForTests([
+      {
+        name: 'budget-ingest',
+        concurrency: 4,
+        workload: 'ingestion',
+        handler: async () => async () => {},
+      },
+    ])
+    const pool = createJobPool()
+    const specs = claimSpecsFor(pool, {
+      ...BUDGET_CONFIG,
+      maxConcurrency: 50,
+      workloadBudgets: { ...BUDGET_CONFIG.workloadBudgets, ingestion: 1 },
+    })
+    expect(specs.map((s) => [s.queue, s.limit])).toEqual([['budget-ingest', 1]])
+  })
+
+  it('counts what a class already has in flight against its budget', () => {
+    __setJobDefinitionsForTests([
+      {
+        name: 'budget-ingest-a',
+        concurrency: 2,
+        workload: 'ingestion',
+        handler: async () => async () => {},
+      },
+      {
+        name: 'budget-ingest-b',
+        concurrency: 2,
+        workload: 'ingestion',
+        handler: async () => async () => {},
+      },
+    ])
+    const pool = createJobPool()
+    pool.inFlight.set('budget-ingest-a', 2)
+    const specs = claimSpecsFor(pool, {
+      ...BUDGET_CONFIG,
+      maxConcurrency: 50,
+      workloadBudgets: { ...BUDGET_CONFIG.workloadBudgets, ingestion: 3 },
+    })
+    // Two of the three are already running on the sibling queue.
+    expect(specs.map((s) => [s.queue, s.limit])).toEqual([['budget-ingest-b', 1]])
+  })
+
+  it('defaults every class budget to its own declared sum, so nothing moves', () => {
+    // Quinn's interactive pair is assistant-turn (2) + assistant-action (2).
+    const config = runnerConfig()
+    expect(config.workloadBudgets.interactive).toBe(4)
+    expect(config.workloadBudgets.ingestion).toBe(1)
+    __setJobDefinitionsForTests([
+      {
+        name: 'budget-turn',
+        concurrency: 2,
+        workload: 'interactive',
+        handler: async () => async () => {},
+      },
+      {
+        name: 'budget-ingest',
+        concurrency: 4,
+        workload: 'ingestion',
+        handler: async () => async () => {},
+      },
+      { name: 'budget-plain', concurrency: 3, handler: async () => async () => {} },
+    ])
+    const pool = createJobPool()
+    const specs = claimSpecsFor(pool, {
+      ...BUDGET_CONFIG,
+      maxConcurrency: 9,
+      workloadBudgets: { interactive: 2, ingestion: 4, evaluation: 0 },
+    })
+    expect(specs.reduce((n, s) => n + s.limit, 0)).toBe(9)
   })
 
   it('frees a slot when a job fails, not only when it succeeds', async () => {

@@ -36,9 +36,32 @@ export interface DynamicSchedule {
   payload: Record<string, unknown>
 }
 
+/**
+ * What kind of work a queue carries, for the purpose of budgeting it.
+ *
+ * Per-queue `concurrency` says how many of ONE queue may run at once. It cannot
+ * say "background work may never take the seats a customer is waiting on",
+ * because the pool spends one global ceiling across the queues in registry
+ * order. A class is the unit that answer needs: `interactive` is a person
+ * waiting for a reply right now, `ingestion` is corpus work that can always be
+ * later, and `evaluation` is grading that can always be later still.
+ *
+ * `evaluation` is declared and currently carried by no queue: the evaluation
+ * suites run out of process (`bun run evals`), so nothing on this tier competes
+ * for a seat. It is here so a suite that does move onto the queue is budgeted
+ * from its first line rather than after it has starved a conversation.
+ */
+export const JOB_WORKLOADS = ['interactive', 'ingestion', 'evaluation'] as const
+export type JobWorkload = (typeof JOB_WORKLOADS)[number]
+
 export interface JobDefinition {
   /** Queue name. Also the `queue` column value and the NOTIFY payload. */
   name: string
+  /**
+   * The budget class this queue draws from. Absent means unclassified: bounded
+   * only by its own `concurrency` and the process ceiling, exactly as before.
+   */
+  workload?: JobWorkload
   /** Loaded on first execution, not at import time. */
   handler: () => Promise<JobHandler>
   /**
@@ -238,6 +261,7 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
     // heartbeats through it; interactive work gets a small pool so a backlog
     // cannot starve the rest of the tier.
     name: 'assistant-turn',
+    workload: 'interactive',
     concurrency: 2,
     maxAttempts: 1,
     leaseMs: 180_000,
@@ -250,6 +274,7 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
   },
   {
     name: 'assistant-action',
+    workload: 'interactive',
     concurrency: 2,
     // The one Quinn queue that retries. Execution is claimed on the receipt's
     // logical action key, so a second attempt reads the first attempt's receipt
@@ -282,6 +307,7 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       import('@/lib/server/domains/assistant/knowledge-ingest-queue').then((m) =>
         m.isKnowledgeBackfillDue()
       ),
+    workload: 'ingestion',
     concurrency: 1,
     maxAttempts: 3,
     retryBackoffMs: 10_000,
@@ -573,6 +599,21 @@ export function maxAttemptsFor(def: JobDefinition): number {
 
 export function concurrencyFor(def: JobDefinition): number {
   return def.concurrency ?? DEFAULT_CONCURRENCY
+}
+
+/**
+ * The default budget for each class: the sum of its own members' concurrency.
+ *
+ * That default binds nothing, by construction — it is exactly what the queues
+ * were already allowed to run. The budget starts mattering when an operator
+ * lowers the process ceiling, which is the case the class exists for.
+ */
+export function declaredWorkloadConcurrency(): Record<JobWorkload, number> {
+  const out = { interactive: 0, ingestion: 0, evaluation: 0 }
+  for (const def of jobDefinitions()) {
+    if (def.workload) out[def.workload] += concurrencyFor(def)
+  }
+  return out
 }
 
 /**

@@ -32,7 +32,9 @@ import {
   type ReapResult,
 } from './job-queue'
 import {
+  JOB_WORKLOADS,
   concurrencyFor,
+  declaredWorkloadConcurrency,
   findJobDefinition,
   isTerminalJobError,
   jobDefinitions,
@@ -43,6 +45,7 @@ import {
   type DynamicSchedule,
   type JobDefinition,
   type JobHandler,
+  type JobWorkload,
 } from './definitions'
 import { enqueueJob } from './job-queue'
 import { latestSlotAtOrBefore, nextSlotAfter, parseCron, slotKey, type ParsedCron } from './cron'
@@ -87,6 +90,17 @@ export interface RunnerConfig {
    * a fleet operator sizing connections cares about the product, not the term.
    */
   maxConcurrency: number
+  /**
+   * Ceiling on jobs of one workload class running at once, and the seats that
+   * class is entitled to whether or not it is using them.
+   *
+   * The interactive budget is a RESERVATION as well as a cap: background work
+   * never claims into it, so lowering `maxConcurrency` on a small container
+   * cannot leave a customer's turn behind a corpus reindex. Each default is the
+   * sum of its own class's declared concurrency, which binds nothing, so this
+   * changes nothing until an operator tightens the ceiling.
+   */
+  workloadBudgets: Record<JobWorkload, number>
 }
 
 /** Sum of every registered queue's concurrency — the reference's own ceiling. */
@@ -95,6 +109,7 @@ export function totalDeclaredConcurrency(): number {
 }
 
 export function runnerConfig(): RunnerConfig {
+  const declared = declaredWorkloadConcurrency()
   return {
     pollIntervalMs: envInt('JOB_POLL_INTERVAL_MS', 1_000, 50, 600_000),
     batchSize: envInt('JOB_BATCH_SIZE', 5, 1, 100),
@@ -102,6 +117,11 @@ export function runnerConfig(): RunnerConfig {
     pruneIntervalMs: envInt('JOB_PRUNE_INTERVAL_MS', 3_600_000, 1_000, 86_400_000),
     retentionMs: envInt('JOB_RETENTION_MS', 7 * 24 * 60 * 60 * 1000, 60_000, 365 * 86_400_000),
     maxConcurrency: envInt('JOB_MAX_CONCURRENCY', totalDeclaredConcurrency(), 1, 512),
+    workloadBudgets: {
+      interactive: envInt('JOB_INTERACTIVE_CONCURRENCY', declared.interactive, 0, 512),
+      ingestion: envInt('JOB_INGESTION_CONCURRENCY', declared.ingestion, 0, 512),
+      evaluation: envInt('JOB_EVALUATION_CONCURRENCY', declared.evaluation, 0, 512),
+    },
   }
 }
 
@@ -390,20 +410,78 @@ export function poolSize(pool: JobPool): number {
   return n
 }
 
+/**
+ * Jobs of one workload class currently running in this pool.
+ *
+ * Read off the definitions rather than tracked separately, so a queue that
+ * changes class cannot leave a stale counter behind.
+ */
+function inFlightForWorkload(pool: JobPool, workload: JobWorkload): number {
+  let n = 0
+  for (const def of jobDefinitions()) {
+    if (def.workload === workload) n += pool.inFlight.get(def.name) ?? 0
+  }
+  return n
+}
+
+/**
+ * The definitions in claim order: interactive queues first, everything else in
+ * registry order.
+ *
+ * Order is load-bearing because one global budget is spent down the list. A
+ * turn a customer is waiting on must be asked for before a reindex, or a
+ * lowered ceiling is spent on the reindex and the turn waits a whole pass.
+ */
+function claimOrderedDefinitions(): readonly JobDefinition[] {
+  const defs = jobDefinitions()
+  const interactive = defs.filter((d) => d.workload === 'interactive')
+  if (interactive.length === 0) return defs
+  return [...interactive, ...defs.filter((d) => d.workload !== 'interactive')]
+}
+
 /** The free slots each queue has right now, given the pool and the caps. */
 export function claimSpecsFor(pool: JobPool, config: RunnerConfig): QueueClaimSpec[] {
   let budget = Math.max(0, config.maxConcurrency - poolSize(pool))
+  const classFree = new Map<JobWorkload, number>()
+  for (const workload of JOB_WORKLOADS) {
+    const cap = config.workloadBudgets?.[workload]
+    classFree.set(
+      workload,
+      cap === undefined
+        ? Number.POSITIVE_INFINITY
+        : Math.max(0, cap - inFlightForWorkload(pool, workload))
+    )
+  }
+  // Seats interactive work could take right now and has not taken yet: its own
+  // free per-queue capacity, bounded by its class budget. Background queues may
+  // not spend into this, which is the whole protection. A ceiling small enough
+  // to matter is exactly the case where a reindex would otherwise take the seat
+  // a customer is waiting on, and this holds whether or not a turn is queued —
+  // one arrives mid-pass, and the reservation is what leaves it somewhere to go.
+  let interactiveReserve = Math.min(
+    classFree.get('interactive') ?? 0,
+    jobDefinitions()
+      .filter((d) => d.workload === 'interactive')
+      .reduce((n, d) => n + Math.max(0, concurrencyFor(d) - (pool.inFlight.get(d.name) ?? 0)), 0)
+  )
   const specs: QueueClaimSpec[] = []
-  for (const def of jobDefinitions()) {
+  for (const def of claimOrderedDefinitions()) {
     if (budget <= 0) break
-    const free = Math.min(
+    const workload = def.workload
+    const free = workload ? (classFree.get(workload) ?? 0) : Number.POSITIVE_INFINITY
+    if (free < 1) continue
+    const spendable = workload === 'interactive' ? budget : Math.max(0, budget - interactiveReserve)
+    const limit = Math.min(
       concurrencyFor(def) - (pool.inFlight.get(def.name) ?? 0),
       config.batchSize,
-      budget
+      spendable,
+      free
     )
-    if (free < 1) continue
-    specs.push({ queue: def.name, limit: free, leaseMs: leaseMsFor(def) })
-    budget -= free
+    if (limit < 1) continue
+    specs.push({ queue: def.name, limit, leaseMs: leaseMsFor(def) })
+    budget -= limit
+    if (workload) classFree.set(workload, free - limit)
+    if (workload === 'interactive') interactiveReserve = Math.max(0, interactiveReserve - limit)
   }
   return specs
 }
@@ -489,9 +567,16 @@ export async function startJobsById(opts: {
       if (!peek) continue
       const def = findJobDefinition(peek.queue)
       if (!def) continue
+      // The same class budget dispatchPass applies: a wake must not walk an
+      // ingestion job past the ceiling a pass would have refused it.
+      const classCap = def.workload
+        ? (opts.config.workloadBudgets?.[def.workload] ?? Number.POSITIVE_INFINITY) -
+          inFlightForWorkload(opts.pool, def.workload)
+        : Number.POSITIVE_INFINITY
       const free = Math.min(
         concurrencyFor(def) - (opts.pool.inFlight.get(peek.queue) ?? 0),
-        opts.config.maxConcurrency - poolSize(opts.pool)
+        opts.config.maxConcurrency - poolSize(opts.pool),
+        classCap
       )
       if (free < 1) continue
       opts.pool.inFlight.set(peek.queue, (opts.pool.inFlight.get(peek.queue) ?? 0) + 1)
