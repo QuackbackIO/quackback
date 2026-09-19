@@ -52,6 +52,8 @@ vi.mock('@/lib/server/domains/assistant/assistant-release.service', () => ({
   getReleaseState: hoisted.getReleaseState,
   ensureDraftCandidate: hoisted.ensureDraftCandidate,
   recordReleaseCheckResult: hoisted.recordReleaseCheckResult,
+}))
+vi.mock('@/lib/server/domains/assistant/assistant-release.behaviour', () => ({
   candidateBehaviour: hoisted.candidateBehaviour,
   liveBehaviour: hoisted.liveBehaviour,
 }))

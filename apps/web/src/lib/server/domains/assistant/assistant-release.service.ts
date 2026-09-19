@@ -126,7 +126,7 @@ export function toRecord(row: typeof assistantReleases.$inferSelect): ReleaseRec
   }
 }
 
-/** @internal shared with assistant-release.publish.ts */
+/** @internal shared with the publish and behaviour modules */
 export async function settingsRow(exec: Transaction | typeof db = db) {
   const [row] = await exec
     .select({
@@ -144,7 +144,7 @@ export async function settingsRow(exec: Transaction | typeof db = db) {
 }
 
 /** The settings row's configuration: the live one with release management off, the draft with it on. */
-/** @internal shared with assistant-release.publish.ts */
+/** @internal shared with the publish and behaviour modules */
 export function parseStoredConfig(stored: unknown): AssistantConfig | null {
   const parsed = assistantConfigSchema.safeParse(migrateAssistantConfig(stored))
   return parsed.success ? parsed.data : null
@@ -172,7 +172,7 @@ export async function readRelease(
   return row ? toRecord(row) : null
 }
 
-/** @internal shared with assistant-release.publish.ts */
+/** @internal shared with the publish and behaviour modules */
 export async function readPublished(
   exec: Transaction | typeof db = db
 ): Promise<ReleaseRecord | null> {
@@ -464,57 +464,4 @@ export async function getWorkspaceName(): Promise<string> {
     log.warn({ err }, 'could not read the workspace name')
     return 'this workspace'
   }
-}
-
-/**
- * The exact behaviour a check or the sandbox runs against.
- *
- * `candidateBehaviour` reads the configuration back out of the candidate's own
- * snapshot rather than out of the settings row: the snapshot is the thing the
- * evidence is bound to, and reading the row instead would make a result that
- * claims to be about a candidate actually be about whatever is current.
- */
-export async function candidateBehaviour(
-  release: ReleaseRecord
-): Promise<import('./release-checks').CandidateBehaviour> {
-  const row = await settingsRow()
-  const config = await releaseConfig(release.snapshotId)
-  if (!config) {
-    throw new ValidationError(
-      'ASSISTANT_RELEASE_SNAPSHOT_UNREADABLE',
-      'This candidate has no readable configuration.'
-    )
-  }
-  const live = await readPublished()
-  return {
-    config,
-    configRevision: release.configRevision,
-    workspaceName: row.name,
-    liveConfig: live
-      ? await releaseConfig(live.snapshotId)
-      : parseStoredConfig(row.assistantConfig),
-    managedFieldPaths: await managedFieldPaths(),
-  }
-}
-
-/** The behaviour a customer would meet right now, for the live side of a comparison. */
-export async function liveBehaviour(): Promise<import('./release-checks').CandidateBehaviour> {
-  const { getAssistantRuntimeConfig } =
-    await import('@/lib/server/domains/settings/settings.assistant')
-  const runtime = await getAssistantRuntimeConfig()
-  return {
-    config: runtime.config,
-    configRevision: runtime.revision,
-    workspaceName: runtime.workspaceName,
-    liveConfig: runtime.config,
-    managedFieldPaths: await managedFieldPaths(),
-  }
-}
-
-async function managedFieldPaths(): Promise<readonly string[]> {
-  const [row] = await db
-    .select({ managedFieldPaths: settings.managedFieldPaths })
-    .from(settings)
-    .limit(1)
-  return row?.managedFieldPaths ?? []
 }

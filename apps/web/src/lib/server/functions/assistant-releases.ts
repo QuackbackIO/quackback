@@ -78,7 +78,7 @@ export const runAssistantReleaseCheckFn = createServerFn({ method: 'POST' })
       await import('@/lib/server/domains/assistant/assistant-release.service')
     const { runReleaseCheck } = await import('@/lib/server/domains/assistant/release-checks')
     const { candidateBehaviour } =
-      await import('@/lib/server/domains/assistant/assistant-release.service')
+      await import('@/lib/server/domains/assistant/assistant-release.behaviour')
 
     const draft = await ensureDraftCandidate(ctx.principal.id)
     const outcome = await runReleaseCheck(data.checkKey, await candidateBehaviour(draft))
@@ -176,8 +176,10 @@ export const runAssistantCandidateSandboxFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ target: data.target }, 'run candidate sandbox turn')
     const ctx = await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
-    const { candidateBehaviour, ensureDraftCandidate, liveBehaviour } =
+    const { ensureDraftCandidate } =
       await import('@/lib/server/domains/assistant/assistant-release.service')
+    const { candidateBehaviour, liveBehaviour } =
+      await import('@/lib/server/domains/assistant/assistant-release.behaviour')
     const { runCandidateSandboxTurn } =
       await import('@/lib/server/domains/assistant/release-checks')
     const behaviour =

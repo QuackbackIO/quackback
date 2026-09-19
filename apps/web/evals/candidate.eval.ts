@@ -34,10 +34,10 @@ import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixt
 import { assistantReleases, eq, settings } from '@/lib/server/db'
 import {
   ensureDraftCandidate,
-  candidateBehaviour,
   getReleaseState,
   recordReleaseCheckResult,
 } from '@/lib/server/domains/assistant/assistant-release.service'
+import { candidateBehaviour } from '@/lib/server/domains/assistant/assistant-release.behaviour'
 import { setReleaseManagement } from '@/lib/server/domains/assistant/assistant-release.publish'
 import {
   getAssistantSettings,
