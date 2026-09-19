@@ -10,7 +10,7 @@ import type { Transaction } from '@/lib/server/db'
 import type { AssistantRunId, ConversationId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
 import type { AssistantRunRow } from './assistant-run.repository'
-import { recordRunStep } from './assistant-run.ledger'
+import { addRunTokenUsage, recordRunStep } from './assistant-run.ledger'
 import type { CommitAssistantOutcomeInput } from './assistant-run.service'
 import type { PublicationVerdict } from './publication-validation'
 
@@ -75,6 +75,22 @@ export async function verifyAndMaybeRepair(input: {
       return { kind: 'blocked', verdict: first.verdict ?? 'validator_error' }
     }
     repaired = attempt
+    // The repair is a second provider call. Recorded as its own step, and
+    // added to the run's counters, so the turn's cost is the whole turn.
+    await recordRunStep(db, {
+      runId: input.run.id,
+      stepKey: 'generate.repair',
+      attemptNumber: input.run.attemptCount,
+      stepKind: 'generation',
+      status: 'succeeded',
+      modelId: attempt.trace.modelId ?? null,
+      promptTokens: attempt.trace.usage?.promptTokens ?? null,
+      completionTokens: attempt.trace.usage?.completionTokens ?? null,
+      finishedAt: new Date(),
+    }).catch((err) => log.warn({ err, run_id: input.run.id }, 'could not record the repair step'))
+    await addRunTokenUsage(db, input.run.id, attempt.trace.usage).catch((err) =>
+      log.warn({ err, run_id: input.run.id }, 'could not record the repair cost')
+    )
   } catch (err) {
     log.warn({ err, run_id: input.run.id }, 'constrained repair failed')
     return { kind: 'blocked', verdict: first.verdict ?? 'validator_error' }

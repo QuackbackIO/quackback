@@ -158,6 +158,16 @@ export interface AssistantTurnTrace {
   omittedGuidance: Array<{ id: string; name: string }>
   toolCalls: AssistantToolOutcome[]
   configFallbackReason?: string
+  /** The chat model this turn generated with. */
+  modelId?: string
+  /**
+   * What this generation cost, as the provider reported it.
+   *
+   * Absent when the provider sent no usage at all, which is the honest answer:
+   * a zero would read as a free turn. The run's own counters accumulate these
+   * across the generation and its constrained repair (QUINN-PRODUCT P8/P9).
+   */
+  usage?: { promptTokens: number; completionTokens: number }
 }
 
 export interface AssistantRuntimeConfig {
@@ -1522,6 +1532,18 @@ ${runtimeConfig.config.agents.workspace.instructions}`)
 
     if (outcome.outcome !== 'success') throw outcome.lastError ?? new Error('assistant turn failed')
 
+    // What the provider said this turn cost. Reported rather than derived, and
+    // omitted entirely when the provider said nothing, because a zero would
+    // read as a free turn rather than as an unreported one.
+    const turnUsage =
+      typeof outcome.usage?.promptTokens === 'number' ||
+      typeof outcome.usage?.completionTokens === 'number'
+        ? {
+            promptTokens: outcome.usage?.promptTokens ?? 0,
+            completionTokens: outcome.usage?.completionTokens ?? 0,
+          }
+        : null
+
     const parsedResult = assistantOutputSchema.safeParse(outcome.final)
     if (!parsedResult.success) {
       throw new AssistantCompletionError('non_conformant_output')
@@ -1562,6 +1584,8 @@ ${runtimeConfig.config.agents.workspace.instructions}`)
       ...(runtimeConfig.configFallbackReason
         ? { configFallbackReason: runtimeConfig.configFallbackReason }
         : {}),
+      modelId: model,
+      ...(turnUsage ? { usage: turnUsage } : {}),
     }
     // The evidence package as it was supplied, with the citations the answer
     // actually kept mapped onto it. A passage the model never cited is kept

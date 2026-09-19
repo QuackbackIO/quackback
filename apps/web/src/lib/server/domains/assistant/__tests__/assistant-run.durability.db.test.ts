@@ -652,7 +652,7 @@ describe.skipIf(!available)('durable Quinn turns on real PostgreSQL', () => {
   })
 })
 
-function answer(text: string) {
+function answer(text: string, usage?: { promptTokens: number; completionTokens: number }) {
   return {
     status: 'answered' as const,
     responseKind: 'answer' as const,
@@ -673,6 +673,7 @@ function answer(text: string) {
       appliedGuidance: [],
       omittedGuidance: [],
       toolCalls: [],
+      ...(usage ? { modelId: 'fake/model', usage } : {}),
     },
   }
 }
@@ -752,6 +753,53 @@ describe.skipIf(!available)('the durable turn executor on real PostgreSQL', () =
     expect(vi.mocked(runAssistantTurn).mock.calls[0][0].readOnlyTools).toBe(false)
     expect(vi.mocked(runAssistantTurn).mock.calls[1][0].readOnlyTools).toBe(true)
     expect(await publicMessages(conversationId)).toHaveLength(1)
+  })
+
+  it('records what the turn spent, adding the repair to the first generation', async () => {
+    const { conversationId, runId } = await seedTurn()
+    vi.mocked(runAssistantTurn)
+      .mockResolvedValueOnce(
+        answer('Refunds take three days.', {
+          promptTokens: 1200,
+          completionTokens: 90,
+        }) as unknown as Awaited<ReturnType<typeof runAssistantTurn>>
+      )
+      .mockResolvedValueOnce(
+        answer('Refunds take three working days.', {
+          promptTokens: 300,
+          completionTokens: 40,
+        }) as unknown as Awaited<ReturnType<typeof runAssistantTurn>>
+      )
+    verifyAnswerSupportMock
+      .mockResolvedValueOnce(enforced('unsupported'))
+      .mockResolvedValueOnce(enforced('supported'))
+
+    const job = await claimTurn(runId)
+    expect(await advanceAssistantRun(job)).toBe('published')
+    expect(await publicMessages(conversationId)).toHaveLength(1)
+
+    const [run] = await db
+      .select()
+      .from(assistantRuns)
+      .where(eq(assistantRuns.id, runId as never))
+    // The run's counters are the whole turn, both provider calls, not the last.
+    expect(run.promptTokens).toBe(1500)
+    expect(run.completionTokens).toBe(130)
+
+    // And the step ledger keeps them apart, so an operator can see which call
+    // was expensive rather than only the total.
+    const steps = await db
+      .select()
+      .from(assistantRunSteps)
+      .where(eq(assistantRunSteps.runId, runId as never))
+    const generate = steps.find((step) => step.stepKey === 'generate')
+    expect(generate).toMatchObject({
+      modelId: 'fake/model',
+      promptTokens: 1200,
+      completionTokens: 90,
+    })
+    const repair = steps.find((step) => step.stepKey === 'generate.repair')
+    expect(repair).toMatchObject({ promptTokens: 300, completionTokens: 40 })
   })
 
   it('P6: an unsupported answer that survives its repair is never published', async () => {

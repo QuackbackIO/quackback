@@ -3,10 +3,10 @@
  *
  * Split out of `assistant-run.repository.ts`, which owns the run row's own
  * state machine and its fences. This module owns the append side: the step
- * ledger and the evidence package. Nothing here is a fence, and nothing here
- * decides whether a run may publish.
+ * ledger, the evidence package and the run's cost counters. Nothing here is a
+ * fence, and nothing here decides whether a run may publish.
  */
-import { assistantRunSteps, assistantRunEvidence } from '@/lib/server/db'
+import { eq, sql, assistantRuns, assistantRunSteps, assistantRunEvidence } from '@/lib/server/db'
 import type { Executor } from '@/lib/server/domains/principals/principal.factory'
 import type { AssistantRunId } from '@quackback/ids'
 
@@ -64,6 +64,39 @@ export async function recordRunStep(exec: Executor, input: RunStepInput): Promis
         finishedAt: input.finishedAt ?? null,
       },
     })
+}
+
+/**
+ * Add one model call's token usage to the run's counters.
+ *
+ * Accumulated rather than assigned: a turn can reach the provider more than
+ * once (the constrained repair, a transport re-dial), and the run's counters
+ * are the turn's total cost rather than the last call's. Both columns are
+ * `NOT NULL DEFAULT 0`, so the addition is always defined. A count that is
+ * missing, negative or not finite adds nothing, because a provider reporting
+ * nonsense must not be able to walk a counter backwards.
+ */
+export async function addRunTokenUsage(
+  exec: Executor,
+  runId: AssistantRunId,
+  usage: { promptTokens?: number | null; completionTokens?: number | null } | null | undefined
+): Promise<void> {
+  const prompt = safeTokenCount(usage?.promptTokens)
+  const completion = safeTokenCount(usage?.completionTokens)
+  if (prompt === 0 && completion === 0) return
+  await exec
+    .update(assistantRuns)
+    .set({
+      promptTokens: sql`${assistantRuns.promptTokens} + ${prompt}`,
+      completionTokens: sql`${assistantRuns.completionTokens} + ${completion}`,
+      updatedAt: new Date(),
+    })
+    .where(eq(assistantRuns.id, runId))
+}
+
+function safeTokenCount(value: number | null | undefined): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return 0
+  return Math.floor(value)
 }
 
 export interface RunEvidenceInput {

@@ -61,6 +61,13 @@ export interface AssistantRunSummary {
   totalMs: number | null
   /** The workflow wait this run answers, when one delegated it. */
   delegation: { workflowRunId: string; nodeId: string; waitSeq: number } | null
+  /**
+   * What the turn spent, accumulated across every provider call it made.
+   * Null when the run recorded nothing, which reads as unreported rather than
+   * free: a run that predates the accounting, or a provider that sent no usage.
+   */
+  promptTokens: number | null
+  completionTokens: number | null
 }
 
 export interface AssistantRunStepView {
@@ -72,6 +79,8 @@ export interface AssistantRunStepView {
   finishedAt: string | null
   durationMs: number | null
   modelId: string | null
+  promptTokens: number | null
+  completionTokens: number | null
   output: Record<string, JsonValue> | null
   validator: Record<string, JsonValue> | null
 }
@@ -170,6 +179,8 @@ function toSummary(row: typeof assistantRuns.$inferSelect): AssistantRunSummary 
     queuedMs: millisBetween(row.createdAt, row.startedAt),
     totalMs: millisBetween(row.createdAt, row.finishedAt),
     delegation: row.delegation ?? null,
+    promptTokens: row.promptTokens > 0 ? row.promptTokens : null,
+    completionTokens: row.completionTokens > 0 ? row.completionTokens : null,
   }
 }
 
@@ -330,6 +341,8 @@ export async function getAssistantRunInspection(
     finishedAt: ISO(step.finishedAt),
     durationMs: millisBetween(step.startedAt, step.finishedAt),
     modelId: step.modelId,
+    promptTokens: step.promptTokens,
+    completionTokens: step.completionTokens,
     output: (step.output ?? null) as Record<string, JsonValue> | null,
     validator: (step.validator ?? null) as Record<string, JsonValue> | null,
   }))

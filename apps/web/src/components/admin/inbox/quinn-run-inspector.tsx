@@ -93,6 +93,17 @@ export function runListPollInterval(
   return runs.some((run) => OPEN_STATUSES.includes(run.status)) ? 5_000 : false
 }
 
+/**
+ * What the turn spent, in and out.
+ *
+ * Null when nothing was recorded, and `Row` drops a null, so a run from before
+ * the accounting stays quiet rather than claiming it was free.
+ */
+function tokens(prompt: number | null, completion: number | null): string | null {
+  if (prompt === null && completion === null) return null
+  return `${(prompt ?? 0).toLocaleString()} in, ${(completion ?? 0).toLocaleString()} out`
+}
+
 function duration(ms: number | null): string | null {
   if (ms === null) return null
   if (ms < 1_000) return `${ms}ms`
@@ -162,6 +173,7 @@ function RunDetail({ runId, onClosed }: { runId: string; onClosed: () => void })
         <Row label="Trigger" value={run.triggerKind.replace(/_/g, ' ')} />
         <Row label="Waited to start" value={duration(run.queuedMs)} />
         <Row label="Total" value={duration(run.totalMs)} />
+        <Row label="Tokens" value={tokens(run.promptTokens, run.completionTokens)} />
         <Row
           label="Delegated by"
           value={run.delegation ? `Workflow step ${run.delegation.nodeId}` : null}

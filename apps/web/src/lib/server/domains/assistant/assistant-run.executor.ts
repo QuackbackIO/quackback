@@ -16,7 +16,7 @@ import type { ConversationAuthorInput } from '@/lib/server/domains/conversation/
 import type { ClaimedJob } from '@/lib/server/jobs/job-queue'
 import { logger } from '@/lib/server/logger'
 import { settleRun, attachSnapshot, claimRunForExecution } from './assistant-run.repository'
-import { recordRunStep } from './assistant-run.ledger'
+import { addRunTokenUsage, recordRunStep } from './assistant-run.ledger'
 import { selectRunBehaviour } from './assistant-release.service'
 import { verifyAndMaybeRepair } from './assistant-run.validation'
 import { commitAssistantOutcome, parkRunForAction } from './assistant-run.service'
@@ -213,6 +213,13 @@ export async function advanceAssistantRun(job: ClaimedJob): Promise<string> {
       attemptNumber: run.attemptCount,
       stepKind: 'generation',
       status: 'succeeded',
+      ...(result.status === 'suppressed'
+        ? {}
+        : {
+            modelId: result.trace.modelId ?? null,
+            promptTokens: result.trace.usage?.promptTokens ?? null,
+            completionTokens: result.trace.usage?.completionTokens ?? null,
+          }),
       output: {
         status: result.status,
         responseKind: result.status === 'suppressed' ? null : (result.responseKind ?? null),
@@ -228,6 +235,11 @@ export async function advanceAssistantRun(job: ClaimedJob): Promise<string> {
       },
       finishedAt: new Date(),
     })
+    if (result.status !== 'suppressed') {
+      // The run's own counters, so the inspector can show what a turn cost
+      // without joining a usage log that carries no run id.
+      await addRunTokenUsage(db, run.id, result.trace.usage)
+    }
 
     if (result.status === 'suppressed') {
       await settleRun(db, {
