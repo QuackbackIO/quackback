@@ -28,6 +28,12 @@ vi.mock('@/lib/server/domains/conversation/conversation.notify', () => ({
   notifyVisitorMessage: vi.fn(),
   notifyConversationStarted: vi.fn(),
 }))
+// Two P4 cases below resume a workflow run, which rebuilds its condition
+// context; this database carries no workspace settings row, and office hours
+// are not what any case here is about.
+vi.mock('@/lib/server/domains/settings/settings.office-hours', () => ({
+  getOfficeHoursSchedule: vi.fn(async () => ({ enabled: false, timezone: 'UTC', intervals: [] })),
+}))
 vi.mock('@/lib/server/domains/settings/settings.widget', async (original) => ({
   ...(await original<typeof import('@/lib/server/domains/settings/settings.widget')>()),
   getMessengerConfig: vi.fn(async () => ({ assistant: { respond: true } })),
@@ -51,6 +57,8 @@ import {
   assistantRuns,
   assistantInvolvements,
   principal,
+  workflows,
+  workflowRuns,
   and,
   eq,
   inArray,
@@ -104,6 +112,7 @@ const available = dedicatedDatabase && tableAvailable
 let visitorId: PrincipalId
 let quinnId: PrincipalId
 const createdConversations: ConversationId[] = []
+const createdWorkflows: Array<typeof workflows.$inferSelect.id> = []
 
 async function newConversation(): Promise<ConversationId> {
   const [row] = await db
@@ -296,6 +305,7 @@ afterAll(async () => {
   for (const id of createdConversations) {
     await db.delete(conversations).where(eq(conversations.id, id))
   }
+  for (const id of createdWorkflows) await db.delete(workflows).where(eq(workflows.id, id))
   if (quinnId) await db.delete(principal).where(eq(principal.id, quinnId))
   if (visitorId) await db.delete(principal).where(eq(principal.id, visitorId))
   await secondClient.end({ timeout: 5 }).catch(() => {})
@@ -687,6 +697,166 @@ describe.skipIf(!available)('the durable turn executor on real PostgreSQL', () =
     expect(run.status).toBe('superseded')
     expect(run.disposition).toBe('fence:input_revision')
     expect(run.resultMessageId).toBeNull()
+  })
+
+  /**
+   * A workflow parked at a `let_assistant_answer` node, delegating to `runId`.
+   * The node has no outgoing edge, so a resume settles the run 'done' with no
+   * actions: these cases are about WHETHER the wait resumes, not where to.
+   */
+  async function parkedWorkflowWait(conversationId: ConversationId, delegatedRunId: string) {
+    const graph = {
+      nodes: [
+        { id: 't', type: 'trigger' },
+        { id: 'la', type: 'let_assistant_answer' },
+      ],
+      edges: [{ from: 't', to: 'la' }],
+    }
+    const [wf] = await db
+      .insert(workflows)
+      .values({
+        name: `Let Quinn answer ${Math.random().toString(36).slice(2, 8)}`,
+        class: 'customer_facing',
+        status: 'live',
+        triggerType: 'conversation.created',
+        graph,
+      })
+      .returning()
+    createdWorkflows.push(wf.id)
+    const [run] = await db
+      .insert(workflowRuns)
+      .values({
+        workflowId: wf.id,
+        conversationId,
+        state: 'waiting',
+        customerFacing: true,
+        graph,
+        cursor: {
+          waitKind: 'assistant',
+          resumeNodeId: 'la',
+          waitSeq: 1,
+          waitSeconds: 0,
+          waitStartedAt: new Date().toISOString(),
+          delegatedRunId,
+        },
+      })
+      .returning()
+    return run
+  }
+
+  /** A delegated turn: the run a workflow park would have requested. */
+  async function seedDelegatedTurn(workflowRunId: string, conversationId: ConversationId) {
+    return db.transaction(async (tx) => {
+      const [message] = await tx
+        .insert(conversationMessages)
+        .values({
+          conversationId,
+          principalId: visitorId,
+          senderType: 'visitor',
+          content: 'my invoice is wrong',
+        })
+        .returning()
+      const requested = await requestAssistantTurn(tx, {
+        conversationId,
+        triggerKey: `workflow:${workflowRunId}:la:1`,
+        triggerKind: 'workflow_delegation',
+        surface: 'workflow_step',
+        triggerMessageId: message.id,
+        delegation: { workflowRunId, nodeId: 'la', waitSeq: 1 },
+      })
+      return requested.run.id
+    })
+  }
+
+  it('P4: an ordinary answer leaves the delegating wait parked', async () => {
+    const conversationId = await newConversation()
+    // The park writes the wait and the run together, so build them in that
+    // order here too: the cursor names the run it delegated to.
+    const placeholder = await seedDelegatedTurn('workflow_run_placeholder', conversationId)
+    const workflowRun = await parkedWorkflowWait(conversationId, placeholder)
+    await db
+      .update(assistantRuns)
+      .set({ delegation: { workflowRunId: workflowRun.id, nodeId: 'la', waitSeq: 1 } })
+      .where(eq(assistantRuns.id, placeholder as never))
+
+    vi.mocked(runAssistantTurn).mockResolvedValue(
+      answer('Your invoice was corrected.') as unknown as Awaited<
+        ReturnType<typeof runAssistantTurn>
+      >
+    )
+    const job = await claimTurn(placeholder)
+    expect(await advanceAssistantRun(job)).toBe('published')
+
+    // Quinn answering is not the workflow's resolution branch: the wait is
+    // still waiting for a hand-off, a close or its own expiry.
+    const [after] = await db.select().from(workflowRuns).where(eq(workflowRuns.id, workflowRun.id))
+    expect(after.state).toBe('waiting')
+  })
+
+  it('P4: a hand-off resumes the delegating wait, by the visit it named', async () => {
+    const conversationId = await newConversation()
+    const placeholder = await seedDelegatedTurn('workflow_run_placeholder2', conversationId)
+    const workflowRun = await parkedWorkflowWait(conversationId, placeholder)
+    await db
+      .update(assistantRuns)
+      .set({ delegation: { workflowRunId: workflowRun.id, nodeId: 'la', waitSeq: 1 } })
+      .where(eq(assistantRuns.id, placeholder as never))
+
+    vi.mocked(runAssistantTurn).mockResolvedValue({
+      ...answer('Let me get a teammate.'),
+      escalation: {
+        mode: 'handoff',
+        reason: 'complex_issue',
+        customerNeed: 'a refund decision',
+        attempted: ['looked up the invoice'],
+        recommendedNextStep: 'review the refund',
+      },
+    } as unknown as Awaited<ReturnType<typeof runAssistantTurn>>)
+    const job = await claimTurn(placeholder)
+    expect(await advanceAssistantRun(job)).toBe('published')
+
+    const [after] = await db.select().from(workflowRuns).where(eq(workflowRuns.id, workflowRun.id))
+    expect(after.state).toBe('done')
+  })
+
+  it('P4: two workers running two turns for one conversation publish once', async () => {
+    // The precondition P4 names before multiple attempts may be enabled
+    // anywhere: durable customer mode under two workers. Both turns are real
+    // intakes with real queue rows, and both executors run at the same time
+    // on separate pooled connections.
+    const conversationId = await newConversation()
+    const first = await intake(conversationId)
+    const secondTurn = await intake(conversationId)
+    vi.mocked(runAssistantTurn).mockResolvedValue(
+      answer('Both workers would say this.') as unknown as Awaited<
+        ReturnType<typeof runAssistantTurn>
+      >
+    )
+
+    const [firstRow] = await jobRowsFor(first.runId)
+    const [secondRow] = await jobRowsFor(secondTurn.runId)
+    const firstJob = await claimById(firstRow.job_id, 60_000)
+    const secondJob = await claimById(secondRow.job_id, 60_000)
+    expect(firstJob).toBeTruthy()
+    expect(secondJob).toBeTruthy()
+
+    const outcomes = await Promise.all([
+      advanceAssistantRun(firstJob!),
+      advanceAssistantRun(secondJob!),
+    ])
+
+    // One customer-visible outcome, whichever worker got there: the older turn
+    // is fenced by the revision its own intake moved.
+    expect(await publicMessages(conversationId)).toHaveLength(1)
+    expect(outcomes.filter((o) => o === 'published')).toHaveLength(1)
+    const rows = await db
+      .select()
+      .from(assistantRuns)
+      .where(eq(assistantRuns.conversationId, conversationId))
+    expect(rows.filter((r) => r.status === 'succeeded')).toHaveLength(1)
+    expect(rows.filter((r) => r.status === 'succeeded' || r.status === 'superseded')).toHaveLength(
+      2
+    )
   })
 
   it('records a suppressed run when the engine declines to speak', async () => {
