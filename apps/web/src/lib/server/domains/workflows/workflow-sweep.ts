@@ -494,11 +494,12 @@ export async function sweepExpiredAssistantWaits(now: Date): Promise<number> {
  * away; this pass closes the gap, and it is also what recovers a delegation
  * whose turn job was lost entirely, where no wake is ever coming.
  *
- * Deliberately narrow. Only a run that produced nothing counts as death: a
- * superseded run means a newer turn took over, and an answered one means the
- * wait is correctly still parked. A conversation with any open run is skipped
- * outright, because that run carries the delegation forward and will complete
- * it itself.
+ * Deliberately narrow. Two things owe the wait an escalation: a run that
+ * produced nothing at all, and a run that handed the customer to a human
+ * without the wait hearing about it. A superseded run owes nothing, because a
+ * newer turn took over, and an answered one means the wait is correctly still
+ * parked. A conversation with any other open run is skipped outright, because
+ * that run carries the delegation forward and will complete it itself.
  */
 export async function sweepStrandedAssistantDelegations(now: Date): Promise<number> {
   const parked = await db
@@ -523,6 +524,7 @@ export async function sweepStrandedAssistantDelegations(now: Date): Promise<numb
     .select({
       id: assistantRuns.id,
       status: assistantRuns.status,
+      outcome: assistantRuns.outcome,
       updatedAt: assistantRuns.updatedAt,
     })
     .from(assistantRuns)
@@ -535,12 +537,15 @@ export async function sweepStrandedAssistantDelegations(now: Date): Promise<numb
     const cursor = readCursor(run)
     const delegated = cursor.delegatedRunId ? byId.get(cursor.delegatedRunId) : undefined
     if (!delegated) continue
-    const died =
+    const owesEscalation =
       DEAD_RUN_STATUSES.has(delegated.status) ||
+      // Published a hand-off and never got to say so: the wait's escalated
+      // edge is exactly what that outcome means.
+      delegated.outcome === 'handoff' ||
       (delegated.status === 'queued' &&
         now.getTime() - delegated.updatedAt.getTime() > STRANDED_DELEGATION_GRACE_MS &&
         !(await turnJobStillLive(cursor.delegatedRunId!)))
-    if (!died) continue
+    if (!owesEscalation) continue
     // Any OTHER open run on this conversation carries the delegation forward
     // and completes it itself; this pass must not race it. The delegated run
     // is excluded from that question because its own state is what was just

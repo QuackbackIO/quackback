@@ -568,6 +568,33 @@ describe.skipIf(!fixture.available)('durable workflow delegation', () => {
       expect(run.disposition).toBe('stranded:no_turn_job')
     })
 
+    it('resumes a wait whose run handed off without ever telling it', async () => {
+      const { runId, delegatedRunId } = await parkedLongAgo()
+      // The hand-off published and the run settled; the process died before
+      // the completion could resume the wait.
+      await testDb
+        .update(assistantRuns)
+        .set({ status: 'succeeded', outcome: 'handoff' })
+        .where(eq(assistantRuns.id, delegatedRunId))
+
+      expect(await sweepStrandedAssistantDelegations(new Date())).toBe(1)
+      const [after] = await testDb.select().from(workflowRuns).where(eq(workflowRuns.id, runId))
+      expect(after.state).toBe('done')
+      expect(applyAction.mock.calls[0][0]).toMatchObject({ type: 'set_priority' })
+    })
+
+    it('leaves a wait alone when the run simply answered', async () => {
+      const { runId, delegatedRunId } = await parkedLongAgo()
+      await testDb
+        .update(assistantRuns)
+        .set({ status: 'succeeded', outcome: 'answer' })
+        .where(eq(assistantRuns.id, delegatedRunId))
+
+      expect(await sweepStrandedAssistantDelegations(new Date())).toBe(0)
+      const [after] = await testDb.select().from(workflowRuns).where(eq(workflowRuns.id, runId))
+      expect(after.state).toBe('waiting')
+    })
+
     it('leaves a wait alone while any Quinn run on the conversation is still open', async () => {
       const { conversationId, runId, delegatedRunId } = await parkedLongAgo()
       await testDb
