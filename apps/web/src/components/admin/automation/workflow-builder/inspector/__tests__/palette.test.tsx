@@ -77,6 +77,31 @@ describe('StepPalette', () => {
     expect(onInsert).toHaveBeenLastCalledWith('request_csat')
   })
 
+  it('lists the Procedure group and inserts each of its kinds', () => {
+    const onInsert = vi.fn()
+    render(<StepPalette onInsert={onInsert} />)
+    expect(screen.getByText('Procedure')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Run an action'))
+    expect(onInsert).toHaveBeenLastCalledWith('call_tool')
+
+    fireEvent.click(screen.getByText('Ask for approval'))
+    expect(onInsert).toHaveBeenLastCalledWith('approval')
+  })
+
+  it('disables only the approval procedure kind in a background workflow', () => {
+    const onInsert = vi.fn()
+    render(<StepPalette onInsert={onInsert} workflowClass="background" />)
+
+    // An approval parks on a person's decision; running a tool does not park,
+    // so it stays offered.
+    expect(screen.getByRole('button', { name: /Ask for approval/ })).toBeDisabled()
+    const run = screen.getByRole('button', { name: /Run an action/ })
+    expect(run).not.toBeDisabled()
+    fireEvent.click(run)
+    expect(onInsert).toHaveBeenLastCalledWith('call_tool')
+  })
+
   it('disables Let Quinn answer in a background workflow with the wait reason', () => {
     const onInsert = vi.fn()
     render(<StepPalette onInsert={onInsert} workflowClass="background" />)

@@ -210,6 +210,8 @@ function shortStepLabel(step: TreeStep): string {
     case 'let_assistant_answer':
     case 'reply_buttons':
     case 'request_csat':
+    case 'call_tool':
+    case 'approval':
       return BLOCK_STEP_LABELS[step.kind]
   }
 }

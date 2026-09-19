@@ -19,6 +19,7 @@ import { CsatEditor } from './csat-editor'
 import { LetAssistantAnswerEditor } from './let-assistant-editor'
 import { MessageEditor } from './message-editor'
 import { StepPalette } from './palette'
+import { ProcedureEditor } from './procedure-editor'
 import { ReplyButtonsEditor } from './reply-buttons-editor'
 import { ReplyTimeEditor } from './reply-time-editor'
 import { TriggerEditor } from './trigger-editor'
@@ -26,6 +27,7 @@ import { WaitEditor } from './wait-editor'
 import {
   ACTION_LABELS,
   BLOCK_STEP_LABELS,
+  PROCEDURE_BLOCK_KINDS,
   describeInsertionContext,
   findStepById,
   type ActionType,
@@ -171,7 +173,9 @@ export function InspectorPanel({
         icon={BLOCK_ICONS[step.kind]}
         tint="bg-pink-500/10 text-pink-700 dark:text-pink-300"
         title={BLOCK_STEP_LABELS[step.kind]}
-        subtitle="Message"
+        // A procedure step posts nothing into the thread, so calling it a
+        // message would describe the wrong half of the builder.
+        subtitle={PROCEDURE_BLOCK_KINDS.includes(step.kind) ? 'Step' : 'Message'}
       />
     )
     const body = (
@@ -208,6 +212,9 @@ export function InspectorPanel({
         )}
         {step.kind === 'request_csat' && (
           <CsatEditor step={step} onChange={(next) => onUpdateStep(() => next)} />
+        )}
+        {(step.kind === 'call_tool' || step.kind === 'approval') && (
+          <ProcedureEditor step={step} onChange={(next) => onUpdateStep(() => next)} />
         )}
       </div>
     )

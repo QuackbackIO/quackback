@@ -1,7 +1,7 @@
 /**
  * The step palette: shown in the inspector when a "+" connector is active.
- * Search filters by label. Groups are Send, Collect, Logic, and Actions;
- * each icon uses the same tone as that step's card.
+ * Search filters by label. Groups are Send, Collect, Procedure, Logic, and
+ * Actions; each icon uses the same tone as that step's card.
  */
 import { useState, type ComponentType } from 'react'
 import { ClockIcon, FunnelIcon, MagnifyingGlassIcon, ShareIcon } from '@heroicons/react/24/outline'
@@ -14,6 +14,7 @@ import {
   BLOCK_STEP_LABELS,
   COLLECT_BLOCK_KINDS,
   PARKING_BLOCK_KINDS,
+  PROCEDURE_BLOCK_KINDS,
   SEND_BLOCK_KINDS,
   type ActionType,
   type BlockStepKind,
@@ -56,6 +57,7 @@ export function StepPalette({
   }
   const send: PaletteItem[] = SEND_BLOCK_KINDS.map(blockItem)
   const collect: PaletteItem[] = COLLECT_BLOCK_KINDS.map(blockItem)
+  const procedure: PaletteItem[] = PROCEDURE_BLOCK_KINDS.map(blockItem)
   const logic: PaletteItem[] = [
     { label: 'Condition', icon: FunnelIcon, tone: 'violet', onSelect: () => onInsert('condition') },
     {
@@ -78,6 +80,7 @@ export function StepPalette({
   const groups = [
     { label: 'Send', items: send.filter(matches) },
     { label: 'Collect', items: collect.filter(matches) },
+    { label: 'Procedure', items: procedure.filter(matches) },
     { label: 'Logic', items: logic.filter(matches) },
     { label: 'Actions', items: actions.filter(matches) },
   ].filter((g) => g.items.length > 0)

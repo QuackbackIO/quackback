@@ -43,6 +43,13 @@ import {
   toPersonCompanyAttributeFieldDefs,
   LET_ASSISTANT_DEFAULT_KEY,
   LET_ASSISTANT_ESCALATED_KEY,
+  CALL_TOOL_DEFAULT_KEY,
+  CALL_TOOL_FAILED_KEY,
+  APPROVAL_DEFAULT_KEY,
+  APPROVAL_DECLINED_KEY,
+  MAX_TOOL_STEP_ARGS,
+  MAX_TOOL_STEP_ARG_LENGTH,
+  MAX_TOOL_STEP_SUMMARY,
   newTree,
   RATING_LABELS,
   resolveConditionField,
@@ -1635,6 +1642,90 @@ describe('conversational block kinds', () => {
     expect(step.paths.find((p) => p.key === LET_ASSISTANT_ESCALATED_KEY)?.steps).toEqual([])
   })
 
+  it('round-trips call_tool: default edge unlabeled, failed edge labeled', () => {
+    const tree: WorkflowTree = {
+      triggerId: 'trigger',
+      steps: [
+        {
+          id: 'call_tool-1',
+          kind: 'call_tool',
+          tool: 'set_attribute',
+          args: { key: 'plan', value: '{conversation.subject|}' },
+          paths: [
+            {
+              key: CALL_TOOL_DEFAULT_KEY,
+              label: 'Done',
+              steps: [{ id: 'a1', kind: 'action', action: { type: 'close' } }],
+            },
+            {
+              key: CALL_TOOL_FAILED_KEY,
+              label: 'Failed',
+              steps: [{ id: 'a2', kind: 'action', action: { type: 'assign_team', teamId: 't_1' } }],
+            },
+          ],
+        },
+      ],
+    }
+    const graph = treeToGraph(tree)
+    expect(workflowGraphSchema.safeParse(graph).success).toBe(true)
+    expect(graph.edges).toContainEqual({ from: 'call_tool-1', to: 'a1' })
+    expect(graph.edges).toContainEqual({ from: 'call_tool-1', to: 'a2', branch: 'failed' })
+    expect(graphToTree(graph)).toEqual({ ok: true, value: tree })
+  })
+
+  it('round-trips approval: default edge unlabeled, declined edge labeled', () => {
+    const tree: WorkflowTree = {
+      triggerId: 'trigger',
+      steps: [
+        {
+          id: 'approval-1',
+          kind: 'approval',
+          tool: 'end_conversation',
+          args: { reason: 'Resolved by the journey' },
+          summary: 'Close this conversation',
+          paths: [
+            {
+              key: APPROVAL_DEFAULT_KEY,
+              label: 'Approved',
+              steps: [{ id: 'a1', kind: 'action', action: { type: 'close' } }],
+            },
+            {
+              key: APPROVAL_DECLINED_KEY,
+              label: 'Declined',
+              steps: [{ id: 'a2', kind: 'action', action: { type: 'reopen' } }],
+            },
+          ],
+        },
+      ],
+    }
+    const graph = treeToGraph(tree)
+    expect(workflowGraphSchema.safeParse(graph).success).toBe(true)
+    expect(graph.edges).toContainEqual({ from: 'approval-1', to: 'a1' })
+    expect(graph.edges).toContainEqual({ from: 'approval-1', to: 'a2', branch: 'declined' })
+    expect(graphToTree(graph)).toEqual({ ok: true, value: tree })
+  })
+
+  it('a procedure step with no labeled edge still round-trips (server-authored graphs are optional there)', () => {
+    const graph: WorkflowGraphJson = {
+      nodes: [
+        { id: 'trigger', type: 'trigger' },
+        { id: 'call_tool-1', type: 'call_tool', tool: 'share_post', args: { postId: 'post_1' } },
+        { id: 'a1', type: 'action', action: { type: 'close' } },
+      ],
+      edges: [
+        { from: 'trigger', to: 'call_tool-1' },
+        { from: 'call_tool-1', to: 'a1' },
+      ],
+    }
+    const tree = graphToTree(graph)
+    expect(tree.ok).toBe(true)
+    if (!tree.ok) return
+    const step = tree.value.steps[0]
+    if (step?.kind !== 'call_tool') throw new Error('expected call_tool')
+    expect(step.paths.find((p) => p.key === CALL_TOOL_FAILED_KEY)?.steps).toEqual([])
+    expect(step.paths.find((p) => p.key === CALL_TOOL_DEFAULT_KEY)?.steps).toHaveLength(1)
+  })
+
   it('createStep produces a tree-representable step for every new kind, flagged by collectStepIssues where setup is still needed', () => {
     const tree = newTree()
     // Defaults that ship with a real value need no setup (show_reply_time,
@@ -1650,6 +1741,10 @@ describe('conversational block kinds', () => {
       'collect_reply',
       'reply_buttons',
       'request_csat',
+      // Both procedure kinds start with no tool chosen, and an approval also
+      // starts with no summary for the reviewer to read.
+      'call_tool',
+      'approval',
     ]
     for (const kind of [
       'message',
@@ -1660,6 +1755,8 @@ describe('conversational block kinds', () => {
       'let_assistant_answer',
       'reply_buttons',
       'request_csat',
+      'call_tool',
+      'approval',
     ] as const) {
       const step = createStep(tree, kind)
       const oneStepTree: WorkflowTree = { triggerId: 'trigger', steps: [step] }
@@ -1744,6 +1841,84 @@ describe('conversational block kinds', () => {
       const result = validateGraph(graph)
       expect(result.ok).toBe(false)
       if (!result.ok) expect(result.error).toMatch(/undeclared path "b"/)
+    })
+
+    const procedureNode = (over: Record<string, unknown>) => ({
+      id: 'x',
+      type: 'call_tool',
+      tool: 'set_attribute',
+      args: {},
+      ...over,
+    })
+    const expectRejected = (node: unknown, pattern: RegExp) => {
+      const graph = { nodes: [trigger, node], edges: [{ from: 'trigger', to: 'x' }] }
+      expect(workflowGraphSchema.safeParse(graph).success).toBe(false)
+      const result = validateGraph(graph)
+      expect(result.ok).toBe(false)
+      if (!result.ok) expect(result.error).toMatch(pattern)
+    }
+
+    it('rejects a procedure step with no tool chosen', () => {
+      expectRejected(procedureNode({ tool: '' }), /choose an action/i)
+    })
+
+    it(`rejects more than ${MAX_TOOL_STEP_ARGS} arguments`, () => {
+      const args = Object.fromEntries(
+        Array.from({ length: MAX_TOOL_STEP_ARGS + 1 }, (_, i) => [`k${i}`, 'v'])
+      )
+      // The count cap is a builder rule: the server exports the number but its
+      // record schema has no entry count to check, so only validateGraph says
+      // no here, before the step reaches a form nobody can review.
+      const result = validateGraph({
+        nodes: [trigger, procedureNode({ args })],
+        edges: [{ from: 'trigger', to: 'x' }],
+      })
+      expect(result.ok).toBe(false)
+      if (!result.ok) expect(result.error).toMatch(/at most 20 arguments/i)
+    })
+
+    it('rejects an argument name longer than 64 characters', () => {
+      expectRejected(procedureNode({ args: { ['k'.repeat(65)]: 'v' } }), /64 characters/i)
+    })
+
+    it('rejects an argument value past the length cap', () => {
+      expectRejected(
+        procedureNode({ args: { key: 'v'.repeat(MAX_TOOL_STEP_ARG_LENGTH + 1) } }),
+        /2000 characters/i
+      )
+    })
+
+    it('rejects an approval step with no summary', () => {
+      expectRejected(
+        { id: 'x', type: 'approval', tool: 'end_conversation', args: {}, summary: '' },
+        /what the reviewer/i
+      )
+    })
+
+    it(`rejects an approval summary longer than ${MAX_TOOL_STEP_SUMMARY} characters`, () => {
+      expectRejected(
+        {
+          id: 'x',
+          type: 'approval',
+          tool: 'end_conversation',
+          args: {},
+          summary: 's'.repeat(MAX_TOOL_STEP_SUMMARY + 1),
+        },
+        /200 characters/i
+      )
+    })
+
+    it('rejects an edge off a procedure node for an undeclared path key', () => {
+      const graph = {
+        nodes: [trigger, procedureNode({}), { id: 'y', type: 'action', action: { type: 'close' } }],
+        edges: [
+          { from: 'trigger', to: 'x' },
+          { from: 'x', to: 'y', branch: 'declined' },
+        ],
+      }
+      const result = validateGraph(graph)
+      expect(result.ok).toBe(false)
+      if (!result.ok) expect(result.error).toMatch(/undeclared path "declined"/)
     })
   })
 

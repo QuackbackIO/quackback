@@ -15,6 +15,9 @@ import {
   MAX_FREQUENCY_CAP_DAYS,
   MAX_WAIT_SECONDS,
   MAX_ASSISTANT_STEP_INSTRUCTIONS,
+  MAX_TOOL_STEP_SUMMARY,
+  MAX_TOOL_STEP_ARGS,
+  MAX_TOOL_STEP_ARG_LENGTH,
   MAX_INACTIVITY_MINUTES,
   DEFAULT_INACTIVITY_MINUTES,
   MAX_BREACH_LEAD_MINUTES,
@@ -39,6 +42,9 @@ export {
   MAX_FREQUENCY_CAP_COUNT,
   MAX_FREQUENCY_CAP_DAYS,
   MAX_ASSISTANT_STEP_INSTRUCTIONS,
+  MAX_TOOL_STEP_SUMMARY,
+  MAX_TOOL_STEP_ARGS,
+  MAX_TOOL_STEP_ARG_LENGTH,
   MAX_INACTIVITY_MINUTES,
   DEFAULT_INACTIVITY_MINUTES,
   MAX_BREACH_LEAD_MINUTES,
@@ -63,6 +69,7 @@ import { CSAT_FACES, TICKET_STATUS_CATEGORIES } from '@/lib/shared/db-types'
 import type { TiptapContent, TicketStatusCategory } from '@/lib/shared/db-types'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 import { truncate } from '@/lib/shared/utils/string'
+import { procedureToolLabel } from '@/lib/shared/workflows/procedure-tools'
 
 // ---------------------------------------------------------------------------
 // Graph JSON types (plain-string ids: the exact shape the save mutation takes)
@@ -89,6 +96,8 @@ export type GraphAttributeOption = NonNullable<
   Extract<GraphNode, { type: 'collect_data' }>['options']
 >[number]
 export type CollectFieldType = Extract<GraphNode, { type: 'collect_data' }>['fieldType']
+/** A procedure step's flat named arguments, derived from the server node. */
+export type ToolStepArgs = Extract<GraphNode, { type: 'call_tool' }>['args']
 
 export type BlockStepKind =
   | 'message'
@@ -100,6 +109,8 @@ export type BlockStepKind =
   | 'collect_data'
   | 'collect_reply'
   | 'request_csat'
+  | 'call_tool'
+  | 'approval'
 
 export const BLOCK_STEP_LABELS: Record<BlockStepKind, string> = {
   message: 'Message',
@@ -111,6 +122,8 @@ export const BLOCK_STEP_LABELS: Record<BlockStepKind, string> = {
   collect_data: 'Collect data',
   collect_reply: 'Collect customer reply',
   request_csat: 'Ask for a rating',
+  call_tool: 'Run an action',
+  approval: 'Ask for approval',
 }
 
 /** The palette's SEND group: posts a message (or nothing, for the pure
@@ -130,6 +143,10 @@ export const COLLECT_BLOCK_KINDS: readonly BlockStepKind[] = [
   'collect_reply',
   'request_csat',
 ]
+/** The palette's PROCEDURE group: reaches Quinn's own action machinery rather
+ *  than the conversation, running a built-in write tool now or asking a
+ *  teammate first. */
+export const PROCEDURE_BLOCK_KINDS: readonly BlockStepKind[] = ['call_tool', 'approval']
 
 /** A minimal, schema-valid empty rich-text body — one empty paragraph. */
 export const EMPTY_BLOCK_BODY: BlockBody = { type: 'doc', content: [{ type: 'paragraph' }] }
@@ -231,6 +248,26 @@ export const RATING_LABELS: Record<RatingKey, string> = Object.fromEntries(
  *  still authors it: the edge is schema-valid and forward-compatible today). */
 export const LET_ASSISTANT_DEFAULT_KEY = 'continue'
 export const LET_ASSISTANT_ESCALATED_KEY = 'escalated'
+
+/** Fixed path keys for call_tool's two edges: the default (unlabeled) edge is
+ *  the tool having done what it said, and the labeled 'failed' edge is every
+ *  other reading, an unconfirmed effect included (graph.ts's
+ *  TOOL_STEP_FAILED_BRANCH). Only the labeled key reaches the graph; the
+ *  default key names the tree path whose edge carries no branch at all. */
+export const CALL_TOOL_DEFAULT_KEY = 'done'
+export const CALL_TOOL_FAILED_KEY = 'failed'
+
+/** Fixed path keys for approval's two edges, same shape as call_tool above:
+ *  the default (unlabeled) edge is approved and executed, and the labeled
+ *  'declined' edge covers rejected, expired, refused, failed and unconfirmed
+ *  alike (graph.ts's APPROVAL_DECLINED_BRANCH). */
+export const APPROVAL_DEFAULT_KEY = 'approved'
+export const APPROVAL_DECLINED_KEY = 'declined'
+
+/** Path labels for the two procedure kinds, shared by createStep, graphToTree
+ *  and the step cards so one path reads the same wherever it is drawn. */
+export const CALL_TOOL_PATH_LABELS = { done: 'Done', failed: 'Failed' } as const
+export const APPROVAL_PATH_LABELS = { approved: 'Approved', declined: 'Declined' } as const
 
 /** Attribute field types collect_data supports (a subset of the full
  *  registry — mirrors workflow.schemas.ts's collect_data.fieldType enum;
@@ -1139,6 +1176,18 @@ export type TreeStep =
        *  resume case — no matching branch edge is a valid, terminal outcome). */
       paths: KeyedPath[]
     }
+  // ── Procedure steps: both fork into the same fixed default/labeled pair
+  // let_assistant_answer uses, so every fan-out helper handles them the same.
+  | { id: string; kind: 'call_tool'; tool: string; args: ToolStepArgs; paths: KeyedPath[] }
+  | {
+      id: string
+      kind: 'approval'
+      tool: string
+      args: ToolStepArgs
+      /** What the reviewer reads on the approval card. */
+      summary: string
+      paths: KeyedPath[]
+    }
 
 export interface WorkflowTree {
   triggerId: string
@@ -1162,6 +1211,8 @@ export function stepPaths(step: TreeStep): KeyedPath[] | null {
     case 'reply_buttons':
     case 'request_csat':
     case 'let_assistant_answer':
+    case 'call_tool':
+    case 'approval':
       return step.paths.length > 0 ? step.paths : null
     default:
       return null
@@ -1178,6 +1229,8 @@ function withPathSteps(step: TreeStep, key: string, steps: TreeStep[]): TreeStep
     case 'reply_buttons':
     case 'request_csat':
     case 'let_assistant_answer':
+    case 'call_tool':
+    case 'approval':
       return { ...step, paths: step.paths.map((p) => (p.key === key ? { ...p, steps } : p)) }
     default:
       return step
@@ -1286,6 +1339,29 @@ export function createStep(
         body: EMPTY_BLOCK_BODY,
         allowTypingInterrupt: true,
         paths: [],
+      }
+    case 'call_tool':
+      return {
+        id,
+        kind,
+        tool: '',
+        args: {},
+        paths: [
+          { key: CALL_TOOL_DEFAULT_KEY, label: CALL_TOOL_PATH_LABELS.done, steps: [] },
+          { key: CALL_TOOL_FAILED_KEY, label: CALL_TOOL_PATH_LABELS.failed, steps: [] },
+        ],
+      }
+    case 'approval':
+      return {
+        id,
+        kind,
+        tool: '',
+        args: {},
+        summary: '',
+        paths: [
+          { key: APPROVAL_DEFAULT_KEY, label: APPROVAL_PATH_LABELS.approved, steps: [] },
+          { key: APPROVAL_DECLINED_KEY, label: APPROVAL_PATH_LABELS.declined, steps: [] },
+        ],
       }
   }
 }
@@ -1430,6 +1506,45 @@ function validateAction(v: unknown, where: string): string | null {
   }
 }
 
+/** The longest an argument NAME may be (workflow.schemas.ts's toolArgsSchema
+ *  record key). A name that long is a paste, not a field the tool declares. */
+const MAX_TOOL_STEP_ARG_KEY_LENGTH = 64
+
+/** A procedure step's tool, arguments and (for an approval) reviewer summary.
+ *  Mirrors workflow.schemas.ts's call_tool/approval variants, plus the
+ *  argument COUNT cap the server exports but its record schema has no entry
+ *  count to enforce: a step with dozens of arguments is past the point anyone
+ *  could review it before it runs. */
+function validateToolStep(node: Record<string, unknown>, where: string): string | null {
+  if (!nonEmptyString(node.tool)) return `${where}: choose an action to run`
+  if (!isRecord(node.args)) return `${where}: "args" must be an object of named values`
+  const entries = Object.entries(node.args)
+  if (entries.length > MAX_TOOL_STEP_ARGS) {
+    return `${where}: an action can take at most ${MAX_TOOL_STEP_ARGS} arguments`
+  }
+  for (const [key, value] of entries) {
+    if (key.length === 0) return `${where}: every argument needs a name`
+    if (key.length > MAX_TOOL_STEP_ARG_KEY_LENGTH) {
+      return `${where}: argument names must be at most ${MAX_TOOL_STEP_ARG_KEY_LENGTH} characters`
+    }
+    if (typeof value === 'string') {
+      if (value.length > MAX_TOOL_STEP_ARG_LENGTH) {
+        return `${where}: "${key}" must be at most ${MAX_TOOL_STEP_ARG_LENGTH} characters`
+      }
+      continue
+    }
+    if (typeof value !== 'number' && typeof value !== 'boolean') {
+      return `${where}: "${key}" must be text, a number, or true/false`
+    }
+  }
+  if (node.type !== 'approval') return null
+  if (!nonEmptyString(node.summary)) return `${where}: write what the reviewer will approve`
+  if (node.summary.length > MAX_TOOL_STEP_SUMMARY) {
+    return `${where}: the approval summary must be at most ${MAX_TOOL_STEP_SUMMARY} characters`
+  }
+  return null
+}
+
 /** Structural validation of an unknown value as a workflow graph. Mirrors
  *  workflowGraphSchema's superRefine cross-node checks too (duplicate node
  *  ids, an edge referencing a missing node, an edge's branch key the node
@@ -1571,6 +1686,20 @@ export function validateGraph(input: unknown): Result<WorkflowGraphJson> {
         if (typeof node.allowTypingInterrupt !== 'boolean') {
           return fail(`${where}: "allowTypingInterrupt" must be true or false`)
         }
+        break
+      }
+      // ── Procedure steps ──────────────────────────────────────────────────
+      case 'call_tool':
+      case 'approval': {
+        const err = validateToolStep(node, where)
+        if (err) return fail(err)
+        // Only the failure edge is a declared path off these nodes; the
+        // success edge carries no branch key at all, same as
+        // let_assistant_answer above.
+        branchKeysByNodeId.set(
+          node.id,
+          new Set([node.type === 'approval' ? APPROVAL_DECLINED_KEY : CALL_TOOL_FAILED_KEY])
+        )
         break
       }
       default:
@@ -1877,6 +2006,46 @@ export function graphToTree(graph: WorkflowGraphJson): Result<WorkflowTree> {
         return { ok: true, value: steps }
       }
 
+      // ── call_tool / approval: default (unlabeled) + optional failure edge ─
+      if (node.type === 'call_tool' || node.type === 'approval') {
+        const approval = node.type === 'approval'
+        const labeledKey = approval ? APPROVAL_DECLINED_KEY : CALL_TOOL_FAILED_KEY
+        const resolved = resolveFixedTwoPathEdges(
+          node,
+          outgoing.get(node.id) ?? [],
+          labeledKey,
+          labeledKey,
+          BLOCK_STEP_LABELS[node.type],
+          walkFrom
+        )
+        if (!resolved.ok) return resolved
+        const paths: KeyedPath[] = [
+          {
+            key: approval ? APPROVAL_DEFAULT_KEY : CALL_TOOL_DEFAULT_KEY,
+            label: approval ? APPROVAL_PATH_LABELS.approved : CALL_TOOL_PATH_LABELS.done,
+            steps: resolved.value.defaultSteps,
+          },
+          {
+            key: labeledKey,
+            label: approval ? APPROVAL_PATH_LABELS.declined : CALL_TOOL_PATH_LABELS.failed,
+            steps: resolved.value.labeledSteps,
+          },
+        ]
+        steps.push(
+          node.type === 'approval'
+            ? {
+                id: node.id,
+                kind: 'approval',
+                tool: node.tool,
+                args: node.args,
+                summary: node.summary,
+                paths,
+              }
+            : { id: node.id, kind: 'call_tool', tool: node.tool, args: node.args, paths }
+        )
+        return { ok: true, value: steps }
+      }
+
       const next = singleSuccessor(node)
       if (!next.ok) return next
       switch (node.type) {
@@ -2031,6 +2200,21 @@ export function treeToGraph(tree: WorkflowTree): WorkflowGraphJson {
           emitFixedTwoPathEdges(step, LET_ASSISTANT_DEFAULT_KEY, LET_ASSISTANT_ESCALATED_KEY, emit)
           break
         }
+        // ── Procedure steps ───────────────────────────────────────────────
+        case 'call_tool':
+          nodes.push({ id: step.id, type: 'call_tool', tool: step.tool, args: step.args })
+          emitFixedTwoPathEdges(step, CALL_TOOL_DEFAULT_KEY, CALL_TOOL_FAILED_KEY, emit)
+          break
+        case 'approval':
+          nodes.push({
+            id: step.id,
+            type: 'approval',
+            tool: step.tool,
+            args: step.args,
+            summary: step.summary,
+          })
+          emitFixedTwoPathEdges(step, APPROVAL_DEFAULT_KEY, APPROVAL_DECLINED_KEY, emit)
+          break
       }
       prev = step.id
     }
@@ -2825,6 +3009,14 @@ export function csatSummary(step: Extract<TreeStep, { kind: 'request_csat' }>): 
     : `Ask for a rating · branches on ${n} rating${n === 1 ? '' : 's'}`
 }
 
+/** One-line summary of a procedure step for cards and outline rows: the
+ *  action it runs, or, until one is chosen, the kind's own name. */
+export function toolStepSummary(step: Extract<TreeStep, { kind: 'call_tool' | 'approval' }>) {
+  if (!step.tool) return BLOCK_STEP_LABELS[step.kind]
+  const tool = procedureToolLabel(step.tool)
+  return step.kind === 'approval' ? `Approve: ${tool}` : tool
+}
+
 /** Kinds SEND_BLOCK_KINDS/COLLECT_BLOCK_KINDS both cover — every
  *  conversational block, for the standalone-disable_composer adjacency
  *  check below (only the two interactive/interrupt-relevant kinds count as
@@ -2856,6 +3048,11 @@ function blockStepIssue(step: TreeStep): string | null {
       return isBlockBodyEmpty(step.body) ? 'Write the prompt' : null
     case 'request_csat':
       return isBlockBodyEmpty(step.body) ? 'Write the prompt' : null
+    case 'call_tool':
+      return step.tool ? null : 'Choose an action to run'
+    case 'approval':
+      if (!step.tool) return 'Choose an action to run'
+      return step.summary.trim() ? null : 'Write what the reviewer will approve'
     default:
       return null
   }
@@ -3097,6 +3294,9 @@ function stepLabel(step: TreeStep, labels: EntityLabels): string {
       return collectReplySummary(step, labels.attributes)
     case 'request_csat':
       return csatSummary(step)
+    case 'call_tool':
+    case 'approval':
+      return toolStepSummary(step)
   }
 }
 

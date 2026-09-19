@@ -9,6 +9,7 @@ import {
   AdjustmentsHorizontalIcon,
   ArrowUturnLeftIcon,
   BoltIcon,
+  CheckBadgeIcon,
   ChatBubbleLeftEllipsisIcon,
   ChatBubbleLeftRightIcon,
   CheckCircleIcon,
@@ -27,6 +28,7 @@ import {
   TicketIcon,
   UserGroupIcon,
   UserPlusIcon,
+  WrenchScrewdriverIcon,
 } from '@heroicons/react/24/outline'
 import {
   AlertDialog,
@@ -58,10 +60,11 @@ export const ACTION_ICONS: Record<ActionType, typeof BoltIcon> = {
   send_webhook: PaperAirplaneIcon,
 }
 
-/** Icons for the 8 conversational block kinds (Phase C, slice C-5) — every
- *  one of them is customer-facing (or, for disable_composer, a direct effect
- *  on the customer's composer), so they share a family look distinct from
- *  the internal action/condition/wait/branch steps (see TONE_TILE's 'pink'). */
+/** Icons for the block kinds (Phase C, slice C-5). The conversational ones
+ *  are customer-facing (or, for disable_composer, a direct effect on the
+ *  customer's composer) and the two procedure kinds act on the customer's
+ *  behalf, so they share a family look distinct from the internal
+ *  action/condition/wait/branch steps (see TONE_TILE's 'pink'). */
 export const BLOCK_ICONS: Record<BlockStepKind, typeof BoltIcon> = {
   message: ChatBubbleLeftRightIcon,
   send_ticket_form: TicketIcon,
@@ -72,6 +75,8 @@ export const BLOCK_ICONS: Record<BlockStepKind, typeof BoltIcon> = {
   collect_data: ClipboardDocumentListIcon,
   collect_reply: ChatBubbleLeftEllipsisIcon,
   request_csat: FaceSmileIcon,
+  call_tool: WrenchScrewdriverIcon,
+  approval: CheckBadgeIcon,
 }
 
 export const GATE_TINT = 'bg-amber-500/10 text-amber-600 dark:text-amber-500'

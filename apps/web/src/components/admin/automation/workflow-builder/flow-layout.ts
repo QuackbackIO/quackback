@@ -33,6 +33,7 @@ import {
   countSteps,
   isBlockBodyEmpty,
   sendWindowSummary,
+  toolStepSummary,
   stepPaths,
   waitSummary,
   type AttributeFieldDef,
@@ -439,6 +440,17 @@ function buildStepNodeData(
         icon: 'request_csat',
         tone: 'pink',
         meta: RATING_KEYS.map((k) => RATING_EMOJI[k]).join(' '),
+        nestedCount: step.paths.reduce((sum, p) => sum + countSteps(p.steps), 0),
+      }
+    case 'call_tool':
+    case 'approval':
+      return {
+        ...base,
+        eyebrow: 'Step',
+        title: BLOCK_STEP_LABELS[step.kind],
+        icon: step.kind,
+        tone: 'pink',
+        meta: toolStepSummary(step),
         nestedCount: step.paths.reduce((sum, p) => sum + countSteps(p.steps), 0),
       }
   }

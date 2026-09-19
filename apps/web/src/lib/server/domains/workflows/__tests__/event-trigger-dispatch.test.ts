@@ -83,10 +83,11 @@ describe('dispatchWorkflowsForEvent', () => {
       type: 'message.created',
       data: { message: { conversationId: 'conversation_1', senderType: 'visitor', content: 'hi' } },
     } as unknown as EventData)
-    // A visitor message never interrupts a parked assistant-wait (Phase C,
-    // slice C-6) — see the dedicated describe block below.
+    // A visitor message never interrupts a parked assistant wait (Phase C,
+    // slice C-6) or a parked approval wait (QUINN-PRODUCT P9): neither is the
+    // customer's to end. See the dedicated describe block below.
     expect(interruptWaitingRuns).toHaveBeenCalledWith('conversation_1', {
-      excludeWaitKind: 'assistant',
+      excludeWaitKind: ['assistant', 'approval'],
     })
     expect(order).toEqual(['interrupt', 'dispatch']) // interrupt strictly first
   })
@@ -404,7 +405,7 @@ describe('dispatchWorkflowsForEvent', () => {
       expect(readMessageBlockReply).not.toHaveBeenCalled() // narrow PK read never reached
       expect(resumeWorkflowRun).not.toHaveBeenCalled()
       expect(interruptWaitingRuns).toHaveBeenCalledWith('conversation_1', {
-        excludeWaitKind: 'assistant',
+        excludeWaitKind: ['assistant', 'approval'],
       })
     })
 
@@ -428,7 +429,7 @@ describe('dispatchWorkflowsForEvent', () => {
       expect(readMessageBlockReply).not.toHaveBeenCalled()
       expect(resumeWorkflowRun).not.toHaveBeenCalled()
       expect(interruptWaitingRuns).toHaveBeenCalledWith('conversation_1', {
-        excludeWaitKind: 'assistant',
+        excludeWaitKind: ['assistant', 'approval'],
       })
     })
 
@@ -449,7 +450,7 @@ describe('dispatchWorkflowsForEvent', () => {
       } as unknown as EventData)
       expect(resumeWorkflowRun).not.toHaveBeenCalled()
       expect(interruptWaitingRuns).toHaveBeenCalledWith('conversation_1', {
-        excludeWaitKind: 'assistant',
+        excludeWaitKind: ['assistant', 'approval'],
       })
     })
 
@@ -474,7 +475,7 @@ describe('dispatchWorkflowsForEvent', () => {
       } as unknown as EventData)
       expect(resumeWorkflowRun).not.toHaveBeenCalled()
       expect(interruptWaitingRuns).toHaveBeenCalledWith('conversation_1', {
-        excludeWaitKind: 'assistant',
+        excludeWaitKind: ['assistant', 'approval'],
       })
     })
 
@@ -663,7 +664,7 @@ describe('dispatchWorkflowsForEvent', () => {
       } as unknown as EventData)
       expect(resumeWorkflowRun).not.toHaveBeenCalled()
       expect(interruptWaitingRuns).toHaveBeenCalledWith('conversation_1', {
-        excludeWaitKind: 'assistant',
+        excludeWaitKind: ['assistant', 'approval'],
       })
     })
 

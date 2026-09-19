@@ -223,10 +223,16 @@ export const MAX_TOOL_STEP_ARG_LENGTH = 2000
  * field per argument, and a shape the editor cannot render is a shape nobody
  * can review before it runs.
  */
-const toolArgsSchema = z.record(
-  z.string().min(1).max(64),
-  z.union([z.string().max(MAX_TOOL_STEP_ARG_LENGTH), z.number(), z.boolean()])
-)
+const toolArgsSchema = z
+  .record(
+    z.string().min(1).max(64),
+    z.union([z.string().max(MAX_TOOL_STEP_ARG_LENGTH), z.number(), z.boolean()])
+  )
+  // The count is bounded at the save boundary as well as in the builder: a
+  // graph posted by anything other than the editor must obey the same ceiling.
+  .refine((args) => Object.keys(args).length <= MAX_TOOL_STEP_ARGS, {
+    message: `A step carries at most ${MAX_TOOL_STEP_ARGS} arguments`,
+  })
 
 const buttonOptionSchema = z.object({ key: z.string().min(1), label: z.string().min(1).max(80) })
 const attributeOptionSchema = z.object({ id: z.string().min(1), label: z.string().min(1) })
