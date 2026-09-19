@@ -311,6 +311,12 @@ export async function generateAssistantCandidate(
     requestedByPrincipalId?: import('@quackback/ids').PrincipalId | null
     /** P6's constrained repair: assemble no write tool, so it cannot repeat one. */
     readOnlyTools?: boolean
+    /**
+     * P7: the exact configuration this run selected at its start. Passed rather
+     * than re-read so a publication landing mid-generation cannot change what
+     * an in-flight run is executing.
+     */
+    runtimeConfig?: import('./assistant.runtime').AssistantRuntimeConfig
   }
 ): Promise<Awaited<ReturnType<typeof runAssistantTurn>>> {
   return runAssistantTurn({
@@ -325,6 +331,7 @@ export async function generateAssistantCandidate(
     runId: opts?.runId ?? null,
     requestedByPrincipalId: opts?.requestedByPrincipalId ?? null,
     readOnlyTools: opts?.readOnlyTools === true,
+    runtimeConfigOverride: opts?.runtimeConfig,
     signal: opts?.signal,
     onActivity: (activity) => publishAssistantActivity(conversationId, activityToStatus(activity)),
   })

@@ -10,13 +10,7 @@
  * gets; every fenced outcome is therefore reported as a disposition string and
  * recorded on the run.
  */
-import {
-  db,
-  and,
-  eq,
-  assistantPendingActions,
-  type AssistantRunDelegation,
-} from '@/lib/server/db'
+import { db, and, eq, assistantPendingActions, type AssistantRunDelegation } from '@/lib/server/db'
 import type { AssistantRunId, ConversationId } from '@quackback/ids'
 import type { ConversationAuthorInput } from '@/lib/server/domains/conversation/conversation.types'
 import type { ClaimedJob } from '@/lib/server/jobs/job-queue'
@@ -27,7 +21,7 @@ import {
   recordRunStep,
   claimRunForExecution,
 } from './assistant-run.repository'
-import { buildEffectiveSnapshot, persistEffectiveSnapshot } from './assistant-snapshot'
+import { selectRunBehaviour } from './assistant-release.service'
 import { verifyAndMaybeRepair } from './assistant-run.validation'
 import { commitAssistantOutcome, parkRunForAction } from './assistant-run.service'
 
@@ -148,10 +142,23 @@ export async function advanceAssistantRun(job: ClaimedJob): Promise<string> {
 
   try {
     // Freeze the behaviour BEFORE any generation, so the record of what the run
-    // did is written even if the generation then fails.
+    // did is written even if the generation then fails. With release management
+    // on this SELECTS the published release's snapshot instead of building a
+    // new one, and the configuration frozen in it is carried through the rest
+    // of the turn, so a publication landing mid-generation changes what the
+    // NEXT run selects and nothing about this one.
+    let runtimeConfig: import('./assistant.runtime').AssistantRuntimeConfig | undefined
     try {
-      const snapshotId = await persistEffectiveSnapshot(await buildEffectiveSnapshot())
-      await attachSnapshot(db, run.id, snapshotId)
+      const behaviour = await selectRunBehaviour()
+      await attachSnapshot(db, run.id, behaviour.snapshotId)
+      if (behaviour.config) {
+        const { getWorkspaceName } = await import('./assistant-release.service')
+        runtimeConfig = {
+          config: behaviour.config,
+          revision: behaviour.configRevision,
+          workspaceName: await getWorkspaceName(),
+        }
+      }
     } catch (err) {
       runLog.warn({ err }, 'effective snapshot could not be persisted')
     }
@@ -190,6 +197,7 @@ export async function advanceAssistantRun(job: ClaimedJob): Promise<string> {
         stepInstructions,
         runId: run.id,
         requestedByPrincipalId: run.requestedByPrincipalId,
+        runtimeConfig,
       })
     } catch (err) {
       await recordRunStep(db, {
@@ -242,6 +250,7 @@ export async function advanceAssistantRun(job: ClaimedJob): Promise<string> {
       prepared,
       stepInstructions,
       result,
+      runtimeConfig,
     })
     if (verified.kind === 'blocked') {
       await settleRun(db, {

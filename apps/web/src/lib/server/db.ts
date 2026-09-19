@@ -458,6 +458,13 @@ export {
   ASSISTANT_RUN_TRIGGER_KINDS,
   ASSISTANT_RUN_SURFACES,
   ASSISTANT_RUN_STEP_STATUSES,
+  // Schema tables - Quinn releases (QUINN-PRODUCT P7)
+  assistantReleases,
+  assistantReleasesRelations,
+  assistantReleaseChecks,
+  ASSISTANT_RELEASE_STATUSES,
+  ASSISTANT_RELEASE_ORIGINS,
+  ASSISTANT_RELEASE_CHECK_STATUSES,
   // Schema tables - derived passage index (QUINN-PRODUCT P5)
   assistantKnowledgeSources,
   assistantSourceVersions,

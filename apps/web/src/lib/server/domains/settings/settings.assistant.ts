@@ -71,6 +71,12 @@ export type AssistantConfigFallbackReason = 'invalid_assistant_config'
 export interface AssistantRuntimeConfigState extends AssistantConfigState {
   workspaceName: string
   configFallbackReason?: AssistantConfigFallbackReason
+  /**
+   * The release this configuration came from, when release management is on.
+   * Absent means the settings row answered, which is every install that has
+   * not opted in and the documented fallback when a release cannot be read.
+   */
+  releaseId?: string
 }
 
 export interface AssistantSettingsState extends AssistantConfigState {
@@ -104,9 +110,29 @@ export async function getAssistantSettings(): Promise<AssistantSettingsState> {
   }
 }
 
-/** Runtime read posture: invalid behavior JSON falls back without reintroducing a V1 reader. */
+/**
+ * Runtime read posture: invalid behavior JSON falls back without reintroducing a V1 reader.
+ *
+ * With release management on (QUINN-PRODUCT P7), the published release answers
+ * this read and the settings row below is the draft. A release that cannot be
+ * read falls through to the row with a warning rather than stopping Quinn,
+ * which is the same direction every other read in this function fails.
+ */
 export async function getAssistantRuntimeConfig(): Promise<AssistantRuntimeConfigState> {
   const row = await requireSettings()
+  if (row.assistantReleaseManagement && row.assistantPublishedReleaseId) {
+    const { publishedRuntimeConfig } =
+      await import('@/lib/server/domains/assistant/assistant-release.service')
+    const released = await publishedRuntimeConfig(row)
+    if (released) {
+      return {
+        config: applyInternalWorkspaceAssistantDefaults(released.config),
+        revision: released.configRevision,
+        workspaceName: row.name,
+        releaseId: released.releaseId,
+      }
+    }
+  }
   const parsed = assistantConfigSchema.safeParse(migrateAssistantConfig(row.assistantConfig))
   const runtimeFields = {
     revision: row.assistantConfigRevision,

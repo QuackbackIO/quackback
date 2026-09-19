@@ -30,15 +30,20 @@
 
 CREATE TABLE IF NOT EXISTS "assistant_releases" (
   "id" uuid PRIMARY KEY NOT NULL,
-  -- Monotonic. A rollback takes the next number rather than reviving an old
-  -- one, so the sequence reads forwards and nothing renumbers.
-  "release_number" integer NOT NULL,
+  -- Allocated at publication, not at draft creation, so a rollback published
+  -- while a draft is open cannot end up numbered below it. NULL is "not
+  -- published yet"; a btree unique index does not collide on NULLs.
+  "release_number" integer,
   "status" text DEFAULT 'draft' NOT NULL,
   "origin" text DEFAULT 'save' NOT NULL,
   "snapshot_id" uuid NOT NULL,
   -- The snapshot's content hash, copied here so a check result binds to the
   -- exact candidate without a join.
   "candidate_hash" text NOT NULL,
+  -- settings.assistant_config_revision the candidate was derived from. The
+  -- publication path compares it under the settings row lock, so a save that
+  -- lands between the review and the write cannot be published unreviewed.
+  "config_revision" integer DEFAULT 0 NOT NULL,
   "note" text,
   -- Affected-use summary of the diff against the release this one replaces.
   "scope" jsonb,

@@ -151,6 +151,8 @@ export type {
   AssistantChunkId,
   AssistantSnapshotId,
   AssistantRequestReceiptId,
+  AssistantReleaseId,
+  AssistantReleaseCheckId,
   TicketId,
   TicketStatusId,
   TicketTypeId,

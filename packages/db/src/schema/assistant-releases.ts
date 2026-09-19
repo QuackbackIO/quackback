@@ -62,8 +62,12 @@ export const assistantReleases = pgTable(
   'assistant_releases',
   {
     id: typeIdWithDefault('assistant_release')('id').primaryKey(),
-    /** Monotonic and stable. A rollback takes the next number rather than reviving an old one. */
-    releaseNumber: integer('release_number').notNull(),
+    /**
+     * Allocated at publication, not at draft creation, so a rollback published
+     * while a draft is open cannot end up numbered below it. Null is "not
+     * published yet".
+     */
+    releaseNumber: integer('release_number'),
     status: text('status', { enum: ASSISTANT_RELEASE_STATUSES }).notNull().default('draft'),
     origin: text('origin', { enum: ASSISTANT_RELEASE_ORIGINS }).notNull().default('save'),
     snapshotId: typeIdColumn('assistant_snapshot')('snapshot_id').notNull(),
@@ -72,6 +76,12 @@ export const assistantReleases = pgTable(
      * to the exact candidate it was run against without a join.
      */
     candidateHash: text('candidate_hash').notNull(),
+    /**
+     * The `settings.assistant_config_revision` the candidate was derived from.
+     * Compared under the settings row lock at publication, so a save landing
+     * between the review and the write cannot be published unreviewed.
+     */
+    configRevision: integer('config_revision').notNull().default(0),
     /** The reviewer's release note. Bounded by the caller. */
     note: text('note'),
     /** Affected-use summary of the diff against the release this one replaces. */

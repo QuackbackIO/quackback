@@ -123,17 +123,32 @@ function shortHash(value: string): string {
  * a source that cannot be read contributes nothing rather than failing the
  * turn, and the omission is visible in the snapshot as an absent section.
  */
-export async function buildEffectiveSnapshot(): Promise<EffectiveSnapshotPayload> {
+export async function buildEffectiveSnapshot(options?: {
+  /**
+   * Resolve the snapshot around THIS configuration instead of the live one.
+   *
+   * The release candidate is the settings row's configuration, which under
+   * release management is exactly the one the live read no longer returns, so
+   * the candidate builder has to say which it means. Every other section
+   * (guidance, connectors, retrieval, validators) still resolves live, because
+   * those subsystems carry their own versions and a candidate is identified by
+   * the versions it was reviewed against.
+   */
+  config: unknown
+  configRevision: number
+}): Promise<EffectiveSnapshotPayload> {
   const { getAssistantRuntimeConfig } =
     await import('@/lib/server/domains/settings/settings.assistant')
-  let config: unknown = null
-  let configRevision = 0
-  try {
-    const runtime = await getAssistantRuntimeConfig()
-    config = runtime.config
-    configRevision = runtime.revision
-  } catch (err) {
-    log.warn({ err }, 'snapshot could not read the assistant config')
+  let config: unknown = options?.config ?? null
+  let configRevision = options?.configRevision ?? 0
+  if (!options) {
+    try {
+      const runtime = await getAssistantRuntimeConfig()
+      config = runtime.config
+      configRevision = runtime.revision
+    } catch (err) {
+      log.warn({ err }, 'snapshot could not read the assistant config')
+    }
   }
 
   const guidance: EffectiveSnapshotPayload['guidance'] = []

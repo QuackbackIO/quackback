@@ -334,6 +334,18 @@ interface AssistantTurnCommonInput {
    * teammate), so the metadata carries no `principalId` key in that case.
    */
   actorPrincipalId?: PrincipalId | null
+  /**
+   * Run this turn under an exact configuration instead of resolving the live
+   * one (QUINN-PRODUCT P7).
+   *
+   * Two callers set it: a durable run, which selects its published release's
+   * snapshot once at the start so a publication landing mid-generation cannot
+   * change what it is executing; and the candidate sandbox, which is the whole
+   * point of testing an exact candidate. It carries configured BEHAVIOUR only.
+   * Permissions, connector policies, per-source switches and every other live
+   * check run at their own boundaries and never read this.
+   */
+  runtimeConfigOverride?: AssistantRuntimeConfig
   /** Workspace db handle for the tools; defaults to the app db. */
   db?: Executor
   /** Aborts the in-flight provider call. */
@@ -945,7 +957,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
   const execDb = input.db ?? db
   let runtimeConfig: AssistantRuntimeConfig
   try {
-    runtimeConfig = await getAssistantRuntimeConfig()
+    runtimeConfig = input.runtimeConfigOverride ?? (await getAssistantRuntimeConfig())
   } catch (error) {
     log.error({ err: error }, 'assistant runtime config read failed; using fail-closed defaults')
     runtimeConfig = {

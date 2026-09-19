@@ -38,6 +38,8 @@ export async function verifyAndMaybeRepair(input: {
   prepared: Awaited<ReturnType<typeof import('./assistant.orchestrator').prepareAssistantTurn>>
   stepInstructions: string | null
   result: AnsweredTurn
+  /** P7: the exact configuration the run selected, so a repair re-answers under it too. */
+  runtimeConfig?: import('./assistant.runtime').AssistantRuntimeConfig
 }): Promise<{ kind: 'ok'; result: AnsweredTurn } | { kind: 'blocked'; verdict: string }> {
   const { verifyAnswerSupport, verificationBlocksPublication } = await import('./answer-validation')
   const receipts = await runReceipts(input.run.id)
@@ -66,6 +68,7 @@ export async function verifyAndMaybeRepair(input: {
       stepInstructions: [input.stepInstructions, REPAIR_INSTRUCTION].filter(Boolean).join('\n\n'),
       runId: input.run.id,
       readOnlyTools: true,
+      runtimeConfig: input.runtimeConfig,
     })
     if (attempt.status === 'suppressed') {
       return { kind: 'blocked', verdict: first.verdict ?? 'validator_error' }
