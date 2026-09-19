@@ -46,7 +46,30 @@ import { typeIdWithDefault, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { conversations } from './conversation'
 import { tickets } from './tickets'
 import { assistantInvolvements } from './assistant'
+import { assistantRuns } from './assistant-runs'
 import { principal } from './auth'
+
+/**
+ * Execution, as its own dimension (QUINN-PRODUCT P3).
+ *
+ * A review decision is not an execution and an execution is not a customer
+ * outcome. `status` above carries the decision; this carries what the durable
+ * executor actually did. NULL means nothing has been dispatched, which is also
+ * what every row that predates this column means.
+ *
+ * `unknown` is dispatched-but-unconfirmed: the effect may have happened, so it
+ * is neither claimed as done nor resent.
+ */
+export const ASSISTANT_PENDING_ACTION_EXECUTION_STATES = [
+  'queued',
+  'running',
+  'succeeded',
+  'failed',
+  'unknown',
+] as const
+
+export type AssistantPendingActionExecutionState =
+  (typeof ASSISTANT_PENDING_ACTION_EXECUTION_STATES)[number]
 
 export const ASSISTANT_PENDING_ACTION_STATUSES = [
   'proposed',
@@ -115,6 +138,44 @@ export const assistantPendingActions = pgTable(
     executedAt: timestamp('executed_at', { withTimezone: true }),
     result: jsonb('result').$type<Record<string, unknown> | null>(),
     idempotencyKey: text('idempotency_key'),
+    /** The durable run that parked on this proposal, and the step it parked at. */
+    runId: typeIdColumnNullable('assistant_run')('run_id').references(() => assistantRuns.id, {
+      onDelete: 'set null',
+    }),
+    runStepKey: text('run_step_key'),
+    /**
+     * Who the action is being taken for: the customer whose request produced
+     * it, or the teammate who asked. Never the approver, who is `decidedById`.
+     */
+    requestedById: typeIdColumnNullable('principal')('requested_by_id').references(
+      () => principal.id,
+      { onDelete: 'set null' }
+    ),
+    /** The same logical action identity the receipt carries. */
+    actionKey: text('action_key'),
+    /**
+     * The exact operation a reviewer is asked to approve. `argsDigest` and
+     * `contractDigest` are taken at proposal time; `approvedArgsDigest` is
+     * taken at the decision. The executor compares all three before it
+     * dispatches, so a changed argument or a changed input contract needs a
+     * fresh decision rather than riding the old one.
+     */
+    argsDigest: text('args_digest'),
+    contractDigest: text('contract_digest'),
+    approvedArgsDigest: text('approved_args_digest'),
+    executionState: text('execution_state', {
+      enum: ASSISTANT_PENDING_ACTION_EXECUTION_STATES,
+    }),
+    executionJobId: text('execution_job_id'),
+    /** Why the pre-dispatch recheck refused, in the reviewer's words. */
+    executionError: text('execution_error'),
+    /**
+     * Why a proposal stopped being decidable without anybody deciding it.
+     * `status` cannot carry a new value without rewriting its CHECK, which no
+     * migration here may replay, so a superseded proposal is `expired` with
+     * `superseded:<reason>` recorded here and the UI reads this first.
+     */
+    disposition: text('disposition'),
   },
   (table) => [
     foreignKey({
@@ -146,6 +207,10 @@ export const assistantPendingActions = pgTable(
     uniqueIndex('assistant_pending_actions_idempotency_key_idx')
       .on(table.idempotencyKey)
       .where(sql`${table.idempotencyKey} IS NOT NULL AND ${table.status} = 'proposed'`),
+    // Drives the recovery sweep over actions whose execution is still owed.
+    index('assistant_pending_actions_execution_idx')
+      .on(table.proposedAt)
+      .where(sql`${table.executionState} IN ('queued', 'running', 'unknown')`),
     check(
       'assistant_pending_actions_status_check',
       sql`${table.status} IN ('proposed','approved','rejected','expired','executed','failed')`

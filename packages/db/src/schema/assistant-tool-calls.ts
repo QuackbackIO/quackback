@@ -14,6 +14,7 @@ import {
   timestamp,
   jsonb,
   integer,
+  boolean,
   index,
   uniqueIndex,
   check,
@@ -24,6 +25,7 @@ import { typeIdWithDefault, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { conversations } from './conversation'
 import { assistantInvolvements } from './assistant'
 import { assistantPendingActions } from './assistant-pending-actions'
+import { assistantRuns } from './assistant-runs'
 import { principal } from './auth'
 
 export const ASSISTANT_TOOL_CALL_STATUSES = [
@@ -35,6 +37,56 @@ export const ASSISTANT_TOOL_CALL_STATUSES = [
 ] as const
 
 export type AssistantToolCallStatus = (typeof ASSISTANT_TOOL_CALL_STATUSES)[number]
+
+/**
+ * The normalized outcome vocabulary (QUINN-PRODUCT P3), carried beside the
+ * coarse `status` rather than inside it.
+ *
+ * `status` has a CHECK constraint listing its five values, and widening that
+ * would need a DROP/ADD constraint pair no migration in this repository may
+ * replay. Keeping the two columns separate is also what makes the older
+ * readers safe: a reader that predates this column sees `started` for a
+ * dispatched-but-unconfirmed effect, which is the honest coarse answer, and
+ * can never mistake it for a success.
+ *
+ * `unknown` is the one that matters: the effect may or may not have happened,
+ * so it is neither announced as done nor resent. It always carries
+ * `reconciliation_state = 'required'`.
+ */
+export const ASSISTANT_TOOL_OUTCOME_STATUSES = [
+  'succeeded',
+  'denied',
+  'pending_approval',
+  'in_progress',
+  'failed',
+  'unknown',
+] as const
+
+export type AssistantToolOutcomeStatus = (typeof ASSISTANT_TOOL_OUTCOME_STATUSES)[number]
+
+/** Whether a human still owes this receipt a verdict, and what they decided. */
+export const ASSISTANT_TOOL_RECONCILIATION_STATES = ['required', 'resolved', 'failed'] as const
+
+export type AssistantToolReconciliationState = (typeof ASSISTANT_TOOL_RECONCILIATION_STATES)[number]
+
+/**
+ * What a duplicate or interrupted call of this tool may do.
+ *
+ * - `local_transactional` the effect and this receipt commit together in this
+ *   database, so there is no window in which one exists without the other.
+ * - `external_idempotent` the effect leaves the database, but the provider
+ *   accepts an idempotency key we supply, so a repeat is absorbed there.
+ * - `external_uncertain` the effect leaves the database with no idempotency or
+ *   status-query contract. An interrupted dispatch becomes `unknown` and waits
+ *   for a person; it is never resent automatically.
+ */
+export const ASSISTANT_TOOL_REPLAY_STRATEGIES = [
+  'local_transactional',
+  'external_idempotent',
+  'external_uncertain',
+] as const
+
+export type AssistantToolReplayStrategy = (typeof ASSISTANT_TOOL_REPLAY_STRATEGIES)[number]
 
 export const assistantToolCalls = pgTable(
   'assistant_tool_calls',
@@ -60,6 +112,44 @@ export const assistantToolCalls = pgTable(
     principalId: typeIdColumnNullable('principal')('principal_id').references(() => principal.id, {
       onDelete: 'set null',
     }),
+    /** The durable run and step this effect belongs to, so it stays explainable. */
+    runId: typeIdColumnNullable('assistant_run')('run_id').references(() => assistantRuns.id, {
+      onDelete: 'set null',
+    }),
+    runStepKey: text('run_step_key'),
+    /**
+     * The stable logical identity of the business action: parent, engagement,
+     * tool and canonical argument digest, or `pending:<id>` once a human
+     * decision is itself the boundary. Deliberately NOT the model's tool-call
+     * id or a job id, either of which is fresh on every continuation.
+     */
+    actionKey: text('action_key'),
+    argsDigest: text('args_digest'),
+    schemaDigest: text('schema_digest'),
+    /** The bounded normalized value a duplicate call is answered with. */
+    result: jsonb('result').$type<Record<string, unknown> | null>(),
+    /** What the provider itself said: request id, echoed idempotency key. */
+    providerReceipt: jsonb('provider_receipt').$type<Record<string, unknown> | null>(),
+    providerIdempotencyKey: text('provider_idempotency_key'),
+    /**
+     * The intent was committed and the effect was attempted. Set with no
+     * `settled_at` is the crash-after-effect case, which is `unknown`.
+     */
+    dispatchedAt: timestamp('dispatched_at', { withTimezone: true }),
+    settledAt: timestamp('settled_at', { withTimezone: true }),
+    outcomeStatus: text('outcome_status', { enum: ASSISTANT_TOOL_OUTCOME_STATUSES }),
+    /** Only meaningful with `outcome_status = 'failed'`. */
+    retryable: boolean('retryable'),
+    reconciliationState: text('reconciliation_state', {
+      enum: ASSISTANT_TOOL_RECONCILIATION_STATES,
+    }),
+    reconciliationNote: text('reconciliation_note'),
+    reconciledAt: timestamp('reconciled_at', { withTimezone: true }),
+    reconciledById: typeIdColumnNullable('principal')('reconciled_by_id').references(
+      () => principal.id,
+      { onDelete: 'set null' }
+    ),
+    replayStrategy: text('replay_strategy', { enum: ASSISTANT_TOOL_REPLAY_STRATEGIES }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
@@ -92,6 +182,16 @@ export const assistantToolCalls = pgTable(
     uniqueIndex('assistant_tool_calls_idempotency_key_idx')
       .on(table.idempotencyKey)
       .where(sql`${table.idempotencyKey} IS NOT NULL`),
+    // The logical-identity twin of the index above. The claim insert conflicts
+    // on either, so two workers that computed the same business action cannot
+    // both dispatch it even when their per-turn keys differ.
+    uniqueIndex('assistant_tool_calls_action_key_idx')
+      .on(table.actionKey)
+      .where(sql`${table.actionKey} IS NOT NULL`),
+    // The reconciliation queue: effects nobody can confirm yet.
+    index('assistant_tool_calls_reconciliation_idx')
+      .on(table.createdAt)
+      .where(sql`${table.reconciliationState} = 'required'`),
     check(
       'assistant_tool_calls_status_check',
       sql`${table.status} IN ('started','succeeded','failed','denied','skipped_duplicate')`

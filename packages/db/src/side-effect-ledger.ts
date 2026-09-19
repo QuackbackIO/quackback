@@ -222,6 +222,12 @@ export const SIDE_EFFECT_LEDGER: readonly LedgerRegistration[] = [
       "Evidence that the inactivity sweep already sent Quinn's resolution check-in for this involvement. The sweep schedules off conversations.inactivity_check_in_at and inactivity_retry_at, never off this stamp, so a rewind cannot resend the check-in through it; it only informs the review queue and reports. Reclassify as settle with stamp-pending if a drain ever starts selecting active involvements WHERE follow_up_sent_at IS NULL.",
   },
   {
+    column: schema.assistantToolCalls.dispatchedAt,
+    policy: 'preserve',
+    reason:
+      'Evidence that an external tool effect was already attempted. Settling or clearing it are both wrong in the same direction: a row with this set and no settled_at is the unknown outcome, and the reconciliation queue is what drains it, by a person. Clearing it would make a dispatched effect read as never attempted, which is the one state from which the executor is allowed to dispatch, so a rewind would re-run the very effect the stamp exists to stop. Restoring it verbatim keeps the effect visible and unrepeatable, which is what a person reviewing the restore needs.',
+  },
+  {
     column: schema.assistantPendingActions.executedAt,
     policy: 'preserve',
     reason:
