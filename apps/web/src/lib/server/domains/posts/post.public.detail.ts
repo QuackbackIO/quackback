@@ -198,13 +198,10 @@ export async function getPublicPostDetail(
   //   - posts in non-published moderationState for non-authors and non-team
   // The 404-on-deny shape matches the previous behaviour (don't leak
   // existence to unauthorized callers).
+  const { postModerationState, postPrincipalId, postAudience } = postResult
   const viewDecision = canViewPost(
     actor,
-    {
-      moderationState: postResult.postModerationState,
-      principalId: postResult.postPrincipalId,
-      audience: postResult.postAudience,
-    },
+    { moderationState: postModerationState, principalId: postPrincipalId, audience: postAudience },
     { access: postResult.boardAccess }
   )
   if (!viewDecision.allowed) {

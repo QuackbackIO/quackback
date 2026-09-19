@@ -3,6 +3,7 @@ import type { PostId, PostVoteId, PrincipalId } from '@quackback/ids'
 
 const mockWithApiKeyAuth = vi.fn()
 const mockListPostVoters = vi.fn()
+const mockAssertPostOnBoardAudience = vi.fn()
 
 vi.mock('@tanstack/react-router', () => ({
   createFileRoute: vi.fn(() => (opts: unknown) => ({ options: opts })),
@@ -12,6 +13,9 @@ vi.mock('@/lib/server/domains/api/auth', () => ({
 }))
 vi.mock('@/lib/server/domains/posts/post.voting', () => ({
   listPostVoters: (...args: unknown[]) => mockListPostVoters(...args),
+}))
+vi.mock('@/lib/server/domains/posts/post.access', () => ({
+  assertPostOnBoardAudience: (...args: unknown[]) => mockAssertPostOnBoardAudience(...args),
 }))
 
 import { Route } from '../$postId.voters'
@@ -46,8 +50,24 @@ describe('GET /api/v1/posts/:postId/voters', () => {
   beforeEach(() => {
     mockWithApiKeyAuth.mockReset()
     mockListPostVoters.mockReset()
+    mockAssertPostOnBoardAudience.mockReset()
+    mockAssertPostOnBoardAudience.mockResolvedValue(undefined)
     mockWithApiKeyAuth.mockResolvedValue(adminAuth)
     mockListPostVoters.mockResolvedValue({ items: [voterRow], nextCursor: VOTE_ID, hasMore: true })
+  })
+
+  it('refuses a post that is not on the board audience, before reading its voters', async () => {
+    // The published API is a contract its consumers were never told about an
+    // internal audience on, so a capture is not addressable through it. The
+    // guard also runs BEFORE the voter read, so a denied caller cannot learn
+    // anything from a timing or shape difference.
+    const { NotFoundError } = await import('@/lib/shared/errors')
+    mockAssertPostOnBoardAudience.mockRejectedValue(
+      new NotFoundError('POST_NOT_FOUND', 'Post not found')
+    )
+    const res = await GET({ request: makeRequest(), params: { postId: POST_ID } })
+    expect(res.status).toBe(404)
+    expect(mockListPostVoters).not.toHaveBeenCalled()
   })
 
   it('returns serialized voters with pagination meta', async () => {
