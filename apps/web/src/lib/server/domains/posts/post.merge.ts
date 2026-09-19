@@ -421,6 +421,7 @@ export async function getPostMergeInfo(
       title: posts.title,
       moderationState: posts.moderationState,
       principalId: posts.principalId,
+      audience: posts.audience,
       boardSlug: boards.slug,
       boardAccess: boards.access,
     })
@@ -443,6 +444,7 @@ export async function getPostMergeInfo(
     {
       moderationState: canonicalPost[0].moderationState,
       principalId: canonicalPost[0].principalId,
+      audience: canonicalPost[0].audience,
     },
     { access: canonicalPost[0].boardAccess }
   )

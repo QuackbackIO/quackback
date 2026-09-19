@@ -98,7 +98,7 @@ describe('canViewPost — non-team viewer on a public board', () => {
   ])('moderationState=$state → allowed=$expected', ({ state, expected }) => {
     const decision = canViewPost(
       portal,
-      { moderationState: state, principalId: 'p_other' as PrincipalId },
+      { moderationState: state, principalId: 'p_other' as PrincipalId, audience: 'board' },
       publicBoard
     )
     expect(decision.allowed).toBe(expected)
@@ -117,7 +117,7 @@ describe('canViewPost — team viewer sees everything except deleted', () => {
     expect(
       canViewPost(
         admin,
-        { moderationState: state, principalId: 'p_other' as PrincipalId },
+        { moderationState: state, principalId: 'p_other' as PrincipalId, audience: 'board' },
         publicBoard
       ).allowed
     ).toBe(expected)
@@ -127,7 +127,11 @@ describe('canViewPost — team viewer sees everything except deleted', () => {
     'member + state=%s → allowed',
     (state) => {
       expect(
-        canViewPost(member, { moderationState: state, principalId: null }, publicBoard).allowed
+        canViewPost(
+          member,
+          { moderationState: state, principalId: null, audience: 'board' },
+          publicBoard
+        ).allowed
       ).toBe(true)
     }
   )
@@ -138,7 +142,7 @@ describe('canViewPost — author-pending escape hatch', () => {
     expect(
       canViewPost(
         portal,
-        { moderationState: 'pending', principalId: portal.principalId },
+        { moderationState: 'pending', principalId: portal.principalId, audience: 'board' },
         publicBoard
       ).allowed
     ).toBe(true)
@@ -146,8 +150,11 @@ describe('canViewPost — author-pending escape hatch', () => {
 
   it('author does NOT see their own spam (only pending qualifies)', () => {
     expect(
-      canViewPost(portal, { moderationState: 'spam', principalId: portal.principalId }, publicBoard)
-        .allowed
+      canViewPost(
+        portal,
+        { moderationState: 'spam', principalId: portal.principalId, audience: 'board' },
+        publicBoard
+      ).allowed
     ).toBe(false)
   })
 
@@ -155,7 +162,7 @@ describe('canViewPost — author-pending escape hatch', () => {
     expect(
       canViewPost(
         portal,
-        { moderationState: 'archived', principalId: portal.principalId },
+        { moderationState: 'archived', principalId: portal.principalId, audience: 'board' },
         publicBoard
       ).allowed
     ).toBe(false)
@@ -167,7 +174,7 @@ describe('canViewPost — author-pending escape hatch', () => {
     expect(
       canViewPost(
         a,
-        { moderationState: 'pending', principalId: 'p_same' as PrincipalId },
+        { moderationState: 'pending', principalId: 'p_same' as PrincipalId, audience: 'board' },
         publicBoard
       ).allowed
     ).toBe(true)
@@ -177,13 +184,21 @@ describe('canViewPost — author-pending escape hatch', () => {
     // Critical: a falsy-equal check would let anyone see all anonymous pending posts.
     // The actor.principalId guard prevents that.
     expect(
-      canViewPost(anon, { moderationState: 'pending', principalId: null }, publicBoard).allowed
+      canViewPost(
+        anon,
+        { moderationState: 'pending', principalId: null, audience: 'board' },
+        publicBoard
+      ).allowed
     ).toBe(false)
   })
 
   it('portal viewer with null post.principalId does NOT match', () => {
     expect(
-      canViewPost(portal, { moderationState: 'pending', principalId: null }, publicBoard).allowed
+      canViewPost(
+        portal,
+        { moderationState: 'pending', principalId: null, audience: 'board' },
+        publicBoard
+      ).allowed
     ).toBe(false)
   })
 
@@ -191,7 +206,7 @@ describe('canViewPost — author-pending escape hatch', () => {
     expect(
       canViewPost(
         portal,
-        { moderationState: 'pending', principalId: 'p_other' as PrincipalId },
+        { moderationState: 'pending', principalId: 'p_other' as PrincipalId, audience: 'board' },
         publicBoard
       ).allowed
     ).toBe(false)
@@ -202,7 +217,7 @@ describe('canViewPost — board denies first, post never inspected', () => {
   it('team-audience board denies any portal user before moderationState check', () => {
     const decision = canViewPost(
       portal,
-      { moderationState: 'published', principalId: portal.principalId },
+      { moderationState: 'published', principalId: portal.principalId, audience: 'board' },
       teamBoard
     )
     expect(decision.allowed).toBe(false)
@@ -214,7 +229,7 @@ describe('canViewPost — board denies first, post never inspected', () => {
     for (const state of ALL_MODERATION_STATES) {
       const decision = canViewPost(
         anon,
-        { moderationState: state, principalId: 'p_other' as PrincipalId },
+        { moderationState: state, principalId: 'p_other' as PrincipalId, audience: 'board' },
         authBoard
       )
       expect(decision.allowed).toBe(false)
@@ -225,7 +240,7 @@ describe('canViewPost — board denies first, post never inspected', () => {
     expect(
       canViewPost(
         portal,
-        { moderationState: 'published', principalId: 'p_other' as PrincipalId },
+        { moderationState: 'published', principalId: 'p_other' as PrincipalId, audience: 'board' },
         segBoard
       ).allowed
     ).toBe(false)
@@ -235,7 +250,7 @@ describe('canViewPost — board denies first, post never inspected', () => {
     expect(
       canViewPost(
         trustedPortal,
-        { moderationState: 'published', principalId: 'p_other' as PrincipalId },
+        { moderationState: 'published', principalId: 'p_other' as PrincipalId, audience: 'board' },
         segBoard
       ).allowed
     ).toBe(true)
@@ -245,7 +260,7 @@ describe('canViewPost — board denies first, post never inspected', () => {
     expect(
       canViewPost(
         trustedPortal,
-        { moderationState: 'pending', principalId: trustedPortal.principalId },
+        { moderationState: 'pending', principalId: trustedPortal.principalId, audience: 'board' },
         segBoard
       ).allowed
     ).toBe(true)
@@ -527,6 +542,7 @@ describe('canCreateComment — board access gate', () => {
   const publishedPost = {
     moderationState: 'published' as ModerationState,
     principalId: 'p_other' as PrincipalId,
+    audience: 'board' as const,
     isCommentsLocked: false,
   }
 
@@ -556,6 +572,7 @@ describe('canCreateComment — post visibility gate', () => {
     const pendingPost = {
       moderationState: 'pending' as ModerationState,
       principalId: 'p_other' as PrincipalId,
+      audience: 'board' as const,
       isCommentsLocked: false,
     }
     expect(canCreateComment(portal, pendingPost, publicBoard, 'none').allowed).toBe(false)
@@ -565,6 +582,7 @@ describe('canCreateComment — post visibility gate', () => {
     const ownPendingPost = {
       moderationState: 'pending' as ModerationState,
       principalId: portal.principalId,
+      audience: 'board' as const,
       isCommentsLocked: false,
     }
     expect(canCreateComment(portal, ownPendingPost, publicBoard, 'none').allowed).toBe(true)
@@ -574,6 +592,7 @@ describe('canCreateComment — post visibility gate', () => {
     const pendingPost = {
       moderationState: 'pending' as ModerationState,
       principalId: 'p_other' as PrincipalId,
+      audience: 'board' as const,
       isCommentsLocked: false,
     }
     expect(canCreateComment(admin, pendingPost, publicBoard, 'none').allowed).toBe(true)
@@ -585,6 +604,7 @@ describe('canCreateComment — isCommentsLocked gate', () => {
   const lockedPost = {
     moderationState: 'published' as ModerationState,
     principalId: 'p_other' as PrincipalId,
+    audience: 'board' as const,
     isCommentsLocked: true,
   }
 
@@ -611,6 +631,7 @@ describe('canCreateComment — board.access.comment tier gates commenting indepe
   const publishedPost = {
     moderationState: 'published' as ModerationState,
     principalId: 'p_other' as PrincipalId,
+    audience: 'board' as const,
     isCommentsLocked: false,
   }
 
@@ -675,6 +696,7 @@ describe('canCreateComment — tri-state moderation.comments resolves against wo
   const publishedPost = {
     moderationState: 'published' as ModerationState,
     principalId: 'p_other' as PrincipalId,
+    audience: 'board' as const,
     isCommentsLocked: false,
   }
 
@@ -743,6 +765,7 @@ describe('canVotePost — per-board vote tier', () => {
   const publishedPost = {
     moderationState: 'published' as ModerationState,
     principalId: 'p_other' as PrincipalId,
+    audience: 'board' as const,
   }
 
   // The modern "Public" preset: anyone can read, but you must sign in
@@ -848,6 +871,7 @@ describe('canVotePost — per-board vote tier', () => {
     const pendingPost = {
       moderationState: 'pending' as ModerationState,
       principalId: 'p_other' as PrincipalId,
+      audience: 'board' as const,
     }
     expect(canVotePost(portal, pendingPost, publicBoard).allowed).toBe(false)
   })
@@ -936,7 +960,7 @@ describe('canViewPost — service principal is non-team', () => {
     expect(
       canViewPost(
         service,
-        { moderationState: 'published', principalId: 'p_other' as PrincipalId },
+        { moderationState: 'published', principalId: 'p_other' as PrincipalId, audience: 'board' },
         publicBoard
       ).allowed
     ).toBe(true)
@@ -946,7 +970,7 @@ describe('canViewPost — service principal is non-team', () => {
     expect(
       canViewPost(
         service,
-        { moderationState: 'pending', principalId: service.principalId },
+        { moderationState: 'pending', principalId: service.principalId, audience: 'board' },
         publicBoard
       ).allowed
     ).toBe(true)
@@ -956,7 +980,7 @@ describe('canViewPost — service principal is non-team', () => {
     expect(
       canViewPost(
         service,
-        { moderationState: 'pending', principalId: 'p_other' as PrincipalId },
+        { moderationState: 'pending', principalId: 'p_other' as PrincipalId, audience: 'board' },
         publicBoard
       ).allowed
     ).toBe(false)
@@ -968,7 +992,7 @@ describe('canViewPost — service principal is non-team', () => {
       expect(
         canViewPost(
           service,
-          { moderationState: state, principalId: service.principalId },
+          { moderationState: state, principalId: service.principalId, audience: 'board' },
           publicBoard
         ).allowed
       ).toBe(false)
@@ -979,7 +1003,7 @@ describe('canViewPost — service principal is non-team', () => {
     expect(
       canViewPost(
         service,
-        { moderationState: 'published', principalId: service.principalId },
+        { moderationState: 'published', principalId: service.principalId, audience: 'board' },
         authBoard
       ).allowed
     ).toBe(false)
@@ -991,7 +1015,7 @@ describe('canViewPost — ownership edges', () => {
     expect(
       canViewPost(
         trustedPortal,
-        { moderationState: 'pending', principalId: 'p_other' as PrincipalId },
+        { moderationState: 'pending', principalId: 'p_other' as PrincipalId, audience: 'board' },
         segBoard
       ).allowed
     ).toBe(false)
@@ -1001,7 +1025,7 @@ describe('canViewPost — ownership edges', () => {
     expect(
       canViewPost(
         member,
-        { moderationState: 'pending', principalId: 'p_other' as PrincipalId },
+        { moderationState: 'pending', principalId: 'p_other' as PrincipalId, audience: 'board' },
         teamBoard
       ).allowed
     ).toBe(true)
@@ -1012,6 +1036,7 @@ describe('canVotePost — service principal + composition edges', () => {
   const publishedOther = {
     moderationState: 'published' as ModerationState,
     principalId: 'p_other' as PrincipalId,
+    audience: 'board' as const,
   }
   const authVoteBoard = {
     access: {
@@ -1064,14 +1089,18 @@ describe('canVotePost — service principal + composition edges', () => {
     expect(
       canVotePost(
         portal,
-        { moderationState: 'pending', principalId: portal.principalId },
+        { moderationState: 'pending', principalId: portal.principalId, audience: 'board' },
         publicBoard
       )
     ).toEqual({ allowed: true })
   })
 
   it('denies anonymous voting on an anonymous-authored pending post (null !== null guard)', () => {
-    const d = canVotePost(anon, { moderationState: 'pending', principalId: null }, publicBoard)
+    const d = canVotePost(
+      anon,
+      { moderationState: 'pending', principalId: null, audience: 'board' },
+      publicBoard
+    )
     expect(d.allowed).toBe(false)
     if (!d.allowed) expect(d.reason).toBe('Post is not yet visible')
   })
@@ -1079,7 +1108,7 @@ describe('canVotePost — service principal + composition edges', () => {
   it('denies a team actor from voting on a deleted post (view composition denies before vote tier)', () => {
     const d = canVotePost(
       admin,
-      { moderationState: 'deleted', principalId: 'p_other' as PrincipalId },
+      { moderationState: 'deleted', principalId: 'p_other' as PrincipalId, audience: 'board' },
       publicBoard
     )
     expect(d.allowed).toBe(false)
@@ -1091,6 +1120,7 @@ describe('canCreateComment — service principal + precedence edges', () => {
   const published = {
     moderationState: 'published' as ModerationState,
     principalId: 'p_other' as PrincipalId,
+    audience: 'board' as const,
     isCommentsLocked: false,
   }
   const commentTierBoard = (
@@ -1157,7 +1187,12 @@ describe('canCreateComment — service principal + precedence edges', () => {
     (state) => {
       const d = canCreateComment(
         portal,
-        { moderationState: state, principalId: 'p_other' as PrincipalId, isCommentsLocked: false },
+        {
+          moderationState: state,
+          principalId: 'p_other' as PrincipalId,
+          audience: 'board',
+          isCommentsLocked: false,
+        },
         publicBoard,
         'none'
       )
@@ -1169,6 +1204,7 @@ describe('canCreateComment — service principal + precedence edges', () => {
     const ownPending = {
       moderationState: 'pending' as ModerationState,
       principalId: portal.principalId,
+      audience: 'board' as const,
       isCommentsLocked: false,
     }
     expect(
@@ -1190,6 +1226,7 @@ describe('canCreateComment — service principal + precedence edges', () => {
     const ownPending = {
       moderationState: 'pending' as ModerationState,
       principalId: trustedPortal.principalId,
+      audience: 'board' as const,
       isCommentsLocked: false,
     }
     expect(canCreateComment(trustedPortal, ownPending, segBoard, 'none').allowed).toBe(true)

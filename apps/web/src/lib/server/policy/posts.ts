@@ -11,6 +11,7 @@ import {
   type BoardAccess,
   type ModerationRuleValue,
   type ModerationState,
+  type PostAudience,
 } from '@/lib/server/db'
 import type { PrincipalId } from '@quackback/ids'
 import { allowDecision, denyDecision, isTeamActor, type Actor, type Decision } from './types'
@@ -58,6 +59,15 @@ export function resolveModerationRule(
 interface PostShape {
   moderationState: ModerationState
   principalId?: PrincipalId | null
+  /**
+   * The audience axis, independent of moderation. Required rather than
+   * defaulted: a reader that forgets to select the column would otherwise
+   * silently judge an internal post as a board one, and the compiler is the
+   * only thing that finds every such reader. `null` is accepted because the
+   * column is non-null in the schema but a left join can still produce one,
+   * and it reads as `'board'` (what every row means before migration 0290).
+   */
+  audience: PostAudience | null
 }
 
 interface BoardShape {
@@ -78,6 +88,13 @@ export function canViewPost(actor: Actor, post: PostShape, board: BoardShape): D
   if (can(actor, PERMISSIONS.POST_VIEW_PRIVATE)) {
     return post.moderationState === 'deleted' ? denyDecision('Post was removed') : allowDecision()
   }
+
+  // The internal audience is the one gate authorship does not open. A pending
+  // post is the author's own submission waiting for review; an internal post
+  // is the team's record ABOUT them, attributed to them so the product team
+  // knows whose problem it is. Same denial copy as an unpublished post, so the
+  // two cannot be told apart by probing.
+  if (post.audience === 'internal') return denyDecision('Post is not yet visible')
 
   if (post.moderationState === 'published') return allowDecision()
   if (
@@ -104,7 +121,15 @@ export function postViewFilter(actor: Actor): SQL {
     principalIdParam !== null
       ? and(eq(posts.moderationState, 'pending'), eq(posts.principalId, principalIdParam as never))
       : sql`false`
-  return and(boardViewFilter(actor), or(eq(posts.moderationState, 'published'), ownPending))!
+  // The audience clause is a peer of the board filter, not part of the
+  // moderation disjunction: an internal post is excluded even when the
+  // reader authored it, which is exactly what the own-pending arm would
+  // otherwise re-admit.
+  return and(
+    boardViewFilter(actor),
+    eq(posts.audience, 'board'),
+    or(eq(posts.moderationState, 'published'), ownPending)
+  )!
 }
 
 export type CommentCreateDecision =
@@ -276,12 +301,12 @@ export function boardCapabilitiesForActor(
   // board capability, so it stays false here.
   const canVote = canVotePost(
     actor,
-    { moderationState: 'published', principalId: null },
+    { moderationState: 'published', principalId: null, audience: 'board' },
     board
   ).allowed
   const canComment = canCreateComment(
     actor,
-    { moderationState: 'published', principalId: null, isCommentsLocked: false },
+    { moderationState: 'published', principalId: null, audience: 'board', isCommentsLocked: false },
     board,
     undefined
   ).allowed

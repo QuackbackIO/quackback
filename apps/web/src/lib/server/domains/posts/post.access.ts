@@ -44,6 +44,7 @@ export async function assertPostViewable(postId: PostId, actor: Actor): Promise<
     .select({
       moderationState: posts.moderationState,
       principalId: posts.principalId,
+      audience: posts.audience,
       access: boards.access,
     })
     .from(posts)
@@ -58,7 +59,7 @@ export async function assertPostViewable(postId: PostId, actor: Actor): Promise<
 
   const decision = canViewPost(
     actor,
-    { moderationState: row.moderationState, principalId: row.principalId },
+    { moderationState: row.moderationState, principalId: row.principalId, audience: row.audience },
     { access: row.access }
   )
   if (!decision.allowed) {
@@ -83,6 +84,7 @@ export async function assertPostVotable(postId: PostId, actor: Actor): Promise<v
     .select({
       moderationState: posts.moderationState,
       principalId: posts.principalId,
+      audience: posts.audience,
       access: boards.access,
     })
     .from(posts)
@@ -97,7 +99,7 @@ export async function assertPostVotable(postId: PostId, actor: Actor): Promise<v
 
   const decision = canVotePost(
     actor,
-    { moderationState: row.moderationState, principalId: row.principalId },
+    { moderationState: row.moderationState, principalId: row.principalId, audience: row.audience },
     { access: row.access }
   )
   if (!decision.allowed) {
@@ -106,7 +108,7 @@ export async function assertPostVotable(postId: PostId, actor: Actor): Promise<v
     // NotFoundError shape — only "viewable but not votable" lands here.
     const viewDecision = canViewPost(
       actor,
-      { moderationState: row.moderationState, principalId: row.principalId },
+      { moderationState: row.moderationState, principalId: row.principalId, audience: row.audience },
       { access: row.access }
     )
     if (!viewDecision.allowed) {
@@ -135,6 +137,7 @@ export async function assertCommentViewable(commentId: PostCommentId, actor: Act
       isPrivate: postComments.isPrivate,
       postModerationState: posts.moderationState,
       postPrincipalId: posts.principalId,
+      postAudience: posts.audience,
       access: boards.access,
     })
     .from(postComments)
@@ -157,7 +160,11 @@ export async function assertCommentViewable(commentId: PostCommentId, actor: Act
 
   const decision = canViewPost(
     actor,
-    { moderationState: row.postModerationState, principalId: row.postPrincipalId },
+    {
+      moderationState: row.postModerationState,
+      principalId: row.postPrincipalId,
+      audience: row.postAudience,
+    },
     { access: row.access }
   )
   if (!decision.allowed) {

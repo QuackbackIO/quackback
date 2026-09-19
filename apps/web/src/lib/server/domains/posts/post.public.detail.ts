@@ -145,6 +145,7 @@ export async function getPublicPostDetail(
         boardAccess: boards.access,
         postModerationState: posts.moderationState,
         postPrincipalId: posts.principalId,
+        postAudience: posts.audience,
         tagsJson: sql<string>`COALESCE(
           (SELECT json_agg(json_build_object('id', t.id, 'name', t.name, 'color', t.color))
            FROM ${postTagAssignments} pt
@@ -199,7 +200,11 @@ export async function getPublicPostDetail(
   // existence to unauthorized callers).
   const viewDecision = canViewPost(
     actor,
-    { moderationState: postResult.postModerationState, principalId: postResult.postPrincipalId },
+    {
+      moderationState: postResult.postModerationState,
+      principalId: postResult.postPrincipalId,
+      audience: postResult.postAudience,
+    },
     { access: postResult.boardAccess }
   )
   if (!viewDecision.allowed) {

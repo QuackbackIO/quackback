@@ -26,6 +26,7 @@ import {
   principal,
   type BoardAccess,
   type ModerationState,
+  type PostAudience,
   type Database,
 } from '@/lib/server/db'
 // oxlint-disable-next-line no-restricted-imports -- legitimate second createDb caller (see board-view-filter-parity.test.ts)
@@ -73,6 +74,10 @@ const accessShapes: AccessCase[] = [
 ]
 
 const STATES: ModerationState[] = ['published', 'pending', 'spam', 'deleted']
+// The second, independent privacy axis. Seeded alongside the moderation matrix
+// because the two compose: an internal post is denied to its own author even in
+// the 'pending' state, which is the one state authorship otherwise opens.
+const AUDIENCES: PostAudience[] = ['board', 'internal']
 
 function buildActor(overrides: Partial<Actor>): Actor {
   return {
@@ -147,7 +152,7 @@ let activeDb: Database | null = null
 let closeDb: (() => Promise<void>) | null = null
 const runSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 // (board name, post id) per (access shape, moderation state).
-const seededPosts = new Map<string, PostId>() // key: `${accessName}:${state}`
+const seededPosts = new Map<string, PostId>() // key: `${accessName}:${state}:${audience}`
 
 const resolved = await pickWorkingDb()
 const dbAvailable = resolved !== null
@@ -177,16 +182,19 @@ describe.skipIf(!dbAvailable)('postViewFilter ↔ canViewPost parity (execution-
         access: shape.access,
       })
       for (const state of STATES) {
-        const postId = createId('post') as PostId
-        await activeDb.insert(posts).values({
-          id: postId,
-          boardId,
-          principalId: P_AUTHOR,
-          title: `pvf-${runSuffix}-${shape.name}-${state}`,
-          content: 'parity fixture',
-          moderationState: state,
-        })
-        seededPosts.set(`${shape.name}:${state}`, postId)
+        for (const audience of AUDIENCES) {
+          const postId = createId('post') as PostId
+          await activeDb.insert(posts).values({
+            id: postId,
+            boardId,
+            principalId: P_AUTHOR,
+            title: `pvf-${runSuffix}-${shape.name}-${state}-${audience}`,
+            content: 'parity fixture',
+            moderationState: state,
+            audience,
+          })
+          seededPosts.set(`${shape.name}:${state}:${audience}`, postId)
+        }
       }
     }
   })
@@ -205,34 +213,36 @@ describe.skipIf(!dbAvailable)('postViewFilter ↔ canViewPost parity (execution-
   for (const [actorName, actor] of Object.entries(actors)) {
     for (const shape of accessShapes) {
       for (const state of STATES) {
-        it(`actor=${actorName} access=${shape.name} state=${state}`, async () => {
-          if (!activeDb) return
-          const postId = seededPosts.get(`${shape.name}:${state}`)
-          expect(postId, `seed missing for ${shape.name}:${state}`).toBeDefined()
-          if (!postId) return
+        for (const audience of AUDIENCES) {
+          it(`actor=${actorName} access=${shape.name} state=${state} audience=${audience}`, async () => {
+            if (!activeDb) return
+            const postId = seededPosts.get(`${shape.name}:${state}:${audience}`)
+            expect(postId, `seed missing for ${shape.name}:${state}:${audience}`).toBeDefined()
+            if (!postId) return
 
-          const expectMemoryAllowed = canViewPost(
-            actor,
-            { moderationState: state, principalId: P_AUTHOR },
-            { access: shape.access }
-          ).allowed
+            const expectMemoryAllowed = canViewPost(
+              actor,
+              { moderationState: state, principalId: P_AUTHOR, audience },
+              { access: shape.access }
+            ).allowed
 
-          // postViewFilter's non-team branch references boards.* via
-          // boardViewFilter, so the boards join must be present. The team
-          // branch ignores boards — the join is harmless there.
-          const matched = await activeDb
-            .select({ id: posts.id })
-            .from(posts)
-            .innerJoin(boards, eq(posts.boardId, boards.id))
-            .where(and(eq(posts.id, postId), postViewFilter(actor)))
+            // postViewFilter's non-team branch references boards.* via
+            // boardViewFilter, so the boards join must be present. The team
+            // branch ignores boards — the join is harmless there.
+            const matched = await activeDb
+              .select({ id: posts.id })
+              .from(posts)
+              .innerJoin(boards, eq(posts.boardId, boards.id))
+              .where(and(eq(posts.id, postId), postViewFilter(actor)))
 
-          const expectSqlAllowed = matched.length === 1
-          expect(
-            expectSqlAllowed,
-            `SQL admitted=${expectSqlAllowed} but in-memory admitted=${expectMemoryAllowed} ` +
-              `for actor=${actorName} access=${shape.name} state=${state}`
-          ).toBe(expectMemoryAllowed)
-        })
+            const expectSqlAllowed = matched.length === 1
+            expect(
+              expectSqlAllowed,
+              `SQL admitted=${expectSqlAllowed} but in-memory admitted=${expectMemoryAllowed} ` +
+                `for actor=${actorName} access=${shape.name} state=${state} audience=${audience}`
+            ).toBe(expectMemoryAllowed)
+          })
+        }
       }
     }
   }

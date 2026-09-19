@@ -725,7 +725,7 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
     // decision reflects the vote tier specifically.
     const voteDecision = canVotePost(
       probeActor,
-      { moderationState: 'published', principalId: null },
+      { moderationState: 'published', principalId: null, audience: 'board' },
       { access: boardAccess }
     )
 

@@ -74,6 +74,7 @@ export async function createComment(
     {
       moderationState: post.moderationState,
       principalId: post.principalId,
+      audience: post.audience,
       isCommentsLocked: post.isCommentsLocked,
     },
     { access: board.access },

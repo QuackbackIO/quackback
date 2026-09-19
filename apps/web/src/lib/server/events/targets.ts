@@ -74,6 +74,7 @@ async function filterSubscribersByPostAudience(
     .select({
       moderationState: posts.moderationState,
       principalId: posts.principalId,
+      audience: posts.audience,
       access: boards.access,
     })
     .from(posts)
@@ -88,10 +89,15 @@ async function filterSubscribersByPostAudience(
     return []
   }
 
-  // Fast path: anonymous-tier view + published post — everyone is in.
-  // (anonymous view tier is the access-matrix equivalent of the legacy
-  // 'public' audience kind.)
-  if (post.access?.view === 'anonymous' && post.moderationState === 'published') {
+  // Fast path: anonymous-tier view + published, board-audience post — everyone
+  // is in. (anonymous view tier is the access-matrix equivalent of the legacy
+  // 'public' audience kind.) An internal post never takes this path: it has no
+  // audience to fan out to, and canViewPost below would deny every one of them.
+  if (
+    post.access?.view === 'anonymous' &&
+    post.moderationState === 'published' &&
+    post.audience === 'board'
+  ) {
     return subscribers
   }
 
@@ -133,7 +139,11 @@ async function filterSubscribersByPostAudience(
     }
     return canViewPost(
       actor,
-      { moderationState: post.moderationState, principalId: post.principalId },
+      {
+        moderationState: post.moderationState,
+        principalId: post.principalId,
+        audience: post.audience,
+      },
       { access: post.access }
     ).allowed
   })

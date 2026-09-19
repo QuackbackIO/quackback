@@ -134,6 +134,7 @@ export async function getNotificationsForMember(
       postTitle: posts.title,
       postModerationState: posts.moderationState,
       postPrincipalId: posts.principalId,
+      postAudience: posts.audience,
       boardSlug: boards.slug,
       boardAccess: boards.access,
     })
@@ -187,6 +188,7 @@ export async function getNotificationsForMember(
           {
             moderationState: row.postModerationState ?? 'published',
             principalId: row.postPrincipalId,
+            audience: row.postAudience,
           },
           { access: row.boardAccess }
         )
