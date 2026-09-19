@@ -114,3 +114,22 @@ An initial production run inherited configured object storage: its PDF/DOCX oper
 Logs: `/tmp/quinn-parity-broad.log`, `/tmp/quinn-parity-e2e.log`, `/tmp/quinn-parity-e2e-production.log`, `/tmp/quinn-parity-build.log`, `/tmp/quinn-parity-typecheck.log`, `/tmp/quinn-parity-e2e-typecheck.log`, `/tmp/quinn-parity-manifest.log`, `/tmp/quinn-parity-lint.log`. Local screenshots are `/tmp/quinn-parity-*.png` and `/tmp/quinn-parity-mobile-*.png`.
 
 This is not acceptance of all 17 mockups. Remaining capabilities and dependencies are tracked in [the parity checklist](quinn-mockup-parity.md).
+
+## Final pass after Step 12 (19 September 2026)
+
+The whole branch was verified once more after the last step landed, from the repository root with `TEST_DATABASE_URL` pointing at the migrated `quackback_quinn_validation` database.
+
+| Check                                                                                                        | Result                                                                                                      |
+| ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| Full repository Vitest run (`--maxWorkers=4`)                                                                | 16,283 passed, 2 failed, 86 skipped (live-model and dedicated-database opt-ins), 1 todo, across 1,549 files |
+| The two failures, fixed and re-run with their neighbouring suites (principals, tickets, server test helpers) | 72 files, 720 passed                                                                                        |
+| Application and workspace-probe typecheck; evals typecheck                                                   | Passed                                                                                                      |
+| Production build                                                                                             | Passed                                                                                                      |
+| Server-function manifest                                                                                     | 853 entries, 853 call sites                                                                                 |
+| Quinn browser suite against the development server on port 3018 (`quackback_quinn_product` database)         | 27 passed, none skipped                                                                                     |
+
+The two full-run failures were real and are fixed on the branch rather than reported around: the principal merge ledger did not know about the nine principal-referencing columns Steps 3, 5, 8, 10 and 11 added (three customer-occupiable columns now re-point, the six teammate attribution stamps are exempted with reasons), and the ticket convergence test still observed the Quinn gate on the legacy orchestrator spy, which durable intake never calls; it now reads the run table. Three Guidance browser scenarios written against the UX0 editor were updated for the canonical editor Step 8 shipped (the Applies-when select, the per-use checkboxes, and the entry and binding tables); the converted legacy skill is proved byte-equal in the editor and bound to all three uses after an edit.
+
+Known remaining test-environment caveat, unchanged from Steps 6 to 12: the conversation domain is unstable under Vitest's default file parallelism against one shared database and passes sequentially (`--no-file-parallelism`); the files involved predate this branch.
+
+Logs from this pass live in the session scratchpad and are not part of the repository.
