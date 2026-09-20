@@ -239,17 +239,17 @@ export async function captureVisitorContactEmail(
 /**
  * Look up the block message a structured reply claims to answer, plus
  * whether it's already been answered, and resolve the canonical echo (or
- * null to degrade — see block-reply.ts's resolveBlockReply for every case).
+ * null to degrade , see block-reply.ts's resolveBlockReply for every case).
  * A standalone read, not inside sendVisitorMessage's transaction: the
- * "already answered" check is best-effort — the run's atomic
+ * "already answered" check is best-effort , the run's atomic
  * waiting->running claim (workflow.engine.ts's resumeWorkflowRun), not this,
  * is the true arbiter of a losing double-tap (see block-reply.ts's module
- * doc) — so relaxing it to a plain read costs nothing real and keeps the
+ * doc) , so relaxing it to a plain read costs nothing real and keeps the
  * overwhelmingly common non-blockReply send from paying for a lookup it
  * never needs.
  *
  * Exported (SF3) so functions/conversation.ts's "prevent replies to closed
- * conversations" gate can run this SAME resolution before rejecting a send —
+ * conversations" gate can run this SAME resolution before rejecting a send ,
  * it needs to know whether a blockReply is a genuine match (not just present
  * on the payload) before letting it bypass that gate. sendVisitorMessage
  * below still re-resolves independently when it actually runs; the redundant
@@ -271,7 +271,7 @@ export async function resolveVisitorBlockReply(
     .limit(1)
 
   // A blockReply may only ever answer a block posted on the SAME
-  // conversation it's arriving on — never an error, just degrades like any
+  // conversation it's arriving on , never an error, just degrades like any
   // other invalid reference.
   const belongsHere = blockMessage?.conversationId === conversationId
   const [alreadyAnswered] = belongsHere
@@ -347,13 +347,13 @@ export async function sendVisitorMessage(
   }
 
   // Phase C conversational block layer (slice C-1): resolve a structured
-  // reply BEFORE deriving `content` below — a valid resolution supplies its
+  // reply BEFORE deriving `content` below , a valid resolution supplies its
   // own server-derived canonical echo (the client's own display text is
   // NEVER trusted) and forgoes any client-supplied rich doc; an invalid/
   // stale/second one simply resolves to null and the rest of this function
   // proceeds exactly as an ordinary free-text send (never an error). A
   // blockReply targeting no conversation at all (a brand-new thread) can
-  // never be valid — nothing to have parked a block on yet.
+  // never be valid , nothing to have parked a block on yet.
   const resolvedBlockReply =
     input.blockReply && input.conversationId
       ? await resolveVisitorBlockReply(input.conversationId, input.blockReply)
@@ -361,7 +361,7 @@ export async function sendVisitorMessage(
 
   const attachments = validateAttachments(input.attachments)
   // Rich-composer doc (inline embeds/images): sanitized on write, like the agent
-  // path — but no mention extraction (a visitor carries no team @-mentions), and
+  // path , but no mention extraction (a visitor carries no team @-mentions), and
   // visitor-authored inline images may only reference our own storage. A
   // resolved block reply carries no rich doc of its own (its content IS the
   // canonical echo), so any client-supplied contentJson alongside it is dropped.
@@ -502,7 +502,7 @@ export async function sendVisitorMessage(
 
     // SF3: a matched structured reply (resolvedBlockReply non-null) answering
     // a block posted on an already-closed conversation is the intended
-    // post-close CSAT/button flow, not the customer reopening the thread —
+    // post-close CSAT/button flow, not the customer reopening the thread ,
     // see applyVisitorReopenStatus's doc.
     const visitorNextStatus = applyVisitorReopenStatus(
       conversation.status,
@@ -517,15 +517,15 @@ export async function sendVisitorMessage(
         // Visitor is active, so their side is read; a reply surfaces the thread.
         visitorLastReadAt: message.createdAt,
         status: visitorNextStatus,
-        // A customer message always wakes a snoozed thread — clear the timer.
+        // A customer message always wakes a snoozed thread , clear the timer.
         snoozedUntil: null,
         // The customer is now waiting on a reply: start the clock if it isn't
         // already running (the oldest unanswered message wins).
         waitingSince: conversation.waitingSince ?? message.createdAt,
-        // Keep resolvedAt consistent with the new status — a reply that reopens
+        // Keep resolvedAt consistent with the new status , a reply that reopens
         // a closed thread must clear the stale resolution timestamp. The one
         // case that stays 'closed' (the post-close matched-blockReply carve-out
-        // above) must NOT bump resolvedAt to this message's time either — the
+        // above) must NOT bump resolvedAt to this message's time either , the
         // conversation's original resolution moment is untouched by a CSAT tap
         // answering it after the fact.
         resolvedAt:
@@ -538,7 +538,7 @@ export async function sendVisitorMessage(
         // not the one it arrived on (that is `source`, which stays immutable
         // provenance). A widget thread whose customer replies by email must
         // become an email thread, or every channel-dependent decision downstream
-        // — notably the presence gate in notifyAgentReply — keeps treating their
+        // , notably the presence gate in notifyAgentReply , keeps treating their
         // mailbox as a side channel and silently drops replies. Bidirectional on
         // purpose: moving back into the widget must restore the presence gate,
         // otherwise they would get an in-app message AND a redundant email.
@@ -563,7 +563,7 @@ export async function sendVisitorMessage(
     // the customer's message is the commit that makes the work claimable.
     let durableRunId: string | null = null
     if (assistantExecutionMode() === 'durable') {
-      const surface = await assistantTurnSurfaceFor(updated, priorStatus, tx)
+      const surface = await assistantTurnSurfaceFor(updated, priorStatus, tx, message.id)
       // The pair probe moves inside the transaction in durable mode: a gate
       // evaluated after the commit cannot take part in it.
       const paired = surface ? await isPairedWithCustomerTicket(conversation.id, tx) : false
@@ -635,7 +635,7 @@ export async function sendVisitorMessage(
 
   void notifyVisitorMessage({
     conversation: txResult.conversation,
-    // Full text, not the truncated preview — notify derives its own
+    // Full text, not the truncated preview , notify derives its own
     // subject/preheader excerpt and renders the whole body inline.
     content: content || preview(fallbackLabel, attachments),
     contentJson: safeContentJson,
@@ -646,7 +646,7 @@ export async function sendVisitorMessage(
   if (created) {
     void emitConversationCreated(actor, author, txResult.conversation)
   }
-  // `created` is exactly notifyVisitorMessage's own isFirstMessage above —
+  // `created` is exactly notifyVisitorMessage's own isFirstMessage above ,
   // the team bell's anti-spam gate (WO-3 slice 5) now reads it off this
   // event instead of a direct call.
   void emitMessageCreated(actor, author, txResult.message, txResult.conversation, created)
@@ -672,11 +672,11 @@ export async function sendVisitorMessage(
   // customer's send; the deep gate (respond flag, AI configured, silence rule)
   // lives inside the orchestration, which the assistant domain owns.
   // CONVERGENCE PHASE 1b: pair conversations are gated OUT of the assistant
-  // (isPairedWithCustomerTicket — the doc there carries the rule). The probe
+  // (isPairedWithCustomerTicket , the doc there carries the rule). The probe
   // rides the same fire-and-forget chain, so the send path stays sync-cheap
   // and the gate applies identically to the intake opening message and every
   // later visitor message on the pair. The workflow engine's explicit
-  // `let_assistant_answer` action is NOT gated — a graph that deliberately
+  // `let_assistant_answer` action is NOT gated , a graph that deliberately
   // hands a thread to Quinn is the workspace's own choice, and the intake
   // table's "workflows FIRE" row keeps those graphs working.
   //
@@ -698,7 +698,7 @@ export async function sendVisitorMessage(
       .catch((err) => log.warn({ err }, 'assistant turn failed'))
   }
 
-  // Return a VISITOR-side DTO to the caller — never leak the agent-only
+  // Return a VISITOR-side DTO to the caller , never leak the agent-only
   // visitorEmail back to the visitor in the send response.
   const conversationDTO = await conversationToDTO(txResult.conversation, 'visitor')
   return { conversation: conversationDTO, message: messageDTO, created }
@@ -716,7 +716,7 @@ export interface StartAgentConversationInput {
  * conversation's visitor side; the composing agent is auto-assigned and the
  * first message is agent-typed. The first message is ALWAYS emailed (the
  * recipient is by definition not in the thread), so the target must be an
- * identified portal user with a deliverable email — validated before any
+ * identified portal user with a deliverable email , validated before any
  * write. Each compose creates a new conversation (no dedupe against open
  * threads).
  */
@@ -729,7 +729,7 @@ export async function startAgentConversation(
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
 
   // Rich-composer doc (inline embeds/images): sanitized on write like the
-  // agent-reply path, but no origin restriction — this message is always
+  // agent-reply path, but no origin restriction , this message is always
   // agent-authored, never a visitor upload.
   const attachments = validateAttachments(input.attachments)
   const safeContentJson = input.contentJson ? sanitizeTiptapContent(input.contentJson) : null
@@ -770,7 +770,7 @@ export async function startAgentConversation(
       'Conversations can only be started with identified portal users'
     )
   }
-  // realEmail() filters the synthetic anonymous placeholder addresses — they
+  // realEmail() filters the synthetic anonymous placeholder addresses , they
   // resolve but are not deliverable.
   if (!realEmail(resolveReplyRecipient(target, target.contactEmail, null))) {
     throw new ValidationError(
@@ -785,7 +785,7 @@ export async function startAgentConversation(
       .values({
         visitorPrincipalId: input.targetPrincipalId,
         channel: 'messenger',
-        // The composer owns the thread from the start — it lands in "Mine".
+        // The composer owns the thread from the start , it lands in "Mine".
         assignedAgentPrincipalId: agent.principalId,
         status: 'open',
         subject: preview(content || fallbackLabel, attachments),
@@ -830,12 +830,12 @@ export async function startAgentConversation(
     message: messageDTO,
   })
 
-  // Always email the first message — fire-and-forget; a delivery failure never
+  // Always email the first message , fire-and-forget; a delivery failure never
   // rolls back the conversation (it logs inside notifyConversationStarted).
   void notifyConversationStarted({
     conversationId: txResult.conversation.id,
     visitorPrincipalId: txResult.conversation.visitorPrincipalId,
-    // Full text, not the truncated preview — notify derives its own excerpt.
+    // Full text, not the truncated preview , notify derives its own excerpt.
     // Same fallback as sendAgentMessage: attachment-only opens have no
     // contentJson image node, so richMessageFallbackLabel is empty.
     content: content || preview(fallbackLabel, attachments),
@@ -846,7 +846,7 @@ export async function startAgentConversation(
 
   void emitConversationCreated(actor, agent, txResult.conversation)
   // isFirstMessage only matters for a VISITOR message (the team bell's
-  // anti-spam gate) — this is an agent-composed opening message, so false.
+  // anti-spam gate) , this is an agent-composed opening message, so false.
   void emitMessageCreated(actor, agent, txResult.message, txResult.conversation, false)
 
   return { conversation: agentDTO, message: messageDTO, created: true }
@@ -871,7 +871,7 @@ export async function sendAgentMessage(
 
   const attachments = validateAttachments(rawAttachments)
   // Rich-composer doc (inline embeds/images): sanitized on write like the note
-  // path, but no mention extraction — replies carry no team @-mentions.
+  // path, but no mention extraction , replies carry no team @-mentions.
   const safeContentJson = contentJson ? sanitizeTiptapContent(contentJson) : null
   // A text-less rich message is valid only when it carries an inline image or a
   // shared post; this label also backs the list preview + notification body. A
@@ -931,7 +931,7 @@ export async function sendAgentMessage(
         agentLastReadAt: message.createdAt,
         assignedAgentPrincipalId: existing.assignedAgentPrincipalId ?? agent.principalId,
         status: agentNextStatus,
-        // A teammate reply answers the customer — the wait clock stops. (A
+        // A teammate reply answers the customer , the wait clock stops. (A
         // snoozed thread stays snoozed on ANY teammate reply: send-and-stay, per
         // applyAgentReopenStatus.)
         waitingSince: null,
@@ -962,7 +962,7 @@ export async function sendAgentMessage(
   publishConversationUpdate(conversationDTO.id, conversationDTO)
   // The VISITOR's own widget shares this exact channel (publishConversationEvent
   // fans out to both the conversation channel and the inbox), so `messageDTO`
-  // here must stay the plain agent-and-visitor-safe ConversationMessageDTO —
+  // here must stay the plain agent-and-visitor-safe ConversationMessageDTO ,
   // never widen it to carry translatedFrom (agent-only). See the
   // message_updated broadcast below for how translatedFrom reaches other
   // agents instead.
@@ -987,7 +987,7 @@ export async function sendAgentMessage(
   }
   if (agentMessageDTO.translatedFrom) {
     // Inbox channel ONLY (never the visitor's conversation channel, unlike
-    // publishConversationEvent above) — mirrors message.actions.ts's
+    // publishConversationEvent above) , mirrors message.actions.ts's
     // publishMessageUpdated pattern for agent-only message enrichment.
     publishAgentConversationEvent({
       kind: 'message_updated',
@@ -999,7 +999,7 @@ export async function sendAgentMessage(
   void notifyAgentReply({
     conversationId: txResult.conversation.id,
     visitorPrincipalId: txResult.conversation.visitorPrincipalId,
-    // Full text, not the truncated preview — notify derives its own excerpt.
+    // Full text, not the truncated preview , notify derives its own excerpt.
     content: content || preview(fallbackLabel, attachments),
     contentJson: safeContentJson,
     agentName: agent.displayName ?? 'Support',
@@ -1008,7 +1008,7 @@ export async function sendAgentMessage(
     messageId: txResult.message.id,
   })
 
-  // isFirstMessage only matters for a VISITOR message — this is an agent
+  // isFirstMessage only matters for a VISITOR message , this is an agent
   // reply, so false.
   void emitMessageCreated(actor, agent, txResult.message, txResult.conversation, false)
   if (
@@ -1019,7 +1019,7 @@ export async function sendAgentMessage(
       actor,
       txResult.conversation,
       txResult.previousAgentPrincipalId,
-      // The team is never touched by an agent claiming a reply — "previous"
+      // The team is never touched by an agent claiming a reply , "previous"
       // is just the still-current value, so the team side of the event
       // reports no change.
       txResult.conversation.assignedTeamId ?? null
@@ -1058,7 +1058,7 @@ export async function addAgentNote(
 
   // Sanitize on write (Layer 1), like every other TipTap-doc path (comments,
   // posts, changelog). Drops disallowed nodes/attrs + caps depth, so a tampered
-  // client can't store hostile JSON — and mentions are extracted from the same
+  // client can't store hostile JSON , and mentions are extracted from the same
   // clean tree below.
   const safeContentJson = contentJson ? sanitizeTiptapContent(contentJson) : null
 
@@ -1081,7 +1081,7 @@ export async function addAgentNote(
         metadata,
       })
       .returning()
-    // Touch updatedAt only — internal notes don't change the visitor-facing
+    // Touch updatedAt only , internal notes don't change the visitor-facing
     // last-message preview/time.
     await tx
       .update(conversations)
@@ -1092,7 +1092,7 @@ export async function addAgentNote(
 
   // A note is always agent-only content (isInternal=true, inbox-channel-only
   // broadcast below), so its DTO is shaped as an AgentConversationMessageDTO
-  // like sendAgentMessage's — a fresh note has no reactions/flags/suggestion/
+  // like sendAgentMessage's , a fresh note has no reactions/flags/suggestion/
   // translation yet, so those are known-empty rather than re-read from the DB.
   const messageDTO: AgentConversationMessageDTO = {
     ...toMessageDTO(message, await resolveAuthor(agent)),
@@ -1118,7 +1118,7 @@ export async function addAgentNote(
     content,
   })
 
-  // Agent inbox only — the visitor's conversation channel never receives it.
+  // Agent inbox only , the visitor's conversation channel never receives it.
   publishAgentConversationEvent({ kind: 'message', conversationId, message: messageDTO })
 
   // Reload so the published DTO reflects current status/assignment rather
@@ -1146,13 +1146,13 @@ export async function setConversationStatus(
   const [updated] = await db
     .update(conversations)
     // Stamp resolvedAt on close, clear it on any reopen. Setting status through
-    // this plain control always clears the snooze timer — a timed snooze goes
+    // this plain control always clears the snooze timer , a timed snooze goes
     // through snoozeConversation; 'snoozed' here means "until the customer replies".
     .set({
       status,
       snoozedUntil: null,
       resolvedAt: resolvedAtForStatus(status, now),
-      // A closed thread is no longer waiting on anyone — drop it from
+      // A closed thread is no longer waiting on anyone , drop it from
       // waitingOnly / longest-waiting sort. GitHub's native close already
       // did this; the other close paths must match.
       ...(status === 'closed' ? { waitingSince: null } : {}),
@@ -1187,7 +1187,7 @@ export async function setConversationStatus(
   }
   // AI attribute classification (AI-ATTRIBUTES-PARITY-SPEC.md Phase 1,
   // detectOnClose): the teammate-close moment, only for a REAL teammate
-  // (principalType 'user') — never Quinn's own end_conversation tool or a
+  // (principalType 'user') , never Quinn's own end_conversation tool or a
   // workflow's `close` action, both of which also call this same function
   // but with a bounded service actor and have their own dedicated
   // classification hooks (assistant_closed / handoff). Fire-and-forget: the
@@ -1228,7 +1228,7 @@ export async function setConversationStatus(
 
 /**
  * Agent action: snooze a conversation until `until` (a wake time), or until the
- * customer next replies when `until` is null. Snoozing is a queue discipline —
+ * customer next replies when `until` is null. Snoozing is a queue discipline ,
  * it never notifies the customer; its transcript notice is an internal,
  * team-only system event. Publishes the same inbox/realtime update a
  * manual status change does so every agent's list reflects it immediately.
@@ -1245,7 +1245,7 @@ export async function snoozeConversation(
   const now = new Date()
   const [updated] = await db
     .update(conversations)
-    // Snoozing is never a resolution — clear resolvedAt if it was set (a closed
+    // Snoozing is never a resolution , clear resolvedAt if it was set (a closed
     // thread snoozed back into the queue).
     .set({
       status: 'snoozed',
@@ -1302,7 +1302,7 @@ const MAX_END_NOTE_LENGTH = 2000
  * Agent action: end a conversation with a reason + optional note. Closes the
  * thread (status='closed', stamps resolvedAt) and records WHY, so resolution-
  * rate reporting has a real outcome to count. Mirrors the close path in
- * setConversationStatus — posts the 'Conversation ended' system notice (only on a real
+ * setConversationStatus , posts the 'Conversation ended' system notice (only on a real
  * close, so re-ending an already-closed thread doesn't spam it) and publishes
  * the conversation update so the widget reflects the close over SSE. Returns the
  * updated agent-side DTO so the caller can show the outcome without a refetch.
@@ -1335,7 +1335,7 @@ export async function endConversation(
     })
     .where(eq(conversations.id, conversationId))
     .returning()
-  // Mark the close in the transcript for both sides — but only on a real
+  // Mark the close in the transcript for both sides , but only on a real
   // open/pending → closed transition, mirroring setConversationStatus.
   if (previous !== 'closed') {
     await emitSystemMessage(conversationId, channelCloseSystemCopy(updated.channel).ended, {
@@ -1366,7 +1366,7 @@ export async function endConversation(
  * marker (endReason/endNote/resolvedAt) is fully cleared, so the conversation
  * rejoins every triage list and counts in resolution reporting like any
  * reopened thread. Only a conversation currently marked spam may be restored
- * — anything else is a caller bug, rejected loud rather than silently
+ * , anything else is a caller bug, rejected loud rather than silently
  * reopened. Publishes the same inbox/realtime update an end does so every
  * agent's list reflects it immediately.
  */
@@ -1407,7 +1407,7 @@ export async function restoreConversationFromSpam(
 
 /**
  * Spam-filter action: file a freshly created conversation as spam. Unlike
- * endConversation this is system-initiated and quiet on the customer side —
+ * endConversation this is system-initiated and quiet on the customer side ,
  * no 'Conversation ended' notice reaches the (presumed abusive) sender, only
  * a team-only marker records the filing. Only a live, not-yet-ended thread is
  * filed: an agent who already closed or ended the conversation has made a
@@ -1446,12 +1446,12 @@ export async function autoFileConversationAsSpam(
 }
 
 /**
- * Agent action: permanently delete a spam-ended conversation. Hard delete —
+ * Agent action: permanently delete a spam-ended conversation. Hard delete ,
  * every child row (messages, participants, summaries, assignments, …) goes
  * with it through the FK cascades, so this is irreversible by design: it
  * exists for the Spam view's "delete forever", and only a conversation still
  * marked spam may be deleted through it. A live or merely-closed thread is
- * rejected loud — inbox hygiene never destroys a real customer thread.
+ * rejected loud , inbox hygiene never destroys a real customer thread.
  */
 export async function deleteConversationPermanently(
   conversationId: ConversationId,
@@ -1490,7 +1490,7 @@ export interface SystemNoticeAttribution {
  * `internal: true` makes the event team-only for the events the customer has
  * no business hearing about (an internal task spun off their conversation):
  * the row is stored `isInternal`, which every visitor read path filters, and
- * the broadcast goes to the agent inbox channel ONLY — the same two-part rule
+ * the broadcast goes to the agent inbox channel ONLY , the same two-part rule
  * `addAgentNote` follows, since channel separation and the read filter each
  * cover a path the other does not.
  *
@@ -1635,7 +1635,7 @@ async function emitSnoozeSystemMessage(
  * routing strategy, announce it, and broadcast the update. Shared by new-
  * conversation routing and offline re-queue. Returns the assigned agent id, or
  * null when routing declines (disabled / nobody active) or the row was claimed
- * concurrently — the caller then leaves it in the unassigned queue.
+ * concurrently , the caller then leaves it in the unassigned queue.
  */
 /** Best-effort auto-assign for any channel's new-conversation path. */
 export async function routeUnassignedConversation(
@@ -1649,7 +1649,7 @@ async function assignRoutedConversation(conversation: Conversation): Promise<Pri
   const { routeConversation } = await import('./routing')
   const { assignedPrincipalId } = await routeConversation(conversation)
   if (!assignedPrincipalId) return null
-  // Atomic claim — only assign while still unassigned, so concurrent routing
+  // Atomic claim , only assign while still unassigned, so concurrent routing
   // (a racing first message, or two agents going offline) can't double-assign.
   const [assigned] = await db
     .update(conversations)
@@ -1661,7 +1661,7 @@ async function assignRoutedConversation(conversation: Conversation): Promise<Pri
   if (!assigned) return null
   await emitAssignmentSystemMessage(assigned.id, assignedPrincipalId)
   publishConversationUpdate(assigned.id, await conversationToDTO(assigned, 'agent'))
-  // Auto-routing only ever touches the agent column — the team side reports
+  // Auto-routing only ever touches the agent column , the team side reports
   // no change (still-current value as its own "previous").
   void emitConversationAssigned(systemActor(), assigned, null, assigned.assignedTeamId ?? null)
   return assignedPrincipalId
@@ -1715,7 +1715,7 @@ export async function assignConversation(
     await emitAssignmentSystemMessage(conversationId, agentPrincipalId, attribution)
   }
   if (updated.assignedAgentPrincipalId !== existing.assignedAgentPrincipalId) {
-    // This action never touches the team column — "previous" is the
+    // This action never touches the team column , "previous" is the
     // still-current value, so the team side of the event reports no change.
     void emitConversationAssigned(
       actor,
@@ -1746,7 +1746,7 @@ export async function assignTeam(
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
   const existing = await loadConversationOr404(conversationId)
   // Re-selecting the current team (or clearing an already-clear one) is a
-  // no-op — it does not re-distribute to a member or repeat the system message.
+  // no-op , it does not re-distribute to a member or repeat the system message.
   if ((existing.assignedTeamId ?? null) === teamId) return existing
 
   // Validate the target (throws NotFound if missing/deleted) and pick a member
@@ -1793,7 +1793,7 @@ export async function assignTeam(
     updated.assignedAgentPrincipalId !== existing.assignedAgentPrincipalId
   ) {
     // The team's members (in-app bell, excluding the actor) now ride this
-    // same event — see getConversationAssignedTargets in events/targets.ts,
+    // same event , see getConversationAssignedTargets in events/targets.ts,
     // which replaced the direct notifyTeamAssigned call.
     void emitConversationAssigned(
       actor,
@@ -1824,7 +1824,7 @@ export async function requeueUnansweredOnAgentOffline(
     if (assigned.length === 0) return
 
     // Which of those threads have a real, visitor-facing agent reply (so they
-    // stay assigned). Internal notes and soft-deleted messages don't count — a
+    // stay assigned). Internal notes and soft-deleted messages don't count , a
     // private note or a since-deleted reply must not mask an unanswered conversation.
     const answered = await db
       .selectDistinct({ id: conversationMessages.conversationId })
@@ -1920,7 +1920,7 @@ export async function setConversationPriority(
 /** Soft-delete a message. Team members may delete any message; a visitor may
  * delete only their own. Broadcasts a message_deleted event so open clients
  * drop the bubble. Idempotent. Branches on the message's (exactly one) parent
- * — a conversation-thread message keeps the full visitor-or-team-member
+ * , a conversation-thread message keeps the full visitor-or-team-member
  * decision below; a ticket-thread message takes the narrower path at the
  * bottom (see its comment for why). */
 export async function deleteConversationMessage(
@@ -1934,7 +1934,7 @@ export async function deleteConversationMessage(
     .limit(1)
   if (!message) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
 
-  // System events (assignment notices) are status records, not user content —
+  // System events (assignment notices) are status records, not user content ,
   // no one deletes them, on either parent. The guard also narrows senderType
   // to visitor|agent for canDeleteMessage below.
   if (message.senderType === 'system') {
@@ -1943,7 +1943,7 @@ export async function deleteConversationMessage(
 
   if (!message.conversationId) {
     // Ticket-thread message. `canDeleteMessage`'s third argument is typed as
-    // ConversationShape (visitorPrincipalId + a ConversationStatus) — real
+    // ConversationShape (visitorPrincipalId + a ConversationStatus) , real
     // conversation semantics that don't map onto a ticket, and there's no
     // ticket-side "delete your own message" feature to preserve (the
     // requester portal exposes no delete action at all today), so this path
@@ -1953,7 +1953,7 @@ export async function deleteConversationMessage(
     // same broad "is this actor an agent" gate `message.actions.ts`'s
     // `requireAgent` uses for the equivalent ticket-message actions.
     if (!message.ticketId) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
-    // Resolves the parent + authorizes ticket visibility (§2.5) — shared with
+    // Resolves the parent + authorizes ticket visibility (§2.5) , shared with
     // message.actions.ts's identical resolve-then-authorize step.
     await resolveMessageParent(message, actor)
     const decision = canActAsAgent(actor)
@@ -2113,7 +2113,7 @@ export async function recordCsat(
   }
 
   // Mirror the CSAT rating onto Quinn's involvement when it was the last handler
-  // (best-effort — never fails the rating; the assistant domain owns it). The
+  // (best-effort , never fails the rating; the assistant domain owns it). The
   // resolved_confirmed trigger rides the csat_submitted event instead: the
   // assistant subscriber in events/process.ts confirms the involvement off the
   // first submission, keeping cross-domain outcome logic on the bus.
@@ -2125,7 +2125,7 @@ export async function recordCsat(
 /**
  * Which side of a conversation the actor speaks for. Ownership beats role: a
  * team member inside a thread THEY own (their own portal/widget conversation)
- * is the visitor there — deriving from role alone would echo their typing back
+ * is the visitor there , deriving from role alone would echo their typing back
  * to them as "agent is typing" and stamp the wrong read watermark.
  */
 function conversationSideFor(conversation: Conversation, actor: Actor): ConversationSide {
@@ -2136,7 +2136,7 @@ function conversationSideFor(conversation: Conversation, actor: Actor): Conversa
 
 /** Broadcast an ephemeral typing signal (never persisted). */
 export async function signalTyping(conversationId: ConversationId, actor: Actor): Promise<void> {
-  // Same access gate as reading the thread — prevents spoofing typing into a
+  // Same access gate as reading the thread , prevents spoofing typing into a
   // conversation the actor can't see.
   const conversation = await assertConversationViewable(conversationId, actor)
   const side = conversationSideFor(conversation, actor)
@@ -2184,7 +2184,7 @@ async function applyAgentUnreadWatermark(
 
 /**
  * Move a conversation's AGENT read watermark to just before an anchor
- * TIMESTAMP — the shared core of `markConversationUnreadFromMessage`, and the
+ * TIMESTAMP , the shared core of `markConversationUnreadFromMessage`, and the
  * CONVERGENCE PHASE 3 delegate for a LEGACY ticket-parented "mark unread from
  * here" anchor on a linked customer pair (ticket-unread.service.ts): the
  * pair's watermark truth is the conversation's, so rewinding from a
@@ -2205,7 +2205,7 @@ export async function markConversationUnreadAt(
 }
 
 /**
- * Mark a conversation unread for the AGENT side starting at a specific message —
+ * Mark a conversation unread for the AGENT side starting at a specific message ,
  * the "mark unread from here" action. Moves the agent read-watermark to just
  * before the anchor (backwards-only, see unreadWatermarkFromAnchor) so the
  * anchor and everything after it resurface as unread in the inbox. Agent-gated
@@ -2261,7 +2261,7 @@ function assistantActor(principalId: PrincipalId): Actor {
  *
  * CONVERGENCE PHASE 1b: a conversation PAIRED with a customer ticket (a
  * "backing conversation") is additionally gated out at the dispatch site via
- * `isPairedWithCustomerTicket` — an async probe, so it can't live in this sync
+ * `isPairedWithCustomerTicket` , an async probe, so it can't live in this sync
  * gate. Intake-created backing conversations also carry source 'ticket_form',
  * which fails the check above on its own; the pair probe is what covers LEGACY
  * widget-source pairs (a messenger conversation linked after the fact).
@@ -2270,7 +2270,7 @@ export function shouldConsiderAssistant(
   conversation: Conversation,
   priorStatus: ConversationStatus | null
 ): boolean {
-  if (conversation.source !== 'widget') return false
+  if (conversation.source !== 'widget' || conversation.channel !== 'messenger') return false
   if (priorStatus === 'closed') return false
   return true
 }
@@ -2286,25 +2286,26 @@ export function shouldConsiderAssistant(
 export async function assistantTurnSurfaceFor(
   conversation: Conversation,
   priorStatus: ConversationStatus | null,
-  exec: Database | Transaction = db
+  exec: Database | Transaction = db,
+  triggerMessageId?: ConversationMessageId | null
 ): Promise<'widget' | 'email' | null> {
   if (priorStatus === 'closed') return null
   if (shouldConsiderAssistant(conversation, priorStatus)) return 'widget'
   const { assistantChannelEligibility } = await import('./assistant-channel-eligibility')
-  const verdict = await assistantChannelEligibility(conversation, exec)
+  const verdict = await assistantChannelEligibility(conversation, exec, triggerMessageId)
   if (!verdict.eligible) return null
   return 'email'
 }
 
 /**
  * CONVERGENCE PHASE 1b (convergence-design.md, side-effect model): whether
- * this conversation is PAIRED with a CUSTOMER ticket — one `ticket_conversations`
+ * this conversation is PAIRED with a CUSTOMER ticket , one `ticket_conversations`
  * row, ticket_type 'customer' (at most one can exist, per the partial unique
  * index). Pair conversations are gated OUT of the assistant turn: the thread
  * is the ticket's, governed by the ticket workflow, and Quinn fronting it
  * would double up. This is the PRIMARY Quinn gate (the intake-time source
  * label only covers 1b-created rows) and it applies to every visitor message
- * on the pair, which closes the Phase 1a flag — a portal/widget requester
+ * on the pair, which closes the Phase 1a flag , a portal/widget requester
  * reply redirected onto the pair conversation no longer summons Quinn.
  *
  * The probe lives here rather than in the tickets domain's pair-thread.service
@@ -2331,7 +2332,7 @@ export async function isPairedWithCustomerTicket(
 }
 
 /**
- * Append a reply authored by the assistant service principal — the message-
+ * Append a reply authored by the assistant service principal , the message-
  * append primitive for Quinn. Like an agent reply it bumps the last-message
  * preview and reopens a closed thread, but it never claims assignment (Quinn
  * fronts, it does not own) and it never marks the agent side read. `waiting`
@@ -2455,7 +2456,7 @@ export async function publishAssistantReplyEffects(
     conversationId: txResult.conversation.id,
     message: messageDTO,
   })
-  // isFirstMessage only matters for a VISITOR message — this is Quinn's own
+  // isFirstMessage only matters for a VISITOR message , this is Quinn's own
   // reply, so false.
   void emitMessageCreated(
     assistantActor(author.principalId),
@@ -2470,7 +2471,7 @@ export async function publishAssistantReplyEffects(
 /**
  * Post an agent-only internal note (authored by Quinn) recording why it handed
  * off, so the teammate who picks the conversation up has context at a glance.
- * Inbox channel only — it never reaches the visitor, mirroring `addNote`.
+ * Inbox channel only , it never reaches the visitor, mirroring `addNote`.
  */
 export async function appendAssistantHandoffNote(
   conversationId: ConversationId,
@@ -2649,7 +2650,7 @@ export async function executeAssistantHandoff(
   } catch (err) {
     log.warn({ err, conversationId }, 'pre-handoff attribute classification failed')
   }
-  // Let workflows/webhooks react to the hand-off — Quinn (the assistant service
+  // Let workflows/webhooks react to the hand-off , Quinn (the assistant service
   // principal) performed it, so the actor mirrors other service-authored events.
   // The caller already holds Quinn's identity; no principal lookup needed here.
   void dispatchAssistantHandedOff(
@@ -2668,7 +2669,7 @@ export type AssistantAutoCloseKind = 'assumed' | 'abandoned'
 
 /**
  * Close a conversation Quinn finished with (assumed resolution or abandoned).
- * Skips closed/snoozed threads and threads a human has already spoken into —
+ * Skips closed/snoozed threads and threads a human has already spoken into ,
  * those belong to the team-handled idle sweep, not Quinn's involvement clock.
  * Used by `finalizeStaleAssistantInvolvements`.
  */

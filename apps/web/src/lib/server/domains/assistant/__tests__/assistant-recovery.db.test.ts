@@ -422,29 +422,39 @@ describe.skipIf(!fixture.available)('operator recovery controls', () => {
     })
   })
 
-  it('retries a failed run that recorded no effect', async () => {
-    const conversationId = await seedConversation()
-    const run = await seedRun(conversationId, {
-      status: 'failed',
-      disposition: 'error',
-      finishedAt: minutesAgo(5),
-    })
+  it.each(['widget', 'email'] as const)(
+    'retries a failed %s run that recorded no effect',
+    async (surface) => {
+      const conversationId = await seedConversation()
+      const run = await seedRun(conversationId, {
+        status: 'failed',
+        disposition: 'error',
+        surface,
+        finishedAt: minutesAgo(5),
+      })
 
-    const retry = await retryFailedAssistantRun(run.id)
+      await testDb
+        .update(conversations)
+        .set({ channel: surface === 'email' ? 'email' : 'messenger' })
+        .where(eq(conversations.id, conversationId))
+      const retry = await retryFailedAssistantRun(run.id)
+      expect(retry.surface).toBe(surface)
+      expect(retry.triggerKind).toBe('operator_retry')
 
-    expect(retry.triggerKey).toBe(`retry:${run.id}`)
-    expect(retry.status).toBe('queued')
-    const jobs = await testDb
-      .select()
-      .from(jobQueue)
-      .where(
-        and(
-          eq(jobQueue.queue, 'assistant-turn'),
-          eq(jobQueue.dedupeKey, `assistant-turn:${retry.id}`)
+      expect(retry.triggerKey).toBe(`retry:${run.id}`)
+      expect(retry.status).toBe('queued')
+      const jobs = await testDb
+        .select()
+        .from(jobQueue)
+        .where(
+          and(
+            eq(jobQueue.queue, 'assistant-turn'),
+            eq(jobQueue.dedupeKey, `assistant-turn:${retry.id}`)
+          )
         )
-      )
-    expect(jobs).toHaveLength(1)
-  })
+      expect(jobs).toHaveLength(1)
+    }
+  )
 
   it('refuses a second retry of the same run', async () => {
     const conversationId = await seedConversation()

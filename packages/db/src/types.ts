@@ -64,7 +64,7 @@ export interface RoadmapBaseFilter {
   segmentIds?: SegmentId[]
 }
 
-// Moderation states for posts — single source of truth, kept in sync with
+// Moderation states for posts , single source of truth, kept in sync with
 // the posts.moderation_state column enum (schema.test.ts pins the match).
 export const MODERATION_STATES = [
   'published',
@@ -76,7 +76,7 @@ export const MODERATION_STATES = [
 ] as const
 export type ModerationState = (typeof MODERATION_STATES)[number]
 
-// Post audience — the second, independent privacy axis, kept in sync with the
+// Post audience , the second, independent privacy axis, kept in sync with the
 // posts.audience column CHECK (schema.test.ts pins the match). Moderation says
 // whether a post has cleared review; audience says who the post is for at all.
 // 'board' delegates to the board's own access matrix (the pre-existing
@@ -147,13 +147,13 @@ export type CustomFieldValues = Record<string, string | number | boolean>
 // ----------------------------------------------------------------------
 // Per-action access tiers (View+Vote / Comment / Submit) and per-board
 // approval overrides. The legacy `BoardAudience` discriminated union was
-// removed in migration 0080 — every reader now consults `BoardAccess`.
+// removed in migration 0080 , every reader now consults `BoardAccess`.
 // ----------------------------------------------------------------------
 
 export const ACCESS_TIERS = ['anonymous', 'authenticated', 'segments', 'team'] as const
 export type AccessTier = (typeof ACCESS_TIERS)[number]
 
-/** Restriction rank — higher number is stricter. Used for tier-invariant
+/** Restriction rank , higher number is stricter. Used for tier-invariant
  *  checks: a derived action (comment / submit) cannot be more permissive
  *  than view. */
 export const ACCESS_TIER_RANK: Record<AccessTier, number> = {
@@ -177,7 +177,7 @@ export interface BoardAccess {
   vote: AccessTier
   comment: AccessTier
   submit: AccessTier
-  /** Per-action segment allowlists — used wherever the matching tier is
+  /** Per-action segment allowlists , used wherever the matching tier is
    *  'segments'. A board can say "Active Users can view & comment, but
    *  only Beta testers can submit." Invalid (and rejected on save) when
    *  an action's tier is 'segments' but that action's list is empty. */
@@ -309,7 +309,7 @@ export interface RawFeedbackItemContextEnvelope {
 
 // Use case types for personalized onboarding
 /**
- * First-run intent — ideally an *outcome* ICP would name, not an industry
+ * First-run intent , ideally an *outcome* ICP would name, not an industry
  * vertical.
  *
  * UI offers: product_feedback | customer_support | help_center | internal.
@@ -322,7 +322,7 @@ export const USE_CASE_TYPES = [
   'customer_support',
   'help_center',
   'internal',
-  // Legacy — do not show in the picker
+  // Legacy , do not show in the picker
   'saas',
   'consumer',
   'marketplace',
@@ -595,7 +595,7 @@ export function isOnboardingComplete(setupState: SetupState | null): boolean {
 
 /**
  * A managed/provisioned workspace can satisfy {@link isOnboardingComplete}
- * without the owner ever seeing the "ready — here's what to do next" screen.
+ * without the owner ever seeing the "ready , here's what to do next" screen.
  * The public portal stays open for visitors; this is the admin-only last hop.
  */
 export function needsActivationHandoff(setupState: SetupState | null): boolean {
@@ -605,7 +605,7 @@ export function needsActivationHandoff(setupState: SetupState | null): boolean {
 /**
  * Provision can stamp the wizard complete so a public board exists, but the
  * owner still has to set the workspace name and URL and pick a first goal.
- * Until they do, send them through the wizard — not the empty board, and not
+ * Until they do, send them through the wizard , not the empty board, and not
  * the "you're ready" handoff.
  */
 export function needsCloudOnboardingWizard(setupState: SetupState | null): boolean {
@@ -658,7 +658,7 @@ export type NewPostNote = InferInsertModel<typeof postNotes>
 export type PostCommentReaction = InferSelectModel<typeof postCommentReactions>
 export type NewPostCommentReaction = InferInsertModel<typeof postCommentReactions>
 
-// Support-inbox conversation statuses — kept in sync with the conversations.status
+// Support-inbox conversation statuses , kept in sync with the conversations.status
 // column enum (schema.test.ts pins the match). 'snoozed' is a deferred-work state
 // with an explicit conversations.snoozed_until wake time (NULL = snoozed until the
 // customer next replies); it replaced the earlier 'pending' in migration 0139.
@@ -704,7 +704,7 @@ export type ConversationEndReason = (typeof CONVERSATION_END_REASONS)[number]
 // 'mail_loop_suspected' is the same shape of judgement about a different
 // question: the ingest path's guess that this message is one of the workspace's
 // own mails coming back. It badges a message filed rather than destroyed
-// BECAUSE it is a guess — see INBOUND_REFUSAL_CAUSES in the conversation domain
+// BECAUSE it is a guess , see INBOUND_REFUSAL_CAUSES in the conversation domain
 // for what the guess is made of and why it is retained.
 export const CONVERSATION_SPAM_FILED_BY = [
   'auto_responder',
@@ -723,7 +723,7 @@ export type ConversationSpamFiledBy = (typeof CONVERSATION_SPAM_FILED_BY)[number
 export const AGENT_AVAILABILITY_VALUES = ['online', 'away'] as const
 export type AgentAvailability = (typeof AGENT_AVAILABILITY_VALUES)[number]
 
-// The inbound channel a conversation arrived on — kept in sync with the
+// The inbound channel a conversation arrived on , kept in sync with the
 // conversations.channel column enum. Widget threads are 'messenger' (ticket
 // intake forms mint messenger-channel backing conversations with source
 // 'ticket_form'); 'email' threads point at their inbound channel account;
@@ -732,12 +732,12 @@ export type AgentAvailability = (typeof AGENT_AVAILABILITY_VALUES)[number]
 export const CHANNELS = ['messenger', 'email', 'github'] as const
 export type Channel = (typeof CHANNELS)[number]
 
-// Agent-set conversation priority for inbox triage — kept in sync with the
+// Agent-set conversation priority for inbox triage , kept in sync with the
 // conversations.priority column enum. 'none' = unset (the default).
 export const CONVERSATION_PRIORITIES = ['none', 'low', 'medium', 'high', 'urgent'] as const
 export type ConversationPriority = (typeof CONVERSATION_PRIORITIES)[number]
 
-// Ticket kind (support platform §4.2) — kept in sync with the tickets.type column
+// Ticket kind (support platform §4.2) , kept in sync with the tickets.type column
 // enum. 'customer' is the customer-visible support request (at most one per
 // conversation); 'back_office' is an internal task; 'tracker' is an umbrella that
 // fans work out to linked tickets via ticket_links.
@@ -745,7 +745,7 @@ export const TICKET_TYPES = ['customer', 'back_office', 'tracker'] as const
 export type TicketType = (typeof TICKET_TYPES)[number]
 
 // Coarse lifecycle bucket a ticket status rolls up to for reporting and inbox
-// grouping — kept in sync with the ticket_statuses.category column enum.
+// grouping , kept in sync with the ticket_statuses.category column enum.
 export const TICKET_STATUS_CATEGORIES = ['open', 'pending', 'closed'] as const
 export type TicketStatusCategory = (typeof TICKET_STATUS_CATEGORIES)[number]
 
@@ -755,14 +755,14 @@ export type TicketStatusCategory = (typeof TICKET_STATUS_CATEGORIES)[number]
 export const TICKET_STAGES = ['received', 'in_progress', 'awaiting_requester', 'resolved'] as const
 export type TicketStage = (typeof TICKET_STAGES)[number]
 
-// How a team-assigned conversation picks a member — kept in sync with the
+// How a team-assigned conversation picks a member , kept in sync with the
 // teams.assignment_method column enum. 'manual' assigns the team only (no
 // member pick); 'round_robin' rotates over online members; 'balanced' reuses
 // the least-loaded auto-assign strategy scoped to the team's members.
 export const TEAM_ASSIGNMENT_METHODS = ['manual', 'round_robin', 'balanced'] as const
 export type TeamAssignmentMethod = (typeof TEAM_ASSIGNMENT_METHODS)[number]
 
-// Which side of a conversation a message came from — kept in sync with the
+// Which side of a conversation a message came from , kept in sync with the
 // conversation_messages.sender_type column enum. 'system' rows are status events (e.g.
 // assignment) shown to both sides; attributed to the relevant agent's principal
 // and never counted as unread.
@@ -826,27 +826,27 @@ export interface ConversationSystemEvent {
   stageLabel?: string
   /** B22: true on a 'ticket_status_changed' for a close via a null-publicStage
    *  status ("Won't do", "Duplicate"): the thread marker is the generic
-   *  localized "Ticket closed" projection — the internal status name is never
+   *  localized "Ticket closed" projection , the internal status name is never
    *  carried here (that is the point of the null stage). */
   closed?: boolean
-  /** Tracker reference (e.g. "#12") for 'ticket_linked' — team-only. */
+  /** Tracker reference (e.g. "#12") for 'ticket_linked' , team-only. */
   trackerReference?: string
   /** Ticket reference (e.g. "#42") for 'ticket_created' (unified inbox M5's
    *  create-ticket flow). CONVERGENCE: on the shared conversation↔ticket
    *  thread this is the customer-visible conversion marker, localized
-   *  client-side from this event — the visitor it renders for is the ticket's
+   *  client-side from this event , the visitor it renders for is the ticket's
    *  own requester. The same kind carries a non-customer ticket opened from a
    *  conversation, where the row is internal and the audience is the team; the
    *  audience rides `isInternal`, not the kind. */
   ticketReference?: string
   /** External issue reference (e.g. "acme/widgets#142") for
-   *  'external_linked' / 'external_unlinked' — team-only. */
+   *  'external_linked' / 'external_unlinked' , team-only. */
   externalReference?: string
-  /** External issue URL for 'external_linked' / 'external_unlinked' — team-only. */
+  /** External issue URL for 'external_linked' / 'external_unlinked' , team-only. */
   externalUrl?: string
-  /** New priority for 'priority_changed' — team-only (the row is internal). */
+  /** New priority for 'priority_changed' , team-only (the row is internal). */
   priority?: ConversationPriority
-  /** CSAT rating (1-5) for 'csat_submitted' — team-only (the row is internal). */
+  /** CSAT rating (1-5) for 'csat_submitted' , team-only (the row is internal). */
   rating?: number
   /** Name of the workflow whose run posted this notice, when one did. Lets
    *  the thread attribute the event to the automation that fired it ("via
@@ -870,7 +870,7 @@ export function withWorkflowAttribution(
 }
 
 // An agent-only suggestion (carried on an internal note) to track a resolved
-// conversation as a feedback post. Surfaced exclusively via the agent DTO — it
+// conversation as a feedback post. Surfaced exclusively via the agent DTO , it
 // never reaches the visitor.
 export interface PostSuggestion {
   boardId: string
@@ -880,7 +880,7 @@ export interface PostSuggestion {
 
 // A write-tool call Quinn proposed but has not executed, surfaced on an
 // internal note (conversation_messages.metadata) so the team sees it without
-// polling. A point-in-time snapshot only — the pending action row is the live
+// polling. A point-in-time snapshot only , the pending action row is the live
 // source of truth an agent approves/rejects from.
 export interface AssistantPendingActionSurface {
   pendingActionId: string
@@ -891,12 +891,12 @@ export interface AssistantPendingActionSurface {
 // Workflow conversational-block layer (Phase C, slice C-1). A block is an
 // ordinary senderType:'agent' message authored by the assistant service
 // principal; its structured shape lives in metadata.block, mirroring the
-// systemEvent precedent — content ALWAYS carries an honest plain-text
+// systemEvent precedent , content ALWAYS carries an honest plain-text
 // fallback, contentJson carries the resolved rich prompt body (variables
 // already substituted server-side; a raw {token} never reaches storage).
 export type WorkflowBlockKind =
   | 'message'
-  // The in-thread ticket intake form (send_ticket_form node) — a SEND kind,
+  // The in-thread ticket intake form (send_ticket_form node) , a SEND kind,
   // never in INTERACTIVE_BLOCK_KINDS: it posts and continues immediately.
   | 'ticketForm'
   | 'buttons'
@@ -905,7 +905,7 @@ export type WorkflowBlockKind =
   | 'csat'
   | 'replyTime'
 
-/** Block kinds that park the run awaiting a customer reply — the only ones
+/** Block kinds that park the run awaiting a customer reply , the only ones
  *  that ever produce a BlockState (widget conversation-rows.ts's derivation)
  *  or need an active-run check before continuing (the engine's
  *  action.executor.ts). The remaining kinds (message/replyTime) post and
@@ -917,7 +917,7 @@ export const INTERACTIVE_BLOCK_KINDS: ReadonlySet<WorkflowBlockKind> = new Set([
   'csat',
 ])
 
-/** The five CSAT satisfaction faces, low to high — index = rating-1. The one
+/** The five CSAT satisfaction faces, low to high , index = rating-1. The one
  *  canonical order/glyph set every surface that renders or echoes a CSAT
  *  rating shares: the widget's block affordance row, the admin inbox's
  *  read-only summary, the server's stored-reply echo + honest plain-text
@@ -953,7 +953,7 @@ export interface WorkflowBlockAttributeOption {
 export type WorkflowBlockPayload =
   | (WorkflowBlockPayloadBase & { kind: 'message' })
   // The ticket intake form sent into the thread by a workflow's
-  // send_ticket_form node: a SEND kind (waiting always false) — the widget
+  // send_ticket_form node: a SEND kind (waiting always false) , the widget
   // renders the form card for this kind and the visitor files the ticket
   // in-thread; there is no structured block reply to correlate.
   | (WorkflowBlockPayloadBase & { kind: 'ticketForm' })
@@ -978,7 +978,7 @@ export type WorkflowBlockPayload =
   | (WorkflowBlockPayloadBase & { kind: 'replyTime'; status: 'online' | 'away' })
 
 /** The customer's structured reply to a block, stored on the VISITOR message
- *  it was sent as. `inReplyToMessageId` is the block message's own id — the
+ *  it was sent as. `inReplyToMessageId` is the block message's own id , the
  *  correlation key (unique per park occurrence, collision-proof where
  *  runId+nodeId is not, since a graph can revisit the same node). */
 export type BlockReplyMetadata =
@@ -1015,18 +1015,22 @@ export interface ConversationMessageMetadata {
   githubCommentId?: string
   /** Live outbound status for a thread-addressed channel send. */
   channelDelivery?: ChannelDelivery
+  /** Durable intent before an autonomous email reaches the provider. Never replayed blindly. */
+  assistantEmailDispatch?: { at: string; jobId: string }
   /** GitHub issue number for the message's thread, when known. */
   githubIssueNumber?: string
   /** Tracker inbound webhook body hash, used to dedupe redelivered status notes. */
   inboundDeliveryKey?: string
   /** Provider Message-ID for an inbound email, used to dedupe webhook retries. */
   emailMessageId?: string
+  /** Receiver-authenticated verdict, written only by email ingest. Absence is unverified. */
+  emailSenderAuth?: 'pass' | 'unverified' | 'reject'
   /** RFC 5322 threading of an inbound email message: the parent it replied to
    *  and the full References chain (bare ids). Populated on the email channel. */
   inReplyTo?: string
   references?: string[]
   /** The email Subject + Cc participants at the time this message arrived
-   *  (§4.8). Bcc is never stored — it is stripped at ingest. */
+   *  (§4.8). Bcc is never stored , it is stripped at ingest. */
   subject?: string
   cc?: string[]
   /** For 'system' messages: the structured event, so clients can localize the
@@ -1070,7 +1074,7 @@ export interface TranslatedFromMetadata {
   /** The teammate's own language at send time (their preference, or the
    *  'en' fallback when unset). */
   sourceLocale: string
-  /** The customer's language the reply was translated (and sent) into —
+  /** The customer's language the reply was translated (and sent) into ,
    *  matches this message's actual stored `content`. */
   targetLocale: string
 }

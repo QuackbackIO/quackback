@@ -1,39 +1,27 @@
-/**
- * Sending an autonomous Quinn answer out over the email channel
- * (QUINN-PRODUCT P9).
- *
- * The transcript message is already committed when this runs. That split is
- * deliberate and follows the inactivity follow-up exactly: the message and its
- * `pending` delivery record are written in the publication transaction, and
- * the transport is a separate job, so a provider outage delays a delivery
- * rather than losing an answer or holding the publication fence open across a
- * network call.
- *
- * What it adds over the inactivity path is a re-check. Between the commit and
- * the send, a teammate can take the conversation over, the customer can close
- * it, or the workspace can turn the channel off; none of those unsends a
- * message, but all of them mean this workspace should not now email the
- * customer as Quinn. The delivery is recorded as cancelled in that case, which
- * is a state a person can read, rather than being quietly dropped.
- *
- * Threading is the ordinary outbound path's: `notifyAgentReply` mints a
- * Message-ID keyed by this message id (so a retry threads identically) and
- * sets In-Reply-To and References from the conversation's own recorded ids.
- */
-import { db, eq, conversations, conversationMessages } from '@/lib/server/db'
-import type { ConversationId, ConversationMessageId } from '@quackback/ids'
+/** Durable, at-most-once dispatch of a committed Quinn email answer. */
+import {
+  db,
+  and,
+  desc,
+  eq,
+  sql,
+  conversations,
+  conversationMessages,
+  assistantRuns,
+  ticketConversations,
+} from '@/lib/server/db'
+import type { ConversationMessageId } from '@quackback/ids'
 import type { ClaimedJob } from '@/lib/server/jobs/job-queue'
-import { logger } from '@/lib/server/logger'
-import { notifyAgentReply } from './conversation.notify'
+import { makeLogger } from '@/lib/server/logger'
+import { notifyAgentReply, EmailNotSentError } from './conversation.notify'
 import { persistChannelDelivery } from './conversation.channel-delivery'
 import { assistantChannelEligibility } from './assistant-channel-eligibility'
+import { getLatestInvolvement, recordAssistantAnswer } from '../assistant/assistant.involvement'
+import { broadcastInboxMessageUpdated } from './message.actions'
 
-const log = logger.child({ component: 'assistant-email-delivery' })
-
-/** The queue that carries one committed Quinn answer out to a mailbox. */
+const log = makeLogger('assistant-email-delivery')
+const UNCONFIRMED = 'Delivery unconfirmed. Not retried automatically.'
 export const ASSISTANT_EMAIL_DELIVERY_QUEUE = 'assistant-email-delivery'
-
-/** One job per message, so a duplicate enqueue is the same job. */
 export function assistantEmailDeliveryDedupeKey(messageId: ConversationMessageId): string {
   return `assistant-email:${messageId}`
 }
@@ -41,41 +29,91 @@ export function assistantEmailDeliveryDedupeKey(messageId: ConversationMessageId
 export async function deliverAssistantEmail(job: ClaimedJob): Promise<void> {
   const messageId = job.payload.messageId as ConversationMessageId | undefined
   if (!messageId) throw new Error('assistant-email-delivery job has no messageId')
-  const deliveryLog = log.child({ message_id: messageId, job_id: job.jobId })
-
   const [message] = await db
     .select()
     .from(conversationMessages)
     .where(eq(conversationMessages.id, messageId))
-    .limit(1)
-  if (!message?.conversationId) return
-  // Already delivered: a retry after the send committed its own record has
-  // nothing left to do and must not send a second copy.
+  if (
+    !message ||
+    !message.conversationId ||
+    message.isInternal ||
+    message.senderType !== 'agent' ||
+    !message.assistantRunId
+  )
+    return
   if (message.metadata?.channelDelivery?.status === 'sent') return
-
+  if (message.metadata?.assistantEmailDispatch) {
+    if (message.metadata.assistantEmailDispatch.jobId === job.jobId) {
+      await persistChannelDelivery(messageId, {
+        status: 'failed',
+        channel: 'email',
+        error: UNCONFIRMED,
+      })
+    }
+    return
+  }
+  const [run] = await db
+    .select()
+    .from(assistantRuns)
+    .where(eq(assistantRuns.id, message.assistantRunId))
+  if (
+    !run ||
+    run.surface !== 'email' ||
+    run.resultMessageId !== message.id ||
+    run.conversationId !== message.conversationId
+  )
+    return
   const [conversation] = await db
     .select()
     .from(conversations)
-    .where(eq(conversations.id, message.conversationId as ConversationId))
-    .limit(1)
+    .where(eq(conversations.id, message.conversationId))
   if (!conversation) return
-
-  // The same rules the intake gate ran, asked again at the moment of sending.
-  const verdict = await assistantChannelEligibility(conversation, db)
-  if (!verdict.eligible) {
+  const verdict = await assistantChannelEligibility(conversation, db, run.triggerMessageId)
+  const [pair] = await db
+    .select({ id: ticketConversations.ticketId })
+    .from(ticketConversations)
+    .where(
+      and(
+        eq(ticketConversations.conversationId, conversation.id),
+        eq(ticketConversations.ticketType, 'customer')
+      )
+    )
+    .limit(1)
+  const involvement = await getLatestInvolvement(conversation.id)
+  const reason = !verdict.eligible
+    ? verdict.reason
+    : pair
+      ? 'paired_ticket'
+      : involvement?.status === 'handed_off' && run.outcome !== 'handoff'
+        ? 'handed_off'
+        : null
+  if (reason) {
     await persistChannelDelivery(messageId, {
       status: 'failed',
       channel: 'email',
-      error: `Not sent: ${verdict.reason.replace(/_/g, ' ')}.`,
+      error: `Not sent: ${reason.replace(/_/g, ' ')}.`,
     })
-    deliveryLog.info(
-      { event: 'assistant_email.cancelled', reason: verdict.reason },
-      'autonomous email answer was not sent'
-    )
+    log.info('Autonomous email answer was not sent', { message_id: messageId, reason })
     return
   }
 
-  await persistChannelDelivery(messageId, { status: 'pending', channel: 'email' })
+  // The compare-and-set is the dispatch commitment. A lost process can leave
+  // an uncertain delivery, but a second worker cannot send another copy.
+  const dispatch = { at: new Date().toISOString(), jobId: job.jobId }
+  const [claimed] = await db
+    .update(conversationMessages)
+    .set({
+      metadata: sql`COALESCE(${conversationMessages.metadata}, '{}'::jsonb) || ${JSON.stringify({ assistantEmailDispatch: dispatch })}::jsonb`,
+    })
+    .where(
+      and(
+        eq(conversationMessages.id, messageId),
+        sql`${conversationMessages.metadata}->'assistantEmailDispatch' IS NULL`,
+        sql`${conversationMessages.metadata}->'channelDelivery'->>'status' IS DISTINCT FROM 'sent'`
+      )
+    )
+    .returning()
+  if (!claimed) return
   try {
     await notifyAgentReply({
       conversationId: conversation.id,
@@ -88,16 +126,86 @@ export async function deliverAssistantEmail(job: ClaimedJob): Promise<void> {
       strictDelivery: true,
     })
   } catch (err) {
+    if (err instanceof EmailNotSentError) {
+      // Only an explicit not-sent result permits another attempt.
+      await db
+        .update(conversationMessages)
+        .set({ metadata: sql`${conversationMessages.metadata} - 'assistantEmailDispatch'` })
+        .where(
+          and(
+            eq(conversationMessages.id, messageId),
+            sql`${conversationMessages.metadata}->'assistantEmailDispatch' = ${JSON.stringify(dispatch)}::jsonb`
+          )
+        )
+      await persistChannelDelivery(messageId, {
+        status: 'failed',
+        channel: 'email',
+        error: err.message,
+      })
+      throw err
+    }
     await persistChannelDelivery(messageId, {
       status: 'failed',
       channel: 'email',
-      error: err instanceof Error ? err.message : 'The reply could not be sent.',
+      error: UNCONFIRMED,
     })
-    deliveryLog.warn({ err, event: 'assistant_email.failed' }, 'autonomous email answer failed')
-    // Rethrown so the queue retries: the answer is durable and unsent, which
-    // is exactly what a retry is for.
-    throw err
+    log.warn('Autonomous email delivery is unconfirmed', {
+      message_id: messageId,
+      job_id: job.jobId,
+    })
+    return
   }
-  await persistChannelDelivery(messageId, { status: 'sent', channel: 'email' })
-  deliveryLog.info({ event: 'assistant_email.sent' }, 'autonomous email answer delivered')
+
+  const updated = await db.transaction(async (tx) => {
+    const [parent] = await tx
+      .select()
+      .from(conversations)
+      .where(eq(conversations.id, conversation.id))
+      .for('update')
+    const at = new Date()
+    const [sent] = await tx
+      .update(conversationMessages)
+      .set({
+        metadata: sql`${conversationMessages.metadata} || ${JSON.stringify({ channelDelivery: { status: 'sent', channel: 'email', at: at.toISOString() } })}::jsonb`,
+      })
+      .where(eq(conversationMessages.id, messageId))
+      .returning()
+    const [latest] = await tx
+      .select({ id: conversationMessages.id })
+      .from(conversationMessages)
+      .where(
+        and(
+          eq(conversationMessages.conversationId, conversation.id),
+          eq(conversationMessages.isInternal, false)
+        )
+      )
+      .orderBy(desc(conversationMessages.createdAt), desc(conversationMessages.id))
+      .limit(1)
+    if (
+      parent?.status === 'open' &&
+      !parent.assignedAgentPrincipalId &&
+      latest?.id === message.id &&
+      parent.assistantRevision === run.inputRevision &&
+      run.outcome !== 'handoff'
+    ) {
+      const active = await getLatestInvolvement(conversation.id, tx)
+      if (active?.status === 'handed_off') return sent
+      const answered = run.outcome === 'answer' && active?.status === 'active'
+      if (answered)
+        await recordAssistantAnswer(active.id, { sources: message.citations ?? [], at }, tx)
+      await tx
+        .update(conversations)
+        .set({
+          waitingSince: null,
+          inactivityOwner: answered ? 'assistant_answered' : 'assistant_waiting',
+          inactivityAnchorAt: at,
+          inactivityCheckInAt: null,
+          inactivityRetryAt: null,
+        })
+        .where(eq(conversations.id, conversation.id))
+    }
+    return sent
+  })
+  if (updated) await broadcastInboxMessageUpdated(updated)
+  log.info('Autonomous email answer delivered', { message_id: messageId, job_id: job.jobId })
 }

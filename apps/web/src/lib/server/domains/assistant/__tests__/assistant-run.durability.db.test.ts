@@ -263,6 +263,7 @@ async function publicMessages(conversationId: ConversationId) {
       id: conversationMessages.id,
       runId: conversationMessages.assistantRunId,
       content: conversationMessages.content,
+      metadata: conversationMessages.metadata,
     })
     .from(conversationMessages)
     .where(
@@ -447,7 +448,7 @@ describe.skipIf(!available)('durable Quinn turns on real PostgreSQL', () => {
     const job = await claimTurn(runId)
 
     // Real expiry, real reaper. The turn job is at-most-once, so the reaper
-    // makes it terminal rather than handing it to a new owner — which is
+    // makes it terminal rather than handing it to a new owner , which is
     // exactly the case a run-row token comparison alone would miss.
     await db.execute(
       sql`UPDATE job_queue SET locked_until = now() - interval '1 second' WHERE job_id = ${job.jobId}`
@@ -880,6 +881,90 @@ describe.skipIf(!available)('the durable turn executor on real PostgreSQL', () =
     expect(step).toMatchObject({ promptTokens: 70, completionTokens: 12 })
     expect(step.finishedAt!.getTime() - step.startedAt.getTime()).toBeGreaterThanOrEqual(15)
   })
+
+  it.each(['generation', 'publication', 'pending_delivery'])(
+    'requires the email trigger verdict at %s',
+    async (gate) => {
+      const { conversationId, runId } = await seedTurn()
+      const { settings } = await import('@/lib/server/db')
+      const [workspace] = await db.select().from(settings).limit(1)
+      await db
+        .update(settings)
+        .set({
+          metadata: JSON.stringify({
+            ...JSON.parse(workspace.metadata ?? '{}'),
+            assistantChannels: { email: { enabled: true } },
+          }),
+        })
+        .where(eq(settings.id, workspace.id))
+      try {
+        const run = (await loadRun(db, runId as never))!
+        await db
+          .update(conversations)
+          .set({ channel: 'email', visitorEmail: 'customer@example.test' })
+          .where(eq(conversations.id, conversationId))
+        await db.update(assistantRuns).set({ surface: 'email' }).where(eq(assistantRuns.id, run.id))
+        await db
+          .update(conversationMessages)
+          .set({
+            metadata: {
+              source: 'email',
+              emailMessageId: `${runId}@customer.example`,
+              emailSenderAuth: gate === 'generation' ? 'reject' : 'pass',
+            },
+          })
+          .where(eq(conversationMessages.id, run.triggerMessageId!))
+        vi.mocked(runAssistantTurn).mockImplementation(async () => {
+          await db
+            .update(conversationMessages)
+            .set({
+              metadata: {
+                source: 'email',
+                emailMessageId: `${runId}@customer.example`,
+                emailSenderAuth: gate === 'pending_delivery' ? 'pass' : 'reject',
+              },
+            })
+            .where(eq(conversationMessages.id, run.triggerMessageId!))
+          return answer('Refunds take three days.') as unknown as Awaited<
+            ReturnType<typeof runAssistantTurn>
+          >
+        })
+        if (gate === 'pending_delivery')
+          verifyAnswerSupportMock
+            .mockResolvedValueOnce(enforced('unsupported'))
+            .mockResolvedValueOnce(enforced('supported'))
+        const outcome = await advanceAssistantRun(await claimTurn(runId))
+        if (gate === 'pending_delivery') {
+          expect(outcome).toBe('published')
+          expect(vi.mocked(runAssistantTurn).mock.calls.map(([input]) => input.surface)).toEqual([
+            'email',
+            'email',
+          ])
+          const [parent] = await db
+            .select()
+            .from(conversations)
+            .where(eq(conversations.id, conversationId))
+          const { getLatestInvolvement } = await import('../assistant.involvement')
+          expect((await getLatestInvolvement(conversationId))?.lastAssistantAnswerAt).toBeNull()
+          expect(parent.inactivityAnchorAt).toBeNull()
+          expect((await publicMessages(conversationId))[0].metadata?.channelDelivery?.status).toBe(
+            'pending'
+          )
+        } else expect(outcome).not.toBe('published')
+        expect(vi.mocked(runAssistantTurn)).toHaveBeenCalledTimes(
+          gate === 'generation' ? 0 : gate === 'pending_delivery' ? 2 : 1
+        )
+        expect(await publicMessages(conversationId)).toHaveLength(
+          gate === 'pending_delivery' ? 1 : 0
+        )
+      } finally {
+        await db
+          .update(settings)
+          .set({ metadata: workspace.metadata })
+          .where(eq(settings.id, workspace.id))
+      }
+    }
+  )
 
   it('P6: a shadow verdict never changes what the customer sees', async () => {
     const { conversationId, runId } = await seedTurn()

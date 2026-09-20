@@ -418,6 +418,7 @@ export async function retryFailedAssistantRun(
   const [parent] = await db
     .select({
       status: conversations.status,
+      channel: conversations.channel,
       assignedAgentPrincipalId: conversations.assignedAgentPrincipalId,
     })
     .from(conversations)
@@ -435,8 +436,9 @@ export async function retryFailedAssistantRun(
     requested = await requestAssistantTurn(tx, {
       conversationId: run.conversationId!,
       triggerKey: `retry:${runId}`,
-      triggerKind: 'agent_handback',
-      surface: 'widget',
+      triggerKind: 'operator_retry',
+      surface:
+        parent.channel === 'email' ? 'email' : run.surface === 'email' ? 'widget' : run.surface,
       triggerMessageId: run.triggerMessageId,
       requestedByPrincipalId: opts.requestedByPrincipalId ?? null,
     })

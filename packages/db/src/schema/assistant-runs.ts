@@ -75,6 +75,8 @@ export const ASSISTANT_RUN_TRIGGER_KINDS = [
   'customer_message',
   'workflow_delegation',
   'agent_handback',
+  'operator_retry',
+  'action_result',
 ] as const
 
 /**

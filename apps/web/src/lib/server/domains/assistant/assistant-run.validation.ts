@@ -34,7 +34,7 @@ type AnsweredTurn = Extract<
  * mode produces the calibration data enforcement is supposed to graduate on.
  */
 export async function verifyAndMaybeRepair(input: {
-  run: { id: AssistantRunId; attemptCount: number }
+  run: Pick<AssistantRunRow, 'id' | 'attemptCount' | 'surface'>
   conversationId: ConversationId
   prepared: Awaited<ReturnType<typeof import('./assistant.orchestrator').prepareAssistantTurn>>
   stepInstructions: string | null
@@ -68,7 +68,7 @@ export async function verifyAndMaybeRepair(input: {
   const repairStartedAt = new Date()
   try {
     const attempt = await generateAssistantCandidate(input.conversationId, prepared, {
-      surface: 'widget',
+      surface: input.run.surface,
       stepInstructions: [input.stepInstructions, REPAIR_INSTRUCTION].filter(Boolean).join('\n\n'),
       runId: input.run.id,
       readOnlyTools: true,

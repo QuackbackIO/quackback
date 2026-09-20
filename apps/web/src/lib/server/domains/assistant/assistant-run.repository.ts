@@ -188,13 +188,7 @@ export async function loadRun(
 }
 
 /** The conversation fields the fences read, under the lock the caller took. */
-export interface FencedConversationState {
-  id: ConversationId
-  status: string
-  snoozedUntil: Date | null
-  endReason: string | null
-  assistantRevision: number
-}
+export type FencedConversationState = typeof conversations.$inferSelect
 
 /**
  * Take the first lock in the documented order and return what the fences need.
@@ -208,13 +202,7 @@ export async function lockConversationForRun(
   conversationId: ConversationId
 ): Promise<FencedConversationState | null> {
   const [row] = await tx
-    .select({
-      id: conversations.id,
-      status: conversations.status,
-      snoozedUntil: conversations.snoozedUntil,
-      endReason: conversations.endReason,
-      assistantRevision: conversations.assistantRevision,
-    })
+    .select()
     .from(conversations)
     .where(eq(conversations.id, conversationId))
     .limit(1)

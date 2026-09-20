@@ -657,51 +657,71 @@ describe.skipIf(!available)('durable approvals', () => {
 })
 
 describe.skipIf(!available)('continuation and ownership', () => {
-  it('parks the run on a live proposal and resumes it as a continuation under the fence', async () => {
-    const conversationId = await newConversation()
-    const requested = await db.transaction((tx) =>
-      requestAssistantTurn(tx, {
-        conversationId,
-        triggerKey: `conversation:${conversationId}:message:kp-park`,
-        triggerKind: 'customer_message',
-        surface: 'widget',
+  it.each(['widget', 'email'] as const)(
+    'continues a parked %s run on its customer channel',
+    async (surface) => {
+      const conversationId = await newConversation()
+      await db
+        .update(conversations)
+        .set({ channel: surface === 'email' ? 'email' : 'messenger' })
+        .where(eq(conversations.id, conversationId))
+      const [trigger] = await db
+        .insert(conversationMessages)
+        .values({
+          conversationId,
+          principalId: visitorId,
+          senderType: 'visitor',
+          content: 'Please do it',
+        })
+        .returning()
+      const requested = await db.transaction((tx) =>
+        requestAssistantTurn(tx, {
+          conversationId,
+          triggerKey: `conversation:${conversationId}:message:kp-park`,
+          triggerKind: 'customer_message',
+          surface,
+          triggerMessageId: trigger.id,
+        })
+      )
+      // The turn published its acknowledgement and then parked.
+      await db
+        .update(assistantRuns)
+        .set({ status: 'running' })
+        .where(eq(assistantRuns.id, requested.run.id))
+      const action = await proposal(conversationId, {
+        runId: requested.run.id,
+      } as Partial<AssistantPendingAction>)
+      const parked = await parkRunForAction(db, requested.run.id, action.id)
+      expect(parked?.status).toBe('waiting_action')
+
+      await db
+        .update(assistantPendingActions)
+        .set({ status: 'approved', decidedById: reviewerId, executionState: 'succeeded' })
+        .where(eq(assistantPendingActions.id, action.id))
+      const approved = (await getPendingActionById(action.id))!
+
+      const continued = await ownershipForActionResult(approved, {
+        kind: 'succeeded',
+        note: 'Refund issued',
       })
-    )
-    // The turn published its acknowledgement and then parked.
-    await db
-      .update(assistantRuns)
-      .set({ status: 'running' })
-      .where(eq(assistantRuns.id, requested.run.id))
-    const action = await proposal(conversationId, {
-      runId: requested.run.id,
-    } as Partial<AssistantPendingAction>)
-    const parked = await parkRunForAction(db, requested.run.id, action.id)
-    expect(parked?.status).toBe('waiting_action')
 
-    await db
-      .update(assistantPendingActions)
-      .set({ status: 'approved', decidedById: reviewerId, executionState: 'succeeded' })
-      .where(eq(assistantPendingActions.id, action.id))
-    const approved = (await getPendingActionById(action.id))!
-
-    const continued = await ownershipForActionResult(approved, {
-      kind: 'succeeded',
-      note: 'Refund issued',
-    })
-
-    expect(continued.kind).toBe('continuation')
-    // The parked run is finished, and the result travels as a NEW run through
-    // every publication fence rather than resuming a row a later customer
-    // message may already have superseded.
-    const settledParked = await loadRun(db, requested.run.id)
-    expect(settledParked?.status).toBe('succeeded')
-    expect(settledParked?.disposition).toBe('action:succeeded')
-    if (continued.kind === 'continuation') {
-      expect(continued.run.run.triggerKey).toBe(`action:${action.id}:result`)
-      expect(continued.run.run.id).not.toBe(requested.run.id)
-      expect(continued.run.inputRevision).toBeGreaterThan(requested.inputRevision)
+      expect(continued.kind).toBe('continuation')
+      // The parked run is finished, and the result travels as a NEW run through
+      // every publication fence rather than resuming a row a later customer
+      // message may already have superseded.
+      const settledParked = await loadRun(db, requested.run.id)
+      expect(settledParked?.status).toBe('succeeded')
+      expect(settledParked?.disposition).toBe('action:succeeded')
+      if (continued.kind === 'continuation') {
+        expect(continued.run.run.surface).toBe(surface)
+        expect(continued.run.run.triggerMessageId).toBe(trigger.id)
+        expect(continued.run.run.triggerKind).toBe('action_result')
+        expect(continued.run.run.triggerKey).toBe(`action:${action.id}:result`)
+        expect(continued.run.run.id).not.toBe(requested.run.id)
+        expect(continued.run.inputRevision).toBeGreaterThan(requested.inputRevision)
+      }
     }
-  })
+  )
 
   it('a customer message during the approval supersedes the parked run and strands nothing', async () => {
     const conversationId = await newConversation()

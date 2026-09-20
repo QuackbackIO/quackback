@@ -93,7 +93,7 @@ export function actionResultTriggerKey(pendingActionId: string): string {
 export interface RequestAssistantTurnInput {
   conversationId: ConversationId
   triggerKey: string
-  triggerKind: 'customer_message' | 'workflow_delegation' | 'agent_handback'
+  triggerKind: import('@/lib/server/db').AssistantRunTriggerKind
   surface: 'widget' | 'email' | 'workflow_step'
   triggerMessageId?: ConversationMessageId | null
   delegation?: { workflowRunId: string; nodeId: string; waitSeq: number } | null
@@ -216,6 +216,7 @@ export type PublicationRejection =
   | 'fence:conversation_snoozed'
   | 'fence:paired_ticket'
   | 'fence:handed_off'
+  | 'fence:channel_ineligible'
   /** The deterministic publication validator refused it. Always enforced. */
   | `validation:${PublicationValidationCode}`
 
@@ -357,6 +358,14 @@ export async function commitAssistantOutcome(
     .limit(1)
   if (paired.length > 0) return { kind: 'rejected', reason: 'fence:paired_ticket' }
 
+  if (run.surface === 'email') {
+    const { assistantChannelEligibility } =
+      await import('@/lib/server/domains/conversation/assistant-channel-eligibility')
+    if (!(await assistantChannelEligibility(conversation, tx, run.triggerMessageId)).eligible) {
+      return { kind: 'rejected', reason: 'fence:channel_ineligible' }
+    }
+  }
+
   const { getLatestInvolvement, openInvolvement, recordAssistantAnswer, recordHandoff } =
     await import('./assistant.involvement')
   const latest = await getLatestInvolvement(input.conversationId, tx)
@@ -420,6 +429,19 @@ export async function commitAssistantOutcome(
     }
   )
   if (deliversByEmail) {
+    // Transcript persistence is not mailbox delivery. Keep the customer waiting
+    // and leave the inactivity clock disarmed until the send is confirmed.
+    const [pendingConversation] = await tx
+      .update(conversations)
+      .set({
+        inactivityAnchorAt: null,
+        inactivityCheckInAt: null,
+        inactivityRetryAt: null,
+        waitingSince: conversation.waitingSince,
+      })
+      .where(eq(conversations.id, input.conversationId))
+      .returning()
+    publication.conversation = pendingConversation
     const { enqueueJob } = await import('@/lib/server/jobs/job-queue')
     const { ASSISTANT_EMAIL_DELIVERY_QUEUE, assistantEmailDeliveryDedupeKey } =
       await import('@/lib/server/domains/conversation/assistant-email-delivery')
@@ -445,7 +467,7 @@ export async function commitAssistantOutcome(
       tx
     )
     if (!handed) return { kind: 'rejected', reason: 'fence:handed_off' }
-  } else if (input.candidate.outcome === 'answer' && involvement) {
+  } else if (!deliversByEmail && input.candidate.outcome === 'answer' && involvement) {
     await recordAssistantAnswer(
       involvement.id,
       {

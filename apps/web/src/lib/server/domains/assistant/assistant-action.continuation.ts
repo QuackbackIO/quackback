@@ -23,7 +23,15 @@
  * correct. The continuation is a new run precisely so that superseding the old
  * one never strands the action.
  */
-import { db, and, eq, conversations, ticketConversations } from '@/lib/server/db'
+import {
+  db,
+  and,
+  desc,
+  eq,
+  conversations,
+  conversationMessages,
+  ticketConversations,
+} from '@/lib/server/db'
 import type { Transaction } from '@/lib/server/db'
 import type { ConversationId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
@@ -155,11 +163,27 @@ export async function ownershipForActionResult(
     if (action.originRole !== 'customer_support') {
       return { kind: 'none', reason: 'teammate_origin' }
     }
+    const [parent] = await tx
+      .select({ channel: conversations.channel })
+      .from(conversations)
+      .where(eq(conversations.id, conversationId))
+    const [trigger] = await tx
+      .select({ id: conversationMessages.id })
+      .from(conversationMessages)
+      .where(
+        and(
+          eq(conversationMessages.conversationId, conversationId),
+          eq(conversationMessages.senderType, 'visitor')
+        )
+      )
+      .orderBy(desc(conversationMessages.createdAt), desc(conversationMessages.id))
+      .limit(1)
     const run = await requestAssistantTurn(tx, {
       conversationId,
       triggerKey: actionResultTriggerKey(action.id),
-      triggerKind: 'agent_handback',
-      surface: 'widget',
+      triggerKind: 'action_result',
+      surface: parent.channel === 'email' ? 'email' : 'widget',
+      triggerMessageId: trigger?.id ?? null,
       stepInstructions: continuationInstruction(report),
     })
     return { kind: 'continuation', run }

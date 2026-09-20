@@ -1,6 +1,6 @@
 /**
  * Offline notifications for support-inbox conversations. Fire-and-forget from the service after a
- * write commits — a delivery failure must never break sending a message.
+ * write commits , a delivery failure must never break sending a message.
  *
  * Because it is fire-and-forget, a failed send has no caller to roll back: the
  * message row is already committed. Thread-addressed channels (GitHub) mark
@@ -13,7 +13,7 @@
  *  - Visitor message  -> email the team only when no agent currently has a
  *    live stream (offline coverage). The in-app team bell for the same
  *    event rides the message.created event/hook pipeline instead (WO-3
- *    slice 5) — see notifyVisitorMessage's own doc.
+ *    slice 5) , see notifyVisitorMessage's own doc.
  *  - Agent reply      -> email the visitor when they're reachable AND either
  *    offline OR on an EMAIL conversation. Presence gates the messenger surface
  *    only: on an email thread the mailbox IS the thread, so a live stream
@@ -71,7 +71,7 @@ function escapeHtmlText(text: string): string {
 }
 
 /**
- * Wrap plain-text message content in escaped <p> paragraphs — blank lines split
+ * Wrap plain-text message content in escaped <p> paragraphs , blank lines split
  * paragraphs, single newlines become <br>. This is the body for a message with
  * no rich contentJson, and it carries the FULL text (not the truncated subject
  * preview) so the email recipient reads the whole message inline.
@@ -197,7 +197,7 @@ async function resolveVisitorConversationLink(
  * Email the team of a new visitor message when no agent is online to see it
  * live. The in-app team bell for the same event moved to the
  * `message.created` event/hook pipeline (WO-3 slice 5, notificationHook in
- * events/handlers/notification.ts) — this function is now email-only.
+ * events/handlers/notification.ts) , this function is now email-only.
  */
 export async function notifyVisitorMessage(opts: {
   conversation: Conversation
@@ -212,14 +212,14 @@ export async function notifyVisitorMessage(opts: {
     // Avoid email spam: only email the team on the first message of a
     // conversation, or when nobody is around to see it live. This gate is
     // redundant with the `!agentsOnline` check below for every case except
-    // the fast escape it buys (skip the team query entirely) — kept exactly
+    // the fast escape it buys (skip the team query entirely) , kept exactly
     // as it was before the bell moved out, to not perturb email behavior.
     //
     // Deliberate small skew: presence is now checked at TWO different
-    // moments — here, at request time, for the email; and again inside the
+    // moments , here, at request time, for the email; and again inside the
     // notification hook, at worker time, for the bell (its own anti-spam
     // gate: `!cfg.isFirstMessage && isAnyAgentOnline()`). Never try to unify
-    // them — the bell's check intentionally runs later, off the request path.
+    // them , the bell's check intentionally runs later, off the request path.
     if (!opts.isFirstMessage && agentsOnline) return
 
     const team = await db
@@ -247,7 +247,7 @@ export async function notifyVisitorMessage(opts: {
         await import('@/lib/server/domains/conversation/conversation.email-channel')
       const teamRoot = teamThreadRootMessageId(opts.conversation.id)
       // Contact class: the only link is an /admin/inbox URL, which carries no
-      // capability — the session does. So a teammate reachable only via their
+      // capability , the session does. So a teammate reachable only via their
       // contact address is correctly included, which the old truthiness filter
       // on the account address would have dropped.
       // Both address fields came back with the team query, so the recipient is
@@ -284,7 +284,7 @@ export async function notifyVisitorMessage(opts: {
 }
 
 /**
- * Backoff before each RETRY of a conversation-email send, in milliseconds — so a
+ * Backoff before each RETRY of a conversation-email send, in milliseconds , so a
  * two-entry list means up to three attempts. Exported so tests can shrink it;
  * nothing else should read it.
  */
@@ -294,9 +294,9 @@ export const EMAIL_SEND_RETRY_DELAYS_MS = [2000, 4000]
  * Has this error positively declared that re-sending reproduces it?
  *
  * Opt-in, and absence means "retry". Only a transport knows which of its own
- * failures are about the moment and which are about the message — a From on a
+ * failures are about the moment and which are about the message , a From on a
  * domain the provider is not authorized to send as is the same rejection every
- * time — so the transport says so and this honours it, without anything here
+ * time , so the transport says so and this honours it, without anything here
  * having to hold a per-provider error taxonomy.
  */
 function declaresPermanentFailure(err: unknown): boolean {
@@ -311,7 +311,7 @@ function declaresPermanentFailure(err: unknown): boolean {
 /**
  * Send with a small bounded retry. The email dispatch layer THROWS on any
  * provider error, and this whole path is fire-and-forget behind a `void` call
- * whose catch only logs — so without a retry a thirty-second provider blip
+ * whose catch only logs , so without a retry a thirty-second provider blip
  * silently loses an agent's reply, while the message row is committed and the
  * thread renders it as sent.
  *
@@ -319,8 +319,8 @@ function declaresPermanentFailure(err: unknown): boolean {
  * per-provider error taxonomy has to be hand-maintained and fails CLOSED: the
  * day the provider adds an error name, an allow-list quietly stops retrying it.
  * Two wasted calls on a genuinely terminal failure is by far the cheaper
- * mistake. The one exception is an error that declares its own permanence — a
- * transport saying "this message is wrong" rather than "not right now" — which
+ * mistake. The one exception is an error that declares its own permanence , a
+ * transport saying "this message is wrong" rather than "not right now" , which
  * costs nothing to honour because the default stays retry for everything that
  * says nothing.
  *
@@ -337,6 +337,9 @@ function declaresPermanentFailure(err: unknown): boolean {
  * plus-addressed Reply-To: it is per conversation, so it is identical on every
  * attempt and routes a reply to either copy into the same thread.
  */
+/** A confirmed refusal before delivery, safe for a durable sender to retry. */
+export class EmailNotSentError extends Error {}
+
 async function sendWithRetry<T>(
   conversationId: ConversationId,
   send: () => Promise<T>
@@ -409,7 +412,7 @@ export async function sendVisitorConversationEmail(opts: {
       ? formatNamedSendingAddress(resolvedFrom, fromDisplayName)
       : resolvedFrom
   const { sendConversationMessageEmail } = await import('@quackback/email')
-  const result = await sendWithRetry(opts.conversationId, () =>
+  const send = () =>
     sendConversationMessageEmail({
       to: opts.recipient,
       direction: opts.direction,
@@ -431,9 +434,9 @@ export async function sendVisitorConversationEmail(opts: {
       conversationId: opts.conversationId,
       ...threading,
     })
-  )
+  const result = opts.strictDelivery ? await send() : await sendWithRetry(opts.conversationId, send)
   if (result && result.sent === false) {
-    if (opts.strictDelivery) throw new Error(`Email not sent: ${result.reason}`)
+    if (opts.strictDelivery) throw new EmailNotSentError(`Email not sent: ${result.reason}`)
     log.warn(
       { conversation_id: opts.conversationId, direction: opts.direction, reason: result.reason },
       'conversation email not sent'
@@ -441,7 +444,7 @@ export async function sendVisitorConversationEmail(opts: {
   }
   // Which Message-ID actually went out, which is not always the one we minted.
   // A transport that owns the header generates its own and reports it back, and
-  // that reported id is the one a reply resolves against — not necessarily the
+  // that reported id is the one a reply resolves against , not necessarily the
   // literal token it quotes, which the store reconciles. An explicit null means
   // it generated one it did not disclose, in which case there is nothing to
   // record and the plus-addressed Reply-To is the only route a reply has home.
@@ -485,7 +488,7 @@ export async function notifyAgentReply(opts: {
     // Presence gates the MESSENGER surface only. On an email conversation the
     // visitor's mailbox IS the thread, so a live SSE stream elsewhere (a portal
     // tab, the widget open on another page) is no evidence they will see this
-    // reply — there the gate is an anti-spam optimisation, and here it simply
+    // reply , there the gate is an anti-spam optimisation, and here it simply
     // does not apply. Worst case an online email visitor gets the in-app copy
     // AND the mail, which is the right way round to be wrong: a duplicate beats
     // a silent drop.
@@ -504,9 +507,9 @@ export async function notifyAgentReply(opts: {
 
     const recipient = resolveReplyRecipient(visitor, visitor?.contactEmail, opts.capturedEmail)
     if (!recipient && opts.strictDelivery)
-      throw new Error('No email address is available for this contact.')
+      throw new EmailNotSentError('No email address is available for this contact.')
     if (!recipient) {
-      // The visitor is unreachable — surface it instead of dropping silently
+      // The visitor is unreachable , surface it instead of dropping silently
       // (the inbox can flag conversations with no reply-to address). `channel`
       // discriminates the two severities: on messenger the widget's unread
       // badge still carries the reply, on email nothing does and it is lost.
@@ -520,13 +523,13 @@ export async function notifyAgentReply(opts: {
 
     const ctx = await buildHookContext()
     if (!ctx) {
-      if (opts.strictDelivery) throw new Error('Email delivery context is unavailable.')
+      if (opts.strictDelivery) throw new EmailNotSentError('Email delivery context is unavailable.')
       return
     }
     // Deep-link to the visitor's conversation surface (portal Support thread
     // when enabled, else the widget messenger view). The thread is surfaced from
     // the visitor's own session (or a re-identify in the host app), so the URL
-    // only navigates — it carries no capability of its own.
+    // only navigates , it carries no capability of its own.
     const ctaUrl = await resolveVisitorConversationLink(ctx.portalBaseUrl, opts.conversationId)
     const adapter = requireChannelAdapter(opts.channel)
     const threadAddressed = getChannelDescriptor(opts.channel)?.addressing === 'thread'
@@ -550,7 +553,7 @@ export async function notifyAgentReply(opts: {
     // Group thread (§4.8): every added customer receives the reply too. One
     // participant's failure never eats the primary send (already delivered
     // above) nor the remaining participants. Participants always get the mail
-    // — they have no widget session of their own on this thread, so their
+    // , they have no widget session of their own on this thread, so their
     // mailbox IS the thread regardless of presence.
     try {
       const { listParticipantReplyRecipients } = await import('./conversation-participant.service')
@@ -593,7 +596,7 @@ export async function notifyAgentReply(opts: {
 
 /**
  * Email the first message of an agent-STARTED conversation. Unlike a reply,
- * this always sends — a brand-new outbound conversation's recipient is, by
+ * this always sends , a brand-new outbound conversation's recipient is, by
  * definition, not sitting in the thread, so presence is never consulted. The
  * service validated a deliverable email before creating the conversation; a
  * send failure here logs and never rolls the conversation back.
@@ -651,12 +654,12 @@ export async function notifyConversationStarted(opts: {
 /**
  * Email a dedicated CSAT rating-request when a workflow's `request_csat`
  * block posts on a conversation whose active channel is EMAIL
- * (`conversations.channel === 'email'` — set only for a cold-inbound email
+ * (`conversations.channel === 'email'` , set only for a cold-inbound email
  * conversation, conversation.email-cold-inbound.ts, and PROMOTED onto any thread
- * whose customer replies by mail — see sendVisitorMessage's channel write). The
+ * whose customer replies by mail , see sendVisitorMessage's channel write). The
  * in-app emoji row is inert in an email client,
  * so this sends a parallel email with real, one-click emoji links
- * (packages/email's csat-request template) — action.executor.ts's send_block
+ * (packages/email's csat-request template) , action.executor.ts's send_block
  * csat case calls this (via a dynamic import, to keep the rarely-hit path out
  * of that module's static graph) right after posting the block in-app.
  *

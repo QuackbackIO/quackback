@@ -16,7 +16,7 @@ import {
 import type { Actor } from '@/lib/server/policy/types'
 
 // config is read lazily (getters), so seeding the required env before any config
-// access makes config.baseUrl resolve — the insert-time trusted-url gate
+// access makes config.baseUrl resolve , the insert-time trusted-url gate
 // (restrictImagesToTrustedOrigins) needs it to accept the rehosted image src.
 // The harness leaves BASE_URL as a bare "/" (not a valid absolute URL), so set an
 // absolute one unconditionally for this file's config load.
@@ -32,6 +32,7 @@ process.env.EMAIL_INBOUND_SIGNING_SECRET = 'whsec_dGVzdHNlY3JldA=='
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
   teams,
+  settings,
   channelAccounts,
   conversations,
   conversationMessages,
@@ -73,7 +74,7 @@ vi.mock('../conversation.query', async (importOriginal) => ({
 // The cold-inbound throttle is a real rate bucket keyed on the sender address,
 // which this file's fixture hardcodes. Left live, the cases below would burn a
 // shared 10-per-hour budget and start failing as 'rate_limited' on repeated
-// local runs — a red suite that points nowhere near its cause. Count the calls
+// local runs , a red suite that points nowhere near its cause. Count the calls
 // instead; the bucket arithmetic is pinned in conversation-ratelimit.test.ts.
 vi.mock('@/lib/server/utils/rate-bucket', () => ({
   incrementBucket: vi.fn().mockResolvedValue({ count: 1 }),
@@ -94,6 +95,15 @@ vi.mock('@/lib/server/storage/s3', async (importOriginal) => {
     uploadObject: async (key: string) => `${config.baseUrl}/api/storage/${key}`,
   }
 })
+
+vi.mock('../conversation.contact', async (original) => ({
+  ...(await original<typeof import('../conversation.contact')>()),
+  subscribeCapturedContact: vi.fn(async () => {}),
+}))
+vi.mock('../conversation.notify', async (original) => ({
+  ...(await original<typeof import('../conversation.notify')>()),
+  notifyVisitorMessage: vi.fn(async () => {}),
+}))
 
 import { ingestParsedEmail } from '../conversation.email-inbound.service'
 import { parseRawEmail } from '../conversation.email-inbound'
@@ -222,6 +232,39 @@ describe.skipIf(!fixture.available)('cold-inbound ingest (real DB, rolled back)'
     expect(isFirstMessage).toBe(true)
   })
 
+  it.each([
+    ['mx; dmarc=pass', 'pass'],
+    ['mx; dmarc=fail (p=reject)', 'reject'],
+    [null, 'unverified'],
+  ] as const)(
+    'records the receiver authentication verdict on replies: %s',
+    async (authenticationResults, verdict) => {
+      await seedInboundRoute('support@quackback.io')
+      await testDb
+        .insert(settings)
+        .values({ name: 'Mail fixture', slug: `mail-${suffix()}`, createdAt: new Date() })
+      const opened = await ingestParsedEmail(coldEmail({ authenticationResults: 'mx; dmarc=pass' }))
+      expect(opened.status).toBe('ingested')
+      if (opened.status !== 'ingested') throw new Error('fixture did not open a conversation')
+      const reply = coldEmail({
+        toAddresses: [inboundReplyToAddress(opened.conversationId, SELF_HOSTED_MAIL_SLUG)!],
+        authenticationResults,
+        text: 'Second message',
+      })
+      expect((await ingestParsedEmail(reply)).status).toBe('ingested')
+      const messages = await testDb
+        .select()
+        .from(conversationMessages)
+        .where(eq(conversationMessages.conversationId, opened.conversationId))
+      expect(
+        messages.find((message) => message.content === 'Second message')?.metadata
+      ).toMatchObject({ emailSenderAuth: verdict })
+      expect(
+        messages.find((message) => message.content === 'My invoice looks wrong.')?.metadata
+      ).toMatchObject({ emailSenderAuth: 'pass' })
+    }
+  )
+
   it('stores converted content + contentJson for an HTML-only cold inbound', async () => {
     await seedInboundRoute('support@quackback.io')
 
@@ -301,7 +344,7 @@ describe.skipIf(!fixture.available)('cold-inbound ingest (real DB, rolled back)'
   })
 
   // THE DEFECT THIS SUITE EXISTS FOR. A hard DMARC reject used to return
-  // 'suppressed' having persisted nothing at all — a legitimate customer behind
+  // 'suppressed' having persisted nothing at all , a legitimate customer behind
   // a forwarding gateway vanished, the sender believed it was delivered, and no
   // agent could ever learn it had arrived. Retention is the fix, so this case
   // asserts the bytes SURVIVED, not merely that a status changed.
@@ -332,7 +375,7 @@ describe.skipIf(!fixture.available)('cold-inbound ingest (real DB, rolled back)'
 
   // An enumerated cause, not a sentence: it is what makes the refusal queryable
   // and what the Spam view badges the row with. 'sender_auth_reject' is
-  // deliberately distinct from the pre-existing 'sender_auth_failure' — one is
+  // deliberately distinct from the pre-existing 'sender_auth_failure' , one is
   // "the author domain told us to refuse this", the other is "DMARC was weak".
   it('records the refusal cause on the retained thread, from the enumerated set', async () => {
     await seedInboundRoute('support@quackback.io')
@@ -351,7 +394,7 @@ describe.skipIf(!fixture.available)('cold-inbound ingest (real DB, rolled back)'
     expect(conv.spamReason).toBe('sender_auth_reject')
     expect(CONVERSATION_SPAM_FILED_BY).toContain(conv.spamReason)
     // Filed in the insert, so it is in the Spam view and out of triage from the
-    // first instant — never open, not even briefly.
+    // first instant , never open, not even briefly.
     expect(conv.status).toBe('closed')
     expect(conv.endReason).toBe('spam')
     expect(conv.resolvedAt).not.toBeNull()
@@ -390,7 +433,7 @@ describe.skipIf(!fixture.available)('cold-inbound ingest (real DB, rolled back)'
 
   // Requirement: retaining the message must not soften the verdict. A refused
   // message is attributed to a standalone unverified lead, badged, and raises
-  // none of the signals an accepted message raises — a bell any stranger can
+  // none of the signals an accepted message raises , a bell any stranger can
   // ring by forging a From is a notification channel handed to them, and a
   // message workflow firing on one is backscatter sent in our name.
   it('confers no identity and raises no signals for a retained refusal', async () => {
@@ -416,7 +459,12 @@ describe.skipIf(!fixture.available)('cold-inbound ingest (real DB, rolled back)'
     expect(conv.visitorPrincipalId).not.toBe(spoofedPrincipalId)
     expect(visitor.userId).toBeNull()
     expect(visitor.type).toBe('anonymous')
-    expect(conv.customAttributes).toMatchObject({ unverifiedSender: true })
+    expect(conv.customAttributes?.unverifiedSender).toBeUndefined()
+    const [inbound] = await testDb
+      .select()
+      .from(conversationMessages)
+      .where(eq(conversationMessages.conversationId, conv.id))
+    expect(inbound.metadata?.emailSenderAuth).toBe('reject')
     // Nobody is waiting on refused mail.
     expect(conv.waitingSince).toBeNull()
     expect(vi.mocked(emitMessageCreated)).not.toHaveBeenCalled()
@@ -424,7 +472,7 @@ describe.skipIf(!fixture.available)('cold-inbound ingest (real DB, rolled back)'
   })
 
   // Release is the recourse half of the fix: an agent restores the thread and
-  // it rejoins the queue — as an UNVERIFIED message would have, attached to
+  // it rejoins the queue , as an UNVERIFIED message would have, attached to
   // nothing. A release that adopted the spoofed account would hand the spoofer
   // the identity the refusal existed to withhold.
   it('releases a retained refusal into the queue without conferring identity', async () => {
@@ -455,7 +503,12 @@ describe.skipIf(!fixture.available)('cold-inbound ingest (real DB, rolled back)'
       .from(principal)
       .where(eq(principal.id, conv.visitorPrincipalId))
     expect(visitor.userId).toBeNull()
-    expect(conv.customAttributes).toMatchObject({ unverifiedSender: true })
+    expect(conv.customAttributes?.unverifiedSender).toBeUndefined()
+    const [inbound] = await testDb
+      .select()
+      .from(conversationMessages)
+      .where(eq(conversationMessages.conversationId, conv.id))
+    expect(inbound.metadata?.emailSenderAuth).toBe('reject')
   })
 
   // Retention has to have a ceiling or an unauthenticated stranger decides how
@@ -520,7 +573,7 @@ describe.skipIf(!fixture.available)('cold-inbound ingest (real DB, rolled back)'
   })
 
   // Cold inbound is the only ingress that mints a principal for an
-  // unauthenticated stranger, so the throttle has to bite BEFORE resolution —
+  // unauthenticated stranger, so the throttle has to bite BEFORE resolution ,
   // a gate placed after it has already let the row be created.
   it('rate-limits a flooding sender without creating a principal or conversation', async () => {
     await seedInboundRoute('support@quackback.io')
@@ -555,7 +608,7 @@ describe.skipIf(!fixture.available)('cold-inbound ingest (real DB, rolled back)'
   // Without reuse, every mail mints a fresh principal, so a block can never bite
   // and the junk is unreclaimable (the anon sweep skips anything owning a
   // conversation). The display-name variant pins that normalization is what
-  // makes the match work — a raw From header would key a second lead.
+  // makes the match work , a raw From header would key a second lead.
   it('reuses the lead a previous mail from the same address created', async () => {
     await seedInboundRoute('support@quackback.io')
 
@@ -580,7 +633,7 @@ describe.skipIf(!fixture.available)('cold-inbound ingest (real DB, rolled back)'
       .where(eq(conversations.id, second.conversationId))
 
     expect(convB.visitor).toBe(convA.visitor)
-    // The bare address is stored either way — never the raw header.
+    // The bare address is stored either way , never the raw header.
     expect(convB.email).toBe('customer@acme.com')
     const [{ count: afterSecond }] = await testDb
       .select({ count: sql<number>`count(*)::int` })
@@ -611,7 +664,7 @@ describe.skipIf(!fixture.available)('cold-inbound ingest (real DB, rolled back)'
     ].join('\r\n')
 
   // RETAINED, not destroyed. `Reply-To` is a header any sender controls, so this
-  // is our own guess about authorship rather than a fact — and a wrong guess
+  // is our own guess about authorship rather than a fact , and a wrong guess
   // here is unattributable as well as unrecoverable: the refusal log carries a
   // cause and nothing else (no address may be written to it), so a customer
   // saying "I replied and nothing happened" leaves nobody anything to match.
@@ -644,7 +697,7 @@ describe.skipIf(!fixture.available)('cold-inbound ingest (real DB, rolled back)'
     expect(conv.spamReason).toBe('mail_loop_suspected')
     expect(CONVERSATION_SPAM_FILED_BY).toContain(conv.spamReason)
     // Filed in the insert: in the Spam view and out of triage from the first
-    // instant. Retention must not cost the suppression the guard exists for —
+    // instant. Retention must not cost the suppression the guard exists for ,
     // nobody is waiting on it, and it rings no bell and starts no clock.
     expect(conv.status).toBe('closed')
     expect(conv.endReason).toBe('spam')

@@ -15,11 +15,11 @@ Rollback: reverting this slice reopens customer access to internal records and w
 
 ## Remaining work
 
-Continue with the supplied Phase 2 findings and final gates. The original request was truncated at the approved-action continuation item; a clarification is pending. This file is an incremental handoff, not a completion claim.
+The supplied Phase 1 and Phase 2 findings are implemented. The final gate results appear below. The original request ended mid-sentence; the saved capability report supplied that continuation finding, but any later UX requirements were not supplied. The existing mockup parity checklist remains the record of broader unimplemented product capabilities.
 
 ## Fleet replay and live-table indexes (2.2, 2.3)
 
-0286's preflight now classifies as `errors`; all ten Quinn migrations classify as `safe` or `errors`. The new span regression failed on 0286 before the annotation. Replay tests: 46 passed. 0284 still requires a one-time `allowMutatingReplay` for a fleet workspace below it, documented in the status report with the classifier limitation.
+0286 now classifies as `safe` after its blocking index moved to the concurrent registry; all ten Quinn migrations classify as `safe` or `errors`. The new span regression failed on 0286 before the annotation. Replay tests: 46 passed. 0284 still requires a one-time `allowMutatingReplay` for a fleet workspace below it, documented in the status report with the classifier limitation.
 
 All seven listed indexes (the request said six) moved from 0286/0287/0289/0290 to `CONCURRENT_INDEX_SPECS`, retaining their exact uniqueness, columns and predicates. The same list drives creation and missing-index postconditions. Invalid-index repair examines all non-constraint indexes, including unique partial indexes, before rebuilding. The drift check now runs the concurrent step before comparing.
 
@@ -41,7 +41,7 @@ Improve now separates substantive answered turns from Unanswered (inability and 
 
 Evidence: three lifecycle regressions, the durable inability-publication case, and two metrics cases were red first. After correction, 32 lifecycle cases and 23 durable run cases pass, plus 32 analytics/card checks. The lifecycle regression queries the operations and performance reports over the very same real database rows it closed. Logs: `/tmp/quinn-inactivity-red.log`, `/tmp/quinn-inactivity-green.log`, `/tmp/quinn-inability-red.log`, `/tmp/quinn-inability-green.log`, `/tmp/quinn-metrics-red.log`, `/tmp/quinn-resolution-regressions.log`.
 
-The email delivery review remains in Phase 2, including delaying the answer clock until a mailbox send is confirmed. No schema migration or historical outcome rewrite is needed for this slice.
+The email delivery correction below also delays the answer clock until mailbox delivery is confirmed. No schema migration or historical outcome rewrite is needed.
 
 ## Source and capture privacy
 
@@ -76,3 +76,15 @@ Two initial regressions failed; a third fresh-job control reproduced premature r
 ## Reviewed follow-up retries
 
 Reclaiming a failed follow-up receipt is now one compare-and-set against a retryable failed outcome. Concurrent reviewers cannot both reopen the same receipt. The new real database race reproduced two sends before the fix and one successful retry afterwards, alongside the existing first-send and uncertain-delivery controls. Red: `/tmp/quinn-email-continuity-red.log`. Green: the 84-test email/follow-up/recovery pass in `/tmp/quinn-email-first-green.log`.
+
+## Email sender authority and delivery
+
+Inbound replies and cold inbound messages store the receiver's authentication verdict on message metadata. Conversation custom attributes confer no email authority, and absence is unverified. Intake, generation, publication and delivery check the triggering message. The current channel decides email routing, including a conversation that began in the widget. Operator retries and approved-action continuations preserve the channel and trigger; their new text trigger kinds are `operator_retry` and `action_result`. A semantic repair now retains email surface too.
+
+Email dispatch commits an atomic message-level claim before the provider call. Strict durable sends bypass the notification helper's internal blind retry. Only an explicit provider refusal allows another attempt; exceptions or a process dying after dispatch leave an unconfirmed delivery and never resend automatically. The inbox delivery error states this explicitly. Message delivery updates merge their JSON fields so they cannot erase the dispatch claim.
+
+A pending email publication preserves the customer's waiting state and disarms inactivity. Confirmed delivery records the answer timestamp and starts the appropriate period only if this is still the latest message, the run revision is current and Quinn still owns the open conversation. Delivery also checks that the message belongs to its email run and refuses customer-ticket parents or a prior handoff.
+
+Evidence: receiver-auth tests failed for all three verdicts before ingest stamped them. Trigger/refusal, concurrent dispatch and ambiguous-send tests were red. The follow-up races and email retry/continuation cases failed against their original paths. A positive pending-email publication failed against the old answer clock, and an email repair failed with widget surface. Final focused passes: 27 email-channel cases, 27 durable run cases, 26 action cases, plus the 84-test ingest/follow-up/recovery pass. Logs: `/tmp/quinn-email-ingest-red.log`, `/tmp/quinn-email-delivery-red.log`, `/tmp/quinn-email-fence-red.log`, `/tmp/quinn-email-publication-clock-red.log`, `/tmp/quinn-email-repair-red.log`, `/tmp/quinn-email-delivery-green.log`, `/tmp/quinn-email-repair-green.log`, `/tmp/quinn-email-actions-green.log`.
+
+No migration is needed for these JSON and text vocabulary changes. Existing historical messages with no authentication verdict cannot authorize autonomous email. An uncertain send intentionally requires a teammate to investigate; no new provider reconciliation capability is claimed. Reverting the delivery change restores the duplicate-send window.

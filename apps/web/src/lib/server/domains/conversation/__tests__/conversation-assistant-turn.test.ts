@@ -146,6 +146,7 @@ function conversationRow(override: Record<string, unknown> = {}) {
     id: 'conversation_1',
     status: 'open',
     source: 'widget',
+    channel: 'messenger',
     customAttributes: {},
     visitorPrincipalId: 'principal_visitor',
     assignedAgentPrincipalId: null,

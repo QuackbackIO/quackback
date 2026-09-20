@@ -1,10 +1,11 @@
+import { evaluateInboundAuth } from './email-auth'
 /**
  * Inbound email ingestion. Provider-neutral: `ingestParsedEmail` owns routing
  * and append, and every front door (the Resend webhook via `ingestInboundEmail`,
  * the IMAP poller) normalizes its input to a `ParsedInboundEmail` and feeds it
  * here. A message is routed into a conversation by its plus-address
- * (`<slug>+c<id>.<tag>@domain`) first, then — for replies whose client stripped the
- * plus-address — by matching its In-Reply-To/References against our stored
+ * (`<slug>+c<id>.<tag>@domain`) first, then , for replies whose client stripped the
+ * plus-address , by matching its In-Reply-To/References against our stored
  * outbound Message-IDs. The visitor's stripped reply is appended through the
  * normal visitor-message path, so lifecycle (reopen), realtime publish and
  * offline notification all behave exactly as they do for a widget message.
@@ -12,7 +13,7 @@
  * Auto-generated mail (autoresponders, bounces, list blasts, our own loops) is
  * dropped up front. The caller assumes an already-authenticated payload (the
  * webhook route is Svix-verified; IMAP owns the mailbox) and this never throws
- * on an unroutable one — it returns a status the caller maps to an ack + log.
+ * on an unroutable one , it returns a status the caller maps to an ack + log.
  */
 import { db, eq, sql, conversationMessages, conversations, principal, user } from '@/lib/server/db'
 import type { ConversationAttachment, ConversationSpamFiledBy } from '@/lib/server/db'
@@ -89,7 +90,7 @@ export type IngestInboundResult =
   | { status: 'no_conversation' }
   // A signed ticket address that resolved but whose target/sender failed a check
   // (unknown/deleted/non-customer ticket, missing requester, sender ≠ requester),
-  // or a ticket address whose signature didn't verify. Always dropped — a ticket
+  // or a ticket address whose signature didn't verify. Always dropped , a ticket
   // address never creates a ticket/conversation and never reaches cold inbound.
   | { status: 'no_ticket' }
   | { status: 'empty' }
@@ -98,7 +99,7 @@ export type IngestInboundResult =
   | { status: 'suppressed' }
 
 /**
- * Why this module refused to admit an inbound message — the enumerated
+ * Why this module refused to admit an inbound message , the enumerated
  * vocabulary, so a refusal is queryable rather than a sentence somebody has to
  * grep for.
  *
@@ -146,7 +147,7 @@ export type IngestInboundResult =
  *                     'mail_loop_suspected' above, and it is retained.
  *     auto_generated  machine-generated mail carrying thread context, which
  *                     would otherwise append to a real thread. (A COLD
- *                     auto-responder is not refused — see above.)
+ *                     auto-responder is not refused , see above.)
  *     empty_body      there is no message to retain.
  *
  * The split is one question: did WE refuse this on the sender's behalf, or did
@@ -171,7 +172,7 @@ export type InboundRefusalCause = (typeof INBOUND_REFUSAL_CAUSES)[number]
  *
  * Derived rather than listed, so the two lists are what decide it. A refusal is
  * retained by filing the thread to Spam under its cause, and the Spam view can
- * only badge a cause its own taxonomy knows — so a cause that is not in both is
+ * only badge a cause its own taxonomy knows , so a cause that is not in both is
  * not a cause a retained refusal can carry, and adding one to only one list
  * fails to compile here rather than writing a value nothing can render.
  */
@@ -218,7 +219,7 @@ function htmlReferencesCid(html: string, cid: string): boolean {
 
 /**
  * Rewrite every `cid:<id>` reference in the raw HTML to its rehosted https URL.
- * MUST run before `emailHtmlToContent` — its tiptap sanitize clears non-http(s)
+ * MUST run before `emailHtmlToContent` , its tiptap sanitize clears non-http(s)
  * `cid:` srcs, so an un-rewritten inline image would lose its source. Longest cid
  * first so a cid that's a prefix of another (`logo` vs `logo2`) can't corrupt it.
  */
@@ -239,10 +240,10 @@ function rewriteCidReferences(html: string, cidMap: Map<string, string>): string
  *
  * Fail-soft by design: a part over the size cap, a declared image whose bytes
  * don't match (magic-byte check), an over-count attachment, or a failed upload is
- * dropped with a log line — a single bad part never fails the whole ingest.
+ * dropped with a log line , a single bad part never fails the whole ingest.
  * Images upload via `uploadImageBuffer` (allow-list + `chat-images` prefix, the
  * same primitive the content rehoster uses); other files upload via the raw
- * `uploadObject` under `chat-files`, capped at `MAX_FILE_SIZE` (5 MB) — the same
+ * `uploadObject` under `chat-files`, capped at `MAX_FILE_SIZE` (5 MB) , the same
  * limit the composer's image upload endpoint enforces (no discrete non-image
  * upload endpoint exists to mirror, so the shared 5 MB file cap applies).
  */
@@ -358,7 +359,7 @@ function ticketIdFromRecipients(recipients: string[]): TicketId | null {
 }
 
 /** Does any recipient claim to be ticket-destined (verified or not)? The claim
- *  is a property of the address grammar, so the channel module decides it —
+ *  is a property of the address grammar, so the channel module decides it ,
  *  see `bearsTicketMarker`. Used to guarantee a forged or tampered ticket
  *  address is DROPPED, not reinterpreted as a conversation reply or opened as
  *  cold inbound. */
@@ -371,9 +372,9 @@ function recipientsBearTicketMarker(recipients: string[]): boolean {
  *
  * The set the ticket branch and cold inbound must BOTH decide on, because they
  * are two answers to one question and the narrower one was the guard. Cold
- * inbound has always read To ∪ Cc — a customer looping support into a thread
+ * inbound has always read To ∪ Cc , a customer looping support into a thread
  * with somebody else puts the address in Cc, and reading To alone would drop
- * exactly that message — so a ticket claim that was only looked for in To left a
+ * exactly that message , so a ticket claim that was only looked for in To left a
  * forged `<slug>+t…` address in Cc to fall through and be opened as ordinary
  * mail to the workspace address, which is the one thing the ticket guards exist
  * to prevent.
@@ -393,7 +394,7 @@ function allRecipients(parsed: ParsedInboundEmail): string[] {
 export async function ingestParsedEmail(parsed: ParsedInboundEmail): Promise<IngestInboundResult> {
   // Loop / auto-mail suppression before any routing. A loop, a ticket-bound
   // auto-reply, or any auto mail carrying threading context is never appended
-  // — never let an autoresponder or one of our own mails looping back fan out
+  // , never let an autoresponder or one of our own mails looping back fan out
   // a reply or append to a thread. A truly cold auto-generated mail (a bulk
   // blast to the support address with no thread context) is instead ingested
   // and filed to Spam by the signal layer, so it stays auditable in the Spam
@@ -406,7 +407,7 @@ export async function ingestParsedEmail(parsed: ParsedInboundEmail): Promise<Ing
   // label would let a neighbour's mail pass as our own.
   const slug = currentMailSlug()
   const ourMessageIdHosts = ownMessageIdDomains()
-  // THE EXACT QUESTION FIRST, and it is asked of the message's OWN id alone —
+  // THE EXACT QUESTION FIRST, and it is asked of the message's OWN id alone ,
   // never of the ids it quotes, which is what threading is and what every
   // genuine reply carries. A row here means this workspace recorded that id when
   // its own mail went out, on whichever transport it went out through: no host
@@ -456,7 +457,7 @@ export async function ingestParsedEmail(parsed: ParsedInboundEmail): Promise<Ing
   // Ticket reply branch (D9): a signed `<slug>+t…` recipient routes straight
   // into the ticket thread. Checked BEFORE conversation routing and cold inbound
   // so a ticket address can never be reinterpreted as a conversation reply nor
-  // opened as a fresh cold-inbound conversation — `ingestTicketReply` always
+  // opened as a fresh cold-inbound conversation , `ingestTicketReply` always
   // returns a terminal status. A ticket-shaped mail whose signature failed to
   // verify is still ticket-destined: drop it here rather than let a forged
   // address fall through. Asked of To ∪ Cc, the same set cold inbound reads, so
@@ -495,7 +496,7 @@ export async function ingestParsedEmail(parsed: ParsedInboundEmail): Promise<Ing
   // read (the common retry case). The partial unique index on
   // (metadata->>'emailMessageId') is the hard backstop; this makes a retry a
   // graceful no-op instead of a unique-violation. The key is the message's own
-  // Message-ID, or the delivering transport's id when it carried none — one
+  // Message-ID, or the delivering transport's id when it carried none , one
   // derivation, so the value looked up here and the value stored below cannot
   // come to disagree. See {@link inboundDedupeKey}.
   const dedupeKey = inboundDedupeKey(parsed)
@@ -529,7 +530,7 @@ export async function ingestParsedEmail(parsed: ParsedInboundEmail): Promise<Ing
   // The transport authenticates the delivery, not the SMTP sender: the signed
   // address is visible to anyone on the email thread (CC, forward), so without
   // this check any third party could inject messages attributed to the visitor.
-  // The From must match an address we know for this visitor — a linked account
+  // The From must match an address we know for this visitor , a linked account
   // email, the principal contact email, the captured pre-chat email, or a
   // recorded channel identity that resolves to this same visitor principal.
   // realEmail() keeps synthetic anonymous placeholders out of the set; an empty
@@ -557,7 +558,7 @@ export async function ingestParsedEmail(parsed: ParsedInboundEmail): Promise<Ing
     return { status: 'suppressed' }
   }
 
-  // Same per-visitor throttle the widget send path enforces — the inbound email
+  // Same per-visitor throttle the widget send path enforces , the inbound email
   // channel must not be an unbounded back door for the offline-notification
   // fanout (a visitor mail-looping replies, or a client retrying with fresh
   // Message-IDs). Fails open on store errors. Ack (200) so the provider stops.
@@ -578,8 +579,8 @@ export async function ingestParsedEmail(parsed: ParsedInboundEmail): Promise<Ing
     segmentIds: new Set(),
   }
 
-  // Rehost inbound media only now — after the sender is verified and the message
-  // cleared the rate gate — so a forged / throttled mail never spends an upload.
+  // Rehost inbound media only now , after the sender is verified and the message
+  // cleared the rate gate , so a forged / throttled mail never spends an upload.
   // Inline `cid:` images are rewritten into the HTML before conversion; other
   // files become discrete attachments. Convert the HTML body (rewritten) to a
   // rich doc + its plaintext mirror: text/plain keeps precedence for `content`
@@ -595,7 +596,11 @@ export async function ingestParsedEmail(parsed: ParsedInboundEmail): Promise<Ing
     {
       conversationId,
       content,
-      metadata: { source: 'email', emailMessageId: dedupeKey ?? undefined },
+      metadata: {
+        source: 'email',
+        emailMessageId: dedupeKey ?? undefined,
+        emailSenderAuth: evaluateInboundAuth(parsed.authenticationResults).verdict,
+      },
       ...(media.attachments.length > 0 ? { attachments: media.attachments } : {}),
     },
     { principalId: visitorPrincipalId, displayName: visitor.displayName },
@@ -610,7 +615,7 @@ export async function ingestParsedEmail(parsed: ParsedInboundEmail): Promise<Ing
  * Cold inbound (§4.8 Layer 2): an email that isn't a reply. Only ingest it when
  * it's addressed to one of our inbound routes; otherwise it's not ours. The
  * DMARC-gated sender resolution decides attach / create-lead, then a fresh email
- * conversation is opened — accepted into the inbox, or quarantined to Spam when
+ * conversation is opened , accepted into the inbox, or quarantined to Spam when
  * its authentication was refused. Dedup + empty-body guards mirror the reply
  * path.
  */
@@ -630,7 +635,7 @@ async function ingestColdInbound(
   const matched = await resolveChannelAccountByRecipient(recipients)
   // A `sending` row is a From identity, not a front door, so mail addressed to
   // one is not cold inbound. The workspace's PLATFORM INBOX is a front door that
-  // needs no row to exist, so it is asked next rather than instead — which is
+  // needs no row to exist, so it is asked next rather than instead , which is
   // what makes a workspace with nothing configured able to receive.
   //
   // Asked as a question here and answered as a WRITE further down, past every
@@ -668,7 +673,7 @@ async function ingestColdInbound(
     return { status: 'from_mismatch' }
   }
 
-  // Throttle BEFORE resolution — resolution is what mints a principal, so a
+  // Throttle BEFORE resolution , resolution is what mints a principal, so a
   // gate placed after it has already let the row be created. Both this and the
   // block check below sit after the dedupe and empty-body guards so a provider
   // redelivery never burns a token.
@@ -687,7 +692,7 @@ async function ingestColdInbound(
   // Blocked people cannot open a new thread by email either. Unconditional
   // rather than attach-only: a branch is more code than the one vacuous PK read
   // it would save on the create path. Placed before rehostInboundMedia so a
-  // blocked sender never spends an upload — the ordering the reply and ticket
+  // blocked sender never spends an upload , the ordering the reply and ticket
   // paths already use.
   //
   // Ahead of the quarantine decision too, and that ordering is the point: a
@@ -776,7 +781,7 @@ async function ingestColdInbound(
   // triage, never breaks ingestion); the workspace trust list bypasses it.
   // The deterministic signals run first: auto-responder headers (this mail
   // arrived already flagged machine-generated) and whatever the sender's
-  // authentication earned short of the quarantine above — either files to Spam
+  // authentication earned short of the quarantine above , either files to Spam
   // without spending an AI completion.
   await maybeAutoFileSpam(conversationId, {
     senderEmail,
@@ -788,7 +793,7 @@ async function ingestColdInbound(
     },
   })
   if (opts.autoResponder !== true) {
-    // Fire-and-forget on purpose — the ack must not delay the ingest response —
+    // Fire-and-forget on purpose , the ack must not delay the ingest response ,
     // but never unhandled: a failed ack is a log line, not a process-level
     // unhandled rejection.
     void import('./conversation.auto-ack')
@@ -806,9 +811,9 @@ async function ingestColdInbound(
 
 /**
  * Reply-by-email (D9): append a verified inbound email onto the ticket named by a
- * signed `<slug>+t…` recipient. Fails QUIET on every rejection — unknown /
+ * signed `<slug>+t…` recipient. Fails QUIET on every rejection , unknown /
  * deleted / non-`customer` ticket, missing requester, or a sender that isn't the
- * requester — with a structured `log.warn`, never creating a ticket or a
+ * requester , with a structured `log.warn`, never creating a ticket or a
  * conversation and never bouncing. Only reached from `ingestParsedEmail` after the
  * RFC 3834 / loop guards and only for a signature-verified ticket address, so the
  * transport is trusted; the remaining trust step is proving the SMTP sender is the
@@ -858,7 +863,7 @@ async function ingestTicketReply(
   }
 
   // Sender verification: the From must match a known address for the requester.
-  // Precedence mirrors `resolveReplyRecipient` — an identified requester's account
+  // Precedence mirrors `resolveReplyRecipient` , an identified requester's account
   // email, then the principal-level contact email. `realEmail()` keeps synthetic
   // anonymous placeholders out of the set; an empty set can never match.
   const requester = await db.query.principal.findFirst({
@@ -892,7 +897,7 @@ async function ingestTicketReply(
     return { status: 'suppressed' }
   }
 
-  // Same per-principal throttle the conversation reply path enforces — the
+  // Same per-principal throttle the conversation reply path enforces , the
   // inbound email channel must not be an unbounded back door for the ticket
   // watcher/agent fan-out (a mail loop or a client retrying with fresh
   // Message-IDs). Fails open on store errors.
@@ -914,7 +919,7 @@ async function ingestTicketReply(
     return { status: 'empty' }
   }
 
-  // Rehost media only now — after the sender is verified — so a forged mail never
+  // Rehost media only now , after the sender is verified , so a forged mail never
   // spends an upload. Same content precedence as the conversation path: text/plain
   // (quote-trimmed) owns `content`; the rewritten HTML supplies `contentJson` and
   // the HTML-only `content` fallback.
@@ -930,7 +935,11 @@ async function ingestTicketReply(
       content,
       contentJson: converted?.contentJson ?? null,
       ...(media.attachments.length > 0 ? { attachments: media.attachments } : {}),
-      metadata: { source: 'email', emailMessageId: dedupeKey ?? undefined },
+      metadata: {
+        source: 'email',
+        emailMessageId: dedupeKey ?? undefined,
+        emailSenderAuth: evaluateInboundAuth(parsed.authenticationResults).verdict,
+      },
     },
     normalizePrincipalType(requester.type)
   )
@@ -948,7 +957,7 @@ export async function ingestInboundEmail(event: unknown): Promise<IngestInboundR
     (event && typeof event === 'object' ? (event as { data?: unknown }).data : null) ?? null
   const parsed = parseInboundEmail(data)
 
-  // Resend's `email.received` webhook is metadata-only — it carries no text/html
+  // Resend's `email.received` webhook is metadata-only , it carries no text/html
   // body. When the payload has no body but exposes the provider email id, fetch
   // the full message from the Received Emails API (#320) and normalize it onto
   // the parsed shape before the provider-neutral core runs. The IMAP front door

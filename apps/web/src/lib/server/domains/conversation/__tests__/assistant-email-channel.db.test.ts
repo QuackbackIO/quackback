@@ -31,6 +31,9 @@ process.env.EMAIL_INBOUND_SIGNING_SECRET = 'whsec_dGVzdHNlY3JldA=='
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
   and,
+  assistantRuns,
+  assistantInvolvements,
+  desc,
   eq,
   conversationMessages,
   conversationOutboundEmails,
@@ -99,6 +102,7 @@ async function seedSettings(): Promise<void> {
 
 interface SeedOptions {
   source?: string
+  channel?: 'email' | 'messenger'
   unverifiedSender?: boolean
   visitorEmail?: string | null
   status?: 'open' | 'closed'
@@ -119,7 +123,7 @@ async function seedEmailConversation(options: SeedOptions = {}) {
     .insert(conversations)
     .values({
       visitorPrincipalId: principalId,
-      channel: 'email',
+      channel: options.channel ?? 'email',
       source: options.source ?? 'email',
       priority: 'none',
       status: options.status ?? 'open',
@@ -142,7 +146,11 @@ async function seedEmailConversation(options: SeedOptions = {}) {
       principalId,
       senderType: 'visitor',
       content: 'My invoice is wrong.',
-      metadata: { source: 'email', emailMessageId: inboundMessageId },
+      metadata: {
+        source: 'email',
+        emailMessageId: inboundMessageId,
+        emailSenderAuth: options.unverifiedSender ? 'unverified' : 'pass',
+      },
     })
   }
   return { conversation, principalId, inboundMessageId }
@@ -153,6 +161,29 @@ async function seedAssistantAnswer(
   conversationId: ConversationId,
   principalId: PrincipalId
 ): Promise<ConversationMessageId> {
+  const [trigger] = await testDb
+    .select()
+    .from(conversationMessages)
+    .where(
+      and(
+        eq(conversationMessages.conversationId, conversationId),
+        eq(conversationMessages.senderType, 'visitor')
+      )
+    )
+    .orderBy(desc(conversationMessages.id))
+    .limit(1)
+  const [run] = await testDb
+    .insert(assistantRuns)
+    .values({
+      conversationId,
+      surface: 'email',
+      triggerKind: 'customer_message',
+      triggerKey: `mail-${suffix()}`,
+      triggerMessageId: trigger?.id,
+      status: 'succeeded',
+      outcome: 'answer',
+    })
+    .returning()
   const [message] = await testDb
     .insert(conversationMessages)
     .values({
@@ -160,12 +191,17 @@ async function seedAssistantAnswer(
       principalId,
       senderType: 'agent',
       content: 'Your invoice was reissued this morning.',
+      assistantRunId: run.id,
       metadata: {
         assistantResponseKind: 'answer',
         channelDelivery: { channel: 'email', status: 'pending', at: new Date().toISOString() },
       },
     })
     .returning()
+  await testDb
+    .update(assistantRuns)
+    .set({ resultMessageId: message.id })
+    .where(eq(assistantRuns.id, run.id))
   return message.id
 }
 
@@ -190,6 +226,40 @@ describe.skipIf(!fixture.available)('autonomous Quinn replies on email', () => {
   afterAll(fixture.close)
 
   describe('eligibility', () => {
+    it.each(['unverified', 'reject', undefined] as const)(
+      'refuses a trigger whose sender verdict is %s despite trusted attributes and an older pass',
+      async (verdict) => {
+        const { conversation, principalId } = await seedEmailConversation()
+        const [trigger] = await testDb
+          .insert(conversationMessages)
+          .values({
+            conversationId: conversation.id,
+            principalId,
+            senderType: 'visitor',
+            content: 'Forged reply',
+            metadata: {
+              source: 'email',
+              emailMessageId: 'forged@customer.example',
+              emailSenderAuth: verdict,
+            },
+          })
+          .returning()
+        await testDb
+          .update(conversations)
+          .set({ customAttributes: { unverifiedSender: false } })
+          .where(eq(conversations.id, conversation.id))
+        expect(await assistantChannelEligibility(conversation, testDb, trigger.id)).toEqual({
+          eligible: false,
+          reason: 'unverified_sender',
+        })
+      }
+    )
+
+    it('uses the current email channel for a conversation that originated in the widget', async () => {
+      const { conversation } = await seedEmailConversation({ source: 'widget' })
+      expect(await assistantTurnSurfaceFor(conversation, 'open', testDb)).toBe('email')
+    })
+
     it('allows a verified sender on an open thread when the channel is on', async () => {
       const { conversation } = await seedEmailConversation()
       expect(await assistantChannelEligibility(conversation, testDb)).toEqual({ eligible: true })
@@ -202,7 +272,11 @@ describe.skipIf(!fixture.available)('autonomous Quinn replies on email', () => {
       ['a thread filed as spam', { endReason: 'spam' }, 'not_open'],
       ['a teammate who took it over', { assigned: true }, 'taken_over'],
       ['nothing to thread the reply from', { inboundMessageId: null }, 'no_thread'],
-      ['a source that is not the email channel', { source: 'ticket_form' }, 'unsupported_source'],
+      [
+        'a source that is not the email channel',
+        { source: 'ticket_form', channel: 'messenger' },
+        'unsupported_source',
+      ],
     ]
 
     it.each(refusals)('refuses %s', async (_name, options, reason) => {
@@ -237,13 +311,127 @@ describe.skipIf(!fixture.available)('autonomous Quinn replies on email', () => {
 
     it('leaves the widget channel exactly as it was', async () => {
       const { conversation } = await seedEmailConversation({ source: 'widget' })
-      expect(await assistantTurnSurfaceFor(conversation, 'open', testDb)).toBe('widget')
+      expect(
+        await assistantTurnSurfaceFor({ ...conversation, channel: 'messenger' }, 'open', testDb)
+      ).toBe('widget')
       // A thread a human deliberately closed still never summons Quinn.
       expect(await assistantTurnSurfaceFor(conversation, 'closed', testDb)).toBeNull()
     })
   })
 
   describe('delivery', () => {
+    it('does not resend after the provider may have accepted an interrupted send', async () => {
+      const { conversation, principalId } = await seedEmailConversation()
+      const messageId = await seedAssistantAnswer(conversation.id, principalId)
+      const job = {
+        jobId: 'ambiguous',
+        payload: { messageId, conversationId: conversation.id },
+      } as never
+      sendConversationMessageEmail.mockRejectedValueOnce(
+        new Error('connection lost after acceptance')
+      )
+      await deliverAssistantEmail(job).catch(() => {})
+      await deliverAssistantEmail(job)
+      expect(sendConversationMessageEmail).toHaveBeenCalledTimes(1)
+      expect(await deliveryRecordOf(messageId)).toMatchObject({
+        status: 'failed',
+        error: expect.stringMatching(/unconfirmed/i),
+      })
+    })
+
+    it('claims dispatch once when two jobs attempt the same message', async () => {
+      const { conversation, principalId } = await seedEmailConversation()
+      const messageId = await seedAssistantAnswer(conversation.id, principalId)
+      await Promise.all(
+        ['one', 'two'].map((jobId) =>
+          deliverAssistantEmail({
+            jobId,
+            payload: { messageId, conversationId: conversation.id },
+          } as never)
+        )
+      )
+      expect(sendConversationMessageEmail).toHaveBeenCalledTimes(1)
+      expect(await deliveryRecordOf(messageId)).toMatchObject({ status: 'sent' })
+    })
+
+    it('checks the run trigger rather than a newer verified message before delivery', async () => {
+      const { conversation, principalId } = await seedEmailConversation()
+      const messageId = await seedAssistantAnswer(conversation.id, principalId)
+      const [run] = await testDb
+        .select()
+        .from(assistantRuns)
+        .where(eq(assistantRuns.resultMessageId, messageId))
+      await testDb
+        .update(conversationMessages)
+        .set({
+          metadata: {
+            source: 'email',
+            emailMessageId: 'forged@customer.example',
+            emailSenderAuth: 'reject',
+          },
+        })
+        .where(eq(conversationMessages.id, run.triggerMessageId!))
+      await testDb
+        .insert(conversationMessages)
+        .values({
+          conversationId: conversation.id,
+          principalId,
+          senderType: 'visitor',
+          content: 'New verified reply',
+          metadata: {
+            source: 'email',
+            emailMessageId: 'verified@customer.example',
+            emailSenderAuth: 'pass',
+          },
+        })
+      await deliverAssistantEmail({ jobId: 'trigger-gate', payload: { messageId } } as never)
+      expect(sendConversationMessageEmail).toHaveBeenCalledTimes(0)
+      expect(await deliveryRecordOf(messageId)).toMatchObject({
+        status: 'failed',
+        error: expect.stringContaining('unverified sender'),
+      })
+    })
+
+    it('records an answer clock only after delivery is confirmed', async () => {
+      const { conversation, principalId } = await seedEmailConversation()
+      const messageId = await seedAssistantAnswer(conversation.id, principalId)
+      const { openInvolvement } =
+        await import('@/lib/server/domains/assistant/assistant.involvement')
+      const involvement = await openInvolvement(
+        { conversationId: conversation.id, triggeredBy: 'first_touch' },
+        testDb
+      )
+      await testDb
+        .update(assistantRuns)
+        .set({ involvementId: involvement.id })
+        .where(eq(assistantRuns.resultMessageId, messageId))
+      await testDb
+        .update(conversations)
+        .set({ inactivityAnchorAt: null })
+        .where(eq(conversations.id, conversation.id))
+      sendConversationMessageEmail.mockImplementationOnce(async (input) => {
+        expect(input.to).toBe(conversation.visitorEmail)
+        const [before] = await testDb
+          .select()
+          .from(assistantInvolvements)
+          .where(eq(assistantInvolvements.id, involvement.id))
+        expect(before.lastAssistantAnswerAt).toBeNull()
+        return { sent: true }
+      })
+      await deliverAssistantEmail({ jobId: 'answer-clock', payload: { messageId } } as never)
+      const [after] = await testDb
+        .select()
+        .from(assistantInvolvements)
+        .where(eq(assistantInvolvements.id, involvement.id))
+      const [parent] = await testDb
+        .select()
+        .from(conversations)
+        .where(eq(conversations.id, conversation.id))
+      expect(after.lastAssistantAnswerAt).not.toBeNull()
+      expect(parent.inactivityAnchorAt).toEqual(after.lastAssistantAnswerAt)
+      expect(parent.inactivityOwner).toBe('assistant_answered')
+    })
+
     it('threads the reply from the inbound Message-ID and records it as sent', async () => {
       const { conversation, principalId, inboundMessageId } = await seedEmailConversation()
       const messageId = await seedAssistantAnswer(conversation.id, principalId)

@@ -2,7 +2,7 @@
  * Persist outbound channel-delivery status on an agent message and fan the
  * change to the inbox stream so ticks move pending → sent/failed live.
  */
-import { db, eq, conversationMessages, type ConversationMessageMetadata } from '@/lib/server/db'
+import { db, eq, sql, conversationMessages } from '@/lib/server/db'
 import type { Channel, ChannelDelivery } from '@/lib/shared/db-types'
 import type { ConversationMessageId } from '@quackback/ids'
 import { getChannelDescriptor } from '@/lib/shared/channels'
@@ -50,16 +50,11 @@ export async function persistChannelDelivery(
         : {}),
     ...(error ? { error } : {}),
   }
-  const metadata: ConversationMessageMetadata = {
-    ...(row.metadata ?? {}),
-    channelDelivery,
-    ...(patch.channel === 'github' && patch.externalId
-      ? { source: 'github', githubCommentId: patch.externalId }
-      : {}),
-  }
   const [updated] = await db
     .update(conversationMessages)
-    .set({ metadata })
+    .set({
+      metadata: sql`COALESCE(${conversationMessages.metadata}, '{}'::jsonb) || ${JSON.stringify({ channelDelivery, ...(patch.channel === 'github' && patch.externalId ? { source: 'github', githubCommentId: patch.externalId } : {}) })}::jsonb`,
+    })
     .where(eq(conversationMessages.id, messageId))
     .returning()
   if (updated) await broadcastInboxMessageUpdated(updated)

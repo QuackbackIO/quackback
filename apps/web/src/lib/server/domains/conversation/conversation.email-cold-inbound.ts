@@ -16,7 +16,7 @@
  *
  * A hard DMARC reject resolves like any other weak verdict rather than being
  * refused here. What a reject decides is the DISPOSITION of the message (the
- * caller quarantines it), and disposition is not this function's job — the
+ * caller quarantines it), and disposition is not this function's job , the
  * message still has to be attributed to somebody in order to be retained and
  * reviewed at all. Identity is not weakened by that, and the reason is
  * structural rather than a promise: `pass` is the only branch below that can
@@ -62,7 +62,7 @@ import { emitConversationCreated, emitMessageCreated } from './conversation.webh
 export interface ColdInboundResolution {
   action: 'attach' | 'create'
   principalId: PrincipalId
-  /** True for a weak-auth lead — drives the unverified-sender badge. */
+  /** True for a weak-auth lead , drives the unverified-sender badge. */
   unverified: boolean
   verdict: InboundAuthResult
 }
@@ -97,14 +97,14 @@ export async function resolveColdInboundSender(
   }
 
   // A lead we minted for this address on an earlier mail: reuse it instead of
-  // minting a second one. This is what makes blocking a cold sender STICK — a
+  // minting a second one. This is what makes blocking a cold sender STICK , a
   // principal created fresh on every message can never be blocked, because the
   // block lands on a row the next message will not look at.
   //
   // `userId IS NULL` is a security clause, not an optimisation: anonymous WIDGET
   // visitors also carry a contactEmail (pre-chat capture) but DO have an auth
   // user row, so matching on type+address alone would let a weak-DMARC stranger
-  // attach to a live visitor's principal and impersonate them to an agent —
+  // attach to a live visitor's principal and impersonate them to an agent ,
   // exactly what the trust gate above exists to prevent. Cold leads are the only
   // anonymous principals created without a user, which makes this an exact
   // fingerprint for "a lead WE minted from an email".
@@ -149,7 +149,7 @@ export async function resolveColdInboundSender(
  * Create a fresh email conversation from a cold inbound message: the conversation
  * (channel='email', source='email', pinned to the inbound route, waiting on a
  * reply, unverified-sender badge when the auth was weak) + its first visitor
- * message, then fire conversation.created and message.created (first message) —
+ * message, then fire conversation.created and message.created (first message) ,
  * the second being what the team bell, message-triggered workflows and the
  * next-response SLA clock all ride, so an emailed-in thread raises the same
  * signals a widget-started one does. Direct inserts (the visitor-message create
@@ -161,14 +161,14 @@ export async function resolveColdInboundSender(
  * Filing in the insert rather than with a follow-up update is what makes the
  * refusal hold: there is no instant at which a refused message sits in the open
  * queue, and no second write whose failure would leave it there. Going through
- * the ordinary spam filter instead would reintroduce exactly that, and worse —
+ * the ordinary spam filter instead would reintroduce exactly that, and worse ,
  * that path is bypassed for a workspace-trusted sender, so a stranger spoofing
  * a trusted address would land in the normal inbox, which is the one outcome a
  * hard reject exists to prevent.
  *
  * The emits are skipped for the same reason. A refused message must not ring
  * the team bell, fire outbound webhooks, start an SLA clock, or trigger a
- * message workflow — an auto-reply workflow firing on a forged From is
+ * message workflow , an auto-reply workflow firing on a forged From is
  * backscatter sent in our name, and a bell any stranger can ring is a
  * notification channel we have handed to them.
  */
@@ -186,13 +186,13 @@ export async function createEmailConversation(input: {
    *  is the enumerated one the Spam view badges the row with. */
   quarantine?: { cause: ConversationSpamFiledBy; note: string } | null
 }): Promise<ConversationId> {
-  const { parsed, channelAccountId, principalId, unverified, content, contentJson } = input
+  const { parsed, channelAccountId, principalId, content, contentJson } = input
   const quarantine = input.quarantine ?? null
   // Direct insert bypasses sendVisitorMessage, so mirror its guards here: an
   // untrusted sender's inline images may only reference our own storage (a
   // cold-inbound cid: / external src is cleared until the attachment task
   // rehosts it), and attachments are re-validated (own-storage url, count, size)
-  // — same as every other visitor-ingress channel.
+  // , same as every other visitor-ingress channel.
   const safeContentJson = contentJson
     ? sanitizeTiptapContent(contentJson, { restrictImagesToTrustedOrigins: true })
     : null
@@ -211,7 +211,7 @@ export async function createEmailConversation(input: {
         lastMessagePreview: (content || (attachments[0] ? attachments[0].name : '')).slice(0, 200),
         lastMessageAt: now,
         // The customer is waiting on the first reply from the moment it lands.
-        // Nobody is waiting on refused mail — an agent has to release it first.
+        // Nobody is waiting on refused mail , an agent has to release it first.
         waitingSince: quarantine ? null : now,
         // The Spam-view shape, written here rather than by a follow-up update:
         // the same (status, resolvedAt, endReason, spamReason) tuple
@@ -226,11 +226,10 @@ export async function createEmailConversation(input: {
             }
           : {}),
         visitorEmail: normalizeSenderAddress(parsed.from),
-        customAttributes: unverified ? { unverifiedSender: true } : {},
       })
       .returning()
 
-    // Returned so message.created below can carry the real row — the event
+    // Returned so message.created below can carry the real row , the event
     // bridge reads its id, senderType, principalId, content and createdAt.
     const [inserted] = await tx
       .insert(conversationMessages)
@@ -244,7 +243,11 @@ export async function createEmailConversation(input: {
         // The same derivation the cold-inbound path deduplicated on a moment
         // ago, so the row a redelivery has to match is filed under the key that
         // redelivery will look up.
-        metadata: { source: 'email', emailMessageId: inboundDedupeKey(parsed) ?? undefined },
+        metadata: {
+          source: 'email',
+          emailMessageId: inboundDedupeKey(parsed) ?? undefined,
+          emailSenderAuth: evaluateInboundAuth(parsed.authenticationResults).verdict,
+        },
       })
       .returning()
     return { conversation: created, message: inserted }

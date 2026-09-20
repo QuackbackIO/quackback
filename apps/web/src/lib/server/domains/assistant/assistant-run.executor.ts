@@ -10,7 +10,14 @@
  * gets; every fenced outcome is therefore reported as a disposition string and
  * recorded on the run.
  */
-import { db, and, eq, assistantPendingActions, type AssistantRunDelegation } from '@/lib/server/db'
+import {
+  db,
+  and,
+  eq,
+  conversations,
+  assistantPendingActions,
+  type AssistantRunDelegation,
+} from '@/lib/server/db'
 import type { AssistantRunId, ConversationId } from '@quackback/ids'
 import type { ConversationAuthorInput } from '@/lib/server/domains/conversation/conversation.types'
 import type { ClaimedJob } from '@/lib/server/jobs/job-queue'
@@ -161,6 +168,29 @@ export async function advanceAssistantRun(job: ClaimedJob): Promise<string> {
 
     const { prepareAssistantTurn, generateAssistantCandidate, InternalSourcedReplyError } =
       await import('./assistant.orchestrator')
+
+    if (run.surface === 'email') {
+      const [conversation] = await db
+        .select()
+        .from(conversations)
+        .where(eq(conversations.id, conversationId))
+      const { assistantChannelEligibility } =
+        await import('@/lib/server/domains/conversation/assistant-channel-eligibility')
+      if (
+        !conversation ||
+        !(await assistantChannelEligibility(conversation, db, run.triggerMessageId)).eligible
+      ) {
+        await settleRun(db, {
+          runId,
+          status: 'suppressed',
+          phase: 'context',
+          disposition: 'fence:channel_ineligible',
+          expectedLeaseToken: job.leaseToken,
+        })
+        await completeDelegation(run, 'escalated')
+        return 'fence:channel_ineligible'
+      }
+    }
 
     const prepared = await prepareAssistantTurn(conversationId, { surface: run.surface })
     if (!prepared) {
