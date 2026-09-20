@@ -1,3 +1,4 @@
+import { PERMISSIONS } from '@/lib/shared/permissions'
 /**
  * Read-only fetch for a live pending-action row, by id.
  *
@@ -37,7 +38,7 @@ const PendingActionInput = z.object({ pendingActionId: z.string() })
 
 // Mirrors assistant-actions.ts's toDTO. Not imported from there (that file is
 // owned by another approval-flow change and shouldn't gain new exports for
-// this) — the reshape is a few fields, so a local copy is cheaper than
+// this) , the reshape is a few fields, so a local copy is cheaper than
 // coupling the two files.
 function toDTO(row: AssistantPendingAction): AssistantPendingActionDTO {
   return {
@@ -68,16 +69,18 @@ export const getAssistantPendingActionFn = createServerFn({ method: 'GET' })
   .validator(PendingActionInput)
   .handler(async ({ data }) => {
     // Base gate: any inbox teammate may open the approval queue.
-    const auth = await requireAuth()
+    const auth = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
     const row = await getPendingActionById(data.pendingActionId as AssistantPendingActionId)
     if (!row) throw new NotFoundError('PENDING_ACTION_NOT_FOUND', 'Pending action not found')
-    // Row-level authz (unified inbox §3.3): see this file's doc comment —
+    // Row-level authz (unified inbox §3.3): see this file's doc comment ,
     // the base gate above only confirms conversation.view SOMEWHERE.
     const actor = await policyActorFromAuth(auth)
     if (row.conversationId) {
       await assertConversationViewable(row.conversationId, actor)
     } else if (row.ticketId) {
       await assertTicketVisible(row.ticketId, actor)
+    } else {
+      throw new NotFoundError('PENDING_ACTION_NOT_FOUND', 'Pending action not found')
     }
     return toDTO(row)
   })
@@ -141,7 +144,7 @@ async function visibleToViewer(
  * kept only if they can see the item it belongs to.
  */
 export const listAssistantReviewQueueFn = createServerFn({ method: 'GET' }).handler(async () => {
-  const auth = await requireAuth()
+  const auth = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
   const actor = await policyActorFromAuth(auth)
   const [proposed, unconfirmed, receipts] = await Promise.all([
     listDecidablePendingActions(100),
@@ -203,7 +206,7 @@ const ReconcileInput = z
 export const reconcileAssistantActionFn = createServerFn({ method: 'POST' })
   .validator(ReconcileInput)
   .handler(async ({ data }) => {
-    const auth = await requireAuth()
+    const auth = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
     const actor = await policyActorFromAuth(auth)
     const receipt = data.receiptId
       ? await getToolCallById(data.receiptId as AssistantToolCallId)
@@ -211,7 +214,16 @@ export const reconcileAssistantActionFn = createServerFn({ method: 'POST' })
     if (!receipt) throw new NotFoundError('TOOL_CALL_NOT_FOUND', 'Action record not found')
     // Row-level authz, the same shape as approve/reject: seeing the item is
     // what authorizes a judgement about an action taken inside it.
-    if (receipt.conversationId) await assertConversationViewable(receipt.conversationId, actor)
+    // Receipts have no ticket column. A proposal supplies its actual parent;
+    // autonomous receipts can only resolve through their conversation.
+    const parent = receipt.pendingActionId
+      ? await getPendingActionById(receipt.pendingActionId)
+      : receipt.conversationId
+        ? { conversationId: receipt.conversationId, ticketId: null }
+        : null
+    if (parent?.conversationId) await assertConversationViewable(parent.conversationId, actor)
+    else if (parent?.ticketId) await assertTicketVisible(parent.ticketId, actor)
+    else throw new NotFoundError('TOOL_CALL_NOT_FOUND', 'Action record not found')
     const settled = await reconcileToolCall(receipt.id, {
       verdict: data.verdict,
       note: data.note,

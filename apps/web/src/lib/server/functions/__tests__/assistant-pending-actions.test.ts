@@ -1,5 +1,5 @@
 /**
- * Tests for getAssistantPendingActionFn — the read the inbox approval card
+ * Tests for getAssistantPendingActionFn , the read the inbox approval card
  * polls for live status, instead of trusting the stale note snapshot.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -109,12 +109,12 @@ beforeEach(() => {
 })
 
 describe('getAssistantPendingActionFn', () => {
-  it('uses bare auth before authorizing the row parent', async () => {
+  it('requires teammate permission before authorizing the row parent', async () => {
     hoisted.getPendingActionById.mockResolvedValue(pendingRow())
 
     await fetchPendingAction({ pendingActionId: 'assistant_action_1' })
 
-    expect(hoisted.requireAuth).toHaveBeenCalledWith()
+    expect(hoisted.requireAuth).toHaveBeenCalledWith({ permission: PERMISSIONS.CONVERSATION_VIEW })
     expect(hoisted.assertConversationViewable).toHaveBeenCalled()
   })
 

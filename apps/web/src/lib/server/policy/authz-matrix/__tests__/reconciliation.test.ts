@@ -49,3 +49,19 @@ describe('authorization surface completeness', () => {
     expect(perms.length).toBeGreaterThan(0)
   })
 })
+
+it.each([
+  ['assistant-runs', 'listAssistantRunsFn'],
+  ['assistant-runs', 'getAssistantRunFn'],
+  ['assistant-pending-actions', 'getAssistantPendingActionFn'],
+  ['assistant-pending-actions', 'listAssistantReviewQueueFn'],
+  ['assistant-pending-actions', 'reconcileAssistantActionFn'],
+  ['assistant-actions', 'approveAssistantActionFn'],
+  ['assistant-actions', 'rejectAssistantActionFn'],
+])('%s::%s enforces its declared teammate baseline in requireAuth', (file, name) => {
+  const { surfaces } = resolveSurfaces(SRC_ROOT)
+  const surface = surfaces.find(
+    (s) => s.file === `lib/server/functions/${file}.ts` && s.surface === name
+  )
+  expect(surface?.authz).toEqual({ type: 'permission', permission: 'conversation.view' })
+})

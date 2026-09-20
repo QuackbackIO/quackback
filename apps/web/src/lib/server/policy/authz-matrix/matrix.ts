@@ -3,7 +3,7 @@
  * tool) against every principal class, and render the committed golden
  * document.
  *
- * Evaluation is pure derivation from two sources of truth — the scanned
+ * Evaluation is pure derivation from two sources of truth , the scanned
  * authorization (what the code enforces) and the fixtures' resolved permission
  * sets (what each class holds). Nothing here restates an expectation by hand,
  * so a widened gate or a changed preset moves the output and shows up in the
@@ -15,7 +15,7 @@ import type { ResolvedSurface } from './resolve'
 import { PRINCIPAL_CLASSES, type PrincipalClass } from './principals'
 import type { ScannedMcpTool, EntryPoint } from './scan'
 
-export type Outcome = 'allow' | 'deny' | 'n/a'
+export type Outcome = 'allow' | 'deny' | 'n/a' | 'owner only'
 
 /** Whether a principal class may reach and pass a resolved surface's gate. */
 export function evaluate(cls: PrincipalClass, surface: ResolvedSurface): Outcome {
@@ -30,6 +30,9 @@ export function evaluate(cls: PrincipalClass, surface: ResolvedSurface): Outcome
       return 'allow'
     case 'mcp_entry':
       return 'allow'
+    case 'permission_or_owner':
+      if (surface.authz.permissions.some((p) => cls.permissions.has(p))) return 'allow'
+      return cls.isAuthenticatedPrincipal ? 'owner only' : 'deny'
     case 'dynamic_permission':
       // Passes if the class holds at least one candidate permission (can touch at
       // least one field); assertApiPermissions enforces the rest per changed field.
@@ -66,6 +69,8 @@ function authzLabel(s: ResolvedSurface): string {
       return 'PUBLIC (any valid key)'
     case 'mcp_entry':
       return 'MCP entry (tool scopes authorize)'
+    case 'permission_or_owner':
+      return `PERMISSION OR ITEM OWNER (${s.authz.permissions.join(' | ')})`
     case 'dynamic_permission':
       return `DYNAMIC (${s.authz.permissions.join(' | ')})`
     case 'role_gate': {
@@ -79,7 +84,7 @@ const mark = (b: boolean) => (b ? '✓' : '·')
 
 /**
  * Render the committed matrix document. Pairs with `matrix.test.ts`, which
- * snapshots this string to MATRIX.md — the reviewable artifact contributors
+ * snapshots this string to MATRIX.md , the reviewable artifact contributors
  * read and reviewers diff.
  */
 export function renderMatrixDoc(
@@ -88,15 +93,15 @@ export function renderMatrixDoc(
   entryPoints: EntryPoint[]
 ): string {
   const out: string[] = []
-  out.push('# Authorization matrix (generated — do not edit by hand)')
+  out.push('# Authorization matrix (generated , do not edit by hand)')
   out.push('')
   out.push(
     'Regenerate with `bunx vitest run apps/web/src/lib/server/policy/authz-matrix -u`.',
-    'A diff here means a gate, a role preset, or the set of surfaces changed — review it as an access-control change.',
+    'A diff here means a gate, a role preset, or the set of surfaces changed , review it as an access-control change.',
     ''
   )
 
-  // Section 1 — permission reach by role profile.
+  // Section 1 , permission reach by role profile.
   out.push('## 1. Permission reach by role profile')
   out.push('')
   out.push(
@@ -113,7 +118,7 @@ export function renderMatrixDoc(
   }
   out.push('')
 
-  // Section 2 — every surface's enforced authorization, grouped by channel.
+  // Section 2 , every surface's enforced authorization, grouped by channel.
   out.push('## 2. Surfaces and their enforced authorization')
   out.push('')
   const sections = [
@@ -126,7 +131,7 @@ export function renderMatrixDoc(
   for (const [ch, title] of sections) {
     const rows = surfaces.filter((s) => s.channel === ch)
     if (rows.length === 0) continue
-    out.push(`### ${title} — ${rows.length} surface${rows.length === 1 ? '' : 's'}`)
+    out.push(`### ${title} , ${rows.length} surface${rows.length === 1 ? '' : 's'}`)
     out.push('')
     out.push('| Surface | Enforces |')
     out.push('| --- | --- |')
@@ -136,7 +141,7 @@ export function renderMatrixDoc(
     out.push('')
   }
 
-  // Section 3 — MCP tool contracts + the scope over-grant.
+  // Section 3 , MCP tool contracts + the scope over-grant.
   out.push('## 3. MCP tools')
   out.push('')
   out.push(
@@ -166,7 +171,7 @@ export function renderMatrixDoc(
   }
   out.push('')
 
-  // Section 4 — entry points with no requireAuth/withApiKeyAuth gate. Pinned so a
+  // Section 4 , entry points with no requireAuth/withApiKeyAuth gate. Pinned so a
   // newly added route or function that forgets to gate shows up as a diff here.
   const ungated = entryPoints.filter((e) => !e.gated)
   out.push('## 4. Entry points without a requireAuth/key gate')
@@ -174,7 +179,7 @@ export function renderMatrixDoc(
   out.push(
     `${ungated.length} of ${entryPoints.length} entry points hold no \`requireAuth\` / \`withApiKeyAuth\` / \`requireTeamAuth\` gate.`,
     'Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).',
-    '**Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.',
+    '**Adding a row here is an access-control change** , confirm the new entry point is meant to be reachable without a gate.',
     ''
   )
   out.push('| Entry point | Kind |')

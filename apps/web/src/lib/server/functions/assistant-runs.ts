@@ -70,7 +70,7 @@ async function assertRunParentViewable(
 export const listAssistantRunsFn = createServerFn({ method: 'GET' })
   .validator(ParentInput)
   .handler(async ({ data }): Promise<AssistantRunSummary[]> => {
-    const auth = await requireAuth()
+    const auth = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
     const actor = await policyActorFromAuth(auth)
     if (data.conversationId) {
       await assertConversationViewable(data.conversationId as ConversationId, actor)
@@ -83,7 +83,7 @@ export const listAssistantRunsFn = createServerFn({ method: 'GET' })
 export const getAssistantRunFn = createServerFn({ method: 'GET' })
   .validator(RunInput)
   .handler(async ({ data }): Promise<AssistantRunDetail> => {
-    const auth = await requireAuth()
+    const auth = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
     const actor = await policyActorFromAuth(auth)
     const parent = await findAssistantRunParent(data.runId as AssistantRunId)
     if (!parent) throw new NotFoundError('ASSISTANT_RUN_NOT_FOUND', 'Run not found')

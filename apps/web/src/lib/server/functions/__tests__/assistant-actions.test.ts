@@ -157,7 +157,7 @@ function actorWith(permissions: string[]) {
 const pendingRow = (overrides: Partial<Record<string, unknown>> = {}) =>
   fakePendingActionRow({ originRole: 'customer_support', ...overrides })
 
-/** DTO shape assertion helper — approve/reject return the JSON-serializable
+/** DTO shape assertion helper , approve/reject return the JSON-serializable
  *  DTO (toDTO), not the raw row with Date fields, so expectations compare
  *  against this instead of the mocked row objects directly. */
 function expectDTOFrom(row: Record<string, unknown>): Partial<AssistantPendingActionDTO> {
@@ -237,7 +237,7 @@ describe('approveAssistantActionFn', () => {
     expect(out).toEqual(
       expect.objectContaining({ status: 'approved', executionState: 'queued', executedAt: null })
     )
-    expect(hoisted.requireAuth).toHaveBeenCalledWith()
+    expect(hoisted.requireAuth).toHaveBeenCalledWith({ permission: PERMISSIONS.CONVERSATION_VIEW })
   })
 
   it('conflicts rather than queueing when the row is no longer decidable', async () => {
@@ -480,7 +480,7 @@ describe('rejectAssistantActionFn', () => {
       'rejected',
       'principal_agent1'
     )
-    expect(hoisted.requireAuth).toHaveBeenCalledWith()
+    expect(hoisted.requireAuth).toHaveBeenCalledWith({ permission: PERMISSIONS.CONVERSATION_VIEW })
     expect(hoisted.resolveToolSpecs).not.toHaveBeenCalled()
     expect(out).toEqual(expect.objectContaining(expectDTOFrom(rejected)))
   })

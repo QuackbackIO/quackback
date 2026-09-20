@@ -1,7 +1,7 @@
-# Authorization matrix (generated — do not edit by hand)
+# Authorization matrix (generated , do not edit by hand)
 
 Regenerate with `bunx vitest run apps/web/src/lib/server/policy/authz-matrix -u`.
-A diff here means a gate, a role preset, or the set of surfaces changed — review it as an access-control change.
+A diff here means a gate, a role preset, or the set of surfaces changed , review it as an access-control change.
 
 ## 1. Permission reach by role profile
 
@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 747 surfaces
+### Server functions (`requireAuth`) , 747 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -209,8 +209,8 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/api-keys.ts`::updateApiKeyFn | api_key.manage |
 | `lib/server/functions/api-keys.ts`::rotateApiKeyFn | api_key.manage |
 | `lib/server/functions/api-keys.ts`::revokeApiKeyFn | api_key.manage |
-| `lib/server/functions/assistant-actions.ts`::approveAssistantActionFn | DYNAMIC (conversation.view | ticket.view | conversation.set_attributes | conversation.set_status | ticket.create | post.create | post.vote_on_behalf) |
-| `lib/server/functions/assistant-actions.ts`::rejectAssistantActionFn | DYNAMIC (conversation.view | ticket.view) |
+| `lib/server/functions/assistant-actions.ts`::approveAssistantActionFn | conversation.view |
+| `lib/server/functions/assistant-actions.ts`::rejectAssistantActionFn | conversation.view |
 | `lib/server/functions/assistant-analytics.ts`::getQuinnPerformanceFn | analytics.view |
 | `lib/server/functions/assistant-channels.ts`::getAssistantEmailChannelFn | assistant.manage |
 | `lib/server/functions/assistant-channels.ts`::updateAssistantEmailChannelFn | assistant.manage |
@@ -242,9 +242,9 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/assistant-improvement.ts`::setAssistantRegressionCaseEnabledFn | assistant.manage |
 | `lib/server/functions/assistant-improvement.ts`::createGuidanceDraftFromConversationFn | assistant.manage |
 | `lib/server/functions/assistant-operations-analytics.ts`::getQuinnOperationsFn | analytics.view |
-| `lib/server/functions/assistant-pending-actions.ts`::getAssistantPendingActionFn | DYNAMIC (conversation.view | ticket.view) |
-| `lib/server/functions/assistant-pending-actions.ts`::listAssistantReviewQueueFn | DYNAMIC (conversation.view | ticket.view) |
-| `lib/server/functions/assistant-pending-actions.ts`::reconcileAssistantActionFn | DYNAMIC (conversation.view) |
+| `lib/server/functions/assistant-pending-actions.ts`::getAssistantPendingActionFn | conversation.view |
+| `lib/server/functions/assistant-pending-actions.ts`::listAssistantReviewQueueFn | conversation.view |
+| `lib/server/functions/assistant-pending-actions.ts`::reconcileAssistantActionFn | conversation.view |
 | `lib/server/functions/assistant-releases.ts`::getAssistantReleaseStateFn | assistant.manage |
 | `lib/server/functions/assistant-releases.ts`::runAssistantReleaseCheckFn | assistant.manage |
 | `lib/server/functions/assistant-releases.ts`::publishAssistantReleaseFn | assistant.manage |
@@ -252,8 +252,8 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/assistant-releases.ts`::setAssistantReleaseManagementFn | assistant.manage |
 | `lib/server/functions/assistant-releases.ts`::runAssistantCandidateSandboxFn | assistant.manage |
 | `lib/server/functions/assistant-review.ts`::getQuinnReviewQueueFn | conversation.view |
-| `lib/server/functions/assistant-runs.ts`::listAssistantRunsFn | DYNAMIC (conversation.view | ticket.view) |
-| `lib/server/functions/assistant-runs.ts`::getAssistantRunFn | DYNAMIC (conversation.view | ticket.view) |
+| `lib/server/functions/assistant-runs.ts`::listAssistantRunsFn | conversation.view |
+| `lib/server/functions/assistant-runs.ts`::getAssistantRunFn | conversation.view |
 | `lib/server/functions/assistant-runs.ts`::cancelAssistantRunFn | conversation.reply |
 | `lib/server/functions/assistant-runs.ts`::retryAssistantRunFn | conversation.reply |
 | `lib/server/functions/assistant-settings.ts`::getAssistantSettingsFn | assistant.manage |
@@ -399,11 +399,11 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/conversation-views.ts`::pinConversationViewFn | conversation.view |
 | `lib/server/functions/conversation-views.ts`::unpinConversationViewFn | conversation.view |
 | `lib/server/functions/conversation.ts`::sendConversationMessageFn | END_USER (any authenticated) |
-| `lib/server/functions/conversation.ts`::listConversationMessagesFn | END_USER (any authenticated) |
+| `lib/server/functions/conversation.ts`::listConversationMessagesFn | PERMISSION OR ITEM OWNER (conversation.view) |
 | `lib/server/functions/conversation.ts`::exportConversationTranscriptFn | conversation.view |
 | `lib/server/functions/conversation.ts`::exportConversationTranscriptFn | TEAM-ONLY (~conversation.view) |
-| `lib/server/functions/conversation.ts`::markConversationReadFn | END_USER (any authenticated) |
-| `lib/server/functions/conversation.ts`::sendConversationTypingFn | END_USER (any authenticated) |
+| `lib/server/functions/conversation.ts`::markConversationReadFn | PERMISSION OR ITEM OWNER (conversation.view) |
+| `lib/server/functions/conversation.ts`::sendConversationTypingFn | PERMISSION OR ITEM OWNER (conversation.view) |
 | `lib/server/functions/conversation.ts`::submitCsatFn | END_USER (any authenticated) |
 | `lib/server/functions/conversation.ts`::setAgentAvailabilityFn | conversation.view |
 | `lib/server/functions/conversation.ts`::mintConversationStreamTokenFn | END_USER (any authenticated) |
@@ -852,7 +852,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/workflows.ts`::runWorkflowManuallyFn | conversation.reply |
 | `lib/server/functions/workspace-wipe.ts`::wipeCloudWorkspaceFn | END_USER (any authenticated) |
 
-### Public REST API (`withApiKeyAuth`) — 125 surfaces
+### Public REST API (`withApiKeyAuth`) , 125 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -982,19 +982,19 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `routes/api/v1/webhooks/index.ts`::GET | webhook.view |
 | `routes/api/v1/webhooks/index.ts`::POST | webhook.manage |
 
-### Session-authenticated routes (`requireAuth`) — 1 surface
+### Session-authenticated routes (`requireAuth`) , 1 surface
 
 | Surface | Enforces |
 | --- | --- |
 | `routes/api/plg-events.ts`::handlePlgEvent | END_USER (any authenticated) |
 
-### SSE stream (inline gate) — 1 surface
+### SSE stream (inline gate) , 1 surface
 
 | Surface | Enforces |
 | --- | --- |
 | `routes/api/chat/stream.ts`::GET | TEAM-ONLY (~conversation.view) |
 
-### MCP transport entry — 1 surface
+### MCP transport entry , 1 surface
 
 | Surface | Enforces |
 | --- | --- |
@@ -1060,7 +1060,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 215 of 1073 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
-**Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
+**Adding a row here is an access-control change** , confirm the new entry point is meant to be reachable without a gate.
 
 | Entry point | Kind |
 | --- | --- |

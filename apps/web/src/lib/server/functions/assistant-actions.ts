@@ -1,12 +1,13 @@
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { toolPermissions } from '@/lib/server/domains/assistant/tool-permissions'
 /**
  * Approve/reject server fns for Quinn's pending write-tool proposals.
  *
  * Base gate is conversation.view (any inbox teammate may open the approval
  * queue); the actual authority is per-proposal, in two parts: (1) the
- * approver must be able to VIEW the proposal's actual parent — a real
+ * approver must be able to VIEW the proposal's actual parent , a real
  * conversation or ticket visibility check (`assertConversationViewable` /
- * `assertTicketVisible`), not just the base permission — and (2) the approver
+ * `assertTicketVisible`), not just the base permission , and (2) the approver
  * must hold every permission the proposed tool declares, so approval can
  * never grant more than the approver already has themself.
  *
@@ -167,7 +168,7 @@ export const decideAssistantAction = createServerOnlyFn(async function decideAss
   // Built-in specs resolve from the static registry; a custom action
   // (Phase 5) persists an `action_<slug>` toolName that lives only in the DB,
   // so fall back to the dynamic resolver keyed by the proposal's origin agent
-  // (the deterministic name set is recomputed there — see
+  // (the deterministic name set is recomputed there , see
   // getActionSpecByToolName). A definition since disabled, unassigned,
   // renamed, or removed resolves to null and reads as "no longer available",
   // exactly like a gone built-in.
@@ -260,7 +261,7 @@ export const approveAssistantActionFn = createServerFn({ method: 'POST' })
     // Base gate: any inbox teammate may act on the queue. The real
     // authority check is per-proposal, below (every permission the
     // proposed tool declares).
-    const auth = await requireAuth()
+    const auth = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
     const actor = await policyActorFromAuth(auth)
     const settled = await decideAssistantAction(
       data.pendingActionId as AssistantPendingActionId,
@@ -274,8 +275,8 @@ export const approveAssistantActionFn = createServerFn({ method: 'POST' })
 export const rejectAssistantActionFn = createServerFn({ method: 'POST' })
   .validator(PendingActionInput)
   .handler(async ({ data }) => {
-    // Same base gate as approve — see the comment there.
-    const auth = await requireAuth()
+    // Same base gate as approve , see the comment there.
+    const auth = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
     const actor = await policyActorFromAuth(auth)
     const settled = await decideAssistantAction(
       data.pendingActionId as AssistantPendingActionId,

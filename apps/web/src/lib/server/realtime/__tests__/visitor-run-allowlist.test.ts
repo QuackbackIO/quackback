@@ -84,7 +84,7 @@ function expectNoRunFields(value: unknown, what: string): void {
   expect(leaked, `${what} carries run fields`).toEqual([])
 }
 
-const agentDto = {
+const agentDto: Required<ConversationDTO> = {
   id: conversationId,
   status: 'open',
   priority: 'none',
@@ -93,7 +93,7 @@ const agentDto = {
   lastMessagePreview: 'hi',
   lastMessageAt: '2026-01-01T00:00:00.000Z',
   createdAt: '2026-01-01T00:00:00.000Z',
-  visitor: { principalId: 'principal_v', displayName: null, avatarUrl: null },
+  visitor: { principalId: 'principal_v' as PrincipalId, displayName: null, avatarUrl: null },
   assignedAgent: null,
   unreadCount: 0,
   visitorLastReadAt: null,
@@ -104,18 +104,49 @@ const agentDto = {
   endReason: null,
   endNote: 'internal end note',
   tags: [],
-  sla: null,
-} as unknown as ConversationDTO
+  sla: {
+    policyId: 'internal',
+    policyName: 'Private policy',
+    appliedAt: '2026-01-01T00:00:00.000Z',
+    firstResponseDueAt: null,
+    firstResponseAt: null,
+    nextResponseDueAt: null,
+    timeToCloseDueAt: null,
+    resolvedAt: null,
+    pauseOnSnooze: true,
+  },
+  snoozedUntil: '2026-12-01T00:00:00.000Z',
+  assignedTeamId: 'team_internal',
+  spamReason: 'manual',
+  customAttributes: { runId: 'private-run', evidence: 'private-passage' },
+  translation: { enabled: true, detectedCustomerLanguage: 'fr', suggestionDismissed: false },
+}
 
 describe('visitor payloads carry no run records', () => {
   it('the conversation update published to a visitor', () => {
     publish.mockClear()
-    publishConversationUpdate(conversationId, agentDto)
+    publishConversationUpdate(conversationId, {
+      ...agentDto,
+      assistantRunId: 'private-run',
+    } as ConversationDTO)
     const visitorCall = publish.mock.calls.find(
       ([channel]) => channel === conversationChannel(conversationId)
     )
     expect(visitorCall).toBeDefined()
     const payload = visitorCall![1]
+    const conversation = payload.conversation
+    expect(conversation).toMatchObject({
+      visitorEmail: null,
+      endNote: null,
+      tags: [],
+      sla: null,
+      snoozedUntil: null,
+      assignedTeamId: null,
+      spamReason: null,
+      customAttributes: {},
+      translation: null,
+    })
+    expect(Object.keys(conversation).sort()).toEqual(Object.keys(agentDto).sort())
     expectNoRunFields(
       typeof payload === 'string' ? JSON.parse(payload) : payload,
       'the visitor conversation update'

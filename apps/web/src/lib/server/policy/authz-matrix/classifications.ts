@@ -3,13 +3,13 @@
  * NOT a self-describing catalogue-permission gate.
  *
  * A `requireAuth({ permission: PERMISSIONS.X })` gate carries its own
- * expectation — the permission IS the contract. Everything else needs a human
+ * expectation , the permission IS the contract. Everything else needs a human
  * to state intent so the matrix (and its reviewers) can tell an END_USER action
  * apart from an accidental hole:
- *   - bare `requireAuth()`      — an end-user action, or a team-any read
- *   - bare `withApiKeyAuth(req)` — a public-tier REST read (any valid key)
- *   - `requireTeamAuth()`        — a local wrapper that resolves to a permission
- *   - inline `isAdmin` / `isTeamMember` — either the real access decision
+ *   - bare `requireAuth()`      , an end-user action, or a team-any read
+ *   - bare `withApiKeyAuth(req)` , a public-tier REST read (any valid key)
+ *   - `requireTeamAuth()`        , a local wrapper that resolves to a permission
+ *   - inline `isAdmin` / `isTeamMember` , either the real access decision
  *     (SECONDARY_GATE) or a behavior refinement behind an existing gate
  *     (NOT_A_GATE)
  *
@@ -29,9 +29,11 @@ export type SurfaceIntent =
   | 'MCP_ENTRY'
   /** Bare gate whose required permission is computed from the request (a field-scoped PATCH): a valid key authenticates, then `assertApiPermissions` enforces the permission for each field touched. No single static permission covers it. */
   | 'DYNAMIC_PERMISSION'
+  /** Row policy permits a team permission or ownership of that item. */
+  | 'PERMISSION_OR_OWNER'
   /** An inline role check that IS the access decision for a surface without a requireAuth/key gate. */
   | 'SECONDARY_GATE'
-  /** An inline role check that refines behavior behind an already-present gate — not an entry point. */
+  /** An inline role check that refines behavior behind an already-present gate , not an entry point. */
   | 'NOT_A_GATE'
 
 export interface Classification {
@@ -61,7 +63,7 @@ export const ALIAS_RESOLUTIONS: Record<string, PermissionKey> = {
 }
 
 // ---------------------------------------------------------------------------
-// Bare gates — keyed by gateKey(file, surface)
+// Bare gates , keyed by gateKey(file, surface)
 // ---------------------------------------------------------------------------
 
 const END_USER = (why: string): Classification => ({ intent: 'END_USER', why })
@@ -70,6 +72,10 @@ const DYNAMIC_PERMISSION = (
   resolvesToAny: readonly PermissionKey[],
   why: string
 ): Classification => ({ intent: 'DYNAMIC_PERMISSION', resolvesToAny, why })
+
+const PERMISSION_OR_OWNER = (permission: PermissionKey, why: string): Classification => ({
+  intent: 'PERMISSION_OR_OWNER', resolvesToAny: [permission], why,
+})
 
 export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   // Anyone signed in acts only on their OWN address here: the principal comes
@@ -102,54 +108,6 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/contact-email.ts::confirmEmailChangeFn': END_USER(
     'writes the caller own address, gated on a code proving they hold it'
   ),
-  // Assistant proposals are item-scoped after authentication. Reads/rejections
-  // require visibility of the concrete parent; approval additionally checks
-  // every permission declared by the current Writer tool specification.
-  'lib/server/functions/assistant-pending-actions.ts::getAssistantPendingActionFn':
-    DYNAMIC_PERMISSION(
-      [PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.TICKET_VIEW],
-      'caller must be able to view the pending action parent'
-    ),
-  // The review queue and the reconciliation verdict are the same shape: the
-  // base gate says inbox teammate, and every row is kept or refused by whether
-  // this caller can see the item the action belongs to.
-  'lib/server/functions/assistant-pending-actions.ts::listAssistantReviewQueueFn':
-    DYNAMIC_PERMISSION(
-      [PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.TICKET_VIEW],
-      'each row is kept only when the caller can view its parent'
-    ),
-  // The run inspector. A run is a record ABOUT an item rather than a thing a
-  // teammate holds a permission for, so the base gate says inbox teammate and
-  // the authority is the visibility of the run's real parent, read off the row.
-  'lib/server/functions/assistant-runs.ts::listAssistantRunsFn': DYNAMIC_PERMISSION(
-    [PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.TICKET_VIEW],
-    'caller must be able to view the conversation or ticket the runs belong to'
-  ),
-  'lib/server/functions/assistant-runs.ts::getAssistantRunFn': DYNAMIC_PERMISSION(
-    [PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.TICKET_VIEW],
-    "caller must be able to view the run's own parent, taken from the row"
-  ),
-  'lib/server/functions/assistant-pending-actions.ts::reconcileAssistantActionFn':
-    DYNAMIC_PERMISSION(
-      [PERMISSIONS.CONVERSATION_VIEW],
-      'caller must be able to view the conversation the effect was taken in'
-    ),
-  'lib/server/functions/assistant-actions.ts::rejectAssistantActionFn': DYNAMIC_PERMISSION(
-    [PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.TICKET_VIEW],
-    'caller must be able to view the pending action parent'
-  ),
-  'lib/server/functions/assistant-actions.ts::approveAssistantActionFn': DYNAMIC_PERMISSION(
-    [
-      PERMISSIONS.CONVERSATION_VIEW,
-      PERMISSIONS.TICKET_VIEW,
-      PERMISSIONS.CONVERSATION_SET_ATTRIBUTES,
-      PERMISSIONS.CONVERSATION_SET_STATUS,
-      PERMISSIONS.TICKET_CREATE,
-      PERMISSIONS.POST_CREATE,
-      PERMISSIONS.POST_VOTE_ON_BEHALF,
-    ],
-    'caller must view the parent and hold every permission declared by the Writer tool'
-  ),
   // Changelog self-serve subscribe/unsubscribe + status: any authenticated
   // principal manages their own changelog email subscription.
   'lib/server/functions/changelog-subscriptions.ts::subscribeToChangelogFn': END_USER(
@@ -178,13 +136,16 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/conversation.ts::sendConversationMessageFn': END_USER(
     'visitor sends a conversation message'
   ),
-  'lib/server/functions/conversation.ts::listConversationMessagesFn': END_USER(
+  'lib/server/functions/conversation.ts::listConversationMessagesFn': PERMISSION_OR_OWNER(
+    PERMISSIONS.CONVERSATION_VIEW,
     'visitor pages their own conversation'
   ),
-  'lib/server/functions/conversation.ts::markConversationReadFn': END_USER(
+  'lib/server/functions/conversation.ts::markConversationReadFn': PERMISSION_OR_OWNER(
+    PERMISSIONS.CONVERSATION_VIEW,
     'visitor marks their conversation read'
   ),
-  'lib/server/functions/conversation.ts::sendConversationTypingFn': END_USER(
+  'lib/server/functions/conversation.ts::sendConversationTypingFn': PERMISSION_OR_OWNER(
+    PERMISSIONS.CONVERSATION_VIEW,
     'visitor typing indicator'
   ),
   'lib/server/functions/conversation.ts::submitCsatFn': END_USER('visitor submits a CSAT rating'),
@@ -270,10 +231,10 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   ),
   'lib/server/functions/uploads.ts::getAvatarUploadUrlFn': END_USER('own avatar upload URL'),
   'lib/server/functions/user.ts::requirePrincipalId': END_USER(
-    'own-profile helper — resolves the caller principal'
+    'own-profile helper , resolves the caller principal'
   ),
   'lib/server/functions/admin-overview.ts::fetchAdminOverviewFn': END_USER(
-    'admin home aggregation — each product section still gates on its own permission'
+    'admin home aggregation , each product section still gates on its own permission'
   ),
 
   // Widget BFF: Bearer-only surfaces. Site `requireAuth` denies widget; these
@@ -355,7 +316,7 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   // (see MCP_TOOLS). Not a permission gate on its own.
   'lib/server/mcp/handler.ts::resolveAuthContext': {
     intent: 'MCP_ENTRY',
-    why: 'MCP transport entry — a valid key authenticates; per-tool scopes provide authorization',
+    why: 'MCP transport entry , a valid key authenticates; per-tool scopes provide authorization',
   },
 
   // Field-scoped write: a valid key authenticates, then assertApiPermissions
@@ -369,7 +330,7 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
       PERMISSIONS.POST_SET_TAGS,
       PERMISSIONS.POST_SET_OWNER,
     ],
-    'field-scoped post PATCH — assertApiPermissions authorizes per changed field'
+    'field-scoped post PATCH , assertApiPermissions authorizes per changed field'
   ),
 
   // Bulk inbox action: the permission depends on the action (assign vs tag vs
@@ -383,7 +344,7 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
       PERMISSIONS.CONVERSATION_SET_STATUS,
       PERMISSIONS.CONVERSATION_MANAGE,
     ],
-    'bulk action — assign/assign_team require conversation.assign, tag requires conversation.set_tags, macro requires conversation.reply, delete_forever requires conversation.manage, the rest conversation.set_status'
+    'bulk action , assign/assign_team require conversation.assign, tag requires conversation.set_tags, macro requires conversation.reply, delete_forever requires conversation.manage, the rest conversation.set_status'
   ),
 
   // Ticket-axis counterpart of the bulk inbox action above: same dynamic
@@ -391,7 +352,7 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   // set_status require ticket.set_status).
   'lib/server/functions/tickets.ts::bulkUpdateTicketsFn': DYNAMIC_PERMISSION(
     [PERMISSIONS.TICKET_ASSIGN, PERMISSIONS.TICKET_SET_STATUS],
-    'bulk action — assign/assign_team require ticket.assign, the rest ticket.set_status'
+    'bulk action , assign/assign_team require ticket.assign, the rest ticket.set_status'
   ),
 
   // Attribute-value write: the permission depends on the target (conversation
@@ -402,12 +363,12 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/conversation-attributes.ts::setConversationAttributeValueFn':
     DYNAMIC_PERMISSION(
       [PERMISSIONS.CONVERSATION_SET_ATTRIBUTES, PERMISSIONS.TICKET_SET_STATUS],
-      'target-dependent — a conversation target requires conversation.set_attributes, a ticket target requires ticket.set_status'
+      'target-dependent , a conversation target requires conversation.set_attributes, a ticket target requires ticket.set_status'
     ),
 
   // Unified inbox (UNIFIED-INBOX-SPEC.md §3.1): the permission depends on
   // which kind(s) the actor can see, so the gate is bare and
-  // `canViewInboxAtAll` asserts the either-or at runtime — a caller holding
+  // `canViewInboxAtAll` asserts the either-or at runtime , a caller holding
   // only `ticket.view` still reaches the endpoint (conversation-only callers
   // just get a ticket-empty feed and vice versa, per the RBAC decision log).
   'lib/server/functions/inbox.ts::listInboxItemsFn': DYNAMIC_PERMISSION(
@@ -417,7 +378,7 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
       PERMISSIONS.TICKET_VIEW,
       PERMISSIONS.TICKET_VIEW_ALL,
     ],
-    'either-or — conversation.view(_all) or ticket.view(_all), checked by canViewInboxAtAll'
+    'either-or , conversation.view(_all) or ticket.view(_all), checked by canViewInboxAtAll'
   ),
   'lib/server/functions/inbox.ts::fetchInboxCountsFn': DYNAMIC_PERMISSION(
     [
@@ -426,7 +387,7 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
       PERMISSIONS.TICKET_VIEW,
       PERMISSIONS.TICKET_VIEW_ALL,
     ],
-    'either-or — conversation.view(_all) or ticket.view(_all), checked by canViewInboxAtAll'
+    'either-or , conversation.view(_all) or ticket.view(_all), checked by canViewInboxAtAll'
   ),
 
   // Public-tier REST reads: a valid key is required, but the data is portal-public
@@ -439,7 +400,7 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   // to these resources require STATUS_PAGE_MANAGE / STATUS_PAGE_PUBLISH.
   'routes/api/v1/status/summary.ts::GET': PUBLIC_DATA('public status page summary'),
   // Shared handlers behind both /status/components (deprecated) and the
-  // /status/services aliases — one gate each, two route surfaces.
+  // /status/services aliases , one gate each, two route surfaces.
   'routes/api/v1/status/-service-handlers.ts::listStatusComponentsHandler': PUBLIC_DATA(
     'public status service list'
   ),
@@ -478,7 +439,7 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
 
   // Cloud workspace ownership. The gate admits any authenticated principal and
   // the *handler* makes the access decision by comparing the caller's own
-  // session address against the owner the control plane reports — there is no
+  // session address against the owner the control plane reports , there is no
   // catalogue permission for "is the owner", and an admin is deliberately not
   // enough. The control plane re-checks and answers `not_owner` regardless, so
   // this is defence in depth rather than the only bar.
@@ -508,13 +469,13 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
 }
 
 // ---------------------------------------------------------------------------
-// Inline role checks — keyed by inlineKey(file, surface, callee)
+// Inline role checks , keyed by inlineKey(file, surface, callee)
 // ---------------------------------------------------------------------------
 
 const NOT_A_GATE = (why: string): Classification => ({ intent: 'NOT_A_GATE', why })
 
 export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
-  // Real access decisions the requireAuth/withApiKeyAuth scan does NOT cover —
+  // Real access decisions the requireAuth/withApiKeyAuth scan does NOT cover ,
   // surfaced precisely because a stray change here would widen access silently.
   'routes/api/chat/stream.ts::GET::isTeamMember': {
     intent: 'SECONDARY_GATE',
@@ -540,10 +501,10 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
 
   // Behavior refinements sitting behind an already-present entry gate.
   'lib/server/functions/admin.ts::checkOnboardingState::isAdmin': NOT_A_GATE(
-    'race-safe first-user promotion — not an access check'
+    'race-safe first-user promotion , not an access check'
   ),
   'lib/server/functions/onboarding.ts::ensureBootstrapAdmin::isAdmin': NOT_A_GATE(
-    'promotes an existing non-admin principal during bootstrap — not an access check'
+    'promotes an existing non-admin principal during bootstrap , not an access check'
   ),
   'routes/api/widget/identify.ts::POST::isTeamMember': NOT_A_GATE(
     'skips overwriting a teammate dashboard profile from the host-app JWT; identify still mints a widget-scoped customer session'
@@ -604,6 +565,6 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
   },
 
   'lib/server/functions/contact-email.ts::confirmEmailChangeFn::isTeamMember': NOT_A_GATE(
-    'decides whether the confirmed address changes a control-plane seat — a teammate is a seat, an end-user is not; the address was already written above it'
+    'decides whether the confirmed address changes a control-plane seat , a teammate is a seat, an end-user is not; the address was already written above it'
   ),
 }

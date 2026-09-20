@@ -9,7 +9,7 @@
  * agent's inbox update at once. Clients dedupe by message id.
  *
  * Tickets (unified inbox §3.2, M3) get their own per-ticket channel
- * (`ticketChannel`) alongside the SAME shared inbox channel above — there is
+ * (`ticketChannel`) alongside the SAME shared inbox channel above , there is
  * no ticket analogue of `publishConversationUpdate`'s visitor-stripped copy,
  * because a ticket stream is team-member-only in this phase (see
  * routes/api/chat/stream.ts's `ticketId` scope gate): both channels a ticket
@@ -42,7 +42,7 @@ export function publishConversationEvent(
 /**
  * Publish a typing signal, tagging each copy with the typist where it's safe:
  * the inbox channel always gets the id (self-suppression + agent collision
- * detection); the conversation channel gets it only for visitor-side typing —
+ * detection); the conversation channel gets it only for visitor-side typing ,
  * there the id is the owner's own, while agent identities must never reach the
  * visitor. The typist's own echo is dropped at the stream layer on every
  * surface (isOwnTyping).
@@ -51,7 +51,7 @@ export function publishTyping(
   conversationId: ConversationId,
   side: ConversationSide,
   at: string,
-  // null (no principal to attribute) publishes untagged — delivered to all, suppressed for none.
+  // null (no principal to attribute) publishes untagged , delivered to all, suppressed for none.
   typistPrincipalId: PrincipalId | null
 ): void {
   const base = { kind: 'typing' as const, conversationId, side, at }
@@ -78,7 +78,7 @@ export function parseConversationFrame(message: string): ParsedConversationFrame
 }
 
 /**
- * True when a parsed frame is a typing event from `selfPrincipalId` — used by
+ * True when a parsed frame is a typing event from `selfPrincipalId` , used by
  * every stream to drop the subscriber's own typing echo, so clients can treat
  * any typing they receive as someone else's. Unparseable, anonymous, or
  * non-matching frames are never suppressed.
@@ -89,7 +89,7 @@ export function isOwnTyping(frame: ParsedConversationFrame, selfPrincipalId: str
 
 /**
  * Publish an agent-only event to the inbox channel ONLY (never the
- * conversation channel the visitor subscribes to) — used for internal notes.
+ * conversation channel the visitor subscribes to) , used for internal notes.
  */
 export function publishAgentConversationEvent(event: ConversationStreamEvent): void {
   publish(CONVERSATION_INBOX_CHANNEL, event)
@@ -123,11 +123,38 @@ export function publishConversationUpdate(
   publish(CONVERSATION_INBOX_CHANNEL, { kind: 'conversation', conversation: agentDto })
   publish(conversationChannel(conversationId), {
     kind: 'conversation',
-    conversation: { ...agentDto, visitorEmail: null, tags: [], endNote: null, sla: null },
+    // Explicit public fields: adding a teammate DTO field cannot publish it.
+    conversation: {
+      id: agentDto.id,
+      status: agentDto.status,
+      priority: agentDto.priority,
+      channel: agentDto.channel,
+      subject: agentDto.subject,
+      lastMessagePreview: agentDto.lastMessagePreview,
+      lastMessageAt: agentDto.lastMessageAt,
+      createdAt: agentDto.createdAt,
+      visitor: agentDto.visitor,
+      assignedAgent: agentDto.assignedAgent,
+      unreadCount: agentDto.unreadCount,
+      visitorLastReadAt: agentDto.visitorLastReadAt,
+      agentLastReadAt: agentDto.agentLastReadAt,
+      csatRating: agentDto.csatRating,
+      resolvedAt: agentDto.resolvedAt,
+      endReason: agentDto.endReason,
+      visitorEmail: null,
+      tags: [],
+      endNote: null,
+      sla: null,
+      snoozedUntil: null,
+      assignedTeamId: null,
+      spamReason: null,
+      customAttributes: {},
+      translation: null,
+    },
   })
 }
 
-/** `ticket:<id>` — the channel a ticket's own stream subscribes to (team members only). */
+/** `ticket:<id>` , the channel a ticket's own stream subscribes to (team members only). */
 export function ticketChannel(ticketId: TicketId): string {
   return `ticket:${ticketId}`
 }
@@ -136,7 +163,7 @@ export function ticketChannel(ticketId: TicketId): string {
  * Publish a ticket stream event to the ticket's own channel + the shared
  * inbox channel, so an open ticket detail view and every team member's inbox
  * update from the same push. Unlike `publishConversationEvent` there is no
- * audience-stripped copy — see the file-header note on why that's safe here.
+ * audience-stripped copy , see the file-header note on why that's safe here.
  */
 export function publishTicketEvent(ticketId: TicketId, event: ConversationStreamEvent): void {
   publish(ticketChannel(ticketId), event)

@@ -1,11 +1,11 @@
 /**
  * Reconcile the raw gate scan against the hand-declared classifications into a
- * single list of resolved surfaces — each with a definite authorization — plus
+ * single list of resolved surfaces , each with a definite authorization , plus
  * the list of reconciliation errors.
  *
  * This is the join the whole matrix stands on: the scanner supplies what the
  * code enforces, the classifications supply intent for the non-permission
- * sites, and this module fails (via `errors`) the moment the two drift — an
+ * sites, and this module fails (via `errors`) the moment the two drift , an
  * unparseable gate, an unclassified bare/inline site, or a stale classification
  * with no live site. Both the completeness CI gate and the derived matrix
  * consume it, so they can never disagree about the surface set.
@@ -33,6 +33,7 @@ export type ResolvedAuthz =
   | { type: 'mcp_entry' }
   /** A key authenticates; a runtime check authorizes against a closed set of candidate permissions (field-scoped write). */
   | { type: 'dynamic_permission'; permissions: readonly PermissionKey[] }
+  | { type: 'permission_or_owner'; permissions: readonly PermissionKey[] }
   /** An inline decision gated on role (`admin`, or `team` = admin|member), optionally mirroring a permission. */
   | { type: 'role_gate'; bar: 'admin' | 'team'; permission?: PermissionKey }
 
@@ -115,12 +116,12 @@ export function resolveSurfaces(srcRoot: string): ResolveResult {
       const cls = BARE_GATE_CLASSIFICATIONS[key]
       if (!cls) {
         errors.push(
-          `${g.file}:${g.line} unclassified bare gate '${key}' — add it to BARE_GATE_CLASSIFICATIONS`
+          `${g.file}:${g.line} unclassified bare gate '${key}' , add it to BARE_GATE_CLASSIFICATIONS`
         )
         continue
       }
       usedBare.add(key)
-      if (cls.intent === 'DYNAMIC_PERMISSION') {
+      if (cls.intent === 'DYNAMIC_PERMISSION' || cls.intent === 'PERMISSION_OR_OWNER') {
         const perms = cls.resolvesToAny ?? []
         const unknown = perms.filter((p) => !PERMISSION_SET.has(p))
         if (perms.length === 0 || unknown.length > 0) {
@@ -133,7 +134,14 @@ export function resolveSurfaces(srcRoot: string): ResolveResult {
           )
           continue
         }
-        surfaces.push({ ...base, authz: { type: 'dynamic_permission', permissions: perms } })
+        surfaces.push({
+          ...base,
+          authz: {
+            type:
+              cls.intent === 'PERMISSION_OR_OWNER' ? 'permission_or_owner' : 'dynamic_permission',
+            permissions: perms,
+          },
+        })
         continue
       }
       const authz: ResolvedAuthz =
@@ -145,7 +153,7 @@ export function resolveSurfaces(srcRoot: string): ResolveResult {
       surfaces.push({ ...base, authz })
     } else {
       errors.push(
-        `${g.file}:${g.line} unparseable gate — authority not statically legible: ${g.authz.raw}`
+        `${g.file}:${g.line} unparseable gate , authority not statically legible: ${g.authz.raw}`
       )
     }
   }
@@ -155,7 +163,7 @@ export function resolveSurfaces(srcRoot: string): ResolveResult {
     const cls = INLINE_CLASSIFICATIONS[key]
     if (!cls) {
       errors.push(
-        `${i.file}:${i.line} unclassified inline role check '${key}' — add it to INLINE_CLASSIFICATIONS`
+        `${i.file}:${i.line} unclassified inline role check '${key}' , add it to INLINE_CLASSIFICATIONS`
       )
       continue
     }
@@ -173,21 +181,21 @@ export function resolveSurfaces(srcRoot: string): ResolveResult {
         authz: { type: 'role_gate', bar: cls.roleBar ?? 'team', permission: cls.resolvesTo },
       })
     }
-    // NOT_A_GATE contributes no surface — it is a refinement behind an existing gate.
+    // NOT_A_GATE contributes no surface , it is a refinement behind an existing gate.
   }
 
   // Reverse lockstep: no classification may outlive the site it describes.
   for (const key of Object.keys(BARE_GATE_CLASSIFICATIONS)) {
     if (!usedBare.has(key))
-      errors.push(`stale bare classification '${key}' — no live gate matches it`)
+      errors.push(`stale bare classification '${key}' , no live gate matches it`)
   }
   for (const key of Object.keys(INLINE_CLASSIFICATIONS)) {
     if (!usedInline.has(key))
-      errors.push(`stale inline classification '${key}' — no live site matches it`)
+      errors.push(`stale inline classification '${key}' , no live site matches it`)
   }
   for (const callee of Object.keys(ALIAS_RESOLUTIONS)) {
     if (!usedAlias.has(callee))
-      errors.push(`stale alias resolution '${callee}' — no live call matches it`)
+      errors.push(`stale alias resolution '${callee}' , no live call matches it`)
   }
 
   surfaces.sort(
