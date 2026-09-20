@@ -41,7 +41,16 @@
  * the existing reconciliation queue, because an email nobody can confirm must
  * not be resent to a customer on a guess.
  */
-import { db, eq, inArray, conversations, posts, boards } from '@/lib/server/db'
+import {
+  db,
+  and,
+  eq,
+  inArray,
+  conversations,
+  posts,
+  boards,
+  assistantToolCalls,
+} from '@/lib/server/db'
 import type { PostId, PrincipalId, ConversationId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
 import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/shared/errors'
@@ -399,18 +408,25 @@ async function sendOne(input: {
  * person's to settle.
  */
 async function reclaimFailedReceipt(actionKey: string) {
-  const { findToolReceipt, finalizeToolCall } =
-    await import('@/lib/server/domains/assistant/tool-audit')
-  const existing = await findToolReceipt({ actionKey, idempotencyKey: actionKey })
-  if (!existing || existing.outcomeStatus !== 'failed') return null
-  await finalizeToolCall(existing.id, {
-    status: 'started',
-    outcomeStatus: null,
-    retryable: null,
-    error: null,
-    settledAt: null,
-  })
-  return existing
+  const [claimed] = await db
+    .update(assistantToolCalls)
+    .set({
+      status: 'started',
+      outcomeStatus: null,
+      retryable: null,
+      error: null,
+      settledAt: null,
+      dispatchedAt: null,
+    })
+    .where(
+      and(
+        eq(assistantToolCalls.actionKey, actionKey),
+        eq(assistantToolCalls.outcomeStatus, 'failed'),
+        eq(assistantToolCalls.retryable, true)
+      )
+    )
+    .returning()
+  return claimed ?? null
 }
 
 async function deliver(input: {

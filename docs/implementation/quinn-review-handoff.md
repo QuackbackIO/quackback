@@ -72,3 +72,7 @@ The semantic verifier defaults to off. Shadow and enforce require explicit `ASSI
 Reconnect activity now requires a started run. Recovery includes pending work past the grace period and schedules its deadline. The test exposed a second defect: SQL compared stored UUID text with TypeID dedupe keys. Recovery now matches application IDs in bounded batches, preserving fresh pending jobs and jobs with active workers. A web-only process warns when durable execution has no configured worker URL. The message-first `makeLogger` facade delegates to the existing pino logger.
 
 Two initial regressions failed; a third fresh-job control reproduced premature recovery against the original UUID comparison. All 36 recovery/worker tests and typecheck pass. Logs: `/tmp/quinn-topology-red.log`, `/tmp/quinn-recovery-id-red.log`, `/tmp/quinn-topology-green.log`. This fixes detection and reporting; a web-only process still needs a separate worker to execute sweeps or turns.
+
+## Reviewed follow-up retries
+
+Reclaiming a failed follow-up receipt is now one compare-and-set against a retryable failed outcome. Concurrent reviewers cannot both reopen the same receipt. The new real database race reproduced two sends before the fix and one successful retry afterwards, alongside the existing first-send and uncertain-delivery controls. Red: `/tmp/quinn-email-continuity-red.log`. Green: the 84-test email/follow-up/recovery pass in `/tmp/quinn-email-first-green.log`.

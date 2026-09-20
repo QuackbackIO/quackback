@@ -334,6 +334,24 @@ describe.skipIf(!fixture.available)('the reviewed product follow-up', () => {
       expect(receipts[0].outcomeStatus).toBe('succeeded')
     })
 
+    it('allows only one reviewer to reclaim a failed receipt', async () => {
+      const postId = await seedPost('board')
+      const customerId = await seedPerson(`retry-${suffix()}@example.test`)
+      const conversationId = await linkConversation(postId, customerId)
+      const input = { postId, message: 'This shipped.', conversationIds: [conversationId] }
+      sendPostUpdateEmail.mockResolvedValueOnce({ sent: false, reason: 'refused' })
+      expect((await sendPostFollowup(input, reviewer())).results[0].outcome).toBe('failed')
+      const results = await Promise.all([
+        sendPostFollowup(input, reviewer()),
+        sendPostFollowup(input, reviewer()),
+      ])
+      expect(results.map((result) => result.results[0].outcome).sort()).toEqual([
+        'already_sent',
+        'sent',
+      ])
+      expect(sendPostUpdateEmail).toHaveBeenCalledTimes(2)
+    })
+
     it('leaves an unconfirmed send for a person instead of resending it', async () => {
       const postId = await seedPost('board')
       const customerId = await seedPerson(`maya-${suffix()}@example.test`)
