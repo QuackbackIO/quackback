@@ -1,5 +1,6 @@
+import { boardAudienceOnly } from '@/lib/server/policy/posts'
 /**
- * Posts exporter — mirrors the interactive /api/export CSV columns, plus the
+ * Posts exporter , mirrors the interactive /api/export CSV columns, plus the
  * post id so comments.csv / votes.csv rows can be cross-referenced. Uncapped
  * and paged, unlike listPostsForExport (10k cap for the interactive route).
  */
@@ -10,7 +11,7 @@ import type { EntityExporter } from '../types'
 
 async function fetchPosts(offset: number, limit: number) {
   const page = await db.query.posts.findMany({
-    where: isNull(posts.deletedAt),
+    where: and(isNull(posts.deletedAt), boardAudienceOnly()),
     orderBy: asc(posts.createdAt),
     offset,
     limit,

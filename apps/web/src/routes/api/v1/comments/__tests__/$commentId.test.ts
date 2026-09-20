@@ -15,6 +15,11 @@ const mockUserEditComment = vi.fn()
 const mockSoftDeleteComment = vi.fn()
 const mockGetCommentById = vi.fn()
 const mockPrincipalFindFirst = vi.fn()
+vi.mock('@/lib/server/domains/posts/post.access', () => ({
+  assertPostOnBoardAudience: async (postId: string) => {
+    if (postId !== 'post_test') throw new NotFoundError('POST_NOT_FOUND', 'Post not found')
+  },
+}))
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
@@ -235,3 +240,15 @@ describe('DELETE /api/v1/comments/:commentId', () => {
     expect(response.status).toBe(403)
   })
 })
+
+it.each(['GET', 'PATCH', 'DELETE'])(
+  '%s refuses a comment on an internal capture',
+  async (method) => {
+    mockGetCommentById.mockResolvedValue({ ...mockComment, postId: 'post_internal' })
+    const response = await handlers[method]({
+      request: makeRequest(method, method === 'PATCH' ? { content: 'Edit' } : undefined),
+      params: { commentId: COMMENT_ID_STR },
+    })
+    expect(response.status).toBe(404)
+  }
+)

@@ -28,13 +28,19 @@ import {
 } from '@quackback/ids'
 import type { PublicPostListResult } from './post.types'
 import type { RespondedFilter } from '@/lib/shared/types/filters'
-import { postViewFilter, isTeamActor, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
+import {
+  boardAudienceOnly,
+  postViewFilter,
+  isTeamActor,
+  ANONYMOUS_ACTOR,
+  type Actor,
+} from '@/lib/server/policy'
 
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
 
 /**
- * Portal tag visibility. Non-team viewers only see tags marked public —
- * both in filter lists and attached to posts — so an internal tag never
+ * Portal tag visibility. Non-team viewers only see tags marked public ,
+ * both in filter lists and attached to posts , so an internal tag never
  * reaches a customer. Team actors see every tag (they assign internal tags
  * from the portal too). Returns undefined for team actors so it can be
  * dropped into `and(...)` without a branch.
@@ -51,7 +57,7 @@ export function publicTagSqlFilter(actor: Actor) {
   return isTeamActor(actor) ? sql`` : sql`AND t.is_public = true`
 }
 
-/** Resolve avatar URL — uploaded key first, then OAuth/external URL. */
+/** Resolve avatar URL , uploaded key first, then OAuth/external URL. */
 export function resolveAvatarUrl(source: {
   avatarKey?: string | null
   avatarUrl?: string | null
@@ -112,6 +118,8 @@ export interface PostWithVotesAndAvatars {
 }
 
 interface PostListParams {
+  /** Published-contract readers may narrow team access to board posts. */
+  audience?: 'board'
   boardSlug?: string
   search?: string
   statusIds?: PostStatusId[]
@@ -126,7 +134,7 @@ interface PostListParams {
   /**
    * Team-only owner filter. `null` matches unassigned posts; a principal id
    * matches that owner. Undefined leaves ownership unfiltered. Callers must
-   * gate this on post.view_private before passing it in — the query layer
+   * gate this on post.view_private before passing it in , the query layer
    * does not re-check.
    */
   ownerId?: PrincipalId | null
@@ -138,13 +146,13 @@ function buildPostFilterConditions(params: PostListParams, actor: Actor) {
   const { boardSlug, statusIds, statusSlugs, tagIds, search } = params
   // postViewFilter handles both the board-audience predicate and the
   // moderationState gate (e.g. hide 'pending' from non-authors). Compose
-  // alongside the existing soft-delete + canonical-post filters — never
+  // alongside the existing soft-delete + canonical-post filters , never
   // replace them.
   //
   // `isNull(boards.deletedAt)` is explicit here (rather than relying on
   // boardViewFilter) because postViewFilter's team-actor branch skips
   // boardViewFilter to grant admins visibility into team-only boards.
-  // Soft-deleted boards must still be filtered for everyone — admins
+  // Soft-deleted boards must still be filtered for everyone , admins
   // never want stale tombstoned posts in the public portal feed.
   const conditions = [
     postViewFilter(actor),
@@ -152,6 +160,8 @@ function buildPostFilterConditions(params: PostListParams, actor: Actor) {
     isNull(posts.canonicalPostId),
     isNull(posts.deletedAt),
   ]
+
+  if (params.audience === 'board') conditions.push(boardAudienceOnly())
 
   if (boardSlug) {
     conditions.push(eq(boards.slug, boardSlug))
@@ -166,7 +176,7 @@ function buildPostFilterConditions(params: PostListParams, actor: Actor) {
   } else if (statusIds && statusIds.length > 0) {
     conditions.push(inArray(posts.statusId, statusIds))
   } else {
-    // Default: exclude complete/closed posts — only show active-category statuses (or unstatused)
+    // Default: exclude complete/closed posts , only show active-category statuses (or unstatused)
     const activeStatusSubquery = db
       .select({ id: postStatuses.id })
       .from(postStatuses)
@@ -176,7 +186,7 @@ function buildPostFilterConditions(params: PostListParams, actor: Actor) {
 
   if (tagIds && tagIds.length > 0) {
     // Join the tag catalog so an internal tag id in a crafted URL is inert
-    // for non-team callers — otherwise the filter would reveal which posts
+    // for non-team callers , otherwise the filter would reveal which posts
     // carry a tag the viewer is never shown.
     const postIdsWithTagsSubquery = db
       .selectDistinct({ postId: postTagAssignments.postId })
@@ -200,7 +210,7 @@ function buildPostFilterConditions(params: PostListParams, actor: Actor) {
 
   if (params.responded === 'responded') {
     // Raw column names for the inner post_comments table; outer posts.id via Drizzle
-    // interpolation. Mirrors post.inbox.ts — see its comment for why ${postComments.postId}
+    // interpolation. Mirrors post.inbox.ts , see its comment for why ${postComments.postId}
     // would be incorrectly rewritten by Drizzle's relational query builder.
     conditions.push(
       sql`EXISTS (SELECT 1 FROM post_comments WHERE post_comments.post_id = ${posts.id} AND post_comments.is_team_member = true AND post_comments.deleted_at IS NULL)`
@@ -211,7 +221,7 @@ function buildPostFilterConditions(params: PostListParams, actor: Actor) {
     )
   }
 
-  // Team-only owner filter — mirrors post.inbox.ts. `null` means unassigned;
+  // Team-only owner filter , mirrors post.inbox.ts. `null` means unassigned;
   // a principal id restricts to that owner. The server fn only forwards these
   // for post.view_private holders, so no re-check here.
   if (params.ownerId === null) {
@@ -220,7 +230,7 @@ function buildPostFilterConditions(params: PostListParams, actor: Actor) {
     conditions.push(eq(posts.ownerPrincipalId, params.ownerId))
   }
 
-  // Team-only segment filter — posts whose author is in any selected segment.
+  // Team-only segment filter , posts whose author is in any selected segment.
   if (params.segmentIds && params.segmentIds.length > 0) {
     conditions.push(
       inArray(
@@ -420,7 +430,7 @@ export async function listPublicPosts(
 
 export async function getAllUserVotedPostIds(principalId: PrincipalId): Promise<Set<PostId>> {
   // Include both the post the vote was cast on and, when that post has been
-  // merged away, the canonical — so the survivor highlights as voted.
+  // merged away, the canonical , so the survivor highlights as voted.
   const result = await db
     .select({
       postId: postVotes.postId,
@@ -430,7 +440,12 @@ export async function getAllUserVotedPostIds(principalId: PrincipalId): Promise<
     .innerJoin(posts, eq(posts.id, postVotes.postId))
     .innerJoin(boards, eq(boards.id, posts.boardId))
     .where(
-      and(eq(postVotes.principalId, principalId), isNull(posts.deletedAt), isNull(boards.deletedAt))
+      and(
+        eq(postVotes.principalId, principalId),
+        boardAudienceOnly(),
+        isNull(posts.deletedAt),
+        isNull(boards.deletedAt)
+      )
     )
   const ids = new Set<PostId>()
   for (const row of result) {
@@ -455,7 +470,12 @@ export async function getVotedPostIdsByUserId(
     .innerJoin(posts, eq(posts.id, postVotes.postId))
     .innerJoin(boards, eq(boards.id, posts.boardId))
     .where(
-      and(eq(principalTable.userId, userId), isNull(posts.deletedAt), isNull(boards.deletedAt))
+      and(
+        eq(principalTable.userId, userId),
+        boardAudienceOnly(),
+        isNull(posts.deletedAt),
+        isNull(boards.deletedAt)
+      )
     )
   const ids = new Set<PostId>()
   for (const row of result) {

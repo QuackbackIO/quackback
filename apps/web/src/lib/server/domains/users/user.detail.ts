@@ -1,3 +1,4 @@
+import { boardAudienceOnly } from '@/lib/server/policy/posts'
 /**
  * Portal user detail query
  *
@@ -145,7 +146,13 @@ export async function getPortalUserDetail(
         .from(posts)
         .innerJoin(boards, eq(posts.boardId, boards.id))
         .leftJoin(postStatuses, eq(postStatuses.id, posts.statusId))
-        .where(and(eq(posts.principalId, principalData.principalId), isNull(posts.deletedAt)))
+        .where(
+          and(
+            eq(posts.principalId, principalData.principalId),
+            isNull(posts.deletedAt),
+            boardAudienceOnly()
+          )
+        )
         .orderBy(desc(posts.createdAt))
         .limit(100),
 
@@ -158,7 +165,11 @@ export async function getPortalUserDetail(
         .from(postComments)
         .innerJoin(posts, eq(posts.id, postComments.postId))
         .where(
-          and(eq(postComments.principalId, principalData.principalId), isNull(posts.deletedAt))
+          and(
+            eq(postComments.principalId, principalData.principalId),
+            isNull(posts.deletedAt),
+            boardAudienceOnly()
+          )
         )
         .groupBy(postComments.postId)
         .limit(100),
@@ -171,7 +182,13 @@ export async function getPortalUserDetail(
         })
         .from(postVotes)
         .innerJoin(posts, eq(posts.id, postVotes.postId))
-        .where(and(eq(postVotes.principalId, principalData.principalId), isNull(posts.deletedAt)))
+        .where(
+          and(
+            eq(postVotes.principalId, principalData.principalId),
+            isNull(posts.deletedAt),
+            boardAudienceOnly()
+          )
+        )
         .orderBy(desc(postVotes.createdAt))
         .limit(100),
     ])
@@ -185,7 +202,7 @@ export async function getPortalUserDetail(
       ]),
     ]
 
-    // Run all dependent queries in parallel — otherPostCommentCounts uses
+    // Run all dependent queries in parallel , otherPostCommentCounts uses
     // otherPostIds (available now) instead of waiting for otherPosts results
     const allCommentPostIds = [...authoredPosts.map((p) => p.id), ...otherPostIds]
     const [otherPosts, commentCounts] = await Promise.all([
@@ -210,7 +227,9 @@ export async function getPortalUserDetail(
             .from(posts)
             .innerJoin(boards, eq(posts.boardId, boards.id))
             .leftJoin(postStatuses, eq(postStatuses.id, posts.statusId))
-            .where(and(inArray(posts.id, otherPostIds), isNull(posts.deletedAt)))
+            .where(
+              and(inArray(posts.id, otherPostIds), isNull(posts.deletedAt), boardAudienceOnly())
+            )
         : [],
 
       // Get comment counts for all engaged posts in one query

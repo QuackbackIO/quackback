@@ -27,12 +27,13 @@ export const Route = createFileRoute('/api/v1/apps/suggest')({
           // Team-level actor so the suggest fallback uses
           // postViewFilter with team scope (otherwise the call
           // defaults to ANONYMOUS_ACTOR and team callers see only
-          // public-board posts — wrong direction).
+          // public-board posts , wrong direction).
           const actor: Actor = {
             principalId: auth.principalId,
             role: auth.role,
             principalType: 'service',
             segmentIds: new Set<SegmentId>(),
+            permissions: new Set(auth.permissions),
           }
 
           const { generateEmbedding } =
@@ -49,6 +50,7 @@ export const Route = createFileRoute('/api/v1/apps/suggest')({
               limit,
               page: 1,
               actor,
+              audience: 'board',
             })
             const resultPosts = result.items.map((p) => ({
               id: p.id,

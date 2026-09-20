@@ -1,7 +1,8 @@
+import { boardAudienceOnly } from '@/lib/server/policy/posts'
 /**
  * Post comments exporter.
  */
-import { db, postComments, asc, isNull } from '@/lib/server/db'
+import { db, postComments, posts, and, inArray, asc, isNull } from '@/lib/server/db'
 import { escapeCSV } from '@/lib/server/utils/csv'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import type { EntityExporter } from '../types'
@@ -10,7 +11,16 @@ const iso = (d: Date | null | undefined) => (d ? d.toISOString() : '')
 
 async function fetchComments(offset: number, limit: number) {
   return db.query.postComments.findMany({
-    where: isNull(postComments.deletedAt),
+    where: and(
+      isNull(postComments.deletedAt),
+      inArray(
+        postComments.postId,
+        db
+          .select({ id: posts.id })
+          .from(posts)
+          .where(and(isNull(posts.deletedAt), boardAudienceOnly()))
+      )
+    ),
     orderBy: asc(postComments.createdAt),
     offset,
     limit,

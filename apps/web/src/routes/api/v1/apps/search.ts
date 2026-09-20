@@ -27,7 +27,7 @@ export const Route = createFileRoute('/api/v1/apps/search')({
           // Build a service-principal Actor from the API-key auth so
           // listPublicPosts uses team-level postViewFilter. Without
           // this, the default ANONYMOUS_ACTOR makes a team caller see
-          // only public-board posts — the wrong direction. Team
+          // only public-board posts , the wrong direction. Team
           // callers (admin | member) short-circuit on isTeamActor, so
           // segmentIds don't matter; pass an empty set.
           const actor: Actor = {
@@ -35,6 +35,7 @@ export const Route = createFileRoute('/api/v1/apps/search')({
             role: auth.role,
             principalType: 'service',
             segmentIds: new Set<SegmentId>(),
+            permissions: new Set(auth.permissions),
           }
           const result = await listPublicPosts({
             search: q,
@@ -42,6 +43,7 @@ export const Route = createFileRoute('/api/v1/apps/search')({
             limit,
             page: 1,
             actor,
+            audience: 'board',
           })
 
           const posts = result.items.map((p) => ({

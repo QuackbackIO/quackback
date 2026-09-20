@@ -1,15 +1,34 @@
+import { boardAudienceOnly } from '@/lib/server/policy/posts'
 /**
- * Post votes exporter — one row per vote with the voter's resolved email
+ * Post votes exporter , one row per vote with the voter's resolved email
  * (anonymous/placeholder addresses pass through realEmail like the other
  * exports).
  */
-import { db, postVotes, principal, user, asc, eq, inArray } from '@/lib/server/db'
+import {
+  db,
+  postVotes,
+  posts,
+  and,
+  isNull,
+  principal,
+  user,
+  asc,
+  eq,
+  inArray,
+} from '@/lib/server/db'
 import { escapeCSV } from '@/lib/server/utils/csv'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import type { EntityExporter } from '../types'
 
 async function fetchVotes(offset: number, limit: number) {
   const page = await db.query.postVotes.findMany({
+    where: inArray(
+      postVotes.postId,
+      db
+        .select({ id: posts.id })
+        .from(posts)
+        .where(and(isNull(posts.deletedAt), boardAudienceOnly()))
+    ),
     orderBy: asc(postVotes.createdAt),
     offset,
     limit,

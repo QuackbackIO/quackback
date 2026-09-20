@@ -1,3 +1,4 @@
+import { assertPostOnBoardAudience } from '@/lib/server/domains/posts/post.access'
 import { createFileRoute } from '@tanstack/react-router'
 import type { Role } from '@/lib/shared/roles'
 import { z } from 'zod'
@@ -39,6 +40,7 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
           const { getCommentById } = await import('@/lib/server/domains/comments/comment.query')
 
           const comment = await getCommentById(commentId)
+          await assertPostOnBoardAudience(comment.postId)
 
           return successResponse({
             id: comment.id,
@@ -84,6 +86,9 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
             })
           }
 
+          const { getCommentById } = await import('@/lib/server/domains/comments/comment.query')
+          await assertPostOnBoardAudience((await getCommentById(commentId)).postId)
+
           const { userEditComment } =
             await import('@/lib/server/domains/comments/comment.permissions')
           const { db, principal, eq } = await import('@/lib/server/db')
@@ -102,8 +107,7 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
             },
             {
               contentJson: (parsed.data.contentJson ?? undefined) as
-                | import('@/lib/shared/db-types').TiptapContent
-                | undefined,
+                import('@/lib/shared/db-types').TiptapContent | undefined,
             }
           )
 
@@ -144,6 +148,9 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
             'post_comment',
             'comment ID'
           )
+
+          const { getCommentById } = await import('@/lib/server/domains/comments/comment.query')
+          await assertPostOnBoardAudience((await getCommentById(commentId)).postId)
 
           const { softDeleteComment } =
             await import('@/lib/server/domains/comments/comment.permissions')

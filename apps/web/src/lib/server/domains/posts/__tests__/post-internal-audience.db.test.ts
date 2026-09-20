@@ -25,7 +25,18 @@ import {
   type UserId,
 } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { boards, posts, postStatuses, principal, user, type PostAudience } from '@/lib/server/db'
+import {
+  boards,
+  posts,
+  postStatuses,
+  principal,
+  user,
+  postVotes,
+  postComments,
+  eq,
+  inArray,
+  type PostAudience,
+} from '@/lib/server/db'
 import { DEFAULT_BOARD_ACCESS } from '@/lib/shared/db-types'
 import type { Actor } from '@/lib/server/policy'
 
@@ -76,16 +87,14 @@ async function seedPrincipal(role: 'admin' | 'user', name: string): Promise<Prin
   const userId = createId('user') as UserId
   const principalId = createId('principal') as PrincipalId
   await testDb.insert(user).values({ id: userId, name, email: `${suffix()}@example.test` })
-  await testDb
-    .insert(principal)
-    .values({
-      id: principalId,
-      userId,
-      role,
-      type: 'user',
-      displayName: name,
-      createdAt: new Date(),
-    })
+  await testDb.insert(principal).values({
+    id: principalId,
+    userId,
+    role,
+    type: 'user',
+    displayName: name,
+    createdAt: new Date(),
+  })
   return principalId
 }
 
@@ -127,6 +136,106 @@ describe.skipIf(!fixture.available)('the internal audience across every reader (
   })
   afterEach(fixture.rollback)
   afterAll(fixture.close)
+
+  it.each(['authored', 'commented', 'voted'])(
+    'the user detail API excludes internal %s engagement',
+    async (kind) => {
+      if (kind !== 'authored') {
+        await testDb
+          .update(posts)
+          .set({ principalId: teamPrincipalId })
+          .where(inArray(posts.id, [boardPostId, internalPostId]))
+        if (kind === 'commented')
+          await testDb
+            .insert(postComments)
+            .values(
+              [boardPostId, internalPostId].map((postId) => ({
+                postId,
+                principalId: customerPrincipalId,
+                content: 'Private captured context',
+              }))
+            )
+        else
+          await testDb
+            .insert(postVotes)
+            .values(
+              [boardPostId, internalPostId].map((postId) => ({
+                postId,
+                principalId: customerPrincipalId,
+              }))
+            )
+      }
+      const { getPortalUserDetail } = await import('../../users/user.detail')
+      const detail = await getPortalUserDetail(customerPrincipalId)
+      expect(detail?.engagedPosts.map((p) => p.id)).toEqual([boardPostId])
+    }
+  )
+
+  it('both public vote-id readers exclude internal captures, including legacy votes', async () => {
+    await testDb
+      .insert(postVotes)
+      .values(
+        [boardPostId, internalPostId].map((postId) => ({
+          postId,
+          principalId: customerPrincipalId,
+        }))
+      )
+    const [customer] = await testDb
+      .select()
+      .from(principal)
+      .where(eq(principal.id, customerPrincipalId))
+    const { getAllUserVotedPostIds, getVotedPostIdsByUserId } = await import('../post.public')
+    expect([...(await getAllUserVotedPostIds(customerPrincipalId))]).toEqual([boardPostId])
+    expect([...(await getVotedPostIdsByUserId(customer.userId!))]).toEqual([boardPostId])
+  })
+
+  it('refuses a proxy vote on an internal capture while voting on a board post', async () => {
+    const { addVoteOnBehalf } = await import('../post.voting')
+    expect(await addVoteOnBehalf(boardPostId, customerPrincipalId)).toMatchObject({ voted: true })
+    await expect(addVoteOnBehalf(internalPostId, customerPrincipalId)).rejects.toMatchObject({
+      statusCode: 404,
+    })
+  })
+
+  it('keeps internal posts, comments and votes out of the workspace CSV export', async () => {
+    await testDb
+      .insert(postVotes)
+      .values(
+        [boardPostId, internalPostId].map((postId) => ({
+          postId,
+          principalId: customerPrincipalId,
+        }))
+      )
+    await testDb
+      .insert(postComments)
+      .values(
+        [boardPostId, internalPostId].map((postId) => ({
+          postId,
+          principalId: customerPrincipalId,
+          content: 'Captured context',
+        }))
+      )
+    const { postsExporter } = await import('../../export/entities/posts')
+    const { commentsExporter } = await import('../../export/entities/comments')
+    const { votesExporter } = await import('../../export/entities/votes')
+    const exported = await postsExporter.fetchPage(0, 5000)
+    expect(exported.map((p) => p.id)).toContain(boardPostId)
+    expect(exported.map((p) => p.id)).not.toContain(internalPostId)
+    for (const exporter of [commentsExporter, votesExporter]) {
+      const rows = await exporter.fetchPage(0, 5000)
+      expect(rows.map((r) => r.postId)).toContain(boardPostId)
+      expect(rows.map((r) => r.postId)).not.toContain(internalPostId)
+    }
+  })
+
+  it('an explicit board audience ceiling also narrows a teammate search', async () => {
+    const result = await listPublicPosts({
+      boardSlug,
+      actor: actorFor(teamPrincipalId, 'admin'),
+      audience: 'board',
+    })
+    expect(result.items.map((p) => p.id)).toEqual([boardPostId])
+  })
 
   describe('the attributed customer', () => {
     it('does not see their own capture in the public list, but does see the board post', async () => {

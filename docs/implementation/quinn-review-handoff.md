@@ -42,3 +42,11 @@ Improve now separates substantive answered turns from Unanswered (inability and 
 Evidence: three lifecycle regressions, the durable inability-publication case, and two metrics cases were red first. After correction, 32 lifecycle cases and 23 durable run cases pass, plus 32 analytics/card checks. The lifecycle regression queries the operations and performance reports over the very same real database rows it closed. Logs: `/tmp/quinn-inactivity-red.log`, `/tmp/quinn-inactivity-green.log`, `/tmp/quinn-inability-red.log`, `/tmp/quinn-inability-green.log`, `/tmp/quinn-metrics-red.log`, `/tmp/quinn-resolution-regressions.log`.
 
 The email delivery review remains in Phase 2, including delaying the answer clock until a mailbox send is confirmed. No schema migration or historical outcome rewrite is needed for this slice.
+
+## Source and capture privacy
+
+Source links now enforce portal access before reading content and require Help Center availability for articles. User activity, vote readers, proxy voting, comment REST endpoints and CSV exports exclude internal captures, including their exported comments and votes. App search and suggestion fallback deliberately request board audience because their results are used in customer linking and voting flows; private boards remain available to authorized team actors.
+
+Evidence: source-route tests failed three cases first; real database audience and comment-route tests failed ten cases first. All four suites now pass 53 tests, with board-audience positive controls. Logs: `/tmp/quinn-source-red.log`, `/tmp/quinn-privacy-red.log`, `/tmp/quinn-privacy-green.log`. CSV exports are customer feedback exports, not full database backups. No migration required.
+
+The saved capability report supplied the truncated continuation finding: retry and approval continuation must retain email surface, and retries must not claim an agent-handback trigger. Later requirements beyond the supplied prompt remain unknown.

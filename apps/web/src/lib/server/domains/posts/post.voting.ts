@@ -38,7 +38,7 @@ function resolveVotedPostId(resolvedUuid: string | null | undefined, fallback: P
 /**
  * Emit the post.voted event for a freshly cast vote: one indexed lookup for
  * the post ref (title/board slug) joined to the voter's identity, then the
- * usual best-effort dispatch. Anonymous voters contribute no identity — the
+ * usual best-effort dispatch. Anonymous voters contribute no identity , the
  * synthetic placeholder email is stripped here, never on the payload. Best
  * effort end to end: a lookup or dispatch failure is logged and dropped,
  * never fails the vote itself (dispatchEvent already swallows its own
@@ -207,7 +207,7 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
   const voteCount = row.vote_count ?? 0
   const eventPostId = resolveVotedPostId(row.resolved_post_id, postId)
 
-  // post.voted fires only on the insert half of the toggle — an unvote is
+  // post.voted fires only on the insert half of the toggle , an unvote is
   // not a "vote cast" and must not notify subscribed endpoints.
   if (voted) {
     await emitPostVotedEvent(eventPostId, principalId, voteCount)
@@ -221,7 +221,7 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
  *
  * Used by integration apps (e.g. Zendesk sidebar) to vote on behalf of
  * a customer when linking a ticket to a post. Unlike voteOnPost(), this
- * is idempotent and never toggles — it only inserts.
+ * is idempotent and never toggles , it only inserts.
  *
  * @param postId - Post ID to vote on
  * @param principalId - Principal ID of the voter
@@ -257,8 +257,8 @@ export async function addVoteOnBehalf(
       FROM ${posts} p
       INNER JOIN ${posts} c ON c.id = COALESCE(p.canonical_post_id, p.id)
       WHERE p.id = ${postUuid}::uuid
-        AND p.deleted_at IS NULL
-        AND c.deleted_at IS NULL
+        AND p.deleted_at IS NULL AND p.audience = 'board'
+        AND c.deleted_at IS NULL AND c.audience = 'board'
     ),
     board_check AS (
       SELECT 1 FROM ${boards}
