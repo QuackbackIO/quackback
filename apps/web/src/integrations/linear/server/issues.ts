@@ -7,6 +7,7 @@
  * status sync.
  */
 import type { IssueTrackerCapability, ParsedIssueRef } from '@/lib/server/integrations/types'
+import { buildLinearIssueBody } from './message'
 import { issueError } from '@/lib/server/integrations/message-utils'
 import { logger } from '@/lib/server/logger'
 
@@ -87,6 +88,14 @@ export async function updateLinearIssue(
 }
 
 export const linearIssues: IssueTrackerCapability = {
+  async refreshPost({ auth, externalId, event, rootUrl }) {
+    if (!auth.accessToken) throw new Error('Linear is not connected')
+    await updateLinearIssue(
+      auth.accessToken as string,
+      externalId,
+      buildLinearIssueBody(event, rootUrl)
+    )
+  },
   async create({ auth, title, bodyMarkdown }): Promise<ParsedIssueRef> {
     const teamId = auth.channelId as string
     const accessToken = auth.accessToken as string

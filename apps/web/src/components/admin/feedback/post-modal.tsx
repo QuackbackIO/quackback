@@ -142,7 +142,6 @@ function PostModalContent({
   const [showMergeOthersDialog, setShowMergeOthersDialog] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [activeTab, setActiveTab] = useState<'comments' | 'activity'>('comments')
-  const [retryQueuedFor, setRetryQueuedFor] = useState<string | null>(null)
 
   // Duplicate badge indicator — derived from merge suggestions (deduped by React Query with SimilarPostsCard)
   const { data: mergeSuggestionsData } = useQuery(mergeSuggestionQueries.forPost(postId))
@@ -174,8 +173,13 @@ function PostModalContent({
   const retryIntegrations = useMutation({
     mutationFn: () => retryPostIntegrationSyncFn({ data: { id: post.id } }),
     onSuccess: (result) => {
-      setRetryQueuedFor(post.id)
-      toast.success(result.updated ? 'Integration content synced' : 'Integration sync queued')
+      toast.success(
+        result.queued
+          ? 'Integration sync queued'
+          : result.updated
+            ? 'Integration content synced'
+            : 'No integrations need delivery'
+      )
     },
     onError: (error) =>
       toast.error(error instanceof Error ? error.message : 'Failed to retry integrations'),
@@ -315,8 +319,7 @@ function PostModalContent({
       canManageIntegrations &&
       !post.deletedAt &&
       post.moderationState === 'published' &&
-      externalLinksQuery.data !== undefined &&
-      retryQueuedFor !== post.id
+      externalLinksQuery.data !== undefined
         ? () => retryIntegrations.mutate()
         : undefined,
     isRetryIntegrationsPending: retryIntegrations.isPending,

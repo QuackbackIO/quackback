@@ -147,7 +147,9 @@ export async function cleanupExpiredLogs(): Promise<{
   const aiUsageDeleted = (aiResult as { count: number }).count ?? 0
   const operationalResult = await db.execute(sql`
     WITH deleted_hooks AS (
-      DELETE FROM hook_deliveries WHERE processed_at < now() - interval '7 days' RETURNING 1
+      -- Post delivery receipts outlive queue retention so manual retry cannot resend successes.
+      DELETE FROM hook_deliveries WHERE processed_at < now() - interval '7 days'
+        AND job_id NOT LIKE 'integration-post-created:%' RETURNING 1
     ), deleted_tokens AS (
       DELETE FROM unsubscribe_tokens
       WHERE expires_at < now() - interval '30 days' OR used_at < now() - interval '30 days'

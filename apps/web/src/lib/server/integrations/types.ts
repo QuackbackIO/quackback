@@ -163,6 +163,14 @@ export interface ParsedIssueRef {
  * specific member being present, never on the provider id.
  */
 export interface IssueTrackerCapability {
+  /** Refresh a linked post using the provider's own formatter. Shared sync visits every active link. */
+  refreshPost?(args: {
+    auth: Record<string, unknown>
+    externalId: string
+    event: import('@/lib/server/events/types').PostCreatedEvent
+    rootUrl: string
+  }): Promise<void>
+
   /**
    * Parse a user-pasted issue reference (full URL or provider shorthand) into
    * the stored link fields. Returns null when the input is not recognizably

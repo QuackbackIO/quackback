@@ -13,7 +13,12 @@
  * a Redis failed-set inspection.
  */
 
+import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
+import { noteDurableWork, SINGLE_WORKSPACE_KEY } from '@/lib/server/workspaces/after-commit'
+import { db, hookDeliveries, eq, sql } from '@/lib/server/db'
+import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { cancelJob, enqueueJob, enqueueJobs } from '@/lib/server/jobs/job-queue'
+import { integrationDeliveryKey } from './integration-delivery'
 import { HOOK_RETRY_ATTEMPTS } from './retry-schedule'
 import type { HookJobData } from './hook-job'
 import type { EventData } from './types'
@@ -117,7 +122,7 @@ export async function enqueueHookJobsWithIds(
     jobs.map(({ data, jobId }) => ({
       queue: EVENTS_QUEUE,
       payload: data as unknown as Record<string, unknown>,
-      dedupeKey: jobId,
+      dedupeKey: integrationDeliveryKey(data) ?? jobId,
       maxAttempts: HOOK_RETRY_ATTEMPTS,
     })),
     opts
@@ -159,4 +164,67 @@ export async function addDelayedJob(
 export async function removeDelayedJob(jobId: string): Promise<void> {
   const removed = await cancelJob(EVENTS_QUEUE, jobId)
   if (removed > 0) log.debug({ job_id: jobId, removed }, 'removed delayed job')
+}
+
+/** Explicit retry only. Never replays other sinks or steals a running job's lease. */
+export async function retryIntegrationDelivery(data: HookJobData): Promise<boolean> {
+  const key = integrationDeliveryKey(data)
+  if (!key || data.event.type !== 'post.created')
+    throw new Error('Integration delivery is missing its destination identity')
+  const postId = data.event.data.post.id
+  return db.transaction(async (tx) => {
+    // Serialize simultaneous manual retries, including adoption of pre-upgrade jobs.
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`)
+    const completed = await tx.query.hookDeliveries.findFirst({
+      where: eq(hookDeliveries.jobId, key),
+    })
+    if (completed?.outcome === 'completed') return false
+    const rows = getExecuteRows<{ job_id: string; status: string }>(
+      await tx.execute(sql`
+      SELECT job_id, status FROM job_queue
+      WHERE queue = 'events' AND (
+        dedupe_key = ${key} OR (
+          payload->>'hookType' = ${data.hookType}
+          AND payload->'event'->>'type' = 'post.created'
+          AND payload->'event'->'data'->'post'->>'id' = ${postId}
+          AND payload->'config'->>'integrationId' = ${data.config.integrationId as string}
+          AND payload->'target' = ${JSON.stringify(data.target)}::jsonb
+        )
+      )
+      ORDER BY CASE status WHEN 'succeeded' THEN 0 WHEN 'running' THEN 1 WHEN 'pending' THEN 2 ELSE 3 END
+      LIMIT 1 FOR UPDATE
+    `)
+    )
+    const existing = rows[0]
+    if (existing?.status === 'succeeded') {
+      // Preserve pre-upgrade success even after its queue row is pruned.
+      await tx
+        .insert(hookDeliveries)
+        .values({ jobId: key, hookType: data.hookType, outcome: 'completed' })
+        .onConflictDoNothing()
+      return false
+    }
+    if (existing?.status === 'pending' || existing?.status === 'running') return true
+    if (existing) {
+      await tx.execute(sql`
+        UPDATE job_queue SET status = 'pending', attempts = 0, run_at = now(),
+          payload = ${JSON.stringify(data)}::jsonb, last_error = NULL, finished_at = NULL,
+          updated_at = now(), lease_token = NULL, locked_until = NULL, locked_by = NULL
+        WHERE job_id = ${existing.job_id} AND status = 'failed'
+      `)
+      noteDurableWork(getCurrentWorkspace()?.workspaceKey ?? SINGLE_WORKSPACE_KEY, {
+        committed: false,
+        jobId: existing.job_id,
+      })
+    } else {
+      await enqueueJob({
+        queue: 'events',
+        payload: data as unknown as Record<string, unknown>,
+        dedupeKey: key,
+        maxAttempts: HOOK_RETRY_ATTEMPTS,
+        executor: tx,
+      })
+    }
+    return true
+  })
 }

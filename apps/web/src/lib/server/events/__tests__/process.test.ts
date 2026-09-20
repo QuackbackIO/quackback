@@ -60,6 +60,13 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   sql: vi.fn(),
 }))
 
+const deliveryReceipts = vi.hoisted(() => ({ completed: vi.fn(), complete: vi.fn() }))
+vi.mock('../integration-delivery', async (original) => ({
+  ...(await original<typeof import('../integration-delivery')>()),
+  integrationDeliveryCompleted: deliveryReceipts.completed,
+  completeIntegrationDelivery: deliveryReceipts.complete,
+}))
+
 // --- Helpers ---
 
 function makeEvent(): PostCreatedEvent {
@@ -124,6 +131,8 @@ import { retryBackoffMs } from '@/lib/server/jobs/definitions'
 describe('Event processing', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    deliveryReceipts.completed.mockResolvedValue(false)
+    deliveryReceipts.complete.mockResolvedValue(undefined)
     enqueued.length = 0
     bulkEnqueued.length = 0
     cancelled.length = 0
@@ -207,6 +216,45 @@ describe('Event processing', () => {
   })
 
   describe('runHookJob', () => {
+    it('skips completed integration deliveries even under another event/job ID', async () => {
+      const run = vi.fn()
+      mockGetHook.mockReturnValue({ run })
+      deliveryReceipts.completed.mockResolvedValue(true)
+      await runHookJob(
+        makeJob({
+          payload: {
+            hookType: 'slack',
+            event: makeEvent(),
+            target: { channelId: 'channel' },
+            config: { integrationId: 'integration_1' },
+          },
+        })
+      )
+      expect(run).not.toHaveBeenCalled()
+    })
+
+    it('records successful integration delivery but never records a failed delivery', async () => {
+      const run = vi
+        .fn()
+        .mockResolvedValueOnce({ success: true })
+        .mockResolvedValueOnce({ success: false, shouldRetry: true, error: 'Unavailable' })
+      mockGetHook.mockReturnValue({ run })
+      const job = makeJob({
+        payload: {
+          hookType: 'slack',
+          event: makeEvent(),
+          target: { channelId: 'channel' },
+          config: { integrationId: 'integration_1' },
+        },
+      })
+      await runHookJob(job)
+      expect(deliveryReceipts.complete).toHaveBeenCalledOnce()
+      expect(deliveryReceipts.complete.mock.calls[0][0]).toMatch(/^integration-post-created:/)
+      deliveryReceipts.complete.mockClear()
+      await expect(runHookJob(job)).rejects.toThrow('Unavailable')
+      expect(deliveryReceipts.complete).not.toHaveBeenCalled()
+    })
+
     it('succeeds silently when hook returns success', async () => {
       const mockHook = { run: vi.fn().mockResolvedValue({ success: true }) }
       mockGetHook.mockReturnValue(mockHook)

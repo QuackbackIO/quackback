@@ -10,6 +10,7 @@
  */
 
 import { db, boards, posts, principal as principalTable, eq, type Post } from '@/lib/server/db'
+import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { type PostId, type PrincipalId, type UserId } from '@quackback/ids'
 import { dispatchPostCreated, buildEventActor } from '@/lib/server/events/dispatch'
@@ -85,7 +86,7 @@ export async function announcePublishedPost(
     await dispatchPostCreated(buildEventActor(author), {
       id: post.id,
       title: post.title,
-      content: post.content,
+      content: contentJsonToMarkdown(post.contentJson, post.content),
       boardId: post.boardId,
       boardSlug: board.slug,
       authorEmail: realEmail(author.email) ?? undefined,

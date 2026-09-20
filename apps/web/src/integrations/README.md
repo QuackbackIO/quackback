@@ -57,3 +57,27 @@ The **framework** (the parts every provider shares) stays outside this folder:
 (not a live provider — `available: false`). It's typechecked and asserted by
 `_template/__tests__/template.conformance.test.ts` every run, so the example can
 never rot. Read it first — it's the shortest tour of the contract.
+
+## Post delivery and content refresh
+
+Post sync is orchestrated by `lib/server/integrations/post-sync.ts`. Retry resolves only
+integration mappings; it never republishes `post.created` to webhooks, AI, notifications,
+or workflows. Each destination is handled independently, so a link for one integration
+cannot block a missing delivery to another.
+
+Original fan-out and manual retry share `integrationDeliveryKey`: post + integration
+instance + destination. Pending/running work is reused; only failed jobs are reset, with
+fresh payloads and an after-commit worker wake. Completed receipts survive queue retention.
+Pre-upgrade pending jobs are reused by retry too. This prevents duplicate retry jobs; it
+is not provider-side exactly-once delivery across a crash after an external API succeeds.
+
+Providers can implement `issues.refreshPost` to update existing linked content using their
+native formatter. The orchestrator visits every active link and reports failures even
+when other destinations succeeded. Unsupported refresh capabilities are skipped without
+blocking other integrations. Linear supplies the first adapter; adding another provider
+does not require changing the orchestration or endpoint.
+
+Canonical post events recover legacy rich-text images through `contentJsonToMarkdown`.
+Markdown issue/card formatters should use `buildIntegrationPostContent` for absolute media
+URLs and intact attachment fallback around truncation. Linear opts into video-as-image
+syntax for its ingestion API; other Markdown providers retain ordinary video links.

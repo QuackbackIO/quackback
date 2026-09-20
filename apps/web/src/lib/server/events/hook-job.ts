@@ -24,6 +24,11 @@
  *    events. That distinction is `onFailure`'s `permanent` argument.
  */
 import { getHook } from './registry'
+import {
+  integrationDeliveryKey,
+  integrationDeliveryCompleted,
+  completeIntegrationDelivery,
+} from './integration-delivery'
 import { isRetryableError } from './hook-utils'
 // Every module this handler reaches is imported statically, not at call time.
 // The tier opens a workspace scope around every pass, so a deferred import would
@@ -98,6 +103,9 @@ export async function runHookJob(job: ClaimedJob): Promise<void> {
   // back to its own branded id, which is still stable across attempts.
   const idempotencyKey = job.dedupeKey ?? job.jobId
 
+  const deliveryKey = integrationDeliveryKey(data)
+  if (deliveryKey && (await integrationDeliveryCompleted(deliveryKey))) return
+
   let result: HookResult
   try {
     result = await hook.run(event, target, hookConfig, { jobId: idempotencyKey })
@@ -148,6 +156,7 @@ export async function runHookJob(job: ClaimedJob): Promise<void> {
         log.error({ err }, 'failed to persist external link')
       )
     }
+    if (deliveryKey) await completeIntegrationDelivery(deliveryKey, hookType)
     return
   }
 
@@ -219,7 +228,10 @@ async function persistExternalLink(data: HookJobData, result: HookResult): Promi
 
   // Look up the integration by type
   const integration = await db.query.integrations.findFirst({
-    where: eq(integrations.integrationType, data.hookType),
+    where:
+      typeof data.config.integrationId === 'string'
+        ? eq(integrations.id, data.config.integrationId as IntegrationId)
+        : eq(integrations.integrationType, data.hookType),
     columns: { id: true },
   })
   if (!integration) return
