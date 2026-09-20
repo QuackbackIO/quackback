@@ -34,8 +34,8 @@ ALTER TABLE "posts" ADD COLUMN IF NOT EXISTS "capture_key" text;
 -- adds only what those two cannot say.
 ALTER TABLE "posts" ADD COLUMN IF NOT EXISTS "capture_provenance" jsonb;
 --> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "posts_capture_key_uidx" ON "posts" ("capture_key") WHERE "capture_key" IS NOT NULL;
+-- Built concurrently after the lineage transaction; see schema-ops.ts.
 --> statement-breakpoint
 -- Internal posts are a small minority and are listed on their own, so the
 -- index only covers them.
-CREATE INDEX IF NOT EXISTS "posts_internal_audience_idx" ON "posts" ("created_at") WHERE "audience" <> 'board';
+-- Built concurrently after the lineage transaction; see schema-ops.ts.

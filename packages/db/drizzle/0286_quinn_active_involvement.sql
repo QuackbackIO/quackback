@@ -16,5 +16,4 @@ BEGIN
   END IF;
 END $$;
 --> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS assistant_involvements_one_active_idx
-ON assistant_involvements (conversation_id) WHERE status = 'active';
+-- Built concurrently after the lineage transaction; see schema-ops.ts.

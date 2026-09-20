@@ -130,5 +130,4 @@ ALTER TABLE "conversation_messages" ADD COLUMN IF NOT EXISTS "assistant_run_id" 
 -- references this table in both directions it needs, and a second edge would
 -- make the two Drizzle table types mutually recursive. Runs and messages share
 -- one parent conversation and are cascade-deleted together.
-CREATE UNIQUE INDEX IF NOT EXISTS "conversation_messages_assistant_run_terminal_idx" ON "conversation_messages" ("assistant_run_id")
-  WHERE "assistant_run_id" IS NOT NULL AND "is_internal" = false;
+-- Built concurrently after the lineage transaction; see schema-ops.ts.

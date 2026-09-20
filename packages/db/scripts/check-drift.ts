@@ -187,7 +187,7 @@ const EXEMPTIONS: { reason: string; pattern: RegExp; optional?: boolean }[] = [
     pattern: /^CREATE INDEX "user_name_trgm_idx" ON "user" USING gin /,
   },
   {
-    // Drop half of the same spurious pair — drizzle-kit reads the gin_trgm_ops
+    // Drop half of the same spurious pair , drizzle-kit reads the gin_trgm_ops
     // index as unmatched and wants to drop it. The migration owns the real DDL.
     reason:
       'pg_trgm GIN index on user.name for admin people search; drizzle-kit cannot round-trip the gin_trgm index, so it re-emits the DROP',
@@ -368,7 +368,7 @@ async function main(): Promise<number> {
     await admin.unsafe(`DROP DATABASE IF EXISTS ${SCRATCH_DB} WITH (FORCE)`)
     await admin.unsafe(`CREATE DATABASE ${SCRATCH_DB}`)
 
-    // max: 8 — pushSchema introspects all tables concurrently; a single
+    // max: 8 , pushSchema introspects all tables concurrently; a single
     // connection would serialize its ~5 catalog queries per table.
     scratch = postgres(scratchUrl(), { max: 8, onnotice: () => {} })
     const db = drizzle(scratch, { schema })
@@ -379,10 +379,10 @@ async function main(): Promise<number> {
     console.log('Applying all migrations to the scratch database...')
     // The same code path production boot uses (migrate + system seed); the
     // seed's DML cannot affect the DDL diff.
-    // Concurrent indexes and the post-condition sweep are deliberately off:
-    // this check diffs DDL that drizzle-kit can express, while concurrent
-    // indexes are raw-SQL-owned and verified separately by schema operations.
-    await runMigrations(scratchUrl(), { concurrentIndexes: false, verify: false })
+    // Include concurrent indexes and postconditions before comparing: Quinn's
+    // unique/partial indexes are declared in the TS schema and built here,
+    // outside the lineage transaction, just as on a live workspace.
+    await runMigrations(scratchUrl())
 
     console.log('Diffing live schema against the Drizzle TS schema...')
     // pushSchema reads `.rows` off execute() results, but the postgres-js

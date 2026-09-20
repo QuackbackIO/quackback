@@ -64,10 +64,10 @@ ALTER TABLE "assistant_tool_calls" ADD COLUMN IF NOT EXISTS "replay_strategy" te
 -- Partial and unique: the claim insert conflicts on this as well as on the
 -- per-turn idempotency key, so two workers that computed the same logical
 -- action cannot both execute it. Two NULLs never conflict.
-CREATE UNIQUE INDEX IF NOT EXISTS "assistant_tool_calls_action_key_idx" ON "assistant_tool_calls" ("action_key") WHERE "action_key" IS NOT NULL;
+-- Built concurrently after the lineage transaction; see schema-ops.ts.
 --> statement-breakpoint
 -- Drives the reconciliation queue: the effects nobody can confirm yet.
-CREATE INDEX IF NOT EXISTS "assistant_tool_calls_reconciliation_idx" ON "assistant_tool_calls" ("created_at") WHERE "reconciliation_state" = 'required';
+-- Built concurrently after the lineage transaction; see schema-ops.ts.
 --> statement-breakpoint
 -- The run that parked on this proposal, and the step it parked at.
 ALTER TABLE "assistant_pending_actions" ADD COLUMN IF NOT EXISTS "run_id" uuid CONSTRAINT "assistant_pending_actions_run_id_assistant_runs_id_fk" REFERENCES "assistant_runs"("id") ON DELETE set null;
@@ -104,4 +104,4 @@ ALTER TABLE "assistant_pending_actions" ADD COLUMN IF NOT EXISTS "execution_erro
 ALTER TABLE "assistant_pending_actions" ADD COLUMN IF NOT EXISTS "disposition" text;
 --> statement-breakpoint
 -- Drives the recovery sweep over actions whose execution is still owed.
-CREATE INDEX IF NOT EXISTS "assistant_pending_actions_execution_idx" ON "assistant_pending_actions" ("proposed_at") WHERE "execution_state" IN ('queued', 'running', 'unknown');
+-- Built concurrently after the lineage transaction; see schema-ops.ts.

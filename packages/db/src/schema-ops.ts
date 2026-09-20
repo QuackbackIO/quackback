@@ -15,14 +15,14 @@
  * | Step | Why it is here |
  * | --- | --- |
  * | {@link ensureExtensions} | `runMigrations()` never issued `CREATE EXTENSION vector`, and no migration file does either, while `0000_initial` declares `vector` columns. A fresh database migrated through the runtime path could not succeed at all. |
- * | {@link dropInvalidIndexes} | An interrupted `CREATE INDEX CONCURRENTLY` leaves an *invalid* index. `IF NOT EXISTS` then treats it as present, so the next run skips it and exits 0 — leaving it INVALID forever. Healing has to happen *before* the build, not by re-running and hoping. |
+ * | {@link dropInvalidIndexes} | An interrupted `CREATE INDEX CONCURRENTLY` leaves an *invalid* index. `IF NOT EXISTS` then treats it as present, so the next run skips it and exits 0 , leaving it INVALID forever. Healing has to happen *before* the build, not by re-running and hoping. |
  * | {@link ensureConcurrentIndexes} | Never called by the runtime path at all. Without it the 4 HNSW and 3 trigram indexes silently do not exist: no error, just a slow workspace. |
  * | {@link verifySchemaPostconditions} | The ledger is not evidence. Post-conditions have to be checked against the catalogue, independently of what `drizzle.__drizzle_migrations` claims. |
  *
  * ## Why this module exists as a module
  *
  * `ensureConcurrentIndexes` used to be a private function inside `migrate.ts`,
- * and `migrate.ts` calls `runMigrations()` at its top level — so importing it to
+ * and `migrate.ts` calls `runMigrations()` at its top level , so importing it to
  * reuse the function ran migrations as a side effect. Any migrator role built on
  * it had to either shell out to the CLI or duplicate the index list. Both were
  * worse than moving the steps into a leaf module that `migrate.ts` imports: one
@@ -75,6 +75,42 @@ export interface ConcurrentIndexSpec {
 }
 
 export const CONCURRENT_INDEX_SPECS: readonly ConcurrentIndexSpec[] = [
+  {
+    name: 'assistant_involvements_one_active_idx',
+    concurrent: true,
+    ddl: "CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS assistant_involvements_one_active_idx ON assistant_involvements (conversation_id) WHERE status = 'active'",
+  },
+  {
+    name: 'conversation_messages_assistant_run_terminal_idx',
+    concurrent: true,
+    ddl: 'CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS "conversation_messages_assistant_run_terminal_idx" ON "conversation_messages" ("assistant_run_id") WHERE "assistant_run_id" IS NOT NULL AND "is_internal" = false',
+  },
+  {
+    name: 'assistant_tool_calls_action_key_idx',
+    concurrent: true,
+    ddl: 'CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS "assistant_tool_calls_action_key_idx" ON "assistant_tool_calls" ("action_key") WHERE "action_key" IS NOT NULL',
+  },
+  {
+    name: 'assistant_tool_calls_reconciliation_idx',
+    concurrent: true,
+    ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS "assistant_tool_calls_reconciliation_idx" ON "assistant_tool_calls" ("created_at") WHERE "reconciliation_state" = \'required\'',
+  },
+  {
+    name: 'assistant_pending_actions_execution_idx',
+    concurrent: true,
+    ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS "assistant_pending_actions_execution_idx" ON "assistant_pending_actions" ("proposed_at") WHERE "execution_state" IN (\'queued\', \'running\', \'unknown\')',
+  },
+  {
+    name: 'posts_capture_key_uidx',
+    concurrent: true,
+    ddl: 'CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS "posts_capture_key_uidx" ON "posts" ("capture_key") WHERE "capture_key" IS NOT NULL',
+  },
+  {
+    name: 'posts_internal_audience_idx',
+    concurrent: true,
+    ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS "posts_internal_audience_idx" ON "posts" ("created_at") WHERE "audience" <> \'board\'',
+  },
+
   {
     name: 'posts_embedding_hnsw_idx',
     concurrent: true,
@@ -193,14 +229,14 @@ export interface DropInvalidResult {
  * This has to run **before** `ensureConcurrentIndexes`, and that ordering is
  * the entire fix. `CREATE INDEX CONCURRENTLY IF NOT EXISTS` treats an invalid
  * index as present: it emits a notice, skips the build, and returns success. So
- * "re-run the migrator" does not heal an invalid index — it certifies it. The
+ * "re-run the migrator" does not heal an invalid index , it certifies it. The
  * migrator would exit 0 with an index that can never be used by the planner and
  * will never be repaired, and nothing anywhere would say so.
  *
  * Constraint-backed indexes are reported rather than dropped. `DROP INDEX`
  * refuses them ("cannot drop index ... because constraint ... requires it"), and
  * an invalid one there means a failed `ALTER TABLE ... ADD CONSTRAINT ... USING
- * INDEX` — a different repair, and not one to guess at automatically.
+ * INDEX` , a different repair, and not one to guess at automatically.
  */
 export async function dropInvalidIndexes(sql: postgres.Sql): Promise<DropInvalidResult> {
   const invalid = await listInvalidIndexes(sql)
@@ -261,7 +297,7 @@ export interface PostconditionReport {
   violations: PostconditionViolation[]
   /** What was checked. See {@link POSTCONDITION_CHECKS}. */
   covers: readonly string[]
-  /** Everything observed, for the run log — reported whether or not it passed. */
+  /** Everything observed, for the run log , reported whether or not it passed. */
   observed: {
     invalidIndexes: InvalidIndex[]
     missingIndexes: string[]
@@ -283,7 +319,7 @@ interface DeclaredTable {
  * The tables and columns this build's Drizzle schema declares.
  *
  * Derived from the schema object the running code queries with, never from a
- * hand-written list — which is the property that makes it worth having. Drizzle
+ * hand-written list , which is the property that makes it worth having. Drizzle
  * emits explicit column lists, so `findFirst()` on a table missing a declared
  * column *throws* rather than returning a null; the set of columns this function
  * returns is therefore the set whose absence takes a page down.
@@ -318,10 +354,10 @@ export function declaredTables(): DeclaredTable[] {
  *
  * 1. **The `indisvalid` sweep.** Every index in every user schema. No list of
  *    expected names, so it catches invalid indexes this module has never heard
- *    of — a future migration's, a partition's, an operator's.
+ *    of , a future migration's, a partition's, an operator's.
  * 2. **Presence of the concurrent indexes.** The one thing the sweep cannot see:
  *    an index that was never built is not invalid, it is absent, and absence is
- *    silent. Derived from {@link CONCURRENT_INDEX_SPECS} — the same list the
+ *    silent. Derived from {@link CONCURRENT_INDEX_SPECS} , the same list the
  *    creator uses, so it cannot drift out of step with it.
  * 3. **Extensions.** A dropped `vector` makes every embedding column
  *    unqueryable while the ledger still reads complete.
@@ -335,7 +371,7 @@ export function declaredTables(): DeclaredTable[] {
  * **What it still does not cover, stated so a green verdict is readable.** Types,
  * nullability, defaults, constraints, triggers and functions are not compared,
  * and objects the database has but this build does not declare are ignored on
- * purpose — a workspace a newer image has already migrated past must keep being
+ * purpose , a workspace a newer image has already migrated past must keep being
  * served (§10.2), so extra is never a violation. Full bidirectional comparison
  * is what `db:check-drift` is for, and it needs the Drizzle Kit toolchain rather
  * than a query.
