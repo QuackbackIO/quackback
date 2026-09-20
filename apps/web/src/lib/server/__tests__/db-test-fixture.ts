@@ -18,7 +18,7 @@
  *   within a file must run sequentially (no `it.concurrent`).
  */
 import { sql } from 'drizzle-orm'
-// Direct client import to spin up our own pool — bypasses the global `db`
+// Direct client import to spin up our own pool , bypasses the global `db`
 // proxy/singleton so each test file keeps its own short-lived connection
 // (and closes it cleanly in afterAll). The lint rule reserves
 // @quackback/db/client for the canonical db.ts entry; this fixture is a
@@ -29,10 +29,11 @@ import { createDb, type Database } from '@quackback/db/client'
 /** The transaction handle type the fixture parks each test inside. */
 export type TestTransaction = Parameters<Parameters<Database['transaction']>[0]>[0]
 
-const CANDIDATE_URLS = [
-  process.env.DATABASE_URL,
-  'postgresql://postgres:password@localhost:5432/quackback',
-].filter((u): u is string => !!u)
+const CANDIDATE_URLS = process.env.TEST_DATABASE_URL
+  ? [process.env.TEST_DATABASE_URL]
+  : [process.env.DATABASE_URL, 'postgresql://postgres:password@localhost:5432/quackback'].filter(
+      (u): u is string => !!u
+    )
 
 /** Thrown into the transaction callback so postgres always rolls back; compared by identity. */
 const ROLLBACK = new Error('db-test-fixture: intentional rollback')
@@ -67,14 +68,14 @@ export interface DbTestFixtureOptions {
   /**
    * Schema-currency probe, run against each candidate DB before it is
    * accepted. Select the columns your suite depends on (`limit(0)` is
-   * enough); a stale or missing schema then skips the suite instead of
-   * failing it mid-test.
+   * enough). A reachable database with a stale schema fails immediately,
+   * with the missing column and the command needed to migrate it.
    */
   probe?: (db: Database) => Promise<void>
 }
 
 export interface DbTestFixture {
-  /** False when no candidate DB is reachable/current; use describe.skipIf. */
+  /** False when no candidate DB is reachable; use describe.skipIf. */
   available: boolean
   /** Open the per-test transaction. Call from beforeEach. */
   begin: () => Promise<void>
@@ -107,19 +108,34 @@ export async function createDbTestFixture(
     const candidate = createDb(url, { max: 1, prepare: false })
     try {
       await candidate.execute(sql`select 1`)
-      await options.probe?.(candidate)
-      activeDb = candidate
-      break
     } catch {
       await endClient(candidate).catch(() => {})
+      continue
     }
+    try {
+      await options.probe?.(candidate)
+    } catch (error) {
+      await endClient(candidate).catch(() => {})
+      const details: string[] = []
+      for (let cause = error; cause instanceof Error; cause = cause.cause) {
+        details.push(cause.message)
+        if (details.length >= 5) break
+      }
+      throw new Error(
+        `db-test-fixture: schema probe failed for ${new URL(url).pathname}: ${details.join(': ')}. ` +
+          'Migrate this database with DATABASE_URL="$TEST_DATABASE_URL" bun run db:migrate',
+        { cause: error }
+      )
+    }
+    activeDb = candidate
+    break
   }
 
   const begin = async (): Promise<void> => {
     const db = activeDb
     if (!db) {
       throw new Error(
-        'db-test-fixture: no reachable test database — guard the suite with describe.skipIf(!fixture.available)'
+        'db-test-fixture: no reachable test database , guard the suite with describe.skipIf(!fixture.available)'
       )
     }
     if (activeTx || txSettled) {
@@ -137,7 +153,7 @@ export async function createDbTestFixture(
     })
 
     // The callback parks on `hold` so the transaction spans the whole test,
-    // then throws the sentinel — rollback is the only way out.
+    // then throws the sentinel , rollback is the only way out.
     txSettled = db
       .transaction(async (tx) => {
         ready(tx)

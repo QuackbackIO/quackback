@@ -15,7 +15,7 @@ Rollback: reverting this slice reopens customer access to internal records and w
 
 ## Remaining work
 
-Continue with 2.4 durability runner, 2.5 truthful resolution, then the supplied Phase 2 findings and final gates. The original request was truncated at the approved-action continuation item; a clarification is pending. This file is an incremental handoff, not a completion claim.
+Continue with 2.5 truthful resolution, then the supplied Phase 2 findings and final gates. The original request was truncated at the approved-action continuation item; a clarification is pending. This file is an incremental handoff, not a completion claim.
 
 ## Fleet replay and live-table indexes (2.2, 2.3)
 
@@ -26,3 +26,9 @@ All seven listed indexes (the request said six) moved from 0286/0287/0289/0290 t
 Evidence: seven registry/lineage regressions failed first. The fresh-database migration and drift check passed. All six application/test databases migrated successfully; their 42 index OIDs, validity flags and definitions are byte-identical before and after, so existing applied indexes were untouched. Logs: `/tmp/quinn-indexes-red.log`, `/tmp/quinn-indexes-green.log`, `/tmp/quinn-indexes-drift.log`, `/tmp/quinn-indexes-before.txt`, `/tmp/quinn-indexes-after.txt`. The registry, real PostgreSQL schema-operations and replay suites pass 27 tests.
 
 No new migration was required. Reverting the index slice restores blocking builds for new upgrades; existing indexes need no rollback.
+
+## Required durability gate (2.4)
+
+`test:db:quinn` runs five committed-row suites across four dedicated databases and checks each file's JSON assertion results. CI prepares these databases in a separate service and makes the required test status depend on this job. The fixture now fails a reachable stale schema with the PostgreSQL error and migration command. Nine runner/fixture tests pass; all five dedicated suites passed without skips using `--prepare`. Database names and commands are documented in the test report.
+
+Rollback: removing the runner or CI dependency loses required durability evidence; it changes no application behavior.

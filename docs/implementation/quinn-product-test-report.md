@@ -133,3 +133,18 @@ The two full-run failures were real and are fixed on the branch rather than repo
 Known remaining test-environment caveat, unchanged from Steps 6 to 12: the conversation domain is unstable under Vitest's default file parallelism against one shared database and passes sequentially (`--no-file-parallelism`); the files involved predate this branch.
 
 Logs from this pass live in the session scratchpad and are not part of the repository.
+
+## Review correction: required durability gate
+
+Run `TEST_DATABASE_URL=postgresql://postgres:password@localhost:5432/quackback_quinn_validation bun run test:db:quinn` from the repository root. The runner preserves the connection credentials, host, port and query options, and replaces only the database name. It runs files sequentially and requires nonempty, all-passing assertion results for each named file; skipped or missing suites fail even if Vitest exits zero.
+
+| Database | Suites |
+| --- | --- |
+| `quackback_quinn_runs` | `assistant-run.durability.db.test.ts`, `conversation-request-receipt.db.test.ts` |
+| `quackback_quinn_s5` | `assistant-action.durability.db.test.ts` |
+| `quackback_quinn_s6` | `workflow-delegation.durability.db.test.ts` |
+| `quackback_quinn_lifecycle` | `conversation-inactivity.db.test.ts` |
+
+Use `bun run test:db:quinn --prepare` to create missing dedicated databases, migrate them and insert a minimal workspace if needed. CI runs this in its own PostgreSQL service alongside the unit shards; the existing required `test` job now depends on both. A reachable database with a failed schema probe throws with the missing column and migration command instead of silently skipping. An explicitly selected TEST_DATABASE_URL is never replaced by a fallback database.
+
+Validation: the stale-schema regression failed before the fixture fix, and the runner assertions reject zero, skipped, failed and wrong-file results. Nine fixture/runner tests pass. The prepared dedicated run executed all five suites successfully with zero skips; see `/tmp/quinn-db-runner.log`. This does not replace the other final acceptance gates.

@@ -59,6 +59,7 @@
     "build": "bun run --filter @quackback/web build",
     "lint": "oxlint",
     "test": "vitest",
+    "test:db:quinn": "bun scripts/test-db-quinn.ts",
     "test:api": "cd apps/web && vitest src/lib/server/domains/api/__tests__/api-integration.test.ts",
     "test:e2e": "bun run --filter @quackback/web test:e2e",
     "db:generate": "bun run --cwd packages/db db:generate",
