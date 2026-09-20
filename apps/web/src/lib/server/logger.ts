@@ -56,3 +56,15 @@ export function createLogger(options: CreateLoggerOptions = {}) {
 
 /** Shared application logger. Level comes from config (LOG_LEVEL). */
 export const logger = createLogger()
+
+/** Message-first pino facade for server call sites. */
+export function makeLogger(component: string) {
+  return {
+    warn: (msg: string, ctx: Record<string, unknown> = {}) =>
+      logger.warn({ component, ...ctx }, msg),
+    info: (msg: string, ctx: Record<string, unknown> = {}) =>
+      logger.info({ component, ...ctx }, msg),
+    error: (msg: string, ctx: Record<string, unknown> = {}) =>
+      logger.error({ component, ...ctx }, msg),
+  }
+}

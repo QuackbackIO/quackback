@@ -39,6 +39,7 @@ import {
   assistantRuns,
   assistantToolCalls,
   conversations,
+  jobQueue,
 } from '@/lib/server/db'
 import type { AssistantRunId, PrincipalId } from '@quackback/ids'
 import { ConflictError, NotFoundError } from '@/lib/shared/errors'
@@ -98,28 +99,62 @@ export interface StrandedRunSweepResult {
  * its job is found by the dedupe key the intent enqueued under; a running run
  * names its job directly.
  */
-async function listStrandedRuns(cutoff: Date, exec: Executor): Promise<AssistantRunRow[]> {
-  return exec
+/** Match application TypeIDs after decoding run rows, never UUID text to TypeID keys. */
+async function runRecoveryDeadlines(exec: Executor) {
+  const runs = await exec
     .select()
     .from(assistantRuns)
     .where(
       and(
         inArray(assistantRuns.status, ['queued', 'running']),
-        lt(assistantRuns.updatedAt, cutoff),
-        isNotNull(assistantRuns.conversationId),
-        sql`NOT EXISTS (
-          SELECT 1 FROM job_queue j
-          WHERE j.queue = ${ASSISTANT_TURN_QUEUE}
-            AND j.status IN ('pending', 'running')
-            AND (
-              j.job_id = ${assistantRuns.jobId}
-              OR j.dedupe_key = ${ASSISTANT_TURN_QUEUE} || ':' || ${assistantRuns.id}::text
-            )
-        )`
+        isNotNull(assistantRuns.conversationId)
       )
     )
     .orderBy(assistantRuns.updatedAt)
-    .limit(SWEEP_BATCH)
+  const candidates: Array<{ run: AssistantRunRow; idleSince: Date }> = []
+  for (let offset = 0; offset < runs.length; offset += 500) {
+    const batch = runs.slice(offset, offset + 500)
+    const jobs = await exec
+      .select()
+      .from(jobQueue)
+      .where(
+        and(
+          eq(jobQueue.queue, ASSISTANT_TURN_QUEUE),
+          inArray(jobQueue.status, ['pending', 'running']),
+          or(
+            inArray(
+              jobQueue.dedupeKey,
+              batch.map((run) => `${ASSISTANT_TURN_QUEUE}:${run.id}`)
+            ),
+            inArray(
+              jobQueue.jobId,
+              batch.flatMap((run) => (run.jobId ? [run.jobId] : []))
+            )
+          )
+        )
+      )
+    for (const run of batch) {
+      const matching = jobs.filter(
+        (job) => job.jobId === run.jobId || job.dedupeKey === `${ASSISTANT_TURN_QUEUE}:${run.id}`
+      )
+      if (matching.some((job) => job.status === 'running')) continue
+      const idleSince = new Date(
+        Math.max(
+          run.updatedAt.getTime(),
+          ...matching.flatMap((job) => [job.createdAt.getTime(), job.runAt.getTime()])
+        )
+      )
+      candidates.push({ run, idleSince })
+    }
+  }
+  return candidates
+}
+
+async function listStrandedRuns(cutoff: Date, exec: Executor): Promise<AssistantRunRow[]> {
+  return (await runRecoveryDeadlines(exec))
+    .filter((candidate) => candidate.idleSince < cutoff)
+    .slice(0, SWEEP_BATCH)
+    .map((candidate) => candidate.run)
 }
 
 /**
@@ -416,26 +451,21 @@ export async function retryFailedAssistantRun(
 
 /** Exported for the operations deadline provider: is anything owed recovery? */
 export async function nextStrandedRecoveryAt(exec: Executor = db): Promise<Date | null> {
+  const runs = await runRecoveryDeadlines(exec)
+  const runAt = runs.length ? Math.min(...runs.map((row) => row.idleSince.getTime())) : null
   const result = await exec.execute(sql`
-    SELECT LEAST(
-      (SELECT min(r.updated_at) FROM assistant_runs r
-        WHERE r.status IN ('queued', 'running')
-          AND r.conversation_id IS NOT NULL
-          AND NOT EXISTS (
-            SELECT 1 FROM job_queue j
-            WHERE j.queue = ${ASSISTANT_TURN_QUEUE} AND j.status IN ('pending', 'running')
-              AND (j.job_id = r.job_id OR j.dedupe_key = ${ASSISTANT_TURN_QUEUE} || ':' || r.id::text)
-          )),
+    SELECT
       (SELECT min(coalesce(a.decided_at, a.proposed_at)) FROM assistant_pending_actions a
         WHERE a.status = 'approved' AND a.execution_state = 'queued'
           AND NOT EXISTS (
             SELECT 1 FROM job_queue j
             WHERE j.queue = ${ASSISTANT_ACTION_QUEUE} AND j.status IN ('pending', 'running')
               AND j.job_id = a.execution_job_id
-          ))
-    ) AS due_at
+          )) AS due_at
   `)
   const value = getExecuteRows<{ due_at: Date | string | null }>(result)[0]?.due_at
-  if (!value) return null
-  return new Date(new Date(value).getTime() + STRANDED_GRACE_MS)
+  const deadlines = [runAt, value ? new Date(value).getTime() : null].filter(
+    (v): v is number => v !== null
+  )
+  return deadlines.length ? new Date(Math.min(...deadlines) + STRANDED_GRACE_MS) : null
 }

@@ -46,6 +46,7 @@ import {
   retryFailedAssistantRun,
   sweepStrandedApprovedActions,
   sweepStrandedAssistantRuns,
+  nextStrandedRecoveryAt,
 } from '../assistant-recovery'
 
 const fixture = await createDbTestFixture({
@@ -173,6 +174,38 @@ describe.skipIf(!fixture.available)('sweepStrandedAssistantRuns', () => {
 
     expect((await sweepStrandedAssistantRuns()).recovered).toBe(1)
     expect((await readRun(run.id)).status).toBe('failed')
+  })
+
+  it('leaves a freshly queued job available for its worker', async () => {
+    const conversationId = await seedConversation()
+    const run = await seedRun(conversationId, { status: 'queued', startedAt: null })
+    await seedJobRow({
+      queue: 'assistant-turn',
+      jobId: 'fresh',
+      dedupeKey: `assistant-turn:${run.id}`,
+      status: 'pending',
+    })
+    expect((await sweepStrandedAssistantRuns()).recovered).toBe(0)
+    expect((await readRun(run.id)).status).toBe('queued')
+    expect((await nextStrandedRecoveryAt())!.getTime()).toBeGreaterThan(Date.now())
+  })
+
+  it('recovers an old pending job when no worker has claimed it', async () => {
+    const conversationId = await seedConversation()
+    const run = await seedRun(conversationId, { status: 'queued', startedAt: null })
+    await seedJobRow({
+      queue: 'assistant-turn',
+      jobId: 'unclaimed',
+      dedupeKey: `assistant-turn:${run.id}`,
+      status: 'pending',
+    })
+    await testDb
+      .update(jobQueue)
+      .set({ createdAt: minutesAgo(60), runAt: minutesAgo(60) })
+      .where(eq(jobQueue.jobId, 'unclaimed'))
+    expect(await nextStrandedRecoveryAt()).not.toBeNull()
+    expect((await sweepStrandedAssistantRuns()).recovered).toBe(1)
+    expect((await readRun(run.id)).disposition).toBe('stranded:no_worker')
   })
 
   it('never touches a run parked on a proposal, which the approval sweep owns', async () => {
@@ -321,6 +354,12 @@ describe.skipIf(!fixture.available)('sweepStrandedApprovedActions', () => {
 describe.skipIf(!fixture.available)('the durable state a reconnect reads', () => {
   beforeEach(fixture.begin)
   afterEach(fixture.rollback)
+
+  it('does not show thinking for a turn that no worker has started', async () => {
+    const conversationId = await seedConversation()
+    await seedRun(conversationId, { status: 'queued', startedAt: null })
+    expect(await getOpenRunState(conversationId)).toBeNull()
+  })
 
   it('says a turn is in flight while one is', async () => {
     const conversationId = await seedConversation()

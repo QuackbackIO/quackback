@@ -6,7 +6,7 @@
  * publication, and this module answers the two questions other domains ask
  * about a conversation, plus the one release a parked run needs.
  */
-import { db, and, desc, eq, sql, conversations, assistantRuns } from '@/lib/server/db'
+import { db, and, desc, eq, isNotNull, sql, conversations, assistantRuns } from '@/lib/server/db'
 import type { AssistantRunPhase, AssistantRunStatus } from '@/lib/server/db'
 import type { Executor } from '@/lib/server/domains/principals/principal.factory'
 import type { AssistantRunId, ConversationId } from '@quackback/ids'
@@ -48,7 +48,8 @@ export async function getOpenRunState(
     .where(
       and(
         eq(assistantRuns.conversationId, conversationId),
-        sql`${assistantRuns.status} IN ('queued', 'running')`
+        sql`${assistantRuns.status} IN ('queued', 'running')`,
+        isNotNull(assistantRuns.startedAt)
       )
     )
     .orderBy(desc(assistantRuns.createdAt))

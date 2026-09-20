@@ -53,3 +53,7 @@ export function runWithLogContext<T>(_context: unknown, fn: () => T): T {
   return fn()
 }
 export function setLogContext(_partial: unknown): void {}
+
+export function makeLogger(_component: string) {
+  return { warn: noop, info: noop, error: noop }
+}

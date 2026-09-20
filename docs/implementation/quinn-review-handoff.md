@@ -66,3 +66,9 @@ The former account-deletion test was replaced with real database release/allow/d
 ## Verifier cost and accounting
 
 The semantic verifier defaults to off. Shadow and enforce require explicit `ASSISTANT_ANSWER_VALIDATION` configuration; explicitly enabled verification still runs before publication. It receives the exact selected guidance and voice instructions used for generation, reports its token usage into the run, and records an explicit start time for each verification and repair. Four regressions failed first, then 172 verifier/runtime/durable-run tests passed. Logs: `/tmp/quinn-verifier-red.log`, `/tmp/quinn-verifier-green.log`. Typecheck passes after retaining optional provider token counts.
+
+## Worker topology and recovery
+
+Reconnect activity now requires a started run. Recovery includes pending work past the grace period and schedules its deadline. The test exposed a second defect: SQL compared stored UUID text with TypeID dedupe keys. Recovery now matches application IDs in bounded batches, preserving fresh pending jobs and jobs with active workers. A web-only process warns when durable execution has no configured worker URL. The message-first `makeLogger` facade delegates to the existing pino logger.
+
+Two initial regressions failed; a third fresh-job control reproduced premature recovery against the original UUID comparison. All 36 recovery/worker tests and typecheck pass. Logs: `/tmp/quinn-topology-red.log`, `/tmp/quinn-recovery-id-red.log`, `/tmp/quinn-topology-green.log`. This fixes detection and reporting; a web-only process still needs a separate worker to execute sweeps or turns.

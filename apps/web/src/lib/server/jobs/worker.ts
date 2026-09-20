@@ -16,7 +16,8 @@
  * is a no-op so HTTP replicas stay producer-only.
  */
 import { config } from '@/lib/server/config'
-import { logger } from '@/lib/server/logger'
+import { logger, makeLogger } from '@/lib/server/logger'
+import { assistantExecutionMode } from '@/lib/server/domains/assistant/assistant-execution-mode'
 import { runWithLogContext } from '@/lib/server/log-context'
 import { shouldRunWorkers } from '@/lib/server/process-role'
 import {
@@ -537,7 +538,13 @@ function scheduleWorkspaceRefresh(cfg: RunnerConfig): void {
 export async function startJobWorker(): Promise<void> {
   if (running) return
   if (!shouldRunWorkers()) {
-    log.info('QUACKBACK_ROLE=web — job worker not started')
+    log.info('QUACKBACK_ROLE=web: job worker not started')
+    if (assistantExecutionMode() === 'durable' && !process.env.QUACKBACK_JOB_WORKER_URL?.trim()) {
+      makeLogger('job-worker').warn(
+        'Durable Quinn execution is enabled on a web-only process without QUACKBACK_JOB_WORKER_URL. Start a worker sharing this database or set QUACKBACK_ROLE=all; queued turns cannot run here.',
+        { event: 'assistant_worker.missing_configuration' }
+      )
+    }
     return
   }
   running = true
