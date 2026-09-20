@@ -301,6 +301,7 @@ describe('the real corpus', () => {
       '0279_better_auth_17.sql',
       '0280_widget_session_scope.sql',
       '0283_refined_visual_theme_default_on.sql',
+      '0286_quinn_active_involvement.sql',
     ])
   })
 

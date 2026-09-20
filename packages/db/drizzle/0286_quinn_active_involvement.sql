@@ -1,5 +1,6 @@
 -- Never fabricate a resolution/handoff to make historical duplicates fit.
 -- Operators must inspect transcript/history and explicitly review a repair.
+-- @replay: guarded-by the block only SELECTs and conditionally RAISE EXCEPTIONs; it performs no writes
 DO $$
 DECLARE duplicate_conversations text;
 BEGIN

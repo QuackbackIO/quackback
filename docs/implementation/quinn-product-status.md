@@ -4,7 +4,7 @@ Source: `/home/james/Downloads/quinn-product-implementation-spec-reconciled.html
 
 Implementation branch: `feat/quinn-product`, based on the specification's `feat/conversation-lifecycle` commit `9a10dd86ff364ca4a3cad0d0dc8252314ce33855`. The original branch and the unrelated edits in the main checkout are preserved.
 
-## P0 — correctness
+## P0 , correctness
 
 Implemented:
 
@@ -17,7 +17,7 @@ Validation: 241 targeted tests passed, none skipped, including PostgreSQL audit 
 
 Rollback: revert the P0 commit. No data rewrite or runtime retry activation occurred. Existing historical audit rows are not reclassified.
 
-## UX0 — shared shell and source selection
+## UX0 , shared shell and source selection
 
 Implemented:
 
@@ -33,7 +33,7 @@ Deployment prerequisite: migrate workspace databases through 0285 and set the co
 
 Remaining UX integration follows the later gates: canonical shared Guidance bindings; durable run/action inspection; exact-candidate evaluation/publication; in-flight evidence revocation fences; richer source views and authenticated teammate citation revalidation. Current customer source views serve plain text, never private original storage URLs.
 
-## P1 prerequisite — one active involvement
+## P1 prerequisite , one active involvement
 
 Implemented in migration 0286 and the involvement service: serialize opens on the conversation row, return the existing active identity, and enforce a partial unique index in PostgreSQL. New opens join the caller transaction. The migration reports up to 20 conversation UUIDs with legacy active duplicates and stops; it never rewrites outcomes. Repair requires inspecting transcript/history and explicitly choosing the canonical active record while preserving audit history.
 
@@ -434,3 +434,9 @@ Remaining work and deliberate omissions:
 - A flagged ticket still cannot be turned into guidance from the Improve page. `assistant_guidance_entries.source_conversation_id` is a conversation foreign key, so recording a ticket as the source of a guidance entry needs a column, which is a migration this step did not need for anything else.
 - `getQuinnPerformance` and the operations metrics do not read the new token counters. The inspector shows a run's cost; there is no spend total, no per-day series and no currency anywhere, because pricing is per model and per provider and this repository holds none of it.
 - No sample billing integration, no simulated action and no mockup-only control ships here. Every control this step adds is backed by the command it names.
+
+## Review correction: fleet replay gate
+
+0286 now vouches for its read-only duplicate preflight using the classifier's accepted `guarded-by` annotation. It classifies as `errors`, which passes the ordinary forward fleet gate. Every migration from 0285 upward is pinned to `safe` or `errors` by `quinn-replay.test.ts`.
+
+Fleet rollout prerequisite for a workspace below 0284: inspect its lineage and run the forward migration once with `allowMutatingReplay`. 0284 still classifies as `mutates`: its settings initialization is guarded by the absence of the channels key and its conversation backfill by `inactivity_owner IS NULL`, but the classifier accepts vouchers only for DO blocks, not UPDATE or writable CTE statements. Rows whose backfilled owner remains NULL can be revisited. Do not broaden the classifier or apply a meaningless annotation to bypass this check. A workspace already at 0284 requires no override for the Quinn forward set. This is an operator rollout instruction, not authorization to deploy.
