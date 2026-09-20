@@ -562,6 +562,7 @@ export async function notifyAgentReply(opts: {
         opts.visitorPrincipalId,
         recipient
       )
+      let participantFailed = false
       for (const participant of participants) {
         try {
           await adapter.deliverAgentMessage({
@@ -579,13 +580,20 @@ export async function notifyAgentReply(opts: {
             direction: 'agent_reply',
           })
         } catch (err) {
+          participantFailed = true
           log.warn(
             { err, conversation_id: opts.conversationId, principal_id: participant.principalId },
             'participant reply email failed'
           )
         }
       }
+      if (opts.strictDelivery && participantFailed)
+        throw new Error('Some participant deliveries were not confirmed.')
     } catch (err) {
+      // The primary send has already completed. Even an explicit refusal for
+      // a participant cannot authorize retrying the entire group delivery.
+      if (opts.strictDelivery)
+        throw new Error('Group delivery is partially unconfirmed.', { cause: err })
       log.warn({ err, conversation_id: opts.conversationId }, 'participant reply fan-out failed')
     }
   } catch (err) {

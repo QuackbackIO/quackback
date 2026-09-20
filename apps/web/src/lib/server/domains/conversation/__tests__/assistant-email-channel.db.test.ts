@@ -36,6 +36,7 @@ import {
   desc,
   eq,
   conversationMessages,
+  conversationParticipants,
   conversationOutboundEmails,
   conversations,
   principal,
@@ -339,6 +340,39 @@ describe.skipIf(!fixture.available)('autonomous Quinn replies on email', () => {
       })
     })
 
+    it('keeps a partial group send unconfirmed without resending to the primary recipient', async () => {
+      const { conversation, principalId } = await seedEmailConversation()
+      const participantId = createId('principal')
+      const participantEmail = `participant-${suffix()}@example.com`
+      await testDb.insert(principal).values({
+        id: participantId,
+        type: 'anonymous',
+        createdAt: new Date(),
+        contactEmail: participantEmail,
+      })
+      await testDb.insert(conversationParticipants).values({
+        conversationId: conversation.id,
+        principalId: participantId,
+      })
+      const messageId = await seedAssistantAnswer(conversation.id, principalId)
+      const job = { jobId: 'partial-group', payload: { messageId } } as never
+      sendConversationMessageEmail.mockImplementation(async (input) => {
+        if (input.to === conversation.visitorEmail) return { sent: true }
+        if (input.to === participantEmail) return { sent: false, reason: 'provider refused' }
+        throw new Error(`Unexpected recipient: ${input.to}`)
+      })
+      await deliverAssistantEmail(job)
+      expect(await deliveryRecordOf(messageId)).toMatchObject({
+        status: 'failed',
+        error: expect.stringMatching(/unconfirmed/i),
+      })
+      await deliverAssistantEmail(job)
+      expect(sendConversationMessageEmail.mock.calls.map(([input]) => input.to)).toEqual([
+        conversation.visitorEmail,
+        participantEmail,
+      ])
+    })
+
     it('claims dispatch once when two jobs attempt the same message', async () => {
       const { conversation, principalId } = await seedEmailConversation()
       const messageId = await seedAssistantAnswer(conversation.id, principalId)
@@ -371,19 +405,17 @@ describe.skipIf(!fixture.available)('autonomous Quinn replies on email', () => {
           },
         })
         .where(eq(conversationMessages.id, run.triggerMessageId!))
-      await testDb
-        .insert(conversationMessages)
-        .values({
-          conversationId: conversation.id,
-          principalId,
-          senderType: 'visitor',
-          content: 'New verified reply',
-          metadata: {
-            source: 'email',
-            emailMessageId: 'verified@customer.example',
-            emailSenderAuth: 'pass',
-          },
-        })
+      await testDb.insert(conversationMessages).values({
+        conversationId: conversation.id,
+        principalId,
+        senderType: 'visitor',
+        content: 'New verified reply',
+        metadata: {
+          source: 'email',
+          emailMessageId: 'verified@customer.example',
+          emailSenderAuth: 'pass',
+        },
+      })
       await deliverAssistantEmail({ jobId: 'trigger-gate', payload: { messageId } } as never)
       expect(sendConversationMessageEmail).toHaveBeenCalledTimes(0)
       expect(await deliveryRecordOf(messageId)).toMatchObject({
