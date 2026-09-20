@@ -381,6 +381,67 @@ describe.skipIf(!enabled)('durable conversation inactivity on migrated PostgreSQ
     await sweepInactivity()
     expect((await jobs()).length).toBe(2)
   })
+  it.each(['inability', 'no_answer_stamp'] as const)(
+    'abandons an incorrectly answered period after %s and reports no resolution',
+    async (reason) => {
+      const c = await conversation('messenger', 'assistant_answered', 20 * minute)
+      const at = new Date('2025-02-01T00:00:00.000Z')
+      const [involvement] = await db
+        .insert(assistantInvolvements)
+        .values({
+          conversationId: c.id,
+          triggeredBy: 'first_touch',
+          createdAt: at,
+          lastAssistantAnswerAt: reason === 'inability' ? c.inactivityAnchorAt : null,
+        })
+        .returning()
+      await db.insert(assistantRuns).values({
+        conversationId: c.id,
+        involvementId: involvement.id,
+        surface: 'widget',
+        triggerKind: 'customer_message',
+        triggerKey: `inability:${c.id}`,
+        status: 'succeeded',
+        outcome: 'inability',
+        createdAt: at,
+        finishedAt: c.inactivityAnchorAt,
+      })
+      const result = await sweepInactivity()
+      expect((await row(c.id)).status).toBe('closed')
+      expect((await row(c.id)).endReason).toBe('no_response')
+      expect(
+        (
+          await db
+            .select()
+            .from(assistantInvolvements)
+            .where(eq(assistantInvolvements.id, involvement.id))
+        )[0].status
+      ).toBe('abandoned')
+      expect(result).toMatchObject({ resolved: 0, abandoned: 1 })
+      const { getQuinnOperations } = await import('@/lib/server/domains/analytics/quinn-operations')
+      const { getQuinnPerformance } =
+        await import('@/lib/server/domains/analytics/quinn-performance')
+      const to = new Date(at.getTime() + 1000)
+      expect((await getQuinnOperations(at, to)).runs).toMatchObject({ answered: 0, unanswered: 1 })
+      expect(await getQuinnPerformance(at, to)).toMatchObject({
+        resolvedConfirmed: 0,
+        resolvedAssumed: 0,
+        resolutionRate: null,
+      })
+    }
+  )
+
+  it('never follows up an inability as though it answered, and honors unanswered closure off', async () => {
+    const c = await conversation('messenger', 'assistant_answered', 20 * minute)
+    await db
+      .insert(assistantInvolvements)
+      .values({ conversationId: c.id, triggeredBy: 'first_touch' })
+    await configure({ assistant: { ...defaults.assistant, closeWhenUnanswered: false } })
+    expect(await nextInactivityDeadline()).toBeNull()
+    expect(await sweepInactivity()).toMatchObject({ followedUp: 0, closed: 0 })
+    expect((await row(c.id)).status).toBe('open')
+  })
+
   it('closes Quinn and records assumed resolution in the same commit, retaining its owner', async () => {
     const c = await conversation('messenger', 'assistant_answered', 16 * minute)
     const [a] = await db
@@ -536,6 +597,13 @@ describe.skipIf(!enabled)('durable conversation inactivity on migrated PostgreSQ
   it('uses independent email clocks and silent team email closure', async () => {
     const c = await conversation('email', 'team', 25 * hour)
     const ai = await conversation('email', 'assistant_answered', 25 * hour)
+    await db
+      .insert(assistantInvolvements)
+      .values({
+        conversationId: ai.id,
+        triggeredBy: 'first_touch',
+        lastAssistantAnswerAt: ai.inactivityAnchorAt,
+      })
     await sweepInactivity()
     expect((await row(c.id)).inactivityCheckInAt).toBeNull()
     expect((await row(ai.id)).inactivityCheckInAt).not.toBeNull()

@@ -14,6 +14,7 @@ const at = (offsetMs: number) => new Date(base.getTime() + offsetMs)
 function run(overrides: Partial<QuinnRunRow> = {}): QuinnRunRow {
   return {
     status: 'succeeded',
+    outcome: 'answer',
     disposition: null,
     createdAt: base,
     startedAt: at(1_000),
@@ -88,6 +89,7 @@ describe('summarizeQuinnRuns', () => {
     const summary = summarizeQuinnRuns([
       {
         status: 'succeeded',
+        outcome: 'answer',
         disposition: null,
         createdAt: '2026-03-01T00:00:00.000Z',
         startedAt: '2026-03-01T00:00:02.000Z',
@@ -103,4 +105,13 @@ describe('summarizeQuinnRuns', () => {
     expect(summary.failureRate).toBe(25)
     expect(summary.supersessionRate).toBe(0)
   })
+})
+
+it('separates substantive answers from inability, clarification, greeting and handoff', () => {
+  const summary = summarizeQuinnRuns(
+    ['answer', 'inability', 'clarification', 'greeting', 'handoff'].map((outcome) =>
+      run({ outcome })
+    )
+  )
+  expect(summary).toMatchObject({ published: 5, answered: 1, unanswered: 2 })
 })

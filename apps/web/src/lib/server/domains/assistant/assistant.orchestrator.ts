@@ -1,5 +1,5 @@
 /**
- * Quinn turn orchestration — the assistant side of the conversation<->assistant
+ * Quinn turn orchestration , the assistant side of the conversation<->assistant
  * cycle. `runAssistantTurnForConversation` runs one out-of-band turn for a widget
  * conversation (persisting Quinn's reply and maintaining the involvement record);
  * `attributeCsatIfLastHandler` mirrors a submitted CSAT rating onto the
@@ -60,7 +60,7 @@ import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 const log = logger.child({ component: 'assistant-orchestrator' })
 
 // The assistant's service principal is immutable once provisioned, so its id is
-// memoized to skip the find-or-create round trip on every turn — but per workspace.
+// memoized to skip the find-or-create round trip on every turn , but per workspace.
 // This id is written as the author foreign key on every message the assistant
 // sends, so one workspace's id memoized process-wide is another workspace's rows
 // pointing at a principal that does not exist in its database.
@@ -83,7 +83,7 @@ export function __resetAssistantPrincipalMemo(): void {
 /**
  * Phase 2 live re-check (AI-ATTRIBUTES-PARITY-SPEC.md §3): on an inbound
  * customer message, while Quinn is participating, re-classify JUST the
- * attribute keys some LIVE workflow condition actually references — so a
+ * attribute keys some LIVE workflow condition actually references , so a
  * mid-conversation intent change is fresh by the time a handoff-triggered
  * workflow branches on it. Mirrors both competitors' cost gate: no live
  * workflow references an AI attribute at all, and this never even reaches
@@ -110,11 +110,11 @@ async function triggerLiveAttributeRecheck(conversationId: ConversationId): Prom
  * mutes it when a human has replied since Quinn's last message. Persists Quinn's
  * reply as an ordinary assistant-authored message, maintains the involvement
  * record, and executes any escalation the engine decided on. Best-effort
- * throughout — the caller invokes it fire-and-forget.
+ * throughout , the caller invokes it fire-and-forget.
  *
  * `opts.stepInstructions` (Phase C conversational block layer, slice C-6):
  * threaded straight onto the turn's input, folded into just this one turn's
- * system prompt (see assistant.runtime.ts's buildStepInstructionsPrompt) —
+ * system prompt (see assistant.runtime.ts's buildStepInstructionsPrompt) ,
  * never persisted config. Only action.executor.ts's `let_assistant_answer`
  * case ever passes this; every other caller (the ordinary customer-message
  * turn in conversation.service.ts) omits it.
@@ -213,7 +213,7 @@ export async function prepareAssistantTurn(
   }
 
   // Messenger config is read uncached, but only past the sync AI-configured gate
-  // above — so it costs a settings round trip solely when AI is set up.
+  // above , so it costs a settings round trip solely when AI is set up.
   const { getMessengerConfig } = await import('@/lib/server/domains/settings/settings.widget')
   const messenger = await getMessengerConfig()
   if (messenger.assistant?.respond !== true) return null
@@ -251,7 +251,7 @@ export async function prepareAssistantTurn(
   const active = latest?.status === 'active' ? latest : null
 
   // Handoff silence: once Quinn hands a conversation to the team, the team
-  // owns it — including the window before a teammate's first reply, which the
+  // owns it , including the window before a teammate's first reply, which the
   // message-based silence rule above cannot see. Quinn never re-enters on its
   // own; a workflow step is the explicit re-engagement path and bypasses this.
   if ((opts?.surface ?? 'widget') === 'widget' && latest?.status === 'handed_off') return null
@@ -259,10 +259,10 @@ export async function prepareAssistantTurn(
   // The customer message this turn answers, for the write-tool idempotency
   // key: a retried turn over the same message must key the same way. In-memory
   // over the thread rows already loaded above; the filter semantics (latest
-  // 'visitor' row among non-internal, non-deleted messages — the SQL half is
+  // 'visitor' row among non-internal, non-deleted messages , the SQL half is
   // loadConversationThread's) are deliberately identical to the targeted
   // `loadAssistantItemState` read (assistant.thread.ts) the suggest route
-  // uses where no thread is in hand — change one and you must change the other.
+  // uses where no thread is in hand , change one and you must change the other.
   const latestCustomerMessageId =
     threadRows.filter((m) => m.senderType === 'visitor').at(-1)?.id ?? null
 
@@ -281,7 +281,7 @@ export async function prepareAssistantTurn(
  * sources or fail validation; only the persisted terminal reply is public.
  * Mirrored into the KV cache on every publish (and cleared when the turn ends)
  * so a subscriber that connects mid-turn can replay the current state instead
- * of missing it — see assistant-activity-snapshot.ts.
+ * of missing it , see assistant-activity-snapshot.ts.
  */
 export function publishAssistantActivity(
   conversationId: ConversationId,
@@ -349,12 +349,12 @@ export async function runAssistantTurnForConversation(
   const { assistantPrincipalId } = prepared
   const active = prepared.activeInvolvement
 
-  // The finally is the single place the snapshot is cleared: every exit —
-  // suppressed, hand-off, answered, or the failure floor below — must leave
+  // The finally is the single place the snapshot is cleared: every exit ,
+  // suppressed, hand-off, answered, or the failure floor below , must leave
   // no stale trace for a later subscriber to replay.
   try {
     const result = await generateAssistantCandidate(conversationId, prepared, opts)
-    // Suppressed by the engine's own silence check — nothing to persist. An
+    // Suppressed by the engine's own silence check , nothing to persist. An
     // honest cannot-answer outcome is still a customer-visible terminal reply
     // and must be persisted; it simply must not advance resolution state.
     if (result.status === 'suppressed') return
@@ -388,7 +388,7 @@ export async function runAssistantTurnForConversation(
     // stored shape (ConversationMessageCitation): the persisted shape is
     // structural, so a new ephemeral field on the in-flight AssistantCitation
     // (today `internal`, the copilot leak gate, and `updatedAt`, the copilot
-    // freshness line) can never leak into storage — it simply isn't projected,
+    // freshness line) can never leak into storage , it simply isn't projected,
     // no per-field strip to forget.
     const persistedCitations = result.citations.map((c): ConversationMessageCitation => ({
       type: c.type,
@@ -403,7 +403,9 @@ export async function runAssistantTurnForConversation(
         assistantResponseKind:
           result.escalation?.mode === 'handoff'
             ? 'handoff'
-            : (result.responseKind ?? 'clarification'),
+            : result.status === 'cannot_answer'
+              ? 'inability'
+              : (result.responseKind ?? 'clarification'),
       },
     })
 
@@ -493,7 +495,7 @@ export class InternalSourcedReplyError extends Error {
 /**
  * Failure floor: a hard turn failure must not strand the customer with a
  * vanished typing indicator and no reply. There is no model-authored text to
- * persist — and the server never authors words as Quinn — so the honest
+ * persist , and the server never authors words as Quinn , so the honest
  * terminal outcome is a human handoff: executeAssistantHandoff opens and
  * routes the conversation, and its system message ("Connecting you to the
  * team") is what the customer sees. Deliberately NOT surface-scoped: a
@@ -511,7 +513,7 @@ export async function runAssistantFailureFloor(
   const rowsNow = await loadConversationThread(conversationId)
   const messagesNow = mapRowsToThreadMessages(rowsNow, assistantPrincipalId)
   if (!respondEligible(messagesNow)) return
-  // One latest-row read answers both involvement questions — same invariant
+  // One latest-row read answers both involvement questions , same invariant
   // as the pre-turn gate.
   const latest = await getLatestInvolvement(conversationId)
   if (latest?.status === 'handed_off') return

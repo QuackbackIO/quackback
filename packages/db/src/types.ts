@@ -1007,7 +1007,7 @@ export interface ChannelDelivery {
 export interface ConversationMessageMetadata {
   /** Stable lifecycle action identity. Automated messages never restart inactivity. */
   inactivity?: { key: string; anchor: string; owner: string; action: 'follow_up' | 'close' }
-  assistantResponseKind?: 'answer' | 'clarification' | 'greeting' | 'handoff'
+  assistantResponseKind?: 'answer' | 'clarification' | 'greeting' | 'handoff' | 'inability'
 
   /** The channel this message arrived through, when not the in-app messenger. */
   source?: 'email' | 'github'

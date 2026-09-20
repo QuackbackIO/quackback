@@ -15,7 +15,7 @@ Rollback: reverting this slice reopens customer access to internal records and w
 
 ## Remaining work
 
-Continue with 2.5 truthful resolution, then the supplied Phase 2 findings and final gates. The original request was truncated at the approved-action continuation item; a clarification is pending. This file is an incremental handoff, not a completion claim.
+Continue with the supplied Phase 2 findings and final gates. The original request was truncated at the approved-action continuation item; a clarification is pending. This file is an incremental handoff, not a completion claim.
 
 ## Fleet replay and live-table indexes (2.2, 2.3)
 
@@ -32,3 +32,13 @@ No new migration was required. Reverting the index slice restores blocking build
 `test:db:quinn` runs five committed-row suites across four dedicated databases and checks each file's JSON assertion results. CI prepares these databases in a separate service and makes the required test status depend on this job. The fixture now fails a reachable stale schema with the PostgreSQL error and migration command. Nine runner/fixture tests pass; all five dedicated suites passed without skips using `--prepare`. Database names and commands are documented in the test report.
 
 Rollback: removing the runner or CI dependency loses required durability evidence; it changes no application behavior.
+
+## Truthful inactivity outcomes (2.5)
+
+Durable publication and the legacy writer stamp inability as inability, so the trigger starts an unanswered period. Only an actual answer records the involvement answer timestamp. The sweep derives effective ownership from the current involvement and latest completed run within the period, using the same rule in scheduling and under the conversation lock. An old answered stamp without a real answer, or followed by inability, closes as abandoned with no resolution event. Disabling unanswered closure leaves it open without a follow-up timer.
+
+Improve now separates substantive answered turns from Unanswered (inability and clarification), and returns no resolution-rate headline until there is at least one confirmed resolution. Historical terminal rows are not rewritten.
+
+Evidence: three lifecycle regressions, the durable inability-publication case, and two metrics cases were red first. After correction, 32 lifecycle cases and 23 durable run cases pass, plus 32 analytics/card checks. The lifecycle regression queries the operations and performance reports over the very same real database rows it closed. Logs: `/tmp/quinn-inactivity-red.log`, `/tmp/quinn-inactivity-green.log`, `/tmp/quinn-inability-red.log`, `/tmp/quinn-inability-green.log`, `/tmp/quinn-metrics-red.log`, `/tmp/quinn-resolution-regressions.log`.
+
+The email delivery review remains in Phase 2, including delaying the answer clock until a mailbox send is confirmed. No schema migration or historical outcome rewrite is needed for this slice.

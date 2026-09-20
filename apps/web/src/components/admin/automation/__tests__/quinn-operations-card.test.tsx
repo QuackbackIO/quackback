@@ -17,6 +17,8 @@ const EMPTY = {
   runs: {
     runs: 0,
     published: 0,
+    answered: 0,
+    unanswered: 0,
     failed: 0,
     superseded: 0,
     suppressed: 0,
@@ -59,6 +61,8 @@ const REAL = {
     ...EMPTY.runs,
     runs: 8,
     published: 6,
+    answered: 4,
+    unanswered: 2,
     failed: 2,
     failureRate: 25,
     unsupported: 1,
@@ -109,6 +113,8 @@ describe('QuinnOperationsCard', () => {
     expect(await screen.findByText('25%')).toBeInTheDocument()
     expect(screen.getByText('1.4s')).toBeInTheDocument()
     expect(screen.getByText('9.0s')).toBeInTheDocument()
+    expect(screen.getByText('4 answered')).toBeInTheDocument()
+    expect(screen.getByText('Unanswered').parentElement).toHaveTextContent('2')
     // An unconfirmed effect is a count, never a rate dressed up as success.
     expect(screen.getByText('Unconfirmed')).toBeInTheDocument()
     expect(screen.getByText('1 awaiting a verdict')).toBeInTheDocument()

@@ -38,6 +38,7 @@ import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 /** One run, reduced to what the operational summary reads. */
 export interface QuinnRunRow {
   status: string
+  outcome: string | null
   disposition: string | null
   createdAt: Date | string
   startedAt: Date | string | null
@@ -49,6 +50,10 @@ export interface QuinnRunSummary {
   runs: number
   /** Runs that published an outcome. */
   published: number
+  /** Substantive supported answers, excluding greetings and handoffs. */
+  answered: number
+  /** Inability and clarification turns that did not answer the question. */
+  unanswered: number
   /** Runs that ended in a failure, including the recovery sweep's. */
   failed: number
   /** Runs a newer input or a withdrawn authority replaced. */
@@ -94,6 +99,8 @@ function percentile(values: number[], fraction: number): number | null {
 /** Pure: the rate maths and the vocabulary, with no database anywhere near it. */
 export function summarizeQuinnRuns(rows: readonly QuinnRunRow[]): QuinnRunSummary {
   let published = 0
+  let answered = 0
+  let unanswered = 0
   let failed = 0
   let superseded = 0
   let suppressed = 0
@@ -107,6 +114,8 @@ export function summarizeQuinnRuns(rows: readonly QuinnRunRow[]): QuinnRunSummar
     switch (row.status) {
       case 'succeeded':
         published += 1
+        if (row.outcome === 'answer') answered += 1
+        if (row.outcome === 'inability' || row.outcome === 'clarification') unanswered += 1
         break
       case 'failed':
         failed += 1
@@ -144,6 +153,8 @@ export function summarizeQuinnRuns(rows: readonly QuinnRunRow[]): QuinnRunSummar
   return {
     runs,
     published,
+    answered,
+    unanswered,
     failed,
     superseded,
     suppressed,
@@ -298,6 +309,7 @@ export async function getQuinnOperations(from: Date, to: Date): Promise<QuinnOpe
     db
       .select({
         status: assistantRuns.status,
+        outcome: assistantRuns.outcome,
         disposition: assistantRuns.disposition,
         createdAt: assistantRuns.createdAt,
         startedAt: assistantRuns.startedAt,

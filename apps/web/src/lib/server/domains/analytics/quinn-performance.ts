@@ -1,8 +1,8 @@
 /**
- * Quinn performance summary — the "Analyze" headline for the AI assistant:
+ * Quinn performance summary , the "Analyze" headline for the AI assistant:
  * involvement, resolution, and escalation
  * rates, the confirmed-vs-assumed resolution split, and actions taken via
- * tool calls, over a date range. Involvement volume is low (like CSAT — see
+ * tool calls, over a date range. Involvement volume is low (like CSAT , see
  * csat-summary.ts), so the caller selects the raw involvement rows for the
  * range with a plain query and hands them here; the rate math and the daily
  * trend are unit-tested directly, no materialized rollup needed.
@@ -34,7 +34,7 @@ export interface QuinnInvolvementRow {
 export interface QuinnPerformanceSummary {
   /** Involvements opened in the range. */
   involvements: number
-  /** Conversations created in the range — the involvement-rate denominator. */
+  /** Conversations created in the range , the involvement-rate denominator. */
   conversations: number
   /** involvements / conversations, 0-100; 0 when there were no conversations. */
   involvementRate: number
@@ -42,11 +42,11 @@ export interface QuinnPerformanceSummary {
   resolvedConfirmed: number
   /** Resolved via inactivity after a real answer (no explicit affirmation). */
   resolvedAssumed: number
-  /** (resolvedConfirmed + resolvedAssumed) / involvements, 0-100. */
-  resolutionRate: number
+  /** (confirmed + assumed) / involvements; absent until a customer confirms a resolution. */
+  resolutionRate: number | null
   /** Handed off to a human by Quinn's own judgment (excludes system errors). */
   handedOff: number
-  /** Handed off by the failure floor after a hard turn failure — an infra
+  /** Handed off by the failure floor after a hard turn failure , an infra
    *  reliability signal, kept out of the quality-facing escalation rate. */
   systemErrors: number
   /** handedOff / involvements, 0-100. */
@@ -71,7 +71,7 @@ const isHandedOff = (status: AssistantInvolvementStatus): boolean =>
   (AI_INBOX_BUCKETS.escalated as readonly AssistantInvolvementStatus[]).includes(status)
 
 // Quinn's rate tiles always render a number rather than a placeholder, so this
-// coalesces the shared helper's null (nothing to divide by) down to 0 — unlike
+// coalesces the shared helper's null (nothing to divide by) down to 0 , unlike
 // guidance-stats.ts and quinn-tools.ts, which surface that "no data yet" case
 // to the UI as null.
 const pct = (n: number, d: number): number => ratePctOrNull(n, d) ?? 0
@@ -116,7 +116,7 @@ export function summarizeQuinnPerformance(
     involvementRate: pct(involvements, conversations),
     resolvedConfirmed,
     resolvedAssumed,
-    resolutionRate: pct(resolved, involvements),
+    resolutionRate: resolvedConfirmed > 0 ? ratePctOrNull(resolved, involvements) : null,
     handedOff,
     systemErrors,
     escalationRate: pct(handedOff, involvements),
@@ -154,7 +154,7 @@ export async function getQuinnCsat(from: Date, to: Date): Promise<CsatSummary> {
 /**
  * Query + summarize Quinn's performance over [from, to). Three independent
  * scans over the range (involvements, conversation count, succeeded tool
- * calls) plus the CSAT slice — low volume, like CSAT, so no rollup table; the
+ * calls) plus the CSAT slice , low volume, like CSAT, so no rollup table; the
  * grouping and rate math happen in memory in `summarizeQuinnPerformance` above.
  */
 export async function getQuinnPerformance(from: Date, to: Date): Promise<QuinnPerformanceReport> {

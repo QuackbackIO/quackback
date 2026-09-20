@@ -406,7 +406,7 @@ export async function commitAssistantOutcome(
       citations: input.candidate.citations,
       assistantRunId: run.id,
       metadata: {
-        assistantResponseKind: input.candidate.handoff ? 'handoff' : input.candidate.responseKind,
+        assistantResponseKind: input.candidate.handoff ? 'handoff' : input.candidate.outcome,
         ...(deliversByEmail
           ? {
               channelDelivery: {
@@ -445,7 +445,7 @@ export async function commitAssistantOutcome(
       tx
     )
     if (!handed) return { kind: 'rejected', reason: 'fence:handed_off' }
-  } else if (input.candidate.responseKind === 'answer' && involvement) {
+  } else if (input.candidate.outcome === 'answer' && involvement) {
     await recordAssistantAnswer(
       involvement.id,
       {

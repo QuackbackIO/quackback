@@ -627,6 +627,33 @@ describe.skipIf(!available)('durable Quinn turns on real PostgreSQL', () => {
     expect(step.validator).toMatchObject({ layer: 'deterministic', code: 'revoked_evidence' })
   })
 
+  it('publishes an inability without starting an assumed-resolution period or recording a real answer', async () => {
+    const conversationId = await newConversation()
+    await customerMessage(conversationId)
+    const { runId } = await intake(conversationId)
+    const job = await claimTurn(runId)
+    const run = await loadRun(db, runId as never)
+    const result = await db.transaction((tx) =>
+      commitAssistantOutcome(tx, {
+        runId: runId as never,
+        conversationId,
+        jobLeaseToken: job.leaseToken,
+        expectedInputRevision: run!.inputRevision,
+        expectedStateVersion: run!.stateVersion,
+        author: { principalId: quinnId, displayName: 'Quinn', avatarUrl: null },
+        candidate: { ...candidate, outcome: 'inability' },
+      })
+    )
+    expect(result.kind).toBe('published')
+    const [row] = await db.select().from(conversations).where(eq(conversations.id, conversationId))
+    expect(row.inactivityOwner).toBe('assistant_waiting')
+    const [involvement] = await db
+      .select()
+      .from(assistantInvolvements)
+      .where(eq(assistantInvolvements.conversationId, conversationId))
+    expect(involvement?.lastAssistantAnswerAt ?? null).toBeNull()
+  })
+
   it('stamps the answer clock and the assistant inactivity owner in the same commit', async () => {
     const conversationId = await newConversation()
     await customerMessage(conversationId)

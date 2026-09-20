@@ -9,7 +9,7 @@ describe('summarizeQuinnPerformance', () => {
       involvementRate: 0,
       resolvedConfirmed: 0,
       resolvedAssumed: 0,
-      resolutionRate: 0,
+      resolutionRate: null,
       handedOff: 0,
       systemErrors: 0,
       escalationRate: 0,
@@ -143,4 +143,14 @@ describe('summarizeQuinnPerformance', () => {
     )
     expect(s.dailyTrend).toEqual([{ date: '2026-06-03', involvements: 1, resolved: 0 }])
   })
+})
+
+it('does not headline an assumed-only resolution percentage', () => {
+  const summary = summarizeQuinnPerformance(
+    [{ status: 'resolved_assumed', handoffReason: null, createdAt: new Date() }],
+    1,
+    0
+  )
+  expect(summary.resolutionRate).toBeNull()
+  expect(summary.resolvedAssumed).toBe(1)
 })

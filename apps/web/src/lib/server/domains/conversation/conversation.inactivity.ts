@@ -32,7 +32,13 @@ import { assistantResolved } from '@/lib/server/events/catalogue/assistant'
 
 const log = logger.child({ component: 'conversation-inactivity' })
 type Owner = 'team' | 'assistant_answered' | 'assistant_waiting' | 'handoff'
-type Candidate = { id: ConversationId; anchor: Date | string; owner: Owner; due_at: Date | string }
+type Candidate = {
+  id: ConversationId
+  anchor: Date | string
+  owner: Owner
+  raw_owner: Owner
+  due_at: Date | string
+}
 type Cursor = { deadline: string; id: string }
 export type InactivityState = {
   channel: string
@@ -94,6 +100,16 @@ export function inactivityAction(
  */
 const quinnOwesResult = sql`SELECT 1 FROM assistant_runs ar WHERE ar.conversation_id = c.id AND ar.status = 'waiting_action'`
 
+// Reclassify old incorrectly stamped periods at read time. No history is
+// rewritten, and both the scheduler and the locked executor use this rule.
+const effectiveInactivityOwner = sql`CASE WHEN c.inactivity_owner = 'assistant_answered' AND (
+  NOT EXISTS (SELECT 1 FROM assistant_involvements ai WHERE ai.conversation_id = c.id
+    AND ai.status = 'active' AND ai.last_assistant_answer_at IS NOT NULL
+    AND ai.last_assistant_answer_at >= c.inactivity_anchor_at)
+  OR COALESCE((SELECT ar.outcome FROM assistant_runs ar WHERE ar.conversation_id = c.id
+    AND ar.status = 'succeeded' AND COALESCE(ar.finished_at, ar.created_at) >= c.inactivity_anchor_at ORDER BY ar.created_at DESC, ar.id DESC LIMIT 1), 'answer') <> 'answer'
+) THEN 'assistant_waiting' ELSE c.inactivity_owner END`
+
 /** Same predicates for min(deadline), bounded scans and worker revalidation. */
 function dueQuery(
   settings: ConversationInactivitySettings,
@@ -113,11 +129,11 @@ function dueQuery(
           (kind === 'assistant_answered' ? p.closeWhenAnswered : p.closeWhenUnanswered))
       const follow = action !== 'close' && p.followUpEnabled && kind !== 'assistant_waiting'
       if (!close && !follow) continue
-      arms.push(sql`SELECT c.id, c.inactivity_anchor_at AS anchor, c.inactivity_owner AS owner,
+      arms.push(sql`SELECT c.id, c.inactivity_anchor_at AS anchor, period.owner, c.inactivity_owner AS raw_owner,
       LEAST(${close ? sql`c.inactivity_anchor_at + ${p.closeMs} * interval '1 millisecond'` : sql`NULL::timestamptz`},
         ${follow ? sql`CASE WHEN c.inactivity_check_in_at IS NULL THEN GREATEST(c.inactivity_anchor_at + ${p.followUpMs} * interval '1 millisecond', c.inactivity_retry_at) END` : sql`NULL::timestamptz`}) AS due_at
-      FROM conversations c WHERE c.status = 'open' AND c.snoozed_until IS NULL
-        AND c.channel = ${channel} AND c.inactivity_owner = ${kind} AND c.inactivity_anchor_at IS NOT NULL
+      FROM conversations c CROSS JOIN LATERAL (SELECT ${effectiveInactivityOwner} AS owner) period WHERE c.status = 'open' AND c.snoozed_until IS NULL
+        AND c.channel = ${channel} AND period.owner = ${kind} AND c.inactivity_anchor_at IS NOT NULL
         AND NOT EXISTS (SELECT 1 FROM workflow_runs r WHERE r.conversation_id = c.id AND r.customer_facing AND r.state IN ('running','waiting') AND (r.state = 'running' OR r.cursor->>'waitKind' = 'input'))
         AND NOT EXISTS (${quinnOwesResult})`)
     }
@@ -208,7 +224,7 @@ async function executeInactivity(
       .for('update', { skipLocked: true })
     if (
       !conversation ||
-      conversation.inactivityOwner !== candidate.owner ||
+      conversation.inactivityOwner !== candidate.raw_owner ||
       conversation.inactivityAnchorAt?.getTime() !== new Date(candidate.anchor).getTime()
     )
       return null
@@ -226,7 +242,17 @@ async function executeInactivity(
       )
     )
     if (owedResult.length) return null
-    const action = inactivityAction(conversation, settings, now)
+    const [period] = getExecuteRows<{ owner: Owner }>(
+      await tx.execute(
+        sql`SELECT ${effectiveInactivityOwner} AS owner FROM conversations c WHERE c.id = ${candidate.id}`
+      )
+    )
+    if (period?.owner !== candidate.owner) return null
+    const action = inactivityAction(
+      { ...conversation, inactivityOwner: period.owner },
+      settings,
+      now
+    )
     if (!action || (requestedAction && requestedAction !== action)) return null
     if (
       action === 'follow_up' &&
@@ -325,6 +351,7 @@ async function executeInactivity(
         .update(conversations)
         .set({
           status: 'closed',
+          inactivityOwner: candidate.owner,
           resolvedAt: now,
           waitingSince: null,
           snoozedUntil: null,

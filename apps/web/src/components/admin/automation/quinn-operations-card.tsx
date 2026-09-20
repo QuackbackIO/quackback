@@ -16,13 +16,13 @@ import { quinnOperationsQuery } from '@/lib/client/queries/assistant-operations-
 import { MetricTile, pct, asRate, useLast30DaysRange } from './metric-tile'
 
 function ms(value: number | null | undefined): string {
-  if (value === null || value === undefined) return '—'
+  if (value === null || value === undefined) return '-'
   if (value < 1_000) return `${value}ms`
   return `${(value / 1_000).toFixed(1)}s`
 }
 
 function count(value: number | null | undefined): string {
-  return value === null || value === undefined ? '—' : String(value)
+  return value === null || value === undefined ? '-' : String(value)
 }
 
 export function QuinnOperationsCard() {
@@ -47,18 +47,14 @@ export function QuinnOperationsCard() {
             <MetricTile
               label="Turns"
               value={count(runs?.runs)}
-              sub={runs ? `${runs.published} answered` : undefined}
+              sub={runs ? `${runs.answered} answered` : undefined}
             />
             <MetricTile
               label="Failed"
               value={pct(asRate(runs?.failureRate))}
               sub={runs ? `${runs.failed} runs` : undefined}
             />
-            <MetricTile
-              label="Replaced"
-              value={pct(asRate(runs?.supersessionRate))}
-              sub={runs ? `${runs.superseded} superseded` : undefined}
-            />
+            <MetricTile label="Unanswered" value={count(runs?.unanswered)} />
             <MetricTile
               label="Unsupported"
               value={pct(asRate(runs?.unsupportedRate))}
