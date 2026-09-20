@@ -7,6 +7,7 @@ const state = vi.hoisted(() => ({
   retry: vi.fn(),
   refresh: vi.fn(),
   refreshOther: vi.fn(),
+  writeHealth: vi.fn(),
 }))
 vi.mock('@/lib/server/db', async (original) => ({
   ...(await original<typeof import('@/lib/server/db')>()),
@@ -17,7 +18,12 @@ vi.mock('@/lib/server/db', async (original) => ({
       principal: { findFirst: async () => ({ displayName: 'Reviewer' }) },
     },
     select: () => ({ from: () => ({ innerJoin: () => ({ where: async () => state.links }) }) }),
-    update: () => ({ set: () => ({ where: async () => undefined }) }),
+    update: () => ({
+      set: (patch: unknown) => {
+        state.writeHealth(patch)
+        return { where: async () => undefined }
+      },
+    }),
   },
 }))
 vi.mock('../index', () => ({
@@ -93,15 +99,38 @@ describe('integration post sync', () => {
   it('propagates queue failures while allowing independent destinations to finish', async () => {
     state.resolve.mockResolvedValue([target('linear'), target('github')])
     state.retry.mockRejectedValueOnce(new Error('queue unavailable')).mockResolvedValueOnce(true)
-    await expect(syncPostIntegrations(id)).rejects.toThrow('queue unavailable')
+    await expect(syncPostIntegrations(id)).rejects.toThrow(
+      'Some integrations could not be synced. Please try again.'
+    )
     expect(state.retry).toHaveBeenCalledTimes(2)
   })
   it('continues refreshing other links when one provider fails and reports failure', async () => {
     state.links = [link('linear', 'one'), link('other', 'two')]
     state.refresh.mockRejectedValueOnce(new Error('provider unavailable'))
-    await expect(syncPostIntegrations(id)).rejects.toThrow('provider unavailable')
+    await expect(syncPostIntegrations(id)).rejects.toThrow(
+      'Some integrations could not be synced. Please try again.'
+    )
     expect(state.refreshOther).toHaveBeenCalledOnce()
   })
+  it.each(['queue', 'refresh'])(
+    'does not expose credentials from %s failures in the response or health record',
+    async (source) => {
+      const secret = 'test-oauth-secret-must-not-escape'
+      const error = new Error(`Failed query: INSERT ... params: {"accessToken":"${secret}"}`)
+      if (source === 'queue') state.retry.mockRejectedValueOnce(error)
+      else {
+        state.links = [link('linear', 'one')]
+        state.refresh.mockRejectedValueOnce(error)
+      }
+      const failure = await syncPostIntegrations(id).catch((e: unknown) => e)
+      expect(failure).toBeInstanceOf(Error)
+      expect((failure as Error).message).toBe(
+        'Some integrations could not be synced. Please try again.'
+      )
+      expect((failure as Error).cause).toBeUndefined()
+      expect(JSON.stringify(state.writeHealth.mock.calls)).not.toContain(secret)
+    }
+  )
   it('reports a no-op without claiming work was queued', async () => {
     state.retry.mockResolvedValue(false)
     expect(await syncPostIntegrations(id)).toEqual({ queued: false, updated: false })

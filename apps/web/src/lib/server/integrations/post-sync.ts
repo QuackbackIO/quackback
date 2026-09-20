@@ -113,13 +113,15 @@ export async function syncPostIntegrations(
             .set({ lastOutboundAt: new Date(), lastError: null, lastErrorAt: null })
             .where(eq(integrations.id, integration.id))
           return 'updated' as const
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Integration sync failed'
+        } catch {
+          // Provider/database errors may contain tokens or serialized job payloads.
+          const message = 'Failed to refresh linked issue. Please try again.'
           await db
             .update(integrations)
-            .set({ lastError: message.slice(0, 500), lastErrorAt: new Date() })
+            .set({ lastError: message, lastErrorAt: new Date() })
             .where(eq(integrations.id, integration.id))
-          throw error
+            .catch(() => undefined)
+          throw new Error(message)
         }
       })()
     )
@@ -127,14 +129,9 @@ export async function syncPostIntegrations(
   // Finish all destinations even if one fails; a subsequent retry safely resumes just that work.
   const results = await Promise.allSettled(work)
   const errors = results.filter((result) => result.status === 'rejected')
-  if (errors.length)
-    throw new Error(
-      errors
-        .map((result) =>
-          result.reason instanceof Error ? result.reason.message : 'Integration sync failed'
-        )
-        .join('; ')
-    )
+  // Never serialize raw errors: an enqueue failure can include SQL parameters
+  // containing the destination's OAuth credentials and the entire post payload.
+  if (errors.length) throw new Error('Some integrations could not be synced. Please try again.')
   return {
     queued: results.some((result) => result.status === 'fulfilled' && result.value === 'queued'),
     updated: results.some((result) => result.status === 'fulfilled' && result.value === 'updated'),
