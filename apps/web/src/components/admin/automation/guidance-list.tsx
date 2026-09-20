@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { ZodError } from 'zod'
 import { useQuery } from '@tanstack/react-query'
 import { PlusIcon } from '@heroicons/react/24/solid'
@@ -24,13 +24,10 @@ import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { ModalFooter } from '@/components/shared/modal-footer'
+import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { SearchInput } from '@/components/shared/search-input'
 import { useUnsavedChanges } from './assistant-form'
@@ -70,9 +67,7 @@ export function GuidanceList() {
   const [error, setError] = useState('')
   const [deleting, setDeleting] = useState(false)
   const [discarding, setDiscarding] = useState(false)
-  const [pendingSelection, setPendingSelection] = useState<{
-    entry: GuidanceEntryDTO | null
-  } | null>(null)
+  const triggerRef = useRef<HTMLButtonElement | null>(null)
   const dirty = draft !== null && JSON.stringify(draft) !== initial
   useUnsavedChanges(dirty, 'guidance')
   const busy = [saveEntry, deleteEntry, updateVoice].some((mutation) => mutation.isPending)
@@ -83,15 +78,12 @@ export function GuidanceList() {
     setInitial(JSON.stringify(next))
     setError('')
   }
-  function select(entry: GuidanceEntryDTO | null) {
+  function select(entry: GuidanceEntryDTO | null, trigger: HTMLButtonElement) {
     if (busy) return
-    if (dirty) {
-      setPendingSelection({ entry })
-      setDiscarding(true)
-    } else open(entry)
+    triggerRef.current = trigger
+    open(entry)
   }
   function close() {
-    setPendingSelection(null)
     if (busy) return
     if (dirty) setDiscarding(true)
     else setDraft(null)
@@ -119,7 +111,7 @@ export function GuidanceList() {
   const readOnly = draft?.entry?.managed === true || draft?.entry?.legacySource === 'managed'
 
   async function save() {
-    if (!draft || readOnly || busy) return
+    if (!draft || readOnly || busy || !dirty || deleting || discarding) return
     setError('')
     try {
       const entry = draft.entry
@@ -177,6 +169,8 @@ export function GuidanceList() {
     }
   }
 
+  const handleKeyDown = useKeyboardSubmit(() => void save())
+
   if ((!settings.data || !entries.data) && (settings.isError || entries.isError))
     return (
       <div role="alert" className="space-y-3">
@@ -208,12 +202,12 @@ export function GuidanceList() {
     <div className="space-y-4">
       <div className="flex flex-wrap gap-3 items-center justify-between">
         <SearchInput value={query} onChange={setQuery} placeholder="Search guidance" />
-        <Button onClick={() => select(null)}>
+        <Button onClick={(event) => select(null, event.currentTarget)}>
           <PlusIcon className="size-4" />
           Add guidance
         </Button>
       </div>
-      <div className="grid items-start gap-5 lg:grid-cols-[minmax(14rem,18rem)_minmax(0,1fr)]">
+      <div className="space-y-3">
         <div className="min-w-0 space-y-3">
           <div role="group" aria-label="Guidance type" className="flex gap-2">
             {(['All', 'Always', 'Situations'] as const).map((value) => (
@@ -233,12 +227,9 @@ export function GuidanceList() {
               <p className="p-5 text-sm text-muted-foreground">No matching guidance.</p>
             )}
             {visible.map((entry) => (
-              <div
-                key={entry.id}
-                className={`flex items-center gap-3 p-4 ${draft?.entry?.id === entry.id ? 'bg-muted/50' : ''}`}
-              >
+              <div key={entry.id} className="flex items-center gap-4 p-4">
                 <div className="min-w-0 flex-1 space-y-1">
-                  <p className="text-sm font-medium">{entry.title}</p>
+                  <p className="text-sm font-medium break-words">{entry.title}</p>
                   <p className="truncate text-xs text-muted-foreground">
                     {entry.appliesWhen ?? 'Every conversation'}
                   </p>
@@ -265,155 +256,186 @@ export function GuidanceList() {
                     )}
                   </div>
                 </div>
-                <Button variant="ghost" size="sm" onClick={() => select(entry)}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(event) => select(entry, event.currentTarget)}
+                >
                   {entry.managed ? 'View' : 'Edit'}
                 </Button>
               </div>
             ))}
           </div>
         </div>
-        {draft ? (
-          <section
-            aria-label="Guidance editor"
-            className="min-w-0 rounded-xl border border-border/50 bg-card p-5 space-y-4"
+      </div>
+      <Dialog
+        open={draft !== null}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) close()
+        }}
+      >
+        {draft && (
+          <DialogContent
+            className="w-[95vw] max-w-3xl max-h-[85dvh] p-0 gap-0 overflow-hidden flex flex-col"
+            finalFocus={triggerRef}
+            onKeyDown={handleKeyDown}
+            showCloseButton={!busy}
           >
-            <h2 className="text-sm font-semibold">
-              {draft.entry ? 'Edit guidance' : 'Add guidance'}
-            </h2>
-            <fieldset disabled={busy || readOnly} className="space-y-4 min-w-0">
-              <div className="space-y-1.5">
-                <Label htmlFor="guidance-name">Name</Label>
-                <Input
-                  id="guidance-name"
-                  value={draft.title}
-                  disabled={configOwned}
-                  onChange={(event) => change({ title: event.target.value })}
-                />
-              </div>
-              <div className="space-y-1.5">
-                {draft.kind === 'procedure' ? (
-                  <>
-                    <Label htmlFor="guidance-when-to-use">When to use</Label>
-                    <Input
-                      id="guidance-when-to-use"
-                      value={draft.condition}
-                      onChange={(event) => change({ condition: event.target.value })}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Quinn loads these steps on request.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <Label htmlFor="guidance-application">Applies when</Label>
-                    <Select
-                      value={draft.kind}
-                      onValueChange={(value) => change({ kind: value as GuidanceEntryKind })}
-                      disabled={configOwned}
-                    >
-                      <SelectTrigger id="guidance-application">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="always">Every conversation</SelectItem>
-                        <SelectItem value="situational">When a situation comes up</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {draft.kind === 'situational' && (
+            <DialogHeader className="border-b px-4 sm:px-6 py-4 pe-12 shrink-0">
+              <DialogTitle>
+                {readOnly ? 'View guidance' : draft.entry ? 'Edit guidance' : 'Add guidance'}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="min-h-0 overflow-y-auto p-4 sm:p-6 space-y-5">
+              <fieldset disabled={busy || readOnly} className="space-y-4 min-w-0">
+                <div className="space-y-1.5">
+                  <Label htmlFor="guidance-name">Name</Label>
+                  <Input
+                    id="guidance-name"
+                    value={draft.title}
+                    disabled={configOwned}
+                    onChange={(event) => change({ title: event.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  {draft.kind === 'procedure' ? (
+                    <>
+                      <Label htmlFor="guidance-when-to-use">When to use</Label>
                       <Input
-                        aria-label="Situation"
+                        id="guidance-when-to-use"
                         value={draft.condition}
                         onChange={(event) => change({ condition: event.target.value })}
                       />
-                    )}
-                  </>
-                )}
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="guidance-instruction">What should Quinn do?</Label>
-                <Textarea
-                  id="guidance-instruction"
-                  rows={9}
-                  className="min-h-40"
-                  value={draft.body}
-                  onChange={(event) => change({ body: event.target.value })}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Uses</Label>
-                {configOwned ? (
-                  <p className="text-sm">
-                    {draft.uses.map((use) => GUIDANCE_USE_LABELS[use]).join(', ')}
-                  </p>
-                ) : (
-                  <div className="space-y-2">
-                    {GUIDANCE_PROFILES.map((use) => (
-                      <div key={use} className="flex items-center gap-2">
-                        <Checkbox
-                          id={`guidance-use-${use}`}
-                          checked={draft.uses.includes(use)}
-                          onCheckedChange={(checked) => toggleUse(use, checked === true)}
+                      <p className="text-xs text-muted-foreground">
+                        Quinn loads these steps on request.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <Label id="guidance-application">Applies when</Label>
+                      <RadioGroup
+                        aria-labelledby="guidance-application"
+                        value={draft.kind}
+                        onValueChange={(value) => change({ kind: value as GuidanceEntryKind })}
+                        disabled={configOwned || busy || readOnly}
+                        className="grid gap-2 sm:grid-cols-2"
+                      >
+                        {(
+                          [
+                            ['always', 'Every conversation'],
+                            ['situational', 'When a situation comes up'],
+                          ] as const
+                        ).map(([value, label]) => (
+                          <Label
+                            key={value}
+                            htmlFor={`guidance-application-${value}`}
+                            className={`flex items-center gap-3 rounded-lg border p-3 text-sm font-normal cursor-pointer ${draft.kind === value ? 'border-primary bg-primary/5' : 'border-border'}`}
+                          >
+                            <RadioGroupItem id={`guidance-application-${value}`} value={value} />
+                            {label}
+                          </Label>
+                        ))}
+                      </RadioGroup>
+                      {draft.kind === 'situational' && (
+                        <Input
+                          aria-label="Situation"
+                          value={draft.condition}
+                          onChange={(event) => change({ condition: event.target.value })}
                         />
-                        <Label htmlFor={`guidance-use-${use}`} className="font-normal">
-                          {GUIDANCE_USE_LABELS[use]}
-                        </Label>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              {!configOwned && (
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="guidance-enabled">Enabled</Label>
-                  <Switch
-                    id="guidance-enabled"
-                    checked={draft.enabled}
-                    onCheckedChange={(enabled) => change({ enabled })}
+                      )}
+                    </>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="guidance-instruction">What should Quinn do?</Label>
+                  <Textarea
+                    id="guidance-instruction"
+                    rows={9}
+                    className="field-sizing-fixed min-h-48 max-h-[40dvh] resize-y"
+                    value={draft.body}
+                    onChange={(event) => change({ body: event.target.value })}
                   />
                 </div>
+                <div className="space-y-1.5">
+                  <Label>Uses</Label>
+                  {configOwned ? (
+                    <p className="text-sm">
+                      {draft.uses.map((use) => GUIDANCE_USE_LABELS[use]).join(', ')}
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {GUIDANCE_PROFILES.map((use) => (
+                        <div key={use} className="flex items-center gap-2">
+                          <Checkbox
+                            id={`guidance-use-${use}`}
+                            checked={draft.uses.includes(use)}
+                            onCheckedChange={(checked) => toggleUse(use, checked === true)}
+                          />
+                          <Label htmlFor={`guidance-use-${use}`} className="font-normal">
+                            {GUIDANCE_USE_LABELS[use]}
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {!configOwned && (
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="guidance-enabled">Enabled</Label>
+                    <Switch
+                      id="guidance-enabled"
+                      checked={draft.enabled}
+                      onCheckedChange={(enabled) => change({ enabled })}
+                    />
+                  </div>
+                )}
+              </fieldset>
+              {readOnly && (
+                <p className="text-xs text-muted-foreground">
+                  These instructions are managed by your deployment configuration.
+                </p>
               )}
-            </fieldset>
-            {readOnly && (
-              <p className="text-xs text-muted-foreground">
-                These instructions are managed by your deployment configuration.
-              </p>
-            )}
-            {error && (
-              <p role="alert" className="text-sm text-destructive whitespace-pre-wrap">
-                {error}
-              </p>
-            )}
-            <div className="flex flex-wrap justify-end gap-2">
-              {draft.entry && draft.entry.owner === 'canonical' && (
-                <Button
-                  variant="outline"
-                  className="me-auto"
-                  disabled={busy}
-                  onClick={() => setDeleting(true)}
-                >
-                  Delete
-                </Button>
+              {error && (
+                <p role="alert" className="text-sm text-destructive whitespace-pre-wrap">
+                  {error}
+                </p>
               )}
-              <Button variant="outline" disabled={busy} onClick={close}>
-                Cancel
-              </Button>
-              {!readOnly && (
-                <Button disabled={busy || !dirty} onClick={() => void save()}>
-                  {busy ? 'Saving…' : 'Save'}
-                </Button>
+              {!readOnly && dirty && (
+                <p className="text-xs text-muted-foreground">
+                  Saved guidance takes effect immediately.
+                </p>
               )}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Saved guidance takes effect immediately. Instructions cannot grant access to knowledge
-              or actions.
-            </p>
-          </section>
-        ) : (
-          <div className="rounded-xl border border-dashed p-8 text-sm text-muted-foreground">
-            Choose guidance to edit, or add instructions for a new situation.
-          </div>
+            {readOnly ? (
+              <div className="flex justify-end border-t px-4 sm:px-6 py-3 bg-muted/30 shrink-0">
+                <Button variant="ghost" size="sm" onClick={close}>
+                  Close
+                </Button>
+              </div>
+            ) : (
+              <ModalFooter
+                onCancel={close}
+                submitLabel={busy ? 'Saving…' : 'Save'}
+                isPending={busy}
+                submitDisabled={!dirty}
+                submitType="button"
+                onSubmit={() => void save()}
+              >
+                {draft.entry?.owner === 'canonical' && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => setDeleting(true)}
+                  >
+                    Delete
+                  </Button>
+                )}
+              </ModalFooter>
+            )}
+          </DialogContent>
         )}
-      </div>
+      </Dialog>
       <ConfirmDialog
         open={deleting}
         onOpenChange={setDeleting}
@@ -433,9 +455,7 @@ export function GuidanceList() {
         variant="destructive"
         onConfirm={() => {
           setDiscarding(false)
-          if (pendingSelection) open(pendingSelection.entry)
-          else setDraft(null)
-          setPendingSelection(null)
+          setDraft(null)
         }}
       />
     </div>

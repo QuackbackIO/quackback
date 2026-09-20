@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
-import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
 import { DEFAULT_ASSISTANT_CONFIG } from '@/lib/shared/assistant/config'
@@ -26,37 +25,6 @@ vi.mock('@/lib/client/mutations/assistant', () => ({
   useDeleteGuidanceEntry: () => ({ mutateAsync: mocks.deleteEntry }),
   useUpdateAssistantVoice: () => ({ mutateAsync: mocks.saveVoice }),
 }))
-// The select relies on pointer/layout APIs happy-dom lacks; render it as a
-// native one so the applies-when picker is drivable with fireEvent.change.
-vi.mock('@/components/ui/select', () => ({
-  Select: ({
-    value,
-    onValueChange,
-    children,
-    disabled,
-  }: {
-    value: string
-    onValueChange: (v: string) => void
-    children: ReactNode
-    disabled?: boolean
-  }) => (
-    <select
-      aria-label="Applies when"
-      value={value}
-      disabled={disabled}
-      onChange={(event) => onValueChange(event.target.value)}
-    >
-      {children}
-    </select>
-  ),
-  SelectTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
-  SelectValue: () => null,
-  SelectContent: ({ children }: { children: ReactNode }) => <>{children}</>,
-  SelectItem: ({ value, children }: { value: string; children: ReactNode }) => (
-    <option value={value}>{children}</option>
-  ),
-}))
-
 import { GuidanceList } from '../guidance-list'
 
 function entry(overrides: Partial<GuidanceEntryDTO> = {}): GuidanceEntryDTO {
@@ -124,6 +92,62 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('Guidance canonical editor', () => {
+  it('opens an accessible modal and returns to the list when canceled', async () => {
+    show()
+    const add = await screen.findByRole('button', { name: 'Add guidance' })
+    fireEvent.click(add)
+    const dialog = await screen.findByRole('dialog', { name: 'Add guidance' })
+    expect(within(dialog).getByLabelText('What should Quinn do?')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
+    await waitFor(() => expect(add).toHaveFocus())
+  })
+
+  it('protects a dirty draft when Escape dismisses the editor', async () => {
+    show()
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Edit guidance' })
+    fireEvent.change(within(dialog).getByLabelText('What should Quinn do?'), {
+      target: { value: 'Keep my draft after Escape.' },
+    })
+    fireEvent.keyDown(dialog, { key: 'Escape', code: 'Escape' })
+    const confirm = await screen.findByRole('alertdialog')
+    expect(confirm).toHaveTextContent('Discard unsaved changes?')
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    expect(screen.getByRole('dialog', { name: 'Edit guidance' })).toBeInTheDocument()
+    expect(screen.getByLabelText('What should Quinn do?')).toHaveValue(
+      'Keep my draft after Escape.'
+    )
+  })
+
+  it('saves the selected application tile using the keyboard shortcut', async () => {
+    show()
+    fireEvent.click(await screen.findByRole('button', { name: 'Add guidance' }))
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Plain language' } })
+    fireEvent.click(screen.getByRole('radio', { name: 'Every conversation' }))
+    fireEvent.change(screen.getByLabelText('What should Quinn do?'), {
+      target: { value: 'Use plain language.' },
+    })
+    fireEvent.keyDown(screen.getByLabelText('What should Quinn do?'), {
+      key: 'Enter',
+      ctrlKey: true,
+    })
+    await waitFor(() =>
+      expect(mocks.saveEntry).toHaveBeenCalledWith({
+        entry: expect.objectContaining({
+          kind: 'always',
+          title: 'Plain language',
+          appliesWhen: null,
+          body: 'Use plain language.',
+        }),
+      })
+    )
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
   it('saves one entry and every role it applies to in a single write', async () => {
     show()
     fireEvent.click(await screen.findByRole('button', { name: 'Add guidance' }))
@@ -270,7 +294,7 @@ it('combines the guidance type filter with search', async () => {
   expect(screen.getByText('No matching guidance.')).toBeInTheDocument()
 })
 
-it('requires confirmation before switching away from unsaved guidance', async () => {
+it('requires confirmation before closing unsaved guidance', async () => {
   listEntries(writingGuidelines, entry())
   show()
   await screen.findByText('Refunds')
@@ -278,10 +302,12 @@ it('requires confirmation before switching away from unsaved guidance', async ()
   fireEvent.change(screen.getByLabelText('What should Quinn do?'), {
     target: { value: 'Keep my draft' },
   })
-  fireEvent.click(screen.getAllByRole('button', { name: 'Edit' })[1])
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
   expect(screen.getByRole('alertdialog')).toHaveTextContent('Discard unsaved changes?')
   expect(screen.getByLabelText('What should Quinn do?')).toHaveValue('Keep my draft')
   fireEvent.click(screen.getByRole('button', { name: 'Discard changes' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  fireEvent.click(screen.getAllByRole('button', { name: 'Edit' })[1])
   expect(screen.getByLabelText('Name')).toHaveValue('Refunds')
   expect(screen.getByLabelText('What should Quinn do?')).toHaveValue('Check policy')
 })

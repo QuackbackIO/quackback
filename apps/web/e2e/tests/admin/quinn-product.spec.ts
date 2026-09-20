@@ -36,17 +36,16 @@ async function addGuidance(page: Page) {
   await open(page, '/admin/automation/guidance', 'Guidance')
   // Retry the action only until hydrated; SSR markup can precede handlers.
   await expect(async () => {
-    if (!(await page.getByRole('region', { name: 'Guidance editor' }).isVisible()))
+    if (!(await page.getByRole('dialog', { name: /^(Add|Edit|View) guidance$/ }).isVisible()))
       await page.getByRole('button', { name: 'Add guidance', exact: true }).click()
-    await expect(page.getByRole('region', { name: 'Guidance editor' })).toBeVisible({
+    await expect(page.getByRole('dialog', { name: /^(Add|Edit|View) guidance$/ })).toBeVisible({
       timeout: 1000,
     })
   }).toPass({ timeout: 15000 })
-  return page.getByRole('region', { name: 'Guidance editor' })
+  return page.getByRole('dialog', { name: /^(Add|Edit|View) guidance$/ })
 }
-async function chooseAppliesWhen(page: Page, dialog: ReturnType<Page['getByRole']>, label: string) {
-  await dialog.getByLabel('Applies when').click()
-  await page.getByRole('option', { name: label, exact: true }).click()
+async function chooseAppliesWhen(dialog: ReturnType<Page['getByRole']>, label: string) {
+  await dialog.getByRole('radio', { name: label, exact: true }).check()
 }
 async function guidanceEntry(title: string) {
   return (
@@ -136,7 +135,7 @@ test.describe('Quinn implemented product acceptance', () => {
   test('Guidance create, edit, disable, search and delete persist', async ({ page }) => {
     const dialog = await addGuidance(page)
     await dialog.getByLabel('Name', { exact: true }).fill(tag + ' rule')
-    await chooseAppliesWhen(page, dialog, 'Every conversation')
+    await chooseAppliesWhen(dialog, 'Every conversation')
     await dialog.getByLabel('What should Quinn do?').fill('Explain the next step clearly.')
     // New entries start bound to customer conversations; move it to teammates only.
     await dialog.getByLabel('Support teammates', { exact: true }).check()
@@ -176,7 +175,7 @@ test.describe('Quinn implemented product acceptance', () => {
   }) => {
     const dialog = await addGuidance(page)
     await dialog.getByLabel('Name', { exact: true }).fill(tag + ' concurrent delete')
-    await chooseAppliesWhen(page, dialog, 'Every conversation')
+    await chooseAppliesWhen(dialog, 'Every conversation')
     await dialog.getByLabel('What should Quinn do?').fill('Original instruction.')
     await dialog.getByRole('button', { name: 'Save', exact: true }).click()
     await expect(dialog).toBeHidden()
@@ -184,7 +183,7 @@ test.describe('Quinn implemented product acceptance', () => {
     await open(other, '/admin/automation/guidance', 'Guidance')
     await searchGuidance(other, tag + ' concurrent delete')
     await other.getByRole('button', { name: 'Edit', exact: true }).click()
-    const stale = other.getByRole('region', { name: 'Guidance editor' })
+    const stale = other.getByRole('dialog', { name: /^(Add|Edit|View) guidance$/ })
     await stale.getByLabel('What should Quinn do?').fill('Keep this unsaved draft.')
     await searchGuidance(page, tag + ' concurrent delete')
     await page.getByRole('button', { name: 'Edit', exact: true }).click()
@@ -231,11 +230,58 @@ test.describe('Quinn implemented product acceptance', () => {
       await sql`SELECT id FROM assistant_guidance_entries WHERE title=${tag + ' invalid'}`
     ).toHaveLength(0)
   })
+  test('Guidance modal contains long instructions and keeps actions visible on desktop and mobile', async ({
+    page,
+  }) => {
+    for (const viewport of [
+      { width: 1440, height: 900 },
+      { width: 390, height: 844 },
+    ]) {
+      await page.setViewportSize(viewport)
+      await open(page, '/admin/automation/guidance', 'Guidance')
+      await searchGuidance(page, tag + ' legacy')
+      const edit = page.getByRole('button', { name: 'Edit', exact: true })
+      await edit.click()
+      const dialog = page.getByRole('dialog', { name: 'Edit guidance' })
+      await expect(dialog).toBeVisible()
+      const instructions = dialog.getByLabel('What should Quinn do?')
+      await expect(instructions).toHaveValue(longInstructions)
+      await expect(dialog.getByRole('button', { name: 'Save', exact: true })).toBeInViewport()
+      await expect(dialog.getByRole('button', { name: 'Cancel', exact: true })).toBeInViewport()
+      const box = await dialog.boundingBox()
+      expect(box).not.toBeNull()
+      expect(box!.x).toBeGreaterThanOrEqual(0)
+      expect(box!.y).toBeGreaterThanOrEqual(0)
+      expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width)
+      expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height)
+      expect(
+        await instructions.evaluate((element) => element.scrollHeight > element.clientHeight)
+      ).toBe(true)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true
+      )
+      await page.screenshot({
+        path: test.info().outputPath(`guidance-modal-${viewport.width}.png`),
+        animations: 'disabled',
+      })
+      await instructions.fill(longInstructions + ' Keep this draft.')
+      await page.keyboard.press('Escape')
+      const confirm = page.getByRole('alertdialog')
+      await expect(confirm).toBeVisible()
+      await confirm.getByRole('button', { name: 'Cancel', exact: true }).click()
+      await expect(instructions).toHaveValue(longInstructions + ' Keep this draft.')
+      await dialog.getByRole('button', { name: 'Close', exact: true }).click()
+      await confirm.getByRole('button', { name: 'Discard changes', exact: true }).click()
+      await expect(dialog).toBeHidden()
+      await expect(edit).toBeFocused()
+    }
+  })
+
   test('legacy guidance preserves long content and all assignments', async ({ page }) => {
     await open(page, '/admin/automation/guidance', 'Guidance')
     await searchGuidance(page, tag + ' legacy')
     await page.getByRole('button', { name: 'Edit', exact: true }).click()
-    const dialog = page.getByRole('region', { name: 'Guidance editor' })
+    const dialog = page.getByRole('dialog', { name: /^(Add|Edit|View) guidance$/ })
     await expect(dialog.getByLabel('What should Quinn do?')).toHaveValue(longInstructions)
     await expect(dialog.getByLabel('When to use')).toHaveValue('When preserving a legacy procedure')
     for (const use of ['Customer conversations', 'Support teammates', 'Workspace and Slack'])
@@ -472,7 +518,7 @@ test.describe('Quinn implemented product acceptance', () => {
       await open(target, '/admin/automation/guidance', 'Guidance')
       await searchGuidance(target, 'Everyday instructions')
       await target.getByRole('button', { name: 'Edit', exact: true }).click()
-      return target.getByRole('region', { name: 'Guidance editor' })
+      return target.getByRole('dialog', { name: /^(Add|Edit|View) guidance$/ })
     }
     const first = await editVoice(page)
     const stale = await editVoice(other)
