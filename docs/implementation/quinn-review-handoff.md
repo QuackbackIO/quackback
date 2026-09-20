@@ -13,7 +13,7 @@ Evidence: real `requireAuth` with portal-scoped sessions and an owned conversati
 
 Rollback: reverting this slice reopens customer access to internal records and write approval. No migration or flag is involved.
 
-## Remaining work
+## Scope and remaining capabilities
 
 The supplied Phase 1 and Phase 2 findings are implemented. The final gate results appear below. The original request ended mid-sentence; the saved capability report supplied that continuation finding, but any later UX requirements were not supplied. The existing mockup parity checklist remains the record of broader unimplemented product capabilities.
 
@@ -88,3 +88,21 @@ A pending email publication preserves the customer's waiting state and disarms i
 Evidence: receiver-auth tests failed for all three verdicts before ingest stamped them. Trigger/refusal, concurrent dispatch and ambiguous-send tests were red. The follow-up races and email retry/continuation cases failed against their original paths. A positive pending-email publication failed against the old answer clock, and an email repair failed with widget surface. Final focused passes: 27 email-channel cases, 27 durable run cases, 26 action cases, plus the 84-test ingest/follow-up/recovery pass. Logs: `/tmp/quinn-email-ingest-red.log`, `/tmp/quinn-email-delivery-red.log`, `/tmp/quinn-email-fence-red.log`, `/tmp/quinn-email-publication-clock-red.log`, `/tmp/quinn-email-repair-red.log`, `/tmp/quinn-email-delivery-green.log`, `/tmp/quinn-email-repair-green.log`, `/tmp/quinn-email-actions-green.log`.
 
 No migration is needed for these JSON and text vocabulary changes. Existing historical messages with no authentication verdict cannot authorize autonomous email. An uncertain send intentionally requires a teammate to investigate; no new provider reconciliation capability is claimed. Reverting the delivery change restores the duplicate-send window.
+
+A final group-thread regression exposed a swallowed participant refusal after the primary send. Strict delivery now reports partial uncertainty and retains its dispatch claim; replay cannot send another primary copy. The recipient-sensitive transport test failed first, then 83 email, notification and participant cases passed. Evidence: `/tmp/quinn-email-partial-red.log`, `/tmp/quinn-email-partial-green.log`.
+
+## Final acceptance and handoff
+
+| Required gate                                      | Result                                        |
+| -------------------------------------------------- | --------------------------------------------- |
+| `bun run typecheck` and `bun run typecheck:evals`  | Passed                                        |
+| Fresh migration and `bun run db:check-drift`       | Passed, no drift                              |
+| `bun run build` and server-function manifest       | Passed, 853 entries and call sites            |
+| Policy/authz/migration contracts and JOBS registry | 973 passed                                    |
+| `bun run test:db:quinn`                            | 91 passed across all five files, zero skipped |
+| `bun scripts/check-quinn-replay.ts`                | All ten Quinn migrations are safe             |
+| Quinn Chromium browser suite on 3018               | 27 passed, zero skipped                       |
+
+The [test report](quinn-product-test-report.md#review-correction-final-gates-20-september-2026) contains commands, log locations and the broader-run limitation: one missing-channel fixture failed, was corrected, and its 36-case file passed; the full broader run was not repeated. Final email-related checks pass 83 cases. Typechecks, build and manifest were rerun after the last delivery correction.
+
+Operational notes for the next owner: apply the documented one-time fleet override only when crossing 0284; run the dedicated database gate in CI; provide a worker for durable execution; explicitly opt into semantic shadow or enforce after reviewing cases. Investigate ambiguous or partial email delivery before any manual follow-up. Local tests do not certify an external mail provider or verifier calibration. No deployment actions have been taken.

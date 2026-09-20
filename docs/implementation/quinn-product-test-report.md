@@ -138,13 +138,38 @@ Logs from this pass live in the session scratchpad and are not part of the repos
 
 Run `TEST_DATABASE_URL=postgresql://postgres:password@localhost:5432/quackback_quinn_validation bun run test:db:quinn` from the repository root. The runner preserves the connection credentials, host, port and query options, and replaces only the database name. It runs files sequentially and requires nonempty, all-passing assertion results for each named file; skipped or missing suites fail even if Vitest exits zero.
 
-| Database | Suites |
-| --- | --- |
-| `quackback_quinn_runs` | `assistant-run.durability.db.test.ts`, `conversation-request-receipt.db.test.ts` |
-| `quackback_quinn_s5` | `assistant-action.durability.db.test.ts` |
-| `quackback_quinn_s6` | `workflow-delegation.durability.db.test.ts` |
-| `quackback_quinn_lifecycle` | `conversation-inactivity.db.test.ts` |
+| Database                    | Suites                                                                           |
+| --------------------------- | -------------------------------------------------------------------------------- |
+| `quackback_quinn_runs`      | `assistant-run.durability.db.test.ts`, `conversation-request-receipt.db.test.ts` |
+| `quackback_quinn_s5`        | `assistant-action.durability.db.test.ts`                                         |
+| `quackback_quinn_s6`        | `workflow-delegation.durability.db.test.ts`                                      |
+| `quackback_quinn_lifecycle` | `conversation-inactivity.db.test.ts`                                             |
 
 Use `bun run test:db:quinn --prepare` to create missing dedicated databases, migrate them and insert a minimal workspace if needed. CI runs this in its own PostgreSQL service alongside the unit shards; the existing required `test` job now depends on both. A reachable database with a failed schema probe throws with the missing column and migration command instead of silently skipping. An explicitly selected TEST_DATABASE_URL is never replaced by a fallback database.
 
 Validation: the stale-schema regression failed before the fixture fix, and the runner assertions reject zero, skipped, failed and wrong-file results. Nine fixture/runner tests pass. The prepared dedicated run executed all five suites successfully with zero skips; see `/tmp/quinn-db-runner.log`. This does not replace the other final acceptance gates.
+
+## Review correction final gates (20 September 2026)
+
+The review fixes were implemented on `feat/quinn-product`, in the isolated Quinn worktree, with failing regressions run before their fixes. Detailed evidence and rollback notes are in [the review handoff](quinn-review-handoff.md). These results supersede earlier gate counts for this correction pass, not the original full-repository results above.
+
+| Gate                                                        | Result                                   | Local evidence                       |
+| ----------------------------------------------------------- | ---------------------------------------- | ------------------------------------ |
+| Application and workspace typecheck                         | Passed                                   | `/tmp/quinn-final-typecheck.log`     |
+| Evals typecheck                                             | Passed                                   | `/tmp/quinn-final-evals.log`         |
+| Fresh database migration and schema drift                   | Passed, no drift                         | `/tmp/quinn-final-drift.log`         |
+| Production build                                            | Passed                                   | `/tmp/quinn-final-build.log`         |
+| Server-function manifest                                    | 853 entries, 853 call sites              | `/tmp/quinn-final-manifest.log`      |
+| Policy, authz matrix, migration contracts and JOBS registry | 32 files, 973 passed                     | `/tmp/quinn-final-policy.log`        |
+| Required dedicated durability runner                        | Five files, 91 passed, zero skipped      | `/tmp/quinn-final-durability.log`    |
+| Quinn replay classifier                                     | All ten migrations 0285 to 0294 are safe | `/tmp/quinn-final-replay.log`        |
+| Quinn browser suite, Chromium, dev server 3018              | 27 passed, zero skipped                  | `/tmp/quinn-final-browser.log`       |
+| Final email, notification and participant regression pass   | Three files, 83 passed                   | `/tmp/quinn-email-partial-green.log` |
+
+The dedicated runner counts are 27 run cases, three receipt cases, 26 action cases, three workflow cases and 32 lifecycle cases. The final run suite was also repeated after the email repair correction, with 27 passing cases in `/tmp/quinn-email-repair-green.log`.
+
+A broader assistant and conversation run executed 175 files: 2,169 passed, one failed, 92 skipped and one todo. The failure was the widget routing fixture omitting `channel: 'messenger'` after the channel check became explicit. That fixture was corrected and its whole file passed all 36 cases. The entire broader run was not repeated; see `/tmp/quinn-final-domain.log` and `/tmp/quinn-final-widget-gate.log`. Dedicated durability evidence above does not rely on those broad-run opt-in skips.
+
+The partial-group email case failed first because a rejected participant was hidden behind a successful overall delivery. It now leaves delivery unconfirmed, preserves the dispatch claim and proves replay does not send a second primary copy. Red: `/tmp/quinn-email-partial-red.log`. SMTP is doubled at the transport boundary with recipient-sensitive behavior; no external provider delivery or reconciliation is certified. Live model calibration is still outside this pass. Existing historic outcome rows and missing sender-verdict metadata were not backfilled.
+
+No push, merge or deployment was performed. Logs under `/tmp` are local evidence and may not survive cleanup.
