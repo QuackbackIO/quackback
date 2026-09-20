@@ -144,6 +144,8 @@ export interface AssistantTurnTrace {
   tone?: AssistantTone
   responseLength?: AssistantResponseLength
   appliedGuidance: Array<{ id: string; name: string }>
+  /** Exact guidance supplied to this generation, for the support verifier. */
+  trustedContext?: string
   /**
    * Guidance that was in scope and did not fit the character budget.
    *
@@ -1575,6 +1577,17 @@ ${runtimeConfig.config.agents.workspace.instructions}`)
           }
         : {}),
       appliedGuidance,
+      ...(selectedGuidance.length > 0 ||
+      (rolePolicy.customerVoice && agentVoice.additionalInstructions)
+        ? {
+            trustedContext: [
+              rolePolicy.customerVoice ? agentVoice.additionalInstructions : '',
+              ...selectedGuidance.map((rule) => rule.instruction),
+            ]
+              .filter(Boolean)
+              .join('\n\n'),
+          }
+        : {}),
       omittedGuidance: omittedGuidanceTrace,
       toolCalls: [...toolContext.ledger.toolOutcomes],
       ...(runtimeConfig.configFallbackReason

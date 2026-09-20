@@ -48,9 +48,9 @@ describe('answerValidationMode', () => {
     else process.env.ASSISTANT_ANSWER_VALIDATION = original
   })
 
-  it('is shadow by default', () => {
+  it('is off by default', () => {
     delete process.env.ASSISTANT_ANSWER_VALIDATION
-    expect(answerValidationMode()).toBe('shadow')
+    expect(answerValidationMode()).toBe('off')
   })
 
   it('reads off and enforce', () => {
@@ -60,20 +60,45 @@ describe('answerValidationMode', () => {
     expect(answerValidationMode()).toBe('enforce')
   })
 
-  it('resolves a typo to shadow rather than to enforce', () => {
+  it('resolves a typo to off', () => {
     process.env.ASSISTANT_ANSWER_VALIDATION = 'enforced'
-    expect(answerValidationMode()).toBe('shadow')
+    expect(answerValidationMode()).toBe('off')
   })
 })
 
 describe('verifyAnswerSupport', () => {
   beforeEach(() => {
-    delete process.env.ASSISTANT_ANSWER_VALIDATION
+    process.env.ASSISTANT_ANSWER_VALIDATION = 'shadow'
     qualityGateModel.mockReturnValue(null)
     runSynthesis.mockReset()
   })
   afterEach(() => {
     delete process.env.ASSISTANT_ANSWER_VALIDATION
+  })
+
+  it('makes no implicit model call, while explicit shadow still calls the verifier', async () => {
+    qualityGateModel.mockReturnValue('gate-model')
+    runSynthesis.mockImplementation(async (input) => {
+      const payload = JSON.parse(input.messages[0].content)
+      expect(payload.answer).toBe(ANSWER.text)
+      return {
+        outcome: 'success',
+        final: { verdict: 'supported', reason: 'ok', evidenceRefs: [] },
+        usage: { promptTokens: 70, completionTokens: 12 },
+      }
+    })
+    delete process.env.ASSISTANT_ANSWER_VALIDATION
+    expect(await verifyAnswerSupport(ANSWER)).toMatchObject({
+      ran: false,
+      skippedReason: 'mode_off',
+    })
+    expect(runSynthesis).toHaveBeenCalledTimes(0)
+    process.env.ASSISTANT_ANSWER_VALIDATION = 'shadow'
+    expect(await verifyAnswerSupport(ANSWER)).toMatchObject({
+      ran: true,
+      usage: { promptTokens: 70, completionTokens: 12 },
+    })
+    expect(runSynthesis).toHaveBeenCalledTimes(1)
   })
 
   it('stands down with a recorded reason when no quality-gate model is configured', async () => {

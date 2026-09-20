@@ -52,10 +52,12 @@ export async function verifyAndMaybeRepair(input: {
       handoff: candidate.escalation?.mode === 'handoff',
       evidence: candidate.evidence,
       receipts,
+      trustedContext: candidate.trace.trustedContext,
     })
 
+  const firstStartedAt = new Date()
   const first = await verify(input.result)
-  await recordVerification(input.run, 'answer_validation', first)
+  await recordVerification(input.run, 'answer_validation', first, firstStartedAt)
   if (!verificationBlocksPublication(first)) return { kind: 'ok', result: input.result }
 
   const { generateAssistantCandidate } = await import('./assistant.orchestrator')
@@ -63,6 +65,7 @@ export async function verifyAndMaybeRepair(input: {
   if (!prepared) return { kind: 'blocked', verdict: first.verdict ?? 'validator_error' }
 
   let repaired: AnsweredTurn
+  const repairStartedAt = new Date()
   try {
     const attempt = await generateAssistantCandidate(input.conversationId, prepared, {
       surface: 'widget',
@@ -80,6 +83,7 @@ export async function verifyAndMaybeRepair(input: {
     await recordRunStep(db, {
       runId: input.run.id,
       stepKey: 'generate.repair',
+      startedAt: repairStartedAt,
       attemptNumber: input.run.attemptCount,
       stepKind: 'generation',
       status: 'succeeded',
@@ -96,8 +100,9 @@ export async function verifyAndMaybeRepair(input: {
     return { kind: 'blocked', verdict: first.verdict ?? 'validator_error' }
   }
 
+  const secondStartedAt = new Date()
   const second = await verify(repaired)
-  await recordVerification(input.run, 'answer_validation_repair', second)
+  await recordVerification(input.run, 'answer_validation_repair', second, secondStartedAt)
   if (verificationBlocksPublication(second)) {
     return { kind: 'blocked', verdict: second.verdict ?? 'validator_error' }
   }
@@ -132,7 +137,8 @@ async function runReceipts(
 async function recordVerification(
   run: { id: AssistantRunId; attemptCount: number },
   stepKey: string,
-  verification: Awaited<ReturnType<typeof import('./answer-validation').verifyAnswerSupport>>
+  verification: Awaited<ReturnType<typeof import('./answer-validation').verifyAnswerSupport>>,
+  startedAt: Date
 ): Promise<void> {
   await recordRunStep(db, {
     runId: run.id,
@@ -141,6 +147,9 @@ async function recordVerification(
     stepKind: 'validation',
     status: verification.ran ? 'succeeded' : 'skipped',
     modelId: verification.model,
+    startedAt,
+    promptTokens: verification.usage?.promptTokens,
+    completionTokens: verification.usage?.completionTokens,
     validator: {
       layer: 'semantic',
       mode: verification.mode,
@@ -151,6 +160,7 @@ async function recordVerification(
     },
     finishedAt: new Date(),
   }).catch((err) => log.warn({ err, run_id: run.id }, 'could not record a validation verdict'))
+  await addRunTokenUsage(db, run.id, verification.usage)
 }
 
 /**

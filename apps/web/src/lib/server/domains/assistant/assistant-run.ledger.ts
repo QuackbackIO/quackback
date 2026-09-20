@@ -23,6 +23,7 @@ export interface RunStepInput {
   completionTokens?: number | null
   toolCallId?: string | null
   validator?: Record<string, unknown> | null
+  startedAt?: Date
   finishedAt?: Date | null
 }
 
@@ -49,6 +50,7 @@ export async function recordRunStep(exec: Executor, input: RunStepInput): Promis
       completionTokens: input.completionTokens ?? null,
       toolCallId: input.toolCallId ?? null,
       validator: input.validator ?? null,
+      startedAt: input.startedAt,
       finishedAt: input.finishedAt ?? null,
     })
     .onConflictDoUpdate({
@@ -61,6 +63,7 @@ export async function recordRunStep(exec: Executor, input: RunStepInput): Promis
         completionTokens: input.completionTokens ?? null,
         toolCallId: input.toolCallId ?? null,
         validator: input.validator ?? null,
+        ...(input.startedAt ? { startedAt: input.startedAt } : {}),
         finishedAt: input.finishedAt ?? null,
       },
     })

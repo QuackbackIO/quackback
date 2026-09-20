@@ -8,8 +8,8 @@
  *
  * Three properties this file is built around:
  *
- * - **Shadow by default.** `ASSISTANT_ANSWER_VALIDATION` selects off, shadow or
- *   enforce; shadow is the default and records a verdict without changing what
+ * - **Off by default.** `ASSISTANT_ANSWER_VALIDATION` selects off, shadow or
+ *   enforce; shadow is an explicit opt-in that records a verdict without changing what
  *   the customer sees. A model-based check is an additional signal, never a
  *   substitute for the permission checks, and it graduates on reviewed results
  *   rather than on the day it ships.
@@ -46,13 +46,12 @@ export type AnswerValidationMode = (typeof ANSWER_VALIDATION_MODES)[number]
  * Read from `process.env` on every call, like the execution-mode and
  * guidance-source selectors: the answer is a property of the deployment, and a
  * worker that never loaded the application config still needs it. An
- * unrecognised value resolves to `shadow`, which is the position that cannot
- * change a customer outcome.
+ * unrecognised value resolves to `off`, so an unset switch never adds a model call.
  */
 export function answerValidationMode(): AnswerValidationMode {
   const raw = process.env.ASSISTANT_ANSWER_VALIDATION?.trim().toLowerCase()
-  if (raw === 'off' || raw === 'enforce') return raw
-  return 'shadow'
+  if (raw === 'shadow' || raw === 'enforce') return raw
+  return 'off'
 }
 
 /** The specification's verdict vocabulary. Stored on the run step verbatim. */
@@ -79,6 +78,7 @@ export interface AnswerVerification {
   /** Source or chunk ids the verifier leaned on, for an authorized inspection. */
   evidenceRefs: string[]
   model: string | null
+  usage?: { promptTokens?: number; completionTokens?: number }
 }
 
 export interface AnswerVerificationInput {
@@ -231,6 +231,7 @@ export async function verifyAnswerSupport(
       reason: parsed.reason.slice(0, REASON_CHAR_LIMIT) || null,
       evidenceRefs: parsed.evidenceRefs.slice(0, 16),
       model,
+      ...(outcome.outcome === 'success' && outcome.usage ? { usage: outcome.usage } : {}),
     }
   } catch (err) {
     log.warn({ err, event: 'answer_validation.failed' }, 'answer validation could not complete')

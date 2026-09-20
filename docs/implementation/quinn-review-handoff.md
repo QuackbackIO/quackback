@@ -62,3 +62,7 @@ The privacy slice initially exposed an incorrect ApiAuthContext field during typ
 Built-in write authority now reads current settings at runtime assembly, approval and dispatch, including runs using a frozen configuration override. The published release still controls behavior; it no longer holds a revoked tool open. Default tool assembly uses the same live resolver and a settings read failure fails closed.
 
 The former account-deletion test was replaced with real database release/allow/deny cases for all three gates, including a positive assembled tool and successful dispatch resolution before revocation. Each gate failed against its former implementation; the runtime override regression also failed. Logs: `/tmp/quinn-live-rules-red.log`, `/tmp/quinn-live-approval-red.log`, `/tmp/quinn-live-runtime-red.log`. Five suites now pass 272 tests (`/tmp/quinn-live-final.log`), and typecheck passes.
+
+## Verifier cost and accounting
+
+The semantic verifier defaults to off. Shadow and enforce require explicit `ASSISTANT_ANSWER_VALIDATION` configuration; explicitly enabled verification still runs before publication. It receives the exact selected guidance and voice instructions used for generation, reports its token usage into the run, and records an explicit start time for each verification and repair. Four regressions failed first, then 172 verifier/runtime/durable-run tests passed. Logs: `/tmp/quinn-verifier-red.log`, `/tmp/quinn-verifier-green.log`. Typecheck passes after retaining optional provider token counts.

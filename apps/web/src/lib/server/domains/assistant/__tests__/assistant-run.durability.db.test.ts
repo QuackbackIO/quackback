@@ -849,6 +849,38 @@ describe.skipIf(!available)('the durable turn executor on real PostgreSQL', () =
     expect(run!.outcome).not.toBe('resolution')
   })
 
+  it('records verifier guidance, usage and elapsed time from the actual call', async () => {
+    const { runId } = await seedTurn()
+    const result = answer('Refunds take three days.', { promptTokens: 100, completionTokens: 20 })
+    result.trace = {
+      ...result.trace,
+      trustedContext: 'Refund policy: three working days.',
+    } as typeof result.trace
+    vi.mocked(runAssistantTurn).mockResolvedValue(
+      result as unknown as Awaited<ReturnType<typeof runAssistantTurn>>
+    )
+    verifyAnswerSupportMock.mockImplementation(async (input) => {
+      expect(input.trustedContext).toBe('Refund policy: three working days.')
+      await new Promise((resolve) => setTimeout(resolve, 15))
+      return { ...enforced('supported'), usage: { promptTokens: 70, completionTokens: 12 } }
+    })
+    const job = await claimTurn(runId)
+    expect(await advanceAssistantRun(job)).toBe('published')
+    const run = (await loadRun(db, runId as never))!
+    expect(run).toMatchObject({ promptTokens: 170, completionTokens: 32 })
+    const [step] = await db
+      .select()
+      .from(assistantRunSteps)
+      .where(
+        and(
+          eq(assistantRunSteps.runId, runId as never),
+          eq(assistantRunSteps.stepKey, 'answer_validation')
+        )
+      )
+    expect(step).toMatchObject({ promptTokens: 70, completionTokens: 12 })
+    expect(step.finishedAt!.getTime() - step.startedAt.getTime()).toBeGreaterThanOrEqual(15)
+  })
+
   it('P6: a shadow verdict never changes what the customer sees', async () => {
     const { conversationId, runId } = await seedTurn()
     vi.mocked(runAssistantTurn).mockResolvedValue(
