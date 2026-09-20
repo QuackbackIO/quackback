@@ -56,3 +56,9 @@ The saved capability report supplied the truncated continuation finding: retry a
 Remote `pattern` is unsupported, with no regular-expression evaluation. Schema analysis and canonical fingerprinting bound depth at 32, including annotation payloads, and over-deep contracts cannot become reviewed. Closed objects recognize only own declared properties. Four new regressions failed first (including actual stack overflow under the old implementation); all 82 connector tests now pass. Logs: `/tmp/quinn-schema-red.log`, `/tmp/quinn-schema-green.log`.
 
 The privacy slice initially exposed an incorrect ApiAuthContext field during typecheck. The follow-up commit restores its existing role-based actor shape; typecheck then passed.
+
+## Immediate tool revocation
+
+Built-in write authority now reads current settings at runtime assembly, approval and dispatch, including runs using a frozen configuration override. The published release still controls behavior; it no longer holds a revoked tool open. Default tool assembly uses the same live resolver and a settings read failure fails closed.
+
+The former account-deletion test was replaced with real database release/allow/deny cases for all three gates, including a positive assembled tool and successful dispatch resolution before revocation. Each gate failed against its former implementation; the runtime override regression also failed. Logs: `/tmp/quinn-live-rules-red.log`, `/tmp/quinn-live-approval-red.log`, `/tmp/quinn-live-runtime-red.log`. Five suites now pass 272 tests (`/tmp/quinn-live-final.log`), and typecheck passes.

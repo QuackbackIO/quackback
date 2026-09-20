@@ -125,7 +125,7 @@ vi.mock('@/lib/server/domains/assistant/tool-audit', () => ({
     id === state.receipt.id ? { ...state.receipt, reconciliationState: input.verdict } : null,
 }))
 vi.mock('@/lib/server/domains/assistant/assistant.toolspec', () => ({
-  getToolSpecByName: async () => null,
+  getToolSpecByName: () => null,
 }))
 vi.mock('@/lib/server/domains/assistant/mcp-workspace-tools', () => ({
   getWorkspaceMcpSpecByName: async () => null,

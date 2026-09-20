@@ -1,3 +1,5 @@
+import { resolveLiveBuiltInToolSpecs } from './live-tool-rules'
+import { roleToAgent } from '@/lib/shared/assistant/config'
 import { toolPermissions } from './tool-permissions'
 /**
  * Quinn's tool-execution pipeline: assembles the tool catalogue
@@ -20,7 +22,7 @@ import { logger } from '@/lib/server/logger'
 import type { ConversationId, TicketId } from '@quackback/ids'
 import type { AssistantToolReplayStrategy } from '@/lib/server/db'
 import type { AssistantToolContext, AssistantToolSpec } from './assistant.toolspec'
-import { resolveToolSpecs, isNoParentResult, NO_CONVERSATION_NOTE } from './assistant.toolspec'
+import { isNoParentResult, NO_CONVERSATION_NOTE } from './assistant.toolspec'
 import {
   claimToolCall,
   findToolReceipt,
@@ -705,7 +707,9 @@ export async function assembleAssistantToolset(
   )
   const connectorActiveSpecs = connectorActive.map((entry) => entry.spec)
 
-  const resolvedSpecs = (specs ?? resolveToolSpecs()).filter(availableBuiltin)
+  const resolvedSpecs = (
+    specs ?? (await resolveLiveBuiltInToolSpecs(roleToAgent(ctx.role)))
+  ).filter(availableBuiltin)
   const builtInTools = resolvedSpecs.map((spec) => {
     const mode = resolveEffectiveToolMode(spec, ctx)
     return spec.definition.server<AssistantToolContext>((args) =>

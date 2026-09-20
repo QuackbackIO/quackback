@@ -1,3 +1,4 @@
+import { resolveLiveBuiltInToolSpecs } from './live-tool-rules'
 import { ASSISTANT_CITATION_TYPES, type AssistantCitationType } from './citation-types'
 import type { Actor } from '@/lib/server/policy/types'
 /**
@@ -51,12 +52,7 @@ import type {
 } from '@/lib/shared/conversation/types'
 import { resolveContentAudience } from './audience'
 import { assembleAssistantToolset } from './assistant.tools'
-import {
-  applyBuiltInToolRules,
-  resolveToolSpecs,
-  makeAssistantToolContext,
-  makeAssistantToolLedger,
-} from './assistant.toolspec'
+import { makeAssistantToolContext, makeAssistantToolLedger } from './assistant.toolspec'
 import { listConversationAttributes } from '@/lib/server/domains/conversation-attributes/conversation-attribute.service'
 import type {
   AssistantCitation,
@@ -1220,7 +1216,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
   // the same approvalPolicy seam the connector dial uses, and an empty map
   // leaves role policy deciding exactly as before the dial existed.
   const builtInSpecs = withoutWriteTools(
-    applyBuiltInToolRules(resolveToolSpecs(), runtimeConfig.config.agents[agentKind].toolRules),
+    await resolveLiveBuiltInToolSpecs(agentKind),
     input.readOnlyTools === true
   )
   try {

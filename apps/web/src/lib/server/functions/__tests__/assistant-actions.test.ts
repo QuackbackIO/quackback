@@ -60,7 +60,10 @@ vi.mock('@/lib/server/logger', () => {
   return { logger: { ...hoisted.log, child }, createLogger: () => ({ ...hoisted.log, child }) }
 })
 
-vi.mock('@/lib/server/db', () => ({ db: {} }))
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
+  db: {},
+}))
 
 vi.mock('@/lib/server/functions/auth-helpers', () => ({
   requireAuth: hoisted.requireAuth,
@@ -73,7 +76,8 @@ vi.mock('@/lib/server/domains/assistant/pending-actions.service', () => ({
   decideAndEnqueuePendingAction: hoisted.decideAndEnqueuePendingAction,
 }))
 
-vi.mock('@/lib/server/domains/assistant/assistant.toolspec', () => ({
+vi.mock('@/lib/server/domains/assistant/assistant.toolspec', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/domains/assistant/assistant.toolspec')>()),
   // Static lookup over the test-controlled built-in registry fixture.
   getToolSpecByName: (name: string) => {
     const specs = (hoisted.resolveToolSpecs() ?? []) as Array<{ name: string }>
@@ -115,6 +119,15 @@ vi.mock('@/lib/server/domains/assistant/connectors/connector-tools', () => ({
 
 vi.mock('@/lib/server/domains/settings/settings.assistant', () => ({
   getAssistantRuntimeConfig: hoisted.getAssistantRuntimeConfig,
+  getAssistantConfig: async () => ({
+    config: {
+      agents: {
+        agent: { toolRules: {} },
+        copilot: { toolRules: {} },
+        workspace: { toolRules: {} },
+      },
+    },
+  }),
 }))
 
 vi.mock('@/lib/server/domains/assistant/assistant.principal', () => ({

@@ -1,3 +1,4 @@
+import { getLiveBuiltInToolSpec } from './live-tool-rules'
 /**
  * Executing an approved action, durably.
  *
@@ -53,7 +54,7 @@ import {
 import { digestOf } from './tool-receipts'
 import type { ActionReport } from './assistant-action.continuation'
 import { executeApprovedPendingAction } from './assistant.tools'
-import { getToolSpecByName, makeAssistantToolContext } from './assistant.toolspec'
+import { makeAssistantToolContext } from './assistant.toolspec'
 import type { AssistantToolSpec } from './assistant.toolspec'
 import { resolveContentAudience } from './audience'
 import { resolveConnectorApprovalSpec } from './connectors/connector-tools'
@@ -166,7 +167,7 @@ export async function resolveApprovedAction(
     }
   }
   const spec =
-    (await getToolSpecByName(action.toolName)) ??
+    (await getLiveBuiltInToolSpec(action.toolName, roleToAgent(action.originRole))) ??
     (connector.status === 'ok' ? connector.spec : null) ??
     (action.originRole === 'workspace_assistant'
       ? await getWorkspaceMcpSpecByName(action.toolName, actor, 'Quinn')

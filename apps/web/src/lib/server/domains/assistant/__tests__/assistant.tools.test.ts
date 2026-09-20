@@ -1101,3 +1101,11 @@ describe('executeApprovedPendingAction', () => {
 
 // The registry's exact contents are pinned by assistant.toolspec.test.ts;
 // this file only asserts how assembly treats what the registry returns.
+
+vi.mock('@/lib/server/domains/settings/settings.assistant', async () => ({
+  getAssistantConfig: async () => ({
+    config: structuredClone(
+      (await import('@/lib/shared/assistant/config')).DEFAULT_ASSISTANT_CONFIG
+    ),
+  }),
+}))

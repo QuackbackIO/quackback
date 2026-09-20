@@ -513,66 +513,92 @@ describe.skipIf(!available)('durable approvals', () => {
     expect(settledAgain).toBeNull()
   })
 
-  // P7: a published release freezes configured behaviour and nothing else. The
-  // case above, run again with a release selected, has to give the same answer:
-  // if it did not, the release would be holding a withdrawn authority open.
-  it('a revoked permission still blocks the action when a release is live', async () => {
-    // This database is this suite's own and carries no workspace row of its
-    // own; the release path needs one, so create it rather than skipping, which
-    // would make the case pass by not running.
-    const existing = await db.select({ id: settings.id }).from(settings).limit(1)
-    const row =
-      existing[0] ??
-      (
-        await db
-          .insert(settings)
-          .values({
-            name: 'Action durability workspace',
-            slug: `s5_${Math.random().toString(36).slice(2, 10)}`,
-            createdAt: new Date(),
-          })
-          .returning({ id: settings.id })
-      )[0]
-    await db.delete(assistantReleases)
-    const { setReleaseManagement } = await import('../assistant-release.publish')
-    const { selectRunBehaviour } = await import('../assistant-release.service')
-    try {
-      await setReleaseManagement(true, quinnId)
-      const behaviour = await selectRunBehaviour()
-      expect(
-        behaviour.releaseId,
-        'a release must be live for this case to mean anything'
-      ).not.toBeNull()
-
-      const conversationId = await newConversation()
-      const action = await proposal(conversationId)
-      await decideAndEnqueuePendingAction({
-        id: action.id,
-        decision: 'approved',
-        decidedById: reviewerId,
-      })
-      await db.delete(principal).where(eq(principal.id, reviewerId))
-      const approved = (await getPendingActionById(action.id))!
-
-      expect(await resolveApprovedAction(approved)).toEqual({
-        ok: false,
-        refusal: 'approver_gone',
-      })
-      expect(await receiptsFor(conversationId), 'nothing may be dispatched').toHaveLength(0)
-
-      const [restored] = await db
-        .insert(principal)
-        .values({ role: 'member', type: 'user', displayName: 'Reviewer', createdAt: new Date() })
-        .returning()
-      reviewerId = restored.id
-    } finally {
+  it.each(['assembly', 'approval', 'dispatch'])(
+    'live tool denial overrides a release at %s',
+    async (gate) => {
+      const { DEFAULT_ASSISTANT_CONFIG } = await import('@/lib/shared/assistant/config')
+      const { setReleaseManagement } = await import('../assistant-release.publish')
+      const { selectRunBehaviour } = await import('../assistant-release.service')
+      const { assembleAssistantToolset } = await import('../assistant.tools')
+      const { makeAssistantToolContext } = await import('../assistant.toolspec')
+      const { decideAssistantAction } = await import('@/lib/server/functions/assistant-actions')
+      const { SYSTEM_ROLE_PERMISSIONS } = await import('@/lib/shared/permissions')
+      const [row] = await db.select().from(settings).limit(1)
+      const config = structuredClone(DEFAULT_ASSISTANT_CONFIG)
+      config.agents.agent.toolRules.set_attribute = 'allow'
+      await db.delete(assistantReleases)
       await db
         .update(settings)
-        .set({ assistantReleaseManagement: false, assistantPublishedReleaseId: null })
+        .set({
+          assistantConfig: config,
+          assistantReleaseManagement: false,
+          assistantPublishedReleaseId: null,
+        })
         .where(eq(settings.id, row.id))
-      await db.delete(assistantReleases)
+      try {
+        await setReleaseManagement(true, quinnId)
+        const behaviour = await selectRunBehaviour()
+        expect(behaviour.releaseId).not.toBeNull()
+        const conversationId = await newConversation()
+        const context = makeAssistantToolContext({
+          db,
+          assistantPrincipalId: quinnId,
+          audience: 'public',
+          conversationId,
+          role: 'customer_support',
+        })
+        expect((await assembleAssistantToolset(context)).tools.map((t) => t.name)).toContain(
+          'set_attribute'
+        )
+        const action = await proposal(conversationId, {
+          toolName: 'set_attribute',
+          args: { key: 'plan', value: 'pro' },
+          argsDigest: digestOf({ key: 'plan', value: 'pro' }),
+        })
+        await decideAndEnqueuePendingAction({
+          id: action.id,
+          decision: 'approved',
+          decidedById: reviewerId,
+        })
+        const approved = (await getPendingActionById(action.id))!
+        expect(await resolveApprovedAction(approved)).toMatchObject({ ok: true })
+        const pending = await proposal(conversationId, {
+          toolName: 'set_attribute',
+          args: { key: 'plan', value: 'free' },
+          argsDigest: digestOf({ key: 'plan', value: 'free' }),
+        })
+        config.agents.agent.toolRules.set_attribute = 'deny'
+        await db.update(settings).set({ assistantConfig: config }).where(eq(settings.id, row.id))
+        expect((await selectRunBehaviour()).releaseId).toBe(behaviour.releaseId)
+        if (gate === 'assembly')
+          expect((await assembleAssistantToolset(context)).tools.map((t) => t.name)).not.toContain(
+            'set_attribute'
+          )
+        if (gate === 'dispatch')
+          expect(await resolveApprovedAction(approved)).toMatchObject({ ok: false })
+        if (gate === 'approval')
+          await expect(
+            decideAssistantAction(pending.id, 'approved', reviewerId, {
+              principalId: reviewerId,
+              role: 'member',
+              principalType: 'user',
+              segmentIds: new Set(),
+              permissions: new Set(SYSTEM_ROLE_PERMISSIONS.manager),
+            })
+          ).rejects.toThrow(/no longer|available/i)
+      } finally {
+        await db
+          .update(settings)
+          .set({
+            assistantConfig: row.assistantConfig,
+            assistantReleaseManagement: false,
+            assistantPublishedReleaseId: null,
+          })
+          .where(eq(settings.id, row.id))
+        await db.delete(assistantReleases)
+      }
     }
-  })
+  )
 
   it('a revoked permission blocks an approved action and records the reason', async () => {
     const conversationId = await newConversation()

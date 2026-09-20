@@ -33,7 +33,7 @@ import {
   decideAndEnqueuePendingAction,
   type AssistantPendingAction,
 } from '@/lib/server/domains/assistant/pending-actions.service'
-import { getToolSpecByName } from '@/lib/server/domains/assistant/assistant.toolspec'
+import { getLiveBuiltInToolSpec } from '@/lib/server/domains/assistant/live-tool-rules'
 import { resolveConnectorApprovalSpec } from '@/lib/server/domains/assistant/connectors/connector-tools'
 import { getWorkspaceMcpSpecByName } from '@/lib/server/domains/assistant/mcp-workspace-tools'
 import { roleToAgent } from '@/lib/shared/assistant/config'
@@ -191,7 +191,7 @@ export const decideAssistantAction = createServerOnlyFn(async function decideAss
     )
   }
   const spec =
-    (await getToolSpecByName(pending.toolName)) ??
+    (await getLiveBuiltInToolSpec(pending.toolName, roleToAgent(pending.originRole))) ??
     (connector.status === 'ok' ? connector.spec : null) ??
     (pending.originRole === 'workspace_assistant'
       ? await getWorkspaceMcpSpecByName(pending.toolName, actor, 'Quinn')

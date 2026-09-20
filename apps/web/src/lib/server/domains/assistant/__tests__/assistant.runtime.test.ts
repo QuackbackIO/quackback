@@ -196,8 +196,10 @@ const DEFAULT_RUNTIME_CONFIG: AssistantRuntimeConfig = {
 }
 
 const mockGetAssistantRuntimeConfig = vi.fn()
+const mockGetAssistantConfig = vi.fn()
 vi.mock('@/lib/server/domains/settings/settings.assistant', () => ({
   getAssistantRuntimeConfig: (...args: unknown[]) => mockGetAssistantRuntimeConfig(...args),
+  getAssistantConfig: (...args: unknown[]) => mockGetAssistantConfig(...args),
 }))
 
 function mockRuntimeConfig(
@@ -339,6 +341,7 @@ beforeEach(() => {
   mockChangelogRetrieve.mockResolvedValue([])
   mockDocumentsRetrieve.mockResolvedValue([])
   mockGetAssistantRuntimeConfig.mockResolvedValue(structuredClone(DEFAULT_RUNTIME_CONFIG))
+  mockGetAssistantConfig.mockResolvedValue(structuredClone(DEFAULT_RUNTIME_CONFIG))
   mockListEnabledGuidanceCandidates.mockResolvedValue([])
   mockSelectApplicableGuidance.mockResolvedValue([])
   mockListConversationAttributes.mockResolvedValue([])
@@ -2797,4 +2800,33 @@ describe('streamAssistantTurn (AG-UI wire shape)', () => {
       message: 'custom message',
     })
   })
+})
+
+it('applies live tool denial to a frozen run configuration', async () => {
+  mockChat.mockImplementation(() =>
+    (async function* () {
+      yield* completeRun({ text: 'Hello', citations: [] })
+    })()
+  )
+  const frozen = structuredClone(DEFAULT_RUNTIME_CONFIG)
+  frozen.config.agents.agent.toolRules.set_attribute = 'allow'
+  await runAssistantTurn({
+    ...baseInput,
+    messages: customerAsks('help'),
+    runtimeConfigOverride: frozen,
+  })
+  expect(
+    mockAssembleAssistantToolset.mock.calls.at(-1)![1].map((s: { name: string }) => s.name)
+  ).toContain('set_attribute')
+  const live = structuredClone(frozen)
+  live.config.agents.agent.toolRules.set_attribute = 'deny'
+  mockGetAssistantConfig.mockResolvedValue(live)
+  await runAssistantTurn({
+    ...baseInput,
+    messages: customerAsks('help'),
+    runtimeConfigOverride: frozen,
+  })
+  expect(
+    mockAssembleAssistantToolset.mock.calls.at(-1)![1].map((s: { name: string }) => s.name)
+  ).not.toContain('set_attribute')
 })
