@@ -33,7 +33,6 @@ export const Route = createFileRoute('/api/v1/apps/suggest')({
             role: auth.role,
             principalType: 'service',
             segmentIds: new Set<SegmentId>(),
-            permissions: new Set(auth.permissions),
           }
 
           const { generateEmbedding } =
