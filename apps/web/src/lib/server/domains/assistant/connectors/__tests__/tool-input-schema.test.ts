@@ -179,3 +179,35 @@ describe('jsonSchemaToZod: model-facing contract', () => {
     expect(zodSchema.safeParse({ a: 'anything' }).success).toBe(true)
   })
 })
+
+it('refuses remote patterns before attempting any match', () => {
+  const schema = { type: 'object', properties: { text: { type: 'string', pattern: '(a+)+$' } } }
+  expect(analyzeToolInputSchema(schema)).toMatchObject({
+    supported: false,
+    reason: expect.stringContaining('pattern'),
+  })
+  expect(validateToolInput(schema, { text: 'a' })).toMatchObject({ ok: false })
+})
+
+it('refuses deeply nested schema and annotation payloads without overflowing', () => {
+  let nested: Record<string, unknown> = { type: 'string' }
+  for (let i = 0; i < 10000; i++) nested = { type: 'object', properties: { child: nested } }
+  expect(analyzeToolInputSchema(nested)).toMatchObject({
+    supported: false,
+    reason: expect.stringContaining('depth'),
+  })
+  expect(analyzeToolInputSchema({ type: 'object', default: nested })).toMatchObject({
+    supported: false,
+  })
+})
+
+it('rejects inherited property names unless explicitly declared', () => {
+  const schema = { type: 'object', properties: {}, additionalProperties: false }
+  expect(validateToolInput(schema, { constructor: 'inherited' })).toMatchObject({ ok: false })
+  expect(
+    validateToolInput(
+      { ...schema, properties: { constructor: { type: 'string' } } },
+      { constructor: 'declared' }
+    )
+  ).toEqual({ ok: true })
+})

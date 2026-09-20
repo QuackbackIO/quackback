@@ -154,3 +154,18 @@ describe('pruneToolReviews', () => {
     expect(Object.keys(pruned)).toEqual(['issue_refund'])
   })
 })
+
+it('does not hash or approve an excessively deep remote schema', () => {
+  let schema: Record<string, unknown> = { type: 'string' }
+  for (let i = 0; i < 10000; i++) schema = { type: 'object', properties: { child: schema } }
+  const remote = tool({ inputSchema: schema })
+  expect(() => toolContractFingerprint(remote)).not.toThrow()
+  const reviews = reviewToolContracts({
+    tools: [remote],
+    reviews: {},
+    toolNames: [remote.name],
+    catalogRevision: 1,
+    principalId: null,
+  })
+  expect(reviewStateForTool(remote, reviews).reviewed).toBe(false)
+})

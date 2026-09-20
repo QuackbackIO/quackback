@@ -15,6 +15,7 @@
  * everything the availability decision reads.
  */
 import { createHash } from 'node:crypto'
+import { analyzeToolInputSchema, MAX_SCHEMA_DEPTH } from './tool-input-schema'
 import type {
   CachedConnectorTool,
   ConnectorToolReview,
@@ -28,21 +29,29 @@ export interface ToolContractFingerprint {
 }
 
 /** Stable JSON: object keys sorted at every depth. */
-function canonicalJson(value: unknown): string {
+function canonicalJson(value: unknown, depth = 0): string | null {
+  if (depth > MAX_SCHEMA_DEPTH) return null
   if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null'
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
-  const entries = Object.entries(value as Record<string, unknown>)
-    .filter(([, nested]) => nested !== undefined)
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([key, nested]) => `${JSON.stringify(key)}:${canonicalJson(nested)}`)
+  if (Array.isArray(value)) {
+    const children = value.map((child) => canonicalJson(child, depth + 1))
+    return children.includes(null) ? null : `[${children.join(',')}]`
+  }
+  const entries: string[] = []
+  for (const key of Object.keys(value).sort()) {
+    const nested = (value as Record<string, unknown>)[key]
+    if (nested === undefined) continue
+    const child = canonicalJson(nested, depth + 1)
+    if (child === null) return null
+    entries.push(`${JSON.stringify(key)}:${child}`)
+  }
   return `{${entries.join(',')}}`
 }
 
 export function toolContractFingerprint(tool: CachedConnectorTool): ToolContractFingerprint {
+  const canonical = tool.inputSchema ? canonicalJson(tool.inputSchema) : null
   return {
-    schemaHash: tool.inputSchema
-      ? createHash('sha256').update(canonicalJson(tool.inputSchema)).digest('hex').slice(0, 32)
-      : null,
+    schemaHash:
+      canonical !== null ? createHash('sha256').update(canonical).digest('hex').slice(0, 32) : null,
     readOnlyHint: tool.annotations?.readOnlyHint === true,
     destructiveHint: tool.annotations?.destructiveHint === true,
   }
@@ -60,6 +69,13 @@ export function reviewStateForTool(
   reviews: ConnectorToolReviews | null | undefined
 ): ToolReviewState {
   const review = reviews?.[tool.name]
+  if (!analyzeToolInputSchema(tool.inputSchema).supported) {
+    return {
+      state: review ? 'changed' : 'new',
+      reviewed: false,
+      changes: ['unsupported input schema'],
+    }
+  }
   if (!review) return { state: 'new', reviewed: false, changes: [] }
   const current = toolContractFingerprint(tool)
   const changes: string[] = []
@@ -101,6 +117,7 @@ export function grandfatherToolReviews(
 ): ConnectorToolReviews {
   const reviews: ConnectorToolReviews = {}
   for (const tool of tools) {
+    if (!analyzeToolInputSchema(tool.inputSchema).supported) continue
     reviews[tool.name] = recordFor(tool, catalogRevision, null, 'grandfathered')
   }
   return reviews
@@ -118,7 +135,7 @@ export function reviewToolContracts(input: {
   const next: ConnectorToolReviews = { ...(input.reviews ?? {}) }
   for (const name of input.toolNames) {
     const tool = live.get(name)
-    if (!tool) continue
+    if (!tool || !analyzeToolInputSchema(tool.inputSchema).supported) continue
     next[name] = recordFor(tool, input.catalogRevision, input.principalId, 'reviewed')
   }
   return next

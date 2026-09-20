@@ -19,13 +19,8 @@
  *
  * Two deliberate narrowings, both in the safe direction:
  *
- * - `pattern` is evaluated only for patterns up to
- *   {@link MAX_PATTERN_LENGTH} characters against strings up to
- *   {@link MAX_PATTERN_INPUT_LENGTH}; a longer string with a pattern declared
- *   is reported as a violation rather than matched. The regular expression
- *   comes from a remote server and runs in the worker, so an unbounded match
- *   is a denial-of-service waiting to happen, and refusing is the direction
- *   that cannot leak.
+ * - Remote regular expressions are unsupported. Length bounds cannot prevent
+ *   catastrophic backtracking. Schema depth is bounded, including annotations.
  * - An absent schema is treated as an object with no declared properties,
  *   which is what the MCP server said: no contract to enforce. It is supported
  *   and accepts any object, exactly as before this module existed.
@@ -40,8 +35,7 @@
 /** Ceiling on the serialized argument payload handed to a remote server. */
 export const CONNECTOR_MAX_ARGUMENT_BYTES = 32 * 1024
 
-const MAX_PATTERN_LENGTH = 200
-const MAX_PATTERN_INPUT_LENGTH = 1024
+export const MAX_SCHEMA_DEPTH = 32
 const MAX_REPORTED_ERRORS = 10
 
 export type Schema = Record<string, unknown>
@@ -80,7 +74,6 @@ const SUPPORTED_KEYWORDS = new Set([
   'uniqueItems',
   'minLength',
   'maxLength',
-  'pattern',
   'minimum',
   'maximum',
   'exclusiveMinimum',
@@ -121,7 +114,8 @@ function describePath(path: string): string {
 }
 
 /** First unsupported construct found, depth first, or null when all of it is enforceable. */
-function findUnsupported(schema: unknown, path: string): string | null {
+function findUnsupported(schema: unknown, path: string, depth = 0): string | null {
+  if (depth > MAX_SCHEMA_DEPTH) return 'the schema exceeds the maximum depth'
   if (!isPlainObject(schema)) {
     return `${describePath(path)} has a schema that is not an object`
   }
@@ -141,17 +135,6 @@ function findUnsupported(schema: unknown, path: string): string | null {
   if ('additionalProperties' in schema && typeof schema.additionalProperties !== 'boolean') {
     return `${describePath(path)} uses a schema-valued "additionalProperties"`
   }
-  if ('pattern' in schema) {
-    const pattern = schema.pattern
-    if (typeof pattern !== 'string' || pattern.length > MAX_PATTERN_LENGTH) {
-      return `${describePath(path)} declares a pattern this workspace will not run`
-    }
-    try {
-      new RegExp(pattern)
-    } catch {
-      return `${describePath(path)} declares a pattern that is not a valid regular expression`
-    }
-  }
   if ('enum' in schema && !Array.isArray(schema.enum)) {
     return `${describePath(path)} declares a non-array "enum"`
   }
@@ -162,7 +145,7 @@ function findUnsupported(schema: unknown, path: string): string | null {
       return `${describePath(path)} declares an empty "${key}"`
     }
     for (const [index, branch] of branches.entries()) {
-      const nested = findUnsupported(branch, `${path}${path ? '.' : ''}${key}[${index}]`)
+      const nested = findUnsupported(branch, `${path}${path ? '.' : ''}${key}[${index}]`, depth + 1)
       if (nested) return nested
     }
   }
@@ -171,17 +154,24 @@ function findUnsupported(schema: unknown, path: string): string | null {
     if (!isPlainObject(properties))
       return `${describePath(path)} declares a non-object "properties"`
     for (const [name, property] of Object.entries(properties)) {
-      const nested = findUnsupported(property, path === '' ? name : `${path}.${name}`)
+      const nested = findUnsupported(property, path === '' ? name : `${path}.${name}`, depth + 1)
       if (nested) return nested
     }
   }
   const items = schema.items
   if (items !== undefined) {
     if (Array.isArray(items)) return `${describePath(path)} declares tuple "items"`
-    const nested = findUnsupported(items, `${path}[]`)
+    const nested = findUnsupported(items, `${path}[]`, depth + 1)
     if (nested) return nested
   }
   return null
+}
+
+/** Includes ignored annotations so fingerprinting cannot overflow on remote JSON. */
+function exceedsSchemaDepth(value: unknown, depth = 0): boolean {
+  if (depth > MAX_SCHEMA_DEPTH) return true
+  if (value === null || typeof value !== 'object') return false
+  return Object.values(value).some((child) => exceedsSchemaDepth(child, depth + 1))
 }
 
 /**
@@ -198,6 +188,9 @@ export function analyzeToolInputSchema(schema: Schema | undefined | null): ToolS
   const types = Array.isArray(declaredTypes) ? declaredTypes : declaredTypes ? [declaredTypes] : []
   if (types.length > 0 && !types.includes('object')) {
     return { supported: false, reason: 'the tool input is not declared as an object' }
+  }
+  if (exceedsSchemaDepth(schema)) {
+    return { supported: false, reason: 'the schema exceeds the maximum depth' }
   }
   const unsupported = findUnsupported(schema, '')
   return unsupported ? { supported: false, reason: unsupported } : { supported: true }
@@ -303,19 +296,6 @@ function checkValue(schema: Schema, value: unknown, path: string, errors: string
     if (typeof schema.maxLength === 'number' && length > schema.maxLength) {
       errors.push(`${describePath(path)} must be at most ${schema.maxLength} characters`)
     }
-    if (typeof schema.pattern === 'string') {
-      if (length > MAX_PATTERN_INPUT_LENGTH) {
-        errors.push(`${describePath(path)} is too long to check against the declared pattern`)
-      } else {
-        try {
-          if (!new RegExp(schema.pattern).test(value)) {
-            errors.push(`${describePath(path)} does not match the declared pattern`)
-          }
-        } catch {
-          errors.push(`${describePath(path)} could not be checked against the declared pattern`)
-        }
-      }
-    }
   }
 
   if (Array.isArray(value)) {
@@ -358,7 +338,7 @@ function checkValue(schema: Schema, value: unknown, path: string, errors: string
       errors.push(`${describePath(path)} must have at most ${schema.maxProperties} properties`)
     if (schema.additionalProperties === false) {
       for (const key of Object.keys(value)) {
-        if (!(key in properties)) {
+        if (!Object.hasOwn(properties, key)) {
           errors.push(
             `${describePath(path === '' ? key : `${path}.${key}`)} is not an allowed property`
           )

@@ -50,3 +50,9 @@ Source links now enforce portal access before reading content and require Help C
 Evidence: source-route tests failed three cases first; real database audience and comment-route tests failed ten cases first. All four suites now pass 53 tests, with board-audience positive controls. Logs: `/tmp/quinn-source-red.log`, `/tmp/quinn-privacy-red.log`, `/tmp/quinn-privacy-green.log`. CSV exports are customer feedback exports, not full database backups. No migration required.
 
 The saved capability report supplied the truncated continuation finding: retry and approval continuation must retain email surface, and retries must not claim an agent-handback trigger. Later requirements beyond the supplied prompt remain unknown.
+
+## Remote schema limits
+
+Remote `pattern` is unsupported, with no regular-expression evaluation. Schema analysis and canonical fingerprinting bound depth at 32, including annotation payloads, and over-deep contracts cannot become reviewed. Closed objects recognize only own declared properties. Four new regressions failed first (including actual stack overflow under the old implementation); all 82 connector tests now pass. Logs: `/tmp/quinn-schema-red.log`, `/tmp/quinn-schema-green.log`.
+
+The privacy slice initially exposed an incorrect ApiAuthContext field during typecheck. The follow-up commit restores its existing role-based actor shape; typecheck then passed.
