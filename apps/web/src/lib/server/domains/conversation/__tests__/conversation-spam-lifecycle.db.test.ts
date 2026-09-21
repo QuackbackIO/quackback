@@ -27,6 +27,7 @@ vi.mock('../conversation.webhooks', () => ({
 
 vi.mock('@/lib/server/realtime/conversation-channels', () => ({
   publishConversationEvent: vi.fn(),
+  publishConversationMessage: vi.fn(),
   publishAgentConversationEvent: vi.fn(),
   publishConversationUpdate: vi.fn(),
 }))

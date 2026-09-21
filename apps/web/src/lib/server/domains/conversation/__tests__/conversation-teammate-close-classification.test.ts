@@ -18,6 +18,7 @@ vi.mock('@/lib/server/domains/conversation-attributes/ai-classification.service'
 
 vi.mock('@/lib/server/realtime/conversation-channels', () => ({
   publishConversationEvent: vi.fn(),
+  publishConversationMessage: vi.fn(),
   publishAgentConversationEvent: vi.fn(),
   publishConversationUpdate: vi.fn(),
   publishTyping: vi.fn(),

@@ -54,7 +54,6 @@ import { ingestGitHubChannelEvent } from '../conversation.github-inbound'
 import { githubThreadKey } from '@/lib/server/domains/channels/github-thread'
 import {
   publishAgentConversationEvent,
-  publishConversationEvent,
   publishConversationMessage,
 } from '@/lib/server/realtime/conversation-channels'
 

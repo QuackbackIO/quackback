@@ -20,6 +20,7 @@ const setPayloads: Record<string, unknown>[] = []
 vi.mock('@/lib/server/realtime/conversation-channels', () => ({
   publishConversationUpdate: (...a: unknown[]) => publishConversationUpdate(...a),
   publishConversationEvent: vi.fn(),
+  publishConversationMessage: vi.fn(),
   publishAgentConversationEvent: vi.fn(),
   publishTyping: vi.fn(),
 }))

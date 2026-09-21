@@ -29,6 +29,7 @@ vi.mock('../conversation.webhooks', () => emit)
 
 vi.mock('@/lib/server/realtime/conversation-channels', () => ({
   publishConversationEvent: (...args: unknown[]) => publishConversationEvent(...args),
+  publishConversationMessage: vi.fn(),
   publishAgentConversationEvent: vi.fn(),
   publishConversationUpdate: (...args: unknown[]) => publishConversationUpdate(...args),
 }))
@@ -65,6 +66,14 @@ vi.mock('../conversation.query', () => ({
     displayName: null,
     avatarUrl: null,
   })),
+  resolveAuthorAudiences: vi.fn(async (a: { principalId: string; displayName?: string | null }) => {
+    const author = {
+      principalId: a.principalId,
+      displayName: a.displayName ?? null,
+      avatarUrl: null,
+    }
+    return { publicAuthor: author, supportAuthor: author }
+  }),
   authorFromInput: vi.fn((a: { principalId: string }) => ({
     principalId: a.principalId,
     displayName: null,

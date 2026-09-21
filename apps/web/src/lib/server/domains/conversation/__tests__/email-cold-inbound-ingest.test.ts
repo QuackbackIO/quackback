@@ -60,6 +60,7 @@ vi.mock('../conversation.webhooks', async (orig) => ({
 // neither needs to be real to prove what the release did to the stored row.
 vi.mock('@/lib/server/realtime/conversation-channels', () => ({
   publishConversationEvent: vi.fn(),
+  publishConversationMessage: vi.fn(),
   publishAgentConversationEvent: vi.fn(),
   publishConversationUpdate: vi.fn(),
 }))
