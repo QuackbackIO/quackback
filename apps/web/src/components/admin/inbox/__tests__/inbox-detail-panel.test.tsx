@@ -85,6 +85,7 @@ vi.mock('@tanstack/react-router', () => ({
   useRouteContext: () => routeContextState,
 }))
 
+import { getPortalUserFn } from '@/lib/server/functions/admin'
 import { InboxDetailPanel } from '../inbox-detail-panel'
 
 function makeConversation(overrides: Partial<ConversationDTO> = {}): ConversationDTO {
@@ -295,5 +296,84 @@ describe('<InboxDetailPanel> GitHub issue people', () => {
       issuePeople: [{ principalId: 'p1', displayName: 'jane', avatarUrl: null }],
     })
     expect(screen.queryByText('On this issue')).not.toBeInTheDocument()
+  })
+})
+
+describe('<InboxDetailPanel> contact name', () => {
+  afterEach(() => {
+    vi.mocked(getPortalUserFn).mockResolvedValue(null)
+    vi.unstubAllGlobals()
+  })
+
+  function showPanel() {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: true,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+      addListener: () => {},
+      removeListener: () => {},
+    }))
+  }
+
+  it('shows the account name instead of the generic public name', async () => {
+    routeContextState.principal = undefined
+    showPanel()
+    vi.mocked(getPortalUserFn).mockResolvedValue({
+      name: 'Ada Lovelace',
+      email: 'ada@example.com',
+      emailVerified: true,
+      segments: [],
+      postCount: 0,
+      commentCount: 0,
+      voteCount: 0,
+      createdAt: '2026-01-01T00:00:00.000Z',
+    } as never)
+
+    renderPanel(
+      makeConversation({
+        visitor: {
+          principalId: 'principal_visitor',
+          displayName: 'Quiet Otter',
+          avatarUrl: null,
+        },
+      })
+    )
+
+    expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument()
+    expect(screen.getByText('ada@example.com')).toBeInTheDocument()
+    expect(screen.getByText('Posts')).toBeInTheDocument()
+    expect(screen.getByText('Comments')).toBeInTheDocument()
+    expect(screen.queryByText('Quiet Otter')).not.toBeInTheDocument()
+  })
+
+  it('does not replace the public name on the card when the account name is still the stock anonymous label', async () => {
+    routeContextState.principal = undefined
+    showPanel()
+    vi.mocked(getPortalUserFn).mockResolvedValue({
+      name: 'Anonymous',
+      email: 'ada@example.com',
+      emailVerified: false,
+      segments: [],
+      postCount: 1,
+      commentCount: 2,
+      voteCount: 3,
+      createdAt: '2026-01-01T00:00:00.000Z',
+    } as never)
+
+    renderPanel(
+      makeConversation({
+        visitor: {
+          principalId: 'principal_visitor',
+          displayName: 'Quiet Otter',
+          avatarUrl: null,
+        },
+      })
+    )
+
+    expect(await screen.findByText('Quiet Otter')).toBeInTheDocument()
+    expect(screen.queryByText('Anonymous')).not.toBeInTheDocument()
   })
 })

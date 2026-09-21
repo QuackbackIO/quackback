@@ -48,6 +48,7 @@ import { getChannelDescriptor, githubIssueRefFromUrl } from '@/lib/shared/channe
 import { TONE_CLASSES } from '@/components/admin/conversation/sla-chip'
 import { CompanyCard } from '@/components/admin/conversation/company-card'
 import { CopilotPanel } from '@/components/admin/conversation/copilot-panel'
+import { supportContactName } from '@/components/admin/inbox/contact-display-name'
 import { usePersonBlockStatus } from '@/components/admin/users/block-person-control'
 import { TicketStageChip, TicketTypeBadge } from '@/components/admin/inbox/ticket-chips'
 import {
@@ -285,9 +286,11 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
   const principalId: PrincipalId | undefined = isTicketItem
     ? (ticket?.requester?.principalId ?? undefined)
     : conversation?.visitor.principalId
-  const principalName = isTicketItem
-    ? (ticket?.requester?.displayName ?? 'Requester')
-    : (conversation?.visitor.displayName ?? 'Visitor')
+  // Public label only. Posts and comments keep this name; the card below
+  // prefers the account name once the portal profile loads.
+  const publicName = isTicketItem
+    ? ticket?.requester?.displayName
+    : conversation?.visitor.displayName
   const principalAvatarUrl = isTicketItem
     ? (ticket?.requester?.avatarUrl ?? null)
     : (conversation?.visitor.avatarUrl ?? null)
@@ -338,6 +341,11 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
   // `detail` is non-null only for identified portal users, so it doubles as the
   // identified-vs-anonymous signal (anonymous visitors aren't portal users).
   const isIdentified = !!detail
+  const contactName = supportContactName({
+    accountName: detail?.name,
+    publicName,
+    fallback: principalId ? (isTicketItem ? 'Requester' : 'Visitor') : 'No requester',
+  })
   const convoCount = history?.conversations.length ?? 0
   const convoMore = history?.hasMore ?? false
   const firstSeen = detail?.createdAt ?? conversation?.createdAt
@@ -365,7 +373,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
             <div className="flex items-center gap-2.5">
               <Avatar
                 src={principalAvatarUrl}
-                name={principalName}
+                name={contactName}
                 className="size-9 shrink-0 text-sm"
               />
               <div className="min-w-0">
@@ -373,9 +381,9 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
                   <Link
                     to="/admin/users"
                     search={{ selected: principalId }}
-                    className="flex items-center gap-1 text-sm font-medium hover:underline"
+                    className="flex min-w-0 items-center gap-1 text-sm font-medium hover:underline"
                   >
-                    <span className="truncate">{principalName}</span>
+                    <span className="min-w-0 truncate">{contactName}</span>
                     {detail?.emailVerified && (
                       <CheckBadgeIcon
                         className="h-3.5 w-3.5 shrink-0 text-primary"
@@ -384,9 +392,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
                     )}
                   </Link>
                 ) : (
-                  <p className="truncate text-sm font-medium">
-                    {principalId ? principalName : 'No requester'}
-                  </p>
+                  <p className="truncate text-sm font-medium">{contactName}</p>
                 )}
                 {principalId ? (
                   email ? (
