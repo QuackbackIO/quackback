@@ -337,12 +337,22 @@ export function WidgetHomeAnimated({
 
   // After identify/logout the live list is authoritative. Keep a stale
   // members-only selection through the anonymous first paint (identify may
-  // grant it); once this session's fetch lands, fall back to the default.
+  // grant it). Once this session's fetch lands, fill an empty selection or
+  // replace one the visitor can no longer see. Honour open({ board }) unless
+  // the visitor has since picked a board themselves.
   useEffect(() => {
     if (sessionVersion === INITIAL_SESSION_VERSION) return
     if (!shouldResetComposeBoard(selectedBoardId, boards, confirmedBoardSlugs)) return
-    setSelectedBoardId(resolveComposeBoardId(boards, undefined, defaultBoard))
-  }, [sessionVersion, selectedBoardId, boards, confirmedBoardSlugs, defaultBoard])
+    const requestedSlug = composeBoardDirtyRef.current ? undefined : composeRequest?.boardSlug
+    setSelectedBoardId(resolveComposeBoardId(boards, requestedSlug, defaultBoard))
+  }, [
+    sessionVersion,
+    selectedBoardId,
+    boards,
+    confirmedBoardSlugs,
+    defaultBoard,
+    composeRequest?.boardSlug,
+  ])
 
   // Per-board capability, server-computed for the request actor. The widget
   // route refetches boardPermissions with the Bearer identity (keyed on
@@ -704,7 +714,7 @@ export function WidgetHomeAnimated({
             transition={{ duration: 0.2 }}
           >
             <AnimatePresence>
-              {expanded && boards.length > 1 && (
+              {expanded && boards.length > 0 && (
                 <motion.div
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
@@ -894,7 +904,7 @@ export function WidgetHomeAnimated({
                             id="widget.home.posting.noAccess"
                             defaultMessage="You don't have access to post on this board"
                           />
-                        ) : boards.length > 1 && !selectedBoardId ? (
+                        ) : boards.length > 0 && !selectedBoardId ? (
                           // Submit is disabled until a board is picked; say so
                           // rather than leaving a dead button unexplained.
                           <FormattedMessage

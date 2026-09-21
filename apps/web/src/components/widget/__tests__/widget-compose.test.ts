@@ -156,7 +156,14 @@ describe('shouldResetComposeBoard', () => {
     expect(shouldResetComposeBoard('board_secret', boards, ['ideas', 'bug-reports'])).toBe(true)
     expect(shouldResetComposeBoard('board_ideas', boards, ['ideas', 'bug-reports'])).toBe(false)
     expect(shouldResetComposeBoard('board_ideas', boards, null)).toBe(false)
-    expect(shouldResetComposeBoard('', boards, ['ideas'])).toBe(false)
+  })
+
+  it('fills an empty selection once the live list is known', () => {
+    expect(shouldResetComposeBoard('', boards, ['ideas'])).toBe(true)
+    expect(shouldResetComposeBoard('', [{ id: 'board_ideas', slug: 'ideas' }], ['ideas'])).toBe(
+      true
+    )
+    expect(shouldResetComposeBoard('', boards, null)).toBe(false)
   })
 })
 
