@@ -98,6 +98,7 @@ export async function loadConversationThread(
   const { messages } = await listMessages(conversationId, {
     includeInternal: opts.includeInternal ?? false,
     limit: opts.limit ?? ASSISTANT_THREAD_WINDOW,
+    preferAccountName: true,
   })
   return messages
 }

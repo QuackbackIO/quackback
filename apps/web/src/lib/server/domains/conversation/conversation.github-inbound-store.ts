@@ -284,8 +284,9 @@ export async function publishGitHubInboxMessage(
     await import('@/lib/server/realtime/conversation-channels')
   if (!message.conversationId) return
   const author = message.principalId
-    ? ((await loadAuthors([message.principalId])).get(message.principalId) ??
-      fallbackAuthor(message.principalId))
+    ? ((await loadAuthors([message.principalId], { preferAccountName: true })).get(
+        message.principalId
+      ) ?? fallbackAuthor(message.principalId))
     : null
   const dto = asAgentMessage(toMessageDTO(message, author))
   if (mode === 'created') {

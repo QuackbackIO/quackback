@@ -272,7 +272,10 @@ async function toPairDtos(
   sourced: Array<{ row: ConversationMessage; source: PairThreadMessageSource }>
 ): Promise<PairThreadMessageDTO[]> {
   const [authors, assistantPrincipalId] = await Promise.all([
-    loadAuthors(sourced.map((s) => s.row.principalId)),
+    loadAuthors(
+      sourced.map((s) => s.row.principalId),
+      { preferAccountName: true }
+    ),
     assistantPrincipalIdOnce(),
   ])
   return sourced.map(({ row, source }) => ({

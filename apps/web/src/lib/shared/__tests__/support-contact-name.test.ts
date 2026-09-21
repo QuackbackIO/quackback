@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { supportContactName } from '../contact-display-name'
+import { supportContactName } from '../support-contact-name'
 
 describe('supportContactName', () => {
   it('shows the account name when the public name is a generic anonymous label', () => {

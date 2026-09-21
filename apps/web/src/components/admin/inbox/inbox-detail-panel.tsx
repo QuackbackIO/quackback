@@ -48,7 +48,7 @@ import { getChannelDescriptor, githubIssueRefFromUrl } from '@/lib/shared/channe
 import { TONE_CLASSES } from '@/components/admin/conversation/sla-chip'
 import { CompanyCard } from '@/components/admin/conversation/company-card'
 import { CopilotPanel } from '@/components/admin/conversation/copilot-panel'
-import { supportContactName } from '@/components/admin/inbox/contact-display-name'
+import { supportContactName } from '@/lib/shared/support-contact-name'
 import { usePersonBlockStatus } from '@/components/admin/users/block-person-control'
 import { TicketStageChip, TicketTypeBadge } from '@/components/admin/inbox/ticket-chips'
 import {

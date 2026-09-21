@@ -371,7 +371,12 @@ export const Route = createFileRoute('/api/chat/stream')({
                       )
                     )
                     .orderBy(conversationMessages.createdAt, conversationMessages.id)
-                  const authors = await loadAuthors(missed.map((m) => m.principalId))
+                  const authors = await loadAuthors(
+                    missed.map((m) => m.principalId),
+                    {
+                      preferAccountName: isTeamMember(effectiveRole),
+                    }
+                  )
                   for (const m of missed) {
                     const dto = toMessageDTO(
                       m,

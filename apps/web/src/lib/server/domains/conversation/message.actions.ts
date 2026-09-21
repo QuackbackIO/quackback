@@ -71,8 +71,9 @@ async function publishMessageUpdated(
   viewerPrincipalId: PrincipalId
 ): Promise<{ reactions: MessageReactionCount[]; flaggedAt: string | null }> {
   const author = message.principalId
-    ? ((await loadAuthors([message.principalId])).get(message.principalId) ??
-      fallbackAuthor(message.principalId))
+    ? ((await loadAuthors([message.principalId], { preferAccountName: true })).get(
+        message.principalId
+      ) ?? fallbackAuthor(message.principalId))
     : null
   // Thread the in-memory suggestion off the raw row so a reaction/flag toggle on a
   // suggestion note keeps carrying it in the broadcast (no re-read of metadata).

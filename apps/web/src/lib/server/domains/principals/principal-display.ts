@@ -9,6 +9,7 @@ import { db, principal, user, eq, inArray } from '@/lib/server/db'
 import type { PrincipalId } from '@quackback/ids'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import type { ConversationAuthorDTO } from '@/lib/shared/conversation/types'
+import { supportContactName } from '@/lib/shared/support-contact-name'
 
 /**
  * Display URL: the public URL of an uploaded key, else an OAuth/external URL.
@@ -35,9 +36,16 @@ export function resolveUserAvatarUrl(opts: {
   )
 }
 
-/** Batch-load principal display info, returning a lookup map. */
+/**
+ * Batch-load principal display info, returning a lookup map.
+ *
+ * `preferAccountName` is for agent support surfaces (the inbox list, the
+ * thread, ticket requesters). It shows the account name. Posts and comments
+ * leave it off, so they keep the public display name.
+ */
 export async function loadAuthors(
-  ids: ReadonlyArray<PrincipalId | null | undefined>
+  ids: ReadonlyArray<PrincipalId | null | undefined>,
+  opts?: { preferAccountName?: boolean }
 ): Promise<Map<PrincipalId, ConversationAuthorDTO>> {
   const unique = [...new Set(ids.filter((id): id is PrincipalId => !!id))]
   const map = new Map<PrincipalId, ConversationAuthorDTO>()
@@ -51,6 +59,7 @@ export async function loadAuthors(
     .select({
       id: principal.id,
       displayName: principal.displayName,
+      accountName: user.name,
       avatarUrl: principal.avatarUrl,
       avatarKey: principal.avatarKey,
       userImage: user.image,
@@ -60,9 +69,16 @@ export async function loadAuthors(
     .leftJoin(user, eq(user.id, principal.userId))
     .where(inArray(principal.id, unique))
   for (const row of rows) {
+    const publicName = row.displayName ?? null
     map.set(row.id, {
       principalId: row.id,
-      displayName: row.displayName ?? null,
+      displayName: opts?.preferAccountName
+        ? supportContactName({
+            accountName: row.accountName,
+            publicName,
+            fallback: '',
+          }) || null
+        : publicName,
       avatarUrl: resolveUserAvatarUrl({
         userImage: row.userImage,
         userImageKey: row.userImageKey,

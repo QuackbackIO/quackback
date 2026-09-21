@@ -22,6 +22,7 @@ let principalRows: Array<{
   id: PrincipalId
   displayName: string | null
   avatarUrl: string | null
+  accountName?: string | null
 }> = []
 // Records the argument handed to inArray so we can assert dedupe behavior.
 const inArrayCalls: unknown[][] = []
@@ -434,6 +435,22 @@ describe('loadAuthors', () => {
       displayName: null,
       avatarUrl: 'https://x/a.png',
     })
+  })
+
+  it('prefers the account name for support surfaces and leaves the public name otherwise', async () => {
+    principalRows = [
+      {
+        id: visitorId,
+        displayName: 'Quiet Otter',
+        avatarUrl: null,
+        accountName: 'Ada Lovelace',
+      },
+    ]
+    const support = await loadAuthors([visitorId], { preferAccountName: true })
+    expect(support.get(visitorId)?.displayName).toBe('Ada Lovelace')
+
+    const publicName = await loadAuthors([visitorId])
+    expect(publicName.get(visitorId)?.displayName).toBe('Quiet Otter')
   })
 })
 

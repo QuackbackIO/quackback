@@ -120,6 +120,7 @@ Example: get_conversation({ conversationId: "conversation_01abc...", includeInte
           before: args.cursor,
           includeInternal: args.includeInternal ?? false,
           limit: 30,
+          preferAccountName: true,
         }),
       ])
       return jsonResult({

@@ -1,9 +1,9 @@
 /**
- * Label for the support contact card.
+ * Name shown to agents for a support contact.
  *
  * The account name is who the person is. Posts and comments keep the public
- * display name, which stays generic for anonymous activity — this helper only
- * chooses the card label and never writes that public name.
+ * display name, which stays generic for anonymous activity. This only chooses
+ * a label; it never writes the public name.
  */
 
 /** Better Auth's stock name when nobody collected a real one. */

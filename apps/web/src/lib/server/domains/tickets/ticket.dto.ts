@@ -297,10 +297,10 @@ export async function buildTicketContext(rows: Ticket[]): Promise<TicketDTOConte
         : Promise.resolve([] as TicketTypeEntity[]),
       // Reuse the inbox's principal loader so the avatar-precedence rule
       // (user.image → uploaded key → principal copy) stays in one place.
-      loadAuthors([
-        ...rows.map((r) => r.requesterPrincipalId),
-        ...rows.map((r) => r.assigneePrincipalId),
-      ]),
+      loadAuthors(
+        [...rows.map((r) => r.requesterPrincipalId), ...rows.map((r) => r.assigneePrincipalId)],
+        { preferAccountName: true }
+      ),
       teamIds.length
         ? db
             .select({ id: teams.id, name: teams.name })

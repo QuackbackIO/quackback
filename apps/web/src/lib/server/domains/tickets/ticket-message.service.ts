@@ -307,7 +307,9 @@ export async function insertTicketMessage(
     return row
   })
 
-  const author = (await loadAuthors([principalId])).get(principalId) ?? fallbackAuthor(principalId)
+  const author =
+    (await loadAuthors([principalId], { preferAccountName: true })).get(principalId) ??
+    fallbackAuthor(principalId)
   const message = toMessageDTO(messageRow, author)
   // Realtime signal (unified inbox §3.2, M3): the one low-level write shared
   // by the agent reply, the internal note, AND the requester reply (see
@@ -362,7 +364,9 @@ async function sendViaPairConversation(
   // ConversationAuthorDTO and ConversationAuthorInput share one shape
   // (principalId + optional displayName/avatarUrl/email), so the display
   // resolution every ticket-thread write already does doubles as the author.
-  const author = (await loadAuthors([principalId])).get(principalId) ?? fallbackAuthor(principalId)
+  const author =
+    (await loadAuthors([principalId], { preferAccountName: true })).get(principalId) ??
+    fallbackAuthor(principalId)
   const message =
     opts.senderType === 'visitor'
       ? (
