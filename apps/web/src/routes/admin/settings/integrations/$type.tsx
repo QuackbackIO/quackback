@@ -84,7 +84,7 @@ function IntegrationSettingsPage() {
         icon={<Icon className="h-6 w-6 text-white" />}
         actions={
           isConnected || isPaused ? (
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
               {hasCredentials && canEditCredentials && (
                 <Button variant="outline" size="sm" onClick={() => setCredentialsOpen(true)}>
                   Configure credentials

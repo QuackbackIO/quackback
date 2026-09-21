@@ -27,15 +27,15 @@ export function IntegrationHeader({
     <>
       <BackLink to="/admin/settings/integrations">Integrations</BackLink>
 
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col items-start justify-between gap-4 sm:flex-row">
+        <div className="flex min-w-0 items-center gap-4">
           <div
-            className={`flex h-12 w-12 items-center justify-center rounded-xl ${catalog.iconBg}`}
+            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${catalog.iconBg}`}
           >
             {icon ?? <span className="text-white font-bold text-lg">{catalog.name.charAt(0)}</span>}
           </div>
-          <div>
-            <div className="flex items-center gap-2">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-xl font-semibold text-foreground">{catalog.name}</h1>
               {isConnected && (
                 <Badge variant="outline" className="border-green-500/30 text-green-600">

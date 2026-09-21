@@ -170,7 +170,7 @@ function getBoardSummary(channel: NotificationChannel, boards: Board[]): string 
  * and the grid would silently collapse.
  */
 function tableGridStyle(eventCount: number): CSSProperties {
-  return { gridTemplateColumns: `minmax(0,1fr) ${'5rem '.repeat(eventCount).trim()}` }
+  return { gridTemplateColumns: `minmax(12rem,1fr) ${'5rem '.repeat(eventCount).trim()}` }
 }
 
 // ============================================
@@ -498,10 +498,10 @@ function ChannelRow<TChannel extends Channel>({
               }`}
             />
             {renderChannelIcon(channelInfo)}
-            <div className="min-w-0 flex items-center gap-2">
-              <span className="text-sm font-medium truncate">{channelName}</span>
+            <div className="min-w-0 flex flex-col items-start gap-0.5">
+              <span className="max-w-full text-sm font-medium truncate">{channelName}</span>
               {hasFilter && (
-                <span className="text-[11px] text-muted-foreground shrink-0">
+                <span className="max-w-full text-[11px] text-muted-foreground truncate">
                   {getBoardSummary(channel, boards)}
                 </span>
               )}
@@ -517,6 +517,7 @@ function ChannelRow<TChannel extends Channel>({
                 onClick={(e) => e.stopPropagation()}
               >
                 <Checkbox
+                  aria-label={`${event.label} for #${channelName}`}
                   checked={enabled}
                   onCheckedChange={(checked) => handleEventToggle(event.id, checked === true)}
                   disabled={disabled || saving}
@@ -599,54 +600,61 @@ function RoutingTable<TChannel extends Channel>({
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
   return (
-    <div className="rounded-lg border border-border/50 overflow-hidden">
-      <div
-        className="grid items-end bg-muted/40 border-b border-border/50"
-        style={tableGridStyle(events.length)}
-      >
-        <div className="px-4 py-2 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-          Channel
-        </div>
-        {events.map((event) => (
-          <div
-            key={event.id}
-            className="py-2 text-[11px] font-medium text-muted-foreground text-center leading-tight"
-            title={event.description}
-          >
-            {event.shortLabel}
-          </div>
-        ))}
-      </div>
-
-      {notificationChannels.map((nc, idx) => (
-        <ChannelRow<TChannel>
-          key={nc.channelId}
-          channel={nc}
-          channelInfo={channelInfoList.find((c) => c.id === nc.channelId)}
-          integrationId={integrationId}
-          disabled={disabled}
-          expanded={expandedId === nc.channelId}
-          onToggleExpand={() =>
-            setExpandedId((prev) => (prev === nc.channelId ? null : nc.channelId))
-          }
-          boards={boards}
-          hasBorder={idx < notificationChannels.length - 1 || expandedId === nc.channelId}
-          events={events}
-          renderChannelIcon={renderChannelIcon}
-        />
-      ))}
-
-      {onAddChannel && (
-        <button
-          type="button"
-          className="flex items-center gap-1.5 px-4 py-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/10 transition-colors w-full border-t border-border/50"
-          onClick={onAddChannel}
-          disabled={disabled}
+    <div
+      className="rounded-lg border border-border/50 overflow-x-auto"
+      role="region"
+      aria-label="Notification channel routing"
+      tabIndex={0}
+    >
+      <div style={{ minWidth: `${12 + events.length * 5}rem` }}>
+        <div
+          className="grid items-end bg-muted/40 border-b border-border/50"
+          style={tableGridStyle(events.length)}
         >
-          <PlusIcon className="h-3.5 w-3.5" />
-          Add channel
-        </button>
-      )}
+          <div className="px-4 py-2 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+            Channel
+          </div>
+          {events.map((event) => (
+            <div
+              key={event.id}
+              className="py-2 text-[11px] font-medium text-muted-foreground text-center leading-tight"
+              title={event.description}
+            >
+              {event.shortLabel}
+            </div>
+          ))}
+        </div>
+
+        {notificationChannels.map((nc, idx) => (
+          <ChannelRow<TChannel>
+            key={nc.channelId}
+            channel={nc}
+            channelInfo={channelInfoList.find((c) => c.id === nc.channelId)}
+            integrationId={integrationId}
+            disabled={disabled}
+            expanded={expandedId === nc.channelId}
+            onToggleExpand={() =>
+              setExpandedId((prev) => (prev === nc.channelId ? null : nc.channelId))
+            }
+            boards={boards}
+            hasBorder={idx < notificationChannels.length - 1 || expandedId === nc.channelId}
+            events={events}
+            renderChannelIcon={renderChannelIcon}
+          />
+        ))}
+
+        {onAddChannel && (
+          <button
+            type="button"
+            className="flex items-center gap-1.5 px-4 py-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/10 transition-colors w-full border-t border-border/50"
+            onClick={onAddChannel}
+            disabled={disabled}
+          >
+            <PlusIcon className="h-3.5 w-3.5" />
+            Add channel
+          </button>
+        )}
+      </div>
     </div>
   )
 }
