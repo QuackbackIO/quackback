@@ -36,6 +36,7 @@ vi.mock('../conversation.notify', () => notify)
 
 const publish = vi.hoisted(() => ({
   publishConversationEvent: vi.fn(),
+  publishConversationMessage: vi.fn(),
   publishAgentConversationEvent: vi.fn(),
   publishConversationUpdate: vi.fn(),
 }))
@@ -72,6 +73,14 @@ vi.mock('../conversation.query', () => ({
     displayName: null,
     avatarUrl: null,
   })),
+  resolveAuthorAudiences: vi.fn(async (a: { principalId: string; displayName?: string | null }) => {
+    const author = {
+      principalId: a.principalId,
+      displayName: a.displayName ?? null,
+      avatarUrl: null,
+    }
+    return { publicAuthor: author, supportAuthor: author }
+  }),
   loadAuthors: vi.fn(async () => new Map()),
 }))
 
@@ -283,9 +292,12 @@ describe('startAgentConversation happy path', () => {
     )
 
     expect(publish.publishConversationUpdate).toHaveBeenCalledTimes(1)
-    expect(publish.publishConversationEvent).toHaveBeenCalledWith(
+    expect(publish.publishConversationMessage).toHaveBeenCalledWith(
       'conversation_outbound',
-      expect.objectContaining({ kind: 'message' })
+      expect.objectContaining({
+        visitor: expect.anything(),
+        agent: expect.anything(),
+      })
     )
     expect(emit.emitConversationCreated).toHaveBeenCalledTimes(1)
     expect(emit.emitMessageCreated).toHaveBeenCalledTimes(1)

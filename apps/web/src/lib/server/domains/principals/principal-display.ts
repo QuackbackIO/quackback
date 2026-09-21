@@ -36,26 +36,48 @@ export function resolveUserAvatarUrl(opts: {
   )
 }
 
-/**
- * Batch-load principal display info, returning a lookup map.
- *
- * `preferAccountName` is for agent support surfaces (the inbox list, the
- * thread, ticket requesters). It shows the account name. Posts and comments
- * leave it off, so they keep the public display name.
- */
-export async function loadAuthors(
-  ids: ReadonlyArray<PrincipalId | null | undefined>,
-  opts?: { preferAccountName?: boolean }
-): Promise<Map<PrincipalId, ConversationAuthorDTO>> {
+type AuthorRow = {
+  id: PrincipalId
+  displayName: string | null
+  accountName: string | null
+  avatarUrl: string | null
+  avatarKey: string | null
+  userImage: string | null
+  userImageKey: string | null
+}
+
+/** Public label, or the account name agents should see. */
+function authorFromRow(row: AuthorRow, preferAccountName: boolean): ConversationAuthorDTO {
+  const publicName = row.displayName ?? null
+  return {
+    principalId: row.id,
+    displayName: preferAccountName
+      ? supportContactName({
+          accountName: row.accountName,
+          publicName,
+          fallback: '',
+        }) || null
+      : publicName,
+    avatarUrl: resolveUserAvatarUrl({
+      userImage: row.userImage,
+      userImageKey: row.userImageKey,
+      principalAvatarUrl: row.avatarUrl,
+      principalAvatarKey: row.avatarKey,
+    }),
+  }
+}
+
+async function selectAuthorRows(
+  ids: ReadonlyArray<PrincipalId | null | undefined>
+): Promise<AuthorRow[]> {
   const unique = [...new Set(ids.filter((id): id is PrincipalId => !!id))]
-  const map = new Map<PrincipalId, ConversationAuthorDTO>()
-  if (unique.length === 0) return map
+  if (unique.length === 0) return []
   // Resolve the avatar from the linked user (the canonical source, like the
   // team-member list): the public URL of an uploaded avatar (stored only as an
   // S3 key), else an external image URL, falling back to the principal's synced
   // copy. principal.avatarUrl alone is not reliably kept in sync, so agents
   // whose avatar lives only on the user row would otherwise show initials.
-  const rows = await db
+  return db
     .select({
       id: principal.id,
       displayName: principal.displayName,
@@ -68,23 +90,40 @@ export async function loadAuthors(
     .from(principal)
     .leftJoin(user, eq(user.id, principal.userId))
     .where(inArray(principal.id, unique))
-  for (const row of rows) {
-    const publicName = row.displayName ?? null
+}
+
+/**
+ * Batch-load principal display info, returning a lookup map.
+ *
+ * `preferAccountName` is for agent support surfaces (the inbox list, the
+ * thread, ticket requesters). It shows the account name. Posts, comments,
+ * and requester reads leave it off, so they keep the public display name.
+ */
+export async function loadAuthors(
+  ids: ReadonlyArray<PrincipalId | null | undefined>,
+  opts?: { preferAccountName?: boolean }
+): Promise<Map<PrincipalId, ConversationAuthorDTO>> {
+  const map = new Map<PrincipalId, ConversationAuthorDTO>()
+  for (const row of await selectAuthorRows(ids)) {
+    map.set(row.id, authorFromRow(row, opts?.preferAccountName === true))
+  }
+  return map
+}
+
+/** Both labels from one read, so a send can fan each audience its own name. */
+export async function loadAuthorAudiences(
+  ids: ReadonlyArray<PrincipalId | null | undefined>
+): Promise<
+  Map<PrincipalId, { publicAuthor: ConversationAuthorDTO; supportAuthor: ConversationAuthorDTO }>
+> {
+  const map = new Map<
+    PrincipalId,
+    { publicAuthor: ConversationAuthorDTO; supportAuthor: ConversationAuthorDTO }
+  >()
+  for (const row of await selectAuthorRows(ids)) {
     map.set(row.id, {
-      principalId: row.id,
-      displayName: opts?.preferAccountName
-        ? supportContactName({
-            accountName: row.accountName,
-            publicName,
-            fallback: '',
-          }) || null
-        : publicName,
-      avatarUrl: resolveUserAvatarUrl({
-        userImage: row.userImage,
-        userImageKey: row.userImageKey,
-        principalAvatarUrl: row.avatarUrl,
-        principalAvatarKey: row.avatarKey,
-      }),
+      publicAuthor: authorFromRow(row, false),
+      supportAuthor: authorFromRow(row, true),
     })
   }
   return map

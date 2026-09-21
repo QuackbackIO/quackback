@@ -14,6 +14,7 @@ import {
   conversationChannel,
   CONVERSATION_INBOX_CHANNEL,
   publishConversationEvent,
+  publishConversationMessage,
   publishAgentConversationEvent,
   publishConversationUpdate,
   publishTyping,
@@ -71,6 +72,29 @@ describe('publishConversationEvent', () => {
     const channels = publish.mock.calls.map((c) => c[0])
     expect(channels).toContain(conversationChannel(conversationId))
     expect(channels).toContain(CONVERSATION_INBOX_CHANNEL)
+  })
+})
+
+describe('publishConversationMessage', () => {
+  it('keeps the public name on the visitor channel and the account name on the inbox', () => {
+    const visitor = {
+      id: 'conversation_msg_1',
+      author: { principalId: 'principal_a', displayName: 'Quiet Otter', avatarUrl: null },
+    }
+    const agent = {
+      ...visitor,
+      author: { principalId: 'principal_a', displayName: 'Ada Lovelace', avatarUrl: null },
+    }
+    publishConversationMessage(conversationId, {
+      visitor: visitor as never,
+      agent: agent as never,
+    })
+    const visitorEvent = publish.mock.calls.find(
+      (c) => c[0] === conversationChannel(conversationId)
+    )
+    const inboxEvent = publish.mock.calls.find((c) => c[0] === CONVERSATION_INBOX_CHANNEL)
+    expect(visitorEvent?.[1].message.author.displayName).toBe('Quiet Otter')
+    expect(inboxEvent?.[1].message.author.displayName).toBe('Ada Lovelace')
   })
 })
 

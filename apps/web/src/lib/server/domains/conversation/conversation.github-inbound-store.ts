@@ -278,28 +278,28 @@ export async function publishGitHubInboxMessage(
   message: ConversationMessage,
   mode: 'created' | 'updated'
 ) {
-  const { toMessageDTO, loadAuthors, fallbackAuthor } = await import('./conversation.query')
+  const { toMessageDTO, loadAuthorAudiences, fallbackAuthor } = await import('./conversation.query')
   const { asAgentMessage } = await import('@/lib/shared/conversation/types')
-  const { publishConversationEvent, publishAgentConversationEvent } =
+  const { publishConversationMessage, publishAgentConversationEvent } =
     await import('@/lib/server/realtime/conversation-channels')
   if (!message.conversationId) return
-  const author = message.principalId
-    ? ((await loadAuthors([message.principalId], { preferAccountName: true })).get(
-        message.principalId
-      ) ?? fallbackAuthor(message.principalId))
+  const views = message.principalId
+    ? (await loadAuthorAudiences([message.principalId])).get(message.principalId)
     : null
-  const dto = asAgentMessage(toMessageDTO(message, author))
+  const publicAuthor =
+    views?.publicAuthor ?? (message.principalId ? fallbackAuthor(message.principalId) : null)
+  const supportAuthor =
+    views?.supportAuthor ?? (message.principalId ? fallbackAuthor(message.principalId) : null)
   if (mode === 'created') {
-    publishConversationEvent(message.conversationId, {
-      kind: 'message',
-      conversationId: message.conversationId,
-      message: dto,
+    publishConversationMessage(message.conversationId, {
+      visitor: toMessageDTO(message, publicAuthor),
+      agent: asAgentMessage(toMessageDTO(message, supportAuthor)),
     })
   } else {
     publishAgentConversationEvent({
       kind: 'message_updated',
       conversationId: message.conversationId,
-      message: dto,
+      message: asAgentMessage(toMessageDTO(message, supportAuthor)),
     })
   }
 }

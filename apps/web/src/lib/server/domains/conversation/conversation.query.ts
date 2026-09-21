@@ -73,7 +73,7 @@ import {
 import { PRIORITY_RANK } from '@/lib/shared/conversation/priority-meta'
 import { conversationRelevanceSql } from './conversation-relevance'
 import type { SQL } from 'drizzle-orm'
-import { loadAuthors, fallbackAuthor } from '../principals/principal-display'
+import { loadAuthors, loadAuthorAudiences, fallbackAuthor } from '../principals/principal-display'
 import { toMessageDTO } from '@/lib/server/messages/message-core'
 import { aggregateReactions } from '@/lib/shared'
 import { supportContactName } from '@/lib/shared/support-contact-name'
@@ -103,7 +103,7 @@ const INBOX_PAGE_SIZE = 25
 // loadAuthors/fallbackAuthor now live in the principals domain (principal
 // display is a principal concern). Re-exported here because the inbox, the
 // message stream, and their test mocks reference them from this module.
-export { loadAuthors, fallbackAuthor }
+export { loadAuthors, loadAuthorAudiences, fallbackAuthor }
 
 /** Build an author DTO from a send-call author input (no DB round trip). */
 export function authorFromInput(input: {
@@ -138,6 +138,25 @@ export async function resolveAuthor(input: {
     displayName: input.displayName ?? resolved.displayName,
     avatarUrl: resolved.avatarUrl ?? input.avatarUrl ?? null,
   }
+}
+
+/**
+ * Public name for the visitor channel, account name for the agent inbox.
+ * The caller's display name is not used: a session name can be the account
+ * name, and that must not ride the visitor payload.
+ */
+export async function resolveAuthorAudiences(input: {
+  principalId: PrincipalId
+  displayName?: string | null
+  avatarUrl?: string | null
+}): Promise<{ publicAuthor: ConversationAuthorDTO; supportAuthor: ConversationAuthorDTO }> {
+  const views = await loadAuthorAudiences([input.principalId])
+  const view = views.get(input.principalId)
+  if (!view) {
+    const fallback = authorFromInput(input)
+    return { publicAuthor: fallback, supportAuthor: fallback }
+  }
+  return view
 }
 
 // toMessageDTO now lives in the shared message core (a message is a peer concern

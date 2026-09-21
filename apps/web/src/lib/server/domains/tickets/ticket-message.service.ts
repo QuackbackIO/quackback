@@ -91,7 +91,7 @@ import {
   resolveMessageContent,
   toMessageDTO,
 } from '@/lib/server/messages/message-core'
-import { loadAuthors, fallbackAuthor } from '../principals/principal-display'
+import { loadAuthors, loadAuthorAudiences, fallbackAuthor } from '../principals/principal-display'
 // The conversation domain, not this one, owns reaction/flag storage
 // (conversationMessageReactions/Flags) — `enrichMessagesForAgent` is already
 // generic over any ConversationMessageDTO[] + viewer id, so the agent-view
@@ -361,13 +361,12 @@ async function sendViaPairConversation(
 ): Promise<{ message: ConversationMessageDTO; ticket: Ticket }> {
   const { sendVisitorMessage, sendAgentMessage } =
     await import('@/lib/server/domains/conversation/conversation.service')
-  // ConversationAuthorDTO and ConversationAuthorInput share one shape
-  // (principalId + optional displayName/avatarUrl/email), so the display
-  // resolution every ticket-thread write already does doubles as the author.
-  const author =
-    (await loadAuthors([principalId], { preferAccountName: true })).get(principalId) ??
-    fallbackAuthor(principalId)
-  const message =
+  // The conversation send publishes the public name on the visitor channel.
+  // The ticket channel is team-only, so that copy uses the account name.
+  const views = (await loadAuthorAudiences([principalId])).get(principalId)
+  const publicAuthor = views?.publicAuthor ?? fallbackAuthor(principalId)
+  const supportAuthor = views?.supportAuthor ?? publicAuthor
+  const sent =
     opts.senderType === 'visitor'
       ? (
           await sendVisitorMessage(
@@ -380,7 +379,7 @@ async function sendViaPairConversation(
               // — the metadata->>'emailMessageId' dedupe is parent-agnostic.
               metadata: input.metadata as ConversationMessageMetadata | undefined,
             },
-            author,
+            publicAuthor,
             opts.actor,
             prepared.contentJson
           )
@@ -389,13 +388,14 @@ async function sendViaPairConversation(
           await sendAgentMessage(
             conversationId,
             prepared.content,
-            author,
+            publicAuthor,
             opts.actor,
             prepared.attachments,
             prepared.contentJson,
             input.metadata as ConversationMessageMetadata | undefined
           )
         ).message
+  const message = { ...sent, author: supportAuthor }
 
   await db
     .update(tickets)

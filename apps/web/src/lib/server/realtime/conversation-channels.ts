@@ -19,6 +19,7 @@ import type { ConversationId, PrincipalId, TicketId } from '@quackback/ids'
 import type {
   ConversationStreamEvent,
   ConversationDTO,
+  ConversationMessageDTO,
   ConversationSide,
 } from '@/lib/shared/conversation/types'
 import { publish } from './pubsub'
@@ -37,6 +38,27 @@ export function publishConversationEvent(
 ): void {
   publish(conversationChannel(conversationId), event)
   publish(CONVERSATION_INBOX_CHANNEL, event)
+}
+
+/**
+ * A new message on both channels, with a different author label per audience.
+ * The visitor's channel keeps the public name. The inbox copy may carry the
+ * account name. Omit `agent` to send the same payload to both.
+ */
+export function publishConversationMessage(
+  conversationId: ConversationId,
+  messages: { visitor: ConversationMessageDTO; agent?: ConversationMessageDTO }
+): void {
+  publish(conversationChannel(conversationId), {
+    kind: 'message',
+    conversationId,
+    message: messages.visitor,
+  })
+  publish(CONVERSATION_INBOX_CHANNEL, {
+    kind: 'message',
+    conversationId,
+    message: messages.agent ?? messages.visitor,
+  })
 }
 
 /**

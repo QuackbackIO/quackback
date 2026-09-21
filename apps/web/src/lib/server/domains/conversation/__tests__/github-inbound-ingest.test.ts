@@ -46,6 +46,7 @@ vi.mock('../conversation.webhooks', async (orig) => ({
 vi.mock('@/lib/server/realtime/conversation-channels', () => ({
   publishConversationUpdate: vi.fn(),
   publishConversationEvent: vi.fn(),
+  publishConversationMessage: vi.fn(),
   publishAgentConversationEvent: vi.fn(),
 }))
 
@@ -54,6 +55,7 @@ import { githubThreadKey } from '@/lib/server/domains/channels/github-thread'
 import {
   publishAgentConversationEvent,
   publishConversationEvent,
+  publishConversationMessage,
 } from '@/lib/server/realtime/conversation-channels'
 
 const fixture = await createDbTestFixture({
@@ -444,7 +446,7 @@ describe.skipIf(!fixture.available)('github channel ingest (real DB, rolled back
     const msgs = await testDb.select().from(conversationMessages)
     const principalIds = new Set(msgs.map((m) => m.principalId))
     expect(principalIds.size).toBe(3)
-    expect(publishConversationEvent).toHaveBeenCalled()
+    expect(publishConversationMessage).toHaveBeenCalled()
   })
 
   it('stores the GitHub avatar on the principal when a later comment includes it', async () => {
