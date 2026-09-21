@@ -94,11 +94,49 @@ export async function exchangeGitLabCode(
     refreshToken: data.refresh_token,
     expiresIn: data.expires_in,
     config: {
+      oauthRedirectUri: redirectUri,
       workspaceName: user?.name || user?.username || 'GitLab',
       // Persist the origin so hook / archive / project listing talk to the
       // same instance without a credentials lookup. Omit when defaulting
       // to gitlab.com so existing connections stay unchanged.
       ...(origin !== GITLAB_COM_ORIGIN ? { instanceUrl: origin } : {}),
     },
+  }
+}
+
+export async function refreshGitLabToken(
+  refreshToken: string,
+  credentials?: Record<string, string>,
+  config?: Record<string, unknown>
+) {
+  const origin = normalizeGitLabInstanceUrl(config?.instanceUrl as string | undefined)
+  if (
+    !credentials?.clientId ||
+    !credentials.clientSecret ||
+    typeof config?.oauthRedirectUri !== 'string' ||
+    origin !== instanceOrigin(credentials)
+  )
+    throw new Error('Reconnect GitLab to refresh its credentials')
+  const response = await gitlabFetch(`${origin}/oauth/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      client_id: credentials.clientId,
+      client_secret: credentials.clientSecret,
+      refresh_token: refreshToken,
+      grant_type: 'refresh_token',
+      redirect_uri: config.oauthRedirectUri,
+    }),
+  })
+  if (!response.ok) throw new Error(`GitLab token refresh failed: ${response.status}`)
+  const data = (await response.json()) as {
+    access_token: string
+    refresh_token: string
+    expires_in: number
+  }
+  return {
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token,
+    expiresIn: data.expires_in,
   }
 }

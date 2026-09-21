@@ -31,15 +31,46 @@ The review of `7c8971fec` confirmed both new Codex comments:
 
 The same pass keeps expired and manually retried Slack app events on the serial Slack queue, preserves webhook-registration errors independently of sync health, and enables outbound status proposals from actual status-listing capabilities. Settings no longer offer event toggles whose adapters do nothing, and setup descriptions distinguish status review from automatic updates. All inbound adapters explicitly declare automatic or review-only status handling; GitHub and Linear can apply verified updates, while the other seven require review.
 
-The duplicate bindings table is removed. Permanent operation keys provide delivery identity; post/ticket external links provide source associations. Initial scheduling, crash recovery and manual retry share one queue-selection helper. All 21 integration hooks return explicit delivery outcomes instead of translating legacy retry booleans. HTTP and SDK rate-limit delays reach the job scheduler. Partial writes remain uncertain, including a Monday item whose follow-up description mutation fails or lacks a result.
+The duplicate bindings table is removed. Permanent operation keys provide delivery identity; post/ticket external links provide source associations. Initial scheduling, crash recovery and manual retry share one queue-selection helper. All integration hooks return explicit delivery outcomes instead of translating legacy retry booleans. HTTP and SDK rate-limit delays reach the job scheduler. Partial writes remain uncertain, including a Monday item whose follow-up description mutation fails or lacks a result.
 
 Sync health is read from the ledger for the current installation, using attention and successful-delivery indexes. Workers no longer update health projections or sweep every integration. Connection errors remain independent. The existing GitHub inbox channel telemetry remains part of that separate channel flow; it is not evidence of ledger delivery.
 
 These migrations are still unreleased, so the initial migration and privacy trigger are revised directly. There is no bindings migration/importer or backwards-compatibility path for an intermediate PR revision.
 
+## Cross-provider consistency
+
+Provider definitions now own account scope, destination labels/ownership checks,
+linked-item behavior, and interactive app execution/scheduling. The shared worker
+and history code do not need provider-name allowlists for these capabilities.
+Discord validates channel guild ownership when saving and immediately before
+sending. Public history still filters provider labels to exclude URLs and secrets.
+
+Signed inbound bodies are durable before parsing or network enrichment. Asana
+acknowledges setup challenges before a secret exists and stores the signing secret
+from its authenticated registration response. It processes all relevant tasks in
+a batch in the worker; failed reads retry from the
+receipt. Successful receipts discard the raw body atomically with their normalized
+children; only unresolved receipts retain it for retry. Manual status reviews identify the linked source, remote item, and received
+status. Unverified destination data can only create a review for a current scoped
+link, never an automatic update.
+
+Stripe, Freshdesk, and Salesforce use the same on-demand customer-context contract
+and settings control as HubSpot, Intercom, and Zendesk. Their obsolete event hooks
+and configuration panels are removed. All authenticated capability paths use the
+shared token resolver; configuration and credentials can be read together. Refresh
+is serialized, reuses the transaction connection for platform credentials, and
+supports GitLab rotation and Salesforce's rejected-read refresh. Trello's fragment
+authorization uses a same-origin browser handoff with the normal state/session checks.
+
+The executable template is registered only in tests. It demonstrates adding a
+provider without changing the worker/history renderer, including account scope
+fencing, delivery, link creation, inbound review, and isolated retry. See the
+[provider guide](../apps/web/src/integrations/README.md) for the capability boundaries
+and implementation checklist.
+
 ## Invariants
 
-- Only work after the recorded start boundary is eligible. Older events and creates for older posts/tickets are skipped without creating history or jobs. New events concerning existing content are eligible, and a user may explicitly link an existing item.
+- Only work after the recorded start boundary is eligible. Older revisions and historic creates cannot become new deliveries or recovery items. Inbound transport receipts may be recorded before their revision is parsed. New events concerning existing content are eligible, and a user may explicitly link an existing item.
 - One operation per logical source, installation and destination. Queue retention never determines whether a change was delivered. Successful operation identities remain after detailed history expires.
 - Claims and attempts commit before dispatch. A lease token fences completion; a heartbeat keeps a live attempt owned. Expiry before dispatch can retry; expiry after dispatch becomes uncertain.
 - The dispatch marker commits before the network call. A timeout or ambiguous provider response never authorizes blind replay. Transport has a deadline and no automatic network retry.
@@ -109,13 +140,53 @@ An operation that was failed or awaiting credentials at backup time may have suc
 
 Validation uses an isolated PostgreSQL database (`quackback_sync_575`), mocked provider boundaries and scratch migration databases. It never calls provider mutation endpoints. The browser review renders the actual health/history/dialog components with fixture server responses inside a settings frame; it covers desktop, mobile, dark mode, loading/error/empty states, restricted actions and confirmation drafts. It is not authenticated full-application E2E coverage.
 
-Verified locally on 2026-09-21:
+Earlier PR validation on 2026-09-21, before the cross-provider consistency changes:
 
 - Full regression (`bun vitest run --maxWorkers=4`): **15,604 passed**, 6 skipped and 1 todo; 1,504 files passed and 3 skipped. PostgreSQL migration replay, gap recovery, concurrency and failure tests are included.
 - Final focused integration, settings UI, event and job checks after the last recovery/UI refinements: **506 passed in 73 files**, including restoration after a worker crash, manual Slack recovery, and Monday compound delivery.
 - `bun run typecheck`, `bun run build`, and `bun run db:check-drift`: passed.
 - Changed-file lint: no errors, with two existing typing warnings in Slack and ntfy tests/handlers. Formatting and `git diff --check`: passed.
 - Actual health/history components in the browser: no page errors or horizontal overflow in desktop/mobile, light/dark, loading, failure, empty and restricted-action states; failed confirmation preserves its draft. The health panel displays sync attention and a connection error together, without hiding either.
+
+Cross-provider follow-up validation on 2026-09-21:
+
+- Integration, shared settings, event routing, ticket links, and platform credential
+  regression: **630 passed in 84 files**, using the isolated database and mocked HTTP.
+- After the final reconnect fence: **31 auth/provider-flow tests passed**. The
+  real one-connection pool test preserves refresh serialization without a nested
+  global connection. The remote-inspection race test rejects new-install credentials.
+- OAuth fragment/gateway and same-origin checks passed, including tenant-origin
+  handoff after a shared gateway bounce and rejection of gateway-origin token POSTs.
+- Browser checks covered all six customer-context labels at desktop/mobile widths,
+  inbound status review in light/dark mode, and failed saves retaining the current
+  value. No page errors or horizontal overflow. A separate browser check executed
+  the Trello fragment bridge under its CSP, verified fragment removal before POST,
+  and checked navigation without a token in the URL. These use fixture responses,
+  not live provider authorization.
+- Typecheck, production build, changed-file lint and formatting passed. The server-function
+  manifest covers all 815 built call sites. Lint retains
+  one pre-existing Slack payload typing warning. No migration changes were needed.
+
+The final pre-push full regression run passed **15,675 tests** (6 skipped, 1 todo).
+Its only failure was the authorization inventory snapshot for the new Trello POST
+callback. The reviewed snapshot now includes that route; its delegated state,
+cookie, dashboard-session, and origin gates are covered. All **59 authorization
+matrix and OAuth callback tests** passed after the update. Typecheck, production
+build, and the **815-entry/call-site server-function manifest** also passed.
+
+The final pre-push review also closed these setup and retention gaps:
+
+- Asana's initial challenge now works before any signing secret is configured.
+  The secret is accepted only from the authenticated registration response, as
+  specified in [Asana's webhook protocol](https://developers.asana.com/docs/webhooks-guide).
+  An unsolicited challenge cannot change the configured secret or enqueue an event.
+- Shared setup identifies manual providers from their capability and rejects
+  automatic setup without credentials instead of reporting success.
+- Raw inbound bodies are removed in the same transaction as successful parsing and
+  fan-out; failed reads retain the encrypted receipt for retry.
+- The one-connection refresh regression now runs against CI's disposable database
+  as well as explicitly selected local test databases. Obsolete Jira auth mocks
+  were removed.
 
 A local `EXPLAIN (ANALYZE, BUFFERS)` over 200,000 fixture operations used the success and attention indexes, returning health for 10,000 current-installation operations (100 needing attention) in 0.182 ms. The fixture transaction was rolled back. This is a local query-plan check, not a production benchmark.
 

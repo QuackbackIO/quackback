@@ -1,3 +1,5 @@
+import { integrationFetch } from '@/lib/server/integrations/sync/transport'
+
 /**
  * Salesforce OAuth utilities.
  */
@@ -25,6 +27,36 @@ export function getSalesforceOAuthUrl(
   })
 
   return `https://login.salesforce.com/services/oauth2/authorize?${params}`
+}
+
+/** Salesforce session lifetimes are policy-controlled; refresh after a rejected read. */
+export async function refreshSalesforceToken(
+  refreshToken: string,
+  credentials?: Record<string, string>
+) {
+  if (!credentials?.clientId || !credentials.clientSecret)
+    throw new Error('Salesforce credentials not configured')
+  const response = await integrationFetch('https://login.salesforce.com/services/oauth2/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'refresh_token',
+      client_id: credentials.clientId,
+      client_secret: credentials.clientSecret,
+      refresh_token: refreshToken,
+    }),
+  })
+  if (!response.ok) throw new Error(`Salesforce token refresh failed: ${response.status}`)
+  const data = (await response.json()) as {
+    access_token: string
+    refresh_token?: string
+    instance_url?: string
+  }
+  return {
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token,
+    ...(data.instance_url ? { config: { instanceUrl: data.instance_url } } : {}),
+  }
 }
 
 /**

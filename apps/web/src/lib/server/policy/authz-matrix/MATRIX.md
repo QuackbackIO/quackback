@@ -1024,7 +1024,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-214 of 1038 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+215 of 1039 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -1236,6 +1236,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `routes/e2e.widget.ts`::GET | route |
 | `routes/hc/sitemap[.]xml.ts`::GET | route |
 | `routes/oauth/$integration/callback.ts`::GET | route |
+| `routes/oauth/$integration/callback.ts`::POST | route |
 | `routes/oauth/$integration/connect.ts`::GET | route |
 | `routes/oauth/connector.callback.ts`::GET | route |
 | `routes/robots[.]txt.ts`::GET | route |

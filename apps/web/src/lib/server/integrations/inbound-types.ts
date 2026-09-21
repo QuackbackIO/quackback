@@ -35,6 +35,8 @@ export interface InboundWebhookResult {
 export interface InboundWebhookHandler {
   /** Automatic adapters supply signed destination and revision evidence. */
   statusMode: 'automatic' | 'review'
+  /** Acknowledge setup challenges without accepting events or storing untrusted secrets. */
+  handshake?(request: Request): Response | null
 
   /**
    * Verify the webhook signature/authenticity.
@@ -43,12 +45,12 @@ export interface InboundWebhookHandler {
   verifySignature(request: Request, body: string, secret: string): Promise<true | Response>
 
   /**
-   * Parse the webhook body and extract a status change, if any.
-   * Returns null for events we don't care about (acknowledged but ignored).
+   * Runs in the durable worker. Return null for irrelevant events, an array
+   * for batches, and throw on transient lookup failures so the receipt retries.
    */
   parseStatusChange(
     body: string,
     config: Record<string, unknown>,
     secrets: Record<string, unknown>
-  ): Promise<InboundWebhookResult | null>
+  ): Promise<InboundWebhookResult | InboundWebhookResult[] | null>
 }

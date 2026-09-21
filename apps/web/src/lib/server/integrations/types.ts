@@ -43,6 +43,8 @@ export interface PlatformCredentialField {
 }
 
 export interface IntegrationOAuthConfig {
+  /** Token fragments require a browser handoff; normal OAuth uses query codes. */
+  callbackMode?: 'code' | 'fragment'
   /** State type discriminator (e.g. 'slack_oauth') */
   stateType: string
   /** Provider's error query param name (default: 'error') */
@@ -121,9 +123,7 @@ export interface IntegrationCatalogEntry {
   /**
    * Capability badges. DERIVED from the definition's slots at
    * getIntegrationCatalog() so the catalog cannot drift from what a
-   * provider implements (IF WO-4). Hand-written entries are honored ONLY
-   * as a fallback for providers with no capability slots yet (the
-   * enrichment-only providers, until the context capability lands).
+   * provider implements. Catalog descriptions must also match actual behavior.
    */
   capabilities?: IntegrationCapability[]
   iconBg: string
@@ -191,17 +191,6 @@ export interface IssueTrackerCapability {
     title: string
     bodyMarkdown: string
   }): Promise<ParsedIssueRef>
-  /**
-   * Build the `auth` bag for `create` from the raw integration row, for
-   * providers whose credentials need more than a config+secrets merge —
-   * Jira's expiring OAuth token, refreshed and persisted before use. Absent =
-   * the caller merges `{ ...config, ...decryptSecrets(secrets) }`.
-   */
-  prepareAuth?(integration: {
-    id: import('@quackback/ids').IntegrationId
-    secrets: unknown
-    config: unknown
-  }): Promise<Record<string, unknown>>
 }
 
 /** One selectable external status/state, as shown in the status-mapping UI. */
@@ -254,7 +243,20 @@ export interface EnrichmentCard {
 }
 
 export interface IntegrationDefinition {
+  /** Provider-owned destination scope, safe presentation, and account ownership checks. */
+  destination?: {
+    scopeKeys: readonly string[]
+    label?: (target: unknown) => string | null
+    validate?: (params: {
+      target: unknown
+      config: Record<string, unknown>
+      accessToken: string
+    }) => Promise<boolean>
+  }
   appHooks?: {
+    /** The provider executes through the shared ledger, with optional queue scheduling. */
+    execute: (job: import('@/lib/server/jobs/job-queue').ClaimedJob) => Promise<void>
+    queue?: { name: string; maxAttempts: number }
     kinds: readonly string[]
     verify: (input: {
       headers: Headers
@@ -296,15 +298,9 @@ export interface IntegrationDefinition {
    * Link created items for lifecycle review, including explicit archive/close review
    * on source deletion. Notification receipts stay in sync history without item links.
    */
-  archiveReview?: true
-  /**
-   * How the inbound status-sync webhook gets set up with the provider.
-   * `'manual'` = the admin configures the webhook by hand on the external
-   * platform (the UI shows the callback URL); an object = the framework
-   * auto-registers/deregisters via the provider API when status sync is
-   * toggled. Expected alongside `inbound` — pinned by
-   * registry-capability-coverage so provider #12 can't silently no-op.
-   */
+  linkedItems?: true
+  /** Preserve provider-specific portable Markdown when presenting a manual content update. */
+  formatReviewContent?: (content: string, rootUrl: string) => string
   /**
    * Refresh an expiring OAuth access token — a thin wrapper over the
    * provider's token endpoint. The framework's getValidAccessToken
@@ -313,8 +309,14 @@ export interface IntegrationDefinition {
    */
   refreshToken?: (
     refreshToken: string,
-    credentials?: Record<string, string>
-  ) => Promise<{ accessToken: string; refreshToken?: string; expiresIn: number }>
+    credentials?: Record<string, string>,
+    config?: Record<string, unknown>
+  ) => Promise<{
+    accessToken: string
+    refreshToken?: string
+    expiresIn?: number
+    config?: Record<string, unknown>
+  }>
   /**
    * On-demand customer context for the enrichment panel (IF WO-9). Looks the
    * person up by email in the provider's tool and returns a normalized card,
@@ -325,7 +327,7 @@ export interface IntegrationDefinition {
     accessToken: string
     config: Record<string, unknown>
     email: string
-  }) => Promise<import('./types').EnrichmentCard | null>
+  }) => Promise<EnrichmentCard | null>
   /**
    * List the provider's statuses/states for the status-mapping UI. Any
    * scoping id (team, list, board, cloud) is read from `config` — it is
@@ -378,7 +380,11 @@ export interface IntegrationDefinition {
           config: Record<string, unknown>
           callbackUrl: string
           secret: string
-        }): Promise<{ externalWebhookId?: string }>
+        }): Promise<{
+          externalWebhookId?: string
+          /** Authenticated provider response may issue the signing secret (e.g. Asana). */
+          webhookSecret?: string
+        }>
         unregister(params: {
           accessToken: string
           config: Record<string, unknown>

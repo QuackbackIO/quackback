@@ -24,6 +24,9 @@ import {
   isValidWorkspaceDomain,
 } from './oauth'
 import { logger } from '@/lib/server/logger'
+import { readTextBodyOr413 } from '@/lib/server/utils/read-body'
+import { oauthFragmentBridge } from './oauth-fragment'
+import { isSameOriginFormPost } from '@/lib/server/http/same-origin-form'
 
 const log = logger.child({ component: 'oauth' })
 
@@ -126,10 +129,23 @@ export async function handleOAuthCallback(
 
   const settingsPath = definition.catalog.settingsPath
   const errorUrl = (base: string, reason: string, path = settingsPath) =>
-    buildSettingsUrl(base, path, integrationType, 'error', reason)
+    `${buildSettingsUrl(base, path, integrationType, 'error', reason)}#`
 
   const url = new URL(request.url)
-  const code = url.searchParams.get('code')
+  const fragment = definition.oauth.callbackMode === 'fragment'
+  let code = fragment ? null : url.searchParams.get('code')
+  if (request.method === 'POST') {
+    if (!fragment) return new Response(null, { status: 405 })
+    if (!isSameOriginFormPost(request)) return new Response(null, { status: 403 })
+    const body = await readTextBodyOr413(request, 16_384)
+    if (body instanceof Response) return body
+    try {
+      const data = JSON.parse(body)
+      code = typeof data.token === 'string' && data.token.length > 0 ? data.token : null
+    } catch {
+      return new Response(null, { status: 400 })
+    }
+  }
   const state = url.searchParams.get('state')
   const errorParam = definition.oauth.errorParam ?? 'error'
   const providerError = url.searchParams.get(errorParam)
@@ -157,7 +173,7 @@ export async function handleOAuthCallback(
     return redirectResponse(fail(`${integrationType}_denied`))
   }
 
-  if (!code) {
+  if (!code && !(fragment && request.method === 'GET')) {
     return redirectResponse(fail('invalid_request'))
   }
 
@@ -187,6 +203,8 @@ export async function handleOAuthCallback(
     return redirectResponse(fail('auth_required'))
   }
 
+  if (fragment && request.method === 'GET') return oauthFragmentBridge()
+
   // Fetch platform credentials from DB for exchange
   let credentials: Record<string, string> | undefined
   if (definition.platformCredentials.length > 0) {
@@ -203,7 +221,7 @@ export async function handleOAuthCallback(
   try {
     const callbackUri = buildCallbackUri(integrationType, request)
     const exchangeResult = await definition.oauth.exchangeCode(
-      code,
+      code!,
       callbackUri,
       stateData.preAuthFields,
       credentials

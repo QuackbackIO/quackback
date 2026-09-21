@@ -55,7 +55,7 @@ describe('getIntegrationCatalog capability derivation', () => {
     }
   })
 
-  it('support_crm hooks derive as customer context, not delivery', async () => {
+  it('customer lookups derive from the context capability, not delivery', async () => {
     const catalog = await getIntegrationCatalog()
     for (const id of ['freshdesk', 'salesforce', 'stripe']) {
       const labels = (catalog.find((e) => e.id === id)!.capabilities ?? []).map((c) => c.label)

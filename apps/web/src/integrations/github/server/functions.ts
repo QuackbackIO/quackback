@@ -86,10 +86,10 @@ export const getGitHubChannelStatusFn = createServerFn({ method: 'GET' }).handle
     let hasToken = false
     if (integration?.secrets) {
       try {
-        const { decryptSecrets } = await import('@/lib/server/integrations/encryption')
-        hasToken = githubAccessTokenPresent(
-          decryptSecrets<{ accessToken?: string }>(integration.secrets)
-        )
+        const { getValidAccessToken } = await import('@/lib/server/integrations/token-refresh')
+        hasToken = githubAccessTokenPresent({
+          accessToken: await getValidAccessToken(integration.id),
+        })
       } catch {
         hasToken = false
       }
@@ -130,9 +130,9 @@ export const setGitHubInboxEnabledFn = createServerFn({ method: 'POST' })
     if (data.enabled) {
       let accessToken: string | undefined
       if (integration?.secrets) {
-        const { decryptSecrets } = await import('@/lib/server/integrations/encryption')
+        const { getValidAccessToken } = await import('@/lib/server/integrations/token-refresh')
         try {
-          accessToken = decryptSecrets<{ accessToken?: string }>(integration.secrets).accessToken
+          accessToken = await getValidAccessToken(integration.id)
         } catch {
           accessToken = undefined
         }
@@ -160,7 +160,7 @@ export const fetchGitHubReposFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<GitHubRepo[]> => {
     const { requireAuth } = await import('@/lib/server/functions/auth-helpers')
     const { db, integrations, eq } = await import('@/lib/server/db')
-    const { decryptSecrets } = await import('@/lib/server/integrations/encryption')
+    const { getValidAccessToken } = await import('@/lib/server/integrations/token-refresh')
     const { listGitHubRepos } = await import('@/integrations/github/server/repos')
 
     await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
@@ -173,7 +173,7 @@ export const fetchGitHubReposFn = createServerFn({ method: 'GET' }).handler(
       throw new Error('GitHub not connected')
     }
 
-    const secrets = decryptSecrets<{ accessToken: string }>(integration.secrets)
+    const secrets = { accessToken: await getValidAccessToken(integration.id) }
     return listGitHubRepos(secrets.accessToken)
   }
 )

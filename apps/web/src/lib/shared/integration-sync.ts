@@ -55,6 +55,7 @@ export const SYNC_KIND_LABELS: Record<string, string> = {
   refresh: 'Update content',
   status: 'Update status',
   'receive-status': 'Status received',
+  'receive-webhook': 'Webhook received',
   membership: 'Segment membership',
   identify: 'Update user',
   archive: 'Archive item',

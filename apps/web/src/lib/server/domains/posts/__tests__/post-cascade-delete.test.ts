@@ -1,3 +1,4 @@
+import { getIntegration } from '@/lib/server/integrations'
 /** Selected archive intents and source deletion are one durable transaction. */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { randomUUID } from 'node:crypto'
@@ -64,7 +65,7 @@ async function seed() {
       integrationId: integration.id,
       integrationType: 'github',
       externalId: '42',
-      syncScope: `${installationIdentity(integration)}:${syncHash(syncDestination({ channelId: 'acme/widgets' }, integration.config))}`,
+      syncScope: `${installationIdentity(integration)}:${syncHash(syncDestination({ channelId: 'acme/widgets' }, integration.config, getIntegration(integration.integrationType)))}`,
       externalDisplayId: '#42',
       externalUrl: 'https://github.com/acme/widgets/issues/42',
     })

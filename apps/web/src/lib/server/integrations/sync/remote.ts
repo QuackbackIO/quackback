@@ -1,7 +1,6 @@
 import { SyncRequestError } from './errors'
 import { getIntegration } from '../index'
-import { decryptSecrets } from '../encryption'
-import { getValidAccessToken } from '../token-refresh'
+import { getIntegrationAuth } from '../token-refresh'
 import { currentSyncIntegration } from './eligibility'
 import { readSyncPayload } from './ledger'
 import { syncDestination, syncHash } from './identity'
@@ -12,15 +11,21 @@ export async function inspectSyncRemote(op: SyncOperation, reference: string) {
   const inspect = getIntegration(op.provider)?.issues?.inspect
   if (!integration || !inspect)
     throw new SyncRequestError('Remote verification is unavailable for this connection')
-  const config = (integration.config ?? {}) as Record<string, unknown>
+  const credentials = await getIntegrationAuth(integration.id)
+  if (credentials.installation !== op.installation)
+    throw new SyncRequestError('The connection changed. This sync cannot use the new connection.')
+  const config = credentials.config
   const payload = readSyncPayload(op)
   const target = payload.data.target ?? { channelId: config.channelId }
-  if (syncHash(syncDestination(target, config)) !== op.destinationKey)
+  if (
+    syncHash(syncDestination(target, config, getIntegration(integration.integrationType))) !==
+    op.destinationKey
+  )
     throw new SyncRequestError('The destination changed. This sync cannot use the new destination.')
   const auth = {
-    ...config,
-    ...(integration.secrets ? decryptSecrets(integration.secrets) : {}),
-    accessToken: await getValidAccessToken(integration.id),
+    ...credentials.config,
+    ...credentials.secrets,
+    accessToken: credentials.accessToken,
     ...(target as Record<string, unknown>),
   }
   try {

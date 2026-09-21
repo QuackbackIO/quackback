@@ -26,9 +26,15 @@ import { syncErrorOutcome } from './outcomes'
 import type { SyncOutcome } from './types'
 import { executeTicketCreate } from './tickets'
 import { applyIdentifySync } from './identify'
-import { fanOutInboundStatus, applyInboundStatus } from './inbound'
+import {
+  fanOutInboundStatus,
+  applyInboundStatus,
+  parseInboundWebhook,
+  queueInboundStatus,
+} from './inbound'
 import { executeSegmentSync } from './segment'
 import { installationIdentity } from './identity'
+import { getIntegration } from '../index'
 
 export async function runIntegrationSync(job: ClaimedJob): Promise<void> {
   const id = job.payload.operationId
@@ -71,12 +77,25 @@ export async function runIntegrationSync(job: ClaimedJob): Promise<void> {
             (claim.operation.kind !== 'create' || typeof evidence.result.externalId === 'string')
               ? { state: 'succeeded', result: evidence.result }
               : { state: 'uncertain', errorCode: 'outcome_unknown' }
-        } else if (payload.executor === 'app-hook' && claim.operation.provider === 'slack') {
-          if (!(await markSyncDispatched(claim))) outcome = { state: 'cancelled' }
+        } else if (payload.executor === 'app-hook') {
+          const execute = getIntegration(claim.operation.provider)?.appHooks?.execute
+          if (!execute) outcome = { state: 'failed', errorCode: 'provider_failed' }
+          else if (!(await markSyncDispatched(claim))) outcome = { state: 'cancelled' }
           else {
-            const { handleSlackHookJob } = await import('@/integrations/slack/server/agent/handler')
-            await handleSlackHookJob({ ...job, payload: payload.data })
+            await execute({ ...job, payload: payload.data })
             outcome = { state: 'succeeded' }
+          }
+        } else if (payload.executor === 'inbound-webhook') {
+          const results = await parseInboundWebhook(integration, payload.data)
+          outcome = { state: 'succeeded', result: { received: results.length } }
+          localWrite = async (tx) => {
+            for (const [index, result] of results.entries())
+              await queueInboundStatus(
+                integration,
+                result,
+                `${payload.data.deliveryKey}:${index}`,
+                tx
+              )
           }
         } else if (payload.executor === 'inbound-status') {
           outcome = { state: 'succeeded' }

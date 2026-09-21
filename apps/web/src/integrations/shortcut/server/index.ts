@@ -1,3 +1,4 @@
+import { channelDestination } from '@/lib/server/integrations/destination'
 import type { IntegrationDefinition } from '@/lib/server/integrations/types'
 import { fetchShortcutStates } from '@/integrations/shortcut/server/statuses'
 import { shortcutHook } from '@/integrations/shortcut/server/hook'
@@ -7,6 +8,7 @@ import { listShortcutProjects } from '@/integrations/shortcut/server/projects'
 
 export const shortcutIntegration: IntegrationDefinition = {
   id: 'shortcut',
+  destination: channelDestination(['workspaceId', 'organizationId']),
   catalog: shortcutCatalog,
   destinations: {
     project: {
@@ -19,7 +21,7 @@ export const shortcutIntegration: IntegrationDefinition = {
   },
   hook: shortcutHook,
   inbound: shortcutInboundHandler,
-  archiveReview: true,
+  linkedItems: true,
   webhookRegistration: 'manual',
   listExternalStatuses: fetchShortcutStates,
   platformCredentials: [],

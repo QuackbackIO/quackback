@@ -8,7 +8,6 @@ import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 import type { IssueTrackerCapability, ParsedIssueRef } from '@/lib/server/integrations/types'
 import { issueError } from '@/lib/server/integrations/message-utils'
 import { ValidationError } from '@/lib/shared/errors'
-import { getJiraAccessToken } from '@/integrations/jira/server/token'
 
 /** Markdown → minimal ADF: one paragraph per blank-line-separated block.
  *  Deliberately lossy (markdown syntax renders literally) — converting GFM to
@@ -58,12 +57,6 @@ export const jiraIssues: IssueTrackerCapability = {
       externalDisplayId: key,
       externalUrl: siteUrl ? `${siteUrl}/browse/${key}` : null,
     }
-  },
-
-  // The stored token expires ~hourly; refresh (and persist) before use.
-  async prepareAuth(integration) {
-    const accessToken = await getJiraAccessToken(integration)
-    return { ...((integration.config ?? {}) as Record<string, unknown>), accessToken }
   },
 
   async create({ auth, title, bodyMarkdown }): Promise<ParsedIssueRef> {

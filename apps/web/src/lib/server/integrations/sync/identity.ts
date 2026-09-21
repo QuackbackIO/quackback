@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import type { IntegrationDefinition } from '../types'
 
 /** Sort object keys, retain array ordering. Credentials must never be part of identity. */
 export function canonicalJson(value: unknown): string {
@@ -24,20 +25,11 @@ export function installationIdentity(integration: {
 /** Connection scope alongside the target: repo numbers and project keys are not global IDs. */
 export function syncDestination(
   target: unknown,
-  config: Record<string, unknown>
+  config: Record<string, unknown>,
+  definition: Pick<IntegrationDefinition, 'destination'> | undefined
 ): Record<string, unknown> {
   const scope: Record<string, unknown> = {}
-  for (const key of [
-    'cloudId',
-    'siteUrl',
-    'organizationName',
-    'workspaceId',
-    'teamId',
-    'boardId',
-    'projectId',
-    'apiUrl',
-    'instanceUrl',
-  ]) {
+  for (const key of definition?.destination?.scopeKeys ?? []) {
     if (typeof config[key] === 'string') scope[key] = syncHash(config[key])
   }
   // Destinations may be webhook URLs with credentials. Only their digest is public metadata.
@@ -59,10 +51,16 @@ export function syncOperationKey(input: {
 /** A link from another destination must never be inspected with current destination credentials. */
 export function reviewDestination(
   link: { id: string; syncScope: string | null },
-  integration: { id: string; connectedAt: Date | string | null; config: unknown }
+  integration: {
+    id: string
+    connectedAt: Date | string | null
+    config: unknown
+    integrationType: string
+  },
+  definition: Pick<IntegrationDefinition, 'destination'> | undefined
 ) {
   const config = (integration.config ?? {}) as Record<string, unknown>
-  const destination = syncDestination({ channelId: config.channelId }, config)
+  const destination = syncDestination({ channelId: config.channelId }, config, definition)
   return link.syncScope === `${installationIdentity(integration)}:${syncHash(destination)}`
     ? destination
     : { unverifiedLink: syncHash(link.id), previousScope: syncHash(link.syncScope) }

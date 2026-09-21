@@ -59,7 +59,7 @@ export const fetchGitLabProjectsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<GitLabProject[]> => {
     const { requireAuth } = await import('@/lib/server/functions/auth-helpers')
     const { db, integrations, eq } = await import('@/lib/server/db')
-    const { decryptSecrets } = await import('@/lib/server/integrations/encryption')
+    const { getIntegrationAuth } = await import('@/lib/server/integrations/token-refresh')
     const { listGitLabProjects } = await import('@/integrations/gitlab/server/projects')
 
     await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
@@ -76,12 +76,13 @@ export const fetchGitLabProjectsFn = createServerFn({ method: 'GET' }).handler(
       throw new Error('GitLab secrets missing')
     }
 
-    const secrets = decryptSecrets<{ accessToken?: string }>(integration.secrets)
+    const auth = await getIntegrationAuth(integration.id)
+    const secrets = { accessToken: auth.accessToken }
     if (!secrets.accessToken) {
       throw new Error('GitLab access token missing')
     }
 
-    const instanceUrl = (integration.config as { instanceUrl?: string } | null)?.instanceUrl
+    const instanceUrl = (auth.config as { instanceUrl?: string } | null)?.instanceUrl
     const projects = await listGitLabProjects(secrets.accessToken, instanceUrl)
     return projects
   }

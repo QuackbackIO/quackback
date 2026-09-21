@@ -84,10 +84,14 @@ export async function syncPostIntegrations(
     }
   }
   for (const { link, integration } of links) {
-    if (!link.syncScope || !getIntegration(integration.integrationType)?.archiveReview) continue
+    if (!link.syncScope || !getIntegration(integration.integrationType)?.linkedItems) continue
     try {
       const installation = installationIdentity(integration)
-      const destination = reviewDestination(link, integration)
+      const destination = reviewDestination(
+        link,
+        integration,
+        getIntegration(integration.integrationType)
+      )
       results.push(
         await queueSyncOperation({
           operationKey: syncOperationKey({

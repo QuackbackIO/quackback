@@ -1,3 +1,4 @@
+import { getIntegration } from '@/lib/server/integrations'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createId, type PostId } from '@quackback/ids'
 const state = vi.hoisted(() => ({
@@ -32,7 +33,7 @@ vi.mock('@/lib/server/db', async (original) => ({
 }))
 vi.mock('../index', () => ({
   getIntegration: (provider: string) =>
-    ['slack', 'discord', 'teams'].includes(provider) ? {} : { archiveReview: true },
+    ['slack', 'discord', 'teams'].includes(provider) ? {} : { linkedItems: true },
 }))
 vi.mock('@/lib/server/events/resolvers/integration.resolver', () => ({
   integrationResolver: { resolve: state.resolve },
@@ -52,7 +53,7 @@ const link = (externalId: string) => ({
     id: externalId,
     externalId,
     externalUrl: `https://linear.app/test/issue/${externalId}`,
-    syncScope: `${installationIdentity({ id: 'linear', connectedAt: null })}:${syncHash(syncDestination({ channelId: 'team' }, { channelId: 'team' }))}`,
+    syncScope: `${installationIdentity({ id: 'linear', connectedAt: null })}:${syncHash(syncDestination({ channelId: 'team' }, { channelId: 'team' }, getIntegration('linear')))}`,
   },
   integration: {
     id: 'linear',

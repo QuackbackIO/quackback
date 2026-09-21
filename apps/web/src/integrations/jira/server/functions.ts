@@ -64,9 +64,6 @@ export const getJiraConnectUrl = createServerFn({ method: 'GET' }).handler(
   }
 )
 
-// Token refresh lives in ./token so the issues capability (service-side
-// create) can share it with these server functions.
-
 export const fetchJiraProjectsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<JiraProject[]> => {
     const { requireAuth } = await import('@/lib/server/functions/auth-helpers')
@@ -83,13 +80,13 @@ export const fetchJiraProjectsFn = createServerFn({ method: 'GET' }).handler(
       throw new Error('Jira not connected')
     }
 
-    const cloudId = (integration.config as JiraIntegrationConfig)?.cloudId
+    const { getIntegrationAuth } = await import('@/lib/server/integrations/token-refresh')
+    const { accessToken, config } = await getIntegrationAuth(integration.id)
+    const cloudId = (config as JiraIntegrationConfig).cloudId
     if (!cloudId) {
       throw new Error('Jira cloud ID not found in integration config')
     }
 
-    const { getJiraAccessToken } = await import('@/integrations/jira/server/token')
-    const accessToken = await getJiraAccessToken(integration)
     return listJiraProjects(accessToken, cloudId)
   }
 )
@@ -115,12 +112,12 @@ export const fetchJiraIssueTypesFn = createServerFn({ method: 'POST' })
       throw new Error('Jira not connected')
     }
 
-    const cloudId = (integration.config as JiraIntegrationConfig)?.cloudId
+    const { getIntegrationAuth } = await import('@/lib/server/integrations/token-refresh')
+    const { accessToken, config } = await getIntegrationAuth(integration.id)
+    const cloudId = (config as JiraIntegrationConfig).cloudId
     if (!cloudId) {
       throw new Error('Jira cloud ID not found in integration config')
     }
 
-    const { getJiraAccessToken } = await import('@/integrations/jira/server/token')
-    const accessToken = await getJiraAccessToken(integration)
     return listJiraIssueTypes(accessToken, cloudId, data.projectId)
   })

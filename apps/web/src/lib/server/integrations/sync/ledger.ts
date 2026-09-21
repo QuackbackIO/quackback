@@ -136,12 +136,14 @@ export async function enqueueSyncJob(
   executor: JobSqlExecutor
 ) {
   const { id, version } = operation
-  const slackApp = operation.kind === 'app-hook' && operation.provider === 'slack'
+  const { getIntegration } = await import('../index')
+  const scheduling =
+    operation.kind === 'app-hook' ? getIntegration(operation.provider)?.appHooks?.queue : undefined
   return enqueueJob({
-    queue: slackApp ? 'slack-hook' : SYNC_QUEUE,
+    queue: scheduling?.name ?? SYNC_QUEUE,
     payload: { operationId: id, version },
     dedupeKey: `sync:${id}:${version}`,
-    maxAttempts: slackApp ? 3 : 6,
+    maxAttempts: scheduling?.maxAttempts ?? 6,
     executor,
   })
 }
@@ -303,6 +305,13 @@ export async function finishSyncOperation(
       .set({
         state: sql`CASE WHEN ${operations.cancelRequested} AND ${outcome.state} IN ('retry_wait', 'failed', 'auth_required') THEN 'cancelled' ELSE ${outcome.state} END`,
         result,
+        // The normalized children are durable in this same transaction; retain
+        // only the receipt identity once the raw provider body is no longer needed.
+        payload:
+          claim.operation.kind === 'receive-webhook' &&
+          ['succeeded', 'cancelled', 'superseded'].includes(outcome.state)
+            ? null
+            : sql`${operations.payload}`,
         remoteId:
           outcome.state === 'succeeded' && typeof outcome.result?.externalId === 'string'
             ? outcome.result.externalId

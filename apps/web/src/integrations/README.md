@@ -1,101 +1,124 @@
 # Integrations
 
-One folder per integration. Everything a provider needs lives in
-`src/integrations/<id>/`:
+Each provider owns its protocol and presentation metadata in `src/integrations/<id>/`:
 
 ```
-src/integrations/<id>/
-  server/        # server-only: definition, catalog, hook, inbound, api calls, tests
-    index.ts     # exports `<id>Integration: IntegrationDefinition`
-    catalog.ts   # the gallery card (name, description, settings path)
-  ui/            # client: config panel + connection actions
+server/index.ts    # IntegrationDefinition and capability adapters
+server/catalog.ts # gallery name, description, and settings path
+server/           # OAuth, provider API calls, signature verification, tests
+ui/               # connection actions and any provider-specific configuration
 ```
 
-The **framework** (the parts every provider shares) stays outside this folder:
+The shared framework in `lib/server/integrations/` owns authentication, encrypted
+storage, durable operations, delivery classification, authorization, and recovery.
+Shared settings components own connection health, destination selection, status
+mapping, customer context controls, and sync history.
 
-- Contracts + orchestrators: `lib/server/integrations/` (`types.ts`,
-  `encryption.ts`, `save.ts`, the inbound/user-sync handlers, `status-mapping.ts`,
-  `webhook-registration.ts`, `archive.ts`, `token-refresh.ts`, and the registry
-  `index.ts`).
-- Shared settings chrome: `components/admin/settings/integrations/` (the header,
-  setup card, platform-credentials dialog, health panel, `DestinationPicker`,
-  `StatusSyncConfig`, and the `INTEGRATION_SETTINGS` registry).
+## Capability boundaries
 
-## Add a new integration
+| Capability                 | Provider responsibility                                                             | Shared behavior                                                                                   |
+| -------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `hook`                     | Convert an event to a notification or created item; return a `DeliveryOutcome`      | Current-source loading, destination fencing, delivery evidence, retries and history               |
+| `linkedItems`              | Declare that created items need lifecycle links                                     | Require remote identity, persist links, propose content/status/archive reviews                    |
+| `destination`              | Declare account scope keys, safe label, and any required ownership check            | Hash scope and target, reject stale destinations, filter public labels                            |
+| `destinations`             | List selectable containers using the supplied credentials                           | Authenticated picker and dependent selections                                                     |
+| `inbound`                  | Verify requests, parse all relevant status changes, declare `automatic` or `review` | Persist authenticated receipts before parsing, worker enrichment, atomic fan-out to current links |
+| `issues` / `externalLinks` | Parse, inspect, create, or search where supported                                   | Source authorization and verified link-existing recovery                                          |
+| `context`                  | Read a customer by email and return a normalized card                               | On-demand lookup, shared authentication, failure isolation; no event mappings or write queue      |
+| `userSync`                 | Normalize inbound attributes and outbound membership changes                        | Durable identify and membership operations                                                        |
+| `appHooks`                 | Verify/acknowledge interactive requests and execute their queued work               | Shared ledger, with optional provider queue scheduling                                            |
+| `oauth` / `refreshToken`   | Authorization protocol and token endpoint                                           | State/session checks, encrypted persistence, serialized refresh, cache invalidation               |
 
-1. **Copy the template**: `cp -r src/integrations/_template src/integrations/<id>`.
-2. **Rename** `template` → `<id>` in the folder, the catalog `id`/`name`, and the
-   exported `templateIntegration` → `<id>Integration`. (Ids are stable: they're
-   stored in the DB and appear in webhook URLs. Use `snake_case`; the one folder
-   whose name diverges is `azure-devops` → id `azure_devops`.)
-3. **Implement only the capabilities you need** in `server/index.ts`. Every field
-   beyond `id`, `catalog`, and `platformCredentials` is optional — delete the rest.
-   The full contract is `lib/server/integrations/types.ts`.
-4. **Register two lines**:
-   - `lib/server/integrations/index.ts`: import `<id>Integration` and add it to the
-     registry map.
-   - `components/admin/settings/integrations/integration-settings-registry.tsx`: add
-     the settings entry (icon, connection actions, setup copy, `renderConfig`).
-5. **Reuse the shared UI**: `DestinationPicker` for routing targets, `StatusSyncConfig`
-   for status mapping, `NotificationChannelRouter` for notification routing — don't
-   hand-roll pickers.
+Providers implement only the capabilities they support. A context lookup does not
+need a destination or hook. A notification does not need `linkedItems`. Catalog
+capability badges derive from these declarations. Catalog descriptions and settings
+copy must describe actual behavior too.
 
-## What keeps it honest
+## Add a provider
 
-- `folder-conformance.test.ts`: every folder is a registered integration and vice
-  versa, each has a `server/index.ts`, and **no provider imports another provider**
-  (shared code belongs in the framework, e.g. `webhook-payload.ts`).
-- `registry-capability-coverage.test.ts`: capability sets stay consistent (every
-  inbound provider declares webhook registration + status listing, every tracker
-  declares archive + destinations, ...).
-- `integration-settings-registry.test.ts`: every catalog provider has a settings
-  entry, none dangle.
+1. Copy `_template/` into a provider folder. Rename its stable ID, catalog, and
+   exported definition. IDs are persisted and used in webhook paths; use
+   `snake_case` (`azure-devops` is the folder for ID `azure_devops`).
+2. Keep only the needed capabilities and replace the fictional endpoints with
+   the provider's documented API. The template is an executable example of
+   linked-item creation, destinations, manual inbound review, and context. For a
+   notification-only adapter, remove `linkedItems` and return a receipt identity
+   if the API supplies one. For context-only adapters, retain just `context` and
+   connection configuration.
+3. Register the definition in `lib/server/integrations/index.ts` and the settings
+   entry in `components/admin/settings/integrations/integration-settings-registry.tsx`.
+   These are intentionally separate server and client boundaries. Do not import
+   the server registry into client code or provider-reachable shared helpers.
+4. Reuse `DestinationPicker`, `NotificationChannelRouter`, `StatusSyncConfig`, and
+   `CustomerContextConfig`. Provider UI supplies options and connection forms;
+   common history and recovery stay shared.
+5. Exercise the provider through the worker, not only its API wrapper. Extend
+   `sync/__tests__/provider-contracts.db.test.ts` or use the same transactional
+   fixture with mocked HTTP. Verify current content, account changes, remote
+   identity, retry boundaries, and useful authorized history. Add protocol tests
+   for signature verification, OAuth exchange, and refresh where applicable.
+6. Run the integration, framework, and shared settings tests, typecheck, and a web
+   build. Review affected settings at narrow and wide widths.
 
-## `_template`
+The template is excluded from the live registry (`available: false`). Its tests
+register it only inside the test process and exercise delivery, link creation,
+manual inbound review, scope fencing, and recovery without editing the worker or
+history renderer. Folder, capability, and UI registry conformance tests catch
+missing registration and incompatible capability combinations.
 
-`_template/` is a permanently checked-in, compiling, contract-satisfying fixture
-(not a live provider — `available: false`). It's typechecked and asserted by
-`_template/__tests__/template.conformance.test.ts` every run, so the example can
-never rot. Read it first — it's the shortest tour of the contract.
+## Authentication and reads
 
-## Durable sync and manual recovery
+Use `getIntegrationAuth(id)` when both credentials and account configuration are
+needed, so they come from the same locked snapshot. `getValidAccessToken(id)` is
+convenient for token-only callers. Providers must not persist refreshed tokens.
+Platform credential reads reuse the refresh transaction's connection, including
+on a one-connection pool; concurrent refreshes serialize on the installation.
 
-Integration producers enqueue only a connection reference and encrypted intent through
-`lib/server/integrations/sync`. The ordinary event queue no longer executes integration
-hooks. Current credentials, configuration and source eligibility are loaded by the sync
-worker immediately before dispatch.
+`withIntegrationReadAuth(id, read)` retries a read once after an explicit 401 and
+successful refresh. Never wrap a remote write with it. Refresh adapters may return
+rotated refresh tokens, an expiry, and updated configuration. Omit expiry when the
+provider uses session policy rather than a published lifetime. Trello declares a
+fragment callback: a small same-origin browser handoff clears the fragment and
+posts the token through the existing state, cookie, and session checks.
 
-Operation identity includes source, installation and destination. Atomic claims, leases,
-dispatch markers and attempt evidence prevent a failed local write or queue pruning from
-authorizing a duplicate remote create. Integration-only post resync visits every active
-link without re-emitting `post.created` to other sinks.
+## Durable writes and inbound receipts
 
-Remote edits and selected archive requests appear in the integration's Sync history.
-The unconditional refresh, status-push and archive writers have been removed. Provider
-support for automatic remote edits must include a verified conditional-write contract;
-a read followed by an unconditional write is insufficient. Verified link-existing recovery
-currently uses the read-only `issues.inspect` capability for GitHub and Linear.
+Producers enqueue a connection reference and encrypted intent through `sync/`.
+The ordinary event queue no longer executes integration hooks. The worker loads
+current credentials, configuration, and source eligibility before dispatch.
+Operation identity includes source, installation, and provider-defined destination
+scope. Atomic claims, leases, dispatch markers, and attempt evidence prevent a
+failed local write or pruned job from authorizing duplicate remote creation.
 
-Each integration hook implements `IntegrationHook` and returns a `DeliveryOutcome`:
-`succeeded` (with optional remote identity), `failed`, `auth_required`, `retry_wait`,
-or `uncertain`. Use the shared response/error classifiers; return a retry only for a
-confirmed rejection. `retryAfterMs` schedules the next job without blocking the worker.
-`withSyncTransport` preserves partial-write and timeout evidence across multiple HTTP
-requests. SDK adapters must report intermediate writes with `recordDeliveryOutcome`.
+Hooks return `succeeded`, `failed`, `auth_required`, `retry_wait`, or `uncertain`.
+Use shared response/error classifiers and bounded `integrationFetch`. Retry only
+confirmed rejections. `retryAfterMs` schedules work without blocking a worker.
+`withSyncTransport` preserves partial-write and timeout evidence across requests;
+SDK adapters must report intermediate writes with `recordDeliveryOutcome`.
 
-Inbound adapters declare `statusMode: 'automatic' | 'review'`. Automatic handling still
-requires verified destination and revision evidence; a flag alone cannot authorize it.
-Status-listing capabilities enable mapped outbound review proposals. Catalog badges use
-these same facts, so manual review is never advertised as automatic remote mutation.
+Signed inbound bodies are encrypted and persisted before parsing or provider
+lookups. Optional handshake handlers only acknowledge challenges; they never accept
+events or save secrets. Registration adapters may return a signing secret issued
+by the authenticated provider API (Asana), replacing the generated secret. Parsers return one result, a batch, or null for irrelevant events, and
+throw on read failures so the worker can retry. Receipt completion, raw-body removal, and status
+fan-out commit together. Review-mode events resolve current links and show the
+source, remote item, and received status. Missing verified destination data may
+support a review of an existing current link; it never authorizes automatic local
+updates. Automatic updates additionally require destination and revision evidence.
 
-Read sync health with `readSyncHealth`; never overwrite connection errors after delivery.
-The ledger owns delivery identity and existing external-link tables own associations.
-No second binding table or health projection is needed.
+Remote content, outbound status changes, and selected archive requests become
+manual reviews. A provider must supply a verified conditional-write contract
+before automatic remote edits can be enabled. Reading and then writing
+unconditionally is insufficient. GitHub and Linear currently support read-only
+`issues.inspect` for verified link-existing recovery.
 
-Canonical post events recover rich-text media through `contentJsonToMarkdown`. Markdown
-formatters use `buildIntegrationPostContent` for absolute media URLs and intact attachment
-fallback around truncation. Linear uses video-as-image syntax; other Markdown providers
-retain ordinary video links.
+Integration-only resync visits every active link without re-emitting `post.created`
+to unrelated sinks. Canonical rich text is converted with `contentJsonToMarkdown`;
+`buildIntegrationPostContent` keeps absolute media URLs and complete attachments
+around truncation. A provider may supply `formatReviewContent` for its Markdown
+conventions.
 
-See [Integration sync safety](../../../../docs/integration-sync-safety.md) for invariants,
-provider boundaries, retention, the forward-only start boundary and offline replacement and rollback procedure.
+Read delivery health with `readSyncHealth`; the ledger owns delivery identity and
+external-link tables own associations. There is no legacy replay path or second
+binding table. See [Integration sync safety](../../../../docs/integration-sync-safety.md)
+for retention, the forward-only start boundary, and offline replacement/rollback.

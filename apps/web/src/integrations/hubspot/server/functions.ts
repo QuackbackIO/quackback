@@ -15,11 +15,6 @@ export interface HubSpotOAuthState {
   ts: number
 }
 
-interface HubSpotIntegrationConfig {
-  workspaceName?: string
-  tokenExpiresAt?: string
-}
-
 export const getHubSpotConnectUrl = createServerFn({ method: 'GET' }).handler(
   async (): Promise<string> => {
     const { randomBytes } = await import('crypto')
@@ -55,7 +50,7 @@ export const searchHubSpotContactFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const { requireAuth } = await import('@/lib/server/functions/auth-helpers')
     const { db, integrations, eq } = await import('@/lib/server/db')
-    const { decryptSecrets } = await import('@/lib/server/integrations/encryption')
+    const { getValidAccessToken } = await import('@/lib/server/integrations/token-refresh')
     const { searchHubSpotContact } = await import('@/integrations/hubspot/server/context')
 
     await requireAuth({ permission: PERMISSIONS.INTEGRATION_VIEW })
@@ -68,40 +63,7 @@ export const searchHubSpotContactFn = createServerFn({ method: 'POST' })
       throw new Error('HubSpot not connected')
     }
 
-    const secrets = decryptSecrets<{ accessToken: string; refreshToken?: string }>(
-      integration.secrets
-    )
-
-    // HubSpot tokens expire after 30 minutes — refresh if we have a refresh token
-    let { accessToken } = secrets
-    if (secrets.refreshToken && integration.config) {
-      const cfg = integration.config as HubSpotIntegrationConfig
-      if (cfg.tokenExpiresAt && new Date(cfg.tokenExpiresAt) < new Date()) {
-        const { refreshHubSpotToken } = await import('@/integrations/hubspot/server/oauth')
-        const { encryptSecrets } = await import('@/lib/server/integrations/encryption')
-        const { getPlatformCredentials } =
-          await import('@/lib/server/domains/platform-credentials/platform-credential.service')
-        const credentials = await getPlatformCredentials('hubspot')
-        const refreshed = await refreshHubSpotToken(secrets.refreshToken, credentials ?? undefined)
-        accessToken = refreshed.accessToken
-
-        // Persist refreshed tokens
-        const { eq: eqOp } = await import('@/lib/server/db')
-        const newSecrets = encryptSecrets({
-          accessToken: refreshed.accessToken,
-          refreshToken: refreshed.refreshToken,
-        })
-        const newExpiry = new Date(Date.now() + refreshed.expiresIn * 1000)
-        await db
-          .update(integrations)
-          .set({
-            secrets: newSecrets,
-            config: { ...cfg, tokenExpiresAt: newExpiry.toISOString() },
-            updatedAt: new Date(),
-          })
-          .where(eqOp(integrations.integrationType, 'hubspot'))
-      }
-    }
+    const accessToken = await getValidAccessToken(integration.id)
 
     return searchHubSpotContact(accessToken, data.email)
   })

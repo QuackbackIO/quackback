@@ -93,10 +93,9 @@ function deriveCapabilities(i: IntegrationDefinition): IntegrationCapability[] {
         })
         break
       default:
-        // support_crm hooks are enrichment lookups, not deliveries.
         caps.push({
-          label: 'Customer context',
-          description: `Look up customer details in ${name} when feedback arrives`,
+          label: 'Event delivery',
+          description: `Send subscribed events to ${name}`,
         })
     }
   }
@@ -126,7 +125,7 @@ function deriveCapabilities(i: IntegrationDefinition): IntegrationCapability[] {
     })
   }
 
-  if (i.archiveReview) {
+  if (i.linkedItems) {
     caps.push({
       label: 'Review cleanup on delete',
       description: `Review linked ${name} items for closing or archiving when feedback is deleted`,

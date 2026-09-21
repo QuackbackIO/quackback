@@ -59,12 +59,8 @@ export const fetchAsanaProjectsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<AsanaProject[]> => {
     const { requireAuth } = await import('@/lib/server/functions/auth-helpers')
     const { db, integrations, eq } = await import('@/lib/server/db')
-    const { decryptSecrets } = await import('@/lib/server/integrations/encryption')
+    const { getIntegrationAuth } = await import('@/lib/server/integrations/token-refresh')
     const { listAsanaProjects } = await import('@/integrations/asana/server/projects')
-    const { refreshAsanaToken } = await import('@/integrations/asana/server/oauth')
-    const { encryptSecrets } = await import('@/lib/server/integrations/encryption')
-    const { logger } = await import('@/lib/server/logger')
-    const log = logger.child({ component: 'asana' })
 
     await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
 
@@ -76,45 +72,8 @@ export const fetchAsanaProjectsFn = createServerFn({ method: 'GET' }).handler(
       throw new Error('Asana not connected')
     }
 
-    const secrets = decryptSecrets<{
-      accessToken: string
-      refreshToken?: string
-    }>(integration.secrets)
-
-    let { accessToken } = secrets
-    const cfg = (integration.config ?? {}) as AsanaIntegrationConfig
-
-    // Refresh token if expired or about to expire (within 5 minutes)
-    if (secrets.refreshToken && cfg.tokenExpiresAt) {
-      const expiresAt = new Date(cfg.tokenExpiresAt).getTime()
-      const bufferMs = 5 * 60 * 1000
-      if (Date.now() >= expiresAt - bufferMs) {
-        log.info('access token expired, refreshing')
-        const { getPlatformCredentials } =
-          await import('@/lib/server/domains/platform-credentials/platform-credential.service')
-        const credentials = await getPlatformCredentials('asana')
-        const refreshed = await refreshAsanaToken(secrets.refreshToken, credentials ?? undefined)
-        accessToken = refreshed.accessToken
-
-        const newExpiry = new Date(Date.now() + refreshed.expiresIn * 1000).toISOString()
-        await db
-          .update(integrations)
-          .set({
-            secrets: encryptSecrets({
-              accessToken: refreshed.accessToken,
-              refreshToken: secrets.refreshToken,
-            }),
-            config: { ...cfg, tokenExpiresAt: newExpiry },
-            updatedAt: new Date(),
-          })
-          .where(eq(integrations.integrationType, 'asana'))
-      }
-    }
-
-    if (!cfg.workspaceId) {
-      throw new Error('Asana workspace ID not found. Please reconnect Asana.')
-    }
-
+    const { accessToken, config: currentConfig } = await getIntegrationAuth(integration.id)
+    const cfg = currentConfig as AsanaIntegrationConfig
     return listAsanaProjects(accessToken, cfg.workspaceId as string)
   }
 )

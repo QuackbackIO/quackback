@@ -58,6 +58,35 @@ afterEach(() => {
   clients.splice(0).forEach((c) => c.clear())
 })
 describe('integration sync recovery', () => {
+  it('presents incoming status changes as a manual update to the source', async () => {
+    api.list.mockResolvedValue({
+      items: [
+        {
+          ...item,
+          direction: 'inbound',
+          kind: 'status',
+          state: 'conflict',
+          actions: ['keep_remote', 'cancel'],
+        },
+      ],
+      nextCursor: null,
+    })
+    api.inspect.mockResolvedValue({
+      preview: { title: 'Platform status', content: 'Done' },
+      remote: null,
+      attempts: [],
+    })
+    mount()
+    fireEvent.click(await screen.findByRole('button', { name: /Search feedback/ }))
+    expect(await screen.findByLabelText('Received platform status')).toHaveValue('Done')
+    expect(screen.getByText(/Review the source item and update its status manually/)).toBeVisible()
+    expect(screen.queryByText(/apply changes there to preserve its edits/)).toBeNull()
+    expect(screen.getByRole('link', { name: 'View source' })).toHaveAttribute(
+      'href',
+      '/admin/feedback?post=post_123'
+    )
+    expect(api.recover).not.toHaveBeenCalled()
+  })
   it('reuses a recovery request identity after a lost response', async () => {
     api.recover.mockRejectedValue(new Error('Connection interrupted'))
     mount()

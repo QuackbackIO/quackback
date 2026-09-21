@@ -107,7 +107,8 @@ export const segmentUserSync: UserSyncHandler = {
     if (!config.outgoingEnabled) return
 
     const writeKey = secrets.writeKey as string | undefined
-    if (!writeKey || users.length === 0) return
+    if (!writeKey) throw Object.assign(new Error('Segment write key missing'), { status: 401 })
+    if (users.length === 0) return
 
     // Segment attribute key: snake_case from segment name
     const attributeKey = segmentName.toLowerCase().replace(/[^a-z0-9]+/g, '_')

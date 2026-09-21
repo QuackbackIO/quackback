@@ -74,7 +74,7 @@ export const fetchSlackChannelsFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }: { data: FetchSlackChannelsInput }): Promise<SlackChannel[]> => {
     const { requireAuth } = await import('@/lib/server/functions/auth-helpers')
     const { db, integrations, eq } = await import('@/lib/server/db')
-    const { decryptSecrets } = await import('@/lib/server/integrations/encryption')
+    const { getValidAccessToken } = await import('@/lib/server/integrations/token-refresh')
     const { listSlackChannels } = await import('@/integrations/slack/server/channels')
     const { logger } = await import('@/lib/server/logger')
     const log = logger.child({ component: 'slack' })
@@ -94,7 +94,7 @@ export const fetchSlackChannelsFn = createServerFn({ method: 'GET' })
       throw new Error('Slack secrets missing')
     }
 
-    const secrets = decryptSecrets<{ accessToken?: string }>(integration.secrets)
+    const secrets = { accessToken: await getValidAccessToken(integration.id) }
     if (!secrets.accessToken) {
       throw new Error('Slack access token missing')
     }

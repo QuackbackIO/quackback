@@ -29,8 +29,9 @@ export interface CredentialSource {
 
 /** Self-host source: the per-instance integration_platform_credentials table. */
 export class DbCredentialSource implements CredentialSource {
+  constructor(private readonly executor: Pick<typeof db, 'query'> = db) {}
   async get(integrationType: string): Promise<Record<string, string> | null> {
-    const row = await db.query.integrationPlatformCredentials.findFirst({
+    const row = await this.executor.query.integrationPlatformCredentials.findFirst({
       where: eq(integrationPlatformCredentials.integrationType, integrationType),
       columns: { secrets: true },
     })
@@ -47,7 +48,7 @@ export class DbCredentialSource implements CredentialSource {
   }
 
   async has(integrationType: string): Promise<boolean> {
-    const row = await db.query.integrationPlatformCredentials.findFirst({
+    const row = await this.executor.query.integrationPlatformCredentials.findFirst({
       where: eq(integrationPlatformCredentials.integrationType, integrationType),
       columns: { id: true },
     })
@@ -55,7 +56,7 @@ export class DbCredentialSource implements CredentialSource {
   }
 
   async listConfigured(): Promise<string[]> {
-    const rows = await db.query.integrationPlatformCredentials.findMany({
+    const rows = await this.executor.query.integrationPlatformCredentials.findMany({
       columns: { integrationType: true },
     })
     return rows.map((r) => r.integrationType)

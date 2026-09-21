@@ -20,8 +20,7 @@ import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import type { JobSqlExecutor } from '@/lib/server/jobs/job-queue'
 import { getBaseUrl } from '@/lib/server/config'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
-import { decryptSecrets } from '../encryption'
-import { getValidAccessToken } from '../token-refresh'
+import { getIntegrationAuth } from '../token-refresh'
 import { installationIdentity, syncDestination, syncHash, syncOperationKey } from './identity'
 import { queueSyncOperation, markSyncDispatched, type SyncTransaction } from './ledger'
 import type { SyncClaim, SyncOutcome } from './types'
@@ -77,7 +76,7 @@ export async function queueHookSync(
     id: integrationId,
     connectedAt: row?.connected_at ?? null,
   })
-  const destination = syncDestination(data.target, row?.config ?? {})
+  const destination = syncDestination(data.target, row?.config ?? {}, getIntegration(data.hookType))
   const source = hookSource(data)
   const kind = data.event.type === 'post.created' ? 'create' : 'notify'
   const operationKey = syncOperationKey({
@@ -133,7 +132,10 @@ export async function executeHookSync(
   const event = payload.event as HookJobData['event']
   const target = payload.target
   const config = (integration.config ?? {}) as Record<string, unknown>
-  if (syncHash(syncDestination(target, config)) !== claim.operation.destinationKey)
+  if (
+    syncHash(syncDestination(target, config, getIntegration(integration.integrationType))) !==
+    claim.operation.destinationKey
+  )
     return { state: 'cancelled', errorCode: 'installation_changed' }
   // Resolve mappings afresh: cached routing or revoked board permission is not authority to send.
   const mappings = await db.query.integrationEventMappings.findMany({
@@ -213,10 +215,11 @@ export async function executeHookSync(
       return { state: 'cancelled', errorCode: 'source_unavailable' }
   }
   await refreshSyncActor(event)
-  const secrets = integration.secrets
-    ? decryptSecrets<Record<string, unknown>>(integration.secrets)
-    : {}
-  const accessToken = await getValidAccessToken(integration.id)
+  const credentials = await getIntegrationAuth(integration.id)
+  const { accessToken, secrets } = credentials
+  const validateDestination = getIntegration(hookType)?.destination?.validate
+  if (validateDestination && !(await validateDestination({ target, config, accessToken })))
+    return { state: 'failed', errorCode: 'provider_failed' }
   if (!(await canDispatchSync(claim.operation, integration, post?.updatedAt)))
     return { state: 'cancelled', errorCode: 'source_unavailable' }
   if (!(await markSyncDispatched(claim))) return { state: 'cancelled' }
@@ -235,7 +238,7 @@ export async function executeHookSync(
     )
     if (
       claim.operation.kind === 'create' &&
-      getIntegration(hookType)?.archiveReview &&
+      getIntegration(hookType)?.linkedItems &&
       result.state === 'succeeded' &&
       !result.result?.externalId
     )
@@ -252,7 +255,7 @@ export async function persistSyncLink(
   if (typeof result.externalId !== 'string') return
   const op = claim.operation
   // Notification receipts remain in sync history; only tracked items get lifecycle links.
-  if (op.kind !== 'create' || !getIntegration(op.provider)?.archiveReview) return
+  if (op.kind !== 'create' || !getIntegration(op.provider)?.linkedItems) return
   const remoteUrl = typeof result.externalUrl === 'string' ? result.externalUrl : null
   const displayId = typeof result.externalDisplayId === 'string' ? result.externalDisplayId : null
   if (op.sourceType === 'post') {

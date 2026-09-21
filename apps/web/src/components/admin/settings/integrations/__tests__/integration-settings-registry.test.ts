@@ -27,15 +27,6 @@ describe('integration settings registry (WO-6)', () => {
       expect(entry.catalog.id, `${key}.catalog.id`).toBe(key)
       expect(entry.Icon, `${key}.Icon`).toBeTruthy()
       expect(entry.ConnectionActions, `${key}.ConnectionActions`).toBeTruthy()
-      // A provider renders at most one connected surface — a config panel OR an
-      // enrichment banner, never both. (Connect-only providers like Segment
-      // legitimately have neither.)
-      const hasConfig = typeof entry.renderConfig === 'function'
-      const hasBanner = entry.connectedBanner != null
-      expect(
-        hasConfig && hasBanner,
-        `${key} must not set both renderConfig and connectedBanner`
-      ).toBe(false)
     }
   })
 

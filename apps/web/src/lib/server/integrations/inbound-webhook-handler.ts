@@ -11,7 +11,6 @@
 import { createHash } from 'crypto'
 import { db, integrations, eq, and } from '@/lib/server/db'
 import { getIntegration } from './index'
-import { decryptSecrets } from './encryption'
 import { readTextBodyOr413, MAX_WEBHOOK_BODY_BYTES } from '@/lib/server/utils/read-body'
 import { logger } from '@/lib/server/logger'
 
@@ -57,6 +56,9 @@ export async function handleInboundWebhook(
     return new Response('Integration not configured', { status: 404 })
   }
 
+  const handshake = definition.inbound.handshake?.(request)
+  if (handshake) return handshake
+
   const config = (integration.config ?? {}) as Record<string, unknown>
   const webhookSecret = config.webhookSecret as string | undefined
   if (!webhookSecret) {
@@ -69,9 +71,6 @@ export async function handleInboundWebhook(
   if (verification !== true) {
     return verification
   }
-
-  // Decrypt secrets so handlers can access OAuth tokens
-  const secrets = integration.secrets ? decryptSecrets(integration.secrets) : {}
 
   // GitHub inbox channel is a second consumer, isolated from tracker status
   // sync. It must run even when parseStatusChange returns null (comments are
@@ -91,26 +90,9 @@ export async function handleInboundWebhook(
     }
   }
 
-  // Parse the webhook payload for a status change
-  const result = await definition.inbound.parseStatusChange(body, config, secrets)
-  if (!result) {
-    // Not a status change event — acknowledge but ignore
-    return new Response('OK', { status: 200 })
-  }
-
-  log.info(
-    {
-      integration_type: integrationType,
-      event_type: result.eventType,
-      external_id: result.externalId,
-      external_status: result.externalStatus,
-    },
-    'inbound status change received'
-  )
-
   try {
-    const { queueInboundStatus } = await import('./sync/inbound')
-    await queueInboundStatus(integration, result, inboundDeliveryKey(integrationType, body))
+    const { queueInboundWebhook } = await import('./sync/inbound')
+    await queueInboundWebhook(integration, body, inboundDeliveryKey(integrationType, body))
   } catch {
     return new Response('Could not accept status event', { status: 503 })
   }

@@ -1,3 +1,4 @@
+import { channelDestination } from '@/lib/server/integrations/destination'
 import type { IntegrationDefinition } from '@/lib/server/integrations/types'
 import { notionHook } from '@/integrations/notion/server/hook'
 import { getNotionOAuthUrl, exchangeNotionCode } from '@/integrations/notion/server/oauth'
@@ -6,6 +7,7 @@ import { listNotionDatabases } from '@/integrations/notion/server/databases'
 
 export const notionIntegration: IntegrationDefinition = {
   id: 'notion',
+  destination: channelDestination(['workspaceId']),
   catalog: notionCatalog,
   oauth: {
     stateType: 'notion_oauth',
@@ -22,7 +24,7 @@ export const notionIntegration: IntegrationDefinition = {
     },
   },
   hook: notionHook,
-  archiveReview: true,
+  linkedItems: true,
   platformCredentials: [
     {
       key: 'clientId',

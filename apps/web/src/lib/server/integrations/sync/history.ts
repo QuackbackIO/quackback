@@ -27,6 +27,7 @@ import { encrypt } from '@/lib/server/encryption'
 import type { SyncOperation } from './types'
 import { randomUUID } from 'node:crypto'
 import { getIntegration } from '../index'
+import { safeDestinationLabel } from '../destination'
 import { inspectSyncRemote } from './remote'
 import { persistSyncLink } from './hooks'
 import { getBaseUrl } from '@/lib/server/config'
@@ -67,29 +68,13 @@ function safeRemoteUrl(value: unknown): string | null {
 }
 
 function destinationLabel(op: SyncOperation): string | null {
-  // Only known non-secret resource identifiers may leave the encrypted payload.
-  // Never display arbitrary targets: incoming/webhook URLs can contain credentials.
-  if (
-    !op.payload ||
-    ![
-      'github',
-      'linear',
-      'jira',
-      'slack',
-      'discord',
-      'asana',
-      'clickup',
-      'trello',
-      'monday',
-      'notion',
-    ].includes(op.provider)
-  )
-    return null
+  const label = getIntegration(op.provider)?.destination?.label
+  if (!op.payload || !label) return null
   const data = readSyncPayload(op).data
-  const target = data.target as { channelId?: unknown } | undefined
   const inbound = data.result as { destinationId?: unknown } | undefined
-  const id = target?.channelId ?? inbound?.destinationId
-  return typeof id === 'string' && /^[a-z0-9 _./-]{1,120}$/i.test(id) ? id : null
+  const value = label(data.target ?? { channelId: inbound?.destinationId })
+  // Provider metadata cannot opt URL credentials or arbitrary payload data into history.
+  return safeDestinationLabel(value)
 }
 
 async function present(op: SyncOperation, actor: Actor): Promise<SyncHistoryItem> {
@@ -206,10 +191,15 @@ export async function inspectSyncOperation(id: string, actor: Actor) {
       preview = {
         title: post.title ?? '',
         // Keep the full Markdown proposal intact when copied to another platform.
-        content: absolutizeMarkdownUrls(post.content ?? '', getBaseUrl(), op.provider === 'linear'),
+        content:
+          getIntegration(op.provider)?.formatReviewContent?.(post.content ?? '', getBaseUrl()) ??
+          absolutizeMarkdownUrls(post.content ?? '', getBaseUrl(), false),
       }
     if (typeof payload.data.proposedStatus === 'string')
       preview = { title: 'Proposed status', content: payload.data.proposedStatus }
+    const inbound = payload.data.result as { externalStatus?: unknown } | undefined
+    if (op.direction === 'inbound' && typeof inbound?.externalStatus === 'string')
+      preview = { title: 'Platform status', content: inbound.externalStatus }
   }
   let remote: { title: string; content: string; externalUrl: string | null } | null = null
   if (op.state === 'conflict' && op.remoteId && getIntegration(op.provider)?.issues?.inspect) {

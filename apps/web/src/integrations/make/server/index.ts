@@ -4,6 +4,7 @@ import { makeCatalog } from '@/integrations/make/server/catalog'
 
 export const makeIntegration: IntegrationDefinition = {
   id: 'make',
+  destination: { scopeKeys: [] },
   catalog: makeCatalog,
   hook: makeHook,
   platformCredentials: [],

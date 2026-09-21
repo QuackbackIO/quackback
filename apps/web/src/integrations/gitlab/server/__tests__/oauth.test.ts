@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { exchangeGitLabCode, getGitLabOAuthUrl } from '@/integrations/gitlab/server/oauth'
+import {
+  exchangeGitLabCode,
+  getGitLabOAuthUrl,
+  refreshGitLabToken,
+} from '@/integrations/gitlab/server/oauth'
 
 // GitLab requests go through the SSRF guard; route them to the stubbed global
 // fetch so the assertions below see the same calls.
@@ -93,7 +97,10 @@ describe('exchangeGitLabCode', () => {
     )
 
     expect(result.accessToken).toBe('tok')
-    expect(result.config).toEqual({ workspaceName: 'Ada' })
+    expect(result.config).toEqual({
+      workspaceName: 'Ada',
+      oauthRedirectUri: 'https://app.example.com/oauth/gitlab/callback',
+    })
     expect(result.config).not.toHaveProperty('instanceUrl')
   })
 
@@ -124,7 +131,47 @@ describe('exchangeGitLabCode', () => {
     expect(result.accessToken).toBe('tok')
     expect(result.config).toEqual({
       workspaceName: 'ada',
+      oauthRedirectUri: 'https://app.example.com/oauth/gitlab/callback',
       instanceUrl: 'https://gitlab.example.com',
     })
   })
+})
+
+it('refreshes against the installed GitLab instance with the original callback URI', async () => {
+  const fetch = vi.fn(async () =>
+    Response.json({ access_token: 'fresh', refresh_token: 'rotated', expires_in: 7200 })
+  )
+  vi.stubGlobal('fetch', fetch)
+  await expect(
+    refreshGitLabToken(
+      'old-refresh',
+      { ...creds, instanceUrl: 'https://gitlab.example.com' },
+      {
+        instanceUrl: 'https://gitlab.example.com',
+        oauthRedirectUri: 'https://app.example.com/oauth/gitlab/callback',
+      }
+    )
+  ).resolves.toEqual({ accessToken: 'fresh', refreshToken: 'rotated', expiresIn: 7200 })
+  const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit]
+  expect(url).toBe('https://gitlab.example.com/oauth/token')
+  expect(JSON.parse(String(init.body))).toMatchObject({
+    grant_type: 'refresh_token',
+    refresh_token: 'old-refresh',
+    redirect_uri: 'https://app.example.com/oauth/gitlab/callback',
+  })
+})
+it('does not send a refresh token to a changed GitLab instance', async () => {
+  const fetch = vi.fn()
+  vi.stubGlobal('fetch', fetch)
+  await expect(
+    refreshGitLabToken(
+      'old-refresh',
+      { ...creds, instanceUrl: 'https://different.example.com' },
+      {
+        instanceUrl: 'https://gitlab.example.com',
+        oauthRedirectUri: 'https://app.example.com/oauth/gitlab/callback',
+      }
+    )
+  ).rejects.toThrow('Reconnect')
+  expect(fetch).not.toHaveBeenCalled()
 })

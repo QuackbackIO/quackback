@@ -243,6 +243,7 @@ export function IntegrationSyncHistory({ provider }: { provider: string }) {
 }
 
 function SyncDetail({ item }: { item: SyncHistoryItem }) {
+  const incomingStatus = item.direction === 'inbound' && item.kind === 'status'
   const detail = useQuery({
     queryKey: ['integration-sync-detail', item.id, item.version],
     queryFn: () => inspectIntegrationSyncFn({ data: { id: item.id } }),
@@ -304,13 +305,19 @@ function SyncDetail({ item }: { item: SyncHistoryItem }) {
       {detail.data?.preview && (
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground">
-            Proposed content. Review the remote item and apply changes there to preserve its edits.
+            {incomingStatus
+              ? 'Received status from the platform. Review the source item and update its status manually if appropriate.'
+              : 'Proposed content. Review the remote item and apply changes there to preserve its edits.'}
           </p>
           <Textarea
-            aria-label="Proposed sync content"
+            aria-label={incomingStatus ? 'Received platform status' : 'Proposed sync content'}
             readOnly
-            value={`${detail.data.preview.title}\n\n${detail.data.preview.content}`}
-            className="min-h-40"
+            value={
+              incomingStatus
+                ? detail.data.preview.content
+                : `${detail.data.preview.title}\n\n${detail.data.preview.content}`
+            }
+            className={incomingStatus ? 'min-h-16' : 'min-h-40'}
           />
           <Button
             size="sm"
@@ -319,12 +326,14 @@ function SyncDetail({ item }: { item: SyncHistoryItem }) {
               const preview = detail.data?.preview
               if (preview)
                 void navigator.clipboard
-                  .writeText(`${preview.title}\n\n${preview.content}`)
+                  .writeText(
+                    incomingStatus ? preview.content : `${preview.title}\n\n${preview.content}`
+                  )
                   .then(() => toast.success('Content copied'))
                   .catch(() => toast.error('Select the content to copy it'))
             }}
           >
-            Copy proposed content
+            {incomingStatus ? 'Copy received status' : 'Copy proposed content'}
           </Button>
         </div>
       )}

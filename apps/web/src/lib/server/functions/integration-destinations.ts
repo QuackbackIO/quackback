@@ -8,7 +8,6 @@
 
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
-import type { IntegrationId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
 import { db, integrations, eq } from '@/lib/server/db'
 import type { DestinationItem } from '@/lib/server/integrations/types'
@@ -56,10 +55,8 @@ export const fetchIntegrationDestinationsFn = createServerFn({ method: 'POST' })
     if (!integration?.secrets || integration.status !== 'active') return []
 
     // Centralized token refresh (IF WO-13) so slot `list` closures stay thin.
-    const { getValidAccessToken } = await import('@/lib/server/integrations/token-refresh')
-    const accessToken = await getValidAccessToken(integration.id as IntegrationId)
-    if (!accessToken) return []
-
-    const config = (integration.config ?? {}) as Record<string, unknown>
-    return destination.list({ accessToken, config, parentId: data.parentId })
+    const { withIntegrationReadAuth } = await import('@/lib/server/integrations/token-refresh')
+    return withIntegrationReadAuth(integration.id, async ({ accessToken, config }) =>
+      accessToken ? destination.list({ accessToken, config, parentId: data.parentId }) : []
+    )
   })

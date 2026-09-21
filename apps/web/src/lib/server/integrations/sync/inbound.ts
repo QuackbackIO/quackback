@@ -6,26 +6,29 @@ import {
   type StatusMappings,
 } from '../status-mapping'
 import type { InboundWebhookResult } from '../inbound-types'
-import { installationIdentity, syncDestination, syncOperationKey } from './identity'
+import { installationIdentity, syncDestination, syncOperationKey, syncHash } from './identity'
 import { queueSyncOperation, type SyncTransaction } from './ledger'
 import type { SyncClaim, SyncOutcome } from './types'
 import { hasNewerInbound } from './ordering'
 import { getIntegration } from '../index'
+import { getIntegrationAuth } from '../token-refresh'
 
-export async function queueInboundStatus(
+/** Persist the authenticated body before any provider reads or enrichment. */
+export async function queueInboundWebhook(
   integration: typeof integrations.$inferSelect,
-  result: InboundWebhookResult,
+  body: string,
   deliveryKey: string
 ) {
   const installation = installationIdentity(integration)
   const destination = syncDestination(
-    { channelId: result.destinationId ?? 'unverified' },
-    (integration.config ?? {}) as Record<string, unknown>
+    { receipt: true },
+    (integration.config ?? {}) as Record<string, unknown>,
+    getIntegration(integration.integrationType)
   )
   return queueSyncOperation({
     operationKey: syncOperationKey({
       installation,
-      kind: 'receive-status',
+      kind: 'receive-webhook',
       sourceType: 'event',
       sourceId: deliveryKey,
       destination,
@@ -34,16 +37,65 @@ export async function queueInboundStatus(
     installation,
     provider: integration.integrationType,
     direction: 'inbound',
-    kind: 'receive-status',
+    kind: 'receive-webhook',
     sourceType: 'event',
     sourceId: deliveryKey,
     destination,
-    sourceRevision:
-      result.occurredAt && Number.isFinite(Date.parse(result.occurredAt))
-        ? new Date(result.occurredAt).toISOString()
-        : undefined,
-    payload: { executor: 'inbound-status', data: { result, deliveryKey } },
+    payload: { executor: 'inbound-webhook', data: { body, deliveryKey } },
   })
+}
+
+export async function parseInboundWebhook(
+  integration: typeof integrations.$inferSelect,
+  data: Record<string, unknown>
+): Promise<InboundWebhookResult[]> {
+  const handler = getIntegration(integration.integrationType)?.inbound
+  if (!handler || typeof data.body !== 'string') throw new Error('Inbound handler unavailable')
+  const auth = await getIntegrationAuth(integration.id)
+  const result = await handler.parseStatusChange(data.body, auth.config, {
+    ...auth.secrets,
+    accessToken: auth.accessToken,
+  })
+  return result ? (Array.isArray(result) ? result : [result]) : []
+}
+
+export async function queueInboundStatus(
+  integration: typeof integrations.$inferSelect,
+  result: InboundWebhookResult,
+  deliveryKey: string,
+  executor?: SyncTransaction
+) {
+  const installation = installationIdentity(integration)
+  const destination = syncDestination(
+    { channelId: result.destinationId ?? 'unverified' },
+    (integration.config ?? {}) as Record<string, unknown>,
+    getIntegration(integration.integrationType)
+  )
+  return queueSyncOperation(
+    {
+      operationKey: syncOperationKey({
+        installation,
+        kind: 'receive-status',
+        sourceType: 'event',
+        sourceId: deliveryKey,
+        destination,
+      }),
+      integrationId: integration.id,
+      installation,
+      provider: integration.integrationType,
+      direction: 'inbound',
+      kind: 'receive-status',
+      sourceType: 'event',
+      sourceId: deliveryKey,
+      destination,
+      sourceRevision:
+        result.occurredAt && Number.isFinite(Date.parse(result.occurredAt))
+          ? new Date(result.occurredAt).toISOString()
+          : undefined,
+      payload: { executor: 'inbound-status', data: { result, deliveryKey } },
+    },
+    executor
+  )
 }
 
 export async function applyInboundStatus(
@@ -69,6 +121,8 @@ export async function applyInboundStatus(
   const config = (integration.config ?? {}) as Record<string, unknown>
   if (!config.statusSyncEnabled || !integration.principalId)
     return { state: 'cancelled', errorCode: 'installation_changed' }
+  if (getIntegration(op.provider)?.inbound?.statusMode !== 'automatic' || !result.destinationId)
+    return { state: 'conflict', errorCode: 'missing_baseline' }
   // Serialize local changes from different remote links to this source too.
   await tx.execute(
     sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${op.sourceType}:${op.sourceId}`}, 0))`
@@ -140,8 +194,18 @@ export async function fanOutInboundStatus(
   const op = claim.operation
   const config = (integration.config ?? {}) as Record<string, unknown>
   if (!config.statusSyncEnabled) return
-  if (getIntegration(op.provider)?.inbound?.statusMode !== 'automatic' || !result.destinationId)
-    return { state: 'conflict' as const, errorCode: 'missing_baseline' as const }
+  const automatic =
+    getIntegration(op.provider)?.inbound?.statusMode === 'automatic' && !!result.destinationId
+  // Missing signed scope is sufficient only for a manual review of an existing
+  // link in the current destination. It must never authorize a local update.
+  const destination = result.destinationId
+    ? op.destination
+    : syncDestination(
+        { channelId: config.channelId },
+        config,
+        getIntegration(integration.integrationType)
+      )
+  const linkScope = `${op.installation}:${syncHash(destination)}`
   const [postLinks, ticketLinks] = await Promise.all([
     tx
       .select()
@@ -151,7 +215,7 @@ export async function fanOutInboundStatus(
           eq(postExternalLinks.integrationId, integration.id),
           eq(postExternalLinks.status, 'active'),
           eq(postExternalLinks.externalId, result.externalId),
-          eq(postExternalLinks.syncScope, `${op.installation}:${op.destinationKey}`)
+          eq(postExternalLinks.syncScope, linkScope)
         )
       ),
     tx
@@ -162,7 +226,7 @@ export async function fanOutInboundStatus(
           eq(ticketExternalLinks.integrationId, integration.id),
           eq(ticketExternalLinks.status, 'active'),
           eq(ticketExternalLinks.externalId, result.externalId),
-          eq(ticketExternalLinks.syncScope, `${op.installation}:${op.destinationKey}`)
+          eq(ticketExternalLinks.syncScope, linkScope)
         )
       ),
   ])
@@ -176,7 +240,7 @@ export async function fanOutInboundStatus(
           kind: 'status',
           sourceType,
           sourceId,
-          destination: op.destination,
+          destination,
           remoteId: result.externalId,
           revision: String(data.deliveryKey),
         }),
@@ -187,10 +251,15 @@ export async function fanOutInboundStatus(
         kind: 'status',
         sourceType,
         sourceId,
-        destination: op.destination,
+        destination,
         remoteId: result.externalId,
         sourceRevision: op.sourceRevision ?? undefined,
-        state: 'queued',
+        state: automatic ? 'queued' : 'conflict',
+        errorCode: automatic ? undefined : 'missing_baseline',
+        result: {
+          externalUrl: link.externalUrl,
+          externalDisplayId: link.externalDisplayId || result.externalId,
+        },
         payload: {
           executor: 'inbound-status',
           data: { result, linkId: link.id, deliveryKey: data.deliveryKey },

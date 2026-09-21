@@ -1,3 +1,4 @@
+import { getIntegration } from '@/lib/server/integrations'
 /** Exercises verified receipt, fan-out and domain effects against PostgreSQL. */
 import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest'
 import { createHmac } from 'crypto'
@@ -221,7 +222,7 @@ async function systemNotes(ticketId: TicketId, kind: string) {
 }
 
 function scope(integration: typeof integrations.$inferSelect) {
-  return `${installationIdentity(integration)}:${syncHash(syncDestination({ channelId: 'acme/widgets' }, integration.config as Record<string, unknown>))}`
+  return `${installationIdentity(integration)}:${syncHash(syncDestination({ channelId: 'acme/widgets' }, integration.config as Record<string, unknown>, getIntegration(integration.integrationType)))}`
 }
 async function drain() {
   for (let n = 0; n < 10; n++) {

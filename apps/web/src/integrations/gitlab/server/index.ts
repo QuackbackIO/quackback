@@ -1,7 +1,12 @@
+import { channelDestination } from '@/lib/server/integrations/destination'
 import type { IntegrationDefinition } from '@/lib/server/integrations/types'
 import { fetchGitLabStatuses } from '@/integrations/gitlab/server/statuses'
 import { gitlabHook } from '@/integrations/gitlab/server/hook'
-import { getGitLabOAuthUrl, exchangeGitLabCode } from '@/integrations/gitlab/server/oauth'
+import {
+  getGitLabOAuthUrl,
+  exchangeGitLabCode,
+  refreshGitLabToken,
+} from '@/integrations/gitlab/server/oauth'
 import { gitlabCatalog } from '@/integrations/gitlab/server/catalog'
 import { gitlabInboundHandler } from '@/integrations/gitlab/server/inbound'
 import { listGitLabProjects } from '@/integrations/gitlab/server/projects'
@@ -10,6 +15,7 @@ const GITLAB_APP_DOCS = 'https://docs.gitlab.com/integration/oauth_provider.html
 
 export const gitlabIntegration: IntegrationDefinition = {
   id: 'gitlab',
+  destination: channelDestination(['instanceUrl']),
   catalog: gitlabCatalog,
   oauth: {
     stateType: 'gitlab_oauth',
@@ -29,8 +35,9 @@ export const gitlabIntegration: IntegrationDefinition = {
     },
   },
   hook: gitlabHook,
+  refreshToken: refreshGitLabToken,
   inbound: gitlabInboundHandler,
-  archiveReview: true,
+  linkedItems: true,
   webhookRegistration: 'manual',
   listExternalStatuses: fetchGitLabStatuses,
   platformCredentials: [

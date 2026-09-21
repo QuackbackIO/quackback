@@ -68,7 +68,7 @@ export const fetchDiscordChannelsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<DiscordChannel[]> => {
     const { requireAuth } = await import('@/lib/server/functions/auth-helpers')
     const { db, integrations, eq } = await import('@/lib/server/db')
-    const { decryptSecrets } = await import('@/lib/server/integrations/encryption')
+    const { getIntegrationAuth } = await import('@/lib/server/integrations/token-refresh')
     const { listDiscordChannels } = await import('@/integrations/discord/server/channels')
     const { logger } = await import('@/lib/server/logger')
     const log = logger.child({ component: 'discord' })
@@ -88,12 +88,13 @@ export const fetchDiscordChannelsFn = createServerFn({ method: 'GET' }).handler(
       throw new Error('Discord secrets missing')
     }
 
-    const secrets = decryptSecrets<{ accessToken?: string }>(integration.secrets)
+    const auth = await getIntegrationAuth(integration.id)
+    const secrets = { accessToken: auth.accessToken }
     if (!secrets.accessToken) {
       throw new Error('Discord bot token missing')
     }
 
-    const cfg = (integration.config ?? {}) as DiscordIntegrationConfig
+    const cfg = (auth.config ?? {}) as DiscordIntegrationConfig
     if (!cfg.guildId) {
       throw new Error('Discord guild ID not found. Please reconnect Discord.')
     }

@@ -12,6 +12,11 @@ export function parseSlackPayload(kind: string, raw: string): Record<string, any
   return kind === 'commands' ? Object.fromEntries(form) : JSON.parse(form.get('payload') ?? '{}')
 }
 export const slackAppHooks: NonNullable<IntegrationDefinition['appHooks']> = {
+  queue: { name: 'slack-hook', maxAttempts: 3 },
+  async execute(job) {
+    const { handleSlackHookJob } = await import('./agent/handler')
+    await handleSlackHookJob(job)
+  },
   kinds: ['events', 'interactions', 'commands', 'options'],
   verify: ({ headers, rawBody, credentials, verifiedAt }) =>
     verifySlackSignature(

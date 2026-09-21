@@ -1,3 +1,4 @@
+import { getIntegration } from '@/lib/server/integrations'
 /**
  * Cascade delete service for post external links.
  *
@@ -134,7 +135,11 @@ export async function executeCascadeDelete(
     const { link, integration } = row
     if (!link.syncScope) continue
     const installation = installationIdentity(integration)
-    const destination = reviewDestination(link, integration)
+    const destination = reviewDestination(
+      link,
+      integration,
+      getIntegration(integration.integrationType)
+    )
     await queueSyncOperation(
       {
         operationKey: syncOperationKey({

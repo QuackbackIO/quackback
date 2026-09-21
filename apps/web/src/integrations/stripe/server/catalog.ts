@@ -3,7 +3,7 @@ import type { IntegrationCatalogEntry } from '@/lib/server/integrations/types'
 export const stripeCatalog: IntegrationCatalogEntry = {
   id: 'stripe',
   name: 'Stripe',
-  description: 'Enrich feedback with customer revenue and subscription data.',
+  description: 'Find customers by email and open their billing profile.',
   category: 'support_crm',
   iconBg: 'bg-[#635BFF]',
   settingsPath: '/admin/settings/integrations/stripe',

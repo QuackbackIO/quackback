@@ -1,7 +1,9 @@
+import { channelDestination } from '@/lib/server/integrations/destination'
 import type { IntegrationDefinition } from '@/lib/server/integrations/types'
 import { discordHook } from '@/integrations/discord/server/hook'
 import { getDiscordOAuthUrl, exchangeDiscordCode } from '@/integrations/discord/server/oauth'
 import { discordCatalog } from '@/integrations/discord/server/catalog'
+import { validateDiscordDestination } from './channels'
 
 export const discordIntegration: IntegrationDefinition = {
   id: 'discord',
@@ -12,6 +14,7 @@ export const discordIntegration: IntegrationDefinition = {
     exchangeCode: exchangeDiscordCode,
   },
   hook: discordHook,
+  destination: { ...channelDestination(['guildId']), validate: validateDiscordDestination },
   platformCredentials: [
     {
       key: 'clientId',

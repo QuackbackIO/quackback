@@ -64,7 +64,7 @@ export const fetchClickUpSpacesFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<ClickUpSpace[]> => {
     const { requireAuth } = await import('@/lib/server/functions/auth-helpers')
     const { db, integrations, eq } = await import('@/lib/server/db')
-    const { decryptSecrets } = await import('@/lib/server/integrations/encryption')
+    const { getIntegrationAuth } = await import('@/lib/server/integrations/token-refresh')
     const { listClickUpSpaces } = await import('@/integrations/clickup/server/lists')
 
     await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
@@ -77,8 +77,9 @@ export const fetchClickUpSpacesFn = createServerFn({ method: 'GET' }).handler(
       throw new Error('ClickUp not connected')
     }
 
-    const secrets = decryptSecrets<{ accessToken: string }>(integration.secrets)
-    const cfg = (integration.config ?? {}) as ClickUpIntegrationConfig
+    const auth = await getIntegrationAuth(integration.id)
+    const secrets = { accessToken: auth.accessToken }
+    const cfg = (auth.config ?? {}) as ClickUpIntegrationConfig
     if (!cfg.teamId) {
       throw new Error('ClickUp team ID not found. Please reconnect ClickUp.')
     }
@@ -91,7 +92,7 @@ export const fetchClickUpListsFn = createServerFn({ method: 'POST' })
   .handler(async ({ data: { spaceId } }): Promise<ClickUpList[]> => {
     const { requireAuth } = await import('@/lib/server/functions/auth-helpers')
     const { db, integrations, eq } = await import('@/lib/server/db')
-    const { decryptSecrets } = await import('@/lib/server/integrations/encryption')
+    const { getIntegrationAuth } = await import('@/lib/server/integrations/token-refresh')
     const { listClickUpLists } = await import('@/integrations/clickup/server/lists')
 
     await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
@@ -104,6 +105,7 @@ export const fetchClickUpListsFn = createServerFn({ method: 'POST' })
       throw new Error('ClickUp not connected')
     }
 
-    const secrets = decryptSecrets<{ accessToken: string }>(integration.secrets)
+    const auth = await getIntegrationAuth(integration.id)
+    const secrets = { accessToken: auth.accessToken }
     return listClickUpLists(secrets.accessToken, spaceId)
   })

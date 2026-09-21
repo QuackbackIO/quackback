@@ -72,7 +72,7 @@ export function StripeConnectionActions({
           open={disconnectDialogOpen}
           onOpenChange={setDisconnectDialogOpen}
           title="Disconnect Stripe?"
-          description="This will remove the Stripe integration and stop all payment event synchronization. You can reconnect at any time."
+          description="This will remove the Stripe integration and stop customer lookups. You can reconnect at any time."
           confirmLabel="Disconnect"
           isPending={disconnecting}
           onConfirm={handleDisconnect}

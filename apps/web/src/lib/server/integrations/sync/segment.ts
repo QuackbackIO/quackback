@@ -19,8 +19,13 @@ export async function executeSegmentSync(
   if (
     !config.outgoingEnabled ||
     !sync ||
-    syncHash(syncDestination({ segmentId: data.segmentId }, config)) !==
-      claim.operation.destinationKey
+    syncHash(
+      syncDestination(
+        { segmentId: data.segmentId },
+        config,
+        getIntegration(integration.integrationType)
+      )
+    ) !== claim.operation.destinationKey
   )
     return { state: 'cancelled', errorCode: 'installation_changed' }
   const [person, segment, member] = await Promise.all([
@@ -50,8 +55,6 @@ export async function executeSegmentSync(
     /* Optional mapping. */
   }
   const secrets = integration.secrets ? decryptSecrets(integration.secrets) : {}
-  if (integration.integrationType === 'segment' && !secrets.writeKey)
-    return { state: 'auth_required', errorCode: 'authentication' }
   if (!(await canDispatchSync(claim.operation, integration)) || !(await markSyncDispatched(claim)))
     return { state: 'cancelled' }
   return withSyncTransport(async () => {

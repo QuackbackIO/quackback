@@ -1,3 +1,4 @@
+import { channelDestination } from '@/lib/server/integrations/destination'
 import type { IntegrationDefinition } from '@/lib/server/integrations/types'
 import { fetchAsanaSections } from '@/integrations/asana/server/statuses'
 import {
@@ -17,6 +18,7 @@ import { listAsanaProjects } from '@/integrations/asana/server/projects'
 
 export const asanaIntegration: IntegrationDefinition = {
   id: 'asana',
+  destination: channelDestination(['workspaceId']),
   catalog: asanaCatalog,
   oauth: {
     stateType: 'asana_oauth',
@@ -36,13 +38,13 @@ export const asanaIntegration: IntegrationDefinition = {
   },
   hook: asanaHook,
   inbound: asanaInboundHandler,
-  archiveReview: true,
+  linkedItems: true,
   webhookRegistration: {
     register: async ({ accessToken, config, callbackUrl }) => {
       const projectGid = config.channelId as string
       if (!projectGid) throw new Error('No Asana project configured')
       const result = await registerAsanaWebhook(accessToken, projectGid, callbackUrl)
-      return { externalWebhookId: result.webhookId }
+      return { externalWebhookId: result.webhookId, webhookSecret: result.webhookSecret }
     },
     unregister: async ({ accessToken, externalWebhookId }) =>
       deleteAsanaWebhook(accessToken, externalWebhookId),

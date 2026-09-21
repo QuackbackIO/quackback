@@ -1,3 +1,5 @@
+import { channelDestination } from '@/lib/server/integrations/destination'
+import { absolutizeMarkdownUrls } from '@/lib/server/integrations/post-content'
 import type { IntegrationDefinition } from '@/lib/server/integrations/types'
 import { fetchLinearStatuses } from '@/integrations/linear/server/statuses'
 import {
@@ -18,6 +20,7 @@ import { listLinearTeams } from '@/integrations/linear/server/teams'
 
 export const linearIntegration: IntegrationDefinition = {
   id: 'linear',
+  destination: channelDestination(['workspaceId', 'organizationId', 'teamId']),
   catalog: linearCatalog,
   oauth: {
     stateType: 'linear_oauth',
@@ -36,7 +39,8 @@ export const linearIntegration: IntegrationDefinition = {
   hook: linearHook,
   inbound: linearInboundHandler,
   issues: linearIssues,
-  archiveReview: true,
+  linkedItems: true,
+  formatReviewContent: (content, rootUrl) => absolutizeMarkdownUrls(content, rootUrl, true),
   webhookRegistration: {
     register: async ({ accessToken, config, callbackUrl, secret }) => {
       const teamId = config.channelId as string | undefined

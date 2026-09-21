@@ -117,14 +117,12 @@ function IntegrationSettingsPage() {
                     health={integration.health}
                     onViewHistory={() => setTab('history')}
                   />
-                  {entry.renderConfig ? (
+                  {entry.renderConfig && (
                     <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
                       <Suspense fallback={<Skeleton className="h-40 w-full" />}>
                         {entry.renderConfig({ integration, isConnected })}
                       </Suspense>
                     </div>
-                  ) : (
-                    entry.connectedBanner
                   )}
                 </>
               )}

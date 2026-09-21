@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto'
 import type { PrincipalId, SegmentId } from '@quackback/ids'
 import { integrations, principal, eq, and, inArray, type Transaction } from '@/lib/server/db'
-import { getIntegrationTypesWithSegmentSync } from './index'
+import { getIntegration, getIntegrationTypesWithSegmentSync } from './index'
 import { queueSyncOperation } from './sync/ledger'
 import { installationIdentity, syncDestination, syncOperationKey } from './sync/identity'
 
@@ -24,7 +24,11 @@ export async function notifyUserSyncIntegrations(
     const config = (integration.config ?? {}) as Record<string, unknown>
     if (!config.outgoingEnabled) continue
     const installation = installationIdentity(integration)
-    const destination = syncDestination({ segmentId: options.segmentId }, config)
+    const destination = syncDestination(
+      { segmentId: options.segmentId },
+      config,
+      getIntegration(integration.integrationType)
+    )
     for (const [ids, joined] of [
       [added, true],
       [removed, false],

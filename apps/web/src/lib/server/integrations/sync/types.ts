@@ -7,6 +7,7 @@ export type SyncExecutor =
   | 'refresh'
   | 'ticket-create'
   | 'inbound-status'
+  | 'inbound-webhook'
   | 'identify'
   | 'segment'
   | 'archive'

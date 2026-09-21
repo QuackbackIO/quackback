@@ -1,3 +1,4 @@
+import { channelDestination } from '@/lib/server/integrations/destination'
 import type { IntegrationDefinition } from '@/lib/server/integrations/types'
 import { mondayHook } from '@/integrations/monday/server/hook'
 import { getMondayOAuthUrl, exchangeMondayCode } from '@/integrations/monday/server/oauth'
@@ -6,6 +7,7 @@ import { listMondayBoards } from '@/integrations/monday/server/boards'
 
 export const mondayIntegration: IntegrationDefinition = {
   id: 'monday',
+  destination: channelDestination(['workspaceId', 'accountId', 'boardId']),
   catalog: mondayCatalog,
   oauth: {
     stateType: 'monday_oauth',
@@ -22,7 +24,7 @@ export const mondayIntegration: IntegrationDefinition = {
     },
   },
   hook: mondayHook,
-  archiveReview: true,
+  linkedItems: true,
   platformCredentials: [
     {
       key: 'clientId',

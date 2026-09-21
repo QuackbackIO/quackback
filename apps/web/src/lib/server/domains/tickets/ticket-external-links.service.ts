@@ -166,7 +166,11 @@ async function insertLinkWithNote(
     const { queueSyncOperation } = await import('@/lib/server/integrations/sync/ledger')
     const config = (integration.config ?? {}) as Record<string, unknown>
     const installation = installationIdentity(integration)
-    const destination = syncDestination({ channelId: config.channelId }, config)
+    const destination = syncDestination(
+      { channelId: config.channelId },
+      config,
+      getIntegration(integration.integrationType)
+    )
     if (`${installation}:${syncHash(destination)}` !== expectedScope)
       throw new ValidationError(
         'CONNECTION_CHANGED',
@@ -270,7 +274,7 @@ export async function linkTicketToIssue(
     )
   }
 
-  const syncScope = `${installationIdentity(integration)}:${syncHash(syncDestination({ channelId: config.channelId }, config))}`
+  const syncScope = `${installationIdentity(integration)}:${syncHash(syncDestination({ channelId: config.channelId }, config, getIntegration(integration.integrationType)))}`
   const existing = await findLink(ticketId, integrationType, ref.externalId, syncScope)
   if (existing) return toDTO(existing) // idempotent re-link
 
@@ -320,7 +324,11 @@ export async function createIssueForTicket(
     await import('@/lib/server/integrations/sync/identity')
   const config = (integration.config ?? {}) as Record<string, unknown>
   const installation = installationIdentity(integration)
-  const destination = syncDestination({ channelId: config.channelId }, config)
+  const destination = syncDestination(
+    { channelId: config.channelId },
+    config,
+    getIntegration(integration.integrationType)
+  )
   const operation = await queueSyncOperation({
     operationKey: syncOperationKey({
       installation,

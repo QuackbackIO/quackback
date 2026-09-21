@@ -59,7 +59,7 @@ export const fetchNotionDatabasesFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<NotionDatabase[]> => {
     const { requireAuth } = await import('@/lib/server/functions/auth-helpers')
     const { db, integrations, eq } = await import('@/lib/server/db')
-    const { decryptSecrets } = await import('@/lib/server/integrations/encryption')
+    const { getValidAccessToken } = await import('@/lib/server/integrations/token-refresh')
     const { listNotionDatabases } = await import('@/integrations/notion/server/databases')
     const { logger } = await import('@/lib/server/logger')
     const log = logger.child({ component: 'notion' })
@@ -79,7 +79,7 @@ export const fetchNotionDatabasesFn = createServerFn({ method: 'GET' }).handler(
       throw new Error('Notion secrets missing')
     }
 
-    const secrets = decryptSecrets<{ accessToken?: string }>(integration.secrets)
+    const secrets = { accessToken: await getValidAccessToken(integration.id) }
     if (!secrets.accessToken) {
       throw new Error('Notion access token missing')
     }

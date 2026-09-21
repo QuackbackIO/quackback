@@ -214,6 +214,8 @@ export const addNotificationChannelFn = createServerFn({ method: 'POST' })
     await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
 
     const integrationId = data.integrationId as IntegrationId
+    const { validateIntegrationDestination } = await import('@/lib/server/integrations/destination')
+    await validateIntegrationDestination(integrationId, { channelId: data.channelId })
     const filters = data.boardIds?.length ? { boardIds: data.boardIds } : null
 
     await db
@@ -263,6 +265,8 @@ export const updateNotificationChannelFn = createServerFn({ method: 'POST' })
     await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
 
     const integrationId = data.integrationId as IntegrationId
+    const { validateIntegrationDestination } = await import('@/lib/server/integrations/destination')
+    await validateIntegrationDestination(integrationId, { channelId: data.channelId })
     const filters = data.boardIds?.length ? { boardIds: data.boardIds } : null
 
     // Upsert event mappings for this channel
