@@ -76,6 +76,22 @@ support for automatic remote edits must include a verified conditional-write con
 a read followed by an unconditional write is insufficient. Verified link-existing recovery
 currently uses the read-only `issues.inspect` capability for GitHub and Linear.
 
+Each integration hook implements `IntegrationHook` and returns a `DeliveryOutcome`:
+`succeeded` (with optional remote identity), `failed`, `auth_required`, `retry_wait`,
+or `uncertain`. Use the shared response/error classifiers; return a retry only for a
+confirmed rejection. `retryAfterMs` schedules the next job without blocking the worker.
+`withSyncTransport` preserves partial-write and timeout evidence across multiple HTTP
+requests. SDK adapters must report intermediate writes with `recordDeliveryOutcome`.
+
+Inbound adapters declare `statusMode: 'automatic' | 'review'`. Automatic handling still
+requires verified destination and revision evidence; a flag alone cannot authorize it.
+Status-listing capabilities enable mapped outbound review proposals. Catalog badges use
+these same facts, so manual review is never advertised as automatic remote mutation.
+
+Read sync health with `readSyncHealth`; never overwrite connection errors after delivery.
+The ledger owns delivery identity and existing external-link tables own associations.
+No second binding table or health projection is needed.
+
 Canonical post events recover rich-text media through `contentJsonToMarkdown`. Markdown
 formatters use `buildIntegrationPostContent` for absolute media URLs and intact attachment
 fallback around truncation. Linear uses video-as-image syntax; other Markdown providers

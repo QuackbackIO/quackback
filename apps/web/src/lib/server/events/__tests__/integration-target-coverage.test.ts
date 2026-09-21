@@ -73,7 +73,7 @@ vi.mock('../hook-utils', () => ({
 }))
 
 const { getHookTargets } = await import('../targets')
-const { listIntegrationTypes, getIntegrationHook } = await import('@/lib/server/integrations')
+const { listIntegrationTypes, getIntegration } = await import('@/lib/server/integrations')
 
 /**
  * The config a connected install has, for each hook integration that resolves a
@@ -141,7 +141,7 @@ function makePostCreatedEvent() {
   }
 }
 
-const hookTypes = listIntegrationTypes().filter((t) => getIntegrationHook(t))
+const hookTypes = listIntegrationTypes().filter((t) => getIntegration(t)?.hook)
 const resolvingTypes = hookTypes.filter((t) => !KNOWN_UNRESOLVED.has(t))
 
 beforeEach(() => {

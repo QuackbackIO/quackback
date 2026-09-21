@@ -20,12 +20,7 @@ const EVENT_CONFIG = [
   {
     id: 'post.created' as const,
     label: 'New feedback submitted',
-    description: 'Sync payment data when users submit new feedback',
-  },
-  {
-    id: 'post.status_changed' as const,
-    label: 'Feedback status changed',
-    description: 'Update payment records when feedback status changes',
+    description: 'Look up Stripe customers when users submit new feedback',
   },
 ]
 
@@ -67,9 +62,7 @@ export function StripeConfig({ integrationId, initialEventMappings, enabled }: S
           <Label htmlFor="enabled-toggle" className="text-base font-medium">
             Integration enabled
           </Label>
-          <p className="text-xs text-muted-foreground">
-            Turn off to pause all Stripe payment synchronization
-          </p>
+          <p className="text-xs text-muted-foreground">Turn off to pause Stripe customer lookups</p>
         </div>
         <Switch
           id="enabled-toggle"

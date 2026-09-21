@@ -1,12 +1,12 @@
+import { deliveryError, httpDeliveryFailure } from '@/lib/server/integrations/sync/outcomes'
 import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 /**
  * Stripe hook handler.
  * Enriches feedback posts with customer revenue data from Stripe.
  */
 
-import type { HookHandler, HookResult } from '@/lib/server/events/hook-types'
+import type { IntegrationHook, DeliveryOutcome } from '@/lib/server/integrations/sync/outcomes'
 import type { EventData } from '@/lib/server/events/types'
-import { isRetryableError } from '@/lib/server/events/hook-utils'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'stripe' })
@@ -22,10 +22,10 @@ export interface StripeConfig {
   rootUrl: string
 }
 
-export const stripeHook: HookHandler = {
-  async run(event: EventData, _target: unknown, config: unknown): Promise<HookResult> {
+export const stripeHook: IntegrationHook = {
+  async run(event: EventData, _target: unknown, config: unknown): Promise<DeliveryOutcome> {
     if (event.type !== 'post.created') {
-      return { success: true }
+      return { state: 'succeeded' }
     }
 
     const { accessToken } = config as StripeConfig
@@ -33,7 +33,7 @@ export const stripeHook: HookHandler = {
 
     if (!email) {
       log.debug('no author email, skipping enrichment')
-      return { success: true }
+      return { state: 'succeeded' }
     }
 
     log.debug('enriching feedback')
@@ -49,25 +49,7 @@ export const stripeHook: HookHandler = {
       })
 
       if (!response.ok) {
-        const status = response.status
-
-        if (status === 401 || status === 403) {
-          return {
-            success: false,
-            error: `Stripe authentication failed (${status}). Please check your API key.`,
-            shouldRetry: false,
-          }
-        }
-
-        if (status === 429) {
-          return { success: false, error: 'Rate limited', shouldRetry: true }
-        }
-
-        return {
-          success: false,
-          error: `Stripe API error: ${status}`,
-          shouldRetry: status >= 500,
-        }
+        return httpDeliveryFailure(response)
       }
 
       const data = (await response.json()) as {
@@ -80,26 +62,23 @@ export const stripeHook: HookHandler = {
 
       if (data.data.length === 0) {
         log.debug('no customer found')
-        return { success: true }
+        return { state: 'succeeded' }
       }
 
       const customer = data.data[0]
       log.info({ customer_id: customer.id }, 'customer found')
 
       return {
-        success: true,
-        externalId: customer.id,
-        externalUrl: `https://dashboard.stripe.com/customers/${customer.id}`,
+        state: 'succeeded',
+        result: {
+          externalId: customer.id,
+          externalUrl: `https://dashboard.stripe.com/customers/${customer.id}`,
+        },
       }
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error'
       log.error({ err: error }, 'enrichment failed')
 
-      return {
-        success: false,
-        error: errorMsg,
-        shouldRetry: isRetryableError(error),
-      }
+      return deliveryError(error)
     }
   },
 

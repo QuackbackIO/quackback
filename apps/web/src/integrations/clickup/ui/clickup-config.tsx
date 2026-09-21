@@ -46,11 +46,6 @@ const EVENT_CONFIG = [
     label: 'Create task from new feedback',
     description: 'Automatically create a ClickUp task when new feedback is submitted',
   },
-  {
-    id: 'post.status_changed' as const,
-    label: 'Sync status changes',
-    description: 'Update linked tasks when feedback status changes',
-  },
 ]
 
 export function ClickUpConfig({

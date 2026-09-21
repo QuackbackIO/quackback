@@ -41,11 +41,6 @@ const EVENT_CONFIG = [
     label: 'Create issue from new feedback',
     description: 'Automatically create a Linear issue when new feedback is submitted',
   },
-  {
-    id: 'post.status_changed' as const,
-    label: 'Sync status changes',
-    description: 'Update linked issues when feedback status changes',
-  },
 ]
 
 export function LinearConfig({

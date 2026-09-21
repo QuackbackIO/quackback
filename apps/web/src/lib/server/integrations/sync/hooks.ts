@@ -5,7 +5,6 @@ import {
   sql,
   integrations,
   integrationEventMappings,
-  integrationSyncBindings,
   postExternalLinks,
   posts,
   postComments,
@@ -16,7 +15,6 @@ import {
 } from '@/lib/server/db'
 import type { IntegrationId, PostId, TicketId, PostCommentId, ChangelogId } from '@quackback/ids'
 import type { HookJobData } from '@/lib/server/events/hook-job'
-import { getHook } from '@/lib/server/events/registry'
 import { getIntegration } from '../index'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import type { JobSqlExecutor } from '@/lib/server/jobs/job-queue'
@@ -26,11 +24,9 @@ import { decryptSecrets } from '../encryption'
 import { getValidAccessToken } from '../token-refresh'
 import { installationIdentity, syncDestination, syncHash, syncOperationKey } from './identity'
 import { queueSyncOperation, markSyncDispatched, type SyncTransaction } from './ledger'
-import { hookSyncOutcome } from './outcomes'
 import type { SyncClaim, SyncOutcome } from './types'
 import { withSyncTransport } from './transport'
 import { canDispatchSync } from './eligibility'
-import { updateSyncHealth } from './health'
 import { refreshSyncActor } from './sources'
 
 export function hookSource(data: HookJobData) {
@@ -61,9 +57,7 @@ export async function queueHookSync(
   requestedBy?: string
 ): Promise<{ id: string; state: string } | null> {
   if (!executor) {
-    const operation = await db.transaction((tx) => queueHookSync(data, tx, requestedBy))
-    await updateSyncHealth(String(data.config.integrationId))
-    return operation
+    return db.transaction((tx) => queueHookSync(data, tx, requestedBy))
   }
   if (data.hookType === 'remote_status_push') {
     const { queueStatusSync } = await import('./status')
@@ -134,7 +128,7 @@ export async function executeHookSync(
   integration: typeof integrations.$inferSelect
 ): Promise<SyncOutcome> {
   const hookType = String(payload.hookType)
-  const hook = await getHook(hookType)
+  const hook = getIntegration(hookType)?.hook
   if (!hook) return { state: 'failed', errorCode: 'provider_failed' }
   const event = payload.event as HookJobData['event']
   const target = payload.target
@@ -242,11 +236,11 @@ export async function executeHookSync(
     if (
       claim.operation.kind === 'create' &&
       getIntegration(hookType)?.archiveReview &&
-      result.success &&
-      !result.externalId
+      result.state === 'succeeded' &&
+      !result.result?.externalId
     )
       return { state: 'uncertain', errorCode: 'outcome_unknown' }
-    return hookSyncOutcome(result)
+    return result
   })
 }
 
@@ -260,20 +254,6 @@ export async function persistSyncLink(
   if (op.kind !== 'create') return
   const remoteUrl = typeof result.externalUrl === 'string' ? result.externalUrl : null
   const displayId = typeof result.externalDisplayId === 'string' ? result.externalDisplayId : null
-  await tx
-    .insert(integrationSyncBindings)
-    .values({
-      installation: op.installation,
-      integrationId: op.integrationId,
-      provider: op.provider,
-      sourceType: op.sourceType,
-      sourceId: op.sourceId,
-      destinationKey: op.destinationKey,
-      remoteId: result.externalId,
-      remoteUrl,
-      remoteDisplayId: displayId,
-    })
-    .onConflictDoNothing()
   if (op.sourceType === 'post') {
     // A missing/deleted source is not a successful association. Keep remote evidence for review.
     const post = await tx.query.posts.findFirst({ where: eq(posts.id, op.sourceId as PostId) })

@@ -1,11 +1,11 @@
+import { deliveryError, httpDeliveryFailure } from '@/lib/server/integrations/sync/outcomes'
 /**
  * GitLab hook handler.
  * Creates issues in GitLab when events occur.
  */
 
-import type { HookHandler, HookResult } from '@/lib/server/events/hook-types'
+import type { IntegrationHook, DeliveryOutcome } from '@/lib/server/integrations/sync/outcomes'
 import type { EventData } from '@/lib/server/events/types'
-import { isRetryableError } from '@/lib/server/events/hook-utils'
 import { buildGitLabIssue } from '@/integrations/gitlab/server/message'
 import { gitlabApiBase } from '@/integrations/gitlab/server/url'
 import { gitlabFetch } from '@/integrations/gitlab/server/fetch'
@@ -24,10 +24,10 @@ export interface GitLabConfig {
   instanceUrl?: string
 }
 
-export const gitlabHook: HookHandler = {
-  async run(event: EventData, target: unknown, config: unknown): Promise<HookResult> {
+export const gitlabHook: IntegrationHook = {
+  async run(event: EventData, target: unknown, config: unknown): Promise<DeliveryOutcome> {
     if (event.type !== 'post.created') {
-      return { success: true }
+      return { state: 'succeeded' }
     }
 
     const { channelId: projectId } = target as GitLabTarget
@@ -52,44 +52,20 @@ export const gitlabHook: HookHandler = {
       )
 
       if (!response.ok) {
-        const errorBody = await response.text()
-        const status = response.status
-
-        if (status === 401 || status === 403) {
-          log.error({ status_code: status, project_id: projectId, body: errorBody }, 'auth error')
-          return {
-            success: false,
-            error: `Authentication failed (${status}). Please reconnect GitLab.`,
-            shouldRetry: false,
-          }
-        }
-
-        if (status === 429) {
-          log.warn({ status_code: status, project_id: projectId, body: errorBody }, 'rate limited')
-          return { success: false, error: 'Rate limited', shouldRetry: true }
-        }
-
-        log.error({ status_code: status, project_id: projectId, body: errorBody }, 'api error')
-        return {
-          success: false,
-          error: `GitLab API error: ${status}`,
-          shouldRetry: status >= 500,
-        }
+        return httpDeliveryFailure(response)
       }
 
       const data = (await response.json()) as { iid: number; web_url: string }
       log.info({ issue_iid: data.iid, project_id: projectId }, 'issue created')
 
-      return { success: true, externalId: String(data.iid), externalUrl: data.web_url }
+      return {
+        state: 'succeeded',
+        result: { externalId: String(data.iid), externalUrl: data.web_url },
+      }
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error'
       log.error({ err: error, project_id: projectId }, 'issue creation failed')
 
-      return {
-        success: false,
-        error: errorMsg,
-        shouldRetry: isRetryableError(error),
-      }
+      return deliveryError(error)
     }
   },
 

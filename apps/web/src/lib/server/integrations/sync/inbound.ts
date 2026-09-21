@@ -10,6 +10,7 @@ import { installationIdentity, syncDestination, syncOperationKey } from './ident
 import { queueSyncOperation, type SyncTransaction } from './ledger'
 import type { SyncClaim, SyncOutcome } from './types'
 import { hasNewerInbound } from './ordering'
+import { getIntegration } from '../index'
 
 export async function queueInboundStatus(
   integration: typeof integrations.$inferSelect,
@@ -139,7 +140,7 @@ export async function fanOutInboundStatus(
   const op = claim.operation
   const config = (integration.config ?? {}) as Record<string, unknown>
   if (!config.statusSyncEnabled) return
-  if (!result.destinationId)
+  if (getIntegration(op.provider)?.inbound?.statusMode !== 'automatic' || !result.destinationId)
     return { state: 'conflict' as const, errorCode: 'missing_baseline' as const }
   const [postLinks, ticketLinks] = await Promise.all([
     tx

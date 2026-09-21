@@ -33,6 +33,9 @@ export interface InboundWebhookResult {
  * Handler interface for inbound webhooks from external platforms.
  */
 export interface InboundWebhookHandler {
+  /** Automatic adapters supply signed destination and revision evidence. */
+  statusMode: 'automatic' | 'review'
+
   /**
    * Verify the webhook signature/authenticity.
    * Returns `true` if valid, or a `Response` for handshake challenges or auth failures.

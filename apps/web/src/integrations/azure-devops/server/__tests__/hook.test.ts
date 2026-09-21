@@ -39,11 +39,7 @@ describe('azureDevOpsHook', () => {
       { accessToken: 'pat', rootUrl: 'https://app.example.com' }
     )
 
-    expect(result).toEqual({
-      success: false,
-      error: 'Azure DevOps organization name is missing from integration config',
-      shouldRetry: false,
-    })
+    expect(result).toEqual({ state: 'failed', errorCode: 'provider_failed' })
     expect(createWorkItem).not.toHaveBeenCalled()
   })
 
@@ -63,8 +59,9 @@ describe('azureDevOpsHook', () => {
       }
     )
 
-    expect(result.success).toBe(true)
-    expect(result.externalId).toBe('42')
+    expect(result.state).toBe('succeeded')
+    if (result.state !== 'succeeded') throw new Error('Expected successful delivery')
+    expect(result.result?.externalId).toBe('42')
     expect(createWorkItem).toHaveBeenCalledWith('pat', 'acme', 'Proj', 'Task', expect.any(Object))
   })
 
@@ -83,17 +80,13 @@ describe('azureDevOpsHook', () => {
       }
     )
 
-    expect(result).toEqual({
-      success: false,
-      error: 'Authentication failed. Please reconnect Azure DevOps.',
-      shouldRetry: false,
-    })
+    expect(result).toEqual({ state: 'auth_required', errorCode: 'authentication' })
   })
 
   it('skips non post.created events', async () => {
     const event = { type: 'comment.created' } as unknown as EventData
     expect(await azureDevOpsHook.run(event, { channelId: 'Proj:Task' }, {})).toEqual({
-      success: true,
+      state: 'succeeded',
     })
   })
 })

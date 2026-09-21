@@ -49,7 +49,10 @@ export const integrationSyncOperations = pgTable(
   (t) => [
     uniqueIndex('integration_sync_operation_key_idx').on(t.operationKey),
     index('integration_sync_history_idx').on(t.provider, t.createdAt, t.id),
-    index('integration_sync_attention_idx').on(t.integrationId, t.state),
+    index('integration_sync_attention_idx').on(t.integrationId, t.installation, t.state),
+    index('integration_sync_success_idx')
+      .on(t.integrationId, t.installation, t.direction, t.finishedAt)
+      .where(sql`${t.state} = 'succeeded'`),
     index('integration_sync_source_idx').on(t.sourceType, t.sourceId),
     index('integration_sync_source_record_idx').on(t.sourceType, t.sourceRecordId),
     // Serialize writes to the same remote object, even from different sources.
@@ -80,36 +83,6 @@ export const integrationSyncAttempts = pgTable(
     }).onDelete('cascade'),
     uniqueIndex('integration_sync_attempt_token_idx').on(t.token),
     index('integration_sync_attempt_operation_idx').on(t.operationId, t.number),
-  ]
-)
-
-export const integrationSyncBindings = pgTable(
-  'integration_sync_bindings',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    installation: text('installation').notNull(),
-    integrationId: text('integration_id').notNull(),
-    provider: text('provider').notNull(),
-    sourceType: text('source_type').notNull(),
-    sourceId: text('source_id').notNull(),
-    destinationKey: text('destination_key').notNull(),
-    remoteId: text('remote_id').notNull(),
-    remoteUrl: text('remote_url'),
-    remoteDisplayId: text('remote_display_id'),
-    sourceHash: text('source_hash'),
-    remoteHash: text('remote_hash'),
-    remoteVersion: text('remote_version'),
-    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [
-    uniqueIndex('integration_sync_binding_idx').on(
-      t.installation,
-      t.sourceType,
-      t.sourceId,
-      t.destinationKey,
-      t.remoteId
-    ),
-    index('integration_sync_binding_remote_idx').on(t.installation, t.destinationKey, t.remoteId),
   ]
 )
 

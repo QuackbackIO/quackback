@@ -47,7 +47,7 @@ export const templateIntegration: IntegrationDefinition = {
   // the framework can cache and link it.
   hook: {
     async run() {
-      return { success: true }
+      return { state: 'succeeded' }
     },
   },
 
@@ -69,9 +69,6 @@ export const templateIntegration: IntegrationDefinition = {
       },
     },
   },
-
-  // Status changes require explicit review until conditional writes are supported.
-  remoteStatusReview: true,
 
   // ── Link an existing item by title (optional, IF WO-15) ───────────────────
   // `search` powers type-a-title link-existing; the UI degrades to paste-a-URL

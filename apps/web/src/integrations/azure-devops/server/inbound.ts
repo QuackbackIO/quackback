@@ -13,6 +13,7 @@ import type {
 } from '@/lib/server/integrations/inbound-types'
 
 export const azureDevOpsInboundHandler: InboundWebhookHandler = {
+  statusMode: 'review',
   async verifySignature(request: Request, _body: string, secret: string): Promise<true | Response> {
     const authHeader = request.headers.get('Authorization')
     if (!authHeader?.startsWith('Basic ')) {

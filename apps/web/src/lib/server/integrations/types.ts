@@ -1,4 +1,4 @@
-import type { HookHandler } from '../events/hook-types'
+import type { IntegrationHook } from './sync/outcomes'
 import type { InboundWebhookHandler } from './inbound-types'
 import type { UserSyncHandler } from './user-sync-types'
 
@@ -281,7 +281,7 @@ export interface IntegrationDefinition {
   id: string
   catalog: IntegrationCatalogEntry
   oauth?: IntegrationOAuthConfig
-  hook?: HookHandler
+  hook?: IntegrationHook
   /** Inbound webhook handler for receiving status changes from the external platform */
   inbound?: InboundWebhookHandler
   /** Issue-tracker capabilities (manual ref parsing; issue creation in a later phase). */
@@ -367,8 +367,6 @@ export interface IntegrationDefinition {
       query: string
     }): Promise<RemoteItemMatch[]>
   }
-  /** Mapped outbound status changes are reviewed in Sync history. */
-  remoteStatusReview?: true
   webhookRegistration?:
     | 'manual'
     | {

@@ -107,6 +107,17 @@ export interface JobDefinition {
   onFailure?: (job: ClaimedJob, error: unknown, permanent: boolean) => Promise<void>
 }
 
+/** A confirmed provider rejection can impose a minimum delay before the next attempt. */
+export class RetryAfterError extends Error {
+  constructor(
+    message: string,
+    readonly retryAfterMs: number
+  ) {
+    super(message)
+    this.name = 'RetryAfterError'
+  }
+}
+
 /**
  * A failure the handler knows a retry cannot fix — the reference's
  * `UnrecoverableError`. Fails the job terminally on the spot, whatever attempts

@@ -13,6 +13,7 @@ import type {
 } from '@/lib/server/integrations/inbound-types'
 
 export const clickupInboundHandler: InboundWebhookHandler = {
+  statusMode: 'review',
   async verifySignature(request: Request, body: string, secret: string): Promise<true | Response> {
     const signature = request.headers.get('X-Signature')
     if (!signature) {

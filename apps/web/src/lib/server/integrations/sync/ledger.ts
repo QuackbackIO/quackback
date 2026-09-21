@@ -12,7 +12,6 @@ import { encrypt, decrypt } from '@/lib/server/encryption'
 import { enqueueJob, type JobSqlExecutor } from '@/lib/server/jobs/job-queue'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { syncHash } from './identity'
-import { updateSyncHealth } from './health'
 import type { SyncClaim, SyncIntent, SyncOperation, SyncOutcome, SyncPayload } from './types'
 
 export const SYNC_QUEUE = 'integration-sync'
@@ -30,9 +29,7 @@ export async function queueSyncOperation(
   executor?: JobSqlExecutor
 ): Promise<{ id: string; state: string; version: number } | null> {
   if (!executor) {
-    const operation = await db.transaction((tx) => queueSyncOperation(intent, tx))
-    await updateSyncHealth(intent.integrationId)
-    return operation
+    return db.transaction((tx) => queueSyncOperation(intent, tx))
   }
   const start = await requireSyncStart(executor)
   const sourceTable = (
@@ -102,25 +99,49 @@ export async function queueSyncOperation(
     VALUES (${intent.operationKey}, ${intent.integrationId}, ${intent.installation}, ${intent.provider},
       ${intent.direction}, ${intent.kind}, ${intent.sourceType}, ${intent.sourceId}, ${intent.sourceRevision ?? null},
       ${JSON.stringify(intent.destination)}::jsonb, ${syncHash(intent.destination)}, ${intent.remoteId ?? null},
-      ${encrypted}, ${intent.requestedBy ?? null}, ${state}, ${intent.errorCode ?? null},
+      ${encrypted}, ${intent.requestedBy ?? null}, ${state}, ${available ? (intent.errorCode ?? null) : 'source_unavailable'},
       ${available && intent.result ? JSON.stringify(intent.result) : null}::jsonb,
       ${['succeeded', 'cancelled', 'superseded'].includes(state) ? new Date().toISOString() : null}::timestamptz, ${sourceRecordId}::uuid)
     ON CONFLICT (operation_key) DO UPDATE SET operation_key = EXCLUDED.operation_key
     RETURNING id, state, version
   `)
   )
-  const row = rows[0]!
-  if (row.state === 'queued' && intent.enqueue !== false)
-    await enqueueSyncJob(row.id, row.version, executor)
+  let row = rows[0]!
+  // Reuse the permanent identity after a source is restored. Only a source-caused
+  // cancellation with no possible remote success may resume; user cancellation
+  // and uncertain/completed deliveries remain terminal for this create identity.
+  if (available && intent.kind === 'create' && row.state === 'cancelled') {
+    const resumed = getExecuteRows<{ id: string; state: string; version: number }>(
+      await executor.execute(sql`
+        UPDATE integration_sync_operations SET state = 'queued', payload = ${encrypted},
+          requested_by = ${intent.requestedBy ?? null}, cancel_requested = false,
+          error_code = NULL, finished_at = NULL, updated_at = now(), version = version + 1
+        WHERE id = ${row.id}::uuid AND state = 'cancelled' AND error_code = 'source_unavailable'
+          AND dispatched_at IS NULL AND remote_id IS NULL
+          AND NOT EXISTS (SELECT 1 FROM integration_sync_attempts
+            WHERE operation_id = ${row.id}::uuid AND
+              (result IS NOT NULL OR state IN ('succeeded', 'remote_succeeded', 'late_result', 'uncertain', 'manually_verified')))
+        RETURNING id, state, version
+      `)
+    )
+    row = resumed[0] ?? row
+  }
+  if (row.state === 'queued')
+    await enqueueSyncJob({ ...row, provider: intent.provider, kind: intent.kind }, executor)
   return row
 }
 
-export async function enqueueSyncJob(id: string, version: number, executor: JobSqlExecutor) {
+export async function enqueueSyncJob(
+  operation: Pick<SyncOperation, 'id' | 'version' | 'provider' | 'kind'>,
+  executor: JobSqlExecutor
+) {
+  const { id, version } = operation
+  const slackApp = operation.kind === 'app-hook' && operation.provider === 'slack'
   return enqueueJob({
-    queue: SYNC_QUEUE,
+    queue: slackApp ? 'slack-hook' : SYNC_QUEUE,
     payload: { operationId: id, version },
     dedupeKey: `sync:${id}:${version}`,
-    maxAttempts: 6,
+    maxAttempts: slackApp ? 3 : 6,
     executor,
   })
 }
@@ -231,9 +252,10 @@ export async function finishSyncOperation(
       lease_expires_at: Date | null
       payload: string | null
       source_record_id: string | null
+      error_code: string | null
     }>(
       await tx.execute(sql`
-      SELECT dispatched_at, lease_token, state, lease_expires_at, payload, source_record_id
+      SELECT dispatched_at, lease_token, state, lease_expires_at, payload, source_record_id, error_code
         FROM integration_sync_operations WHERE id = ${claim.operation.id}::uuid FOR UPDATE
     `)
     )
@@ -260,6 +282,8 @@ export async function finishSyncOperation(
     }
     if (locked[0]?.dispatched_at && outcome.state === 'cancelled')
       outcome = { state: 'uncertain', errorCode: 'outcome_unknown' }
+    if (outcome.state === 'cancelled' && current.error_code === 'cancelled_by_user')
+      outcome = { state: 'cancelled', errorCode: 'cancelled_by_user' }
     if (persist && outcome.state === 'succeeded') {
       const persisted = await persist(tx)
       if (persisted) outcome = persisted
@@ -338,7 +362,7 @@ export async function recoverExpiredSyncs(): Promise<void> {
         .set({
           state,
           finishedAt: state === 'queued' ? null : new Date(),
-          errorCode: op.dispatchedAt ? 'outcome_unknown' : null,
+          errorCode: op.dispatchedAt ? 'outcome_unknown' : op.cancelRequested ? op.errorCode : null,
           leaseToken: null,
           leaseExpiresAt: null,
           version: op.version + 1,
@@ -354,7 +378,7 @@ export async function recoverExpiredSyncs(): Promise<void> {
             finishedAt: new Date(),
           })
           .where(eq(attempts.token, op.leaseToken))
-      if (state === 'queued') await enqueueSyncJob(op.id, op.version + 1, tx)
+      if (state === 'queued') await enqueueSyncJob({ ...op, version: op.version + 1 }, tx)
     }
   })
 }

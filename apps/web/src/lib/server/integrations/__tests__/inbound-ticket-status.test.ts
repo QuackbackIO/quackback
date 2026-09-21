@@ -300,10 +300,11 @@ describe.skipIf(!fixture.available)('inbound webhook ticket branch (real DB, rol
       .where(eq(ticketExternalLinks.ticketId, ticketId))
     expect(link.remoteState).toBe('Closed')
     const [integ] = await testDb
-      .select({ lastInboundAt: integrations.lastInboundAt })
+      .select()
       .from(integrations)
       .where(eq(integrations.integrationType, 'github'))
-    expect(integ.lastInboundAt).not.toBeNull()
+    const { readSyncHealth } = await import('../sync/health')
+    expect((await readSyncHealth(integ)).lastInboundAt).not.toBeNull()
   })
 
   it('notes and bells even when NO ticket status mapping matches (the silence case)', async () => {

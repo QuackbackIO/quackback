@@ -22,6 +22,21 @@ The implementation follows these ordered slices:
 5. Move existing dynamic-segment membership delivery and the Slack app-hook queue. Resolve current credentials and source eligibility at execution.
 6. Remove legacy writers and import/compatibility paths. Record the start boundary, discard retired jobs, verify migrations, run regressions and review desktop/mobile UI.
 
+## Follow-up review and simplification
+
+The review of `7c8971fec` confirmed both new Codex comments:
+
+- [Restored creates](https://github.com/QuackbackIO/quackback/pull/575#discussion_r4061210775): a source-driven cancellation could strand a never-dispatched create. Restoration now reuses that operation only when no dispatch or success evidence exists. Explicit user cancellation, success and uncertainty remain protected.
+- [Slack rate limits](https://github.com/QuackbackIO/quackback/pull/575#discussion_r4061210782): the installed Slack SDK's rate-limit error now maps to a confirmed rejection with its retry delay. Unknown outcomes still require review.
+
+The same pass keeps expired and manually retried Slack app events on the serial Slack queue, preserves webhook-registration errors independently of sync health, and enables outbound status proposals from actual status-listing capabilities. Settings no longer offer event toggles whose adapters do nothing, and setup descriptions distinguish status review from automatic updates. All inbound adapters explicitly declare automatic or review-only status handling; GitHub and Linear can apply verified updates, while the other seven require review.
+
+The duplicate bindings table is removed. Permanent operation keys provide delivery identity; post/ticket external links provide source associations. Initial scheduling, crash recovery and manual retry share one queue-selection helper. All 21 integration hooks return explicit delivery outcomes instead of translating legacy retry booleans. HTTP and SDK rate-limit delays reach the job scheduler. Partial writes remain uncertain, including a Monday item whose follow-up description mutation fails or lacks a result.
+
+Sync health is read from the ledger for the current installation, using attention and successful-delivery indexes. Workers no longer update health projections or sweep every integration. Connection errors remain independent. The existing GitHub inbox channel telemetry remains part of that separate channel flow; it is not evidence of ledger delivery.
+
+These migrations are still unreleased, so the initial migration and privacy trigger are revised directly. There is no bindings migration/importer or backwards-compatibility path for an intermediate PR revision.
+
 ## Invariants
 
 - Only work after the recorded start boundary is eligible. Older events and creates for older posts/tickets are skipped without creating history or jobs. New events concerning existing content are eligible, and a user may explicitly link an existing item.
@@ -37,18 +52,18 @@ The implementation follows these ordered slices:
 
 ## Product behavior and provider boundaries
 
-| Flow                                      | Behavior                                                                                                                                                                                                                                                                      |
-| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Post creates / integration notifications  | Queued per destination. Existing success, pending work and uncertainty are reused. Resync does not republish the domain event to unrelated sinks.                                                                                                                             |
-| Ticket creates                            | Queued from the current ticket narrative, with source authorization. The ticket links refresh while its panel is open.                                                                                                                                                        |
-| Remote content, status or archive changes | Explicit review in Sync history. No current adapter declares a verified conditional write, so the old unconditional mutators have been deleted. Copy the proposal, open the remote item, and preserve its edits.                                                              |
-| Inbound status                            | Signature verification precedes durable receipt. Each linked source gets an independent operation; source mutation, activity, notes, outbox events and completion share a transaction. Only applied newer revisions supersede an older update.                                |
-| Destination verification                  | GitHub and Linear supply the required destination and revision. Other inbound adapters require review when destination/revision evidence is missing. Existing reference-only links are never adopted for sync. A repository-local number is never treated as globally unique. |
-| Link-existing recovery                    | GitHub and Linear perform a read-only lookup in the original destination, followed by explicit confirmation. Other providers do not offer an unverified recovery link.                                                                                                        |
-| Segment identify                          | Verified receipts are acknowledged only after enqueue commits. Declared attributes and completion commit together. Missing timestamps require review; unknown users are ignored as before.                                                                                    |
-| Segment membership                        | Existing dynamic evaluation and per-person outbound intent share a transaction. Execution reads current membership and identity and sends a stable delivery ID. This does not add outbound behavior to manual/SSO membership paths that did not previously sync.              |
-| Slack app hooks                           | Existing signed receipt and ledger enqueue commit together. The existing app handler runs through the durable worker; ambiguous app actions are not replayed.                                                                                                                 |
-| Unsupported source events                 | Fail closed as review items rather than sending an unverifiable snapshot. Deletion does not grant permission to re-send deleted source content.                                                                                                                               |
+| Flow                                      | Behavior                                                                                                                                                                                                                                                                                                                      |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Post creates / integration notifications  | Queued per destination. Existing success, pending work and uncertainty are reused. Resync does not republish the domain event to unrelated sinks.                                                                                                                                                                             |
+| Ticket creates                            | Queued from the current ticket narrative, with source authorization. The ticket links refresh while its panel is open.                                                                                                                                                                                                        |
+| Remote content, status or archive changes | Explicit review in Sync history. No current adapter declares a verified conditional write, so the old unconditional mutators have been deleted. Copy the proposal, open the remote item, and preserve its edits.                                                                                                              |
+| Inbound status                            | Signature verification precedes durable receipt. Each linked source gets an independent operation; source mutation, activity, notes, outbox events and completion share a transaction. Only applied newer revisions supersede an older update.                                                                                |
+| Destination verification                  | GitHub and Linear supply the required destination and revision. The other seven inbound adapters explicitly require review; enabling automatic handling also requires destination/revision evidence. Existing reference-only links are never adopted for sync. A repository-local number is never treated as globally unique. |
+| Link-existing recovery                    | GitHub and Linear perform a read-only lookup in the original destination, followed by explicit confirmation. Other providers do not offer an unverified recovery link.                                                                                                                                                        |
+| Segment identify                          | Verified receipts are acknowledged only after enqueue commits. Declared attributes and completion commit together. Missing timestamps require review; unknown users are ignored as before.                                                                                                                                    |
+| Segment membership                        | Existing dynamic evaluation and per-person outbound intent share a transaction. Execution reads current membership and identity and sends a stable delivery ID. This does not add outbound behavior to manual/SSO membership paths that did not previously sync.                                                              |
+| Slack app hooks                           | Existing signed receipt and ledger enqueue commit together. The existing app handler runs through the durable worker; ambiguous app actions are not replayed.                                                                                                                                                                 |
+| Unsupported source events                 | Fail closed as review items rather than sending an unverifiable snapshot. Deletion does not grant permission to re-send deleted source content.                                                                                                                                                                               |
 
 The system does not claim provider-side exactly-once delivery. If an external platform accepted a request and the response was lost, there may be no safe way to prove absence. Such work stays visible as uncertain, with cancellation and evidence-based recovery. A historic post or ticket is not automatically adopted. Creating a remote issue from an older ticket is declined; users can explicitly link an existing issue instead.
 
@@ -92,14 +107,16 @@ An operation that was failed or awaiting credentials at backup time may have suc
 
 ## Validation
 
-Validation uses an isolated PostgreSQL database (`quackback_sync_575`), mocked provider boundaries and scratch migration databases. It never calls provider mutation endpoints. The browser review renders the actual history/dialog components with fixture server responses inside a settings frame; it covers desktop, mobile, dark mode, loading/error/empty states, restricted actions and confirmation drafts. It is not authenticated full-application E2E coverage.
+Validation uses an isolated PostgreSQL database (`quackback_sync_575`), mocked provider boundaries and scratch migration databases. It never calls provider mutation endpoints. The browser review renders the actual health/history/dialog components with fixture server responses inside a settings frame; it covers desktop, mobile, dark mode, loading/error/empty states, restricted actions and confirmation drafts. It is not authenticated full-application E2E coverage.
 
 Verified locally on 2026-09-21:
 
-- Full regression (`bun vitest run --maxWorkers=4`): **15,590 passed**, 6 skipped and 1 todo; 1,503 files passed and 3 skipped. PostgreSQL migration replay, gap recovery, concurrency and failure tests are included.
-- Latest post resync checks: 8 passed. Archive/history UI checks after the final reference-only presentation change: 15 passed.
+- Full regression (`bun vitest run --maxWorkers=4`): **15,604 passed**, 6 skipped and 1 todo; 1,504 files passed and 3 skipped. PostgreSQL migration replay, gap recovery, concurrency and failure tests are included.
+- Final focused integration, settings UI, event and job checks after the last recovery/UI refinements: **506 passed in 73 files**, including restoration after a worker crash, manual Slack recovery, and Monday compound delivery.
 - `bun run typecheck`, `bun run build`, and `bun run db:check-drift`: passed.
-- Changed-file lint: no errors, with three existing warnings in Slack handler typing and principal-repoint file length. Formatting and `git diff --check`: passed.
-- Actual history components in the browser: no page errors or horizontal overflow in desktop/mobile, light/dark, loading, failure, empty and restricted-action states; failed confirmation preserves its draft.
+- Changed-file lint: no errors, with two existing typing warnings in Slack and ntfy tests/handlers. Formatting and `git diff --check`: passed.
+- Actual health/history components in the browser: no page errors or horizontal overflow in desktop/mobile, light/dark, loading, failure, empty and restricted-action states; failed confirmation preserves its draft. The health panel displays sync attention and a connection error together, without hiding either.
+
+A local `EXPLAIN (ANALYZE, BUFFERS)` over 200,000 fixture operations used the success and attention indexes, returning health for 10,000 current-installation operations (100 needing attention) in 0.182 ms. The fixture transaction was rolled back. This is a local query-plan check, not a production benchmark.
 
 Live provider behavior and the offline production replacement still require the release checks above.

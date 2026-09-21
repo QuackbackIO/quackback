@@ -25,6 +25,7 @@ export const SYNC_ERRORS = {
   manual_update: 'Review and apply this change on the platform to preserve edits made there.',
   missing_baseline: 'We could not verify this change. Check the platform before continuing.',
   source_unavailable: 'This item was removed or is no longer available to sync.',
+  cancelled_by_user: 'Further attempts were cancelled by a teammate.',
   installation_changed:
     'The connection or destination changed. This operation cannot use the new connection.',
   missing_payload: 'The original data is no longer available. Start a new sync from the source.',

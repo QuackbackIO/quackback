@@ -9,6 +9,7 @@ import {
   integrationSyncAttempts as attempts,
 } from '@/lib/server/db'
 import type { ClaimedJob } from '@/lib/server/jobs/job-queue'
+import { RetryAfterError } from '@/lib/server/jobs/definitions'
 import {
   claimSyncOperation,
   readSyncPayload,
@@ -24,12 +25,10 @@ import { executeHookSync, persistSyncLink } from './hooks'
 import { syncErrorOutcome } from './outcomes'
 import type { SyncOutcome } from './types'
 import { executeTicketCreate } from './tickets'
-import { updateSyncHealth } from './health'
 import { applyIdentifySync } from './identify'
 import { fanOutInboundStatus, applyInboundStatus } from './inbound'
 import { executeSegmentSync } from './segment'
 import { installationIdentity } from './identity'
-export { updateSyncHealth } from './health'
 
 export async function runIntegrationSync(job: ClaimedJob): Promise<void> {
   const id = job.payload.operationId
@@ -142,8 +141,11 @@ export async function runIntegrationSync(job: ClaimedJob): Promise<void> {
       }
       throw new Error('Integration sync could not record its outcome')
     }
-    await updateSyncHealth(claim.operation.integrationId)
-    if (outcome.state === 'retry_wait') throw new Error('Integration sync is waiting for a retry')
+    if (outcome.state === 'retry_wait')
+      throw new RetryAfterError(
+        'Integration sync is waiting for a retry',
+        outcome.retryAfterMs ?? 0
+      )
   } finally {
     clearInterval(heartbeat)
   }
@@ -155,7 +157,7 @@ export async function onIntegrationSyncFailure(
   permanent: boolean
 ): Promise<void> {
   if (!permanent || typeof job.payload.operationId !== 'string') return
-  const [op] = await db
+  await db
     .update(operations)
     .set({
       state: sql`CASE WHEN ${operations.dispatchedAt} IS NOT NULL THEN 'uncertain' ELSE 'failed' END`,
@@ -170,16 +172,10 @@ export async function onIntegrationSyncFailure(
         sql`(${operations.state} = 'retry_wait' OR (${operations.state} = 'queued' AND ${operations.version} = ${typeof job.payload.version === 'number' ? job.payload.version : -1}))`
       )
     )
-    .returning()
-  if (op) await updateSyncHealth(op.integrationId)
 }
 
 export async function sweepIntegrationSync(): Promise<void> {
   await recoverExpiredSyncs()
-  // Refresh projections for transactional producers and crash recovery, too.
-  const { integrations } = await import('@/lib/server/db')
-  const connections = await db.select({ id: integrations.id }).from(integrations)
-  for (const connection of connections) await updateSyncHealth(connection.id)
   // Detailed resolved history expires, but compact operation identity is permanent.
   await db.execute(sql`DELETE FROM integration_sync_attempts WHERE operation_id IN (
     SELECT id FROM integration_sync_operations WHERE state IN ('succeeded', 'cancelled', 'superseded') AND finished_at < now() - interval '90 days')`)

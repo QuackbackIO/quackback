@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { integrationFetch, withSyncTransport } from '../transport'
+import { integrationFetch, withSyncTransport, recordDeliveryOutcome } from '../transport'
 
 afterEach(() => vi.restoreAllMocks())
 describe('provider transport outcomes', () => {
@@ -48,6 +48,37 @@ describe('provider transport outcomes', () => {
       )
     )
     expect(results.map((r) => r.state)).toEqual(['retry_wait', 'uncertain'])
+  })
+  it('retains Retry-After from a confirmed rejection', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(null, { status: 429, headers: { 'Retry-After': '120' } })
+    )
+    expect(
+      await withSyncTransport(async () => {
+        await integrationFetch('https://provider.test/items', { method: 'POST' })
+        throw new Error('Provider rate limit')
+      })
+    ).toEqual({ state: 'retry_wait', errorCode: 'unavailable', retryAfterMs: 120_000 })
+  })
+  it('does not accept apparent success after a failed follow-up request', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('{}', { status: 201 }))
+      .mockResolvedValueOnce(new Response(null, { status: 429 }))
+    expect(
+      await withSyncTransport(async () => {
+        await integrationFetch('https://provider.test/items', { method: 'POST' })
+        await integrationFetch('https://provider.test/items/1/body', { method: 'POST' })
+        return { state: 'succeeded', result: { externalId: '1' } }
+      })
+    ).toEqual({ state: 'uncertain', errorCode: 'outcome_unknown' })
+  })
+  it('preserves partial SDK writes before a later rejection', async () => {
+    expect(
+      await withSyncTransport(async () => {
+        recordDeliveryOutcome({ state: 'succeeded' })
+        return { state: 'retry_wait', errorCode: 'unavailable' }
+      })
+    ).toEqual({ state: 'uncertain', errorCode: 'outcome_unknown' })
   })
   it('keeps a timeout uncertain even if an adapter marks it retryable', async () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('timeout'))

@@ -32,7 +32,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS "integration_sync_operation_key_idx" ON "integ
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "integration_sync_history_idx" ON "integration_sync_operations" ("provider", "created_at", "id");
 --> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "integration_sync_attention_idx" ON "integration_sync_operations" ("integration_id", "state");
+CREATE INDEX IF NOT EXISTS "integration_sync_attention_idx" ON "integration_sync_operations" ("integration_id", "installation", "state");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "integration_sync_success_idx" ON "integration_sync_operations" ("integration_id", "installation", "direction", "finished_at") WHERE "state" = 'succeeded';
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "integration_sync_source_idx" ON "integration_sync_operations" ("source_type", "source_id");
 --> statement-breakpoint
@@ -53,27 +55,6 @@ CREATE TABLE IF NOT EXISTS "integration_sync_attempts" (
 CREATE UNIQUE INDEX IF NOT EXISTS "integration_sync_attempt_token_idx" ON "integration_sync_attempts" ("token");
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "integration_sync_attempt_operation_idx" ON "integration_sync_attempts" ("operation_id", "number");
---> statement-breakpoint
-CREATE TABLE IF NOT EXISTS "integration_sync_bindings" (
-  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-  "installation" text NOT NULL,
-  "integration_id" text NOT NULL,
-  "provider" text NOT NULL,
-  "source_type" text NOT NULL,
-  "source_id" text NOT NULL,
-  "destination_key" text NOT NULL,
-  "remote_id" text NOT NULL,
-  "remote_url" text,
-  "remote_display_id" text,
-  "source_hash" text,
-  "remote_hash" text,
-  "remote_version" text,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "integration_sync_binding_idx" ON "integration_sync_bindings" ("installation", "source_type", "source_id", "destination_key", "remote_id");
---> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "integration_sync_binding_remote_idx" ON "integration_sync_bindings" ("installation", "destination_key", "remote_id");
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "integration_sync_actions" (
   "id" uuid PRIMARY KEY NOT NULL,

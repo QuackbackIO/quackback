@@ -40,6 +40,7 @@ import {
   maxAttemptsFor,
   retentionOverrides,
   retryBackoffMs,
+  RetryAfterError,
   type DynamicSchedule,
   type JobDefinition,
   type JobHandler,
@@ -258,7 +259,12 @@ export async function runJob(job: ClaimedJob): Promise<'succeeded' | 'failed' | 
     // answer. It only ever makes the outcome final sooner — see failJob.
     const terminal = isTerminalJobError(err)
     const outcome = await failJob(job, message, {
-      backoffMs: retryBackoffMs(def, job.attempts),
+      backoffMs: Math.max(
+        retryBackoffMs(def, job.attempts),
+        err instanceof RetryAfterError && Number.isFinite(err.retryAfterMs)
+          ? Math.max(0, err.retryAfterMs)
+          : 0
+      ),
       terminal,
     })
     const fields = jobFields(job, {

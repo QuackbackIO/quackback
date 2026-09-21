@@ -1,6 +1,6 @@
 /**
  * Resolve outbound status proposals for Sync history. When a Quackback
- * post/ticket status changes, each linked item with `remoteStatusReview`
+ * post/ticket status changes, each linked item with external statuses
  * and a matching `pushStatusMappings` entry gets a review operation.
  * No adapter currently supports a verified conditional remote write.
  *
@@ -171,7 +171,7 @@ export const remoteStatusPushResolver: SinkResolver = {
       actorType: event.actorType,
       actorId: event.actorId,
       entityType: isPost ? 'post' : 'ticket',
-      hasPushCapability: (type) => getIntegration(type)?.remoteStatusReview === true,
+      hasPushCapability: (type) => !!getIntegration(type)?.listExternalStatuses,
     })
   },
 }

@@ -290,7 +290,7 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
     setup: {
       title: 'Connect your Asana workspace',
       description:
-        'Connect Asana to automatically create tasks from feedback and keep statuses in sync across both platforms.',
+        'Connect Asana to create tasks from feedback and review incoming status changes.',
       steps: [
         <p key="1">
           Click <span className="font-medium text-foreground">Connect</span> to authorize Quackback
@@ -496,7 +496,7 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
     setup: {
       title: 'Connect GitLab',
       description:
-        'Connect GitLab.com or a self-hosted GitLab instance to create issues from feedback and sync statuses.',
+        'Connect GitLab.com or a self-hosted GitLab instance to create issues from feedback and review incoming status changes.',
       steps: [
         <p key="1">
           Configure your GitLab{' '}
@@ -602,7 +602,7 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
     setup: {
       title: 'Connect your Jira instance',
       description:
-        "Connect Jira to automatically create and sync issues from feedback posts, keeping your team's workflow in sync.",
+        'Connect Jira to create issues from feedback and review incoming status changes.',
       steps: [
         <p key="1">
           Click <span className="font-medium text-foreground">Connect</span> to authorize Quackback
@@ -632,7 +632,7 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
     setup: {
       title: 'Connect your Linear workspace',
       description:
-        'Connect Linear to automatically create issues from user feedback and keep statuses in sync across both platforms.',
+        'Connect Linear to create issues from feedback and receive verified status updates on linked items.',
       steps: [
         <p key="1">
           Click <span className="font-medium text-foreground">Connect</span> to authorize Quackback
@@ -694,8 +694,7 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
     ConnectionActions: MondayConnectionActions,
     setup: {
       title: 'Connect Monday.com',
-      description:
-        'Connect Monday.com to automatically create items from feedback and sync statuses between platforms.',
+      description: 'Connect Monday.com to create items from feedback in your selected board.',
       steps: [
         <p key="1">
           Configure your Monday.com{' '}
@@ -891,7 +890,7 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
     setup: {
       title: 'Connect your Shortcut workspace',
       description:
-        'Connect Shortcut to automatically create stories from feedback and keep statuses in sync across both platforms.',
+        'Connect Shortcut to create stories from feedback and review incoming status changes.',
       steps: [
         <p key="1">
           Generate an API token from your Shortcut account settings and paste it below.
@@ -1019,8 +1018,7 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
     ConnectionActions: TrelloConnectionActions,
     setup: {
       title: 'Connect your Trello workspace',
-      description:
-        'Connect Trello to create cards from feedback and sync statuses between Trello lists and Quackback.',
+      description: 'Connect Trello to create cards from feedback and review incoming list changes.',
       steps: [
         <p key="1">
           Create a Trello Power-Up in your workspace (optional, only needed for custom branding).

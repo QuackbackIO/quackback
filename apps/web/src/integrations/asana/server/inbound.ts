@@ -19,6 +19,7 @@ const log = logger.child({ component: 'asana' })
 const ASANA_API = 'https://app.asana.com/api/1.0'
 
 export const asanaInboundHandler: InboundWebhookHandler = {
+  statusMode: 'review',
   async verifySignature(request: Request, body: string, secret: string): Promise<true | Response> {
     // Handshake: Asana sends X-Hook-Secret on initial webhook setup
     const hookSecret = request.headers.get('X-Hook-Secret')

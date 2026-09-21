@@ -28,6 +28,7 @@ export type SyncOutcome =
         | 'cancelled'
         | 'superseded'
       errorCode?: SyncErrorCode
+      retryAfterMs?: number
     }
 export interface SyncIntent {
   operationKey: string
@@ -45,7 +46,6 @@ export interface SyncIntent {
   payload: SyncPayload
   result?: Record<string, unknown>
   state?: SyncState
-  enqueue?: boolean
   errorCode?: SyncErrorCode
 }
 export interface SyncClaim {

@@ -1,15 +1,13 @@
 /**
  * Hook registry.
  *
- * Hooks are triggered when events occur. All hook types register here.
+ * Built-in hooks are triggered by the ordinary event queue.
  * The event processor uses getHook() to run hooks.
  *
- * Integration hooks (Slack, Discord, etc.) are resolved via the integration
- * registry. Built-in hooks (email, notification, ai, webhook) live here.
+ * Integration hooks run exclusively through the sync ledger and its registry.
  */
 
 import type { HookHandler } from './hook-types'
-import { getIntegrationHook } from '@/lib/server/integrations'
 
 // Import built-in handlers
 import { emailHook } from './handlers/email'
@@ -37,7 +35,7 @@ const lazyHooks: Record<string, () => Promise<HookHandler>> = {
 
 /**
  * Get a registered hook by type.
- * Checks built-in hooks first, then lazy hooks, then integration hooks.
+ * Checks built-in hooks first, then lazy hooks.
  */
 export async function getHook(type: string): Promise<HookHandler | undefined> {
   const builtin = builtinHooks.get(type)
@@ -50,7 +48,7 @@ export async function getHook(type: string): Promise<HookHandler | undefined> {
     return hook
   }
 
-  return getIntegrationHook(type)
+  return undefined
 }
 
 /**

@@ -20,12 +20,7 @@ const EVENT_CONFIG = [
   {
     id: 'post.created' as const,
     label: 'New feedback submitted',
-    description: 'Create Freshdesk tickets when users submit new feedback',
-  },
-  {
-    id: 'post.status_changed' as const,
-    label: 'Feedback status changed',
-    description: 'Update Freshdesk tickets when feedback status changes',
+    description: 'Look up Freshdesk contacts when users submit new feedback',
   },
 ]
 
@@ -72,7 +67,7 @@ export function FreshdeskConfig({
             Integration enabled
           </Label>
           <p className="text-xs text-muted-foreground">
-            Turn off to pause all Freshdesk ticket synchronization
+            Turn off to pause Freshdesk contact lookups
           </p>
         </div>
         <Switch

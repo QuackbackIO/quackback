@@ -28,7 +28,6 @@ it.each([
   expect(response.status).toBe(200)
   expect(mocks.enqueue).toHaveBeenCalledWith(
     'slack',
-    'slack-hook',
     'Ev1',
     expect.objectContaining({ kind: 'events', encryptedPayload: expect.any(String) }),
     executor
@@ -51,7 +50,6 @@ it('aborts an in-flight turn when Stop arrives, then still enqueues cleanup', as
   expect(turn.signal.aborted).toBe(true)
   expect(mocks.enqueue).toHaveBeenCalledWith(
     'slack',
-    'slack-hook',
     'Ev1',
     expect.objectContaining({ kind: 'events', encryptedPayload: expect.any(String) }),
     executor

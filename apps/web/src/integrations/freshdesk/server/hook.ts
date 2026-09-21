@@ -1,12 +1,12 @@
+import { deliveryError, httpDeliveryFailure } from '@/lib/server/integrations/sync/outcomes'
 import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 /**
  * Freshdesk hook handler.
  * Enriches feedback posts with support ticket data from Freshdesk.
  */
 
-import type { HookHandler, HookResult } from '@/lib/server/events/hook-types'
+import type { IntegrationHook, DeliveryOutcome } from '@/lib/server/integrations/sync/outcomes'
 import type { EventData } from '@/lib/server/events/types'
-import { isRetryableError } from '@/lib/server/events/hook-utils'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'freshdesk' })
@@ -21,17 +21,17 @@ export interface FreshdeskConfig {
   subdomain?: string
 }
 
-export const freshdeskHook: HookHandler = {
-  async run(event: EventData, _target: unknown, config: unknown): Promise<HookResult> {
+export const freshdeskHook: IntegrationHook = {
+  async run(event: EventData, _target: unknown, config: unknown): Promise<DeliveryOutcome> {
     if (event.type !== 'post.created') {
-      return { success: true }
+      return { state: 'succeeded' }
     }
 
     const { accessToken, subdomain } = config as FreshdeskConfig
     const email = event.data.post.authorEmail
 
     if (!email || !subdomain) {
-      return { success: true }
+      return { state: 'succeeded' }
     }
 
     log.debug('enriching feedback')
@@ -45,42 +45,29 @@ export const freshdeskHook: HookHandler = {
       )
 
       if (!response.ok) {
-        const status = response.status
-
-        if (status === 401 || status === 403) {
-          return {
-            success: false,
-            error: `Freshdesk authentication failed (${status}).`,
-            shouldRetry: false,
-          }
-        }
-
-        return {
-          success: false,
-          error: `Freshdesk API error: ${status}`,
-          shouldRetry: status === 429 || status >= 500,
-        }
+        return httpDeliveryFailure(response)
       }
 
       const contacts = (await response.json()) as Array<{ id: number; name?: string }>
 
       if (contacts.length === 0) {
         log.debug('no contact found')
-        return { success: true }
+        return { state: 'succeeded' }
       }
 
       const contact = contacts[0]
       log.info({ contact_id: contact.id }, 'contact found')
 
       return {
-        success: true,
-        externalId: String(contact.id),
-        externalUrl: `https://${subdomain}.freshdesk.com/a/contacts/${contact.id}`,
+        state: 'succeeded',
+        result: {
+          externalId: String(contact.id),
+          externalUrl: `https://${subdomain}.freshdesk.com/a/contacts/${contact.id}`,
+        },
       }
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error'
       log.error({ err: error }, 'enrichment failed')
-      return { success: false, error: errorMsg, shouldRetry: isRetryableError(error) }
+      return deliveryError(error)
     }
   },
 

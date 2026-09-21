@@ -27,22 +27,32 @@ describe('getIntegrationCatalog capability derivation', () => {
       expect(labels, `${id} has no inbound handler`).not.toContain('Two-way status sync')
       // They do create items and clean up on delete — slots they really have.
       expect(labels).toContain('Create items from feedback')
-      expect(labels).toContain('Clean up on delete')
+      expect(labels).toContain('Review cleanup on delete')
     }
   })
 
-  it('full trackers advertise the full loop', async () => {
+  it('verified inbound trackers distinguish automatic updates from outbound review', async () => {
     const catalog = await getIntegrationCatalog()
     const linear = catalog.find((e) => e.id === 'linear')!
     const labels = (linear.capabilities ?? []).map((c) => c.label)
     expect(labels).toEqual(
       expect.arrayContaining([
         'Create items from feedback',
-        'Two-way status sync',
+        'Receive status updates',
+        'Review outbound status changes',
         'Link existing items',
-        'Clean up on delete',
+        'Review cleanup on delete',
       ])
     )
+  })
+
+  it('review-only inbound adapters do not advertise automatic status updates', async () => {
+    const catalog = await getIntegrationCatalog()
+    for (const id of ['jira', 'azure_devops', 'asana', 'clickup', 'gitlab', 'shortcut', 'trello']) {
+      const labels = catalog.find((entry) => entry.id === id)!.capabilities!.map((cap) => cap.label)
+      expect(labels, id).toContain('Review status updates')
+      expect(labels, id).not.toContain('Receive status updates')
+    }
   })
 
   it('support_crm hooks derive as customer context, not delivery', async () => {
@@ -54,13 +64,13 @@ describe('getIntegrationCatalog capability derivation', () => {
     }
   })
 
-  it('zero-slot providers keep their hand-written fallback copy', async () => {
+  it('lookup providers advertise their implemented context capability', async () => {
     const catalog = await getIntegrationCatalog()
     for (const id of ['zendesk', 'intercom', 'hubspot']) {
       const entry = catalog.find((e) => e.id === id)!
       expect(
         (entry.capabilities ?? []).length,
-        `${id} should fall back to hand-written copy until the context capability lands`
+        `${id} should expose its implemented customer context lookup`
       ).toBeGreaterThan(0)
     }
   })

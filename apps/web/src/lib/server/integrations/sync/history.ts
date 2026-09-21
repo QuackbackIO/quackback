@@ -29,7 +29,6 @@ import { randomUUID } from 'node:crypto'
 import { getIntegration } from '../index'
 import { inspectSyncRemote } from './remote'
 import { persistSyncLink } from './hooks'
-import { updateSyncHealth } from './health'
 
 export function syncActions(
   op: Pick<SyncOperation, 'state' | 'cancelRequested'> &
@@ -338,6 +337,7 @@ export async function actOnSync(
         .update(operations)
         .set({
           cancelRequested: true,
+          ...(input.action === 'cancel' ? { errorCode: 'cancelled_by_user' } : {}),
           state:
             current.state === 'running' || current.state === 'uncertain'
               ? current.state
@@ -366,10 +366,9 @@ export async function actOnSync(
           updatedAt: new Date(),
         })
         .where(eq(operations.id, input.id))
-      await enqueueSyncJob(input.id, current.version + 1, tx)
+      await enqueueSyncJob({ ...current, version: current.version + 1 }, tx)
     }
     return { success: true }
   })
-  await updateSyncHealth(op.integrationId)
   return result
 }

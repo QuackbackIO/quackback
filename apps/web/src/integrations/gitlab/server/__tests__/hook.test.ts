@@ -54,9 +54,8 @@ describe('gitlabHook', () => {
     })
 
     expect(result).toEqual({
-      success: true,
-      externalId: '9',
-      externalUrl: 'https://gitlab.com/acme/app/-/issues/9',
+      state: 'succeeded',
+      result: { externalId: '9', externalUrl: 'https://gitlab.com/acme/app/-/issues/9' },
     })
     expect(fetchMock).toHaveBeenCalledWith(
       'https://gitlab.com/api/v4/projects/42/issues',
@@ -77,7 +76,7 @@ describe('gitlabHook', () => {
       instanceUrl: 'https://gitlab.example.com/',
     })
 
-    expect(result.success).toBe(true)
+    expect(result.state).toBe('succeeded')
     expect(fetchMock).toHaveBeenCalledWith(
       'https://gitlab.example.com/api/v4/projects/42/issues',
       expect.objectContaining({ method: 'POST' })
@@ -108,6 +107,6 @@ describe('gitlabHook', () => {
       target,
       { accessToken: 'tok', rootUrl: 'https://app.example.com' }
     )
-    expect(result).toEqual({ success: true })
+    expect(result).toEqual({ state: 'succeeded' })
   })
 })

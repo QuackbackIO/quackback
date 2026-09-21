@@ -42,7 +42,7 @@ function IntegrationSettingsPage() {
   const entry = getIntegrationSettingsEntry(type)
   if (!entry) throw notFound()
 
-  const { data } = useSuspenseQuery(adminQueries.integrationByType(type))
+  const { data, refetch } = useSuspenseQuery(adminQueries.integrationByType(type))
   const integration = data.integration as IntegrationSettingsData | null
   const {
     platformCredentialFields,
@@ -52,11 +52,13 @@ function IntegrationSettingsPage() {
   const [credentialsOpen, setCredentialsOpen] = useState(false)
   const { tab = 'settings' } = Route.useSearch()
   const navigate = Route.useNavigate()
-  const setTab = (value: string) =>
+  const setTab = (value: string) => {
+    if (value === 'settings') void refetch()
     void navigate({
       search: (previous) => ({ ...previous, tab: value === 'history' ? 'history' : undefined }),
       replace: true,
     })
+  }
 
   const { catalog, Icon, ConnectionActions, setup } = entry
   const status = integration?.status ?? null

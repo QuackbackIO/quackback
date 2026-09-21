@@ -55,7 +55,6 @@ export const slackAppHooks: NonNullable<IntegrationDefinition['appHooks']> = {
     // assistant logs. Full thread context is fetched in memory by the worker.
     await queueAppHookSync(
       'slack',
-      'slack-hook',
       this.deliveryId(kind, rawBody, _contentType)!,
       {
         kind,

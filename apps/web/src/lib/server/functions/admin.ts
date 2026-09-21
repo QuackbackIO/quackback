@@ -638,6 +638,8 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
     }
 
     const notificationChannels = [...channelMap.values()]
+    const { readSyncHealth } = await import('@/lib/server/integrations/sync/health')
+    const syncHealth = await readSyncHealth(integration)
 
     return {
       integration: {
@@ -651,11 +653,10 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
           enabled: m.enabled,
         })),
         notificationChannels,
-        // Per-integration health telemetry (IF WO-14 columns): last successful
-        // outbound delivery, last inbound webhook, and last recorded error.
+        // Sync outcomes belong to the current installation; connection errors
+        // remain independent of successful or failed deliveries.
         health: {
-          lastOutboundAt: integration.lastOutboundAt?.toISOString() ?? null,
-          lastInboundAt: integration.lastInboundAt?.toISOString() ?? null,
+          ...syncHealth,
           lastError: integration.lastError ?? null,
           lastErrorAt: integration.lastErrorAt?.toISOString() ?? null,
         },

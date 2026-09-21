@@ -3,7 +3,6 @@ import { createId, type PostId } from '@quackback/ids'
 const state = vi.hoisted(() => ({
   post: {} as Record<string, unknown>,
   links: [] as Array<Record<string, unknown>>,
-  bindings: [] as Array<Record<string, unknown>>,
   resolve: vi.fn(),
   queue: vi.fn(),
   hook: vi.fn(),
@@ -27,7 +26,6 @@ vi.mock('@/lib/server/db', async (original) => ({
           }
         },
       },
-      integrationSyncBindings: { findMany: async () => state.bindings },
     },
     select: () => ({ from: () => ({ innerJoin: () => ({ where: async () => state.links }) }) }),
   },
@@ -72,7 +70,6 @@ beforeEach(() => {
     updatedAt: new Date(),
   }
   state.links = []
-  state.bindings = []
   state.resolve.mockResolvedValue([target()])
   state.queue.mockImplementation(async (intent) => ({
     id: intent.operationKey,
@@ -89,18 +86,18 @@ describe('integration post sync', () => {
       'other-team',
     ])
   })
-  it('does not let one destination binding suppress another destination', async () => {
-    state.bindings = [
-      {
-        installation: installationIdentity({ id: 'linear', connectedAt: null }),
-        destinationKey: syncHash(syncDestination({ channelId: 'team' }, { channelId: 'team' })),
-        remoteId: 'one',
-      },
-    ]
+  it('reuses a completed operation without suppressing other destinations', async () => {
+    state.hook.mockImplementation(async (data) => ({
+      id: data.target.channelId,
+      state: data.target.channelId === 'team' ? 'succeeded' : 'queued',
+    }))
     state.resolve.mockResolvedValue([target(), target('other-team')])
-    await syncPostIntegrations(id)
-    expect(state.hook).toHaveBeenCalledTimes(1)
-    expect(state.hook.mock.calls[0][0].target.channelId).toBe('other-team')
+    const result = await syncPostIntegrations(id)
+    expect(state.hook.mock.calls.map(([data]) => data.target.channelId)).toEqual([
+      'team',
+      'other-team',
+    ])
+    expect(result).toMatchObject({ queued: true, operationIds: ['team', 'other-team'] })
   })
   it('represents every linked refresh for review, preserving canonical rich media', async () => {
     state.post.contentJson = {

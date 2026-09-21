@@ -28,7 +28,7 @@ import {
 } from '../ledger'
 import { actOnSync } from '../history'
 import { syncHash, canonicalJson, syncOperationKey } from '../identity'
-import { hookSyncOutcome, syncErrorOutcome } from '../outcomes'
+import { deliveryError, syncErrorOutcome } from '../outcomes'
 import type { SyncIntent } from '../types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { createId } from '@quackback/ids'
@@ -79,14 +79,12 @@ describe('sync identity and error policy', () => {
       syncOperationKey({ ...key, installation: 'reconnected' })
     )
   })
-  it('never treats a dispatched timeout or legacy shouldRetry as proof of rejection', () => {
+  it('requires rejection evidence and treats compound failures after dispatch as uncertain', () => {
     expect(syncErrorOutcome(new Error('timeout'), true).state).toBe('uncertain')
-    expect(hookSyncOutcome({ success: false, shouldRetry: true }).state).toBe('uncertain')
-    expect(
-      hookSyncOutcome({ success: false, deliveryOutcome: 'rejected', shouldRetry: true }).state
-    ).toBe('retry_wait')
-    expect(syncErrorOutcome({ status: 429 }, true).state).toBe('retry_wait')
-    expect(syncErrorOutcome({ status: 401 }, true).state).toBe('auth_required')
+    expect(deliveryError({ shouldRetry: true }).state).toBe('uncertain')
+    expect(deliveryError({ status: 429 }).state).toBe('retry_wait')
+    expect(deliveryError({ status: 401 }).state).toBe('auth_required')
+    expect(syncErrorOutcome({ status: 429 }, true).state).toBe('uncertain')
   })
 })
 

@@ -13,6 +13,7 @@ import type {
 } from '@/lib/server/integrations/inbound-types'
 
 export const githubInboundHandler: InboundWebhookHandler = {
+  statusMode: 'automatic',
   async verifySignature(request: Request, body: string, secret: string): Promise<true | Response> {
     const signature = request.headers.get('X-Hub-Signature-256')
     if (!signature) {

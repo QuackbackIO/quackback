@@ -25,7 +25,6 @@ describe('_template provider fixture', () => {
   })
 
   it('demonstrates the WO-15 two-way slots', () => {
-    expect(templateIntegration.remoteStatusReview).toBe(true)
     expect(typeof templateIntegration.externalLinks?.search).toBe('function')
   })
 })

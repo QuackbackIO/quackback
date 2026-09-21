@@ -479,7 +479,6 @@ export {
   integrationDeliveries,
   integrationSyncOperations,
   integrationSyncAttempts,
-  integrationSyncBindings,
   integrationSyncActions,
   // Schema tables - RBAC
   roles,

@@ -1,12 +1,22 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import type { SyncOutcome } from './types'
+import { deliveryError, httpDeliveryFailure, type DeliveryOutcome } from './outcomes'
 
 interface Evidence {
   writes: number
-  rejectedStatus?: number
+  rejection?: DeliveryOutcome
   ambiguous: boolean
 }
 const evidence = new AsyncLocalStorage<Evidence>()
+
+/** SDK adapters report the same evidence as fetch adapters. */
+export function recordDeliveryOutcome(outcome: DeliveryOutcome): void {
+  const current = evidence.getStore()
+  if (!current) return
+  if (outcome.state === 'succeeded') current.writes++
+  else if (outcome.state === 'uncertain') current.ambiguous = true
+  else current.rejection = outcome
+}
 
 /** Bounded transport for provider adapters. Never retries a request internally. */
 export async function integrationFetch(
@@ -24,7 +34,8 @@ export async function integrationFetch(
       signal: originalSignal ? AbortSignal.any([originalSignal, timeout]) : timeout,
     })
     if (current && write) {
-      if (response.status >= 400 && response.status < 500) current.rejectedStatus = response.status
+      if (response.status >= 400 && response.status < 500)
+        current.rejection = httpDeliveryFailure(response)
       else if (response.ok) current.writes++
       else current.ambiguous = true
     }
@@ -42,16 +53,13 @@ export async function withSyncTransport(run: () => Promise<SyncOutcome>): Promis
     let outcome: SyncOutcome
     try {
       outcome = await run()
-    } catch {
-      outcome = { state: 'uncertain', errorCode: 'outcome_unknown' }
+    } catch (error) {
+      outcome = deliveryError(error)
     }
-    if (outcome.state === 'succeeded') return outcome
+    if (outcome.state === 'succeeded' && !current.ambiguous && !current.rejection) return outcome
     if (current.ambiguous || current.writes > 0)
       return { state: 'uncertain', errorCode: 'outcome_unknown' }
-    if (current.rejectedStatus === 401 || current.rejectedStatus === 403)
-      return { state: 'auth_required', errorCode: 'authentication' }
-    if (current.rejectedStatus === 429) return { state: 'retry_wait', errorCode: 'unavailable' }
-    if (current.rejectedStatus) return { state: 'failed', errorCode: 'provider_failed' }
+    if (current.rejection) return current.rejection
     return outcome
   })
 }

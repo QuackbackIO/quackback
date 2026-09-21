@@ -1,15 +1,6 @@
 /** Integration-only resync; every destination is represented by durable history. */
 import { createId, type PostId, type PrincipalId } from '@quackback/ids'
-import {
-  db,
-  eq,
-  and,
-  posts,
-  boards,
-  integrations,
-  postExternalLinks,
-  integrationSyncBindings,
-} from '@/lib/server/db'
+import { db, eq, and, posts, boards, integrations, postExternalLinks } from '@/lib/server/db'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { integrationResolver } from '@/lib/server/events/resolvers/integration.resolver'
 import type { PostCreatedEvent } from '@/lib/server/events/types'
@@ -17,7 +8,6 @@ import { queueHookSync } from './sync/hooks'
 import { queueSyncOperation } from './sync/ledger'
 import {
   installationIdentity,
-  syncDestination,
   syncHash,
   syncOperationKey,
   reviewDestination,
@@ -72,12 +62,6 @@ export async function syncPostIntegrations(
         eq(integrations.status, 'active')
       )
     )
-  const bindings = await db.query.integrationSyncBindings.findMany({
-    where: and(
-      eq(integrationSyncBindings.sourceType, 'post'),
-      eq(integrationSyncBindings.sourceId, postId)
-    ),
-  })
   const results: Array<{ id: string; state: string } | null> = []
   // Bounded database work; independent destinations still complete after one fails.
   let failed = false
@@ -87,15 +71,6 @@ export async function syncPostIntegrations(
         where: eq(integrations.id, String(target.config.integrationId) as never),
       })
       if (!integration || integration.status !== 'active') continue
-      const installation = installationIdentity(integration)
-      const destination = syncDestination(
-        target.target,
-        integration.config as Record<string, unknown>
-      )
-      const existing = bindings.some(
-        (b) => b.installation === installation && b.destinationKey === syncHash(destination)
-      )
-      if (existing) continue
       results.push(
         await queueHookSync(
           { hookType: target.type, event, target: target.target, config: target.config },

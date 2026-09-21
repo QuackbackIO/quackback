@@ -75,6 +75,7 @@ export function IntegrationSyncHistory({ provider }: { provider: string }) {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['integration-sync'] })
       await queryClient.invalidateQueries({ queryKey: ['integration-sync-detail'] })
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'integrations'] })
     },
     onError: (error) => {
       toast.error(error instanceof Error ? error.message : 'Could not update this sync')
@@ -369,6 +370,7 @@ function LinkExistingSyncItem({ item }: { item: SyncHistoryItem }) {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['integration-sync'] })
       await queryClient.invalidateQueries({ queryKey: ['integration-sync-detail'] })
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'integrations'] })
       toast.success('Remote item linked')
       setOpen(false)
     },

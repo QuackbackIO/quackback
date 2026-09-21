@@ -1,12 +1,12 @@
+import { deliveryError, httpDeliveryFailure } from '@/lib/server/integrations/sync/outcomes'
 import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 /**
  * Salesforce hook handler.
  * Enriches feedback posts with CRM data from Salesforce.
  */
 
-import type { HookHandler, HookResult } from '@/lib/server/events/hook-types'
+import type { IntegrationHook, DeliveryOutcome } from '@/lib/server/integrations/sync/outcomes'
 import type { EventData } from '@/lib/server/events/types'
-import { isRetryableError } from '@/lib/server/events/hook-utils'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'salesforce' })
@@ -21,17 +21,17 @@ export interface SalesforceConfig {
   instanceUrl?: string
 }
 
-export const salesforceHook: HookHandler = {
-  async run(event: EventData, _target: unknown, config: unknown): Promise<HookResult> {
+export const salesforceHook: IntegrationHook = {
+  async run(event: EventData, _target: unknown, config: unknown): Promise<DeliveryOutcome> {
     if (event.type !== 'post.created') {
-      return { success: true }
+      return { state: 'succeeded' }
     }
 
     const { accessToken, instanceUrl } = config as SalesforceConfig
     const email = event.data.post.authorEmail
 
     if (!email || !instanceUrl) {
-      return { success: true }
+      return { state: 'succeeded' }
     }
 
     log.debug('enriching feedback')
@@ -48,21 +48,7 @@ export const salesforceHook: HookHandler = {
       )
 
       if (!response.ok) {
-        const status = response.status
-
-        if (status === 401) {
-          return {
-            success: false,
-            error: 'Salesforce authentication failed. Please reconnect.',
-            shouldRetry: false,
-          }
-        }
-
-        return {
-          success: false,
-          error: `Salesforce API error: ${status}`,
-          shouldRetry: status === 429 || status >= 500,
-        }
+        return httpDeliveryFailure(response)
       }
 
       const data = (await response.json()) as {
@@ -76,21 +62,22 @@ export const salesforceHook: HookHandler = {
 
       if (data.records.length === 0) {
         log.debug('no contact found')
-        return { success: true }
+        return { state: 'succeeded' }
       }
 
       const contact = data.records[0]
       log.info({ contact_id: contact.Id }, 'contact found')
 
       return {
-        success: true,
-        externalId: contact.Id,
-        externalUrl: `${instanceUrl}/lightning/r/Contact/${contact.Id}/view`,
+        state: 'succeeded',
+        result: {
+          externalId: contact.Id,
+          externalUrl: `${instanceUrl}/lightning/r/Contact/${contact.Id}/view`,
+        },
       }
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error'
       log.error({ err: error }, 'enrichment failed')
-      return { success: false, error: errorMsg, shouldRetry: isRetryableError(error) }
+      return deliveryError(error)
     }
   },
 

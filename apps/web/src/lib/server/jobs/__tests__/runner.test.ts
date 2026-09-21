@@ -61,7 +61,7 @@ vi.mock('@/lib/server/workspaces/workspace-context', () => ({
     currentWorkspaceKey === null ? null : { workspaceKey: currentWorkspaceKey },
 }))
 
-import { TerminalJobError, __setJobDefinitionsForTests } from '../definitions'
+import { TerminalJobError, RetryAfterError, __setJobDefinitionsForTests } from '../definitions'
 import { slotKey } from '../cron'
 import { claimJobs, enqueueJob, reapExpiredLeases } from '../job-queue'
 import {
@@ -368,6 +368,26 @@ describe('draining', () => {
     expect((await drainOnce(CONFIG)).failed).toBe(1)
     expect((await rowsFor(q))[0].status).toBe('failed')
     expect(calls).toBe(2)
+    expect(await drainOnce(CONFIG)).toMatchObject({ claimed: 0 })
+  })
+
+  it('honors a provider retry delay without sleeping in the worker', async () => {
+    const q = queue('provider-rate-limit')
+    __setJobDefinitionsForTests([
+      {
+        name: q,
+        maxAttempts: 2,
+        retryBackoffMs: 0,
+        handler: async () => async () => {
+          throw new RetryAfterError('Rate limited', 60_000)
+        },
+      },
+    ])
+    await enqueueJob({ queue: q, maxAttempts: 2 })
+    const before = Date.now()
+    expect((await drainOnce(CONFIG)).retrying).toBe(1)
+    const [row] = await rowsFor(q)
+    expect(new Date(row.run_at).getTime()).toBeGreaterThanOrEqual(before + 60_000)
     expect(await drainOnce(CONFIG)).toMatchObject({ claimed: 0 })
   })
 

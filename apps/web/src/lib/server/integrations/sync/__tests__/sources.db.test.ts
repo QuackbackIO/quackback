@@ -23,8 +23,8 @@ vi.mock('@/lib/server/db', async (original) => ({
 vi.mock('@/lib/server/secret-key', () => ({
   activeSecretKey: () => 'integration-sync-test-key-32-characters-only',
 }))
-const deliver = vi.hoisted(() => vi.fn().mockResolvedValue({ success: true }))
-vi.mock('@/lib/server/events/registry', () => ({ getHook: async () => ({ run: deliver }) }))
+const deliver = vi.hoisted(() => vi.fn().mockResolvedValue({ state: 'succeeded' }))
+vi.mock('@/integrations/slack/server/hook', () => ({ slackHook: { run: deliver } }))
 const fixture = await createDbTestFixture()
 beforeEach(fixture.begin)
 afterEach(async () => {

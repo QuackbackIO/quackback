@@ -23,7 +23,7 @@ vi.mock('@/lib/server/cache', async (original) => ({
 import { db, eq, sql, integrations, integrationSyncOperations as operations } from '@/lib/server/db'
 import { encryptSecrets, decryptSecrets } from '../../encryption'
 import { getValidAccessToken } from '../../token-refresh'
-import { updateSyncHealth } from '../health'
+import { readSyncHealth } from '../health'
 import { queueSyncOperation } from '../ledger'
 import { installationIdentity } from '../identity'
 import type { IntegrationId } from '@quackback/ids'
@@ -96,18 +96,13 @@ describe('sync runtime concurrency (PostgreSQL)', () => {
         lastInboundAt: new Date(),
       })
       .where(eq(integrations.id, integration.id))
-    await updateSyncHealth(integration.id)
-    expect(
-      await db.query.integrations.findFirst({ where: eq(integrations.id, integration.id) })
-    ).toMatchObject({
-      lastError: null,
-      lastErrorAt: null,
-      errorCount: 0,
+    expect(await readSyncHealth(integration)).toMatchObject({
+      attentionCount: 0,
       lastOutboundAt: null,
       lastInboundAt: null,
     })
   })
-  it('never clears another unresolved operation when success and failure health projections race', async () => {
+  it('counts unresolved operations independently of concurrent successful deliveries', async () => {
     const integration = await seed()
     const base = {
       integrationId: integration.id,
@@ -134,18 +129,13 @@ describe('sync runtime concurrency (PostgreSQL)', () => {
         state: 'succeeded',
       }),
     ])
-    await Promise.all(Array.from({ length: 4 }, () => updateSyncHealth(integration.id)))
-    const row = (await db.query.integrations.findFirst({
-      where: eq(integrations.id, integration.id),
-    }))!
-    expect(row.lastError).toContain('Sync history')
-    expect(row.lastOutboundAt).toBeInstanceOf(Date)
+    const snapshots = await Promise.all(
+      Array.from({ length: 4 }, () => readSyncHealth(integration))
+    )
+    expect(snapshots.every((s) => s.attentionCount === 1)).toBe(true)
+    expect(snapshots[0].lastOutboundAt).not.toBeNull()
     if (!failed) throw new Error('Expected a new sync operation')
     await db.update(operations).set({ state: 'cancelled' }).where(eq(operations.id, failed.id))
-    await updateSyncHealth(integration.id)
-    expect(
-      (await db.query.integrations.findFirst({ where: eq(integrations.id, integration.id) }))
-        ?.lastError
-    ).toBeNull()
+    expect((await readSyncHealth(integration)).attentionCount).toBe(0)
   })
 })

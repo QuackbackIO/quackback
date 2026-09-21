@@ -3,7 +3,7 @@ import type { IntegrationCatalogEntry } from '@/lib/server/integrations/types'
 export const asanaCatalog: IntegrationCatalogEntry = {
   id: 'asana',
   name: 'Asana',
-  description: 'Create Asana tasks from feedback and keep status in sync.',
+  description: 'Create Asana tasks from feedback and review status changes.',
   category: 'issue_tracking',
   iconBg: 'bg-[#F06A6A]',
   settingsPath: '/admin/settings/integrations/asana',

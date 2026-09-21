@@ -14,6 +14,8 @@ BEGIN
   IF should_purge THEN
     UPDATE integration_sync_operations SET
       payload = CASE WHEN kind = 'archive' AND TG_OP <> 'DELETE' THEN payload ELSE NULL END,
+      error_code = CASE WHEN kind <> 'archive' AND NOT cancel_requested AND dispatched_at IS NULL
+        AND state IN ('queued', 'running', 'retry_wait', 'failed', 'auth_required', 'conflict') THEN 'source_unavailable' ELSE error_code END,
       result = NULL, cancel_requested = CASE WHEN kind = 'archive' THEN cancel_requested ELSE true END,
       state = CASE WHEN state = 'running' OR dispatched_at IS NOT NULL THEN state
         WHEN state IN ('queued', 'retry_wait', 'failed', 'auth_required', 'conflict') AND kind <> 'archive' THEN 'cancelled' ELSE state END,
@@ -23,10 +25,6 @@ BEGIN
       OR (TG_ARGV[0] = 'post' AND source_type = 'comment' AND source_record_id IN (SELECT id FROM post_comments WHERE post_id = OLD.id));
     UPDATE integration_sync_attempts SET result = NULL WHERE operation_id IN (
       SELECT id FROM integration_sync_operations WHERE (source_type = TG_ARGV[0] AND source_record_id = OLD.id)
-      OR (TG_ARGV[0] = 'post' AND source_type = 'comment' AND source_record_id IN (SELECT id FROM post_comments WHERE post_id = OLD.id)));
-    UPDATE integration_sync_bindings SET remote_url = NULL, remote_display_id = NULL, source_hash = NULL,
-      remote_hash = NULL, remote_version = NULL WHERE (source_type, source_id) IN (
-        SELECT source_type, source_id FROM integration_sync_operations WHERE (source_type = TG_ARGV[0] AND source_record_id = OLD.id)
       OR (TG_ARGV[0] = 'post' AND source_type = 'comment' AND source_record_id IN (SELECT id FROM post_comments WHERE post_id = OLD.id)));
   END IF;
   RETURN NULL;
