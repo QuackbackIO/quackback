@@ -1,3 +1,4 @@
+import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 /**
  * Salesforce hook handler.
  * Enriches feedback posts with CRM data from Salesforce.
@@ -39,7 +40,7 @@ export const salesforceHook: HookHandler = {
       // SOQL query to find contact by email — escape backslashes then single quotes
       const safeEmail = email.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
       const query = `SELECT Id, Name, AccountId, Account.Name FROM Contact WHERE Email = '${safeEmail}' LIMIT 1`
-      const response = await fetch(
+      const response = await integrationFetch(
         `${instanceUrl}/services/data/v62.0/query?q=${encodeURIComponent(query)}`,
         {
           headers: { Authorization: `Bearer ${accessToken}` },
@@ -96,7 +97,7 @@ export const salesforceHook: HookHandler = {
   async testConnection(config: unknown): Promise<{ ok: boolean; error?: string }> {
     const { accessToken, instanceUrl } = config as SalesforceConfig
     try {
-      const response = await fetch(`${instanceUrl}/services/data/v62.0/`, {
+      const response = await integrationFetch(`${instanceUrl}/services/data/v62.0/`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       })
       return { ok: response.ok, error: response.ok ? undefined : `HTTP ${response.status}` }

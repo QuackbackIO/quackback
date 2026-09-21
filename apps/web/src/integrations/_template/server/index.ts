@@ -70,15 +70,8 @@ export const templateIntegration: IntegrationDefinition = {
     },
   },
 
-  // ── Two-way status sync (optional, IF WO-15) ──────────────────────────────
-  // `push` writes a Quackback status change out to the linked remote item. The
-  // framework owns the trigger, loop-safety, and the pushStatusMappings lookup;
-  // you only perform the remote write.
-  remoteStatus: {
-    async push() {
-      return { success: true }
-    },
-  },
+  // Status changes require explicit review until conditional writes are supported.
+  remoteStatusReview: true,
 
   // ── Link an existing item by title (optional, IF WO-15) ───────────────────
   // `search` powers type-a-title link-existing; the UI degrades to paste-a-URL
@@ -95,7 +88,7 @@ export const templateIntegration: IntegrationDefinition = {
   //   webhookRegistration— 'manual' or { register, unregister } for auto setup
   //   listExternalStatuses — the remote states shown in the status-mapping UI
   //   issues             — parse a pasted ref + create a remote issue
-  //   archive            — close/archive the linked item on cascading post delete
+  //   archiveReview      — offer manual archive review on source deletion
   //   context            — customer-context enrichment card by email
   //   userSync           — sync members to the remote system
   //   refreshToken       — refresh an expired OAuth token

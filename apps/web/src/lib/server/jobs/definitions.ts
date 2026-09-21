@@ -160,6 +160,10 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
     failedRetentionMs: 60 * 60_000,
     handler: async () =>
       (await import('@/lib/server/integrations/slack-hook-queue')).handleSlackHookJob,
+    onFailure: (job, error, permanent) =>
+      import('@/lib/server/integrations/sync/worker').then((m) =>
+        m.onIntegrationSyncFailure(job, error, permanent)
+      ),
   },
   {
     name: 'integration-deliveries-sweep',
@@ -303,6 +307,25 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
     handler: () => import('@/lib/server/events/hook-job').then((m) => m.runHookJob),
     onFailure: (job, error, permanent) =>
       import('@/lib/server/events/hook-job').then((m) => m.onHookJobFailure(job, error, permanent)),
+  },
+  {
+    name: 'integration-sync',
+    concurrency: 5,
+    leaseMs: 90_000,
+    maxAttempts: 6,
+    backoffMs: (attemptsMade) => hookRetryDelayMs(attemptsMade),
+    handler: () => import('@/lib/server/integrations/sync/queue').then((m) => m.runIntegrationSync),
+    onFailure: (job, error, permanent) =>
+      import('@/lib/server/integrations/sync/worker').then((m) =>
+        m.onIntegrationSyncFailure(job, error, permanent)
+      ),
+  },
+  {
+    name: 'integration-sync-sweep',
+    cron: '* * * * *',
+    concurrency: 1,
+    handler: () =>
+      import('@/lib/server/integrations/sync/sweep-queue').then((m) => m.sweepIntegrationSync),
   },
   {
     // Drains one job-owned outbox row. The row is written in emit()'s

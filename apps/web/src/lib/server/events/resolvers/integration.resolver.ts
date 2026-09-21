@@ -1,14 +1,11 @@
 /**
  * Integration sink resolver (EVENTING-V2 WO-8b) — the DomainEvent-native port of
  * getIntegrationTargets(). Reads the cached integration_event_mappings, applies
- * the board filter, dedupes by (integrationType, channelId), decrypts the
- * per-integration access token, and emits one target per channel. Behavior +
- * target shape are preserved; only the event access (payload vs data) changes.
+ * the board filter, dedupes by (integrationType, channelId), and emits a connection reference
+ * per channel. Credentials and current configuration are loaded only at dispatch.
  */
 import { db, integrations, integrationEventMappings, eq, and } from '@/lib/server/db'
 import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/cache'
-import { decryptSecrets } from '@/lib/server/integrations/encryption'
-import { buildHookContext } from '../hook-context'
 import { logger } from '@/lib/server/logger'
 import { getEventDefinition } from '../catalogue'
 import { boardIdsFromEvent } from './webhook.resolver'
@@ -22,8 +19,7 @@ export interface CachedMapping {
   eventType: string
   integrationType: string
   /** Integration row id — lets the worker refresh an expired token by id. */
-  integrationId?: string
-  secrets: string | null
+  integrationId: string
   integrationConfig: unknown
   actionConfig: unknown
   filters: unknown
@@ -31,13 +27,12 @@ export interface CachedMapping {
 
 async function loadMappings(): Promise<CachedMapping[]> {
   const cached = await cacheGet<CachedMapping[]>(CACHE_KEYS.INTEGRATION_MAPPINGS)
-  if (cached) return cached
+  if (cached?.every((mapping) => typeof mapping.integrationId === 'string')) return cached
   const rows = await db
     .select({
       eventType: integrationEventMappings.eventType,
       integrationType: integrations.integrationType,
       integrationId: integrations.id,
-      secrets: integrations.secrets,
       integrationConfig: integrations.config,
       actionConfig: integrationEventMappings.actionConfig,
       filters: integrationEventMappings.filters,
@@ -51,21 +46,19 @@ async function loadMappings(): Promise<CachedMapping[]> {
 
 /**
  * Pure target construction (unit-testable): filter mappings for this event type,
- * apply the board filter, dedupe by (integrationType, channelId), decrypt the
- * token via the injected `decrypt`. Mirrors getIntegrationTargets exactly.
+ * apply the board filter, dedupe by (integrationType, channelId), and retain only the
+ * connection reference. Cached credentials never enter queued delivery intents.
  */
 export function buildIntegrationTargets(
   mappings: CachedMapping[],
   eventType: string,
-  boardIds: string[],
-  rootUrl: string,
-  decrypt: (blob: string) => { accessToken?: string }
+  boardIds: string[]
 ): HookTarget[] {
   const targets: HookTarget[] = []
   const seen = new Set<string>()
 
   for (const m of mappings) {
-    if (m.eventType !== eventType) continue
+    if (m.eventType !== eventType || !m.integrationId) continue
 
     const filters = m.filters as { boardIds?: string[] } | null
     if (
@@ -88,39 +81,10 @@ export function buildIntegrationTargets(
     if (seen.has(dedupeKey)) continue
     seen.add(dedupeKey)
 
-    let accessToken: string | undefined
-    if (m.secrets) {
-      try {
-        accessToken = decrypt(m.secrets).accessToken
-      } catch (error) {
-        log.error(
-          { err: error, integration_type: m.integrationType },
-          'failed to decrypt integration secrets'
-        )
-        continue
-      }
-    }
-
-    // Inbound-only fields stay on the integration row; they must not ride
-    // along in hook jobs (webhookSecret especially). Everything else — Jira
-    // cloudId/siteUrl, Azure org name — is what the outbound hook needs.
-    const {
-      webhookSecret: _webhookSecret,
-      statusMappings: _statusMappings,
-      statusSyncEnabled: _statusSyncEnabled,
-      externalWebhookId: _externalWebhookId,
-      ...hookConfig
-    } = integrationConfig
-
     targets.push({
       type: m.integrationType,
       target: { channelId },
-      config: {
-        ...hookConfig,
-        accessToken,
-        rootUrl,
-        ...(m.integrationId ? { integrationId: m.integrationId } : {}),
-      },
+      config: { integrationId: m.integrationId },
     })
   }
 
@@ -153,14 +117,6 @@ export const integrationResolver: SinkResolver = {
     const mappings = await loadMappings()
     const relevant = mappings.filter((m) => m.eventType === event.type)
     if (relevant.length === 0) return []
-    const context = await buildHookContext()
-    if (!context) throw new Error('Failed to build integration hook context')
-    return buildIntegrationTargets(
-      relevant,
-      event.type,
-      boardIdsFromEvent(event),
-      context.portalBaseUrl,
-      (blob) => decryptSecrets<{ accessToken?: string }>(blob)
-    )
+    return buildIntegrationTargets(relevant, event.type, boardIdsFromEvent(event))
   },
 }

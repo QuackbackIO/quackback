@@ -1,5 +1,4 @@
 import type { IntegrationDefinition } from '@/lib/server/integrations/types'
-import { completeAsanaTask } from '@/integrations/asana/server/archive'
 import { fetchAsanaSections } from '@/integrations/asana/server/statuses'
 import {
   registerAsanaWebhook,
@@ -37,7 +36,7 @@ export const asanaIntegration: IntegrationDefinition = {
   },
   hook: asanaHook,
   inbound: asanaInboundHandler,
-  archive: completeAsanaTask,
+  archiveReview: true,
   webhookRegistration: {
     register: async ({ accessToken, config, callbackUrl }) => {
       const projectGid = config.channelId as string

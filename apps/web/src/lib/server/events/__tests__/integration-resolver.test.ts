@@ -1,110 +1,64 @@
 import { describe, it, expect } from 'vitest'
 import { buildIntegrationTargets, type CachedMapping } from '../resolvers/integration.resolver'
-
-/**
- * WO-8b — the integration resolver's pure target construction: event-type +
- * board filter, (integrationType, channelId) dedupe, and token decryption via an
- * injected decrypt. End-to-end parity vs getHookTargets lands in WO-15.
- */
-
-const decrypt = (blob: string) => ({ accessToken: `token-for-${blob}` })
-
-function mapping(over: Partial<CachedMapping>): CachedMapping {
+function mapping(over: Partial<CachedMapping> = {}): CachedMapping {
   return {
     eventType: 'post.created',
     integrationType: 'slack',
-    secrets: 'enc',
+    integrationId: 'integration-test',
     integrationConfig: {},
     actionConfig: { channelId: 'C1' },
     filters: null,
     ...over,
   }
 }
-
-describe('buildIntegrationTargets (WO-8b)', () => {
-  it('builds a target per mapping with decrypted token + rootUrl', () => {
-    const targets = buildIntegrationTargets([mapping({})], 'post.created', [], 'https://p', decrypt)
-    expect(targets).toEqual([
-      {
-        type: 'slack',
-        target: { channelId: 'C1' },
-        config: { accessToken: 'token-for-enc', rootUrl: 'https://p' },
-      },
-    ])
-  })
-
-  it('copies stored integration config onto the hook target and strips inbound-only fields', () => {
-    const targets = buildIntegrationTargets(
+describe('integration routing', () => {
+  it('queues only the connection reference, never cached credentials or configuration', () => {
+    const target = buildIntegrationTargets(
       [
         mapping({
-          integrationType: 'jira',
           integrationConfig: {
-            channelId: 'PROJ:10001',
-            cloudId: 'cloud-1',
-            siteUrl: 'https://acme.atlassian.net',
-            webhookSecret: 'do-not-send',
-            statusMappings: { Done: 'completed' },
-            statusSyncEnabled: true,
-            externalWebhookId: 'wh-1',
+            accessToken: 'old-secret',
+            webhookSecret: 'secret',
+            siteUrl: 'old-site',
           },
-          actionConfig: {},
         }),
       ],
       'post.created',
-      [],
-      'https://p',
-      decrypt
+      []
     )
-    expect(targets[0]?.config).toMatchObject({
-      cloudId: 'cloud-1',
-      siteUrl: 'https://acme.atlassian.net',
-      accessToken: 'token-for-enc',
-      rootUrl: 'https://p',
-    })
-    expect(targets[0]?.config).not.toHaveProperty('webhookSecret')
-    expect(targets[0]?.config).not.toHaveProperty('statusMappings')
-    expect(targets[0]?.config).not.toHaveProperty('statusSyncEnabled')
-    expect(targets[0]?.config).not.toHaveProperty('externalWebhookId')
+    expect(target).toEqual([
+      { type: 'slack', target: { channelId: 'C1' }, config: { integrationId: 'integration-test' } },
+    ])
   })
-
-  it('dedupes by (integrationType, channelId)', () => {
-    const targets = buildIntegrationTargets(
-      [mapping({}), mapping({})],
-      'post.created',
-      [],
-      'https://p',
-      decrypt
-    )
-    expect(targets).toHaveLength(1)
+  it('deduplicates the same destination without dropping another channel', () => {
+    expect(
+      buildIntegrationTargets(
+        [mapping(), mapping(), mapping({ actionConfig: { channelId: 'C2' } })],
+        'post.created',
+        []
+      )
+    ).toHaveLength(2)
   })
-
-  it('applies the board filter (skips a mapping whose boards do not overlap)', () => {
+  it('revalidates configured board filters', () => {
     const m = mapping({ filters: { boardIds: ['board_a'] } })
+    expect(buildIntegrationTargets([m], 'post.created', ['board_b'])).toHaveLength(0)
+    expect(buildIntegrationTargets([m], 'post.created', ['board_a'])).toHaveLength(1)
+  })
+  it('rejects targets without a destination or a connection identity', () => {
     expect(
-      buildIntegrationTargets([m], 'post.created', ['board_b'], 'https://p', decrypt)
+      buildIntegrationTargets(
+        [mapping({ actionConfig: {}, integrationConfig: {} })],
+        'post.created',
+        []
+      )
     ).toHaveLength(0)
     expect(
-      buildIntegrationTargets([m], 'post.created', ['board_a'], 'https://p', decrypt)
-    ).toHaveLength(1)
-  })
-
-  it('skips a mapping with no channel id and one whose secrets fail to decrypt', () => {
-    const noChannel = mapping({ actionConfig: {}, integrationConfig: {} })
-    expect(
-      buildIntegrationTargets([noChannel], 'post.created', [], 'https://p', decrypt)
+      buildIntegrationTargets([mapping({ integrationId: '' })], 'post.created', [])
     ).toHaveLength(0)
-
-    const boom = mapping({ channelIdShim: undefined } as never)
-    const targets = buildIntegrationTargets([boom], 'post.created', [], 'https://p', () => {
-      throw new Error('bad key')
-    })
-    expect(targets).toHaveLength(0)
   })
-
-  it('ignores mappings for a different event type', () => {
-    const other = mapping({ eventType: 'comment.created' })
-    expect(buildIntegrationTargets([other], 'post.created', [], 'https://p', decrypt)).toHaveLength(
-      0
-    )
+  it('ignores mappings for another event', () => {
+    expect(
+      buildIntegrationTargets([mapping({ eventType: 'comment.created' })], 'post.created', [])
+    ).toHaveLength(0)
   })
 })

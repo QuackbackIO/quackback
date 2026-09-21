@@ -1,5 +1,4 @@
 import type { IntegrationDefinition } from '@/lib/server/integrations/types'
-import { archiveNotionPage } from '@/integrations/notion/server/archive'
 import { notionHook } from '@/integrations/notion/server/hook'
 import { getNotionOAuthUrl, exchangeNotionCode } from '@/integrations/notion/server/oauth'
 import { notionCatalog } from '@/integrations/notion/server/catalog'
@@ -23,7 +22,7 @@ export const notionIntegration: IntegrationDefinition = {
     },
   },
   hook: notionHook,
-  archive: archiveNotionPage,
+  archiveReview: true,
   platformCredentials: [
     {
       key: 'clientId',

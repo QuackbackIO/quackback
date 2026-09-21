@@ -1,5 +1,4 @@
 import type { IntegrationDefinition } from '@/lib/server/integrations/types'
-import { closeGitLabIssue } from '@/integrations/gitlab/server/archive'
 import { fetchGitLabStatuses } from '@/integrations/gitlab/server/statuses'
 import { gitlabHook } from '@/integrations/gitlab/server/hook'
 import { getGitLabOAuthUrl, exchangeGitLabCode } from '@/integrations/gitlab/server/oauth'
@@ -31,7 +30,7 @@ export const gitlabIntegration: IntegrationDefinition = {
   },
   hook: gitlabHook,
   inbound: gitlabInboundHandler,
-  archive: closeGitLabIssue,
+  archiveReview: true,
   webhookRegistration: 'manual',
   listExternalStatuses: fetchGitLabStatuses,
   platformCredentials: [

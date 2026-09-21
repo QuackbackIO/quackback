@@ -1,3 +1,4 @@
+import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 /**
  * Discord hook handler.
  * Sends messages to Discord channels when events occur.
@@ -32,7 +33,7 @@ export const discordHook: HookHandler = {
     const message = buildDiscordMessage(event, rootUrl)
 
     try {
-      const response = await fetch(`${DISCORD_API}/channels/${channelId}/messages`, {
+      const response = await integrationFetch(`${DISCORD_API}/channels/${channelId}/messages`, {
         method: 'POST',
         headers: {
           Authorization: `Bot ${accessToken}`,
@@ -88,7 +89,7 @@ export const discordHook: HookHandler = {
   async testConnection(config: unknown): Promise<{ ok: boolean; error?: string }> {
     const { accessToken } = config as DiscordConfig
     try {
-      const response = await fetch(`${DISCORD_API}/users/@me`, {
+      const response = await integrationFetch(`${DISCORD_API}/users/@me`, {
         headers: { Authorization: `Bot ${accessToken}` },
       })
       return { ok: response.ok, error: response.ok ? undefined : `HTTP ${response.status}` }

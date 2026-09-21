@@ -1,5 +1,4 @@
 import type { IntegrationDefinition } from '@/lib/server/integrations/types'
-import { closeAzureDevOpsWorkItem } from '@/integrations/azure-devops/server/archive'
 import { fetchAzureDevOpsStatuses } from '@/integrations/azure-devops/server/statuses'
 import { azureDevOpsHook } from '@/integrations/azure-devops/server/hook'
 import { azureDevOpsInboundHandler } from '@/integrations/azure-devops/server/inbound'
@@ -14,7 +13,7 @@ export const azureDevOpsIntegration: IntegrationDefinition = {
   hook: azureDevOpsHook,
   inbound: azureDevOpsInboundHandler,
   issues: azureDevOpsIssues,
-  archive: closeAzureDevOpsWorkItem,
+  archiveReview: true,
   webhookRegistration: 'manual',
   listExternalStatuses: fetchAzureDevOpsStatuses,
   destinations: {

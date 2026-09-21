@@ -176,6 +176,13 @@ export const SIDE_EFFECT_LEDGER: readonly LedgerRegistration[] = [
       'Publication state of the article. Nothing is dispatched off it, so a rewind changes what is visible in the help center and nothing else.',
   },
 
+  {
+    column: schema.integrationSyncOperations.dispatchedAt,
+    policy: 'preserve',
+    reason:
+      'Evidence of a possibly applied remote change, read by lease recovery and retry fencing. Clearing it would permit duplicate writes. Restores must keep integration workers paused and quarantine pending operations before resuming, since no snapshot can recover evidence written after it.',
+  },
+
   // -- preserve: settling would cause the worse failure ---------------------
   {
     column: schema.hookDeliveries.processedAt,

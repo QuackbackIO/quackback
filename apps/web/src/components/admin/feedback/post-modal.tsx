@@ -174,11 +174,11 @@ function PostModalContent({
     mutationFn: () => retryPostIntegrationSyncFn({ data: { id: post.id } }),
     onSuccess: (result) => {
       toast.success(
-        result.queued
-          ? 'Integration sync queued'
-          : result.updated
-            ? 'Integration content synced'
-            : 'No integrations need delivery'
+        result.needsAttention
+          ? 'Some syncs need review. Open Sync history in integration settings.'
+          : result.queued
+            ? 'Integration sync queued'
+            : 'No new sync work to queue'
       )
     },
     onError: (error) =>
@@ -623,6 +623,10 @@ function PostModalContent({
             toast.success('Post deleted')
             // Show warnings for failed cascade operations
             if (result.cascadeResults) {
+              if (result.cascadeResults.some((r) => r.success))
+                toast.message('Archive requests saved', {
+                  description: 'Review and finish them in each integration’s Sync history.',
+                })
               for (const r of result.cascadeResults) {
                 if (!r.success) {
                   toast.warning(`Failed to close ${r.integrationType} issue: ${r.error}`)

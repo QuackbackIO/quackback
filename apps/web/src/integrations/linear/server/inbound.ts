@@ -48,6 +48,8 @@ export const linearInboundHandler: InboundWebhookHandler = {
     if (!stateName) return null
 
     return {
+      destinationId: payload.data.teamId,
+      occurredAt: payload.data.updatedAt,
       externalId: payload.data.id,
       externalStatus: stateName,
       eventType: 'issue.state_changed',

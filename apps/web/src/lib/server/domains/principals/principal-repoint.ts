@@ -453,6 +453,8 @@ export const REPOINT_STEPS: RepointStep[] = [
  * merge source.
  */
 export const REPOINT_EXEMPTIONS: Record<string, string> = {
+  'integration_sync_actions.principal_id':
+    'Integration recovery requires INTEGRATION_MANAGE; anonymous principals cannot own these immutable action receipts.',
   // Team/agent actor columns (anonymous principals can never occupy them)
   'tickets.assignee_principal_id':
     'ticket assignees are team members; the merge source is anonymous',

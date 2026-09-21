@@ -17,9 +17,10 @@ export interface IntegrationHealth {
 
 interface IntegrationHealthPanelProps {
   health: IntegrationHealth | undefined
+  onViewHistory?: () => void
 }
 
-export function IntegrationHealthPanel({ health }: IntegrationHealthPanelProps) {
+export function IntegrationHealthPanel({ health, onViewHistory }: IntegrationHealthPanelProps) {
   if (!health) return null
   const { lastOutboundAt, lastInboundAt, lastError, lastErrorAt } = health
 
@@ -59,6 +60,11 @@ export function IntegrationHealthPanel({ health }: IntegrationHealthPanelProps) 
               )}
             </div>
             <p className="mt-0.5 break-words text-xs text-destructive/90">{lastError}</p>
+            {onViewHistory && (
+              <button type="button" onClick={onViewHistory} className="mt-2 text-xs underline">
+                View sync history
+              </button>
+            )}
           </div>
         </div>
       )}

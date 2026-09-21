@@ -5,9 +5,6 @@ import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import type { EvaluationResult } from './segment.types'
 import type { SegmentRules, SegmentCondition } from '@/lib/server/db'
 import { getSegment } from './segment.service'
-import { logger } from '@/lib/server/logger'
-
-const log = logger.child({ component: 'segment-evaluation' })
 
 /** SQL comparison operators for rule conditions */
 const OPERATOR_SQL: Record<string, string> = {
@@ -365,7 +362,10 @@ function buildConditionSql(condition: SegmentCondition): ReturnType<typeof sql> 
  * Evaluate a dynamic segment's rules and return the set of matching principal IDs.
  * Translates rules to SQL — does not load users into memory.
  */
-async function resolveMatchingPrincipals(rules: SegmentRules): Promise<string[]> {
+async function resolveMatchingPrincipals(
+  rules: SegmentRules,
+  executor: import('@/lib/server/db').Transaction
+): Promise<string[]> {
   const conditionSqls = rules.conditions
     .map(buildConditionSql)
     .filter((c): c is NonNullable<typeof c> => c !== null)
@@ -381,7 +381,7 @@ async function resolveMatchingPrincipals(rules: SegmentRules): Promise<string[]>
   // (type='user'). The type guard excludes anonymous visitors, who also carry
   // role='user' but must not match segments. The companies LEFT JOIN feeds the
   // company_* predicates; people without a company keep a NULL co row.
-  const rows = await db.execute(sql`
+  const rows = await executor.execute(sql`
     SELECT p.id
     FROM principal p
     INNER JOIN "user" u ON u.id = p.user_id
@@ -406,60 +406,36 @@ async function resolveMatchingPrincipals(rules: SegmentRules): Promise<string[]>
  * Adds new matches, removes stale members.
  */
 export async function evaluateDynamicSegment(segmentId: SegmentId): Promise<EvaluationResult> {
-  const segment = await getSegment(segmentId)
-  if (!segment) {
-    throw new NotFoundError('SEGMENT_NOT_FOUND', `Segment ${segmentId} not found`)
-  }
-  if (segment.type !== 'dynamic') {
-    throw new ValidationError('SEGMENT_TYPE_ERROR', 'Segment is not dynamic')
-  }
-  if (!segment.rules || !segment.rules.conditions?.length) {
-    const deleted = await db
-      .delete(userSegments)
+  return db.transaction(async (tx) => {
+    // The segment row lock also fences rule/name edits while memberships and
+    // outbound intents commit. Every producer of dynamic changes uses this lock.
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtextextended(${`segment-sync:${segmentId}`}, 0))`
+    )
+    await tx.execute(sql`SELECT id FROM segments WHERE ${eq(segments.id, segmentId)} FOR SHARE`)
+    const segment = await getSegment(segmentId, tx)
+    if (!segment) throw new NotFoundError('SEGMENT_NOT_FOUND', `Segment ${segmentId} not found`)
+    if (segment.type !== 'dynamic')
+      throw new ValidationError('SEGMENT_TYPE_ERROR', 'Segment is not dynamic')
+    const currentMembers = await tx
+      .select({ principalId: userSegments.principalId })
+      .from(userSegments)
       .where(and(eq(userSegments.segmentId, segmentId), eq(userSegments.addedBy, 'dynamic')))
-      .returning({ principalId: userSegments.principalId })
-    const removedIds = deleted.map((row) => row.principalId as PrincipalId)
-    if (removedIds.length > 0) {
-      import('@/lib/server/integrations/user-sync-notify')
-        .then(({ notifyUserSyncIntegrations }) =>
-          notifyUserSyncIntegrations(segment.name, [], removedIds)
-        )
-        .catch((err) => log.error({ err }, 'user sync notify failed'))
-    }
-    return { segmentId, added: 0, removed: deleted.length }
-  }
-
-  const currentMembers = await db
-    .select({ principalId: userSegments.principalId })
-    .from(userSegments)
-    .where(and(eq(userSegments.segmentId, segmentId), eq(userSegments.addedBy, 'dynamic')))
-
-  const currentIds = new Set<string>(currentMembers.map((r) => r.principalId))
-
-  const matchingIds = await resolveMatchingPrincipals(segment.rules)
-  const matchingSet = new Set(matchingIds)
-
-  const toAdd = matchingIds.filter((id) => !currentIds.has(id)) as PrincipalId[]
-  const toRemove = [...currentIds].filter((id) => !matchingSet.has(id)) as PrincipalId[]
-
-  await db.transaction(async (tx) => {
-    if (toAdd.length > 0) {
+    const currentIds = new Set<string>(currentMembers.map((r) => r.principalId))
+    const matchingIds = segment.rules?.conditions?.length
+      ? await resolveMatchingPrincipals(segment.rules, tx)
+      : []
+    const matchingSet = new Set(matchingIds)
+    const toAdd = matchingIds.filter((id) => !currentIds.has(id)) as PrincipalId[]
+    const toRemove = [...currentIds].filter((id) => !matchingSet.has(id)) as PrincipalId[]
+    if (toAdd.length)
       await tx
         .insert(userSegments)
         .values(
-          toAdd.map((pid) => ({
-            principalId: pid,
-            segmentId,
-            addedBy: 'dynamic' as const,
-          }))
+          toAdd.map((principalId) => ({ principalId, segmentId, addedBy: 'dynamic' as const }))
         )
         .onConflictDoNothing()
-    }
-    if (toRemove.length > 0) {
-      // Scope to addedBy='dynamic' so we never wipe rows whose source is
-      // manual / sso / api / widget. Without this, a principal who is both
-      // a manual member and a stale dynamic match loses their manual row
-      // on the next sweep — silently locking them out of segment-gated boards.
+    if (toRemove.length)
       await tx
         .delete(userSegments)
         .where(
@@ -469,18 +445,11 @@ export async function evaluateDynamicSegment(segmentId: SegmentId): Promise<Eval
             inArray(userSegments.principalId, toRemove)
           )
         )
-    }
+    const { notifyUserSyncIntegrations } =
+      await import('@/lib/server/integrations/user-sync-notify')
+    await notifyUserSyncIntegrations(segment.name, toAdd, toRemove, { executor: tx, segmentId })
+    return { segmentId, added: toAdd.length, removed: toRemove.length }
   })
-
-  if (toAdd.length > 0 || toRemove.length > 0) {
-    import('@/lib/server/integrations/user-sync-notify')
-      .then(({ notifyUserSyncIntegrations }) =>
-        notifyUserSyncIntegrations(segment.name, toAdd, toRemove)
-      )
-      .catch((err) => log.error({ err }, 'user sync notify failed'))
-  }
-
-  return { segmentId, added: toAdd.length, removed: toRemove.length }
 }
 
 /**

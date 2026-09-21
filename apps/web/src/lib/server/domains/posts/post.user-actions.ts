@@ -242,7 +242,8 @@ export async function userEditPost(
  */
 export async function softDeletePost(
   postId: PostId,
-  actor: { principalId: PrincipalId; role: Role; userId?: UserId }
+  actor: { principalId: PrincipalId; role: Role; userId?: UserId },
+  beforeDelete?: (tx: import('@/lib/server/db').Transaction) => Promise<void>
 ): Promise<void> {
   log.info(
     { post_id: postId, principal_id: actor.principalId, role: actor.role },
@@ -297,15 +298,16 @@ export async function softDeletePost(
     }
   }
 
-  // Set deletedAt and deletedByPrincipalId
-  const [updatedPost] = await db
-    .update(posts)
-    .set({
-      deletedAt: new Date(),
-      deletedByPrincipalId: actor.principalId,
-    })
-    .where(eq(posts.id, postId))
-    .returning()
+  // Capture selected syncs in the same commit as deletion.
+  const updatedPost = await db.transaction(async (tx) => {
+    if (beforeDelete) await beforeDelete(tx)
+    const [updated] = await tx
+      .update(posts)
+      .set({ deletedAt: new Date(), deletedByPrincipalId: actor.principalId })
+      .where(eq(posts.id, postId))
+      .returning()
+    return updated
+  })
 
   if (!updatedPost) {
     throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)

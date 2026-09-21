@@ -1,3 +1,4 @@
+import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 /**
  * Freshdesk hook handler.
  * Enriches feedback posts with support ticket data from Freshdesk.
@@ -36,7 +37,7 @@ export const freshdeskHook: HookHandler = {
     log.debug('enriching feedback')
 
     try {
-      const response = await fetch(
+      const response = await integrationFetch(
         `https://${subdomain}.freshdesk.com/api/v2/contacts?email=${encodeURIComponent(email)}`,
         {
           headers: { Authorization: `Basic ${btoa(`${accessToken}:X`)}` },
@@ -86,9 +87,12 @@ export const freshdeskHook: HookHandler = {
   async testConnection(config: unknown): Promise<{ ok: boolean; error?: string }> {
     const { accessToken, subdomain } = config as FreshdeskConfig
     try {
-      const response = await fetch(`https://${subdomain}.freshdesk.com/api/v2/settings/helpdesk`, {
-        headers: { Authorization: `Basic ${btoa(`${accessToken}:X`)}` },
-      })
+      const response = await integrationFetch(
+        `https://${subdomain}.freshdesk.com/api/v2/settings/helpdesk`,
+        {
+          headers: { Authorization: `Basic ${btoa(`${accessToken}:X`)}` },
+        }
+      )
       return { ok: response.ok, error: response.ok ? undefined : `HTTP ${response.status}` }
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : 'Connection failed' }

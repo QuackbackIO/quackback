@@ -1,3 +1,4 @@
+import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 /**
  * Trello hook handler.
  * Creates cards in Trello when events occur.
@@ -50,7 +51,7 @@ export const trelloHook: HookHandler = {
         token: accessToken,
       })
 
-      const response = await fetch(`${TRELLO_API}/cards?${params}`, {
+      const response = await integrationFetch(`${TRELLO_API}/cards?${params}`, {
         method: 'POST',
       })
 
@@ -99,7 +100,7 @@ export const trelloHook: HookHandler = {
   async testConnection(config: unknown): Promise<{ ok: boolean; error?: string }> {
     const { accessToken, apiKey } = config as TrelloConfig
     try {
-      const response = await fetch(
+      const response = await integrationFetch(
         `${TRELLO_API}/members/me?key=${apiKey}&token=${accessToken}&fields=id`
       )
       return { ok: response.ok, error: response.ok ? undefined : `HTTP ${response.status}` }

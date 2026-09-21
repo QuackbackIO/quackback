@@ -66,6 +66,13 @@ export interface LedgerEntry {
 
 export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
   {
+    file: 'apps/web/src/lib/server/integrations/sync/transport.ts',
+    name: 'evidence',
+    category: 'process-lifetime',
+    reason:
+      'The AsyncLocalStorage instance carries transport evidence for exactly one sync attempt. withSyncTransport creates a new store on every call; concurrent workspaces and attempts cannot read each other’s response counts or failures. No provider data is cached outside that async context.',
+  },
+  {
     file: 'apps/web/src/lib/server/domains/platform-credentials/platform-credential.service.ts',
     name: '_controlPlaneSource',
     category: 'fleet-wide',

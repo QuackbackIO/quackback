@@ -158,7 +158,7 @@ function mappingRow(
   return {
     eventType: 'post.created',
     integrationType: type,
-    secrets: JSON.stringify({ accessToken: 'token' }),
+    integrationId: `integration-${type}`,
     integrationConfig: fixture.integrationConfig ?? {},
     actionConfig: fixture.actionConfig ?? {},
     filters: null,

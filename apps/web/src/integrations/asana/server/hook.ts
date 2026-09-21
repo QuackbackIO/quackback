@@ -1,3 +1,4 @@
+import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 /**
  * Asana hook handler.
  * Creates Asana tasks when feedback events occur.
@@ -38,7 +39,7 @@ export const asanaHook: HookHandler = {
     const { name, htmlNotes } = buildAsanaTaskBody(event, rootUrl)
 
     try {
-      const response = await fetch(`${ASANA_API}/tasks`, {
+      const response = await integrationFetch(`${ASANA_API}/tasks`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${accessToken}`,

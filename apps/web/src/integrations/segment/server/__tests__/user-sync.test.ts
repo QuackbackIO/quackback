@@ -54,7 +54,7 @@ describe('segmentUserSync.handleIdentify', () => {
     expect(result).toMatchObject({ email: 'user@example.com' })
   })
 
-  it('acknowledges a replayed Segment message without reprocessing it', async () => {
+  it('passes stable identity to the durable receiver without claiming it before local work', async () => {
     const secret = 'segment-secret'
     const replayBody = JSON.stringify({
       type: 'identify',
@@ -72,8 +72,8 @@ describe('segmentUserSync.handleIdentify', () => {
       { incomingSecret: secret }
     )
 
-    expect(result).toBeInstanceOf(Response)
-    expect((result as Response).status).toBe(200)
+    expect(result).toMatchObject({ deliveryId: 'segment-message-1' })
+    expect(claimMessageId).not.toHaveBeenCalled()
   })
 
   it('rejects a tampered signature with 401 and never reaches the mutation path', async () => {

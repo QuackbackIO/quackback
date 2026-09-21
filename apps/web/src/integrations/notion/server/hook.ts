@@ -1,3 +1,4 @@
+import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 /**
  * Notion hook handler.
  * Creates database items in Notion when events occur.
@@ -37,7 +38,7 @@ export const notionHook: HookHandler = {
     const { title, blocks } = buildNotionPage(event, rootUrl)
 
     try {
-      const response = await fetch(`${NOTION_API}/pages`, {
+      const response = await integrationFetch(`${NOTION_API}/pages`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -100,7 +101,7 @@ export const notionHook: HookHandler = {
   async testConnection(config: unknown): Promise<{ ok: boolean; error?: string }> {
     const { accessToken } = config as NotionConfig
     try {
-      const response = await fetch(`${NOTION_API}/users/me`, {
+      const response = await integrationFetch(`${NOTION_API}/users/me`, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
           'Notion-Version': NOTION_VERSION,

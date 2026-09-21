@@ -44,7 +44,7 @@ export function OnDeleteConfig({
             On post delete
           </Label>
           <p className="text-xs text-muted-foreground">
-            {action} linked issues when a post is deleted
+            Review linked issues when a post is deleted
           </p>
         </div>
         <Switch
@@ -55,8 +55,8 @@ export function OnDeleteConfig({
         />
       </div>
       <p className="text-xs text-muted-foreground">
-        When enabled, the delete confirmation dialog will pre-check the option to{' '}
-        {action.toLowerCase()} linked {name} issues.
+        When enabled, the delete dialog selects linked {name} issues for review in Sync history.
+        Open each issue on {name} to {action.toLowerCase()} it.
       </p>
     </div>
   )

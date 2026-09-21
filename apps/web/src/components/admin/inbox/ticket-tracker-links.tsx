@@ -44,7 +44,7 @@ export function TicketTrackerLinks({
   ticketId: TicketId
   onChanged: () => void
 }) {
-  const { data } = useQuery(ticketQueries.externalLinks(ticketId))
+  const { data } = useQuery({ ...ticketQueries.externalLinks(ticketId), refetchInterval: 10_000 })
   if (!data) return null
 
   const linksByType = new Map<string, TrackerLink[]>()
@@ -136,7 +136,19 @@ function TrackerSection({
   })
   const create = useMutation({
     mutationFn: () => createTicketIssueFn({ data: { ticketId, integrationType: type } }),
-    onSuccess: settle,
+    onSuccess: (result) => {
+      settle()
+      toast.message(
+        result.state === 'succeeded'
+          ? 'Issue already created'
+          : ['queued', 'running', 'retry_wait'].includes(result.state)
+            ? 'Issue creation queued'
+            : 'This sync needs attention',
+        {
+          description: 'Review progress in the integration’s Sync history.',
+        }
+      )
+    },
     onError,
   })
 

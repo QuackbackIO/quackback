@@ -117,10 +117,10 @@ function deriveCapabilities(i: IntegrationDefinition): IntegrationCapability[] {
     })
   }
 
-  if (i.archive) {
+  if (i.archiveReview) {
     caps.push({
       label: 'Clean up on delete',
-      description: `Close or archive linked ${name} items when feedback is deleted`,
+      description: `Review linked ${name} items for closing or archiving when feedback is deleted`,
     })
   }
 

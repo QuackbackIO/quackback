@@ -82,21 +82,50 @@ export async function handleInboundIdentify(
   // Integration returned a Response directly — honour it
   if (result instanceof Response) return result
 
-  // We have a UserIdentifyPayload — merge attributes into user.metadata
-  const { email, externalUserId } = result
-  const attributes = normalizeIdentifyAttributes(result)
+  const record = await db.query.user.findFirst({
+    where: eq(user.email, result.email),
+    columns: { id: true },
+  })
+  if (!record) return new Response('OK', { status: 200 })
   try {
-    // Merge user attributes (filtered through definitions) and raw system fields
-    // in a single call to avoid TOCTOU race on the metadata column
-    const rawFields = externalUserId ? { _externalUserId: externalUserId } : {}
-    await mergeUserAttributes(email, attributes, rawFields)
-    log.info(
-      { integration_type: integrationType, attribute_count: Object.keys(attributes).length },
-      'merged user attributes'
-    )
-  } catch (error) {
-    log.error({ err: error, integration_type: integrationType }, 'attribute merge failed')
-    // Return 200 — we received the payload successfully, processing failure is internal
+    const { queueSyncOperation } = await import('./sync/ledger')
+    const { installationIdentity, syncOperationKey, syncHash } = await import('./sync/identity')
+    const installation = installationIdentity(integration)
+    const destination = { user: record.id }
+    await queueSyncOperation({
+      operationKey: syncOperationKey({
+        installation,
+        destination,
+        kind: 'identify',
+        sourceType: 'user',
+        sourceId: record.id,
+        revision: result.deliveryId || syncHash(body),
+      }),
+      installation,
+      integrationId: integration.id,
+      provider: integrationType,
+      direction: 'inbound',
+      kind: 'identify',
+      sourceType: 'user',
+      sourceId: record.id,
+      destination,
+      remoteId: record.id,
+      sourceRevision:
+        result.occurredAt && Number.isFinite(Date.parse(result.occurredAt))
+          ? new Date(result.occurredAt).toISOString()
+          : undefined,
+      payload: {
+        executor: 'identify',
+        data: {
+          email: result.email,
+          attributes: normalizeIdentifyAttributes(result),
+          externalUserId: result.externalUserId,
+        },
+      },
+    })
+  } catch {
+    // No acknowledgment until the receipt and work are durable.
+    return new Response('Could not accept identify event', { status: 503 })
   }
 
   return new Response('OK', { status: 200 })
@@ -131,7 +160,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export async function mergeUserAttributes(
   email: string,
   attributes: Record<string, unknown>,
-  rawFields: Record<string, unknown> = {}
+  rawFields: Record<string, unknown> = {},
+  executor: import('@/lib/server/db').Database | import('@/lib/server/db').Transaction = db
 ): Promise<void> {
   const hasAttributes = Object.keys(attributes).length > 0
   const hasRawFields = Object.keys(rawFields).length > 0
@@ -141,7 +171,7 @@ export async function mergeUserAttributes(
   const update: Record<string, unknown> = {}
 
   if (hasAttributes) {
-    const attrDefs = await db.select().from(userAttributeDefinitions)
+    const attrDefs = await executor.select().from(userAttributeDefinitions)
 
     if (attrDefs.length > 0) {
       // Build: external attribute name → { internalKey, type }
@@ -168,7 +198,7 @@ export async function mergeUserAttributes(
 
   if (Object.keys(update).length === 0) return
 
-  const userRecord = await db.query.user.findFirst({
+  const userRecord = await executor.query.user.findFirst({
     where: eq(user.email, email),
     columns: { id: true },
   })
@@ -177,7 +207,7 @@ export async function mergeUserAttributes(
     return
   }
 
-  await db
+  await executor
     .update(user)
     .set({
       metadata: sql`(coalesce(nullif(${user.metadata}, ''), '{}')::jsonb || ${JSON.stringify(update)}::jsonb)::text`,

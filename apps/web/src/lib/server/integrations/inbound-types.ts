@@ -10,6 +10,9 @@
  * Result of parsing an inbound webhook payload.
  */
 export interface InboundWebhookResult {
+  /** Verified scope from the signed event, never inferred from the current connection. */
+  destinationId?: string
+  occurredAt?: string
   /** The external issue ID that changed status */
   externalId: string
   /** The new status name from the external platform */

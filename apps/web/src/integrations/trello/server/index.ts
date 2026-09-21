@@ -1,5 +1,4 @@
 import type { IntegrationDefinition } from '@/lib/server/integrations/types'
-import { archiveTrelloCard } from '@/integrations/trello/server/archive'
 import { listTrelloBoards, listTrelloLists } from '@/integrations/trello/server/boards'
 import { fetchTrelloStatuses } from '@/integrations/trello/server/statuses'
 import { trelloHook } from '@/integrations/trello/server/hook'
@@ -17,7 +16,7 @@ export const trelloIntegration: IntegrationDefinition = {
   },
   hook: trelloHook,
   inbound: trelloInboundHandler,
-  archive: archiveTrelloCard,
+  archiveReview: true,
   webhookRegistration: 'manual',
   listExternalStatuses: fetchTrelloStatuses,
   destinations: {

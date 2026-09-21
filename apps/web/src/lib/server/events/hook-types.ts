@@ -14,6 +14,8 @@ import type { ContactEmail } from '@/lib/server/email/recipient'
  */
 export interface HookResult {
   success: boolean
+  /** 'rejected' is a confirmed response proving the mutation was not applied. */
+  deliveryOutcome?: 'rejected' | 'unknown'
   /** External ID used for API lookups (may be opaque UUID/numeric ID) */
   externalId?: string
   /** Human-friendly display label (e.g. "QUA-24", "#142"). Falls back to externalId in UI. */

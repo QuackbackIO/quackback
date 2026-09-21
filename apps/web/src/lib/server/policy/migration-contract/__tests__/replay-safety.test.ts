@@ -286,6 +286,10 @@ describe('the real corpus', () => {
     // 0283 inserts a Labs row only where none exists, then deletes the 1h
     // settings cache only if that insert returned a row. A second run writes
     // zero rows. A bare CTE DELETE at the tip would collapse the gap-heal window.
+    // 0284 removes only retired delivery shapes that new writers cannot create.
+    // 0285 replaces only the old three-column link constraint and adds its
+    // scoped replacement only when absent. Real PostgreSQL replay is covered
+    // by lineage-double-apply and migrator-gap-heal.
     const vouching = files.filter(
       (f) => assessReplaySafety(f, readFileSync(join(MIGRATIONS_DIR, f), 'utf8')).vouched.length > 0
     )
@@ -301,6 +305,8 @@ describe('the real corpus', () => {
       '0279_better_auth_17.sql',
       '0280_widget_session_scope.sql',
       '0283_refined_visual_theme_default_on.sql',
+      '0284_integration_sync.sql',
+      '0285_integration_link_scope.sql',
     ])
   })
 

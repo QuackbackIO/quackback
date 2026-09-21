@@ -61,13 +61,7 @@ export async function linkTicketToPost(
       externalId: input.externalId,
       externalUrl: input.externalUrl ?? null,
     })
-    .onConflictDoNothing({
-      target: [
-        postExternalLinks.integrationType,
-        postExternalLinks.externalId,
-        postExternalLinks.postId,
-      ],
-    })
+    .onConflictDoNothing()
     .returning({ id: postExternalLinks.id })
 
   // If conflict, fetch existing link
@@ -113,7 +107,8 @@ async function getExistingLinkId(input: LinkTicketInput): Promise<string | null>
     where: and(
       eq(postExternalLinks.integrationType, input.integrationType),
       eq(postExternalLinks.externalId, input.externalId),
-      eq(postExternalLinks.postId, input.postId)
+      eq(postExternalLinks.postId, input.postId),
+      eq(postExternalLinks.syncScope, '')
     ),
     columns: { id: true },
   })
@@ -134,7 +129,8 @@ export async function unlinkTicketFromPost(input: {
       and(
         eq(postExternalLinks.postId, input.postId),
         eq(postExternalLinks.integrationType, input.integrationType),
-        eq(postExternalLinks.externalId, input.externalId)
+        eq(postExternalLinks.externalId, input.externalId),
+        eq(postExternalLinks.syncScope, '')
       )
     )
 }
@@ -171,6 +167,7 @@ export async function getLinkedPosts(input: {
     LEFT JOIN ${postStatuses} ps ON ps.id = p.status_id
     WHERE pel.integration_type = ${input.integrationType}
       AND pel.external_id = ${input.externalId}
+      AND pel.sync_scope = ''
       AND p.deleted_at IS NULL
     ORDER BY pel.created_at DESC
   `)

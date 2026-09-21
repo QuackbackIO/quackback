@@ -1,3 +1,4 @@
+import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 /**
  * Shortcut hook handler.
  * Creates Shortcut stories when feedback events occur.
@@ -42,7 +43,7 @@ export const shortcutHook: HookHandler = {
     const { title, description } = buildShortcutStoryBody(event, rootUrl)
 
     try {
-      const response = await fetch(`${SHORTCUT_API}/stories`, {
+      const response = await integrationFetch(`${SHORTCUT_API}/stories`, {
         method: 'POST',
         headers: {
           'Shortcut-Token': accessToken,

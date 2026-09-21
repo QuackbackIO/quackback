@@ -1,5 +1,4 @@
 import type { IntegrationDefinition } from '@/lib/server/integrations/types'
-import { archiveShortcutStory } from '@/integrations/shortcut/server/archive'
 import { fetchShortcutStates } from '@/integrations/shortcut/server/statuses'
 import { shortcutHook } from '@/integrations/shortcut/server/hook'
 import { shortcutInboundHandler } from '@/integrations/shortcut/server/inbound'
@@ -20,7 +19,7 @@ export const shortcutIntegration: IntegrationDefinition = {
   },
   hook: shortcutHook,
   inbound: shortcutInboundHandler,
-  archive: archiveShortcutStory,
+  archiveReview: true,
   webhookRegistration: 'manual',
   listExternalStatuses: fetchShortcutStates,
   platformCredentials: [],

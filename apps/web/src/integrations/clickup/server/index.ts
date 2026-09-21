@@ -1,5 +1,4 @@
 import type { IntegrationDefinition } from '@/lib/server/integrations/types'
-import { closeClickUpTask } from '@/integrations/clickup/server/archive'
 import { fetchClickUpStatuses } from '@/integrations/clickup/server/statuses'
 import {
   registerClickUpWebhook,
@@ -24,7 +23,7 @@ export const clickupIntegration: IntegrationDefinition = {
   },
   hook: clickupHook,
   inbound: clickupInboundHandler,
-  archive: closeClickUpTask,
+  archiveReview: true,
   webhookRegistration: {
     register: async ({ accessToken, config, callbackUrl, secret }) => {
       const teamId = config.teamId as string

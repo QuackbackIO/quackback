@@ -1828,6 +1828,27 @@
       "when": 1789642200000,
       "tag": "0283_refined_visual_theme_default_on",
       "breakpoints": true
+    },
+    {
+      "idx": 261,
+      "version": "7",
+      "when": 1789987200000,
+      "tag": "0284_integration_sync",
+      "breakpoints": true
+    },
+    {
+      "idx": 262,
+      "version": "7",
+      "when": 1789987200001,
+      "tag": "0285_integration_link_scope",
+      "breakpoints": true
+    },
+    {
+      "idx": 263,
+      "version": "7",
+      "when": 1789987200002,
+      "tag": "0286_integration_sync_privacy",
+      "breakpoints": true
     }
   ]
 }

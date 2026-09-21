@@ -70,3 +70,4 @@ export * from './labs'
 
 export * from './slack'
 export * from './integration-deliveries'
+export * from './integration-sync'

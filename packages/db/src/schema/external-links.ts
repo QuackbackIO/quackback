@@ -20,6 +20,8 @@ export const postExternalLinks = pgTable(
     integrationId: typeIdColumnNullable('integration')('integration_id'),
     integrationType: varchar('integration_type', { length: 50 }).notNull(),
     externalId: text('external_id').notNull(),
+    /** Empty for references; only explicitly established sync links have an ownership scope. */
+    syncScope: text('sync_scope').notNull().default(''),
     /** Human-friendly display label (e.g. "QUA-24", "#142"). Falls back to externalId when null. */
     externalDisplayId: text('external_display_id'),
     externalUrl: text('external_url'),
@@ -50,7 +52,8 @@ export const postExternalLinks = pgTable(
     unique('post_external_links_type_external_post_unique').on(
       table.externalId,
       table.integrationType,
-      table.postId
+      table.postId,
+      table.syncScope
     ),
     index('post_external_links_post_status_idx').on(table.postId, table.status),
   ]
@@ -85,6 +88,7 @@ export const ticketExternalLinks = pgTable(
     integrationId: typeIdColumnNullable('integration')('integration_id'),
     integrationType: varchar('integration_type', { length: 50 }).notNull(),
     externalId: text('external_id').notNull(),
+    syncScope: text('sync_scope').notNull().default(''),
     /** Human-friendly display label (e.g. "acme/widgets#142"). Falls back to externalId when null. */
     externalDisplayId: text('external_display_id'),
     externalUrl: text('external_url'),
@@ -115,6 +119,7 @@ export const ticketExternalLinks = pgTable(
     unique('ticket_external_links_type_external_ticket_unique').on(
       table.externalId,
       table.integrationType,
+      table.syncScope,
       table.ticketId
     ),
     index('ticket_external_links_type_external_id_idx').on(table.integrationType, table.externalId),

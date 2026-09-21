@@ -60,12 +60,8 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   sql: vi.fn(),
 }))
 
-const deliveryReceipts = vi.hoisted(() => ({ completed: vi.fn(), complete: vi.fn() }))
-vi.mock('../integration-delivery', async (original) => ({
-  ...(await original<typeof import('../integration-delivery')>()),
-  integrationDeliveryCompleted: deliveryReceipts.completed,
-  completeIntegrationDelivery: deliveryReceipts.complete,
-}))
+const syncProducer = vi.hoisted(() => vi.fn().mockResolvedValue({ id: 'op-1', state: 'uncertain' }))
+vi.mock('@/lib/server/integrations/sync/hooks', () => ({ queueHookSync: syncProducer }))
 
 // --- Helpers ---
 
@@ -131,8 +127,6 @@ import { retryBackoffMs } from '@/lib/server/jobs/definitions'
 describe('Event processing', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    deliveryReceipts.completed.mockResolvedValue(false)
-    deliveryReceipts.complete.mockResolvedValue(undefined)
     enqueued.length = 0
     bulkEnqueued.length = 0
     cancelled.length = 0
@@ -216,44 +210,26 @@ describe('Event processing', () => {
   })
 
   describe('runHookJob', () => {
-    it('skips completed integration deliveries even under another event/job ID', async () => {
-      const run = vi.fn()
-      mockGetHook.mockReturnValue({ run })
-      deliveryReceipts.completed.mockResolvedValue(true)
-      await runHookJob(
-        makeJob({
+    it.each([true, false])(
+      'rejects integration delivery on the ordinary event queue with integration ID = %s without a remote call',
+      async (hasId) => {
+        const run = vi.fn()
+        mockGetHook.mockReturnValue({ run })
+        const job = makeJob({
           payload: {
             hookType: 'slack',
             event: makeEvent(),
             target: { channelId: 'channel' },
-            config: { integrationId: 'integration_1' },
+            config: hasId ? { integrationId: 'integration_1' } : {},
           },
         })
-      )
-      expect(run).not.toHaveBeenCalled()
-    })
-
-    it('records successful integration delivery but never records a failed delivery', async () => {
-      const run = vi
-        .fn()
-        .mockResolvedValueOnce({ success: true })
-        .mockResolvedValueOnce({ success: false, shouldRetry: true, error: 'Unavailable' })
-      mockGetHook.mockReturnValue({ run })
-      const job = makeJob({
-        payload: {
-          hookType: 'slack',
-          event: makeEvent(),
-          target: { channelId: 'channel' },
-          config: { integrationId: 'integration_1' },
-        },
-      })
-      await runHookJob(job)
-      expect(deliveryReceipts.complete).toHaveBeenCalledOnce()
-      expect(deliveryReceipts.complete.mock.calls[0][0]).toMatch(/^integration-post-created:/)
-      deliveryReceipts.complete.mockClear()
-      await expect(runHookJob(job)).rejects.toThrow('Unavailable')
-      expect(deliveryReceipts.complete).not.toHaveBeenCalled()
-    })
+        await expect(runHookJob(job)).rejects.toThrow(
+          'Integration delivery requires the integration-sync queue'
+        )
+        expect(syncProducer).not.toHaveBeenCalled()
+        expect(run).not.toHaveBeenCalled()
+      }
+    )
 
     it('succeeds silently when hook returns success', async () => {
       const mockHook = { run: vi.fn().mockResolvedValue({ success: true }) }

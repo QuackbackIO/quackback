@@ -1,3 +1,4 @@
+import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 /**
  * Teams hook handler.
  * Sends adaptive cards to Teams channels when events occur.
@@ -37,14 +38,17 @@ export const teamsHook: HookHandler = {
     const message = buildTeamsMessage(event, rootUrl)
 
     try {
-      const response = await fetch(`${GRAPH_API}/teams/${teamId}/channels/${channelId}/messages`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(message),
-      })
+      const response = await integrationFetch(
+        `${GRAPH_API}/teams/${teamId}/channels/${channelId}/messages`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(message),
+        }
+      )
 
       if (!response.ok) {
         const errorBody = await response.text()

@@ -1,3 +1,4 @@
+import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 /**
  * Jira issue-tracker capability: manual ref parsing for ticket linking.
  * The externalId namespace is the issue KEY (e.g. "PROJ-42") — matching what
@@ -79,22 +80,25 @@ export const jiraIssues: IssueTrackerCapability = {
     const issueTypeId =
       channelIssueTypeId ?? (typeof auth.issueTypeId === 'string' ? auth.issueTypeId : undefined)
 
-    const response = await fetch(`https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/issue`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify({
-        fields: {
-          project: { id: projectId },
-          summary: title,
-          description: markdownToAdf(bodyMarkdown),
-          ...(issueTypeId ? { issuetype: { id: issueTypeId } } : {}),
+    const response = await integrationFetch(
+      `https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/issue`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
         },
-      }),
-    })
+        body: JSON.stringify({
+          fields: {
+            project: { id: projectId },
+            summary: title,
+            description: markdownToAdf(bodyMarkdown),
+            ...(issueTypeId ? { issuetype: { id: issueTypeId } } : {}),
+          },
+        }),
+      }
+    )
 
     if (!response.ok) {
       const status = response.status

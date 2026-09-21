@@ -1,11 +1,4 @@
-/**
- * Real-DB coverage for the inbound webhook handler's ticket branch: a GitHub
- * issues.closed/reopened webhook reverse-looks-up ticket_external_links by
- * external ID, resolves config.ticketStatusMappings, and applies the status
- * through setTicketStatus (so lifecycle stamps like resolvedAt land). The
- * post branch (changeStatus) is mocked to verify the two branches stay
- * independent. Runs inside the fixture rollback.
- */
+/** Exercises verified receipt, fan-out and domain effects against PostgreSQL. */
 import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest'
 import { createHmac } from 'crypto'
 import {
@@ -36,10 +29,8 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
 }))
 
-// Post branch boundary: assert call args instead of standing up the whole
-// post domain (boards/posts/events) in this suite.
-vi.mock('@/lib/server/domains/posts/post.status', () => ({
-  changeStatus: vi.fn().mockResolvedValue(undefined),
+vi.mock('@/lib/server/secret-key', () => ({
+  activeSecretKey: () => 'integration-sync-test-key-32-characters-only',
 }))
 
 // Neutralize the fire-and-forget webhook bridge (createTicket/setTicketStatus).
@@ -54,13 +45,17 @@ vi.mock('@/lib/server/domains/tickets/ticket.webhooks', () => ({
 vi.mock('@/lib/server/realtime/conversation-channels', () => ({ publishTicketEvent: vi.fn() }))
 
 import { handleInboundWebhook } from '../inbound-webhook-handler'
-import { changeStatus } from '@/lib/server/domains/posts/post.status'
+import { runIntegrationSync } from '../sync/worker'
+import { syncTestJob } from '../sync/__tests__/job'
+import { installationIdentity, syncDestination, syncHash } from '../sync/identity'
+import { integrationSyncOperations as operations, events, and, inArray } from '@/lib/server/db'
 import { createTicket } from '@/lib/server/domains/tickets/ticket.service'
-import { emitTicketExternalStatusChanged } from '@/lib/server/domains/tickets/ticket.webhooks'
 import { resolveActorPermissions } from '@/lib/server/policy/permissions'
 import type { Actor } from '@/lib/server/policy/types'
 import { conversationMessages } from '@/lib/server/db'
 
+const olderRevision = new Date(Date.now() + 60_000).toISOString()
+const newerRevision = new Date(Date.now() + 120_000).toISOString()
 const fixture = await createDbTestFixture({
   probe: async (db) => {
     await db.select({ id: tickets.id }).from(tickets).limit(0)
@@ -69,6 +64,8 @@ const fixture = await createDbTestFixture({
 })
 
 const suffix = () => `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+const fixtureTickets: TicketId[] = []
+const fixtureIntegrationIds: string[] = []
 const WEBHOOK_SECRET = 'test_webhook_secret'
 
 async function seedActor(): Promise<Actor> {
@@ -124,21 +121,38 @@ async function seedStatuses(): Promise<{ open: TicketStatusId; closed: TicketSta
 }
 
 async function seedGitHubIntegration(config: Record<string, unknown>) {
+  const service = createId('principal')
+  await testDb
+    .insert(principal)
+    .values({ id: service, role: 'user', type: 'service', createdAt: new Date() })
   const [row] = await testDb
     .insert(integrations)
     .values({
       integrationType: 'github',
       status: 'active',
-      config: { channelId: 'acme/widgets', webhookSecret: WEBHOOK_SECRET, ...config },
+      principalId: service,
+      config: {
+        channelId: 'acme/widgets',
+        webhookSecret: WEBHOOK_SECRET,
+        statusSyncEnabled: true,
+        ...config,
+      },
     })
     .returning()
+  fixtureIntegrationIds.push(row.id)
   return row
 }
 
 async function seedLinkedTicket(actor: Actor, externalId: string): Promise<TicketId> {
+  const integration = (await testDb.query.integrations.findFirst({
+    where: eq(integrations.integrationType, 'github'),
+  }))!
   const dto = await createTicket({ type: 'customer', title: `customer ${suffix()}` }, actor)
+  fixtureTickets.push(dto.id)
   await testDb.insert(ticketExternalLinks).values({
     ticketId: dto.id,
+    integrationId: integration.id,
+    syncScope: scope(integration),
     integrationType: 'github',
     externalId,
     externalDisplayId: `acme/widgets#${externalId}`,
@@ -161,8 +175,19 @@ async function seedMinimalPost(principalId: PrincipalId) {
 }
 
 /** A signed GitHub issues webhook request for the central handler. */
-function githubWebhookRequest(action: 'closed' | 'reopened', issueNumber: number): Request {
-  const body = JSON.stringify({ action, issue: { number: issueNumber } })
+function githubWebhookRequest(
+  action: 'closed' | 'reopened',
+  issueNumber: number,
+  repository = 'acme/widgets'
+): Request {
+  const body = JSON.stringify({
+    action,
+    repository: { full_name: repository },
+    issue: {
+      number: issueNumber,
+      updated_at: action === 'closed' ? olderRevision : newerRevision,
+    },
+  })
   const signature = 'sha256=' + createHmac('sha256', WEBHOOK_SECRET).update(body).digest('hex')
   return new Request('http://localhost/api/integrations/github/webhook', {
     method: 'POST',
@@ -195,11 +220,44 @@ async function systemNotes(ticketId: TicketId, kind: string) {
   )
 }
 
+function scope(integration: typeof integrations.$inferSelect) {
+  return `${installationIdentity(integration)}:${syncHash(syncDestination({ channelId: 'acme/widgets' }, integration.config as Record<string, unknown>))}`
+}
+async function drain() {
+  for (let n = 0; n < 10; n++) {
+    const rows = await testDb.query.integrationSyncOperations.findMany({
+      where: and(
+        eq(operations.state, 'queued'),
+        inArray(operations.integrationId, fixtureIntegrationIds)
+      ),
+    })
+    if (!rows.length) return
+    for (const row of rows) await runIntegrationSync(syncTestJob(row.id)).catch(() => undefined)
+  }
+  throw new Error('Queue did not drain')
+}
+async function receiveAndDrain(request: Request, provider: string) {
+  const response = await handleInboundWebhook(request, provider)
+  await drain()
+  return response
+}
+async function externalEvents() {
+  return testDb
+    .select()
+    .from(events)
+    .where(
+      and(
+        eq(events.type, 'ticket.external_status_changed'),
+        inArray(events.entityId, fixtureTickets)
+      )
+    )
+}
+
 describe.skipIf(!fixture.available)('inbound webhook ticket branch (real DB, rolled back)', () => {
   beforeEach(async () => {
+    fixtureTickets.length = 0
+    fixtureIntegrationIds.length = 0
     await fixture.begin()
-    vi.mocked(changeStatus).mockClear()
-    vi.mocked(emitTicketExternalStatusChanged).mockClear()
   })
   afterEach(fixture.rollback)
   afterAll(fixture.close)
@@ -211,16 +269,13 @@ describe.skipIf(!fixture.available)('inbound webhook ticket branch (real DB, rol
     const actor = await seedActor()
     const ticketId = await seedLinkedTicket(actor, '77')
 
-    const response = await handleInboundWebhook(githubWebhookRequest('closed', 77), 'github')
+    const response = await receiveAndDrain(githubWebhookRequest('closed', 77), 'github')
     expect(response.status).toBe(200)
 
     const state = await ticketState(ticketId)
     expect(state.statusId).toBe(closed)
     // Applied through setTicketStatus: the closed-category transition stamped resolvedAt.
     expect(state.resolvedAt).not.toBeNull()
-
-    // No post is linked to this external id, so the post path stayed idle.
-    expect(changeStatus).not.toHaveBeenCalled()
 
     // Close-the-loop: a team-only system note lands on the thread with the
     // provider-verb copy, and the agent-watcher bell event fires once.
@@ -229,8 +284,8 @@ describe.skipIf(!fixture.available)('inbound webhook ticket branch (real DB, rol
     expect(notes[0].content).toBe('GitHub issue acme/widgets#77 was closed')
     expect(notes[0].isInternal).toBe(true)
     expect(notes[0].senderType).toBe('system')
-    expect(emitTicketExternalStatusChanged).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(emitTicketExternalStatusChanged).mock.calls[0][2]).toMatchObject({
+    expect(await externalEvents()).toHaveLength(1)
+    expect((await externalEvents())[0].payload).toMatchObject({
       integrationType: 'github',
       externalDisplayId: 'acme/widgets#77',
       externalStatus: 'Closed',
@@ -258,7 +313,7 @@ describe.skipIf(!fixture.available)('inbound webhook ticket branch (real DB, rol
     const actor = await seedActor()
     const ticketId = await seedLinkedTicket(actor, '90')
 
-    const response = await handleInboundWebhook(githubWebhookRequest('closed', 90), 'github')
+    const response = await receiveAndDrain(githubWebhookRequest('closed', 90), 'github')
     expect(response.status).toBe(200)
 
     // Status untouched (no mapping) — but the external fact still lands.
@@ -266,7 +321,7 @@ describe.skipIf(!fixture.available)('inbound webhook ticket branch (real DB, rol
     const notes = await systemNotes(ticketId, 'external_status_changed')
     expect(notes).toHaveLength(1)
     expect(notes[0].content).toContain('was closed')
-    expect(emitTicketExternalStatusChanged).toHaveBeenCalledTimes(1)
+    expect(await externalEvents()).toHaveLength(1)
   })
 
   it('reopened note uses the reopened verb', async () => {
@@ -276,7 +331,7 @@ describe.skipIf(!fixture.available)('inbound webhook ticket branch (real DB, rol
     const actor = await seedActor()
     const ticketId = await seedLinkedTicket(actor, '91')
 
-    await handleInboundWebhook(githubWebhookRequest('reopened', 91), 'github')
+    await receiveAndDrain(githubWebhookRequest('reopened', 91), 'github')
     const notes = await systemNotes(ticketId, 'external_status_changed')
     expect(notes).toHaveLength(1)
     expect(notes[0].content).toBe('GitHub issue acme/widgets#91 was reopened')
@@ -290,16 +345,16 @@ describe.skipIf(!fixture.available)('inbound webhook ticket branch (real DB, rol
     const ticketId = await seedLinkedTicket(actor, '93')
 
     // Same body twice = a provider redelivery (byte-identical payload).
-    await handleInboundWebhook(githubWebhookRequest('closed', 93), 'github')
-    await handleInboundWebhook(githubWebhookRequest('closed', 93), 'github')
+    await receiveAndDrain(githubWebhookRequest('closed', 93), 'github')
+    await receiveAndDrain(githubWebhookRequest('closed', 93), 'github')
 
     expect(await systemNotes(ticketId, 'external_status_changed')).toHaveLength(1)
-    expect(emitTicketExternalStatusChanged).toHaveBeenCalledTimes(1)
+    expect(await externalEvents()).toHaveLength(1)
 
     // A genuinely different event (reopen) still lands.
-    await handleInboundWebhook(githubWebhookRequest('reopened', 93), 'github')
+    await receiveAndDrain(githubWebhookRequest('reopened', 93), 'github')
     expect(await systemNotes(ticketId, 'external_status_changed')).toHaveLength(2)
-    expect(emitTicketExternalStatusChanged).toHaveBeenCalledTimes(2)
+    expect(await externalEvents()).toHaveLength(2)
   })
 
   it('notes every ticket linked to the same issue', async () => {
@@ -310,10 +365,10 @@ describe.skipIf(!fixture.available)('inbound webhook ticket branch (real DB, rol
     const a = await seedLinkedTicket(actor, '92')
     const b = await seedLinkedTicket(actor, '92')
 
-    await handleInboundWebhook(githubWebhookRequest('closed', 92), 'github')
+    await receiveAndDrain(githubWebhookRequest('closed', 92), 'github')
     expect(await systemNotes(a, 'external_status_changed')).toHaveLength(1)
     expect(await systemNotes(b, 'external_status_changed')).toHaveLength(1)
-    expect(emitTicketExternalStatusChanged).toHaveBeenCalledTimes(2)
+    expect(await externalEvents()).toHaveLength(2)
   })
 
   it('reopens: issues.reopened maps back through the Open mapping', async () => {
@@ -323,10 +378,10 @@ describe.skipIf(!fixture.available)('inbound webhook ticket branch (real DB, rol
     const actor = await seedActor()
     const ticketId = await seedLinkedTicket(actor, '78')
 
-    await handleInboundWebhook(githubWebhookRequest('closed', 78), 'github')
+    await receiveAndDrain(githubWebhookRequest('closed', 78), 'github')
     expect((await ticketState(ticketId)).statusId).toBe(closed)
 
-    await handleInboundWebhook(githubWebhookRequest('reopened', 78), 'github')
+    await receiveAndDrain(githubWebhookRequest('reopened', 78), 'github')
     const state = await ticketState(ticketId)
     expect(state.statusId).toBe(open)
     expect(state.resolvedAt).toBeNull()
@@ -340,7 +395,7 @@ describe.skipIf(!fixture.available)('inbound webhook ticket branch (real DB, rol
     const a = await seedLinkedTicket(actor, '80')
     const b = await seedLinkedTicket(actor, '80')
 
-    await handleInboundWebhook(githubWebhookRequest('closed', 80), 'github')
+    await receiveAndDrain(githubWebhookRequest('closed', 80), 'github')
     expect((await ticketState(a)).statusId).toBe(closed)
     expect((await ticketState(b)).statusId).toBe(closed)
   })
@@ -352,12 +407,12 @@ describe.skipIf(!fixture.available)('inbound webhook ticket branch (real DB, rol
     const actor = await seedActor()
     const ticketId = await seedLinkedTicket(actor, '79')
 
-    const response = await handleInboundWebhook(githubWebhookRequest('closed', 79), 'github')
+    const response = await receiveAndDrain(githubWebhookRequest('closed', 79), 'github')
     expect(response.status).toBe(200)
     expect((await ticketState(ticketId)).statusId).toBe(open)
   })
 
-  it('still runs the post branch when both a post and a ticket link exist', async () => {
+  it('preserves ticket progress when a post branch mapping fails', async () => {
     await seedSettings()
     const { closed } = await seedStatuses()
     const postStatusId = createId('post_status')
@@ -382,16 +437,85 @@ describe.skipIf(!fixture.available)('inbound webhook ticket branch (real DB, rol
     const postId = await seedMinimalPost(actor.principalId!)
     await testDb.insert(postExternalLinks).values({
       postId,
+      integrationId: integration.id,
+      syncScope: scope(integration),
       integrationType: 'github',
       externalId: '81',
     })
 
-    await handleInboundWebhook(githubWebhookRequest('closed', 81), 'github')
+    await receiveAndDrain(githubWebhookRequest('closed', 81), 'github')
 
-    expect(changeStatus).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(changeStatus).mock.calls[0][0]).toBe(postId)
-    expect(vi.mocked(changeStatus).mock.calls[0][1]).toBe(postStatusId)
+    const postOp = await testDb.query.integrationSyncOperations.findFirst({
+      where: and(eq(operations.sourceId, postId), eq(operations.kind, 'status')),
+    })
+    expect(postOp?.state).toBe('retry_wait')
     expect((await ticketState(ticketId)).statusId).toBe(closed)
+  })
+
+  it('acknowledges the durable receipt before applying local effects', async () => {
+    await seedSettings()
+    const { open, closed } = await seedStatuses()
+    await seedGitHubIntegration({ ticketStatusMappings: { Closed: closed } })
+    const ticketId = await seedLinkedTicket(await seedActor(), '84')
+    expect((await handleInboundWebhook(githubWebhookRequest('closed', 84), 'github')).status).toBe(
+      200
+    )
+    expect((await ticketState(ticketId)).statusId).toBe(open)
+    expect(
+      await testDb.query.integrationSyncOperations.findMany({
+        where: inArray(operations.integrationId, fixtureIntegrationIds),
+      })
+    ).toHaveLength(1)
+    await drain()
+    expect((await ticketState(ticketId)).statusId).toBe(closed)
+  })
+
+  it('does not apply the same issue number from another repository', async () => {
+    await seedSettings()
+    const { open, closed } = await seedStatuses()
+    await seedGitHubIntegration({ ticketStatusMappings: { Closed: closed } })
+    const ticketId = await seedLinkedTicket(await seedActor(), '85')
+    await receiveAndDrain(githubWebhookRequest('closed', 85, 'other/widgets'), 'github')
+    expect((await ticketState(ticketId)).statusId).toBe(open)
+    expect(await systemNotes(ticketId, 'external_status_changed')).toHaveLength(0)
+    const op = await testDb.query.integrationSyncOperations.findFirst({
+      where: eq(operations.sourceId, ticketId),
+    })
+    expect(op).toBeUndefined()
+  })
+
+  it('leaves a reference-only association untouched without importing a child operation', async () => {
+    await seedSettings()
+    const { open, closed } = await seedStatuses()
+    await seedGitHubIntegration({ ticketStatusMappings: { Closed: closed } })
+    const ticketId = await seedLinkedTicket(await seedActor(), '87')
+    await testDb
+      .update(ticketExternalLinks)
+      .set({ syncScope: '' })
+      .where(eq(ticketExternalLinks.ticketId, ticketId))
+    await receiveAndDrain(githubWebhookRequest('closed', 87), 'github')
+    expect((await ticketState(ticketId)).statusId).toBe(open)
+    expect(
+      await testDb.query.integrationSyncOperations.findMany({
+        where: eq(operations.sourceId, ticketId),
+      })
+    ).toHaveLength(0)
+    expect(await systemNotes(ticketId, 'external_status_changed')).toHaveLength(0)
+  })
+
+  it('does not regress a ticket when an older status arrives last', async () => {
+    await seedSettings()
+    const { open, closed } = await seedStatuses()
+    await seedGitHubIntegration({ ticketStatusMappings: { Closed: closed, Open: open } })
+    const ticketId = await seedLinkedTicket(await seedActor(), '86')
+    await receiveAndDrain(githubWebhookRequest('reopened', 86), 'github')
+    await receiveAndDrain(githubWebhookRequest('closed', 86), 'github')
+    expect((await ticketState(ticketId)).statusId).toBe(open)
+    expect(await systemNotes(ticketId, 'external_status_changed')).toHaveLength(1)
+    const older = await testDb.query.integrationSyncOperations.findFirst({
+      where: and(eq(operations.sourceId, ticketId), eq(operations.state, 'superseded')),
+    })
+    expect(older).toBeDefined()
   })
 
   it('acknowledges a malformed body with 200 not 500', async () => {

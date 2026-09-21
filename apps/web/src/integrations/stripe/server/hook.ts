@@ -1,3 +1,4 @@
+import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 /**
  * Stripe hook handler.
  * Enriches feedback posts with customer revenue data from Stripe.
@@ -43,7 +44,7 @@ export const stripeHook: HookHandler = {
         query: `email:'${email}'`,
         limit: '1',
       })
-      const response = await fetch(`${STRIPE_API}/customers/search?${searchParams}`, {
+      const response = await integrationFetch(`${STRIPE_API}/customers/search?${searchParams}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       })
 
@@ -105,7 +106,7 @@ export const stripeHook: HookHandler = {
   async testConnection(config: unknown): Promise<{ ok: boolean; error?: string }> {
     const { accessToken } = config as StripeConfig
     try {
-      const response = await fetch(`${STRIPE_API}/balance`, {
+      const response = await integrationFetch(`${STRIPE_API}/balance`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       })
       return { ok: response.ok, error: response.ok ? undefined : `HTTP ${response.status}` }

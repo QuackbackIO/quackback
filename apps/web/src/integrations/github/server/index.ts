@@ -1,5 +1,4 @@
 import type { IntegrationDefinition } from '@/lib/server/integrations/types'
-import { closeGitHubIssue } from '@/integrations/github/server/archive'
 import { fetchGitHubStatuses } from '@/integrations/github/server/statuses'
 import {
   registerGitHubWebhook,
@@ -42,7 +41,7 @@ export const githubIntegration: IntegrationDefinition = {
   hook: githubHook,
   inbound: githubInboundHandler,
   issues: githubIssues,
-  archive: closeGitHubIssue,
+  archiveReview: true,
   webhookRegistration: {
     register: async ({ accessToken, config, callbackUrl, secret }) => {
       const ownerRepo = config.channelId as string

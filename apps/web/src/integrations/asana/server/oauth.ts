@@ -1,3 +1,4 @@
+import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 /**
  * Asana OAuth utilities.
  *
@@ -123,7 +124,7 @@ export async function refreshAsanaToken(
     throw new Error('Asana credentials not configured')
   }
 
-  const response = await fetch(ASANA_TOKEN_URL, {
+  const response = await integrationFetch(ASANA_TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({

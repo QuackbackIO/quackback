@@ -163,14 +163,11 @@ export interface ParsedIssueRef {
  * specific member being present, never on the provider id.
  */
 export interface IssueTrackerCapability {
-  /** Refresh a linked post using the provider's own formatter. Shared sync visits every active link. */
-  refreshPost?(args: {
+  /** Read-only verification in the configured destination. Never accepts an arbitrary fetch URL. */
+  inspect?(args: {
     auth: Record<string, unknown>
-    externalId: string
-    event: import('@/lib/server/events/types').PostCreatedEvent
-    rootUrl: string
-  }): Promise<void>
-
+    reference: string
+  }): Promise<ParsedIssueRef & { title: string; content: string; version?: string }>
   /**
    * Parse a user-pasted issue reference (full URL or provider shorthand) into
    * the stored link fields. Returns null when the input is not recognizably
@@ -295,12 +292,8 @@ export interface IntegrationDefinition {
    * segment membership sync (evaluation → external platform).
    */
   userSync?: UserSyncHandler
-  /**
-   * Close/archive the linked external item on cascading post delete. Never
-   * throws — failures are warnings, not blockers (see archive.ts semantics:
-   * 404 means already-gone and counts as success).
-   */
-  archive?: (ctx: import('./archive').ArchiveContext) => Promise<import('./archive').ArchiveResult>
+  /** Offer explicit archive/close review on source deletion; never an automatic write. */
+  archiveReview?: true
   /**
    * How the inbound status-sync webhook gets set up with the provider.
    * `'manual'` = the admin configures the webhook by hand on the external
@@ -374,21 +367,8 @@ export interface IntegrationDefinition {
       query: string
     }): Promise<RemoteItemMatch[]>
   }
-  /**
-   * Two-way status sync (IF WO-15). `push` writes a Quackback status change out
-   * to the linked remote item. The framework owns the trigger (a linked-entity
-   * status-change consumer on the event spine), loop-safety (never re-pushes to
-   * the integration that reported the change), and the `pushStatusMappings`
-   * config lookup; the provider only performs the remote write.
-   */
-  remoteStatus?: {
-    push(params: {
-      accessToken: string
-      config: Record<string, unknown>
-      externalId: string
-      remoteStatus: string
-    }): Promise<{ success: boolean; error?: string }>
-  }
+  /** Mapped outbound status changes are reviewed in Sync history. */
+  remoteStatusReview?: true
   webhookRegistration?:
     | 'manual'
     | {

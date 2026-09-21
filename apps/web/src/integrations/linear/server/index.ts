@@ -1,5 +1,4 @@
 import type { IntegrationDefinition } from '@/lib/server/integrations/types'
-import { archiveLinearIssue } from '@/integrations/linear/server/archive'
 import { fetchLinearStatuses } from '@/integrations/linear/server/statuses'
 import {
   registerLinearWebhook,
@@ -37,7 +36,7 @@ export const linearIntegration: IntegrationDefinition = {
   hook: linearHook,
   inbound: linearInboundHandler,
   issues: linearIssues,
-  archive: archiveLinearIssue,
+  archiveReview: true,
   webhookRegistration: {
     register: async ({ accessToken, config, callbackUrl, secret }) => {
       const teamId = config.channelId as string | undefined

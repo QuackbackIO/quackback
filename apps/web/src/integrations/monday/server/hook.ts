@@ -1,3 +1,4 @@
+import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 /**
  * Monday.com hook handler.
  * Creates items in Monday.com when events occur.
@@ -44,7 +45,7 @@ export const mondayHook: HookHandler = {
         }
       }`
 
-      const response = await fetch(MONDAY_API, {
+      const response = await integrationFetch(MONDAY_API, {
         method: 'POST',
         headers: {
           Authorization: accessToken,
@@ -97,7 +98,7 @@ export const mondayHook: HookHandler = {
 
       // Add update with description
       if (updateBody) {
-        await fetch(MONDAY_API, {
+        await integrationFetch(MONDAY_API, {
           method: 'POST',
           headers: {
             Authorization: accessToken,
@@ -126,7 +127,7 @@ export const mondayHook: HookHandler = {
   async testConnection(config: unknown): Promise<{ ok: boolean; error?: string }> {
     const { accessToken } = config as MondayConfig
     try {
-      const response = await fetch(MONDAY_API, {
+      const response = await integrationFetch(MONDAY_API, {
         method: 'POST',
         headers: {
           Authorization: accessToken,

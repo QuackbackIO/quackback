@@ -24,18 +24,13 @@
  *    events. That distinction is `onFailure`'s `permanent` argument.
  */
 import { getHook } from './registry'
-import {
-  integrationDeliveryKey,
-  integrationDeliveryCompleted,
-  completeIntegrationDelivery,
-} from './integration-delivery'
+import { getIntegration } from '@/lib/server/integrations'
 import { isRetryableError } from './hook-utils'
 // Every module this handler reaches is imported statically, not at call time.
 // The tier opens a workspace scope around every pass, so a deferred import would
 // execute its target's top level under whichever workspace reached it first
 // (`jobs/JOBS.md` §9); `__tests__/handler-imports.test.ts` enforces it.
-import { db, webhooks, integrations, postExternalLinks, eq, sql } from '@/lib/server/db'
-import { getValidAccessToken } from '@/lib/server/integrations/token-refresh'
+import { db, webhooks, eq, sql } from '@/lib/server/db'
 import { notifyChangelogPublished } from '@/lib/server/domains/changelog/changelog.service'
 import {
   handleMaintenanceStart,
@@ -47,14 +42,7 @@ import { TerminalJobError } from '@/lib/server/jobs/definitions'
 import type { ClaimedJob } from '@/lib/server/jobs/job-queue'
 import type { HookResult } from './hook-types'
 import type { EventData } from './types'
-import type {
-  ChangelogId,
-  IntegrationId,
-  PostId,
-  PrincipalId,
-  StatusIncidentId,
-  WebhookId,
-} from '@quackback/ids'
+import type { ChangelogId, PostId, PrincipalId, StatusIncidentId, WebhookId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'event-hook-job' })
@@ -70,6 +58,16 @@ export interface HookJobData {
 export async function runHookJob(job: ClaimedJob): Promise<void> {
   const data = job.payload as unknown as HookJobData
   const { hookType, event, target, config: hookConfig } = data
+
+  // Integration delivery belongs exclusively to the durable sync worker.
+  // Enforce the queue boundary even if an invalid job is submitted.
+  if (
+    typeof hookConfig.integrationId === 'string' ||
+    getIntegration(hookType) ||
+    hookType === 'remote_status_push'
+  ) {
+    throw new TerminalJobError('Integration delivery requires the integration-sync queue')
+  }
 
   // Handle delayed changelog publish sentinel
   if (hookType === '__changelog_publish__') {
@@ -103,9 +101,6 @@ export async function runHookJob(job: ClaimedJob): Promise<void> {
   // back to its own branded id, which is still stable across attempts.
   const idempotencyKey = job.dedupeKey ?? job.jobId
 
-  const deliveryKey = integrationDeliveryKey(data)
-  if (deliveryKey && (await integrationDeliveryCompleted(deliveryKey))) return
-
   let result: HookResult
   try {
     result = await hook.run(event, target, hookConfig, { jobId: idempotencyKey })
@@ -114,51 +109,7 @@ export async function runHookJob(job: ClaimedJob): Promise<void> {
     throw new TerminalJobError(error instanceof Error ? error.message : 'Unknown error')
   }
 
-  // One-shot refresh + retry when the provider reports an expired token and the
-  // resolver attributed the target to an integration (WO-13: the outbound path
-  // previously 401'd until reconnect).
-  if (!result.success && result.authExpired) {
-    const integrationId = (hookConfig as { integrationId?: string }).integrationId
-    if (integrationId) {
-      const fresh = await getValidAccessToken(integrationId as IntegrationId)
-      if (fresh) {
-        log.info(
-          { hook_type: hookType, integration_id: integrationId },
-          'token expired mid-delivery; refreshed and retrying once'
-        )
-        try {
-          result = await hook.run(
-            event,
-            target,
-            { ...hookConfig, accessToken: fresh },
-            { jobId: idempotencyKey }
-          )
-        } catch (error) {
-          if (isRetryableError(error)) throw error
-          throw new TerminalJobError(error instanceof Error ? error.message : 'Unknown error')
-        }
-      }
-    }
-  }
-
-  // Health telemetry (WO-14): record delivery outcome on the integration, when
-  // the resolver attributed this target to one.
-  const integrationId = (hookConfig as { integrationId?: string }).integrationId
-  if (integrationId) {
-    await recordIntegrationHealth(integrationId, result).catch((err) =>
-      log.error({ err }, 'failed to record integration health')
-    )
-  }
-
-  if (result.success) {
-    if (result.externalId) {
-      await persistExternalLink(data, result).catch((err) =>
-        log.error({ err }, 'failed to persist external link')
-      )
-    }
-    if (deliveryKey) await completeIntegrationDelivery(deliveryKey, hookType)
-    return
-  }
+  if (result.success) return
 
   if (result.shouldRetry) {
     throw new Error(result.error ?? 'Hook failed (retryable)')
@@ -215,55 +166,6 @@ async function updateWebhookFailureCount(data: HookJobData, errorMessage: string
       status: sql`CASE WHEN ${webhooks.failureCount} + 1 >= ${MAX_FAILURES} THEN 'disabled' ELSE ${webhooks.status} END`,
     })
     .where(eq(webhooks.id, webhookId))
-}
-
-/**
- * Persist an external link when an outbound hook successfully creates an external issue.
- * Non-fatal — errors are logged but don't fail the hook job.
- */
-async function persistExternalLink(data: HookJobData, result: HookResult): Promise<void> {
-  // Extract postId from event data
-  const postId = (data.event.data as { post?: { id?: string } }).post?.id
-  if (!postId) return
-
-  // Look up the integration by type
-  const integration = await db.query.integrations.findFirst({
-    where:
-      typeof data.config.integrationId === 'string'
-        ? eq(integrations.id, data.config.integrationId as IntegrationId)
-        : eq(integrations.integrationType, data.hookType),
-    columns: { id: true },
-  })
-  if (!integration) return
-
-  await db
-    .insert(postExternalLinks)
-    .values({
-      postId: postId as PostId,
-      integrationId: integration.id as IntegrationId,
-      integrationType: data.hookType,
-      externalId: result.externalId!,
-      externalDisplayId: result.externalDisplayId ?? null,
-      externalUrl: result.externalUrl ?? null,
-      origin: 'event', // created by an automatic event delivery (WO-14 provenance)
-    })
-    .onConflictDoNothing()
-}
-
-/**
- * Record a delivery outcome on the integration for the settings health panel
- * (WO-14). Success stamps last_outbound_at; a failure stamps last_error +
- * last_error_at. Best-effort — never blocks or fails the delivery.
- */
-async function recordIntegrationHealth(integrationId: string, result: HookResult): Promise<void> {
-  const now = new Date()
-  const patch = result.success
-    ? { lastOutboundAt: now, lastError: null, lastErrorAt: null }
-    : { lastError: (result.error ?? 'Delivery failed').slice(0, 500), lastErrorAt: now }
-  await db
-    .update(integrations)
-    .set(patch)
-    .where(eq(integrations.id, integrationId as IntegrationId))
 }
 
 /**

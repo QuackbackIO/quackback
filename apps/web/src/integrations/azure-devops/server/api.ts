@@ -1,3 +1,4 @@
+import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 /**
  * Azure DevOps API wrapper.
  * Uses Personal Access Token (PAT) with Basic auth.
@@ -28,7 +29,7 @@ async function azureDevOpsApi(
     }
   }
 
-  const response = await fetch(url, {
+  const response = await integrationFetch(url, {
     method,
     headers,
     ...(body ? { body: JSON.stringify(body) } : {}),

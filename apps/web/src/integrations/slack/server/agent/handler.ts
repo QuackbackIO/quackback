@@ -356,7 +356,7 @@ export async function handleSlackHookJob(job: ClaimedJob): Promise<void> {
   }
   const secrets = decryptSecrets<{ accessToken: string }>(row.secrets)
   const client = new WebClient(secrets.accessToken, {
-    retryConfig: { retries: 2 },
+    retryConfig: { retries: 0 },
     timeout: 15_000,
   })
   if (kind === 'interactions' && payload.type === 'block_actions') {
@@ -678,6 +678,8 @@ async function handleSlackQuestion(input: {
         })
         .catch(() => {})
     else if (command) await replyError('Something went wrong on my side. Try again in a moment.')
+    // The durable receipt must not claim successful processing after a failed turn.
+    throw new Error('Slack app event processing failed')
   } finally {
     if (!command) endSlackTurn(team, channel, thread, turnAbort)
     if (!command)

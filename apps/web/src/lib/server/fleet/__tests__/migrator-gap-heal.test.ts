@@ -59,7 +59,13 @@ import { assessReplaySafety } from '@/lib/server/policy/migration-contract/repla
 // assembly, both gates, the truncation, the executor, the post-run check — is
 // the real code.
 vi.mock('@/lib/server/workspaces/pool-cache', () => ({
-  resolveWorkspacePassword: async () => 'password',
+  resolveWorkspacePassword: async () =>
+    decodeURIComponent(
+      new URL(
+        process.env.DRIFT_CHECK_DATABASE_URL ??
+          'postgresql://postgres:password@localhost:5432/postgres'
+      ).password
+    ),
 }))
 
 /**
@@ -357,10 +363,9 @@ describe('the drift that was measured, which is no longer healable', () => {
     const db = await scratch()
     const holes = MEASURED_HOLE.map(whenOf)
     await withSql(db, (sql) =>
-      sql.unsafe(
-        `DELETE FROM drizzle.__drizzle_migrations WHERE created_at = ANY($1::bigint[])`,
-        [holes]
-      )
+      sql.unsafe(`DELETE FROM drizzle.__drizzle_migrations WHERE created_at = ANY($1::bigint[])`, [
+        holes,
+      ])
     )
     const before = await ledgerOf(db)
 

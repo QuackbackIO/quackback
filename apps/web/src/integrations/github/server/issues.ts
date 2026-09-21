@@ -1,3 +1,4 @@
+import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 /**
  * GitHub issue-tracker capability: manual ref parsing for ticket linking.
  * The externalId namespace is the bare issue number — matching what
@@ -16,6 +17,44 @@ const ISSUE_URL_RE =
 const ISSUE_SHORTHAND_RE = /^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)#(\d+)$/
 
 export const githubIssues: IssueTrackerCapability = {
+  async inspect({ auth, reference }) {
+    const parsed = /^\d+$/.test(reference)
+      ? { externalId: reference }
+      : githubIssues.parseRef!(reference, auth)
+    if (!parsed || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(String(auth.channelId)))
+      throw new Error('Use a GitHub issue URL or number from this repository')
+    const response = await integrationFetch(
+      `${GITHUB_API}/repos/${auth.channelId}/issues/${parsed.externalId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${auth.accessToken}`,
+          Accept: 'application/vnd.github+json',
+          'User-Agent': 'quackback',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+      }
+    )
+    if (!response.ok)
+      throw issueError('Issue is unavailable in this destination', { status: response.status })
+    const issue = (await response.json()) as {
+      number: number
+      title: string
+      body: string | null
+      html_url: string
+      updated_at: string
+      pull_request?: unknown
+    }
+    if (issue.pull_request || String(issue.number) !== parsed.externalId)
+      throw new Error('Expected an issue')
+    return {
+      externalId: String(issue.number),
+      externalDisplayId: `${auth.channelId}#${issue.number}`,
+      externalUrl: issue.html_url,
+      title: issue.title,
+      content: issue.body ?? '',
+      version: issue.updated_at,
+    }
+  },
   parseRef(input: string, config: Record<string, unknown>): ParsedIssueRef | null {
     const trimmed = input.trim()
     const m = ISSUE_URL_RE.exec(trimmed) ?? ISSUE_SHORTHAND_RE.exec(trimmed)
@@ -49,7 +88,7 @@ export const githubIssues: IssueTrackerCapability = {
     const ownerRepo = auth.channelId as string
     const accessToken = auth.accessToken as string
 
-    const response = await fetch(`${GITHUB_API}/repos/${ownerRepo}/issues`, {
+    const response = await integrationFetch(`${GITHUB_API}/repos/${ownerRepo}/issues`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,

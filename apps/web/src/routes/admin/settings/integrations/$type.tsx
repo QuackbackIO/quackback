@@ -12,6 +12,8 @@ import {
 } from '@/components/admin/settings/integrations/integration-settings-registry'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { IntegrationSyncHistory } from '@/components/admin/settings/integrations/integration-sync-history'
 import { canEditPlatformCredentials, showOAuthConnect } from '@/lib/shared/integration-connect'
 
 /** URL segments use hyphens (e.g. `azure-devops`); registry keys use the
@@ -22,6 +24,9 @@ function toIntegrationType(param: string): string {
 }
 
 export const Route = createFileRoute('/admin/settings/integrations/$type')({
+  validateSearch: (search: Record<string, unknown>): { tab?: 'history' } => ({
+    tab: search.tab === 'history' ? 'history' : undefined,
+  }),
   loader: async ({ context, params }) => {
     const type = toIntegrationType(params.type)
     if (!getIntegrationSettingsEntry(type)) throw notFound()
@@ -45,6 +50,13 @@ function IntegrationSettingsPage() {
     platformCredentialsManaged = false,
   } = data
   const [credentialsOpen, setCredentialsOpen] = useState(false)
+  const { tab = 'settings' } = Route.useSearch()
+  const navigate = Route.useNavigate()
+  const setTab = (value: string) =>
+    void navigate({
+      search: (previous) => ({ ...previous, tab: value === 'history' ? 'history' : undefined }),
+      replace: true,
+    })
 
   const { catalog, Icon, ConnectionActions, setup } = entry
   const status = integration?.status ?? null
@@ -82,57 +94,74 @@ function IntegrationSettingsPage() {
         }
       />
 
-      {integration && (isConnected || isPaused) && (
-        <>
-          {entry.bareConfig ? (
-            <Suspense fallback={<Skeleton className="h-40 w-full" />}>
-              {entry.renderConfig?.({ integration, isConnected })}
-            </Suspense>
-          ) : (
+      <Tabs variant="line" value={tab} onValueChange={(value) => setTab(String(value))}>
+        <TabsList>
+          <TabsTrigger value="settings">Settings</TabsTrigger>
+          <TabsTrigger value="history">Sync history</TabsTrigger>
+        </TabsList>
+        <TabsContent value="history">
+          <IntegrationSyncHistory key={type} provider={type} />
+        </TabsContent>
+        <TabsContent value="settings" className="space-y-6">
+          {integration && (isConnected || isPaused) && (
             <>
-              <IntegrationHealthPanel health={integration.health} />
-              {entry.renderConfig ? (
-                <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-                  <Suspense fallback={<Skeleton className="h-40 w-full" />}>
-                    {entry.renderConfig({ integration, isConnected })}
-                  </Suspense>
-                </div>
+              {entry.bareConfig ? (
+                <Suspense fallback={<Skeleton className="h-40 w-full" />}>
+                  {entry.renderConfig?.({ integration, isConnected })}
+                </Suspense>
               ) : (
-                entry.connectedBanner
+                <>
+                  <IntegrationHealthPanel
+                    health={integration.health}
+                    onViewHistory={() => setTab('history')}
+                  />
+                  {entry.renderConfig ? (
+                    <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
+                      <Suspense fallback={<Skeleton className="h-40 w-full" />}>
+                        {entry.renderConfig({ integration, isConnected })}
+                      </Suspense>
+                    </div>
+                  ) : (
+                    entry.connectedBanner
+                  )}
+                </>
               )}
             </>
           )}
-        </>
-      )}
 
-      {!integration && (
-        <IntegrationSetupCard
-          icon={<Icon className="h-6 w-6 text-muted-foreground" />}
-          title={setup.title}
-          description={setup.description}
-          steps={setup.steps}
-          connectionForm={
-            <div className="flex flex-col items-end gap-2">
-              {hasCredentials && !canConnect && (
-                <Button onClick={() => setCredentialsOpen(true)}>Configure credentials</Button>
-              )}
-              {canConnect && (
-                <div className="flex items-center gap-2">
-                  {hasCredentials && canEditCredentials && (
-                    <Button variant="outline" size="sm" onClick={() => setCredentialsOpen(true)}>
-                      Configure credentials
-                    </Button>
+          {!integration && (
+            <IntegrationSetupCard
+              icon={<Icon className="h-6 w-6 text-muted-foreground" />}
+              title={setup.title}
+              description={setup.description}
+              steps={setup.steps}
+              connectionForm={
+                <div className="flex flex-col items-end gap-2">
+                  {hasCredentials && !canConnect && (
+                    <Button onClick={() => setCredentialsOpen(true)}>Configure credentials</Button>
                   )}
-                  <Suspense fallback={null}>
-                    <ConnectionActions integrationId={undefined} isConnected={false} />
-                  </Suspense>
+                  {canConnect && (
+                    <div className="flex items-center gap-2">
+                      {hasCredentials && canEditCredentials && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCredentialsOpen(true)}
+                        >
+                          Configure credentials
+                        </Button>
+                      )}
+                      <Suspense fallback={null}>
+                        <ConnectionActions integrationId={undefined} isConnected={false} />
+                      </Suspense>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          }
-        />
-      )}
-
+              }
+            />
+          )}
+        </TabsContent>
+      </Tabs>
       {hasCredentials && canEditCredentials && (
         <PlatformCredentialsDialog
           integrationType={type}

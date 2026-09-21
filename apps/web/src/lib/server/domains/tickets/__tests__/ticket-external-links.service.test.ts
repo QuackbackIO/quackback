@@ -8,6 +8,9 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest'
 import { createId, type PrincipalId, type TicketId, type UserId } from '@quackback/ids'
+vi.mock('@/lib/server/secret-key', () => ({
+  activeSecretKey: () => 'integration-sync-test-key-32-characters-only',
+}))
 
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
@@ -56,6 +59,15 @@ import { azureDevOpsIssues } from '@/integrations/azure-devops/server/issues'
 import { listTicketMessages } from '../ticket-message.service'
 import { resolveActorPermissions } from '@/lib/server/policy/permissions'
 import type { Actor } from '@/lib/server/policy/types'
+import { runIntegrationSync } from '@/lib/server/integrations/sync/worker'
+import { integrationSyncOperations } from '@/lib/server/db'
+import { syncTestJob } from '@/lib/server/integrations/sync/__tests__/job'
+
+async function createAndRun(ticketId: TicketId, actor: Actor) {
+  const queued = await createIssueForTicket(ticketId, 'github', actor)
+  await runIntegrationSync(syncTestJob(queued.operationId))
+  return (await listTicketExternalLinks(ticketId))[0]
+}
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -413,6 +425,26 @@ describe.skipIf(!fixture.available)('ticket-external-links.service (real DB, rol
     ).resolves.toBeUndefined()
   })
 
+  it('does not adopt a ticket created before forward sync started', async () => {
+    await seedSettings()
+    await seedDefaultStatus()
+    await seedGitHubIntegration()
+    const actor = await seedActor()
+    const ticketId = await makeTicket(actor)
+    await testDb
+      .update(tickets)
+      .set({ createdAt: new Date('2020-01-01T00:00:00Z') })
+      .where(eq(tickets.id, ticketId))
+    await expect(createIssueForTicket(ticketId, 'github', actor)).rejects.toThrow(
+      'This ticket predates integration sync'
+    )
+    expect(
+      await testDb.query.integrationSyncOperations.findMany({
+        where: eq(integrationSyncOperations.sourceId, ticketId),
+      })
+    ).toHaveLength(0)
+  })
+
   it('creates a GitHub issue from the ticket, links it, and notes "Created"', async () => {
     await seedSettings()
     await seedDefaultStatus()
@@ -442,7 +474,7 @@ describe.skipIf(!fixture.available)('ticket-external-links.service (real DB, rol
         )
       )
     try {
-      const link = await createIssueForTicket(ticketId, 'github', actor)
+      const link = await createAndRun(ticketId, actor)
 
       expect(link.externalId).toBe('77')
       expect(link.externalDisplayId).toBe('acme/widgets#77')
@@ -457,7 +489,7 @@ describe.skipIf(!fixture.available)('ticket-external-links.service (real DB, rol
 
       const page = await listTicketMessages(ticketId, { includeInternal: true })
       const note = page.messages.find((m) => m.systemEvent?.kind === 'external_linked')
-      expect(note?.content).toBe('Created GitHub issue acme/widgets#77')
+      expect(note?.content).toBe('Linked GitHub issue acme/widgets#77')
     } finally {
       fetchSpy.mockRestore()
     }
@@ -505,7 +537,7 @@ describe.skipIf(!fixture.available)('ticket-external-links.service (real DB, rol
         )
       )
     try {
-      const link = await createIssueForTicket(ticketId, 'github', actor)
+      const link = await createAndRun(ticketId, actor)
       expect(link.externalId).toBe('78')
       const [, init] = fetchSpy.mock.calls[0]
       const sent = JSON.parse((init as RequestInit).body as string)
@@ -544,7 +576,7 @@ describe.skipIf(!fixture.available)('ticket-external-links.service (real DB, rol
         )
       )
     try {
-      await createIssueForTicket(ticketId, 'github', actor)
+      await createAndRun(ticketId, actor)
       const sent = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string) as {
         body: string
       }
@@ -594,9 +626,12 @@ describe.skipIf(!fixture.available)('ticket-external-links.service (real DB, rol
       .spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(new Response('nope', { status: 401 }))
     try {
-      await expect(createIssueForTicket(ticketId, 'github', actor)).rejects.toThrow(
-        /authentication failed/i
-      )
+      const queued = await createIssueForTicket(ticketId, 'github', actor)
+      await runIntegrationSync(syncTestJob(queued.operationId))
+      const operation = await testDb.query.integrationSyncOperations.findFirst({
+        where: eq(integrationSyncOperations.id, queued.operationId),
+      })
+      expect(operation?.state).toBe('auth_required')
       expect(await listTicketExternalLinks(ticketId)).toEqual([])
     } finally {
       fetchSpy.mockRestore()

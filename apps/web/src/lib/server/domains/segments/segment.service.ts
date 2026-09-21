@@ -138,8 +138,11 @@ export async function listSegments(): Promise<SegmentWithCount[]> {
 /**
  * Get a single segment by ID.
  */
-export async function getSegment(segmentId: SegmentId): Promise<Segment | null> {
-  const row = await db.query.segments.findFirst({
+export async function getSegment(
+  segmentId: SegmentId,
+  executor: typeof db | import('@/lib/server/db').Transaction = db
+): Promise<Segment | null> {
+  const row = await executor.query.segments.findFirst({
     where: and(eq(segments.id, segmentId), isNull(segments.deletedAt)),
   })
   if (!row) return null

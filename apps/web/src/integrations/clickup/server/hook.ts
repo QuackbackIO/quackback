@@ -1,3 +1,4 @@
+import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 /**
  * ClickUp hook handler.
  * Creates ClickUp tasks when feedback events occur.
@@ -37,7 +38,7 @@ export const clickupHook: HookHandler = {
     const { name, description } = buildClickUpTaskBody(event, rootUrl)
 
     try {
-      const response = await fetch(`${CLICKUP_API}/list/${listId}/task`, {
+      const response = await integrationFetch(`${CLICKUP_API}/list/${listId}/task`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${accessToken}`,

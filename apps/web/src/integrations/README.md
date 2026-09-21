@@ -58,26 +58,28 @@ The **framework** (the parts every provider shares) stays outside this folder:
 `_template/__tests__/template.conformance.test.ts` every run, so the example can
 never rot. Read it first — it's the shortest tour of the contract.
 
-## Post delivery and content refresh
+## Durable sync and manual recovery
 
-Post sync is orchestrated by `lib/server/integrations/post-sync.ts`. Retry resolves only
-integration mappings; it never republishes `post.created` to webhooks, AI, notifications,
-or workflows. Each destination is handled independently, so a link for one integration
-cannot block a missing delivery to another.
+Integration producers enqueue only a connection reference and encrypted intent through
+`lib/server/integrations/sync`. The ordinary event queue no longer executes integration
+hooks. Current credentials, configuration and source eligibility are loaded by the sync
+worker immediately before dispatch.
 
-Original fan-out and manual retry share `integrationDeliveryKey`: post + integration
-instance + destination. Pending/running work is reused; only failed jobs are reset, with
-fresh payloads and an after-commit worker wake. Completed receipts survive queue retention.
-Pre-upgrade pending jobs are reused by retry too. This prevents duplicate retry jobs; it
-is not provider-side exactly-once delivery across a crash after an external API succeeds.
+Operation identity includes source, installation and destination. Atomic claims, leases,
+dispatch markers and attempt evidence prevent a failed local write or queue pruning from
+authorizing a duplicate remote create. Integration-only post resync visits every active
+link without re-emitting `post.created` to other sinks.
 
-Providers can implement `issues.refreshPost` to update existing linked content using their
-native formatter. The orchestrator visits every active link and reports failures even
-when other destinations succeeded. Unsupported refresh capabilities are skipped without
-blocking other integrations. Linear supplies the first adapter; adding another provider
-does not require changing the orchestration or endpoint.
+Remote edits and selected archive requests appear in the integration's Sync history.
+The unconditional refresh, status-push and archive writers have been removed. Provider
+support for automatic remote edits must include a verified conditional-write contract;
+a read followed by an unconditional write is insufficient. Verified link-existing recovery
+currently uses the read-only `issues.inspect` capability for GitHub and Linear.
 
-Canonical post events recover legacy rich-text images through `contentJsonToMarkdown`.
-Markdown issue/card formatters should use `buildIntegrationPostContent` for absolute media
-URLs and intact attachment fallback around truncation. Linear opts into video-as-image
-syntax for its ingestion API; other Markdown providers retain ordinary video links.
+Canonical post events recover rich-text media through `contentJsonToMarkdown`. Markdown
+formatters use `buildIntegrationPostContent` for absolute media URLs and intact attachment
+fallback around truncation. Linear uses video-as-image syntax; other Markdown providers
+retain ordinary video links.
+
+See [Integration sync safety](../../../../docs/integration-sync-safety.md) for invariants,
+provider boundaries, retention, the forward-only start boundary and offline replacement and rollback procedure.

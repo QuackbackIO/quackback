@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { verifySlackSignature } from './verify'
-import { enqueueJob } from '@/lib/server/jobs/job-queue'
+import { queueAppHookSync } from '@/lib/server/integrations/sync/app-hooks'
 import { encryptSecrets } from '@/lib/server/integrations/encryption'
 import type { IntegrationDefinition } from '@/lib/server/integrations/types'
 import { shouldEnqueueSlackEvent } from './agent/addressing'
@@ -53,13 +53,19 @@ export const slackAppHooks: NonNullable<IntegrationDefinition['appHooks']> = {
       return new Response(null, { status: 200 })
     // Transport payloads are encrypted, short-lived, and never written to
     // assistant logs. Full thread context is fetched in memory by the worker.
-    await enqueueJob({
-      queue: 'slack-hook',
-      payload: { kind, encryptedPayload: encryptSecrets(payload) },
-      dedupeKey: this.deliveryId(kind, rawBody, _contentType),
-      maxAttempts: 3,
-      executor,
-    })
+    await queueAppHookSync(
+      'slack',
+      'slack-hook',
+      this.deliveryId(kind, rawBody, _contentType)!,
+      {
+        kind,
+        encryptedPayload: encryptSecrets(payload),
+        ...(typeof payload.event_time === 'number' && Number.isFinite(payload.event_time)
+          ? { occurredAt: new Date(payload.event_time * 1000).toISOString() }
+          : {}),
+      },
+      executor
+    )
     return kind === 'commands'
       ? Response.json({ response_type: 'ephemeral', text: 'Working on it…' })
       : new Response(null, { status: 200 })

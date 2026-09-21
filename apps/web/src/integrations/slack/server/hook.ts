@@ -109,7 +109,11 @@ export const slackHook: HookHandler = {
       return { success: true }
     }
 
-    const client = new WebClient(accessToken)
+    const client = new WebClient(accessToken, {
+      retryConfig: { retries: 0 },
+      timeout: 20_000,
+      rejectRateLimitedCalls: true,
+    })
 
     try {
       const result = await postMessage(client, channelId, message)
@@ -136,6 +140,8 @@ export const slackHook: HookHandler = {
           success: false,
           error: `Authentication failed: ${errorCode}. Please reconnect Slack.`,
           shouldRetry: false,
+          authExpired: true,
+          deliveryOutcome: 'rejected',
         }
       }
 

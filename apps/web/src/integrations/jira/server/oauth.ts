@@ -1,3 +1,4 @@
+import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 /**
  * Jira (Atlassian) OAuth 2.0 (3LO) utilities.
  */
@@ -126,7 +127,7 @@ export async function refreshJiraToken(
     throw new Error('Jira credentials not configured')
   }
 
-  const response = await fetch('https://auth.atlassian.com/oauth/token', {
+  const response = await integrationFetch('https://auth.atlassian.com/oauth/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

@@ -1,3 +1,4 @@
+import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 /**
  * Jira hook handler.
  * Creates Jira issues when feedback events occur.
@@ -41,7 +42,7 @@ async function jiraApi(
   accessToken: string,
   body?: unknown
 ): Promise<Response> {
-  const response = await fetch(url, {
+  const response = await integrationFetch(url, {
     method,
     headers: {
       Authorization: `Bearer ${accessToken}`,

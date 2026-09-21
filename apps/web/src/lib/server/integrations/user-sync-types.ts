@@ -27,6 +27,8 @@
  * inbound event is valid and parseable.
  */
 export interface UserIdentifyPayload {
+  deliveryId?: string
+  occurredAt?: string
   /** Email — primary lookup key for matching Quackback users. */
   email: string
   /** The platform's userId, stored for future cross-system identity linking. */

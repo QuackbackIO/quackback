@@ -369,6 +369,8 @@ went stale the moment a queue moved.
 | `sending-domain-recheck`        | `20 6 * * *`   | 1           | 3        | 60s   |
 | `analytics`                     | `0 * * * *`    | 1           | 3        | 60s   |
 | `events`                        | —              | 5           | 6        | 60s   |
+| `integration-sync`              | —              | 5           | 6        | 90s   |
+| `integration-sync-sweep`        | `* * * * *`    | 1           | 1        | 60s   |
 | `event-dispatch`                | —              | 5           | 10       | 60s   |
 | `segment-evaluation`            | dynamic        | 2           | 3        | 60s   |
 | `help-center-translate`         | —              | 1           | 3        | 120s  |

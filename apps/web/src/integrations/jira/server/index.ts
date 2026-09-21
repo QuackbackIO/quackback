@@ -1,5 +1,4 @@
 import type { IntegrationDefinition } from '@/lib/server/integrations/types'
-import { closeJiraIssue } from '@/integrations/jira/server/archive'
 import { fetchJiraStatuses } from '@/integrations/jira/server/statuses'
 import {
   registerJiraWebhook,
@@ -30,7 +29,7 @@ export const jiraIntegration: IntegrationDefinition = {
   hook: jiraHook,
   inbound: jiraInboundHandler,
   issues: jiraIssues,
-  archive: closeJiraIssue,
+  archiveReview: true,
   webhookRegistration: {
     register: async ({ accessToken, config, callbackUrl }) => {
       const cloudId = config.cloudId as string

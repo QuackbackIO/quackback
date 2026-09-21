@@ -92,15 +92,15 @@ describe('registry capability coverage', () => {
     ])
     for (const type of ARCHIVE_PROVIDERS) {
       expect(
-        getIntegration(type)?.archive,
-        `${type} must declare .archive (close/archive the linked item on post delete)`
-      ).toBeTypeOf('function')
+        getIntegration(type)?.archiveReview,
+        `${type} must declare archive review on post delete`
+      ).toBe(true)
     }
     for (const type of listIntegrationTypes()) {
-      if (getIntegration(type)?.archive) {
+      if (getIntegration(type)?.archiveReview) {
         expect(
           ARCHIVE_PROVIDERS.has(type),
-          `${type} declares .archive — add it to ARCHIVE_PROVIDERS so the set stays exact`
+          `${type} declares .archiveReview — add it to ARCHIVE_PROVIDERS so the set stays exact`
         ).toBe(true)
       }
     }

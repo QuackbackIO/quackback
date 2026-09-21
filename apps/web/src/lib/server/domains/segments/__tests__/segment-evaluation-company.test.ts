@@ -68,7 +68,12 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
         })),
       })),
       transaction: vi.fn(async (fn: (tx: unknown) => Promise<void>) => {
-        await fn({
+        return fn({
+          execute: vi.fn(async (query: SqlObj) => {
+            if (query.text.includes('p.id')) capturedSql = query.text
+            return []
+          }),
+          select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn(async () => []) })) })),
           insert: vi.fn(() => ({
             values: vi.fn(() => ({
               onConflictDoNothing: vi.fn(async () => {}),
@@ -247,7 +252,7 @@ describe('evaluator — company_attr attribute (custom attributes)', () => {
       { attribute: 'company_attr', operator: 'eq', value: 'eu', metadataKey: 'region' },
     ])
     await evaluateDynamicSegment('segment_test' as never)
-    expect(capturedSql).toContain("co.custom_attributes::jsonb->>")
+    expect(capturedSql).toContain('co.custom_attributes::jsonb->>')
     expect(capturedSql).toContain('region')
     expect(capturedSql).toContain('eu')
   })
