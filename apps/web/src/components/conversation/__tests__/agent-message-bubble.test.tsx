@@ -9,6 +9,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { render, screen, cleanup, fireEvent } from '@testing-library/react'
 import { AgentMessageBubble } from '../message-bubble'
+import { canEditAgentMessage } from '../message-edit'
 import type { AgentConversationMessageDTO } from '@/lib/shared/conversation/types'
 
 afterEach(cleanup)
@@ -36,6 +37,66 @@ function baseMessage(over: Partial<AgentConversationMessageDTO> = {}): AgentConv
     ...over,
   }
 }
+
+describe('AgentMessageBubble — edited mark', () => {
+  it('shows a small (edited) note after the time once the body has been edited', () => {
+    render(
+      <AgentMessageBubble
+        message={baseMessage({
+          senderType: 'agent',
+          editedAt: '2026-07-01T01:00:00.000Z',
+        })}
+      />
+    )
+    expect(screen.getByText('(edited)')).toBeInTheDocument()
+    expect(screen.getByTitle(/^Edited /)).toBeInTheDocument()
+  })
+
+  it('omits the note on a message that was never edited', () => {
+    render(<AgentMessageBubble message={baseMessage()} />)
+    expect(screen.queryByText('(edited)')).not.toBeInTheDocument()
+  })
+
+  it('opens an inline editor from the message menu', () => {
+    const onEdit = vi.fn(async () => {})
+    render(
+      <AgentMessageBubble
+        canEdit
+        onEdit={onEdit}
+        message={baseMessage({
+          senderType: 'agent',
+          content: 'Hello there',
+          author: { principalId: 'principal_me' as never, displayName: 'James', avatarUrl: null },
+        })}
+      />
+    )
+    fireEvent.click(screen.getByLabelText('More actions'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Edit message' }))
+    expect(screen.getByTestId('message-edit-form')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByTestId('message-edit-form')).not.toBeInTheDocument()
+    expect(screen.getByText('Hello there')).toBeInTheDocument()
+  })
+
+  it('offers Edit message only for the author\'s own ordinary message', () => {
+    const own = baseMessage({
+      senderType: 'agent',
+      author: { principalId: 'principal_me' as never, displayName: 'James', avatarUrl: null },
+    })
+    expect(canEditAgentMessage(own, 'principal_me')).toBe(true)
+    expect(canEditAgentMessage(own, 'principal_other')).toBe(false)
+    expect(canEditAgentMessage({ ...own, isAssistant: true }, 'principal_me')).toBe(false)
+    expect(canEditAgentMessage({ ...own, senderType: 'system' }, 'principal_me')).toBe(false)
+    expect(
+      canEditAgentMessage(
+        { ...own, block: { kind: 'buttons', prompt: 'Pick', options: [] } as never },
+        'principal_me'
+      )
+    ).toBe(false)
+  })
+})
 
 describe('AgentMessageBubble — inbox translation (P2-D.1)', () => {
   it('renders the plain content with no toggle when translation is absent (pin: unchanged default)', () => {

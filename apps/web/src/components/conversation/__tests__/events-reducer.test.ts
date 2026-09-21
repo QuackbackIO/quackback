@@ -365,6 +365,33 @@ describe('applyAgentThreadEvent', () => {
     })
   })
 
+  it('patches an edited body on message_updated and keeps the viewer reaction', () => {
+    const prev = agentCache({
+      messages: [
+        agentMessage('m1', {
+          content: 'typo',
+          reactions: [{ emoji: '👍', count: 1, hasReacted: true }],
+        }),
+      ],
+    })
+    const next = applyAgentThreadEvent(
+      prev,
+      {
+        kind: 'message_updated',
+        conversationId: CONV_ID,
+        message: agentMessage('m1', {
+          content: 'fixed',
+          editedAt: '2026-07-01T11:00:00.000Z',
+          reactions: [{ emoji: '👍', count: 1, hasReacted: false }],
+        }),
+      },
+      CONV_ID
+    )!
+    expect(next.messages[0].content).toBe('fixed')
+    expect(next.messages[0].editedAt).toBe('2026-07-01T11:00:00.000Z')
+    expect(next.messages[0].reactions[0].hasReacted).toBe(true)
+  })
+
   it('returns prev untouched on message_updated for a message outside the loaded page', () => {
     const prev = agentCache()
     const evt: ConversationStreamEvent = {
@@ -495,6 +522,32 @@ describe('applyVisitorThreadEvent', () => {
         {
           kind: 'conversation',
           conversation: conversation({ id: OTHER_CONV_ID, status: 'closed' }),
+        },
+        CONV_ID
+      )
+    ).toBe(prev)
+  })
+
+  it('patches a customer-visible edit in place', () => {
+    const prev = visitorCache()
+    const next = applyVisitorThreadEvent(
+      prev,
+      {
+        kind: 'message_edited',
+        conversationId: CONV_ID,
+        message: baseMessage('m1', { content: 'fixed', editedAt: '2026-07-01T11:00:00.000Z' }),
+      },
+      CONV_ID
+    )!
+    expect(next.messages[0].content).toBe('fixed')
+    expect(next.messages[0].editedAt).toBe('2026-07-01T11:00:00.000Z')
+    expect(
+      applyVisitorThreadEvent(
+        prev,
+        {
+          kind: 'message_edited',
+          conversationId: CONV_ID,
+          message: baseMessage('missing', { content: 'nope' }),
         },
         CONV_ID
       )

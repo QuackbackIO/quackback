@@ -9,6 +9,7 @@ import {
   canStartConversation,
   canActAsAgent,
   canDeleteMessage,
+  canEditMessage,
   type ConversationShape,
 } from '../conversation'
 import { ANONYMOUS_ACTOR, type Actor } from '../types'
@@ -170,5 +171,32 @@ describe('canDeleteMessage', () => {
       segmentIds: new Set(),
     }
     expect(canDeleteMessage(serviceVisitor, ownVisitorMsg, openConv).allowed).toBe(false)
+  })
+})
+
+describe('canEditMessage', () => {
+  const own = { authorPrincipalId: VISITOR }
+  const agentOwn = { authorPrincipalId: 'principal_admin' as PrincipalId }
+
+  it('lets the author edit their own message', () => {
+    expect(canEditMessage(visitorActor, own).allowed).toBe(true)
+    expect(canEditMessage(adminActor, agentOwn).allowed).toBe(true)
+  })
+
+  it('denies editing someone else\'s message, including a teammate\'s', () => {
+    expect(canEditMessage(adminActor, own).allowed).toBe(false)
+    expect(canEditMessage(memberActor, own).allowed).toBe(false)
+    expect(canEditMessage(visitorActor, agentOwn).allowed).toBe(false)
+  })
+
+  it('denies a service principal and an author-less row', () => {
+    const serviceVisitor: Actor = {
+      principalId: VISITOR,
+      role: 'user',
+      principalType: 'service',
+      segmentIds: new Set(),
+    }
+    expect(canEditMessage(serviceVisitor, own).allowed).toBe(false)
+    expect(canEditMessage(visitorActor, { authorPrincipalId: null }).allowed).toBe(false)
   })
 })

@@ -131,6 +131,10 @@ export interface ConversationMessageDTO {
   senderType: MessageSenderType
   content: string
   createdAt: string
+  /** ISO timestamp of the last body edit, or null/absent when never edited.
+   *  Optional so pre-existing fixtures keep compiling; `toMessageDTO` always
+   *  sets it. Drives the small "(edited)" mark beside the timestamp. */
+  editedAt?: string | null
   /** Null for system events, which have no human author. */
   author: ConversationAuthorDTO | null
   attachments: ConversationAttachment[]
@@ -477,13 +481,23 @@ export type ConversationStreamEvent =
       typistPrincipalId?: PrincipalId
     }
   | { kind: 'message_deleted'; conversationId: ConversationId; messageId: ConversationMessageId }
-  // An existing message changed in an agent-only way (reaction or flag toggled).
-  // Carries the enriched AgentConversationMessageDTO and is published on the inbox
-  // channel ONLY (publishAgentConversationEvent) — it never reaches the visitor.
+  // An existing message changed in an agent-visible way: a reaction or flag
+  // toggle, or a body edit. Carries the enriched AgentConversationMessageDTO
+  // and is published on the inbox channel ONLY (publishAgentConversationEvent)
+  // — it never reaches the visitor. A customer-visible body edit ALSO publishes
+  // `message_edited` on the visitor's conversation channel.
   | {
       kind: 'message_updated'
       conversationId: ConversationId
       message: AgentConversationMessageDTO
+    }
+  // A customer-visible message body was edited. Base DTO only (no reactions,
+  // flags, or translatedFrom). Published on the visitor's conversation channel
+  // so their open thread replaces the bubble. Internal notes do not emit this.
+  | {
+      kind: 'message_edited'
+      conversationId: ConversationId
+      message: ConversationMessageDTO
     }
   // Ephemeral AI-assistant working status while Quinn's turn runs — never
   // persisted. Published on the conversation channel ONLY (not the inbox) so it

@@ -529,6 +529,19 @@ export async function dispatchMessageDeleted(
   })
 }
 
+export async function dispatchMessageUpdated(
+  actor: EventActor,
+  message: EventMessageData,
+  conversation: EventConversationRef,
+  editedAt: string
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'message.updated',
+    data: { message, conversation, editedAt },
+  })
+}
+
 export async function dispatchTicketCreated(
   actor: EventActor,
   ticket: EventTicketData

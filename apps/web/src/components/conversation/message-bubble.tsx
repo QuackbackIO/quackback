@@ -15,7 +15,7 @@
  * tokens both bubbles render from (UNIFIED-INBOX-SPEC.md §2.6) — geometry
  * and fill live in one place so the two idioms cannot drift apart.
  */
-import { memo, useState } from 'react'
+import { memo, useCallback, useRef, useState } from 'react'
 import {
   EllipsisVerticalIcon,
   TrashIcon,
@@ -31,7 +31,7 @@ import {
   CheckIcon,
   ExclamationCircleIcon,
 } from '@heroicons/react/24/solid'
-import { BookmarkIcon, SparklesIcon } from '@heroicons/react/24/outline'
+import { BookmarkIcon, PencilIcon, SparklesIcon } from '@heroicons/react/24/outline'
 import { Avatar } from '@/components/ui/avatar'
 import { ConversationAttachmentList } from '@/components/shared/conversation-attachments'
 import { ReactionChip } from '@/components/shared/reaction-chip'
@@ -68,9 +68,25 @@ import {
   AssistantAnswer,
 } from '@/components/shared/conversation/assistant-turn'
 import { PendingActionCard } from '@/components/conversation/pending-action-card'
+import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import {
+  CONVERSATION_EDITOR_FEATURES,
+  CONVERSATION_NOTE_FEATURES,
+} from '@/components/conversation/conversation-editor-features'
+import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 
 function timeLabel(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+}
+
+/** Small grey "(edited)" beside the timestamp, the same mark Slack uses. */
+function EditedMark({ at }: { at?: string | null }) {
+  if (!at) return null
+  return (
+    <span className="text-muted-foreground/50" title={`Edited ${timeLabel(at)}`}>
+      (edited)
+    </span>
+  )
 }
 
 function channelDeliveryLabel(delivery: ChannelDelivery): string {
@@ -268,6 +284,12 @@ interface AgentMessageBubbleProps {
    *  render. That's what lets `memo` below actually skip unrelated rows on a
    *  re-render (perf review). */
   onDelete?: (messageId: ConversationMessageId) => void
+  /** Author-only. Opens an inline editor; the server repeats the authorship check. */
+  canEdit?: boolean
+  onEdit?: (
+    messageId: ConversationMessageId,
+    draft: { content: string; contentJson: TiptapContent | null }
+  ) => Promise<void>
   /** Toggle the caller's reaction with `emoji` (hasReacted = current state). */
   onToggleReaction?: (messageId: ConversationMessageId, emoji: string, hasReacted: boolean) => void
   /** Set/clear the team-wide flag (next = the desired flagged state). */
@@ -336,14 +358,104 @@ interface VisitorMessageBubbleProps {
    *  above the bubble and inline [n] markers in `content` become citation dots. */
   citations?: ConversationMessageCitation[]
   time?: string
+  /** ISO timestamp of the last body edit. Renders a small "(edited)" mark. */
+  editedAt?: string | null
   linkPreviews?: boolean
   getAuthHeaders?: () => Record<string, string>
   embedOpenMode?: EmbedOpenMode
 }
 
+function MessageEditForm({
+  message,
+  onCancel,
+  onSave,
+}: {
+  message: AgentConversationMessageDTO
+  onCancel: () => void
+  onSave: (draft: { content: string; contentJson: TiptapContent | null }) => Promise<void>
+}) {
+  const jsonRef = useRef<TiptapContent | null>(message.contentJson)
+  const markdownRef = useRef(message.content)
+  const [saving, setSaving] = useState(false)
+  const [empty, setEmpty] = useState(false)
+  const hasAttachments = message.attachments.length > 0
+  const saveRef = useRef<() => void>(() => {})
+
+  const save = async () => {
+    if (saving) return
+    const textEmpty = !markdownRef.current.trim() && isEmptyTiptapDoc(jsonRef.current ?? undefined)
+    if (textEmpty && !hasAttachments) return
+    setSaving(true)
+    try {
+      await onSave({
+        content: markdownRef.current.trim(),
+        contentJson: isEmptyTiptapDoc(jsonRef.current ?? undefined) ? null : jsonRef.current,
+      })
+    } catch {
+      setSaving(false)
+    }
+  }
+  saveRef.current = () => {
+    void save()
+  }
+  // Enter saves, Shift+Enter inserts a line break. The keymap closure is baked
+  // in at editor creation, so this callback must stay stable.
+  const onSubmit = useCallback(() => saveRef.current(), [])
+
+  return (
+    <div
+      className="w-[min(32rem,70vw)] rounded-lg border border-border bg-background px-3 py-2 focus-within:border-primary/60"
+      data-testid="message-edit-form"
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          e.stopPropagation()
+          onCancel()
+        }
+      }}
+    >
+      <RichTextEditor
+        value={message.contentJson ?? message.content}
+        features={message.isInternal ? CONVERSATION_NOTE_FEATURES : CONVERSATION_EDITOR_FEATURES}
+        borderless
+        minHeight="2.5rem"
+        autofocus="end"
+        placeholder="Edit message"
+        className="max-h-64 overflow-y-auto"
+        onChange={(json, _html, markdown) => {
+          const doc = json as TiptapContent
+          jsonRef.current = doc
+          markdownRef.current = markdown
+          setEmpty(!markdown.trim() && isEmptyTiptapDoc(doc))
+        }}
+        onSubmit={onSubmit}
+      />
+      <div className="mt-1.5 flex items-center justify-end gap-1.5">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={saving}
+          className="rounded-md px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={() => void save()}
+          disabled={saving || (empty && !hasAttachments)}
+          className="rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+        >
+          {saving ? 'Saving…' : 'Save changes'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export const AgentMessageBubble = memo(function AgentMessageBubble({
   message,
   onDelete = () => {},
+  canEdit = false,
+  onEdit,
   onToggleReaction = () => {},
   onToggleFlag = () => {},
   onMarkUnread = () => {},
@@ -362,6 +474,7 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
   // open (the pointer leaves the row to interact with the portal'd content).
   const [emojiOpen, setEmojiOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [editing, setEditing] = useState(false)
 
   // System events (e.g. "assigned to …") are status notices, not messages:
   // centered, no avatar, no actions.
@@ -440,6 +553,17 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
             cap lives HERE (a direct child of the definite-width column) and the
             bubble fills it — see the flex-1 comment above. */}
         <div className="relative w-fit max-w-[85%]">
+          {editing && onEdit ? (
+            <MessageEditForm
+              message={message}
+              onCancel={() => setEditing(false)}
+              onSave={async (draft) => {
+                await onEdit(message.id, draft)
+                setEditing(false)
+              }}
+            />
+          ) : (
+          <>
           <div
             className={cn(
               jumbo
@@ -598,6 +722,11 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
                 <DropdownMenuItem onClick={() => onMarkUnread(message.id)}>
                   <EnvelopeIcon className="h-4 w-4" /> Mark unread
                 </DropdownMenuItem>
+                {canEdit && onEdit && (
+                  <DropdownMenuItem onClick={() => setEditing(true)}>
+                    <PencilIcon className="h-4 w-4" /> Edit message
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem variant="destructive" onClick={() => onDelete(message.id)}>
                   <TrashIcon className="h-4 w-4" /> Delete
                 </DropdownMenuItem>
@@ -619,6 +748,8 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
+          </>
+          )}
         </div>
 
         {/* Note-only follow-ups render as their own cards below the bubble
@@ -700,6 +831,7 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
             <span className="shrink-0">· via ticket thread</span>
           )}
           <span>{timeLabel(message.createdAt)}</span>
+          <EditedMark at={message.editedAt} />
           {isAgent && !isNote && message.channelDelivery ? (
             <ChannelDeliveryTicks
               delivery={message.channelDelivery}
@@ -742,6 +874,7 @@ export function VisitorMessageBubble({
   attachments,
   citations,
   time,
+  editedAt,
   linkPreviews = false,
   getAuthHeaders,
   embedOpenMode = 'newTab',
@@ -806,6 +939,12 @@ export function VisitorMessageBubble({
                 {time}
               </>
             )}
+            {editedAt && (
+              <>
+                {' '}
+                <EditedMark at={editedAt} />
+              </>
+            )}
           </p>
         </div>
       )}
@@ -817,6 +956,12 @@ export function VisitorMessageBubble({
               <>
                 {' · '}
                 {time}
+              </>
+            )}
+            {editedAt && (
+              <>
+                {' '}
+                <EditedMark at={editedAt} />
               </>
             )}
           </p>

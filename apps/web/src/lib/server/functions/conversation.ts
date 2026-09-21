@@ -836,6 +836,28 @@ export const mintConversationStreamTokenFn = createServerFn({ method: 'GET' }).h
   return runMintConversationStreamToken(await requireAuth())
 })
 
+const editMessageSchema = z.object({
+  messageId: z.string(),
+  content: z.string().max(MAX_CONVERSATION_MESSAGE_LENGTH).default(''),
+  contentJson: z.unknown().nullable().optional(),
+})
+
+/** Replace the body of a message the caller authored. */
+export const editConversationMessageFn = createServerFn({ method: 'POST' })
+  .validator(editMessageSchema)
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_REPLY })
+    const actor = await policyActorFromAuth(ctx)
+    const { editConversationMessage } =
+      await import('@/lib/server/domains/conversation/conversation.edit')
+    return editConversationMessage(
+      data.messageId as ConversationMessageId,
+      data.content,
+      (data.contentJson ?? null) as import('@/lib/shared/db-types').TiptapContent | null,
+      actor
+    )
+  })
+
 /** Soft-delete a message (team members; or a visitor deleting their own). */
 export const deleteConversationMessageFn = createServerFn({ method: 'POST' })
   .validator(messageIdSchema)

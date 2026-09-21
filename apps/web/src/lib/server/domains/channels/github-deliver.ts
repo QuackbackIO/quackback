@@ -243,6 +243,34 @@ export async function deliverGitHubLifecycleComment(
   }
 }
 
+export async function updateGitHubIssueComment(
+  conversationId: AgentMessageDeliveryCtx['conversationId'],
+  githubCommentId: string,
+  body: string
+): Promise<void> {
+  const target = await resolveIssueTarget(conversationId)
+  if (!target.ok) throw new Error(target.error)
+  const response = await fetch(
+    `${GITHUB_API}/repos/${target.ownerRepo}/issues/comments/${githubCommentId}`,
+    {
+      method: 'PATCH',
+      headers: githubHeaders(target.accessToken),
+      body: JSON.stringify({ body }),
+    }
+  )
+  // The comment is already gone upstream. Keep the local edit.
+  if (response.ok || response.status === 404) return
+  if (response.status === 401) {
+    await noteAuthFailure(target.integrationId)
+    throw issueError('Authentication failed. Please reconnect GitHub.', {
+      retryable: false,
+      status: 401,
+    })
+  }
+  const errorBody = await response.text()
+  throw issueError(`HTTP ${response.status}: ${errorBody}`, { status: response.status })
+}
+
 export async function deleteGitHubIssueComment(
   conversationId: AgentMessageDeliveryCtx['conversationId'],
   githubCommentId: string

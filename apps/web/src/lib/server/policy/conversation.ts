@@ -80,3 +80,21 @@ export function canDeleteMessage(
   }
   return denyDecision('You can only delete your own messages')
 }
+
+/**
+ * Who may edit a message: only its author. Unlike delete, a teammate cannot
+ * rewrite someone else's words. Service principals are excluded. System rows
+ * are refused by the caller before this check (they have no author).
+ */
+export function canEditMessage(
+  actor: Actor,
+  message: { authorPrincipalId: PrincipalId | null }
+): Decision {
+  if (!actor.principalId) return denyDecision('A session is required to edit a message')
+  if (actor.principalType === 'service')
+    return denyDecision('Service principals cannot edit messages')
+  if (message.authorPrincipalId && message.authorPrincipalId === actor.principalId) {
+    return allowDecision()
+  }
+  return denyDecision('You can only edit your own messages')
+}

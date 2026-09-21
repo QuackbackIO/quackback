@@ -170,6 +170,11 @@ export const WEBHOOK_EVENT_CONFIG = [
     description: 'When a public message is deleted',
   },
   {
+    id: 'message.updated',
+    label: 'Message Edited',
+    description: 'When the author edits a public message',
+  },
+  {
     id: 'ticket.created',
     label: 'Ticket Created',
     description: 'When a ticket is opened',

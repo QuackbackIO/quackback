@@ -28,6 +28,7 @@ import {
   type RefObject,
 } from 'react'
 import { useRouteContext } from '@tanstack/react-router'
+import { canEditAgentMessage } from '@/components/conversation/message-edit'
 import {
   PaperAirplaneIcon,
   PaperClipIcon,
@@ -62,6 +63,7 @@ import {
   sendAgentMessageFn,
   addConversationNoteFn,
   deleteConversationMessageFn,
+  editConversationMessageFn,
   addMessageReactionFn,
   removeMessageReactionFn,
   setMessageFlagFn,
@@ -325,7 +327,11 @@ export function AgentConversationThread({
   const ticketThreadKey = ticketKeys.thread(ticketId ?? INACTIVE_TICKET_ID)
   // The current agent's display name, for attributing optimistic reactions.
   const { session, settings } = useRouteContext({ from: '__root__' })
+  const { principal } = useRouteContext({ from: '/admin' }) as {
+    principal?: { id?: string }
+  }
   const myName = session?.user?.name ?? 'You'
+  const myPrincipalId = principal?.id
   const flags = settings?.featureFlags as FeatureFlags | undefined
   const showTickets = flags?.supportTickets ?? false
   // B24: the linked-ticket affordances (the header's ticket-status pill, the
@@ -1038,6 +1044,25 @@ export function AgentConversationThread({
     onError: () => toast.error('Failed to delete message'),
   })
 
+  const handleEditMessage = useCallback(
+    async (
+      messageId: ConversationMessageId,
+      draft: { content: string; contentJson: AgentConversationMessageDTO['contentJson'] }
+    ) => {
+      try {
+        const message = await editConversationMessageFn({
+          data: { messageId, content: draft.content, contentJson: draft.contentJson },
+        })
+        patchActiveMessage(message.id, () => message)
+        onChanged()
+      } catch {
+        toast.error('Failed to edit message')
+        throw new Error('Failed to edit message')
+      }
+    },
+    [onChanged, patchActiveMessage]
+  )
+
   // Toggle the caller's emoji reaction on a message (optimistic; the SSE
   // message_updated reconciles counts across agents on the conversation side —
   // a ticket-parented reaction has no live broadcast yet, see message.actions.ts,
@@ -1620,6 +1645,8 @@ export function AgentConversationThread({
             highlighted={m.id === highlightId}
             onOpenPost={onOpenPost}
             onDelete={deleteMutation.mutate}
+            canEdit={canEditAgentMessage(m, myPrincipalId)}
+            onEdit={handleEditMessage}
             onToggleReaction={handleToggleReaction}
             onToggleFlag={handleToggleFlag}
             onMarkUnread={markUnreadMutation.mutate}

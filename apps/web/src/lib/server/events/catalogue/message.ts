@@ -16,3 +16,4 @@ export const messageNoteCreated = decl(
   S
 )
 export const messageDeleted = decl('message.deleted', 'conversation_message', { webhook: true }, S)
+export const messageUpdated = decl('message.updated', 'conversation_message', { webhook: true }, S)

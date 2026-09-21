@@ -187,7 +187,8 @@ export function applyAgentThreadEvent(
 
 /** Apply one per-conversation stream event to the visitor thread's cache. The
  *  stream is scoped to a single conversation, so message events carry no id
- *  filter; agent-only message_updated never reaches this stream and is ignored. */
+ *  filter; agent-only message_updated never reaches this stream and is ignored.
+ *  A customer-visible body edit arrives as message_edited. */
 export function applyVisitorThreadEvent(
   prev: VisitorThreadCache | undefined,
   evt: ConversationStreamEvent,
@@ -204,6 +205,25 @@ export function applyVisitorThreadEvent(
         : prev
     case 'message_deleted':
       return { ...prev, messages: prev.messages.filter((m) => m.id !== evt.messageId) }
+    case 'message_edited': {
+      // A customer-visible body edit. A message outside the loaded page stays
+      // untouched — don't append an edit as if it were a new message.
+      if (!prev.messages.some((m) => m.id === evt.message.id)) return prev
+      return {
+        ...prev,
+        messages: prev.messages.map((m) =>
+          m.id === evt.message.id
+            ? {
+                ...m,
+                content: evt.message.content,
+                contentJson: evt.message.contentJson,
+                attachments: evt.message.attachments,
+                editedAt: evt.message.editedAt ?? null,
+              }
+            : m
+        ),
+      }
+    }
     case 'conversation':
       return evt.conversation.id === conversationId
         ? { ...prev, status: evt.conversation.status, csatRating: evt.conversation.csatRating }

@@ -979,6 +979,7 @@ export function VisitorConversationThread({
             attachments={m.attachments}
             citations={m.citations}
             time={formatTime(m.createdAt)}
+            editedAt={m.editedAt}
             linkPreviews={linkPreviews}
             getAuthHeaders={getAuthHeaders}
             embedOpenMode={embedOpenMode}
