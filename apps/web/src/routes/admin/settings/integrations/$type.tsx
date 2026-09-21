@@ -136,7 +136,7 @@ function IntegrationSettingsPage() {
               description={setup.description}
               steps={setup.steps}
               connectionForm={
-                <div className="flex flex-col items-end gap-2">
+                <div className="flex flex-col items-start gap-2">
                   {hasCredentials && !canConnect && (
                     <Button onClick={() => setCredentialsOpen(true)}>Configure credentials</Button>
                   )}
