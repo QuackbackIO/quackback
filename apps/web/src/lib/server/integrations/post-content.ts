@@ -71,8 +71,12 @@ function extractMedia(content: string, rootUrl: string): PostMedia[] {
   return media
 }
 
-/** Make app-relative markdown assets fetchable by Linear's ingestion worker. */
-function absolutizeMarkdownUrls(content: string, rootUrl: string, embedVideos: boolean): string {
+/** Make app-relative markdown assets fetchable outside Quackback, preserving formatting. */
+export function absolutizeMarkdownUrls(
+  content: string,
+  rootUrl: string,
+  embedVideos: boolean
+): string {
   return content.replace(/(!?\[[^\]]*\]\()([^)\s]+)([^)]*\))/g, (_all, open, url, close) => {
     const absolute = absoluteMediaUrl(url, rootUrl)
     if (!embedVideos || !VIDEO_FILE_RE.test(absolute) || open.startsWith('!')) {

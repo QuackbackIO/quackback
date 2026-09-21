@@ -29,6 +29,8 @@ import { randomUUID } from 'node:crypto'
 import { getIntegration } from '../index'
 import { inspectSyncRemote } from './remote'
 import { persistSyncLink } from './hooks'
+import { getBaseUrl } from '@/lib/server/config'
+import { absolutizeMarkdownUrls } from '../post-content'
 
 export function syncActions(
   op: Pick<SyncOperation, 'state' | 'cancelRequested'> &
@@ -200,7 +202,12 @@ export async function inspectSyncOperation(id: string, actor: Actor) {
     const post = (
       payload.data.event as { data?: { post?: { title?: string; content?: string } } } | undefined
     )?.data?.post
-    if (post) preview = { title: post.title ?? '', content: post.content ?? '' }
+    if (post)
+      preview = {
+        title: post.title ?? '',
+        // Keep the full Markdown proposal intact when copied to another platform.
+        content: absolutizeMarkdownUrls(post.content ?? '', getBaseUrl(), op.provider === 'linear'),
+      }
     if (typeof payload.data.proposedStatus === 'string')
       preview = { title: 'Proposed status', content: payload.data.proposedStatus }
   }

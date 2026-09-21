@@ -39,7 +39,8 @@ import {
   markSyncDispatched,
   finishSyncOperation,
 } from '../ledger'
-import { actOnSync } from '../history'
+import { actOnSync, inspectSyncOperation } from '../history'
+import * as config from '@/lib/server/config'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { queueAppHookSync } from '../app-hooks'
 import { readSyncHealth } from '../health'
@@ -110,6 +111,39 @@ async function seed(provider = 'linear') {
   return { data, post, integration }
 }
 describe('sync recovery regressions (PostgreSQL)', () => {
+  it.each(['linear', 'github'])(
+    'makes %s manual review content portable without truncating it',
+    async (provider) => {
+      const { data } = await seed(provider)
+      if (data.event.type !== 'post.created') throw new Error('Expected post event')
+      data.event.data.post.content = `# Proposed update\n\n- Keep this list\n- Keep its formatting\n\n${'Full review text. '.repeat(200)}\n\n![Screenshot](/uploads/image.png)\n\n[Recording](/uploads/video.mp4)`
+      const first = (await queueHookSync(data))!
+      await testDb
+        .update(operations)
+        .set({ kind: 'refresh', state: 'conflict', errorCode: 'manual_update' })
+        .where(eq(operations.id, first.id))
+      vi.spyOn(config, 'getBaseUrl').mockReturnValue('https://review.quackback.test')
+      const detail = await inspectSyncOperation(first.id, {
+        principalId: createId('principal'),
+        role: 'admin',
+        principalType: 'user',
+        permissions: new Set(Object.values(PERMISSIONS)),
+        segmentIds: new Set(),
+      })
+      expect(detail.preview?.content).toContain('Full review text. '.repeat(200))
+      expect(detail.preview?.content).toContain(
+        '# Proposed update\n\n- Keep this list\n- Keep its formatting\n\n'
+      )
+      expect(detail.preview?.content).toContain(
+        '![Screenshot](https://review.quackback.test/uploads/image.png)'
+      )
+      expect(detail.preview?.content).toContain(
+        provider === 'linear'
+          ? '![Video: Recording](https://review.quackback.test/uploads/video.mp4)'
+          : '[Recording](https://review.quackback.test/uploads/video.mp4)'
+      )
+    }
+  )
   it('reschedules a never-dispatched create after source deletion and restoration', async () => {
     const { data, post } = await seed()
     const first = await queueHookSync(data)
