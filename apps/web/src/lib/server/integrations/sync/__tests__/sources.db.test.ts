@@ -5,6 +5,9 @@ import {
   eq,
   user,
   principal,
+  boards,
+  posts,
+  postComments,
   conversations,
   conversationMessages,
   integrations,
@@ -15,7 +18,7 @@ import { encryptSecrets } from '../../encryption'
 import { queueHookSync } from '../hooks'
 import { runIntegrationSync } from '../worker'
 import { syncTestJob } from './job'
-import type { MessageCreatedEvent } from '@/lib/server/events/types'
+import type { MessageCreatedEvent, EventData } from '@/lib/server/events/types'
 vi.mock('@/lib/server/db', async (original) => ({
   ...(await original<typeof import('@/lib/server/db')>()),
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
@@ -102,9 +105,92 @@ async function seed() {
     target: { channelId: 'C1' },
     config: { integrationId: integration.id, accessToken: 'expired-token' },
   }
-  return { message, conversation, integration, data, person }
+  return { message, conversation, integration, data, person, author }
 }
 describe('canonical sync sources (PostgreSQL)', () => {
+  it.each(['post.created', 'comment.created', 'comment.updated'] as const)(
+    '%s refreshes the source author independently of the event actor',
+    async (type) => {
+      const { data, person, author } = await seed()
+      const [board] = await testDb
+        .insert(boards)
+        .values({ name: 'Authors', slug: createId('board') })
+        .returning()
+      const [postAuthor] = await testDb
+        .insert(principal)
+        .values({
+          type: 'service',
+          role: 'user',
+          displayName: 'Post author',
+          createdAt: new Date(),
+        })
+        .returning()
+      const [post] = await testDb
+        .insert(posts)
+        .values({
+          boardId: board.id,
+          principalId: postAuthor.id,
+          title: 'Current post',
+          content: 'Current body',
+        })
+        .returning()
+      const [comment] = await testDb
+        .insert(postComments)
+        .values({
+          postId: post.id,
+          principalId: author.id,
+          content: 'Current comment',
+        })
+        .returning()
+      await testDb.insert(integrationEventMappings).values({
+        integrationId: data.config.integrationId,
+        eventType: type,
+        actionType: 'send_message',
+        enabled: true,
+        actionConfig: { channelId: 'C1' },
+      })
+      const event = {
+        id: createId('event'),
+        type,
+        timestamp: new Date().toISOString(),
+        actor: { type: 'service' },
+        data: {
+          post: {
+            id: post.id,
+            title: 'Old title',
+            content: 'Old body',
+            boardId: board.id,
+            boardSlug: board.slug,
+            voteCount: 0,
+            authorName: 'Stale post author',
+            authorEmail: 'stale@example.com',
+          },
+          ...(type === 'post.created'
+            ? {}
+            : {
+                comment: {
+                  id: comment.id,
+                  content: 'Old comment',
+                  authorName: 'Stale commenter',
+                  authorEmail: 'stale@example.com',
+                },
+              }),
+        },
+      } as EventData
+      const op = (await queueHookSync({ ...data, event }))!
+      await runIntegrationSync(syncTestJob(op.id))
+      expect(deliver).toHaveBeenCalledTimes(1)
+      const sent = deliver.mock.calls[0][0]
+      expect(sent.data.post).toMatchObject({ authorName: 'Post author', authorEmail: undefined })
+      if (type !== 'post.created')
+        expect(sent.data.comment).toMatchObject({
+          authorName: 'Current person',
+          authorEmail: person.email,
+          content: 'Current comment',
+        })
+      expect(JSON.stringify(sent)).not.toMatch(/Stale|stale@example|Old comment|Old body/)
+    }
+  )
   it('preserves support-message notifications using current content, identity and credentials', async () => {
     const { data, person } = await seed()
     const op = await queueHookSync(data)

@@ -27,6 +27,7 @@ import type { SyncClaim, SyncOutcome } from './types'
 import { withSyncTransport } from './transport'
 import { canDispatchSync } from './eligibility'
 import { refreshSyncActor } from './sources'
+import { realEmail } from '@/lib/shared/anonymous-email'
 
 export function hookSource(data: HookJobData) {
   const content = data.event.data as {
@@ -150,7 +151,12 @@ export async function executeHookSync(
     claim.operation.sourceType === 'post'
       ? (claim.operation.sourceId as PostId)
       : (eventPost?.id as PostId | undefined)
-  const post = postId ? await db.query.posts.findFirst({ where: eq(posts.id, postId) }) : null
+  const post = postId
+    ? await db.query.posts.findFirst({
+        where: eq(posts.id, postId),
+        with: { author: { with: { user: { columns: { name: true, email: true } } } } },
+      })
+    : null
   const channel = (target as { channelId?: unknown } | null)?.channelId
   if (
     !mappings.some((m) => {
@@ -174,11 +180,14 @@ export async function executeHookSync(
       boardId: post.boardId,
       boardSlug: board.slug,
       voteCount: post.voteCount,
+      authorName: post.author?.displayName ?? post.author?.user?.name ?? undefined,
+      authorEmail: realEmail(post.author?.user?.email) ?? undefined,
     }
   }
   if (event.type === 'comment.created' || event.type === 'comment.updated') {
     const comment = await db.query.postComments.findFirst({
       where: eq(postComments.id, event.data.comment.id as PostCommentId),
+      with: { author: { with: { user: { columns: { name: true, email: true } } } } },
     })
     if (
       !comment ||
@@ -191,6 +200,8 @@ export async function executeHookSync(
       id: comment.id,
       content: contentJsonToMarkdown(comment.contentJson, comment.content),
       isPrivate: false,
+      authorName: comment.author?.displayName ?? comment.author?.user?.name ?? undefined,
+      authorEmail: realEmail(comment.author?.user?.email) ?? undefined,
     }
   }
   if (event.type === 'changelog.published') {

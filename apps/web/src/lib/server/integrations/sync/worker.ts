@@ -7,6 +7,7 @@ import {
   integrations,
   integrationSyncOperations as operations,
   integrationSyncAttempts as attempts,
+  type Ticket,
 } from '@/lib/server/db'
 import type { ClaimedJob } from '@/lib/server/jobs/job-queue'
 import { RetryAfterError } from '@/lib/server/jobs/definitions'
@@ -35,6 +36,10 @@ import {
 import { executeSegmentSync } from './segment'
 import { installationIdentity } from './identity'
 import { getIntegration } from '../index'
+import { publishTicketUpdated } from '@/lib/server/domains/tickets/ticket-intake.service'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'integration-sync' })
 
 export async function runIntegrationSync(job: ClaimedJob): Promise<void> {
   const id = job.payload.operationId
@@ -51,6 +56,7 @@ export async function runIntegrationSync(job: ClaimedJob): Promise<void> {
   try {
     let outcome: SyncOutcome
     let localWrite: ((tx: SyncTransaction) => Promise<void | SyncOutcome>) | undefined
+    const updatedTickets: Ticket[] = []
     try {
       const integration = await currentSyncIntegration(claim.operation)
       const invalid = await validateSyncSource(claim.operation)
@@ -102,7 +108,7 @@ export async function runIntegrationSync(job: ClaimedJob): Promise<void> {
           localWrite = (tx) =>
             claim.operation.kind === 'receive-status'
               ? fanOutInboundStatus(tx, claim, integration, payload.data)
-              : applyInboundStatus(tx, claim, integration, payload.data)
+              : applyInboundStatus(tx, claim, integration, payload.data, updatedTickets)
         } else if (payload.executor === 'identify') {
           outcome = { state: 'succeeded' }
           localWrite = (tx) => applyIdentifySync(tx, claim, payload.data)
@@ -159,6 +165,15 @@ export async function runIntegrationSync(job: ClaimedJob): Promise<void> {
         }).catch(() => undefined)
       }
       throw new Error('Integration sync could not record its outcome')
+    }
+    // Realtime is the usual best-effort post-write tail. A rollback never
+    // reaches here, and a publish failure must not replay a committed change.
+    for (const ticket of updatedTickets) {
+      try {
+        await publishTicketUpdated(ticket)
+      } catch (error) {
+        log.warn({ err: error, ticketId: ticket.id }, 'Could not publish synced ticket update')
+      }
     }
     if (outcome.state === 'retry_wait')
       throw new RetryAfterError(

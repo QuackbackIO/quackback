@@ -9,6 +9,7 @@ import {
   conversationMessages,
   ticketLinks,
   type Transaction,
+  type Ticket,
 } from '@/lib/server/db'
 import type { TicketId, TicketStatusId, PrincipalId } from '@quackback/ids'
 import { emit } from '@/lib/server/events/emit'
@@ -37,6 +38,7 @@ export async function applySyncedTicketStatus(
   statusId: TicketStatusId | null,
   principalId: PrincipalId,
   external?: ExternalChange,
+  updatedTickets: Ticket[] = [],
   visited = new Set<string>()
 ) {
   if (visited.has(ticketId)) return
@@ -86,7 +88,7 @@ export async function applySyncedTicketStatus(
   const transition = statusTransition(previousCategory, target.category, now)
   const stage = resolveStage(target)
   const previousStage = previous ? resolveStage(previous) : null
-  await tx
+  const [updated] = await tx
     .update(tickets)
     .set({
       statusId,
@@ -95,6 +97,9 @@ export async function applySyncedTicketStatus(
       ...(transition.reopenedIncrement ? { reopenedCount: ticket.reopenedCount + 1 } : {}),
     })
     .where(eq(tickets.id, ticketId))
+    .returning()
+  // The worker publishes these only after the entire receipt transaction commits.
+  updatedTickets.push(updated)
   await tx.insert(ticketActivity).values({
     ticketId,
     principalId,
@@ -162,6 +167,7 @@ export async function applySyncedTicketStatus(
         statusId,
         principalId,
         undefined,
+        updatedTickets,
         visited
       )
   }

@@ -29,7 +29,6 @@ import {
   integrationEventMappings,
   postExternalLinks,
   integrationSyncOperations as operations,
-  sql,
   eq,
 } from '@/lib/server/db'
 import {
@@ -49,7 +48,6 @@ const fixture = await createDbTestFixture()
 describe.skipIf(!fixture.available)('provider capability flows', () => {
   beforeEach(async () => {
     await fixture.begin()
-    await testDb.execute(sql`UPDATE integration_sync_start SET started_at='2020-01-01' WHERE id=1`)
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ data: [] }))
   })
   afterEach(async () => {

@@ -54,9 +54,6 @@ import type { HookJobData } from '@/lib/server/events/hook-job'
 const fixture = await createDbTestFixture()
 beforeEach(async () => {
   await fixture.begin()
-  await testDb.execute(
-    sql`UPDATE integration_sync_start SET started_at = '2020-01-01'::timestamptz WHERE id = 1`
-  )
   vi.spyOn(globalThis, 'fetch').mockRejectedValue(
     new Error('Network disabled in sync regression test')
   )

@@ -15,6 +15,7 @@ import {
   tickets,
   ticketStatuses,
   ticketExternalLinks,
+  ticketLinks,
   postExternalLinks,
   posts,
   boards,
@@ -54,6 +55,8 @@ import { createTicket } from '@/lib/server/domains/tickets/ticket.service'
 import { resolveActorPermissions } from '@/lib/server/policy/permissions'
 import type { Actor } from '@/lib/server/policy/types'
 import { conversationMessages } from '@/lib/server/db'
+import { publishTicketEvent } from '@/lib/server/realtime/conversation-channels'
+import * as ledger from '../sync/ledger'
 
 const olderRevision = new Date(Date.now() + 60_000).toISOString()
 const newerRevision = new Date(Date.now() + 120_000).toISOString()
@@ -259,16 +262,22 @@ describe.skipIf(!fixture.available)('inbound webhook ticket branch (real DB, rol
     fixtureTickets.length = 0
     fixtureIntegrationIds.length = 0
     await fixture.begin()
+    vi.clearAllMocks()
+    vi.mocked(publishTicketEvent).mockReset()
   })
-  afterEach(fixture.rollback)
+  afterEach(async () => {
+    vi.restoreAllMocks()
+    await fixture.rollback()
+  })
   afterAll(fixture.close)
 
-  it('applies the mapped ticket status on issues.closed via setTicketStatus', async () => {
+  it('applies the mapped ticket lifecycle and publishes the committed status', async () => {
     await seedSettings()
     const { closed } = await seedStatuses()
     await seedGitHubIntegration({ ticketStatusMappings: { Closed: closed, Open: null } })
     const actor = await seedActor()
     const ticketId = await seedLinkedTicket(actor, '77')
+    vi.mocked(publishTicketEvent).mockClear()
 
     const response = await receiveAndDrain(githubWebhookRequest('closed', 77), 'github')
     expect(response.status).toBe(200)
@@ -277,6 +286,16 @@ describe.skipIf(!fixture.available)('inbound webhook ticket branch (real DB, rol
     expect(state.statusId).toBe(closed)
     // Applied through setTicketStatus: the closed-category transition stamped resolvedAt.
     expect(state.resolvedAt).not.toBeNull()
+    expect(publishTicketEvent).toHaveBeenCalledWith(
+      ticketId,
+      expect.objectContaining({
+        kind: 'ticket_updated',
+        ticket: expect.objectContaining({
+          id: ticketId,
+          status: expect.objectContaining({ id: closed }),
+        }),
+      })
+    )
 
     // Close-the-loop: a team-only system note lands on the thread with the
     // provider-verb copy, and the agent-watcher bell event fires once.
@@ -306,6 +325,77 @@ describe.skipIf(!fixture.available)('inbound webhook ticket branch (real DB, rol
       .where(eq(integrations.integrationType, 'github'))
     const { readSyncHealth } = await import('../sync/health')
     expect((await readSyncHealth(integ)).lastInboundAt).not.toBeNull()
+  })
+
+  it('publishes tracker and cascaded customer status changes, without duplicate delivery', async () => {
+    await seedSettings()
+    const { closed } = await seedStatuses()
+    await seedGitHubIntegration({ ticketStatusMappings: { Closed: closed } })
+    const actor = await seedActor()
+    const trackerId = await seedLinkedTicket(actor, '88')
+    await testDb.update(tickets).set({ type: 'tracker' }).where(eq(tickets.id, trackerId))
+    const customer = await createTicket({ type: 'customer', title: 'Tracked customer' }, actor)
+    await testDb
+      .insert(ticketLinks)
+      .values({ trackerTicketId: trackerId, linkedTicketId: customer.id, relation: 'tracks' })
+    vi.mocked(publishTicketEvent).mockClear()
+    await receiveAndDrain(githubWebhookRequest('closed', 88), 'github')
+    expect((await ticketState(customer.id)).statusId).toBe(closed)
+    expect(publishTicketEvent).toHaveBeenCalledTimes(2)
+    for (const id of [trackerId, customer.id])
+      expect(publishTicketEvent).toHaveBeenCalledWith(
+        id,
+        expect.objectContaining({
+          kind: 'ticket_updated',
+          ticket: expect.objectContaining({ id, status: expect.objectContaining({ id: closed }) }),
+        })
+      )
+    await receiveAndDrain(githubWebhookRequest('closed', 88), 'github')
+    expect(publishTicketEvent).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not publish a ticket change when the receipt transaction rolls back', async () => {
+    await seedSettings()
+    const { open, closed } = await seedStatuses()
+    await seedGitHubIntegration({ ticketStatusMappings: { Closed: closed } })
+    const ticketId = await seedLinkedTicket(await seedActor(), '89')
+    vi.mocked(publishTicketEvent).mockClear()
+    const finish = ledger.finishSyncOperation
+    vi.spyOn(ledger, 'finishSyncOperation').mockImplementation((claim, outcome, persist) =>
+      finish(
+        claim,
+        outcome,
+        persist && claim.operation.sourceId === ticketId
+          ? async (tx) => {
+              await persist(tx)
+              throw new Error('Receipt completion failed')
+            }
+          : persist
+      )
+    )
+    await receiveAndDrain(githubWebhookRequest('closed', 89), 'github')
+    expect((await ticketState(ticketId)).statusId).toBe(open)
+    expect(publishTicketEvent).not.toHaveBeenCalled()
+    expect(await externalEvents()).toHaveLength(0)
+  })
+
+  it('keeps committed status and delivery success when realtime publication fails', async () => {
+    await seedSettings()
+    const { closed } = await seedStatuses()
+    await seedGitHubIntegration({ ticketStatusMappings: { Closed: closed } })
+    const ticketId = await seedLinkedTicket(await seedActor(), '94')
+    vi.mocked(publishTicketEvent).mockClear()
+    vi.mocked(publishTicketEvent).mockImplementationOnce(() => {
+      throw new Error('Realtime unavailable')
+    })
+    await receiveAndDrain(githubWebhookRequest('closed', 94), 'github')
+    expect((await ticketState(ticketId)).statusId).toBe(closed)
+    expect(publishTicketEvent).toHaveBeenCalledTimes(1)
+    expect(
+      await testDb.query.integrationSyncOperations.findFirst({
+        where: eq(operations.sourceId, ticketId),
+      })
+    ).toMatchObject({ state: 'succeeded' })
   })
 
   it('notes and bells even when NO ticket status mapping matches (the silence case)', async () => {

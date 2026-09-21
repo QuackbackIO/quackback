@@ -1,4 +1,12 @@
-import { and, eq, sql, integrations, postExternalLinks, ticketExternalLinks } from '@/lib/server/db'
+import {
+  and,
+  eq,
+  sql,
+  integrations,
+  postExternalLinks,
+  ticketExternalLinks,
+  type Ticket,
+} from '@/lib/server/db'
 import type { PostId, TicketId } from '@quackback/ids'
 import {
   resolveStatusMapping,
@@ -102,7 +110,8 @@ export async function applyInboundStatus(
   tx: SyncTransaction,
   claim: SyncClaim,
   integration: typeof integrations.$inferSelect,
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
+  updatedTickets: Ticket[] = []
 ): Promise<void | SyncOutcome> {
   const [current] = await tx
     .select()
@@ -178,7 +187,8 @@ export async function applyInboundStatus(
         config.ticketStatusMappings as StatusMappings | undefined
       ),
       integration.principalId,
-      external
+      external,
+      updatedTickets
     )
   }
 }
