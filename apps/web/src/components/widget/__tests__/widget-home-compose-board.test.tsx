@@ -42,6 +42,38 @@ vi.mock('../use-widget-image-upload', () => ({
   WidgetSessionError: class WidgetSessionError extends Error {},
 }))
 vi.mock('../widget-vote-button', () => ({ WidgetVoteButton: () => null }))
+vi.mock('framer-motion', async () => {
+  const { createElement, forwardRef } = await import('react')
+  const MOTION_PROPS = new Set([
+    'initial',
+    'animate',
+    'exit',
+    'transition',
+    'variants',
+    'layout',
+    'whileHover',
+    'whileTap',
+    'whileFocus',
+    'whileInView',
+  ])
+  const make = (tag: string) =>
+    forwardRef<HTMLElement, Record<string, unknown>>((props, ref) => {
+      const { children, ...rest } = props
+      const dom: Record<string, unknown> = { ref }
+      for (const [key, value] of Object.entries(rest)) {
+        if (!MOTION_PROPS.has(key)) dom[key] = value
+      }
+      return createElement(tag, dom, children as ReactNode)
+    })
+  return {
+    AnimatePresence: ({ children }: { children?: ReactNode }) => children,
+    motion: new Proxy(
+      {},
+      { get: (_target, prop) => (typeof prop === 'string' ? make(prop) : undefined) }
+    ),
+    useReducedMotion: () => true,
+  }
+})
 vi.mock('@/components/ui/rich-text-editor', () => ({
   RichTextEditor: () => <div data-testid="editor" />,
 }))
