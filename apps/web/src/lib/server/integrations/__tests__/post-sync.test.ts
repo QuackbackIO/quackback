@@ -30,7 +30,10 @@ vi.mock('@/lib/server/db', async (original) => ({
     select: () => ({ from: () => ({ innerJoin: () => ({ where: async () => state.links }) }) }),
   },
 }))
-vi.mock('../index', () => ({ getIntegration: () => ({ archiveReview: true }) }))
+vi.mock('../index', () => ({
+  getIntegration: (provider: string) =>
+    ['slack', 'discord', 'teams'].includes(provider) ? {} : { archiveReview: true },
+}))
 vi.mock('@/lib/server/events/resolvers/integration.resolver', () => ({
   integrationResolver: { resolve: state.resolve },
 }))
@@ -78,6 +81,22 @@ beforeEach(() => {
   state.hook.mockResolvedValue({ id: 'queued-create', state: 'queued' })
 })
 describe('integration post sync', () => {
+  it.each(['slack', 'discord', 'teams'])(
+    'does not offer a manual issue refresh for a %s notification receipt',
+    async (provider) => {
+      const receipt = link('message-receipt')
+      state.links = [
+        { ...receipt, integration: { ...receipt.integration, integrationType: provider } },
+      ]
+      state.hook.mockResolvedValue({ id: 'completed', state: 'succeeded' })
+      expect(await syncPostIntegrations(id)).toEqual({
+        queued: false,
+        needsAttention: false,
+        operationIds: ['completed'],
+      })
+      expect(state.queue).not.toHaveBeenCalled()
+    }
+  )
   it('queues each missing destination without replaying the event bus', async () => {
     state.resolve.mockResolvedValue([target(), target('other-team')])
     expect((await syncPostIntegrations(id)).queued).toBe(true)

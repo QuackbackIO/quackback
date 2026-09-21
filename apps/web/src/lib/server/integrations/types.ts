@@ -292,7 +292,10 @@ export interface IntegrationDefinition {
    * segment membership sync (evaluation → external platform).
    */
   userSync?: UserSyncHandler
-  /** Offer explicit archive/close review on source deletion; never an automatic write. */
+  /**
+   * Link created items for lifecycle review, including explicit archive/close review
+   * on source deletion. Notification receipts stay in sync history without item links.
+   */
   archiveReview?: true
   /**
    * How the inbound status-sync webhook gets set up with the provider.

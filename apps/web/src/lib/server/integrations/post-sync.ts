@@ -6,6 +6,7 @@ import { integrationResolver } from '@/lib/server/events/resolvers/integration.r
 import type { PostCreatedEvent } from '@/lib/server/events/types'
 import { queueHookSync } from './sync/hooks'
 import { queueSyncOperation } from './sync/ledger'
+import { getIntegration } from './index'
 import {
   installationIdentity,
   syncHash,
@@ -83,7 +84,7 @@ export async function syncPostIntegrations(
     }
   }
   for (const { link, integration } of links) {
-    if (!link.syncScope) continue
+    if (!link.syncScope || !getIntegration(integration.integrationType)?.archiveReview) continue
     try {
       const installation = installationIdentity(integration)
       const destination = reviewDestination(link, integration)

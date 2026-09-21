@@ -28,11 +28,12 @@ import {
   posts,
   principal,
   integrations,
+  postExternalLinks,
   integrationSyncOperations as operations,
   eq,
   sql,
 } from '@/lib/server/db'
-import { queueHookSync } from '../hooks'
+import { queueHookSync, persistSyncLink } from '../hooks'
 import {
   claimSyncOperation,
   recoverExpiredSyncs,
@@ -111,6 +112,28 @@ async function seed(provider = 'linear') {
   return { data, post, integration }
 }
 describe('sync recovery regressions (PostgreSQL)', () => {
+  it.each(['slack', 'discord', 'teams', 'linear'])(
+    'keeps %s delivery evidence without treating notifications as linked issues',
+    async (provider) => {
+      const { data, post } = await seed(provider)
+      const operation = (await queueHookSync(data))!
+      const claim = (await claimSyncOperation(operation.id))!
+      const result = { externalId: 'remote-receipt', externalUrl: 'https://provider.test/item' }
+      await markSyncDispatched(claim)
+      await finishSyncOperation(claim, { state: 'succeeded', result }, (tx) =>
+        persistSyncLink(tx, claim, result)
+      )
+      const saved = await testDb.query.integrationSyncOperations.findFirst({
+        where: eq(operations.id, operation.id),
+      })
+      expect(saved).toMatchObject({ state: 'succeeded', remoteId: result.externalId, result })
+      const links = await testDb.query.postExternalLinks.findMany({
+        where: eq(postExternalLinks.postId, post.id),
+      })
+      expect(links).toHaveLength(provider === 'linear' ? 1 : 0)
+      expect(await queueHookSync(data)).toMatchObject({ id: operation.id, state: 'succeeded' })
+    }
+  )
   it.each(['linear', 'github'])(
     'makes %s manual review content portable without truncating it',
     async (provider) => {

@@ -251,7 +251,8 @@ export async function persistSyncLink(
 ): Promise<void> {
   if (typeof result.externalId !== 'string') return
   const op = claim.operation
-  if (op.kind !== 'create') return
+  // Notification receipts remain in sync history; only tracked items get lifecycle links.
+  if (op.kind !== 'create' || !getIntegration(op.provider)?.archiveReview) return
   const remoteUrl = typeof result.externalUrl === 'string' ? result.externalUrl : null
   const displayId = typeof result.externalDisplayId === 'string' ? result.externalDisplayId : null
   if (op.sourceType === 'post') {
