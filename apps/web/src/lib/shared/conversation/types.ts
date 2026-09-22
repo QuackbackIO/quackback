@@ -441,10 +441,11 @@ export interface ConversationAssistantActivity {
  * those switches to add a branch, touching code this task must not rewrite.
  * Parallel kinds instead fall through those switches' existing `default` case
  * untouched, and get their own small single-purpose reducers
- * (applyTicketThreadEvent, events-reducer.ts). There is no `ticket_message_updated`
- * (no reactions/flags on ticket messages) or `ticket_message_deleted` (no
- * delete-ticket-message feature exists yet) — add them alongside their
- * conversation counterparts if/when tickets grow those features.
+ * (applyTicketThreadEvent, events-reducer.ts). `ticket_message_updated` carries
+ * a body edit to a message shown in the ticket thread (ticket-parented, or
+ * conversation-parented on a linked pair); reactions and flags on ticket
+ * messages still do not broadcast. There is no `ticket_message_deleted` (no
+ * delete-ticket-message feature exists yet).
  *
  * `ticket: TicketDTO` on `ticket_updated` mirrors `conversation: ConversationDTO`
  * on `conversation`: one push refreshes both the list row and an open detail
@@ -455,6 +456,7 @@ export interface ConversationAssistantActivity {
  */
 export type TicketStreamEvent =
   | { kind: 'ticket_message'; ticketId: TicketId; message: ConversationMessageDTO }
+  | { kind: 'ticket_message_updated'; ticketId: TicketId; message: ConversationMessageDTO }
   | { kind: 'ticket_updated'; ticket: TicketDTO }
   | { kind: 'ticket_read'; ticketId: TicketId; side: MessageSenderType; at: string }
 

@@ -766,7 +766,7 @@ function InboxPage() {
           conversationKeys.agentThread(conversationId),
           (prev) => applyAgentThreadEvent(prev, evt, conversationId)
         )
-      } else if (evt.kind === 'ticket_message') {
+      } else if (evt.kind === 'ticket_message' || evt.kind === 'ticket_message_updated') {
         reconcileCachedThread<TicketThreadCache>(
           queryClient,
           ticketKeys.thread(evt.ticketId),

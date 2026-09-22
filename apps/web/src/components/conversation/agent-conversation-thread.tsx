@@ -1645,7 +1645,7 @@ export function AgentConversationThread({
             highlighted={m.id === highlightId}
             onOpenPost={onOpenPost}
             onDelete={deleteMutation.mutate}
-            canEdit={canEditAgentMessage(m, myPrincipalId)}
+            canEdit={canEditAgentMessage(m, myPrincipalId, permissions)}
             onEdit={handleEditMessage}
             onToggleReaction={handleToggleReaction}
             onToggleFlag={handleToggleFlag}

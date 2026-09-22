@@ -221,6 +221,7 @@ describe('agentEventChangesInboxList', () => {
     [{ kind: 'typing', conversationId: CONV_ID, side: 'visitor', at: 'x' }, false],
     [{ kind: 'message_updated', conversationId: CONV_ID, message: agentMessage('m9') }, false],
     [{ kind: 'ticket_message', ticketId: TICKET_ID, message: ticketMsg }, true],
+    [{ kind: 'ticket_message_updated', ticketId: TICKET_ID, message: ticketMsg }, false],
     [{ kind: 'ticket_updated', ticket: { id: TICKET_ID } as never }, true],
     [{ kind: 'ticket_read', ticketId: TICKET_ID, side: 'agent', at: 'x' }, true],
     [{ kind: 'ticket_read', ticketId: TICKET_ID, side: 'visitor', at: 'x' }, false],
@@ -716,6 +717,46 @@ describe('applyTicketThreadEvent', () => {
       kind: 'ticket_message',
       ticketId: OTHER_TICKET_ID,
       message: ticketMessage('tm2'),
+    }
+    expect(applyTicketThreadEvent(prev, evt, TICKET_ID)).toBe(prev)
+  })
+
+  it('patches an edited message body in place, keeping its position', () => {
+    const prev = ticketCache({ messages: [ticketMessage('tm1'), ticketMessage('tm2')] })
+    const edited = {
+      ...ticketMessage('tm1'),
+      content: 'Edited',
+      editedAt: '2026-07-02T00:00:00.000Z',
+    }
+    const next = applyTicketThreadEvent(
+      prev,
+      { kind: 'ticket_message_updated', ticketId: TICKET_ID, message: edited },
+      TICKET_ID
+    )!
+    expect(next.messages.map((m) => m.id)).toEqual(['tm1', 'tm2'])
+    expect(next.messages[0]).toMatchObject({
+      content: 'Edited',
+      editedAt: '2026-07-02T00:00:00.000Z',
+    })
+    expect(next.messages[1]).toBe(prev.messages[1])
+  })
+
+  it('does not append an edit for a message outside the loaded page', () => {
+    const prev = ticketCache()
+    const next = applyTicketThreadEvent(
+      prev,
+      { kind: 'ticket_message_updated', ticketId: TICKET_ID, message: ticketMessage('tm9') },
+      TICKET_ID
+    )!
+    expect(next.messages.map((m) => m.id)).toEqual(['tm1'])
+  })
+
+  it('ignores an edit for another ticket', () => {
+    const prev = ticketCache()
+    const evt: ConversationStreamEvent = {
+      kind: 'ticket_message_updated',
+      ticketId: OTHER_TICKET_ID,
+      message: ticketMessage('tm1'),
     }
     expect(applyTicketThreadEvent(prev, evt, TICKET_ID)).toBe(prev)
   })

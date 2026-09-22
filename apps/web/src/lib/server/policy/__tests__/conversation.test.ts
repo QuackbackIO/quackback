@@ -14,6 +14,7 @@ import {
 } from '../conversation'
 import { ANONYMOUS_ACTOR, type Actor } from '../types'
 import type { PrincipalId } from '@quackback/ids'
+import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 
 const VISITOR = 'principal_visitor' as PrincipalId
 const OTHER = 'principal_other' as PrincipalId
@@ -175,28 +176,53 @@ describe('canDeleteMessage', () => {
 })
 
 describe('canEditMessage', () => {
-  const own = { authorPrincipalId: VISITOR }
-  const agentOwn = { authorPrincipalId: 'principal_admin' as PrincipalId }
-
-  it('lets the author edit their own message', () => {
-    expect(canEditMessage(visitorActor, own).allowed).toBe(true)
-    expect(canEditMessage(adminActor, agentOwn).allowed).toBe(true)
+  const reply = { parent: 'conversation' as const, isInternal: false }
+  const adminReply = { ...reply, authorPrincipalId: 'principal_admin' as PrincipalId }
+  const withPermissions = (...keys: PermissionKey[]): Actor => ({
+    ...adminActor,
+    permissions: new Set(keys),
   })
 
-  it('denies editing someone else\'s message, including a teammate\'s', () => {
-    expect(canEditMessage(adminActor, own).allowed).toBe(false)
-    expect(canEditMessage(memberActor, own).allowed).toBe(false)
-    expect(canEditMessage(visitorActor, agentOwn).allowed).toBe(false)
+  it('lets the author edit their own message', () => {
+    expect(canEditMessage(adminActor, adminReply).allowed).toBe(true)
+  })
+
+  it("denies editing someone else's message, including a teammate's", () => {
+    const visitorMsg = { ...reply, authorPrincipalId: VISITOR }
+    expect(canEditMessage(adminActor, visitorMsg).allowed).toBe(false)
+    expect(canEditMessage(memberActor, visitorMsg).allowed).toBe(false)
+    expect(canEditMessage(visitorActor, adminReply).allowed).toBe(false)
+  })
+
+  it('denies a visitor editing their own message (no reply permission)', () => {
+    expect(canEditMessage(visitorActor, { ...reply, authorPrincipalId: VISITOR }).allowed).toBe(
+      false
+    )
+  })
+
+  it('requires the permission that writes that kind of message', () => {
+    const cases = [
+      { parent: 'conversation', isInternal: false, key: PERMISSIONS.CONVERSATION_REPLY },
+      { parent: 'conversation', isInternal: true, key: PERMISSIONS.CONVERSATION_NOTE },
+      { parent: 'ticket', isInternal: false, key: PERMISSIONS.TICKET_REPLY },
+      { parent: 'ticket', isInternal: true, key: PERMISSIONS.TICKET_NOTE },
+    ] as const
+    const all = cases.map((c) => c.key)
+    for (const c of cases) {
+      const msg = {
+        authorPrincipalId: adminActor.principalId,
+        parent: c.parent,
+        isInternal: c.isInternal,
+      }
+      expect(canEditMessage(withPermissions(c.key), msg).allowed).toBe(true)
+      const others = all.filter((k) => k !== c.key)
+      expect(canEditMessage(withPermissions(...others), msg).allowed).toBe(false)
+    }
   })
 
   it('denies a service principal and an author-less row', () => {
-    const serviceVisitor: Actor = {
-      principalId: VISITOR,
-      role: 'user',
-      principalType: 'service',
-      segmentIds: new Set(),
-    }
-    expect(canEditMessage(serviceVisitor, own).allowed).toBe(false)
-    expect(canEditMessage(visitorActor, { authorPrincipalId: null }).allowed).toBe(false)
+    const serviceAdmin: Actor = { ...adminActor, principalType: 'service' }
+    expect(canEditMessage(serviceAdmin, adminReply).allowed).toBe(false)
+    expect(canEditMessage(adminActor, { ...reply, authorPrincipalId: null }).allowed).toBe(false)
   })
 })

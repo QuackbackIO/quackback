@@ -31,6 +31,7 @@ import {
   publishAgentConversationEvent,
   publishConversationOnlyEvent,
   publishConversationUpdate,
+  publishTicketEvent,
 } from '@/lib/server/realtime/conversation-channels'
 import {
   validateContent,
@@ -106,6 +107,30 @@ function bodyUnchanged(
   return prev == null && richMessageFallbackLabel(next) === ''
 }
 
+/**
+ * Ticket threads listen on the ticket channel, not the inbox's conversation
+ * events, so an edit shown there needs its own push: to the message's ticket,
+ * or to the customer ticket paired with its conversation.
+ */
+async function publishTicketThreadEdit(message: ConversationMessage): Promise<void> {
+  let ticketId = message.ticketId
+  if (!ticketId && message.conversationId) {
+    const { resolvePairTicketIdForConversation } =
+      await import('@/lib/server/domains/tickets/pair-thread.service')
+    ticketId = await resolvePairTicketIdForConversation(message.conversationId)
+  }
+  if (!ticketId) return
+  const author = message.principalId
+    ? ((await loadAuthors([message.principalId])).get(message.principalId) ??
+      fallbackAuthor(message.principalId))
+    : null
+  publishTicketEvent(ticketId, {
+    kind: 'ticket_message_updated',
+    ticketId,
+    message: toMessageDTO(message, author),
+  })
+}
+
 /** Replace the body of a message the actor authored. */
 export async function editConversationMessage(
   messageId: ConversationMessageId,
@@ -149,7 +174,11 @@ export async function editConversationMessage(
     }
   }
 
-  const decision = canEditMessage(actor, { authorPrincipalId: message.principalId })
+  const decision = canEditMessage(actor, {
+    authorPrincipalId: message.principalId,
+    parent: message.conversationId ? 'conversation' : 'ticket',
+    isInternal: message.isInternal,
+  })
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
 
   return applyEdit(message, rawContent, contentJson, actor, viewerId)
@@ -183,7 +212,8 @@ async function applyEdit(
   const githubCommentId =
     message.conversationId && !message.isInternal ? message.metadata?.githubCommentId : undefined
   if (githubCommentId && message.conversationId) {
-    const { updateGitHubIssueComment } = await import('@/lib/server/domains/channels/github-deliver')
+    const { updateGitHubIssueComment } =
+      await import('@/lib/server/domains/channels/github-deliver')
     const { contentJsonToMarkdown } = await import('@/lib/server/markdown-tiptap')
     await updateGitHubIssueComment(
       message.conversationId,
@@ -262,6 +292,7 @@ async function applyEdit(
   }
 
   const dto = await toAgentDto(updated, viewerId)
+  await publishTicketThreadEdit(updated)
 
   if (updated.conversationId) {
     publishAgentConversationEvent({

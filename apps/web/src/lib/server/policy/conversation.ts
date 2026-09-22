@@ -7,8 +7,8 @@
  * team sees and acts on all of them.
  */
 import { allowDecision, denyDecision, type Actor, type Decision } from './types'
-import { can } from './authorize'
-import { PERMISSIONS } from '@/lib/shared/permissions'
+import { can, authorize } from './authorize'
+import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import type { PrincipalId } from '@quackback/ids'
 import type { ConversationStatus } from '@/lib/server/db'
 
@@ -82,19 +82,36 @@ export function canDeleteMessage(
 }
 
 /**
- * Who may edit a message: only its author. Unlike delete, a teammate cannot
- * rewrite someone else's words. Service principals are excluded. System rows
- * are refused by the caller before this check (they have no author).
+ * Who may edit a message: only its author, and only while they still hold the
+ * permission that writes that kind of message (a reply or a note, on a
+ * conversation or a ticket). Unlike delete, a teammate cannot rewrite someone
+ * else's words. Service principals are excluded. System rows are refused by
+ * the caller before this check (they have no author).
  */
 export function canEditMessage(
   actor: Actor,
-  message: { authorPrincipalId: PrincipalId | null }
+  message: {
+    authorPrincipalId: PrincipalId | null
+    parent: 'conversation' | 'ticket'
+    isInternal: boolean
+  }
 ): Decision {
   if (!actor.principalId) return denyDecision('A session is required to edit a message')
   if (actor.principalType === 'service')
     return denyDecision('Service principals cannot edit messages')
-  if (message.authorPrincipalId && message.authorPrincipalId === actor.principalId) {
-    return allowDecision()
+  if (!message.authorPrincipalId || message.authorPrincipalId !== actor.principalId) {
+    return denyDecision('You can only edit your own messages')
   }
-  return denyDecision('You can only edit your own messages')
+  return authorize(actor, editPermissionFor(message))
+}
+
+/** The permission that writes this kind of message, and so gates editing it. */
+function editPermissionFor(message: {
+  parent: 'conversation' | 'ticket'
+  isInternal: boolean
+}): PermissionKey {
+  if (message.parent === 'ticket') {
+    return message.isInternal ? PERMISSIONS.TICKET_NOTE : PERMISSIONS.TICKET_REPLY
+  }
+  return message.isInternal ? PERMISSIONS.CONVERSATION_NOTE : PERMISSIONS.CONVERSATION_REPLY
 }

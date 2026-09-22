@@ -846,7 +846,9 @@ const editMessageSchema = z.object({
 export const editConversationMessageFn = createServerFn({ method: 'POST' })
   .validator(editMessageSchema)
   .handler(async ({ data }) => {
-    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_REPLY })
+    // The permission depends on the message (reply or note, conversation or
+    // ticket), so the service checks it once the row is loaded.
+    const ctx = await requireAuth()
     const actor = await policyActorFromAuth(ctx)
     const { editConversationMessage } =
       await import('@/lib/server/domains/conversation/conversation.edit')

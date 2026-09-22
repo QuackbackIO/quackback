@@ -12,12 +12,16 @@ const publishAgentConversationEvent = vi.fn()
 const publishConversationUpdate = vi.fn()
 const emitMessageUpdated = vi.fn()
 const updateGitHubIssueComment = vi.fn()
+const publishTicketEvent = vi.fn()
+let pairTicketId: string | null = null
 
 let messageRow: Record<string, unknown> | null = null
 let latestId = 'conversation_msg_1'
 const updates: Array<{ table: string; values: Record<string, unknown> }> = []
 
-const emit = vi.hoisted(() => ({ emitMessageUpdated: (...a: unknown[]) => emitMessageUpdated(...a) }))
+const emit = vi.hoisted(() => ({
+  emitMessageUpdated: (...a: unknown[]) => emitMessageUpdated(...a),
+}))
 
 vi.mock('../conversation.webhooks', () => emit)
 
@@ -25,6 +29,11 @@ vi.mock('@/lib/server/realtime/conversation-channels', () => ({
   publishConversationOnlyEvent: (...a: unknown[]) => publishConversationOnlyEvent(...a),
   publishAgentConversationEvent: (...a: unknown[]) => publishAgentConversationEvent(...a),
   publishConversationUpdate: (...a: unknown[]) => publishConversationUpdate(...a),
+  publishTicketEvent: (...a: unknown[]) => publishTicketEvent(...a),
+}))
+
+vi.mock('@/lib/server/domains/tickets/pair-thread.service', () => ({
+  resolvePairTicketIdForConversation: vi.fn(async () => pairTicketId),
 }))
 
 vi.mock('@/lib/server/messages/assistant-principal', () => ({
@@ -43,8 +52,8 @@ vi.mock('./sync-conversation-mentions', () => ({
   syncConversationMessageMentions: vi.fn(),
 }))
 
-vi.mock('./message-parent', () => ({
-  resolveMessageParent: vi.fn(async () => ({ kind: 'conversation', conversationId: 'conversation_1' })),
+vi.mock('../message-parent', () => ({
+  resolveMessageParent: vi.fn(async () => ({ kind: 'ticket', ticketId: 'ticket_1' })),
 }))
 
 vi.mock('@/lib/server/domains/channels/github-deliver', () => ({
@@ -64,8 +73,14 @@ vi.mock('../conversation.query', () => ({
     senderType: m.senderType,
     author: { principalId: m.principalId, displayName: 'Agent' },
   })),
-  loadAuthors: vi.fn(async () => new Map([['principal_agent', { displayName: 'Agent', avatarUrl: null }]])),
-  fallbackAuthor: vi.fn((id: string) => ({ principalId: id, displayName: 'Agent', avatarUrl: null })),
+  loadAuthors: vi.fn(
+    async () => new Map([['principal_agent', { displayName: 'Agent', avatarUrl: null }]])
+  ),
+  fallbackAuthor: vi.fn((id: string) => ({
+    principalId: id,
+    displayName: 'Agent',
+    avatarUrl: null,
+  })),
   enrichMessagesForAgent: vi.fn(async (messages: Array<Record<string, unknown>>) =>
     messages.map((m) => ({
       ...m,
@@ -137,6 +152,7 @@ vi.mock('@/lib/server/db', () => {
 })
 
 import { editConversationMessage } from '../conversation.edit'
+import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 
 const agentActor: Actor = {
   principalId: 'principal_agent' as PrincipalId,
@@ -171,7 +187,16 @@ function message(over: Record<string, unknown> = {}) {
   }
 }
 
+function agentWith(...keys: PermissionKey[]): Actor {
+  return {
+    ...agentActor,
+    role: 'member',
+    permissions: new Set([PERMISSIONS.CONVERSATION_VIEW, ...keys]),
+  }
+}
+
 beforeEach(() => {
+  pairTicketId = null
   messageRow = null
   latestId = 'conversation_msg_1'
   updates.length = 0
@@ -179,10 +204,15 @@ beforeEach(() => {
 })
 
 describe('editConversationMessage', () => {
-  it('refuses a teammate editing someone else\'s message', async () => {
+  it("refuses a teammate editing someone else's message", async () => {
     messageRow = message()
     await expect(
-      editConversationMessage('conversation_msg_1' as ConversationMessageId, 'Nope', null, otherActor)
+      editConversationMessage(
+        'conversation_msg_1' as ConversationMessageId,
+        'Nope',
+        null,
+        otherActor
+      )
     ).rejects.toThrow(ForbiddenError)
     expect(publishAgentConversationEvent).not.toHaveBeenCalled()
     expect(updates).toHaveLength(0)
@@ -191,7 +221,12 @@ describe('editConversationMessage', () => {
   it('refuses a system message', async () => {
     messageRow = message({ senderType: 'system', principalId: null })
     await expect(
-      editConversationMessage('conversation_msg_1' as ConversationMessageId, 'Nope', null, agentActor)
+      editConversationMessage(
+        'conversation_msg_1' as ConversationMessageId,
+        'Nope',
+        null,
+        agentActor
+      )
     ).rejects.toThrow(ForbiddenError)
   })
 
@@ -254,5 +289,84 @@ describe('editConversationMessage', () => {
     )
     expect(updates).toHaveLength(0)
     expect(publishAgentConversationEvent).not.toHaveBeenCalled()
+  })
+
+  it('checks the permission for the kind of message being edited', async () => {
+    messageRow = message({ isInternal: true })
+    await expect(
+      editConversationMessage(
+        'conversation_msg_1' as ConversationMessageId,
+        'Note, fixed',
+        null,
+        agentWith(PERMISSIONS.CONVERSATION_REPLY)
+      )
+    ).rejects.toThrow(ForbiddenError)
+    expect(updates).toHaveLength(0)
+
+    messageRow = message({ conversationId: null, ticketId: 'ticket_1' })
+    await expect(
+      editConversationMessage(
+        'conversation_msg_1' as ConversationMessageId,
+        'Hello there',
+        null,
+        agentWith(PERMISSIONS.CONVERSATION_REPLY)
+      )
+    ).rejects.toThrow(ForbiddenError)
+    const dto = await editConversationMessage(
+      'conversation_msg_1' as ConversationMessageId,
+      'Hello there',
+      null,
+      agentWith(PERMISSIONS.TICKET_REPLY)
+    )
+    expect(dto.content).toBe('Hello there')
+  })
+
+  it('pushes a ticket-parented edit to the ticket thread', async () => {
+    messageRow = message({ conversationId: null, ticketId: 'ticket_1' })
+    await editConversationMessage(
+      'conversation_msg_1' as ConversationMessageId,
+      'Hello there',
+      null,
+      agentActor
+    )
+    expect(publishTicketEvent).toHaveBeenCalledWith(
+      'ticket_1',
+      expect.objectContaining({
+        kind: 'ticket_message_updated',
+        ticketId: 'ticket_1',
+        message: expect.objectContaining({ id: 'conversation_msg_1', content: 'Hello there' }),
+      })
+    )
+    expect(publishAgentConversationEvent).not.toHaveBeenCalled()
+    expect(publishConversationOnlyEvent).not.toHaveBeenCalled()
+  })
+
+  it('pushes a paired conversation edit to its customer ticket thread too', async () => {
+    pairTicketId = 'ticket_pair'
+    messageRow = message()
+    await editConversationMessage(
+      'conversation_msg_1' as ConversationMessageId,
+      'Hello there',
+      null,
+      agentActor
+    )
+    expect(publishTicketEvent).toHaveBeenCalledWith(
+      'ticket_pair',
+      expect.objectContaining({ kind: 'ticket_message_updated', ticketId: 'ticket_pair' })
+    )
+    expect(publishAgentConversationEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'message_updated' })
+    )
+  })
+
+  it('does not push to a ticket channel for an unpaired conversation', async () => {
+    messageRow = message()
+    await editConversationMessage(
+      'conversation_msg_1' as ConversationMessageId,
+      'Hello there',
+      null,
+      agentActor
+    )
+    expect(publishTicketEvent).not.toHaveBeenCalled()
   })
 })

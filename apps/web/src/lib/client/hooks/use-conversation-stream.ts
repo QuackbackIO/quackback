@@ -57,6 +57,7 @@ const NAMED_EVENTS = [
   // Ticket frames (inbox stream). EventSource drops named events with no
   // listener, so hover-prefetched ticket caches would stay stale without these.
   'ticket_message',
+  'ticket_message_updated',
   'ticket_updated',
   'ticket_read',
 ] as const

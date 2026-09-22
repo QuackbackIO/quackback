@@ -10,6 +10,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest'
 import { render, screen, cleanup, fireEvent } from '@testing-library/react'
 import { AgentMessageBubble } from '../message-bubble'
 import { canEditAgentMessage } from '../message-edit'
+import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import type { AgentConversationMessageDTO } from '@/lib/shared/conversation/types'
 
 afterEach(cleanup)
@@ -80,21 +81,45 @@ describe('AgentMessageBubble — edited mark', () => {
     expect(screen.getByText('Hello there')).toBeInTheDocument()
   })
 
-  it('offers Edit message only for the author\'s own ordinary message', () => {
+  it("offers Edit message only for the author's own ordinary message", () => {
     const own = baseMessage({
       senderType: 'agent',
       author: { principalId: 'principal_me' as never, displayName: 'James', avatarUrl: null },
     })
-    expect(canEditAgentMessage(own, 'principal_me')).toBe(true)
-    expect(canEditAgentMessage(own, 'principal_other')).toBe(false)
-    expect(canEditAgentMessage({ ...own, isAssistant: true }, 'principal_me')).toBe(false)
-    expect(canEditAgentMessage({ ...own, senderType: 'system' }, 'principal_me')).toBe(false)
+    const all = new Set(Object.values(PERMISSIONS))
+    expect(canEditAgentMessage(own, 'principal_me', all)).toBe(true)
+    expect(canEditAgentMessage(own, 'principal_other', all)).toBe(false)
+    expect(canEditAgentMessage({ ...own, isAssistant: true }, 'principal_me', all)).toBe(false)
+    expect(canEditAgentMessage({ ...own, senderType: 'system' }, 'principal_me', all)).toBe(false)
     expect(
       canEditAgentMessage(
         { ...own, block: { kind: 'buttons', prompt: 'Pick', options: [] } as never },
-        'principal_me'
+        'principal_me',
+        all
       )
     ).toBe(false)
+  })
+
+  it('hides Edit message without the permission that writes that kind of message', () => {
+    const own = baseMessage({
+      senderType: 'agent',
+      author: { principalId: 'principal_me' as never, displayName: 'James', avatarUrl: null },
+    })
+    const ticketReply = { ...own, conversationId: null, ticketId: 'ticket_1' as never }
+    const note = { ...own, isInternal: true }
+    const only = (key: PermissionKey) => new Set([key])
+    expect(canEditAgentMessage(ticketReply, 'principal_me', only(PERMISSIONS.TICKET_REPLY))).toBe(
+      true
+    )
+    expect(
+      canEditAgentMessage(ticketReply, 'principal_me', only(PERMISSIONS.CONVERSATION_REPLY))
+    ).toBe(false)
+    expect(canEditAgentMessage(note, 'principal_me', only(PERMISSIONS.CONVERSATION_NOTE))).toBe(
+      true
+    )
+    expect(canEditAgentMessage(note, 'principal_me', only(PERMISSIONS.CONVERSATION_REPLY))).toBe(
+      false
+    )
   })
 })
 
