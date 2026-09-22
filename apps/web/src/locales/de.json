@@ -525,6 +525,7 @@
   "widget.messenger.jumpToLatest": "Zur neuesten Nachricht springen",
   "widget.messenger.loadOlder": "Frühere Nachrichten laden",
   "widget.messenger.loadingOlder": "Wird geladen…",
+  "widget.messenger.edited": "(bearbeitet)",
   "widget.loading": "Wird geladen…",
   "widget.messenger.offline": "Wir antworten per E-Mail",
   "widget.messenger.assistant.teamAlso": "Das Team kann auch helfen",

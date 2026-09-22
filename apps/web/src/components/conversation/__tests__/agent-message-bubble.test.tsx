@@ -8,7 +8,7 @@
  */
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { render, screen, cleanup, fireEvent } from '@testing-library/react'
-import { AgentMessageBubble } from '../message-bubble'
+import { AgentMessageBubble, VisitorMessageBubble } from '../message-bubble'
 import { canEditAgentMessage } from '../message-edit'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import type { AgentConversationMessageDTO } from '@/lib/shared/conversation/types'
@@ -55,6 +55,16 @@ describe('AgentMessageBubble — edited mark', () => {
 
   it('omits the note on a message that was never edited', () => {
     render(<AgentMessageBubble message={baseMessage()} />)
+    expect(screen.queryByText('(edited)')).not.toBeInTheDocument()
+  })
+
+  it('renders the visitor-side mark from the localized label it is given', () => {
+    render(
+      <VisitorMessageBubble side="peer" content="Hi" time="10:00" editedLabel="(bearbeitet)" />
+    )
+    expect(screen.getByText('(bearbeitet)')).toBeInTheDocument()
+    cleanup()
+    render(<VisitorMessageBubble side="peer" content="Hi" time="10:00" />)
     expect(screen.queryByText('(edited)')).not.toBeInTheDocument()
   })
 
