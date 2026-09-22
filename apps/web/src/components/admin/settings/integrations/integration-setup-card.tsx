@@ -5,7 +5,7 @@ interface IntegrationSetupCardProps {
   title: string
   description: string
   steps: ReactNode[]
-  connectionForm: ReactNode
+  connectionForm?: ReactNode
 }
 
 export function IntegrationSetupCard({
@@ -38,7 +38,9 @@ export function IntegrationSetupCard({
         ))}
       </div>
 
-      <div className="mt-6 border-t border-border/50 pt-6">{connectionForm}</div>
+      {connectionForm ? (
+        <div className="mt-6 border-t border-border/50 pt-6">{connectionForm}</div>
+      ) : null}
     </div>
   )
 }

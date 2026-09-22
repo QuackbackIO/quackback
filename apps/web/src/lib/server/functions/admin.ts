@@ -594,6 +594,7 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
       log.debug({ type: data.type }, 'fetch integration by type not found')
       return {
         integration: null,
+        syncHistoryAvailable: false,
         platformCredentialFields,
         platformCredentialsConfigured,
         platformCredentialsManaged,
@@ -639,7 +640,22 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
 
     const notificationChannels = [...channelMap.values()]
     const { readSyncHealth } = await import('@/lib/server/integrations/sync/health')
+    const {
+      connectionIsDestination,
+      readSlackAssistantEnabled,
+      syncHistoryAvailable,
+      writesLedger,
+    } = await import('@/lib/server/integrations/sync/availability')
     const syncHealth = await readSyncHealth(integration)
+    const syncHistoryAvailableFlag = syncHistoryAvailable({
+      provider: data.type,
+      status: integration.status,
+      config: integrationConfig,
+      notificationChannels,
+      writesLedger: writesLedger(definition),
+      connectionIsDestination: connectionIsDestination(definition),
+      slackAssistantEnabled: await readSlackAssistantEnabled(data.type),
+    }).available
 
     return {
       integration: {
@@ -661,6 +677,7 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
           lastErrorAt: integration.lastErrorAt?.toISOString() ?? null,
         },
       },
+      syncHistoryAvailable: syncHistoryAvailableFlag,
       platformCredentialFields,
       platformCredentialsConfigured,
       platformCredentialsManaged,
