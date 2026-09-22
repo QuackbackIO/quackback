@@ -119,23 +119,25 @@ export function authorFromInput(input: {
 }
 
 /**
- * Resolve a send-call author for the returned/broadcast DTO. The avatar comes
+ * Resolve an agent-only note or suggestion author. The avatar comes
  * from the canonical resolver (loadAuthors: user.image → uploaded image_key →
  * principal copy) so a just-sent message shows the same avatar a reload would —
  * the session only carries `user.image`, which is null for uploaded avatars. The
- * live session display name is preferred; we fall back to the input entirely if
- * the principal row can't be found.
+ * account name matches agent thread reads; we fall back to the input if the
+ * principal row can't be found.
  */
 export async function resolveAuthor(input: {
   principalId: PrincipalId
   displayName?: string | null
   avatarUrl?: string | null
 }): Promise<ConversationAuthorDTO> {
-  const resolved = (await loadAuthors([input.principalId])).get(input.principalId)
+  const resolved = (await loadAuthors([input.principalId], { preferAccountName: true })).get(
+    input.principalId
+  )
   if (!resolved) return authorFromInput(input)
   return {
     principalId: input.principalId,
-    displayName: input.displayName ?? resolved.displayName,
+    displayName: resolved.displayName,
     avatarUrl: resolved.avatarUrl ?? input.avatarUrl ?? null,
   }
 }
@@ -153,8 +155,10 @@ export async function resolveAuthorAudiences(input: {
   const views = await loadAuthorAudiences([input.principalId])
   const view = views.get(input.principalId)
   if (!view) {
-    const fallback = authorFromInput(input)
-    return { publicAuthor: fallback, supportAuthor: fallback }
+    return {
+      publicAuthor: fallbackAuthor(input.principalId),
+      supportAuthor: authorFromInput(input),
+    }
   }
   return view
 }

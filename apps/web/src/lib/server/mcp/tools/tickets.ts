@@ -175,6 +175,7 @@ Example: get_ticket({ ticketId: "ticket_01abc...", includeInternal: true })`,
         listTicketMessages(ticketId, {
           before: args.cursor,
           includeInternal: args.includeInternal ?? false,
+          preferAccountName: true,
         }),
       ])
       const nextCursor = page.hasMore && page.messages.length ? page.messages[0].id : null

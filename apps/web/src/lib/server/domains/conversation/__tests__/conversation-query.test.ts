@@ -100,6 +100,8 @@ import {
   authorFromInput,
   fallbackAuthor,
   loadAuthors,
+  resolveAuthor,
+  resolveAuthorAudiences,
   listConversationsForAgent,
   resolveVisitorConversation,
   enrichMessagesForAgent,
@@ -451,6 +453,38 @@ describe('loadAuthors', () => {
 
     const publicName = await loadAuthors([visitorId])
     expect(publicName.get(visitorId)?.displayName).toBe('Quiet Otter')
+  })
+})
+
+describe('resolveAuthorAudiences', () => {
+  it('uses account names for live internal notes and suggestion cards', async () => {
+    principalRows = [
+      { id: agentId, displayName: 'Support Ada', accountName: 'Ada Lovelace', avatarUrl: null },
+    ]
+    const author = await resolveAuthor({ principalId: agentId, displayName: 'Support Ada' })
+    expect(author.displayName).toBe('Ada Lovelace')
+  })
+
+  it('uses the stored public name even when the caller supplies an account name', async () => {
+    principalRows = [
+      { id: agentId, displayName: 'Support Ada', accountName: 'Ada Lovelace', avatarUrl: null },
+    ]
+    const authors = await resolveAuthorAudiences({
+      principalId: agentId,
+      displayName: 'Ada Lovelace',
+    })
+    expect(authors.publicAuthor.displayName).toBe('Support Ada')
+    expect(authors.supportAuthor.displayName).toBe('Ada Lovelace')
+    expect(inArrayCalls).toEqual([[agentId]])
+  })
+
+  it('keeps a caller-provided account name off the public fallback when the principal is missing', async () => {
+    const authors = await resolveAuthorAudiences({
+      principalId: agentId,
+      displayName: 'Ada Lovelace',
+    })
+    expect(authors.publicAuthor).toEqual(fallbackAuthor(agentId))
+    expect(authors.supportAuthor.displayName).toBe('Ada Lovelace')
   })
 })
 

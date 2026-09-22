@@ -458,7 +458,7 @@ export async function sendVisitorMessage(
   // there (publishConversationUpdate strips agent-only fields for the visitor).
   if (created) {
     const agentDTO = await conversationToDTO(txResult.conversation, 'agent')
-    publishConversationUpdate(agentDTO.id, agentDTO)
+    await publishConversationUpdate(agentDTO.id, agentDTO)
   }
   publishConversationMessage(txResult.conversation.id, {
     visitor: visitorMessage,
@@ -655,7 +655,7 @@ export async function startAgentConversation(
   // Agent-side DTO for the inbox stream; publishConversationUpdate strips
   // agent-only fields from the visitor's copy.
   const agentDTO = await conversationToDTO(txResult.conversation, 'agent')
-  publishConversationUpdate(agentDTO.id, agentDTO)
+  await publishConversationUpdate(agentDTO.id, agentDTO)
   publishConversationMessage(txResult.conversation.id, {
     visitor: toMessageDTO(txResult.message, authored.publicAuthor),
     agent: messageDTO,
@@ -788,7 +788,7 @@ export async function sendAgentMessage(
   // strips them from the visitor's copy.
   const conversationDTO = await conversationToDTO(txResult.conversation, 'agent')
 
-  publishConversationUpdate(conversationDTO.id, conversationDTO)
+  await publishConversationUpdate(conversationDTO.id, conversationDTO)
   publishConversationMessage(txResult.conversation.id, {
     visitor: toMessageDTO(txResult.message, authored.publicAuthor),
     agent: messageDTO,
@@ -998,7 +998,7 @@ export async function setConversationStatus(
     }
   }
   const dto = await conversationToDTO(updated, 'agent')
-  publishConversationUpdate(conversationId, dto)
+  await publishConversationUpdate(conversationId, dto)
   if (updated.status !== previous) {
     void emitConversationStatusChanged(actor, updated, previous)
   }
@@ -1068,7 +1068,7 @@ export async function snoozeConversation(
     .where(eq(conversations.id, conversationId))
     .returning()
   const dto = await conversationToDTO(updated, 'agent')
-  publishConversationUpdate(conversationId, dto)
+  await publishConversationUpdate(conversationId, dto)
   await emitSnoozeSystemMessage(conversationId, actor.principalId, until)
   if (updated.status !== previous) {
     void emitConversationStatusChanged(actor, updated, previous)
@@ -1099,7 +1099,7 @@ export async function sweepDueSnoozedConversations(): Promise<{ woken: number }>
   await Promise.all(
     due.map(async (conversation) => {
       const dto = await conversationToDTO(conversation, 'agent')
-      publishConversationUpdate(conversation.id, dto)
+      await publishConversationUpdate(conversation.id, dto)
       void emitConversationStatusChanged(actor, conversation, 'snoozed')
     })
   )
@@ -1152,7 +1152,7 @@ export async function endConversation(
     })
   }
   const dto = await conversationToDTO(updated, 'agent')
-  publishConversationUpdate(conversationId, dto)
+  await publishConversationUpdate(conversationId, dto)
   if (previous !== 'closed') {
     void emitConversationStatusChanged(actor, updated, previous)
     void import('@/lib/server/domains/channels')
@@ -1208,7 +1208,7 @@ export async function restoreConversationFromSpam(
     internal: true,
   })
   const dto = await conversationToDTO(updated, 'agent')
-  publishConversationUpdate(conversationId, dto)
+  await publishConversationUpdate(conversationId, dto)
   void emitConversationStatusChanged(actor, updated, existing.status)
   return dto
 }
@@ -1245,7 +1245,7 @@ export async function autoFileConversationAsSpam(
     internal: true,
   })
   const dto = await conversationToDTO(updated, 'agent')
-  publishConversationUpdate(conversationId, dto)
+  await publishConversationUpdate(conversationId, dto)
   void emitConversationStatusChanged(systemActor(), updated, existing.status)
   log.info({ conversation_id: conversationId }, 'conversation auto-filed as spam')
   return true
@@ -1466,7 +1466,7 @@ async function assignRoutedConversation(conversation: Conversation): Promise<Pri
     .returning()
   if (!assigned) return null
   await emitAssignmentSystemMessage(assigned.id, assignedPrincipalId)
-  publishConversationUpdate(assigned.id, await conversationToDTO(assigned, 'agent'))
+  await publishConversationUpdate(assigned.id, await conversationToDTO(assigned, 'agent'))
   // Auto-routing only ever touches the agent column — the team side reports
   // no change (still-current value as its own "previous").
   void emitConversationAssigned(systemActor(), assigned, null, assigned.assignedTeamId ?? null)
@@ -1513,7 +1513,7 @@ export async function assignConversation(
     .where(eq(conversations.id, conversationId))
     .returning()
   const dto = await conversationToDTO(updated, 'agent')
-  publishConversationUpdate(conversationId, dto)
+  await publishConversationUpdate(conversationId, dto)
   if (agentPrincipalId) {
     await emitAssignmentSystemMessage(conversationId, agentPrincipalId, attribution)
   }
@@ -1581,7 +1581,7 @@ export async function assignTeam(
     .returning()
 
   const dto = await conversationToDTO(updated, 'agent')
-  publishConversationUpdate(conversationId, dto)
+  await publishConversationUpdate(conversationId, dto)
 
   if (team) {
     await emitTeamAssignmentSystemMessage(conversationId, team.name)
@@ -1678,7 +1678,8 @@ export async function requeueUnansweredOnAgentOffline(
         .from(conversations)
         .where(eq(conversations.id, conversation.id))
         .limit(1)
-      if (current) publishConversationUpdate(current.id, await conversationToDTO(current, 'agent'))
+      if (current)
+        await publishConversationUpdate(current.id, await conversationToDTO(current, 'agent'))
     }
   } catch (err) {
     log.warn({ err }, 'requeue unanswered on agent offline failed')
@@ -1710,7 +1711,7 @@ export async function setConversationPriority(
     .where(eq(conversations.id, conversationId))
     .returning()
   const dto = await conversationToDTO(updated, 'agent')
-  publishConversationUpdate(conversationId, dto)
+  await publishConversationUpdate(conversationId, dto)
   if (updated.priority !== existing.priority) {
     await emitPriorityChangeSystemMessage(conversationId, actor.principalId, updated.priority)
     void emitConversationPriorityChanged(actor, updated, existing.priority)
@@ -1891,7 +1892,7 @@ export async function recordCsat(
   // Surface the rating to the agent inbox live (agent-only fields stripped for
   // the visitor). This fires on every call so a follow-up comment still lands.
   const dto = await conversationToDTO(updated, 'agent')
-  publishConversationUpdate(conversationId, dto)
+  await publishConversationUpdate(conversationId, dto)
   // Emit after the transaction commits so a rolled-back write never webhooks.
   if (isFirstSubmission) void emitConversationCsatSubmitted(actor, updated)
   if (commentJustAdded) void emitConversationCsatCommentAdded(actor, updated)
@@ -2165,7 +2166,7 @@ export async function appendAssistantReply(
   const authored = await resolveAuthorAudiences(author)
   const messageDTO = toMessageDTO(txResult.message, authored.supportAuthor, author.principalId)
   const conversationDTO = await conversationToDTO(txResult.conversation, 'agent')
-  publishConversationUpdate(conversationDTO.id, conversationDTO)
+  await publishConversationUpdate(conversationDTO.id, conversationDTO)
   publishConversationMessage(txResult.conversation.id, {
     visitor: toMessageDTO(txResult.message, authored.publicAuthor, author.principalId),
     agent: messageDTO,
@@ -2304,7 +2305,7 @@ export async function executeAssistantHandoff(
   // assignRoutedConversation broadcasts the assigned DTO itself on success; when
   // routing declines (or a workflow owns the handoff), still surface the update.
   if (!assigned) {
-    publishConversationUpdate(updated.id, await conversationToDTO(updated, 'agent'))
+    await publishConversationUpdate(updated.id, await conversationToDTO(updated, 'agent'))
   }
   // AI attribute classification (AI-ATTRIBUTES-PARITY-SPEC.md Phase 1) runs
   // BEFORE the event dispatches below, so a workflow condition on

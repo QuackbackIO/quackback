@@ -32,7 +32,11 @@ export const Route = createFileRoute('/api/v1/tickets/$ticketId/messages')({
 
           // 404 if the ticket doesn't exist (or is soft-deleted) before listing.
           await loadTicketOr404(ticketId)
-          const result = await listTicketMessages(ticketId, { before, includeInternal })
+          const result = await listTicketMessages(ticketId, {
+            before,
+            includeInternal,
+            preferAccountName: true,
+          })
 
           // The page is oldest-first; the cursor for the next (older) page is the
           // oldest message loaded. No more pages -> null cursor.

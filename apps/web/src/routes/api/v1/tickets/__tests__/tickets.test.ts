@@ -170,6 +170,7 @@ describe('GET /api/v1/tickets/:id/messages', () => {
     expect(mockListMessages).toHaveBeenCalledWith(TICKET_ID, {
       before: undefined,
       includeInternal: false,
+      preferAccountName: true,
     })
     expect(body.data.map((m: { id: string }) => m.id)).toEqual(['m_old', 'm_new'])
     // cursor for the next older page = the oldest (first) loaded message
@@ -188,6 +189,7 @@ describe('GET /api/v1/tickets/:id/messages', () => {
     expect(mockListMessages).toHaveBeenCalledWith(TICKET_ID, {
       before: undefined,
       includeInternal: true,
+      preferAccountName: true,
     })
   })
 })

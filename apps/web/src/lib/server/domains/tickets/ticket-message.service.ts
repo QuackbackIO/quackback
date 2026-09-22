@@ -547,7 +547,7 @@ export interface TicketMessagePage {
  */
 export async function listTicketMessages(
   ticketId: TicketId,
-  opts: { before?: string; includeInternal?: boolean; all?: boolean } = {}
+  opts: Parameters<typeof listPairThreadMessages>[1] = {}
 ): Promise<TicketMessagePage> {
   return listPairThreadMessages(ticketId, opts)
 }
@@ -575,7 +575,7 @@ export async function listTicketMessagesForAgent(
   viewerPrincipalId: PrincipalId,
   opts: { before?: string; includeInternal?: boolean } = {}
 ): Promise<AgentTicketMessagePage> {
-  const page = await listTicketMessages(ticketId, opts)
+  const page = await listTicketMessages(ticketId, { ...opts, preferAccountName: true })
   const messages = await enrichMessagesForAgent(page.messages, viewerPrincipalId, new Map())
   return { messages, hasMore: page.hasMore }
 }

@@ -527,7 +527,7 @@ export async function setInboxTranslationEnabled(
     .where(eq(conversations.id, conversationId))
     .returning()
   const dto = await conversationToDTO(updated, 'agent')
-  publishConversationUpdate(conversationId, dto)
+  await publishConversationUpdate(conversationId, dto)
   return updated
 }
 
@@ -547,7 +547,7 @@ export async function dismissInboxTranslationSuggestion(
     .where(eq(conversations.id, conversationId))
     .returning()
   const dto = await conversationToDTO(updated, 'agent')
-  publishConversationUpdate(conversationId, dto)
+  await publishConversationUpdate(conversationId, dto)
   return updated
 }
 

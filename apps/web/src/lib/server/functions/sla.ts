@@ -220,8 +220,7 @@ export const createSlaPolicyFn = createServerFn({ method: 'POST' })
   })
 
 export type UpdateSlaPolicyResult =
-  | { ok: true }
-  | { ok: false; code: 'TARGET_REMOVAL'; message: string }
+  { ok: true } | { ok: false; code: 'TARGET_REMOVAL'; message: string }
 
 export const updateSlaPolicyFn = createServerFn({ method: 'POST' })
   .validator(updateSchema)
@@ -255,8 +254,7 @@ export const updateSlaPolicyFn = createServerFn({ method: 'POST' })
   })
 
 export type ArchiveSlaPolicyResult =
-  | { ok: true }
-  | { ok: false; code: 'SLA_IN_USE'; workflows: { id: string; name: string }[] }
+  { ok: true } | { ok: false; code: 'SLA_IN_USE'; workflows: { id: string; name: string }[] }
 
 /** Archive (soft-delete) a policy; blocked while a LIVE workflow applies it.
  *  Archived policies stay on already-applied conversations and in reports. */
@@ -298,7 +296,7 @@ export const removeConversationSlaFn = createServerFn({ method: 'POST' })
         await import('@/lib/server/domains/conversation/conversation.query')
       const { publishConversationUpdate } =
         await import('@/lib/server/realtime/conversation-channels')
-      publishConversationUpdate(row.id, await conversationToDTO(row, 'agent'))
+      await publishConversationUpdate(row.id, await conversationToDTO(row, 'agent'))
     }
     return { ok: true, removed: !!row }
   })

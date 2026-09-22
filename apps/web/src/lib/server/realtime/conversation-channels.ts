@@ -23,6 +23,7 @@ import type {
   ConversationSide,
 } from '@/lib/shared/conversation/types'
 import { publish } from './pubsub'
+import { loadAuthors, fallbackAuthor } from '@/lib/server/domains/principals/principal-display'
 
 export function conversationChannel(conversationId: ConversationId): string {
   return `conversation:${conversationId}`
@@ -138,14 +139,36 @@ export function publishConversationOnlyEvent(
  * sync with the agent-only fields on ConversationDTO so a new one can never
  * silently reach the visitor (conversation-channels.test.ts pins this).
  */
-export function publishConversationUpdate(
+export async function publishConversationUpdate(
   conversationId: ConversationId,
   agentDto: ConversationDTO
-): void {
+): Promise<void> {
+  // Reuse the public profile loader: agent DTOs may contain account names.
+  const authors = await loadAuthors([
+    agentDto.visitor.principalId,
+    agentDto.assignedAgent?.principalId,
+  ])
   publish(CONVERSATION_INBOX_CHANNEL, { kind: 'conversation', conversation: agentDto })
   publish(conversationChannel(conversationId), {
     kind: 'conversation',
-    conversation: { ...agentDto, visitorEmail: null, tags: [], endNote: null, sla: null },
+    conversation: {
+      ...agentDto,
+      visitor:
+        authors.get(agentDto.visitor.principalId) ?? fallbackAuthor(agentDto.visitor.principalId),
+      assignedAgent: agentDto.assignedAgent
+        ? (authors.get(agentDto.assignedAgent.principalId) ??
+          fallbackAuthor(agentDto.assignedAgent.principalId))
+        : null,
+      visitorEmail: null,
+      tags: [],
+      endNote: null,
+      sla: null,
+      snoozedUntil: null,
+      assignedTeamId: null,
+      customAttributes: {},
+      translation: null,
+      spamReason: null,
+    },
   })
 }
 

@@ -217,7 +217,7 @@ async function applyGitHubIssueState(
   })
   const { conversationToDTO } = await import('./conversation.query')
   const { publishConversationUpdate } = await import('@/lib/server/realtime/conversation-channels')
-  publishConversationUpdate(conversationId, await conversationToDTO(updated, 'agent'))
+  await publishConversationUpdate(conversationId, await conversationToDTO(updated, 'agent'))
 }
 
 async function bumpLastInbound(integrationId: IntegrationId): Promise<void> {
