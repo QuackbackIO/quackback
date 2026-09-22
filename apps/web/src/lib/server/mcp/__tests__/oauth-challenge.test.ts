@@ -12,6 +12,7 @@ describe('MCP protected resource metadata', () => {
   it('advertises only the three first-connect read scopes', () => {
     const doc = mcpProtectedResourceMetadata('https://feedback.example.com')
     expect(doc.resource).toBe('https://feedback.example.com/api/mcp')
+    expect(doc.authorization_servers).toEqual(['https://feedback.example.com/api/auth'])
     expect(doc.scopes_supported).toEqual([...MCP_FIRST_CONNECT_SCOPES])
     expect(doc.scopes_supported).toEqual(['read:feedback', 'read:article', 'read:chat'])
     expect(doc.scopes_supported).not.toContain('offline_access')
