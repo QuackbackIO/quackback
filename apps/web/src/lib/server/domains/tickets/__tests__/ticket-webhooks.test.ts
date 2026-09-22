@@ -154,6 +154,28 @@ describe('ticket.webhooks emit helpers', () => {
 })
 
 describe('ticket.webhooks reply + note emit helpers', () => {
+  it.each(['Anonymous', null])(
+    'keeps the account name in agent alerts for a requester with public name %s',
+    async (publicName) => {
+      const principalId = 'principal_r' as PrincipalId
+      loadAuthors.mockResolvedValue(
+        new Map([[principalId, { principalId, displayName: publicName, avatarUrl: null }]])
+      )
+      const requester = { ...agentActor, principalId, role: 'user' } as Actor
+      const message = {
+        ...baseMessage,
+        senderType: 'visitor' as const,
+        author: { principalId, displayName: 'Avery Requester', avatarUrl: null },
+      }
+
+      await emitTicketReplied(requester, baseTicket, message)
+
+      expect(dispatch.dispatchTicketReplied).toHaveBeenCalledTimes(1)
+      expect(dispatch.dispatchTicketReplied.mock.calls[0][7]).toBe('Avery Requester')
+      expect(loadAuthors).not.toHaveBeenCalled()
+    }
+  )
+
   it.each(['Support Ada', null])(
     'uses the public author name (%s) for requester reply notifications',
     async (publicName) => {

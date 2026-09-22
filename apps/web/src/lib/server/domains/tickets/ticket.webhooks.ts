@@ -178,11 +178,12 @@ export async function emitTicketReplied(
   message: ConversationMessageDTO
 ): Promise<void> {
   await safe('ticket.replied', async () => {
-    // This event also drives requester emails and notifications. Its label
-    // must stay public even when the sending agent's DTO uses an account name.
-    const author = message.author
-      ? (await loadAuthors([message.author.principalId])).get(message.author.principalId)
-      : null
+    // Requester replies notify only other watchers, so keep the support name.
+    // Agent replies also notify the requester and must use the public label.
+    let author = message.author
+    if (author && message.senderType !== 'visitor') {
+      author = (await loadAuthors([author.principalId])).get(author.principalId) ?? null
+    }
     return dispatchTicketReplied(
       toEventActor(actor),
       ticketRef(ticket),
