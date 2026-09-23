@@ -5,10 +5,8 @@
  */
 import { describe, it, expect } from 'vitest'
 
-const { isRegistrationRateLimited } = await import('../$')
+const { isRegistrationRateLimited, REG_MAX } = await import('../$')
 const { withWorkspace } = await import('@/lib/server/__tests__/workspace-scope')
-
-const REG_MAX = 10
 
 function request(ip: string): Request {
   return new Request('https://app.example.com/api/auth/oauth2/register', {

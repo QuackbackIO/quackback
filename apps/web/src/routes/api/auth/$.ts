@@ -9,7 +9,10 @@ import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 
 /**
  * Simple rate limiter for OAuth client registration.
- * Limits to 10 registrations per IP per hour to prevent spam/abuse.
+ * Limits registrations per IP per hour to prevent spam/abuse. Hosted MCP
+ * clients register a new client on every connection from a small set of
+ * shared egress addresses, and a server without a proxy sees every caller as
+ * one address, so the ceiling has to cover a whole team connecting at once.
  *
  * Per workspace: the budget is a per-workspace resource, so a shared counter lets
  * one address exhaust every workspace's registration allowance at once, and
@@ -17,7 +20,7 @@ import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
  */
 const registrationAttempts = new WorkspaceKeyedCache<{ count: number; windowStart: number }>()
 const REG_WINDOW_MS = 60 * 60 * 1000 // 1 hour
-const REG_MAX = 10
+export const REG_MAX = 100
 
 export function isRegistrationRateLimited(request: Request): boolean {
   const ip =
