@@ -14,6 +14,7 @@ import {
   and,
   isNull,
   desc,
+  ne,
   notInArray,
   conversations,
   conversationMessages,
@@ -253,6 +254,8 @@ async function applyEdit(
     }
 
     if (!row.isInternal && row.conversationId) {
+      // The preview tracks the newest customer-visible message. System lines
+      // never write it, so they must not stop an edit from refreshing it.
       const [latest] = await tx
         .select({ id: conversationMessages.id })
         .from(conversationMessages)
@@ -260,7 +263,8 @@ async function applyEdit(
           and(
             eq(conversationMessages.conversationId, row.conversationId),
             isNull(conversationMessages.deletedAt),
-            eq(conversationMessages.isInternal, false)
+            eq(conversationMessages.isInternal, false),
+            ne(conversationMessages.senderType, 'system')
           )
         )
         .orderBy(desc(conversationMessages.createdAt), desc(conversationMessages.id))

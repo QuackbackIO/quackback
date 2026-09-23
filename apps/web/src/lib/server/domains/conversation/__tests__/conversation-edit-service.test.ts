@@ -13,6 +13,7 @@ const publishConversationUpdate = vi.fn()
 const emitMessageUpdated = vi.fn()
 const updateGitHubIssueComment = vi.fn()
 const publishTicketEvent = vi.fn()
+const ne = vi.fn()
 let pairTicketId: string | null = null
 
 let messageRow: Record<string, unknown> | null = null
@@ -144,9 +145,10 @@ vi.mock('@/lib/server/db', () => {
     and: vi.fn((...args: unknown[]) => args),
     isNull: vi.fn(),
     desc: vi.fn(),
+    ne: (...a: unknown[]) => ne(...a),
     notInArray: vi.fn(),
     conversations: { __name: 'conversations', id: 'id' },
-    conversationMessages: { __name: 'conversation_messages', id: 'id' },
+    conversationMessages: { __name: 'conversation_messages', id: 'id', senderType: 'sender_type' },
     conversationMessageMentions: { __name: 'conversation_message_mentions', id: 'id' },
   }
 })
@@ -368,5 +370,18 @@ describe('editConversationMessage', () => {
       agentActor
     )
     expect(publishTicketEvent).not.toHaveBeenCalled()
+  })
+
+  it('refreshes the preview when only a system line follows the edited message', async () => {
+    messageRow = message()
+    await editConversationMessage(
+      'conversation_msg_1' as ConversationMessageId,
+      'Hello there',
+      null,
+      agentActor
+    )
+    // System lines never write the preview, so the "newest message" lookup
+    // must skip them or an edit before a close/assign notice goes stale.
+    expect(ne).toHaveBeenCalledWith('sender_type', 'system')
   })
 })
