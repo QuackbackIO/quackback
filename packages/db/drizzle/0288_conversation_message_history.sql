@@ -7,7 +7,7 @@ ALTER TABLE "conversation_messages" ADD COLUMN IF NOT EXISTS "redacted_at" times
 ALTER TABLE "conversation_messages" ADD COLUMN IF NOT EXISTS "redacted_by_principal_id" uuid CONSTRAINT "conversation_messages_redacted_by_principal_id_fkey" REFERENCES "principal"("id") ON DELETE SET NULL;
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "conversation_message_edits" (
-  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+  "id" uuid PRIMARY KEY NOT NULL,
   "message_id" uuid NOT NULL CONSTRAINT "conversation_message_edits_message_id_fkey" REFERENCES "conversation_messages"("id") ON DELETE CASCADE,
   "editor_principal_id" uuid CONSTRAINT "conversation_message_edits_editor_principal_id_fkey" REFERENCES "principal"("id") ON DELETE SET NULL,
   "previous_content" text NOT NULL,
