@@ -64,6 +64,30 @@ describe('mcpDcrRegistrationBody', () => {
     expect(mcpDcrRedirectUrisToRestore(original)).toBeNull()
   })
 
+  it.each([
+    ['http://localhost:8765/callback'],
+    ['http://127.0.0.1:8765/callback'],
+    ['http://[::1]:8765/callback'],
+    ['com.example.app:/oauth/callback'],
+  ])('defaults an omitted application_type to native for %s', (uri) => {
+    const body = mcpDcrRegistrationBody({ redirect_uris: [uri] })
+    expect(body.application_type).toBe('native')
+    expect(body.redirect_uris).toEqual([uri])
+  })
+
+  it('leaves an omitted application_type alone when every redirect is web-valid', () => {
+    const body = mcpDcrRegistrationBody({ redirect_uris: ['https://example.com/oauth/callback'] })
+    expect(body.application_type).toBeUndefined()
+  })
+
+  it('does not override an explicit web client that registered a loopback redirect', () => {
+    const body = mcpDcrRegistrationBody({
+      application_type: 'web',
+      redirect_uris: ['http://localhost:8765/callback'],
+    })
+    expect(body.application_type).toBe('web')
+  })
+
   it('rewrites only the host-bearing custom scheme in a mixed Cursor set', () => {
     const original = {
       redirect_uris: [
