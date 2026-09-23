@@ -5,6 +5,7 @@ import {
   listMessagesSchema,
   myConversationSchema,
   csatSchema,
+  messageIdSchema,
 } from '@/lib/shared/schemas/conversation'
 
 export const widgetSendConversationMessageFn = createServerFn({ method: 'POST' })
@@ -86,3 +87,11 @@ export const widgetMintConversationStreamTokenFn = createServerFn({ method: 'GET
     return runMintConversationStreamToken(await requireWidgetAuth())
   }
 )
+
+export const widgetDeleteConversationMessageFn = createServerFn({ method: 'POST' })
+  .validator(messageIdSchema)
+  .handler(async ({ data }) => {
+    const { requireWidgetAuth } = await import('../widget-auth')
+    const { runDeleteConversationMessage } = await import('../conversation')
+    return runDeleteConversationMessage(await requireWidgetAuth(), data)
+  })

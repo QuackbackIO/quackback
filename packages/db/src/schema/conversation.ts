@@ -295,6 +295,10 @@ export const conversationMessages = pgTable(
     // Soft delete support, mirroring comments.
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
     deletedByPrincipalId: typeIdColumnNullable('principal')('deleted_by_principal_id'),
+    // Set when a moderator redacts the message: the body, attachments, and
+    // edit history are wiped for good, where a delete only hides them.
+    redactedAt: timestamp('redacted_at', { withTimezone: true }),
+    redactedByPrincipalId: typeIdColumnNullable('principal')('redacted_by_principal_id'),
   },
   (table) => [
     // FK names match the constraints the SQL migration created.
@@ -321,6 +325,11 @@ export const conversationMessages = pgTable(
     foreignKey({
       name: 'conversation_messages_deleted_by_principal_id_fkey',
       columns: [table.deletedByPrincipalId],
+      foreignColumns: [principal.id],
+    }).onDelete('set null'),
+    foreignKey({
+      name: 'conversation_messages_redacted_by_principal_id_fkey',
+      columns: [table.redactedByPrincipalId],
       foreignColumns: [principal.id],
     }).onDelete('set null'),
     // Live feed + keyset pagination on the composite (conversationId, createdAt, id);
@@ -425,6 +434,38 @@ export const conversationMessageTranslations = pgTable(
     // Backs the 180-day retention sweep's DELETE ... WHERE created_at < cutoff
     // (mirrors assistant_tool_calls_created_at_idx / tool-audit.ts's pattern).
     index('conversation_message_translations_created_at_idx').on(table.createdAt),
+  ]
+)
+
+/**
+ * The body a support message had before each edit, so the team can see what a
+ * message used to say. Written in the same transaction as the edit; wiped when
+ * a moderator redacts the message.
+ */
+export const conversationMessageEdits = pgTable(
+  'conversation_message_edits',
+  {
+    id: typeIdWithDefault('conversation_msg_edit')('id').primaryKey(),
+    messageId: typeIdColumn('conversation_msg')('message_id').notNull(),
+    // Null once the editor's principal is gone.
+    editorPrincipalId: typeIdColumnNullable('principal')('editor_principal_id'),
+    previousContent: text('previous_content').notNull(),
+    previousContentJson: jsonb('previous_content_json').$type<TiptapContent>(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: 'conversation_message_edits_message_id_fkey',
+      columns: [table.messageId],
+      foreignColumns: [conversationMessages.id],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'conversation_message_edits_editor_principal_id_fkey',
+      columns: [table.editorPrincipalId],
+      foreignColumns: [principal.id],
+    }).onDelete('set null'),
+    index('conversation_message_edits_message_idx').on(table.messageId, table.createdAt),
+    index('conversation_message_edits_editor_idx').on(table.editorPrincipalId),
   ]
 )
 

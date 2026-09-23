@@ -13,6 +13,7 @@ import {
   submitCsatFn,
   markConversationReadFn,
   sendConversationTypingFn,
+  deleteConversationMessageFn,
 } from '@/lib/server/functions/conversation'
 import {
   getConversationLinkedTicketFn,
@@ -32,6 +33,7 @@ export const portalVisitorRpc = {
   submitCsat: submitCsatFn,
   markConversationRead: markConversationReadFn,
   sendConversationTyping: sendConversationTypingFn,
+  deleteConversationMessage: deleteConversationMessageFn,
   getConversationLinkedTicket: getConversationLinkedTicketFn,
   createMyTicket: createMyTicketFn,
   getMyTicketStageLabels: getMyTicketStageLabelsFn,

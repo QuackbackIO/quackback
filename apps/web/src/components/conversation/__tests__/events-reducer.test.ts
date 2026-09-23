@@ -27,8 +27,6 @@ import {
   prependOlderAgentMessages,
   prependOlderTicketMessages,
   prependOlderVisitorMessages,
-  removeAgentThreadMessage,
-  removeTicketThreadMessage,
   toggleReactionLocal,
   updateAgentThreadMessage,
   updateTicketThreadMessage,
@@ -671,13 +669,6 @@ describe('agent thread message helpers', () => {
       updateAgentThreadMessage(undefined, 'm2' as ConversationMessageId, (m) => m)
     ).toBeUndefined()
   })
-
-  it('removeAgentThreadMessage drops the target message', () => {
-    const prev = agentCache({ messages: [agentMessage('m1'), agentMessage('m2')] })
-    const next = removeAgentThreadMessage(prev, 'm1' as ConversationMessageId)!
-    expect(next.messages.map((m) => m.id)).toEqual(['m2'])
-    expect(removeAgentThreadMessage(undefined, 'm1' as ConversationMessageId)).toBeUndefined()
-  })
 })
 
 function ticketMessage(id: string, overrides: Partial<AgentConversationMessageDTO> = {}) {
@@ -818,12 +809,5 @@ describe('ticket thread message helpers (§2.5, M4)', () => {
     expect(
       updateTicketThreadMessage(undefined, 'tm2' as ConversationMessageId, (m) => m)
     ).toBeUndefined()
-  })
-
-  it('removeTicketThreadMessage drops the target message', () => {
-    const prev = ticketCache({ messages: [ticketMessage('tm1'), ticketMessage('tm2')] })
-    const next = removeTicketThreadMessage(prev, 'tm1' as ConversationMessageId)!
-    expect(next.messages.map((m) => m.id)).toEqual(['tm2'])
-    expect(removeTicketThreadMessage(undefined, 'tm1' as ConversationMessageId)).toBeUndefined()
   })
 })

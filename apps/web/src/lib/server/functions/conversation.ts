@@ -35,6 +35,7 @@ import {
   listMessagesSchema,
   myConversationSchema,
   csatSchema,
+  messageIdSchema,
   type SendConversationMessageInput,
   type MyConversationInput,
   type ListMessagesInput,
@@ -150,8 +151,6 @@ const listConversationsSchema = z.object({
     )
     .optional(),
 })
-
-const messageIdSchema = z.object({ messageId: z.string() })
 
 const agentSendSchema = z.object({
   conversationId: z.string(),
@@ -676,6 +675,7 @@ export const runListConversationMessages = createServerOnlyFn(
         before: data.before,
         includeInternal: isTeam,
         includeLinkedTicket: isTeam,
+        includeDeleted: isTeam,
       })
     // Team members get the agent-only reaction/flag/suggestion/pending-action
     // enrichment on older messages too; the visitor path returns the clean base DTOs.
@@ -860,17 +860,47 @@ export const editConversationMessageFn = createServerFn({ method: 'POST' })
     )
   })
 
-/** Soft-delete a message (team members; or a visitor deleting their own). */
-export const deleteConversationMessageFn = createServerFn({ method: 'POST' })
-  .validator(messageIdSchema)
-  .handler(async ({ data }) => {
-    const ctx = await requireAuth()
+/**
+ * Soft-delete a message: your own message, or anyone's for a moderator. The
+ * customer stops seeing it; the team keeps a placeholder. Shared by the portal
+ * and the widget.
+ */
+export const runDeleteConversationMessage = createServerOnlyFn(
+  async function runDeleteConversationMessage(ctx: AuthContext, data: { messageId: string }) {
     await assertVisitorConversationAccess(ctx)
     const actor = await policyActorFromAuth(ctx)
     const { deleteConversationMessage } =
       await import('@/lib/server/domains/conversation/conversation.service')
     await deleteConversationMessage(data.messageId as ConversationMessageId, actor)
     return { ok: true }
+  }
+)
+
+export const deleteConversationMessageFn = createServerFn({ method: 'POST' })
+  .validator(messageIdSchema)
+  .handler(async ({ data }) => runDeleteConversationMessage(await requireAuth(), data))
+
+/** Wipe a message's content for good. Moderators only. */
+export const redactConversationMessageFn = createServerFn({ method: 'POST' })
+  .validator(messageIdSchema)
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
+    const actor = await policyActorFromAuth(ctx)
+    const { redactConversationMessage } =
+      await import('@/lib/server/domains/conversation/conversation.history')
+    return redactConversationMessage(data.messageId as ConversationMessageId, actor)
+  })
+
+/** Earlier versions of an edited message, newest first. Team only. */
+export const listConversationMessageEditsFn = createServerFn({ method: 'GET' })
+  .validator(messageIdSchema)
+  .handler(async ({ data }) => {
+    // Conversation or ticket view, decided once the message is loaded.
+    const ctx = await requireAuth()
+    const actor = await policyActorFromAuth(ctx)
+    const { listConversationMessageEdits } =
+      await import('@/lib/server/domains/conversation/conversation.history')
+    return listConversationMessageEdits(data.messageId as ConversationMessageId, actor)
   })
 
 /** Build the agent-author object used by conversation convert/share operations. */
@@ -1052,6 +1082,7 @@ export const getConversationFn = createServerFn({ method: 'GET' })
         before: data.before,
         includeInternal: true,
         includeLinkedTicket: true,
+        includeDeleted: true,
       }),
     ])
     // Upgrade to AgentConversationMessageDTO[] by attaching the agent-only reaction +

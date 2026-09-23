@@ -1856,6 +1856,13 @@
       "when": 1789987200003,
       "tag": "0287_conversation_message_edited_at",
       "breakpoints": true
+    },
+    {
+      "idx": 265,
+      "version": "7",
+      "when": 1789987200004,
+      "tag": "0288_conversation_message_history",
+      "breakpoints": true
     }
   ]
 }

@@ -13,8 +13,6 @@ import {
   eq,
   and,
   isNull,
-  desc,
-  ne,
   notInArray,
   conversations,
   conversationMessages,
@@ -32,11 +30,9 @@ import {
   publishAgentConversationEvent,
   publishConversationOnlyEvent,
   publishConversationUpdate,
-  publishTicketEvent,
 } from '@/lib/server/realtime/conversation-channels'
 import {
   validateContent,
-  preview,
   richMessageFallbackLabel,
   resolveMessageContent,
   toMessageDTO,
@@ -46,43 +42,14 @@ import { extractMentions } from '@/lib/server/domains/posts/extract-mentions'
 import { assistantPrincipalIdOnce } from '@/lib/server/messages/assistant-principal'
 import { resolveMessageParent } from './message-parent'
 import { syncConversationMessageMentions } from './sync-conversation-mentions'
+import { conversationToDTO, loadAuthors, fallbackAuthor } from './conversation.query'
 import {
-  conversationToDTO,
-  enrichMessagesForAgent,
-  loadAuthors,
-  fallbackAuthor,
-} from './conversation.query'
+  agentMessageDto,
+  publishTicketThreadUpdate,
+  recordMessageEdit,
+  refreshConversationPreview,
+} from './conversation.history'
 import { emitMessageUpdated } from './conversation.webhooks'
-
-async function toAgentDto(
-  message: ConversationMessage,
-  viewerPrincipalId: PrincipalId
-): Promise<AgentConversationMessageDTO> {
-  const author = message.principalId
-    ? ((await loadAuthors([message.principalId])).get(message.principalId) ??
-      fallbackAuthor(message.principalId))
-    : null
-  const suggestions = new Map()
-  if (message.metadata?.postSuggestion) {
-    suggestions.set(message.id, message.metadata.postSuggestion)
-  }
-  const pending = new Map()
-  if (message.metadata?.assistantPendingAction) {
-    pending.set(message.id, message.metadata.assistantPendingAction)
-  }
-  const translated = new Map()
-  if (message.metadata?.translatedFrom) {
-    translated.set(message.id, message.metadata.translatedFrom)
-  }
-  const [enriched] = await enrichMessagesForAgent(
-    [toMessageDTO(message, author)],
-    viewerPrincipalId,
-    suggestions,
-    pending,
-    translated
-  )
-  return enriched
-}
 
 function withoutTranslatedFrom(
   metadata: ConversationMessageMetadata | null
@@ -106,30 +73,6 @@ function bodyUnchanged(
   // synthesizes a doc. That is not an edit. A doc that adds an image or an
   // embed can keep the same text mirror, and that is an edit.
   return prev == null && richMessageFallbackLabel(next) === ''
-}
-
-/**
- * Ticket threads listen on the ticket channel, not the inbox's conversation
- * events, so an edit shown there needs its own push: to the message's ticket,
- * or to the customer ticket paired with its conversation.
- */
-async function publishTicketThreadEdit(message: ConversationMessage): Promise<void> {
-  let ticketId = message.ticketId
-  if (!ticketId && message.conversationId) {
-    const { resolvePairTicketIdForConversation } =
-      await import('@/lib/server/domains/tickets/pair-thread.service')
-    ticketId = await resolvePairTicketIdForConversation(message.conversationId)
-  }
-  if (!ticketId) return
-  const author = message.principalId
-    ? ((await loadAuthors([message.principalId])).get(message.principalId) ??
-      fallbackAuthor(message.principalId))
-    : null
-  publishTicketEvent(ticketId, {
-    kind: 'ticket_message_updated',
-    ticketId,
-    message: toMessageDTO(message, author),
-  })
 }
 
 /** Replace the body of a message the actor authored. */
@@ -205,7 +148,7 @@ async function applyEdit(
   )
 
   if (bodyUnchanged(message, content, safeContentJson)) {
-    return toAgentDto(message, viewerId)
+    return agentMessageDto(message, viewerId)
   }
 
   const githubCommentId =
@@ -236,6 +179,7 @@ async function applyEdit(
       .where(and(eq(conversationMessages.id, message.id), isNull(conversationMessages.deletedAt)))
       .returning()
     if (!row) return null
+    await recordMessageEdit(tx, message, viewerId)
 
     if (row.isInternal && row.conversationId) {
       const mentionedIds = extractMentions(safeContentJson)
@@ -252,30 +196,7 @@ async function applyEdit(
     }
 
     if (!row.isInternal && row.conversationId) {
-      // The preview tracks the newest customer-visible message. System lines
-      // never write it, so they must not stop an edit from refreshing it.
-      const [latest] = await tx
-        .select({ id: conversationMessages.id })
-        .from(conversationMessages)
-        .where(
-          and(
-            eq(conversationMessages.conversationId, row.conversationId),
-            isNull(conversationMessages.deletedAt),
-            eq(conversationMessages.isInternal, false),
-            ne(conversationMessages.senderType, 'system')
-          )
-        )
-        .orderBy(desc(conversationMessages.createdAt), desc(conversationMessages.id))
-        .limit(1)
-      if (latest?.id === row.id) {
-        await tx
-          .update(conversations)
-          .set({
-            lastMessagePreview: preview(content || fallbackLabel, row.attachments ?? []),
-            updatedAt: now,
-          })
-          .where(eq(conversations.id, row.conversationId))
-      }
+      await refreshConversationPreview(tx, row.conversationId)
     }
     return row
   })
@@ -293,8 +214,8 @@ async function applyEdit(
     })
   }
 
-  const dto = await toAgentDto(updated, viewerId)
-  await publishTicketThreadEdit(updated)
+  const dto = await agentMessageDto(updated, viewerId)
+  await publishTicketThreadUpdate(updated)
 
   if (updated.conversationId) {
     publishAgentConversationEvent({

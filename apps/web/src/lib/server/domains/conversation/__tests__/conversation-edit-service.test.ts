@@ -19,6 +19,7 @@ let pairTicketId: string | null = null
 let messageRow: Record<string, unknown> | null = null
 let latestId = 'conversation_msg_1'
 const updates: Array<{ table: string; values: Record<string, unknown> }> = []
+const inserts: Array<{ table: string; values: Record<string, unknown> }> = []
 
 const emit = vi.hoisted(() => ({
   emitMessageUpdated: (...a: unknown[]) => emitMessageUpdated(...a),
@@ -139,6 +140,11 @@ vi.mock('@/lib/server/db', () => {
           select: () => chain('select'),
           update: (t: { __name?: string }) => chain('update', t?.__name ?? 'unknown'),
           delete: () => chain('delete', 'conversation_message_mentions'),
+          insert: (t: { __name?: string }) => ({
+            values: async (values: Record<string, unknown>) => {
+              inserts.push({ table: t?.__name ?? 'unknown', values })
+            },
+          }),
         }),
     },
     eq: vi.fn(),
@@ -150,6 +156,10 @@ vi.mock('@/lib/server/db', () => {
     conversations: { __name: 'conversations', id: 'id' },
     conversationMessages: { __name: 'conversation_messages', id: 'id', senderType: 'sender_type' },
     conversationMessageMentions: { __name: 'conversation_message_mentions', id: 'id' },
+    conversationMessageEdits: { __name: 'conversation_message_edits', id: 'id' },
+    conversationMessageTranslations: { __name: 'conversation_message_translations', id: 'id' },
+    inAppNotifications: { __name: 'in_app_notifications', id: 'id' },
+    sql: vi.fn(),
   }
 })
 
@@ -202,6 +212,7 @@ beforeEach(() => {
   messageRow = null
   latestId = 'conversation_msg_1'
   updates.length = 0
+  inserts.length = 0
   vi.clearAllMocks()
 })
 
@@ -396,5 +407,37 @@ describe('editConversationMessage', () => {
     // System lines never write the preview, so the "newest message" lookup
     // must skip them or an edit before a close/assign notice goes stale.
     expect(ne).toHaveBeenCalledWith('sender_type', 'system')
+  })
+
+  it('keeps the body the edit replaced in the edit history', async () => {
+    messageRow = message({ content: 'Hello', contentJson: null })
+    await editConversationMessage(
+      'conversation_msg_1' as ConversationMessageId,
+      'Hello there',
+      null,
+      agentActor
+    )
+    expect(inserts).toEqual([
+      {
+        table: 'conversation_message_edits',
+        values: expect.objectContaining({
+          messageId: 'conversation_msg_1',
+          editorPrincipalId: 'principal_agent',
+          previousContent: 'Hello',
+          previousContentJson: null,
+        }),
+      },
+    ])
+  })
+
+  it('records no history when the body is unchanged', async () => {
+    messageRow = message()
+    await editConversationMessage(
+      'conversation_msg_1' as ConversationMessageId,
+      'Hello',
+      null,
+      agentActor
+    )
+    expect(inserts).toHaveLength(0)
   })
 })

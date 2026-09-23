@@ -299,13 +299,13 @@ function buildNotifications(
   }
 
   if (event.type === 'conversation.note_mentioned') {
-    const { conversationId, authorName, preview } = config
+    const { conversationId, conversationMessageId, authorName, preview } = config
     return principalIds.map((principalId) => ({
       principalId,
       type: 'chat_mention' as NotificationType,
       title: `${authorName} mentioned you in a conversation`,
       body: preview,
-      metadata: { conversationId, actorName: authorName },
+      metadata: { conversationId, conversationMessageId, actorName: authorName },
     }))
   }
 
@@ -391,13 +391,13 @@ function buildNotifications(
   }
 
   if (event.type === 'message.created') {
-    const { conversationId, authorName, preview } = config
+    const { conversationId, conversationMessageId, authorName, preview } = config
     return principalIds.map((principalId) => ({
       principalId,
       type: 'chat_message' as NotificationType,
       title: `New message from ${authorName}`,
       body: preview,
-      metadata: { conversationId, actorName: authorName },
+      metadata: { conversationId, conversationMessageId, actorName: authorName },
     }))
   }
 

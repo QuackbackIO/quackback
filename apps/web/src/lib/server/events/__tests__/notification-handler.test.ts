@@ -724,7 +724,12 @@ describe('notificationHook — conversation.note_mentioned', () => {
         type: 'chat_mention',
         title: 'Jane mentioned you in a conversation',
         body: 'please take a look',
-        metadata: { conversationId: 'conversation_1', actorName: 'Jane' },
+        // The message id lets a redaction blank this preview later.
+        metadata: {
+          conversationId: 'conversation_1',
+          conversationMessageId: 'conversation_msg_1',
+          actorName: 'Jane',
+        },
       }),
       expect.objectContaining({
         principalId: 'principal_two',

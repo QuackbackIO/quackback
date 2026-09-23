@@ -1107,6 +1107,8 @@ export async function getMessageCreatedTargets(event: EventData): Promise<HookTa
     target: { principalIds: team.map((t) => t.principalId as PrincipalId) },
     config: {
       conversationId: event.data.conversation.id,
+      // Lets a redaction find and blank this preview later.
+      conversationMessageId: event.data.message.id,
       authorName,
       preview: truncate(event.data.message.content, 140),
       isFirstMessage: event.data.isFirstMessage,

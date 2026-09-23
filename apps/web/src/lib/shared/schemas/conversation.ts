@@ -47,6 +47,8 @@ export const sendMessageSchema = z.object({
 export type SendConversationMessageInput = z.infer<typeof sendMessageSchema>
 
 export const conversationIdSchema = z.object({ conversationId: z.string() })
+
+export const messageIdSchema = z.object({ messageId: z.string() })
 export type ConversationIdInput = z.infer<typeof conversationIdSchema>
 
 export const listMessagesSchema = z.object({

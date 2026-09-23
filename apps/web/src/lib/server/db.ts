@@ -309,6 +309,7 @@ export {
   conversationMessageFlags,
   conversationMessageFlagsRelations,
   conversationMessageTranslations,
+  conversationMessageEdits,
   conversationMessageTranslationsRelations,
   // Schema tables - past-conversation summaries (Quinn grounding, P2-A.4)
   conversationSummaries,

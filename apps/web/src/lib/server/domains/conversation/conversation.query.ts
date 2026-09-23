@@ -74,7 +74,11 @@ import { PRIORITY_RANK } from '@/lib/shared/conversation/priority-meta'
 import { conversationRelevanceSql } from './conversation-relevance'
 import type { SQL } from 'drizzle-orm'
 import { loadAuthors, loadAuthorAudiences, fallbackAuthor } from '../principals/principal-display'
-import { toMessageDTO } from '@/lib/server/messages/message-core'
+import {
+  toMessageDTO,
+  withRemovalNames,
+  authorIdsWithRemovers,
+} from '@/lib/server/messages/message-core'
 import { aggregateReactions } from '@/lib/shared'
 import { supportContactName } from '@/lib/shared/support-contact-name'
 import { truncate } from '@/lib/shared/utils/string'
@@ -949,6 +953,8 @@ export async function listMessages(
     includeLinkedTicket?: boolean
     /** Agent surfaces show the account name. Posts and the visitor widget do not. */
     preferAccountName?: boolean
+    /** Agent threads keep deleted messages as placeholders; every other read skips them. */
+    includeDeleted?: boolean
   }
 ): Promise<MessagePage> {
   const limit = Math.min(opts?.limit ?? MESSAGE_PAGE_SIZE, 100)
@@ -974,7 +980,7 @@ export async function listMessages(
     .where(
       and(
         eq(conversationMessages.conversationId, conversationId),
-        isNull(conversationMessages.deletedAt),
+        opts?.includeDeleted ? undefined : isNull(conversationMessages.deletedAt),
         // Visitors never see internal notes; agents pass includeInternal.
         opts?.includeInternal ? undefined : eq(conversationMessages.isInternal, false),
         cursor
@@ -1001,7 +1007,7 @@ export async function listMessages(
         .where(
           and(
             eq(conversationMessages.ticketId, linkedTicketId),
-            isNull(conversationMessages.deletedAt),
+            opts?.includeDeleted ? undefined : isNull(conversationMessages.deletedAt),
             opts?.includeInternal ? undefined : eq(conversationMessages.isInternal, false),
             cursor
               ? or(
@@ -1027,7 +1033,7 @@ export async function listMessages(
   const page = hasMore ? merged.slice(0, limit) : merged
   const [authors, assistantPrincipalId] = await Promise.all([
     loadAuthors(
-      page.map((m) => m.principalId),
+      opts?.includeDeleted ? authorIdsWithRemovers(page) : page.map((m) => m.principalId),
       {
         // Agent threads (internal notes, or an explicit ask) show the account
         // name. The visitor widget leaves this off and keeps the public name.
@@ -1059,11 +1065,15 @@ export async function listMessages(
   }
   return {
     messages: ordered.map((m) =>
-      // System events have a null principal and therefore no author.
-      toMessageDTO(
+      withRemovalNames(
+        // System events have a null principal and therefore no author.
+        toMessageDTO(
+          m,
+          m.principalId ? (authors.get(m.principalId) ?? fallbackAuthor(m.principalId)) : null,
+          assistantPrincipalId
+        ),
         m,
-        m.principalId ? (authors.get(m.principalId) ?? fallbackAuthor(m.principalId)) : null,
-        assistantPrincipalId
+        authors
       )
     ),
     hasMore,

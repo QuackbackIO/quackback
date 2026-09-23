@@ -138,6 +138,8 @@ export function toMessageDTO(
     content: message.content,
     createdAt: message.createdAt.toISOString(),
     editedAt: message.editedAt ? message.editedAt.toISOString() : null,
+    deletedAt: message.deletedAt ? message.deletedAt.toISOString() : null,
+    redactedAt: message.redactedAt ? message.redactedAt.toISOString() : null,
     author,
     attachments,
     citations: message.citations ?? [],
@@ -159,4 +161,32 @@ export function toMessageDTO(
           }
         : null),
   }
+}
+
+/**
+ * Who removed a message, for the agent thread's placeholder. `authors` must
+ * already hold the deleter and redactor (callers add both ids to the author
+ * load alongside the message authors).
+ */
+export function withRemovalNames<T extends ConversationMessageDTO>(
+  dto: T,
+  row: Pick<ConversationMessage, 'deletedByPrincipalId' | 'redactedByPrincipalId'>,
+  authors: Map<PrincipalId, Pick<ConversationAuthorDTO, 'displayName'>>
+): T {
+  if (!row.deletedByPrincipalId && !row.redactedByPrincipalId) return dto
+  const name = (id: PrincipalId | null) => (id ? (authors.get(id)?.displayName ?? null) : null)
+  return {
+    ...dto,
+    deletedByName: name(row.deletedByPrincipalId),
+    redactedByName: name(row.redactedByPrincipalId),
+  }
+}
+
+/** Author ids to load for a page: authors, plus who deleted or redacted a row. */
+export function authorIdsWithRemovers(
+  rows: Array<
+    Pick<ConversationMessage, 'principalId' | 'deletedByPrincipalId' | 'redactedByPrincipalId'>
+  >
+): Array<PrincipalId | null> {
+  return rows.flatMap((r) => [r.principalId, r.deletedByPrincipalId, r.redactedByPrincipalId])
 }

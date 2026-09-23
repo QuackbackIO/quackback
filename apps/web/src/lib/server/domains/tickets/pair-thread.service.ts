@@ -82,7 +82,11 @@ import {
 } from '@/lib/server/db'
 import type { ConversationId, ConversationMessageId, TicketId } from '@quackback/ids'
 import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
-import { toMessageDTO } from '@/lib/server/messages/message-core'
+import {
+  toMessageDTO,
+  withRemovalNames,
+  authorIdsWithRemovers,
+} from '@/lib/server/messages/message-core'
 import { assistantPrincipalIdOnce } from '@/lib/server/messages/assistant-principal'
 import { loadAuthors, fallbackAuthor } from '../principals/principal-display'
 
@@ -207,14 +211,14 @@ async function resolvePairCursor(before: string | undefined): Promise<PairCursor
 /** The WHERE clause one parent's page shares: parent predicate + audience + keyset. */
 function pairParentWhere(
   parent: PairParent,
-  opts: { includeInternal: boolean; cursor: PairCursor | null }
+  opts: { includeInternal: boolean; cursor: PairCursor | null; includeDeleted?: boolean }
 ) {
   const { cursor } = opts
   return and(
     parent.source === 'ticket'
       ? eq(conversationMessages.ticketId, parent.ticketId)
       : eq(conversationMessages.conversationId, parent.conversationId),
-    isNull(conversationMessages.deletedAt),
+    opts.includeDeleted ? undefined : isNull(conversationMessages.deletedAt),
     // AUDIENCE RULE: the internal strip applies to both parents alike.
     opts.includeInternal ? undefined : eq(conversationMessages.isInternal, false),
     cursor
@@ -232,7 +236,12 @@ function pairParentWhere(
 /** One parent's keyset page (newest-first, `limit + 1` rows) against its own index. */
 async function fetchParentPage(
   parent: PairParent,
-  opts: { includeInternal: boolean; cursor: PairCursor | null; limit: number }
+  opts: {
+    includeInternal: boolean
+    cursor: PairCursor | null
+    limit: number
+    includeDeleted?: boolean
+  }
 ): Promise<ConversationMessage[]> {
   return db
     .select()
@@ -273,17 +282,18 @@ async function toPairDtos(
   preferAccountName: boolean
 ): Promise<PairThreadMessageDTO[]> {
   const [authors, assistantPrincipalId] = await Promise.all([
-    loadAuthors(
-      sourced.map((s) => s.row.principalId),
-      { preferAccountName }
-    ),
+    loadAuthors(authorIdsWithRemovers(sourced.map((s) => s.row)), { preferAccountName }),
     assistantPrincipalIdOnce(),
   ])
   return sourced.map(({ row, source }) => ({
-    ...toMessageDTO(
+    ...withRemovalNames(
+      toMessageDTO(
+        row,
+        row.principalId ? (authors.get(row.principalId) ?? fallbackAuthor(row.principalId)) : null,
+        assistantPrincipalId
+      ),
       row,
-      row.principalId ? (authors.get(row.principalId) ?? fallbackAuthor(row.principalId)) : null,
-      assistantPrincipalId
+      authors
     ),
     source,
   }))
@@ -306,6 +316,8 @@ export async function listPairThreadMessages(
     all?: boolean
     /** Agent reads can prefer account names while excluding internal notes. */
     preferAccountName?: boolean
+    /** Agent threads keep deleted messages as placeholders. */
+    includeDeleted?: boolean
   } = {}
 ): Promise<PairThreadMessagePage> {
   const includeInternal = opts.includeInternal ?? false
@@ -333,9 +345,14 @@ export async function listPairThreadMessages(
   const cursor = await resolvePairCursor(opts.before)
   const perParent = await Promise.all(
     parents.map(async (parent) =>
-      (await fetchParentPage(parent, { includeInternal, cursor, limit: MESSAGE_PAGE_SIZE })).map(
-        (row) => ({ row, source: parent.source })
-      )
+      (
+        await fetchParentPage(parent, {
+          includeInternal,
+          cursor,
+          limit: MESSAGE_PAGE_SIZE,
+          includeDeleted: opts.includeDeleted,
+        })
+      ).map((row) => ({ row, source: parent.source }))
     )
   )
   const merged = perParent.flat().sort((a, b) => compareNewestFirst(a.row, b.row))

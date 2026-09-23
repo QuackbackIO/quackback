@@ -575,7 +575,11 @@ export async function listTicketMessagesForAgent(
   viewerPrincipalId: PrincipalId,
   opts: { before?: string; includeInternal?: boolean } = {}
 ): Promise<AgentTicketMessagePage> {
-  const page = await listTicketMessages(ticketId, { ...opts, preferAccountName: true })
+  const page = await listTicketMessages(ticketId, {
+    ...opts,
+    preferAccountName: true,
+    includeDeleted: true,
+  })
   const messages = await enrichMessagesForAgent(page.messages, viewerPrincipalId, new Map())
   return { messages, hasMore: page.hasMore }
 }

@@ -323,16 +323,6 @@ function updateThreadMessage<C extends { messages: AgentConversationMessageDTO[]
   return { ...prev, messages: prev.messages.map((m) => (m.id === messageId ? update(m) : m)) }
 }
 
-/** Drop one message from a thread cache (after a delete) — generic, mirrors
- *  `updateThreadMessage`. */
-function removeThreadMessage<C extends { messages: AgentConversationMessageDTO[] }>(
-  prev: C | undefined,
-  messageId: ConversationMessageId
-): C | undefined {
-  if (!prev) return prev
-  return { ...prev, messages: prev.messages.filter((m) => m.id !== messageId) }
-}
-
 /** Patch one message in the agent thread cache. */
 export function updateAgentThreadMessage(
   prev: AgentThreadCache | undefined,
@@ -340,14 +330,6 @@ export function updateAgentThreadMessage(
   update: (m: AgentConversationMessageDTO) => AgentConversationMessageDTO
 ): AgentThreadCache | undefined {
   return updateThreadMessage(prev, messageId, update)
-}
-
-/** Drop one message from the agent thread cache (after a delete). */
-export function removeAgentThreadMessage(
-  prev: AgentThreadCache | undefined,
-  messageId: ConversationMessageId
-): AgentThreadCache | undefined {
-  return removeThreadMessage(prev, messageId)
 }
 
 // ---------------------------------------------------------------------------
@@ -374,8 +356,8 @@ export interface TicketThreadCache {
  *  `ticket_message` / `ticket_message_updated` return prev untouched —
  *  `ticket_updated`/`ticket_read` have nothing in this cache to patch (see the
  *  type doc above). Ticket-parented reactions/flags don't broadcast yet (see
- *  message.actions.ts); a body edit does, and patches only the body fields so
- *  the viewer's own reaction state is kept. */
+ *  message.actions.ts); an edit, delete, or redaction does, and patches only
+ *  the body and removal fields so the viewer's own reaction state is kept. */
 export function applyTicketThreadEvent(
   prev: TicketThreadCache | undefined,
   evt: ConversationStreamEvent,
@@ -392,6 +374,11 @@ export function applyTicketThreadEvent(
       editedAt: evt.message.editedAt ?? null,
       // An edit replaces the sent text, so any pre-translation original is gone.
       translatedFrom: null,
+      // A delete or redaction turns the row into a placeholder.
+      deletedAt: evt.message.deletedAt ?? null,
+      deletedByName: evt.message.deletedByName ?? null,
+      redactedAt: evt.message.redactedAt ?? null,
+      redactedByName: evt.message.redactedByName ?? null,
     }))
   }
   if (evt.kind !== 'ticket_message') return prev
@@ -429,12 +416,4 @@ export function updateTicketThreadMessage(
   update: (m: AgentConversationMessageDTO) => AgentConversationMessageDTO
 ): TicketThreadCache | undefined {
   return updateThreadMessage(prev, messageId, update)
-}
-
-/** Drop one message from the ticket thread cache (after a delete). */
-export function removeTicketThreadMessage(
-  prev: TicketThreadCache | undefined,
-  messageId: ConversationMessageId
-): TicketThreadCache | undefined {
-  return removeThreadMessage(prev, messageId)
 }

@@ -12,6 +12,7 @@ import { githubLoginsMatch, githubThreadKey } from '@/lib/server/domains/channel
 import { getLiveGitHubConnectionAccount } from '@/lib/server/domains/channel-accounts/github-connection'
 import { logger } from '@/lib/server/logger'
 import { lookupChannelThread } from './conversation.inbound-resolve'
+import { recordMessageEdit } from './conversation.history'
 import { channelCloseSystemCopy } from '@/lib/shared/channels'
 import {
   appendGitHubComment,
@@ -157,16 +158,21 @@ async function applyGitHubCommentEdit(githubCommentId: string, body: string | un
   const row = await findGitHubCommentMessage(githubCommentId)
   if (!row?.conversationId) return
   const { content, contentJson } = markdownBody(body)
-  const [updated] = await db
-    .update(conversationMessages)
-    .set({
-      content: content || row.content,
-      contentJson: contentJson ?? row.contentJson,
-      editedAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(eq(conversationMessages.id, row.id))
-    .returning()
+  const updated = await db.transaction(async (tx) => {
+    // The GitHub author edited their comment; keep what it said before.
+    await recordMessageEdit(tx, row, row.principalId)
+    const [next] = await tx
+      .update(conversationMessages)
+      .set({
+        content: content || row.content,
+        contentJson: contentJson ?? row.contentJson,
+        editedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(conversationMessages.id, row.id))
+      .returning()
+    return next
+  })
   if (updated) await publishGitHubInboxMessage(updated, 'updated')
 }
 

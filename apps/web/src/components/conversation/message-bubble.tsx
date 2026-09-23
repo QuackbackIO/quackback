@@ -31,7 +31,7 @@ import {
   CheckIcon,
   ExclamationCircleIcon,
 } from '@heroicons/react/24/solid'
-import { BookmarkIcon, PencilIcon, SparklesIcon } from '@heroicons/react/24/outline'
+import { BookmarkIcon, EyeSlashIcon, PencilIcon, SparklesIcon } from '@heroicons/react/24/outline'
 import { Avatar } from '@/components/ui/avatar'
 import { ConversationAttachmentList } from '@/components/shared/conversation-attachments'
 import { ReactionChip } from '@/components/shared/reaction-chip'
@@ -56,6 +56,7 @@ import type { TiptapContent, WorkflowBlockPayload } from '@/lib/shared/db-types'
 import type { ConversationMessageId } from '@quackback/ids'
 import type {
   AgentConversationMessageDTO,
+  ConversationMessageEditDTO,
   ChannelDelivery,
   ConversationAttachment,
   ConversationMessageCitation,
@@ -85,6 +86,123 @@ function EditedMark({ label = '(edited)', title }: { label?: string; title?: str
     <span className="text-muted-foreground/50" title={title}>
       {label}
     </span>
+  )
+}
+
+/** "(edited)" that opens the message's earlier versions, fetched on first open. */
+function EditHistory({
+  messageId,
+  load,
+}: {
+  messageId: ConversationMessageId
+  load: (messageId: ConversationMessageId) => Promise<ConversationMessageEditDTO[]>
+}) {
+  const [versions, setVersions] = useState<ConversationMessageEditDTO[] | null>(null)
+  const [failed, setFailed] = useState(false)
+  return (
+    <Popover
+      onOpenChange={(open) => {
+        if (!open || versions) return
+        setFailed(false)
+        load(messageId).then(setVersions, () => setFailed(true))
+      }}
+    >
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="text-muted-foreground/50 underline-offset-2 hover:text-foreground hover:underline"
+        >
+          (edited)
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 p-0">
+        <p className="border-b border-border/60 px-3 py-2 text-xs font-medium">Earlier versions</p>
+        <div className="max-h-72 overflow-y-auto">
+          {failed ? (
+            <p className="px-3 py-2 text-xs text-muted-foreground">Could not load the history.</p>
+          ) : !versions ? (
+            <p className="px-3 py-2 text-xs text-muted-foreground">Loading…</p>
+          ) : versions.length === 0 ? (
+            <p className="px-3 py-2 text-xs text-muted-foreground">No earlier versions kept.</p>
+          ) : (
+            versions.map((v) => (
+              <div key={v.id} className="border-b border-border/40 px-3 py-2 last:border-b-0">
+                <p className="whitespace-pre-wrap break-words text-sm">{v.content}</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Changed {timeLabel(v.editedAt)}
+                  {v.editorName ? ` by ${v.editorName}` : ''}
+                </p>
+              </div>
+            ))
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+/**
+ * A deleted message stays in the agent thread as a placeholder the team can
+ * open. A redacted one has nothing left to open.
+ */
+function RemovedMessage({
+  message,
+  onRedact,
+}: {
+  message: AgentConversationMessageDTO
+  onRedact?: (messageId: ConversationMessageId) => void
+}) {
+  const [shown, setShown] = useState(false)
+  const self = message.senderType === 'agent'
+  const redacted = !!message.redactedAt
+  const who = redacted ? message.redactedByName : message.deletedByName
+  const original = message.content || message.attachments.map((a) => a.name).join(', ')
+  return (
+    <div
+      data-message-id={message.id}
+      className={cn('flex py-1.5', self ? 'justify-end' : 'justify-start')}
+    >
+      <div className={cn('flex max-w-[85%] flex-col gap-1', self ? 'items-end' : 'items-start')}>
+        <div className="flex items-center gap-2 rounded-lg border border-dashed border-border px-3 py-1.5 text-xs text-muted-foreground">
+          {redacted ? (
+            <EyeSlashIcon className="h-3.5 w-3.5" />
+          ) : (
+            <TrashIcon className="h-3.5 w-3.5" />
+          )}
+          <span>
+            {redacted ? 'Redacted' : 'Deleted'}
+            {who ? ` by ${who}` : ''}
+          </span>
+          {!redacted && original && (
+            <button
+              type="button"
+              onClick={() => setShown((v) => !v)}
+              className="font-medium text-foreground/70 hover:text-foreground"
+            >
+              {shown ? 'Hide' : 'Show'}
+            </button>
+          )}
+          {!redacted && onRedact && (
+            <button
+              type="button"
+              onClick={() => onRedact(message.id)}
+              className="font-medium text-destructive/80 hover:text-destructive"
+            >
+              Redact
+            </button>
+          )}
+        </div>
+        {shown && !redacted && (
+          <p className="whitespace-pre-wrap break-words rounded-lg bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+            {original}
+          </p>
+        )}
+        <span className="text-[11px] text-muted-foreground/70">
+          {message.author?.displayName ?? (self ? 'Agent' : 'Visitor')} ·{' '}
+          {timeLabel(message.createdAt)}
+        </span>
+      </div>
+    </div>
   )
 }
 
@@ -287,6 +405,11 @@ interface AgentMessageBubbleProps {
   canEdit?: boolean
   /** Your own message, or anyone's for a moderator; the server repeats the check. */
   canDelete?: boolean
+  /** Moderators only: wipe the message's content for good (the caller confirms). */
+  canRedact?: boolean
+  onRedact?: (messageId: ConversationMessageId) => void
+  /** Earlier versions of an edited message, for the "(edited)" popover. */
+  loadEditHistory?: (messageId: ConversationMessageId) => Promise<ConversationMessageEditDTO[]>
   onEdit?: (
     messageId: ConversationMessageId,
     draft: { content: string; contentJson: TiptapContent | null }
@@ -362,6 +485,10 @@ interface VisitorMessageBubbleProps {
   /** Localized "(edited)" mark for a message whose body was edited; omitted
    *  when it never was. */
   editedLabel?: string
+  /** The customer deleting their own message, with localized labels. The team
+   *  keeps it; the customer stops seeing it. */
+  onDelete?: () => void
+  deleteLabels?: { action: string; confirm: string; cancel: string }
   linkPreviews?: boolean
   getAuthHeaders?: () => Record<string, string>
   embedOpenMode?: EmbedOpenMode
@@ -458,6 +585,9 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
   onDelete = () => {},
   canEdit = false,
   canDelete = false,
+  canRedact = false,
+  onRedact,
+  loadEditHistory,
   onEdit,
   onToggleReaction = () => {},
   onToggleFlag = () => {},
@@ -491,6 +621,10 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
         <span className="h-px flex-1 bg-border/40" />
       </div>
     )
+  }
+
+  if (message.deletedAt) {
+    return <RemovedMessage message={message} onRedact={canRedact ? onRedact : undefined} />
   }
 
   // Visitor messages, agent replies, and internal notes all share one chat-
@@ -735,6 +869,11 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
                         <TrashIcon className="h-4 w-4" /> Delete
                       </DropdownMenuItem>
                     )}
+                    {canRedact && onRedact && (
+                      <DropdownMenuItem variant="destructive" onClick={() => onRedact(message.id)}>
+                        <EyeSlashIcon className="h-4 w-4" /> Redact
+                      </DropdownMenuItem>
+                    )}
                     {showTrackActions && (
                       <>
                         <DropdownMenuSeparator />
@@ -836,7 +975,12 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
             <span className="shrink-0">· via ticket thread</span>
           )}
           <span>{timeLabel(message.createdAt)}</span>
-          {message.editedAt && <EditedMark title={`Edited ${timeLabel(message.editedAt)}`} />}
+          {message.editedAt &&
+            (loadEditHistory ? (
+              <EditHistory messageId={message.id} load={loadEditHistory} />
+            ) : (
+              <EditedMark title={`Edited ${timeLabel(message.editedAt)}`} />
+            ))}
           {isAgent && !isNote && message.channelDelivery ? (
             <ChannelDeliveryTicks
               delivery={message.channelDelivery}
@@ -880,53 +1024,95 @@ export function VisitorMessageBubble({
   citations,
   time,
   editedLabel,
+  onDelete,
+  deleteLabels,
   linkPreviews = false,
   getAuthHeaders,
   embedOpenMode = 'newTab',
 }: VisitorMessageBubbleProps) {
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
   const self = side === 'self'
+  const deleteControl = self && onDelete && deleteLabels ? { onDelete, labels: deleteLabels } : null
   const jumbo = isJumboEmojiMessage(content, contentJson)
   // Quinn's turns render as markdown-lite (the prompt encourages lists/bold), with
   // inline citation dots + a sources trace only when the answer was grounded.
   const isAiReply = !self && isAssistant
   const cited = isAiReply && citations && citations.length > 0 ? citations : null
+  const bubble = (
+    <div className={jumbo ? 'max-w-[85%]' : bubbleClasses(side)}>
+      {jumbo ? (
+        // A lone-emoji message renders large (no bubble chrome).
+        <div className={JUMBO_EMOJI_CLASS}>{content}</div>
+      ) : contentJson ? (
+        // Rich message (inline images / post embeds): hydrate embed cards into
+        // the static rendered HTML, matching the changelog/inbox surfaces. The
+        // widget's iframe origin may differ from the portal's, so an embedded
+        // post opens its absolute URL in a new tab there.
+        <EmbedHydration openMode={embedOpenMode} getAuthHeaders={getAuthHeaders}>
+          <RichTextContent
+            content={contentJson}
+            className={cn('text-sm leading-relaxed', bubbleContentTextClass(side))}
+          />
+        </EmbedHydration>
+      ) : (
+        content &&
+        (isAiReply ? (
+          <AssistantAnswer text={content} citations={cited ?? []} />
+        ) : (
+          <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">{content}</div>
+        ))
+      )}
+      {attachments && attachments.length > 0 && (
+        <ConversationAttachmentList attachments={attachments} />
+      )}
+      {linkPreviews && (
+        <LinkPreviews content={content} contentJson={contentJson} getAuthHeaders={getAuthHeaders} />
+      )}
+    </div>
+  )
   return (
     <div className={self ? 'flex flex-col items-end' : 'flex flex-col items-start'}>
       {cited && <AssistantSourcesTrace citations={cited} />}
-      <div className={jumbo ? 'max-w-[85%]' : bubbleClasses(side)}>
-        {jumbo ? (
-          // A lone-emoji message renders large (no bubble chrome).
-          <div className={JUMBO_EMOJI_CLASS}>{content}</div>
-        ) : contentJson ? (
-          // Rich message (inline images / post embeds): hydrate embed cards into
-          // the static rendered HTML, matching the changelog/inbox surfaces. The
-          // widget's iframe origin may differ from the portal's, so an embedded
-          // post opens its absolute URL in a new tab there.
-          <EmbedHydration openMode={embedOpenMode} getAuthHeaders={getAuthHeaders}>
-            <RichTextContent
-              content={contentJson}
-              className={cn('text-sm leading-relaxed', bubbleContentTextClass(side))}
-            />
-          </EmbedHydration>
-        ) : (
-          content &&
-          (isAiReply ? (
-            <AssistantAnswer text={content} citations={cited ?? []} />
-          ) : (
-            <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">{content}</div>
-          ))
-        )}
-        {attachments && attachments.length > 0 && (
-          <ConversationAttachmentList attachments={attachments} />
-        )}
-        {linkPreviews && (
-          <LinkPreviews
-            content={content}
-            contentJson={contentJson}
-            getAuthHeaders={getAuthHeaders}
-          />
-        )}
-      </div>
+      {deleteControl ? (
+        <div className="group/own flex w-full items-center justify-end gap-1">
+          {!confirmingDelete && (
+            <button
+              type="button"
+              aria-label={deleteControl.labels.action}
+              title={deleteControl.labels.action}
+              onClick={() => setConfirmingDelete(true)}
+              className="flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover/own:opacity-100 [@media(hover:none)]:opacity-60"
+            >
+              <TrashIcon className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {bubble}
+        </div>
+      ) : (
+        bubble
+      )}
+      {deleteControl && confirmingDelete && (
+        <div className="mt-1 flex items-center gap-2 px-1 text-[11px]">
+          <span className="text-muted-foreground">{deleteControl.labels.confirm}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setConfirmingDelete(false)
+              deleteControl.onDelete()
+            }}
+            className="font-medium text-destructive hover:underline"
+          >
+            {deleteControl.labels.action}
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirmingDelete(false)}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            {deleteControl.labels.cancel}
+          </button>
+        </div>
+      )}
       {/* Attribution below the bubble. Peer (team/assistant) shows name · time;
           the assistant's name gets a subtle sparkle + "AI" suffix as one
           cohesive label. Self (the visitor) shows "You · time" only when a

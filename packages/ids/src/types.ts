@@ -96,6 +96,8 @@ export type ConversationSummaryId = TypeId<'conversation_summary'>
 
 /** Conversation message translation ID (P2-D.1 inbox translation cache) - e.g., conversation_msg_translation_01h455vb4pex5vsknk084sn02q */
 export type ConversationMessageTranslationId = TypeId<'conversation_msg_translation'>
+/** Conversation message edit-history row - e.g., conversation_msg_edit_01h455vb4pex5vsknk084sn02q */
+export type ConversationMessageEditId = TypeId<'conversation_msg_edit'>
 
 /** Integration ID - e.g., integration_01h455vb4pex5vsknk084sn02q */
 export type IntegrationId = TypeId<'integration'>
@@ -502,6 +504,7 @@ export interface EntityIdMap {
   conversation_message_reaction: ConversationMessageReactionId
   conversation_summary: ConversationSummaryId
   conversation_message_translation: ConversationMessageTranslationId
+  conversation_message_edit: ConversationMessageEditId
   integration: IntegrationId
   platform_cred: PlatformCredentialId
   event_mapping: EventMappingId

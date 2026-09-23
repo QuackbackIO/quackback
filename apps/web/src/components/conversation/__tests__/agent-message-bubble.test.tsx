@@ -168,6 +168,93 @@ describe('canDeleteAgentMessage', () => {
   })
 })
 
+describe('AgentMessageBubble: removed messages', () => {
+  const deleted = () =>
+    baseMessage({
+      content: 'My password is hunter2',
+      deletedAt: '2026-07-01T01:00:00.000Z',
+      deletedByName: 'Vic',
+    })
+
+  it('shows a placeholder the team can open', () => {
+    render(<AgentMessageBubble message={deleted()} />)
+    expect(screen.getByText('Deleted by Vic')).toBeInTheDocument()
+    expect(screen.queryByText('My password is hunter2')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Show' }))
+    expect(screen.getByText('My password is hunter2')).toBeInTheDocument()
+    // A removed message has no actions menu.
+    expect(screen.queryByLabelText('More actions')).not.toBeInTheDocument()
+  })
+
+  it('offers Redact on the placeholder to a moderator only', () => {
+    const onRedact = vi.fn()
+    const { unmount } = render(<AgentMessageBubble message={deleted()} />)
+    expect(screen.queryByRole('button', { name: 'Redact' })).not.toBeInTheDocument()
+    unmount()
+    render(<AgentMessageBubble message={deleted()} canRedact onRedact={onRedact} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Redact' }))
+    expect(onRedact).toHaveBeenCalledWith(deleted().id)
+  })
+
+  it('has nothing left to open once redacted', () => {
+    render(
+      <AgentMessageBubble
+        message={{
+          ...deleted(),
+          content: '',
+          redactedAt: '2026-07-01T02:00:00.000Z',
+          redactedByName: 'Ava',
+        }}
+        canRedact
+        onRedact={vi.fn()}
+      />
+    )
+    expect(screen.getByText('Redacted by Ava')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Show' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Redact' })).not.toBeInTheDocument()
+  })
+
+  it('opens earlier versions from the (edited) mark', async () => {
+    const load = vi.fn(async () => [
+      { id: 'e1', content: 'Hello', editedAt: '2026-07-01T01:00:00.000Z', editorName: 'Ava' },
+    ])
+    render(
+      <AgentMessageBubble
+        message={baseMessage({ senderType: 'agent', editedAt: '2026-07-01T01:00:00.000Z' })}
+        loadEditHistory={load}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: '(edited)' }))
+    expect(await screen.findByText('Hello')).toBeInTheDocument()
+    expect(load).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('VisitorMessageBubble: deleting your own message', () => {
+  const labels = { action: 'Delete', confirm: 'Delete this message?', cancel: 'Cancel' }
+
+  it('asks before deleting, and Cancel keeps the message', () => {
+    const onDelete = vi.fn()
+    render(
+      <VisitorMessageBubble side="self" content="Hi" onDelete={onDelete} deleteLabels={labels} />
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(screen.getByText('Delete this message?')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(onDelete).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(onDelete).toHaveBeenCalledTimes(1)
+  })
+
+  it('offers no delete on a team message', () => {
+    render(
+      <VisitorMessageBubble side="peer" content="Hi" onDelete={vi.fn()} deleteLabels={labels} />
+    )
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+  })
+})
+
 describe('AgentMessageBubble — inbox translation (P2-D.1)', () => {
   it('renders the plain content with no toggle when translation is absent (pin: unchanged default)', () => {
     render(<AgentMessageBubble message={baseMessage()} />)

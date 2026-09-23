@@ -135,6 +135,16 @@ export interface ConversationMessageDTO {
    *  Optional so pre-existing fixtures keep compiling; `toMessageDTO` always
    *  sets it. Drives the small "(edited)" mark beside the timestamp. */
   editedAt?: string | null
+  /** Agent threads only: a deleted message stays in the thread as a
+   *  placeholder. ISO time it was deleted, or null/absent. Visitor threads never
+   *  load deleted rows. */
+  deletedAt?: string | null
+  /** Who deleted it, for the placeholder ("Deleted by …"). */
+  deletedByName?: string | null
+  /** Set once a moderator redacts the message: the body is gone for good and
+   *  `content` is empty. */
+  redactedAt?: string | null
+  redactedByName?: string | null
   /** Null for system events, which have no human author. */
   author: ConversationAuthorDTO | null
   attachments: ConversationAttachment[]
@@ -525,3 +535,13 @@ export type ConversationStreamEvent =
 /** Hard caps shared by client + server validation. */
 export const MAX_CONVERSATION_MESSAGE_LENGTH = 4000
 export const MAX_CONVERSATION_ATTACHMENTS = 10
+
+/** One earlier version of an edited support message, newest first. */
+export interface ConversationMessageEditDTO {
+  id: string
+  /** The body the message had before this edit. */
+  content: string
+  /** When the edit that replaced it was made. */
+  editedAt: string
+  editorName: string | null
+}

@@ -37,6 +37,7 @@ import {
   postActivity,
   conversations,
   conversationMessages,
+  conversationMessageEdits,
   conversationParticipants,
   conversationSummaries,
   postSubscriptions,
@@ -291,6 +292,12 @@ export const REPOINT_STEPS: RepointStep[] = [
     'principal_id',
     'Message authorship. ON DELETE RESTRICT, same as conversations.'
   ),
+  simpleRepoint(
+    'conversation_message_edits',
+    conversationMessageEdits,
+    'editor_principal_id',
+    'Message edit attribution. An inbound GitHub edit records the commenter, who can be a customer identity that later merges.'
+  ),
   collisionRepoint(
     'conversation_participants',
     conversationParticipants,
@@ -477,6 +484,7 @@ export const REPOINT_EXEMPTIONS: Record<string, string> = {
   'teams.rr_cursor_principal_id':
     'round-robin cursor points at an online teammate, never anonymous',
   'conversation_messages.deleted_by_principal_id': 'message moderation is agent-only',
+  'conversation_messages.redacted_by_principal_id': 'message moderation is agent-only',
   'conversation_message_mentions.principal_id': 'conversation mentions target agents',
   'conversation_message_reactions.principal_id':
     'conversation reactions are agent-only (requireAgent)',

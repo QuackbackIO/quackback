@@ -157,6 +157,10 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/conversation.ts::deleteConversationMessageFn': END_USER(
     'author deletes their own conversation message'
   ),
+  'lib/server/functions/conversation.ts::listConversationMessageEditsFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.TICKET_VIEW],
+    "earlier versions of a message; caller must be able to view the message's conversation or ticket"
+  ),
   'lib/server/functions/conversation.ts::editConversationMessageFn': DYNAMIC_PERMISSION(
     [
       PERMISSIONS.CONVERSATION_REPLY,
@@ -291,6 +295,9 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   ),
   'lib/server/functions/widget/conversation.ts::widgetSendConversationMessageFn': END_USER(
     'widget visitor sends a conversation message'
+  ),
+  'lib/server/functions/widget/conversation.ts::widgetDeleteConversationMessageFn': END_USER(
+    'widget visitor deletes their own message; the team keeps it'
   ),
   'lib/server/functions/widget/conversation.ts::widgetListConversationMessagesFn': END_USER(
     'widget visitor pages their own conversation'

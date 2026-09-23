@@ -86,6 +86,7 @@ describe('getMessageCreatedTargets', () => {
       target: { principalIds: ['principal_admin', 'principal_member'] },
       config: {
         conversationId: 'conversation_1',
+        conversationMessageId: 'conversation_msg_1',
         authorName: 'Jane',
         preview: 'hello team, need help',
         isFirstMessage: true,

@@ -362,6 +362,7 @@ describe('replayGateVerdict', () => {
       '0285_integration_link_scope',
       '0286_integration_sync_privacy',
       '0287_conversation_message_edited_at',
+      '0288_conversation_message_history',
     ])
     const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
     expect(verdict.ok).toBe(false)

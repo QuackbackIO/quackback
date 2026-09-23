@@ -104,6 +104,7 @@ export type {
   ConversationMessageMentionId,
   ConversationSummaryId,
   ConversationMessageTranslationId,
+  ConversationMessageEditId,
   IntegrationId,
   PlatformCredentialId,
   EventMappingId,

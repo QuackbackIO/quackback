@@ -64,6 +64,8 @@ import {
   addConversationNoteFn,
   deleteConversationMessageFn,
   editConversationMessageFn,
+  redactConversationMessageFn,
+  listConversationMessageEditsFn,
   addMessageReactionFn,
   removeMessageReactionFn,
   setMessageFlagFn,
@@ -125,8 +127,6 @@ import {
   appendSentTicketMessage,
   prependOlderAgentMessages,
   prependOlderTicketMessages,
-  removeAgentThreadMessage,
-  removeTicketThreadMessage,
   toggleReactionLocal,
   updateAgentThreadMessage,
   updateTicketThreadMessage,
@@ -818,20 +818,6 @@ export function AgentConversationThread({
     },
     [isTicket, queryClient, ticketThreadKey, threadKey]
   )
-  const removeActiveMessage = useCallback(
-    (messageId: ConversationMessageId) => {
-      if (isTicket) {
-        queryClient.setQueryData(ticketThreadKey, (prev: TicketThreadCache | undefined) =>
-          removeTicketThreadMessage(prev, messageId)
-        )
-      } else {
-        queryClient.setQueryData(threadKey, (prev: AgentThreadCache | undefined) =>
-          removeAgentThreadMessage(prev, messageId)
-        )
-      }
-    },
-    [isTicket, queryClient, ticketThreadKey, threadKey]
-  )
   const invalidateActiveThread = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: isTicket ? ticketThreadKey : threadKey })
   }, [isTicket, queryClient, ticketThreadKey, threadKey])
@@ -1040,9 +1026,32 @@ export function AgentConversationThread({
   const deleteMutation = useMutation({
     mutationFn: (messageId: ConversationMessageId) =>
       deleteConversationMessageFn({ data: { messageId } }),
-    onSuccess: (_r, messageId) => removeActiveMessage(messageId),
+    // The team keeps a placeholder; the SSE echo fills in the server's copy.
+    onSuccess: (_r, messageId) =>
+      patchActiveMessage(messageId, (m) => ({
+        ...m,
+        deletedAt: new Date().toISOString(),
+        deletedByName: myName,
+      })),
     onError: () => toast.error('Failed to delete message'),
   })
+
+  const [redactTarget, setRedactTarget] = useState<ConversationMessageId | null>(null)
+  const redactMutation = useMutation({
+    mutationFn: (messageId: ConversationMessageId) =>
+      redactConversationMessageFn({ data: { messageId } }),
+    onSuccess: (message) => {
+      patchActiveMessage(message.id, () => message)
+      setRedactTarget(null)
+      onChanged()
+    },
+    onError: () => toast.error('Failed to redact message'),
+  })
+  const loadEditHistory = useCallback(
+    (messageId: ConversationMessageId) => listConversationMessageEditsFn({ data: { messageId } }),
+    []
+  )
+  const canRedact = permissions.has(PERMISSIONS.CONVERSATION_MANAGE)
 
   const handleEditMessage = useCallback(
     async (
@@ -1647,6 +1656,9 @@ export function AgentConversationThread({
             onDelete={deleteMutation.mutate}
             canEdit={canEditAgentMessage(m, myPrincipalId, permissions)}
             canDelete={canDeleteAgentMessage(m, myPrincipalId, permissions)}
+            canRedact={canRedact}
+            onRedact={setRedactTarget}
+            loadEditHistory={loadEditHistory}
             onEdit={handleEditMessage}
             onToggleReaction={handleToggleReaction}
             onToggleFlag={handleToggleFlag}
@@ -2292,6 +2304,20 @@ export function AgentConversationThread({
         </div>
       </div>
 
+      <ConfirmDialog
+        open={redactTarget !== null}
+        onOpenChange={(o) => {
+          if (!o) setRedactTarget(null)
+        }}
+        title="Redact message?"
+        description="Its content, attachments, and edit history are removed for good."
+        confirmLabel="Redact"
+        variant="destructive"
+        isPending={redactMutation.isPending}
+        onConfirm={() => {
+          if (redactTarget) redactMutation.mutate(redactTarget)
+        }}
+      />
       {/* Convert/share/end dialogs are conversation-only (§2.5 — convert-to-post
           is deferred for tickets, end-conversation has no ticket equivalent,
           the status axis stands in for it instead). Not rendered at all for a

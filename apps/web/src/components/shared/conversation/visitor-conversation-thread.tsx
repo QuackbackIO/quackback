@@ -24,7 +24,7 @@ import { SystemEventNotice } from './system-event-notice'
 import { conversationAvailable } from '@/lib/shared/conversation/presence'
 import { ArrowUpIcon, ChevronDownIcon } from '@heroicons/react/24/solid'
 import { ChatBubbleLeftRightIcon, PaperClipIcon, BookOpenIcon } from '@heroicons/react/24/outline'
-import type { ConversationId } from '@quackback/ids'
+import type { ConversationId, ConversationMessageId } from '@quackback/ids'
 import { Avatar } from '@/components/ui/avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { TypingDots } from '@/components/shared/typing-dots'
@@ -579,6 +579,36 @@ export function VisitorConversationThread({
       .catch(() => setCsatCommentDone(false)) // reopen the box for a retry on failure
   }, [conversationId, csatRating, csatComment, getAuthHeaders])
 
+  // Deleting your own message: gone from your thread at once, restored if the
+  // server refuses. The team keeps it.
+  const deleteLabels = useMemo(
+    () => ({
+      action: intl.formatMessage({ id: 'widget.messenger.delete', defaultMessage: 'Delete' }),
+      confirm: intl.formatMessage({
+        id: 'widget.messenger.deleteConfirm',
+        defaultMessage: 'Delete this message?',
+      }),
+      cancel: intl.formatMessage({ id: 'widget.messenger.deleteCancel', defaultMessage: 'Cancel' }),
+    }),
+    [intl]
+  )
+  const deleteOwnMessage = useCallback(
+    async (messageId: ConversationMessageId) => {
+      if (!conversationId) return
+      const key = conversationKeys.visitorThread(conversationId)
+      const before = queryClient.getQueryData<VisitorThreadCache>(key)
+      queryClient.setQueryData(key, (prev: VisitorThreadCache | undefined) =>
+        prev ? { ...prev, messages: prev.messages.filter((m) => m.id !== messageId) } : prev
+      )
+      try {
+        await rpc.deleteConversationMessage({ data: { messageId }, headers: getAuthHeaders() })
+      } catch {
+        queryClient.setQueryData(key, before)
+      }
+    },
+    [conversationId, getAuthHeaders, queryClient, rpc]
+  )
+
   // Phase C conversational block layer: a structured reply (button tap /
   // collect submit / CSAT rating) rides the SAME send path as an ordinary
   // message, plus the `blockReply` correlation (server-derived echo — this
@@ -984,6 +1014,10 @@ export function VisitorConversationThread({
                 ? intl.formatMessage({ id: 'widget.messenger.edited', defaultMessage: '(edited)' })
                 : undefined
             }
+            // Your own message, except an answer to an interactive block (it
+            // drives the workflow that asked). The server checks ownership.
+            onDelete={isVisitor && !m.blockReply ? () => void deleteOwnMessage(m.id) : undefined}
+            deleteLabels={deleteLabels}
             linkPreviews={linkPreviews}
             getAuthHeaders={getAuthHeaders}
             embedOpenMode={embedOpenMode}

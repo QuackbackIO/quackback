@@ -15,8 +15,8 @@ are opt-in: a webhook only receives the event types listed in its subscription.
 | `conversation.csat_comment_added` | A visitor adds the optional free-text comment to their rating. Fires once per survey, only if a comment is left. |
 | `message.created`                 | A visitor or agent sends a public message.                                                                       |
 | `message.note_created`            | An agent adds an **internal note**. Private content — subscribe only if your endpoint should receive it.         |
-| `message.deleted`                 | A public message is soft-deleted.                                                                                |
-| `message.updated`                 | The author edits a public message. The payload carries the new body. Internal-note edits are not emitted.       |
+| `message.deleted`                 | A public message is deleted or redacted, by its author or a moderator. Fires once, when the customer loses it.   |
+| `message.updated`                 | The author edits a public message. The payload carries the new body. Internal-note edits are not emitted.        |
 
 Internal-note deletions are not emitted. System messages (e.g. "chat ended") are
 represented by `conversation.*` events, not `message.created`. Anonymous visitors'

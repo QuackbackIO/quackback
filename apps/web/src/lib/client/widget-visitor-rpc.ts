@@ -6,6 +6,7 @@ import {
   widgetSubmitCsatFn,
   widgetMarkConversationReadFn,
   widgetSendConversationTypingFn,
+  widgetDeleteConversationMessageFn,
 } from '@/lib/server/functions/widget/conversation'
 import {
   widgetGetConversationLinkedTicketFn,
@@ -26,6 +27,7 @@ export const widgetVisitorRpc: VisitorSurfaceRpc = {
   submitCsat: widgetSubmitCsatFn,
   markConversationRead: widgetMarkConversationReadFn,
   sendConversationTyping: widgetSendConversationTypingFn,
+  deleteConversationMessage: widgetDeleteConversationMessageFn,
   getConversationLinkedTicket: widgetGetConversationLinkedTicketFn,
   createMyTicket: widgetCreateMyTicketFn,
   getMyTicketStageLabels: widgetGetMyTicketStageLabelsFn,

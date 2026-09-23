@@ -96,6 +96,9 @@ import {
 } from './conversation.notify'
 import { resolveReplyRecipient } from './conversation.recipient'
 import { resolveMessageParent } from './message-parent'
+import { agentMessageDto, publishRemoval, refreshConversationPreview } from './conversation.history'
+import { can } from '@/lib/server/policy/authorize'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import {
   conversationToDTO,
@@ -108,7 +111,6 @@ import {
   emitConversationCreated,
   emitMessageCreated,
   emitMessageNoteCreated,
-  emitMessageDeleted,
   emitConversationStatusChanged,
   emitConversationAssigned,
   emitConversationPriorityChanged,
@@ -1735,7 +1737,9 @@ export async function deleteConversationMessage(
     .from(conversationMessages)
     .where(eq(conversationMessages.id, messageId))
     .limit(1)
-  if (!message) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
+  if (!message || message.deletedAt) {
+    throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
+  }
 
   const authored = {
     senderType: message.senderType,
@@ -1744,77 +1748,57 @@ export async function deleteConversationMessage(
     isInternal: message.isInternal,
   }
 
-  if (!message.conversationId) {
-    // Ticket-thread message: the same own-message / moderator rule as a
-    // conversation, once the actor is known to see the ticket.
+  if (message.conversationId) {
+    const conversation = await loadConversationOr404(message.conversationId)
+    const decision = canDeleteMessage(actor, authored, conversation)
+    if (!decision.allowed) {
+      // Hide existence from anyone who can't even view the conversation.
+      if (!canViewConversation(actor, conversation).allowed) {
+        throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
+      }
+      throw new ForbiddenError('FORBIDDEN', decision.reason)
+    }
+    // A customer's answer to an interactive block drives the workflow that
+    // asked it, so only a moderator can remove it.
+    if (message.metadata?.blockReply && !can(actor, PERMISSIONS.CONVERSATION_MANAGE)) {
+      throw new ForbiddenError('FORBIDDEN', 'This message cannot be deleted')
+    }
+    if (
+      conversation.channel === 'github' &&
+      !message.isInternal &&
+      message.metadata?.githubCommentId
+    ) {
+      const { deleteGitHubIssueComment } =
+        await import('@/lib/server/domains/channels/github-deliver')
+      await deleteGitHubIssueComment(conversation.id, message.metadata.githubCommentId)
+    }
+  } else {
+    // Ticket-thread message: the same own-message / moderator rule, once the
+    // actor is known to see the ticket.
     if (!message.ticketId) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
-    // Resolves the parent + authorizes ticket visibility (§2.5) — shared with
-    // message.actions.ts's identical resolve-then-authorize step.
     await resolveMessageParent(message, actor)
     const decision = canDeleteMessage(actor, authored, null)
     if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
+  }
 
-    await db
+  // A soft delete: the customer loses the message, the team keeps it as a
+  // placeholder they can open. Only a redaction removes the content.
+  const now = new Date()
+  const deleted = await db.transaction(async (tx) => {
+    const [row] = await tx
       .update(conversationMessages)
-      .set({
-        deletedAt: new Date(),
-        deletedByPrincipalId: actor.principalId,
-        updatedAt: new Date(),
-      })
+      .set({ deletedAt: now, deletedByPrincipalId: actor.principalId, updatedAt: now })
       .where(and(eq(conversationMessages.id, messageId), isNull(conversationMessages.deletedAt)))
-
-    // No realtime broadcast and no webhook here: ticket-thread update routing
-    // (and its message.deleted webhook analogue) arrives with the customer
-    // loop, mirroring message.actions.ts's identical deferral for ticket
-    // reactions/flags. The acting client applies the deletion optimistically.
-    return
-  }
-
-  const conversationId = message.conversationId
-  const conversation = await loadConversationOr404(conversationId)
-
-  const decision = canDeleteMessage(actor, authored, conversation)
-  if (!decision.allowed) {
-    // Hide existence from anyone who can't even view the conversation.
-    if (!canViewConversation(actor, conversation).allowed) {
-      throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
+      .returning()
+    if (row?.conversationId && !row.isInternal) {
+      await refreshConversationPreview(tx, row.conversationId)
     }
-    throw new ForbiddenError('FORBIDDEN', decision.reason)
-  }
+    return row
+  })
+  if (!deleted) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
 
-  if (
-    conversation.channel === 'github' &&
-    !message.isInternal &&
-    message.metadata?.githubCommentId
-  ) {
-    const { deleteGitHubIssueComment } =
-      await import('@/lib/server/domains/channels/github-deliver')
-    await deleteGitHubIssueComment(conversationId, message.metadata.githubCommentId)
-  }
-
-  await db
-    .update(conversationMessages)
-    .set({ deletedAt: new Date(), deletedByPrincipalId: actor.principalId, updatedAt: new Date() })
-    .where(and(eq(conversationMessages.id, messageId), isNull(conversationMessages.deletedAt)))
-
-  const deletedEvent = {
-    kind: 'message_deleted' as const,
-    conversationId,
-    messageId,
-  }
-  // An internal note never reached the visitor, so its deletion must not either
-  // (the message id would otherwise surface on the visitor's channel).
-  if (message.isInternal) {
-    publishAgentConversationEvent(deletedEvent)
-  } else {
-    publishConversationEvent(conversationId, deletedEvent)
-  }
-
-  // Internal-note deletion stays internal (no public webhook); mirror the
-  // publishConversationEvent vs publishAgentConversationEvent split above.
-  if (!message.isInternal) {
-    void emitMessageDeleted(actor, message, conversation)
-  }
+  const dto = await agentMessageDto(deleted, actor.principalId as PrincipalId)
+  await publishRemoval(deleted, dto, actor, !deleted.isInternal && !!deleted.conversationId)
 }
 
 /** Record a visitor CSAT rating (1-5) on their conversation. */
