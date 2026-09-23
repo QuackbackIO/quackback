@@ -86,13 +86,29 @@ export function mcpDcrRedirectUrisToRestore(body: Record<string, unknown>): stri
   return original
 }
 
+/** A redirect Better Auth accepts from a `web` client: HTTPS on a non-loopback host. */
+function isWebRedirectUri(uri: string): boolean {
+  let url: URL
+  try {
+    url = new URL(uri)
+  } catch {
+    return false
+  }
+  if (url.protocol !== 'https:') return false
+  const host = url.hostname.toLowerCase()
+  return host !== 'localhost' && host !== '[::1]' && !/^127\.\d+\.\d+\.\d+$/.test(host)
+}
+
 /**
  * Persist the full authorization-server allow-list on a DCR client row.
  * Cursor registers with read defaults; without this, a later write step-up
  * fails with `invalid_scope` because the client row never listed writes.
  *
- * MCP DCR clients are native (desktop). Forcing `native` also covers Cursor
- * builds that omit `application_type` (Better Auth 1.7 defaults omitted → web).
+ * Better Auth 1.7 treats an omitted `application_type` as `web`, which only
+ * allows HTTPS non-loopback redirects. Most desktop MCP clients omit it and
+ * register an RFC 8252 loopback (`http://localhost:PORT/callback`) or a
+ * private-use scheme, so an omitted type with any such redirect becomes
+ * `native`. An explicit type is kept, except for the placeholder rewrite.
  */
 export function mcpDcrRegistrationBody(body: Record<string, unknown>): Record<string, unknown> {
   const redirectUris = parseRedirectUris(body.redirect_uris)
@@ -100,12 +116,13 @@ export function mcpDcrRegistrationBody(body: Record<string, unknown>): Record<st
   const usedNativeRedirectRewrite = Boolean(
     redirectUris && rewritten && redirectUris.some((uri, i) => uri !== rewritten[i])
   )
+  const nativeByDefault =
+    body.application_type === undefined &&
+    Boolean(redirectUris?.some((uri) => !isWebRedirectUri(uri)))
   return {
     ...body,
     scope: MCP_AS_SCOPES.join(' '),
-    // Only force native when we had to swap a host-bearing private-use
-    // scheme for the 1.7.4 placeholder. HTTPS web clients keep `web`.
-    ...(usedNativeRedirectRewrite ? { application_type: 'native' } : {}),
+    ...(usedNativeRedirectRewrite || nativeByDefault ? { application_type: 'native' } : {}),
     ...(rewritten ? { redirect_uris: rewritten } : {}),
   }
 }
