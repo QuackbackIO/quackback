@@ -8,7 +8,8 @@
  */
 import { allowDecision, denyDecision, type Actor, type Decision } from './types'
 import { can, authorize } from './authorize'
-import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import { writePermissionFor } from '@/lib/shared/conversation/message-permissions'
 import type { PrincipalId } from '@quackback/ids'
 import type { ConversationStatus } from '@/lib/server/db'
 
@@ -57,22 +58,34 @@ export function canActAsAgent(actor: Actor): Decision {
   return denyDecision('Only team members can act as a support agent')
 }
 
+interface AuthoredMessage {
+  senderType: 'visitor' | 'agent' | 'system'
+  // Null for author-less rows, which are never "your own message".
+  authorPrincipalId: PrincipalId | null
+  parent: 'conversation' | 'ticket'
+  isInternal: boolean
+}
+
 /**
- * Who may delete a message: a team member (any message), or the visitor who
- * authored it (their own visitor-side message in their own conversation).
+ * Who may delete a message, the way Slack does it: anyone may delete their own
+ * agent message while they hold the permission that writes it; a moderator
+ * (`conversation.manage`) may delete anyone's; and the visitor who owns a
+ * conversation may delete their own visitor-side message in it. System rows
+ * are refused by the caller before this check.
  */
 export function canDeleteMessage(
   actor: Actor,
-  // authorPrincipalId is null for author-less rows; a null author can never be
-  // "your own message", so a non-team actor is correctly denied.
-  message: { senderType: 'visitor' | 'agent'; authorPrincipalId: PrincipalId | null },
-  conversation: ConversationShape
+  message: AuthoredMessage,
+  // The owning conversation, or null for a ticket-parented message.
+  conversation: ConversationShape | null
 ): Decision {
+  if (message.senderType === 'system') return denyDecision('System messages cannot be deleted')
   if (can(actor, PERMISSIONS.CONVERSATION_MANAGE)) return allowDecision()
+  if (message.senderType === 'agent') return ownAgentMessage(actor, message, 'delete')
   if (
+    conversation &&
     actor.principalId &&
     actor.principalType !== 'service' &&
-    message.senderType === 'visitor' &&
     message.authorPrincipalId === actor.principalId &&
     conversation.visitorPrincipalId === actor.principalId
   ) {
@@ -82,39 +95,27 @@ export function canDeleteMessage(
 }
 
 /**
- * Who may edit a message: only the author of an agent-side message, and only while they still hold the
- * permission that writes that kind of message (a reply or a note, on a
- * conversation or a ticket). Unlike delete, a teammate cannot rewrite someone
- * else's words. Service principals are excluded. System rows are refused by
- * the caller before this check (they have no author).
+ * Who may edit a message: only the author of an agent-side message, and only
+ * while they hold the permission that writes that kind of message. Unlike
+ * delete there is no moderator override: nobody rewrites someone else's words.
  */
-export function canEditMessage(
-  actor: Actor,
-  message: {
-    senderType: 'visitor' | 'agent' | 'system'
-    authorPrincipalId: PrincipalId | null
-    parent: 'conversation' | 'ticket'
-    isInternal: boolean
-  }
-): Decision {
-  if (!actor.principalId) return denyDecision('A session is required to edit a message')
-  if (actor.principalType === 'service')
-    return denyDecision('Service principals cannot edit messages')
+export function canEditMessage(actor: Actor, message: AuthoredMessage): Decision {
   // A teammate can also write as a customer; that row stays the customer's.
   if (message.senderType !== 'agent') return denyDecision('Only agent messages can be edited')
-  if (!message.authorPrincipalId || message.authorPrincipalId !== actor.principalId) {
-    return denyDecision('You can only edit your own messages')
-  }
-  return authorize(actor, editPermissionFor(message))
+  return ownAgentMessage(actor, message, 'edit')
 }
 
-/** The permission that writes this kind of message, and so gates editing it. */
-function editPermissionFor(message: {
-  parent: 'conversation' | 'ticket'
-  isInternal: boolean
-}): PermissionKey {
-  if (message.parent === 'ticket') {
-    return message.isInternal ? PERMISSIONS.TICKET_NOTE : PERMISSIONS.TICKET_REPLY
+/** The author acting on their own agent message, with the permission that writes it. */
+function ownAgentMessage(
+  actor: Actor,
+  message: AuthoredMessage,
+  verb: 'edit' | 'delete'
+): Decision {
+  if (!actor.principalId) return denyDecision(`A session is required to ${verb} a message`)
+  if (actor.principalType === 'service')
+    return denyDecision(`Service principals cannot ${verb} messages`)
+  if (!message.authorPrincipalId || message.authorPrincipalId !== actor.principalId) {
+    return denyDecision(`You can only ${verb} your own messages`)
   }
-  return message.isInternal ? PERMISSIONS.CONVERSATION_NOTE : PERMISSIONS.CONVERSATION_REPLY
+  return authorize(actor, writePermissionFor(message))
 }

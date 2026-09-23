@@ -147,9 +147,6 @@ export async function editConversationMessage(
   if (!message || message.deletedAt) {
     throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
   }
-  if (message.senderType === 'system') {
-    throw new ForbiddenError('FORBIDDEN', 'System messages cannot be edited')
-  }
   if (message.metadata?.block) {
     throw new ForbiddenError('FORBIDDEN', 'This message cannot be edited')
   }

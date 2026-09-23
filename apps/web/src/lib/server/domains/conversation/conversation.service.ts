@@ -1736,29 +1736,21 @@ export async function deleteConversationMessage(
     .limit(1)
   if (!message) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
 
-  // System events (assignment notices) are status records, not user content —
-  // no one deletes them, on either parent. The guard also narrows senderType
-  // to visitor|agent for canDeleteMessage below.
-  if (message.senderType === 'system') {
-    throw new ForbiddenError('FORBIDDEN', 'System messages cannot be deleted')
+  const authored = {
+    senderType: message.senderType,
+    authorPrincipalId: message.principalId,
+    parent: message.conversationId ? ('conversation' as const) : ('ticket' as const),
+    isInternal: message.isInternal,
   }
 
   if (!message.conversationId) {
-    // Ticket-thread message. `canDeleteMessage`'s third argument is typed as
-    // ConversationShape (visitorPrincipalId + a ConversationStatus) — real
-    // conversation semantics that don't map onto a ticket, and there's no
-    // ticket-side "delete your own message" feature to preserve (the
-    // requester portal exposes no delete action at all today), so this path
-    // is intentionally narrower than the conversation one above: any team
-    // member who can see the ticket (assigned to them/their team, or
-    // ticket.view_all) may delete any of its messages. `canActAsAgent` is the
-    // same broad "is this actor an agent" gate `message.actions.ts`'s
-    // `requireAgent` uses for the equivalent ticket-message actions.
+    // Ticket-thread message: the same own-message / moderator rule as a
+    // conversation, once the actor is known to see the ticket.
     if (!message.ticketId) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
     // Resolves the parent + authorizes ticket visibility (§2.5) — shared with
     // message.actions.ts's identical resolve-then-authorize step.
     await resolveMessageParent(message, actor)
-    const decision = canActAsAgent(actor)
+    const decision = canDeleteMessage(actor, authored, null)
     if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
 
     await db
@@ -1780,11 +1772,7 @@ export async function deleteConversationMessage(
   const conversationId = message.conversationId
   const conversation = await loadConversationOr404(conversationId)
 
-  const decision = canDeleteMessage(
-    actor,
-    { senderType: message.senderType, authorPrincipalId: message.principalId },
-    conversation
-  )
+  const decision = canDeleteMessage(actor, authored, conversation)
   if (!decision.allowed) {
     // Hide existence from anyone who can't even view the conversation.
     if (!canViewConversation(actor, conversation).allowed) {

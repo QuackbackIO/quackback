@@ -285,6 +285,8 @@ interface AgentMessageBubbleProps {
   onDelete?: (messageId: ConversationMessageId) => void
   /** Author-only. Opens an inline editor; the server repeats the authorship check. */
   canEdit?: boolean
+  /** Your own message, or anyone's for a moderator; the server repeats the check. */
+  canDelete?: boolean
   onEdit?: (
     messageId: ConversationMessageId,
     draft: { content: string; contentJson: TiptapContent | null }
@@ -455,6 +457,7 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
   message,
   onDelete = () => {},
   canEdit = false,
+  canDelete = false,
   onEdit,
   onToggleReaction = () => {},
   onToggleFlag = () => {},
@@ -727,9 +730,11 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
                         <PencilIcon className="h-4 w-4" /> Edit message
                       </DropdownMenuItem>
                     )}
-                    <DropdownMenuItem variant="destructive" onClick={() => onDelete(message.id)}>
-                      <TrashIcon className="h-4 w-4" /> Delete
-                    </DropdownMenuItem>
+                    {canDelete && (
+                      <DropdownMenuItem variant="destructive" onClick={() => onDelete(message.id)}>
+                        <TrashIcon className="h-4 w-4" /> Delete
+                      </DropdownMenuItem>
+                    )}
                     {showTrackActions && (
                       <>
                         <DropdownMenuSeparator />

@@ -137,15 +137,52 @@ describe('canActAsAgent', () => {
 })
 
 describe('canDeleteMessage', () => {
-  const ownVisitorMsg = { senderType: 'visitor' as const, authorPrincipalId: VISITOR }
-  const agentMsg = {
+  const msg = (over: Partial<Parameters<typeof canDeleteMessage>[1]> = {}) => ({
     senderType: 'agent' as const,
     authorPrincipalId: 'principal_admin' as PrincipalId,
-  }
+    parent: 'conversation' as const,
+    isInternal: false,
+    ...over,
+  })
+  const ownVisitorMsg = msg({ senderType: 'visitor', authorPrincipalId: VISITOR })
+  const contributor = (...keys: PermissionKey[]): Actor => ({
+    principalId: 'principal_contrib' as PrincipalId,
+    role: 'member',
+    principalType: 'user',
+    segmentIds: new Set(),
+    permissions: new Set(keys),
+  })
 
-  it('lets a team member delete any message', () => {
+  it("lets a moderator (conversation.manage) delete anyone's message", () => {
     expect(canDeleteMessage(adminActor, ownVisitorMsg, openConv).allowed).toBe(true)
-    expect(canDeleteMessage(memberActor, agentMsg, openConv).allowed).toBe(true)
+    expect(canDeleteMessage(memberActor, msg(), openConv).allowed).toBe(true)
+    expect(canDeleteMessage(memberActor, msg({ parent: 'ticket' }), null).allowed).toBe(true)
+  })
+
+  it('lets a teammate without manage delete only their own agent messages', () => {
+    const me = contributor(PERMISSIONS.CONVERSATION_REPLY, PERMISSIONS.CONVERSATION_NOTE)
+    const mine = msg({ authorPrincipalId: me.principalId })
+    expect(canDeleteMessage(me, mine, openConv).allowed).toBe(true)
+    expect(canDeleteMessage(me, { ...mine, isInternal: true }, openConv).allowed).toBe(true)
+    expect(canDeleteMessage(me, msg(), openConv).allowed).toBe(false)
+    expect(canDeleteMessage(me, ownVisitorMsg, openConv).allowed).toBe(false)
+  })
+
+  it('requires the permission that writes that kind of message', () => {
+    const me = contributor(PERMISSIONS.CONVERSATION_REPLY)
+    const mine = msg({ authorPrincipalId: me.principalId })
+    expect(canDeleteMessage(me, { ...mine, isInternal: true }, openConv).allowed).toBe(false)
+    expect(canDeleteMessage(me, { ...mine, parent: 'ticket' }, null).allowed).toBe(false)
+    const ticketMe = contributor(PERMISSIONS.TICKET_REPLY)
+    const ticketMine = msg({ authorPrincipalId: ticketMe.principalId, parent: 'ticket' })
+    expect(canDeleteMessage(ticketMe, ticketMine, null).allowed).toBe(true)
+  })
+
+  it('never deletes a system line, even for a moderator', () => {
+    expect(
+      canDeleteMessage(adminActor, msg({ senderType: 'system', authorPrincipalId: null }), openConv)
+        .allowed
+    ).toBe(false)
   })
 
   it('lets the owning visitor delete their own visitor message', () => {
@@ -154,11 +191,11 @@ describe('canDeleteMessage', () => {
   })
 
   it('denies a visitor deleting an agent message', () => {
-    expect(canDeleteMessage(visitorActor, agentMsg, openConv).allowed).toBe(false)
+    expect(canDeleteMessage(visitorActor, msg(), openConv).allowed).toBe(false)
   })
 
   it("denies a visitor deleting another visitor's message", () => {
-    const othersMsg = { senderType: 'visitor' as const, authorPrincipalId: OTHER }
+    const othersMsg = msg({ senderType: 'visitor', authorPrincipalId: OTHER })
     expect(canDeleteMessage(visitorActor, othersMsg, openConv).allowed).toBe(false)
   })
 

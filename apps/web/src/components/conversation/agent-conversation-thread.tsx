@@ -28,7 +28,7 @@ import {
   type RefObject,
 } from 'react'
 import { useRouteContext } from '@tanstack/react-router'
-import { canEditAgentMessage } from '@/components/conversation/message-edit'
+import { canDeleteAgentMessage, canEditAgentMessage } from '@/components/conversation/message-edit'
 import {
   PaperAirplaneIcon,
   PaperClipIcon,
@@ -1646,6 +1646,7 @@ export function AgentConversationThread({
             onOpenPost={onOpenPost}
             onDelete={deleteMutation.mutate}
             canEdit={canEditAgentMessage(m, myPrincipalId, permissions)}
+            canDelete={canDeleteAgentMessage(m, myPrincipalId, permissions)}
             onEdit={handleEditMessage}
             onToggleReaction={handleToggleReaction}
             onToggleFlag={handleToggleFlag}

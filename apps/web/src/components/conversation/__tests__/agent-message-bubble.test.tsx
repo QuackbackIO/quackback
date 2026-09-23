@@ -9,7 +9,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { render, screen, cleanup, fireEvent } from '@testing-library/react'
 import { AgentMessageBubble, VisitorMessageBubble } from '../message-bubble'
-import { canEditAgentMessage } from '../message-edit'
+import { canDeleteAgentMessage, canEditAgentMessage } from '../message-edit'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import type { AgentConversationMessageDTO } from '@/lib/shared/conversation/types'
 
@@ -132,6 +132,39 @@ describe('AgentMessageBubble — edited mark', () => {
     expect(canEditAgentMessage(note, 'principal_me', only(PERMISSIONS.CONVERSATION_REPLY))).toBe(
       false
     )
+  })
+})
+
+describe('canDeleteAgentMessage', () => {
+  const own = baseMessage({
+    senderType: 'agent',
+    author: { principalId: 'principal_me' as never, displayName: 'James', avatarUrl: null },
+  })
+  const replier = new Set<PermissionKey>([PERMISSIONS.CONVERSATION_REPLY])
+  const moderator = new Set<PermissionKey>([PERMISSIONS.CONVERSATION_MANAGE])
+
+  it('offers Delete on your own agent message', () => {
+    expect(canDeleteAgentMessage(own, 'principal_me', replier)).toBe(true)
+    expect(canDeleteAgentMessage(own, 'principal_other', replier)).toBe(false)
+    expect(canDeleteAgentMessage(baseMessage(), 'principal_v', replier)).toBe(false)
+  })
+
+  it("offers Delete on anyone's message to a moderator, never on a system line", () => {
+    expect(canDeleteAgentMessage(own, 'principal_other', moderator)).toBe(true)
+    expect(canDeleteAgentMessage(baseMessage(), 'principal_other', moderator)).toBe(true)
+    expect(
+      canDeleteAgentMessage({ ...own, senderType: 'system' }, 'principal_other', moderator)
+    ).toBe(false)
+  })
+
+  it('hides Delete in the menu unless allowed', () => {
+    const { unmount } = render(<AgentMessageBubble message={own} />)
+    fireEvent.click(screen.getByLabelText('More actions'))
+    expect(screen.queryByRole('menuitem', { name: 'Delete' })).not.toBeInTheDocument()
+    unmount()
+    render(<AgentMessageBubble message={own} canDelete />)
+    fireEvent.click(screen.getByLabelText('More actions'))
+    expect(screen.getByRole('menuitem', { name: 'Delete' })).toBeInTheDocument()
   })
 })
 
