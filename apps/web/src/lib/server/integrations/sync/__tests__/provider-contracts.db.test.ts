@@ -28,6 +28,7 @@ import {
   integrationPlatformCredentials,
   integrationEventMappings,
   postExternalLinks,
+  postStatuses,
   integrationSyncOperations as operations,
   eq,
 } from '@/lib/server/db'
@@ -238,6 +239,109 @@ describe.skipIf(!fixture.available)('provider capability flows', () => {
       })
     }
   )
+  // A Linear issue keeps its UUID when it is moved to another team, and the
+  // signed event then reports the new team. The link was established under the
+  // old one; without following the move, every later state change is dropped
+  // with nothing recorded — the post stays at its last pre-move status forever.
+  async function seedLinkedUnder(provider: string, teamId: string, externalId: string) {
+    const seeded = await seed(provider)
+    const [status] = await testDb
+      .insert(postStatuses)
+      .values({ name: 'Done', slug: randomUUID(), category: 'complete' })
+      .returning()
+    await testDb
+      .update(integrations)
+      .set({
+        config: {
+          channelId: teamId,
+          statusSyncEnabled: true,
+          webhookSecret: 'review-signing-secret',
+          statusMappings: { Done: status.id },
+        },
+      })
+      .where(eq(integrations.id, seeded.integration.id))
+    const receive = async (destinationId: string) => {
+      const queued = (await queueInboundStatus(
+        seeded.integration,
+        {
+          externalId,
+          externalStatus: 'Done',
+          eventType: 'issue.state_changed',
+          destinationId,
+          occurredAt: new Date().toISOString(),
+        },
+        randomUUID()
+      ))!
+      return (await testDb.query.integrationSyncOperations.findFirst({
+        where: eq(operations.id, queued.id),
+      }))!
+    }
+    const origin = await receive(teamId)
+    const originScope = `${origin.installation}:${origin.destinationKey}`
+    await testDb.insert(postExternalLinks).values({
+      postId: seeded.post.id,
+      integrationId: seeded.integration.id,
+      integrationType: provider,
+      externalId,
+      externalDisplayId: 'PRO-7',
+      externalUrl: 'https://linear.app/acme/issue/PRO-7',
+      syncScope: originScope,
+    })
+    const statusOps = async () =>
+      (
+        await testDb.query.integrationSyncOperations.findMany({
+          where: eq(operations.integrationId, seeded.integration.id),
+        })
+      ).filter((row) => row.kind === 'status')
+    const link = async () =>
+      (await testDb.query.postExternalLinks.findFirst({
+        where: eq(postExternalLinks.postId, seeded.post.id),
+      }))!
+    return { ...seeded, status, receive, originScope, statusOps, link }
+  }
+  it('Linear follows a linked issue into the team it was moved to', async () => {
+    const { post, status, receive, originScope, statusOps, link } = await seedLinkedUnder(
+      'linear',
+      'team-product',
+      'issue-uuid-1'
+    )
+    const moved = await receive('team-desktop')
+    await runIntegrationSync(syncTestJob(moved.id))
+
+    const [child, ...rest] = await statusOps()
+    expect(rest).toEqual([])
+    expect(child).toMatchObject({
+      state: 'queued',
+      sourceId: post.id,
+      remoteId: 'issue-uuid-1',
+      destinationKey: moved.destinationKey,
+    })
+    const followed = await link()
+    expect(followed.syncScope).toBe(`${moved.installation}:${moved.destinationKey}`)
+    expect(followed.syncScope).not.toBe(originScope)
+
+    await runIntegrationSync(syncTestJob(child.id))
+    expect(
+      await testDb.query.integrationSyncOperations.findFirst({
+        where: eq(operations.id, child.id),
+      })
+    ).toMatchObject({ state: 'succeeded' })
+    expect(await testDb.query.posts.findFirst({ where: eq(posts.id, post.id) })).toMatchObject({
+      statusId: status.id,
+    })
+  })
+  it('a provider whose ids are scoped per destination still ignores an item from another one', async () => {
+    const { receive, originScope, statusOps, link } = await seedLinkedUnder(
+      'jira',
+      'project-a',
+      'REMOTE-123'
+    )
+    const other = await receive('project-b')
+    await runIntegrationSync(syncTestJob(other.id))
+
+    expect(await statusOps()).toEqual([])
+    expect((await link()).syncScope).toBe(originScope)
+  })
   it('Asana keeps a signed compact event durable when its lookup fails', async () => {
     await seed('asana')
     vi.mocked(fetch).mockResolvedValue(new Response('Unavailable', { status: 503 }))

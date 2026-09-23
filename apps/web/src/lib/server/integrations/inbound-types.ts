@@ -35,6 +35,14 @@ export interface InboundWebhookResult {
 export interface InboundWebhookHandler {
   /** Automatic adapters supply signed destination and revision evidence. */
   statusMode: 'automatic' | 'review'
+  /**
+   * Remote ids are unique across the whole connected account, so a signed
+   * event about a linked item that now reports another destination is the
+   * same item after a move (a Linear issue keeps its UUID across teams). The
+   * link follows it instead of the event being dropped. Leave unset where an
+   * id is only unique per destination — a repo number, a project key.
+   */
+  followsMoves?: boolean
   /** Acknowledge setup challenges without accepting events or storing untrusted secrets. */
   handshake?(request: Request): Response | null
 

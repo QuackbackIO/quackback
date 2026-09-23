@@ -216,6 +216,20 @@ export async function fanOutInboundStatus(
         getIntegration(integration.integrationType)
       )
   const linkScope = `${op.installation}:${syncHash(destination)}`
+  // A provider whose remote ids are unique across the account may report a
+  // linked item from a destination other than the one it was linked under:
+  // the item moved. Only a link this installation established under SOME
+  // destination follows it; a bare reference (empty scope) never becomes a
+  // sync link this way, and a signed destination is still required — an
+  // unverified event can only offer a review in the current destination.
+  // `starts_with`, not LIKE: an installation id carries `_`, a LIKE wildcard.
+  const followsMoves = automatic && getIntegration(op.provider)?.inbound?.followsMoves === true
+  const ownScope = followsMoves
+    ? sql`starts_with(${postExternalLinks.syncScope}, ${`${op.installation}:`})`
+    : undefined
+  const ownTicketScope = followsMoves
+    ? sql`starts_with(${ticketExternalLinks.syncScope}, ${`${op.installation}:`})`
+    : undefined
   const [postLinks, ticketLinks] = await Promise.all([
     tx
       .select()
@@ -225,7 +239,7 @@ export async function fanOutInboundStatus(
           eq(postExternalLinks.integrationId, integration.id),
           eq(postExternalLinks.status, 'active'),
           eq(postExternalLinks.externalId, result.externalId),
-          eq(postExternalLinks.syncScope, linkScope)
+          ownScope ?? eq(postExternalLinks.syncScope, linkScope)
         )
       ),
     tx
@@ -236,10 +250,26 @@ export async function fanOutInboundStatus(
           eq(ticketExternalLinks.integrationId, integration.id),
           eq(ticketExternalLinks.status, 'active'),
           eq(ticketExternalLinks.externalId, result.externalId),
-          eq(ticketExternalLinks.syncScope, linkScope)
+          ownTicketScope ?? eq(ticketExternalLinks.syncScope, linkScope)
         )
       ),
   ])
+  // The status operation below is applied under the event's destination, so a
+  // link that followed a move has to carry that scope before it is queued.
+  for (const link of postLinks) {
+    if (link.syncScope === linkScope) continue
+    await tx
+      .update(postExternalLinks)
+      .set({ syncScope: linkScope })
+      .where(eq(postExternalLinks.id, link.id))
+  }
+  for (const link of ticketLinks) {
+    if (link.syncScope === linkScope) continue
+    await tx
+      .update(ticketExternalLinks)
+      .set({ syncScope: linkScope })
+      .where(eq(ticketExternalLinks.id, link.id))
+  }
   for (const link of [...postLinks, ...ticketLinks]) {
     const sourceType = 'postId' in link ? 'post' : 'ticket'
     const sourceId = 'postId' in link ? link.postId : link.ticketId

@@ -42,9 +42,8 @@ export const linearIntegration: IntegrationDefinition = {
   linkedItems: true,
   formatReviewContent: (content, rootUrl) => absolutizeMarkdownUrls(content, rootUrl, true),
   webhookRegistration: {
-    register: async ({ accessToken, config, callbackUrl, secret }) => {
-      const teamId = config.channelId as string | undefined
-      const result = await registerLinearWebhook(accessToken, callbackUrl, secret, teamId)
+    register: async ({ accessToken, callbackUrl, secret }) => {
+      const result = await registerLinearWebhook(accessToken, callbackUrl, secret)
       return { externalWebhookId: result.webhookId }
     },
     unregister: async ({ accessToken, externalWebhookId }) =>

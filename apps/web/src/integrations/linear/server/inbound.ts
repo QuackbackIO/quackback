@@ -14,6 +14,9 @@ import type {
 
 export const linearInboundHandler: InboundWebhookHandler = {
   statusMode: 'automatic',
+  // `data.id` is the issue's UUID, stable across a move between teams, while
+  // `data.teamId` — the destination below — changes with the move.
+  followsMoves: true,
   async verifySignature(request: Request, body: string, secret: string): Promise<true | Response> {
     const signature = request.headers.get('Linear-Signature')
     if (!signature) {

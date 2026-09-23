@@ -20,11 +20,10 @@ interface LinearWebhookResult {
 export async function registerLinearWebhook(
   accessToken: string,
   callbackUrl: string,
-  secret: string,
-  teamId?: string
+  secret: string
 ): Promise<LinearWebhookResult> {
   try {
-    return await createLinearWebhook(accessToken, callbackUrl, secret, teamId)
+    return await createLinearWebhook(accessToken, callbackUrl, secret)
   } catch (error) {
     const msg = error instanceof Error ? error.message : ''
     if (!/not unique|already exists/i.test(msg)) throw error
@@ -32,22 +31,25 @@ export async function registerLinearWebhook(
     const staleId = await findLinearWebhookByUrl(accessToken, callbackUrl)
     if (!staleId) throw error
     await deleteLinearWebhook(accessToken, staleId)
-    return createLinearWebhook(accessToken, callbackUrl, secret, teamId)
+    return createLinearWebhook(accessToken, callbackUrl, secret)
   }
 }
 
 async function createLinearWebhook(
   accessToken: string,
   callbackUrl: string,
-  secret: string,
-  teamId?: string
+  secret: string
 ): Promise<LinearWebhookResult> {
+  // Every public team, not the team issues are created in. An issue keeps its
+  // UUID when it is moved to another team, so its linked post is still found —
+  // but a team-scoped webhook stops delivering the moment the issue leaves
+  // that team, and every later state change is silently lost.
   const variables: Record<string, unknown> = {
     input: {
       url: callbackUrl,
       resourceTypes: ['Issue'],
       secret,
-      ...(teamId ? { teamId } : {}),
+      allPublicTeams: true,
     },
   }
 

@@ -182,7 +182,9 @@ export function LinearConfig({
           </Select>
         )}
         <p className="text-xs text-muted-foreground">
-          New feedback issues will be created in this team.
+          New feedback issues will be created in this team. Status changes sync back from any public
+          team, so an issue keeps its link when it is moved. Issues moved into a private team stop
+          syncing.
         </p>
       </div>
 
