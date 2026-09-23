@@ -11,6 +11,8 @@ interface IntegrationHeaderProps {
   workspaceName?: string | null
   icon?: ReactNode
   actions?: ReactNode
+  /** Health column. When set, identity and health share one settings card. */
+  aside?: ReactNode
 }
 
 export function IntegrationHeader({
@@ -19,6 +21,7 @@ export function IntegrationHeader({
   workspaceName,
   icon,
   actions,
+  aside,
 }: IntegrationHeaderProps) {
   const isConnected = status === 'active'
   const isPaused = status === 'paused'
@@ -27,8 +30,15 @@ export function IntegrationHeader({
     <>
       <BackLink to="/admin/settings/integrations">Integrations</BackLink>
 
-      <div className="flex flex-col items-start justify-between gap-4 sm:flex-row">
-        <div className="flex min-w-0 items-center gap-4">
+      <div
+        className={
+          aside
+            ? 'overflow-hidden rounded-xl border border-border/50 bg-card shadow-sm md:grid md:grid-cols-[minmax(0,1fr)_minmax(280px,340px)]'
+            : 'flex flex-col items-start justify-between gap-4 sm:flex-row'
+        }
+        data-settings-card={aside ? '' : undefined}
+      >
+        <div className={`flex min-w-0 items-center gap-4 ${aside ? 'p-4' : ''}`}>
           <div
             className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${catalog.iconBg}`}
           >
@@ -72,7 +82,11 @@ export function IntegrationHeader({
           </div>
         </div>
 
-        {actions}
+        {aside ? (
+          <div className="border-t border-border/50 p-4 md:border-t-0 md:border-l">{aside}</div>
+        ) : (
+          actions
+        )}
       </div>
     </>
   )

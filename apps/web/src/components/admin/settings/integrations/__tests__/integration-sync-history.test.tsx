@@ -58,6 +58,17 @@ afterEach(() => {
   clients.splice(0).forEach((c) => c.clear())
 })
 describe('integration sync recovery', () => {
+  it('renders nothing when the destination is not active', async () => {
+    api.list.mockResolvedValue({ available: false, items: [], nextCursor: null })
+    mount()
+    await waitFor(() => expect(api.list).toHaveBeenCalled())
+    await waitFor(() =>
+      expect(screen.queryByRole('status', { name: 'Loading sync history' })).toBeNull()
+    )
+    expect(screen.queryByText('No syncs to show')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'All' })).toBeNull()
+  })
+
   it('presents incoming status changes as a manual update to the source', async () => {
     api.list.mockResolvedValue({
       items: [
