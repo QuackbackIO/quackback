@@ -36,8 +36,9 @@ const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
   'Access-Control-Allow-Headers':
-    'Authorization, Content-Type, Accept, Mcp-Session-Id, Mcp-Protocol-Version, Last-Event-ID',
-  'Access-Control-Expose-Headers': 'WWW-Authenticate, Mcp-Session-Id, Mcp-Protocol-Version',
+    'Authorization, Content-Type, Accept, Mcp-Session-Id, Mcp-Protocol-Version, Last-Event-ID, DPoP',
+  'Access-Control-Expose-Headers':
+    'WWW-Authenticate, Mcp-Session-Id, Mcp-Protocol-Version, DPoP-Nonce',
   'Access-Control-Max-Age': '86400',
 }
 

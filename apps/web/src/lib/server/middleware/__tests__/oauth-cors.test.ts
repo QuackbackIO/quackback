@@ -72,7 +72,13 @@ describe('handleOAuthCors', () => {
     expect(res.headers.get('access-control-allow-credentials')).toBeNull()
     expect(res.headers.get('access-control-allow-methods')).toContain('POST')
     const allowed = res.headers.get('access-control-allow-headers')?.toLowerCase() ?? ''
-    for (const h of ['authorization', 'content-type', 'mcp-session-id', 'mcp-protocol-version']) {
+    for (const h of [
+      'authorization',
+      'content-type',
+      'mcp-session-id',
+      'mcp-protocol-version',
+      'dpop',
+    ]) {
       expect(allowed).toContain(h)
     }
   })
@@ -91,6 +97,7 @@ describe('handleOAuthCors', () => {
     const exposed = out.response.headers.get('access-control-expose-headers')?.toLowerCase() ?? ''
     expect(exposed).toContain('www-authenticate')
     expect(exposed).toContain('mcp-session-id')
+    expect(exposed).toContain('dpop-nonce')
   })
 
   it('rebuilds a response whose headers are immutable', async () => {
