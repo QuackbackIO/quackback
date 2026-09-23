@@ -142,7 +142,7 @@ describe('startSsoTestFn', () => {
     expect(result.authorizeUrl).toMatch(/^https:\/\/idp\/auth\?/)
     // Redirect URI is the provider's own production callback.
     expect(result.authorizeUrl).toMatch(
-      /redirect_uri=https%3A%2F%2Fqb\.test%2Fapi%2Fauth%2Foauth2%2Fcallback%2Fsso/
+      /redirect_uri=https%3A%2F%2Fqb\.test%2Fapi%2Fauth%2Fcallback%2Fsso/
     )
     // PKCE is mandatory for OAuth 2.1 IdPs and ignored by IdPs that don't
     // support it — the authorize URL must carry an S256 challenge pair.
@@ -313,7 +313,7 @@ describe('startSsoTestFn', () => {
 
     // Redirect URI must be the provider's OWN callback, not the legacy sso path.
     expect(result.authorizeUrl).toMatch(
-      /redirect_uri=https%3A%2F%2Fqb\.test%2Fapi%2Fauth%2Foauth2%2Fcallback%2Foidc_abc123/
+      /redirect_uri=https%3A%2F%2Fqb\.test%2Fapi%2Fauth%2Fcallback%2Foidc_abc123/
     )
 
     // Session must carry the correct registrationId.

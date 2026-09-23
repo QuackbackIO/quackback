@@ -838,8 +838,8 @@ export const principal = pgTable(
      * session). Read by the SSO-enforcement bootstrap guard to refuse
      * enabling enforcement without a recent SSO sign-in window — stops
      * an admin who only signed in via magic-link from locking themselves
-     * out. Null = never signed in via SSO. Written by the
-     * /oauth2/callback/:providerId hooks.after middleware.
+     * out. Null = never signed in via SSO. Written by the OIDC callback
+     * hooks.after middleware (`/callback/:id`).
      */
     lastSsoSignInAt: timestamp('last_sso_sign_in_at', { withTimezone: true }),
     // A reachable address for a principal whose account email cannot receive

@@ -90,7 +90,7 @@ beforeEach(() => {
 describe('<ProviderCreatePage>', () => {
   it('presents the redirect URI before the credentials it produces', () => {
     renderPage()
-    const uri = screen.getByText(/\/api\/auth\/oauth2\/callback\/oidc_/)
+    const uri = screen.getByText(/\/api\/auth\/callback\/oidc_/)
     const clientId = screen.getByLabelText('Client ID')
     // Node.compareDocumentPosition: FOLLOWING (4) means clientId comes after.
     expect(uri.compareDocumentPosition(clientId) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
@@ -152,7 +152,7 @@ describe('<ProviderCreatePage>', () => {
         <ProviderCreatePage registrationId="oidc_fromroute" />
       </QueryClientProvider>
     )
-    expect(screen.getByText(/\/api\/auth\/oauth2\/callback\/oidc_fromroute$/)).toBeInTheDocument()
+    expect(screen.getByText(/\/api\/auth\/callback\/oidc_fromroute$/)).toBeInTheDocument()
     await userEvent.type(screen.getByLabelText('Client ID'), 'client-123')
     saveAndTest()
     await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
