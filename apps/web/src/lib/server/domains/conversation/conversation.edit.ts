@@ -176,6 +176,7 @@ export async function editConversationMessage(
   }
 
   const decision = canEditMessage(actor, {
+    senderType: message.senderType,
     authorPrincipalId: message.principalId,
     parent: message.conversationId ? 'conversation' : 'ticket',
     isInternal: message.isInternal,

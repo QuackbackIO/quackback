@@ -111,9 +111,14 @@ export function toggleReactionLocal(
  *  count (mirrors the conversation `read`/`side` rule above exactly). */
 export function agentEventChangesInboxList(evt: ConversationStreamEvent): boolean {
   if (evt.kind === 'ticket_read') return evt.side === 'agent'
-  if (evt.kind === 'ticket_message' || evt.kind === 'ticket_updated') return true
-  // A body edit patches the open thread; the list row does not move.
-  if (evt.kind === 'ticket_message_updated') return false
+  // A body edit can change the row's preview, which ticket rows derive from
+  // their messages.
+  if (
+    evt.kind === 'ticket_message' ||
+    evt.kind === 'ticket_message_updated' ||
+    evt.kind === 'ticket_updated'
+  )
+    return true
   return (
     (evt.kind !== 'read' && evt.kind !== 'typing' && evt.kind !== 'message_updated') ||
     (evt.kind === 'read' && evt.side === 'agent')

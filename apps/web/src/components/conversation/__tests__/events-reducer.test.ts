@@ -221,7 +221,7 @@ describe('agentEventChangesInboxList', () => {
     [{ kind: 'typing', conversationId: CONV_ID, side: 'visitor', at: 'x' }, false],
     [{ kind: 'message_updated', conversationId: CONV_ID, message: agentMessage('m9') }, false],
     [{ kind: 'ticket_message', ticketId: TICKET_ID, message: ticketMsg }, true],
-    [{ kind: 'ticket_message_updated', ticketId: TICKET_ID, message: ticketMsg }, false],
+    [{ kind: 'ticket_message_updated', ticketId: TICKET_ID, message: ticketMsg }, true],
     [{ kind: 'ticket_updated', ticket: { id: TICKET_ID } as never }, true],
     [{ kind: 'ticket_read', ticketId: TICKET_ID, side: 'agent', at: 'x' }, true],
     [{ kind: 'ticket_read', ticketId: TICKET_ID, side: 'visitor', at: 'x' }, false],

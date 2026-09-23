@@ -101,6 +101,8 @@ describe('AgentMessageBubble — edited mark', () => {
     expect(canEditAgentMessage(own, 'principal_other', all)).toBe(false)
     expect(canEditAgentMessage({ ...own, isAssistant: true }, 'principal_me', all)).toBe(false)
     expect(canEditAgentMessage({ ...own, senderType: 'system' }, 'principal_me', all)).toBe(false)
+    // A teammate who wrote as a customer does not get to edit that row.
+    expect(canEditAgentMessage({ ...own, senderType: 'visitor' }, 'principal_me', all)).toBe(false)
     expect(
       canEditAgentMessage(
         { ...own, block: { kind: 'buttons', prompt: 'Pick', options: [] } as never },

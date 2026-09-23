@@ -82,7 +82,7 @@ export function canDeleteMessage(
 }
 
 /**
- * Who may edit a message: only its author, and only while they still hold the
+ * Who may edit a message: only the author of an agent-side message, and only while they still hold the
  * permission that writes that kind of message (a reply or a note, on a
  * conversation or a ticket). Unlike delete, a teammate cannot rewrite someone
  * else's words. Service principals are excluded. System rows are refused by
@@ -91,6 +91,7 @@ export function canDeleteMessage(
 export function canEditMessage(
   actor: Actor,
   message: {
+    senderType: 'visitor' | 'agent' | 'system'
     authorPrincipalId: PrincipalId | null
     parent: 'conversation' | 'ticket'
     isInternal: boolean
@@ -99,6 +100,8 @@ export function canEditMessage(
   if (!actor.principalId) return denyDecision('A session is required to edit a message')
   if (actor.principalType === 'service')
     return denyDecision('Service principals cannot edit messages')
+  // A teammate can also write as a customer; that row stays the customer's.
+  if (message.senderType !== 'agent') return denyDecision('Only agent messages can be edited')
   if (!message.authorPrincipalId || message.authorPrincipalId !== actor.principalId) {
     return denyDecision('You can only edit your own messages')
   }

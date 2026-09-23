@@ -176,7 +176,7 @@ describe('canDeleteMessage', () => {
 })
 
 describe('canEditMessage', () => {
-  const reply = { parent: 'conversation' as const, isInternal: false }
+  const reply = { senderType: 'agent' as const, parent: 'conversation' as const, isInternal: false }
   const adminReply = { ...reply, authorPrincipalId: 'principal_admin' as PrincipalId }
   const withPermissions = (...keys: PermissionKey[]): Actor => ({
     ...adminActor,
@@ -210,6 +210,7 @@ describe('canEditMessage', () => {
     const all = cases.map((c) => c.key)
     for (const c of cases) {
       const msg = {
+        senderType: 'agent' as const,
         authorPrincipalId: adminActor.principalId,
         parent: c.parent,
         isInternal: c.isInternal,
@@ -218,6 +219,11 @@ describe('canEditMessage', () => {
       const others = all.filter((k) => k !== c.key)
       expect(canEditMessage(withPermissions(...others), msg).allowed).toBe(false)
     }
+  })
+
+  it("denies a teammate's own customer-side or system row", () => {
+    expect(canEditMessage(adminActor, { ...adminReply, senderType: 'visitor' }).allowed).toBe(false)
+    expect(canEditMessage(adminActor, { ...adminReply, senderType: 'system' }).allowed).toBe(false)
   })
 
   it('denies a service principal and an author-less row', () => {

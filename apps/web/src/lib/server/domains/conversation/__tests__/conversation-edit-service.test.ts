@@ -220,6 +220,19 @@ describe('editConversationMessage', () => {
     expect(updates).toHaveLength(0)
   })
 
+  it("refuses a teammate's own customer-side message", async () => {
+    messageRow = message({ senderType: 'visitor' })
+    await expect(
+      editConversationMessage(
+        'conversation_msg_1' as ConversationMessageId,
+        'Nope',
+        null,
+        agentActor
+      )
+    ).rejects.toThrow(ForbiddenError)
+    expect(updates).toHaveLength(0)
+  })
+
   it('refuses a system message', async () => {
     messageRow = message({ senderType: 'system', principalId: null })
     await expect(
