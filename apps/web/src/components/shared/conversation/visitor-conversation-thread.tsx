@@ -63,6 +63,20 @@ import { getWidgetCapabilitiesFn } from '@/lib/server/functions/widget-capabilit
 import { TicketHeaderCard } from './ticket-header-card'
 import type { RequesterTicketDTO } from '@/lib/server/domains/tickets'
 
+/** Put a message back where it belongs in an oldest-first thread. */
+export function restoreInOrder<M extends { id: string; createdAt: string }>(
+  messages: M[],
+  message: M
+): M[] {
+  const at = messages.findIndex(
+    (m) =>
+      m.createdAt > message.createdAt || (m.createdAt === message.createdAt && m.id > message.id)
+  )
+  return at === -1
+    ? [...messages, message]
+    : [...messages.slice(0, at), message, ...messages.slice(at)]
+}
+
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
@@ -596,14 +610,22 @@ export function VisitorConversationThread({
     async (messageId: ConversationMessageId) => {
       if (!conversationId) return
       const key = conversationKeys.visitorThread(conversationId)
-      const before = queryClient.getQueryData<VisitorThreadCache>(key)
+      const removed = queryClient
+        .getQueryData<VisitorThreadCache>(key)
+        ?.messages.find((m) => m.id === messageId)
       queryClient.setQueryData(key, (prev: VisitorThreadCache | undefined) =>
         prev ? { ...prev, messages: prev.messages.filter((m) => m.id !== messageId) } : prev
       )
       try {
         await rpc.deleteConversationMessage({ data: { messageId }, headers: getAuthHeaders() })
       } catch {
-        queryClient.setQueryData(key, before)
+        // Put back only this message, so anything that arrived meanwhile stays.
+        if (!removed) return
+        queryClient.setQueryData(key, (prev: VisitorThreadCache | undefined) =>
+          prev && !prev.messages.some((m) => m.id === messageId)
+            ? { ...prev, messages: restoreInOrder(prev.messages, removed) }
+            : prev
+        )
       }
     },
     [conversationId, getAuthHeaders, queryClient, rpc]

@@ -105,6 +105,7 @@ export function mockDbModule(): Record<string, unknown> {
     },
     conversationMessages: {
       principalId: 'conversationMessages.principalId',
+      deletedByPrincipalId: 'conversationMessages.deletedByPrincipalId',
       __name: 'conversation_messages',
     },
     conversationMessageEdits: {

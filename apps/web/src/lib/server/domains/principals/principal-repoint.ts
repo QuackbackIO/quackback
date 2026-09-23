@@ -293,6 +293,12 @@ export const REPOINT_STEPS: RepointStep[] = [
     'Message authorship. ON DELETE RESTRICT, same as conversations.'
   ),
   simpleRepoint(
+    'conversation_messages',
+    conversationMessages,
+    'deleted_by_principal_id',
+    'Who deleted a message. A customer can delete their own, so an anonymous visitor who later identifies keeps the "Deleted by" attribution on the placeholder the team still sees.'
+  ),
+  simpleRepoint(
     'conversation_message_edits',
     conversationMessageEdits,
     'editor_principal_id',
@@ -483,7 +489,6 @@ export const REPOINT_EXEMPTIONS: Record<string, string> = {
   'team_members.principal_id': 'team members are teammates; the merge source is always anonymous',
   'teams.rr_cursor_principal_id':
     'round-robin cursor points at an online teammate, never anonymous',
-  'conversation_messages.deleted_by_principal_id': 'message moderation is agent-only',
   'conversation_messages.redacted_by_principal_id': 'message moderation is agent-only',
   'conversation_message_mentions.principal_id': 'conversation mentions target agents',
   'conversation_message_reactions.principal_id':

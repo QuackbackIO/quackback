@@ -200,11 +200,35 @@ describe.skipIf(!fixture.available)('message history (real DB, rolled back)', ()
       body: `My password is ${SECRET}`,
       metadata: { conversationId: conversation.id, conversationMessageId: leaked.id },
     })
-    expect(await secretCopies()).toBeGreaterThanOrEqual(5)
+    // Written before notifications carried the message id: matched by preview.
+    await testDb.insert(inAppNotifications).values({
+      principalId: agent.id,
+      type: 'chat_mention',
+      title: 'Vic mentioned you',
+      body: `first draft ${SECRET}`,
+      metadata: { conversationId: conversation.id },
+    })
+    // A different message in the same conversation keeps its preview.
+    const [unrelated] = await testDb
+      .insert(inAppNotifications)
+      .values({
+        principalId: agent.id,
+        type: 'chat_message',
+        title: 'New message from Vic Visitor',
+        body: 'Happy to help',
+        metadata: { conversationId: conversation.id },
+      })
+      .returning()
+    expect(await secretCopies()).toBeGreaterThanOrEqual(6)
 
     const dto = await redactConversationMessage(leaked.id as ConversationMessageId, actorFor(agent))
 
     expect(await secretCopies()).toBe(0)
+    const [kept] = await testDb
+      .select()
+      .from(inAppNotifications)
+      .where(eq(inAppNotifications.id, unrelated.id))
+    expect(kept.body).toBe('Happy to help')
     const [row] = await testDb
       .select()
       .from(conversationMessages)

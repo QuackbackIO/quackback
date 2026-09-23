@@ -12,6 +12,8 @@ import {
   desc,
   isNull,
   ne,
+  or,
+  inArray,
   sql,
   conversations,
   conversationMessages,
@@ -47,6 +49,7 @@ import {
 } from '@/lib/server/messages/message-core'
 import { storedAssetKeyFromSrc } from '@/lib/server/storage/asset-url'
 import { logger } from '@/lib/server/logger'
+import { truncate } from '@/lib/shared/utils/string'
 import { resolveMessageParent } from './message-parent'
 import {
   conversationToDTO,
@@ -237,7 +240,10 @@ export async function redactConversationMessage(
   const now = new Date()
   const { redacted, mediaKeys } = await db.transaction(async (tx) => {
     const edits = await tx
-      .select({ previousContentJson: conversationMessageEdits.previousContentJson })
+      .select({
+        previousContent: conversationMessageEdits.previousContent,
+        previousContentJson: conversationMessageEdits.previousContentJson,
+      })
       .from(conversationMessageEdits)
       .where(eq(conversationMessageEdits.messageId, message.id))
     const keys = messageMediaKeys([message, ...edits.map((e) => e.previousContentJson)])
@@ -267,7 +273,9 @@ export async function redactConversationMessage(
     await tx
       .update(inAppNotifications)
       .set({ body: null })
-      .where(sql`${inAppNotifications.metadata} ->> 'conversationMessageId' = ${message.id}`)
+      .where(
+        notificationsQuoting(message, [message.content, ...edits.map((e) => e.previousContent)])
+      )
     if (message.conversationId && !message.isInternal) {
       await refreshConversationPreview(tx, message.conversationId)
     }
@@ -310,6 +318,27 @@ export async function publishRemoval(
   if (!conversation) return
   publishConversationUpdate(conversation.id, await conversationToDTO(conversation, 'agent'))
   void emitMessageDeleted(actor, message, conversation)
+}
+
+/**
+ * Notifications whose preview quotes this message. Newer ones carry the message
+ * id; older chat notifications only name the conversation, so those match when
+ * their preview is exactly what this message, or an earlier version of it,
+ * produced.
+ */
+function notificationsQuoting(message: ConversationMessage, versions: string[]) {
+  const byId = sql`${inAppNotifications.metadata} ->> 'conversationMessageId' = ${message.id}`
+  const previews = [...new Set(versions.filter(Boolean).map((v) => truncate(v, 140)))]
+  if (!message.conversationId || previews.length === 0) return byId
+  return or(
+    byId,
+    and(
+      sql`${inAppNotifications.metadata} ->> 'conversationMessageId' IS NULL`,
+      sql`${inAppNotifications.metadata} ->> 'conversationId' = ${message.conversationId}`,
+      inArray(inAppNotifications.type, ['chat_message', 'chat_mention']),
+      inArray(inAppNotifications.body, previews)
+    )
+  )
 }
 
 /** A team member who can see the message's conversation or ticket. */
