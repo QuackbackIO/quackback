@@ -28,15 +28,16 @@ export function ssoTestResultKey(testId: string): string {
 export const SSO_TEST_POSTMESSAGE_SOURCE = 'quackback-sso-test' as const
 
 /**
- * Path prefix shared by every genericOAuth callback. The test flow uses
- * the provider's own production callback (`<prefix><registrationId>`) so
- * admins register exactly one redirect URI per provider. The auth catch-all
- * intercepts all paths under this prefix before handing off to Better-Auth
- * — a KV miss for the OAuth `state` still falls through cleanly.
+ * Pre-1.7 generic OAuth callback. Sign-in and Test sign-in no longer send
+ * this URL. The catch-all still intercepts it so a return to a previously
+ * registered redirect URI can finish a test or be rewritten onto Better Auth.
  */
 export const SSO_OAUTH_CALLBACK_PREFIX = '/api/auth/oauth2/callback/' as const
 
-/** Better Auth 1.7 social-path callback. SSO test also intercepts this. */
+/**
+ * Callback Better Auth 1.7 sends for social and generic OIDC providers.
+ * Test sign-in uses the same prefix so one IdP registration covers both.
+ */
 export const SSO_SOCIAL_CALLBACK_PREFIX = '/api/auth/callback/' as const
 
 export function isSsoTestCallbackPath(pathname: string): boolean {

@@ -9,11 +9,12 @@
  *    genericOAuth runs with `pkce: true`, so the test flow mints a
  *    verifier/challenge pair to mirror that exactly.
  *
- *    The redirect_uri matches the provider's own production callback
- *    (`/api/auth/oauth2/callback/<registrationId>`) so admins register
- *    exactly one URL with their IdP. The auth catch-all intercepts test
- *    sign-ins by looking up `sso-test:<state>` in the KV store before handing
- *    off to Better-Auth — see `sso-test-callback.ts`.
+ *    The redirect_uri matches the provider's production callback
+ *    (`/api/auth/callback/<registrationId>`), the URL Better Auth 1.7
+ *    sends, so admins register exactly one URL with their IdP. The auth
+ *    catch-all intercepts test sign-ins by looking up `sso-test:<state>`
+ *    in the KV store before handing off to Better Auth — see
+ *    `sso-test-callback.ts`.
  *
  *  - getSsoTestResultFn: polls the `sso-test:result:<testId>` key
  *    written by the callback handler and returns the diagnostic
@@ -25,6 +26,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { authProviderCallbackPath } from '@/lib/server/auth/auth-providers'
 import type { DiagnosticStep, HandshakeStage } from '@/lib/server/auth/sso-test-handshake'
 import type { ProfileOutcome } from '@/lib/shared/sso-profile-outcome'
 import type { SsoTestCaptureV2 } from '@/lib/shared/sso-test-capture'
@@ -159,11 +161,10 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
     }
 
     const { config } = await import('@/lib/server/config')
-    // Use the provider's own production callback so admins register exactly
-    // one redirect URI with their IdP. The catch-all dispatches test vs prod
-    // by looking up the OAuth `state` in the KV store (miss → fall through to
-    // Better-Auth), so the same URL handles both flows.
-    const redirectUri = `${config.baseUrl.replace(/\/$/, '')}/api/auth/oauth2/callback/${data.registrationId}`
+    // Same path Better Auth sends on sign-in, so the test and production
+    // share one redirect URI. The catch-all dispatches test vs prod by
+    // looking up the OAuth `state` in the KV store (miss → fall through).
+    const redirectUri = `${config.baseUrl.replace(/\/$/, '')}${authProviderCallbackPath(data.registrationId)}`
     const testId = `ssotest_${randomBytes(15).toString('base64url')}`
     const state = randomBytes(32).toString('base64url')
     const nonce = randomBytes(32).toString('base64url')

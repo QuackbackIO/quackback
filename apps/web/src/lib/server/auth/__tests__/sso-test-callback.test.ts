@@ -1,6 +1,6 @@
 /**
  * Tests for the SSO test-callback helper that the auth catch-all route
- * calls (for any `/api/auth/oauth2/callback/*` path) before handing off
+ * calls (for `/api/auth/callback/*` and the legacy `/api/auth/oauth2/callback/*`) before handing off
  * to Better-Auth. State-keyed KV lookup is the discriminator: a hit
  * means "this is an admin Test sign-in, run the diagnostic handshake
  * and render the popup HTML"; a miss means "let Better-Auth handle it
@@ -72,7 +72,7 @@ const validSession = {
   issuer: 'https://idp',
   clientId: 'cid',
   clientSecret: 'csecret',
-  redirectUri: 'https://qb.test/api/auth/oauth2/callback/sso',
+  redirectUri: 'https://qb.test/api/auth/callback/sso',
   adminUserId: 'user_admin',
   startedAt: 1700000000,
 }
@@ -82,7 +82,7 @@ const customProviderSession = {
   ...validSession,
   testId: 'ssotest_custom',
   registrationId: 'oidc_custom',
-  redirectUri: 'https://qb.test/api/auth/oauth2/callback/oidc_custom',
+  redirectUri: 'https://qb.test/api/auth/callback/oidc_custom',
 }
 
 function v2Capture(over: Record<string, unknown> = {}): {
@@ -180,7 +180,7 @@ describe('handleSsoTestCallback', () => {
         issuer: 'https://idp',
         clientId: 'cid',
         clientSecret: 'csecret',
-        redirectUri: 'https://qb.test/api/auth/oauth2/callback/sso',
+        redirectUri: 'https://qb.test/api/auth/callback/sso',
         registrationId: 'sso',
       })
     )

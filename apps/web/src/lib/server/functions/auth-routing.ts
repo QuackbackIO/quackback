@@ -19,7 +19,7 @@
  * auth runtime applies via `getRegisteredOidcProviderIds` /
  * `buildGenericOAuthConfigs`). If the owner is disabled, off-tier, or
  * missing its secret, routing falls through to `methods` rather than
- * dead-redirecting to a provider whose `/oauth2/callback` 404s. This
+ * dead-redirecting to a provider whose `/callback` 404s. This
  * preserves the pre-registry `isSsoConfigured` master-switch behavior and
  * stays consistent with `isHardBound`, which fails open (scoped to the
  * owner) when the owning IdP isn't registered.

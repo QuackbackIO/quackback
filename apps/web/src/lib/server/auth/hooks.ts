@@ -485,7 +485,10 @@ export const hooksBefore = createAuthMiddleware(async (ctx) => {
 
 /**
  * OIDC callback post-processing — runs for any registered OIDC provider's
- * callback (the genericOAuth path `/oauth2/callback/:providerId`).
+ * callback. Better Auth 1.7 delivers that on `/callback/:id` (`params.id`).
+ * Hooks also accept the legacy `/oauth2/callback/:providerId` template.
+ * The auth catch-all rewrites a pre-1.7 return onto `/callback/:id`
+ * before Better Auth sees it.
  *
  * Two responsibilities:
  *
@@ -630,8 +633,8 @@ export function shouldBootstrapPromote(
 /**
  * Auto-provision SSO users to a role on first OIDC sign-in.
  *
- * Fires on any registered OIDC provider's callback
- * (`/oauth2/callback/:providerId`). The IdP's assertion of email + identity
+ * Fires on any registered OIDC provider's callback (`/callback/:id`, and
+ * the legacy `/oauth2/callback/:providerId` alias). The IdP's assertion of email + identity
  * is the trust source; magic-link to a verified-domain email is hard-bound
  * in `hooksBefore` so it never reaches this path, and password/social
  * callbacks are likewise blocked.
