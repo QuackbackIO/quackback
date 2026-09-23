@@ -525,6 +525,7 @@
   "widget.messenger.jumpToLatest": "跳到最新消息",
   "widget.messenger.loadOlder": "加载更早的消息",
   "widget.messenger.loadingOlder": "加载中…",
+  "widget.messenger.edited": "（已编辑）",
   "widget.loading": "加载中…",
   "widget.messenger.offline": "我们会通过邮件回复",
   "widget.messenger.assistant.teamAlso": "团队也可以提供帮助",

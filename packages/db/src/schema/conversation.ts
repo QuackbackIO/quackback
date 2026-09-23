@@ -288,6 +288,10 @@ export const conversationMessages = pgTable(
     ),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
+    // Set when a person edits the message body. Distinct from updatedAt, which
+    // also moves on soft-delete. Null until the first edit; the thread renders
+    // it as a small "(edited)" mark beside the timestamp.
+    editedAt: timestamp('edited_at', { withTimezone: true }),
     // Soft delete support, mirroring comments.
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
     deletedByPrincipalId: typeIdColumnNullable('principal')('deleted_by_principal_id'),

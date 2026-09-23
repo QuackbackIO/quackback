@@ -57,6 +57,7 @@ vi.mock('@/lib/server/integrations/webhook-registration', () => ({
 
 import {
   deleteGitHubIssueComment,
+  updateGitHubIssueComment,
   deliverGitHubAgentMessage,
   deliverGitHubLifecycleComment,
   retryGitHubAgentMessage,
@@ -268,6 +269,15 @@ describe('github adapter delivery', () => {
       externalId: undefined,
       error: 'This conversation is not linked to a GitHub issue.',
     })
+  })
+
+  it('PATCHes a GitHub issue comment body', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: async () => '' })
+    vi.stubGlobal('fetch', fetchMock)
+    await updateGitHubIssueComment(conversationId, '444', 'fixed the typo')
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/repos/acme/api/issues/comments/444')
+    expect(fetchMock.mock.calls[0][1].method).toBe('PATCH')
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ body: 'fixed the typo' })
   })
 
   it('DELETEs a GitHub issue comment', async () => {

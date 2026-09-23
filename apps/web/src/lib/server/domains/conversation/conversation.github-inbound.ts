@@ -162,6 +162,7 @@ async function applyGitHubCommentEdit(githubCommentId: string, body: string | un
     .set({
       content: content || row.content,
       contentJson: contentJson ?? row.contentJson,
+      editedAt: new Date(),
       updatedAt: new Date(),
     })
     .where(eq(conversationMessages.id, row.id))

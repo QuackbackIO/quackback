@@ -76,6 +76,7 @@ describe('serializeMessage', () => {
       authorName: 'Agent',
       content: 'hello',
       createdAt: '2026-06-05T00:00:00.000Z',
+      editedAt: null,
     })
   })
 

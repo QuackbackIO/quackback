@@ -208,6 +208,11 @@ export const P = {
     message: z.looseObject({ id, conversationId: id }),
     conversation: conversationRef,
   }),
+  'message.updated': z.looseObject({
+    message: messageData,
+    conversation: conversationRef,
+    editedAt: z.string(),
+  }),
   // ticket
   'ticket.created': z.looseObject({ ticket: ticketRef.loose() }),
   'ticket.status_changed': z.looseObject({

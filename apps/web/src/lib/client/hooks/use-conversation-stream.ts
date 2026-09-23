@@ -45,10 +45,11 @@ const NAMED_EVENTS = [
   'read',
   'typing',
   'message_deleted',
-  // Agent-only: a reaction/flag changed on an existing message. The server only
-  // ever publishes this on the inbox channel, so the visitor stream never
-  // receives it even though the event name is registered here.
+  // Agent-only: a reaction, flag, or body edit on an existing message. The
+  // server publishes this on the inbox channel. Visitors receive a body edit
+  // as `message_edited` instead, so agent-only fields never ride along.
   'message_updated',
+  'message_edited',
   // Ephemeral AI-assistant turn signals (conversation channel only). EventSource
   // drops any named frame with no matching listener, so these MUST be registered.
   'assistant_activity',
@@ -56,6 +57,7 @@ const NAMED_EVENTS = [
   // Ticket frames (inbox stream). EventSource drops named events with no
   // listener, so hover-prefetched ticket caches would stay stale without these.
   'ticket_message',
+  'ticket_message_updated',
   'ticket_updated',
   'ticket_read',
 ] as const

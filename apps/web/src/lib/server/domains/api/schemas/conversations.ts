@@ -80,6 +80,9 @@ export const MessageSchema = z.object({
   }),
   content: z.string().meta({ example: 'Hello, I need help with my account.' }),
   createdAt: TimestampSchema,
+  editedAt: NullableTimestampSchema.meta({
+    description: 'When the author last edited the message, null if never edited',
+  }),
 })
 
 // A conversation tag (POST/DELETE /conversations/:id/tags response).

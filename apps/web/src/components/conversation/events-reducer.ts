@@ -111,7 +111,14 @@ export function toggleReactionLocal(
  *  count (mirrors the conversation `read`/`side` rule above exactly). */
 export function agentEventChangesInboxList(evt: ConversationStreamEvent): boolean {
   if (evt.kind === 'ticket_read') return evt.side === 'agent'
-  if (evt.kind === 'ticket_message' || evt.kind === 'ticket_updated') return true
+  // A body edit can change the row's preview, which ticket rows derive from
+  // their messages.
+  if (
+    evt.kind === 'ticket_message' ||
+    evt.kind === 'ticket_message_updated' ||
+    evt.kind === 'ticket_updated'
+  )
+    return true
   return (
     (evt.kind !== 'read' && evt.kind !== 'typing' && evt.kind !== 'message_updated') ||
     (evt.kind === 'read' && evt.side === 'agent')
@@ -187,7 +194,8 @@ export function applyAgentThreadEvent(
 
 /** Apply one per-conversation stream event to the visitor thread's cache. The
  *  stream is scoped to a single conversation, so message events carry no id
- *  filter; agent-only message_updated never reaches this stream and is ignored. */
+ *  filter; agent-only message_updated never reaches this stream and is ignored.
+ *  A customer-visible body edit arrives as message_edited. */
 export function applyVisitorThreadEvent(
   prev: VisitorThreadCache | undefined,
   evt: ConversationStreamEvent,
@@ -204,6 +212,25 @@ export function applyVisitorThreadEvent(
         : prev
     case 'message_deleted':
       return { ...prev, messages: prev.messages.filter((m) => m.id !== evt.messageId) }
+    case 'message_edited': {
+      // A customer-visible body edit. A message outside the loaded page stays
+      // untouched — don't append an edit as if it were a new message.
+      if (!prev.messages.some((m) => m.id === evt.message.id)) return prev
+      return {
+        ...prev,
+        messages: prev.messages.map((m) =>
+          m.id === evt.message.id
+            ? {
+                ...m,
+                content: evt.message.content,
+                contentJson: evt.message.contentJson,
+                attachments: evt.message.attachments,
+                editedAt: evt.message.editedAt ?? null,
+              }
+            : m
+        ),
+      }
+    }
     case 'conversation':
       return evt.conversation.id === conversationId
         ? { ...prev, status: evt.conversation.status, csatRating: evt.conversation.csatRating }
@@ -343,18 +370,30 @@ export interface TicketThreadCache {
 
 /** Apply one ticket-stream event to an open ticket thread's cache. Events for
  *  other tickets (the inbox stream is multiplexed, and a ticket's own stream
- *  only ever carries its own events anyway) and any non-`ticket_message` kind
- *  return prev untouched — `ticket_updated`/`ticket_read` have nothing in this
- *  cache to patch (see the type doc above). Ticket-parented reactions/flags
- *  don't broadcast yet (no `ticket_message_updated` stream event — deferred,
- *  see message.actions.ts), so unlike the conversation side there is no
- *  `message_updated`/`message_deleted` case to handle here.*/
+ *  only ever carries its own events anyway) and any kind other than
+ *  `ticket_message` / `ticket_message_updated` return prev untouched —
+ *  `ticket_updated`/`ticket_read` have nothing in this cache to patch (see the
+ *  type doc above). Ticket-parented reactions/flags don't broadcast yet (see
+ *  message.actions.ts); a body edit does, and patches only the body fields so
+ *  the viewer's own reaction state is kept. */
 export function applyTicketThreadEvent(
   prev: TicketThreadCache | undefined,
   evt: ConversationStreamEvent,
   ticketId: TicketId
 ): TicketThreadCache | undefined {
   if (!prev) return prev
+  if (evt.kind === 'ticket_message_updated') {
+    if (evt.ticketId !== ticketId) return prev
+    return updateThreadMessage(prev, evt.message.id, (m) => ({
+      ...m,
+      content: evt.message.content,
+      contentJson: evt.message.contentJson,
+      attachments: evt.message.attachments,
+      editedAt: evt.message.editedAt ?? null,
+      // An edit replaces the sent text, so any pre-translation original is gone.
+      translatedFrom: null,
+    }))
+  }
   if (evt.kind !== 'ticket_message') return prev
   if (evt.ticketId !== ticketId) return prev
   if (prev.messages.some((m) => m.id === evt.message.id)) return prev

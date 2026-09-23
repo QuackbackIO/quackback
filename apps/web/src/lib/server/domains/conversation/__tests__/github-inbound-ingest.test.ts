@@ -61,6 +61,7 @@ const fixture = await createDbTestFixture({
   probe: async (db) => {
     await db.select({ id: channelAccounts.id }).from(channelAccounts).limit(0)
     await db.select({ id: conversations.id }).from(conversations).limit(0)
+    await db.select({ editedAt: conversationMessages.editedAt }).from(conversationMessages).limit(0)
   },
 })
 
@@ -352,6 +353,7 @@ describe.skipIf(!fixture.available)('github channel ingest (real DB, rolled back
     const msgs = await testDb.select().from(conversationMessages)
     const edited = msgs.find((m) => m.metadata?.githubCommentId === '555')
     expect(edited?.content).toBe('still broken, edited')
+    expect(edited?.editedAt).toBeInstanceOf(Date)
     expect(publishAgentConversationEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: 'message_updated',

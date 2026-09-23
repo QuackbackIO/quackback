@@ -525,6 +525,7 @@
   "widget.messenger.jumpToLatest": "К последним сообщениям",
   "widget.messenger.loadOlder": "Загрузить предыдущие сообщения",
   "widget.messenger.loadingOlder": "Загрузка…",
+  "widget.messenger.edited": "(изменено)",
   "widget.loading": "Загрузка…",
   "widget.messenger.offline": "Мы ответим по email",
   "widget.messenger.assistant.teamAlso": "Команда тоже может помочь",

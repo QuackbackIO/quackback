@@ -979,6 +979,11 @@ export function VisitorConversationThread({
             attachments={m.attachments}
             citations={m.citations}
             time={formatTime(m.createdAt)}
+            editedLabel={
+              m.editedAt
+                ? intl.formatMessage({ id: 'widget.messenger.edited', defaultMessage: '(edited)' })
+                : undefined
+            }
             linkPreviews={linkPreviews}
             getAuthHeaders={getAuthHeaders}
             embedOpenMode={embedOpenMode}

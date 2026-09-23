@@ -30,6 +30,7 @@ import {
   dispatchMessageCreated,
   dispatchMessageNoteCreated,
   dispatchMessageDeleted,
+  dispatchMessageUpdated,
 } from '@/lib/server/events/dispatch'
 import { logger } from '@/lib/server/logger'
 import { makeSafeDispatch } from '@/lib/server/events/safe-dispatch'
@@ -160,6 +161,22 @@ export async function emitMessageDeleted(
       toEventActor(actor),
       { id: message.id, conversationId: conversation.id },
       conversationRef(conversation)
+    )
+  )
+}
+
+export async function emitMessageUpdated(
+  actor: Actor,
+  author: ConversationAuthorInput,
+  message: ConversationMessage,
+  conversation: Conversation
+): Promise<void> {
+  await safe('message.updated', () =>
+    dispatchMessageUpdated(
+      toEventActor(actor, author),
+      messageData(message, author, conversation),
+      conversationRef(conversation),
+      (message.editedAt ?? new Date()).toISOString()
     )
   )
 }

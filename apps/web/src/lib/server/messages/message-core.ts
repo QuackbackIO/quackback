@@ -137,6 +137,7 @@ export function toMessageDTO(
     senderType: message.senderType as MessageSenderType,
     content: message.content,
     createdAt: message.createdAt.toISOString(),
+    editedAt: message.editedAt ? message.editedAt.toISOString() : null,
     author,
     attachments,
     citations: message.citations ?? [],

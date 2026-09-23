@@ -157,6 +157,15 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/conversation.ts::deleteConversationMessageFn': END_USER(
     'author deletes their own conversation message'
   ),
+  'lib/server/functions/conversation.ts::editConversationMessageFn': DYNAMIC_PERMISSION(
+    [
+      PERMISSIONS.CONVERSATION_REPLY,
+      PERMISSIONS.CONVERSATION_NOTE,
+      PERMISSIONS.TICKET_REPLY,
+      PERMISSIONS.TICKET_NOTE,
+    ],
+    'author edits their own message; needs the permission that writes that kind (reply or note, conversation or ticket)'
+  ),
 
   // Requester tickets (converged Messages surface): a signed-in requester's
   // ticket surface is their conversation pair; these fns feed the shared
