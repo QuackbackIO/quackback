@@ -41,6 +41,7 @@ vi.mock('@/lib/server/auth/index', () => ({
 import { mcpProtectedResourceMetadata } from '@/lib/server/mcp/protected-resource-metadata'
 import { Route as PathInsertedRoute } from '../[.]well-known.oauth-authorization-server.api.auth'
 import { Route as RootRoute } from '../[.]well-known.oauth-authorization-server'
+import { Route as OidcPathInsertedRoute } from '../[.]well-known.openid-configuration.api.auth'
 
 type Handlers = { GET: (args: { request: Request }) => Promise<Response> }
 type TestRoute = { path: string; options: { server: { handlers: Handlers } } }
@@ -74,6 +75,17 @@ describe('OAuth authorization server discovery for /api/mcp', () => {
     const body = await fetchMetadata(
       RootRoute,
       `${BASE_URL}/.well-known/oauth-authorization-server`
+    )
+    expect(body.issuer).toBe(advertised)
+  })
+
+  it('serves OIDC discovery at the path-inserted URL with the same issuer', async () => {
+    expect((OidcPathInsertedRoute as unknown as TestRoute).path).toBe(
+      `/.well-known/openid-configuration${issuerPath}`
+    )
+    const body = await fetchMetadata(
+      OidcPathInsertedRoute,
+      `${BASE_URL}/.well-known/openid-configuration${issuerPath}`
     )
     expect(body.issuer).toBe(advertised)
   })
