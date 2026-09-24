@@ -23,7 +23,7 @@ import { createRouteContextMemo } from '@/lib/client/route-context-memo'
 import type { WorkspaceSettings } from '@/lib/shared/types/settings'
 import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
 import { ThemeProvider } from '@/components/theme-provider'
-import { resolveDocumentTheme } from '@/lib/shared/theme'
+import { resolveDocumentTheme, SYSTEM_THEME_SCRIPT } from '@/lib/shared/theme'
 import { DefaultErrorPage } from '@/components/shared/error-page'
 import { OttHandler } from '@/components/shared/ott-handler'
 import { VisitorBeacon } from '@/components/shared/visitor-beacon'
@@ -214,6 +214,7 @@ function MinimalDocument({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <html lang="en" style={{ colorScheme }} suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: SYSTEM_THEME_SCRIPT }} />
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Quackback</title>
@@ -300,11 +301,12 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   // We pass the resolved default so the script knows what to apply.
   const defaultTheme = forcedTheme ?? themeCookie ?? 'system'
 
-  // ...but the script can't color the very first canvas the browser paints
-  // during load, so when the theme is known we also commit the class and
-  // color-scheme on the SSR <html> — otherwise dark users get a white flash.
-  // `system` is resolved from the Sec-CH-Prefers-Color-Scheme hint when the
-  // browser sent it, so even system users get a fully server-rendered theme.
+  // ...but that script sits in <body>, after content that may paint first, so
+  // when the theme is known we also commit the class and color-scheme on the
+  // SSR <html>, or dark users get a white flash. `system` is resolved
+  // from the Sec-CH-Prefers-Color-Scheme hint when the browser sent it; when
+  // it did not, SYSTEM_THEME_SCRIPT resolves it at the top of <head>, before
+  // any of the body can paint.
   const { className: themeClass, colorScheme } = resolveDocumentTheme(
     defaultTheme,
     prefersColorScheme
@@ -320,11 +322,11 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   const resolvedLocale = widgetOverride ?? acceptLanguageLocale ?? DEFAULT_LOCALE
   const { lang, dir } = htmlLangDir(documentLocale(routeIds, resolvedLocale))
 
-  // suppressHydrationWarning stays: next-themes' inline script sets the theme
-  // class on <html> before React hydrates, and for `system` without the client
-  // hint (Firefox/Safari) the server can't know the OS preference, so the SSR
-  // markup and the hydrated DOM differ by design. This silences that one
-  // expected mismatch (one element, one level).
+  // suppressHydrationWarning stays: the inline theme scripts set the class on
+  // <html> before React hydrates, and for `system` without the client hint
+  // (a first visit, Firefox/Safari) the server can't know the OS preference,
+  // so the SSR markup and the hydrated DOM differ by design. This silences
+  // that one expected mismatch (one element, one level).
   return (
     <html
       lang={lang}
@@ -335,6 +337,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
       suppressHydrationWarning
     >
       <head>
+        {!themeClass && <script dangerouslySetInnerHTML={{ __html: SYSTEM_THEME_SCRIPT }} />}
         <HeadContent />
       </head>
       <body className="min-h-screen bg-background font-sans antialiased">

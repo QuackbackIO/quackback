@@ -41,21 +41,35 @@ export function parsePrefersColorScheme(value: string | null | undefined): 'ligh
 const PREFERS_COLOR_SCHEME_HINT = 'Sec-CH-Prefers-Color-Scheme'
 
 /**
- * The client-hint response headers for a document at `pathname`.
+ * The client-hint response headers for a document.
  *
- * `Accept-CH` asks the browser to send the OS color scheme on later requests,
- * so `system` can be resolved during SSR. `Critical-CH` makes Chromium discard
- * a first response rendered without it and request the document again, which
- * earns its extra render where the server paints the theme. The widget is
- * rendered on the client (`ssr: 'data-only'`) inside a panel that stays hidden
- * until it opens, so there it would only render the document twice.
+ * `Accept-CH` asks Chromium to send the OS color scheme with later requests
+ * to this origin, so from then on `system` is resolved during SSR and the
+ * markup carries the theme. There is deliberately no `Critical-CH`: it makes
+ * Chromium discard a first visit's response and request the page again, so
+ * every first visit rendered every page twice. A document rendered without
+ * the hint resolves `system` in {@link SYSTEM_THEME_SCRIPT} instead, before
+ * any of its body can paint.
  */
-export function colorSchemeHintHeaders(pathname: string): Record<string, string> {
-  const headers: Record<string, string> = { 'Accept-CH': PREFERS_COLOR_SCHEME_HINT }
-  const isWidget = pathname === '/widget' || pathname.startsWith('/widget/')
-  if (!isWidget) headers['Critical-CH'] = PREFERS_COLOR_SCHEME_HINT
-  return headers
+export function colorSchemeHintHeaders(): Record<string, string> {
+  return { 'Accept-CH': PREFERS_COLOR_SCHEME_HINT }
 }
+
+/**
+ * Resolves a `system` theme the server could not: the first thing in <head>
+ * of a document rendered without the OS preference (a first visit, or a
+ * browser that sends no client hints). As a parser-blocking script ahead of
+ * the body it runs before anything of the page can paint, so the first frame
+ * is already in the right theme rather than waiting for next-themes' script
+ * in <body>, which a network chunk boundary can delay past a paint.
+ *
+ * It makes next-themes' choice: the preference next-themes stored (under its
+ * default `theme` key), else the OS preference.
+ */
+export const SYSTEM_THEME_SCRIPT =
+  "(function(){try{var d=document.documentElement,t;try{t=localStorage.getItem('theme')}catch(e){}" +
+  "if(t!=='light'&&t!=='dark')t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';" +
+  'd.classList.add(t);d.style.colorScheme=t}catch(e){}})()'
 
 /**
  * Resolve the `class` and `color-scheme` to put on the SSR-rendered <html> so
@@ -66,9 +80,9 @@ export function colorSchemeHintHeaders(pathname: string): Record<string, string>
  * For an explicit theme we commit to it (e.g. color-scheme:dark keeps the
  * canvas dark even on a light-mode OS). `system` is resolved from the OS
  * preference when the browser sent the `Sec-CH-Prefers-Color-Scheme` hint;
- * without it (Firefox/Safari, or the first request before the hint is known)
- * we leave the class off (the inline script adds it) and let `light dark` tell
- * the browser to take the canvas from the OS preference.
+ * without it (Firefox/Safari, or a first visit before the hint is known) we
+ * leave the class off for {@link SYSTEM_THEME_SCRIPT} to add, and let
+ * `light dark` tell the browser to take the canvas from the OS preference.
  */
 export function resolveDocumentTheme(
   theme: Theme,
