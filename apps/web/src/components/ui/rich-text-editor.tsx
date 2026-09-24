@@ -84,6 +84,7 @@ import {
 // module with only light deps. Re-exported below for backward compatibility;
 // read-only consumers should import from '@/components/ui/rich-text-content'.
 import { RichTextContent, isRichTextContent } from './rich-text-content'
+import { RichTextEditorEmptyState } from './lazy-rich-text-editor'
 import {
   Bold,
   Italic,
@@ -1657,32 +1658,20 @@ function RichTextEditorBase({
   }, [])
 
   if (!editor) {
-    // Reserve the editor's eventual height + placeholder so the surrounding
-    // layout (toolbar footer, card border) doesn't jump when TipTap finishes
-    // mounting. Keeping immediatelyRender=false preserves SSR safety.
+    // Reserve the editor's eventual size, toolbar row included, so the
+    // surrounding layout doesn't jump when TipTap finishes mounting. Keeping
+    // immediatelyRender=false preserves SSR safety.
     return (
-      <div
-        className={cn(
-          !borderless && 'overflow-hidden rounded-md border border-input bg-background',
-          disabled && 'opacity-50 cursor-not-allowed',
-          fill && 'flex h-full min-h-0 flex-col',
-          className
-        )}
+      <RichTextEditorEmptyState
+        placeholder={placeholder}
+        className={className}
+        disabled={disabled}
+        minHeight={minHeight}
+        fill={fill}
+        borderless={borderless}
+        toolbarPosition={toolbarPosition}
         aria-hidden="true"
-      >
-        <div
-          className={cn(
-            'prose prose-sm prose-neutral dark:prose-invert max-w-none',
-            'min-h-[var(--editor-min-height)]',
-            borderless ? 'py-0' : 'px-3 py-2',
-            'text-muted-foreground',
-            fill && 'min-h-0 flex-1'
-          )}
-          style={{ '--editor-min-height': minHeight } as React.CSSProperties}
-        >
-          {placeholder ?? ' '}
-        </div>
-      </div>
+      />
     )
   }
 
