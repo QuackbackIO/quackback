@@ -3,6 +3,7 @@ import { Route } from '@/routes/admin/feedback'
 import { useMemo, useCallback } from 'react'
 import { isItemSelected, toggleItem } from '@/components/shared/filter-utils'
 import type { InboxFilters } from '@/lib/shared/types'
+import { DEFAULT_INBOX_SORT } from '@/lib/client/hooks/use-inbox-query'
 
 export type { InboxFilters }
 
@@ -19,30 +20,34 @@ function parseOptionalInt(value: unknown): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined
 }
 
+type FeedbackSearch = ReturnType<typeof Route.useSearch>
+
+/** The inbox filters a feedback URL's search params describe. */
+export function inboxFiltersFromSearch(search: Partial<FeedbackSearch>): InboxFilters {
+  return {
+    search: search.search,
+    status: stringList(search.status),
+    board: stringList(search.board),
+    tags: stringList(search.tags),
+    segmentIds: stringList(search.segments),
+    owner: search.owner,
+    dateFrom: search.dateFrom,
+    dateTo: search.dateTo,
+    minVotes: parseOptionalInt(search.minVotes),
+    minComments: parseOptionalInt(search.minComments),
+    responded: search.responded,
+    updatedBefore: search.updatedBefore,
+    hasDuplicates: search.hasDuplicates,
+    sort: search.sort ?? DEFAULT_INBOX_SORT,
+    showDeleted: search.deleted,
+  }
+}
+
 export function useInboxFilters() {
   const navigate = useNavigate()
   const search = Route.useSearch()
 
-  const filters: InboxFilters = useMemo(
-    () => ({
-      search: search.search,
-      status: stringList(search.status),
-      board: stringList(search.board),
-      tags: stringList(search.tags),
-      segmentIds: stringList(search.segments),
-      owner: search.owner,
-      dateFrom: search.dateFrom,
-      dateTo: search.dateTo,
-      minVotes: parseOptionalInt(search.minVotes),
-      minComments: parseOptionalInt(search.minComments),
-      responded: search.responded,
-      updatedBefore: search.updatedBefore,
-      hasDuplicates: search.hasDuplicates,
-      sort: search.sort ?? 'newest',
-      showDeleted: search.deleted,
-    }),
-    [search]
-  )
+  const filters: InboxFilters = useMemo(() => inboxFiltersFromSearch(search), [search])
 
   const setFilters = useCallback(
     (updates: Partial<InboxFilters>) => {
