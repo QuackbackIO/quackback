@@ -15,8 +15,12 @@
  * turn a progressively-streamed SSR document into a single burst at the
  * end. A per-chunk Z_PARTIAL_FLUSH / BROTLI_OPERATION_FLUSH keeps the
  * output cadence matching the input cadence.
+ *
+ * Applied by the server entry to the final response (`finish-response.ts`),
+ * never as request middleware: the SSR handler disposes a streamed document
+ * whose response a middleware replaced (see `response-hooks.ts`).
  */
-import { createMiddleware } from '@tanstack/react-start'
+import zlib from 'node:zlib'
 
 /** Below this, the framing overhead is not worth the CPU. Matches the size
  *  floor Nitro's own build-time compressPublicAssets uses. */
@@ -60,12 +64,8 @@ function pickEncoding(acceptEncoding: string): Encoding | null {
 
 /**
  * Combines any number of comma-separated Vary values into one, case
- * insensitively deduped, preserving first-seen order. A route can carry a
- * Vary on the Response object it returns (e.g. publicWorkspaceCacheHeaders'
- * Host) and/or on the framework's own H3 event (e.g. bootstrap.ts's cache
- * Vary, set via setResponseHeader) -- either, both, or neither may be
- * present, and whichever this module writes to has to reflect all of them
- * or it silently drops one.
+ * insensitively deduped, preserving first-seen order, so adding
+ * Accept-Encoding never drops a Vary the response already carries.
  */
 function mergeVaryValues(...sources: string[]): string {
   const seen = new Set<string>()
@@ -87,30 +87,17 @@ function appendVary(headers: Headers, value: string) {
 }
 
 /**
- * A TransformStream that pipes bytes through node:zlib and forces a flush
- * after every input chunk, so the compressed output tracks the input's
- * arrival instead of waiting for the whole stream to close.
+ * The body compressed through node:zlib, with a flush after every input chunk
+ * so the compressed output tracks the input's arrival instead of waiting for
+ * the whole stream to close.
  *
- * Completion of the final flush is signalled by the zlib stream's own
- * 'end' event, not by the .end() callback: that callback fires once the
- * writable side is done, but zlib can still have one more buffered 'data'
- * event in flight at that point, and enqueueing it after the
- * TransformStream controller has closed throws. 'end' is only emitted
- * once every 'data' event has already been delivered.
+ * Pull-driven: the source is read only when the server asks for more output,
+ * as it would read an uncompressed body.
  */
-async function createStreamingCompressor(
+function compressBody(
+  body: ReadableStream<Uint8Array>,
   encoding: Encoding
-): Promise<TransformStream<Uint8Array, Uint8Array>> {
-  // Dynamic import: this module is reachable from the client bundle via
-  // start.ts's isomorphic config. node: specifiers are externalized rather
-  // than rejected at build time (vite.config.ts), so a static import here
-  // would still ship a bare `import ... from "node:zlib"` in the browser
-  // bundle -- and since compression.ts sits in the eager entry graph, the
-  // browser actually tries to fetch it, a guaranteed 404 on every page
-  // load. createStreamingCompressor only ever runs inside
-  // compressionMiddleware's server() callback, so this never executes
-  // client-side.
-  const zlib = await import('node:zlib')
+): ReadableStream<Uint8Array> {
   const impl =
     encoding === 'br'
       ? zlib.createBrotliCompress({
@@ -120,40 +107,52 @@ async function createStreamingCompressor(
   const flushOp =
     encoding === 'br' ? zlib.constants.BROTLI_OPERATION_FLUSH : zlib.constants.Z_PARTIAL_FLUSH
 
-  // `cancel` is in the Streams standard and both Bun and Node call it; the DOM
-  // lib types do not declare it yet.
-  const transformer: Transformer<Uint8Array, Uint8Array> & { cancel(): void } = {
-    start(controller) {
-      impl.on('data', (chunk: Buffer) =>
-        controller.enqueue(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength))
-      )
-      impl.on('error', (err) => controller.error(err))
-    },
-    transform(chunk) {
-      return new Promise<void>((resolve, reject) => {
-        impl.write(chunk, (err) => {
-          if (err) {
-            reject(err)
-            return
-          }
-          impl.flush(flushOp, () => resolve())
-        })
+  const compressed: Uint8Array[] = []
+  impl.on('data', (chunk: Buffer) =>
+    compressed.push(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength))
+  )
+  const write = (chunk: Uint8Array) =>
+    new Promise<void>((resolve, reject) => {
+      impl.write(chunk, (err) => {
+        if (err) reject(err)
+        else impl.flush(flushOp, () => resolve())
       })
+    })
+  // Resolved by zlib's own 'end' event, not the .end() callback: the callback
+  // can fire while a last 'data' event is still to come.
+  const end = () =>
+    new Promise<void>((resolve, reject) => {
+      impl.once('end', () => resolve())
+      impl.once('error', reject)
+      impl.end()
+    })
+
+  const reader = body.getReader()
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      // Feed the encoder until it has output to hand over, or the body ends.
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) {
+          await end()
+          for (const chunk of compressed.splice(0)) controller.enqueue(chunk)
+          controller.close()
+          return
+        }
+        await write(value)
+        if (compressed.length) {
+          for (const chunk of compressed.splice(0)) controller.enqueue(chunk)
+          return
+        }
+      }
     },
-    flush() {
-      return new Promise<void>((resolve, reject) => {
-        impl.once('end', () => resolve())
-        impl.once('error', reject)
-        impl.end()
-      })
-    },
-    // The client went away or the body errored: flush() will never run, so
-    // release the encoder's native state now rather than at garbage collection.
-    cancel() {
+    // The client went away or the body errored: release the encoder's native
+    // state now rather than at garbage collection, and stop the source.
+    cancel(reason) {
       impl.destroy()
+      return reader.cancel(reason)
     },
-  }
-  return new TransformStream(transformer)
+  })
 }
 
 /**
@@ -189,7 +188,7 @@ export async function maybeCompress(response: Response, acceptEncoding: string):
     })
   }
 
-  const compressedBody = response.body.pipeThrough(await createStreamingCompressor(encoding))
+  const compressedBody = compressBody(response.body, encoding)
   const headers = new Headers(response.headers)
   headers.set('content-encoding', encoding)
   headers.delete('content-length')
@@ -204,63 +203,3 @@ export async function maybeCompress(response: Response, acceptEncoding: string):
     headers,
   })
 }
-
-/**
- * Minimal shape of what the framework's next() resolves to; see
- * request-context.ts's identical NextResult for why response is optional.
- */
-interface NextResult {
-  response?: Response
-}
-
-/**
- * Core compression step, decoupled from the framework middleware wrapper so
- * it stays generic over whatever next() actually resolves to (the real
- * RequestServerResult, not just the response field this module cares
- * about) and mutates that same object in place, the way
- * request-context.ts's handleRequestWithContext does.
- */
-export async function compressResultResponse<T extends NextResult>(opts: {
-  request: Request
-  next: () => Promise<T>
-}): Promise<T> {
-  const result = await opts.next()
-  if (result.response) {
-    const compressed = await maybeCompress(
-      result.response,
-      opts.request.headers.get('accept-encoding') ?? ''
-    )
-    if (compressed !== result.response) {
-      result.response = compressed
-      // Dynamic import: this file is reachable from the client bundle via
-      // start.ts's isomorphic config, and @tanstack/react-start/server is a
-      // protected server-only specifier there (see bootstrap.ts for the
-      // same pattern). compressionMiddleware itself only ever runs inside
-      // createMiddleware().server(), so this import never actually
-      // executes on the client.
-      const { getResponseHeader, setResponseHeader } = await import('@tanstack/react-start/server')
-      // Once anything is written to the H3 event's own Vary (e.g.
-      // bootstrap.ts's cache Vary, via setResponseHeader) it wins outright
-      // over whatever the Response object carries when the final response
-      // is assembled -- so this has to fold in whichever of the two, or
-      // both, already held a value before writing the merged result back.
-      const merged = mergeVaryValues(
-        getResponseHeader('vary') ?? '',
-        compressed.headers.get('vary') ?? ''
-      )
-      if (merged) setResponseHeader('vary', merged)
-    }
-  }
-  return result
-}
-
-/**
- * Outermost request middleware: wraps the fully-formed response (every
- * other middleware has already applied its headers) and compresses its
- * body when the client accepts it. Placed first in the requestMiddleware
- * array in start.ts so it sees the truly final bytes, including whatever
- * request-context or CSRF already added to the headers.
- */
-export const compressionMiddleware = createMiddleware().server(({ next, request }) =>
-  compressResultResponse({ request, next: () => Promise.resolve(next()) })
-)

@@ -10,6 +10,7 @@ import { handleRequestWithContext } from '../request-context'
 import { getLogContext } from '@/lib/server/log-context'
 import { createLogger } from '@/lib/server/logger'
 import { countingQueryLogger } from '@/lib/server/request-metrics'
+import { finishResponse } from '@/lib/server/finish-response'
 
 function capture() {
   const lines: string[] = []
@@ -109,13 +110,29 @@ describe('handleRequestWithContext', () => {
     expect(off.response.headers.get('server-timing')).toBeNull()
   })
 
+  it('hands the framework back the very response it produced', async () => {
+    // The SSR handler disposes a streamed document whose response a middleware
+    // replaced: it tears down the serializer that writes the streamed data and
+    // closing tags, so the document never ends. Observing the body therefore
+    // happens at the server entry, never by swapping the response here.
+    const original = new Response(new ReadableStream({ start: (c) => c.close() }))
+    const result = await handleRequestWithContext({
+      request: new Request('http://localhost/'),
+      log: capture().log,
+      serverTiming: true,
+      next: async () => ({ response: original }),
+    })
+    expect(result.response).toBe(original)
+  })
+
   it('with Server-Timing on, logs the final count once a streamed body ends', async () => {
     const cap = capture()
     let release!: () => void
     const gate = new Promise<void>((resolve) => (release = resolve))
 
+    const request = new Request('http://localhost/')
     const result = await handleRequestWithContext({
-      request: new Request('http://localhost/'),
+      request,
       log: cap.log,
       serverTiming: true,
       next: async () => {
@@ -136,8 +153,10 @@ describe('handleRequestWithContext', () => {
     expect(cap.records().find((r) => r.msg === 'request completed').db_queries).toBe(1)
     expect(cap.records().find((r) => r.msg === 'request finished')).toBeUndefined()
 
+    // The server entry applies the hook to the final response.
+    const sent = await finishResponse(request, result.response!)
     release()
-    expect(await result.response!.text()).toBe('<html></html>')
+    expect(await sent.text()).toBe('<html></html>')
     const finished = cap.records().find((r) => r.msg === 'request finished')
     expect(finished.db_queries).toBe(2)
     expect(finished.request_id).toBeDefined()
