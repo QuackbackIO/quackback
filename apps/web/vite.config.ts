@@ -182,6 +182,26 @@ export default defineConfig(({ mode }) => {
         // scripts/check-widget-bundle.ts guards the widget's eager graph in CI.
       },
     },
+    environments: {
+      client: {
+        build: {
+          rolldownOptions: {
+            output: {
+              codeSplitting: {
+                // Merge the client entry's static import closure into the
+                // entry chunk. Every document loads all of it before it can
+                // hydrate, so this moves no code across a lazy boundary; it
+                // only stops usage-based splitting from cutting that eager
+                // set into ~200 tiny chunks, each a request on every first
+                // load. `$initial` is rolldown's tag for exactly that set, so
+                // unlike directory pinning it cannot pull a lazy module in.
+                groups: [{ name: 'entry', tags: ['$initial'] }],
+              },
+            },
+          },
+        },
+      },
+    },
     resolve: {
       tsconfigPaths: true,
     },
