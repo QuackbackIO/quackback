@@ -8,6 +8,7 @@ import {
 } from '@/lib/server/db'
 import type { IdentityProviderId } from '@quackback/ids'
 import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/cache'
+import { localCacheGet, localCacheSet } from '@/lib/server/local-cache'
 import { memoizePerRequest } from '@/lib/server/request-memo'
 import { ValidationError, NotFoundError } from '@/lib/shared/errors'
 import { httpsUrl } from '@/lib/shared/schemas/auth'
@@ -884,7 +885,22 @@ export async function getWorkspaceSettings(): Promise<WorkspaceSettings | null> 
   return settings ? liveWorkspaceSettings(structuredClone(settings)) : null
 }
 
+/**
+ * How long this process reuses the settings it read (`localCacheSet`): a write
+ * made by another process reaches this one within this window, which bounds
+ * how late, for example, a changed auth config takes effect there.
+ */
+export const SETTINGS_LOCAL_TTL_MS = 5_000
+
 async function loadWorkspaceSettings(): Promise<WorkspaceSettings | null> {
+  const local = localCacheGet<WorkspaceSettings>(CACHE_KEYS.WORKSPACE_SETTINGS)
+  if (local) return local
+  const settings = await readWorkspaceSettings()
+  if (settings) localCacheSet(CACHE_KEYS.WORKSPACE_SETTINGS, settings, SETTINGS_LOCAL_TTL_MS)
+  return settings
+}
+
+async function readWorkspaceSettings(): Promise<WorkspaceSettings | null> {
   try {
     const cached = await cacheGet<WorkspaceSettings>(CACHE_KEYS.WORKSPACE_SETTINGS)
     if (cached) {
