@@ -1,120 +1,172 @@
 {
   "tolerance": {
     "htmlKB": 0.05,
+    "htmlTransferKB": 0.05,
     "jsKB": 0.02
   },
   "journeys": {
     "doc:portal-home": {
-      "dbQueries": 18,
-      "htmlKB": 153
+      "dbQueries": 10,
+      "htmlKB": 140.3
     },
     "doc:portal-roadmap": {
-      "dbQueries": 23,
-      "htmlKB": 99
+      "dbQueries": 7,
+      "htmlKB": 86
     },
     "doc:portal-changelog": {
-      "dbQueries": 5,
-      "htmlKB": 78.2
+      "dbQueries": 3,
+      "htmlKB": 64.4
+    },
+    "doc:portal-post": {
+      "dbQueries": 20,
+      "htmlKB": 79.4
     },
     "doc:help-center": {
-      "dbQueries": 8,
-      "htmlKB": 82.8
+      "dbQueries": 6,
+      "htmlKB": 69
     },
     "doc:widget": {
-      "dbQueries": 33,
-      "htmlKB": 66.8
+      "dbQueries": 24,
+      "htmlKB": 52.9
     },
     "doc:portal-home+session": {
-      "dbQueries": 54,
-      "htmlKB": 170.7
+      "dbQueries": 17,
+      "htmlKB": 158
     },
     "doc:portal-changelog+session": {
-      "dbQueries": 32,
-      "htmlKB": 83.2
+      "dbQueries": 7,
+      "htmlKB": 69.4
     },
     "doc:admin-feedback": {
-      "dbQueries": 50,
-      "htmlKB": 178.6
+      "dbQueries": 29,
+      "htmlKB": 215.6
     },
     "doc:admin-inbox": {
-      "dbQueries": 44,
-      "htmlKB": 163.8
+      "dbQueries": 26,
+      "htmlKB": 162.5
     },
     "doc:admin-roadmap": {
-      "dbQueries": 39,
-      "htmlKB": 132.8
+      "dbQueries": 13,
+      "htmlKB": 120.3
     },
     "doc:admin-changelog": {
-      "dbQueries": 35,
-      "htmlKB": 132
+      "dbQueries": 9,
+      "htmlKB": 118.4
     },
     "doc:admin-help-center": {
-      "dbQueries": 37,
-      "htmlKB": 139.9
+      "dbQueries": 11,
+      "htmlKB": 126.6
     },
     "doc:admin-users": {
-      "dbQueries": 39,
-      "htmlKB": 184.3
+      "dbQueries": 13,
+      "htmlKB": 172.1
     },
     "doc:admin-settings": {
-      "dbQueries": 36,
-      "htmlKB": 154.5
+      "dbQueries": 11,
+      "htmlKB": 141.8
     },
     "ui:portal-load": {
-      "dbQueries": 36,
-      "serverRequests": 3,
-      "requests": 307,
-      "jsRequests": 300,
-      "jsKB": 3499.8
+      "dbQueries": 10,
+      "serverRequests": 2,
+      "requests": 160,
+      "jsRequests": 154,
+      "jsKB": 515.1,
+      "htmlTransferKB": 22
     },
     "ui:portal-open-post": {
-      "dbQueries": 46,
-      "serverRequests": 9,
-      "requests": 32,
-      "jsRequests": 23,
-      "jsKB": 195.9
+      "dbQueries": 23,
+      "serverRequests": 6,
+      "requests": 41,
+      "jsRequests": 35,
+      "jsKB": 60.3,
+      "htmlTransferKB": 0
+    },
+    "ui:portal-post-load": {
+      "dbQueries": 30,
+      "serverRequests": 3,
+      "requests": 158,
+      "jsRequests": 153,
+      "jsKB": 479.9,
+      "htmlTransferKB": 18.2
+    },
+    "ui:portal-open-post-with-comments": {
+      "dbQueries": 24,
+      "serverRequests": 6,
+      "requests": 41,
+      "jsRequests": 35,
+      "jsKB": 60.3,
+      "htmlTransferKB": 0
     },
     "ui:widget-load": {
-      "dbQueries": 73,
-      "serverRequests": 4,
-      "requests": 327,
-      "jsRequests": 319,
-      "jsKB": 3942.7
+      "dbQueries": 27,
+      "serverRequests": 3,
+      "requests": 174,
+      "jsRequests": 166,
+      "jsKB": 781
+    },
+    "ui:widget-embed": {
+      "dbQueries": 28,
+      "serverRequests": 5,
+      "requests": 93,
+      "jsRequests": 84,
+      "jsKB": 393.7,
+      "htmlTransferKB": 1.1
     },
     "ui:widget-feedback-tab": {
       "dbQueries": 0,
       "serverRequests": 0,
       "requests": 0,
       "jsRequests": 0,
-      "jsKB": 0
+      "jsKB": 0,
+      "htmlTransferKB": 0
     },
     "ui:admin-feedback-load": {
-      "dbQueries": 167,
-      "serverRequests": 8,
-      "requests": 308,
-      "jsRequests": 297,
-      "jsKB": 2020.3
+      "dbQueries": 35,
+      "serverRequests": 2,
+      "requests": 176,
+      "jsRequests": 170,
+      "jsKB": 461.4,
+      "htmlTransferKB": 36.4
     },
     "ui:admin-open-post": {
-      "dbQueries": 107,
-      "serverRequests": 9,
-      "requests": 51,
-      "jsRequests": 41,
-      "jsKB": 1478.6
+      "dbQueries": 18,
+      "serverRequests": 1,
+      "requests": 53,
+      "jsRequests": 51,
+      "jsKB": 278,
+      "htmlTransferKB": 0
     },
     "ui:admin-inbox-load": {
-      "dbQueries": 221,
-      "serverRequests": 13,
-      "requests": 352,
-      "jsRequests": 335,
-      "jsKB": 3830.4
+      "dbQueries": 46,
+      "serverRequests": 3,
+      "requests": 220,
+      "jsRequests": 212,
+      "jsKB": 817.5,
+      "htmlTransferKB": 34.1
     },
     "ui:admin-nav-feedback-to-roadmap": {
-      "dbQueries": 146,
-      "serverRequests": 13,
-      "requests": 52,
-      "jsRequests": 38,
-      "jsKB": 1470
+      "dbQueries": 20,
+      "serverRequests": 2,
+      "requests": 44,
+      "jsRequests": 42,
+      "jsKB": 84.9,
+      "htmlTransferKB": 0
+    },
+    "ui:portal-hover-open-post": {
+      "dbQueries": 23,
+      "serverRequests": 6,
+      "requests": 41,
+      "jsRequests": 35,
+      "jsKB": 60.3,
+      "htmlTransferKB": 0
+    },
+    "ui:admin-hover-nav-feedback-to-roadmap": {
+      "dbQueries": 20,
+      "serverRequests": 2,
+      "requests": 44,
+      "jsRequests": 42,
+      "jsKB": 84.9,
+      "htmlTransferKB": 0
     }
   },
   "$comment": "Ceilings for bun perf/bench.ts. Lowered with --update whenever a journey comes in under; raised only with --update --allow-increase, which a reviewer should question."
