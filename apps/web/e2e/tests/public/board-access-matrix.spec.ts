@@ -327,6 +327,8 @@ async function submitComment(page: Page, board: { slug: string; postId: string }
     .locator('form')
     .filter({ has: page.getByTestId('comment-form-editor') })
     .first()
+  // The composer mounts its editor once pointed at or focused.
+  await form.getByRole('textbox', { name: /write a comment/i }).click()
   const editor = form.locator('[contenteditable="true"]').first()
   await editor.click()
   await editor.pressSequentially(text) // TipTap editor — type rather than fill
