@@ -93,7 +93,10 @@ function resolveLocal(from: string, specifier: string): string | null {
 }
 
 /** Every heavy module or package reachable from `entry`, with the chain that reaches it. */
-function heavyReachableFrom(entry: string): string[] {
+function heavyReachableFrom(
+  entry: string,
+  heavy = { modules: HEAVY_MODULES, packages: HEAVY_PACKAGES }
+): string[] {
   const start = path.join(SRC, entry)
   const parent = new Map<string, string | null>([[start, null]])
   const queue = [start]
@@ -109,8 +112,8 @@ function heavyReachableFrom(entry: string): string[] {
   while (queue.length > 0) {
     const file = queue.shift()!
     const rel = path.relative(SRC, file)
-    if (HEAVY_MODULES[rel]) {
-      found.push(`${HEAVY_MODULES[rel]}: ${chain(file)}`)
+    if (heavy.modules[rel]) {
+      found.push(`${heavy.modules[rel]}: ${chain(file)}`)
       continue
     }
     if (rel.startsWith('lib/server/functions/') || !/\.tsx?$/.test(file)) continue
@@ -123,8 +126,8 @@ function heavyReachableFrom(entry: string): string[] {
         }
         continue
       }
-      const heavy = HEAVY_PACKAGES.find(({ pattern }) => pattern.test(specifier))
-      if (heavy) found.push(`${heavy.what} (${specifier}): ${chain(file)}`)
+      const heavyPackage = heavy.packages.find(({ pattern }) => pattern.test(specifier))
+      if (heavyPackage) found.push(`${heavyPackage.what} (${specifier}): ${chain(file)}`)
     }
   }
   return found
@@ -137,6 +140,15 @@ describe('post reading surfaces', () => {
       expect(heavyReachableFrom(entry)).toEqual([])
     }
   )
+
+  it('keeps the emoji dataset out of the editor itself', () => {
+    // The editor's emoji node loads it the first time an editor needs it.
+    const dataset = {
+      modules: { 'lib/shared/content-emoji.ts': 'the emoji dataset' },
+      packages: [{ pattern: /^@tiptap\/extension-emoji$/, what: 'the emoji dataset' }],
+    }
+    expect(heavyReachableFrom('components/ui/rich-text-editor.tsx', dataset)).toEqual([])
+  })
 
   it('reports a heavy module reached through a static import, not a lazy one', () => {
     expect(heavyReachableFrom('components/ui/lazy-rich-text-editor.tsx')).toEqual([])

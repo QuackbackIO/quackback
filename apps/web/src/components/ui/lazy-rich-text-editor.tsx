@@ -13,7 +13,7 @@ import { cn } from '@/lib/shared/utils'
 
 /**
  * The rich-text editor behind a lazy boundary. The editor (tiptap,
- * prosemirror, highlight.js, emoji data) outweighs the rest of any page that
+ * prosemirror, highlight.js) outweighs the rest of any page that
  * renders it, so surfaces that show it only after an interaction, or below the
  * content a visitor came for, load it as its own chunk. Render it inside
  * <Suspense>, with RichTextEditorPlaceholder as the fallback.
