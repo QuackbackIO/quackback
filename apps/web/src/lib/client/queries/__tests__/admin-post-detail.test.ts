@@ -54,7 +54,7 @@ function requestedPanels(): string[] | undefined {
 
 let client: QueryClient
 beforeEach(() => {
-  vi.clearAllMocks()
+  mockFetchPostWithDetails.mockReset()
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 })
 
