@@ -13,6 +13,9 @@ import { takeResponseBodyEndHook } from '@/lib/server/response-hooks'
 export async function finishResponse(request: Request, response: Response): Promise<Response> {
   const hook = takeResponseBodyEndHook(response)
   const observed = hook ? withBodyEnd(response, hook) : response
+  // Kill switch: QUACKBACK_COMPRESSION=off hands responses back unencoded,
+  // e.g. behind a proxy that compresses, or to rule compression out.
+  if (process.env.QUACKBACK_COMPRESSION === 'off') return observed
   return maybeCompress(observed, request.headers.get('accept-encoding') ?? '')
 }
 
