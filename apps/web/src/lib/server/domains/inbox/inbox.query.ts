@@ -522,24 +522,29 @@ export interface InboxCounts {
   ticketsByType: { customer: number; back_office: number; tracker: number }
 }
 
-async function countConversationScope(
+/**
+ * "mine"/"unassigned"/pair open-conversation counts in one query (three
+ * FILTER aggregates over one scan) instead of three round trips that would
+ * otherwise share the same `conversationFilter(actor) AND status = 'open'`
+ * base predicate. `principalId` undefined (no principal, or an actor whose
+ * kind carries none) forces the `mine` filter to `false` rather than
+ * skipping the query: `unassigned` and `pair` still need it to run.
+ */
+async function countConversationScopes(
   actor: Actor,
-  opts: { assignedAgentPrincipalId?: PrincipalId; unassignedOnly?: boolean }
-): Promise<number> {
+  principalId: PrincipalId | null
+): Promise<{ mine: number; unassigned: number; pair: number }> {
   const [row] = await db
-    .select({ c: sql<number>`count(*)::int` })
+    .select({
+      mine: sql<number>`count(*) FILTER (WHERE ${
+        principalId ? eq(conversations.assignedAgentPrincipalId, principalId) : sql`false`
+      })::int`,
+      unassigned: sql<number>`count(*) FILTER (WHERE ${isNull(conversations.assignedAgentPrincipalId)})::int`,
+      pair: sql<number>`count(*) FILTER (WHERE ${hasLinkedCustomerTicketSql()})::int`,
+    })
     .from(conversations)
-    .where(
-      and(
-        conversationFilter(actor),
-        eq(conversations.status, 'open'),
-        opts.assignedAgentPrincipalId
-          ? eq(conversations.assignedAgentPrincipalId, opts.assignedAgentPrincipalId)
-          : undefined,
-        opts.unassignedOnly ? isNull(conversations.assignedAgentPrincipalId) : undefined
-      )
-    )
-  return row?.c ?? 0
+    .where(and(conversationFilter(actor), eq(conversations.status, 'open')))
+  return { mine: row?.mine ?? 0, unassigned: row?.unassigned ?? 0, pair: row?.pair ?? 0 }
 }
 
 /**
@@ -553,8 +558,8 @@ async function countConversationScope(
  * without a CASE/FILTER per bucket.
  *
  * The customer bucket these return is therefore the STANDALONE half only —
- * `countInboxScopes` adds the pair half (`countPairConversations`) so the
- * badge matches the converged Tickets-scope views.
+ * `countInboxScopes` adds the pair half (`countConversationScopes`' `pair`)
+ * so the badge matches the converged Tickets-scope views.
  */
 async function countTicketScopesByType(
   actor: Actor
@@ -587,24 +592,6 @@ async function countTicketScopesByType(
 }
 
 /**
- * CONVERGENCE PHASE 2 (alias semantics): open conversations that ARE a pair
- * (an active link to a non-deleted customer ticket) — the "customer" ticket
- * badge's pair half. A linked pair counts ONCE across the nav, as its
- * conversation; the shared `hasLinkedCustomerTicketSql` fragment (also what
- * `listConversationsForAgent`'s `hasLinkedCustomerTicket` filter runs) keeps
- * badge and view in lockstep.
- */
-async function countPairConversations(actor: Actor): Promise<number> {
-  const [row] = await db
-    .select({ c: sql<number>`count(*)::int` })
-    .from(conversations)
-    .where(
-      and(conversationFilter(actor), eq(conversations.status, 'open'), hasLinkedCustomerTicketSql())
-    )
-  return row?.c ?? 0
-}
-
-/**
  * Nav-badge counts for the inbox (§3.1): "mine"/"unassigned" open
  * conversations, plus open tickets per type (the customer bucket counts a
  * linked pair once, as its conversation — see InboxCounts). Bounded by the
@@ -615,23 +602,21 @@ export async function countInboxScopes(actor: Actor): Promise<InboxCounts> {
   const canConversations = canViewConversations(actor)
   const canTickets = canViewTickets(actor)
 
-  const [mine, unassigned, ticketsByType, pairConversations] = await Promise.all([
-    canConversations && actor.principalId
-      ? countConversationScope(actor, { assignedAgentPrincipalId: actor.principalId })
-      : Promise.resolve(0),
-    canConversations ? countConversationScope(actor, { unassignedOnly: true }) : Promise.resolve(0),
+  const [conversationScopes, ticketsByType] = await Promise.all([
+    canConversations
+      ? countConversationScopes(actor, actor.principalId)
+      : Promise.resolve({ mine: 0, unassigned: 0, pair: 0 }),
     canTickets
       ? countTicketScopesByType(actor)
       : Promise.resolve({ customer: 0, back_office: 0, tracker: 0 }),
-    canConversations ? countPairConversations(actor) : Promise.resolve(0),
   ])
 
   // The pair is ONE item: a linked customer ticket's share of the customer
   // bucket arrives as its conversation (the standalone half is already in
   // ticketsByType.customer via the ticket-table count).
-  ticketsByType.customer += pairConversations
+  ticketsByType.customer += conversationScopes.pair
 
-  return { mine, unassigned, ticketsByType }
+  return { mine: conversationScopes.mine, unassigned: conversationScopes.unassigned, ticketsByType }
 }
 
 // ---------------------------------------------------------------------------
