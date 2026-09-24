@@ -29,7 +29,13 @@
  *
  * Exit code 1 means a count went over its ceiling (or a journey broke).
  */
-import { chromium, type Browser, type BrowserContext, type Page } from '@playwright/test'
+import {
+  chromium,
+  type Browser,
+  type BrowserContext,
+  type Frame,
+  type Page,
+} from '@playwright/test'
 import { parseArgs } from 'node:util'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { journeys, type Actor, type BrowserJourney, type DocumentJourney } from './journeys'
@@ -174,27 +180,54 @@ const INIT_SCRIPT = `
   performance.setResourceTimingBufferSize(100000)
 `
 
-interface PageSnapshot {
+interface FrameSnapshot {
   at: number
   commits: number
   elements: number
   resources: { name: string; type: string; bytes: number; start: number }[]
 }
 
+interface PageSnapshot extends FrameSnapshot {
+  /**
+   * Child frames (an embedded widget iframe, say). Each keeps its own
+   * performance timeline and clock, so its work is read inside the frame.
+   */
+  frames: Map<Frame, FrameSnapshot>
+}
+
+function frameSnapshot(frame: Frame, withNavigation: boolean): Promise<FrameSnapshot> {
+  return frame.evaluate(
+    (navigation) => ({
+      at: performance.now(),
+      commits: (window as unknown as { __perfCommits: number }).__perfCommits,
+      elements: document.getElementsByTagName('*').length,
+      resources: (performance.getEntriesByType('resource') as PerformanceResourceTiming[])
+        .concat(
+          navigation
+            ? (performance.getEntriesByType('navigation') as PerformanceResourceTiming[])
+            : []
+        )
+        .map((e) => ({
+          name: e.name,
+          type: e.initiatorType,
+          bytes: e.encodedBodySize,
+          start: e.startTime,
+        })),
+    }),
+    withNavigation
+  )
+}
+
 async function snapshot(page: Page): Promise<PageSnapshot> {
-  return page.evaluate(() => ({
-    at: performance.now(),
-    commits: (window as unknown as { __perfCommits: number }).__perfCommits,
-    elements: document.getElementsByTagName('*').length,
-    resources: (performance.getEntriesByType('resource') as PerformanceResourceTiming[])
-      .concat(performance.getEntriesByType('navigation') as PerformanceResourceTiming[])
-      .map((e) => ({
-        name: e.name,
-        type: e.initiatorType,
-        bytes: e.encodedBodySize,
-        start: e.startTime,
-      })),
-  }))
+  const main = await frameSnapshot(page.mainFrame(), true)
+  const frames = new Map<Frame, FrameSnapshot>()
+  for (const frame of page.frames()) {
+    if (frame === page.mainFrame() || frame.isDetached()) continue
+    // A child frame's own document is already a resource of its parent.
+    const child = await frameSnapshot(frame, false).catch(() => null)
+    if (child) frames.set(frame, child)
+  }
+  return { ...main, frames }
 }
 
 async function cdpMetrics(cdp: Awaited<ReturnType<BrowserContext['newCDPSession']>>) {
@@ -317,6 +350,12 @@ async function measureBrowser(
     const cdpAfter = await cdpMetrics(cdp)
     const since = before?.at ?? 0
     const loaded = after.resources.filter((r) => r.start >= since)
+    let childCommits = 0
+    for (const [frame, child] of after.frames) {
+      const earlier = before?.frames.get(frame)
+      loaded.push(...child.resources.filter((r) => r.start >= (earlier?.at ?? 0)))
+      childCommits += child.commits - (earlier?.commits ?? 0)
+    }
     const scripts = loaded.filter((r) => /\.m?js(\?|$)/.test(r.name))
     // Chromium tags the document's own PerformanceNavigationTiming entry
     // with initiatorType "navigation"; a journey whose run() is a
@@ -332,7 +371,7 @@ async function measureBrowser(
       jsRequests: scripts.length,
       jsKB: kb(scripts.reduce((sum, r) => sum + r.bytes, 0)),
       htmlTransferKB: kb(navigation?.bytes ?? 0),
-      reactCommits: after.commits - (before?.commits ?? 0),
+      reactCommits: after.commits - (before?.commits ?? 0) + childCommits,
       layouts: cdpAfter.LayoutCount - cdpBefore.LayoutCount,
       styleRecalcs: cdpAfter.RecalcStyleCount - cdpBefore.RecalcStyleCount,
       domElements: after.elements,

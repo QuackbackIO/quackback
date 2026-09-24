@@ -8,6 +8,8 @@
  * checks that with --repeat.
  */
 import type { Page } from '@playwright/test'
+import { buildWidgetInstallSnippet } from '../src/lib/shared/widget/install-prompt'
+import { BENCH_PORT } from './config'
 
 export type Actor = 'anon' | 'admin'
 
@@ -31,6 +33,12 @@ export interface BrowserJourney {
 export type Journey = DocumentJourney | BrowserJourney
 
 const firstPortalPost = (page: Page) => page.locator('a[href*="/posts/post_"]').first()
+
+/** A customer's page on another site, with the widget installed as documented. */
+const HOST_PAGE = 'https://customer.example/'
+const hostPageHtml = () =>
+  `<!doctype html><html><head><title>Customer site</title></head><body><h1>Customer site</h1>` +
+  `${buildWidgetInstallSnippet(`http://localhost:${BENCH_PORT}`)}</body></html>`
 
 export const journeys: Journey[] = [
   // Server-rendered documents, anonymous visitor.
@@ -85,6 +93,26 @@ export const journeys: Journey[] = [
     run: async (page) => {
       await page.goto('/widget')
       await page.getByRole('button', { name: 'Home', exact: true }).waitFor()
+    },
+  },
+  {
+    // What every visitor to a page with the widget installed pays: the SDK
+    // preloads the hidden widget iframe whether or not the visitor opens it.
+    kind: 'browser',
+    name: 'ui:widget-embed',
+    as: 'anon',
+    run: async (page) => {
+      await page.route(HOST_PAGE, (route) =>
+        route.fulfill({ contentType: 'text/html', body: hostPageHtml() })
+      )
+      // The widget is served from a loopback address; a public page needs
+      // the browser's local-network permission to reach it.
+      await page.context().grantPermissions(['local-network-access'])
+      await page.goto(HOST_PAGE)
+      await page
+        .frameLocator('iframe.quackback-widget-iframe')
+        .getByRole('button', { name: 'Home', exact: true })
+        .waitFor({ state: 'attached' })
     },
   },
   {
