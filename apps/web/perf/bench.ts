@@ -100,6 +100,9 @@ async function startServer() {
       SECRET_KEY: process.env.PERF_SECRET_KEY ?? 'perf-bench-secret-key-local-and-ci-only-0000',
       QUACKBACK_ROLE: 'web',
       QUACKBACK_SERVER_TIMING: '1',
+      // The settings copy a process keeps for a few seconds would make a count
+      // depend on timing; held for the whole run, counts measure a warm process.
+      QUACKBACK_SETTINGS_CACHE_MS: String(60 * 60 * 1000),
       LOG_LEVEL: args.trace ? 'debug' : 'info',
     },
     stdout: 'pipe',

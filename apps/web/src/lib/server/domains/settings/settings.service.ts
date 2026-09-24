@@ -892,11 +892,22 @@ export async function getWorkspaceSettings(): Promise<WorkspaceSettings | null> 
  */
 export const SETTINGS_LOCAL_TTL_MS = 5_000
 
+/**
+ * The window in effect: QUACKBACK_SETTINGS_CACHE_MS overrides it (0 turns the
+ * copy off). The perf bench pins it long, so its counts measure a warm process
+ * rather than whichever side of the window a request happened to land on.
+ */
+function settingsLocalTtlMs(): number {
+  const override = Number(process.env.QUACKBACK_SETTINGS_CACHE_MS)
+  return Number.isFinite(override) && override >= 0 ? override : SETTINGS_LOCAL_TTL_MS
+}
+
 async function loadWorkspaceSettings(): Promise<WorkspaceSettings | null> {
   const local = localCacheGet<WorkspaceSettings>(CACHE_KEYS.WORKSPACE_SETTINGS)
   if (local) return local
   const settings = await readWorkspaceSettings()
-  if (settings) localCacheSet(CACHE_KEYS.WORKSPACE_SETTINGS, settings, SETTINGS_LOCAL_TTL_MS)
+  const ttlMs = settingsLocalTtlMs()
+  if (settings && ttlMs > 0) localCacheSet(CACHE_KEYS.WORKSPACE_SETTINGS, settings, ttlMs)
   return settings
 }
 
