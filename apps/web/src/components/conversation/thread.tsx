@@ -215,12 +215,18 @@ export function useOlderMessages({
  * side (`whenLastFrom`) — opening + reading marks read, not only replying, and
  * a surface's own outbound sends never trigger a write. Keyed on the last
  * message id so benign array re-creation doesn't re-fire it.
+ *
+ * `readThrough` is the caller's current read watermark. When it already covers
+ * the newest message there is nothing to clear, so reopening a read thread
+ * writes nothing. It is read when the newest message changes, never tracked:
+ * a watermark moved back by "mark unread" must not re-mark the thread read.
  */
 export function useMarkReadOnIncoming({
   conversationId,
   messages,
   whenLastFrom,
   enabled = true,
+  readThrough,
   getHeaders,
   onMarked,
 }: {
@@ -228,21 +234,29 @@ export function useMarkReadOnIncoming({
   messages: ConversationMessageDTO[]
   whenLastFrom: 'visitor' | 'agent'
   enabled?: boolean
+  readThrough?: string | null
   getHeaders?: () => Record<string, string>
   onMarked?: () => void
 }) {
   const lastMessage = messages.at(-1)
   const lastMessageId = lastMessage?.id
   const lastSenderType = lastMessage?.senderType
+  const lastCreatedAtRef = useRef(lastMessage?.createdAt)
+  lastCreatedAtRef.current = lastMessage?.createdAt
   const { markConversationRead } = useVisitorSurfaceRpc()
   const getHeadersRef = useRef(getHeaders)
   getHeadersRef.current = getHeaders
   const onMarkedRef = useRef(onMarked)
   onMarkedRef.current = onMarked
+  const readThroughRef = useRef(readThrough)
+  readThroughRef.current = readThrough
 
   useEffect(() => {
     if (!conversationId || !enabled) return
     if (lastSenderType !== whenLastFrom) return
+    const through = readThroughRef.current
+    const lastCreatedAt = lastCreatedAtRef.current
+    if (through && lastCreatedAt && Date.parse(through) >= Date.parse(lastCreatedAt)) return
     const headers = getHeadersRef.current?.()
     void markConversationRead({
       data: { conversationId },

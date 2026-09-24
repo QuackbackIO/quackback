@@ -97,6 +97,7 @@ import {
   type InboxSearch,
 } from '@/lib/client/conversation/inbox-scope'
 import { reconcileCachedThread } from '@/lib/client/conversation/reconcile-cached-thread'
+import { applyConversationReadToLists } from '@/lib/client/conversation/inbox-read'
 import type { Channel } from '@/lib/shared/channels'
 import { conversationInboxQueries } from '@/lib/client/queries/conversation-inbox'
 import { inboxQueries, inboxKeys, ticketQueries, ticketKeys } from '@/lib/client/queries/inbox'
@@ -746,6 +747,11 @@ function InboxPage() {
           () => evt.ticket
         )
         patchTicketInInboxLists(queryClient, evt.ticket)
+      } else if (evt.kind === 'read' && evt.side === 'agent') {
+        // An agent-side read moves only the row's unread badge, so the row is
+        // patched in each cached list; a list the patch cannot be sure of
+        // (a watermark moved back, or a fetch in flight) is refetched.
+        applyConversationReadToLists(queryClient, evt.conversationId, evt.at)
       } else if (agentEventChangesInboxList(evt)) {
         // Every membership/order/preview-changing event (a new message, a
         // conversation's status/assignee/tags, an agent-side read move) —

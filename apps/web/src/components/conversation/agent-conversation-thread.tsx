@@ -181,6 +181,7 @@ import {
   buildAdminConversationRows,
   type AdminConversationRow,
 } from '@/lib/client/conversation/admin-conversation-rows'
+import { applyConversationReadToLists } from '@/lib/client/conversation/inbox-read'
 import type { JSONContent } from '@tiptap/core'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
@@ -783,13 +784,19 @@ export function AgentConversationThread({
   // Clear the agent-side unread badge when a thread is open and new visitor
   // messages arrive — opening + reading should mark read, not only replying.
   // Conversation adapter: the existing shared hook, no-op'd (`conversationId:
-  // null`) while a ticket is open.
+  // null`) while a ticket is open. A thread already read through its newest
+  // message writes nothing. A read moves only the row's unread badge, so the
+  // cached lists are patched in place rather than refetched with the counts.
+  const onConversationRead = useCallback(() => {
+    if (conversationId) applyConversationReadToLists(queryClient, conversationId)
+  }, [queryClient, conversationId])
   useMarkReadOnIncoming({
     conversationId: isTicket ? null : conversationId,
     messages,
     whenLastFrom: 'visitor',
     enabled: !isLoading,
-    onMarked: onChanged,
+    readThrough: conversation?.agentLastReadAt ?? null,
+    onMarked: onConversationRead,
   })
   // Ticket adapter: mark read once the thread has loaded, and again whenever a
   // new message lands while it's open — simpler than the conversation side's
