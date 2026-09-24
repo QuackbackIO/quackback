@@ -1492,6 +1492,28 @@ function InboxPage() {
     onOpenHelp: () => setHelpOpen(true),
   })
 
+  // The list header's slot. Quinn view: the outcome sub-filter chips
+  // (Resolved/Escalated/Pending). Otherwise the company picker, shown only when
+  // the workspace has companies to filter by. Memoized so opening an item
+  // leaves the (memoized) list header as it was.
+  const listHeaderSlot = useMemo(
+    () =>
+      isQuinnView ? (
+        <QuinnBucketChips
+          value={urlAi}
+          counts={assistantCounts}
+          onChange={(ai) => updateSearch({ ai, i: undefined, m: undefined })}
+        />
+      ) : companies && companies.length > 0 ? (
+        <CompanyInboxFilter
+          companies={companies}
+          value={urlCompany}
+          onChange={(id) => updateSearch({ company: id, i: undefined, m: undefined })}
+        />
+      ) : undefined,
+    [isQuinnView, urlAi, assistantCounts, companies, urlCompany, updateSearch]
+  )
+
   // The floating bar shows for a real multi-selection, or when a value menu was
   // popped for the single open item.
   const bulkBarVisible = hasSelection || (bulkMenu !== null && hasActiveConversation)
@@ -1530,24 +1552,7 @@ function InboxPage() {
           onSelectNav={setNav}
           scopeLabel={scopeLabel}
           showRefinements={showRefinements}
-          // Quinn view: the outcome sub-filter chips (Resolved/Escalated/
-          // Pending). Otherwise the company picker, shown only when the workspace
-          // has companies to filter by.
-          headerSlot={
-            isQuinnView ? (
-              <QuinnBucketChips
-                value={urlAi}
-                counts={assistantCounts}
-                onChange={(ai) => updateSearch({ ai, i: undefined, m: undefined })}
-              />
-            ) : companies && companies.length > 0 ? (
-              <CompanyInboxFilter
-                companies={companies}
-                value={urlCompany}
-                onChange={(id) => updateSearch({ company: id, i: undefined, m: undefined })}
-              />
-            ) : undefined
-          }
+          headerSlot={listHeaderSlot}
           searchInput={searchInput}
           onSearchInput={setSearchInput}
           facet={facet}
