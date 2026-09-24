@@ -9,6 +9,7 @@ import { describe, it, expect } from 'vitest'
 import { handleRequestWithContext } from '../request-context'
 import { getLogContext } from '@/lib/server/log-context'
 import { createLogger } from '@/lib/server/logger'
+import { countingQueryLogger } from '@/lib/server/request-metrics'
 
 function capture() {
   const lines: string[] = []
@@ -68,6 +69,101 @@ describe('handleRequestWithContext', () => {
     expect(completed.status).toBe(200)
     expect(typeof completed.duration_ms).toBe('number')
     expect(completed.request_id).toBeDefined()
+  })
+
+  it('logs how many queries the request ran', async () => {
+    const cap = capture()
+    const request = new Request('http://localhost/api/posts')
+
+    await handleRequestWithContext({
+      request,
+      log: cap.log,
+      next: async () => {
+        countingQueryLogger.logQuery('select 1', [])
+        countingQueryLogger.logQuery('select 2', [])
+        return { response: new Response('ok', { status: 200 }) }
+      },
+    })
+
+    const completed = cap.records().find((r) => r.msg === 'request completed')
+    expect(completed.db_queries).toBe(2)
+  })
+
+  it('adds a Server-Timing header only when asked to', async () => {
+    const run = (serverTiming: boolean) =>
+      handleRequestWithContext({
+        request: new Request('http://localhost/x'),
+        log: capture().log,
+        serverTiming,
+        next: async () => {
+          countingQueryLogger.logQuery('select 1', [])
+          return { response: new Response('ok', { status: 200 }) }
+        },
+      })
+
+    const on = await run(true)
+    expect(on.response.headers.get('server-timing')).toMatch(
+      /^app;dur=[\d.]+, db;desc="1 queries"$/
+    )
+    const off = await run(false)
+    expect(off.response.headers.get('server-timing')).toBeNull()
+  })
+
+  it('with Server-Timing on, logs the final count once a streamed body ends', async () => {
+    const cap = capture()
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => (release = resolve))
+
+    const result = await handleRequestWithContext({
+      request: new Request('http://localhost/'),
+      log: cap.log,
+      serverTiming: true,
+      next: async () => {
+        countingQueryLogger.logQuery('select 1', [])
+        // A query that runs while the document streams, after the headers left.
+        const body = new ReadableStream<Uint8Array>({
+          async pull(controller) {
+            await gate
+            countingQueryLogger.logQuery('select 2', [])
+            controller.enqueue(new TextEncoder().encode('<html></html>'))
+            controller.close()
+          },
+        })
+        return { response: new Response(body, { status: 200 }) }
+      },
+    })
+
+    expect(cap.records().find((r) => r.msg === 'request completed').db_queries).toBe(1)
+    expect(cap.records().find((r) => r.msg === 'request finished')).toBeUndefined()
+
+    release()
+    expect(await result.response!.text()).toBe('<html></html>')
+    const finished = cap.records().find((r) => r.msg === 'request finished')
+    expect(finished.db_queries).toBe(2)
+    expect(finished.request_id).toBeDefined()
+  })
+
+  it('with Server-Timing on, logs finished at once for a bodyless response', async () => {
+    const cap = capture()
+    await handleRequestWithContext({
+      request: new Request('http://localhost/'),
+      log: cap.log,
+      serverTiming: true,
+      next: async () => ({ response: new Response(null, { status: 307 }) }),
+    })
+    expect(cap.records().filter((r) => r.msg === 'request finished')).toHaveLength(1)
+  })
+
+  it('never logs finished for a healthy probe', async () => {
+    const cap = capture()
+    const result = await handleRequestWithContext({
+      request: new Request('http://localhost/api/health/ready'),
+      log: cap.log,
+      serverTiming: true,
+      next: async () => ({ response: new Response('ok', { status: 200 }) }),
+    })
+    await result.response.text()
+    expect(cap.records()).toHaveLength(0)
   })
 
   it('survives a context with no response attached yet', async () => {
