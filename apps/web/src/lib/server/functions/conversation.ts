@@ -49,6 +49,7 @@ import { officeHoursSnapshot } from '@/lib/shared/office-hours'
 import type { ConversationPresence } from '@/lib/shared/conversation/presence'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { inboxChannelFilterSchema } from '@/lib/shared/channels/inbox-filter'
+import { AGENT_CONVERSATION_PANELS } from '@/lib/shared/conversation/agent-panels'
 import {
   CONVERSATION_STATUSES,
   CONVERSATION_END_REASONS,
@@ -971,22 +972,8 @@ export const getConversationAssistantActivityFn = createServerFn({ method: 'GET'
   .validator(z.object({ conversationId: z.string() }))
   .handler(async ({ data }): Promise<ConversationAssistantActivity | null> => {
     await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
-    const { getLatestInvolvement } =
-      await import('@/lib/server/domains/assistant/assistant.involvement')
-    const inv = await getLatestInvolvement(data.conversationId as ConversationId)
-    if (!inv) return null
-    return {
-      outcome: inv.status,
-      handoffReason: inv.handoffReason,
-      sources: inv.sources.map((s) => ({
-        type: s.type,
-        id: s.id,
-        title: s.title ?? '',
-        url: s.url ?? '',
-      })),
-      rating: inv.rating,
-      answeredAt: inv.lastAssistantAnswerAt?.toISOString() ?? null,
-    }
+    const { loadConversationAssistantActivity } = await import('./conversation-panels')
+    return loadConversationAssistantActivity(data.conversationId as ConversationId)
   })
 
 const userConversationsSchema = z.object({
@@ -1013,9 +1000,17 @@ export const listConversationsForUserFn = createServerFn({ method: 'GET' })
     )
   })
 
-/** A single conversation (agent view) + first page of messages. */
+const agentConversationSchema = listMessagesSchema.extend({
+  // The reads beside the thread to load with it (see conversation-panels.ts).
+  panels: z.array(z.enum(AGENT_CONVERSATION_PANELS)).optional(),
+})
+
+/**
+ * A single conversation (agent view) + first page of messages, and the
+ * panels beside it that the caller asks for.
+ */
 export const getConversationFn = createServerFn({ method: 'GET' })
-  .validator(listMessagesSchema)
+  .validator(agentConversationSchema)
   .handler(async ({ data }) => {
     const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
     const actor = await policyActorFromAuth(ctx)
@@ -1042,7 +1037,8 @@ export const getConversationFn = createServerFn({ method: 'GET' })
           'customer language detection failed to load'
         )
       )
-    const [dto, page] = await Promise.all([
+    const requestedPanels = data.before ? undefined : data.panels
+    const [dto, page, panels] = await Promise.all([
       conversationToDTO(conversation, 'agent'),
       // Agents see internal notes inline. CONVERGENCE PHASE 0: a linked
       // customer ticket's legacy ticket-parented rows render inline too —
@@ -1053,6 +1049,15 @@ export const getConversationFn = createServerFn({ method: 'GET' })
         includeInternal: true,
         includeLinkedTicket: true,
       }),
+      requestedPanels?.length
+        ? import('./conversation-panels').then((m) =>
+            m.loadAgentConversationPanels(conversation, requestedPanels, {
+              userId: ctx.user.id,
+              permissions: ctx.permissions,
+              actor,
+            })
+          )
+        : undefined,
     ])
     // Upgrade to AgentConversationMessageDTO[] by attaching the agent-only reaction +
     // flag + post-suggestion + pending-action + translated-from fields. This
@@ -1066,7 +1071,7 @@ export const getConversationFn = createServerFn({ method: 'GET' })
       page.pendingActionPointers,
       page.translatedFromPointers
     )
-    return { conversation: dto, messages, hasMore: page.hasMore }
+    return { conversation: dto, messages, hasMore: page.hasMore, panels }
   })
 
 /** Agent reply. */

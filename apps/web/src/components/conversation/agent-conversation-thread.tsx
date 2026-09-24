@@ -56,6 +56,7 @@ import { toast } from 'sonner'
 import type {
   ConversationId,
   ConversationMessageId,
+  PrincipalId,
   TicketId,
   TicketStatusId,
 } from '@quackback/ids'
@@ -175,6 +176,7 @@ import {
 import { ComposerAttachmentTray } from '@/components/shared/composer-attachment-tray'
 import { LinkPreviews } from '@/components/shared/link-preview-card'
 import { conversationInboxQueries } from '@/lib/client/queries/conversation-inbox'
+import { conversationPanelQueries } from '@/lib/client/queries/conversation-panels'
 import { inboxQueries, ticketKeys, ticketQueries } from '@/lib/client/queries/inbox'
 import { useSetTicketStatus } from '@/lib/client/mutations/inbox'
 import {
@@ -482,9 +484,11 @@ export function AgentConversationThread({
   // its own row. Resolved in two hops — the summary tells us the id, then
   // the full DTO (same cache key as a ticket item's own `ticket` query above)
   // drives the header's ticket-status pill + the panel's Ticket card/Links.
+  // The thread request loads the link with the thread and seeds it, so it
+  // waits for the thread rather than racing it with a request of its own.
   const { data: linkedTicketSummary } = useQuery({
     ...inboxQueries.conversationTicketLink(conversationId ?? INACTIVE_CONVERSATION_ID),
-    enabled: !isTicket && !!conversationId,
+    enabled: !isTicket && !!conversationId && !!convThread,
   })
   const linkedTicketId = linkedTicketSummary?.id ?? null
   const { data: linkedTicketFull } = useQuery({
@@ -1041,10 +1045,11 @@ export function AgentConversationThread({
   // P2-D.1 inbox translation: activation banner/toggle + per-message
   // translation display, gated on the inboxTranslation capability. A no-op
   // hook (everything false/undefined) when the capability is off, so a
-  // ticket's behavior is unaffected.
+  // ticket's behavior is unaffected. It starts once the conversation has
+  // loaded: the thread request brings the agent's language preference with it.
   const inboxTranslationEnabled = capabilities.inboxTranslation
   const inboxTranslation = useInboxTranslation({
-    enabledFlag: inboxTranslationEnabled,
+    enabledFlag: inboxTranslationEnabled && !!conversation,
     conversationId: conversationId ?? INACTIVE_CONVERSATION_ID,
     translationState: conversation?.translation,
     messages,
@@ -1249,7 +1254,9 @@ export function AgentConversationThread({
   // Block / unblock the visitor (overflow menu, conversations only).
   const { blocked: visitorBlocked } = usePersonBlockStatus(conversation?.visitor.principalId)
   const [blockConfirmOpen, setBlockConfirmOpen] = useState(false)
-  const blockStatusKey = ['admin', 'person-block-status', conversation?.visitor.principalId]
+  const blockStatusKey = conversationPanelQueries.blockStatus(
+    conversation?.visitor.principalId as PrincipalId
+  ).queryKey
   const blockMutation = useMutation({
     mutationFn: () => blockPersonFn({ data: { principalId: conversation!.visitor.principalId } }),
     onSuccess: () => {
