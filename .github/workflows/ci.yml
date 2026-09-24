@@ -43,6 +43,9 @@ jobs:
       # production build. Compare the built bundle's call sites against the
       # manifest while we still have the output.
       - run: bun run --cwd apps/web check:server-fn-manifest
+      # The embeddable widget's eager JavaScript (bytes, chunk count, and
+      # libraries that must stay lazy) against its budget.
+      - run: bun run --cwd apps/web check:widget-bundle
       - run: bun run --filter @quackback/web typecheck
       - run: bun run --cwd packages/widget typecheck
       - run: bun run --cwd packages/widget test
