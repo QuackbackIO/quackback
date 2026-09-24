@@ -8,9 +8,25 @@
  * closes that gap for anything that streams through the request pipeline,
  * while leaving already-encoded, tiny, or event-stream responses alone.
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import zlib from 'node:zlib'
 import { maybeCompress } from '../compression'
+
+// Records every encoder the module creates, so a test can see whether it was
+// released. Everything else is the real node:zlib.
+const encoders = vi.hoisted(() => [] as { destroyed: boolean }[])
+vi.mock('node:zlib', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:zlib')>()
+  const record = <T extends { destroyed: boolean }>(encoder: T) => (encoders.push(encoder), encoder)
+  const wrapped = {
+    ...actual,
+    createGzip: (...args: Parameters<typeof actual.createGzip>) =>
+      record(actual.createGzip(...args)),
+    createBrotliCompress: (...args: Parameters<typeof actual.createBrotliCompress>) =>
+      record(actual.createBrotliCompress(...args)),
+  }
+  return { ...wrapped, default: wrapped }
+})
 
 /** Exceeds the compression size floor; large enough to compress meaningfully. */
 const bigHtml = '<!doctype html><html><body>' + '<p>hello world</p>'.repeat(200) + '</body></html>'
@@ -154,6 +170,25 @@ describe('maybeCompress', () => {
     const noBody = new Response(null, { status: 204 })
     const res = await maybeCompress(noBody, 'gzip, br')
     expect(res).toBe(noBody)
+  })
+
+  it('releases the encoder when the client goes away mid-stream', async () => {
+    const encoder = new TextEncoder()
+    const source = new ReadableStream<Uint8Array>({
+      start(controller) {
+        // A document that never finishes: the client leaves first.
+        controller.enqueue(encoder.encode(bigHtml))
+      },
+    })
+    const compressed = await maybeCompress(
+      new Response(source, { headers: { 'content-type': 'text/html' } }),
+      'br'
+    )
+    const reader = compressed.body!.getReader()
+    await reader.read()
+    await reader.cancel()
+
+    await vi.waitFor(() => expect(encoders.at(-1)?.destroyed).toBe(true))
   })
 
   it('streams output progressively instead of buffering the whole body first', async () => {
