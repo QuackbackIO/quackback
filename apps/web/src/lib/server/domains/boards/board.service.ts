@@ -28,7 +28,7 @@ import { emitBestEffort } from '@/lib/server/events/emit'
 import { boardCreated, boardDeleted } from '@/lib/server/events/catalogue'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
 import type { CreateBoardInput, UpdateBoardInput, BoardWithDetails } from './board.types'
-import { slugify } from '@/lib/shared/utils'
+import { slugify } from '@/lib/shared/utils/slugify'
 import { type BoardAccess } from '@/lib/server/db'
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
 

@@ -1,5 +1,5 @@
 import { test, expect, type Page, type Locator } from '@playwright/test'
-import { slugify } from '../../../src/lib/shared/utils/string'
+import { slugify } from '../../../src/lib/shared/utils/slugify'
 
 /**
  * Select an access preset and persist it. The save dock is a `fixed bottom-0`

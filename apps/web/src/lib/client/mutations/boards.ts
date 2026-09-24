@@ -19,7 +19,6 @@ import type { Board, BoardAccess } from '@/lib/shared/db-types'
 import type { BoardId } from '@quackback/ids'
 import { boardKeys } from '@/lib/client/hooks/use-boards-query'
 import { adminQueries } from '@/lib/client/queries/admin'
-import { slugify } from '@/lib/shared/utils'
 
 // ============================================================================
 // Mutation Hooks
@@ -34,6 +33,9 @@ export function useCreateBoard() {
   return useMutation({
     mutationFn: (input: CreateBoardInput) => createBoardFn({ data: input }),
     onMutate: async (input) => {
+      // Loaded on demand: slugify carries large transliteration tables, and
+      // this module ships on pages that never create a board.
+      const { slugify } = await import('@/lib/shared/utils/slugify')
       await queryClient.cancelQueries({ queryKey: boardKeys.lists() })
       const previous = queryClient.getQueryData<Board[]>(boardKeys.lists())
 
