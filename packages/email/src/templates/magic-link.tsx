@@ -6,6 +6,7 @@ interface MagicLinkEmailProps {
   signInUrl: string
   code: string
   logoUrl?: string
+  brandName?: string
 }
 
 /**
@@ -17,10 +18,15 @@ interface MagicLinkEmailProps {
  * verification record on the server, so the user can pick whichever is
  * convenient.
  */
-export function MagicLinkEmail({ signInUrl, code, logoUrl }: MagicLinkEmailProps) {
+export function MagicLinkEmail({
+  signInUrl,
+  code,
+  logoUrl,
+  brandName = 'Quackback',
+}: MagicLinkEmailProps) {
   return (
-    <EmailLayout preview="Your sign-in link" logoUrl={logoUrl}>
-      <Heading style={{ ...typography.h1, textAlign: 'center' }}>Sign in to Quackback</Heading>
+    <EmailLayout preview="Your sign-in link" logoUrl={logoUrl} logoAlt={brandName}>
+      <Heading style={{ ...typography.h1, textAlign: 'center' }}>Sign in to {brandName}</Heading>
       <Text style={{ ...typography.text, textAlign: 'center' }}>
         Click the button below to finish signing in.
       </Text>
