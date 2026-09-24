@@ -38,6 +38,25 @@ export function parsePrefersColorScheme(value: string | null | undefined): 'ligh
   return token === 'dark' || token === 'light' ? token : null
 }
 
+const PREFERS_COLOR_SCHEME_HINT = 'Sec-CH-Prefers-Color-Scheme'
+
+/**
+ * The client-hint response headers for a document at `pathname`.
+ *
+ * `Accept-CH` asks the browser to send the OS color scheme on later requests,
+ * so `system` can be resolved during SSR. `Critical-CH` makes Chromium discard
+ * a first response rendered without it and request the document again, which
+ * earns its extra render where the server paints the theme. The widget is
+ * rendered on the client (`ssr: 'data-only'`) inside a panel that stays hidden
+ * until it opens, so there it would only render the document twice.
+ */
+export function colorSchemeHintHeaders(pathname: string): Record<string, string> {
+  const headers: Record<string, string> = { 'Accept-CH': PREFERS_COLOR_SCHEME_HINT }
+  const isWidget = pathname === '/widget' || pathname.startsWith('/widget/')
+  if (!isWidget) headers['Critical-CH'] = PREFERS_COLOR_SCHEME_HINT
+  return headers
+}
+
 /**
  * Resolve the `class` and `color-scheme` to put on the SSR-rendered <html> so
  * the first paint already matches the chosen theme. Skipping this leaves the

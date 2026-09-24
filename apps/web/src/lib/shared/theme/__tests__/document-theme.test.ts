@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { resolveDocumentTheme, parsePrefersColorScheme } from '../index'
+import { colorSchemeHintHeaders, resolveDocumentTheme, parsePrefersColorScheme } from '../index'
 
 // resolveDocumentTheme decides what `class` and `color-scheme` the server puts
 // on <html> so the very first paint already matches the chosen theme. Without
@@ -70,5 +70,26 @@ describe('parsePrefersColorScheme', () => {
     expect(parsePrefersColorScheme(undefined)).toBeNull()
     expect(parsePrefersColorScheme('')).toBeNull()
     expect(parsePrefersColorScheme('no-preference')).toBeNull()
+  })
+})
+
+describe('colorSchemeHintHeaders', () => {
+  it('asks for the hint and insists on it for a server-painted document', () => {
+    for (const pathname of ['/', '/changelog', '/admin/feedback', '/widgetry']) {
+      expect(colorSchemeHintHeaders(pathname)).toEqual({
+        'Accept-CH': 'Sec-CH-Prefers-Color-Scheme',
+        'Critical-CH': 'Sec-CH-Prefers-Color-Scheme',
+      })
+    }
+  })
+
+  it('only asks for it on the widget, which the server does not paint', () => {
+    // Critical-CH would make Chromium render the widget document twice on a
+    // first visit, for a theme the client resolves anyway.
+    for (const pathname of ['/widget', '/widget/', '/widget/anything']) {
+      expect(colorSchemeHintHeaders(pathname)).toEqual({
+        'Accept-CH': 'Sec-CH-Prefers-Color-Scheme',
+      })
+    }
   })
 })
