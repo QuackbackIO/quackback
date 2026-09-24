@@ -123,6 +123,10 @@ const authInstances = new WorkspaceKeyedCache<AuthInstance>(256)
 // round-trip). Mismatch → rebuild, other pods' writes propagate.
 const authConfigVersions = new WorkspaceKeyedCache<number>(256)
 const AUTH_CACHE_KEY = 'instance'
+// The build in flight, per workspace. A cold page fans out into several
+// concurrent server-function requests; they share one build rather than each
+// loading every provider's credentials and registering the plugins again.
+const authBuilds = new WorkspaceKeyedCache<Promise<AuthInstance>>(256)
 
 type RateLimitCounter = { count: number; lastRequest: number }
 
@@ -866,7 +870,7 @@ async function createAuth() {
  * auth-instance-affecting write path.
  */
 export async function getAuth(): Promise<AuthInstance> {
-  let instance = authInstances.get(AUTH_CACHE_KEY)
+  const instance = authInstances.get(AUTH_CACHE_KEY)
   const builtVersion = authConfigVersions.get(AUTH_CACHE_KEY)
   // Skip the version check when no instance is cached yet — the build
   // path below records the version after creation.
@@ -875,17 +879,36 @@ export async function getAuth(): Promise<AuthInstance> {
     const t = await getWorkspaceSettings()
     const current = t?.settings?.authConfigVersion
     if (typeof current === 'number' && current !== builtVersion) {
-      resetAuth()
-      instance = undefined
+      // Concurrent callers all see the same stale instance; only the first
+      // drops it, so the rest join its rebuild instead of cancelling it.
+      if (authInstances.get(AUTH_CACHE_KEY) === instance) resetAuth()
+      return buildAuth()
     }
+    return instance
   }
-  if (!instance) {
-    const built = await createAuth()
-    instance = built.instance
-    authInstances.set(AUTH_CACHE_KEY, instance)
-    authConfigVersions.set(AUTH_CACHE_KEY, built.authConfigVersion)
-  }
-  return instance
+  return instance ?? buildAuth()
+}
+
+/** Join the workspace's build in flight, or start one. */
+function buildAuth(): Promise<AuthInstance> {
+  const inFlight = authBuilds.get(AUTH_CACHE_KEY)
+  if (inFlight) return inFlight
+  const build: Promise<AuthInstance> = createAuth()
+    .then((built) => {
+      // A reset while this was building means it was built from a config that
+      // has since changed: serve it to the callers already waiting on it, but
+      // do not install it.
+      if (authBuilds.get(AUTH_CACHE_KEY) === build) {
+        authInstances.set(AUTH_CACHE_KEY, built.instance)
+        authConfigVersions.set(AUTH_CACHE_KEY, built.authConfigVersion)
+      }
+      return built.instance
+    })
+    .finally(() => {
+      if (authBuilds.get(AUTH_CACHE_KEY) === build) authBuilds.delete(AUTH_CACHE_KEY)
+    })
+  authBuilds.set(AUTH_CACHE_KEY, build)
+  return build
 }
 
 /**
@@ -895,6 +918,7 @@ export async function getAuth(): Promise<AuthInstance> {
 export function resetAuth(): void {
   authInstances.delete(AUTH_CACHE_KEY)
   authConfigVersions.delete(AUTH_CACHE_KEY)
+  authBuilds.delete(AUTH_CACHE_KEY)
 }
 
 // Export a proxy object that lazily initializes auth on first access

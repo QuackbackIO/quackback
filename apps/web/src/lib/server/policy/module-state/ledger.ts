@@ -90,6 +90,15 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
   },
   {
     file: 'apps/web/src/lib/server/auth/index.ts',
+    name: 'authBuilds',
+    category: 'workspace-keyed',
+    reason:
+      'The auth instance build in flight, shared by concurrent cold requests. It resolves to an ' +
+      "instance closed over one workspace's database adapter and providers (see authInstances), so " +
+      'a caller joining another workspace build would authenticate against the wrong workspace.',
+  },
+  {
+    file: 'apps/web/src/lib/server/auth/index.ts',
     name: 'authInstances',
     category: 'workspace-keyed',
     reason:
