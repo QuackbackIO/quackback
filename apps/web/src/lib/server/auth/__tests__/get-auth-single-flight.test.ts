@@ -28,12 +28,22 @@ vi.mock('@/lib/server/domains/platform-credentials/platform-credential.service',
 }))
 
 let authConfigVersion = 1
+// The next `gatedReads` settings reads wait until the test releases them, which
+// is how a test holds callers at the version check.
+let gatedReads = 0
+const heldReads: Array<() => void> = []
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
-  getWorkspaceSettings: vi.fn(async () => ({
-    settings: { authConfigVersion },
-    authConfig: { oauth: {} },
-    developerConfig: {},
-  })),
+  getWorkspaceSettings: vi.fn(async () => {
+    if (gatedReads > 0) {
+      gatedReads -= 1
+      await new Promise<void>((resolve) => heldReads.push(resolve))
+    }
+    return {
+      settings: { authConfigVersion },
+      authConfig: { oauth: {} },
+      developerConfig: {},
+    }
+  }),
 }))
 vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
   getTierLimits: vi.fn(async () => ({ features: {} })),
@@ -54,6 +64,8 @@ beforeEach(() => {
   resetAuth()
   builds = 0
   authConfigVersion = 1
+  gatedReads = 0
+  heldReads.length = 0
   mockGetPlatformCredentials.mockClear()
 })
 
@@ -75,6 +87,27 @@ describe('getAuth', () => {
 
     expect(rebuilt).not.toBe(first)
     expect(await getAuth()).toBe(rebuilt)
+    expect(builds).toBe(2)
+  })
+
+  it('hands a caller that saw the stale version the rebuild another caller installed', async () => {
+    await getAuth()
+    authConfigVersion = 2
+    gatedReads = 2
+    // Both callers are held at the version check holding the stale instance.
+    // They start one after the other: vitest resolves two concurrent dynamic
+    // imports of the mocked settings module inconsistently.
+    const first = getAuth()
+    await vi.waitFor(() => expect(heldReads).toHaveLength(1))
+    const late = getAuth()
+    await vi.waitFor(() => expect(heldReads).toHaveLength(2))
+
+    heldReads.shift()!()
+    const rebuilt = await first
+    // The late caller resumes only after the rebuild is installed.
+    heldReads.shift()!()
+
+    expect(await late).toBe(rebuilt)
     expect(builds).toBe(2)
   })
 

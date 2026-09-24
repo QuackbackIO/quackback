@@ -880,9 +880,13 @@ export async function getAuth(): Promise<AuthInstance> {
     const current = t?.settings?.authConfigVersion
     if (typeof current === 'number' && current !== builtVersion) {
       // Concurrent callers all see the same stale instance; only the first
-      // drops it, so the rest join its rebuild instead of cancelling it.
-      if (authInstances.get(AUTH_CACHE_KEY) === instance) resetAuth()
-      return buildAuth()
+      // drops it and rebuilds. The rest take what that rebuild installed, or
+      // join it while it is still in flight, rather than starting another.
+      if (authInstances.get(AUTH_CACHE_KEY) === instance) {
+        resetAuth()
+        return buildAuth()
+      }
+      return authInstances.get(AUTH_CACHE_KEY) ?? buildAuth()
     }
     return instance
   }
