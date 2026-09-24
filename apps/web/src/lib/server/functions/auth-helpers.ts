@@ -6,13 +6,19 @@
 
 import type { UserId, PrincipalId, WorkspaceId } from '@quackback/ids'
 import type { Role } from '@/lib/server/auth'
-import { auth } from '@/lib/server/auth'
 import { toSessionScope, sessionRole, type SessionScope } from '@/lib/shared/roles'
 import { getRequestHeaders } from '@tanstack/react-start/server'
-import { db, principal, eq, type PermissionKey } from '@/lib/server/db'
+import type { PermissionKey, Principal } from '@/lib/server/db'
 import { ensurePrincipalForUser } from '@/lib/server/domains/principals/principal.factory'
 import { permissionsForPrincipal } from '@/lib/server/policy/permissions'
 import { requireSettingsCached } from '@/lib/server/domains/settings/settings.helpers'
+import {
+  getRequestPrincipal,
+  getRequestSession,
+  IDENTITY_MEMO_PREFIX,
+  rememberRequestPrincipal,
+  type RequestSession,
+} from '@/lib/server/auth/request-session'
 import { memoizePerRequest } from './auth-request-cache'
 import { logger } from '@/lib/server/logger'
 
@@ -21,9 +27,6 @@ const log = logger.child({ component: 'auth-helpers' })
 export type RequireAuthOptions = {
   permission?: PermissionKey
 }
-
-// Type alias for session result
-type SessionResult = Awaited<ReturnType<typeof auth.api.getSession>>
 
 /**
  * Quick check if the request has a session cookie.
@@ -50,20 +53,16 @@ export function hasAuthCredentials(): boolean {
 }
 
 /**
- * Get session directly from better-auth (not through server function).
- * This avoids nested server function call issues.
+ * The request's session, read directly (not through a server function, which
+ * would nest) and shared with every other identity read in the request.
  */
-async function getSessionDirect(): Promise<SessionResult | null> {
-  // Memoized per request: the same better-auth session lookup would otherwise
-  // repeat for every requireAuth/getOptionalAuth call in the request.
-  return memoizePerRequest('session', async () => {
-    try {
-      return await auth.api.getSession({ headers: getRequestHeaders() })
-    } catch (error) {
-      log.error({ err: error }, 'get session failed')
-      return null
-    }
-  })
+async function getSessionDirect(): Promise<RequestSession | null> {
+  try {
+    return await getRequestSession()
+  } catch (error) {
+    log.error({ err: error }, 'get session failed')
+    return null
+  }
 }
 
 /**
@@ -83,6 +82,17 @@ async function getAuthSettings() {
       return null
     }
   })
+}
+
+/**
+ * The principal's assignment-derived permission set, resolved once per request.
+ * Keyed on the role as well, so a role change that drops the principal from
+ * the request memo can never be answered with the old role's grants.
+ */
+function requestPermissions(record: Principal): Promise<ReadonlySet<PermissionKey>> {
+  return memoizePerRequest(`${IDENTITY_MEMO_PREFIX}permissions:${record.id}:${record.role}`, () =>
+    permissionsForPrincipal(record.id as PrincipalId, record.role as Role)
+  )
 }
 
 export type { Role }
@@ -139,21 +149,12 @@ export async function requireAuth(options?: RequireAuthOptions): Promise<AuthCon
     throw new Error('Workspace not configured')
   }
 
-  // Memoized per request keyed on user: the principal read + permission join
-  // is identical for every requireAuth call in the request.
-  const { principalRecord, resolvedPermissions } = await memoizePerRequest(
-    `principal:${userId}`,
-    async () => {
-      const record = await db.query.principal.findFirst({
-        where: eq(principal.userId, userId),
-      })
-      if (!record) {
-        throw new Error('Access denied: Not a team member')
-      }
-      const perms = await permissionsForPrincipal(record.id, record.role as Role)
-      return { principalRecord: record, resolvedPermissions: perms }
-    }
-  )
+  // Both reads are shared with every other identity read in the request.
+  const principalRecord = await getRequestPrincipal(userId)
+  if (!principalRecord) {
+    throw new Error('Access denied: Not a team member')
+  }
+  const resolvedPermissions = await requestPermissions(principalRecord)
 
   const role: Role = sessionRole(principalRecord.role as Role, scope)
   // Non-dashboard audiences never carry team authority downstream.
@@ -254,32 +255,31 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
     return null
   }
 
-  // Memoized per request (distinct key from requireAuth: this path lazily
-  // creates the principal and skips the permission join for end users).
-  const { principalRecord, resolvedPermissions } = await memoizePerRequest(
-    `optionalPrincipal:${userId}`,
-    async () => {
-      // Resolve (or lazily create) the caller's principal. The factory is
-      // read-first and race-safe against a concurrent first-touch.
+  // Resolve (or lazily create) the caller's principal. The read is shared
+  // with the rest of the request; the create runs once per request and the
+  // factory is race-safe against a concurrent first-touch.
+  const principalRecord =
+    (await getRequestPrincipal(userId)) ??
+    (await memoizePerRequest(`${IDENTITY_MEMO_PREFIX}ensure-principal:${userId}`, async () => {
       const { principal: record } = await ensurePrincipalForUser({
         userId,
         role: 'user',
         displayName: session.user.name,
         avatarUrl: session.user.image ?? null,
       })
+      rememberRequestPrincipal(record)
+      return record
+    }))
 
-      // Same assignment-derived resolution as requireAuth, so portal/public
-      // surfaces that gate on the optional context honour custom roles too.
-      // End users (role 'user') never carry workspace assignments — the role
-      // reconcile and seed heal enforce that — so the dominant portal case
-      // skips the join instead of paying a guaranteed-empty DB read.
-      const perms =
-        record.role === 'user'
-          ? new Set<PermissionKey>()
-          : await permissionsForPrincipal(record.id as PrincipalId, record.role as Role)
-      return { principalRecord: record, resolvedPermissions: perms }
-    }
-  )
+  // Same assignment-derived resolution as requireAuth, so portal/public
+  // surfaces that gate on the optional context honour custom roles too.
+  // End users (role 'user') never carry workspace assignments (the role
+  // reconcile and seed heal enforce that), so the dominant portal case
+  // skips the join instead of paying a guaranteed-empty DB read.
+  const resolvedPermissions: ReadonlySet<PermissionKey> =
+    principalRecord.role === 'user'
+      ? new Set<PermissionKey>()
+      : await requestPermissions(principalRecord)
 
   const role: Role = sessionRole(principalRecord.role as Role, scope)
   // Non-dashboard audiences never carry team authority downstream.

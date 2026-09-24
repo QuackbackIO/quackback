@@ -65,55 +65,34 @@ export interface BootstrapData {
   cloudEnabled: boolean
 }
 
-// Returns both the session (with principalType) AND the user role in
-// one principal-table query — avoids the duplicate read the caller
-// previously did to compute role separately. Saves one round-trip per
-// page render for authenticated users.
+// Returns both the session (with principalType) AND the user role from one
+// principal read, both shared with every other identity read in the request.
 async function getSessionAndRole(): Promise<{
   session: Session | null
   role: Role | null
 }> {
   // Fast-path for unauthenticated requests: if there's no Cookie header at
   // all the request can't possibly carry a session token, so we can skip
-  // every dynamic import below + auth.api.getSession's DB lookup. Hot path
-  // for every cold-start landing-page hit since the visitor has no cookies.
+  // every dynamic import below + the session lookup. Hot path for every
+  // cold-start landing-page hit since the visitor has no cookies.
   const { getRequestHeaders } = await import('@tanstack/react-start/server')
   const headers = getRequestHeaders()
   if (!headers.get('cookie')) {
     return { session: null, role: null }
   }
 
-  const [{ auth }, { db, principal, eq }, { cacheGet, cacheSet, CACHE_KEYS }] = await Promise.all([
-    import('@/lib/server/auth/index'),
-    import('@/lib/server/db'),
-    import('@/lib/server/cache'),
-  ])
+  const { getRequestSession, getRequestPrincipal } =
+    await import('@/lib/server/auth/request-session')
 
   try {
-    const session = await auth.api.getSession({
-      headers,
-    })
+    const session = await getRequestSession()
 
     if (!session?.user) {
       return { session: null, role: null }
     }
 
     const userId = session.user.id as UserId
-
-    // Cache the principal type/role per user. Hot path on every
-    // authenticated SSR render. Mutation paths (principal.service.ts,
-    // api-key.service.ts, auth/index.ts anon-link) invalidate explicitly;
-    // the 5min TTL backstops anything we miss.
-    const cacheKey = CACHE_KEYS.PRINCIPAL_BY_USER(userId)
-    let principalRecord = await cacheGet<{ type: string; role: string }>(cacheKey)
-    if (!principalRecord) {
-      principalRecord =
-        (await db.query.principal.findFirst({
-          where: eq(principal.userId, userId),
-          columns: { type: true, role: true },
-        })) ?? null
-      if (principalRecord) await cacheSet(cacheKey, principalRecord, 300)
-    }
+    const principalRecord = await getRequestPrincipal(userId)
 
     const scope = toSessionScope(session.session.scope)
 
