@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useEffect, useRef, useState, type ComponentProps } from 'react'
 import { useIntl } from 'react-intl'
 import {
   ArrowRightIcon,
@@ -16,7 +16,6 @@ import { ReactionChip } from '@/components/shared/reaction-chip'
 import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
-import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { REACTION_EMOJIS } from '@/lib/shared/db-types'
@@ -40,6 +39,19 @@ import type { PostCommentId, PostId, PrincipalId } from '@quackback/ids'
 import { InlineModerationActions } from '@/components/shared/inline-moderation-actions'
 import { useApproveComment, useRejectComment } from '@/lib/client/mutations/moderation'
 import { useOpenedOnce } from '@/lib/client/hooks/use-opened-once'
+
+// Asked only when someone deletes a comment, so it loads on first use.
+const LazyConfirmDialog = lazy(() =>
+  import('@/components/shared/confirm-dialog').then((m) => ({ default: m.ConfirmDialog }))
+)
+
+function ConfirmDialog(props: ComponentProps<typeof LazyConfirmDialog>) {
+  return (
+    <Suspense fallback={null}>
+      <LazyConfirmDialog {...props} />
+    </Suspense>
+  )
+}
 
 /**
  * Groups root-level comments so consecutive private comments are wrapped
@@ -376,6 +388,7 @@ function CommentItem({
   const editJsonRef = useRef<TiptapContent | null>(comment.contentJson ?? null)
   const [editError, setEditError] = useState<string | null>(null)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const deleteConfirmMounted = useOpenedOnce(deleteConfirmOpen)
 
   // Null while a legacy markdown-only row's parse loads, once editing starts.
   const editInitialJson = useCommentDoc(comment.content, comment.contentJson, isEditing)
@@ -955,7 +968,7 @@ function CommentItem({
                     })}
               </Button>
             )}
-            {canDelete && (
+            {canDelete && deleteConfirmMounted && (
               <ConfirmDialog
                 open={deleteConfirmOpen}
                 onOpenChange={setDeleteConfirmOpen}
