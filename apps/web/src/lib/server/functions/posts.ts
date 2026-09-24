@@ -288,7 +288,7 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
 
     const postId = data.id as PostId
 
-    const [result, commentsPage, voted, panels] = await Promise.all([
+    const [result, commentsPage, voted, panels, mergedPosts] = await Promise.all([
       getPostWithDetails(postId),
       getPaginatedCommentsWithReplies(postId, {
         principalId: auth.principal.id,
@@ -299,6 +299,14 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
       data.panels?.length && !data.commentsCursor
         ? loadAdminPostPanels(postId, data.panels, auth.permissions)
         : undefined,
+      // Posts merged into this one (the admin Unmerge list).
+      getMergedPosts(postId).then((posts) =>
+        posts.map((p) => ({
+          ...p,
+          createdAt: toIsoString(p.createdAt),
+          mergedAt: toIsoString(p.mergedAt),
+        }))
+      ),
     ])
     const comments = commentsPage.comments
     log.debug(
@@ -325,26 +333,16 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
         }
       : null
 
-    // Fetch merge info: merged posts (if canonical) or merge info (if duplicate)
-    // The admin handler is team-gated, so the resolved actor is admin
-    // or member — both pass canViewPost on any audience. Without the
-    // actor though, getPostMergeInfo defaulted to ANONYMOUS_ACTOR and
-    // hid the merge banner for canonicals on restricted-audience boards.
-    const adminMergeActor = await policyActorFromAuth(auth)
-    const [mergedPosts, mergeInfo] = await Promise.all([
-      getMergedPosts(postId).then((posts) =>
-        posts.map((p) => ({
-          ...p,
-          createdAt: toIsoString(p.createdAt),
-          mergedAt: toIsoString(p.mergedAt),
-        }))
-      ),
-      result.canonicalPostId
-        ? getPostMergeInfo(postId, adminMergeActor).then((info) =>
-            info ? { ...info, mergedAt: toIsoString(info.mergedAt) } : null
-          )
-        : null,
-    ])
+    // Merge info (the banner on a post merged into another). The admin
+    // handler is team-gated, so the resolved actor is admin or member, and
+    // both pass canViewPost on any audience. Without the actor though,
+    // getPostMergeInfo defaulted to ANONYMOUS_ACTOR and hid the merge
+    // banner for canonicals on restricted-audience boards.
+    const mergeInfo = result.canonicalPostId
+      ? await getPostMergeInfo(postId, await policyActorFromAuth(auth)).then((info) =>
+          info ? { ...info, mergedAt: toIsoString(info.mergedAt) } : null
+        )
+      : null
 
     return {
       ...serializePostDates(result),
