@@ -10,6 +10,7 @@ import {
   fetchPublicRoadmaps,
   fetchPublicRoadmapPosts,
   fetchPortalData,
+  fetchRoadmapPageData,
 } from '@/lib/server/functions/portal'
 
 /**
@@ -27,6 +28,7 @@ export const VIEWER_SCOPED_PORTAL_QUERY_KEYS: readonly (readonly string[])[] = [
   ['portal', 'post'],
   ['portal', 'roadmaps'],
   ['portal', 'roadmapPosts'],
+  ['portal', 'roadmapPage'],
   ['publicPosts'],
 ]
 
@@ -167,6 +169,26 @@ export const portalQueries = {
       queryFn: () => fetchPublicRoadmaps(),
       // Roadmaps don't change often
       staleTime: 2 * 60 * 1000, // 2 minutes
+    }),
+
+  /**
+   * Combined fetch for the roadmap page shell: the roadmap list plus the
+   * statuses, boards and tags its columns and filters need, in one request.
+   * Seeds the four cache entries those components read individually
+   * (roadmaps/statuses/boards/tags), so none of them needs a request of its
+   * own.
+   */
+  roadmapPageData: () =>
+    queryOptions({
+      queryKey: ['portal', 'roadmapPage'],
+      queryFn: async ({ client }) => {
+        const data = await fetchRoadmapPageData()
+        client.setQueryData(['portal', 'roadmaps'], data.roadmaps)
+        client.setQueryData(['portal', 'statuses'], data.statuses)
+        client.setQueryData(['portal', 'boards'], data.boards)
+        client.setQueryData(['portal', 'tags'], data.tags)
+        return data
+      },
     }),
 
   /**

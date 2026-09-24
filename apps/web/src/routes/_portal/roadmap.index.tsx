@@ -21,12 +21,7 @@ export const Route = createFileRoute('/_portal/roadmap/')({
     const { queryClient, settings, baseUrl, userRole } = context
     if (!isProductEnabled(settings?.featureFlags, 'feedback')) throw notFound()
 
-    const [roadmaps] = await Promise.all([
-      queryClient.ensureQueryData(portalQueries.roadmaps()),
-      queryClient.ensureQueryData(portalQueries.statuses()),
-      queryClient.ensureQueryData(portalQueries.boards()),
-      queryClient.ensureQueryData(portalQueries.tags()),
-    ])
+    const { roadmaps } = await queryClient.ensureQueryData(portalQueries.roadmapPageData())
 
     return {
       firstRoadmapId: roadmaps[0]?.id ?? null,

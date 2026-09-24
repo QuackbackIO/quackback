@@ -542,19 +542,9 @@ export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
     return await getSubscriptionStatus(requestedPrincipalId, data.postId as PostId)
   })
 
-export const fetchPublicRoadmaps = createServerFn({ method: 'GET' }).handler(async () => {
-  log.debug('fetch public roadmaps')
-  // Outer gate: private portal + unauthorized caller → no roadmaps.
-  const access = await resolvePortalAccessForRequest()
-  if (!access.granted) {
-    log.debug('portal access denied, returning empty')
-    return []
-  }
-
-  const auth = hasAuthCredentials() ? await getOptionalAuth() : null
-  const actor = await policyActorFromAuth(auth)
-  const roadmaps = await listPublicRoadmaps(actor)
-  return roadmaps.map((r) => ({
+/** Shared by fetchPublicRoadmaps and fetchRoadmapPageData so both serialize a roadmap the same way. */
+function serializePublicRoadmap(r: Awaited<ReturnType<typeof listPublicRoadmaps>>[number]) {
+  return {
     id: r.id,
     name: r.name,
     slug: r.slug,
@@ -577,7 +567,22 @@ export const fetchPublicRoadmaps = createServerFn({ method: 'GET' }).handler(asy
     })),
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
-  }))
+  }
+}
+
+export const fetchPublicRoadmaps = createServerFn({ method: 'GET' }).handler(async () => {
+  log.debug('fetch public roadmaps')
+  // Outer gate: private portal + unauthorized caller → no roadmaps.
+  const access = await resolvePortalAccessForRequest()
+  if (!access.granted) {
+    log.debug('portal access denied, returning empty')
+    return []
+  }
+
+  const auth = hasAuthCredentials() ? await getOptionalAuth() : null
+  const actor = await policyActorFromAuth(auth)
+  const roadmaps = await listPublicRoadmaps(actor)
+  return roadmaps.map(serializePublicRoadmap)
 })
 
 export const fetchPublicRoadmapPosts = createServerFn({ method: 'GET' })
@@ -770,3 +775,46 @@ export const fetchBoardCapabilitiesFn = createServerFn({ method: 'GET' }).handle
 })
 
 export type WidgetVisibleBoard = { id: string; name: string; slug: string }
+
+/**
+ * Combined fetch for the roadmap page's shell: the roadmap list plus the
+ * statuses, boards and tags its columns and filters need, in one request
+ * that resolves portal access and auth once rather than once per list.
+ * Mirrors fetchPortalData's combined fetch for the feed. Column post lists
+ * stay a separate per-column fetch (fetchPublicRoadmapPosts): the shell
+ * renders before any column's posts are needed.
+ *
+ * Declared at the end of the module on purpose: the gate test maps portal
+ * handlers by declaration order, so new server fns append here to avoid
+ * shifting existing indices.
+ */
+export const fetchRoadmapPageData = createServerFn({ method: 'GET' }).handler(async () => {
+  log.debug('fetch roadmap page data')
+  const access = await resolvePortalAccessForRequest()
+  if (!access.granted) {
+    log.debug('portal access denied, returning empty')
+    return { roadmaps: [], statuses: [], boards: [], tags: [] }
+  }
+
+  const auth = hasAuthCredentials() ? await getOptionalAuth() : null
+  const actor = await policyActorFromAuth(auth)
+
+  const [roadmapsRaw, statuses, boardsRaw, tags] = await Promise.all([
+    listPublicRoadmaps(actor),
+    listPublicStatuses(),
+    listPublicBoardsWithStats(actor),
+    listPublicPostTags(actor),
+  ])
+
+  return {
+    roadmaps: roadmapsRaw.map(serializePublicRoadmap),
+    statuses,
+    // Strip the internal access matrix (see fetchPortalData): clients never
+    // read board.access, so it must not reach the public payload (#191).
+    boards: boardsRaw.map(({ access: _access, ...b }) => ({
+      ...b,
+      settings: (b.settings ?? {}) as BoardSettings,
+    })),
+    tags,
+  }
+})
