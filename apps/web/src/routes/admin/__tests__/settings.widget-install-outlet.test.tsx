@@ -45,7 +45,8 @@ vi.mock('@/lib/client/mutations/settings', () => ({
 describe('widget settings child outlet', () => {
   it('renders the install child instead of the general widget page', async () => {
     useChildMatches.mockReturnValue([{ id: '/admin/settings/widget/install' }])
-    const { WidgetSettingsGate } = await import('../settings.widget')
+    const { WidgetSettingsGate } =
+      await import('@/components/admin/settings/widget/widget-settings-page')
     render(<WidgetSettingsGate />)
     expect(screen.getByText('install-outlet')).toBeTruthy()
     expect(screen.queryByText('Add to your site')).toBeNull()

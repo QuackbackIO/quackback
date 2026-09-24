@@ -9,7 +9,7 @@ vi.mock('@/components/admin/upgrade', () => ({
   UpgradeScreen: () => <p>AI drafts are a Pro feature. Upgrade to Pro to enable it.</p>,
 }))
 
-const { MacrosSettingsBody } = await import('../settings.macros')
+const { MacrosSettingsBody } = await import('@/components/admin/settings/macros-settings-body')
 
 describe('macros settings page', () => {
   it('shows the in-route upgrade screen when macros are not on the plan', () => {

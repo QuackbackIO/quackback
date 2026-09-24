@@ -5,9 +5,7 @@ import { DocumentDuplicateIcon } from '@heroicons/react/24/solid'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
-import { SettingsCard } from '@/components/admin/settings/settings-card'
-import { MacrosManager } from '@/components/admin/conversation/macros-manager'
-import { UpgradeScreen } from '@/components/admin/upgrade'
+import { MacrosSettingsBody } from '@/components/admin/settings/macros-settings-body'
 
 export const Route = createFileRoute('/admin/settings/macros')({
   beforeLoad: ({ context }) => {
@@ -42,15 +40,5 @@ function MacrosSettingsPage() {
       />
       <MacrosSettingsBody entitled={macrosEntitled} />
     </div>
-  )
-}
-
-export function MacrosSettingsBody({ entitled }: { entitled: boolean }) {
-  return entitled ? (
-    <SettingsCard>
-      <MacrosManager />
-    </SettingsCard>
-  ) : (
-    <UpgradeScreen entitlement="aiDrafts" />
   )
 }

@@ -16,7 +16,8 @@ vi.mock('@/lib/client/mutations/settings', () => ({
   useUpdateWidgetConfig: () => ({ mutateAsync: vi.fn() }),
 }))
 
-const { TabsCard, LayoutCard } = await import('../settings.widget')
+const { TabsCard, LayoutCard } =
+  await import('@/components/admin/settings/widget/widget-settings-page')
 
 const config = {
   tabs: {
