@@ -89,7 +89,9 @@ export function ConvertToPostDialog({
     }
   }, [open, defaultTitle, defaultContent, defaultBoardId])
 
-  const { data: boards = [] } = useQuery(adminQueries.boards())
+  // The dialog stays mounted, closed, beside every open conversation; the
+  // board picker only needs the boards once it opens.
+  const { data: boards = [] } = useQuery({ ...adminQueries.boards(), enabled: open })
   // Default/repair the board selection: fall back to the first board when none
   // is chosen yet or the seeded id isn't a real board.
   useEffect(() => {
