@@ -23,7 +23,7 @@ import { encryptPlatformCredentials } from '@/lib/server/integrations/encryption
 import { config } from '@/lib/server/config'
 import { DbCredentialSource, EnvCredentialSource, type CredentialSource } from './credential-source'
 import { AUTH_CREDENTIAL_PREFIX } from '@/lib/server/auth/auth-providers'
-import { memoizePerRequest } from '@/lib/server/functions/auth-request-cache'
+import { memoizePerRequest } from '@/lib/server/request-memo'
 
 interface SavePlatformCredentialsInput {
   integrationType: string

@@ -1,11 +1,14 @@
 /**
- * Request-scoped memoization for the auth helpers.
+ * Request-scoped memoization.
  *
- * `requireAuth` / `getOptionalAuth` run on ~95 server functions, each doing a
- * session lookup + settings read + principal read + permission join. Within a
- * single HTTP request the same helper is frequently called many times (a route
- * loader plus every server fn it fans out to), re-resolving identical data on
- * each call.
+ * Within one HTTP request the same read is often asked for many times: the
+ * request's identity (session, principal, permissions) by every auth helper,
+ * the workspace settings by auth and by the page, portal access by each
+ * loader. Memoizing them here resolves each once per request.
+ *
+ * A write that changes a memoized value forgets it: `cacheDel` forgets the
+ * keys it deletes, and a value derived from one of them is keyed with
+ * `derivedMemoKey` so it is forgotten along with it.
  *
  * The global request middleware (`request-context.ts`) opens an
  * AsyncLocalStorage log-context object at the very start of every request —
@@ -88,13 +91,26 @@ export function rememberPerRequest<T>(key: string, value: T): void {
 }
 
 /**
- * Drop `keys` from this request's memo so the next reader resolves them afresh.
- * Called after a write that changes what a memoized read returned.
+ * Drop `keys` from this request's memo, with every value derived from them
+ * (see `derivedMemoKey`), so the next reader resolves them afresh. Called
+ * after a write that changes what a memoized read returned.
  */
 export function forgetPerRequest(...keys: string[]): void {
   const memo = getMemo()
   if (!memo) return
-  for (const key of keys) delete memo[scopedKey(key)]
+  for (const key of keys) {
+    const slot = scopedKey(key)
+    delete memo[slot]
+    for (const other of Object.keys(memo)) if (other.startsWith(`${slot}#`)) delete memo[other]
+  }
+}
+
+/**
+ * The memo key for a value derived from the one memoized under `base`, so
+ * forgetting `base` forgets it too.
+ */
+export function derivedMemoKey(base: string, name: string): string {
+  return `${base}#${name}`
 }
 
 /** Drop every key that starts with `prefix` from this request's memo. */

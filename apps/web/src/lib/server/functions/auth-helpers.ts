@@ -19,7 +19,8 @@ import {
   rememberRequestPrincipal,
   type RequestSession,
 } from '@/lib/server/auth/request-session'
-import { memoizePerRequest } from './auth-request-cache'
+import { derivedMemoKey, memoizePerRequest } from '@/lib/server/request-memo'
+import { CACHE_KEYS } from '@/lib/server/cache'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'auth-helpers' })
@@ -84,11 +85,13 @@ async function getAuthSettings() {
 
 /**
  * The principal's assignment-derived permission set, resolved once per request.
- * Keyed on the role as well, so a role change that drops the principal from
- * the request memo can never be answered with the old role's grants.
+ * Derived from the principal's memo entry, so any change that forgets the
+ * principal (every role and assignment mutation deletes its cache key) forgets
+ * its grants with it, custom-role reassignments included.
  */
 function requestPermissions(record: Principal): Promise<ReadonlySet<PermissionKey>> {
-  return memoizePerRequest(`${IDENTITY_MEMO_PREFIX}permissions:${record.id}:${record.role}`, () =>
+  const base = CACHE_KEYS.PRINCIPAL_BY_USER(record.userId ?? '')
+  return memoizePerRequest(derivedMemoKey(base, `permissions:${record.id}:${record.role}`), () =>
     permissionsForPrincipal(record.id as PrincipalId, record.role as Role)
   )
 }

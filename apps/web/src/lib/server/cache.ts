@@ -24,7 +24,7 @@
  */
 import { logger } from '@/lib/server/logger'
 import { kvGet, kvSet, kvDel } from '@/lib/server/kv/pg-kv'
-import { forgetPerRequest } from '@/lib/server/functions/auth-request-cache'
+import { forgetPerRequest } from '@/lib/server/request-memo'
 
 const log = logger.child({ component: 'cache' })
 

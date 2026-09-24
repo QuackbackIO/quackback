@@ -8,7 +8,7 @@
  * them in the browser's network panel.
  *
  * The counters hang off the request's log context under a symbol key, like the
- * auth memo in `functions/auth-request-cache.ts`. Symbol keys survive the
+ * auth memo in `request-memo.ts`. Symbol keys survive the
  * `{ ...parent }` copy a workspace scope makes, so a child scope keeps counting
  * into the same object, and the logger's JSON output never includes them.
  */
