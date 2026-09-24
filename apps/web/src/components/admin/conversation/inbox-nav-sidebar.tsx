@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, queryOptions } from '@tanstack/react-query'
 import { useRouteContext } from '@tanstack/react-router'
 import {
   ChatBubbleLeftRightIcon,
@@ -172,9 +172,11 @@ export type InboxTeam = {
 
 const INBOX_TEAMS_KEY = ['admin', 'inbox', 'teams'] as const
 
-/** Shared (deduped) source of the per-team inbox roster. */
-export function useInboxTeams(): { data: InboxTeam[] | undefined } {
-  return useQuery({
+/** Shared (deduped) source of the per-team inbox roster. Exported as a
+ *  queryOptions factory (not just the hook) so the inbox route's loader can
+ *  prefetch it under the exact same key the nav sidebar reads. */
+export function inboxTeamsQueryOptions() {
+  return queryOptions({
     queryKey: INBOX_TEAMS_KEY,
     queryFn: async (): Promise<InboxTeam[]> => {
       const teams = await listTeamsFn()
@@ -182,6 +184,10 @@ export function useInboxTeams(): { data: InboxTeam[] | undefined } {
     },
     staleTime: 60_000,
   })
+}
+
+export function useInboxTeams(): { data: InboxTeam[] | undefined } {
+  return useQuery(inboxTeamsQueryOptions())
 }
 
 /** Human label for the active scope, resolving a tag/segment/team/view id. */
