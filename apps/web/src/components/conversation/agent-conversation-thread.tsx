@@ -28,6 +28,7 @@ import {
   type RefObject,
 } from 'react'
 import { useRouteContext } from '@tanstack/react-router'
+import type { ScrollToOptions } from '@tanstack/react-virtual'
 import { canDeleteAgentMessage, canEditAgentMessage } from '@/components/conversation/message-edit'
 import {
   PaperAirplaneIcon,
@@ -277,6 +278,114 @@ function toastImageUploadError(error: Error) {
   toast.error(error.message)
 }
 
+/** The thread's scroll seam into its message list, which owns the virtualizer. */
+interface ThreadMessagesHandle {
+  scrollToIndex: (index: number, options: ScrollToOptions) => void
+}
+
+/**
+ * The virtualized message list and its scroll-to-latest pill. The virtualizer
+ * re-renders whatever component calls it on every measurement and scroll;
+ * owning it here keeps those re-renders to the list instead of the whole
+ * thread (header, composer, detail panel).
+ */
+function ThreadMessages({
+  rows,
+  renderRow,
+  lastMessageId,
+  skipInitialScroll,
+  handleRef,
+}: {
+  rows: AdminConversationRow[]
+  renderRow: (row: AdminConversationRow) => ReactNode
+  lastMessageId: string | undefined
+  skipInitialScroll: () => boolean
+  handleRef: RefObject<ThreadMessagesHandle | null>
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  // Mounted once the thread has loaded, so there is nothing left to wait for.
+  const virtualizer = useThreadVirtualizer({
+    rows,
+    scrollRef,
+    estimateSize: 72,
+    loading: false,
+    skipInitialScroll,
+  })
+  useImperativeHandle(
+    handleRef,
+    () => ({ scrollToIndex: (index, options) => virtualizer.scrollToIndex(index, options) }),
+    [virtualizer]
+  )
+
+  // Scroll-to-bottom pill state. `atEnd` reads the live virtualizer offset, which
+  // lags one frame behind a programmatic/follow scroll, so to flag "new messages
+  // below" we compare against the PREVIOUS render's at-end state (wasAtEndRef),
+  // not the live value (which momentarily reads false right after any append).
+  const atEnd = virtualizer.isAtEnd()
+  const [hasNewBelow, setHasNewBelow] = useState(false)
+  const wasAtEndRef = useRef(true)
+  const prevLastIdRef = useRef(lastMessageId)
+  // Surface the "new messages" pill when a message lands while the agent was
+  // scrolled up. Declared BEFORE the at-end effect on purpose: React runs effects
+  // in declaration order, so this reads wasAtEndRef while it still holds the
+  // PREVIOUS render's value (before the at-end effect overwrites it), which keeps
+  // the pill from flashing when followOnAppend re-pins us on a received message.
+  useEffect(() => {
+    if (lastMessageId && lastMessageId !== prevLastIdRef.current && !wasAtEndRef.current) {
+      setHasNewBelow(true)
+    }
+    prevLastIdRef.current = lastMessageId
+  }, [lastMessageId])
+  useEffect(() => {
+    if (atEnd) setHasNewBelow(false)
+    wasAtEndRef.current = atEnd
+  }, [atEnd])
+
+  // Messages: min-h-0 so this scrolls and the composer stays pinned. The
+  // wrapper is `relative` so the scroll-to-bottom pill can float over the
+  // thread.
+  return (
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      <ThreadViewport
+        virtualizer={virtualizer}
+        rows={rows}
+        renderRow={renderRow}
+        viewportRef={scrollRef}
+        className="min-h-0 flex-1"
+        rowClassName="px-5 py-1.5"
+      />
+
+      {/* Scroll-to-bottom pill: shown when scrolled up off the newest
+          message; highlighted (primary + dot) when a message arrived while
+          the agent was away from the bottom. */}
+      {!atEnd && (
+        <button
+          type="button"
+          onClick={() => {
+            setHasNewBelow(false)
+            virtualizer.scrollToIndex(rows.length - 1, { align: 'end', behavior: 'smooth' })
+          }}
+          className={cn(
+            'absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-md transition-colors',
+            hasNewBelow
+              ? 'border-primary bg-primary text-primary-foreground hover:bg-primary/90'
+              : 'border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground'
+          )}
+          aria-label={hasNewBelow ? 'New messages — jump to latest' : 'Jump to latest'}
+        >
+          {hasNewBelow && (
+            <>
+              <span className="size-1.5 rounded-full bg-primary-foreground" />
+              <span>New messages</span>
+            </>
+          )}
+          <ChevronDownIcon className="h-4 w-4" />
+        </button>
+      )}
+    </div>
+  )
+}
+
 /** The doc a composer holds before anything is written: no content, or one empty paragraph. */
 function isBlankComposerDoc(doc: JSONContent | TiptapContent | null | undefined): boolean {
   const content = doc?.content
@@ -389,7 +498,6 @@ export function AgentConversationThread({
   replyDraftRef.current = replyDraft
   const noteDraftRef = useRef(noteDraft)
   noteDraftRef.current = noteDraft
-  const scrollRef = useRef<HTMLDivElement>(null)
 
   // The one controlled convert dialog's seed, built at whichever entry point
   // opened it: a per-message "Track as feedback" pick, an AI "Track as post"
@@ -702,15 +810,11 @@ export function AgentConversationThread({
     ]
   )
 
-  // A pending `?m=` jump owns the initial scroll, so consume the one-shot
-  // without scrolling to the bottom in that case.
-  const virtualizer = useThreadVirtualizer({
-    rows,
-    scrollRef,
-    estimateSize: 72,
-    loading: isLoading,
-    skipInitialScroll: () => pendingTargetRef.current != null,
-  })
+  // The message list owns the virtualizer (see ThreadMessages); the thread
+  // scrolls it through this handle. A pending `?m=` jump owns the initial
+  // scroll, so the list consumes its one-shot without scrolling to the bottom.
+  const messagesRef = useRef<ThreadMessagesHandle | null>(null)
+  const skipInitialScroll = useCallback(() => pendingTargetRef.current != null, [])
 
   // After our own send, jump to the freshly-appended message — followOnAppend
   // only auto-follows when already at the bottom, so an agent who replied while
@@ -721,33 +825,10 @@ export function AgentConversationThread({
   useLayoutEffect(() => {
     if (!pendingOwnSendScroll.current || rows.length === 0) return
     pendingOwnSendScroll.current = false
-    virtualizer.scrollToIndex(rows.length - 1, { align: 'end' })
-  }, [rows.length, virtualizer])
+    messagesRef.current?.scrollToIndex(rows.length - 1, { align: 'end' })
+  }, [rows.length])
 
-  // Scroll-to-bottom pill state. `atEnd` reads the live virtualizer offset, which
-  // lags one frame behind a programmatic/follow scroll — so to flag "new messages
-  // below" we compare against the PREVIOUS render's at-end state (wasAtEndRef),
-  // not the live value (which momentarily reads false right after any append).
   const lastMessageId = messages.at(-1)?.id
-  const atEnd = virtualizer.isAtEnd()
-  const [hasNewBelow, setHasNewBelow] = useState(false)
-  const wasAtEndRef = useRef(true)
-  const prevLastIdRef = useRef(lastMessageId)
-  // Surface the "new messages" pill when a message lands while the agent was
-  // scrolled up. Declared BEFORE the at-end effect on purpose: React runs effects
-  // in declaration order, so this reads wasAtEndRef while it still holds the
-  // PREVIOUS render's value (before the at-end effect overwrites it) — which keeps
-  // the pill from flashing when followOnAppend re-pins us on a received message.
-  useEffect(() => {
-    if (lastMessageId && lastMessageId !== prevLastIdRef.current && !wasAtEndRef.current) {
-      setHasNewBelow(true)
-    }
-    prevLastIdRef.current = lastMessageId
-  }, [lastMessageId])
-  useEffect(() => {
-    if (atEnd) setHasNewBelow(false)
-    wasAtEndRef.current = atEnd
-  }, [atEnd])
 
   // Re-arm the jump whenever the URL target changes (e.g. clicking another
   // "Saved for later" message while this conversation is already open).
@@ -765,7 +846,7 @@ export function AgentConversationThread({
     if (!capabilities.deepLinkJump || !pendingTarget || isLoading) return
     const index = rows.findIndex((r) => r.type === 'message' && r.message.id === pendingTarget)
     if (index >= 0) {
-      virtualizer.scrollToIndex(index, { align: 'center' })
+      messagesRef.current?.scrollToIndex(index, { align: 'center' })
       setHighlightId(pendingTarget)
       setPendingTarget(null)
       return
@@ -783,7 +864,6 @@ export function AgentConversationThread({
     isLoading,
     hasMoreOlder,
     loadingOlder,
-    virtualizer,
     loadOlder,
   ])
 
@@ -2065,47 +2145,13 @@ export function AgentConversationThread({
           </div>
         )}
 
-        {/* Messages — min-h-0 so this scrolls and the composer stays pinned. The
-            wrapper is `relative` so the scroll-to-bottom pill can float over the
-            thread. */}
-        <div className="relative flex min-h-0 flex-1 flex-col">
-          <ThreadViewport
-            virtualizer={virtualizer}
-            rows={rows}
-            renderRow={renderRow}
-            viewportRef={scrollRef}
-            className="min-h-0 flex-1"
-            rowClassName="px-5 py-1.5"
-          />
-
-          {/* Scroll-to-bottom pill: shown when scrolled up off the newest
-              message; highlighted (primary + dot) when a message arrived while
-              the agent was away from the bottom. */}
-          {!atEnd && (
-            <button
-              type="button"
-              onClick={() => {
-                setHasNewBelow(false)
-                virtualizer.scrollToIndex(rows.length - 1, { align: 'end', behavior: 'smooth' })
-              }}
-              className={cn(
-                'absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-md transition-colors',
-                hasNewBelow
-                  ? 'border-primary bg-primary text-primary-foreground hover:bg-primary/90'
-                  : 'border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground'
-              )}
-              aria-label={hasNewBelow ? 'New messages — jump to latest' : 'Jump to latest'}
-            >
-              {hasNewBelow && (
-                <>
-                  <span className="size-1.5 rounded-full bg-primary-foreground" />
-                  <span>New messages</span>
-                </>
-              )}
-              <ChevronDownIcon className="h-4 w-4" />
-            </button>
-          )}
-        </div>
+        <ThreadMessages
+          rows={rows}
+          renderRow={renderRow}
+          lastMessageId={lastMessageId}
+          skipInitialScroll={skipInitialScroll}
+          handleRef={messagesRef}
+        />
 
         {/* P2-D.1 inbox translation: dismissible auto-suggest banner, shown
             above the composer when the customer's detected language differs
