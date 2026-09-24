@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from '@tanstack/react-router'
 import { useSuspenseQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query'
@@ -42,8 +42,8 @@ export function RoadmapAdmin() {
   const { data: boards } = useSuspenseQuery(adminQueries.boards())
   const { data: tags } = useSuspenseQuery(adminQueries.tags())
   const { data: segments } = useSegments()
-  const { selectedRoadmapId, setSelectedRoadmap } = useRoadmapSelection()
   const { data: roadmaps } = useRoadmaps()
+  const { selectedRoadmapId, setSelectedRoadmap } = useRoadmapSelection(roadmaps)
   const changeStatus = useChangePostStatusId()
   const setEta = useSetPostEta()
   const queryClient = useQueryClient()
@@ -51,13 +51,6 @@ export function RoadmapAdmin() {
   const handleCardClick = (postId: string) => {
     navigate({ search: { ...search, post: postId } })
   }
-
-  // Auto-select first roadmap
-  useEffect(() => {
-    if (roadmaps?.length && !selectedRoadmapId) {
-      setSelectedRoadmap(roadmaps[0].id)
-    }
-  }, [roadmaps, selectedRoadmapId, setSelectedRoadmap])
 
   const selectedRoadmap = roadmaps?.find((r) => r.id === selectedRoadmapId)
   const { data: dateBuckets = [] } = useRoadmapDateBuckets(
