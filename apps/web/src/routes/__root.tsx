@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { Component, useLayoutEffect, type ReactNode } from 'react'
+import { Component, lazy, Suspense, useLayoutEffect, type ReactNode } from 'react'
 import type { Role } from '@/lib/shared/roles'
 import type { QueryClient } from '@tanstack/react-query'
 import {
@@ -23,7 +23,6 @@ import type { WorkspaceSettings } from '@/lib/shared/types/settings'
 import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
 import { ThemeProvider } from '@/components/theme-provider'
 import { resolveDocumentTheme } from '@/lib/shared/theme'
-import { Toaster } from '@/components/ui/sonner'
 import { DefaultErrorPage } from '@/components/shared/error-page'
 import { OttHandler } from '@/components/shared/ott-handler'
 import { VisitorBeacon } from '@/components/shared/visitor-beacon'
@@ -34,6 +33,11 @@ import {
   visualThemeAttribute,
   type VisualTheme,
 } from '@/lib/shared/labs'
+
+// The toast renderer is its own chunk: the root module ships with every
+// document (the embedded widget included), and a toast fired before it mounts
+// is replayed to it once it subscribes.
+const Toaster = lazy(() => import('@/components/ui/sonner').then((m) => ({ default: m.Toaster })))
 
 export interface RouterContext {
   queryClient: QueryClient
@@ -348,7 +352,9 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
           syncCookie={!routeIds.includes('/widget') && !searchForcedTheme}
         >
           {children}
-          <Toaster />
+          <Suspense fallback={null}>
+            <Toaster />
+          </Suspense>
         </ThemeProvider>
         <Scripts />
       </body>
