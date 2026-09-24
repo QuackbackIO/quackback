@@ -465,14 +465,17 @@ async function createAuth() {
 
     // Tell Better-Auth about non-standard columns on `user` so the
     // OAuth `mapProfileToUser` return shape is allowed through and
-    // written by drizzleAdapter. We only register `locale` here —
-    // existing custom columns (metadata, isAnonymous, twoFactorEnabled,
-    // imageKey) are written by other code paths (anonymous plugin /
-    // databaseHooks / direct queries) and don't need to round-trip
-    // through Better-Auth's signup validators.
+    // written by drizzleAdapter. `imageKey` (the uploaded avatar) is
+    // registered so the session's user carries it and the viewer's avatar
+    // needs no read of its own; `input: false` keeps it out of what sign-up
+    // and update-user accept, since only the avatar upload writes it. The
+    // other custom columns (metadata, isAnonymous, twoFactorEnabled) are
+    // written by other code paths (anonymous plugin / databaseHooks / direct
+    // queries) and don't need to round-trip through Better-Auth's validators.
     user: {
       additionalFields: {
         locale: { type: 'string', required: false, input: false },
+        imageKey: { type: 'string', required: false, input: false },
       },
     },
 

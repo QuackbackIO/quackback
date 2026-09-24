@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
+import { getRequestHeaders } from '@tanstack/react-start/server'
 import {
   type PostId,
   type PrincipalId,
@@ -30,6 +31,7 @@ import {
 import { db, principal as principalTable, user as userTable, eq, inArray } from '@/lib/server/db'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
+import { getRequestSession } from '@/lib/server/auth/request-session'
 import {
   listPublicBoardsWithStats,
   getPublicBoardBySlug,
@@ -443,14 +445,32 @@ export const fetchPublicTags = createServerFn({ method: 'GET' }).handler(async (
   return await listPublicPostTags(actor)
 })
 
+/**
+ * The signed-in viewer's own image columns, when this request has already
+ * read them. A document render has: the root bootstrap resolved the session,
+ * user row included, before any loader asks for an avatar. A server-function
+ * call from the browser has resolved nothing yet, and a session lookup costs
+ * two reads where the row costs one, so it gets null and reads the row.
+ */
+async function resolvedViewerImage(
+  userId: string
+): Promise<{ image: string | null; imageKey: string | null } | null> {
+  if (getRequestHeaders().get('x-tsr-serverFn')) return null
+  const session = await getRequestSession().catch(() => null)
+  if (session?.user.id !== userId) return null
+  return { image: session.user.image ?? null, imageKey: session.user.imageKey ?? null }
+}
+
 export const fetchUserAvatar = createServerFn({ method: 'GET' })
   .validator(z.object({ userId: z.string(), fallbackImageUrl: z.string().nullable().optional() }))
   .handler(async ({ data }) => {
     log.debug({ user_id: data.userId }, 'fetch user avatar')
-    const user = await db.query.user.findFirst({
-      where: eq(userTable.id, data.userId as UserId),
-      columns: { imageKey: true, image: true },
-    })
+    const user =
+      (await resolvedViewerImage(data.userId)) ??
+      (await db.query.user.findFirst({
+        where: eq(userTable.id, data.userId as UserId),
+        columns: { imageKey: true, image: true },
+      }))
 
     if (!user) return { avatarUrl: data.fallbackImageUrl ?? null, hasCustomAvatar: false }
 
