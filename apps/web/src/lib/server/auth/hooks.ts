@@ -58,6 +58,7 @@ import { applyClaimAttributesAfter } from './apply-claim-attributes'
 import { decodeSsoClaims } from './sso-claims-decode'
 import { peekResolvedClaims } from './resolved-claims-stash'
 import { pickAvatarUrl } from './resolve-identity'
+import { forgetRequestIdentity } from './request-session'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'auth-hooks' })
@@ -1565,6 +1566,12 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
     const provider = inferProvider(ctx as Parameters<typeof inferProvider>[0])
     log.debug({ path: ctx.path, provider: provider ?? null }, 'after-hook')
   }
+
+  // Any endpoint but a session read may have changed who the request is
+  // (sign-in, sign-out, a revoked session, a changed email or password). An
+  // in-process call is followed by the rest of its request, which must read
+  // the identity afresh rather than the memoized one.
+  if (ctx.path !== '/get-session') forgetRequestIdentity()
 
   // The provider registry is only consulted by the OAuth-callback after-hooks
   // (bootstrap promotion, auto-provision, policy cleanup, claim attributes).
