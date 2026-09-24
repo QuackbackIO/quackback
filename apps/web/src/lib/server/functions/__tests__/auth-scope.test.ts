@@ -21,8 +21,9 @@ vi.mock('@/lib/server/db', () => ({
   eq: vi.fn(),
 }))
 
-vi.mock('../auth-request-cache', () => ({
+vi.mock('@/lib/server/request-memo', () => ({
   memoizePerRequest: (_key: string, fn: () => unknown) => fn(),
+  derivedMemoKey: (base: string, name: string) => `${base}#${name}`,
 }))
 
 vi.mock('@/lib/server/domains/settings/settings.helpers', () => ({

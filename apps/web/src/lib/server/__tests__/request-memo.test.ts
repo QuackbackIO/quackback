@@ -11,7 +11,7 @@ vi.mock('@/lib/server/workspaces/workspace-keyed', () => ({
 
 const { runWithLogContext } = await import('@/lib/server/log-context')
 const { forgetPerRequest, forgetPerRequestPrefix, memoizePerRequest, rememberPerRequest } =
-  await import('../auth-request-cache')
+  await import('../request-memo')
 
 function inRequest<T>(fn: () => Promise<T>): Promise<T> {
   return runWithLogContext({ request_id: crypto.randomUUID() }, fn)

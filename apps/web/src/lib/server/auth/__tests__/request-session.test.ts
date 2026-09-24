@@ -261,6 +261,18 @@ describe('one identity read per request', () => {
     expect(mockPrincipalFindFirst).toHaveBeenCalledTimes(2)
   })
 
+  it('reads the permission set afresh after its principal cache key is deleted', async () => {
+    const sets = await inRequest('tok_ada', async () => {
+      const before = await requireAuth()
+      // A custom-role reassignment: the legacy role stays 'admin', the grants change.
+      mockPermissionsForPrincipal.mockResolvedValueOnce(new Set(['post.view']))
+      await cacheDel(CACHE_KEYS.PRINCIPAL_BY_USER('user_ada'))
+      const after = await requireAuth()
+      return [before.permissions, after.permissions]
+    })
+    expect(sets).toEqual([['settings.manage'], ['post.view']])
+  })
+
   it('serves a lazily created principal to the rest of the request', async () => {
     principalsByUser.delete('user_bob')
 
