@@ -21,13 +21,24 @@ import { gzipSync } from 'node:zlib'
 const ASSETS_DIR = join(import.meta.dirname, '..', '.output', 'public', 'assets')
 
 /** Total gzipped budget for the widget's eager chunk graph (entry + route). */
-const BUDGET_GZIP_BYTES = 550 * 1024
+const BUDGET_GZIP_BYTES = 420 * 1024
+/**
+ * Budget for the number of eager chunks: each one is a request the iframe
+ * makes before it can render, on every host page that embeds the widget.
+ */
+const BUDGET_CHUNKS = 60
 /**
  * Content markers for heavy libraries that must only ever load behind lazy
- * boundaries (rich-text editor, charts). Checked against eager chunk contents
- * so renames can't dodge the guard.
+ * boundaries. Checked against eager chunk contents so renames can't dodge the
+ * guard. Each marker is a string the library itself ships.
  */
-const FORBIDDEN_CONTENT = ['ProseMirror', 'recharts']
+const FORBIDDEN_CONTENT: { marker: string; library: string }[] = [
+  { marker: 'ProseMirror', library: 'rich-text editor' },
+  { marker: 'recharts', library: 'charts' },
+  { marker: 'DndDescribedBy', library: '@dnd-kit' },
+  { marker: 'reactEasyCrop_Container', library: 'react-easy-crop' },
+  { marker: 'transliterate', library: 'transliteration tables' },
+]
 
 if (!existsSync(ASSETS_DIR)) {
   console.error(`check-widget-bundle: ${ASSETS_DIR} not found — run \`bun run build\` first.`)
@@ -95,7 +106,9 @@ const totalGzip = [...seen.values()].reduce((sum, s) => sum + s.gzip, 0)
 const contaminated = [...seen.entries()]
   .map(([name, { content }]) => ({
     name,
-    markers: FORBIDDEN_CONTENT.filter((marker) => content.includes(marker)),
+    markers: FORBIDDEN_CONTENT.filter(({ marker }) => content.includes(marker)).map(
+      ({ library }) => library
+    ),
   }))
   .filter((c) => c.markers.length > 0)
 
@@ -109,8 +122,8 @@ for (const [name, { raw, gzip }] of top) {
   )
 }
 console.log(
-  `Total: ${(totalRaw / 1024).toFixed(0)} KB raw, ${(totalGzip / 1024).toFixed(0)} KB gzipped ` +
-    `(budget ${(BUDGET_GZIP_BYTES / 1024).toFixed(0)} KB gz)`
+  `Total: ${seen.size} chunks (budget ${BUDGET_CHUNKS}), ${(totalRaw / 1024).toFixed(0)} KB raw, ` +
+    `${(totalGzip / 1024).toFixed(0)} KB gzipped (budget ${(BUDGET_GZIP_BYTES / 1024).toFixed(0)} KB gz)`
 )
 
 let failed = false
@@ -118,6 +131,12 @@ if (contaminated.length > 0) {
   console.error(
     '\nFAIL: heavy lazy-only libraries are eagerly reachable from the widget:\n' +
       contaminated.map((c) => `  ${c.name} (${c.markers.join(', ')})`).join('\n')
+  )
+  failed = true
+}
+if (seen.size > BUDGET_CHUNKS) {
+  console.error(
+    `\nFAIL: widget loads ${seen.size} eager chunks, over the budget of ${BUDGET_CHUNKS}.`
   )
   failed = true
 }
