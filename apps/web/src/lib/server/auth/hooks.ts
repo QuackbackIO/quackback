@@ -445,6 +445,10 @@ function sessionTokenFromAuthHeaders(headers: HeaderBag | undefined): string | n
  * Widget-scoped sessions may only hit the Better Auth allowlist. Portal and
  * dashboard sessions still pass; missing sessions are left to the endpoint's
  * own auth middleware.
+ *
+ * An allowlisted path passes whatever the session is, so it returns before the
+ * lookup: `/get-session` backs every authenticated request, and resolving the
+ * session here as well would double its cost.
  */
 export async function handleWidgetAccountMutationGate(ctx: {
   path?: string
@@ -456,6 +460,7 @@ export async function handleWidgetAccountMutationGate(ctx: {
     }
   }
 }): Promise<void> {
+  if (WIDGET_AUTH_ALLOWLIST.has(ctx.path ?? '')) return
   const headers = ctx.headers ?? ctx.request?.headers
   const token = sessionTokenFromAuthHeaders(headers)
   if (!token) return
@@ -468,7 +473,6 @@ export async function handleWidgetAccountMutationGate(ctx: {
       : undefined
   if (!session) return
   if (toSessionScope(session.scope) !== 'widget') return
-  if (WIDGET_AUTH_ALLOWLIST.has(ctx.path ?? '')) return
   throw new APIError('FORBIDDEN', {
     message: 'Widget sessions cannot access this endpoint',
   })
