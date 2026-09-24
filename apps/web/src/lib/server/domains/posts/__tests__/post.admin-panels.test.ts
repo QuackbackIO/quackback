@@ -45,7 +45,7 @@ const SUGGESTED_AT = new Date('2026-02-03T04:05:06.000Z')
 const ALL = ['voters', 'mergeSuggestions', 'externalLinks', 'ownerCandidates'] as const
 
 beforeEach(() => {
-  vi.clearAllMocks()
+  vi.resetAllMocks()
   mockGetPostVoters.mockResolvedValue([
     { principalId: 'principal_v', displayName: 'Voter', createdAt: VOTED_AT },
   ])
