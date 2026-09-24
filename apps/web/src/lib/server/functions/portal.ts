@@ -248,14 +248,7 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
     }
 
     return {
-      // Strip the internal access matrix (segment ids, per-action tiers,
-      // moderation rules) from the client payload — the UI gates via
-      // boardPermissions / boardCapabilitiesForActor and never reads
-      // board.access, so shipping it would leak segmentation structure (#191).
-      boards: boardsRaw.map(({ access: _access, ...b }) => ({
-        ...b,
-        settings: (b.settings ?? {}) as BoardSettings,
-      })),
+      boards: boardsRaw.map(serializePublicBoard),
       posts,
       statuses,
       tags,
@@ -277,12 +270,7 @@ export const fetchPublicBoards = createServerFn({ method: 'GET' }).handler(async
   const auth = await getOptionalAuth()
   const actor = await policyActorFromAuth(auth)
   const boards = await listPublicBoardsWithStats(actor)
-  // Strip the internal access matrix (see fetchPortalData) — clients never
-  // read board.access, so it must not reach the public payload (#191).
-  return boards.map(({ access: _access, ...b }) => ({
-    ...b,
-    settings: (b.settings ?? {}) as BoardSettings,
-  }))
+  return boards.map(serializePublicBoard)
 })
 
 export const fetchPublicBoardBySlug = createServerFn({ method: 'GET' })
@@ -305,9 +293,7 @@ export const fetchPublicBoardBySlug = createServerFn({ method: 'GET' })
     const actor = await policyActorFromAuth(auth)
     const board = await getPublicBoardBySlug(data.slug, actor)
     if (!board) return null
-    // Strip the internal access matrix (see fetchPortalData) before serializing.
-    const { access: _access, ...rest } = board
-    return { ...rest, settings: (rest.settings ?? {}) as BoardSettings }
+    return serializePublicBoard(board)
   })
 
 export const runFetchPublicPostDetail = createServerOnlyFn(async function runFetchPublicPostDetail(
@@ -541,6 +527,19 @@ export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
     await assertPostViewable(data.postId as PostId, actor)
     return await getSubscriptionStatus(requestedPrincipalId, data.postId as PostId)
   })
+
+/**
+ * A board as every public payload carries it. The internal access matrix
+ * (segment ids, per-action tiers, moderation rules) is stripped: the UI gates through
+ * boardPermissions / boardCapabilitiesForActor and never reads board.access,
+ * so shipping it would leak segmentation structure (#191).
+ */
+function serializePublicBoard<B extends { access: unknown; settings: unknown }>({
+  access: _access,
+  ...board
+}: B) {
+  return { ...board, settings: (board.settings ?? {}) as BoardSettings }
+}
 
 /** Shared by fetchPublicRoadmaps and fetchRoadmapPageData so both serialize a roadmap the same way. */
 function serializePublicRoadmap(r: Awaited<ReturnType<typeof listPublicRoadmaps>>[number]) {
@@ -809,12 +808,7 @@ export const fetchRoadmapPageData = createServerFn({ method: 'GET' }).handler(as
   return {
     roadmaps: roadmapsRaw.map(serializePublicRoadmap),
     statuses,
-    // Strip the internal access matrix (see fetchPortalData): clients never
-    // read board.access, so it must not reach the public payload (#191).
-    boards: boardsRaw.map(({ access: _access, ...b }) => ({
-      ...b,
-      settings: (b.settings ?? {}) as BoardSettings,
-    })),
+    boards: boardsRaw.map(serializePublicBoard),
     tags,
   }
 })
