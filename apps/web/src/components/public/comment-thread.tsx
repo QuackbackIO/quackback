@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useIntl } from 'react-intl'
 import {
   ArrowRightIcon,
@@ -30,7 +30,10 @@ import { CommentContent } from '@/components/public/comment-content'
 import { AuthorHoverCard } from '@/components/public/author-hover-card'
 import { AdminAuthorHoverCard } from '@/components/admin/admin-author-hover-card'
 import { CommentForm, type CreateCommentMutation } from './comment-form'
-import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import {
+  LazyRichTextEditor,
+  RichTextEditorPlaceholder,
+} from '@/components/ui/lazy-rich-text-editor'
 import { COMMENT_EDITOR_FEATURES } from './comment-editor-features'
 import { commentMarkdownToTiptapJson } from '@/lib/server/markdown-tiptap'
 import type { TiptapContent } from '@/lib/shared/db-types'
@@ -699,20 +702,22 @@ function CommentItem({
                   }
                 }}
               >
-                <RichTextEditor
-                  value={editInitialJson}
-                  borderless
-                  minHeight="64px"
-                  autofocus="end"
-                  features={COMMENT_EDITOR_FEATURES}
-                  onImageUpload={onImageUpload}
-                  onVideoUpload={onImageUpload}
-                  disabled={editMutation.isPending}
-                  onChange={(json, _html, markdown) => {
-                    editJsonRef.current = json as TiptapContent
-                    setEditContent(markdown ?? '')
-                  }}
-                />
+                <Suspense fallback={<RichTextEditorPlaceholder minHeight="64px" />}>
+                  <LazyRichTextEditor
+                    value={editInitialJson}
+                    borderless
+                    minHeight="64px"
+                    autofocus="end"
+                    features={COMMENT_EDITOR_FEATURES}
+                    onImageUpload={onImageUpload}
+                    onVideoUpload={onImageUpload}
+                    disabled={editMutation.isPending}
+                    onChange={(json, _html, markdown) => {
+                      editJsonRef.current = json as TiptapContent
+                      setEditContent(markdown ?? '')
+                    }}
+                  />
+                </Suspense>
               </div>
               {editError && <p className="text-xs text-destructive mt-1">{editError}</p>}
               <div className="flex items-center gap-2 mt-2">

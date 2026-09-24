@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, memo, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, memo, useRef, useState } from 'react'
 import { usePillsScroll } from '@/lib/client/hooks/use-pills-scroll'
 import { Squares2X2Icon, PencilIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/solid'
 import {
@@ -32,7 +32,10 @@ import { cn } from '@/lib/shared/utils'
 import { useWidgetAuth } from './widget-auth-provider'
 import { sendToHost } from '@/lib/client/widget-bridge'
 import type { PostId } from '@quackback/ids'
-import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import {
+  LazyRichTextEditor,
+  RichTextEditorPlaceholder,
+} from '@/components/ui/lazy-rich-text-editor'
 import { useWidgetMediaUpload, WidgetSessionError } from './use-widget-image-upload'
 import type { JSONContent } from '@tiptap/react'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
@@ -815,33 +818,35 @@ export function WidgetHomeAnimated({
                     transition={{ duration: 0.2, delay: 0.1 }}
                     className="px-3 pb-2"
                   >
-                    <RichTextEditor
-                      value={contentJson || ''}
-                      onChange={handleEditorChange}
-                      placeholder={intl.formatMessage({
-                        id: 'widget.home.input.details',
-                        defaultMessage: 'Add more details...',
-                      })}
-                      minHeight="80px"
-                      borderless
-                      features={{
-                        headings: true,
-                        codeBlocks: true,
-                        taskLists: true,
-                        blockquotes: true,
-                        dividers: true,
-                        tables: true,
-                        images: true,
-                        videos: true,
-                        embeds: true,
-                        quackbackEmbeds: true,
-                        bubbleMenu: true,
-                        slashMenu: true,
-                      }}
-                      onImageUpload={uploadMedia}
-                      onVideoUpload={uploadMedia}
-                      className="text-sm"
-                    />
+                    <Suspense fallback={<RichTextEditorPlaceholder minHeight="80px" />}>
+                      <LazyRichTextEditor
+                        value={contentJson || ''}
+                        onChange={handleEditorChange}
+                        placeholder={intl.formatMessage({
+                          id: 'widget.home.input.details',
+                          defaultMessage: 'Add more details...',
+                        })}
+                        minHeight="80px"
+                        borderless
+                        features={{
+                          headings: true,
+                          codeBlocks: true,
+                          taskLists: true,
+                          blockquotes: true,
+                          dividers: true,
+                          tables: true,
+                          images: true,
+                          videos: true,
+                          embeds: true,
+                          quackbackEmbeds: true,
+                          bubbleMenu: true,
+                          slashMenu: true,
+                        }}
+                        onImageUpload={uploadMedia}
+                        onVideoUpload={uploadMedia}
+                        className="text-sm"
+                      />
+                    </Suspense>
                   </motion.div>
 
                   <AnimatePresence>
