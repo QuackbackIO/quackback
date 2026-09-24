@@ -4,6 +4,7 @@ import { setupRouterSsrQueryIntegration } from '@tanstack/react-router-ssr-query
 import { routeTree } from './routeTree.gen'
 import { DefaultErrorPage, NotFoundPage } from '@/components/shared/error-page'
 import { RoutePendingComponent } from '@/components/shared/route-pending'
+import { expireRouteContextOnInvalidate } from '@/lib/client/route-context-memo'
 
 export function getRouter() {
   const queryClient = new QueryClient({
@@ -34,6 +35,10 @@ export function getRouter() {
     router,
     queryClient,
   })
+
+  // Sign-in, sign-out and settings changes call router.invalidate() to
+  // refresh the root and admin context, which navigations otherwise reuse.
+  expireRouteContextOnInvalidate(router)
 
   return router
 }

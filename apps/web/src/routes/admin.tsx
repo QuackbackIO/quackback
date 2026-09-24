@@ -1,4 +1,4 @@
-import { Suspense, lazy } from 'react'
+import { Suspense, lazy, useEffect } from 'react'
 import {
   createFileRoute,
   Outlet,
@@ -23,6 +23,9 @@ import { isProductEnabled } from '@/lib/shared/types/settings'
 import { CloudQuackbackWidget } from '@/components/shared/cloud-quackback-widget'
 import { useHasPermission } from '@/lib/client/use-permissions'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { createRouteContextMemo } from '@/lib/client/route-context-memo'
+import { isAdminPathAllowedDuringDowngradeLock } from '@/lib/shared/billing/plan-downgrade-lock'
+import type { requireWorkspaceRole } from '@/lib/server/functions/workspace-utils'
 
 const PostModal = lazy(() =>
   import('@/components/admin/feedback/post-modal').then((m) => ({ default: m.PostModal }))
@@ -36,6 +39,27 @@ const ArticleModal = lazy(() =>
   import('@/components/admin/help-center/article-modal').then((m) => ({ default: m.ArticleModal }))
 )
 
+/** What the admin pages read from the role guard's answer. */
+type AdminGuard = Pick<
+  Awaited<ReturnType<typeof requireWorkspaceRole>>,
+  'user' | 'principal' | 'permissions'
+>
+
+/**
+ * The role guard's answer holds for every admin page until the viewer or
+ * their role changes, so navigations and preloads share one call (see
+ * route-context-memo.ts for what expires it).
+ */
+const adminGuard = createRouteContextMemo<AdminGuard>()
+
+async function loadAdminGuard(): Promise<AdminGuard> {
+  const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
+  const { user, principal, permissions } = await requireWorkspaceRole({
+    data: { allowedRoles: ['admin', 'member'] },
+  })
+  return { user, principal, permissions }
+}
+
 export const Route = createFileRoute('/admin')({
   validateSearch: (
     search: Record<string, unknown>
@@ -46,7 +70,7 @@ export const Route = createFileRoute('/admin')({
     if (typeof search.article === 'string') next.article = search.article
     return next
   },
-  beforeLoad: async ({ location }) => {
+  beforeLoad: async ({ location, context }) => {
     // Skip auth for public admin routes (login, signup)
     // These are child routes but should be publicly accessible
     const publicPaths = ['/admin/login', '/admin/signup']
@@ -55,19 +79,26 @@ export const Route = createFileRoute('/admin')({
     }
 
     // Only team members (admin, member roles) can access admin dashboard
-    // Portal users (role='user') don't have access to this
-    const [{ requireWorkspaceRole }, { shouldLockAdminToBillingFn }] = await Promise.all([
-      import('@/lib/server/functions/workspace-utils'),
-      import('@/lib/server/functions/billing'),
-    ])
+    // Portal users (role='user') don't have access to this.
     // Role guard first: it throws a sign-in redirect. The billing helper's
     // requireAuth() throws a plain Error, so racing the two can surface an
     // error page for an unauthenticated visitor.
-    const { user, principal, permissions } = await requireWorkspaceRole({
-      data: { allowedRoles: ['admin', 'member'] },
-    })
-    if (await shouldLockAdminToBillingFn({ data: { pathname: location.pathname } })) {
-      throw redirect({ href: '/admin/settings/billing' })
+    const { user, principal, permissions } = await adminGuard.get(loadAdminGuard)
+
+    // A pending plan downgrade locks billing managers to the pages where they
+    // can get under the new plan's limits. Only a billing manager of a
+    // workspace with plan billing (cloudEnabled) can be locked, so only they
+    // pay for the check, and it runs on every navigation because the path
+    // decides it.
+    if (
+      context.cloudEnabled &&
+      permissions.includes(PERMISSIONS.BILLING_MANAGE) &&
+      !isAdminPathAllowedDuringDowngradeLock(location.pathname)
+    ) {
+      const { shouldLockAdminToBillingFn } = await import('@/lib/server/functions/billing')
+      if (await shouldLockAdminToBillingFn({ data: { pathname: location.pathname } })) {
+        throw redirect({ href: '/admin/settings/billing' })
+      }
     }
 
     return {
@@ -135,8 +166,7 @@ export const Route = createFileRoute('/admin')({
   },
   // The layout loader (avatar/version/plan-notice/messages) is stable across
   // intra-admin navigation, so cache it for 5 min instead of re-running the
-  // Promise.all on every child route change. beforeLoad still runs each nav to
-  // re-assert the auth guard.
+  // Promise.all on every child route change.
   staleTime: 5 * 60 * 1000,
   component: AdminLayout,
 })
@@ -187,6 +217,12 @@ function AdminLayout() {
     locale,
     messages,
   } = Route.useLoaderData()
+  // The first navigation after hydration reuses the guard this document was
+  // rendered with instead of asking the server again.
+  const { user, principal, permissions } = Route.useRouteContext()
+  useEffect(() => {
+    if (user && principal && permissions) adminGuard.seed({ user, principal, permissions })
+  }, [user, principal, permissions])
   const postId = useEntityIdFromUrl('post')
   const entryId = useEntityIdFromUrl('entry')
   const articleId = useEntityIdFromUrl('article')
