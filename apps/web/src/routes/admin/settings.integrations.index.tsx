@@ -6,9 +6,7 @@ import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { adminQueries } from '@/lib/client/queries/admin'
-import { IntegrationList } from '@/components/admin/settings/integrations/integration-list'
-import { UpgradeScreen } from '@/components/admin/upgrade'
-import { describePlanUpgrade } from '@/lib/shared/describe-upgrade'
+import { IntegrationsSettingsBody } from '@/components/admin/settings/integrations/integrations-settings-body'
 
 export const Route = createFileRoute('/admin/settings/integrations/')({
   loader: async ({ context }) => {
@@ -55,19 +53,5 @@ function IntegrationsPage() {
         integrations={integrations}
       />
     </div>
-  )
-}
-
-export function IntegrationsSettingsBody(props: {
-  enabled: boolean
-  catalog: Parameters<typeof IntegrationList>[0]['catalog']
-  integrations: Parameters<typeof IntegrationList>[0]['integrations']
-}) {
-  return props.enabled ? (
-    <IntegrationList catalog={props.catalog} integrations={props.integrations} />
-  ) : (
-    <UpgradeScreen
-      description={describePlanUpgrade('Integrations', 'business', { plural: true })}
-    />
   )
 }
