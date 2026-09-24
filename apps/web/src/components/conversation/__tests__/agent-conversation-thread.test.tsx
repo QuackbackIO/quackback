@@ -42,6 +42,7 @@ const threadProbe = vi.hoisted(() => ({
   linkFetches: 0,
   translationEnabled: [] as boolean[],
   panelOnChanged: [] as unknown[],
+  remeasure: () => {},
 }))
 
 const routeContextState = {
@@ -58,34 +59,43 @@ vi.mock('@tanstack/react-router', () => ({
 
 // The virtualized viewport + its supporting hooks are replaced with a plain
 // list render — this test asserts on rendered rows, not scroll/virtualization.
-vi.mock('../thread', () => ({
-  ThreadViewport: ({
-    rows,
-    renderRow,
-  }: {
-    rows: { key: string }[]
-    renderRow: (r: unknown) => unknown
-  }) => (
-    <div data-testid="thread-viewport">
-      {rows.map((r) => (
-        <div key={r.key}>{renderRow(r) as React.ReactNode}</div>
-      ))}
-    </div>
-  ),
-  useThreadVirtualizer: () => ({
-    getTotalSize: () => 0,
-    getVirtualItems: () => [],
-    scrollToIndex: vi.fn(),
-    scrollToEnd: vi.fn(),
-    isAtEnd: () => true,
-    measureElement: () => {},
-  }),
-  useOlderMessages: () => ({ loadingOlder: false, loadOlder: vi.fn() }),
-  useMarkReadOnIncoming: (args: { readThrough?: string | null; onMarked?: () => void }) => {
-    composerProbe.markRead = args
-  },
-  useTypingSender: () => composerProbe.sendTyping,
-}))
+// The virtualizer stub keeps the real one's habit of re-rendering whatever
+// calls it (measurements and scrolling do), triggered by `remeasure`.
+vi.mock('../thread', async () => {
+  const { useState } = await import('react')
+  return {
+    ThreadViewport: ({
+      rows,
+      renderRow,
+    }: {
+      rows: { key: string }[]
+      renderRow: (r: unknown) => unknown
+    }) => (
+      <div data-testid="thread-viewport">
+        {rows.map((r) => (
+          <div key={r.key}>{renderRow(r) as React.ReactNode}</div>
+        ))}
+      </div>
+    ),
+    useThreadVirtualizer: () => {
+      const [, setMeasured] = useState(0)
+      threadProbe.remeasure = () => setMeasured((n) => n + 1)
+      return {
+        getTotalSize: () => 0,
+        getVirtualItems: () => [],
+        scrollToIndex: vi.fn(),
+        scrollToEnd: vi.fn(),
+        isAtEnd: () => true,
+        measureElement: () => {},
+      }
+    },
+    useOlderMessages: () => ({ loadingOlder: false, loadOlder: vi.fn() }),
+    useMarkReadOnIncoming: (args: { readThrough?: string | null; onMarked?: () => void }) => {
+      composerProbe.markRead = args
+    },
+    useTypingSender: () => composerProbe.sendTyping,
+  }
+})
 
 vi.mock('../message-bubble', () => ({
   AgentMessageBubble: ({ message }: { message: AgentConversationMessageDTO }) => (
@@ -1027,5 +1037,19 @@ describe('AgentConversationThread: stable props for memoized children', () => {
 
     expect(threadProbe.panelOnChanged.length).toBeGreaterThan(rendersBefore)
     expect(new Set(threadProbe.panelOnChanged.slice(rendersBefore - 1)).size).toBe(1)
+  })
+})
+
+describe('AgentConversationThread: virtualizer re-renders', () => {
+  it('re-renders the message list, not the rest of the thread, when the list is measured', async () => {
+    renderThread({ kind: 'conversation', id: 'conversation_measured' })
+    await screen.findByTestId('thread-viewport')
+    await waitFor(() => expect(composerProbe.onChange).not.toBeNull())
+    const rendersBefore = composerProbe.threadRenders
+
+    act(() => threadProbe.remeasure())
+    act(() => threadProbe.remeasure())
+
+    expect(composerProbe.threadRenders).toBe(rendersBefore)
   })
 })
