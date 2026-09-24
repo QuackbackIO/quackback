@@ -120,7 +120,9 @@ async function createStreamingCompressor(
   const flushOp =
     encoding === 'br' ? zlib.constants.BROTLI_OPERATION_FLUSH : zlib.constants.Z_PARTIAL_FLUSH
 
-  return new TransformStream<Uint8Array, Uint8Array>({
+  // `cancel` is in the Streams standard and both Bun and Node call it; the DOM
+  // lib types do not declare it yet.
+  const transformer: Transformer<Uint8Array, Uint8Array> & { cancel(): void } = {
     start(controller) {
       impl.on('data', (chunk: Buffer) =>
         controller.enqueue(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength))
@@ -145,7 +147,13 @@ async function createStreamingCompressor(
         impl.end()
       })
     },
-  })
+    // The client went away or the body errored: flush() will never run, so
+    // release the encoder's native state now rather than at garbage collection.
+    cancel() {
+      impl.destroy()
+    },
+  }
+  return new TransformStream(transformer)
 }
 
 /**
