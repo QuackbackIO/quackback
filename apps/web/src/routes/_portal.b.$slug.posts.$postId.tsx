@@ -19,7 +19,7 @@ import {
 import { DeletePostDialog } from '@/components/public/post-detail/delete-post-dialog'
 import { usePostPermissions, postPermissionsKeys } from '@/lib/client/hooks/use-portal-posts-query'
 import { getPostPermissionsFn } from '@/lib/server/functions/public-posts'
-import { usePostActions } from '@/lib/client/mutations'
+import { usePostActions } from '@/lib/client/mutations/portal-post-actions'
 import { usePortalTeamPostActions } from '@/lib/client/mutations/portal-team-post-actions'
 import { MergeIntoDialog, MergeOthersDialog } from '@/components/admin/feedback/merge-section'
 import { usePortalMediaUpload } from '@/lib/client/hooks/use-image-upload'
