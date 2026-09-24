@@ -3,13 +3,12 @@
  * connected CRM integrations (Zendesk/HubSpot/Intercom) for a post's author.
  * Fetched ON DEMAND (only when an author email exists and the query is
  * enabled) — never eagerly per post row. Renders nothing when there's no
- * email or no connected provider returns a match.
+ * email or no connected provider returns a match. When no connected provider
+ * could answer, the post detail request already says so and seeds the query.
  */
 import { useQuery } from '@tanstack/react-query'
-import {
-  fetchCustomerContextFn,
-  type EnrichmentCard,
-} from '@/lib/server/functions/customer-context'
+import type { EnrichmentCard } from '@/lib/server/functions/customer-context'
+import { customerContextQuery } from '@/lib/client/queries/customer-context'
 import { getIntegrationIcon } from '@/components/admin/settings/integrations/integration-ui'
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/16/solid'
 
@@ -20,10 +19,8 @@ interface CustomerContextPanelProps {
 
 export function CustomerContextPanel({ email }: CustomerContextPanelProps) {
   const { data: cards = [] } = useQuery({
-    queryKey: ['customer-context', email],
-    queryFn: () => fetchCustomerContextFn({ data: { email: email! } }),
+    ...customerContextQuery(email ?? ''),
     enabled: !!email,
-    staleTime: 5 * 60 * 1000,
   })
 
   if (!email || cards.length === 0) return null

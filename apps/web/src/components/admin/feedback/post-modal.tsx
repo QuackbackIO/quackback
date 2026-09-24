@@ -98,7 +98,7 @@ function PostModalContent({
   const queryClient = useQueryClient()
 
   // Queries
-  const postQuery = useSuspenseQuery(adminQueries.postDetail(postId))
+  const postQuery = useSuspenseQuery(adminQueries.postDetail(postId, { withPanels: true }))
   const { data: tags = [] } = useQuery(adminQueries.tags())
   const { data: statuses = [] } = useQuery(adminQueries.statuses())
   const { data: boards = [] } = useQuery(adminQueries.boards())

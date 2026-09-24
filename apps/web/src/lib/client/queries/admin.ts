@@ -1,5 +1,6 @@
-import { queryOptions } from '@tanstack/react-query'
+import { queryOptions, type QueryClient } from '@tanstack/react-query'
 import type { PostId, RoadmapId } from '@quackback/ids'
+import type { AdminPostPanel } from '@/lib/server/domains/posts/post.admin-panels'
 import {
   fetchTagsList,
   fetchStatusesList,
@@ -30,6 +31,64 @@ import { fetchPostWithDetails, fetchPostVotersFn } from '@/lib/server/functions/
 import { fetchMergePreviewFn } from '@/lib/server/functions/post-merge'
 import { fetchPublicStatuses } from '@/lib/server/functions/portal'
 import type { PortalUserListParams } from '@/lib/shared/types'
+import { mergeSuggestionQueries } from '@/lib/client/queries/signals'
+import { postOwnerQueries } from '@/lib/client/queries/post-owner'
+import { postExternalLinksQuery } from '@/lib/client/hooks/use-post-external-links-query'
+import { customerContextQuery } from '@/lib/client/queries/customer-context'
+
+/**
+ * The queries behind the panels beside a post in the admin post modal, by the
+ * name the post detail request loads each under (see post.admin-panels). The
+ * customer-context query is keyed by the author's email, unknown until the
+ * post has loaded once.
+ */
+function postPanelQueries(postId: PostId, authorEmail: string | null | undefined) {
+  return {
+    voters: adminQueries.postVoters(postId),
+    mergeSuggestions: mergeSuggestionQueries.forPost(postId),
+    externalLinks: postExternalLinksQuery(postId),
+    ownerCandidates: postOwnerQueries.candidates(),
+    customerContext: authorEmail ? customerContextQuery(authorEmail) : null,
+  } satisfies Record<AdminPostPanel, unknown>
+}
+
+/** A panel is loaded with the post unless its cache is fresh or already refetching. */
+function panelNeedsLoad(
+  client: QueryClient,
+  options: { queryKey: readonly unknown[]; staleTime?: unknown } | null
+) {
+  if (!options) return true
+  const query = client.getQueryCache().find({ queryKey: options.queryKey, exact: true })
+  if (!query || query.state.data === undefined) return true
+  const staleTime = typeof options.staleTime === 'number' ? options.staleTime : 0
+  return query.state.fetchStatus === 'idle' && query.isStaleByTime(staleTime)
+}
+
+function panelsToLoad(client: QueryClient, postId: PostId): AdminPostPanel[] {
+  const cached = client.getQueryData<{ authorEmail?: string | null }>(['inbox', 'detail', postId])
+  const queries = postPanelQueries(postId, cached?.authorEmail)
+  return (Object.keys(queries) as AdminPostPanel[]).filter((name) =>
+    panelNeedsLoad(client, queries[name])
+  )
+}
+
+function seedPostPanels(
+  client: QueryClient,
+  postId: PostId,
+  authorEmail: string | null | undefined,
+  loaded: NonNullable<Awaited<ReturnType<typeof fetchPostWithDetails>>['panels']>
+) {
+  const queries = postPanelQueries(postId, authorEmail)
+  if (loaded.voters) client.setQueryData(queries.voters.queryKey, loaded.voters)
+  if (loaded.mergeSuggestions)
+    client.setQueryData(queries.mergeSuggestions.queryKey, loaded.mergeSuggestions)
+  if (loaded.externalLinks)
+    client.setQueryData(queries.externalLinks.queryKey, loaded.externalLinks)
+  if (loaded.ownerCandidates)
+    client.setQueryData(queries.ownerCandidates.queryKey, loaded.ownerCandidates)
+  if (loaded.customerContext && queries.customerContext)
+    client.setQueryData(queries.customerContext.queryKey, loaded.customerContext)
+}
 
 /**
  * Query options factory for admin routes.
@@ -246,12 +305,19 @@ export const adminQueries = {
   /**
    * Get post details by ID
    * NOTE: Uses same query key as inboxKeys.detail() for cache consistency with mutations
+   *
+   * `withPanels` also loads, in the same request, the modal panels whose caches
+   * are empty or stale, and seeds each panel's own query with the result.
    */
-  postDetail: (postId: PostId) =>
+  postDetail: (postId: PostId, options?: { withPanels?: boolean }) =>
     queryOptions({
       queryKey: ['inbox', 'detail', postId],
-      queryFn: async () => {
-        const data = await fetchPostWithDetails({ data: { id: postId } })
+      queryFn: async ({ client }) => {
+        const panels = options?.withPanels ? panelsToLoad(client, postId) : []
+        const { panels: loaded, ...data } = await fetchPostWithDetails({
+          data: { id: postId, ...(panels.length > 0 ? { panels } : {}) },
+        })
+        if (loaded) seedPostPanels(client, postId, data.authorEmail, loaded)
         // Deserialize nested date strings from server response
         type ServerComment = (typeof data.comments)[0]
         type DeserializedComment = Omit<ServerComment, 'createdAt' | 'replies'> & {
