@@ -8,7 +8,7 @@
  * gets a copy of its own, an invalidation in the same request is honoured, and
  * the next request reads again.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const kvRows = new Map<string, unknown>()
 const mockKvGet = vi.fn(async (key: string) => structuredClone(kvRows.get(key) ?? null))
@@ -49,9 +49,10 @@ vi.mock('@/lib/server/auth/auth-providers', () => ({
   getAllAuthProviders: vi.fn().mockReturnValue([]),
 }))
 
-const { getWorkspaceSettings } = await import('../settings.service')
+const { getWorkspaceSettings, SETTINGS_LOCAL_TTL_MS } = await import('../settings.service')
 const { invalidateSettingsCache } = await import('../settings.helpers')
 const { runWithLogContext } = await import('@/lib/server/log-context')
+const { forgetCachedKeys } = await import('@/lib/server/local-cache')
 
 const COMPLETE_SETUP = JSON.stringify({
   version: 2,
@@ -84,6 +85,7 @@ function inRequest<T>(fn: () => Promise<T>): Promise<T> {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  forgetCachedKeys('settings:workspace')
   kvRows.clear()
   kvRows.set('settings:workspace', cachedSettings('First'))
 })
@@ -136,5 +138,53 @@ describe('getWorkspaceSettings within a request', () => {
     const later = await inRequest(() => getWorkspaceSettings())
     expect(later?.name).toBe('Later')
     expect(mockKvGet).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('getWorkspaceSettings across requests, in production', () => {
+  beforeEach(() => {
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.useFakeTimers({ toFake: ['Date'] })
+  })
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.useRealTimers()
+  })
+
+  it('serves the next few seconds of requests from this process', async () => {
+    await inRequest(() => getWorkspaceSettings())
+    const again = await inRequest(() => getWorkspaceSettings())
+    expect(again?.name).toBe('First')
+    expect(mockKvGet).toHaveBeenCalledTimes(1)
+  })
+
+  it('sees a write made by another process once its copy has expired', async () => {
+    await inRequest(() => getWorkspaceSettings())
+    kvRows.set('settings:workspace', cachedSettings('Written elsewhere'))
+
+    vi.advanceTimersByTime(SETTINGS_LOCAL_TTL_MS - 1)
+    expect((await inRequest(() => getWorkspaceSettings()))?.name).toBe('First')
+    vi.advanceTimersByTime(2)
+    expect((await inRequest(() => getWorkspaceSettings()))?.name).toBe('Written elsewhere')
+  })
+
+  it('sees a write made through this process at once', async () => {
+    await inRequest(() => getWorkspaceSettings())
+    mockFindFirst.mockResolvedValue({
+      id: 'settings_1',
+      name: 'Renamed',
+      slug: 'ws',
+      setupState: COMPLETE_SETUP,
+    })
+    await inRequest(() => invalidateSettingsCache())
+    expect((await inRequest(() => getWorkspaceSettings()))?.name).toBe('Renamed')
+  })
+
+  it('hands every request a copy of its own', async () => {
+    await inRequest(async () => {
+      const first = await getWorkspaceSettings()
+      first!.name = 'mutated by a caller'
+    })
+    expect((await inRequest(() => getWorkspaceSettings()))?.name).toBe('First')
   })
 })

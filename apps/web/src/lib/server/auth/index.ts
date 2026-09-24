@@ -865,10 +865,10 @@ async function createAuth() {
  * Get the auth instance (lazy-initialized).
  *
  * Cross-pod invalidation: every call reads the cached settings row's
- * `authConfigVersion` (one Redis hit, already happens for everything
- * else). If the cached _auth was built against an older version, drop
- * it and rebuild. This guarantees that a write on pod A propagates to
- * pod B no later than its next request after pod A's commit. The
+ * `authConfigVersion` (read once per request, and reused by a process for
+ * up to `SETTINGS_LOCAL_TTL_MS`). If the cached _auth was built against an
+ * older version, drop it and rebuild. A write on pod A therefore reaches
+ * pod B within that window of pod A's commit, and pod A at once. The
  * version is bumped by `bumpAuthConfigVersionInTx` from every
  * auth-instance-affecting write path.
  */

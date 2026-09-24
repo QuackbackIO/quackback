@@ -24,7 +24,7 @@
  */
 import { logger } from '@/lib/server/logger'
 import { kvGet, kvSet, kvDel } from '@/lib/server/kv/pg-kv'
-import { forgetPerRequest } from '@/lib/server/request-memo'
+import { forgetCachedKeys } from '@/lib/server/local-cache'
 
 const log = logger.child({ component: 'cache' })
 
@@ -83,12 +83,11 @@ export async function cacheSet(key: string, value: unknown, ttlSeconds: number):
 }
 
 /**
- * Delete `keys`, and forget them in the current request's memo too: a read
- * memoized for the request under a cache key's name (the workspace settings,
- * a principal) must not outlive the write that invalidated it.
+ * Delete `keys`, and forget every copy of them this process holds: the
+ * request memo and the short-lived local copies (`local-cache.ts`).
  */
 export async function cacheDel(...keys: string[]): Promise<void> {
-  forgetPerRequest(...keys)
+  forgetCachedKeys(...keys)
   try {
     await kvDel(...keys)
   } catch (err) {
