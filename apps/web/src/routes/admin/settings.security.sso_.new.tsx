@@ -5,10 +5,7 @@ import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { ProviderCreatePage } from '@/components/admin/settings/security/identity-providers/provider-create-page'
 import { UpgradeScreen } from '@/components/admin/upgrade'
-import {
-  newRegistrationId,
-  SIGN_IN_TAB,
-} from '@/components/admin/settings/security/identity-providers/provider-shared'
+import { SIGN_IN_TAB } from '@/components/admin/settings/security/identity-providers/provider-shared'
 
 // The trailing underscore on "sso_" escapes nesting under
 // /admin/settings/security/sso, which is a redirect-only route for stale
@@ -27,6 +24,8 @@ export const Route = createFileRoute('/admin/settings/security/sso_/new')({
     // Generated here rather than in the component so the server render and
     // the client agree: the redirect URI built from it is shown before
     // hydration and may be copied into the IdP straight away.
+    const { newRegistrationId } =
+      await import('@/components/admin/settings/security/identity-providers/provider-shared')
     return { ssoEntitled, registrationId: newRegistrationId() }
   },
   component: SsoCreateRoute,

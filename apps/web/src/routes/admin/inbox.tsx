@@ -68,8 +68,6 @@ import {
 } from '@/lib/client/mutations/inbox'
 import {
   InboxNavSidebar,
-  inboxTeamsQueryOptions,
-  isInboxView,
   isTicketInboxView as isTicketNavView,
   scopeLabelFor,
   useConversationTagsWithCounts,
@@ -83,8 +81,10 @@ import { RequiredAttributesDialog } from '@/components/admin/conversation/requir
 import { CreateTicketDialog } from '@/components/admin/inbox/create-ticket-dialog'
 import { isMissingRequiredAttributesMessage } from '@/lib/shared/conversation/attribute-values'
 import { resolveDefaultClosedStatusId } from '@/lib/shared/tickets'
+import { inboxTeamsQueryOptions } from '@/lib/client/queries/inbox-teams'
 import {
   inboxNavKey,
+  isInboxView,
   navFromSearch,
   normalizeTriageFacet,
   normalizeInboxChannel,
