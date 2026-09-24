@@ -1,6 +1,7 @@
 /**
- * The after-hook forgets the request's memoized identity once an in-process
- * endpoint may have changed it.
+ * The after-hook's two request-identity duties: forget the memoized identity
+ * once an in-process endpoint may have changed it, and sign the session JWT
+ * only for a `/get-session` that goes back over the wire.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -8,6 +9,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('better-auth/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('better-auth/api')>()),
   createAuthMiddleware: (fn: (ctx: unknown) => Promise<void>) => fn,
+}))
+
+const mockGetJwtToken = vi.fn(async (_ctx: unknown) => 'signed.jwt.token')
+vi.mock('better-auth/plugins', () => ({
+  getJwtToken: (ctx: unknown) => mockGetJwtToken(ctx),
 }))
 
 vi.mock('@tanstack/react-start/server', () => ({
@@ -81,5 +87,48 @@ describe('hooksAfter and the request identity memo', () => {
 
   it('keeps it across a session read', async () => {
     expect(await sessionReadsAround('/get-session')).toBe(1)
+  })
+})
+
+describe('hooksAfter and the session JWT header', () => {
+  function getSessionCtx(opts: { overHttp: boolean; signedIn: boolean; expose?: string }) {
+    const responseHeaders = new Headers()
+    if (opts.expose) responseHeaders.set('access-control-expose-headers', opts.expose)
+    const setHeader = vi.fn((name: string, value: string) => responseHeaders.set(name, value))
+    return {
+      ctx: {
+        path: '/get-session',
+        params: {},
+        body: {},
+        ...(opts.overHttp && { request: new Request('http://localhost/api/auth/get-session') }),
+        context: {
+          session: opts.signedIn ? { session: { id: 's1' }, user: { id: 'u1' } } : null,
+          responseHeaders,
+        },
+        setHeader,
+      },
+      setHeader,
+    }
+  }
+
+  it('signs one for a signed-in /get-session over HTTP, as the plugin would', async () => {
+    const { ctx, setHeader } = getSessionCtx({ overHttp: true, signedIn: true, expose: 'x-a' })
+    await hooksAfter(ctx)
+    expect(mockGetJwtToken).toHaveBeenCalledWith(ctx)
+    expect(setHeader).toHaveBeenCalledWith('set-auth-jwt', 'signed.jwt.token')
+    expect(setHeader).toHaveBeenCalledWith('Access-Control-Expose-Headers', 'x-a, set-auth-jwt')
+  })
+
+  it('skips the signature for an in-process session read', async () => {
+    const { ctx, setHeader } = getSessionCtx({ overHttp: false, signedIn: true })
+    await hooksAfter(ctx)
+    expect(mockGetJwtToken).not.toHaveBeenCalled()
+    expect(setHeader).not.toHaveBeenCalled()
+  })
+
+  it('skips it when there is no session', async () => {
+    const { ctx } = getSessionCtx({ overHttp: true, signedIn: false })
+    await hooksAfter(ctx)
+    expect(mockGetJwtToken).not.toHaveBeenCalled()
   })
 })

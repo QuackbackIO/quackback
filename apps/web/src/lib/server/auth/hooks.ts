@@ -20,6 +20,7 @@
  */
 
 import { APIError, createAuthMiddleware } from 'better-auth/api'
+import { getJwtToken } from 'better-auth/plugins'
 import type { UserId } from '@quackback/ids'
 import { toSessionScope, type Role } from '@/lib/shared/roles'
 import {
@@ -1561,6 +1562,42 @@ export async function handleCountryCapture(ctx: {
  *     first recorded device is seeded silently. Alerts cannot be
  *     disabled. Bowser labels the email; it is not the claim key.
  */
+/**
+ * The jwt plugin's `set-auth-jwt` header on `/get-session`, for HTTP callers
+ * only.
+ *
+ * A client reads the session's signed JWT from this header. The plugin's own
+ * hook (disabled in `auth/index.ts`) also signed one for every in-process
+ * `auth.api.getSession`, where the header is discarded, at the cost of a JWKS
+ * read and a signature on every session resolution. An in-process call carries
+ * no `request`; a routed one always does. Mirrors the plugin's hook otherwise.
+ */
+export async function handleSessionJwtHeader(ctx: {
+  path?: string
+  request?: unknown
+  context?: {
+    session?: { session?: unknown } | null
+    newSession?: { session?: unknown } | null
+    responseHeaders?: Headers
+  }
+  setHeader?: (name: string, value: string) => void
+}): Promise<void> {
+  if (ctx.path !== '/get-session' || !ctx.request || !ctx.setHeader) return
+  const session = ctx.context?.session || ctx.context?.newSession
+  if (!session?.session) return
+  const jwt = await getJwtToken(ctx as Parameters<typeof getJwtToken>[0])
+  const exposed = ctx.context?.responseHeaders?.get('access-control-expose-headers') || ''
+  const headers = new Set(
+    exposed
+      .split(',')
+      .map((header) => header.trim())
+      .filter(Boolean)
+  )
+  headers.add('set-auth-jwt')
+  ctx.setHeader('set-auth-jwt', jwt)
+  ctx.setHeader('Access-Control-Expose-Headers', Array.from(headers).join(', '))
+}
+
 export const hooksAfter = createAuthMiddleware(async (ctx) => {
   if (process.env.AUTH_HOOKS_DEBUG === '1') {
     const provider = inferProvider(ctx as Parameters<typeof inferProvider>[0])
@@ -1572,6 +1609,7 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
   // in-process call is followed by the rest of its request, which must read
   // the identity afresh rather than the memoized one.
   if (ctx.path !== '/get-session') forgetRequestIdentity()
+  await handleSessionJwtHeader(ctx as Parameters<typeof handleSessionJwtHeader>[0])
 
   // The provider registry is only consulted by the OAuth-callback after-hooks
   // (bootstrap promotion, auto-provision, policy cleanup, claim attributes).
