@@ -12,10 +12,10 @@ import type { PostId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
-  getPendingSuggestionsForPost,
   getPendingMergeSuggestionSummary,
   getMergeSuggestionCountsForPosts,
 } from '@/lib/server/domains/merge-suggestions/merge-suggestion.service'
+import { loadMergeSuggestionsPanel } from '@/lib/server/domains/posts/post.admin-panels'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'merge-suggestions' })
@@ -36,16 +36,7 @@ export const getMergeSuggestionsForPostFn = createServerFn({ method: 'GET' })
   .validator(getMergeSuggestionsSchema)
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.POST_VIEW_PRIVATE })
-    try {
-      const suggestions = await getPendingSuggestionsForPost(data.postId as PostId)
-      return suggestions.map((s) => ({
-        ...s,
-        createdAt: s.createdAt instanceof Date ? s.createdAt.toISOString() : s.createdAt,
-      }))
-    } catch (error) {
-      log.error({ err: error }, 'get merge suggestions for post failed')
-      return []
-    }
+    return loadMergeSuggestionsPanel(data.postId as PostId)
   })
 
 /**

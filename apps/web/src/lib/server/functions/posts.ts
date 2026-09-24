@@ -38,7 +38,12 @@ import {
 } from '@/lib/server/domains/posts/post.cascade-delete'
 import { hasUserVoted } from '@/lib/server/domains/posts/post.public.utils'
 import { getMergedPosts, getPostMergeInfo } from '@/lib/server/domains/posts/post.merge'
-import { getPostVoters, addVoteOnBehalf, removeVote } from '@/lib/server/domains/posts/post.voting'
+import { addVoteOnBehalf, removeVote } from '@/lib/server/domains/posts/post.voting'
+import {
+  ADMIN_POST_PANELS,
+  loadAdminPostPanels,
+  loadPostVotersPanel,
+} from '@/lib/server/domains/posts/post.admin-panels'
 import { toIsoString, toIsoStringOrNull } from '@/lib/shared/utils'
 import { logger } from '@/lib/server/logger'
 
@@ -272,6 +277,8 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
       // page size); "show more" fetches pass the prior page's nextCursor.
       commentsCursor: z.string().nullish(),
       commentsLimit: PageLimitSchema,
+      // Admin modal panels to load with the post (see post.admin-panels).
+      panels: z.array(z.enum(ADMIN_POST_PANELS)).optional(),
     })
   )
   .handler(async ({ data }) => {
@@ -280,7 +287,7 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
 
     const postId = data.id as PostId
 
-    const [result, commentsPage, voted] = await Promise.all([
+    const [result, commentsPage, voted, panels] = await Promise.all([
       getPostWithDetails(postId),
       getPaginatedCommentsWithReplies(postId, {
         principalId: auth.principal.id,
@@ -288,6 +295,9 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
         limit: data.commentsLimit,
       }),
       hasUserVoted(postId, auth.principal.id),
+      data.panels?.length && !data.commentsCursor
+        ? loadAdminPostPanels(postId, data.panels, auth.permissions)
+        : undefined,
     ])
     const comments = commentsPage.comments
     log.debug(
@@ -348,6 +358,7 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
       mergedAt: toIsoStringOrNull(result.mergedAt),
       mergedPosts: mergedPosts.length > 0 ? mergedPosts : undefined,
       mergeInfo,
+      panels,
     }
   })
 
@@ -358,11 +369,7 @@ export const fetchPostVotersFn = createServerFn({ method: 'GET' })
   .validator(z.object({ id: z.string() }))
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.POST_VIEW_PRIVATE })
-    const voters = await getPostVoters(data.id as PostId)
-    return voters.map((v) => ({
-      ...v,
-      createdAt: toIsoString(v.createdAt as Date | string),
-    }))
+    return loadPostVotersPanel(data.id as PostId)
   })
 
 // ============================================
