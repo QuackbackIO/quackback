@@ -19,7 +19,7 @@ import {
   TicketIcon,
   UserCircleIcon,
 } from '@heroicons/react/24/outline'
-import type { PrincipalId } from '@quackback/ids'
+import type { ConversationId, PrincipalId } from '@quackback/ids'
 import {
   HANDOFF_REASON_LABELS,
   CONVERSATION_END_REASON_LABELS,
@@ -28,12 +28,8 @@ import {
 } from '@/lib/shared/conversation/types'
 import type { InboxItemRef } from '@/lib/shared/inbox/items'
 import type { TicketDTO } from '@/lib/server/domains/tickets'
-import {
-  listConversationsForUserFn,
-  getConversationAssistantActivityFn,
-} from '@/lib/server/functions/conversation'
-import { getPortalUserFn } from '@/lib/server/functions/admin'
-import { conversationKeys } from '@/lib/client/queries/conversation-keys'
+import { conversationPanelQueries } from '@/lib/client/queries/conversation-panels'
+import { DETAIL_PANEL_MEDIA_QUERY } from '@/lib/client/conversation/detail-panel'
 import { useMediaQuery } from '@/lib/client/hooks/use-media-query'
 import { useCopilotTabGate } from '@/lib/client/hooks/use-copilot-tab-gate'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
@@ -181,13 +177,7 @@ function TicketSlaChip({ sla }: { sla: NonNullable<TicketDTO['sla']> }) {
   )
 }
 
-/**
- * The viewport at which this panel exists at all — bound to the `xl:` Tailwind
- * breakpoint on the panel's own `hidden xl:flex` <aside> below. The inbox
- * route derives `copilotAvailable` from the SAME query so the Ask Copilot
- * affordances can never disagree with the panel actually rendering.
- */
-export const DETAIL_PANEL_MEDIA_QUERY = '(min-width: 1280px)'
+export { DETAIL_PANEL_MEDIA_QUERY }
 
 export interface InboxDetailPanelProps {
   /** The open item, discriminated by kind. */
@@ -300,25 +290,19 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
   // so smaller viewports don't pay for an invisible sidebar.
   const isVisible = useMediaQuery(DETAIL_PANEL_MEDIA_QUERY)
 
+  // A conversation's thread request loads these with the thread and seeds
+  // them, so they only ask on their own for a ticket or once they go stale.
   const { data: detail } = useQuery({
-    queryKey: conversationKeys.agentContactDetail(principalId),
-    queryFn: () => getPortalUserFn({ data: { principalId: principalId as PrincipalId } }),
+    ...conversationPanelQueries.contact(principalId as PrincipalId),
     enabled: isVisible && !!principalId,
-    staleTime: 60_000,
   })
   const { data: history } = useQuery({
-    queryKey: conversationKeys.agentUserConversationsFor(principalId),
-    queryFn: () =>
-      listConversationsForUserFn({ data: { principalId: principalId as PrincipalId } }),
+    ...conversationPanelQueries.history(principalId as PrincipalId),
     enabled: isVisible && !!principalId,
-    staleTime: 30_000,
   })
   const { data: aiActivity } = useQuery({
-    queryKey: conversationKeys.agentAssistantActivity(conversation?.id),
-    queryFn: () =>
-      getConversationAssistantActivityFn({ data: { conversationId: conversation!.id } }),
+    ...conversationPanelQueries.assistantActivity(conversation?.id as ConversationId),
     enabled: isVisible && !isTicketItem && !!conversation,
-    staleTime: 30_000,
   })
   // The live registry (convergence Phase 4): the ticket card joins the type's
   // fields[] client-side to render the ticket's custom-field answers.

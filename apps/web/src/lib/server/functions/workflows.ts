@@ -374,6 +374,16 @@ export interface RunnableWorkflowDTO {
 
 const runnableFilter = (w: Workflow): boolean => w.status === 'live'
 
+/** The live workflows among `all`, as the manual-run picker lists them. */
+export function toRunnableWorkflows(all: Workflow[]): RunnableWorkflowDTO[] {
+  return all.filter(runnableFilter).map((w) => ({
+    id: w.id,
+    name: w.name,
+    class: w.class,
+    triggerType: w.triggerType,
+  }))
+}
+
 /**
  * Live workflows a teammate can fire manually from the inbox — a minimal DTO
  * (no graph/triggerSettings; the picker only ever shows name + class). Built
@@ -384,13 +394,7 @@ const runnableFilter = (w: Workflow): boolean => w.status === 'live'
 export const listRunnableWorkflowsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<RunnableWorkflowDTO[]> => {
     await requireAuth({ permission: PERMISSIONS.CONVERSATION_REPLY })
-    const all = await listWorkflows()
-    return all.filter(runnableFilter).map((w) => ({
-      id: w.id,
-      name: w.name,
-      class: w.class,
-      triggerType: w.triggerType,
-    }))
+    return toRunnableWorkflows(await listWorkflows())
   }
 )
 
