@@ -192,6 +192,15 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       nitro({
         preset: 'bun',
+        // The bare Bun preset has no reverse proxy in front of it, so
+        // without this every static asset ships uncompressed: gzip and
+        // brotli siblings are written next to each build asset over 1 KB
+        // (nitro/dist/_build/common.mjs compressPublicAssets) and the
+        // static handler picks whichever the client's Accept-Encoding
+        // allows, setting Content-Encoding and Vary itself. Dynamic
+        // responses (SSR documents, server-function JSON) are unaffected;
+        // see compression.ts for those.
+        compressPublicAssets: { gzip: true, brotli: true },
       }),
       tanstackStart({
         srcDirectory: 'src',
