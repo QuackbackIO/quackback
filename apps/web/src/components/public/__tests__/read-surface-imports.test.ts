@@ -5,7 +5,8 @@
  * the light read renderer (`RichTextContent`). The editor, the markdown
  * converter and the emoji dataset each outweigh the rest of the page, so they
  * sit behind lazy boundaries and load only when a visitor starts composing or
- * a legacy markdown-only comment needs parsing. One static import is enough to
+ * a legacy markdown-only comment needs parsing, as do the dialogs a reader
+ * rarely opens (delete, merge, confirm). One static import is enough to
  * pull any of them back into every post view, so this walks the runtime static
  * import graph from each reading surface and fails with the offending chain.
  *
@@ -32,6 +33,10 @@ const HEAVY_MODULES: Record<string, string> = {
   'components/ui/rich-text-editor.tsx': 'the rich-text editor',
   'lib/server/markdown-tiptap.ts': 'the markdown converter',
   'lib/shared/content-emoji.ts': 'the emoji dataset',
+  // Dialogs a reader opens rarely, if ever: each is its own download.
+  'components/public/post-detail/delete-post-dialog.tsx': 'the delete dialog',
+  'components/admin/feedback/merge-section.tsx': 'the merge dialogs',
+  'components/shared/confirm-dialog.tsx': 'the confirm dialog',
 }
 
 const HEAVY_PACKAGES: { pattern: RegExp; what: string }[] = [
@@ -126,9 +131,12 @@ function heavyReachableFrom(entry: string): string[] {
 }
 
 describe('post reading surfaces', () => {
-  it.each(READING_SURFACES)('%s reaches no editor, markdown or emoji code eagerly', (entry) => {
-    expect(heavyReachableFrom(entry)).toEqual([])
-  })
+  it.each(READING_SURFACES)(
+    '%s reaches no editor, markdown, emoji or dialog code eagerly',
+    (entry) => {
+      expect(heavyReachableFrom(entry)).toEqual([])
+    }
+  )
 
   it('reports a heavy module reached through a static import, not a lazy one', () => {
     expect(heavyReachableFrom('components/ui/lazy-rich-text-editor.tsx')).toEqual([])
