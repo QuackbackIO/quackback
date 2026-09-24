@@ -279,18 +279,24 @@ const nextId = (name: string) => `perf:${name}:${++sequence}`
 
 async function measureDocument(context: BrowserContext, journey: DocumentJourney) {
   const id = nextId(journey.name)
+  const path = typeof journey.path === 'string' ? journey.path : await journey.path(context.request)
   const started = performance.now()
-  const res = await context.request.get(journey.path, {
+  const res = await context.request.get(path, {
     headers: { 'x-request-id': id },
     maxRedirects: 0,
+    // A document whose stream never ends would otherwise hang the run.
+    timeout: 8000,
   })
   const body = await res.body()
   const clientMs = performance.now() - started
   if (res.status() !== 200) {
     const location = res.headers()['location']
     throw new Error(
-      `${journey.path} answered ${res.status()}${location ? ` -> ${location}` : ''}, expected 200`
+      `${path} answered ${res.status()}${location ? ` -> ${location}` : ''}, expected 200`
     )
+  }
+  if (!body.toString('utf8').trimEnd().endsWith('</html>')) {
+    throw new Error(`${path} ended before </html>: the document stream did not finish`)
   }
   const work = await serverWork(id)
   return {

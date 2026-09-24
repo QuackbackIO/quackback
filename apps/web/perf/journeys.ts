@@ -7,7 +7,7 @@
  * worth keeping if its counts come out identical on every run; the bench
  * checks that with --repeat.
  */
-import type { Page } from '@playwright/test'
+import type { APIRequestContext, Page } from '@playwright/test'
 import { buildWidgetInstallSnippet } from '../src/lib/shared/widget/install-prompt'
 import { BENCH_PORT } from './config'
 
@@ -17,7 +17,8 @@ export interface DocumentJourney {
   kind: 'document'
   name: string
   as: Actor
-  path: string
+  /** A fixed path, or one resolved at run time (seeded ids differ per database). */
+  path: string | ((request: APIRequestContext) => Promise<string>)
 }
 
 export interface BrowserJourney {
@@ -34,6 +35,14 @@ export type Journey = DocumentJourney | BrowserJourney
 
 const firstPortalPost = (page: Page) => page.locator('a[href*="/posts/post_"]').first()
 
+/** The first post linked from the portal home, for loading a post page directly. */
+async function firstPostPath(request: APIRequestContext): Promise<string> {
+  const html = await (await request.get('/?sort=trending')).text()
+  const match = html.match(/\/b\/[a-z0-9-]+\/posts\/post_[a-z0-9]+/)
+  if (!match) throw new Error('no post link on the portal home')
+  return match[0]
+}
+
 /** A customer's page on another site, with the widget installed as documented. */
 const HOST_PAGE = 'https://customer.example/'
 const hostPageHtml = () =>
@@ -45,6 +54,9 @@ export const journeys: Journey[] = [
   { kind: 'document', name: 'doc:portal-home', as: 'anon', path: '/?sort=trending' },
   { kind: 'document', name: 'doc:portal-roadmap', as: 'anon', path: '/roadmap' },
   { kind: 'document', name: 'doc:portal-changelog', as: 'anon', path: '/changelog' },
+  // A post page streams a query after the shell, so its document only ends
+  // once that query has been written into it.
+  { kind: 'document', name: 'doc:portal-post', as: 'anon', path: firstPostPath },
   { kind: 'document', name: 'doc:help-center', as: 'anon', path: '/hc' },
   { kind: 'document', name: 'doc:widget', as: 'anon', path: '/widget' },
 
@@ -83,6 +95,15 @@ export const journeys: Journey[] = [
     run: async (page) => {
       await firstPortalPost(page).click()
       await page.waitForURL(/\/posts\/post_/)
+      await page.getByRole('heading', { level: 1 }).first().waitFor()
+    },
+  },
+  {
+    kind: 'browser',
+    name: 'ui:portal-post-load',
+    as: 'anon',
+    run: async (page) => {
+      await page.goto(await firstPostPath(page.request), { waitUntil: 'load' })
       await page.getByRole('heading', { level: 1 }).first().waitFor()
     },
   },
