@@ -27,9 +27,9 @@ export interface BootstrapData {
   userRole: Role | null
   themeCookie: Theme
   /** OS color-scheme preference from the `Sec-CH-Prefers-Color-Scheme` client
-   *  hint, used by the root document to resolve a `system` theme during SSR so
-   *  even first-time `system` visitors don't flash. null when the browser
-   *  didn't send the hint (e.g. Firefox/Safari, or before it's advertised). */
+   *  hint, used by the root document to resolve a `system` theme during SSR.
+   *  null when the browser didn't send the hint (e.g. Firefox/Safari, or a
+   *  first visit); the document then resolves it in a <head> script. */
   prefersColorScheme: 'light' | 'dark' | null
   /** Dot-paths managed by `/etc/quackback/config.yaml`. The matching
    *  in-app form controls render disabled when the path appears here.
@@ -139,7 +139,7 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     { getWorkspaceSettings },
     { getRegisteredAuthProviders },
     { config },
-    { getRequestHeaders, getRequestUrl, setResponseHeader },
+    { getRequestHeaders, setResponseHeader },
     { resolveHelpCenterBaseUrl },
   ] = await Promise.all([
     import('@/lib/server/domains/settings/settings.service'),
@@ -210,14 +210,11 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
   )
   const acceptLanguageLocale = resolveLocale(headers.get('accept-language'))
 
-  // Advertise the prefers-color-scheme client hint so the browser tells us the
-  // OS preference. Critical-CH makes Chromium retry the very first navigation
-  // with the hint attached, so even a first-time `system` visitor gets the
-  // right theme server-rendered (one extra request, once per origin); the
-  // widget, which the server does not paint, skips that retry. Browsers that
-  // don't support it (Firefox/Safari) ignore it and fall back to the
-  // `color-scheme: light dark` canvas.
-  for (const [name, value] of Object.entries(colorSchemeHintHeaders(getRequestUrl().pathname))) {
+  // Ask for the prefers-color-scheme client hint, so Chromium sends the OS
+  // preference with later requests and a `system` theme is rendered here. A
+  // document rendered without it (a first visit, Firefox, Safari) resolves the
+  // theme in a <head> script instead (see colorSchemeHintHeaders).
+  for (const [name, value] of Object.entries(colorSchemeHintHeaders())) {
     setResponseHeader(name, value)
   }
   // This document is keyed on every input we render into it: the `theme` cookie

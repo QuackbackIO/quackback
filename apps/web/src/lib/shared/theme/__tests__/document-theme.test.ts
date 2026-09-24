@@ -74,22 +74,10 @@ describe('parsePrefersColorScheme', () => {
 })
 
 describe('colorSchemeHintHeaders', () => {
-  it('asks for the hint and insists on it for a server-painted document', () => {
-    for (const pathname of ['/', '/changelog', '/admin/feedback', '/widgetry']) {
-      expect(colorSchemeHintHeaders(pathname)).toEqual({
-        'Accept-CH': 'Sec-CH-Prefers-Color-Scheme',
-        'Critical-CH': 'Sec-CH-Prefers-Color-Scheme',
-      })
-    }
-  })
-
-  it('only asks for it on the widget, which the server does not paint', () => {
-    // Critical-CH would make Chromium render the widget document twice on a
-    // first visit, for a theme the client resolves anyway.
-    for (const pathname of ['/widget', '/widget/', '/widget/anything']) {
-      expect(colorSchemeHintHeaders(pathname)).toEqual({
-        'Accept-CH': 'Sec-CH-Prefers-Color-Scheme',
-      })
-    }
+  it('asks for the hint without insisting on it', () => {
+    // Critical-CH would make Chromium discard every first visit's response
+    // and render the page a second time; the <head> theme script resolves
+    // `system` for a document rendered without the hint instead.
+    expect(colorSchemeHintHeaders()).toEqual({ 'Accept-CH': 'Sec-CH-Prefers-Color-Scheme' })
   })
 })
