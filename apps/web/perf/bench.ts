@@ -15,6 +15,7 @@
  *   bun perf/bench.ts --update         lower every ceiling a journey came in under
  *   bun perf/bench.ts --repeat 3       run 3 times and flag any count that moved
  *   bun perf/bench.ts --timing 20      add median/p90 wall time per journey
+ *   PERF_APP_DIR=../other/apps/web bun perf/bench.ts   bench another build
  *   bun perf/bench.ts --trace --only ui:portal-load
  *                                      list the SQL behind the journey, most repeated first
  *
@@ -38,7 +39,9 @@ const { values: args } = parseArgs({
   },
 })
 
-const appDir = new URL('..', import.meta.url).pathname
+// PERF_APP_DIR benches another checkout's build with these journeys, which is
+// how a before/after comparison runs on identical instruments.
+const appDir = process.env.PERF_APP_DIR ?? new URL('..', import.meta.url).pathname
 const perfDir = new URL('.', import.meta.url).pathname
 const budgetsPath = `${perfDir}budgets.json`
 const baseURL = `http://localhost:${BENCH_PORT}`
