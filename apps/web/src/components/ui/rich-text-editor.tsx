@@ -21,7 +21,6 @@ import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
 import Youtube from '@tiptap/extension-youtube'
-import { Emoji, inputRegex } from '@tiptap/extension-emoji'
 import { MentionExtension } from './mention-extension'
 import { createSuggestionPopup, createSuggestionPositioner } from './suggestion-popup'
 import { applySuggestionListKey } from './suggestion-list-keys'
@@ -30,7 +29,7 @@ import { QuackbackEmbed } from './quackback-embed-extension'
 import { ConversationImage } from './conversation-image-node'
 import { UploadedVideo } from './uploaded-video-node'
 import { Markdown } from '@tiptap/markdown'
-import { Extension, InputRule } from '@tiptap/core'
+import { Extension } from '@tiptap/core'
 import type { Range } from '@tiptap/core'
 import Suggestion, { type SuggestionOptions, type SuggestionProps } from '@tiptap/suggestion'
 import { createLowlight } from 'lowlight'
@@ -69,10 +68,10 @@ import { resizableImageInsertAttrs } from '@/lib/client/resizable-image-insert-a
 // so server-side consumers (e.g. outbound conversation email) can import it
 // without pulling in React/tiptap-react. Re-exported below for existing callers.
 import { generateContentHTML } from '@/lib/shared/content-html'
-// The emoji dataset + shortcode lookup live in their own module so read-only
-// surfaces don't statically bundle it; the editor's `:` picker is fine to pay
-// the cost since the editor chunk is already lazy-loaded on compose surfaces.
-import { defaultEmojis, lookupEmoji, type EmojiItem } from '@/lib/shared/content-emoji'
+// The emoji dataset + shortcode lookup live in their own module, which the
+// emoji node loads when an editor first needs it (see ./emoji-node).
+import type { EmojiItem } from '@/lib/shared/content-emoji'
+import { EmojiNode, loadEmojiData } from './emoji-node'
 import {
   MAX_EMOJI_SUGGESTIONS,
   POPULAR_EMOJI_SHORTCODES,
@@ -1097,7 +1096,10 @@ interface EmojiSuggestionListProps {
   query?: string
 }
 
-function filterEmojiItems(query: string): EmojiItem[] {
+function filterEmojiItems(
+  query: string,
+  { lookupEmoji, defaultEmojis }: Awaited<ReturnType<typeof loadEmojiData>>
+): EmojiItem[] {
   return recommendEmojiItems(query, {
     recents: readRecentEmojis(),
     popularShortcodes: POPULAR_EMOJI_SHORTCODES,
@@ -1229,66 +1231,13 @@ export const EmojiSuggestionList = forwardRef<EmojiSuggestionListRef, EmojiSugge
 )
 EmojiSuggestionList.displayName = 'EmojiSuggestionList'
 
-/**
- * Emoji storage per emoji dataset. TipTap reads `extension.storage` through a
- * getter that re-runs `addStorage` on every access, dozens of times per editor
- * mount, and the stock storage scans the whole dataset to build its
- * support-by-version table each time. The table depends only on the dataset,
- * so it is built once. The getter still spreads the result into a fresh object
- * per editor; the shared values are read-only.
- */
-const emojiStorageByDataset = new WeakMap<object, object>()
-
 /** The `:`-triggered inline emoji picker, shared with the conversation composers so
  *  reply + note get the same emoji UX as posts. */
 export function createEmojiExtension() {
-  return Emoji.extend({
-    addStorage() {
-      const dataset = this.options.emojis
-      let storage = emojiStorageByDataset.get(dataset)
-      if (!storage) {
-        storage = this.parent?.() ?? {}
-        emojiStorageByDataset.set(dataset, storage)
-      }
-      return storage as ReturnType<NonNullable<typeof this.parent>>
-    },
-    addAttributes() {
-      return {
-        ...this.parent?.(),
-        // Persist the Unicode char at write time so read-only HTML/email hit
-        // generateContentHTML's attrs.emoji fast path without loading the
-        // dataset. Legacy name-only nodes still upgrade via lookupEmoji.
-        emoji: { default: null },
-      }
-    },
-    addInputRules() {
-      const parent = this.parent?.() ?? []
-      const shortcodeRule = new InputRule({
-        find: inputRegex,
-        handler: ({ range, match, chain }) => {
-          const typed = match[1]
-          const item = lookupEmoji(typed)
-          if (!item?.emoji) return
-          recordRecentEmoji(item.emoji)
-          chain()
-            .insertContentAt(range, {
-              type: this.name,
-              attrs: { name: item.name, emoji: item.emoji },
-            })
-            .command(({ tr, state }) => {
-              tr.setStoredMarks(state.doc.resolve(state.selection.to - 1).marks())
-              return true
-            })
-            .run()
-        },
-      })
-      const withoutDefaultShortcode = parent.filter((rule) => rule.find !== inputRegex)
-      return [shortcodeRule, ...withoutDefaultShortcode]
-    },
-  }).configure({
+  return EmojiNode.configure({
     enableEmoticons: true,
     suggestion: {
-      items: ({ query }) => filterEmojiItems(query),
+      items: async ({ query }) => filterEmojiItems(query, await loadEmojiData()),
       allow: ({ editor }) => !editor.isActive('codeBlock'),
       render: () => {
         let component: ReactRenderer<EmojiSuggestionListRef> | null = null
