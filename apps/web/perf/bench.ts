@@ -16,6 +16,9 @@
  *   bun perf/bench.ts --repeat 3       run 3 times and flag any count that moved
  *   bun perf/bench.ts --timing 20      add median/p90 wall time per journey
  *   bun perf/bench.ts --throttle ...   browser journeys over a 10 Mbps, 40 ms link
+ *   bun perf/bench.ts --core           skip the breadth sweep over every page
+ *   bun perf/bench.ts --renders ...    list the components that rendered most (build with
+ *                                      PERF_UNMINIFIED=1 for readable names)
  *   PERF_APP_DIR=../other/apps/web bun perf/bench.ts   bench another build
  *   bun perf/bench.ts --trace --only ui:portal-load
  *                                      list the SQL behind the journey, most repeated first,
@@ -53,6 +56,8 @@ const { values: args } = parseArgs({
     only: { type: 'string', multiple: true },
     headed: { type: 'boolean', default: false },
     throttle: { type: 'boolean', default: false },
+    core: { type: 'boolean', default: false },
+    renders: { type: 'boolean', default: false },
   },
 })
 
@@ -172,13 +177,52 @@ async function serverWork(requestId: string, expected?: number) {
  */
 const INIT_SCRIPT = `
   window.__perfCommits = 0
+  window.__perfRenders = 0
+  window.__perfByComponent = Object.create(null)
+
+  // Component renders per commit, counted the way React DevTools decides a
+  // fiber rendered: a subtree whose children were not reconciled this commit
+  // (the same child fiber as before) was reused and is skipped; a component
+  // fiber counts when it mounted or carries the PerformedWork flag. Tags:
+  // 0 function, 1 class, 11 forwardRef, 15 simple memo (14, the memo wrapper,
+  // would double count its inner component).
+  const COMPONENT_TAGS = new Set([0, 1, 11, 15])
+  const PERFORMED_WORK = 1
+  const nameOf = (fiber) => {
+    const type = fiber.type
+    if (!type) return 'Anonymous'
+    return (
+      type.displayName || type.name ||
+      (type.render && (type.render.displayName || type.render.name)) ||
+      'Anonymous'
+    )
+  }
+  const countRenders = (root) => {
+    const stack = [root]
+    while (stack.length) {
+      const fiber = stack.pop()
+      const previous = fiber.alternate
+      const rendered = previous === null || (fiber.flags & PERFORMED_WORK) !== 0
+      if (COMPONENT_TAGS.has(fiber.tag) && rendered) {
+        window.__perfRenders++
+        const name = nameOf(fiber)
+        window.__perfByComponent[name] = (window.__perfByComponent[name] || 0) + 1
+      }
+      if (fiber.sibling) stack.push(fiber.sibling)
+      if (fiber.child && (previous === null || fiber.child !== previous.child)) stack.push(fiber.child)
+    }
+  }
+
   window.__REACT_DEVTOOLS_GLOBAL_HOOK__ = {
     renderers: new Map(),
     supportsFiber: true,
     isDisabled: false,
     inject(renderer) { const id = this.renderers.size + 1; this.renderers.set(id, renderer); return id },
     onScheduleFiberRoot() {},
-    onCommitFiberRoot() { window.__perfCommits++ },
+    onCommitFiberRoot(id, root) {
+      window.__perfCommits++
+      try { countRenders(root.current) } catch {}
+    },
     onPostCommitFiberRoot() {},
     onCommitFiberUnmount() {},
     checkDCE() {},
@@ -189,6 +233,8 @@ const INIT_SCRIPT = `
 interface FrameSnapshot {
   at: number
   commits: number
+  renders: number
+  byComponent: Record<string, number>
   elements: number
   resources: { name: string; type: string; bytes: number; start: number }[]
 }
@@ -206,6 +252,10 @@ function frameSnapshot(frame: Frame, withNavigation: boolean): Promise<FrameSnap
     (navigation) => ({
       at: performance.now(),
       commits: (window as unknown as { __perfCommits: number }).__perfCommits,
+      renders: (window as unknown as { __perfRenders: number }).__perfRenders,
+      byComponent: {
+        ...(window as unknown as { __perfByComponent: Record<string, number> }).__perfByComponent,
+      },
       elements: document.getElementsByTagName('*').length,
       resources: (performance.getEntriesByType('resource') as PerformanceResourceTiming[])
         .concat(
@@ -374,10 +424,16 @@ async function measureBrowser(
     const since = before?.at ?? 0
     const loaded = after.resources.filter((r) => r.start >= since)
     let childCommits = 0
+    let childRenders = 0
+    const byComponent = diffCounts(after.byComponent, before?.byComponent)
     for (const [frame, child] of after.frames) {
       const earlier = before?.frames.get(frame)
       loaded.push(...child.resources.filter((r) => r.start >= (earlier?.at ?? 0)))
       childCommits += child.commits - (earlier?.commits ?? 0)
+      childRenders += child.renders - (earlier?.renders ?? 0)
+      for (const [name, n] of Object.entries(diffCounts(child.byComponent, earlier?.byComponent))) {
+        byComponent[name] = (byComponent[name] ?? 0) + n
+      }
     }
     const scripts = loaded.filter((r) => /\.m?js(\?|$)/.test(r.name))
     // Chromium tags the document's own PerformanceNavigationTiming entry
@@ -395,6 +451,7 @@ async function measureBrowser(
       jsKB: kb(scripts.reduce((sum, r) => sum + r.bytes, 0)),
       htmlTransferKB: kb(navigation?.bytes ?? 0),
       reactCommits: after.commits - (before?.commits ?? 0) + childCommits,
+      componentRenders: after.renders - (before?.renders ?? 0) + childRenders,
       layouts: cdpAfter.LayoutCount - cdpBefore.LayoutCount,
       styleRecalcs: cdpAfter.RecalcStyleCount - cdpBefore.RecalcStyleCount,
       domElements: after.elements,
@@ -404,6 +461,7 @@ async function measureBrowser(
       id,
       quiet,
       metrics,
+      byComponent,
       timing: {
         doneMs,
         serverMs: work.serverMs,
@@ -416,6 +474,16 @@ async function measureBrowser(
 }
 
 const kb = (bytes: number) => Math.round((bytes / 1024) * 10) / 10
+
+/** Per-name counts that grew between two snapshots. */
+function diffCounts(after: Record<string, number>, before: Record<string, number> = {}) {
+  const grown: Record<string, number> = {}
+  for (const [name, n] of Object.entries(after)) {
+    const delta = n - (before[name] ?? 0)
+    if (delta > 0) grown[name] = delta
+  }
+  return grown
+}
 
 // ---------------------------------------------------------------------------
 // Budgets
@@ -539,7 +607,9 @@ function percentile(values: number[], p: number) {
 
 async function main() {
   const selected = journeys.filter(
-    (j) => !args.only?.length || args.only.some((o) => j.name === o || j.name.startsWith(o))
+    (j) =>
+      (!args.core || !j.sweep) &&
+      (!args.only?.length || args.only.some((o) => j.name === o || j.name.startsWith(o)))
   )
   const repeat = Math.max(1, Number(args.repeat))
   const timingRuns = Math.max(0, Number(args.timing))
@@ -599,6 +669,13 @@ async function main() {
           if (args.trace && r === 0) {
             console.log(`\n  ${journey.name}: ${result.metrics.dbQueries} queries`)
             printTrace(result.id)
+          }
+          if (args.renders && r === 0 && 'byComponent' in result) {
+            console.log(`\n  ${journey.name}: ${result.metrics.componentRenders} component renders`)
+            const top = Object.entries(result.byComponent)
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 20)
+            for (const [name, n] of top) console.log(`    ${String(n).padStart(5)}x  ${name}`)
           }
         } catch (err) {
           errors[journey.name] = err instanceof Error ? err.message.split('\n')[0]! : String(err)
