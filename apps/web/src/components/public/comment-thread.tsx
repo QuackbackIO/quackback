@@ -39,6 +39,7 @@ import type { TiptapContent } from '@/lib/shared/db-types'
 import type { PostCommentId, PostId, PrincipalId } from '@quackback/ids'
 import { InlineModerationActions } from '@/components/shared/inline-moderation-actions'
 import { useApproveComment, useRejectComment } from '@/lib/client/mutations/moderation'
+import { useOpenedOnce } from '@/lib/client/hooks/use-opened-once'
 
 /**
  * Groups root-level comments so consecutive private comments are wrapped
@@ -364,6 +365,8 @@ function CommentItem({
   const approveComment = useApproveComment(postId)
   const rejectComment = useRejectComment(postId)
   const [showReplyForm, setShowReplyForm] = useState(false)
+  // The reply composer, and the editor it brings, mounts when Reply first opens it.
+  const replyFormMounted = useOpenedOnce(showReplyForm)
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [reactions, setReactions] = useState<CommentReactionCount[]>(comment.reactions)
   const [isPending, setIsPending] = useState(false)
@@ -991,19 +994,21 @@ function CommentItem({
             }}
           >
             <div className="overflow-hidden">
-              <div className="mt-3 ms-10 max-w-lg p-3 bg-muted/30 [border-radius:var(--radius)] border border-border/30">
-                <CommentForm
-                  postId={postId}
-                  parentId={comment.id}
-                  onSuccess={() => setShowReplyForm(false)}
-                  onCancel={() => setShowReplyForm(false)}
-                  user={user}
-                  createComment={createComment}
-                  isTeamMember={isTeamMember}
-                  defaultPrivate={comment.isPrivate}
-                  onImageUpload={onImageUpload}
-                />
-              </div>
+              {replyFormMounted && (
+                <div className="mt-3 ms-10 max-w-lg p-3 bg-muted/30 [border-radius:var(--radius)] border border-border/30">
+                  <CommentForm
+                    postId={postId}
+                    parentId={comment.id}
+                    onSuccess={() => setShowReplyForm(false)}
+                    onCancel={() => setShowReplyForm(false)}
+                    user={user}
+                    createComment={createComment}
+                    isTeamMember={isTeamMember}
+                    defaultPrivate={comment.isPrivate}
+                    onImageUpload={onImageUpload}
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>
