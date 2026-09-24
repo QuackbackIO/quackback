@@ -1,5 +1,5 @@
 import { db, sql, ticketStatuses, ticketTypes } from '@/lib/server/db'
-import { slugify } from '@/lib/shared/utils'
+import { slugify } from '@/lib/shared/utils/slugify'
 
 type SlugRegistry = typeof ticketStatuses | typeof ticketTypes
 
