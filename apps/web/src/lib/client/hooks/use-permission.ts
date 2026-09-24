@@ -28,7 +28,17 @@ export function resolvePermission(role: string | null | undefined, key: Permissi
  * mapping and why this is UX-only.
  */
 export function usePermission(key: PermissionKey): boolean {
-  const { principal, permissions } = useRouteContext({ from: '/admin' }) as {
+  return permissionFromRouteContext(useRouteContext({ from: '/admin' }), key)
+}
+
+/**
+ * The answer {@link usePermission} gives, from an `/admin` route context. For a
+ * `useRouteContext` select: beforeLoad hands back a fresh context on every
+ * navigation, and selecting the answer keeps a component from re-rendering
+ * when it has not changed.
+ */
+export function permissionFromRouteContext(context: unknown, key: PermissionKey): boolean {
+  const { principal, permissions } = (context ?? {}) as {
     principal?: { role: string } | null
     permissions?: PermissionKey[]
   }
