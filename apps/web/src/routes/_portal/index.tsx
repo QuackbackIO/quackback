@@ -8,7 +8,7 @@ import { EmptyState } from '@/components/shared/empty-state'
 import { FeedbackContainer } from '@/components/public/feedback/feedback-container'
 import { PortalWelcomeCard } from '@/components/public/feedback/portal-welcome-card'
 import { usePreviewDraft } from '@/components/public/preview-draft-context'
-import { portalQueries } from '@/lib/client/queries/portal'
+import { portalQueries, useSeedPortalStatusesCache } from '@/lib/client/queries/portal'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { isStatusPagePublished } from '@/lib/shared/status-settings'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
@@ -168,6 +168,11 @@ function PortalFeed() {
   const { data: portalData } = useSuspenseQuery(
     portalQueries.portalData(portalDataParams(search, session?.user?.id))
   )
+
+  // Seeds the shared statuses cache from this response so a post-detail
+  // navigation right after reuses it instead of fetching the same status
+  // list again (see useSeedPortalStatusesCache).
+  useSeedPortalStatusesCache(portalData.statuses)
 
   // votedPosts is seeded from portalData.votedPostIds via FeedbackContainer's
   // useVotedPosts({ initialVotedIds }) below (its query uses that as
