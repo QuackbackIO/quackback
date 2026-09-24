@@ -35,6 +35,14 @@ const composerProbe = vi.hoisted(() => ({
   markRead: null as null | { readThrough?: string | null; onMarked?: () => void },
 }))
 
+// Holds the thread request open, and records what asked for the reads that
+// ride with it in the meantime.
+const threadProbe = vi.hoisted(() => ({
+  gate: null as null | Promise<void>,
+  linkFetches: 0,
+  translationEnabled: [] as boolean[],
+}))
+
 const routeContextState = {
   session: { user: { name: 'Agent Smith' } },
   settings: { featureFlags: {} },
@@ -188,16 +196,19 @@ vi.mock('@/components/shared/empty-state', () => ({
 vi.mock('@/components/ui/avatar', () => ({ Avatar: () => null }))
 
 vi.mock('@/lib/client/hooks/use-inbox-translation', () => ({
-  useInboxTranslation: () => ({
-    translationFor: () => undefined,
-    showSuggestionBanner: false,
-    enabled: false,
-    togglePending: false,
-    toggleEnabled: vi.fn(),
-    dismissSuggestion: vi.fn(),
-    activateFromSuggestion: vi.fn(),
-    detectedLanguageLabel: '',
-  }),
+  useInboxTranslation: ({ enabledFlag }: { enabledFlag: boolean }) => {
+    threadProbe.translationEnabled.push(enabledFlag)
+    return {
+      translationFor: () => undefined,
+      showSuggestionBanner: false,
+      enabled: false,
+      togglePending: false,
+      toggleEnabled: vi.fn(),
+      dismissSuggestion: vi.fn(),
+      activateFromSuggestion: vi.fn(),
+      detectedLanguageLabel: '',
+    }
+  },
 }))
 vi.mock('@/lib/client/hooks/use-copilot-insert', () => ({ useCopilotInsert: () => vi.fn() }))
 vi.mock('@/lib/client/hooks/use-image-upload', () => ({
@@ -336,7 +347,10 @@ vi.mock('@/lib/client/queries/inbox', async (importOriginal) => ({
     }),
     conversationTicketLink: (id: string) => ({
       queryKey: ['conversation-ticket-link', id],
-      queryFn: () => Promise.resolve(mockTicketLink.value),
+      queryFn: () => {
+        threadProbe.linkFetches++
+        return Promise.resolve(mockTicketLink.value)
+      },
     }),
   },
   ticketQueries: {
@@ -354,12 +368,14 @@ vi.mock('@/lib/client/queries/conversation-inbox', () => ({
   conversationInboxQueries: {
     thread: (id: string) => ({
       queryKey: ['conv-thread', id],
-      queryFn: () =>
-        Promise.resolve({
+      queryFn: async () => {
+        if (threadProbe.gate) await threadProbe.gate
+        return {
           hasMore: false,
           conversation: makeConversation({ id: id as ConversationDTO['id'] }),
           messages: [] as AgentConversationMessageDTO[],
-        }),
+        }
+      },
     }),
   },
 }))
@@ -959,5 +975,27 @@ describe('AgentConversationThread: marking read', () => {
     expect(onChanged).not.toHaveBeenCalled()
     const list = client.getQueryData<{ conversations: ConversationDTO[] }>(listKey)
     expect(list?.conversations[0].unreadCount).toBe(0)
+  })
+})
+
+describe('AgentConversationThread: reads that ride with the thread', () => {
+  it('asks for the ticket link and the translation preference only once the thread has loaded', async () => {
+    let open!: () => void
+    threadProbe.gate = new Promise<void>((resolve) => (open = resolve))
+    threadProbe.linkFetches = 0
+    threadProbe.translationEnabled = []
+    renderThread({ kind: 'conversation', id: 'conversation_gated' })
+
+    // The thread request loads both and seeds them, so while it is in
+    // flight neither asks on its own.
+    await new Promise((r) => setTimeout(r, 20))
+    expect(threadProbe.linkFetches).toBe(0)
+    expect(threadProbe.translationEnabled.length).toBeGreaterThan(0)
+    expect(threadProbe.translationEnabled.every((on) => !on)).toBe(true)
+
+    act(() => open())
+    await screen.findByTestId('editor')
+    expect(threadProbe.translationEnabled.at(-1)).toBe(true)
+    threadProbe.gate = null
   })
 })

@@ -43,6 +43,7 @@ import {
 } from '@/lib/server/domains/principals/principal.service'
 import { listPortalUsers, removePortalUser } from '@/lib/server/domains/users/user.service'
 import { getPortalUserDetail } from '@/lib/server/domains/users/user.detail'
+import type { PortalUserDetail } from '@/lib/server/domains/users/user.types'
 import {
   listSegments,
   createSegment,
@@ -839,6 +840,22 @@ export const listPortalUsersFn = createServerFn({ method: 'GET' })
     }
   })
 
+/** A portal user's details with their dates serialized for the client. */
+export function serializePortalUserDetail(detail: PortalUserDetail) {
+  return {
+    ...detail,
+    joinedAt: detail.joinedAt.toISOString(),
+    createdAt: detail.createdAt.toISOString(),
+    engagedPosts: detail.engagedPosts.map((post) => ({
+      ...post,
+      createdAt: post.createdAt.toISOString(),
+      engagedAt: post.engagedAt.toISOString(),
+    })),
+  }
+}
+
+export type PortalUserDetailDTO = ReturnType<typeof serializePortalUserDetail>
+
 /**
  * Get a portal user's details.
  */
@@ -850,23 +867,13 @@ export const getPortalUserFn = createServerFn({ method: 'GET' })
 
     const result = await getPortalUserDetail(data.principalId as PrincipalId)
 
-    // Serialize Date fields for client
     if (!result) {
       log.debug({ principal_id: data.principalId }, 'get portal user not found')
       return null
     }
 
     log.debug({ principal_id: data.principalId }, 'get portal user found')
-    return {
-      ...result,
-      joinedAt: result.joinedAt.toISOString(),
-      createdAt: result.createdAt.toISOString(),
-      engagedPosts: result.engagedPosts.map((post) => ({
-        ...post,
-        createdAt: post.createdAt.toISOString(),
-        engagedAt: post.engagedAt.toISOString(),
-      })),
-    }
+    return serializePortalUserDetail(result)
   })
 
 /**
