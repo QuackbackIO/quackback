@@ -226,7 +226,6 @@ export function ConversationListColumn({
   const intl = useIntl()
   const { userRole } = useRouteContext({ from: '__root__' })
   const activationAction = useActivationAction('conversation_empty')
-  const [composeOpen, setComposeOpen] = useState(false)
   const queryClient = useQueryClient()
   const prefetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const cancelPrefetch = useCallback(() => {
@@ -251,9 +250,6 @@ export function ConversationListColumn({
     },
     [cancelPrefetch, queryClient]
   )
-  // Whether the list is a search, which decides both the implicit sort and
-  // whether the term-scored sort is offered at all.
-  const searching = searchInput.trim().length > 0
   return (
     <div
       className={cn(
@@ -263,6 +259,160 @@ export function ConversationListColumn({
         selectedId && 'hidden md:flex'
       )}
     >
+      <ConversationListHeader
+        nav={nav}
+        onSelectNav={onSelectNav}
+        scopeLabel={scopeLabel}
+        headerSlot={headerSlot}
+        showRefinements={showRefinements}
+        searchInput={searchInput}
+        onSearchInput={onSearchInput}
+        facet={facet}
+        onFacet={onFacet}
+        priorityFilter={priorityFilter}
+        onPriorityFilter={onPriorityFilter}
+        ticketTypeFilter={ticketTypeFilter}
+        onTicketTypeFilter={onTicketTypeFilter}
+        ticketTypeOptions={ticketTypeOptions}
+        channelFilter={channelFilter}
+        onChannelFilter={onChannelFilter}
+        sort={sort}
+        onSort={onSort}
+      />
+      <ScrollArea className="min-h-0 flex-1">
+        {loading ? (
+          <ConversationListSkeleton />
+        ) : items.length === 0 ? (
+          (() => {
+            const isMainConversationQueue =
+              nav.kind === 'view' &&
+              (nav.view === 'mine' || nav.view === 'unassigned' || nav.view === 'all')
+            const isFiltered =
+              searchInput.trim().length > 0 ||
+              priorityFilter !== 'all' ||
+              !!channelFilter ||
+              (facet !== 'all' && facet !== 'open')
+            const isAllClear =
+              isMainConversationQueue && facet === 'open' && !isFiltered && !activationAction
+            const emptyMsg = isFiltered
+              ? intl.formatMessage({
+                  id: 'inbox.empty.filtered.title',
+                  defaultMessage: 'No conversations match these filters',
+                })
+              : isAllClear
+                ? intl.formatMessage({
+                    id: 'inbox.empty.allClear.title',
+                    defaultMessage: 'You’re all caught up',
+                  })
+                : emptyStateMessage(nav, facet, scopeLabel)
+            // First-run CTA on the unfiltered main queues (not tickets/labels).
+            const showMessengerCta = isMainConversationQueue && !isFiltered && !isAllClear
+            return (
+              <div className="px-4 py-10 text-center space-y-3">
+                <p className="text-sm font-medium text-foreground">{emptyMsg}</p>
+                {isFiltered && (
+                  <p className="mx-auto max-w-[16rem] text-xs text-muted-foreground">
+                    <FormattedMessage
+                      id="inbox.empty.filtered.description"
+                      defaultMessage="Try changing your search or filters."
+                    />
+                  </p>
+                )}
+                {isAllClear && (
+                  <p className="mx-auto max-w-[16rem] text-xs text-muted-foreground">
+                    <FormattedMessage
+                      id="inbox.empty.allClear.description"
+                      defaultMessage="No open conversations need your attention."
+                    />
+                  </p>
+                )}
+                {showMessengerCta && (
+                  <>
+                    <p className="text-xs text-muted-foreground max-w-[16rem] mx-auto">
+                      When customers message you, conversations show up here.
+                    </p>
+                    {/* Widget settings are admin-only; members get the message
+                        without a button they can't use. */}
+                    {userRole === 'admin' && activationAction && (
+                      <ActivationActionButton
+                        action={activationAction}
+                        surface="conversation_empty"
+                        className="h-11 sm:h-9"
+                      />
+                    )}
+                  </>
+                )}
+              </div>
+            )
+          })()
+        ) : (
+          items.map((item) => {
+            const id = itemId(item)
+            return item.kind === 'conversation' ? (
+              <ConversationRow
+                key={id}
+                id={id}
+                item={item}
+                selected={selectedId === id}
+                onSelect={onSelect}
+                onPrefetch={prefetchItem}
+                onPrefetchCancel={cancelPrefetch}
+              />
+            ) : (
+              <TicketRow
+                key={id}
+                id={id}
+                item={item}
+                selected={selectedId === id}
+                onSelect={onSelect}
+                onPrefetch={prefetchItem}
+                onPrefetchCancel={cancelPrefetch}
+              />
+            )
+          })
+        )}
+      </ScrollArea>
+    </div>
+  )
+}
+
+type ConversationListHeaderProps = Omit<
+  ConversationListColumnProps,
+  'loading' | 'items' | 'selectedId' | 'onSelect'
+>
+
+/**
+ * The list column's header: scope label (desktop) or scope menu (mobile), the
+ * compose button and dialog, search, and the sort and filter menus. Nothing
+ * here depends on which item is open, so opening one re-renders only the
+ * rows below it.
+ */
+const ConversationListHeader = memo(function ConversationListHeader({
+  nav,
+  onSelectNav,
+  scopeLabel,
+  headerSlot,
+  showRefinements,
+  searchInput,
+  onSearchInput,
+  facet,
+  onFacet,
+  priorityFilter,
+  onPriorityFilter,
+  ticketTypeFilter,
+  onTicketTypeFilter,
+  ticketTypeOptions,
+  channelFilter,
+  onChannelFilter,
+  sort,
+  onSort,
+}: ConversationListHeaderProps) {
+  const [composeOpen, setComposeOpen] = useState(false)
+  // Whether the list is a search, which decides both the implicit sort and
+  // whether the term-scored sort is offered at all.
+  const searching = searchInput.trim().length > 0
+  return (
+    <>
       <div className="flex items-center justify-between gap-2 border-b border-border/50 px-4 py-[0.85rem]">
         {/* At lg+ the nav sidebar owns scope selection, so the header is a
             plain label. Below lg the sidebar is hidden, so offer a dropdown. */}
@@ -472,102 +622,9 @@ export function ConversationListColumn({
           </>
         )}
       </div>
-      <ScrollArea className="min-h-0 flex-1">
-        {loading ? (
-          <ConversationListSkeleton />
-        ) : items.length === 0 ? (
-          (() => {
-            const isMainConversationQueue =
-              nav.kind === 'view' &&
-              (nav.view === 'mine' || nav.view === 'unassigned' || nav.view === 'all')
-            const isFiltered =
-              searchInput.trim().length > 0 ||
-              priorityFilter !== 'all' ||
-              !!channelFilter ||
-              (facet !== 'all' && facet !== 'open')
-            const isAllClear =
-              isMainConversationQueue && facet === 'open' && !isFiltered && !activationAction
-            const emptyMsg = isFiltered
-              ? intl.formatMessage({
-                  id: 'inbox.empty.filtered.title',
-                  defaultMessage: 'No conversations match these filters',
-                })
-              : isAllClear
-                ? intl.formatMessage({
-                    id: 'inbox.empty.allClear.title',
-                    defaultMessage: 'You’re all caught up',
-                  })
-                : emptyStateMessage(nav, facet, scopeLabel)
-            // First-run CTA on the unfiltered main queues (not tickets/labels).
-            const showMessengerCta = isMainConversationQueue && !isFiltered && !isAllClear
-            return (
-              <div className="px-4 py-10 text-center space-y-3">
-                <p className="text-sm font-medium text-foreground">{emptyMsg}</p>
-                {isFiltered && (
-                  <p className="mx-auto max-w-[16rem] text-xs text-muted-foreground">
-                    <FormattedMessage
-                      id="inbox.empty.filtered.description"
-                      defaultMessage="Try changing your search or filters."
-                    />
-                  </p>
-                )}
-                {isAllClear && (
-                  <p className="mx-auto max-w-[16rem] text-xs text-muted-foreground">
-                    <FormattedMessage
-                      id="inbox.empty.allClear.description"
-                      defaultMessage="No open conversations need your attention."
-                    />
-                  </p>
-                )}
-                {showMessengerCta && (
-                  <>
-                    <p className="text-xs text-muted-foreground max-w-[16rem] mx-auto">
-                      When customers message you, conversations show up here.
-                    </p>
-                    {/* Widget settings are admin-only; members get the message
-                        without a button they can't use. */}
-                    {userRole === 'admin' && activationAction && (
-                      <ActivationActionButton
-                        action={activationAction}
-                        surface="conversation_empty"
-                        className="h-11 sm:h-9"
-                      />
-                    )}
-                  </>
-                )}
-              </div>
-            )
-          })()
-        ) : (
-          items.map((item) => {
-            const id = itemId(item)
-            return item.kind === 'conversation' ? (
-              <ConversationRow
-                key={id}
-                id={id}
-                item={item}
-                selected={selectedId === id}
-                onSelect={onSelect}
-                onPrefetch={prefetchItem}
-                onPrefetchCancel={cancelPrefetch}
-              />
-            ) : (
-              <TicketRow
-                key={id}
-                id={id}
-                item={item}
-                selected={selectedId === id}
-                onSelect={onSelect}
-                onPrefetch={prefetchItem}
-                onPrefetchCancel={cancelPrefetch}
-              />
-            )
-          })
-        )}
-      </ScrollArea>
-    </div>
+    </>
   )
-}
+})
 
 /** One skeleton row — mirrors ConversationRow/TicketRow's fixed anatomy
  *  (avatar circle, name line, preview + time line) at the same `py-3` height
