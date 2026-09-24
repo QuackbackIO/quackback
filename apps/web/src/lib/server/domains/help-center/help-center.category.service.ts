@@ -15,7 +15,7 @@ import type { KbCategoryId, SegmentId } from '@quackback/ids'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
 import { segmentGateAllows } from '@/lib/server/policy/segment-gate'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
-import { slugify } from '@/lib/shared/utils'
+import { slugify } from '@/lib/shared/utils/slugify'
 import { uniqueHelpCenterSlug } from './help-center.slug'
 import { deleteRedirectRulesForTarget } from './help-center-redirect-rules.service'
 import type {

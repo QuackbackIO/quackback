@@ -32,7 +32,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { EmptyState } from '@/components/shared/empty-state'
-import { cn, slugify } from '@/lib/shared/utils'
+import { cn } from '@/lib/shared/utils'
 import { useRoadmaps } from '@/lib/client/hooks/use-roadmaps-query'
 import { useCreateRoadmap, useUpdateRoadmap, useDeleteRoadmap } from '@/lib/client/mutations'
 import type { RoadmapView } from '@/lib/client/hooks/use-roadmaps-query'
@@ -63,6 +63,9 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
 
   const handleCreateSubmit = async (value: RoadmapBuilderValue) => {
     try {
+      // Loaded on demand: slugify carries large transliteration tables that
+      // the roadmap page otherwise never needs.
+      const { slugify } = await import('@/lib/shared/utils/slugify')
       const newRoadmap = await createRoadmap.mutateAsync({
         ...value,
         slug: slugify(value.name),

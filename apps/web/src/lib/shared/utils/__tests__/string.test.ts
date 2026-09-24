@@ -12,10 +12,10 @@ import {
   truncate,
   formatStatus,
   getStatusEmoji,
-  slugify,
   contentPreview,
   safeEmail,
 } from '../string'
+import { slugify } from '../slugify'
 
 describe('getInitials', () => {
   it('returns initials from two-word name', () => {

@@ -35,7 +35,7 @@ import {
   resolveFeatureFlags,
 } from '@/lib/server/domains/settings/settings.types'
 import { isPathManaged } from '@/lib/server/config-file/managed-paths'
-import { slugify } from '@/lib/shared/utils'
+import { slugify } from '@/lib/shared/utils/slugify'
 import { getSetupState } from '@/lib/shared/db-types'
 import { logger } from '@/lib/server/logger'
 import {
