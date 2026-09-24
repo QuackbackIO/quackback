@@ -20,6 +20,7 @@ import { createMiddleware } from '@tanstack/react-start'
 import { logger } from '@/lib/server/logger'
 import { runWithLogContext } from '@/lib/server/log-context'
 import { formatServerTiming, openRequestMetrics } from '@/lib/server/request-metrics'
+import { onResponseBodyEnd } from '@/lib/server/response-hooks'
 
 /**
  * Health probe path. Hit every few seconds by the platform's healthcheck,
@@ -36,11 +37,6 @@ function deriveRequestId(request: Request): string {
   // Cap to keep a malicious/huge header out of every log line.
   if (header) return header.slice(0, 200)
   return crypto.randomUUID()
-}
-
-function onBodyEnd(response: Response, done: () => void): Response {
-  const body = response.body!.pipeThrough(new TransformStream({ flush: done }))
-  return new Response(body, response)
 }
 
 /**
@@ -122,7 +118,9 @@ export async function handleRequestWithContext<T extends NextResult>({
             },
             'request finished'
           )
-        if (response?.body) result.response = onBodyEnd(response, finish)
+        // Never swap the response here: the server entry runs the hook
+        // (see response-hooks.ts for why).
+        if (response?.body) onResponseBodyEnd(response, finish)
         else finish()
       }
       return result
