@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { Suspense, useRef, useState } from 'react'
 import { useIntl } from 'react-intl'
 import { useForm } from 'react-hook-form'
 import { useQueryClient, type UseMutationResult } from '@tanstack/react-query'
@@ -22,7 +22,10 @@ import { removeViewerScopedPortalQueries } from '@/lib/client/queries/portal'
 import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { cn } from '@/lib/shared/utils'
-import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import {
+  LazyRichTextEditor,
+  RichTextEditorPlaceholder,
+} from '@/components/ui/lazy-rich-text-editor'
 import { COMMENT_EDITOR_FEATURES } from './comment-editor-features'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { PostId, PostCommentId } from '@quackback/ids'
@@ -219,25 +222,27 @@ export function CommentForm({
                         }
                       }}
                     >
-                      <RichTextEditor
-                        key={editorResetKey}
-                        value={field.value}
-                        borderless
-                        toolbarPosition="bottom"
-                        minHeight="72px"
-                        disabled={isSubmitting}
-                        features={COMMENT_EDITOR_FEATURES}
-                        onImageUpload={onImageUpload}
-                        onVideoUpload={onImageUpload}
-                        placeholder={intl.formatMessage({
-                          id: 'portal.commentForm.placeholder',
-                          defaultMessage: 'Write a comment...',
-                        })}
-                        onChange={(json, _html, markdown) => {
-                          editorJsonRef.current = json as TiptapContent
-                          field.onChange(markdown ?? '')
-                        }}
-                      />
+                      <Suspense fallback={<RichTextEditorPlaceholder minHeight="72px" />}>
+                        <LazyRichTextEditor
+                          key={editorResetKey}
+                          value={field.value}
+                          borderless
+                          toolbarPosition="bottom"
+                          minHeight="72px"
+                          disabled={isSubmitting}
+                          features={COMMENT_EDITOR_FEATURES}
+                          onImageUpload={onImageUpload}
+                          onVideoUpload={onImageUpload}
+                          placeholder={intl.formatMessage({
+                            id: 'portal.commentForm.placeholder',
+                            defaultMessage: 'Write a comment...',
+                          })}
+                          onChange={(json, _html, markdown) => {
+                            editorJsonRef.current = json as TiptapContent
+                            field.onChange(markdown ?? '')
+                          }}
+                        />
+                      </Suspense>
                     </div>
                   </FormControl>
                   <FormMessage className="px-3" />
@@ -462,23 +467,25 @@ export function CommentForm({
                     }
                   }}
                 >
-                  <RichTextEditor
-                    key={editorResetKey}
-                    value={field.value}
-                    minHeight="80px"
-                    disabled={isSubmitting}
-                    features={COMMENT_EDITOR_FEATURES}
-                    onImageUpload={onImageUpload}
-                    onVideoUpload={onImageUpload}
-                    placeholder={intl.formatMessage({
-                      id: 'portal.commentForm.placeholder',
-                      defaultMessage: 'Write a comment...',
-                    })}
-                    onChange={(json, _html, markdown) => {
-                      editorJsonRef.current = json as TiptapContent
-                      field.onChange(markdown ?? '')
-                    }}
-                  />
+                  <Suspense fallback={<RichTextEditorPlaceholder minHeight="80px" />}>
+                    <LazyRichTextEditor
+                      key={editorResetKey}
+                      value={field.value}
+                      minHeight="80px"
+                      disabled={isSubmitting}
+                      features={COMMENT_EDITOR_FEATURES}
+                      onImageUpload={onImageUpload}
+                      onVideoUpload={onImageUpload}
+                      placeholder={intl.formatMessage({
+                        id: 'portal.commentForm.placeholder',
+                        defaultMessage: 'Write a comment...',
+                      })}
+                      onChange={(json, _html, markdown) => {
+                        editorJsonRef.current = json as TiptapContent
+                        field.onChange(markdown ?? '')
+                      }}
+                    />
+                  </Suspense>
                 </div>
               </FormControl>
               <FormMessage />
