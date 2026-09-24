@@ -318,6 +318,11 @@ async function measureBrowser(
     const since = before?.at ?? 0
     const loaded = after.resources.filter((r) => r.start >= since)
     const scripts = loaded.filter((r) => /\.m?js(\?|$)/.test(r.name))
+    // Chromium tags the document's own PerformanceNavigationTiming entry
+    // with initiatorType "navigation"; a journey whose run() is a
+    // client-side transition (no fresh document load) has none, so this
+    // is 0 there rather than absent, keeping the metric shape stable.
+    const navigation = loaded.find((r) => r.type === 'navigation')
     const work = await serverWork(id)
 
     const metrics: Metrics = {
@@ -326,6 +331,7 @@ async function measureBrowser(
       requests: loaded.length,
       jsRequests: scripts.length,
       jsKB: kb(scripts.reduce((sum, r) => sum + r.bytes, 0)),
+      htmlTransferKB: kb(navigation?.bytes ?? 0),
       reactCommits: after.commits - (before?.commits ?? 0),
       layouts: cdpAfter.LayoutCount - cdpBefore.LayoutCount,
       styleRecalcs: cdpAfter.RecalcStyleCount - cdpBefore.RecalcStyleCount,
@@ -373,7 +379,15 @@ function loadBudgets(): Budgets {
  * React commits, layout and style-recalc counts and JS call counts move by a
  * few between runs of the admin journeys, so they are reported, never gated.
  */
-const GATED = ['dbQueries', 'serverRequests', 'requests', 'jsRequests', 'jsKB', 'htmlKB']
+const GATED = [
+  'dbQueries',
+  'serverRequests',
+  'requests',
+  'jsRequests',
+  'jsKB',
+  'htmlKB',
+  'htmlTransferKB',
+]
 
 function compare(budgets: Budgets, name: string, metrics: Metrics) {
   const ceilings = budgets.journeys[name] ?? {}
