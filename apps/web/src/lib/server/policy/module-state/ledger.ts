@@ -276,6 +276,15 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       "another workspace's messages on a bus with no authorization layer of its own.",
   },
   {
+    file: 'apps/web/src/lib/server/local-cache.ts',
+    name: 'localCopies',
+    category: 'workspace-keyed',
+    reason:
+      "Short-lived copies of cached values, chiefly the workspace settings, which hold one workspace's " +
+      'auth config, secrets and flags. Shared, one workspace would be served another workspace settings ' +
+      'for up to the copy lifetime.',
+  },
+  {
     file: 'apps/web/src/lib/server/response-hooks.ts',
     name: 'bodyEndHooks',
     category: 'workspace-scoped-key',

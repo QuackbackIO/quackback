@@ -22,8 +22,8 @@ import {
   type VisualTheme,
 } from '@/lib/shared/labs'
 import { CACHE_KEYS } from '@/lib/server/cache'
+import { forgetCachedKeys } from '@/lib/server/local-cache'
 import { kvDel } from '@/lib/server/kv/pg-kv'
-import { forgetPerRequest } from '@/lib/server/request-memo'
 import type { WorkspaceSettings } from './settings.types'
 
 const log = logger.child({ component: 'settings-labs' })
@@ -160,8 +160,8 @@ async function readExperimentState(
 async function commitLabsChange(): Promise<void> {
   // kvDel (not cacheDel): cacheDel swallows failures, and a successful Labs
   // write must not leave the 1h settings cache on the previous visualTheme.
-  // So forget the request's own copy here too, as cacheDel would.
-  forgetPerRequest(CACHE_KEYS.WORKSPACE_SETTINGS, CACHE_KEYS.REGISTERED_AUTH_PROVIDERS)
+  // So forget this process's copies here too, as cacheDel would.
+  forgetCachedKeys(CACHE_KEYS.WORKSPACE_SETTINGS, CACHE_KEYS.REGISTERED_AUTH_PROVIDERS)
   try {
     await kvDel(CACHE_KEYS.WORKSPACE_SETTINGS, CACHE_KEYS.REGISTERED_AUTH_PROVIDERS)
   } catch (error) {
