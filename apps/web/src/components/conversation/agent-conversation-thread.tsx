@@ -333,8 +333,17 @@ export function AgentConversationThread({
   const isTicket = item.kind === 'ticket'
   const conversationId = item.kind === 'conversation' ? item.id : null
   const ticketId = item.kind === 'ticket' ? item.id : null
-  const threadKey = conversationKeys.agentThread(conversationId ?? INACTIVE_CONVERSATION_ID)
-  const ticketThreadKey = ticketKeys.thread(ticketId ?? INACTIVE_TICKET_ID)
+  // Stable per item: the cache writers below close over these keys, and a key
+  // rebuilt on every render would rebuild them too, handing fresh callbacks to
+  // the memoized detail panel and message bubbles on every render.
+  const threadKey = useMemo(
+    () => conversationKeys.agentThread(conversationId ?? INACTIVE_CONVERSATION_ID),
+    [conversationId]
+  )
+  const ticketThreadKey = useMemo(
+    () => ticketKeys.thread(ticketId ?? INACTIVE_TICKET_ID),
+    [ticketId]
+  )
   // The current agent's display name, for attributing optimistic reactions.
   const { session, settings } = useRouteContext({ from: '__root__' })
   const { principal } = useRouteContext({ from: '/admin' }) as {

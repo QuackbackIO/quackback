@@ -41,6 +41,7 @@ const threadProbe = vi.hoisted(() => ({
   gate: null as null | Promise<void>,
   linkFetches: 0,
   translationEnabled: [] as boolean[],
+  panelOnChanged: [] as unknown[],
 }))
 
 const routeContextState = {
@@ -117,9 +118,16 @@ vi.mock('@/components/admin/conversation/conversation-tags-editor', () => ({
 }))
 vi.mock('@/components/admin/conversation/status-control', () => ({ StatusControl: () => null }))
 vi.mock('@/components/admin/inbox/inbox-detail-panel', () => ({
-  InboxDetailPanel: ({ openCopilotToken }: { openCopilotToken?: number }) => (
-    <div data-testid="inbox-detail-panel" data-open-copilot-token={openCopilotToken} />
-  ),
+  InboxDetailPanel: ({
+    openCopilotToken,
+    onChanged,
+  }: {
+    openCopilotToken?: number
+    onChanged?: () => void
+  }) => {
+    threadProbe.panelOnChanged.push(onChanged)
+    return <div data-testid="inbox-detail-panel" data-open-copilot-token={openCopilotToken} />
+  },
 }))
 vi.mock('@/components/admin/inbox/create-ticket-dialog', () => ({
   CreateTicketDialog: () => null,
@@ -997,5 +1005,27 @@ describe('AgentConversationThread: reads that ride with the thread', () => {
     await screen.findByTestId('editor')
     expect(threadProbe.translationEnabled.at(-1)).toBe(true)
     threadProbe.gate = null
+  })
+})
+
+describe('AgentConversationThread: stable props for memoized children', () => {
+  it('hands the detail panel the same refresh handler across thread re-renders', async () => {
+    threadProbe.panelOnChanged = []
+    renderThread({ kind: 'conversation', id: 'conversation_stable' })
+    await screen.findByTestId('inbox-detail-panel')
+    await waitFor(() => expect(composerProbe.onChange).not.toBeNull())
+    const rendersBefore = threadProbe.panelOnChanged.length
+
+    // Typing re-renders the thread (the draft is its state).
+    act(() =>
+      composerProbe.onChange?.(
+        { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Hi' }] }] },
+        '<p>Hi</p>',
+        'Hi'
+      )
+    )
+
+    expect(threadProbe.panelOnChanged.length).toBeGreaterThan(rendersBefore)
+    expect(new Set(threadProbe.panelOnChanged.slice(rendersBefore - 1)).size).toBe(1)
   })
 })
