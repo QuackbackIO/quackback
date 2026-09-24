@@ -165,6 +165,9 @@ export default defineConfig(({ mode }) => {
       },
     },
     build: {
+      // PERF_UNMINIFIED=1 keeps component names readable for the perf bench's
+      // render profiler (`bun perf/bench.ts --renders`). Never for a release.
+      ...(process.env.PERF_UNMINIFIED === '1' && { minify: false }),
       rolldownOptions: {
         // TanStack Router SSR code imports node builtins (node:stream, node:async_hooks)
         // that end up in the client bundle. Mark node: imports as external since they're

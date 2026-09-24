@@ -19,6 +19,8 @@ export interface DocumentJourney {
   as: Actor
   /** A fixed path, or one resolved at run time (seeded ids differ per database). */
   path: string | ((request: APIRequestContext) => Promise<string>)
+  /** Part of the breadth sweep over every page (skipped by --core). */
+  sweep?: boolean
 }
 
 export interface BrowserJourney {
@@ -29,6 +31,8 @@ export interface BrowserJourney {
   setup?: (page: Page) => Promise<void>
   /** The measured interaction. Resolves once its result is on screen. */
   run: (page: Page) => Promise<void>
+  /** Part of the breadth sweep over every page (skipped by --core). */
+  sweep?: boolean
 }
 
 export type Journey = DocumentJourney | BrowserJourney
@@ -51,6 +55,93 @@ const HOST_PAGE = 'https://customer.example/'
 const hostPageHtml = () =>
   `<!doctype html><html><head><title>Customer site</title></head><body><h1>Customer site</h1>` +
   `${buildWidgetInstallSnippet(`http://localhost:${BENCH_PORT}`)}</body></html>`
+
+/**
+ * Every page reachable without an id that answers 200 on the bench data, loaded
+ * both as a document and in a browser. Pages behind a feature the bench data
+ * leaves off redirect, and are left out rather than measured as redirects.
+ */
+const SWEEP_PAGES: { path: string; as: Actor }[] = [
+  ...[
+    'analytics',
+    'automation',
+    'automation/agent',
+    'automation/connectors',
+    'automation/copilot',
+    'automation/performance',
+    'automation/skills',
+    'automation/workflows',
+    'changelog',
+    'feedback',
+    'help-center',
+    'inbox',
+    'moderation',
+    'notifications',
+    'roadmap',
+    'tickets',
+    'users?sort=newest',
+  ].map((page) => ({ path: `/admin/${page}`, as: 'admin' as const })),
+  ...[
+    'billing',
+    'boards',
+    'changelog',
+    'channels',
+    'channels/email',
+    'channels/github',
+    'channels/messenger',
+    'companies',
+    'conversation-data',
+    'developers',
+    'domains',
+    'feedback',
+    'general',
+    'help-center',
+    'imports',
+    'integrations',
+    'labs',
+    'macros',
+    'members',
+    'members/roles/new',
+    'moderation',
+    'notifications',
+    'office-hours',
+    'people',
+    'portal',
+    'security/authentication',
+    'security/sso/new',
+    'sla',
+    'statuses',
+    'support',
+    'tags',
+    'ticket-statuses',
+    'ticket-types',
+    'widget',
+    'widget/install',
+  ].map((page) => ({ path: `/admin/settings/${page}`, as: 'admin' as const })),
+  ...['/roadmap', '/changelog', '/hc', '/support', '/notifications'].map((path) => ({
+    path,
+    as: 'anon' as const,
+  })),
+  ...['/settings/profile', '/settings/preferences', '/notifications', '/support'].map((path) => ({
+    path,
+    as: 'admin' as const,
+  })),
+]
+
+function sweepJourneys(): Journey[] {
+  return SWEEP_PAGES.flatMap(({ path, as }): Journey[] => [
+    { kind: 'document', name: `sweep:doc:${as}:${path}`, as, path, sweep: true },
+    {
+      kind: 'browser',
+      name: `sweep:ui:${as}:${path}`,
+      as,
+      sweep: true,
+      run: async (page) => {
+        await page.goto(path, { waitUntil: 'load' })
+      },
+    },
+  ])
+}
 
 export const journeys: Journey[] = [
   // Server-rendered documents, anonymous visitor.
@@ -254,4 +345,90 @@ export const journeys: Journey[] = [
       await page.getByRole('heading').first().waitFor()
     },
   },
+
+  // Interactions, where re-rendering shows: typing, opening, switching.
+  {
+    kind: 'browser',
+    name: 'ui:admin-feedback-type-search',
+    as: 'admin',
+    setup: async (page) => {
+      await page.goto('/admin/feedback')
+      await page.locator('[data-post-id]').first().waitFor()
+    },
+    run: async (page) => {
+      const search = page
+        .getByRole('searchbox')
+        .or(page.getByPlaceholder(/search/i))
+        .first()
+      await search.click()
+      await search.pressSequentially('export', { delay: 60 })
+      await page.waitForURL(/search=export|q=export/).catch(() => {})
+    },
+  },
+  {
+    kind: 'browser',
+    name: 'ui:admin-inbox-open-conversation',
+    as: 'admin',
+    setup: async (page) => {
+      await page.goto('/admin/inbox')
+      await page.getByText('Bench conversation 1').first().waitFor()
+    },
+    run: async (page) => {
+      await page.getByText('Bench conversation 1').first().click()
+      await page.getByText('Bench conversation 1 - visitor message one').first().waitFor()
+    },
+  },
+  {
+    kind: 'browser',
+    name: 'ui:portal-post-type-comment',
+    as: 'admin',
+    setup: async (page) => {
+      await page.goto(await firstPostPath(page.request))
+      await page.getByRole('heading', { level: 1 }).first().waitFor()
+    },
+    run: async (page) => {
+      const composer = page.getByRole('textbox', { name: /comment/i }).first()
+      await composer.click()
+      await page.locator('[contenteditable="true"]').first().waitFor()
+      await page.keyboard.type('Measuring what a keystroke costs.', { delay: 30 })
+    },
+  },
+  {
+    kind: 'browser',
+    name: 'ui:widget-switch-tabs',
+    as: 'anon',
+    setup: async (page) => {
+      await page.goto('/widget')
+      await page.getByRole('button', { name: 'Home', exact: true }).waitFor()
+    },
+    run: async (page) => {
+      await page.getByRole('button', { name: 'Help', exact: true }).click()
+      await page.getByRole('textbox', { name: 'Search help articles' }).waitFor()
+      await page.getByRole('button', { name: 'Changelog', exact: true }).click()
+      await page
+        .getByRole('heading', { name: 'Latest' })
+        .or(page.getByText('No updates yet'))
+        .first()
+        .waitFor()
+      await page.getByRole('button', { name: 'Home', exact: true }).click()
+    },
+  },
+  {
+    kind: 'browser',
+    name: 'ui:admin-settings-click-through',
+    as: 'admin',
+    setup: async (page) => {
+      await page.goto('/admin/settings/general')
+      await page.getByRole('heading').first().waitFor()
+    },
+    run: async (page) => {
+      for (const path of ['/admin/settings/portal', '/admin/settings/members']) {
+        await page.locator(`a[href="${path}"]`).first().click()
+        await page.waitForURL(path)
+        await page.getByRole('heading').first().waitFor()
+      }
+    },
+  },
+
+  ...sweepJourneys(),
 ]
