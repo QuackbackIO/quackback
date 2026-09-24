@@ -276,6 +276,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       "another workspace's messages on a bus with no authorization layer of its own.",
   },
   {
+    file: 'apps/web/src/lib/server/response-hooks.ts',
+    name: 'bodyEndHooks',
+    category: 'workspace-scoped-key',
+    keyedBy: 'response.body',
+    reason:
+      "Keyed by one response's body stream, an object that exists only for the request that produced " +
+      'it, so a lookup can only ever find its own request. It is a WeakMap and the entry is removed ' +
+      'when taken, so nothing outlives the response.',
+  },
+  {
     file: 'apps/web/src/lib/server/workspaces/pool-cache.ts',
     name: 'pools',
     category: 'workspace-scoped-key',
