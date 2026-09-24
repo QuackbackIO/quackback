@@ -1,7 +1,12 @@
 import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
 import type { Role } from '@/lib/shared/roles'
 import { sessionRole, toSessionScope } from '@/lib/shared/roles'
-import { getThemeCookie, parsePrefersColorScheme, type Theme } from '@/lib/shared/theme'
+import {
+  colorSchemeHintHeaders,
+  getThemeCookie,
+  parsePrefersColorScheme,
+  type Theme,
+} from '@/lib/shared/theme'
 import { getUpdateBannerDismissedVersionCookie } from '@/lib/shared/update-banner-cookie'
 import { resolveLocale, type SupportedLocale } from '@/lib/shared/i18n'
 import type { Session, PrincipalType } from '@/lib/server/auth/session'
@@ -134,7 +139,7 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     { getWorkspaceSettings },
     { getRegisteredAuthProviders },
     { config },
-    { getRequestHeaders, setResponseHeader },
+    { getRequestHeaders, getRequestUrl, setResponseHeader },
     { resolveHelpCenterBaseUrl },
   ] = await Promise.all([
     import('@/lib/server/domains/settings/settings.service'),
@@ -208,11 +213,13 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
   // Advertise the prefers-color-scheme client hint so the browser tells us the
   // OS preference. Critical-CH makes Chromium retry the very first navigation
   // with the hint attached, so even a first-time `system` visitor gets the
-  // right theme server-rendered (one extra request, once per origin). Browsers
-  // that don't support it (Firefox/Safari) ignore it and fall back to the
+  // right theme server-rendered (one extra request, once per origin); the
+  // widget, which the server does not paint, skips that retry. Browsers that
+  // don't support it (Firefox/Safari) ignore it and fall back to the
   // `color-scheme: light dark` canvas.
-  setResponseHeader('Accept-CH', 'Sec-CH-Prefers-Color-Scheme')
-  setResponseHeader('Critical-CH', 'Sec-CH-Prefers-Color-Scheme')
+  for (const [name, value] of Object.entries(colorSchemeHintHeaders(getRequestUrl().pathname))) {
+    setResponseHeader(name, value)
+  }
   // This document is keyed on every input we render into it: the `theme` cookie
   // (and the session/role embedded in the dehydrated context), Accept-Language
   // for `<html lang>`/`dir`, the color-scheme hint, and now Host (below,
