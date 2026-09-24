@@ -405,6 +405,7 @@ export function AgentConversationThread({
   createTicketToken,
   openCopilotToken,
   composerRef,
+  detailPanelShown = false,
 }: {
   /** The open item, discriminated by kind — drives both the data adapter and
    *  the derived `ThreadCapabilities`. */
@@ -437,6 +438,11 @@ export function AgentConversationThread({
   /** Publishes the composer seam the host's keyboard shortcuts and command
    *  palette drive. Both item kinds. */
   composerRef?: RefObject<ThreadComposerHandle | null>
+  /** Whether the viewport shows the detail panel (the host's read of
+   *  DETAIL_PANEL_MEDIA_QUERY; false in a server render). Where it shows,
+   *  the header's copies of the panel's triage controls, hidden there by CSS,
+   *  are not rendered, and the panel loads its own reads. */
+  detailPanelShown?: boolean
 }) {
   const queryClient = useQueryClient()
   const isTicket = item.kind === 'ticket'
@@ -2065,10 +2071,12 @@ export function AgentConversationThread({
         </div>
         {/* Narrow-viewport fallback: Properties live in the detail panel at
             xl+; below that, priority/assignee stay reachable here. */}
-        <div className="flex shrink-0 items-center gap-1.5 xl:hidden">
-          <TicketPriorityControl ticket={ticket} onChanged={onChanged} />
-          <TicketAssigneeControl ticket={ticket} onChanged={onChanged} />
-        </div>
+        {!detailPanelShown && (
+          <div className="flex shrink-0 items-center gap-1.5 xl:hidden">
+            <TicketPriorityControl ticket={ticket} onChanged={onChanged} />
+            <TicketAssigneeControl ticket={ticket} onChanged={onChanged} />
+          </div>
+        )}
         {headerActions}
       </div>
     ) : (
@@ -2107,7 +2115,7 @@ export function AgentConversationThread({
         </div>
         {/* Triage controls live in the detail panel at xl+; below that
             (panel hidden) they stay in the header. */}
-        {conversation && (
+        {conversation && !detailPanelShown && (
           <div className="flex shrink-0 items-center gap-1.5 xl:hidden">
             <PriorityControl
               conversationId={conversationId ?? INACTIVE_CONVERSATION_ID}
@@ -2139,7 +2147,7 @@ export function AgentConversationThread({
         {/* Conversation labels — xl+ shows them in the detail panel. Tickets
             have no tags surface (§2.5's capability matrix — "tags,
             conversations only"). */}
-        {!isTicket && conversation && conversationId && (
+        {!isTicket && conversation && conversationId && !detailPanelShown && (
           <div className="flex items-center gap-1.5 border-b border-border/50 px-4 py-2 sm:px-5 xl:hidden">
             <ConversationTagsEditor conversationId={conversationId} tags={conversation.tags} />
           </div>
@@ -2546,6 +2554,7 @@ export function AgentConversationThread({
           onInsertFromCopilot={insertFromCopilot}
           openCopilotToken={openCopilotToken}
           issuePeople={issuePeople}
+          visible={detailPanelShown}
         />
       )}
     </div>

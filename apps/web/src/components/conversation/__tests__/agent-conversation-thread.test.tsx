@@ -116,7 +116,7 @@ vi.mock('../composer-ai-actions', () => ({
   },
 }))
 vi.mock('@/components/admin/conversation/priority-control', () => ({
-  PriorityControl: () => null,
+  PriorityControl: () => <span data-testid="priority-control" />,
 }))
 vi.mock('@/components/admin/conversation/assignee-control', () => ({
   AssigneeControl: () => null,
@@ -131,12 +131,20 @@ vi.mock('@/components/admin/inbox/inbox-detail-panel', () => ({
   InboxDetailPanel: ({
     openCopilotToken,
     onChanged,
+    visible,
   }: {
     openCopilotToken?: number
     onChanged?: () => void
+    visible?: boolean
   }) => {
     threadProbe.panelOnChanged.push(onChanged)
-    return <div data-testid="inbox-detail-panel" data-open-copilot-token={openCopilotToken} />
+    return (
+      <div
+        data-testid="inbox-detail-panel"
+        data-open-copilot-token={openCopilotToken}
+        data-visible={String(visible)}
+      />
+    )
   },
 }))
 vi.mock('@/components/admin/inbox/create-ticket-dialog', () => ({
@@ -442,7 +450,10 @@ function makeConversation(overrides: Partial<ConversationDTO> = {}): Conversatio
   }
 }
 
-function renderThread(item: { kind: 'conversation' | 'ticket'; id: string }) {
+function renderThread(
+  item: { kind: 'conversation' | 'ticket'; id: string },
+  extra: { detailPanelShown?: boolean } = {}
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
@@ -455,6 +466,7 @@ function renderThread(item: { kind: 'conversation' | 'ticket'; id: string }) {
         onOpenPost={vi.fn()}
         isVisitorTyping={false}
         isOtherAgentTyping={false}
+        {...extra}
       />
     </QueryClientProvider>
   )
@@ -1051,5 +1063,23 @@ describe('AgentConversationThread: virtualizer re-renders', () => {
     act(() => threadProbe.remeasure())
 
     expect(composerProbe.threadRenders).toBe(rendersBefore)
+  })
+})
+
+describe('AgentConversationThread: triage controls beside the detail panel', () => {
+  it('leaves the header copies out where the detail panel shows them', async () => {
+    renderThread({ kind: 'conversation', id: 'conversation_wide' }, { detailPanelShown: true })
+    const panel = await screen.findByTestId('inbox-detail-panel')
+
+    expect(screen.queryByTestId('priority-control')).not.toBeInTheDocument()
+    expect(panel).toHaveAttribute('data-visible', 'true')
+  })
+
+  it('keeps them in the header where the detail panel does not show', async () => {
+    renderThread({ kind: 'conversation', id: 'conversation_narrow' })
+    const panel = await screen.findByTestId('inbox-detail-panel')
+
+    expect(screen.getByTestId('priority-control')).toBeInTheDocument()
+    expect(panel).toHaveAttribute('data-visible', 'false')
   })
 })

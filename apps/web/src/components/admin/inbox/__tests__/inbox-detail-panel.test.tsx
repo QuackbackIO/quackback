@@ -119,6 +119,9 @@ function makeConversation(overrides: Partial<ConversationDTO> = {}): Conversatio
   }
 }
 
+// Whether the viewport shows the panel, as the inbox route reads it.
+let panelShown = false
+
 function renderPanel(
   conversation: ConversationDTO = makeConversation(),
   extra: {
@@ -137,6 +140,7 @@ function renderPanel(
         onTrackAsFeedback={vi.fn()}
         onCreateTicket={vi.fn()}
         onInsertFromCopilot={vi.fn()}
+        visible={panelShown}
         {...props}
       />
     </QueryClientProvider>
@@ -302,20 +306,11 @@ describe('<InboxDetailPanel> GitHub issue people', () => {
 describe('<InboxDetailPanel> contact name', () => {
   afterEach(() => {
     vi.mocked(getPortalUserFn).mockResolvedValue(null)
-    vi.unstubAllGlobals()
+    panelShown = false
   })
 
   function showPanel() {
-    vi.stubGlobal('matchMedia', (query: string) => ({
-      matches: true,
-      media: query,
-      onchange: null,
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      dispatchEvent: () => false,
-      addListener: () => {},
-      removeListener: () => {},
-    }))
+    panelShown = true
   }
 
   it('shows the account name instead of the generic public name', async () => {

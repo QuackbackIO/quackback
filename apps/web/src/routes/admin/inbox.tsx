@@ -43,7 +43,7 @@ import {
 import { BulkActionBar, type BulkMenuId } from '@/components/admin/conversation/bulk-action-bar'
 import { InboxCommandBar } from '@/components/admin/conversation/inbox-command-bar'
 import { ShortcutHelpPanel } from '@/components/admin/conversation/shortcut-help-panel'
-import { DETAIL_PANEL_MEDIA_QUERY } from '@/components/admin/inbox/inbox-detail-panel'
+import { DETAIL_PANEL_MEDIA_QUERY } from '@/lib/client/conversation/detail-panel'
 import { useInboxKeyboard } from '@/components/admin/conversation/use-inbox-keyboard'
 import {
   useBulkConversationUpdate,
@@ -1584,6 +1584,7 @@ function InboxPage() {
             isOtherAgentTyping={false}
             openCopilotToken={openCopilotToken}
             composerRef={composerHandleRef}
+            detailPanelShown={isDetailPanelViewport}
           />
         ) : selectedRef?.kind === 'conversation' ? (
           <AgentConversationThread
@@ -1599,6 +1600,7 @@ function InboxPage() {
             createTicketToken={createTicketToken}
             openCopilotToken={openCopilotToken}
             composerRef={composerHandleRef}
+            detailPanelShown={isDetailPanelViewport}
           />
         ) : (
           <div className="hidden h-full items-center justify-center md:flex">
