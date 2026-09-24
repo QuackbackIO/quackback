@@ -150,6 +150,7 @@ export const Route = createFileRoute('/widget/')({
     // Teammate-avatar cluster for the Home header. Workspace-global and public-safe
     // (name + image only), so the anonymous SSR baseline is correct for everyone.
     let team: { name: string; avatarUrl: string | null }[] = []
+    let showPoweredBy = true
     const [portalData, { getBaseUrl }] = await Promise.all([
       feedbackProductEnabled
         ? queryClient.ensureQueryData(
@@ -217,14 +218,17 @@ export const Route = createFileRoute('/widget/')({
             })
             .catch(() => {})
         : Promise.resolve(),
+      // Independent of every branch above, so it runs in the same batch
+      // rather than adding its own round trip after it.
+      getShowPoweredByFn().then((value) => {
+        showPoweredBy = value
+      }),
     ])
 
     queryClient.setQueryData(
       widgetQueryKeys.votedPosts.bySession(INITIAL_SESSION_VERSION),
       new Set(portalData.votedPostIds)
     )
-
-    const showPoweredBy = await getShowPoweredByFn()
 
     return {
       posts: portalData.posts.items.map((p) => ({
