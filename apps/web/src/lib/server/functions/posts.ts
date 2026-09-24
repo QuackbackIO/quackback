@@ -24,7 +24,8 @@ import { db, eq, posts } from '@/lib/server/db'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import { getMemberById } from '@/lib/server/domains/principals/principal.service'
 import { createPost, updatePost } from '@/lib/server/domains/posts/post.service'
-import { listInboxPosts, countInboxFilterFacets } from '@/lib/server/domains/posts/post.inbox'
+import { countInboxFilterFacets } from '@/lib/server/domains/posts/post.inbox'
+import { listAdminInboxPage } from '@/lib/server/domains/posts/post.admin-inbox'
 import {
   getPostWithDetails,
   getPaginatedCommentsWithReplies,
@@ -207,7 +208,7 @@ export const fetchInboxPostsForAdmin = createServerFn({ method: 'GET' })
     log.debug('fetch inbox posts for admin')
     await requireAuth({ permission: PERMISSIONS.POST_VIEW_PRIVATE })
 
-    const result = await listInboxPosts({
+    const result = await listAdminInboxPage({
       boardIds: data.boardIds as BoardId[] | undefined,
       statusIds: data.statusIds as PostStatusId[] | undefined,
       statusSlugs: data.statusSlugs,
