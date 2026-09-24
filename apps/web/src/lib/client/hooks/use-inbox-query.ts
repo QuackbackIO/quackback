@@ -104,13 +104,17 @@ async function fetchPostDetail(postId: PostId): Promise<PostDetails> {
 // Shared Query Options (QC-1)
 // ============================================================================
 
+/** The order the inbox lists in when the URL names none. */
+export const DEFAULT_INBOX_SORT = 'newest' satisfies InboxFilters['sort']
+
 /**
  * The unfiltered inbox filter set. The route loader warms the infinite cache
  * with exactly this shape so the renderer's `useInboxPosts` reads the same
  * cache entry on first paint (React Query hashes `undefined` fields away, so
- * this hashes identically to the empty-search filters the hook builds).
+ * this hashes identically to the empty-search filters the hook builds, which
+ * carry the default sort).
  */
-export const defaultInboxFilters: InboxFilters = {}
+export const defaultInboxFilters: InboxFilters = { sort: DEFAULT_INBOX_SORT }
 
 /**
  * ONE canonical definition of the inbox infinite query, shared by the route
