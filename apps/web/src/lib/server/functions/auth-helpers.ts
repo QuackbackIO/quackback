@@ -66,22 +66,20 @@ async function getSessionDirect(): Promise<RequestSession | null> {
 }
 
 /**
- * The workspace settings row, served from the Redis-cached workspace-settings blob
- * (a single Redis GET when warm) and additionally memoized per request. This is
- * the auth-helper READ path only — never a read-modify-write, which must keep
- * using the uncached settings read so a write is never based on a cached row.
- * Returns null when unconfigured (getOptionalAuth's public surfaces treat that
- * as "no auth" rather than an error).
+ * The workspace settings row, served from the cached workspace-settings blob,
+ * which is itself read once per request. This is the auth-helper READ path
+ * only, never a read-modify-write, which must keep using the uncached
+ * settings read so a write is never based on a cached row. Returns null when
+ * unconfigured (getOptionalAuth's public surfaces treat that as "no auth"
+ * rather than an error).
  */
 async function getAuthSettings() {
-  return memoizePerRequest('settings', async () => {
-    try {
-      return await requireSettingsCached()
-    } catch (error) {
-      log.error({ err: error }, 'auth settings read failed')
-      return null
-    }
-  })
+  try {
+    return await requireSettingsCached()
+  } catch (error) {
+    log.error({ err: error }, 'auth settings read failed')
+    return null
+  }
 }
 
 /**
