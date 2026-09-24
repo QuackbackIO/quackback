@@ -7,7 +7,7 @@
  * here, and this runs the Better Auth session lookup and the principal read at
  * most once per request.
  *
- * Every read is memoized for the current request only (`auth-request-cache.ts`),
+ * Every read is memoized for the current request only (`request-memo.ts`),
  * partitioned by workspace, and taken from the request's own headers, so
  * nothing crosses a request, a user or a workspace. Cookie and Bearer
  * credentials resolve exactly as a direct `auth.api.getSession` call would, and
@@ -37,7 +37,7 @@ import {
   forgetPerRequestPrefix,
   memoizePerRequest,
   rememberPerRequest,
-} from '@/lib/server/functions/auth-request-cache'
+} from '@/lib/server/request-memo'
 
 export type RequestSession = NonNullable<Awaited<ReturnType<typeof auth.api.getSession>>>
 

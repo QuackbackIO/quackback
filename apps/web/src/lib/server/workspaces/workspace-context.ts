@@ -7,7 +7,7 @@
  *
  * The store already exists. `middleware/request-context.ts` opens a
  * `runWithLogContext` object at the very start of every SSR document, server
- * route and server function, and `functions/auth-request-cache.ts` already
+ * route and server function, and `request-memo.ts` already
  * demonstrates hanging request-scoped state off it under a symbol key. This is
  * the same mechanism, one field wider.
  *

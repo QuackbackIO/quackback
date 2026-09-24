@@ -60,7 +60,7 @@ const { hooksAfter } = (await import('../hooks')) as unknown as {
   hooksAfter: (ctx: unknown) => Promise<void>
 }
 const { runWithLogContext } = await import('@/lib/server/log-context')
-const { memoizePerRequest } = await import('@/lib/server/functions/auth-request-cache')
+const { memoizePerRequest } = await import('@/lib/server/request-memo')
 const { IDENTITY_MEMO_PREFIX } = await import('../request-session')
 
 beforeEach(() => {

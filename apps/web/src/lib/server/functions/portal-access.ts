@@ -70,7 +70,7 @@ export type PortalAccessDecision =
 export const resolvePortalAccessForRequest = createServerOnlyFn(
   async (): Promise<PortalAccessDecision> => {
     const [{ memoizePerRequest }, { IDENTITY_MEMO_PREFIX }] = await Promise.all([
-      import('./auth-request-cache'),
+      import('@/lib/server/request-memo'),
       import('@/lib/server/auth/request-session'),
     ])
     return memoizePerRequest(`${IDENTITY_MEMO_PREFIX}portal-access`, resolvePortalAccess)
