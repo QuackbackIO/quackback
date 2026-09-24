@@ -32,6 +32,7 @@ const composerProbe = vi.hoisted(() => ({
   onChange: null as null | ((json: unknown, html: string, markdown: string) => void),
   sendTyping: (() => {}) as () => void,
   threadRenders: 0,
+  markRead: null as null | { readThrough?: string | null; onMarked?: () => void },
 }))
 
 const routeContextState = {
@@ -71,7 +72,9 @@ vi.mock('../thread', () => ({
     measureElement: () => {},
   }),
   useOlderMessages: () => ({ loadingOlder: false, loadOlder: vi.fn() }),
-  useMarkReadOnIncoming: () => {},
+  useMarkReadOnIncoming: (args: { readThrough?: string | null; onMarked?: () => void }) => {
+    composerProbe.markRead = args
+  },
   useTypingSender: () => composerProbe.sendTyping,
 }))
 
@@ -892,5 +895,69 @@ describe('AgentConversationThread: typing signal', () => {
     expect(send()).not.toBeDisabled()
     act(() => composerProbe.onChange?.(blankDoc, '<p></p>', ''))
     expect(send()).toBeDisabled()
+  })
+})
+
+describe('AgentConversationThread: marking read', () => {
+  it("reads through the conversation's own agent watermark", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client.setQueryData(['conv-thread', 'conversation_read'], {
+      hasMore: false,
+      conversation: makeConversation({
+        id: 'conversation_read' as ConversationDTO['id'],
+        agentLastReadAt: '2026-07-02T10:00:00.000Z',
+      }),
+      messages: [makeMessage({ conversationId: 'conversation_read' as never })],
+    })
+    render(
+      <QueryClientProvider client={client}>
+        <AgentConversationThread
+          item={{ kind: 'conversation', id: 'conversation_read' } as never}
+          targetMessageId={null}
+          onChanged={vi.fn()}
+          onBack={vi.fn()}
+          onSelectItem={vi.fn()}
+          onOpenPost={vi.fn()}
+          isVisitorTyping={false}
+          isOtherAgentTyping={false}
+        />
+      </QueryClientProvider>
+    )
+    await screen.findByTestId('editor')
+    expect(composerProbe.markRead?.readThrough).toBe('2026-07-02T10:00:00.000Z')
+  })
+
+  it('clears the row in the cached inbox lists after a read instead of refreshing the inbox', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const listKey = ['admin', 'inbox', 'conversations', 'view:mine', 'open', 'all', '']
+    client.setQueryData(listKey, {
+      conversations: [
+        makeConversation({ id: 'conversation_read' as ConversationDTO['id'], unreadCount: 3 }),
+      ],
+      hasMore: false,
+      nextCursor: null,
+    })
+    const onChanged = vi.fn()
+    render(
+      <QueryClientProvider client={client}>
+        <AgentConversationThread
+          item={{ kind: 'conversation', id: 'conversation_read' } as never}
+          targetMessageId={null}
+          onChanged={onChanged}
+          onBack={vi.fn()}
+          onSelectItem={vi.fn()}
+          onOpenPost={vi.fn()}
+          isVisitorTyping={false}
+          isOtherAgentTyping={false}
+        />
+      </QueryClientProvider>
+    )
+    await screen.findByTestId('editor')
+
+    act(() => composerProbe.markRead?.onMarked?.())
+
+    expect(onChanged).not.toHaveBeenCalled()
+    const list = client.getQueryData<{ conversations: ConversationDTO[] }>(listKey)
+    expect(list?.conversations[0].unreadCount).toBe(0)
   })
 })
