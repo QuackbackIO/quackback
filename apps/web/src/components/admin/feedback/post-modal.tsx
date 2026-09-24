@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useState, useEffect, useCallback } from 'react'
+import { Suspense, memo, useState, useCallback, useLayoutEffect, useRef } from 'react'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { CustomerContextPanel } from '@/components/admin/feedback/customer-context-panel'
 import { ModalFooter } from '@/components/shared/modal-footer'
@@ -18,7 +18,7 @@ import { usePostMediaUpload, usePortalMediaUpload } from '@/lib/client/hooks/use
 import { adminQueries } from '@/lib/client/queries/admin'
 import { postOwnerQueries } from '@/lib/client/queries/post-owner'
 import { mergeSuggestionQueries } from '@/lib/client/queries/signals'
-import { usePermission } from '@/lib/client/hooks/use-permission'
+import { permissionFromRouteContext } from '@/lib/client/hooks/use-permission'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
 import {
@@ -58,7 +58,7 @@ import {
 import { usePostExternalLinks } from '@/lib/client/hooks/use-post-external-links-query'
 import { usePostDetailKeyboard } from '@/lib/client/hooks/use-post-detail-keyboard'
 import { retryPostIntegrationSyncFn, setPostEtaFn } from '@/lib/server/functions/posts'
-import { useRouterState } from '@tanstack/react-router'
+import { useRouteContext, useRouterState } from '@tanstack/react-router'
 import {
   type PostId,
   type PostStatusId,
@@ -89,7 +89,12 @@ interface PostModalContentProps {
   onClose: () => void
 }
 
-function PostModalContent({
+/**
+ * Memoized, and every prop is stable while the post stays open, so the
+ * content (two rich-text editors, the sidebar, the comment thread) renders
+ * only for its own state, not for each navigation around it.
+ */
+const PostModalContent = memo(function PostModalContent({
   postId,
   currentUser,
   onNavigateToPost,
@@ -106,9 +111,20 @@ function PostModalContent({
   // Owner (assignee) control — gated on post.set_owner. The roster is fetched
   // via the same post.set_owner-gated fn the portal uses; the current owner is
   // resolved from it against the post's ownerPrincipalId (already in payload).
-  const canSetOwner = usePermission(PERMISSIONS.POST_SET_OWNER)
-  const canModerate = usePermission(PERMISSIONS.POST_APPROVE)
-  const canManageIntegrations = usePermission(PERMISSIONS.INTEGRATION_MANAGE)
+  // Each answer is selected (not the whole context), so the fresh context
+  // each navigation brings does not re-render the modal.
+  const canSetOwner = useRouteContext({
+    from: '/admin',
+    select: (context) => permissionFromRouteContext(context, PERMISSIONS.POST_SET_OWNER),
+  })
+  const canModerate = useRouteContext({
+    from: '/admin',
+    select: (context) => permissionFromRouteContext(context, PERMISSIONS.POST_APPROVE),
+  })
+  const canManageIntegrations = useRouteContext({
+    from: '/admin',
+    select: (context) => permissionFromRouteContext(context, PERMISSIONS.INTEGRATION_MANAGE),
+  })
   const approvePost = useApprovePost(postId)
   const rejectPost = useRejectPost(postId)
   const { data: ownerCandidates } = useQuery({
@@ -134,7 +150,6 @@ function PostModalContent({
   const [title, setTitle] = useState(post.title)
   const [contentJson, setContentJson] = useState<JSONContent | null>(getInitialContentJson(post))
   const [contentMarkdown, setContentMarkdown] = useState(post.content ?? '')
-  const [hasInitialized, setHasInitialized] = useState(false)
 
   // UI state
   const [isUpdating, setIsUpdating] = useState(false)
@@ -142,6 +157,26 @@ function PostModalContent({
   const [showMergeOthersDialog, setShowMergeOthersDialog] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [activeTab, setActiveTab] = useState<'comments' | 'activity'>('comments')
+
+  // Reset the form when the post changes (prev/next navigation, or a refetch
+  // bringing a new title or body). Adjusted during render rather than in an
+  // effect, which rendered the whole modal a second time on every open.
+  const [formSource, setFormSource] = useState({
+    id: post.id,
+    title: post.title,
+    contentJson: post.contentJson,
+  })
+  if (
+    formSource.id !== post.id ||
+    formSource.title !== post.title ||
+    formSource.contentJson !== post.contentJson
+  ) {
+    setFormSource({ id: post.id, title: post.title, contentJson: post.contentJson })
+    setTitle(post.title)
+    setContentJson(getInitialContentJson(post))
+    setShowMergeDialog(false)
+    setShowMergeOthersDialog(false)
+  }
 
   // Duplicate badge indicator — derived from merge suggestions (deduped by React Query with SimilarPostsCard)
   const { data: mergeSuggestionsData } = useQuery(mergeSuggestionQueries.forPost(postId))
@@ -190,23 +225,6 @@ function PostModalContent({
     post.id as PostId,
     showDeleteDialog || canManageIntegrations
   )
-
-  // Initialize form with post data
-  useEffect(() => {
-    if (post && !hasInitialized) {
-      setTitle(post.title)
-      setContentJson(getInitialContentJson(post))
-      setHasInitialized(true)
-    }
-  }, [post, hasInitialized])
-
-  // Reset when navigating to different post
-  useEffect(() => {
-    setTitle(post.title)
-    setContentJson(getInitialContentJson(post))
-    setShowMergeDialog(false)
-    setShowMergeOthersDialog(false)
-  }, [post.id, post.title, post.contentJson])
 
   // Keyboard navigation
   usePostDetailKeyboard({
@@ -642,7 +660,7 @@ function PostModalContent({
       />
     </div>
   )
-}
+})
 
 export function PostModal({ postId: urlPostId, currentUser }: PostModalProps) {
   const { pathname, search } = useRouterState({ select: (s) => s.location })
@@ -653,6 +671,15 @@ export function PostModal({ postId: urlPostId, currentUser }: PostModalProps) {
     route: pathname,
     search: search as Record<string, unknown>,
   })
+
+  // useUrlModal's callbacks change with every location; the content gets
+  // stable ones that call the latest.
+  const latest = useRef({ close, navigateTo })
+  useLayoutEffect(() => {
+    latest.current = { close, navigateTo }
+  })
+  const onClose = useCallback(() => latest.current.close(), [])
+  const onNavigateToPost = useCallback((id: string) => latest.current.navigateTo(id), [])
 
   return (
     <UrlModalShell
@@ -665,8 +692,8 @@ export function PostModal({ postId: urlPostId, currentUser }: PostModalProps) {
         <PostModalContent
           postId={validatedId}
           currentUser={currentUser}
-          onNavigateToPost={navigateTo}
-          onClose={close}
+          onNavigateToPost={onNavigateToPost}
+          onClose={onClose}
         />
       )}
     </UrlModalShell>
