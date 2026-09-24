@@ -35,6 +35,9 @@ export type Journey = DocumentJourney | BrowserJourney
 
 const firstPortalPost = (page: Page) => page.locator('a[href*="/posts/post_"]').first()
 
+/** How long a hover-then-click journey rests the pointer on a link before pressing it. */
+const HOVER_MS = 250
+
 /** The first post linked from the portal home, for loading a post page directly. */
 async function firstPostPath(request: APIRequestContext): Promise<string> {
   const html = await (await request.get('/?sort=trending')).text()
@@ -194,6 +197,43 @@ export const journeys: Journey[] = [
     },
     run: async (page) => {
       await page.locator('a[href="/admin/roadmap"]').first().click()
+      await page.waitForURL(/\/admin\/roadmap/)
+      await page.getByRole('heading').first().waitFor()
+    },
+  },
+
+  // The same click-throughs the way a person makes them: the pointer rests on
+  // the link long enough for the router's intent preload to start before the
+  // press (and the focus the press gives the link) lands.
+  {
+    kind: 'browser',
+    name: 'ui:portal-hover-open-post',
+    as: 'anon',
+    setup: async (page) => {
+      await page.goto('/?sort=trending')
+      await firstPortalPost(page).waitFor()
+    },
+    run: async (page) => {
+      await firstPortalPost(page).hover()
+      await page.waitForTimeout(HOVER_MS)
+      await firstPortalPost(page).click()
+      await page.waitForURL(/\/posts\/post_/)
+      await page.getByRole('heading', { level: 1 }).first().waitFor()
+    },
+  },
+  {
+    kind: 'browser',
+    name: 'ui:admin-hover-nav-feedback-to-roadmap',
+    as: 'admin',
+    setup: async (page) => {
+      await page.goto('/admin/feedback')
+      await page.locator('[data-post-id]').first().waitFor()
+    },
+    run: async (page) => {
+      const link = page.locator('a[href="/admin/roadmap"]').first()
+      await link.hover()
+      await page.waitForTimeout(HOVER_MS)
+      await link.click()
       await page.waitForURL(/\/admin\/roadmap/)
       await page.getByRole('heading').first().waitFor()
     },
