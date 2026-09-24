@@ -62,12 +62,14 @@ import {
 } from '@/components/widget/widget-skeletons'
 import { conversationSummaryKey } from '@/components/widget/use-messenger-summary'
 import { useTicketStageBadge } from '@/components/widget/use-ticket-stage-badge'
+import { useWarmLazyViews } from '@/components/widget/use-warm-lazy-views'
 
 // Secondary views load behind lazy() boundaries so the iframe's first paint
 // only needs the shell + Home/feedback — the detail views carry the
 // rich-text editor (tiptap) and the messenger carries the conversation thread.
-// The shared import thunks below also feed an idle-time prefetch after mount,
-// so by the time a visitor clicks a tab the chunk is already cached.
+// The shared import thunks below also feed an idle-time warm-up of the enabled
+// tabs' views once the widget is shown (useWarmLazyViews), so by the time a
+// visitor clicks a tab the chunk is already cached.
 const loadPostDetail = () => import('@/components/widget/widget-post-detail')
 const loadChangelog = () => import('@/components/widget/widget-changelog')
 const loadChangelogDetail = () => import('@/components/widget/widget-changelog-detail')
@@ -92,17 +94,23 @@ const WidgetMessenger = lazy(() => loadMessenger().then((m) => ({ default: m.Wid
 const WidgetMessages = lazy(() => loadMessagesView().then((m) => ({ default: m.WidgetMessages })))
 const WidgetTickets = lazy(() => loadTicketsView().then((m) => ({ default: m.WidgetTickets })))
 
-const LAZY_VIEW_LOADERS = [
-  loadPostDetail,
-  loadChangelog,
-  loadChangelogDetail,
-  loadHelp,
-  loadHelpCategory,
-  loadHelpDetail,
-  loadMessenger,
-  loadMessagesView,
-  loadTicketsView,
-]
+/** The lazy views a visitor can reach from the enabled tabs. */
+function lazyViewLoadersFor(tabs: {
+  feedback?: boolean
+  changelog?: boolean
+  help?: boolean
+  messages?: boolean
+  tickets?: boolean
+}): (() => Promise<unknown>)[] {
+  const loaders: (() => Promise<unknown>)[] = []
+  if (tabs.feedback) loaders.push(loadPostDetail)
+  if (tabs.changelog) loaders.push(loadChangelog, loadChangelogDetail)
+  if (tabs.help) loaders.push(loadHelp, loadHelpCategory, loadHelpDetail)
+  if (tabs.messages) loaders.push(loadMessagesView)
+  if (tabs.tickets) loaders.push(loadTicketsView)
+  if (tabs.messages || tabs.tickets) loaders.push(loadMessenger)
+  return loaders
+}
 
 const searchSchema = z.object({
   board: z.string().optional(),
@@ -481,20 +489,10 @@ function WidgetPage() {
   // panel is always full-screen, so the manual size control is meaningless.
   const [hostIsMobile, setHostIsMobile] = useState(false)
 
-  // Warm the lazy view chunks once the first paint has settled, so tab
-  // clicks resolve from cache instead of hitting the network. Idle-time only:
-  // first paint must never compete with these fetches.
-  useEffect(() => {
-    const prefetch = () => {
-      for (const load of LAZY_VIEW_LOADERS) void load().catch(() => {})
-    }
-    if (typeof window.requestIdleCallback === 'function') {
-      const handle = window.requestIdleCallback(prefetch, { timeout: 3000 })
-      return () => window.cancelIdleCallback(handle)
-    }
-    const timer = window.setTimeout(prefetch, 1500)
-    return () => window.clearTimeout(timer)
-  }, [])
+  // Warm the enabled tabs' lazy view chunks once the widget is shown, so tab
+  // clicks resolve from cache instead of hitting the network.
+  const warmLoaders = useMemo(() => lazyViewLoadersFor(tabs), [tabs])
+  useWarmLazyViews(warmLoaders)
 
   // Where a cross-navigation came from (e.g. Home's "Search for help" jumping
   // to the Help tab). While set, even a ROOT view shows a back chevron that
