@@ -12,6 +12,7 @@ import {
   queryOptions,
   keepPreviousData,
   type InfiniteData,
+  type QueryClient,
 } from '@tanstack/react-query'
 import {
   fetchInboxPostsForAdmin,
@@ -19,6 +20,7 @@ import {
   fetchPostWithDetails,
 } from '@/lib/server/functions/posts'
 import type { InboxFilters, PostDetails } from '@/lib/shared/types'
+import { mergeSuggestionQueries } from '@/lib/client/queries/signals'
 import type { PostListItem, InboxPostListResult } from '@/lib/shared/db-types'
 import type { BoardId, PrincipalId, PostId, PostTagId, SegmentId } from '@quackback/ids'
 
@@ -78,18 +80,28 @@ function facetCountFilters(filters: InboxFilters): InboxFilters {
   return rest
 }
 
+/**
+ * One page of the list. The page arrives with its posts' pending merge
+ * suggestion counts, which seed the per-page counts query the rows' duplicate
+ * badges read (`mergeSuggestionQueries.countsForPosts`, keyed by the page's ids
+ * in order), so the badges need no request of their own.
+ */
 async function fetchInboxPosts(
+  client: QueryClient,
   filters: InboxFilters,
   cursor?: string
 ): Promise<InboxPostListResult> {
-  return (await fetchInboxPostsForAdmin({
+  const { duplicateCounts, ...page } = await fetchInboxPostsForAdmin({
     data: {
       ...toInboxListInput(filters),
       sort: filters.sort,
       cursor,
       limit: 20,
     },
-  })) as unknown as InboxPostListResult
+  })
+  const ids = page.items.map((p) => p.id as PostId)
+  client.setQueryData(mergeSuggestionQueries.countsForPosts(ids).queryKey, duplicateCounts)
+  return page as unknown as InboxPostListResult
 }
 
 async function fetchPostDetail(postId: PostId): Promise<PostDetails> {
@@ -127,7 +139,7 @@ export const defaultInboxFilters: InboxFilters = { sort: DEFAULT_INBOX_SORT }
 export function inboxPostsInfiniteOptions(filters: InboxFilters) {
   return infiniteQueryOptions({
     queryKey: inboxKeys.list(filters),
-    queryFn: ({ pageParam }) => fetchInboxPosts(filters, pageParam),
+    queryFn: ({ pageParam, client }) => fetchInboxPosts(client, filters, pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     // NOTE (QC-2): no `maxPages` here. This cursor is a one-directional keyset
