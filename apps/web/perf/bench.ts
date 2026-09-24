@@ -17,7 +17,8 @@
  *   bun perf/bench.ts --timing 20      add median/p90 wall time per journey
  *   PERF_APP_DIR=../other/apps/web bun perf/bench.ts   bench another build
  *   bun perf/bench.ts --trace --only ui:portal-load
- *                                      list the SQL behind the journey, most repeated first
+ *                                      list the SQL behind the journey, most repeated first,
+ *                                      then each server request (server functions by name)
  *
  * Every journey's warm-up call is also the first request this freshly booted
  * server has handled for it, so its db_queries is printed as a "cold:" line
@@ -37,7 +38,7 @@ import {
   type Page,
 } from '@playwright/test'
 import { parseArgs } from 'node:util'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { journeys, type Actor, type BrowserJourney, type DocumentJourney } from './journeys'
 import { ADMIN, BENCH_DATABASE_URL, BENCH_PORT } from './config'
 
@@ -77,7 +78,7 @@ interface ServerLine {
 // ---------------------------------------------------------------------------
 
 const finished = new Map<string, ServerLine[]>()
-const statements = new Map<string, string[]>()
+const statements = new Map<string, { sql: string; route?: string }[]>()
 
 async function startServer() {
   const server = Bun.spawn(['bun', '.output/server/index.mjs'], {
@@ -119,7 +120,10 @@ async function startServer() {
         if (record.msg === 'request finished') {
           finished.set(id, [...(finished.get(id) ?? []), record])
         } else if (record.msg === 'db query' && record.sql) {
-          statements.set(id, [...(statements.get(id) ?? []), record.sql])
+          statements.set(id, [
+            ...(statements.get(id) ?? []),
+            { sql: record.sql, route: record.route },
+          ])
         }
       }
     }
@@ -457,14 +461,56 @@ function normalizeSql(sql: string) {
   return sql.replace(/\s+/g, ' ').replace(/\$\d+/g, '?').slice(0, 220)
 }
 
-function printTrace(id: string) {
+/**
+ * Server function ids are hashes; the build's resolver manifest maps each one
+ * back to the function's name, so a traced request reads as `getPostFn`
+ * rather than `/_serverFn/3f9c...`.
+ */
+let serverFnNames: Map<string, string> | undefined
+function routeLabel(route: string | undefined) {
+  if (!route) return '(no route)'
+  if (!serverFnNames) {
+    serverFnNames = new Map()
+    const dir = `${appDir}.output/server`
+    const file = readdirSync(dir).find((f) => f.includes('server-fn-resolver'))
+    const source = file ? readFileSync(`${dir}/${file}`, 'utf8') : ''
+    for (const m of source.matchAll(
+      /"([0-9a-f]{64})":\s*\{\s*functionName:\s*"(\w+?)(?:_createServerFn_handler)?"/g
+    ))
+      serverFnNames.set(m[1]!, m[2]!)
+  }
+  const id = route.match(/\/_serverFn\/([0-9a-f]{64})/)?.[1]
+  return id ? `${route.split(' ')[0]} ${serverFnNames.get(id) ?? id}` : route
+}
+
+function printStatements(list: { sql: string }[], indent: string) {
   const counts = new Map<string, number>()
-  for (const sql of statements.get(id) ?? []) {
+  for (const { sql } of list) {
     const key = normalizeSql(sql)
     counts.set(key, (counts.get(key) ?? 0) + 1)
   }
   const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1])
-  for (const [sql, n] of sorted) console.log(`    ${String(n).padStart(3)}x  ${sql}`)
+  for (const [sql, n] of sorted) console.log(`${indent}${String(n).padStart(3)}x  ${sql}`)
+}
+
+function printTrace(id: string) {
+  const list = statements.get(id) ?? []
+  printStatements(list, '    ')
+  const requests = finished.get(id) ?? []
+  if (requests.length === 0) return
+  console.log(`\n    by server request:`)
+  const byRoute = new Map<string, { sql: string }[]>()
+  for (const s of list) byRoute.set(s.route ?? '', [...(byRoute.get(s.route ?? '') ?? []), s])
+  const printed = new Set<string>()
+  for (const r of requests) {
+    console.log(
+      `    - ${routeLabel(r.route)}  db=${r.db_queries ?? 0}  ${r.duration_ms ?? 0}ms  (${r.status ?? '?'})`
+    )
+    if (r.route && !printed.has(r.route)) {
+      printed.add(r.route)
+      printStatements(byRoute.get(r.route) ?? [], '          ')
+    }
+  }
 }
 
 function percentile(values: number[], p: number) {
