@@ -38,6 +38,7 @@ import { createDbFromSql, type Database } from '@quackback/db/client'
 import { config } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
 import { runWithLogContext } from '@/lib/server/log-context'
+import { countingQueryLogger } from '@/lib/server/request-metrics'
 import { ensureWorkspaceSchemaCurrent } from '@/lib/server/fleet/ensure-schema-current'
 import { assertSchemaFloor } from '@/lib/server/fleet/schema-floor'
 import {
@@ -185,7 +186,7 @@ function createEntry(workspace: WorkspaceDescriptor): PoolEntry {
     onnotice: () => {},
   })
 
-  const db = createDbFromSql(sql)
+  const db = createDbFromSql(sql, { logger: countingQueryLogger })
 
   const entry: PoolEntry = {
     workspaceKey: workspace.workspaceKey,
@@ -407,7 +408,7 @@ export async function openWorkspaceDirectPool(
     const secrets = await verifyWorkspaceDatabase(workspace, sql)
     return {
       sql,
-      db: createDbFromSql(sql),
+      db: createDbFromSql(sql, { logger: countingQueryLogger }),
       secrets,
       close: () =>
         sql

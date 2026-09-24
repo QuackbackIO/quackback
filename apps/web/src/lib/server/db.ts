@@ -16,6 +16,7 @@ import {
   WorkspaceScopeMissingError,
 } from '@/lib/server/workspaces/workspace-context'
 import { wrapDbTransaction } from '@/lib/server/workspaces/after-commit'
+import { countingQueryLogger } from '@/lib/server/request-metrics'
 
 // Import drizzle-orm operators explicitly to work around Nitro bundler issues
 // with nested barrel exports. If we use `export { asc } from 'drizzle-orm'`,
@@ -115,6 +116,7 @@ function getDatabase(): Database {
     globalThis.__db = createDb(config.databaseUrl, {
       max: config.dbPoolMax,
       idleTimeout: config.dbIdleTimeout,
+      logger: countingQueryLogger,
     })
   }
   return globalThis.__db

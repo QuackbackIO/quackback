@@ -38,3 +38,6 @@ npm-debug.log*
 # Temporary files
 *.tmp
 .cache
+
+# Performance bench output
+perf/.results
