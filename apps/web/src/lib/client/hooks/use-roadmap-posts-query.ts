@@ -1,4 +1,9 @@
-import { useInfiniteQuery, keepPreviousData, type InfiniteData } from '@tanstack/react-query'
+import {
+  useInfiniteQuery,
+  infiniteQueryOptions,
+  keepPreviousData,
+  type InfiniteData,
+} from '@tanstack/react-query'
 import type {
   RoadmapPost,
   RoadmapPostListResult,
@@ -7,7 +12,7 @@ import type {
 } from '@/lib/shared/types'
 import type { RoadmapId, PostStatusId } from '@quackback/ids'
 import type { RoadmapFilters } from '@/lib/shared/types'
-import { getRoadmapPostsFn } from '@/lib/server/functions/roadmaps'
+import { getRoadmapColumnsFn, getRoadmapPostsFn } from '@/lib/server/functions/roadmaps'
 import { getRoadmapPostsByStatusFn } from '@/lib/server/functions/public-posts'
 
 // ============================================================================
@@ -89,37 +94,129 @@ export function useRoadmapPosts({ statusId, initialData }: UseRoadmapPostsOption
 }
 
 export function useRoadmapPostsByRoadmap({
+  enabled = true,
+  ...column
+}: UseRoadmapPostsByRoadmapOptions) {
+  return useInfiniteQuery({ ...roadmapPostsByRoadmapOptions(column), enabled })
+}
+
+const COLUMN_PAGE_SIZE = 20
+
+function columnFilterInput(roadmapId: RoadmapId, filters: RoadmapFilters | undefined) {
+  return {
+    roadmapId,
+    limit: COLUMN_PAGE_SIZE,
+    search: filters?.search,
+    boardIds: filters?.board,
+    tagIds: filters?.tags,
+    segmentIds: filters?.segmentIds,
+    sort: filters?.sort,
+  }
+}
+
+type RoadmapColumnRef = { statusId?: PostStatusId; bucketId?: string }
+
+interface FirstPageBatch {
+  input: ReturnType<typeof columnFilterInput>
+  columns: RoadmapColumnRef[]
+  waiters: { resolve: (page: RoadmapPostsListResult) => void; reject: (error: unknown) => void }[]
+}
+
+/**
+ * First pages asked for in the same tick for the same board and filters (the
+ * board opening, a filter change, a drag refreshing two columns), waiting to
+ * go out as one getRoadmapColumnsFn request.
+ */
+const pendingFirstPages = new Map<string, FirstPageBatch>()
+
+function fetchColumnFirstPage(
+  roadmapId: RoadmapId,
+  column: RoadmapColumnRef,
+  filters: RoadmapFilters | undefined
+): Promise<RoadmapPostsListResult> {
+  const input = columnFilterInput(roadmapId, filters)
+  const key = JSON.stringify(input)
+  let batch = pendingFirstPages.get(key)
+  if (!batch) {
+    const created: FirstPageBatch = { input, columns: [], waiters: [] }
+    pendingFirstPages.set(key, created)
+    queueMicrotask(() => void sendFirstPages(key, created))
+    batch = created
+  }
+  const { columns, waiters } = batch
+  return new Promise((resolve, reject) => {
+    columns.push(column)
+    waiters.push({ resolve, reject })
+  })
+}
+
+/** The most columns one first-page request may carry: the server's limit. */
+const MAX_COLUMNS_PER_REQUEST = 50
+
+/**
+ * A batch's first pages, fetched in requests of at most
+ * MAX_COLUMNS_PER_REQUEST columns (a date board can span more periods than
+ * that) and returned in the batch's column order.
+ */
+async function fetchInChunks<Column>(
+  columns: Column[],
+  fetchChunk: (columns: Column[]) => Promise<RoadmapPostsListResult[]>
+): Promise<RoadmapPostsListResult[]> {
+  const chunks: Column[][] = []
+  for (let i = 0; i < columns.length; i += MAX_COLUMNS_PER_REQUEST) {
+    chunks.push(columns.slice(i, i + MAX_COLUMNS_PER_REQUEST))
+  }
+  return (await Promise.all(chunks.map(fetchChunk))).flat()
+}
+
+async function sendFirstPages(key: string, batch: FirstPageBatch) {
+  pendingFirstPages.delete(key)
+  try {
+    const pages = await fetchInChunks(
+      batch.columns,
+      async (columns) =>
+        (await getRoadmapColumnsFn({
+          data: { ...batch.input, columns },
+        })) as RoadmapPostsListResult[]
+    )
+    batch.waiters.forEach((waiter, i) => waiter.resolve(pages[i]!))
+  } catch (error) {
+    for (const waiter of batch.waiters) waiter.reject(error)
+  }
+}
+
+/**
+ * One admin roadmap column's posts, a page of 20 at a time. First pages load
+ * together with the board's other columns (see fetchColumnFirstPage); later
+ * pages load for their column alone.
+ */
+export function roadmapPostsByRoadmapOptions({
   roadmapId,
   statusId,
   bucketId,
   filters,
-  enabled = true,
-}: UseRoadmapPostsByRoadmapOptions) {
-  return useInfiniteQuery({
+}: Omit<UseRoadmapPostsByRoadmapOptions, 'enabled'>) {
+  return infiniteQueryOptions({
     queryKey: roadmapPostsKeys.byRoadmap(roadmapId, statusId, bucketId, filters),
     queryFn: ({ pageParam }) =>
-      getRoadmapPostsFn({
-        data: {
-          roadmapId,
-          statusId,
-          bucketId,
-          limit: 20,
-          offset: pageParam,
-          search: filters?.search,
-          boardIds: filters?.board,
-          tagIds: filters?.tags,
-          segmentIds: filters?.segmentIds,
-          sort: filters?.sort,
-        },
-      }) as Promise<RoadmapPostsListResult>,
+      pageParam === 0
+        ? fetchColumnFirstPage(roadmapId, { statusId, bucketId }, filters)
+        : (getRoadmapPostsFn({
+            data: {
+              ...columnFilterInput(roadmapId, filters),
+              statusId,
+              bucketId,
+              offset: pageParam,
+            },
+          }) as Promise<RoadmapPostsListResult>),
     initialPageParam: 0,
-    getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length * 20 : undefined),
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.hasMore ? allPages.length * COLUMN_PAGE_SIZE : undefined,
     // Offset inverts trivially (offset - 20, floored at 0) — admin board.
     getPreviousPageParam: (_firstPage, _allPages, firstPageParam) =>
-      firstPageParam > 0 ? Math.max(0, firstPageParam - 20) : undefined,
+      firstPageParam > 0 ? Math.max(0, firstPageParam - COLUMN_PAGE_SIZE) : undefined,
     maxPages: 5,
     placeholderData: keepPreviousData,
-    enabled,
   })
 }
 
