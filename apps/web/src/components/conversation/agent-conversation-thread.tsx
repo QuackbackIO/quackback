@@ -274,6 +274,13 @@ function toastImageUploadError(error: Error) {
   toast.error(error.message)
 }
 
+/** The doc a composer holds before anything is written: no content, or one empty paragraph. */
+function isBlankComposerDoc(doc: JSONContent | TiptapContent | null | undefined): boolean {
+  const content = doc?.content
+  if (!content || content.length === 0) return true
+  return content.length === 1 && content[0].type === 'paragraph' && !content[0].content?.length
+}
+
 export function AgentConversationThread({
   item,
   targetMessageId,
@@ -1508,18 +1515,30 @@ export function AgentConversationThread({
   // when the capability is on — a ticket reply never signals typing); a note
   // is internal, so it never signals typing either way. Both callbacks are
   // stable so the editor's extensions aren't rebuilt on every render.
+  //
+  // An editor also reports updates that change no text: mounting, and
+  // toggling editable, report the blank doc it already held. Those leave the
+  // draft as it was, so they neither re-render the thread nor tell the
+  // visitor the agent is typing; only a change to the text signals typing.
+  // The draft refs move with each accepted update so a second update in the
+  // same tick compares against the first rather than the last render.
   const onReplyChange = useCallback(
     (json: JSONContent, _html: string, markdown: string) => {
-      setReplyDraft({ json: json as TiptapContent, markdown })
-      if (capabilities.typing) onLocalInput()
+      const previous = replyDraftRef.current
+      if (isBlankComposerDoc(json) && isBlankComposerDoc(previous.json)) return
+      const next = { json: json as TiptapContent, markdown }
+      replyDraftRef.current = next
+      setReplyDraft(next)
+      if (capabilities.typing && markdown !== previous.markdown) onLocalInput()
     },
     [onLocalInput, capabilities.typing]
   )
-  const onNoteChange = useCallback(
-    (json: JSONContent, _html: string, markdown: string) =>
-      setNoteDraft({ json: json as TiptapContent, markdown }),
-    []
-  )
+  const onNoteChange = useCallback((json: JSONContent, _html: string, markdown: string) => {
+    if (isBlankComposerDoc(json) && isBlankComposerDoc(noteDraftRef.current.json)) return
+    const next = { json: json as TiptapContent, markdown }
+    noteDraftRef.current = next
+    setNoteDraft(next)
+  }, [])
 
   // Enter-to-send routes through onSubmit, so it must be a STABLE callback — an
   // inline arrow would churn the editor's extension identity every keystroke.
