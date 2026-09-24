@@ -514,6 +514,19 @@ async function main() {
       })
       console.log(`${mark} ${name}${errors[name] ? `  (${errors[name]})` : ''}`)
       console.log(`    ${cells.join('  ')}`)
+      if (process.env.GITHUB_ACTIONS === 'true') {
+        for (const row of rows) {
+          if (row.verdict === 'over') {
+            console.log(
+              `::error title=Performance budget::${name} ${row.metric}=${row.value} is over its ceiling of ${row.ceiling}`
+            )
+          } else if (row.verdict === 'under') {
+            console.log(
+              `::notice title=Performance ratchet::${name} ${row.metric}=${row.value} is under its ceiling of ${row.ceiling}; lower it with \`bun run --cwd apps/web perf --update\``
+            )
+          }
+        }
+      }
       if (timingRuns) {
         console.log(
           `    timing: ${Object.entries(timing)
