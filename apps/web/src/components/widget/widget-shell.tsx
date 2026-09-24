@@ -24,7 +24,7 @@ import { useWidgetAuth } from './widget-auth-provider'
 import { useMessengerUnread } from './use-messenger-unread'
 import { useChangelogUnread } from './use-changelog-unread'
 import { useTicketStageBadge } from './use-ticket-stage-badge'
-import { hasOpenSuggestionPopup } from '@/components/ui/suggestion-popup'
+import { hasOpenSuggestionPopup } from '@/components/ui/suggestion-popup-marker'
 
 import { type WidgetTab, type EnabledTabs, visibleTabsForVisitor } from './widget-nav'
 export type { WidgetTab }
