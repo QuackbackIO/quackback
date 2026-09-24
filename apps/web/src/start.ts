@@ -11,6 +11,7 @@
  * same-origin protection in production (the omission warning is dev-only).
  */
 import { createStart, createCsrfMiddleware } from '@tanstack/react-start'
+import { compressionMiddleware } from '@/lib/server/middleware/compression'
 import { oauthCorsMiddleware } from '@/lib/server/middleware/oauth-cors'
 import { requestContextMiddleware } from '@/lib/server/middleware/request-context'
 import { serverFnLogMiddleware } from '@/lib/server/middleware/server-fn-log'
@@ -31,7 +32,12 @@ const csrfMiddleware = createCsrfMiddleware({
 
 export const startInstance = createStart(() => {
   return {
-    // Request-context/logging first so even CSRF-rejected requests get a
+    // Compression wraps everything else in this array: it only sees the
+    // response once every inner middleware has already applied its headers,
+    // and it is the last thing to touch the body before it leaves the
+    // process. See compression.ts for why the body is streamed through
+    // node:zlib rather than the web CompressionStream API.
+    // Request-context/logging next so even CSRF-rejected requests get a
     // request_id and an access log. Workspace resolution second — before CSRF and
     // before auth, because auth is full of `db` queries and cannot run until the
     // database has been chosen (SAAS-HOSTING-STACK.md §6). Under
@@ -39,6 +45,7 @@ export const startInstance = createStart(() => {
     // OAuth/MCP CORS answers preflights before workspace resolution: a
     // preflight carries no credentials and needs no database.
     requestMiddleware: [
+      compressionMiddleware,
       requestContextMiddleware,
       oauthCorsMiddleware,
       workspaceContextMiddleware,
