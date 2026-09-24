@@ -1,5 +1,5 @@
 import type { BoardId } from '@quackback/ids'
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { Suspense, useState, useCallback, useEffect, useRef } from 'react'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { useRouter, useRouteContext } from '@tanstack/react-router'
@@ -8,7 +8,11 @@ import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
 import { PencilIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
-import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import {
+  LazyRichTextEditor,
+  RichTextEditorPlaceholder,
+  preloadRichTextEditor,
+} from '@/components/ui/lazy-rich-text-editor'
 import { usePortalMediaUpload } from '@/lib/client/hooks/use-image-upload'
 import { useCreatePublicPost } from '@/lib/client/mutations/portal-posts'
 import { useAuthPopover } from '@/components/auth/auth-popover-context'
@@ -276,6 +280,8 @@ export function FeedbackHeaderAnimated({
       }}
       transition={{ duration: 0.2 }}
       onKeyDown={handleKeyDown}
+      // The editor renders once the header expands; hovering warms its chunk.
+      onPointerEnter={preloadRichTextEditor}
     >
       {/* Destination board, above title when expanded */}
       <AnimatePresence>
@@ -380,24 +386,26 @@ export function FeedbackHeaderAnimated({
               transition={{ duration: 0.2, delay: 0.15 }}
               className="px-4 sm:px-5 pb-4"
             >
-              <RichTextEditor
-                value={contentJson || ''}
-                onChange={handleContentChange}
-                placeholder={intl.formatMessage({
-                  id: 'portal.feedback.header.detailsPlaceholder',
-                  defaultMessage: 'Add more details... Type / for commands',
-                })}
-                minHeight="150px"
-                borderless
-                toolbarPosition="bottom"
-                features={{
-                  ...PUBLIC_FEEDBACK_EDITOR_FEATURES,
-                  images: canUploadMedia,
-                  videos: canUploadMedia,
-                }}
-                onImageUpload={canUploadMedia ? uploadMediaWithSession : undefined}
-                onVideoUpload={canUploadMedia ? uploadMediaWithSession : undefined}
-              />
+              <Suspense fallback={<RichTextEditorPlaceholder minHeight="150px" />}>
+                <LazyRichTextEditor
+                  value={contentJson || ''}
+                  onChange={handleContentChange}
+                  placeholder={intl.formatMessage({
+                    id: 'portal.feedback.header.detailsPlaceholder',
+                    defaultMessage: 'Add more details... Type / for commands',
+                  })}
+                  minHeight="150px"
+                  borderless
+                  toolbarPosition="bottom"
+                  features={{
+                    ...PUBLIC_FEEDBACK_EDITOR_FEATURES,
+                    images: canUploadMedia,
+                    videos: canUploadMedia,
+                  }}
+                  onImageUpload={canUploadMedia ? uploadMediaWithSession : undefined}
+                  onVideoUpload={canUploadMedia ? uploadMediaWithSession : undefined}
+                />
+              </Suspense>
             </motion.div>
 
             {/* Board-configured custom intake fields */}
