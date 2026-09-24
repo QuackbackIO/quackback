@@ -111,6 +111,22 @@ export const journeys: Journey[] = [
     },
   },
   {
+    // The trending post above has no comments. The most voted one has, so this
+    // is what rendering a comment thread adds to opening a post.
+    kind: 'browser',
+    name: 'ui:portal-open-post-with-comments',
+    as: 'anon',
+    setup: async (page) => {
+      await page.goto('/?sort=top')
+      await firstPortalPost(page).waitFor()
+    },
+    run: async (page) => {
+      await firstPortalPost(page).click()
+      await page.waitForURL(/\/posts\/post_/)
+      await page.locator('[id^="comment-"]').first().waitFor()
+    },
+  },
+  {
     kind: 'browser',
     name: 'ui:widget-load',
     as: 'anon',
