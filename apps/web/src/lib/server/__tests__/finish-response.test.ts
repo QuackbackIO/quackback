@@ -49,6 +49,18 @@ describe('finishResponse', () => {
     expect(hook).toHaveBeenCalledTimes(1)
   })
 
+  it('leaves the body unencoded when compression is switched off', async () => {
+    process.env.QUACKBACK_COMPRESSION = 'off'
+    try {
+      const response = htmlResponse()
+      const sent = await finishResponse(request('br'), response)
+      expect(sent).toBe(response)
+      expect(sent.headers.get('content-encoding')).toBeNull()
+    } finally {
+      delete process.env.QUACKBACK_COMPRESSION
+    }
+  })
+
   it('returns the response itself when there is nothing to do', async () => {
     const response = htmlResponse()
     expect(await finishResponse(request(), response)).toBe(response)
