@@ -1228,10 +1228,29 @@ export const EmojiSuggestionList = forwardRef<EmojiSuggestionListRef, EmojiSugge
 )
 EmojiSuggestionList.displayName = 'EmojiSuggestionList'
 
+/**
+ * Emoji storage per emoji dataset. TipTap reads `extension.storage` through a
+ * getter that re-runs `addStorage` on every access, dozens of times per editor
+ * mount, and the stock storage scans the whole dataset to build its
+ * support-by-version table each time. The table depends only on the dataset,
+ * so it is built once. The getter still spreads the result into a fresh object
+ * per editor; the shared values are read-only.
+ */
+const emojiStorageByDataset = new WeakMap<object, object>()
+
 /** The `:`-triggered inline emoji picker, shared with the conversation composers so
  *  reply + note get the same emoji UX as posts. */
 export function createEmojiExtension() {
   return Emoji.extend({
+    addStorage() {
+      const dataset = this.options.emojis
+      let storage = emojiStorageByDataset.get(dataset)
+      if (!storage) {
+        storage = this.parent?.() ?? {}
+        emojiStorageByDataset.set(dataset, storage)
+      }
+      return storage as ReturnType<NonNullable<typeof this.parent>>
+    },
     addAttributes() {
       return {
         ...this.parent?.(),
