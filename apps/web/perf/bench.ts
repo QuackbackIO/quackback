@@ -15,6 +15,7 @@
  *   bun perf/bench.ts --update         lower every ceiling a journey came in under
  *   bun perf/bench.ts --repeat 3       run 3 times and flag any count that moved
  *   bun perf/bench.ts --timing 20      add median/p90 wall time per journey
+ *   bun perf/bench.ts --throttle ...   browser journeys over a 10 Mbps, 40 ms link
  *   PERF_APP_DIR=../other/apps/web bun perf/bench.ts   bench another build
  *   bun perf/bench.ts --trace --only ui:portal-load
  *                                      list the SQL behind the journey, most repeated first,
@@ -51,6 +52,7 @@ const { values: args } = parseArgs({
     trace: { type: 'boolean', default: false },
     only: { type: 'string', multiple: true },
     headed: { type: 'boolean', default: false },
+    throttle: { type: 'boolean', default: false },
   },
 })
 
@@ -322,6 +324,17 @@ async function measureBrowser(
   const inflight = trackInflight(page)
   const cdp = await context.newCDPSession(page)
   await cdp.send('Performance.enable')
+  if (args.throttle) {
+    // A home broadband link. Localhost has no bandwidth limit, so without this
+    // the bytes a change saves never show up as time.
+    await cdp.send('Network.enable')
+    await cdp.send('Network.emulateNetworkConditions', {
+      offline: false,
+      latency: 40,
+      downloadThroughput: (10 * 1024 * 1024) / 8,
+      uploadThroughput: (5 * 1024 * 1024) / 8,
+    })
+  }
   if (opts.instrument) {
     await cdp.send('Profiler.enable')
     await cdp.send('Profiler.startPreciseCoverage', { callCount: true, detailed: false })
