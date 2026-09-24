@@ -25,6 +25,15 @@ import type { LinkedTicketSummary } from '@/lib/shared/inbox/items'
 
 afterEach(cleanup)
 
+// The composer seams the typing tests drive: the stub editor publishes the
+// latest onChange it was handed, the typing sender is one spy for every
+// render, and the AI-actions stub counts how often the thread re-rendered.
+const composerProbe = vi.hoisted(() => ({
+  onChange: null as null | ((json: unknown, html: string, markdown: string) => void),
+  sendTyping: (() => {}) as () => void,
+  threadRenders: 0,
+}))
+
 const routeContextState = {
   session: { user: { name: 'Agent Smith' } },
   settings: { featureFlags: {} },
@@ -63,7 +72,7 @@ vi.mock('../thread', () => ({
   }),
   useOlderMessages: () => ({ loadingOlder: false, loadOlder: vi.fn() }),
   useMarkReadOnIncoming: () => {},
-  useTypingSender: () => vi.fn(),
+  useTypingSender: () => composerProbe.sendTyping,
 }))
 
 vi.mock('../message-bubble', () => ({
@@ -79,9 +88,10 @@ vi.mock('../macro-picker', () => ({
   ),
 }))
 vi.mock('../composer-ai-actions', () => ({
-  ComposerAiActions: ({ activeMode }: { activeMode: string }) => (
-    <div data-testid="composer-ai-actions" data-active-mode={activeMode} />
-  ),
+  ComposerAiActions: ({ activeMode }: { activeMode: string }) => {
+    composerProbe.threadRenders++
+    return <div data-testid="composer-ai-actions" data-active-mode={activeMode} />
+  },
 }))
 vi.mock('@/components/admin/conversation/priority-control', () => ({
   PriorityControl: () => null,
@@ -146,10 +156,13 @@ vi.mock('@/components/ui/rich-text-editor', async () => {
     RichTextEditor: ({
       placeholder,
       editorRef,
+      onChange,
     }: {
       placeholder?: string
       editorRef?: React.RefObject<{ focus: () => void } | null>
+      onChange?: (json: unknown, html: string, markdown: string) => void
     }) => {
+      composerProbe.onChange = onChange ?? null
       const areaRef = useRef<HTMLTextAreaElement>(null)
       useImperativeHandle(editorRef, () => ({ focus: () => areaRef.current?.focus() }))
       return <textarea ref={areaRef} data-testid="editor" placeholder={placeholder} readOnly />
@@ -832,5 +845,52 @@ describe('AgentConversationThread — composer focus handle', () => {
     act(() => composerRef.current?.openMacros())
 
     expect(screen.queryByTestId('macro-picker')).not.toBeInTheDocument()
+  })
+})
+
+describe('AgentConversationThread: typing signal', () => {
+  const blankDoc = { type: 'doc', content: [{ type: 'paragraph' }] }
+  const docWith = (text: string) => ({
+    type: 'doc',
+    content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
+  })
+
+  it('an update that leaves the blank composer blank neither signals typing nor re-renders', async () => {
+    const sendTyping = vi.fn()
+    composerProbe.sendTyping = sendTyping
+    renderThread({ kind: 'conversation', id: 'conversation_1' })
+    await screen.findByTestId('editor')
+    await waitFor(() => expect(composerProbe.onChange).not.toBeNull())
+    const rendersBefore = composerProbe.threadRenders
+
+    // What an editor reports when it mounts or toggles editable on an empty doc.
+    act(() => composerProbe.onChange?.(blankDoc, '<p></p>', ''))
+
+    expect(sendTyping).not.toHaveBeenCalled()
+    expect(composerProbe.threadRenders).toBe(rendersBefore)
+  })
+
+  it('typing into the reply composer still signals typing', async () => {
+    const sendTyping = vi.fn()
+    composerProbe.sendTyping = sendTyping
+    renderThread({ kind: 'conversation', id: 'conversation_1' })
+    await screen.findByTestId('editor')
+    await waitFor(() => expect(composerProbe.onChange).not.toBeNull())
+
+    act(() => composerProbe.onChange?.(docWith('H'), '<p>H</p>', 'H'))
+
+    expect(sendTyping).toHaveBeenCalledTimes(1)
+  })
+
+  it('clearing a typed reply back to blank updates the draft', async () => {
+    renderThread({ kind: 'conversation', id: 'conversation_1' })
+    await screen.findByTestId('editor')
+    await waitFor(() => expect(composerProbe.onChange).not.toBeNull())
+    const send = () => screen.getByRole('button', { name: 'Send reply' })
+
+    act(() => composerProbe.onChange?.(docWith('Hi'), '<p>Hi</p>', 'Hi'))
+    expect(send()).not.toBeDisabled()
+    act(() => composerProbe.onChange?.(blankDoc, '<p></p>', ''))
+    expect(send()).toBeDisabled()
   })
 })
