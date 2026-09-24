@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { useIntl } from 'react-intl'
 import {
   ArrowRightIcon,
@@ -26,7 +26,7 @@ import type { CommentReactionCount } from '@/lib/shared'
 import type { PublicCommentView } from '@/lib/client/queries/portal-detail'
 import { cn } from '@/lib/shared/utils'
 import { StatusBadge } from '@/components/ui/status-badge'
-import { CommentContent } from '@/components/public/comment-content'
+import { CommentContent, useCommentDoc } from '@/components/public/comment-content'
 import { AuthorHoverCard } from '@/components/public/author-hover-card'
 import { AdminAuthorHoverCard } from '@/components/admin/admin-author-hover-card'
 import { CommentForm, type CreateCommentMutation } from './comment-form'
@@ -35,7 +35,6 @@ import {
   RichTextEditorPlaceholder,
 } from '@/components/ui/lazy-rich-text-editor'
 import { COMMENT_EDITOR_FEATURES } from './comment-editor-features'
-import { commentMarkdownToTiptapJson } from '@/lib/server/markdown-tiptap'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { PostCommentId, PostId, PrincipalId } from '@quackback/ids'
 import { InlineModerationActions } from '@/components/shared/inline-moderation-actions'
@@ -375,11 +374,8 @@ function CommentItem({
   const [editError, setEditError] = useState<string | null>(null)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
 
-  // Stored doc preferred; legacy rows fall back to a markdown parse.
-  const editInitialJson = useMemo<TiptapContent>(() => {
-    if (comment.contentJson) return comment.contentJson
-    return commentMarkdownToTiptapJson(comment.content)
-  }, [comment.contentJson, comment.content])
+  // Null while a legacy markdown-only row's parse loads, once editing starts.
+  const editInitialJson = useCommentDoc(comment.content, comment.contentJson, isEditing)
 
   const editMutation = useEditComment({
     commentId: comment.id as PostCommentId,
@@ -702,22 +698,26 @@ function CommentItem({
                   }
                 }}
               >
-                <Suspense fallback={<RichTextEditorPlaceholder minHeight="64px" />}>
-                  <LazyRichTextEditor
-                    value={editInitialJson}
-                    borderless
-                    minHeight="64px"
-                    autofocus="end"
-                    features={COMMENT_EDITOR_FEATURES}
-                    onImageUpload={onImageUpload}
-                    onVideoUpload={onImageUpload}
-                    disabled={editMutation.isPending}
-                    onChange={(json, _html, markdown) => {
-                      editJsonRef.current = json as TiptapContent
-                      setEditContent(markdown ?? '')
-                    }}
-                  />
-                </Suspense>
+                {editInitialJson ? (
+                  <Suspense fallback={<RichTextEditorPlaceholder minHeight="64px" />}>
+                    <LazyRichTextEditor
+                      value={editInitialJson}
+                      borderless
+                      minHeight="64px"
+                      autofocus="end"
+                      features={COMMENT_EDITOR_FEATURES}
+                      onImageUpload={onImageUpload}
+                      onVideoUpload={onImageUpload}
+                      disabled={editMutation.isPending}
+                      onChange={(json, _html, markdown) => {
+                        editJsonRef.current = json as TiptapContent
+                        setEditContent(markdown ?? '')
+                      }}
+                    />
+                  </Suspense>
+                ) : (
+                  <RichTextEditorPlaceholder minHeight="64px" />
+                )}
               </div>
               {editError && <p className="text-xs text-destructive mt-1">{editError}</p>}
               <div className="flex items-center gap-2 mt-2">

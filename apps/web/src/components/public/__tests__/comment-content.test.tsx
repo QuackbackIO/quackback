@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from 'vitest'
-import { render, waitFor } from '@testing-library/react'
+import { render, renderHook, waitFor } from '@testing-library/react'
 
 // CommentContent wraps rendered content in MentionHoverCardOverlay, which
 // reads branding from the root route context. Stub the hook so the test
@@ -14,7 +14,7 @@ vi.mock('@tanstack/react-router', () => ({
   }),
 }))
 
-import { CommentContent, hasMarkdownTokens } from '../comment-content'
+import { CommentContent, hasMarkdownTokens, useCommentDoc } from '../comment-content'
 
 describe('hasMarkdownTokens', () => {
   it('returns false for empty string', () => {
@@ -78,19 +78,20 @@ describe('<CommentContent>', () => {
     expect(container.querySelector('h1, h2, h3, ul, strong')).toBeNull()
   })
 
-  it('renders markdown headings', () => {
+  // The markdown parser loads on demand, so parsed markdown appears after a tick.
+  it('renders markdown headings', async () => {
     const { container } = render(<CommentContent content={'## Heading\n\nbody'} />)
-    expect(container.querySelector('h2')).not.toBeNull()
+    await waitFor(() => expect(container.querySelector('h2')).not.toBeNull())
   })
 
-  it('renders bold via markdown syntax', () => {
+  it('renders bold via markdown syntax', async () => {
     const { container } = render(<CommentContent content="this is **bold** here" />)
-    expect(container.querySelector('strong')).not.toBeNull()
+    await waitFor(() => expect(container.querySelector('strong')).not.toBeNull())
   })
 
-  it('renders italic via single-asterisk markdown syntax', () => {
+  it('renders italic via single-asterisk markdown syntax', async () => {
     const { container } = render(<CommentContent content="this is *italic* here" />)
-    expect(container.querySelector('em')).not.toBeNull()
+    await waitFor(() => expect(container.querySelector('em')).not.toBeNull())
   })
 
   it('renders an <img> for image markdown', async () => {
@@ -132,9 +133,9 @@ describe('<CommentContent>', () => {
     expect(container.querySelector('strong')?.textContent).toBe('precomputed')
   })
 
-  it('falls back to markdown when contentJson is null (optimistic cache case)', () => {
+  it('falls back to markdown when contentJson is null (optimistic cache case)', async () => {
     const { container } = render(<CommentContent content="**bold**" contentJson={null} />)
-    expect(container.querySelector('strong')).not.toBeNull()
+    await waitFor(() => expect(container.querySelector('strong')).not.toBeNull())
   })
 
   it('renders emoji nodes inside contentJson (Unicode char survives the JSON fast-path)', () => {
@@ -195,5 +196,44 @@ describe('<CommentContent>', () => {
     )
     await waitFor(() => expect(container.textContent).toContain('🤞'))
     expect(container.textContent).not.toContain(':crossed_fingers:')
+  })
+})
+
+describe('useCommentDoc', () => {
+  const stored = {
+    type: 'doc',
+    content: [{ type: 'paragraph', content: [{ type: 'text', text: 'stored' }] }],
+  }
+
+  it('returns the stored doc at once', () => {
+    const { result } = renderHook(() => useCommentDoc('## ignored', stored, true))
+    expect(result.current).toBe(stored)
+  })
+
+  it('leaves a legacy markdown row unparsed until enabled', async () => {
+    const { result, rerender } = renderHook(
+      ({ enabled }) => useCommentDoc('## Legacy heading', null, enabled),
+      { initialProps: { enabled: false } }
+    )
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(result.current).toBeNull()
+
+    rerender({ enabled: true })
+    await waitFor(() => expect(result.current).not.toBeNull())
+    expect(result.current?.content?.[0]).toMatchObject({
+      type: 'heading',
+      attrs: { level: 2 },
+      content: [{ type: 'text', text: 'Legacy heading' }],
+    })
+  })
+
+  it('parses again when the markdown changes', async () => {
+    const { result, rerender } = renderHook(({ markdown }) => useCommentDoc(markdown, null, true), {
+      initialProps: { markdown: 'first **one**' },
+    })
+    await waitFor(() => expect(JSON.stringify(result.current)).toContain('first '))
+    rerender({ markdown: 'second **two**' })
+    expect(result.current).toBeNull()
+    await waitFor(() => expect(JSON.stringify(result.current)).toContain('second '))
   })
 })

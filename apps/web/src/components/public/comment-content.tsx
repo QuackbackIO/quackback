@@ -1,5 +1,4 @@
-import { useMemo } from 'react'
-import { commentMarkdownToTiptapJson } from '@/lib/server/markdown-tiptap'
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import { RichTextContent } from '@/components/ui/rich-text-content'
 import { MentionHoverCardOverlay } from '@/components/ui/mention-hover-card-overlay'
 import { EmbedHydration } from '@/components/shared/embed-hydration'
@@ -42,32 +41,77 @@ export function hasMarkdownTokens(text: string): boolean {
   )
 }
 
-export function CommentContent({ content, contentJson, className }: CommentContentProps) {
-  const isMarkdown = hasMarkdownTokens(content)
-  // Only parse markdown when there's no precomputed JSON to fall back on.
-  const fallbackJson = useMemo(
-    () => (!contentJson && isMarkdown ? commentMarkdownToTiptapJson(content) : null),
-    [content, contentJson, isMarkdown]
-  )
-  if (contentJson) {
-    return (
-      <MentionHoverCardOverlay>
-        <EmbedHydration>
-          <RichTextContent content={contentJson} className={className} />
-        </EmbedHydration>
-      </MentionHoverCardOverlay>
-    )
-  }
-  if (!isMarkdown || !fallbackJson) {
-    return <p className={cn('whitespace-pre-wrap', className)}>{content}</p>
-  }
-  // Markdown fallback never contains mention chips or embeds, but wrap anyway so
-  // any future syntax routed through this path is covered.
+/**
+ * Parse a legacy comment's markdown into the TipTap doc newer rows store. The
+ * parser brings tiptap, prosemirror and marked with it, more code than the rest
+ * of a post page, so it loads on first use.
+ */
+function loadCommentMarkdownParser() {
+  return import('@/lib/server/markdown-tiptap').then((m) => m.commentMarkdownToTiptapJson)
+}
+
+/**
+ * A comment's TipTap doc: the stored one, or for a legacy row that has only
+ * markdown, a parse of it made once `enabled`. Null while that parse is pending.
+ */
+export function useCommentDoc(
+  content: string,
+  contentJson: TiptapContent | null | undefined,
+  enabled: boolean
+): TiptapContent | null {
+  const [parsed, setParsed] = useState<{ markdown: string; json: TiptapContent } | null>(null)
+  const needsParse = enabled && !contentJson && parsed?.markdown !== content
+  useEffect(() => {
+    if (!needsParse) return
+    let cancelled = false
+    void loadCommentMarkdownParser().then((parse) => {
+      if (!cancelled) setParsed({ markdown: content, json: parse(content) })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [needsParse, content])
+  if (contentJson) return contentJson
+  return parsed?.markdown === content ? parsed.json : null
+}
+
+interface PlainCommentProps {
+  content: string
+  className?: string
+}
+
+const MarkdownComment = lazy(() =>
+  loadCommentMarkdownParser().then((parse) => ({
+    default: function MarkdownComment({ content, className }: PlainCommentProps) {
+      const json = useMemo(() => parse(content), [content])
+      return <RenderedComment json={json} className={className} />
+    },
+  }))
+)
+
+// Markdown-parsed docs never contain mention chips or embeds, but they render
+// through the same wrappers so any future syntax routed through them is covered.
+function RenderedComment({ json, className }: { json: TiptapContent; className?: string }) {
   return (
     <MentionHoverCardOverlay>
       <EmbedHydration>
-        <RichTextContent content={fallbackJson} className={className} />
+        <RichTextContent content={json} className={className} />
       </EmbedHydration>
     </MentionHoverCardOverlay>
+  )
+}
+
+function PlainComment({ content, className }: PlainCommentProps) {
+  return <p className={cn('whitespace-pre-wrap', className)}>{content}</p>
+}
+
+export function CommentContent({ content, contentJson, className }: CommentContentProps) {
+  if (contentJson) return <RenderedComment json={contentJson} className={className} />
+  if (!hasMarkdownTokens(content)) return <PlainComment content={content} className={className} />
+  // The raw text stands in while the parser loads; server rendering waits for it.
+  return (
+    <Suspense fallback={<PlainComment content={content} className={className} />}>
+      <MarkdownComment content={content} className={className} />
+    </Suspense>
   )
 }
