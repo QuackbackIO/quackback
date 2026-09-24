@@ -19,6 +19,14 @@
  *   bun perf/bench.ts --trace --only ui:portal-load
  *                                      list the SQL behind the journey, most repeated first
  *
+ * Every journey's warm-up call is also the first request this freshly booted
+ * server has handled for it, so its db_queries is printed as a "cold:" line
+ * whenever it differs from the steady-state count. This is not a from-nothing
+ * count: the bench's own admin sign-in (below) and any journey earlier in
+ * `selected` already warmed whatever process-level state they share with it.
+ * For the genuine cold number, hit the route directly against a server that
+ * has handled nothing else yet.
+ *
  * Exit code 1 means a count went over its ceiling (or a journey broke).
  */
 import { chromium, type Browser, type BrowserContext, type Page } from '@playwright/test'
@@ -441,9 +449,22 @@ async function main() {
         : measureBrowser(browser, storage, journey, { instrument })
 
     // Warm the server's caches and JIT so the measured pass sees steady state.
+    // The first call each journey makes here is also the first request this
+    // freshly spawned server has handled for it, so its db_queries is close
+    // to the cache-fill cost a real deploy or cache expiry pays once:
+    // captured for free, since warm-up already makes the call and would
+    // otherwise discard the result. Not exact: the admin sign-in just above
+    // and any journey run earlier in `selected` already warmed whatever
+    // process-level state (an in-memory config cache, say) they share with
+    // this one, so the number here is "cold for this journey's own cache
+    // entries, warm for anything already touched" rather than a genuine
+    // from-nothing count. For that, hit the route directly against a
+    // freshly started server before the bench (or anything else) runs.
+    const coldMetrics: Record<string, Metrics> = {}
     process.stdout.write('warming up')
     for (const journey of selected) {
-      await measure(journey, false).catch(() => {})
+      const result = await measure(journey, false).catch(() => null)
+      if (result) coldMetrics[journey.name] = result.metrics
       process.stdout.write('.')
     }
     process.stdout.write('\n')
@@ -519,6 +540,10 @@ async function main() {
       })
       console.log(`${mark} ${name}${errors[name] ? `  (${errors[name]})` : ''}`)
       console.log(`    ${cells.join('  ')}`)
+      const coldQueries = coldMetrics[name]?.dbQueries
+      if (coldQueries !== undefined && coldQueries !== metrics.dbQueries) {
+        console.log(`    cold: dbQueries=${coldQueries}`)
+      }
       if (process.env.GITHUB_ACTIONS === 'true') {
         for (const row of rows) {
           if (row.verdict === 'over') {
