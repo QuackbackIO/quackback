@@ -713,8 +713,11 @@ async function createAuth() {
         expiresIn: 10,
       }),
 
-      // JWT plugin — signs access tokens, exposes /api/auth/jwks for verification
-      jwt(),
+      // JWT plugin: signs access tokens, exposes /api/auth/jwks for verification.
+      // Its `set-auth-jwt` header on `/get-session` is set by `hooksAfter`
+      // instead, and only for a request that came over the wire: the plugin's
+      // own hook signed one for every in-process session read too.
+      jwt({ disableSettingJwtHeader: true }),
 
       // MCP authorization server (`mcp()` replaces `oauthProvider()` — do not
       // register both). Tokens are audience-bound to `/api/mcp`.
