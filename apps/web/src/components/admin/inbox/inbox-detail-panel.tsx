@@ -29,8 +29,7 @@ import {
 import type { InboxItemRef } from '@/lib/shared/inbox/items'
 import type { TicketDTO } from '@/lib/server/domains/tickets'
 import { conversationPanelQueries } from '@/lib/client/queries/conversation-panels'
-import { DETAIL_PANEL_MEDIA_QUERY } from '@/lib/client/conversation/detail-panel'
-import { useMediaQuery } from '@/lib/client/hooks/use-media-query'
+
 import { useCopilotTabGate } from '@/lib/client/hooks/use-copilot-tab-gate'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { formatSlaCountdown, dueCountdownTone } from '@/lib/shared/conversation/sla'
@@ -177,8 +176,6 @@ function TicketSlaChip({ sla }: { sla: NonNullable<TicketDTO['sla']> }) {
   )
 }
 
-export { DETAIL_PANEL_MEDIA_QUERY }
-
 export interface InboxDetailPanelProps {
   /** The open item, discriminated by kind. */
   item: InboxItemRef
@@ -206,6 +203,10 @@ export interface InboxDetailPanelProps {
   openCopilotToken?: number
   /** Distinct GitHub users who have written on this issue. */
   issuePeople?: { principalId: string; displayName: string; avatarUrl: string | null }[]
+  /** Whether the viewport shows the panel (DETAIL_PANEL_MEDIA_QUERY, read by
+   *  the inbox route). The panel is `hidden xl:flex`; it only fetches its data
+   *  when shown, so smaller viewports don't pay for an invisible sidebar. */
+  visible: boolean
 }
 
 /**
@@ -229,6 +230,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
   onInsertFromCopilot,
   openCopilotToken,
   issuePeople,
+  visible: isVisible,
 }: InboxDetailPanelProps) {
   const { settings } = useRouteContext({ from: '/admin' }) as {
     settings?: { featureFlags?: FeatureFlags } | null
@@ -285,10 +287,6 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
     ? (ticket?.requester?.avatarUrl ?? null)
     : (conversation?.visitor.avatarUrl ?? null)
   const { blocked: contactBlocked } = usePersonBlockStatus(principalId)
-
-  // The panel is `hidden xl:flex`; only fetch its data when it's actually shown
-  // so smaller viewports don't pay for an invisible sidebar.
-  const isVisible = useMediaQuery(DETAIL_PANEL_MEDIA_QUERY)
 
   // A conversation's thread request loads these with the thread and seeds
   // them, so they only ask on their own for a ticket or once they go stale.
