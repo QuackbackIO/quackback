@@ -106,7 +106,27 @@ export function CommentForm({
     },
   })
 
+  // What the editor holds. Typing keeps it here rather than in the form, so a
+  // keystroke never re-renders the form around the editor; the form takes the
+  // markdown when the comment is submitted. After a submit attempt the form
+  // validates on change, so from then on each change also reaches the field
+  // and its validation message follows the text.
   const editorJsonRef = useRef<TiptapContent | null>(null)
+  const editorMarkdownRef = useRef('')
+  const submittedRef = useRef(false)
+
+  function recordEditorChange(json: unknown, markdown: string, onFieldChange: (v: string) => void) {
+    editorJsonRef.current = json as TiptapContent
+    editorMarkdownRef.current = markdown
+    if (submittedRef.current) onFieldChange(markdown)
+  }
+
+  function submit() {
+    submittedRef.current = true
+    form.setValue('content', editorMarkdownRef.current)
+    void form.handleSubmit(onSubmit)()
+  }
+
   // Bumping the key on submit force-remounts the editor with a fresh doc.
   // `form.reset()` flips field.value to '' which would clear via value-sync,
   // but TipTap's empty-doc model leaves a stale `<p></p>` node that traps
@@ -166,6 +186,8 @@ export function CommentForm({
         onSuccess: () => {
           form.reset()
           editorJsonRef.current = null
+          editorMarkdownRef.current = ''
+          submittedRef.current = false
           setEditorResetKey((k) => k + 1)
           setSelectedStatusId(null)
           onSuccess?.()
@@ -194,7 +216,12 @@ export function CommentForm({
   if (showStatusSelector) {
     return (
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)}>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            submit()
+          }}
+        >
           <div className="rounded-lg border border-border/50 bg-background overflow-hidden focus-within:border-border focus-within:ring-1 focus-within:ring-ring/20 transition-colors">
             {/* Textarea area */}
             <FormField
@@ -215,7 +242,7 @@ export function CommentForm({
                       onKeyDownCapture={(e) => {
                         if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
                           e.preventDefault()
-                          void form.handleSubmit(onSubmit)()
+                          submit()
                         }
                       }}
                     >
@@ -233,10 +260,9 @@ export function CommentForm({
                           id: 'portal.commentForm.placeholder',
                           defaultMessage: 'Write a comment...',
                         })}
-                        onChange={(json, _html, markdown) => {
-                          editorJsonRef.current = json as TiptapContent
-                          field.onChange(markdown ?? '')
-                        }}
+                        onChange={(json, _html, markdown) =>
+                          recordEditorChange(json, markdown ?? '', field.onChange)
+                        }
                       />
                     </div>
                   </FormControl>
@@ -410,7 +436,7 @@ export function CommentForm({
                 size="sm"
                 disabled={isSubmitting}
                 className="h-7 text-xs"
-                onClick={() => void form.handleSubmit(onSubmit)()}
+                onClick={submit}
               >
                 {isSubmitting
                   ? intl.formatMessage({
@@ -440,7 +466,13 @@ export function CommentForm({
   // Default composer for non-team-members / replies
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          submit()
+        }}
+        className="space-y-4"
+      >
         <FormField
           control={form.control}
           name="content"
@@ -458,7 +490,7 @@ export function CommentForm({
                   onKeyDownCapture={(e) => {
                     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
                       e.preventDefault()
-                      void form.handleSubmit(onSubmit)()
+                      submit()
                     }
                   }}
                 >
@@ -474,10 +506,9 @@ export function CommentForm({
                       id: 'portal.commentForm.placeholder',
                       defaultMessage: 'Write a comment...',
                     })}
-                    onChange={(json, _html, markdown) => {
-                      editorJsonRef.current = json as TiptapContent
-                      field.onChange(markdown ?? '')
-                    }}
+                    onChange={(json, _html, markdown) =>
+                      recordEditorChange(json, markdown ?? '', field.onChange)
+                    }
                   />
                 </div>
               </FormControl>
@@ -571,12 +602,7 @@ export function CommentForm({
               </Tooltip>
             </TooltipProvider>
           )}
-          <Button
-            type="button"
-            size="sm"
-            disabled={isSubmitting}
-            onClick={() => void form.handleSubmit(onSubmit)()}
-          >
+          <Button type="button" size="sm" disabled={isSubmitting} onClick={submit}>
             {isSubmitting
               ? intl.formatMessage({
                   id: 'portal.commentForm.submitting',
