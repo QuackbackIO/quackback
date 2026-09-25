@@ -40,7 +40,7 @@ export const Route = createFileRoute('/_portal/changelog/')({
 
 function ChangelogPage() {
   const intl = useIntl()
-  const { session } = Route.useRouteContext()
+  const session = Route.useRouteContext({ select: (context) => context.session })
   const isIdentified = !!session?.user && session.user.principalType !== 'anonymous'
 
   return (

@@ -36,7 +36,10 @@ vi.mock('@/components/ui/rich-text-editor', () => ({
 
 vi.mock('@tanstack/react-router', () => ({
   useRouter: () => ({ invalidate: vi.fn() }),
-  useRouteContext: () => ({ session: null }),
+  useRouteContext: (opts?: { select?: (context: never) => unknown }) => {
+    const context = { session: null }
+    return opts?.select ? opts.select(context as never) : context
+  },
 }))
 
 import { CommentForm, type CreateCommentMutation } from '../comment-form'

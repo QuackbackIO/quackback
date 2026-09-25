@@ -19,10 +19,11 @@ interface PortalBrandMarkProps {
  * happens here.
  */
 export function PortalBrandMark({ variant = 'stack' }: PortalBrandMarkProps) {
-  const ctx = useRouteContext({ from: '__root__' }) as {
-    settings?: { brandingData?: SettingsBrandingData }
-  }
-  const branding = ctx.settings?.brandingData
+  const branding = useRouteContext({
+    from: '__root__',
+    select: (context) =>
+      (context as { settings?: { brandingData?: SettingsBrandingData } }).settings?.brandingData,
+  })
   const name = branding?.name ?? 'Quackback'
   const logo = branding?.headerLogoUrl ?? branding?.logoUrl ?? null
   const initial = name.charAt(0).toUpperCase()

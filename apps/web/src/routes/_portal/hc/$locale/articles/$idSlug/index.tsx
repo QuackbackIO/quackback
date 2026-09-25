@@ -88,7 +88,8 @@ function ArticleDetailPage() {
   const { article, related, category, articles, allCategories } = Route.useLoaderData()
   const { locale } = Route.useParams()
   const { helpCenterConfig } = helpCenterApi.useLoaderData()
-  const { baseUrl, settings } = Route.useRouteContext()
+  const baseUrl = Route.useRouteContext({ select: (context) => context.baseUrl })
+  const settings = Route.useRouteContext({ select: (context) => context.settings })
   const supportEnabled = isPortalSupportSurfaceEnabled(
     settings?.featureFlags,
     settings?.portalConfig

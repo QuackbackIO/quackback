@@ -36,9 +36,12 @@ const { createPost, editor, similar, boardPicker } = vi.hoisted(() => ({
 
 vi.mock('@tanstack/react-router', () => ({
   useRouter: () => ({ invalidate: vi.fn(), navigate: vi.fn() }),
-  useRouteContext: () => ({
-    session: { user: { name: 'Ada Example', email: 'ada@example.com', principalType: 'user' } },
-  }),
+  useRouteContext: (opts?: { select?: (context: never) => unknown }) => {
+    const context = {
+      session: { user: { name: 'Ada Example', email: 'ada@example.com', principalType: 'user' } },
+    }
+    return opts?.select ? opts.select(context as never) : context
+  },
 }))
 vi.mock('@/lib/client/hooks/use-image-upload', () => ({
   usePortalMediaUpload: () => ({ upload: vi.fn() }),
