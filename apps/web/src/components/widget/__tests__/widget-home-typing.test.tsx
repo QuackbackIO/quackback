@@ -6,6 +6,10 @@
  * when its title is cleared with no details written. The editor is a stub that
  * counts its renders (it is not memoized, so it renders whenever its host
  * does) and hands the test its change callbacks.
+ *
+ * The title is typed into its own field: a keystroke there renders the field
+ * and the similar-ideas search, not the composer around them, and the search
+ * still waits for a pause and drops a request a later keystroke replaces.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
@@ -159,6 +163,107 @@ afterEach(() => {
   editor.renders = 0
   editor.onChange = null
   editor.onDocumentChange = null
+})
+
+/** Type into the title one character at a time, as a person does. */
+function typeTitleByKey(text: string, from = '') {
+  for (let i = 1; i <= text.length; i++) typeTitle(from + text.slice(0, i))
+}
+
+/** The similar-ideas searches the composer made (the popular list has its own). */
+function similarSearches() {
+  const fetchMock = vi.mocked(fetch)
+  return fetchMock.mock.calls
+    .map(([url, init]) => ({ url: new URL(String(url), 'http://widget.test'), init }))
+    .filter(
+      ({ url }) => url.pathname === '/api/widget/search' && url.searchParams.get('limit') === '5'
+    )
+}
+
+describe('widget home title', () => {
+  it('does not re-render the composer per keystroke in the title', async () => {
+    renderHome()
+    typeTitle('D')
+    await screen.findByTestId('editor')
+
+    editor.renders = 0
+    typeTitleByKey('ark mode', 'D')
+
+    expect(editor.renders).toBe(0)
+    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Feedback title' }).value).toBe(
+      'Dark mode'
+    )
+  })
+
+  it('searches for similar ideas once the typing pauses', async () => {
+    vi.mocked(fetch).mockImplementation(
+      async () =>
+        ({
+          ok: true,
+          json: async () => ({
+            data: {
+              posts: [
+                {
+                  id: 'post_2',
+                  title: 'Dark theme',
+                  voteCount: 3,
+                  statusId: null,
+                  commentCount: 0,
+                },
+              ],
+            },
+          }),
+        }) as Response
+    )
+    renderHome()
+    typeTitle('D')
+    await screen.findByTestId('editor')
+    typeTitleByKey('ark mode', 'D')
+    expect(similarSearches()).toHaveLength(0)
+
+    expect(await screen.findByText('Dark theme')).toBeTruthy()
+    expect(screen.getByText('Similar ideas')).toBeTruthy()
+    const searches = similarSearches()
+    expect(searches).toHaveLength(1)
+    expect(searches[0]!.url.searchParams.get('q')).toBe('Dark mode')
+  })
+
+  it('drops a search that a later keystroke replaces', async () => {
+    const signals: AbortSignal[] = []
+    vi.mocked(fetch).mockImplementation(
+      (_url, init) =>
+        new Promise((_resolve, reject) => {
+          const signal = (init as RequestInit).signal!
+          signals.push(signal)
+          signal.addEventListener('abort', () =>
+            reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))
+          )
+        })
+    )
+    renderHome()
+    typeTitleByKey('Dark')
+    await screen.findByTestId('editor')
+    await waitFor(() => expect(signals).toHaveLength(1))
+    expect(signals[0]!.aborted).toBe(false)
+
+    typeTitle('Dark mode')
+    expect(signals[0]!.aborted).toBe(true)
+  })
+
+  it('offers Submit only once the title has text', async () => {
+    renderHome()
+    typeTitle('  ')
+    await screen.findByTestId('editor')
+    const submit = () => screen.getByRole<HTMLButtonElement>('button', { name: 'Submit' })
+    expect(submit().disabled).toBe(true)
+
+    typeTitle('  x')
+    expect(submit().disabled).toBe(false)
+
+    fireEvent.click(submit())
+    await waitFor(() => expect(createPost).toHaveBeenCalledTimes(1))
+    expect(createPost.mock.calls[0]![0]).toMatchObject({ data: { title: 'x' } })
+  })
 })
 
 describe('widget home post composer', () => {
