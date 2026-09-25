@@ -109,6 +109,17 @@ describe('publishConversationMessage', () => {
     expect(visitorEvent?.[1].message.author.displayName).toBe('Quiet Otter')
     expect(inboxEvent?.[1].message.author.displayName).toBe('Ada Lovelace')
   })
+
+  it('tells the inbox, and only the inbox, when the same write sent the conversation update', () => {
+    const message = { id: 'conversation_msg_1' } as never
+    publishConversationMessage(conversationId, { visitor: message }, { conversationUpdated: true })
+    publishConversationMessage(conversationId, { visitor: message })
+
+    const inbox = publish.mock.calls.filter((c) => c[0] === CONVERSATION_INBOX_CHANNEL)
+    const visitor = publish.mock.calls.filter((c) => c[0] === conversationChannel(conversationId))
+    expect(inbox.map((c) => c[1].conversationUpdated)).toEqual([true, undefined])
+    expect(visitor.map((c) => 'conversationUpdated' in c[1])).toEqual([false, false])
+  })
 })
 
 describe('publishAgentConversationEvent', () => {

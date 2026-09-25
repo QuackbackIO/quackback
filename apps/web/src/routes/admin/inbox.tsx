@@ -29,6 +29,7 @@ import type { ComposerMode } from '@/components/conversation/composer-ai-actions
 import {
   agentEventChangesInboxCounts,
   agentEventChangesInboxList,
+  companionRefreshFallback,
   applyAgentThreadEvent,
   applyTicketThreadEvent,
   type AgentThreadCache,
@@ -681,6 +682,12 @@ function InboxPage() {
     void queryClient.invalidateQueries({ queryKey: conversationKeys.agentConversations() })
     void queryClient.invalidateQueries({ queryKey: inboxKeys.items() })
   }, [queryClient])
+  // Refreshes the list should a new message's companion conversation event
+  // never arrive (see companionRefreshFallback).
+  const refreshIfCompanionLost = useMemo(
+    () => companionRefreshFallback(refreshInboxList),
+    [refreshInboxList]
+  )
   const refreshInboxCounts = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: inboxKeys.counts() })
   }, [queryClient])
@@ -728,6 +735,7 @@ function InboxPage() {
     buildUrl: async () => '/api/chat/stream?scope=inbox',
     onReconnect: refreshInboxAfterReconnect,
     onEvent: (evt) => {
+      refreshIfCompanionLost(evt)
       // A ticket's live properties (status/assignee/priority/stage/type) name
       // their own cache keys precisely, so this patches them directly instead
       // of invalidating anything: the detail cache any open thread/panel

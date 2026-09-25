@@ -460,10 +460,11 @@ export async function sendVisitorMessage(
     const agentDTO = await conversationToDTO(txResult.conversation, 'agent')
     await publishConversationUpdate(agentDTO.id, agentDTO)
   }
-  publishConversationMessage(txResult.conversation.id, {
-    visitor: visitorMessage,
-    agent: agentMessage,
-  })
+  publishConversationMessage(
+    txResult.conversation.id,
+    { visitor: visitorMessage, agent: agentMessage },
+    { conversationUpdated: created }
+  )
 
   // A brand-new conversation: try auto-routing it to an active agent. Best-
   // effort (never blocks the send), and runs outside the transaction so a store
@@ -656,10 +657,11 @@ export async function startAgentConversation(
   // agent-only fields from the visitor's copy.
   const agentDTO = await conversationToDTO(txResult.conversation, 'agent')
   await publishConversationUpdate(agentDTO.id, agentDTO)
-  publishConversationMessage(txResult.conversation.id, {
-    visitor: toMessageDTO(txResult.message, authored.publicAuthor),
-    agent: messageDTO,
-  })
+  publishConversationMessage(
+    txResult.conversation.id,
+    { visitor: toMessageDTO(txResult.message, authored.publicAuthor), agent: messageDTO },
+    { conversationUpdated: true }
+  )
 
   // Always email the first message — fire-and-forget; a delivery failure never
   // rolls back the conversation (it logs inside notifyConversationStarted).
@@ -789,10 +791,11 @@ export async function sendAgentMessage(
   const conversationDTO = await conversationToDTO(txResult.conversation, 'agent')
 
   await publishConversationUpdate(conversationDTO.id, conversationDTO)
-  publishConversationMessage(txResult.conversation.id, {
-    visitor: toMessageDTO(txResult.message, authored.publicAuthor),
-    agent: messageDTO,
-  })
+  publishConversationMessage(
+    txResult.conversation.id,
+    { visitor: toMessageDTO(txResult.message, authored.publicAuthor), agent: messageDTO },
+    { conversationUpdated: true }
+  )
 
   // P2-D.1: surface translatedFrom on the DTO returned to the sending agent,
   // and to every other agent's open thread, without leaking it to the visitor.
@@ -2155,10 +2158,14 @@ export async function appendAssistantReply(
   const messageDTO = toMessageDTO(txResult.message, authored.supportAuthor, author.principalId)
   const conversationDTO = await conversationToDTO(txResult.conversation, 'agent')
   await publishConversationUpdate(conversationDTO.id, conversationDTO)
-  publishConversationMessage(txResult.conversation.id, {
-    visitor: toMessageDTO(txResult.message, authored.publicAuthor, author.principalId),
-    agent: messageDTO,
-  })
+  publishConversationMessage(
+    txResult.conversation.id,
+    {
+      visitor: toMessageDTO(txResult.message, authored.publicAuthor, author.principalId),
+      agent: messageDTO,
+    },
+    { conversationUpdated: true }
+  )
   // isFirstMessage only matters for a VISITOR message — this is Quinn's own
   // reply, so false.
   void emitMessageCreated(
