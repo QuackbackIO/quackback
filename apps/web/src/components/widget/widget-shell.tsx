@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { AnimatePresence, m, useReducedMotion } from 'framer-motion'
 import {
   ArrowLeftIcon,
   ArrowsPointingInIcon,
@@ -381,7 +381,7 @@ export function WidgetShell({
       >
         <AnimatePresence initial={false} custom={panelExpanded}>
           {showTabBar && (
-            <motion.div
+            <m.div
               key="tab-bar"
               custom={panelExpanded}
               variants={tabBarVariants}
@@ -463,7 +463,7 @@ export function WidgetShell({
                   )
                 })}
               </div>
-            </motion.div>
+            </m.div>
           )}
         </AnimatePresence>
 

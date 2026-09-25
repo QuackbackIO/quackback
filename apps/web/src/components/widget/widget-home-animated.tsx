@@ -8,7 +8,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
 } from '@heroicons/react/24/outline'
-import { motion, AnimatePresence } from 'framer-motion'
+import { m, AnimatePresence } from 'framer-motion'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useIntl, FormattedMessage } from 'react-intl'
 import {
@@ -706,7 +706,7 @@ export function WidgetHomeAnimated({
     <form onSubmit={handleSubmit} className="flex flex-col h-full">
       <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
         <div className="w-full px-3 pt-2 pb-3">
-          <motion.div
+          <m.div
             className="rounded-lg border border-border bg-card overflow-hidden"
             initial={false}
             animate={{
@@ -718,7 +718,7 @@ export function WidgetHomeAnimated({
           >
             <AnimatePresence>
               {expanded && boards.length > 0 && (
-                <motion.div
+                <m.div
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
@@ -753,14 +753,14 @@ export function WidgetHomeAnimated({
                       </SelectContent>
                     </Select>
                   </div>
-                </motion.div>
+                </m.div>
               )}
             </AnimatePresence>
 
             <div className="flex items-center gap-2.5 px-3 py-2.5">
               <AnimatePresence>
                 {!expanded && (
-                  <motion.div
+                  <m.div
                     initial={false}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.8, width: 0, marginRight: -10 }}
@@ -768,11 +768,11 @@ export function WidgetHomeAnimated({
                     className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center"
                   >
                     <PencilIcon className="w-3.5 h-3.5 text-primary" />
-                  </motion.div>
+                  </m.div>
                 )}
               </AnimatePresence>
 
-              <motion.input
+              <m.input
                 ref={inputRef}
                 type="text"
                 placeholder={intl.formatMessage({
@@ -805,14 +805,14 @@ export function WidgetHomeAnimated({
 
             <AnimatePresence>
               {expanded && (
-                <motion.div
+                <m.div
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
                   transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
                   className="overflow-hidden"
                 >
-                  <motion.div
+                  <m.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ duration: 0.2, delay: 0.1 }}
@@ -847,13 +847,13 @@ export function WidgetHomeAnimated({
                         className="text-sm"
                       />
                     </Suspense>
-                  </motion.div>
+                  </m.div>
 
                   <AnimatePresence>
                     {!isSimilarSearching &&
                       similarPostResults &&
                       similarPostResults.posts.length > 0 && (
-                        <motion.div
+                        <m.div
                           initial={{ opacity: 0, height: 0 }}
                           animate={{ opacity: 1, height: 'auto' }}
                           exit={{ opacity: 0, height: 0 }}
@@ -884,7 +884,7 @@ export function WidgetHomeAnimated({
                               ))}
                             </div>
                           </div>
-                        </motion.div>
+                        </m.div>
                       )}
                   </AnimatePresence>
 
@@ -896,7 +896,7 @@ export function WidgetHomeAnimated({
                     </div>
                   )}
 
-                  <motion.div
+                  <m.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ duration: 0.2, delay: 0.15 }}
@@ -967,11 +967,11 @@ export function WidgetHomeAnimated({
                         </button>
                       </div>
                     </div>
-                  </motion.div>
-                </motion.div>
+                  </m.div>
+                </m.div>
               )}
             </AnimatePresence>
-          </motion.div>
+          </m.div>
 
           {/* Popular ideas */}
           <div className="mt-2">
