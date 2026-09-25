@@ -83,6 +83,8 @@ export const Route = createFileRoute('/admin/settings/sla')({
     await Promise.all([
       context.queryClient.ensureQueryData(slaPoliciesQuery),
       context.queryClient.ensureQueryData(settingsQueries.defaultSlaPolicy()),
+      // The policies' office-hours note reads these on first paint.
+      context.queryClient.ensureQueryData(slaOfficeHoursQuery).catch(() => undefined),
     ])
     return {}
   },
