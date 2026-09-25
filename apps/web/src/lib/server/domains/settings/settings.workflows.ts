@@ -13,7 +13,7 @@
  * concurrent settings work. `getWorkflowAbandonedAutoCloseSettings` is called
  * from the run engine's hot park path (every interactive-block park), same as
  * `getOfficeHoursSchedule` is called from every run's condition-context
- * resolution — a single `requireSettingsPerRequest()` read, never cached
+ * resolution: a single `requireSettingsPerRequest()` read, never cached
  * across requests, matching that precedent rather than the heavier
  * `getWorkspaceSettings()` consolidation.
  */

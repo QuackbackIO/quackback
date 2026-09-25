@@ -65,7 +65,7 @@ any workspace-database query exists.
 
 On the request-scoped `AsyncLocalStorage` store that `request-context.ts` already
 opens for every SSR document, server route and server function, under a symbol
-key — the same mechanism `request-memo.ts` already uses for its
+key, the same mechanism `request-memo.ts` already uses for its
 per-request memo. `@quackback/logger` owns the store and shares it with
 `@quackback/db` and `@quackback/email`, so a scoped log line carries `workspace_key`
 without anyone passing it down.
