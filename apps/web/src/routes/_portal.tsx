@@ -34,7 +34,7 @@ import { isSafeCallbackUrl } from '@/lib/shared/routing'
 import { useAutoOpenAuthDialog } from '@/components/auth/use-auto-open-auth'
 import { resolveInstantSsoRedirectFn } from '@/lib/server/functions/instant-sso'
 import { useBrandingFont } from '@/lib/client/hooks/use-branding-font'
-import { usePreviewDraft } from '@/components/public/preview-draft-context'
+import { usePreviewCss } from '@/components/public/preview-draft-context'
 import { resolvePortalOgImageUrl } from '@/lib/shared/portal-og-image'
 
 /**
@@ -436,9 +436,9 @@ function PortalAuthAutoOpen(props: {
  * Loads the workspace's chosen branding font on demand (see useBrandingFont).
  * Mounted inside PortalPreviewProvider's tree so that, in the admin branding
  * preview, it also picks up the live draft stylesheet (postMessaged from the
- * settings page as the admin previews different fonts) via usePreviewDraft —
- * outside preview mode that hook returns null and this falls back to the
- * loader-supplied customCss/configFontSans, exactly like a normal visit.
+ * settings page as the admin previews different fonts) via usePreviewCss.
+ * Without a draft stylesheet (always, outside preview mode) it falls back to
+ * the loader-supplied customCss/configFontSans, exactly like a normal visit.
  */
 function PortalBrandingFontLoader({
   customCss,
@@ -447,7 +447,7 @@ function PortalBrandingFontLoader({
   customCss: string
   configFontSans: string | null
 }) {
-  const draft = usePreviewDraft()
-  useBrandingFont(draft?.css ?? customCss, configFontSans)
+  const draftCss = usePreviewCss()
+  useBrandingFont(draftCss ?? customCss, configFontSans)
   return null
 }
