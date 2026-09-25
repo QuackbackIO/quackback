@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query'
 import { UsersLayout } from '@/components/admin/users/users-layout'
 import { UsersSegmentNav } from '@/components/admin/users/users-segment-nav'
@@ -7,7 +7,6 @@ import { UserDetail } from '@/components/admin/users/user-detail'
 import { CompaniesView } from '@/components/admin/users/companies-view'
 import { CompanyDetail } from '@/components/admin/users/company-detail'
 import { InvitationsView } from '@/components/admin/users/invitations-view'
-import { NewPersonDialog } from '@/components/admin/users/new-person-dialog'
 import { useUsersFilters } from '@/components/admin/users/use-users-filters'
 import { usePortalInvites } from '@/components/admin/users/use-portal-invites'
 import { Route as UsersRoute } from '@/routes/admin/users'
@@ -27,7 +26,6 @@ import {
   useDeleteSegment,
   useEvaluateSegment,
 } from '@/lib/client/mutations'
-import { SegmentFormDialog } from '@/components/admin/segments/segment-form'
 import type { SegmentFormValues, RuleCondition } from '@/components/admin/segments/segment-form'
 import {
   getAutoColor,
@@ -38,6 +36,19 @@ import { canReadCompanies, companiesDirectoryQueries } from '@/lib/client/querie
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import type { PrincipalId, SegmentId } from '@quackback/ids'
 import type { SegmentCondition } from '@/lib/shared/db-types'
+
+// The segment rule builder and the new-person form load the first time one of
+// their dialogs opens, not with the page.
+const SegmentFormDialog = lazy(() =>
+  import('@/components/admin/segments/segment-form').then((m) => ({
+    default: m.SegmentFormDialog,
+  }))
+)
+const NewPersonDialog = lazy(() =>
+  import('@/components/admin/users/new-person-dialog').then((m) => ({
+    default: m.NewPersonDialog,
+  }))
+)
 
 interface UsersContainerProps {
   currentMemberRole: string
@@ -135,6 +146,12 @@ export function UsersContainer({ currentMemberRole }: UsersContainerProps) {
   // "New person" (ad-hoc contact) dialog state
   const [newPersonOpen, setNewPersonOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<SegmentListItem | null>(null)
+  // Each dialog mounts on its first open and stays mounted, so closing it
+  // still animates.
+  const [newPersonOpened, setNewPersonOpened] = useState(false)
+  const [segmentFormOpened, setSegmentFormOpened] = useState(false)
+  if (newPersonOpen && !newPersonOpened) setNewPersonOpened(true)
+  if ((createOpen || editTarget) && !segmentFormOpened) setSegmentFormOpened(true)
   const [deleteTarget, setDeleteTarget] = useState<SegmentListItem | null>(null)
   const [evaluatingId, setEvaluatingId] = useState<string | null>(null)
 
@@ -328,49 +345,57 @@ export function UsersContainer({ currentMemberRole }: UsersContainerProps) {
       </UsersLayout>
 
       {/* New person (ad-hoc contact) dialog */}
-      <NewPersonDialog
-        open={newPersonOpen}
-        onOpenChange={setNewPersonOpen}
-        onViewPerson={(principalId) => setSelectedUserId(principalId)}
-      />
+      {newPersonOpened && (
+        <Suspense fallback={null}>
+          <NewPersonDialog
+            open={newPersonOpen}
+            onOpenChange={setNewPersonOpen}
+            onViewPerson={(principalId) => setSelectedUserId(principalId)}
+          />
+        </Suspense>
+      )}
 
-      {/* Create dialog */}
-      <SegmentFormDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        onSubmit={handleCreateSegment}
-        isPending={createSegment.isPending}
-        customAttributes={customAttributes}
-        companyAttributes={companyAttributes}
-      />
+      {segmentFormOpened && (
+        <Suspense fallback={null}>
+          {/* Create dialog */}
+          <SegmentFormDialog
+            open={createOpen}
+            onOpenChange={setCreateOpen}
+            onSubmit={handleCreateSegment}
+            isPending={createSegment.isPending}
+            customAttributes={customAttributes}
+            companyAttributes={companyAttributes}
+          />
 
-      {/* Edit dialog */}
-      <SegmentFormDialog
-        open={!!editTarget}
-        onOpenChange={(open) => !open && setEditTarget(null)}
-        initialValues={
-          editTarget
-            ? {
-                id: editTarget.id as SegmentId,
-                name: editTarget.name,
-                description: editTarget.description ?? '',
-                type: editTarget.type as 'manual' | 'dynamic',
-                rules: editTarget.rules
-                  ? {
-                      match: editTarget.rules.match,
-                      conditions: editTarget.rules.conditions.map((c: SegmentCondition) =>
-                        deserializeCondition(c, customAttributes, companyAttributes)
-                      ) as unknown as RuleCondition[],
-                    }
-                  : { match: 'all', conditions: [] },
-              }
-            : undefined
-        }
-        onSubmit={handleUpdateSegment}
-        isPending={updateSegment.isPending}
-        customAttributes={customAttributes}
-        companyAttributes={companyAttributes}
-      />
+          {/* Edit dialog */}
+          <SegmentFormDialog
+            open={!!editTarget}
+            onOpenChange={(open) => !open && setEditTarget(null)}
+            initialValues={
+              editTarget
+                ? {
+                    id: editTarget.id as SegmentId,
+                    name: editTarget.name,
+                    description: editTarget.description ?? '',
+                    type: editTarget.type as 'manual' | 'dynamic',
+                    rules: editTarget.rules
+                      ? {
+                          match: editTarget.rules.match,
+                          conditions: editTarget.rules.conditions.map((c: SegmentCondition) =>
+                            deserializeCondition(c, customAttributes, companyAttributes)
+                          ) as unknown as RuleCondition[],
+                        }
+                      : { match: 'all', conditions: [] },
+                  }
+                : undefined
+            }
+            onSubmit={handleUpdateSegment}
+            isPending={updateSegment.isPending}
+            customAttributes={customAttributes}
+            companyAttributes={companyAttributes}
+          />
+        </Suspense>
+      )}
 
       {/* Delete confirm */}
       <ConfirmDialog
