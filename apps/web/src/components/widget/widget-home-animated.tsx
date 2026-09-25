@@ -1,4 +1,14 @@
-import { Suspense, useCallback, useEffect, useMemo, memo, useRef, useState } from 'react'
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  memo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type RefObject,
+} from 'react'
 import { usePillsScroll } from '@/lib/client/hooks/use-pills-scroll'
 import { Squares2X2Icon, PencilIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/solid'
 import {
@@ -260,6 +270,202 @@ const WidgetPostRow = memo(
     prev.noAccessReason === next.noAccessReason
 )
 
+/**
+ * The title as typed, held outside React state: the field and the similar-ideas
+ * search read it as it changes, and the composer reads it when it acts on
+ * it, so a keystroke renders the field and the search, not the composer.
+ * It is kept here rather than shared with the portal's composer: a module
+ * the two alone import would be a chunk, and a request, of its own.
+ */
+interface TitleStore {
+  get(): string
+  set(next: string): void
+  subscribe(onChange: () => void): () => void
+}
+
+function createTitleStore(): TitleStore {
+  let value = ''
+  const listeners = new Set<() => void>()
+  return {
+    get: () => value,
+    set(next) {
+      if (next === value) return
+      value = next
+      for (const listener of listeners) listener()
+    },
+    subscribe(onChange) {
+      listeners.add(onChange)
+      return () => {
+        listeners.delete(onChange)
+      }
+    },
+  }
+}
+
+/** What a component reads from the title; it renders again only when that changes. */
+function useTitle<T = string>(
+  title: TitleStore,
+  select: (value: string) => T = (value) => value as T
+): T {
+  const read = () => select(title.get())
+  return useSyncExternalStore(title.subscribe, read, read)
+}
+
+function TitleInput({
+  title,
+  inputRef,
+  expanded,
+  onType,
+  onFocus,
+}: {
+  title: TitleStore
+  inputRef: RefObject<HTMLInputElement | null>
+  expanded: boolean
+  onType: (value: string) => void
+  onFocus: () => void
+}) {
+  const intl = useIntl()
+  const value = useTitle(title)
+  return (
+    <m.input
+      ref={inputRef}
+      type="text"
+      placeholder={intl.formatMessage({
+        id: 'widget.home.input.placeholder',
+        defaultMessage: "What's your idea?",
+      })}
+      value={value}
+      aria-label={intl.formatMessage({
+        id: 'widget.home.input.label',
+        defaultMessage: 'Feedback title',
+      })}
+      onChange={(e) => {
+        title.set(e.target.value)
+        onType(e.target.value)
+      }}
+      onFocus={onFocus}
+      className="flex-1 bg-transparent border-0 outline-none text-foreground placeholder:text-muted-foreground/50 placeholder:font-normal caret-primary focus-visible:ring-2 focus-visible:ring-ring/50"
+      initial={false}
+      animate={{
+        fontSize: expanded ? '1rem' : '0.875rem',
+        fontWeight: expanded ? 600 : 400,
+      }}
+      transition={{ duration: 0.2 }}
+    />
+  )
+}
+
+/**
+ * Ideas like the one being written, searched once the title's typing pauses.
+ * A later keystroke cancels a search still waiting or in flight.
+ */
+function SimilarIdeas({
+  title,
+  sessionVersion,
+  statusMap,
+  rowCanVote,
+  ensureSessionThen,
+  noAccessReason,
+  onAuthRequired,
+  onPostSelect,
+}: {
+  title: TitleStore
+  sessionVersion: number
+  statusMap: Map<string, StatusInfo>
+  rowCanVote: (boardId: string | undefined) => boolean
+  ensureSessionThen: (callback: () => void | Promise<void>) => Promise<void>
+  noAccessReason?: string
+  onAuthRequired: (postId: string) => void
+  onPostSelect?: (postId: string) => void
+}) {
+  const value = useTitle(title)
+  const [similarPostResults, setSimilarPostResults] = useState<SearchResult | null>(null)
+  const [isSimilarSearching, setIsSimilarSearching] = useState(false)
+  const similarDebounceRef = useRef<ReturnType<typeof setTimeout>>(null)
+
+  useEffect(() => {
+    if (similarDebounceRef.current) clearTimeout(similarDebounceRef.current)
+    const q = value.trim()
+    if (!q) {
+      setSimilarPostResults(null)
+      setIsSimilarSearching(false)
+      return
+    }
+    const cached = similarSearchCacheGet(sessionVersion, q)
+    if (cached) {
+      setSimilarPostResults(cached)
+      setIsSimilarSearching(false)
+      return
+    }
+    // Drop the previous identity's hits before the new request lands.
+    setSimilarPostResults(null)
+    setIsSimilarSearching(true)
+    const controller = new AbortController()
+    similarDebounceRef.current = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({ q, limit: '5' })
+        const res = await fetch(`/api/widget/search?${params}`, {
+          signal: controller.signal,
+          headers: getWidgetAuthHeaders(),
+        })
+        if (!res.ok) {
+          setSimilarPostResults({ posts: [] })
+          return
+        }
+        const json = await res.json()
+        const result: SearchResult = { posts: json.data?.posts ?? [] }
+        similarSearchCacheSet(sessionVersion, q, result)
+        setSimilarPostResults(result)
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return
+        setSimilarPostResults({ posts: [] })
+      } finally {
+        setIsSimilarSearching(false)
+      }
+    }, 300)
+    return () => {
+      if (similarDebounceRef.current) clearTimeout(similarDebounceRef.current)
+      controller.abort()
+    }
+  }, [value, sessionVersion])
+
+  return (
+    <AnimatePresence>
+      {!isSimilarSearching && similarPostResults && similarPostResults.posts.length > 0 && (
+        <m.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          transition={{ duration: 0.15, ease: 'easeOut' }}
+          className="overflow-hidden"
+        >
+          <div className="px-3 pb-2">
+            <p className="text-[11px] font-medium text-muted-foreground/60 flex items-center gap-1 mb-1.5">
+              <LightBulbIcon className="w-3 h-3" />
+              <FormattedMessage id="widget.home.similar.heading" defaultMessage="Similar ideas" />
+            </p>
+            <div className="space-y-0.5">
+              {similarPostResults.posts.slice(0, 3).map((post) => (
+                <WidgetPostRow
+                  key={post.id}
+                  post={post}
+                  statusMap={statusMap}
+                  compact
+                  canVote={rowCanVote(post.board?.id)}
+                  ensureSessionThen={ensureSessionThen}
+                  noAccessReason={noAccessReason}
+                  onAuthRequired={() => onAuthRequired(post.id)}
+                  onSelect={() => onPostSelect?.(post.id)}
+                />
+              ))}
+            </div>
+          </div>
+        </m.div>
+      )}
+    </AnimatePresence>
+  )
+}
+
 // ── Main component ──
 
 export function WidgetHomeAnimated({
@@ -290,7 +496,10 @@ export function WidgetHomeAnimated({
   const queryClient = useQueryClient()
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const [title, setTitle] = useState('')
+  const [title] = useState(createTitleStore)
+  // Submit waits for a title; this changes when the first character arrives
+  // or the last one goes, not with every keystroke.
+  const hasTitle = useTitle(title, (value) => value.trim() !== '')
   const [expanded, setExpanded] = useState(false)
   const [selectedBoardId, setSelectedBoardId] = useState(() =>
     resolveComposeBoardId(boards, undefined, defaultBoard)
@@ -320,7 +529,7 @@ export function WidgetHomeAnimated({
     if (!composeRequest) return
     composeBoardDirtyRef.current = false
     setExpanded(true)
-    if (composeRequest.title) setTitle(composeRequest.title)
+    if (composeRequest.title) title.set(composeRequest.title)
     if (composeRequest.body) {
       const next = composeBodyFromPlainText(composeRequest.body)
       detailsRef.current = { json: () => next.json, html: () => next.html }
@@ -407,9 +616,6 @@ export function WidgetHomeAnimated({
     onError: handleUploadError,
   })
 
-  const [similarPostResults, setSimilarPostResults] = useState<SearchResult | null>(null)
-  const [isSimilarSearching, setIsSimilarSearching] = useState(false)
-  const similarDebounceRef = useRef<ReturnType<typeof setTimeout>>(null)
   const [activeBoardSlug, setActiveBoardSlug] = useState<string | null>(
     () => initialBoardSlug ?? null
   )
@@ -529,52 +735,6 @@ export function WidgetHomeAnimated({
       })
     : undefined
 
-  useEffect(() => {
-    if (similarDebounceRef.current) clearTimeout(similarDebounceRef.current)
-    const q = title.trim()
-    if (!q) {
-      setSimilarPostResults(null)
-      setIsSimilarSearching(false)
-      return
-    }
-    const cached = similarSearchCacheGet(sessionVersion, q)
-    if (cached) {
-      setSimilarPostResults(cached)
-      setIsSimilarSearching(false)
-      return
-    }
-    // Drop the previous identity's hits before the new request lands.
-    setSimilarPostResults(null)
-    setIsSimilarSearching(true)
-    const controller = new AbortController()
-    similarDebounceRef.current = setTimeout(async () => {
-      try {
-        const params = new URLSearchParams({ q, limit: '5' })
-        const res = await fetch(`/api/widget/search?${params}`, {
-          signal: controller.signal,
-          headers: getWidgetAuthHeaders(),
-        })
-        if (!res.ok) {
-          setSimilarPostResults({ posts: [] })
-          return
-        }
-        const json = await res.json()
-        const result: SearchResult = { posts: json.data?.posts ?? [] }
-        similarSearchCacheSet(sessionVersion, q, result)
-        setSimilarPostResults(result)
-      } catch (err) {
-        if (err instanceof Error && err.name === 'AbortError') return
-        setSimilarPostResults({ posts: [] })
-      } finally {
-        setIsSimilarSearching(false)
-      }
-    }, 300)
-    return () => {
-      if (similarDebounceRef.current) clearTimeout(similarDebounceRef.current)
-      controller.abort()
-    }
-  }, [title, sessionVersion])
-
   // Debounce popular ideas search
   useEffect(() => {
     if (popularSearchDebounceRef.current) clearTimeout(popularSearchDebounceRef.current)
@@ -596,7 +756,7 @@ export function WidgetHomeAnimated({
 
   function collapseForm() {
     setExpanded(false)
-    setTitle('')
+    title.set('')
     detailsRef.current = null
     setEditorContent(null)
     setError(null)
@@ -604,7 +764,8 @@ export function WidgetHomeAnimated({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!title.trim() || !selectedBoardId || isSubmitting) return
+    const typedTitle = title.get()
+    if (!typedTitle.trim() || !selectedBoardId || isSubmitting) return
 
     setIsSubmitting(true)
     setError(null)
@@ -659,7 +820,7 @@ export function WidgetHomeAnimated({
       const result = await widgetCreatePublicPostFn({
         data: {
           boardId: selectedBoardId,
-          title: title.trim(),
+          title: typedTitle.trim(),
           content: (details?.html() ?? '').trim(),
           contentJson: details?.json() as TiptapContent | undefined,
           metadata: metadata ?? undefined,
@@ -709,7 +870,7 @@ export function WidgetHomeAnimated({
     }
   }
 
-  const canSubmitForm = title.trim() && selectedBoardId && canPost
+  const canSubmitForm = hasTitle && selectedBoardId && canPost
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col h-full">
@@ -781,34 +942,17 @@ export function WidgetHomeAnimated({
                 )}
               </AnimatePresence>
 
-              <m.input
-                ref={inputRef}
-                type="text"
-                placeholder={intl.formatMessage({
-                  id: 'widget.home.input.placeholder',
-                  defaultMessage: "What's your idea?",
-                })}
-                value={title}
-                aria-label={intl.formatMessage({
-                  id: 'widget.home.input.label',
-                  defaultMessage: 'Feedback title',
-                })}
-                onChange={(e) => {
-                  const val = e.target.value
-                  setTitle(val)
+              <TitleInput
+                title={title}
+                inputRef={inputRef}
+                expanded={expanded}
+                onType={(val) => {
                   if (val && !expanded) setExpanded(true)
                   if (!val && expanded && !detailsRef.current?.html().trim()) setExpanded(false)
                 }}
                 onFocus={() => {
-                  if (title && !expanded) setExpanded(true)
+                  if (title.get() && !expanded) setExpanded(true)
                 }}
-                className="flex-1 bg-transparent border-0 outline-none text-foreground placeholder:text-muted-foreground/50 placeholder:font-normal caret-primary focus-visible:ring-2 focus-visible:ring-ring/50"
-                initial={false}
-                animate={{
-                  fontSize: expanded ? '1rem' : '0.875rem',
-                  fontWeight: expanded ? 600 : 400,
-                }}
-                transition={{ duration: 0.2 }}
               />
             </div>
 
@@ -858,44 +1002,16 @@ export function WidgetHomeAnimated({
                     </Suspense>
                   </m.div>
 
-                  <AnimatePresence>
-                    {!isSimilarSearching &&
-                      similarPostResults &&
-                      similarPostResults.posts.length > 0 && (
-                        <m.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          transition={{ duration: 0.15, ease: 'easeOut' }}
-                          className="overflow-hidden"
-                        >
-                          <div className="px-3 pb-2">
-                            <p className="text-[11px] font-medium text-muted-foreground/60 flex items-center gap-1 mb-1.5">
-                              <LightBulbIcon className="w-3 h-3" />
-                              <FormattedMessage
-                                id="widget.home.similar.heading"
-                                defaultMessage="Similar ideas"
-                              />
-                            </p>
-                            <div className="space-y-0.5">
-                              {similarPostResults.posts.slice(0, 3).map((post) => (
-                                <WidgetPostRow
-                                  key={post.id}
-                                  post={post}
-                                  statusMap={statusMap}
-                                  compact
-                                  canVote={rowCanVote(post.board?.id)}
-                                  ensureSessionThen={ensureSessionThen}
-                                  noAccessReason={voteNoAccessReason}
-                                  onAuthRequired={() => handleAuthRequired(post.id)}
-                                  onSelect={() => onPostSelect?.(post.id)}
-                                />
-                              ))}
-                            </div>
-                          </div>
-                        </m.div>
-                      )}
-                  </AnimatePresence>
+                  <SimilarIdeas
+                    title={title}
+                    sessionVersion={sessionVersion}
+                    statusMap={statusMap}
+                    rowCanVote={rowCanVote}
+                    ensureSessionThen={ensureSessionThen}
+                    noAccessReason={voteNoAccessReason}
+                    onAuthRequired={handleAuthRequired}
+                    onPostSelect={onPostSelect}
+                  />
 
                   {error && (
                     <div className="px-3 pb-2">
