@@ -45,15 +45,21 @@ export function inboxFiltersFromSearch(search: Partial<FeedbackSearch>): InboxFi
 
 export function useInboxFilters() {
   const navigate = useNavigate()
-  const search = Route.useSearch()
+  // The filters alone, kept as the same object while they are unchanged:
+  // opening or closing a post over the list is a search-only navigation that
+  // changes none of them, and renders nothing that reads them.
+  const filters: InboxFilters = Route.useSearch({
+    select: inboxFiltersFromSearch,
+    structuralSharing: true,
+  })
 
-  const filters: InboxFilters = useMemo(() => inboxFiltersFromSearch(search), [search])
-
+  // Updates start from the URL as it is when they run, the open post included.
   const setFilters = useCallback(
     (updates: Partial<InboxFilters>) => {
       void navigate({
+        from: '/admin/feedback',
         to: '/admin/feedback',
-        search: {
+        search: (search) => ({
           ...search,
           // Use 'key in updates' to check if key was explicitly passed (even if undefined)
           ...('search' in updates && { search: updates.search }),
@@ -71,22 +77,23 @@ export function useInboxFilters() {
           ...('hasDuplicates' in updates && { hasDuplicates: updates.hasDuplicates || undefined }),
           ...('sort' in updates && { sort: updates.sort }),
           ...('showDeleted' in updates && { deleted: updates.showDeleted || undefined }),
-        },
+        }),
         replace: true,
       })
     },
-    [navigate, search]
+    [navigate]
   )
 
   const clearFilters = useCallback(() => {
     void navigate({
+      from: '/admin/feedback',
       to: '/admin/feedback',
-      search: {
+      search: (search) => ({
         sort: search.sort,
-      },
+      }),
       replace: true,
     })
-  }, [navigate, search])
+  }, [navigate])
 
   const hasActiveFilters = useMemo(() => {
     return !!(
