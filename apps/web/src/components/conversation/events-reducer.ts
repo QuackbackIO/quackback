@@ -100,7 +100,9 @@ export function toggleReactionLocal(
 /** Whether an inbox-stream event changes the conversation LIST's ordering /
  *  preview / unread badge: new + deleted messages, conversation updates, and an
  *  AGENT read move (mark-unread). typing, visitor-read ("Seen"), and
- *  message_updated (reaction/flag) only touch the open thread.
+ *  message_updated (reaction/flag) only touch the open thread. A new message
+ *  whose write also sent the conversation's update leaves the list to that
+ *  event, so one write refreshes the list once, whichever event lands first.
  *
  *  Also covers the ticket-side events (unified inbox §3.2, M3), which share
  *  this one predicate rather than a parallel `eventChangesInboxItemList` since
@@ -119,6 +121,7 @@ export function agentEventChangesInboxList(evt: ConversationStreamEvent): boolea
     evt.kind === 'ticket_updated'
   )
     return true
+  if (evt.kind === 'message' && evt.conversationUpdated) return false
   return (
     (evt.kind !== 'read' && evt.kind !== 'typing' && evt.kind !== 'message_updated') ||
     (evt.kind === 'read' && evt.side === 'agent')
