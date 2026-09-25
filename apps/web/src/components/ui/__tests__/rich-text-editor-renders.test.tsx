@@ -99,6 +99,27 @@ describe('RichTextEditor typing', () => {
     expect(buttonRenders.count).toBe(0)
   })
 
+  it('redraws only the buttons whose state changed', async () => {
+    const { container } = render(<ControlledHost />)
+    const { dom, editor } = await mountedEditor(container)
+    const user = userEvent.setup()
+    await user.click(dom)
+
+    // The first keystroke makes Undo available: one toolbar button changes.
+    buttonRenders.count = 0
+    await user.type(dom, 'a')
+    await waitFor(() => expect(toolbarButton('Undo').disabled).toBe(false))
+    expect(buttonRenders.count).toBe(1)
+
+    // Bold turns on in the toolbar and in the bubble menu, nothing else.
+    buttonRenders.count = 0
+    act(() => {
+      editor.commands.toggleBold()
+    })
+    await waitFor(() => expect(isActive('Bold')).toBe(true))
+    expect(buttonRenders.count).toBe(2)
+  })
+
   it('runs one transaction per keystroke', async () => {
     const { container } = render(<ControlledHost />)
     const { dom, editor } = await mountedEditor(container)
