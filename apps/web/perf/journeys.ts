@@ -476,6 +476,11 @@ export const journeys: Journey[] = [
       await page.locator('a[href="/admin/settings/portal"]').first().click()
       await page.waitForURL('/admin/settings/portal')
       await page.getByRole('main').getByRole('switch').first().waitFor()
+      // The portal preview is a whole portal in a frame, with reads of its
+      // own after it hydrates; leaving before they finish made the count a race.
+      const preview = await page.locator('iframe[title="Portal preview"]').elementHandle()
+      const frame = await preview?.contentFrame()
+      await frame?.waitForLoadState('networkidle')
       await page.locator('a[href="/admin/settings/members"]').first().click()
       await page.waitForURL('/admin/settings/members')
       await page.getByText('demo@example.com').first().waitFor()
