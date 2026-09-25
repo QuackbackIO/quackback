@@ -7,7 +7,7 @@
  * worth keeping if its counts come out identical on every run; the bench
  * checks that with --repeat.
  */
-import type { APIRequestContext, Page } from '@playwright/test'
+import type { APIRequestContext, Locator, Page } from '@playwright/test'
 import { buildWidgetInstallSnippet } from '../src/lib/shared/widget/install-prompt'
 import { BENCH_PORT } from './config'
 
@@ -41,6 +41,22 @@ const firstPortalPost = (page: Page) => page.locator('a[href*="/posts/post_"]').
 
 /** How long a hover-then-click journey rests the pointer on a link before pressing it. */
 const HOVER_MS = 250
+
+/**
+ * Click until `ready` shows. A setup step that clicks right after a page load
+ * can land before hydration, and that click is lost.
+ */
+async function clickUntil(target: Locator, ready: Locator) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    await target.click()
+    const shown = await ready
+      .waitFor({ timeout: 1000 })
+      .then(() => true)
+      .catch(() => false)
+    if (shown) return
+  }
+  await ready.waitFor()
+}
 
 /** The first post linked from the portal home, for loading a post page directly. */
 async function firstPostPath(request: APIRequestContext): Promise<string> {
@@ -389,6 +405,39 @@ export const journeys: Journey[] = [
       const composer = page.getByRole('textbox', { name: /comment/i }).first()
       await composer.click()
       await page.locator('[contenteditable="true"]').first().waitFor()
+      await page.keyboard.type('Measuring what a keystroke costs.', { delay: 30 })
+    },
+  },
+  // Typing alone: the editor is mounted and focused before the measured part.
+  {
+    kind: 'browser',
+    name: 'ui:admin-post-modal-type-comment',
+    as: 'admin',
+    setup: async (page) => {
+      const html = await (await page.request.get('/admin/feedback')).text()
+      const postId = html.match(/data-post-id="(post_[a-z0-9]+)"/)?.[1]
+      if (!postId) throw new Error('no post on the admin feedback page')
+      await page.goto(`/admin/feedback?post=${postId}`)
+      const composer = page.locator('[data-testid="comment-form-editor"] [contenteditable="true"]')
+      await clickUntil(page.getByRole('textbox', { name: 'Write a comment...' }), composer)
+      await composer.click()
+    },
+    run: async (page) => {
+      await page.keyboard.type('Measuring what a keystroke costs.', { delay: 30 })
+    },
+  },
+  {
+    kind: 'browser',
+    name: 'ui:admin-inbox-type-reply',
+    as: 'admin',
+    setup: async (page) => {
+      await page.goto('/admin/inbox')
+      const composer = page.locator('[contenteditable="true"]').first()
+      await clickUntil(page.getByText('Bench conversation 1').first(), composer)
+      await page.getByText('Bench conversation 1 - visitor message one').first().waitFor()
+      await composer.click()
+    },
+    run: async (page) => {
       await page.keyboard.type('Measuring what a keystroke costs.', { delay: 30 })
     },
   },
