@@ -5,8 +5,8 @@
  * inline onChange) re-renders on every keystroke; the toolbar, bubble menus
  * and context menu around the writing surface must not follow it, and the
  * editor must not run a transaction per keystroke on their behalf. The
- * toolbar still tracks the selection on its own. Button is wrapped in a
- * render counter.
+ * toolbar still tracks the selection on its own. Mounting the editor hands
+ * its host no change it did not make. Button is wrapped in a render counter.
  */
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -80,6 +80,55 @@ const toolbarButton = (title: string) => screen.getByTitle(title) as HTMLButtonE
 /** The quiet toolbar marks an active button with this background. */
 const isActive = (title: string) =>
   toolbarButton(title).className.split(/\s+/).includes('bg-muted/60')
+
+describe('RichTextEditor mount', () => {
+  const doc = (text: string) => ({
+    type: 'doc',
+    content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
+  })
+
+  it('opens on its initial content without re-applying it', async () => {
+    // A blank line stored as `content: []`, which the editor's own JSON omits:
+    // the document it holds is equivalent, not identical.
+    const value = {
+      type: 'doc',
+      content: [...doc('Hello').content, { type: 'paragraph', content: [] }],
+    }
+    const onChange = vi.fn()
+    const { container } = render(<RichTextEditor value={value} onChange={onChange} />)
+    const { dom } = await mountedEditor(container)
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)))
+
+    expect(dom.textContent).toBe('Hello')
+    // Nothing was done to the document, so there is nothing to undo.
+    expect(toolbarButton('Undo').disabled).toBe(true)
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('does not report a change of editability as an edit', async () => {
+    const onChange = vi.fn()
+    const value = doc('Hello')
+    const { container, rerender } = render(<RichTextEditor value={value} onChange={onChange} />)
+    const { editor } = await mountedEditor(container)
+
+    rerender(<RichTextEditor value={value} onChange={onChange} disabled />)
+    await waitFor(() => expect(editor.isEditable).toBe(false))
+    rerender(<RichTextEditor value={value} onChange={onChange} />)
+    await waitFor(() => expect(editor.isEditable).toBe(true))
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('still takes a new value from the host', async () => {
+    const onChange = vi.fn()
+    const { container, rerender } = render(
+      <RichTextEditor value={doc('Hello')} onChange={onChange} />
+    )
+    const { dom } = await mountedEditor(container)
+
+    rerender(<RichTextEditor value={doc('Replaced')} onChange={onChange} />)
+    await waitFor(() => expect(dom.textContent).toBe('Replaced'))
+  })
+})
 
 describe('RichTextEditor typing', () => {
   it('does not re-render the toolbar or menus per keystroke of a controlled host', async () => {
