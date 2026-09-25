@@ -3,8 +3,10 @@
  * Typing a comment is the editor's work alone: a keystroke must not re-render
  * the form around the editor. The form still posts exactly what was typed, and
  * once a submit has shown a validation message it re-checks on every change so
- * the message clears as soon as the comment is valid. The editor module is
- * stubbed: it counts its renders and hands the test its onChange.
+ * the message clears as soon as the comment is valid. Until then a keystroke
+ * serializes nothing: the comment's markdown is read when it is sent. The
+ * editor module is stubbed: it counts its renders and hands the test its
+ * change callback.
  */
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { render, screen, cleanup, fireEvent, act, waitFor } from '@testing-library/react'
@@ -13,13 +15,21 @@ import { IntlProvider } from 'react-intl'
 import type { PostId } from '@quackback/ids'
 
 type OnChange = (json: unknown, html: string, markdown: string) => void
+type Doc = { json(): unknown; html(): string; markdown(): string }
 
-const editor = vi.hoisted(() => ({ renders: 0, onChange: null as OnChange | null }))
+const editor = vi.hoisted(() => ({
+  renders: 0,
+  onChange: null as OnChange | null,
+  onDocumentChange: null as ((document: Doc) => void) | null,
+  /** Markdown serializations: every onChange call, or a document's markdown read. */
+  serialized: 0,
+}))
 
 vi.mock('@/components/ui/rich-text-editor', () => ({
-  RichTextEditor: ({ onChange }: { onChange?: OnChange }) => {
+  RichTextEditor: (props: { onChange?: OnChange; onDocumentChange?: (document: Doc) => void }) => {
     editor.renders++
-    editor.onChange = onChange ?? null
+    editor.onChange = props.onChange ?? null
+    editor.onDocumentChange = props.onDocumentChange ?? null
     return <div data-testid="editor" />
   },
 }))
@@ -31,7 +41,10 @@ vi.mock('@tanstack/react-router', () => ({
 
 import { CommentForm, type CreateCommentMutation } from '../comment-form'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  editor.serialized = 0
+})
 
 const POST_ID = 'post_01h00000000000000000000000' as PostId
 
@@ -59,9 +72,25 @@ async function renderForm(props: Partial<Parameters<typeof CommentForm>[0]> = {}
   return { mutate }
 }
 
+/** Feed the editor's change callback one character at a time. */
 function type(text: string) {
   for (let i = 1; i <= text.length; i++) {
-    act(() => editor.onChange!(doc(text.slice(0, i)), '', text.slice(0, i)))
+    const typed = text.slice(0, i)
+    act(() => {
+      if (editor.onDocumentChange) {
+        editor.onDocumentChange({
+          json: () => doc(typed),
+          html: () => `<p>${typed}</p>`,
+          markdown: () => {
+            editor.serialized++
+            return typed
+          },
+        })
+      } else {
+        editor.serialized++
+        editor.onChange!(doc(typed), '', typed)
+      }
+    })
   }
 }
 
@@ -77,6 +106,16 @@ describe('CommentForm typing', () => {
     editor.renders = 0
     type('Hello there')
     expect(editor.renders).toBe(0)
+  })
+
+  it('serializes the comment once, when it is sent', async () => {
+    const { mutate } = await renderForm()
+    type('Hello there')
+    expect(editor.serialized).toBe(0)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Comment' }))
+    await waitFor(() => expect(mutate).toHaveBeenCalledTimes(1))
+    expect(editor.serialized).toBe(1)
   })
 
   it('posts what was typed', async () => {
