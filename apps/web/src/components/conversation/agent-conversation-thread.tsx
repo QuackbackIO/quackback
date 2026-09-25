@@ -169,7 +169,11 @@ import { usePersonBlockStatus } from '@/components/admin/users/block-person-cont
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { RequiredAttributesDialog } from '@/components/admin/conversation/required-attributes-dialog'
 import { downloadTranscriptFile } from '@/components/admin/conversation/export-transcript-button'
-import { RichTextEditor, type RichTextEditorHandle } from '@/components/ui/rich-text-editor'
+import {
+  RichTextEditor,
+  type EditorDocument,
+  type RichTextEditorHandle,
+} from '@/components/ui/rich-text-editor'
 import {
   CONVERSATION_EDITOR_FEATURES,
   CONVERSATION_NOTE_FEATURES,
@@ -1629,18 +1633,21 @@ export function AgentConversationThread({
   // The draft refs move with each accepted update so a second update in the
   // same tick compares against the first rather than the last render.
   const onReplyChange = useCallback(
-    (json: JSONContent, _html: string, markdown: string) => {
+    (document: EditorDocument) => {
+      const json = document.json()
       const previous = drafts.get('reply')
       if (isBlankComposerDoc(json) && isBlankComposerDoc(previous.json)) return
+      const markdown = document.markdown()
       drafts.set('reply', { json: json as TiptapContent, markdown })
       if (capabilities.typing && markdown !== previous.markdown) onLocalInput()
     },
     [drafts, onLocalInput, capabilities.typing]
   )
   const onNoteChange = useCallback(
-    (json: JSONContent, _html: string, markdown: string) => {
+    (document: EditorDocument) => {
+      const json = document.json()
       if (isBlankComposerDoc(json) && isBlankComposerDoc(drafts.get('note').json)) return
-      drafts.set('note', { json: json as TiptapContent, markdown })
+      drafts.set('note', { json: json as TiptapContent, markdown: document.markdown() })
     },
     [drafts]
   )
@@ -2277,7 +2284,7 @@ export function AgentConversationThread({
                 autofocus={noteKey > 0 ? 'end' : false}
                 placeholder="Add an internal note for your team…"
                 className="max-h-64 overflow-y-auto"
-                onChange={onNoteChange}
+                onDocumentChange={onNoteChange}
                 onSubmit={onSend}
               />
             ) : (
@@ -2294,7 +2301,7 @@ export function AgentConversationThread({
                   isTicket,
                 })}
                 className="max-h-64 overflow-y-auto"
-                onChange={onReplyChange}
+                onDocumentChange={onReplyChange}
                 onSubmit={onSend}
               />
             )}

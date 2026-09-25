@@ -201,15 +201,20 @@ vi.mock('@/components/ui/rich-text-editor', async () => {
     RichTextEditor: ({
       placeholder,
       editorRef,
-      onChange,
+      onDocumentChange,
     }: {
       placeholder?: string
       editorRef?: React.RefObject<{ focus: () => void; clear?: () => void } | null>
-      onChange?: (json: unknown, html: string, markdown: string) => void
+      onDocumentChange?: (document: { json(): unknown; html(): string; markdown(): string }) => void
     }) => {
-      composerProbe.onChange = onChange ?? null
+      // The tests type as (json, html, markdown); the composer reads a document.
+      const onChange = onDocumentChange
+        ? (json: unknown, html: string, markdown: string) =>
+            onDocumentChange({ json: () => json, html: () => html, markdown: () => markdown })
+        : null
+      composerProbe.onChange = onChange
       const areaRef = useRef<HTMLTextAreaElement>(null)
-      composer.onChange = onChange ?? null
+      composer.onChange = onChange
       useImperativeHandle(editorRef, () => ({
         focus: () => areaRef.current?.focus(),
         clear: () => {},
