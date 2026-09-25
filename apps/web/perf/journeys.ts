@@ -443,6 +443,58 @@ export const journeys: Journey[] = [
   },
   {
     kind: 'browser',
+    name: 'ui:widget-type-message',
+    as: 'anon',
+    setup: async (page) => {
+      await page.goto('/widget')
+      await page.getByRole('button', { name: 'Home', exact: true }).waitFor()
+      const ask = page.getByRole('button', { name: 'Ask a question' })
+      await clickUntil(page.getByRole('button', { name: 'Messages', exact: true }), ask)
+      const composer = page.locator('[contenteditable="true"]').first()
+      await clickUntil(ask, composer)
+      await composer.click()
+    },
+    run: async (page) => {
+      await page.keyboard.type('Measuring what a keystroke costs.', { delay: 30 })
+    },
+  },
+  // The "new post" composers: the title is typed before the measured part.
+  {
+    kind: 'browser',
+    name: 'ui:portal-type-new-post',
+    as: 'admin',
+    setup: async (page) => {
+      await page.goto('/?sort=trending')
+      await firstPortalPost(page).waitFor()
+      const composer = page.locator('[contenteditable="true"]').first()
+      await clickUntil(page.getByRole('textbox', { name: 'Feedback title' }), composer)
+      await page.keyboard.type('A keystroke budget')
+      await composer.click()
+    },
+    run: async (page) => {
+      await page.keyboard.type('Measuring what a keystroke costs.', { delay: 30 })
+    },
+  },
+  {
+    kind: 'browser',
+    name: 'ui:widget-type-new-post',
+    as: 'anon',
+    setup: async (page) => {
+      await page.goto('/widget')
+      await page.getByRole('button', { name: 'Home', exact: true }).waitFor()
+      const title = page.getByRole('textbox', { name: 'Feedback title' })
+      await clickUntil(page.getByRole('button', { name: 'Feedback', exact: true }), title)
+      await title.click()
+      await page.keyboard.type('A keystroke budget')
+      const composer = page.locator('[contenteditable="true"]').first()
+      await composer.click()
+    },
+    run: async (page) => {
+      await page.keyboard.type('Measuring what a keystroke costs.', { delay: 30 })
+    },
+  },
+  {
+    kind: 'browser',
     name: 'ui:widget-switch-tabs',
     as: 'anon',
     setup: async (page) => {
