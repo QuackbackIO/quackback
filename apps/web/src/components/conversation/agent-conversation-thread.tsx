@@ -469,15 +469,27 @@ export function AgentConversationThread({
     () => ticketKeys.thread(ticketId ?? INACTIVE_TICKET_ID),
     [ticketId]
   )
-  // The current agent's display name, for attributing optimistic reactions.
-  const { session, settings } = useRouteContext({ from: '__root__' })
-  const { principal } = useRouteContext({ from: '/admin' }) as {
-    principal?: { id?: string }
-  }
-  const myName = session?.user?.name ?? 'You'
-  const myPrincipalId = principal?.id
-  const flags = settings?.featureFlags as FeatureFlags | undefined
-  const showTickets = flags?.supportTickets ?? false
+  // Each route-context read selects the one value the thread uses, so a router
+  // update that leaves them alone does not re-render the whole thread. The
+  // current agent's display name attributes optimistic reactions.
+  const myName = useRouteContext({
+    from: '__root__',
+    select: (context) => context.session?.user?.name ?? 'You',
+  })
+  const myPrincipalId = useRouteContext({
+    from: '/admin',
+    select: (context) => (context as { principal?: { id?: string } }).principal?.id,
+  })
+  const showTickets = useRouteContext({
+    from: '__root__',
+    select: (context) =>
+      (context.settings?.featureFlags as FeatureFlags | undefined)?.supportTickets ?? false,
+  })
+  const supportInbox = useRouteContext({
+    from: '__root__',
+    select: (context) =>
+      (context.settings?.featureFlags as FeatureFlags | undefined)?.supportInbox ?? false,
+  })
   // B24: the linked-ticket affordances (the header's ticket-status pill, the
   // linked-ticket detail fetch) gate on the resolved ticket permissions, not
   // just the feature flag. `ticket.view` decides whether the ticket is fetched
@@ -674,7 +686,7 @@ export function AgentConversationThread({
     if (!capabilities.reply) setNoteMode(true)
   }, [capabilities.reply])
 
-  const linkPreviewsEnabled = capabilities.linkPreviews && (flags?.supportInbox ?? false)
+  const linkPreviewsEnabled = capabilities.linkPreviews && supportInbox
 
   // The unread divider sits immediately above the first message newer than the
   // agent's read watermark — i.e. the first message that "mark unread" or new
