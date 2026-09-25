@@ -167,7 +167,12 @@ function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   )
 }
 
-function SelectValue({
+/**
+ * Memoized: usually given only a placeholder, it renders when the selected
+ * value or the item labels change (Base UI's value part follows the select's
+ * state itself), not each time the form around it renders.
+ */
+const SelectValue = React.memo(function SelectValue({
   className,
   placeholder,
   children,
@@ -193,7 +198,13 @@ function SelectValue({
       }}
     </SelectPrimitive.Value>
   )
-}
+})
+
+// One element for every trigger: an unchanged element is not rendered again
+// when the trigger is, and the icon follows the select's state itself.
+const SELECT_ICON = (
+  <SelectPrimitive.Icon render={<ChevronDownIcon className="size-4 opacity-50" />} />
+)
 
 function SelectTrigger({
   className,
@@ -239,7 +250,7 @@ function SelectTrigger({
           <XMarkIcon className="size-4" />
         </span>
       ) : (
-        <SelectPrimitive.Icon render={<ChevronDownIcon className="size-4 opacity-50" />} />
+        SELECT_ICON
       )}
     </SelectPrimitive.Trigger>
   )
