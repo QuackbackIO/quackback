@@ -725,9 +725,9 @@ function CommentItem({
                       onImageUpload={onImageUpload}
                       onVideoUpload={onImageUpload}
                       disabled={editMutation.isPending}
-                      onChange={(json, _html, markdown) => {
-                        editJsonRef.current = json as TiptapContent
-                        setEditContent(markdown ?? '')
+                      onDocumentChange={(document) => {
+                        editJsonRef.current = document.json() as TiptapContent
+                        setEditContent(document.markdown())
                       }}
                     />
                   </Suspense>

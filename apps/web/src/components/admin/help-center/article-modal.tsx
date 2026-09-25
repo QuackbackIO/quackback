@@ -32,6 +32,7 @@ import { listSegmentsFn } from '@/lib/server/functions/admin'
 import { getInitialContentJson } from '@/components/admin/feedback/detail/post-utils'
 import type { ArticleId } from '@quackback/ids'
 import type { JSONContent } from '@tiptap/react'
+import type { EditorDocument } from '@/components/ui/rich-text-editor'
 
 interface ArticleModalProps {
   articleId: string | undefined
@@ -95,9 +96,9 @@ function ArticleModalContent({ articleId, onClose }: ArticleModalContentProps) {
   }, [article, articleId, form])
 
   const handleContentChange = useCallback(
-    (json: JSONContent, _html: string, markdown: string) => {
-      setContentJson(json)
-      form.setValue('content', markdown, { shouldValidate: false, shouldDirty: true })
+    (document: EditorDocument) => {
+      setContentJson(document.json())
+      form.setValue('content', document.markdown(), { shouldValidate: false, shouldDirty: true })
     },
     [form]
   )

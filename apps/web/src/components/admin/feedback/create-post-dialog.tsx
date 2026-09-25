@@ -34,6 +34,7 @@ import { AuthorSelector, type NewAuthor } from '@/components/shared/author-selec
 import { useCreatePortalUser, useUpdatePortalUser } from '@/lib/client/mutations'
 import { cn } from '@/lib/shared/utils'
 import type { JSONContent } from '@tiptap/react'
+import type { EditorDocument } from '@/components/ui/rich-text-editor'
 import type { Board, PostTag, PostStatusEntity } from '@/lib/shared/db-types'
 import type { CurrentUser } from '@/lib/shared/types/inbox'
 import { Form } from '@/components/ui/form'
@@ -101,9 +102,9 @@ export function CreatePostDialog({
   })
 
   const handleContentChange = useCallback(
-    (json: JSONContent, _html: string, markdown: string) => {
-      setContentJson(json)
-      form.setValue('content', markdown, { shouldValidate: false, shouldDirty: true })
+    (document: EditorDocument) => {
+      setContentJson(document.json())
+      form.setValue('content', document.markdown(), { shouldValidate: false, shouldDirty: true })
     },
     [form]
   )
@@ -207,7 +208,7 @@ export function CreatePostDialog({
                           >
                             <LazyRichTextEditor
                               value={contentJson || ''}
-                              onChange={handleContentChange}
+                              onDocumentChange={handleContentChange}
                               placeholder="Add more details... Type / for commands"
                               minHeight="200px"
                               borderless

@@ -1,5 +1,5 @@
 import type { UseFormReturn } from 'react-hook-form'
-import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import { RichTextEditor, type EditorDocument } from '@/components/ui/rich-text-editor'
 import { FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form'
 import { TitleInput } from '@/components/shared/title-input'
 import { FormError } from '@/components/shared/form-error'
@@ -10,7 +10,7 @@ interface ChangelogFormFieldsProps {
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   form: UseFormReturn<any>
   contentJson: JSONContent | null
-  onContentChange: (json: JSONContent, html: string, markdown: string) => void
+  onContentChange: (document: EditorDocument) => void
   error?: string
 }
 
@@ -37,7 +37,7 @@ export function ChangelogFormFields({
             <FormControl>
               <RichTextEditor
                 value={contentJson || ''}
-                onChange={onContentChange}
+                onDocumentChange={onContentChange}
                 placeholder="Share the details of your update..."
                 minHeight="100%"
                 fill

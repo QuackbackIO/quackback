@@ -28,6 +28,7 @@ import {
   type SegmentId,
 } from '@quackback/ids'
 import type { JSONContent } from '@tiptap/react'
+import type { EditorDocument } from '@/components/ui/rich-text-editor'
 
 interface ChangelogModalProps {
   entryId: string | undefined
@@ -91,9 +92,9 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
   }, [entry, form, hasInitialized])
 
   const handleContentChange = useCallback(
-    (json: JSONContent, _html: string, markdown: string) => {
-      setContentJson(json)
-      form.setValue('content', markdown, { shouldValidate: false, shouldDirty: true })
+    (document: EditorDocument) => {
+      setContentJson(document.json())
+      form.setValue('content', document.markdown(), { shouldValidate: false, shouldDirty: true })
     },
     [form]
   )
