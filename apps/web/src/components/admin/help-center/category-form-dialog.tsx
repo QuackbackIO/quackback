@@ -52,6 +52,7 @@ const LOCALE_LABELS: Record<string, string> = {
   'pt-br': 'Português (Brasil)',
   'zh-cn': '简体中文',
   'zh-tw': '繁體中文',
+  nl: 'Nederlands',
 }
 
 /** Compact per-locale name/description editor (domains/languages §2). No

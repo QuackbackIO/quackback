@@ -10,6 +10,7 @@ export const SUPPORTED_LOCALES = [
   'pt-br',
   'zh-cn',
   'zh-tw',
+  'nl',
 ] as const
 
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number]
