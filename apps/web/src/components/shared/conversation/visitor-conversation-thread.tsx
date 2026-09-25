@@ -33,7 +33,6 @@ import { useConversationStream } from '@/lib/client/hooks/use-conversation-strea
 import { useConversationTyping } from '@/lib/client/hooks/use-conversation-typing'
 import { useAssistantTurn } from '@/lib/client/hooks/use-assistant-turn'
 import { useConversationComposerAttachments } from '@/lib/client/hooks/use-conversation-composer-attachments'
-import { useDebouncedValue } from '@/lib/client/hooks/use-debounced-value'
 import { ComposerAttachmentTray } from '@/components/shared/composer-attachment-tray'
 import { VISITOR_CONVERSATION_FEATURES } from '@/components/conversation/conversation-editor-features'
 import { VisitorMessageBubble } from '@/components/conversation/message-bubble'
@@ -41,10 +40,13 @@ import {
   ThreadViewport,
   docHasContentNode,
   useComposerDoc,
+  useComposerDocValue,
+  useDebouncedComposerText,
   useMarkReadOnIncoming,
   useOlderMessages,
   useThreadVirtualizer,
   useTypingSender,
+  type ComposerDocStore,
 } from '@/components/conversation/thread'
 import {
   applyVisitorThreadEvent,
@@ -70,6 +72,7 @@ function formatTime(iso: string): string {
 const NO_HEADERS = (): Record<string, string> => ({})
 const ALWAYS_READY = async (): Promise<boolean> => true
 const EMPTY_MESSAGES: ConversationMessageDTO[] = []
+const NO_HELP_RESULTS: Array<{ slug: string; title: string }> = []
 
 // The full rich-text editor pulls in lowlight's syntax-highlighting grammars
 // (a meaningful chunk) that the composer doesn't need until it's actually
@@ -225,8 +228,9 @@ export function VisitorConversationThread({
   const [csatCommentDone, setCsatCommentDone] = useState(false)
   const [csatComment, setCsatComment] = useState('')
   // Composer is a rich TipTap doc (inline images + post embeds): the shared
-  // composer-doc state (plain text gates send + drives help-search/typing; the
+  // composer-doc store (plain text gates send + drives help-search/typing; the
   // doc persists as contentJson; the reset signal clears the editor on send).
+  // Typing writes the store without re-rendering this thread.
   const composer = useComposerDoc()
   const [sending, setSending] = useState(false)
   // Phase C conversational block layer: the block message currently awaiting
@@ -322,8 +326,6 @@ export function VisitorConversationThread({
     },
     [ensureSession, addFiles, intl]
   )
-  // Live link unfurl while composing (debounced), matching admin.
-  const debouncedMessageText = useDebouncedValue(composer.text, 500)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const composerPlaceholder = intl.formatMessage({
     id: 'widget.messenger.placeholder',
@@ -335,10 +337,10 @@ export function VisitorConversationThread({
   // Also drives the typing indicator, same as onLocalInput did for the old composer.
   const handleEditorChange = useCallback(
     (json: JSONContent) => {
-      composer.onChange(tiptapPlainText(json).trim(), json)
+      composer.draft.set(tiptapPlainText(json).trim(), json)
       onLocalInput()
     },
-    [composer.onChange, onLocalInput]
+    [composer.draft, onLocalInput]
   )
 
   // Pasting/dropping an image routes to the attachment tray, matching the
@@ -666,35 +668,52 @@ export function VisitorConversationThread({
 
   // Help-center deflection: as the visitor types their first message (before a
   // conversation exists), suggest relevant articles so they can self-serve.
-  const [helpResults, setHelpResults] = useState<Array<{ slug: string; title: string }>>([])
+  const [helpResults, setHelpResults] = useState(NO_HELP_RESULTS)
   const helpSearchFn = helpSearch?.search
-  const messageText = composer.text
+  const composerDraft = composer.draft
+  const clearComposer = composer.clear
   useEffect(() => {
-    setHelpResults([])
+    setHelpResults(NO_HELP_RESULTS)
   }, [helpSearchFn, sessionVersion])
   useEffect(() => {
     if (!helpSearchFn || conversationId || messages.length > 0) {
-      setHelpResults([])
+      setHelpResults(NO_HELP_RESULTS)
       return
     }
-    const q = messageText.trim()
-    if (q.length < 3) {
-      setHelpResults([])
-      return
-    }
-    const controller = new AbortController()
-    const t = setTimeout(async () => {
-      try {
-        setHelpResults(await helpSearchFn(q, controller.signal))
-      } catch {
-        /* aborted or failed — leave suggestions as-is */
+    // Search once the text has rested for 300ms. Each change to the text
+    // drops the pending search and aborts one in flight.
+    let text: string | null = null
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let controller: AbortController | undefined
+    const searchText = () => {
+      const next = composerDraft.get().text
+      if (next === text) return
+      text = next
+      clearTimeout(timer)
+      controller?.abort()
+      const q = next.trim()
+      if (q.length < 3) {
+        setHelpResults(NO_HELP_RESULTS)
+        return
       }
-    }, 300)
-    return () => {
-      clearTimeout(t)
-      controller.abort()
+      const current = new AbortController()
+      controller = current
+      timer = setTimeout(async () => {
+        try {
+          setHelpResults(await helpSearchFn(q, current.signal))
+        } catch {
+          /* aborted or failed: leave suggestions as-is */
+        }
+      }, 300)
     }
-  }, [messageText, helpSearchFn, conversationId, messages.length])
+    searchText()
+    const unsubscribe = composerDraft.subscribe(searchText)
+    return () => {
+      unsubscribe()
+      clearTimeout(timer)
+      controller?.abort()
+    }
+  }, [composerDraft, helpSearchFn, conversationId, messages.length])
 
   // The newest visitor message is "Seen" once the agent's read watermark
   // reaches it.
@@ -826,8 +845,8 @@ export function VisitorConversationThread({
   })
 
   const send = useCallback(async () => {
-    const text = composer.text.trim()
-    const doc = composer.docRef.current
+    const { text: typed, doc } = composerDraft.get()
+    const text = typed.trim()
     const hasAttachments = pendingAttachments.length > 0
     // Sendable when there's typed text, an inline embed, or a tray attachment.
     if (
@@ -891,7 +910,7 @@ export function VisitorConversationThread({
         onConversationStarted?.(newId)
       }
       // Clear the composer only on success — the resetSignal bump empties the editor.
-      composer.clear()
+      clearComposer()
       clearAttachments()
       setUploadError(null)
     } catch {
@@ -900,7 +919,8 @@ export function VisitorConversationThread({
       setSending(false)
     }
   }, [
-    composer,
+    composerDraft,
+    clearComposer,
     sending,
     conversationId,
     ensureSession,
@@ -1381,7 +1401,7 @@ export function VisitorConversationThread({
           {uploadError && <p className="px-1 pt-1 text-[11px] text-destructive">{uploadError}</p>}
           {/* Live link unfurl while composing (Slack-style), gated by the flag. */}
           {linkPreviews && (
-            <LinkPreviews content={debouncedMessageText} getAuthHeaders={getAuthHeaders} />
+            <ComposerLinkPreviews draft={composerDraft} getAuthHeaders={getAuthHeaders} />
           )}
           <div className="flex items-center gap-0.5 pt-1">
             <button
@@ -1397,28 +1417,62 @@ export function VisitorConversationThread({
               <PaperClipIcon className="w-5 h-5" />
             </button>
             <div className="flex-1" />
-            <button
-              type="button"
-              onClick={() => void send()}
-              disabled={
-                (!composer.text.trim() &&
-                  !composer.hasContentNode &&
-                  pendingAttachments.length === 0) ||
-                sending ||
-                uploading ||
-                composerLock.disabled
-              }
-              className="shrink-0 flex items-center justify-center size-9 rounded-full bg-primary text-primary-foreground disabled:opacity-40 transition-opacity"
-              aria-label={intl.formatMessage({
+            <ComposerSendButton
+              draft={composerDraft}
+              hasAttachments={pendingAttachments.length > 0}
+              busy={sending || uploading || composerLock.disabled}
+              onSend={() => void send()}
+              label={intl.formatMessage({
                 id: 'widget.messenger.send',
                 defaultMessage: 'Send',
               })}
-            >
-              <ArrowUpIcon className="w-4 h-4" />
-            </button>
+            />
           </div>
         </div>
       </div>
     </div>
   )
+}
+
+/**
+ * The send button. It follows whether the draft has anything to send on its
+ * own, so typing re-renders the button (when that flips), never the thread.
+ */
+function ComposerSendButton({
+  draft,
+  hasAttachments,
+  busy,
+  onSend,
+  label,
+}: {
+  draft: ComposerDocStore
+  hasAttachments: boolean
+  busy: boolean
+  onSend: () => void
+  label: string
+}) {
+  const empty = useComposerDocValue(draft, (d) => !d.text.trim() && !d.hasContentNode)
+  return (
+    <button
+      type="button"
+      onClick={onSend}
+      disabled={(empty && !hasAttachments) || busy}
+      className="shrink-0 flex items-center justify-center size-9 rounded-full bg-primary text-primary-foreground disabled:opacity-40 transition-opacity"
+      aria-label={label}
+    >
+      <ArrowUpIcon className="w-4 h-4" />
+    </button>
+  )
+}
+
+/** Link previews for the draft's text, once typing pauses. */
+function ComposerLinkPreviews({
+  draft,
+  getAuthHeaders,
+}: {
+  draft: ComposerDocStore
+  getAuthHeaders: () => Record<string, string>
+}) {
+  const content = useDebouncedComposerText(draft, 500)
+  return <LinkPreviews content={content} getAuthHeaders={getAuthHeaders} />
 }
