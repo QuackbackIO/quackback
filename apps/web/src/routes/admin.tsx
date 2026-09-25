@@ -1,9 +1,8 @@
-import { Suspense, lazy, useEffect, type ComponentProps } from 'react'
+import { useEffect, type ComponentProps } from 'react'
 import {
   createFileRoute,
   Outlet,
   redirect,
-  useNavigate,
   useRouterState,
   useRouteContext,
 } from '@tanstack/react-router'
@@ -14,8 +13,7 @@ import { fetchUserAvatar } from '@/lib/server/functions/portal'
 import { unreadCountQuery } from '@/lib/client/hooks/use-notifications-queries'
 import { getLatestVersion, isNewerVersion } from '@/lib/server/functions/version'
 import { AdminSidebar } from '@/components/admin/admin-sidebar'
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
-import { Skeleton } from '@/components/ui/skeleton'
+import { ArticleModal, ChangelogModal, PostModal } from '@/components/admin/entity-modals'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { UpdateBanner } from '@/components/admin/update-banner'
 import { PlanNoticeBanner } from '@/components/admin/plan-notice-banner'
@@ -27,18 +25,6 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { createRouteContextMemo } from '@/lib/client/route-context-memo'
 import { isAdminPathAllowedDuringDowngradeLock } from '@/lib/shared/billing/plan-downgrade-lock'
 import type { requireWorkspaceRole } from '@/lib/server/functions/workspace-utils'
-
-const PostModal = lazy(() =>
-  import('@/components/admin/feedback/post-modal').then((m) => ({ default: m.PostModal }))
-)
-const ChangelogModal = lazy(() =>
-  import('@/components/admin/changelog/changelog-modal').then((m) => ({
-    default: m.ChangelogModal,
-  }))
-)
-const ArticleModal = lazy(() =>
-  import('@/components/admin/help-center/article-modal').then((m) => ({ default: m.ArticleModal }))
-)
 
 /** What the admin pages read from the role guard's answer. */
 type AdminGuard = Pick<
@@ -175,33 +161,6 @@ export const Route = createFileRoute('/admin')({
   component: AdminLayout,
 })
 
-function EntityModalChunkFallback({
-  searchParam,
-  title,
-}: {
-  searchParam: 'post' | 'entry' | 'article'
-  title: string
-}) {
-  const navigate = useNavigate()
-  const { pathname, search } = useRouterState({ select: (s) => s.location })
-  const close = () => {
-    const { [searchParam]: _cleared, ...rest } = search as Record<string, unknown>
-    void navigate({ to: pathname, search: rest, replace: true })
-  }
-
-  return (
-    <Dialog open onOpenChange={(next) => !next && close()}>
-      <DialogContent className="flex h-[85vh] w-[95vw] flex-col gap-0 p-0 sm:w-[90vw] lg:max-w-5xl xl:max-w-6xl">
-        <DialogTitle className="sr-only">{title}</DialogTitle>
-        <div className="flex h-full flex-col gap-3 p-6">
-          <Skeleton className="h-8 w-1/3 rounded-md" />
-          <Skeleton className="min-h-0 flex-1 rounded-lg" />
-        </div>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
 function useEntityIdFromUrl(key: 'post' | 'entry' | 'article'): string | undefined {
   return useRouterState({
     select: (s) => {
@@ -221,7 +180,8 @@ function useProductEnabled(product: ProductId): boolean {
 /**
  * The post, changelog entry and article modals any admin page opens from the
  * URL. They read the location and permissions themselves, so opening one (a
- * search-only navigation) renders them and not the layout around them.
+ * search-only navigation) renders them and not the layout around them. Each
+ * opens its dialog at once and loads its content inside it (entity-modals.tsx).
  */
 function EntityModals({
   currentUser,
@@ -244,23 +204,13 @@ function EntityModals({
   return (
     <>
       {currentUser && feedbackEnabled && postId && !onRoadmap && (
-        <Suspense fallback={<EntityModalChunkFallback searchParam="post" title="Edit post" />}>
-          <PostModal postId={postId} currentUser={currentUser} />
-        </Suspense>
+        <PostModal postId={postId} currentUser={currentUser} />
       )}
       {changelogEnabled && canViewChangelogDrafts && entryId && (
-        <Suspense
-          fallback={<EntityModalChunkFallback searchParam="entry" title="Edit changelog entry" />}
-        >
-          <ChangelogModal entryId={entryId} />
-        </Suspense>
+        <ChangelogModal entryId={entryId} />
       )}
       {helpCenterEnabled && canManageHelpCenter && articleId && (
-        <Suspense
-          fallback={<EntityModalChunkFallback searchParam="article" title="Edit article" />}
-        >
-          <ArticleModal articleId={articleId} />
-        </Suspense>
+        <ArticleModal articleId={articleId} />
       )}
     </>
   )

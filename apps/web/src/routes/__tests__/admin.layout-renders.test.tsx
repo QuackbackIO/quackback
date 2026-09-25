@@ -5,6 +5,9 @@
  * search-only one included (opening a conversation), and the layout shows
  * none of what changed, so it renders nothing again for one; its loader's
  * answer and the viewer's permissions still reach it when they change.
+ *
+ * The first time a post opens, its content loads inside the modal's own
+ * dialog: one dialog mounts, not a placeholder dialog and then the real one.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, render, screen } from '@testing-library/react'
@@ -61,6 +64,21 @@ vi.mock('@/lib/server/functions/version', () => ({
 }))
 vi.mock('@/lib/server/functions/plan-notice', () => ({ getPlanNotice: async () => null }))
 
+const dialogs = vi.hoisted(() => ({ mounts: 0 }))
+vi.mock('@/components/ui/dialog', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/components/ui/dialog')>()
+  const { useEffect } = await import('react')
+  function Dialog(props: Parameters<typeof actual.Dialog>[0]) {
+    useEffect(() => {
+      dialogs.mounts++
+    }, [])
+    return <actual.Dialog {...props} />
+  }
+  return { ...actual, Dialog }
+})
+vi.mock('@/components/admin/feedback/post-modal', () => ({
+  PostModalContent: ({ postId }: { postId: string }) => <p>content of {postId}</p>,
+}))
 vi.mock('@/lib/server/functions/notifications', () => ({
   getUnreadCountFn: async () => ({ count: 0 }),
   getNotificationsFn: async () => ({ notifications: [], total: 0, unreadCount: 0 }),
@@ -73,6 +91,8 @@ afterEach(() => {
   cleanup()
   expireRouteContext()
 })
+
+const POST = 'post_01h455vb4pex5vsknk084sn02q'
 
 const rootAnswer = {
   settings: { featureFlags: { ...DEFAULT_FEATURE_FLAGS, supportInbox: true } },
@@ -137,6 +157,17 @@ describe('admin layout renders', () => {
     await screen.findByText('roadmap page')
 
     expect({ sidebar: shell.sidebarRenders, widget: shell.widgetRenders }).toEqual(settled)
+  })
+
+  it('opens a post in one dialog, its content arriving inside it', async () => {
+    grant([])
+    const router = await mount()
+    const mounted = dialogs.mounts
+
+    await act(() => router.navigate({ to: '/admin/inbox', search: { post: POST } } as never))
+
+    expect(await screen.findByText(`content of ${POST}`)).toBeTruthy()
+    expect(dialogs.mounts - mounted).toBe(1)
   })
 
   it('still hands the rail what its loader answers after a refresh', async () => {

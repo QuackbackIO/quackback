@@ -1,15 +1,12 @@
 import { useState, useCallback, useEffect } from 'react'
-import { useRouterState } from '@tanstack/react-router'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { ModalFooter } from '@/components/shared/modal-footer'
-import { useUrlModal } from '@/lib/client/hooks/use-url-modal'
 import { useForm } from 'react-hook-form'
 import { useQuery } from '@tanstack/react-query'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { Loader2 } from 'lucide-react'
 import { Cog6ToothIcon } from '@heroicons/react/24/solid'
 import { ModalHeader } from '@/components/shared/modal-header'
-import { UrlModalShell } from '@/components/shared/url-modal-shell'
 import { updateChangelogSchema } from '@/lib/shared/schemas/changelog'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
 import { useUpdateChangelog } from '@/lib/client/mutations/changelog'
@@ -30,16 +27,12 @@ import {
 import type { JSONContent } from '@tiptap/react'
 import type { EditorDocument } from '@/components/ui/rich-text-editor'
 
-interface ChangelogModalProps {
-  entryId: string | undefined
-}
-
 interface ChangelogModalContentProps {
   entryId: ChangelogId
   onClose: () => void
 }
 
-function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps) {
+export function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps) {
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
   const [linkedPostIds, setLinkedPostIds] = useState<PostId[]>([])
   const [categoryIds, setCategoryIds] = useState<ChangelogCategoryId[]>([])
@@ -270,27 +263,5 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
         </ModalFooter>
       </form>
     </Form>
-  )
-}
-
-export function ChangelogModal({ entryId: urlEntryId }: ChangelogModalProps) {
-  const { pathname, search } = useRouterState({ select: (s) => s.location })
-  const { open, validatedId, close } = useUrlModal<ChangelogId>({
-    urlId: urlEntryId,
-    idPrefix: 'changelog',
-    searchParam: 'entry',
-    route: pathname,
-    search: search as Record<string, unknown>,
-  })
-
-  return (
-    <UrlModalShell
-      open={open}
-      onOpenChange={(o) => !o && close()}
-      srTitle="Edit changelog entry"
-      hasValidId={!!validatedId}
-    >
-      {validatedId && <ChangelogModalContent entryId={validatedId} onClose={close} />}
-    </UrlModalShell>
   )
 }

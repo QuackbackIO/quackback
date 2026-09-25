@@ -1,17 +1,15 @@
 'use client'
 
-import { Suspense, memo, useState, useCallback, useLayoutEffect, useRef } from 'react'
+import { Suspense, memo, useState, useCallback } from 'react'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { CustomerContextPanel } from '@/components/admin/feedback/customer-context-panel'
 import { ModalFooter } from '@/components/shared/modal-footer'
-import { useUrlModal } from '@/lib/client/hooks/use-url-modal'
 import { useSuspenseQuery, useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import type { JSONContent } from '@tiptap/react'
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { ModalHeader } from '@/components/shared/modal-header'
-import { UrlModalShell } from '@/components/shared/url-modal-shell'
 import { Button } from '@/components/ui/button'
 import { RichTextEditor, type EditorDocument } from '@/components/ui/rich-text-editor'
 import { usePostMediaUpload, usePortalMediaUpload } from '@/lib/client/hooks/use-image-upload'
@@ -58,7 +56,7 @@ import {
 import { usePostExternalLinks } from '@/lib/client/hooks/use-post-external-links-query'
 import { usePostDetailKeyboard } from '@/lib/client/hooks/use-post-detail-keyboard'
 import { retryPostIntegrationSyncFn, setPostEtaFn } from '@/lib/server/functions/posts'
-import { useRouteContext, useRouterState } from '@tanstack/react-router'
+import { useRouteContext } from '@tanstack/react-router'
 import {
   type PostId,
   type PostStatusId,
@@ -77,11 +75,6 @@ import {
   getInitialContentJson,
 } from '@/components/admin/feedback/detail/post-utils'
 
-interface PostModalProps {
-  postId: string | undefined
-  currentUser: CurrentUser
-}
-
 interface PostModalContentProps {
   postId: PostId
   currentUser: CurrentUser
@@ -94,7 +87,7 @@ interface PostModalContentProps {
  * content (two rich-text editors, the sidebar, the comment thread) renders
  * only for its own state, not for each navigation around it.
  */
-const PostModalContent = memo(function PostModalContent({
+export const PostModalContent = memo(function PostModalContent({
   postId,
   currentUser,
   onNavigateToPost,
@@ -661,41 +654,3 @@ const PostModalContent = memo(function PostModalContent({
     </div>
   )
 })
-
-export function PostModal({ postId: urlPostId, currentUser }: PostModalProps) {
-  const { pathname, search } = useRouterState({ select: (s) => s.location })
-  const { open, validatedId, close, navigateTo } = useUrlModal<PostId>({
-    urlId: urlPostId,
-    idPrefix: 'post',
-    searchParam: 'post',
-    route: pathname,
-    search: search as Record<string, unknown>,
-  })
-
-  // useUrlModal's callbacks change with every location; the content gets
-  // stable ones that call the latest.
-  const latest = useRef({ close, navigateTo })
-  useLayoutEffect(() => {
-    latest.current = { close, navigateTo }
-  })
-  const onClose = useCallback(() => latest.current.close(), [])
-  const onNavigateToPost = useCallback((id: string) => latest.current.navigateTo(id), [])
-
-  return (
-    <UrlModalShell
-      open={open}
-      onOpenChange={(o) => !o && close()}
-      srTitle="Edit post"
-      hasValidId={!!validatedId}
-    >
-      {validatedId && (
-        <PostModalContent
-          postId={validatedId}
-          currentUser={currentUser}
-          onNavigateToPost={onNavigateToPost}
-          onClose={onClose}
-        />
-      )}
-    </UrlModalShell>
-  )
-}
