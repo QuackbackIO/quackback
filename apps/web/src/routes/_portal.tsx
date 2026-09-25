@@ -9,6 +9,7 @@ import { lazy, Suspense } from 'react'
 import { createServerFn } from '@tanstack/react-start'
 import { setResponseHeader } from '@tanstack/react-start/server'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
+import { unreadCountQuery } from '@/lib/client/hooks/use-notifications-queries'
 import { PortalPreviewProvider } from '@/components/public/portal-preview-listener'
 import { getMyPortalPermissionsFn } from '@/lib/server/functions/portal-permissions'
 import { PortalPermissionsProvider } from '@/lib/client/hooks/use-portal-permissions'
@@ -83,7 +84,7 @@ export const Route = createFileRoute('/_portal')({
     error: search.error,
   }),
   loader: async ({ context, deps, location }) => {
-    const { session, settings, userRole, baseUrl, registeredAuthProviders } = context
+    const { queryClient, session, settings, userRole, baseUrl, registeredAuthProviders } = context
 
     // Document response header — only meaningful (and only cheap) during SSR;
     // client-side navigations skip the extra RPC.
@@ -130,6 +131,14 @@ export const Route = createFileRoute('/_portal')({
       isTeamMember(userRole) ? getMyPortalPermissionsFn() : Promise.resolve([] as PermissionKey[])
     )
     const portalIntlPromise = markHandled(loadPortalIntl())
+    // The header's notification bell (signed-in visitors) shows the unread
+    // count on every portal page. Loaded with the page, the count is there at
+    // first paint rather than asked for once the page hydrates; unreadable
+    // now, it is left to the bell.
+    const unreadCountPromise =
+      session?.user && session.user.principalType !== 'anonymous'
+        ? queryClient.ensureQueryData(unreadCountQuery()).catch(() => null)
+        : Promise.resolve(null)
 
     const accessResult = await accessResultPromise
     // Parse the portal-route auth-prompt params (signin, prompt, callbackUrl)
@@ -210,7 +219,11 @@ export const Route = createFileRoute('/_portal')({
     // gating; the server still enforces every mutation) and only for team
     // roles — end users and visitors skip the RPC entirely. Both were already
     // started above, in parallel with the access check.
-    const [avatarData, permissionKeys] = await Promise.all([avatarPromise, permissionKeysPromise])
+    const [avatarData, permissionKeys] = await Promise.all([
+      avatarPromise,
+      permissionKeysPromise,
+      unreadCountPromise,
+    ])
 
     const brandingData = settings?.brandingData ?? null
     const faviconData = settings?.faviconData ?? null
