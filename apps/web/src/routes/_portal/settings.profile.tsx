@@ -3,6 +3,7 @@ import { useIntl } from 'react-intl'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import type { UserId } from '@quackback/ids'
 import { settingsQueries } from '@/lib/client/queries/settings'
+import { getEmailChangeStateFn } from '@/lib/server/functions/contact-email'
 import { UserIcon } from '@heroicons/react/24/solid'
 import { PageHeader } from '@/components/shared/page-header'
 import { ProfileForm } from '@/components/settings/profile-form'
@@ -17,8 +18,18 @@ export const Route = createFileRoute('/_portal/settings/profile')({
       throw new Error('User not authenticated')
     }
 
-    // Pre-fetch user profile using React Query
-    await queryClient.ensureQueryData(settingsQueries.userProfile(session.user.id))
+    // Pre-fetch user profile and the email-change widget's own state
+    // together: both are needed for this page's first paint, so seeding
+    // them here (same query key EmailField already reads) turns what would
+    // be a separate post-hydration round trip, redoing the session/principal
+    // lookup this loader already paid for, into one shell response.
+    await Promise.all([
+      queryClient.ensureQueryData(settingsQueries.userProfile(session.user.id)),
+      queryClient.ensureQueryData({
+        queryKey: ['email-change-state'],
+        queryFn: () => getEmailChangeStateFn(),
+      }),
+    ])
 
     return {
       user: session.user,
