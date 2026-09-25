@@ -127,6 +127,12 @@ vi.mock('@/components/admin/conversation/conversation-tags-editor', () => ({
   ConversationTagsEditor: () => null,
 }))
 vi.mock('@/components/admin/conversation/status-control', () => ({ StatusControl: () => null }))
+// The detail panel renders whenever the thread does, so it doubles as the
+// thread's render counter. The editor stub hands out its latest onChange.
+const composer = vi.hoisted(() => ({
+  threadRenders: 0,
+  onChange: null as ((json: unknown, html: string, markdown: string) => void) | null,
+}))
 vi.mock('@/components/admin/inbox/inbox-detail-panel', () => ({
   InboxDetailPanel: ({
     openCopilotToken,
@@ -138,6 +144,7 @@ vi.mock('@/components/admin/inbox/inbox-detail-panel', () => ({
     visible?: boolean
   }) => {
     threadProbe.panelOnChanged.push(onChanged)
+    composer.threadRenders++
     return (
       <div
         data-testid="inbox-detail-panel"
@@ -196,12 +203,16 @@ vi.mock('@/components/ui/rich-text-editor', async () => {
       onChange,
     }: {
       placeholder?: string
-      editorRef?: React.RefObject<{ focus: () => void } | null>
+      editorRef?: React.RefObject<{ focus: () => void; clear?: () => void } | null>
       onChange?: (json: unknown, html: string, markdown: string) => void
     }) => {
       composerProbe.onChange = onChange ?? null
       const areaRef = useRef<HTMLTextAreaElement>(null)
-      useImperativeHandle(editorRef, () => ({ focus: () => areaRef.current?.focus() }))
+      composer.onChange = onChange ?? null
+      useImperativeHandle(editorRef, () => ({
+        focus: () => areaRef.current?.focus(),
+        clear: () => {},
+      }))
       return <textarea ref={areaRef} data-testid="editor" placeholder={placeholder} readOnly />
     },
     RichTextContent: () => null,
@@ -1038,7 +1049,7 @@ describe('AgentConversationThread: stable props for memoized children', () => {
     await waitFor(() => expect(composerProbe.onChange).not.toBeNull())
     const rendersBefore = threadProbe.panelOnChanged.length
 
-    // Typing re-renders the thread (the draft is its state).
+    // The first character re-renders the thread: the reply becomes sendable.
     act(() =>
       composerProbe.onChange?.(
         { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Hi' }] }] },
@@ -1081,5 +1092,48 @@ describe('AgentConversationThread: triage controls beside the detail panel', () 
 
     expect(screen.getByTestId('priority-control')).toBeInTheDocument()
     expect(panel).toHaveAttribute('data-visible', 'false')
+  })
+})
+
+describe('AgentConversationThread composer typing', () => {
+  const doc = (text: string) => ({
+    type: 'doc',
+    content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
+  })
+  /** Feed the composer one character at a time, as the editor does. */
+  const type = (from: string, to: string) => {
+    for (let i = from.length + 1; i <= to.length; i++) {
+      act(() => composer.onChange!(doc(to.slice(0, i)), '', to.slice(0, i)))
+    }
+  }
+
+  it('re-renders the thread when the reply becomes sendable, not per keystroke', async () => {
+    renderThread({ kind: 'conversation', id: 'conversation_1' })
+    await screen.findByTestId('inbox-detail-panel')
+    const send = screen.getByRole('button', { name: 'Send reply' })
+    expect(send).toBeDisabled()
+
+    type('', 'H')
+    expect(send).toBeEnabled()
+
+    composer.threadRenders = 0
+    type('H', 'Hello there')
+    expect(composer.threadRenders).toBe(0)
+  })
+
+  it('sends the reply as typed and empties the composer', async () => {
+    const { sendAgentMessageFn } = await import('@/lib/server/functions/conversation')
+    vi.mocked(sendAgentMessageFn).mockResolvedValue({} as never)
+    renderThread({ kind: 'conversation', id: 'conversation_1' })
+    await screen.findByTestId('inbox-detail-panel')
+
+    type('', 'Hello there')
+    fireEvent.click(screen.getByRole('button', { name: 'Send reply' }))
+
+    await waitFor(() => expect(sendAgentMessageFn).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(sendAgentMessageFn).mock.calls[0]![0]).toMatchObject({
+      data: { content: 'Hello there', contentJson: doc('Hello there') },
+    })
+    expect(screen.getByRole('button', { name: 'Send reply' })).toBeDisabled()
   })
 })
