@@ -360,13 +360,17 @@ describe.skipIf(!fixture.available)('convergence Phase 1a (real DB, rolled back)
 
       // Realtime: the delegate's conversation-channel publish plus the
       // redirect's dual-publish on the team-only ticket channel.
-      expect(realtime.publishConversationMessage).toHaveBeenCalledWith(conversationId, {
-        visitor: expect.objectContaining({
-          id: message.id,
-          author: expect.objectContaining({ principalId: agentP, displayName: null }),
-        }),
-        agent: expect.objectContaining({ id: message.id, author: message.author }),
-      })
+      expect(realtime.publishConversationMessage).toHaveBeenCalledWith(
+        conversationId,
+        {
+          visitor: expect.objectContaining({
+            id: message.id,
+            author: expect.objectContaining({ principalId: agentP, displayName: null }),
+          }),
+          agent: expect.objectContaining({ id: message.id, author: message.author }),
+        },
+        { conversationUpdated: true }
+      )
       // The seed has an account name but no public name. The widget must not
       // receive the account name even though the team-only ticket copy does.
       expect(message.author?.displayName).toMatch(/^U-/)

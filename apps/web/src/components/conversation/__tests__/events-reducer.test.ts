@@ -214,6 +214,9 @@ describe('agentEventChangesInboxList', () => {
   const ticketMsg = baseMessage('tm9', { conversationId: null, ticketId: TICKET_ID })
   it.each([
     [{ kind: 'message', conversationId: CONV_ID, message: msg }, true],
+    // The write that added it also sent the conversation's own event, and
+    // that one refreshes the list: one refresh per write, not two.
+    [{ kind: 'message', conversationId: CONV_ID, message: msg, conversationUpdated: true }, false],
     [{ kind: 'conversation', conversation: conversation() }, true],
     [{ kind: 'message_deleted', conversationId: CONV_ID, messageId: msg.id }, true],
     [{ kind: 'read', conversationId: CONV_ID, side: 'agent', at: 'x' }, true],

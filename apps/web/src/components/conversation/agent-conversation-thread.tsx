@@ -958,7 +958,7 @@ export function AgentConversationThread({
   // never echo back over SSE, so `onChanged` → `refreshInbox` is the only
   // reconciliation for them). The reply path (`sendMutation`, below) passes
   // `false`: replying already writes straight into this cache above, AND the
-  // SSE echo of the agent's own message fires `agentEventChangesInboxList` →
+  // reply's SSE echo (its `conversation` event) fires `agentEventChangesInboxList` →
   // `refreshInboxList` (see inbox.tsx's stream handler) — so calling
   // `onChanged` here too was a redundant second broad invalidation racing the
   // SSE one (QC-3).

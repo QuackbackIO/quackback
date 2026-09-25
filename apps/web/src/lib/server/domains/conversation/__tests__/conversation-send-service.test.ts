@@ -12,6 +12,8 @@ const insertedMessages: Record<string, unknown>[] = []
 // The `.set()` payload of the post-insert conversation UPDATE — where the
 // active-channel promotion is written.
 const updatedConversations: Record<string, unknown>[] = []
+// The row a send to an existing conversation finds; null sends start a new one.
+let existingConversation: Record<string, unknown> | null = null
 
 // vi.mock factories are hoisted above imports, so build the spy bag via
 // vi.hoisted so the factory below can close over it.
@@ -103,12 +105,15 @@ vi.mock('@/lib/server/db', () => {
       if (label === 'conversations') updatedConversations.push(row)
       return c
     })
+    c.from = vi.fn(() => c)
     c.where = vi.fn(() => c)
-    c.limit = vi.fn(async () => [])
+    c.limit = vi.fn(async () =>
+      label === 'select' && existingConversation ? [existingConversation] : []
+    )
     c.orderBy = vi.fn(() => c)
     c.returning = vi.fn(async () => {
       if (label === 'conversations') {
-        const last = insertedConversations.at(-1) ?? {}
+        const last = existingConversation ?? insertedConversations.at(-1) ?? {}
         return [
           {
             id: 'conversation_new' as unknown as ConversationId,
@@ -157,6 +162,12 @@ vi.mock('@/lib/server/db', () => {
 })
 
 import { sendVisitorMessage } from '../conversation.service'
+import {
+  publishConversationMessage as publishConversationMessageFn,
+  publishConversationUpdate,
+} from '@/lib/server/realtime/conversation-channels'
+
+const publishConversationMessage = vi.mocked(publishConversationMessageFn)
 
 const visitor = 'principal_visitor' as PrincipalId
 const visitorActor: Actor = {
@@ -170,7 +181,49 @@ beforeEach(() => {
   insertedConversations.length = 0
   insertedMessages.length = 0
   updatedConversations.length = 0
+  existingConversation = null
   vi.clearAllMocks()
+})
+
+// A new conversation reaches the inbox as its own `conversation` event, which
+// refreshes the inbox list; the first message's event says so, so the list is
+// not refreshed twice for one send. A later message sends no such event, so its
+// message event must refresh the list itself.
+describe('sendVisitorMessage: the inbox list signal', () => {
+  it('marks the first message as sent alongside the new conversation', async () => {
+    await sendVisitorMessage({ content: 'Hello there' }, { principalId: visitor }, visitorActor)
+
+    expect(publishConversationUpdate).toHaveBeenCalled()
+    expect(publishConversationMessage).toHaveBeenCalledTimes(1)
+    expect(publishConversationMessage.mock.calls[0]![2]).toEqual({ conversationUpdated: true })
+  })
+
+  it('leaves a later message to refresh the list itself', async () => {
+    existingConversation = {
+      id: 'conversation_existing',
+      visitorPrincipalId: visitor,
+      assignedAgentPrincipalId: 'principal_agent',
+      status: 'open',
+      channel: 'messenger',
+      subject: 'Hello there',
+      visitorEmail: null,
+      waitingSince: null,
+      resolvedAt: null,
+      lastMessageAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: null,
+    }
+    const result = await sendVisitorMessage(
+      { conversationId: 'conversation_existing' as ConversationId, content: 'One more thing' },
+      { principalId: visitor },
+      visitorActor
+    )
+
+    expect(result.created).toBe(false)
+    expect(publishConversationUpdate).not.toHaveBeenCalled()
+    expect(publishConversationMessage).toHaveBeenCalledTimes(1)
+    expect(publishConversationMessage.mock.calls[0]![2]).toEqual({ conversationUpdated: false })
+  })
 })
 
 // `conversations.channel` is the surface the thread is CURRENTLY on, not the one
