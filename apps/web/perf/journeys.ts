@@ -88,6 +88,9 @@ function seededConversation(subject: string) {
 const REPLY = 'Measuring what a reply costs.'
 const replyConversation = seededConversation('Bench conversation 2')
 
+/** The unsaved welcome message the portal-draft journey previews. */
+const WELCOME_DRAFT = 'Tell us what would make the bench faster.'
+
 /** How long a hover-then-click journey rests the pointer on a link before pressing it. */
 const HOVER_MS = 250
 
@@ -607,6 +610,29 @@ export const journeys: Journey[] = [
       await page.locator('a[href="/admin/settings/members"]').first().click()
       await page.waitForURL('/admin/settings/members')
       await page.getByText('demo@example.com').first().waitFor()
+    },
+  },
+  {
+    // An unsaved welcome message on the portal settings page travels into the
+    // portal preview frame as one draft message: what that message re-renders
+    // in the frame is what every edit costs there. Nothing is saved.
+    kind: 'browser',
+    name: 'ui:admin-settings-portal-draft-welcome',
+    as: 'admin',
+    setup: async (page) => {
+      await page.goto('/admin/settings/portal')
+      const preview = await page.locator('iframe[title="Portal preview"]').elementHandle()
+      const frame = await preview?.contentFrame()
+      await frame?.locator('a[href*="/posts/post_"]').first().waitFor()
+      await frame?.waitForLoadState('networkidle')
+      const welcome = page.locator(
+        'xpath=//*[normalize-space()="Welcome message"]/ancestor::*[.//*[@contenteditable="true"]][1]'
+      )
+      await welcome.locator('[contenteditable="true"]').click()
+    },
+    run: async (page) => {
+      await page.keyboard.insertText(WELCOME_DRAFT)
+      await page.frameLocator('iframe[title="Portal preview"]').getByText(WELCOME_DRAFT).waitFor()
     },
   },
 
