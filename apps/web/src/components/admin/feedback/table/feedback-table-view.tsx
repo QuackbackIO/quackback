@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { useDebouncedSearch } from '@/lib/client/hooks/use-debounced-search'
 import { Spinner } from '@/components/shared/spinner'
@@ -26,6 +26,7 @@ interface FeedbackTableViewProps {
   hasMore: boolean
   isLoading: boolean
   isLoadingMore: boolean
+  /** Opens a post from its row; keep it stable, or every row renders again. */
   onNavigateToPost: (id: string) => void
   onLoadMore: () => void
   hasActiveFilters: boolean
@@ -36,6 +37,51 @@ interface FeedbackTableViewProps {
   onToggleSegment?: (id: string) => void
   /** Duplicate counts per post (for badges) */
   duplicateCountByPostId?: Map<PostId, number>
+}
+
+const SORT_OPTIONS = [
+  { value: 'newest', label: 'Newest' },
+  { value: 'oldest', label: 'Oldest' },
+  { value: 'votes', label: 'Top Votes' },
+  { value: 'priority', label: 'Priority' },
+]
+
+interface FeedbackListHeaderProps {
+  search: string | undefined
+  sort: InboxFilters['sort']
+  onFiltersChange: (updates: Partial<InboxFilters>) => void
+  action?: ReactNode
+  children?: ReactNode
+}
+
+/**
+ * The search box's text lives here, so a keystroke renders the header and not
+ * the list below it; the debounced value reaches the URL through the filters.
+ */
+function FeedbackListHeader({
+  search,
+  sort,
+  onFiltersChange,
+  action,
+  children,
+}: FeedbackListHeaderProps) {
+  const { value: searchValue, setValue: setSearchValue } = useDebouncedSearch({
+    externalValue: search,
+    onChange: (next) => onFiltersChange({ search: next }),
+  })
+
+  return (
+    <AdminListHeader
+      searchValue={searchValue}
+      onSearchChange={setSearchValue}
+      sortOptions={SORT_OPTIONS}
+      activeSort={sort}
+      onSortChange={(value) => onFiltersChange({ sort: value as InboxFilters['sort'] })}
+      action={action}
+    >
+      {children}
+    </AdminListHeader>
+  )
 }
 
 function TableSkeleton() {
@@ -99,12 +145,6 @@ export function FeedbackTableView({
   duplicateCountByPostId,
   onToggleSegment,
 }: FeedbackTableViewProps): React.ReactElement {
-  const sort = filters.sort
-  const { value: searchValue, setValue: setSearchValue } = useDebouncedSearch({
-    externalValue: filters.search,
-    onChange: (search) => onFiltersChange({ search }),
-  })
-
   const loadMoreRef = useInfiniteScroll({
     hasMore,
     isFetching: isLoading || isLoadingMore,
@@ -141,20 +181,11 @@ export function FeedbackTableView({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
-  const sortOptions = [
-    { value: 'newest', label: 'Newest' },
-    { value: 'oldest', label: 'Oldest' },
-    { value: 'votes', label: 'Top Votes' },
-    { value: 'priority', label: 'Priority' },
-  ]
-
   const headerContent = (
-    <AdminListHeader
-      searchValue={searchValue}
-      onSearchChange={setSearchValue}
-      sortOptions={sortOptions}
-      activeSort={sort}
-      onSortChange={(value) => onFiltersChange({ sort: value as InboxFilters['sort'] })}
+    <FeedbackListHeader
+      search={filters.search}
+      sort={filters.sort}
+      onFiltersChange={onFiltersChange}
       action={headerAction}
     >
       {/* Active Filters Bar - Always visible */}
@@ -173,7 +204,7 @@ export function FeedbackTableView({
           onToggleSegment={onToggleSegment}
         />
       </div>
-    </AdminListHeader>
+    </FeedbackListHeader>
   )
 
   // Filter posts by duplicates if active
@@ -243,7 +274,7 @@ export function FeedbackTableView({
                 post={post}
                 statuses={statuses}
                 duplicateCount={duplicateCountByPostId?.get(post.id)}
-                onClick={() => onNavigateToPost(post.id)}
+                onOpen={onNavigateToPost}
               />
             </div>
           ))}
