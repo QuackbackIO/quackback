@@ -14,6 +14,7 @@ vi.mock('@/lib/client/hooks/use-auth-broadcast', () => ({ useAuthBroadcast: vi.f
 // dialog's formContext without the real sign-in flow, and record the props the
 // dialog hands it (mode / onModeSwitch) for the collapse-signup assertions.
 let stepToReport = 'credentials'
+let reportedStep: string | null = null
 let lastFormProps: { mode?: string; onModeSwitch?: unknown } = {}
 vi.mock('../portal-auth-form-inline', () => ({
   PortalAuthFormInline: ({
@@ -28,6 +29,7 @@ vi.mock('../portal-auth-form-inline', () => ({
     lastFormProps = { mode, onModeSwitch }
     useEffect(() => {
       onContextChange?.({ step: stepToReport, email: '' })
+      reportedStep = stepToReport
     }, [onContextChange])
     return <div>FORM_BODY</div>
   },
@@ -61,6 +63,7 @@ function renderDialog(opts?: {
 beforeEach(() => {
   vi.clearAllMocks()
   stepToReport = 'credentials'
+  reportedStep = null
   lastFormProps = {}
   mockSignOut.mockResolvedValue(undefined) // the abandon path calls .catch()
 })
@@ -70,6 +73,8 @@ describe('AuthDialog — abandon during required 2FA', () => {
     stepToReport = 'two-factor-enroll'
     renderDialog()
     await screen.findByText('FORM_BODY')
+    // The form loads on open; close only once it has reported its step.
+    await waitFor(() => expect(reportedStep).toBe('two-factor-enroll'))
 
     fireEvent.click(screen.getByRole('button', { name: /close/i }))
 
@@ -80,6 +85,7 @@ describe('AuthDialog — abandon during required 2FA', () => {
     stepToReport = 'credentials'
     renderDialog()
     await screen.findByText('FORM_BODY')
+    await waitFor(() => expect(reportedStep).toBe('credentials'))
 
     fireEvent.click(screen.getByRole('button', { name: /close/i }))
 

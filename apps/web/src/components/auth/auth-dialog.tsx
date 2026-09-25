@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -6,13 +6,19 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
-import { PortalAuthFormInline } from './portal-auth-form-inline'
+import { Spinner } from '@/components/shared/spinner'
 import { headerForStep, type FormContext } from './auth-step-header'
 import { hasDistinctSignup } from './oauth-buttons'
 import { useAuthPopover } from './auth-popover-context'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { signOut } from '@/lib/client/auth-client'
 import type { OidcSignInButton } from '@/lib/shared/oidc-sign-in-button'
+
+// Every portal page mounts this dialog, but only a visitor who opens it needs
+// the sign-in form and the steps it carries, so the form loads on first open.
+const PortalAuthFormInline = lazy(() =>
+  import('./portal-auth-form-inline').then((m) => ({ default: m.PortalAuthFormInline }))
+)
 
 export interface OrgAuthConfig {
   found: boolean
@@ -81,15 +87,23 @@ export function AuthDialog({ authConfig, workspaceName }: AuthDialogProps) {
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
-        <PortalAuthFormInline
-          mode={effectiveMode}
-          authConfig={authConfig}
-          workspaceName={workspaceName}
-          callbackUrl={callbackUrl}
-          linkConflict={linkConflict}
-          onModeSwitch={distinctSignup ? setMode : undefined}
-          onContextChange={setFormContext}
-        />
+        <Suspense
+          fallback={
+            <div className="flex justify-center py-10">
+              <Spinner />
+            </div>
+          }
+        >
+          <PortalAuthFormInline
+            mode={effectiveMode}
+            authConfig={authConfig}
+            workspaceName={workspaceName}
+            callbackUrl={callbackUrl}
+            linkConflict={linkConflict}
+            onModeSwitch={distinctSignup ? setMode : undefined}
+            onContextChange={setFormContext}
+          />
+        </Suspense>
       </DialogContent>
     </Dialog>
   )
