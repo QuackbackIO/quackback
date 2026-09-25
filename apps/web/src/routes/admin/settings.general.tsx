@@ -34,6 +34,8 @@ export const Route = createFileRoute('/admin/settings/general')({
     const [cloudIdentity] = await Promise.all([
       getCloudIdentityFn(),
       context.queryClient.ensureQueryData(settingsQueries.logo()),
+      // The export action shows a run in flight.
+      context.queryClient.ensureQueryData(settingsQueries.exportRuns()).catch(() => undefined),
     ])
     return { cloudIdentity }
   },
