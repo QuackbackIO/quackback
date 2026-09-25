@@ -38,7 +38,7 @@ export function WorkflowTemplateGallery({
   const intl = useIntl()
   const [category, setCategory] = useState<WorkflowTemplateCategory>('popular')
   const templates = workflowTemplatesByCategory(category)
-  const { settings } = useRouteContext({ from: '__root__' })
+  const settings = useRouteContext({ from: '__root__', select: (context) => context.settings })
   const assistant = settings?.publicWidgetConfig?.messenger?.assistant
   const quinnOn = Boolean(assistant?.enabled && assistant?.respond)
 

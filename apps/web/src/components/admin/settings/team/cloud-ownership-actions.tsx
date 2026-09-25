@@ -18,7 +18,10 @@ export function CloudOwnershipActions({
   memberEmails: string[]
   sessionEmail: string | null
 }) {
-  const { billingEnabled } = useRouteContext({ from: '__root__' })
+  const billingEnabled = useRouteContext({
+    from: '__root__',
+    select: (context) => context.billingEnabled,
+  })
   const ownerQuery = useQuery({
     queryKey: ['admin', 'cloud-owner'],
     queryFn: () => getCloudOwnerEmailFn(),

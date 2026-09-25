@@ -232,10 +232,11 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
   issuePeople,
   visible: isVisible,
 }: InboxDetailPanelProps) {
-  const { settings } = useRouteContext({ from: '/admin' }) as {
-    settings?: { featureFlags?: FeatureFlags } | null
-  }
-  const flags = settings?.featureFlags
+  const flags = useRouteContext({
+    from: '/admin',
+    select: (context) =>
+      (context as { settings?: { featureFlags?: FeatureFlags } | null }).settings?.featureFlags,
+  })
   // The flag + copilot.use gate, shared with the inbox route's
   // `copilotAvailable` so the Ask Copilot affordances can never disagree
   // with the tab actually existing.

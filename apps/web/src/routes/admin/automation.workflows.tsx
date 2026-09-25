@@ -41,7 +41,7 @@ export const Route = createFileRoute('/admin/automation/workflows')({
 
 /** Gate behind the `supportInbox` flag, mirroring the messenger settings page. */
 function WorkflowsPageRoute() {
-  const { settings } = Route.useRouteContext()
+  const settings = Route.useRouteContext({ select: (context) => context.settings })
   const flags = settings?.featureFlags as FeatureFlags | undefined
   if (!flags?.supportInbox) {
     return <Navigate to="/admin/automation/agent" />

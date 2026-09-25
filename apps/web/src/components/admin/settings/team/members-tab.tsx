@@ -125,7 +125,7 @@ interface MembersTabProps {
 
 /** The teammate roster + pending invitations (the Members tab of Members & Teams). */
 export function MembersTab({ workspaceName, currentMember }: MembersTabProps) {
-  const { session } = useRouteContext({ from: '__root__' })
+  const session = useRouteContext({ from: '__root__', select: (context) => context.session })
   const teamDataQuery = useSuspenseQuery(settingsQueries.teamMembersAndInvitations())
   const { members, avatarMap, formattedInvitations, seatUsage } = teamDataQuery.data
 

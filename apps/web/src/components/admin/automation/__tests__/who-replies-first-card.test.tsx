@@ -16,7 +16,10 @@ vi.mock('@tanstack/react-router', () => ({
       {children}
     </a>
   ),
-  useRouteContext: () => ({ settings: { featureFlags: { supportInbox: true } } }),
+  useRouteContext: (opts?: { select?: (context: never) => unknown }) => {
+    const context = { settings: { featureFlags: { supportInbox: true } } }
+    return opts?.select ? opts.select(context as never) : context
+  },
   useRouterState: ({ select }: { select: (s: { location: { pathname: string } }) => string }) =>
     select({ location: { pathname: hoisted.pathname } }),
 }))

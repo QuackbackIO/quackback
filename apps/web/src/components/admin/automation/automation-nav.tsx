@@ -109,7 +109,7 @@ export function buildAutomationNavSections(
 export function AutomationNav() {
   const intl = useIntl()
   const pathname = useRouterState({ select: (state) => state.location.pathname })
-  const { settings } = useRouteContext({ from: '__root__' })
+  const settings = useRouteContext({ from: '__root__', select: (context) => context.settings })
   const flags = settings?.featureFlags as FeatureFlags | undefined
   const permissions: AutomationNavPermissions = {
     assistant: usePermission(PERMISSIONS.ASSISTANT_MANAGE),

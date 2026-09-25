@@ -30,9 +30,12 @@ vi.mock('@tanstack/react-router', async () => {
   return {
     ...actual,
     useRouter: () => ({ invalidate: vi.fn() }),
-    useRouteContext: () => ({
-      settings: { featureFlags: { feedback: true, changelog: true, supportInbox: true } },
-    }),
+    useRouteContext: (opts?: { select?: (context: never) => unknown }) => {
+      const context = {
+        settings: { featureFlags: { feedback: true, changelog: true, supportInbox: true } },
+      }
+      return opts?.select ? opts.select(context as never) : context
+    },
     useChildMatches: () => [],
     Outlet: () => null,
     Link: ({ children }: { children: ReactNode }) => <a>{children}</a>,
