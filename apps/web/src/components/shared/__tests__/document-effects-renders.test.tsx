@@ -118,4 +118,14 @@ describe('document watchers', () => {
     expect(replace).toHaveBeenCalledTimes(1)
     expect(replace.mock.calls[0]![0]).toContain('tok_1')
   })
+
+  // The admin settings pages frame the live portal as a preview (`?preview=true`);
+  // an admin looking at their own settings is not a visitor.
+  it('send no pageview from the portal preview', async () => {
+    const router = await mount('/?preview=true', 'portal page')
+
+    await act(() => router.navigate({ to: '/', search: { preview: true, page: '2' } } as never))
+
+    expect(sendBeacon).not.toHaveBeenCalled()
+  })
 })
