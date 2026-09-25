@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { extractCssVariables, normalizeFontSans } from '@/lib/shared/theme'
 import { PreviewDraftProvider, type PortalPreviewDraft } from './preview-draft-context'
 
 type StructuralDraft = Omit<PortalPreviewDraft, 'css'>
@@ -16,6 +17,30 @@ function nextDraft(prev: StructuralDraft | null, next: StructuralDraft): Structu
     ? prev?.welcomeCard
     : next.welcomeCard
   return prev && nav === prev.nav && welcomeCard === prev.welcomeCard ? prev : { nav, welcomeCard }
+}
+
+/**
+ * The draft stylesheet as the portal applies a saved theme. The saved theme
+ * also sets the font and radius on `body`, and the font family itself with
+ * `!important`, which beat a draft that sets them on `:root` alone; so the
+ * draft's light values are declared there too. They go ahead of the draft's
+ * own text, whose custom rules then win, as saved custom CSS does.
+ */
+function previewStylesheet(css: string): string {
+  const { light } = extractCssVariables(css)
+  const fontSans = light['--font-sans'] ? normalizeFontSans(light['--font-sans']) : null
+  const radius = light['--radius'] ?? null
+  const bodyVars = [
+    fontSans ? `--font-sans: ${fontSans}` : null,
+    radius ? `--radius: ${radius}` : null,
+  ].filter(Boolean)
+  return [
+    bodyVars.length > 0 ? `body { ${bodyVars.join('; ')}; }` : null,
+    fontSans ? `html body { font-family: ${fontSans} !important; }` : null,
+    css,
+  ]
+    .filter(Boolean)
+    .join('\n')
 }
 
 /**
@@ -66,12 +91,14 @@ export function PortalPreviewProvider({
     return () => window.removeEventListener('message', onMessage)
   }, [active])
 
+  const stylesheet = useMemo(() => (css ? previewStylesheet(css) : ''), [css])
+
   if (!enabled) return <>{children}</>
 
   return (
     <PreviewDraftProvider draft={draft} css={css}>
       {children}
-      {css ? <style data-preview-override="">{css}</style> : null}
+      {stylesheet ? <style data-preview-override="">{stylesheet}</style> : null}
     </PreviewDraftProvider>
   )
 }
