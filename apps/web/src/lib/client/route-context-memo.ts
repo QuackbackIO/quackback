@@ -1,3 +1,5 @@
+import { replaceEqualDeep } from '@tanstack/react-router'
+
 /**
  * Client-side reuse of the identity-bound route context.
  *
@@ -26,6 +28,11 @@
  *
  * A failed call is never kept. On the server nothing is kept at all: module
  * state there is shared by every request.
+ *
+ * A new answer keeps the previous answer's objects wherever it did not change
+ * them (structural sharing), so a component that selected a part of the
+ * context (the settings, the permission list) renders again only when that
+ * part changed, not every time the context is asked for again.
  */
 
 export const ROUTE_CONTEXT_MAX_AGE_MS = 60_000
@@ -53,6 +60,8 @@ const onServer = () => typeof window === 'undefined'
 export function createRouteContextMemo<T>(): RouteContextMemo<T> {
   let kept: { generation: number; at: number; value: Promise<T> } | null = null
   let seeded = false
+  let last: T | undefined
+  const shareParts = (value: T): T => (last = replaceEqualDeep(last, value))
 
   const isCurrent = () =>
     kept !== null &&
@@ -63,7 +72,7 @@ export function createRouteContextMemo<T>(): RouteContextMemo<T> {
     get(load) {
       if (onServer()) return load()
       if (isCurrent()) return kept!.value
-      const entry = { generation, at: Date.now(), value: load() }
+      const entry = { generation, at: Date.now(), value: load().then(shareParts) }
       kept = entry
       entry.value.catch(() => {
         if (kept === entry) kept = null
@@ -74,6 +83,7 @@ export function createRouteContextMemo<T>(): RouteContextMemo<T> {
       if (onServer() || seeded) return
       seeded = true
       if (kept !== null || generation !== 0) return
+      last = value
       kept = { generation, at: Date.now(), value: Promise.resolve(value) }
     },
   }
