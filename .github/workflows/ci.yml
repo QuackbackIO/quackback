@@ -208,7 +208,8 @@ jobs:
   # it leaves a notice to ratchet the ceiling down.
   perf:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The build, plus about 160 journeys (the breadth sweep loads every page).
+    timeout-minutes: 40
     services:
       postgres:
         image: pgvector/pgvector:pg17

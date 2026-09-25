@@ -508,9 +508,11 @@ function loadBudgets(): Budgets {
 }
 
 /**
- * Metrics the budget gates: the ones that came out identical on every run.
- * React commits, layout and style-recalc counts and JS call counts move by a
- * few between runs of the admin journeys, so they are reported, never gated.
+ * Metrics the budget gates. The counts come out identical on every run; the
+ * sizes and component renders can move a little, so they carry a tolerance
+ * and are budgeted at their peak across repeats. React commits, layout and
+ * style-recalc counts and JS call counts move more than that between runs of
+ * the admin journeys, so they are reported, never gated.
  */
 const GATED = [
   'dbQueries',
@@ -520,6 +522,7 @@ const GATED = [
   'jsKB',
   'htmlKB',
   'htmlTransferKB',
+  'componentRenders',
 ]
 
 function compare(budgets: Budgets, name: string, metrics: Metrics) {
@@ -695,7 +698,12 @@ async function main() {
     const budgets = loadBudgets()
     const results: Record<
       string,
-      { metrics: Metrics; unstable: string[]; timing?: Record<string, number> }
+      {
+        metrics: Metrics
+        unstable: string[]
+        peaks: Metrics
+        timing?: Record<string, number>
+      }
     > = {}
     console.log('')
     for (const journey of selected) {
@@ -710,13 +718,16 @@ async function main() {
       const unstable = Object.keys(metrics).filter((m) =>
         measured.some((run) => run[m] !== metrics[m])
       )
+      const peaks = Object.fromEntries(
+        Object.keys(metrics).map((m) => [m, Math.max(...measured.map((run) => run[m]!))])
+      ) as Metrics
       const timing: Record<string, number> = {}
       for (const key of Object.keys(timings[name]?.[0] ?? {})) {
         const values = timings[name]!.map((t) => t[key]!)
         timing[`${key}.p50`] = Math.round(percentile(values, 50))
         timing[`${key}.p90`] = Math.round(percentile(values, 90))
       }
-      results[name] = { metrics, unstable, timing: timingRuns ? timing : undefined }
+      results[name] = { metrics, unstable, peaks, timing: timingRuns ? timing : undefined }
 
       const rows = compare(budgets, name, metrics)
       const over = rows.filter((row) => row.verdict === 'over')
@@ -767,11 +778,16 @@ async function main() {
     writeFileSync(`${perfDir}.results/latest.json`, JSON.stringify(results, null, 2))
 
     if (args.update) {
-      for (const [name, { metrics, unstable }] of Object.entries(results)) {
+      for (const [name, { metrics, unstable, peaks }] of Object.entries(results)) {
         const current = (budgets.journeys[name] ??= {})
         for (const metric of GATED) {
-          const value = metrics[metric]
-          if (value === undefined || unstable.includes(metric)) continue
+          // A reading that moved between repeats is budgeted at its peak when
+          // the metric has a tolerance to absorb the spread, and not at all
+          // otherwise.
+          const shaky = unstable.includes(metric)
+          if (shaky && budgets.tolerance[metric] === undefined) continue
+          const value = shaky ? peaks[metric] : metrics[metric]
+          if (value === undefined) continue
           const ceiling = current[metric]
           if (ceiling === undefined || value < ceiling || args['allow-increase'])
             current[metric] = value
