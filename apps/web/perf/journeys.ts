@@ -614,6 +614,42 @@ export const journeys: Journey[] = [
       await page.keyboard.type('Measuring what a keystroke costs.', { delay: 30 })
     },
   },
+  // Typing a new post's title, which also looks for similar posts. The composer
+  // is open (its editor mounted) before the measured part.
+  {
+    kind: 'browser',
+    name: 'ui:portal-type-post-title',
+    as: 'admin',
+    setup: async (page) => {
+      await page.goto('/?sort=trending')
+      await firstPortalPost(page).waitFor()
+      const title = page.getByRole('textbox', { name: 'Feedback title' })
+      await clickUntil(title, page.locator('[contenteditable="true"]').first())
+      await title.click()
+    },
+    run: async (page) => {
+      await page.keyboard.type('Measuring what a keystroke costs.', { delay: 30 })
+    },
+  },
+  {
+    kind: 'browser',
+    name: 'ui:widget-type-post-title',
+    as: 'anon',
+    setup: async (page) => {
+      await page.goto('/widget')
+      await page.getByRole('button', { name: 'Home', exact: true }).waitFor()
+      const title = page.getByRole('textbox', { name: 'Feedback title' })
+      await clickUntil(page.getByRole('button', { name: 'Feedback', exact: true }), title)
+      // The composer opens on the first character.
+      await title.click()
+      await page.keyboard.type('M')
+      await page.locator('[contenteditable="true"]').first().waitFor()
+      await title.click()
+    },
+    run: async (page) => {
+      await page.keyboard.type('easuring what a keystroke costs.', { delay: 30 })
+    },
+  },
   {
     kind: 'browser',
     name: 'ui:widget-switch-tabs',
