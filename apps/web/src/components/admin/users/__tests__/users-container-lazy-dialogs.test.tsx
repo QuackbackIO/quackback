@@ -19,7 +19,8 @@ vi.mock('@/components/admin/users/new-person-dialog', () => {
 })
 
 describe('users page', () => {
-  it('loads neither dialog with the page', async () => {
+  // Importing the whole page's module graph takes seconds under a loaded suite.
+  it('loads neither dialog with the page', { timeout: 30_000 }, async () => {
     await import('../users-container')
     expect(segmentFormLoaded).toBe(false)
     expect(newPersonLoaded).toBe(false)
