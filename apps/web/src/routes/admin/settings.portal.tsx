@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { ClientOnly, createFileRoute, useBlocker, useRouter } from '@tanstack/react-router'
@@ -520,10 +520,19 @@ function WelcomeBodyEditor({
   onChange: (v: TiptapContent) => void
 }) {
   const { upload: uploadImage } = useImageUpload({ prefix: 'portal-welcome' })
+  // The editor reports its document once it mounts. The same document again
+  // is not an edit, and adopting that copy would re-render the whole page.
+  const handleChange = useCallback(
+    (json: JSONContent) => {
+      if (JSON.stringify(json) === JSON.stringify(value)) return
+      onChange(json as TiptapContent)
+    },
+    [value, onChange]
+  )
   return (
     <RichTextEditor
       value={value}
-      onChange={(json: JSONContent) => onChange(json as TiptapContent)}
+      onChange={handleChange}
       placeholder="Tell visitors what kind of feedback you'd love to hear…"
       minHeight="160px"
       features={{

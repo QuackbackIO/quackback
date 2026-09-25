@@ -1,11 +1,12 @@
 // @vitest-environment happy-dom
 /**
  * The portal settings page holds its live preview iframe back until
- * hydration. Only the preview may render again when that happens:
- * re-rendering the page for it repaints the theme controls, the navigation
- * editor and the welcome message editor for nothing.
+ * hydration, and its welcome message editor reports its document once it
+ * mounts. Neither may re-render the page: that repaints the theme controls,
+ * the navigation editor and the welcome message editor for nothing.
  */
-import { act, type ComponentType, type ReactNode } from 'react'
+import { act, useEffect, type ComponentType, type ReactNode } from 'react'
+import { fireEvent } from '@testing-library/react'
 import { hydrateRoot } from 'react-dom/client'
 import { renderToString } from 'react-dom/server'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -44,7 +45,21 @@ vi.mock('@/lib/client/hooks/use-image-upload', () => ({
 }))
 
 vi.mock('@/components/ui/rich-text-editor', () => ({
-  RichTextEditor: () => <div data-testid="rich-text-editor" />,
+  RichTextEditor: ({ value, onChange }: { value: unknown; onChange: (doc: unknown) => void }) => {
+    // The real editor reports its (unchanged) document once it has mounted.
+    useEffect(() => onChange(JSON.parse(JSON.stringify(value))), [])
+    return (
+      <button
+        data-testid="rich-text-editor"
+        onClick={() =>
+          onChange({
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Hello' }] }],
+          })
+        }
+      />
+    )
+  },
 }))
 
 vi.mock('@/components/admin/upgrade', () => ({ UpgradeModal: () => null }))
@@ -125,5 +140,14 @@ describe('portal settings page hydration', () => {
     // Nothing is unsaved: the save bar stays hidden.
     const saveBar = container.querySelector('[role="region"][aria-live="polite"]')!
     expect(saveBar.className).toContain('invisible')
+  })
+
+  it('takes an edit to the welcome message as an unsaved change', async () => {
+    const container = await hydratePage()
+    act(() => {
+      fireEvent.click(container.querySelector('[data-testid="rich-text-editor"]')!)
+    })
+    const saveBar = container.querySelector('[role="region"][aria-live="polite"]')!
+    expect(saveBar.className).not.toContain('invisible')
   })
 })
