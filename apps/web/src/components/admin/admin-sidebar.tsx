@@ -126,11 +126,19 @@ function railControlClass(labeled: boolean, isActive = false) {
   )
 }
 
+/**
+ * Whether the rail item for `href` is the current page. Each item follows the
+ * location on its own, so a navigation renders only the items it highlights or
+ * clears, and a search-only one (opening a post or a conversation) none.
+ */
+function useIsNavActive(href: string): boolean {
+  return useRouterState({ select: (s) => isNavActive(s.location.pathname, href) })
+}
+
 function NavItem({
   href,
   icon: Icon,
   label,
-  isActive,
   onClick,
   badge,
   dot,
@@ -139,7 +147,6 @@ function NavItem({
   href: string
   icon: typeof ChatBubbleLeftIcon
   label: string
-  isActive: boolean
   onClick?: () => void
   /** Optional count or short mark (e.g. remaining launch steps) */
   badge?: string | number | null
@@ -148,6 +155,7 @@ function NavItem({
   /** Icon + visible label. Legacy stays icon-only with a tooltip. */
   labeled?: boolean
 }) {
+  const isActive = useIsNavActive(href)
   const link = (
     <Link
       to={href}
@@ -200,11 +208,46 @@ function NavItem({
   )
 }
 
+function MobileNavLink({
+  href,
+  icon: Icon,
+  label,
+  onClick,
+}: {
+  href: string
+  icon: typeof ChatBubbleLeftIcon
+  label: string
+  onClick: () => void
+}) {
+  const isActive = useIsNavActive(href)
+  return (
+    <Link
+      to={href}
+      onClick={onClick}
+      className={cn(
+        'flex items-center gap-3 px-4 py-3 rounded-lg text-sm transition-colors',
+        'text-muted-foreground/80 hover:text-foreground hover:bg-muted/50',
+        isActive && 'bg-muted/80 text-foreground font-medium'
+      )}
+    >
+      <Icon className="h-5 w-5" />
+      {label}
+    </Link>
+  )
+}
+
 export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarProps) {
   const refined = useRefinedTheme()
   const router = useRouter()
-  const { session, settings, userRole, billingEnabled } = useRouteContext({ from: '__root__' })
-  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  // Each part is selected: the route context is a new object after every
+  // navigation, while these stay the same until the viewer or workspace changes.
+  const session = useRouteContext({ from: '__root__', select: (context) => context.session })
+  const settings = useRouteContext({ from: '__root__', select: (context) => context.settings })
+  const userRole = useRouteContext({ from: '__root__', select: (context) => context.userRole })
+  const billingEnabled = useRouteContext({
+    from: '__root__',
+    select: (context) => context.billingEnabled,
+  })
   // The settings area is admin-only (every tab gates on requireAuth(['admin'])).
   // Members would only ever land on the access-denied page, so hide the cog.
   const isAdmin = userRole === 'admin'
@@ -302,7 +345,6 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                   href={item.href}
                   icon={navItemIcon(item, refined)}
                   label={item.label}
-                  isActive={isNavActive(pathname, item.href)}
                   labeled={refined}
                 />
               ))}
@@ -319,7 +361,6 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                   href="/admin/settings"
                   icon={Cog6ToothIcon}
                   label="Settings"
-                  isActive={isNavActive(pathname, '/admin/settings')}
                   labeled={refined}
                 />
               )}
@@ -535,40 +576,23 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
               </SheetTitle>
             </SheetHeader>
             <nav className="flex flex-col gap-1.5 px-4 py-3">
-              {filteredNavItems.map((item) => {
-                const isActive = isNavActive(pathname, item.href)
-                const Icon = navItemIcon(item, refined)
-                return (
-                  <Link
-                    key={item.href}
-                    to={item.href}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className={cn(
-                      'flex items-center gap-3 px-4 py-3 rounded-lg text-sm transition-colors',
-                      'text-muted-foreground/80 hover:text-foreground hover:bg-muted/50',
-                      isActive && 'bg-muted/80 text-foreground font-medium'
-                    )}
-                  >
-                    <Icon className="h-5 w-5" />
-                    {item.label}
-                  </Link>
-                )
-              })}
+              {filteredNavItems.map((item) => (
+                <MobileNavLink
+                  key={item.href}
+                  href={item.href}
+                  icon={navItemIcon(item, refined)}
+                  label={item.label}
+                  onClick={() => setMobileMenuOpen(false)}
+                />
+              ))}
               <div className="h-px bg-border/40 my-4" />
               {isAdmin && (
-                <Link
-                  to="/admin/settings"
+                <MobileNavLink
+                  href="/admin/settings"
+                  icon={Cog6ToothIcon}
+                  label="Settings"
                   onClick={() => setMobileMenuOpen(false)}
-                  className={cn(
-                    'flex items-center gap-3 px-4 py-3 rounded-lg text-sm transition-colors',
-                    'text-muted-foreground/80 hover:text-foreground hover:bg-muted/50',
-                    isNavActive(pathname, '/admin/settings') &&
-                      'bg-muted/80 text-foreground font-medium'
-                  )}
-                >
-                  <Cog6ToothIcon className="h-5 w-5" />
-                  Settings
-                </Link>
+                />
               )}
               {billingEnabled && siblings.length > 0
                 ? siblings.map((sibling) => (
