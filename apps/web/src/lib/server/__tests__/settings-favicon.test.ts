@@ -6,11 +6,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const hoisted = vi.hoisted(() => ({
-  mockFindFirst: vi.fn(),
+  mockFindSettings: vi.fn(),
 }))
 
-vi.mock('@/lib/server/db', () => ({
-  db: { query: { settings: { findFirst: hoisted.mockFindFirst } } },
+// The readers take the settings row the request already holds.
+vi.mock('@/lib/server/domains/settings/settings.helpers', () => ({
+  findSettingsCached: hoisted.mockFindSettings,
 }))
 
 vi.mock('@/lib/server/storage/s3', () => ({
@@ -25,19 +26,19 @@ beforeEach(() => {
 
 describe('getSettingsFaviconData', () => {
   it('returns the public URL for a stored favicon key', async () => {
-    hoisted.mockFindFirst.mockResolvedValue({ faviconKey: 'favicons/duck.png' })
+    hoisted.mockFindSettings.mockResolvedValue({ faviconKey: 'favicons/duck.png' })
     expect(await getSettingsFaviconData()).toEqual({
       url: 'https://cdn.example.com/favicons/duck.png',
     })
   })
 
   it('returns null when no favicon key is stored', async () => {
-    hoisted.mockFindFirst.mockResolvedValue({ faviconKey: null })
+    hoisted.mockFindSettings.mockResolvedValue({ faviconKey: null })
     expect(await getSettingsFaviconData()).toBeNull()
   })
 
   it('returns null when no settings record exists', async () => {
-    hoisted.mockFindFirst.mockResolvedValue(undefined)
+    hoisted.mockFindSettings.mockResolvedValue(null)
     expect(await getSettingsFaviconData()).toBeNull()
   })
 })

@@ -133,6 +133,7 @@ let portalVisibility: 'public' | 'private' = 'private'
 const mockGetPortalConfig = vi.fn(async () => ({ access: { visibility: portalVisibility } }))
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   getPortalConfig: () => mockGetPortalConfig(),
+  getPortalConfigCached: () => mockGetPortalConfig(),
 }))
 
 const { runWithLogContext } = await import('@/lib/server/log-context')

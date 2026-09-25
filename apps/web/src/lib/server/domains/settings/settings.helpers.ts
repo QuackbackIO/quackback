@@ -4,6 +4,7 @@
  */
 import { db, eq, settings } from '@/lib/server/db'
 import { cacheDel, CACHE_KEYS } from '@/lib/server/cache'
+import { derivedMemoKey, memoizePerRequest } from '@/lib/server/request-memo'
 import { DomainException, InternalError, NotFoundError } from '@/lib/shared/errors'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
@@ -104,6 +105,26 @@ export async function requireSettings(): Promise<SettingsRecord> {
   return org
 }
 
+const SETTINGS_ROW_MEMO_KEY = derivedMemoKey(CACHE_KEYS.WORKSPACE_SETTINGS, 'row')
+
+/**
+ * The settings row for the READ-ONLY getters (office hours, stage labels, the
+ * assistant settings, ...), read once per request and shared by all of them: a
+ * page asks for several. Unlike {@link requireSettingsCached} it is never older
+ * than the request; `invalidateSettingsCache()` forgets it with the rest of
+ * the settings, and outside a request it is read every time.
+ *
+ * A read-modify-write keeps {@link requireSettings}.
+ *
+ * @internal
+ */
+export async function requireSettingsPerRequest(): Promise<SettingsRecord> {
+  const org = await memoizePerRequest(SETTINGS_ROW_MEMO_KEY, () => db.query.settings.findFirst())
+  if (!org) throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
+  // Every caller gets a copy, so one parsing its slice cannot change another's.
+  return structuredClone(org)
+}
+
 /**
  * The raw settings row for READ-ONLY paths, served through the Redis-cached
  * workspace-settings blob (a single Redis GET when warm; the miss path is the
@@ -117,12 +138,23 @@ export async function requireSettings(): Promise<SettingsRecord> {
  * @internal
  */
 export async function requireSettingsCached(): Promise<SettingsRecord> {
+  const org = await findSettingsCached()
+  if (!org) throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
+  return org
+}
+
+/**
+ * {@link requireSettingsCached} for callers that treat a missing row as a
+ * state rather than an error: null before the workspace has one.
+ *
+ * @internal
+ */
+export async function findSettingsCached(): Promise<SettingsRecord | null> {
   // Dynamic import: settings.service imports these helpers at module scope,
   // so a static import here would be a load-time cycle.
   const { getWorkspaceSettings } = await import('./settings.service')
   const workspace = await getWorkspaceSettings()
-  if (!workspace?.settings) throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
-  return workspace.settings as SettingsRecord
+  return (workspace?.settings as SettingsRecord | undefined) ?? null
 }
 
 /** @internal */

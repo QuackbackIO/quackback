@@ -27,11 +27,12 @@ export interface BrandingData {
 }
 
 /**
- * Get the first (and only) settings record for single workspace deployment.
+ * The workspace's settings row, from the settings the request already holds:
+ * every reader here is read-only.
  */
 async function getSettingsRecord() {
-  const { db } = await import('@/lib/server/db')
-  return db.query.settings.findFirst()
+  const { findSettingsCached } = await import('@/lib/server/domains/settings/settings.helpers')
+  return findSettingsCached()
 }
 
 /**

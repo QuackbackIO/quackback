@@ -179,10 +179,14 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 vi.mock('@/lib/shared/roles', () => ({ isTeamMember: vi.fn().mockReturnValue(false) }))
 
 // The capability gates read the workspace anonymous switch fail-closed from the
-// RAW settings (workspaceAllowsAnonymous), so drive it via getSettings here.
+// RAW settings (workspaceAllowsAnonymous), so drive it via getSettings (and the
+// cached read of the same row) here.
 // getPortalConfig is still mocked for any merged-config consumers.
 vi.mock('@/lib/server/functions/workspace', () => ({
   getSettings: vi.fn().mockResolvedValue({ portalConfig: { features: { allowAnonymous: true } } }),
+  getSettingsCached: vi.fn().mockResolvedValue({
+    portalConfig: { features: { allowAnonymous: true } },
+  }),
 }))
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   getPortalConfig: vi.fn().mockResolvedValue({ features: { allowAnonymous: true } }),
