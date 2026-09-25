@@ -19,7 +19,9 @@ import {
  * (`publicPostsKeys`, see use-portal-posts-query), post lists and post detail
  * embed that filtered catalog; public roadmap results honour the same guard
  * for caller-supplied tag filters; and the roadmap catalog's `baseFilter` has
- * internal tag ids redacted for non-team viewers.
+ * internal tag ids redacted for non-team viewers. Notifications belong to the
+ * signed-in viewer outright, and the portal loader reads the bell's unread
+ * count back through `ensureQueryData`.
  */
 export const VIEWER_SCOPED_PORTAL_QUERY_KEYS: readonly (readonly string[])[] = [
   ['portal', 'tags'],
@@ -30,6 +32,7 @@ export const VIEWER_SCOPED_PORTAL_QUERY_KEYS: readonly (readonly string[])[] = [
   ['portal', 'roadmapPosts'],
   ['portal', 'roadmapPage'],
   ['publicPosts'],
+  ['notifications'],
 ]
 
 /**

@@ -88,6 +88,26 @@ describe('removeViewerScopedPortalQueries', () => {
     expect(queryClient.getQueryData(feedKey)).toBeUndefined()
   })
 
+  it("drops the previous viewer's notifications, unread count included", async () => {
+    const queryClient = newClient()
+    queryClient.setQueryData(['notifications', 'unreadCount'], 3)
+    queryClient.setQueryData(['notifications', 'list', { unreadOnly: false }], {
+      notifications: [],
+    })
+
+    removeViewerScopedPortalQueries(queryClient)
+
+    // The portal loader's read of the count goes to the network as the new viewer.
+    const queryFn = vi.fn(async () => 0)
+    const served = await queryClient.ensureQueryData({
+      queryKey: ['notifications', 'unreadCount'],
+      queryFn,
+    })
+    expect(served).toBe(0)
+    expect(queryFn).toHaveBeenCalledTimes(1)
+    expect(queryClient.getQueryCache().findAll({ queryKey: ['notifications', 'list'] })).toEqual([])
+  })
+
   it('covers every family whose payload depends on the viewer', () => {
     expect(VIEWER_SCOPED_PORTAL_QUERY_KEYS).toEqual(
       expect.arrayContaining([
