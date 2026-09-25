@@ -30,7 +30,7 @@ import { QuackbackEmbed } from './quackback-embed-extension'
 import { ConversationImage } from './conversation-image-node'
 import { UploadedVideo } from './uploaded-video-node'
 import { Markdown } from '@tiptap/markdown'
-import { Extension } from '@tiptap/core'
+import { Extension, getHTMLFromFragment } from '@tiptap/core'
 import type { Range } from '@tiptap/core'
 import Suggestion, { type SuggestionOptions, type SuggestionProps } from '@tiptap/suggestion'
 import { createLowlight } from 'lowlight'
@@ -485,6 +485,66 @@ export function plaintextFromTiptapJson(doc: unknown): string {
   }
   walk(doc as { type?: string; content?: unknown[] })
   return blocks.join('\n')
+}
+
+/**
+ * The document after an edit, serialized on demand. Nothing is serialized
+ * until a format is read, and each format at most once, so a host can keep the
+ * latest document while it is written and serialize it once, when it is sent.
+ * A later read still returns the document as it was at this edit.
+ */
+export interface EditorDocument {
+  json(): JSONContent
+  html(): string
+  /** Markdown, with markdownFromEditor's fallbacks when the serializer throws. */
+  markdown(): string
+}
+
+/**
+ * An EditorDocument for the editor's current document. `markdownFallback` is
+ * what markdownFromEditor falls back on; `onSerialize` hears the JSON and the
+ * markdown the first time each is serialized.
+ */
+function editorDocument(
+  editor: Pick<Editor, 'state' | 'schema' | 'markdown'>,
+  {
+    markdownFallback = () => '',
+    onSerialize,
+  }: {
+    markdownFallback?: () => string
+    onSerialize?: (format: 'json' | 'markdown', value: JSONContent | string) => void
+  } = {}
+): EditorDocument {
+  // A ProseMirror document is immutable, so this one stays the edit's own.
+  const { doc } = editor.state
+  const { schema, markdown: markdownManager } = editor
+  let json: JSONContent | undefined
+  let html: string | undefined
+  let markdown: string | undefined
+  const snapshot: EditorDocument = {
+    json() {
+      if (json === undefined) {
+        json = doc.toJSON() as JSONContent
+        onSerialize?.('json', json)
+      }
+      return json
+    },
+    html() {
+      html ??= getHTMLFromFragment(doc.content, schema)
+      return html
+    },
+    markdown() {
+      if (markdown === undefined) {
+        const serializer = markdownManager
+          ? { getMarkdown: () => markdownManager.serialize(snapshot.json()) }
+          : {}
+        markdown = markdownFromEditor(serializer, 3, markdownFallback(), snapshot.json())
+        onSerialize?.('markdown', markdown)
+      }
+      return markdown
+    },
+  }
+  return snapshot
 }
 
 export function seedMarkdownFallback(
@@ -1318,7 +1378,15 @@ export interface RichTextEditorHandle {
 
 interface RichTextEditorProps {
   value?: string | JSONContent
+  /**
+   * Called after every edit with the document serialized up front: always
+   * the JSON, the HTML when the callback declares a 2nd parameter and the
+   * markdown when it declares a 3rd. A host that needs the document only
+   * when it is sent should take onDocumentChange instead.
+   */
   onChange?: (json: JSONContent, html: string, markdown: string) => void
+  /** Called after every edit with the document, serialized only when read. */
+  onDocumentChange?: (document: EditorDocument) => void
   placeholder?: string
   className?: string
   disabled?: boolean
@@ -1362,6 +1430,7 @@ interface RichTextEditorProps {
 function RichTextEditorBase({
   value,
   onChange,
+  onDocumentChange,
   placeholder = 'Write something...',
   className,
   disabled = false,
@@ -1457,6 +1526,10 @@ function RichTextEditorBase({
   // above, which is cleared after a controlled-value round trip; comment
   // composers need this if a later getMarkdown() throw would otherwise emit ''.
   const lastSuccessfulMarkdownRef = useRef(seedMarkdownFallback(value))
+  // The latest edit's document. Only its reads count as what the editor
+  // emitted, for the guards above; a host reading an older document later (on
+  // send) changes nothing.
+  const latestDocumentRef = useRef<EditorDocument | null>(null)
 
   // Stable initial content reference — passed once to useEditor so TipTap v3's
   // compareOptions never sees a reference change on `content` and never calls
@@ -1478,21 +1551,30 @@ function RichTextEditorBase({
       lastSuccessfulMarkdownRef.current = seedMarkdownFallback(initialContentRef.current, editor)
     },
     onUpdate: ({ editor }) => {
+      if (!onChange && !onDocumentChange) return
+      const edited = editorDocument(editor, {
+        markdownFallback: () => lastSuccessfulMarkdownRef.current,
+        onSerialize: (format, serialized) => {
+          if (latestDocumentRef.current !== edited) return
+          if (format === 'json') {
+            lastEmittedJsonRef.current = serialized
+          } else {
+            lastEmittedMarkdownRef.current = serialized as string
+            lastSuccessfulMarkdownRef.current = serialized as string
+          }
+        },
+      })
+      latestDocumentRef.current = edited
+      lastEmittedJsonRef.current = null
+      lastEmittedMarkdownRef.current = null
+      onDocumentChange?.(edited)
       if (!onChange) return
-      const json = editor.getJSON()
-      lastEmittedJsonRef.current = json
-      const html = editor.getHTML()
-      // Only serialize to markdown when the caller declares a 3rd parameter.
-      // Callers that only need json+html (widget, portal) skip the expensive
-      // recursive tree-walk that @tiptap/markdown does on every keystroke.
-      const markdown = markdownFromEditor(
-        editor,
-        onChange.length,
-        lastSuccessfulMarkdownRef.current,
-        json
-      )
+      // Serialize only the formats the callback declares a parameter for:
+      // the HTML and the markdown each walk the whole document.
+      const json = edited.json()
+      const html = onChange.length >= 2 ? edited.html() : ''
+      const markdown = onChange.length >= 3 ? edited.markdown() : ''
       lastEmittedMarkdownRef.current = markdown
-      if (onChange.length >= 3) lastSuccessfulMarkdownRef.current = markdown
       onChange(json, html, markdown)
     },
     editorProps,
@@ -1858,6 +1940,7 @@ export const RichTextEditor = memo(RichTextEditorBase, (prev, next) => {
   if (
     prev.value !== next.value ||
     prev.onChange !== next.onChange ||
+    prev.onDocumentChange !== next.onDocumentChange ||
     prev.onImageUpload !== next.onImageUpload ||
     prev.onVideoUpload !== next.onVideoUpload ||
     prev.onSubmit !== next.onSubmit ||
