@@ -6,7 +6,8 @@ import {
   type Editor,
   type JSONContent,
 } from '@tiptap/react'
-import { BubbleMenu } from '@tiptap/react/menus'
+import { BubbleMenu, type BubbleMenuProps } from '@tiptap/react/menus'
+import { redoDepth, undoDepth } from '@tiptap/pm/history'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Link from '@tiptap/extension-link'
@@ -1559,13 +1560,94 @@ function RichTextEditorBase({
     }
   }, [disabled, editor])
 
+  if (!editor) {
+    // Reserve the editor's eventual size, toolbar row included, so the
+    // surrounding layout doesn't jump when TipTap finishes mounting. Keeping
+    // immediatelyRender=false preserves SSR safety.
+    return (
+      <RichTextEditorEmptyState
+        placeholder={placeholder}
+        className={className}
+        disabled={disabled}
+        minHeight={minHeight}
+        fill={fill}
+        borderless={borderless}
+        toolbarPosition={toolbarPosition}
+        aria-hidden="true"
+      />
+    )
+  }
+
+  return (
+    <EditorChrome
+      editor={editor}
+      className={className}
+      disabled={disabled}
+      fill={fill}
+      borderless={borderless}
+      toolbarPosition={toolbarPosition}
+      features={features}
+      onImageUpload={onImageUpload}
+      onVideoUpload={onVideoUpload}
+    />
+  )
+}
+
+// Held at module scope: TipTap's BubbleMenu dispatches a transaction to update
+// its plugin whenever `options` or `shouldShow` changes identity.
+const BUBBLE_MENU_OPTIONS = { strategy: 'fixed', placement: 'top' } as const
+
+const showFormattingBubble: BubbleMenuProps['shouldShow'] = ({ editor, state }) => {
+  // Don't show in code blocks or tables
+  if (editor.isActive('codeBlock')) return false
+  if (editor.isActive('table')) return false
+  // Only show when text is selected
+  const { from, to } = state.selection
+  return from !== to
+}
+
+const showTableBubble: BubbleMenuProps['shouldShow'] = ({ editor }) => editor.isActive('table')
+
+const showImageBubble: BubbleMenuProps['shouldShow'] = ({ editor }) =>
+  editor.isActive('resizableImage')
+
+interface EditorChromeProps {
+  editor: Editor
+  className?: string
+  disabled: boolean
+  fill: boolean
+  borderless: boolean
+  toolbarPosition: 'top' | 'none' | 'bottom'
+  features: EditorFeatures
+  onImageUpload?: (file: File) => Promise<string>
+  onVideoUpload?: (file: File) => Promise<string>
+}
+
+/**
+ * The writing surface and everything around it: the toolbar, the bubble menus
+ * and the image context menu. None of it takes the document as a prop, so a
+ * controlled host that re-renders on every keystroke (a new value and often a
+ * new onChange) stops at RichTextEditorBase. The toolbar and menus follow the
+ * selection through their own useEditorState subscriptions instead.
+ */
+const EditorChrome = memo(function EditorChrome({
+  editor,
+  className,
+  disabled,
+  fill,
+  borderless,
+  toolbarPosition,
+  features,
+  onImageUpload,
+  onVideoUpload,
+}: EditorChromeProps) {
   // Image context menu state - stores the src of the right-clicked image
   const [contextMenuImageSrc, setContextMenuImageSrc] = useState<string | null>(null)
 
   // Handle right-click - check if it's on an image and store the src
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
-      if (!editor || !features.images) {
+      if (!features.images) {
         setContextMenuImageSrc(null)
         return
       }
@@ -1582,7 +1664,7 @@ function RichTextEditorBase({
         setContextMenuImageSrc(null)
       }
     },
-    [editor, features.images]
+    [features.images]
   )
 
   // Use shared image actions hook for context menu
@@ -1605,24 +1687,6 @@ function RichTextEditorBase({
       el.style.overflow = 'visible'
     }
   }, [])
-
-  if (!editor) {
-    // Reserve the editor's eventual size, toolbar row included, so the
-    // surrounding layout doesn't jump when TipTap finishes mounting. Keeping
-    // immediatelyRender=false preserves SSR safety.
-    return (
-      <RichTextEditorEmptyState
-        placeholder={placeholder}
-        className={className}
-        disabled={disabled}
-        minHeight={minHeight}
-        fill={fill}
-        borderless={borderless}
-        toolbarPosition={toolbarPosition}
-        aria-hidden="true"
-      />
-    )
-  }
 
   return (
     <ContextMenu>
@@ -1702,18 +1766,8 @@ function RichTextEditorBase({
           editor={editor}
           appendTo={getBubbleMenuContainer}
           ref={bubbleMenuRef}
-          options={{
-            strategy: 'fixed',
-            placement: 'top',
-          }}
-          shouldShow={({ editor, state }) => {
-            // Don't show in code blocks or tables
-            if (editor.isActive('codeBlock')) return false
-            if (editor.isActive('table')) return false
-            // Only show when text is selected
-            const { from, to } = state.selection
-            return from !== to
-          }}
+          options={BUBBLE_MENU_OPTIONS}
+          shouldShow={showFormattingBubble}
         >
           <BubbleMenuContent editor={editor} disabled={disabled} />
         </BubbleMenu>
@@ -1724,13 +1778,8 @@ function RichTextEditorBase({
           editor={editor}
           appendTo={getBubbleMenuContainer}
           ref={bubbleMenuRef}
-          options={{
-            strategy: 'fixed',
-            placement: 'top',
-          }}
-          shouldShow={({ editor }) => {
-            return editor.isActive('table')
-          }}
+          options={BUBBLE_MENU_OPTIONS}
+          shouldShow={showTableBubble}
         >
           <TableToolbar editor={editor} disabled={disabled} />
         </BubbleMenu>
@@ -1741,19 +1790,53 @@ function RichTextEditorBase({
           editor={editor}
           appendTo={getBubbleMenuContainer}
           ref={bubbleMenuRef}
-          options={{
-            strategy: 'fixed',
-            placement: 'top',
-          }}
-          shouldShow={({ editor }) => {
-            return editor.isActive('resizableImage')
-          }}
+          options={BUBBLE_MENU_OPTIONS}
+          shouldShow={showImageBubble}
         >
           <ImageToolbar editor={editor} disabled={disabled} />
         </BubbleMenu>
       )}
     </ContextMenu>
   )
+}, sameChromeProps)
+
+function sameChromeProps(prev: EditorChromeProps, next: EditorChromeProps): boolean {
+  return (
+    prev.editor === next.editor &&
+    prev.className === next.className &&
+    prev.disabled === next.disabled &&
+    prev.fill === next.fill &&
+    prev.borderless === next.borderless &&
+    prev.toolbarPosition === next.toolbarPosition &&
+    prev.onImageUpload === next.onImageUpload &&
+    prev.onVideoUpload === next.onVideoUpload &&
+    sameFeatures(prev.features, next.features)
+  )
+}
+
+// Every feature flag, so a comparison can never miss one added later.
+const FEATURE_FLAGS: Record<keyof EditorFeatures, true> = {
+  headings: true,
+  images: true,
+  videos: true,
+  codeBlocks: true,
+  bubbleMenu: true,
+  slashMenu: true,
+  taskLists: true,
+  blockquotes: true,
+  tables: true,
+  dividers: true,
+  embeds: true,
+  quackbackEmbeds: true,
+  emojiPicker: true,
+  enterAsHardBreak: true,
+  mentions: true,
+}
+const FEATURE_KEYS = Object.keys(FEATURE_FLAGS) as (keyof EditorFeatures)[]
+
+/** Feature sets compared flag by flag, so callers may pass inline objects. */
+function sameFeatures(prev: EditorFeatures = {}, next: EditorFeatures = {}): boolean {
+  return FEATURE_KEYS.every((key) => prev[key] === next[key])
 }
 
 // Skip re-render when individual feature flags and all other props are unchanged.
@@ -1776,25 +1859,7 @@ export const RichTextEditor = memo(RichTextEditorBase, (prev, next) => {
     prev.editorRef !== next.editorRef
   )
     return false
-  const pf = prev.features ?? {}
-  const nf = next.features ?? {}
-  return (
-    pf.headings === nf.headings &&
-    pf.codeBlocks === nf.codeBlocks &&
-    pf.blockquotes === nf.blockquotes &&
-    pf.dividers === nf.dividers &&
-    pf.images === nf.images &&
-    pf.videos === nf.videos &&
-    pf.taskLists === nf.taskLists &&
-    pf.tables === nf.tables &&
-    pf.embeds === nf.embeds &&
-    pf.quackbackEmbeds === nf.quackbackEmbeds &&
-    pf.slashMenu === nf.slashMenu &&
-    pf.emojiPicker === nf.emojiPicker &&
-    pf.enterAsHardBreak === nf.enterAsHardBreak &&
-    pf.mentions === nf.mentions &&
-    pf.bubbleMenu === nf.bubbleMenu
-  )
+  return sameFeatures(prev.features, next.features)
 })
 
 // ============================================================================
@@ -2007,19 +2072,18 @@ interface BubbleMenuContentProps {
   disabled: boolean
 }
 
+const selectBubbleMarks = ({ editor: e }: { editor: Editor }) => ({
+  bold: e.isActive('bold'),
+  italic: e.isActive('italic'),
+  underline: e.isActive('underline'),
+  strike: e.isActive('strike'),
+  code: e.isActive('code'),
+  link: e.isActive('link'),
+})
+
 function BubbleMenuContent({ editor, disabled }: BubbleMenuContentProps) {
-  // Same subscription trick as MenuBar: active-state without full re-renders.
-  const active = useEditorState({
-    editor,
-    selector: ({ editor: e }) => ({
-      bold: e.isActive('bold'),
-      italic: e.isActive('italic'),
-      underline: e.isActive('underline'),
-      strike: e.isActive('strike'),
-      code: e.isActive('code'),
-      link: e.isActive('link'),
-    }),
-  })
+  // Same subscription as MenuBar: re-renders only when a mark it shows flips.
+  const active = useEditorState({ editor, selector: selectBubbleMarks })
   return (
     <div className="flex items-center gap-0.5 rounded-lg border bg-popover p-1 shadow-md">
       <ToolbarButton
@@ -2058,19 +2122,24 @@ function BubbleMenuContent({ editor, disabled }: BubbleMenuContentProps) {
         isActive={active.code}
         title="Inline Code (Cmd+E)"
       />
-      <LinkButton editor={editor} disabled={disabled} />
+      <LinkButton editor={editor} disabled={disabled} isActive={active.link} />
       <ToolbarDivider />
       <HeadingDropdown editor={editor} disabled={disabled} />
     </div>
   )
 }
 
-function LinkButton({ editor, disabled }: { editor: Editor; disabled: boolean }) {
+function LinkButton({
+  editor,
+  disabled,
+  isActive,
+}: {
+  editor: Editor
+  disabled: boolean
+  isActive: boolean
+}) {
   const [isOpen, setIsOpen] = useState(false)
   const [url, setUrl] = useState('')
-
-  const currentUrl = editor.getAttributes('link').href as string | undefined
-  const isActive = editor.isActive('link')
 
   const applyLink = () => {
     if (!url.trim()) {
@@ -2092,7 +2161,7 @@ function LinkButton({ editor, disabled }: { editor: Editor; disabled: boolean })
           className={cn('h-7 w-7 p-0', isActive && 'bg-muted')}
           disabled={disabled}
           onClick={() => {
-            setUrl(currentUrl || '')
+            setUrl((editor.getAttributes('link').href as string | undefined) || '')
             setIsOpen(true)
           }}
           title="Insert Link"
@@ -2138,16 +2207,16 @@ function LinkButton({ editor, disabled }: { editor: Editor; disabled: boolean })
   )
 }
 
-function HeadingDropdown({ editor, disabled }: { editor: Editor; disabled: boolean }) {
-  // Determine current block type
-  const getCurrentBlockType = () => {
-    if (editor.isActive('heading', { level: 1 })) return 'H1'
-    if (editor.isActive('heading', { level: 2 })) return 'H2'
-    if (editor.isActive('heading', { level: 3 })) return 'H3'
-    return 'Text'
-  }
+/** The block type under the selection, as the bubble menu names it. */
+const selectBlockType = ({ editor: e }: { editor: Editor }) => {
+  if (e.isActive('heading', { level: 1 })) return 'H1'
+  if (e.isActive('heading', { level: 2 })) return 'H2'
+  if (e.isActive('heading', { level: 3 })) return 'H3'
+  return 'Text'
+}
 
-  const currentType = getCurrentBlockType()
+function HeadingDropdown({ editor, disabled }: { editor: Editor; disabled: boolean }) {
+  const currentType = useEditorState({ editor, selector: selectBlockType })
 
   const blockTypes = [
     { label: 'Text', value: 'paragraph', icon: <Type className="size-4" /> },
@@ -2360,9 +2429,11 @@ interface ImageToolbarProps {
   disabled: boolean
 }
 
+const selectImageSrc = ({ editor: e }: { editor: Editor }) =>
+  e.getAttributes('resizableImage').src as string | undefined
+
 function ImageToolbar({ editor, disabled }: ImageToolbarProps) {
-  const attrs = editor.getAttributes('resizableImage')
-  const src = attrs.src as string | undefined
+  const src = useEditorState({ editor, selector: selectImageSrc })
 
   const { viewImage, downloadImage, copyImage, copyLink, deleteImage } = useImageActions({
     src,
@@ -2435,6 +2506,26 @@ interface MenuBarProps {
   borderless?: boolean
 }
 
+/**
+ * What the fixed toolbar shows: the active marks and blocks, and whether there
+ * is anything to undo or redo. The history depth answers the same question as
+ * `editor.can().undo()` without building the full command chain, which this
+ * selector would otherwise do on every transaction.
+ */
+const selectToolbarState = ({ editor: e }: { editor: Editor }) => ({
+  bold: e.isActive('bold'),
+  italic: e.isActive('italic'),
+  link: e.isActive('link'),
+  bulletList: e.isActive('bulletList'),
+  orderedList: e.isActive('orderedList'),
+  codeBlock: e.isActive('codeBlock'),
+  heading1: e.isActive('heading', { level: 1 }),
+  heading2: e.isActive('heading', { level: 2 }),
+  heading3: e.isActive('heading', { level: 3 }),
+  canUndo: undoDepth(e.state) > 0,
+  canRedo: redoDepth(e.state) > 0,
+})
+
 function MenuBar({
   editor,
   disabled,
@@ -2447,30 +2538,9 @@ function MenuBar({
   const isBottom = variant === 'bottom'
   // Muted ghost buttons on the transparent bottom row; filled active-state on top.
   const btn = isBottom ? ('quiet' as const) : ('default' as const)
-  // Subscribe to the marks/nodes the toolbar reflects so active-state stays
-  // current without re-rendering the whole editor on every keystroke
-  // (useEditor's default re-renders all children per transaction).
-  const active = useEditorState({
-    editor,
-    selector: ({ editor: e }) => ({
-      bold: e.isActive('bold'),
-      italic: e.isActive('italic'),
-      link: e.isActive('link'),
-      bulletList: e.isActive('bulletList'),
-      orderedList: e.isActive('orderedList'),
-      codeBlock: e.isActive('codeBlock'),
-      heading1: e.isActive('heading', { level: 1 }),
-      heading2: e.isActive('heading', { level: 2 }),
-      heading3: e.isActive('heading', { level: 3 }),
-    }),
-  })
-  const canUndoRedo = useEditorState({
-    editor,
-    selector: ({ editor: e }) => ({
-      undo: e.can().undo(),
-      redo: e.can().redo(),
-    }),
-  })
+  // Subscribe to the marks/nodes the toolbar reflects so it re-renders only
+  // when one of them changes, never merely because a character was typed.
+  const active = useEditorState({ editor, selector: selectToolbarState })
   const setLink = useCallback(() => {
     const previousUrl = editor.getAttributes('link').href
     let url = window.prompt('URL', previousUrl)
@@ -2542,9 +2612,6 @@ function MenuBar({
     }
     input.click()
   }, [editor, onVideoUpload])
-
-  const canUndo = canUndoRedo.undo
-  const canRedo = canUndoRedo.redo
 
   return (
     <div
@@ -2679,14 +2746,14 @@ function MenuBar({
         variant={btn}
         icon={<ArrowUturnLeftIcon className="size-4" />}
         onClick={() => editor.chain().focus().undo().run()}
-        disabled={disabled || !canUndo}
+        disabled={disabled || !active.canUndo}
         title="Undo"
       />
       <ToolbarButton
         variant={btn}
         icon={<ArrowUturnRightIcon className="size-4" />}
         onClick={() => editor.chain().focus().redo().run()}
-        disabled={disabled || !canRedo}
+        disabled={disabled || !active.canRedo}
         title="Redo"
       />
     </div>
