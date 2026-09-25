@@ -191,7 +191,6 @@ import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 import { useConversationTyping } from '@/lib/client/hooks/use-conversation-typing'
 import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
 import { useConversationComposerAttachments } from '@/lib/client/hooks/use-conversation-composer-attachments'
-import { useDebouncedValue } from '@/lib/client/hooks/use-debounced-value'
 import { useCopilotInsert } from '@/lib/client/hooks/use-copilot-insert'
 import { useComposerFocus } from '@/lib/client/hooks/use-composer-focus'
 import { usePermissions } from '@/lib/client/use-permissions'
@@ -203,6 +202,13 @@ import {
   appendTextToDraft,
   type ComposerDraft,
 } from './composer-draft'
+import {
+  createComposerDrafts,
+  isEmptyDraft,
+  useComposerDraftValue,
+  useDebouncedDraftText,
+  type ComposerDrafts,
+} from './composer-drafts'
 import { ComposerAiActions, type ComposerMode } from './composer-ai-actions'
 import { TypingDots } from '@/components/shared/typing-dots'
 import { EmojiPicker } from '@/components/shared/emoji-picker'
@@ -493,17 +499,14 @@ export function AgentConversationThread({
   // a back-office thread is mostly working chatter, and sharing is a decision
   // about one note rather than a mode the composer stays in.
   const [shareNoteWithConversation, setShareNoteWithConversation] = useState(false)
-  const [replyDraft, setReplyDraft] = useState<ComposerDraft>(EMPTY_DRAFT)
-  const [noteDraft, setNoteDraft] = useState<ComposerDraft>(EMPTY_DRAFT)
+  // The drafts live outside React state: the editor writes one on every
+  // keystroke, which must not re-render this whole thread. What the thread
+  // draws from a draft (the send button, AI actions, link previews) subscribes
+  // to just that value; everything else reads the latest draft when it acts.
+  const [drafts] = useState(createComposerDrafts)
   const [replyKey, setReplyKey] = useState(0)
   const [noteKey, setNoteKey] = useState(0)
-  // Latest drafts for stable, pull-based composer AI actions. Reading from
-  // refs lets an async transform verify that the draft did not change without
-  // recreating its callbacks on every keystroke.
-  const replyDraftRef = useRef(replyDraft)
-  replyDraftRef.current = replyDraft
-  const noteDraftRef = useRef(noteDraft)
-  noteDraftRef.current = noteDraft
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   // The one controlled convert dialog's seed, built at whichever entry point
   // opened it: a per-message "Track as feedback" pick, an AI "Track as post"
@@ -669,10 +672,6 @@ export function AgentConversationThread({
   }, [capabilities.reply])
 
   const linkPreviewsEnabled = capabilities.linkPreviews && (flags?.supportInbox ?? false)
-  const debouncedComposerText = useDebouncedValue(
-    noteMode ? noteDraft.markdown : replyDraft.markdown,
-    500
-  )
 
   // The unread divider sits immediately above the first message newer than the
   // agent's read watermark — i.e. the first message that "mark unread" or new
@@ -1048,7 +1047,7 @@ export function AgentConversationThread({
             label: 'Send untranslated',
             onClick: () => {
               // Re-clear the composer we restored above, then resend.
-              setReplyDraft(EMPTY_DRAFT)
+              drafts.set('reply', EMPTY_DRAFT)
               setReplyKey((k) => k + 1)
               sendMutation.mutate({ ...vars, skipTranslation: true })
               requestAnimationFrame(() => activeEditorRef.current?.focus('end'))
@@ -1066,7 +1065,7 @@ export function AgentConversationThread({
             label: 'Send untranslated',
             onClick: () => {
               // Re-clear the composer we restored above, then resend.
-              setReplyDraft(EMPTY_DRAFT)
+              drafts.set('reply', EMPTY_DRAFT)
               setReplyKey((k) => k + 1)
               sendMutation.mutate({ ...vars, skipTranslation: true })
               requestAnimationFrame(() => activeEditorRef.current?.focus('end'))
@@ -1519,14 +1518,14 @@ export function AgentConversationThread({
   const insertIntoDraft = useCallback(
     (mode: 'reply' | 'note', append: (prev: ComposerDraft) => ComposerDraft) => {
       if (mode === 'note') {
-        setNoteDraft(append)
+        drafts.set('note', append)
         setNoteKey((k) => k + 1)
       } else {
-        setReplyDraft(append)
+        drafts.set('reply', append)
         setReplyKey((k) => k + 1)
       }
     },
-    []
+    [drafts]
   )
   const insertText = useCallback(
     (mode: 'reply' | 'note', text: string) =>
@@ -1597,27 +1596,26 @@ export function AgentConversationThread({
     if (noteMode) setMacroPickerOpen(false)
   }, [noteMode])
 
-  const getComposerText = useCallback(
-    (mode: ComposerMode) =>
-      mode === 'note' ? noteDraftRef.current.markdown : replyDraftRef.current.markdown,
-    []
-  )
-  const replaceComposerText = useCallback((mode: ComposerMode, text: string) => {
-    const previous = mode === 'note' ? noteDraftRef.current : replyDraftRef.current
-    const apply = (draft: ComposerDraft) => {
-      if (mode === 'note') {
-        setNoteDraft(draft)
-        setNoteKey((k) => k + 1)
-      } else {
-        setReplyDraft(draft)
-        setReplyKey((k) => k + 1)
+  const getComposerText = useCallback((mode: ComposerMode) => drafts.get(mode).markdown, [drafts])
+  const replaceComposerText = useCallback(
+    (mode: ComposerMode, text: string) => {
+      const previous = drafts.get(mode)
+      const apply = (draft: ComposerDraft) => {
+        if (mode === 'note') {
+          drafts.set('note', draft)
+          setNoteKey((k) => k + 1)
+        } else {
+          drafts.set('reply', draft)
+          setReplyKey((k) => k + 1)
+        }
       }
-    }
-    apply(answerToDraft(text))
-    // Replacing the document remounts the editor and clears its native history.
-    // Return a full-fidelity restore for the composer's persistent inline Undo.
-    return () => apply(previous)
-  }, [])
+      apply(answerToDraft(text))
+      // Replacing the document remounts the editor and clears its native history.
+      // Return a full-fidelity restore for the composer's persistent inline Undo.
+      return () => apply(previous)
+    },
+    [drafts]
+  )
 
   // Track each mode's draft from the editor's onChange (json + markdown mirror).
   // The reply keystroke also drives the visitor-facing typing indicator (only
@@ -1633,21 +1631,20 @@ export function AgentConversationThread({
   // same tick compares against the first rather than the last render.
   const onReplyChange = useCallback(
     (json: JSONContent, _html: string, markdown: string) => {
-      const previous = replyDraftRef.current
+      const previous = drafts.get('reply')
       if (isBlankComposerDoc(json) && isBlankComposerDoc(previous.json)) return
-      const next = { json: json as TiptapContent, markdown }
-      replyDraftRef.current = next
-      setReplyDraft(next)
+      drafts.set('reply', { json: json as TiptapContent, markdown })
       if (capabilities.typing && markdown !== previous.markdown) onLocalInput()
     },
-    [onLocalInput, capabilities.typing]
+    [drafts, onLocalInput, capabilities.typing]
   )
-  const onNoteChange = useCallback((json: JSONContent, _html: string, markdown: string) => {
-    if (isBlankComposerDoc(json) && isBlankComposerDoc(noteDraftRef.current.json)) return
-    const next = { json: json as TiptapContent, markdown }
-    noteDraftRef.current = next
-    setNoteDraft(next)
-  }, [])
+  const onNoteChange = useCallback(
+    (json: JSONContent, _html: string, markdown: string) => {
+      if (isBlankComposerDoc(json) && isBlankComposerDoc(drafts.get('note').json)) return
+      drafts.set('note', { json: json as TiptapContent, markdown })
+    },
+    [drafts]
+  )
 
   // Enter-to-send routes through onSubmit, so it must be a STABLE callback — an
   // inline arrow would churn the editor's extension identity every keystroke.
@@ -1661,7 +1658,7 @@ export function AgentConversationThread({
   const sendRef = useRef<() => void>(() => {})
   sendRef.current = () => {
     const useNote = noteMode || !capabilities.reply
-    const draft = useNote ? noteDraft : replyDraft
+    const draft = drafts.get(useNote ? 'note' : 'reply')
     const empty = isEmptyTiptapDoc(draft.json ?? undefined)
     const hasAttachments = pendingAttachments.length > 0
     const mutation = useNote ? noteMutation : sendMutation
@@ -1675,14 +1672,14 @@ export function AgentConversationThread({
       // failed text below it with a separator, so both survive. The merge is
       // JSON-first: the remount reads value.json, so a markdown-only merge
       // would render invisible and be dropped on the next edit.
-      const current = (useNote ? noteDraftRef : replyDraftRef).current
+      const current = drafts.get(useNote ? 'note' : 'reply')
       const failedMarkdown = snapshot.markdown
       if (isEmptyTiptapDoc(current.json ?? undefined)) {
         if (useNote) {
-          setNoteDraft(snapshot)
+          drafts.set('note', snapshot)
           setNoteKey((k) => k + 1)
         } else {
-          setReplyDraft(snapshot)
+          drafts.set('reply', snapshot)
           setReplyKey((k) => k + 1)
         }
       } else if (failedMarkdown.trim() && snapshot.json) {
@@ -1707,10 +1704,10 @@ export function AgentConversationThread({
           markdown: `${current.markdown.replace(/\s+$/, '')}\n\n--- failed to send, kept below ---\n\n${failedMarkdown}`,
         }
         if (useNote) {
-          setNoteDraft(merged)
+          drafts.set('note', merged)
           setNoteKey((k) => k + 1)
         } else {
-          setReplyDraft(merged)
+          drafts.set('reply', merged)
           setReplyKey((k) => k + 1)
         }
         toast.error('Failed to send message — kept below your new typing')
@@ -1726,25 +1723,25 @@ export function AgentConversationThread({
       restoreDraft,
     })
     // Clear in place (no key bump): remounting would destroy the focused node
-    // and drop focus to <body>. The view clears imperatively, the state mirrors
+    // and drop focus to <body>. The view clears imperatively, the draft mirrors
     // it, and focus never leaves the editing surface.
     activeEditorRef.current?.clear()
     if (useNote) {
-      setNoteDraft(EMPTY_DRAFT)
+      drafts.set('note', EMPTY_DRAFT)
     } else {
-      setReplyDraft(EMPTY_DRAFT)
+      drafts.set('reply', EMPTY_DRAFT)
     }
     activeEditorRef.current?.focus('end')
   }
   const onSend = useCallback(() => sendRef.current(), [])
 
-  const activeDraft = noteMode || !capabilities.reply ? noteDraft : replyDraft
+  const activeMode: ComposerMode = noteMode || !capabilities.reply ? 'note' : 'reply'
+  // Re-renders the thread only when the active draft turns empty or not.
+  const activeDraftEmpty = useComposerDraftValue(drafts, activeMode, isEmptyDraft)
   const activePending =
     noteMode || !capabilities.reply ? noteMutation.isPending : sendMutation.isPending
   const sendDisabled =
-    (isEmptyTiptapDoc(activeDraft.json ?? undefined) && pendingAttachments.length === 0) ||
-    activePending ||
-    uploading
+    (activeDraftEmpty && pendingAttachments.length === 0) || activePending || uploading
 
   // Render one virtualized row. AgentMessageBubble keeps all the agent-view
   // behaviors (and its data-message-id root) for every kind.
@@ -2267,12 +2264,14 @@ export function AgentConversationThread({
                 Enter sends, Shift+Enter breaks; formatting comes from the editor's
                 own bubble/slash/`:` surfaces. Images stay tray-only (paste/drop
                 and the paperclip stage files below) — the editor has no
-                onImageUpload, so it never inlines a resizableImage. */}
+                onImageUpload, so it never inlines a resizableImage. A mounted
+                editor owns its text; `value` seeds each (re)mount, so it reads
+                the latest draft rather than subscribing to every keystroke. */}
             {noteMode || !capabilities.reply ? (
               <RichTextEditor
                 key={`note-${noteKey}`}
                 editorRef={activeEditorRef}
-                value={noteDraft.json ?? ''}
+                value={drafts.get('note').json ?? ''}
                 features={CONVERSATION_NOTE_FEATURES}
                 borderless
                 minHeight="4.5rem"
@@ -2286,7 +2285,7 @@ export function AgentConversationThread({
               <RichTextEditor
                 key={`reply-${replyKey}`}
                 editorRef={activeEditorRef}
-                value={replyDraft.json ?? ''}
+                value={drafts.get('reply').json ?? ''}
                 features={CONVERSATION_EDITOR_FEATURES}
                 borderless
                 minHeight="4.5rem"
@@ -2303,7 +2302,9 @@ export function AgentConversationThread({
             <ComposerAttachmentTray attachments={pendingAttachments} onRemove={removeAttachment} />
             {/* Live link unfurl while composing (Slack-style) — part of the
                 preview tray, gated by the flag + capability. */}
-            {linkPreviewsEnabled && <LinkPreviews content={debouncedComposerText} />}
+            {linkPreviewsEnabled && (
+              <ComposerLinkPreviews drafts={drafts} mode={noteMode ? 'note' : 'reply'} />
+            )}
             <div className="flex flex-wrap items-center gap-0.5 pt-1">
               {/* Attach is available in both reply and note mode, for both kinds. */}
               <button
@@ -2361,8 +2362,8 @@ export function AgentConversationThread({
               )}
               <ComposerAiActions
                 item={item}
-                activeMode={noteMode || !capabilities.reply ? 'note' : 'reply'}
-                activeDraftText={activeDraft.markdown}
+                activeMode={activeMode}
+                subscribeDraft={drafts.subscribe}
                 getDraftText={getComposerText}
                 onReplaceDraftText={replaceComposerText}
               />
@@ -2559,4 +2560,14 @@ export function AgentConversationThread({
       )}
     </div>
   )
+}
+
+/**
+ * Link previews for the draft being written, from its text once typing
+ * pauses. It follows the draft itself, so a keystroke re-renders neither the
+ * thread nor the previews.
+ */
+function ComposerLinkPreviews({ drafts, mode }: { drafts: ComposerDrafts; mode: ComposerMode }) {
+  const content = useDebouncedDraftText(drafts, mode, 500)
+  return <LinkPreviews content={content} />
 }
