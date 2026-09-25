@@ -1,3 +1,4 @@
+import { DEFAULT_FONT_SANS } from './expand'
 import { normalizeFontSans } from './generator'
 
 /**
@@ -12,7 +13,7 @@ import { normalizeFontSans } from './generator'
  * entry. 'system' has no @font-face at all.
  */
 export const BRANDING_FONTS = [
-  { id: 'inter', value: '"Inter", ui-sans-serif, system-ui, sans-serif' },
+  { id: 'inter', value: DEFAULT_FONT_SANS },
   { id: 'system', value: 'ui-sans-serif, system-ui, -apple-system, sans-serif' },
   { id: 'roboto', value: '"Roboto", ui-sans-serif, system-ui, sans-serif' },
   { id: 'open-sans', value: '"Open Sans", ui-sans-serif, system-ui, sans-serif' },
