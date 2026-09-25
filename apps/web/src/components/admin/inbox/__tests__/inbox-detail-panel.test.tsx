@@ -82,7 +82,8 @@ vi.mock('@tanstack/react-router', () => ({
   Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
     <a href={to}>{children}</a>
   ),
-  useRouteContext: () => routeContextState,
+  useRouteContext: (opts?: { select?: (context: typeof routeContextState) => unknown }) =>
+    opts?.select ? opts.select(routeContextState) : routeContextState,
 }))
 
 import { getPortalUserFn } from '@/lib/server/functions/admin'

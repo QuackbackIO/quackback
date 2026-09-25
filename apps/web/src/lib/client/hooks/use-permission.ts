@@ -25,10 +25,14 @@ export function resolvePermission(role: string | null | undefined, key: Permissi
 /**
  * Client-side permission check from the admin route's `principal.role`
  * (routes/admin.tsx beforeLoad). See {@link resolvePermission} for the actual
- * mapping and why this is UX-only.
+ * mapping and why this is UX-only. Selects the answer, so the caller renders
+ * again only when it changes.
  */
 export function usePermission(key: PermissionKey): boolean {
-  return permissionFromRouteContext(useRouteContext({ from: '/admin' }), key)
+  return useRouteContext({
+    from: '/admin',
+    select: (context) => permissionFromRouteContext(context, key),
+  })
 }
 
 /**
