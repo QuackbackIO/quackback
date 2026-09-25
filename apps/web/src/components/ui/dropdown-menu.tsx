@@ -3,10 +3,26 @@ import { Menu as MenuPrimitive } from '@base-ui/react/menu'
 import { CheckIcon, ChevronRightIcon } from '@heroicons/react/24/solid'
 
 import { asChildRender, overlayTriggerProps } from '@/components/ui/as-child'
+import {
+  OverlayOpenedContext,
+  useOverlayOpened,
+  useOverlayOpenedRoot,
+} from '@/components/ui/overlay-opened'
 import { cn } from '@/lib/shared/utils'
 
-function DropdownMenu(props: MenuPrimitive.Root.Props) {
-  return <MenuPrimitive.Root data-slot="dropdown-menu" {...props} />
+function DropdownMenu({ open, defaultOpen, onOpenChange, ...props }: MenuPrimitive.Root.Props) {
+  const opened = useOverlayOpenedRoot(open, defaultOpen, onOpenChange)
+  return (
+    <OverlayOpenedContext.Provider value={opened.value}>
+      <MenuPrimitive.Root
+        data-slot="dropdown-menu"
+        open={open}
+        defaultOpen={defaultOpen}
+        onOpenChange={opened.onOpenChange}
+        {...props}
+      />
+    </OverlayOpenedContext.Provider>
+  )
 }
 
 function DropdownMenuTrigger({
@@ -48,6 +64,9 @@ function DropdownMenuContent({
     /** When false, the menu will not flip to stay in view. */
     avoidCollisions?: boolean
   }) {
+  // Nothing to portal until the menu first opens.
+  const opened = useOverlayOpened()
+  if (!opened) return null
   return (
     <MenuPrimitive.Portal>
       <MenuPrimitive.Positioner

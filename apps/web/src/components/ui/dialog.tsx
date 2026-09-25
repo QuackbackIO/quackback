@@ -3,10 +3,26 @@ import { Dialog as DialogPrimitive } from '@base-ui/react/dialog'
 import { XMarkIcon } from '@heroicons/react/24/solid'
 
 import { asChildRender, overlayTriggerProps } from '@/components/ui/as-child'
+import {
+  OverlayOpenedContext,
+  useOverlayOpened,
+  useOverlayOpenedRoot,
+} from '@/components/ui/overlay-opened'
 import { cn } from '@/lib/shared/utils'
 
-function Dialog(props: DialogPrimitive.Root.Props) {
-  return <DialogPrimitive.Root data-slot="dialog" {...props} />
+function Dialog({ open, defaultOpen, onOpenChange, ...props }: DialogPrimitive.Root.Props) {
+  const opened = useOverlayOpenedRoot(open, defaultOpen, onOpenChange)
+  return (
+    <OverlayOpenedContext.Provider value={opened.value}>
+      <DialogPrimitive.Root
+        data-slot="dialog"
+        open={open}
+        defaultOpen={defaultOpen}
+        onOpenChange={opened.onOpenChange}
+        {...props}
+      />
+    </OverlayOpenedContext.Provider>
+  )
 }
 
 function DialogTrigger({
@@ -76,8 +92,11 @@ function DialogContent({
   showCloseButton?: boolean
   instant?: boolean
 }) {
+  // Nothing to portal until the dialog first opens.
+  const opened = useOverlayOpened()
+  if (!opened) return null
   return (
-    <DialogPortal data-slot="dialog-portal">
+    <DialogPrimitive.Portal data-slot="dialog-portal">
       <DialogOverlay className={instant ? '!animate-none !duration-0' : undefined} />
       <DialogPrimitive.Popup
         aria-describedby={undefined}
@@ -101,7 +120,7 @@ function DialogContent({
           </DialogPrimitive.Close>
         )}
       </DialogPrimitive.Popup>
-    </DialogPortal>
+    </DialogPrimitive.Portal>
   )
 }
 
