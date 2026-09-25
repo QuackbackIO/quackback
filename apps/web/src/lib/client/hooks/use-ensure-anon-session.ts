@@ -16,12 +16,17 @@ import { authClient } from '@/lib/client/auth-client'
 
 export function useEnsureAnonSession(): () => Promise<boolean> {
   const router = useRouter()
-  const { session } = useRouteContext({ from: '__root__' })
-  const hasSessionRef = useRef(!!session?.user)
+  // Only whether a session exists: the root context is a fresh object on every
+  // navigation, and each post card in a list calls this hook.
+  const hasSession = useRouteContext({
+    from: '__root__',
+    select: (context) => !!context.session?.user,
+  })
+  const hasSessionRef = useRef(hasSession)
 
   useEffect(() => {
-    hasSessionRef.current = !!session?.user
-  }, [session?.user])
+    hasSessionRef.current = hasSession
+  }, [hasSession])
 
   return useCallback(async (): Promise<boolean> => {
     if (hasSessionRef.current) return true
