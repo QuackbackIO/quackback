@@ -455,7 +455,9 @@ function PortalPage() {
               theme={state.previewMode}
               refreshKey={refreshKey}
               draftCss={state.cssText}
+              cssDirty={themeDirty}
               draft={previewDraft}
+              draftDirty={welcomeDirty || navDirty}
               viewport={viewport}
               workspaceName={workspaceName}
               faviconUrl={logoData?.url ?? null}

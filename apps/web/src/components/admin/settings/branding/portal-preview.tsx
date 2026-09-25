@@ -14,14 +14,27 @@ interface PortalPreviewProps {
   refreshKey: string
   /** The theme editor's full draft stylesheet, injected live into the iframe. */
   draftCss: string
+  /** Whether the theme holds an unsaved edit (the saved theme renders natively otherwise). */
+  cssDirty: boolean
   /** Structural drafts (nav, welcome card, header identity), injected live. */
   draft: PortalPreviewDraft
+  /** Whether the navigation or welcome card holds an unsaved edit. */
+  draftDirty: boolean
   /** Constrain the frame to a phone-ish width. */
   viewport: 'desktop' | 'mobile'
   /** Shown in the fake browser chrome. */
   workspaceName: string
   /** Browser-tab icon slot — the workspace logo (the portal's favicon). */
   faviconUrl?: string | null
+}
+
+/**
+ * The framed portal home, spelled the way the portal canonicalizes it (the
+ * preview flag as a boolean, the default sort included) so the frame loads
+ * without a redirect first.
+ */
+export function portalPreviewSrc(theme: 'light' | 'dark') {
+  return `/?theme=${theme}&preview=true&sort=trending`
 }
 
 /**
@@ -35,20 +48,36 @@ export function PortalPreview({
   theme,
   refreshKey,
   draftCss,
+  cssDirty,
   draft,
+  draftDirty,
   viewport,
   workspaceName,
   faviconUrl,
 }: PortalPreviewProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
+  // What the current frame document holds on each channel: no stylesheet and
+  // no structural draft while it shows the saved config. Every message
+  // re-renders the portal page inside the frame, so a channel's draft goes in
+  // only while it holds an unsaved edit, and only when it changes. A discard
+  // puts the saved values back: an empty stylesheet, the saved structure.
+  const frameCss = useRef('')
+  const frameDraft = useRef<PortalPreviewDraft | null>(null)
 
   const postDrafts = useCallback(() => {
     const target = iframeRef.current?.contentWindow
     if (!target) return
     const origin = window.location.origin
-    target.postMessage({ type: 'quackback:preview-css', css: draftCss }, origin)
-    target.postMessage({ type: 'quackback:preview-draft', draft }, origin)
-  }, [draftCss, draft])
+    const css = cssDirty ? draftCss : ''
+    if (css !== frameCss.current) {
+      target.postMessage({ type: 'quackback:preview-css', css }, origin)
+      frameCss.current = css
+    }
+    if ((draftDirty || frameDraft.current) && draft !== frameDraft.current) {
+      target.postMessage({ type: 'quackback:preview-draft', draft }, origin)
+      frameDraft.current = draft
+    }
+  }, [draftCss, cssDirty, draft, draftDirty])
 
   // Debounced push on draft changes (typing in the CSS editor / title field).
   useEffect(() => {
@@ -56,12 +85,15 @@ export function PortalPreview({
     return () => window.clearTimeout(timer)
   }, [postDrafts])
 
-  // The iframe announces readiness after every (re)mount; re-send the current
-  // drafts so a save-triggered reload doesn't lose unsaved edits on screen.
+  // The portal announces readiness from each document the frame loads (a
+  // save-triggered reload, a theme switch); that document starts from the
+  // saved config, so re-send any unsaved edits to keep them on screen.
   useEffect(() => {
     function onMessage(event: MessageEvent) {
       if (event.origin !== window.location.origin) return
       if ((event.data as { type?: string } | null)?.type === 'quackback:preview-ready') {
+        frameCss.current = ''
+        frameDraft.current = null
         postDrafts()
       }
     }
@@ -100,9 +132,8 @@ export function PortalPreview({
       <iframe
         key={refreshKey}
         ref={iframeRef}
-        src={`/?theme=${theme}&preview=1`}
+        src={portalPreviewSrc(theme)}
         title="Portal preview"
-        onLoad={postDrafts}
         className={cn(
           'w-full border-0 bg-background',
           viewport === 'mobile' ? 'h-[640px]' : 'h-[720px]'
