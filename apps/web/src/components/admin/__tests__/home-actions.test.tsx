@@ -26,10 +26,13 @@ vi.mock('@tanstack/react-query', () => ({
 }))
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => vi.fn(),
-  useRouteContext: () => ({
-    user: { name: 'Ada', email: 'ada@example.com' },
-    principal: { id: 'prin_1' },
-  }),
+  useRouteContext: (opts?: { select?: (context: never) => unknown }) => {
+    const context = {
+      user: { name: 'Ada', email: 'ada@example.com' },
+      principal: { id: 'prin_1' },
+    }
+    return opts?.select ? opts.select(context as never) : context
+  },
 }))
 
 import { HomeActions } from '../home-actions'

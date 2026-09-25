@@ -29,7 +29,10 @@ beforeAll(() => {
 afterEach(cleanup)
 
 vi.mock('@tanstack/react-router', () => ({
-  useRouteContext: () => ({ principal: { id: 'principal_1' } }),
+  useRouteContext: (opts?: { select?: (context: never) => unknown }) => {
+    const context = { principal: { id: 'principal_1' } }
+    return opts?.select ? opts.select(context as never) : context
+  },
 }))
 
 const hoisted = vi.hoisted(() => ({

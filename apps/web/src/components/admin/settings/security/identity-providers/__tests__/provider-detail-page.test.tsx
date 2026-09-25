@@ -114,7 +114,10 @@ vi.mock('../../sso/use-sso-test-sign-in', () => ({
 vi.mock('@tanstack/react-start', () => ({ useServerFn: (fn: unknown) => fn }))
 
 vi.mock('@tanstack/react-router', () => ({
-  useRouteContext: () => ({ baseUrl: 'https://app.example.com' }),
+  useRouteContext: (opts?: { select?: (context: never) => unknown }) => {
+    const context = { baseUrl: 'https://app.example.com' }
+    return opts?.select ? opts.select(context as never) : context
+  },
   useNavigate: () => state.navigate,
   Link: ({
     children,

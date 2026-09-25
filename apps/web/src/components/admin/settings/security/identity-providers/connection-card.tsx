@@ -199,7 +199,7 @@ function ConnectionEditor({
   provider: IdentityProvider
   onDone: () => void
 }) {
-  const { baseUrl } = useRouteContext({ from: '__root__' })
+  const baseUrl = useRouteContext({ from: '__root__', select: (context) => context.baseUrl })
   const setCreds = useServerFn(setProviderCredentialsFn)
   const { saving, save } = useProviderSave(provider)
   const { openTest } = useConnectionTest(provider)

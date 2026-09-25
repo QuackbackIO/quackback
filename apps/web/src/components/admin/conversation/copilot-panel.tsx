@@ -298,13 +298,16 @@ export function CopilotPanel({
    *  (e.g. an inbox keyboard shortcut). */
   askInputRef?: Ref<HTMLTextAreaElement>
 }) {
-  const { principal } = useRouteContext({ from: '/admin' }) as { principal?: { id: string } | null }
+  const principalId = useRouteContext({
+    from: '/admin',
+    select: (context) => (context as { principal?: { id: string } | null }).principal?.id,
+  })
   const assistantName = 'Copilot'
   const headerLabel = 'Copilot'
 
   const sourceOptions = useMemo(() => visibleSourceOptions(), [])
   const visibleTypes = useMemo(() => sourceOptions.map((o) => o.type), [sourceOptions])
-  const { checked, toggle } = useSourceFilter(principal?.id, visibleTypes)
+  const { checked, toggle } = useSourceFilter(principalId, visibleTypes)
   const sourceTypesParam = checked.size === visibleTypes.length ? undefined : Array.from(checked)
 
   const [turns, setTurns] = useState<CopilotTurn[]>([])

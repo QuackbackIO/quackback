@@ -18,7 +18,7 @@ export function WhoRepliesFirstCard() {
   const canAgent = usePermission(PERMISSIONS.ASSISTANT_MANAGE)
   const canWorkflows = usePermission(PERMISSIONS.WORKFLOW_MANAGE)
   const canOfficeHours = usePermission(PERMISSIONS.OFFICE_HOURS_MANAGE)
-  const { settings } = useRouteContext({ from: '__root__' })
+  const settings = useRouteContext({ from: '__root__', select: (context) => context.settings })
   const flags = settings?.featureFlags as FeatureFlags | undefined
   const onAgentPage = pathname === '/admin/automation/agent'
   const onWorkflowsPage =

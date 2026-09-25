@@ -11,7 +11,7 @@ interface InboxEmptyStateProps {
 }
 
 export function InboxEmptyState({ type, onClearFilters }: InboxEmptyStateProps) {
-  const { userRole } = useRouteContext({ from: '__root__' })
+  const userRole = useRouteContext({ from: '__root__', select: (context) => context.userRole })
   const activationAction = useActivationAction('feedback_empty')
   const isAdmin = userRole === 'admin'
 

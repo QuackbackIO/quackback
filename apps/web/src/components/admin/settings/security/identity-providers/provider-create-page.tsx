@@ -51,7 +51,7 @@ export function ProviderCreatePage({
   const queryClient = useQueryClient()
   const upsert = useServerFn(upsertIdentityProviderFn)
   const setCreds = useServerFn(setProviderCredentialsFn)
-  const { baseUrl } = useRouteContext({ from: '__root__' })
+  const baseUrl = useRouteContext({ from: '__root__', select: (context) => context.baseUrl })
 
   // Fixed for the life of the form so the redirect URI shown below is the
   // exact value that gets saved (and registered at the IdP), even if the

@@ -23,7 +23,7 @@ const METHOD_LABELS: Record<string, string> = {
  *  shows when the support inbox is enabled. */
 export function TeamsTab() {
   const queryClient = useQueryClient()
-  const { settings } = useRouteContext({ from: '__root__' })
+  const settings = useRouteContext({ from: '__root__', select: (context) => context.settings })
   const flags = settings?.featureFlags as FeatureFlags | undefined
   const showAssignmentMethod = !!flags?.supportInbox
 

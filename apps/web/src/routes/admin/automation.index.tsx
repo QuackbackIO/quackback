@@ -39,7 +39,7 @@ function AutomationIndexPage() {
   const canManageAssistant = usePermission(PERMISSIONS.ASSISTANT_MANAGE)
   const canManageWorkflows = usePermission(PERMISSIONS.WORKFLOW_MANAGE)
   const canViewAnalytics = usePermission(PERMISSIONS.ANALYTICS_VIEW)
-  const { settings } = Route.useRouteContext()
+  const settings = Route.useRouteContext({ select: (context) => context.settings })
   const flags = settings?.featureFlags as FeatureFlags | undefined
 
   useEffect(() => {

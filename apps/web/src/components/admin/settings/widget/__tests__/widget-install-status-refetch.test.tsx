@@ -25,7 +25,10 @@ vi.mock('@tanstack/react-router', async () => {
     await vi.importActual<typeof import('@tanstack/react-router')>('@tanstack/react-router')
   return {
     ...actual,
-    useRouteContext: () => ({ baseUrl: 'https://feedback.example.com' }),
+    useRouteContext: (opts?: { select?: (context: never) => unknown }) => {
+      const context = { baseUrl: 'https://feedback.example.com' }
+      return opts?.select ? opts.select(context as never) : context
+    },
     Link: ({ children }: { children: ReactNode }) => <a>{children}</a>,
   }
 })

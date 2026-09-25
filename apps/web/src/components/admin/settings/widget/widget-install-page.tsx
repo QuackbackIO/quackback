@@ -35,7 +35,7 @@ import { adminQueries } from '@/lib/client/queries/admin'
 import { useMintWidgetInstallCode, useUpdateWidgetConfig } from '@/lib/client/mutations/settings'
 
 export function WidgetInstallPage() {
-  const { baseUrl } = useRouteContext({ from: '__root__' })
+  const baseUrl = useRouteContext({ from: '__root__', select: (context) => context.baseUrl })
   const secretQuery = useSuspenseQuery(settingsQueries.widgetSecret())
   const widgetConfigQuery = useSuspenseQuery(settingsQueries.widgetConfig())
   const updateWidgetConfig = useUpdateWidgetConfig()

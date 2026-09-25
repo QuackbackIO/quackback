@@ -106,7 +106,10 @@ vi.mock('@tanstack/react-router', () => ({
       </a>
     )
   },
-  useRouteContext: () => ({ settings: { name: 'Acme' } }),
+  useRouteContext: (opts?: { select?: (context: never) => unknown }) => {
+    const context = { settings: { name: 'Acme' } }
+    return opts?.select ? opts.select(context as never) : context
+  },
 }))
 
 import { OverviewDashboard } from '../admin-overview'

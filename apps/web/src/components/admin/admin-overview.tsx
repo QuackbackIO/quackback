@@ -25,7 +25,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 export function useWorkspaceHomeTitle(): string {
-  const { settings } = useRouteContext({ from: '__root__' })
+  const settings = useRouteContext({ from: '__root__', select: (context) => context.settings })
   const branding = (settings as { brandingData?: { name?: string } } | undefined)?.brandingData
   return branding?.name ?? settings?.name ?? 'Home'
 }
