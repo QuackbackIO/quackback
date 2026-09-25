@@ -30,9 +30,13 @@ vi.mock('@/lib/client/auth-client', () => ({
   },
 }))
 
-vi.mock('../two-factor-enroll-steps', () => ({
-  TwoFactorEnrollSteps: () => <div>ENROLL_STEPS</div>,
-}))
+// Set when the enrollment module is first imported: it carries the QR code
+// library, so the form should fetch it only when a sign-in reaches enrollment.
+let enrollStepsLoaded = false
+vi.mock('../two-factor-enroll-steps', () => {
+  enrollStepsLoaded = true
+  return { TwoFactorEnrollSteps: () => <div>ENROLL_STEPS</div> }
+})
 vi.mock('../two-factor-challenge-step', () => ({
   TwoFactorChallengeStep: () => <div>CHALLENGE_STEP</div>,
 }))
@@ -108,6 +112,13 @@ beforeEach(() => {
 })
 
 describe('PortalAuthFormInline — inline 2FA', () => {
+  // First in the file: the module registry is shared across its tests.
+  it('loads the enrollment steps only when a sign-in reaches them', async () => {
+    renderForm(true)
+    await fillEmailAndContinue()
+    expect(enrollStepsLoaded).toBe(false)
+  })
+
   it('shows the challenge step when better-auth returns twoFactorRedirect', async () => {
     mockSignInEmail.mockResolvedValue({ data: { twoFactorRedirect: true }, error: null })
     renderForm(true)

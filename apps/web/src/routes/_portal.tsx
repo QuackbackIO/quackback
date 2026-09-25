@@ -5,6 +5,7 @@ import {
   retainSearchParams,
   useRouteContext,
 } from '@tanstack/react-router'
+import { lazy, Suspense } from 'react'
 import { createServerFn } from '@tanstack/react-start'
 import { setResponseHeader } from '@tanstack/react-start/server'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
@@ -17,7 +18,6 @@ import { PortalHeader } from '@/components/public/portal-header'
 import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
 import { AuthDialog } from '@/components/auth/auth-dialog'
 import { buildPortalAuthDialogConfig } from '@/components/auth/portal-auth-dialog-config'
-import { PortalAccessGate } from '@/components/portal/portal-access-gate'
 import type { PortalAccessGateError } from '@/lib/shared/types/portal-gate-error'
 import { generateWorkspaceThemeCSS, readFontSans } from '@/lib/shared/theme'
 import { PortalIntlProvider } from '@/components/portal-intl-provider'
@@ -306,6 +306,13 @@ export const Route = createFileRoute('/_portal')({
   component: PortalLayout,
 })
 
+// The access gate (a private portal's sign-in wall, with the whole sign-in form
+// and its two-factor steps) is for a visitor the portal turns away, so only
+// that visitor loads it. The server still renders it in place.
+const PortalAccessGate = lazy(() =>
+  import('@/components/portal/portal-access-gate').then((m) => ({ default: m.PortalAccessGate }))
+)
+
 function PortalLayout() {
   const loaderData = Route.useLoaderData()
   const { preview } = Route.useSearch()
@@ -317,18 +324,20 @@ function PortalLayout() {
     return (
       <>
         <PortalBrandingFontLoader customCss={gate.customCss} configFontSans={gate.configFontSans} />
-        <PortalAccessGate
-          reason={gate.reason}
-          workspaceName={gate.workspaceName}
-          logoUrl={gate.logoUrl}
-          authConfig={gate.authConfig}
-          themeStyles={gate.themeStyles}
-          customCss={gate.customCss}
-          userEmail={gate.userEmail ?? null}
-          locale={gate.locale}
-          callbackUrl={gate.callbackUrl}
-          autoOpenSignin={gate.autoOpenSignin}
-        />
+        <Suspense fallback={null}>
+          <PortalAccessGate
+            reason={gate.reason}
+            workspaceName={gate.workspaceName}
+            logoUrl={gate.logoUrl}
+            authConfig={gate.authConfig}
+            themeStyles={gate.themeStyles}
+            customCss={gate.customCss}
+            userEmail={gate.userEmail ?? null}
+            locale={gate.locale}
+            callbackUrl={gate.callbackUrl}
+            autoOpenSignin={gate.autoOpenSignin}
+          />
+        </Suspense>
       </>
     )
   }
