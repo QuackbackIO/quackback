@@ -17,6 +17,17 @@ const { location, linkRenders, navRenders } = vi.hoisted(() => {
     settings: { featureFlags: { feedback: true, changelog: true } },
     billingEnabled: false,
     cloudEnabled: false,
+    // An admin's: every page the nav lists is one it may open.
+    permissions: [
+      'settings.manage',
+      'settings.branding',
+      'member.view',
+      'auth.manage',
+      'api_key.manage',
+      'integration.view',
+      'user_attribute.view',
+      'company.view',
+    ],
   }
   let context = { ...parts }
   const listeners = new Set<() => void>()
