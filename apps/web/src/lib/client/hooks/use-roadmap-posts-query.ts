@@ -3,6 +3,7 @@ import {
   infiniteQueryOptions,
   keepPreviousData,
   type InfiniteData,
+  type QueryClient,
 } from '@tanstack/react-query'
 import type {
   RoadmapPost,
@@ -194,6 +195,37 @@ export function roadmapPostsByRoadmapOptions({
       firstPageParam > 0 ? Math.max(0, firstPageParam - COLUMN_PAGE_SIZE) : undefined,
     maxPages: 5,
     placeholderData: keepPreviousData,
+  })
+}
+
+/**
+ * Put the first page of each of a board's columns in the cache with one
+ * getRoadmapColumnsFn request, for a route loader. It asks directly rather
+ * than through fetchColumnFirstPage's batch, which is shared by everything
+ * running in the process: on a server that could hand one request's columns
+ * to another.
+ */
+export async function warmRoadmapColumns(
+  queryClient: QueryClient,
+  roadmapId: RoadmapId,
+  columns: readonly { statusId: PostStatusId }[],
+  filters: RoadmapFilters
+): Promise<void> {
+  const keyOf = (statusId: PostStatusId) =>
+    roadmapPostsByRoadmapOptions({ roadmapId, statusId, filters }).queryKey
+  const missing = columns.filter((c) => queryClient.getQueryData(keyOf(c.statusId)) === undefined)
+  if (missing.length === 0) return
+  const pages = (await getRoadmapColumnsFn({
+    data: {
+      ...columnFilterInput(roadmapId, filters),
+      columns: missing.map((c) => ({ statusId: c.statusId })),
+    },
+  })) as RoadmapPostsListResult[]
+  missing.forEach((column, i) => {
+    queryClient.setQueryData<InfiniteData<RoadmapPostsListResult, number>>(keyOf(column.statusId), {
+      pages: [pages[i]!],
+      pageParams: [0],
+    })
   })
 }
 
