@@ -8,6 +8,9 @@
  * with `asRate` first.
  */
 import { useMemo } from 'react'
+import { last30DaysRange, type DateRange } from '@/lib/client/queries/automation-performance'
+
+export type { DateRange }
 
 export interface MetricTileProps {
   label: string
@@ -25,18 +28,9 @@ export function MetricTile({ label, value, sub }: MetricTileProps) {
   )
 }
 
-export interface DateRange {
-  from: string
-  to: string
-}
-
 /** The rolling 30-day window the automation performance cards default to. */
 export function useLast30DaysRange(): DateRange {
-  return useMemo(() => {
-    const to = new Date()
-    const from = new Date(to.getTime() - 30 * 86_400_000)
-    return { from: from.toISOString(), to: to.toISOString() }
-  }, [])
+  return useMemo(() => last30DaysRange(), [])
 }
 
 /** Format a 0-1 rate as a whole-number percent, or a placeholder while unset. */

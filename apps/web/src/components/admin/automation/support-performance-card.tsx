@@ -9,7 +9,7 @@
  */
 import { useQuery } from '@tanstack/react-query'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
-import { MetricTile, useLast30DaysRange, pct } from './metric-tile'
+import { MetricTile, pct, type DateRange } from './metric-tile'
 import { Skeleton } from '@/components/ui/skeleton'
 import { supportReportingQuery } from '@/lib/client/queries/support-reporting'
 import { formatSlaCountdown } from '@/lib/shared/conversation/sla'
@@ -69,8 +69,7 @@ function BreachHeatmap({ cells }: { cells: SlaBreachHeatmapCell[] }) {
   )
 }
 
-export function SupportPerformanceCard() {
-  const range = useLast30DaysRange()
+export function SupportPerformanceCard({ range }: { range: DateRange }) {
   const { data, isLoading } = useQuery(supportReportingQuery(range.from, range.to))
 
   const runs = (data?.workflows ?? []).reduce(
