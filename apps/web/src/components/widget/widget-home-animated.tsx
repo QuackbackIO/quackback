@@ -38,6 +38,7 @@ import {
 } from '@/components/ui/lazy-rich-text-editor'
 import { useWidgetMediaUpload, WidgetSessionError } from './use-widget-image-upload'
 import type { JSONContent } from '@tiptap/react'
+import type { EditorDocument } from '@/components/ui/rich-text-editor'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
 import {
   composeBodyFromPlainText,
@@ -299,11 +300,18 @@ export function WidgetHomeAnimated({
     composeBoardDirtyRef.current = true
     setSelectedBoardId(id)
   }, [])
-  const [contentJson, setContentJson] = useState<JSONContent | null>(null)
-  const [contentHtml, setContentHtml] = useState('')
-  const handleEditorChange = useCallback((json: JSONContent, html: string) => {
-    setContentJson(json)
-    setContentHtml(html)
+  // The details as written. Typing keeps them here rather than in state, so a
+  // keystroke never re-renders the composer around the editor; the post reads
+  // them (serialized once) when it is submitted. Only the open composer's
+  // editor writes them: a closing one is still on screen while it animates
+  // out. `editorContent` is what the editor is handed as its value, which only
+  // a host prefill sets.
+  const detailsRef = useRef<Pick<EditorDocument, 'json' | 'html'> | null>(null)
+  const [editorContent, setEditorContent] = useState<JSONContent | null>(null)
+  const expandedRef = useRef(expanded)
+  expandedRef.current = expanded
+  const handleEditorChange = useCallback((document: EditorDocument) => {
+    if (expandedRef.current) detailsRef.current = document
   }, [])
 
   // Host `open({ view: 'new-post' })` lands here. Nonce (not title/board) is
@@ -315,8 +323,8 @@ export function WidgetHomeAnimated({
     if (composeRequest.title) setTitle(composeRequest.title)
     if (composeRequest.body) {
       const next = composeBodyFromPlainText(composeRequest.body)
-      setContentJson(next.json)
-      setContentHtml(next.html)
+      detailsRef.current = { json: () => next.json, html: () => next.html }
+      setEditorContent(next.json)
     }
     setSelectedBoardId(resolveComposeBoardId(boards, composeRequest.boardSlug, defaultBoard))
     inputRef.current?.focus({ preventScroll: true })
@@ -589,8 +597,8 @@ export function WidgetHomeAnimated({
   function collapseForm() {
     setExpanded(false)
     setTitle('')
-    setContentJson(null)
-    setContentHtml('')
+    detailsRef.current = null
+    setEditorContent(null)
     setError(null)
   }
 
@@ -647,12 +655,13 @@ export function WidgetHomeAnimated({
       // if the host identifies or clears the visitor while it is in flight.
       const headers = getWidgetAuthHeaders()
       const votedPostsKey = widgetQueryKeys.votedPosts.bySession(getSessionVersion())
+      const details = detailsRef.current
       const result = await widgetCreatePublicPostFn({
         data: {
           boardId: selectedBoardId,
           title: title.trim(),
-          content: contentHtml.trim(),
-          contentJson: (contentJson ?? undefined) as TiptapContent | undefined,
+          content: (details?.html() ?? '').trim(),
+          contentJson: details?.json() as TiptapContent | undefined,
           metadata: metadata ?? undefined,
         },
         headers,
@@ -788,7 +797,7 @@ export function WidgetHomeAnimated({
                   const val = e.target.value
                   setTitle(val)
                   if (val && !expanded) setExpanded(true)
-                  if (!val && expanded && !contentHtml.trim()) setExpanded(false)
+                  if (!val && expanded && !detailsRef.current?.html().trim()) setExpanded(false)
                 }}
                 onFocus={() => {
                   if (title && !expanded) setExpanded(true)
@@ -820,8 +829,8 @@ export function WidgetHomeAnimated({
                   >
                     <Suspense fallback={<RichTextEditorPlaceholder minHeight="80px" />}>
                       <LazyRichTextEditor
-                        value={contentJson || ''}
-                        onChange={handleEditorChange}
+                        value={editorContent || ''}
+                        onDocumentChange={handleEditorChange}
                         placeholder={intl.formatMessage({
                           id: 'widget.home.input.details',
                           defaultMessage: 'Add more details...',
