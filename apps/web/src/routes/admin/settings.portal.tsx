@@ -73,6 +73,7 @@ import type {
   PortalWelcomeCard,
 } from '@/lib/shared/types/settings'
 import type { TiptapContent } from '@/lib/shared/db-types'
+import { settingsReadBatch } from '@/lib/client/queries/settings-batch'
 
 export const Route = createFileRoute('/admin/settings/portal')({
   loader: async ({ context }) => {
@@ -82,11 +83,12 @@ export const Route = createFileRoute('/admin/settings/portal')({
     assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_BRANDING)
 
     const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
+    const ensure = settingsReadBatch(context.queryClient)
     await Promise.all([
-      context.queryClient.ensureQueryData(settingsQueries.branding()),
-      context.queryClient.ensureQueryData(settingsQueries.logo()),
-      context.queryClient.ensureQueryData(settingsQueries.customCss()),
-      context.queryClient.ensureQueryData(settingsQueries.portalConfig()),
+      ensure(settingsQueries.branding()),
+      ensure(settingsQueries.logo()),
+      ensure(settingsQueries.customCss()),
+      ensure(settingsQueries.portalConfig()),
       ensureBillingCatalogue(context.queryClient, context.billingEnabled),
     ])
   },

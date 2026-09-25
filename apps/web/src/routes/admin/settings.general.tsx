@@ -27,15 +27,17 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { WorkspaceDangerCard } from '@/components/admin/settings/workspace-danger-card'
 import { WorkspaceIdentityCard } from '@/components/admin/settings/workspace-identity-card'
+import { settingsReadBatch } from '@/lib/client/queries/settings-batch'
 
 export const Route = createFileRoute('/admin/settings/general')({
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MANAGE)
+    const ensure = settingsReadBatch(context.queryClient)
     const [cloudIdentity] = await Promise.all([
       getCloudIdentityFn(),
-      context.queryClient.ensureQueryData(settingsQueries.logo()),
+      ensure(settingsQueries.logo()),
       // The export action shows a run in flight.
-      context.queryClient.ensureQueryData(settingsQueries.exportRuns()).catch(() => undefined),
+      ensure(settingsQueries.exportRuns()).catch(() => undefined),
     ])
     return { cloudIdentity }
   },
