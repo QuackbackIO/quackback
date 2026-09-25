@@ -1,6 +1,13 @@
-import { useRouter, useRouteContext, Link, Outlet, useChildMatches } from '@tanstack/react-router'
+import {
+  useRouter,
+  useRouteContext,
+  useHydrated,
+  Link,
+  Outlet,
+  useChildMatches,
+} from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { useState, useTransition, useMemo, useEffect, type ReactNode } from 'react'
+import { useState, useTransition, useMemo, type ReactNode } from 'react'
 import { useTheme } from 'next-themes'
 import {
   ChatBubbleLeftRightIcon,
@@ -104,20 +111,6 @@ function WidgetSettingsPage() {
   const [launcherGreeting, setLauncherGreeting] = useState(config.launcherGreeting ?? '')
   const [homeDraft, setHomeDraft] = useState<WidgetHomeConfig>(config.home ?? {})
 
-  // The preview theme follows the admin's own theme until the toggle overrides
-  // it. resolvedTheme must not affect render output before the mount effect:
-  // SSR renders it as undefined but the client hydrates with the real value,
-  // and React doesn't patch attribute mismatches during hydration, so the
-  // toggle would keep its stale server-rendered active state forever. Gating
-  // on mounted keeps hydration consistent (and holds the iframe back one tick
-  // instead of flashing a light widget at dark users and reloading).
-  const { resolvedTheme } = useTheme()
-  const [previewThemeOverride, setPreviewThemeOverride] = useState<'light' | 'dark' | null>(null)
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
-  const previewTheme =
-    previewThemeOverride ?? (mounted && resolvedTheme === 'dark' ? 'dark' : 'light')
-
   // The preview iframe shows the persisted config; remount it whenever a save
   // lands. Keyed on content (not dataUpdatedAt) so refetches that return
   // identical data don't cause gratuitous reloads.
@@ -168,39 +161,78 @@ function WidgetSettingsPage() {
           <AssistantLinkCard assistant={config.messenger?.assistant} />
         </div>
 
-        <div className="xl:sticky xl:top-6 min-w-0 xl:h-[calc(100vh-7.5rem)] flex flex-col">
-          <div className="mb-3 flex items-center gap-3">
-            <span className="text-sm font-medium">Live preview</span>
-            <span className="hidden sm:inline text-xs text-muted-foreground">
-              the real widget — content and actions are real
-            </span>
-            <div className="ms-auto flex items-center gap-1 rounded-lg border border-border p-0.5">
-              <PreviewToggleButton
-                active={previewTheme === 'light'}
-                onClick={() => setPreviewThemeOverride('light')}
-                icon={SunIcon}
-                label="Light"
-              />
-              <PreviewToggleButton
-                active={previewTheme === 'dark'}
-                onClick={() => setPreviewThemeOverride('dark')}
-                icon={MoonIcon}
-                label="Dark"
-              />
-            </div>
-          </div>
-          <div className="flex-1 min-h-0">
-            {mounted && (
-              <WidgetPreview
-                position={position}
-                label={launcherLabel.trim() || undefined}
-                greeting={launcherGreeting.trim() || undefined}
-                theme={previewTheme}
-                refreshKey={previewRefreshKey}
-              />
-            )}
-          </div>
+        <WidgetPreviewColumn
+          position={position}
+          label={launcherLabel.trim() || undefined}
+          greeting={launcherGreeting.trim() || undefined}
+          refreshKey={previewRefreshKey}
+        />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The live preview column. It owns the preview's theme and its wait for
+ * hydration, so the preview appearing re-renders this column alone rather
+ * than every settings card beside it.
+ */
+function WidgetPreviewColumn({
+  position,
+  label,
+  greeting,
+  refreshKey,
+}: {
+  position: 'bottom-right' | 'bottom-left'
+  label?: string
+  greeting?: string
+  refreshKey: string
+}) {
+  // The preview theme follows the admin's own theme until the toggle overrides
+  // it. resolvedTheme must not affect render output until hydration is done:
+  // SSR renders it as undefined but the client hydrates with the real value,
+  // and React doesn't patch attribute mismatches during hydration, so the
+  // toggle would keep its stale server-rendered active state forever. Gating
+  // on hydration keeps it consistent (and holds the iframe back one tick
+  // instead of flashing a light widget at dark users and reloading).
+  const { resolvedTheme } = useTheme()
+  const hydrated = useHydrated()
+  const [previewThemeOverride, setPreviewThemeOverride] = useState<'light' | 'dark' | null>(null)
+  const previewTheme =
+    previewThemeOverride ?? (hydrated && resolvedTheme === 'dark' ? 'dark' : 'light')
+
+  return (
+    <div className="xl:sticky xl:top-6 min-w-0 xl:h-[calc(100vh-7.5rem)] flex flex-col">
+      <div className="mb-3 flex items-center gap-3">
+        <span className="text-sm font-medium">Live preview</span>
+        <span className="hidden sm:inline text-xs text-muted-foreground">
+          the real widget — content and actions are real
+        </span>
+        <div className="ms-auto flex items-center gap-1 rounded-lg border border-border p-0.5">
+          <PreviewToggleButton
+            active={previewTheme === 'light'}
+            onClick={() => setPreviewThemeOverride('light')}
+            icon={SunIcon}
+            label="Light"
+          />
+          <PreviewToggleButton
+            active={previewTheme === 'dark'}
+            onClick={() => setPreviewThemeOverride('dark')}
+            icon={MoonIcon}
+            label="Dark"
+          />
         </div>
+      </div>
+      <div className="flex-1 min-h-0">
+        {hydrated && (
+          <WidgetPreview
+            position={position}
+            label={label}
+            greeting={greeting}
+            theme={previewTheme}
+            refreshKey={refreshKey}
+          />
+        )}
       </div>
     </div>
   )

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
-import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router'
+import { ClientOnly, createFileRoute, useBlocker, useRouter } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { settingsQueries } from '@/lib/client/queries/settings'
@@ -214,8 +214,6 @@ function PortalPage() {
   // Preview wiring
   // ============================================
   const [viewport, setViewport] = useState<'desktop' | 'mobile'>('desktop')
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
 
   // Which built-in tabs are currently unavailable (product/tab off) — the
   // editor keeps their rows but renders them inert. Mirrors portal-header.
@@ -451,7 +449,8 @@ function PortalPage() {
             </div>
           </div>
 
-          {mounted && (
+          {/* The iframe waits for hydration; ClientOnly re-renders only itself then. */}
+          <ClientOnly>
             <PortalPreview
               theme={state.previewMode}
               refreshKey={refreshKey}
@@ -461,7 +460,7 @@ function PortalPage() {
               workspaceName={workspaceName}
               faviconUrl={logoData?.url ?? null}
             />
-          )}
+          </ClientOnly>
         </div>
       </div>
 
