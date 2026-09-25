@@ -110,6 +110,53 @@ async function clickUntil(target: Locator, ready: Locator) {
   await ready.waitFor()
 }
 
+/**
+ * Run `action`, then wait until the page has had no request in flight for
+ * `quietMs`. A navigation's reads include the ones its page makes after it
+ * mounts; moving on while one is in flight can abort it, and whether an
+ * aborted request reached the server is a race.
+ */
+async function untilQuiet(page: Page, action: () => Promise<void>, quietMs = 300) {
+  const inflight = new Set<unknown>()
+  let lastChange = Date.now()
+  const started = (request: { resourceType(): string }) => {
+    if (request.resourceType() === 'eventsource') return
+    inflight.add(request)
+    lastChange = Date.now()
+  }
+  const ended = (request: unknown) => {
+    if (inflight.delete(request)) lastChange = Date.now()
+  }
+  page.on('request', started)
+  page.on('requestfinished', ended)
+  page.on('requestfailed', ended)
+  try {
+    await action()
+    while (inflight.size > 0 || Date.now() - lastChange < quietMs) {
+      await page.waitForTimeout(50)
+    }
+  } finally {
+    page.off('request', started)
+    page.off('requestfinished', ended)
+    page.off('requestfailed', ended)
+  }
+}
+
+/**
+ * The settings pages a tour clicks through from General, each with the
+ * heading that shows once its loader has finished. None embeds a preview
+ * frame, so every read counted is the page's own.
+ */
+const SETTINGS_TOUR = [
+  ['/admin/settings/members', 'Members & Teams'],
+  ['/admin/settings/security/authentication', 'Access & Security'],
+  ['/admin/settings/developers', 'Developers'],
+  ['/admin/settings/integrations', 'Integrations'],
+  ['/admin/settings/people', 'People'],
+  ['/admin/settings/companies', 'Companies'],
+  ['/admin/settings/imports', 'Imports & exports'],
+] as const
+
 /** The first post linked from the portal home, for loading a post page directly. */
 async function firstPostPath(request: APIRequestContext): Promise<string> {
   const html = await (await request.get('/?sort=trending')).text()
@@ -633,6 +680,27 @@ export const journeys: Journey[] = [
     run: async (page) => {
       await page.keyboard.insertText(WELCOME_DRAFT)
       await page.frameLocator('iframe[title="Portal preview"]').getByText(WELCOME_DRAFT).waitFor()
+    },
+  },
+  {
+    // What a navigation between settings pages costs, page by page: each step
+    // is one click on the settings nav, done once the page and every read it
+    // makes after mounting have finished.
+    kind: 'browser',
+    name: 'ui:admin-settings-tour',
+    as: 'admin',
+    setup: async (page) => {
+      await page.goto('/admin/settings/general')
+      await page.getByRole('heading', { name: 'General', exact: true }).waitFor()
+    },
+    run: async (page) => {
+      for (const [path, heading] of SETTINGS_TOUR) {
+        await untilQuiet(page, async () => {
+          await page.locator(`a[href="${path}"]`).first().click()
+          await page.waitForURL(path)
+          await page.getByRole('heading', { name: heading, exact: true }).first().waitFor()
+        })
+      }
     },
   },
 
