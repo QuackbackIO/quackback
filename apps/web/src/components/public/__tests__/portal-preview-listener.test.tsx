@@ -89,6 +89,24 @@ describe('PortalPreviewProvider', () => {
     expect(renders).toEqual({ nav: 2, welcomeCard: 3, css: 1 })
   })
 
+  // The saved theme sets the font and radius on body (and the font family with
+  // !important), which beats a draft that only sets them on :root.
+  it('applies the draft font and radius where the saved theme sets them', () => {
+    const saved = document.createElement('style')
+    saved.textContent =
+      'body { --radius: 0.5rem; } html body { font-family: "Roboto", sans-serif !important; }'
+    document.head.append(saved)
+    post({
+      type: 'quackback:preview-css',
+      css: ':root { --radius: 1rem; --font-sans: "Inter", sans-serif; }',
+    })
+
+    const body = getComputedStyle(document.body)
+    expect(body.getPropertyValue('--radius').trim()).toBe('1rem')
+    expect(body.fontFamily.replaceAll('"', '')).toBe('Inter, sans-serif')
+    saved.remove()
+  })
+
   it('treats an emptied stylesheet as no draft', () => {
     post({ type: 'quackback:preview-css', css: ':root {}' })
     post({ type: 'quackback:preview-css', css: '' })
