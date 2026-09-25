@@ -90,7 +90,12 @@ export function WidgetSettingsGate() {
 function WidgetSettingsPage() {
   const widgetConfigQuery = useSuspenseQuery(settingsQueries.widgetConfig())
   const boardsQuery = useSuspenseQuery(adminQueries.boards())
-  const onboardingQuery = useSuspenseQuery(adminQueries.onboardingStatus())
+  // The install status the page was delivered with stays fresh for a few
+  // seconds, so a hydration that takes a moment does not fetch it again.
+  const onboardingQuery = useSuspenseQuery({
+    ...adminQueries.onboardingStatus(),
+    staleTime: 5_000,
+  })
   const { settings } = useRouteContext({ from: '__root__' })
 
   const flags = settings?.featureFlags as FeatureFlags | undefined
