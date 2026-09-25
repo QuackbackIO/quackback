@@ -37,12 +37,15 @@ export const MentionPicker = forwardRef<MentionPickerHandle, MentionPickerProps>
     const commandRef = useRef(command)
     itemsRef.current = items
     commandRef.current = command
-    const ctx = useRouteContext({ from: '__root__' }) as {
-      settings?: { brandingData?: SettingsBrandingData; name?: string | null }
-    }
-    const branding = ctx.settings?.brandingData
+    const settings = useRouteContext({
+      from: '__root__',
+      select: (context) =>
+        (context as { settings?: { brandingData?: SettingsBrandingData; name?: string | null } })
+          .settings,
+    })
+    const branding = settings?.brandingData
     const teamBadgeLogoUrl = branding?.logoUrl ?? null
-    const teamBadgeLabel = branding?.name ?? ctx.settings?.name ?? 'Team'
+    const teamBadgeLabel = branding?.name ?? settings?.name ?? 'Team'
 
     const updateSelected = (next: number) => {
       selectedRef.current = next

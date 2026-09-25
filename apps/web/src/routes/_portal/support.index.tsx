@@ -66,7 +66,8 @@ function ConversationListSkeleton() {
  */
 function SupportListPage() {
   const intl = useIntl()
-  const { session, settings } = useRouteContext({ from: '__root__' })
+  const session = useRouteContext({ from: '__root__', select: (context) => context.session })
+  const settings = useRouteContext({ from: '__root__', select: (context) => context.settings })
   const authPopover = useAuthPopoverSafe()
 
   const messengerEnabled = isPortalChatStartEnabled(settings?.featureFlags, settings?.portalConfig)

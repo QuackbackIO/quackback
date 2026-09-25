@@ -80,7 +80,7 @@ export function CommentForm({
   const intl = useIntl()
   const router = useRouter()
   const queryClient = useQueryClient()
-  const { session } = useRouteContext({ from: '__root__' })
+  const session = useRouteContext({ from: '__root__', select: (context) => context.session })
   const [error, setError] = useState<string | null>(null)
   const [selectedStatusId, setSelectedStatusId] = useState<string | null>(null)
   const [statusPopoverOpen, setStatusPopoverOpen] = useState(false)

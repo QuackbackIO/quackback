@@ -76,7 +76,7 @@ export function FeedbackHeaderAnimated({
   const intl = useIntl()
   const router = useRouter()
   const queryClient = useQueryClient()
-  const { session } = useRouteContext({ from: '__root__' })
+  const session = useRouteContext({ from: '__root__', select: (context) => context.session })
   const [expanded, setExpanded] = useState(false)
   const [error, setError] = useState('')
   const { openAuthPopover } = useAuthPopover()

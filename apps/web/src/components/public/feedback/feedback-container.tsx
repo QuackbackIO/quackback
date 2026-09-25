@@ -75,7 +75,7 @@ export function FeedbackContainer({
 }: FeedbackContainerProps): React.ReactElement {
   const intl = useIntl()
   const router = useRouter()
-  const { session } = useRouteContext({ from: '__root__' })
+  const session = useRouteContext({ from: '__root__', select: (context) => context.session })
   const { filters, setFilters, clearFilters, activeFilterCount } = usePublicFilters()
   const queryClient = useQueryClient()
   const { can } = usePortalPermissions()
