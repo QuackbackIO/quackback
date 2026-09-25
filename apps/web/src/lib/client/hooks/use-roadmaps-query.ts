@@ -5,7 +5,7 @@
  * Mutations are in @/lib/client/mutations/roadmaps.
  */
 
-import { useQuery } from '@tanstack/react-query'
+import { queryOptions, useQuery } from '@tanstack/react-query'
 import type {
   BoardId,
   PostStatusId,
@@ -78,15 +78,19 @@ export const roadmapsKeys = {
 // Query Hooks
 // ============================================================================
 
+/** Every roadmap (admin), in board order. */
+export function roadmapListOptions() {
+  return queryOptions({
+    queryKey: roadmapsKeys.list(),
+    queryFn: fetchRoadmaps as unknown as () => Promise<RoadmapView[]>,
+  })
+}
+
 /**
  * Hook to fetch all roadmaps (admin)
  */
 export function useRoadmaps({ enabled = true }: UseRoadmapsOptions = {}) {
-  return useQuery({
-    queryKey: roadmapsKeys.list(),
-    queryFn: fetchRoadmaps as unknown as () => Promise<RoadmapView[]>,
-    enabled,
-  })
+  return useQuery({ ...roadmapListOptions(), enabled })
 }
 
 export function useRoadmapDateBuckets(
