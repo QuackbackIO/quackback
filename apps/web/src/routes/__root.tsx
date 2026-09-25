@@ -7,6 +7,8 @@ import {
   createRootRouteWithContext,
   HeadContent,
   redirect,
+  rootRouteId,
+  useRouter,
   useRouterState,
 } from '@tanstack/react-router'
 import {
@@ -253,24 +255,45 @@ function VisualThemeSync({ visualTheme }: { visualTheme: VisualTheme }) {
   return null
 }
 
-function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
-  const context = Route.useRouteContext()
-  const { settings, themeCookie, prefersColorScheme, acceptLanguageLocale, visualTheme } = context
-  // The first navigation after hydration reuses the context this document
-  // was rendered with instead of asking the server again. An error page
-  // rendered because the bootstrap failed has none to reuse.
+/**
+ * The first navigation after hydration reuses the context this document was
+ * rendered with instead of asking the server again. Read once, when the
+ * document mounts: the memo keeps only the first answer it is given. An error
+ * page rendered because the bootstrap failed has none to reuse.
+ */
+function useSeedRootContext() {
+  const router = useRouter()
   useEffect(() => {
-    const { queryClient: _queryClient, ...rendered } = context
-    if (rendered.onboarding) rootContext.seed(rendered)
-  }, [context])
+    const root = router.state.matches.find((match) => match.routeId === rootRouteId)
+    if (!root) return
+    const { queryClient: _queryClient, ...rendered } = root.context as RouterContext &
+      Partial<RootContext>
+    if (rendered.onboarding) rootContext.seed(rendered as RootContext)
+  }, [router])
+}
+
+function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
+  // Every read below is selected: the context and the location are new after
+  // every navigation, and the document changes only when what it shows does.
+  const settings = Route.useRouteContext({ select: (context) => context.settings })
+  const themeCookie = Route.useRouteContext({ select: (context) => context.themeCookie })
+  const prefersColorScheme = Route.useRouteContext({
+    select: (context) => context.prefersColorScheme,
+  })
+  const acceptLanguageLocale = Route.useRouteContext({
+    select: (context) => context.acceptLanguageLocale,
+  })
+  const visualTheme = Route.useRouteContext({ select: (context) => context.visualTheme })
+  useSeedRootContext()
   const resolvedVisualTheme: VisualTheme =
     visualTheme === 'refined' || settings?.visualTheme === 'refined' ? 'refined' : 'legacy'
-  const pathname = useRouterState({ select: (s) => s.location.pathname })
-  // structuralSharing keeps the array reference stable across store updates that
-  // don't change the matched routes, so RootDocument doesn't re-render every tick.
-  const routeIds = useRouterState({
-    select: (s): string[] => s.matches.map((m) => m.routeId),
-    structuralSharing: true,
+  // Portal routes can force a specific theme (light/dark) via branding config.
+  // Admin and other non-portal routes always respect the user's preference.
+  const isPortalRoute = useRouterState({
+    select: (s) => !NON_PORTAL_PREFIXES.some((prefix) => s.location.pathname.startsWith(prefix)),
+  })
+  const isWidgetRoute = useRouterState({
+    select: (s) => s.matches.some((m) => m.routeId === '/widget'),
   })
   // The widget honors a `?locale=` override (its SDK appends it); read it so the
   // iframe document advertises the widget's actual language, not just the
@@ -285,13 +308,9 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
     select: (s) => (s.location.search as { theme?: string }).theme,
   })
 
-  // Portal routes can force a specific theme (light/dark) via branding config.
-  // Admin and other non-portal routes always respect the user's preference.
-  const isPortalRoute = !NON_PORTAL_PREFIXES.some((prefix) => pathname.startsWith(prefix))
   const themeMode = settings?.brandingConfig?.themeMode ?? 'user'
   const searchForcedTheme =
-    (routeIds.includes('/widget') || isPortalRoute) &&
-    (themeParam === 'light' || themeParam === 'dark')
+    (isWidgetRoute || isPortalRoute) && (themeParam === 'light' || themeParam === 'dark')
       ? themeParam
       : undefined
   const forcedTheme =
@@ -318,9 +337,16 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   // actually-localized routes are tagged; see documentLocale. On the widget a
   // valid `?locale=` override wins, matching what the widget itself renders.
   const widgetOverride =
-    routeIds.includes('/widget') && widgetLocaleParam ? normalizeLocale(widgetLocaleParam) : null
+    isWidgetRoute && widgetLocaleParam ? normalizeLocale(widgetLocaleParam) : null
   const resolvedLocale = widgetOverride ?? acceptLanguageLocale ?? DEFAULT_LOCALE
-  const { lang, dir } = htmlLangDir(documentLocale(routeIds, resolvedLocale))
+  const locale = useRouterState({
+    select: (s) =>
+      documentLocale(
+        s.matches.map((m) => m.routeId),
+        resolvedLocale
+      ),
+  })
+  const { lang, dir } = htmlLangDir(locale)
 
   // suppressHydrationWarning stays: the inline theme scripts set the class on
   // <html> before React hydrates, and for `system` without the client hint
@@ -351,7 +377,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
           // Never write the shared theme cookie from a forced-theme document:
           // the widget iframe and the same-origin portal preview iframe would
           // otherwise flip the admin's own theme.
-          syncCookie={!routeIds.includes('/widget') && !searchForcedTheme}
+          syncCookie={!isWidgetRoute && !searchForcedTheme}
         >
           {children}
           <Suspense fallback={null}>
