@@ -21,7 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { MetricTile, useLast30DaysRange, pct, asRate } from './metric-tile'
+import { MetricTile, pct, asRate, type DateRange } from './metric-tile'
 import { copilotUsageMetricsQuery } from '@/lib/client/queries/assistant-copilot-analytics'
 
 /** Admin-facing labels for the raw metadata.transform values. Falls back to
@@ -56,10 +56,11 @@ export interface CopilotUsageCardProps {
   /** When true, show the actions-funnel section (approval-rate tile +
    *  propose/approve/reject/expire list). */
   showActionsFunnel: boolean
+  /** The window the metrics cover (part of the query key the page warms). */
+  range: DateRange
 }
 
-export function CopilotUsageCard({ showActionsFunnel }: CopilotUsageCardProps) {
-  const range = useLast30DaysRange()
+export function CopilotUsageCard({ showActionsFunnel, range }: CopilotUsageCardProps) {
   const { data } = useQuery(copilotUsageMetricsQuery(range.from, range.to))
 
   const transforms = data?.transformsByKind ?? []

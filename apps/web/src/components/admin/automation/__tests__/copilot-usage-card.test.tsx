@@ -71,6 +71,8 @@ import { CopilotUsageCard } from '../copilot-usage-card'
 
 afterEach(cleanup)
 
+const RANGE = { from: '2026-01-01T00:00:00.000Z', to: '2026-01-31T00:00:00.000Z' }
+
 function renderWithClient(ui: ReactElement) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>)
@@ -79,12 +81,14 @@ function renderWithClient(ui: ReactElement) {
 describe('CopilotUsageCard', () => {
   it('mounts', () => {
     hoisted.getCopilotUsageMetricsFn.mockResolvedValue(METRICS)
-    expect(() => renderWithClient(<CopilotUsageCard showActionsFunnel />)).not.toThrow()
+    expect(() =>
+      renderWithClient(<CopilotUsageCard showActionsFunnel range={RANGE} />)
+    ).not.toThrow()
   })
 
   it('renders the headline metric tiles', async () => {
     hoisted.getCopilotUsageMetricsFn.mockResolvedValue(METRICS)
-    renderWithClient(<CopilotUsageCard showActionsFunnel />)
+    renderWithClient(<CopilotUsageCard showActionsFunnel range={RANGE} />)
 
     expect(await screen.findByText('42')).toBeInTheDocument()
     expect(screen.getByText('7')).toBeInTheDocument()
@@ -95,7 +99,7 @@ describe('CopilotUsageCard', () => {
 
   it('renders the Outcomes section: insert rate, inserted breakdown, feedback signal', async () => {
     hoisted.getCopilotUsageMetricsFn.mockResolvedValue(METRICS)
-    renderWithClient(<CopilotUsageCard showActionsFunnel />)
+    renderWithClient(<CopilotUsageCard showActionsFunnel range={RANGE} />)
 
     // The insert-rate sub-line renders totalInserted — insertRate's own
     // server-derived numerator — never a client-side hand-sum of the kinds.
@@ -124,7 +128,7 @@ describe('CopilotUsageCard', () => {
 
   it('hides the actions funnel and approval-rate tile without showActionsFunnel, keeping Outcomes', async () => {
     hoisted.getCopilotUsageMetricsFn.mockResolvedValue(METRICS)
-    renderWithClient(<CopilotUsageCard showActionsFunnel={false} />)
+    renderWithClient(<CopilotUsageCard showActionsFunnel={false} range={RANGE} />)
 
     expect(await screen.findByText('Outcomes')).toBeInTheDocument()
     expect(screen.queryByText('Actions funnel')).not.toBeInTheDocument()
@@ -134,7 +138,7 @@ describe('CopilotUsageCard', () => {
 
   it('renders the per-teammate leaderboard, falling back for a missing display name', async () => {
     hoisted.getCopilotUsageMetricsFn.mockResolvedValue(METRICS)
-    renderWithClient(<CopilotUsageCard showActionsFunnel />)
+    renderWithClient(<CopilotUsageCard showActionsFunnel range={RANGE} />)
 
     expect(await screen.findByText('Alice')).toBeInTheDocument()
     expect(screen.getByText('30')).toBeInTheDocument()
@@ -144,7 +148,7 @@ describe('CopilotUsageCard', () => {
 
   it('renders the cited-sources table ranked by question volume, linking each article', async () => {
     hoisted.getCopilotUsageMetricsFn.mockResolvedValue(METRICS)
-    renderWithClient(<CopilotUsageCard showActionsFunnel />)
+    renderWithClient(<CopilotUsageCard showActionsFunnel range={RANGE} />)
 
     expect(await screen.findByText('Cited sources')).toBeInTheDocument()
 
@@ -182,7 +186,7 @@ describe('CopilotUsageCard', () => {
 
   it('omits the cited-sources table when no source was cited', async () => {
     hoisted.getCopilotUsageMetricsFn.mockResolvedValue({ ...METRICS, topCitedSources: [] })
-    renderWithClient(<CopilotUsageCard showActionsFunnel />)
+    renderWithClient(<CopilotUsageCard showActionsFunnel range={RANGE} />)
 
     await screen.findByText('Outcomes')
     expect(screen.queryByText('Cited sources')).not.toBeInTheDocument()
@@ -190,7 +194,7 @@ describe('CopilotUsageCard', () => {
 
   it('renders the per-kind transform breakdown with a friendly label', async () => {
     hoisted.getCopilotUsageMetricsFn.mockResolvedValue(METRICS)
-    renderWithClient(<CopilotUsageCard showActionsFunnel />)
+    renderWithClient(<CopilotUsageCard showActionsFunnel range={RANGE} />)
 
     expect(await screen.findByText('My tone')).toBeInTheDocument()
     expect(screen.getByText('More friendly')).toBeInTheDocument()
@@ -198,7 +202,7 @@ describe('CopilotUsageCard', () => {
 
   it('renders the actions funnel', async () => {
     hoisted.getCopilotUsageMetricsFn.mockResolvedValue(METRICS)
-    renderWithClient(<CopilotUsageCard showActionsFunnel />)
+    renderWithClient(<CopilotUsageCard showActionsFunnel range={RANGE} />)
 
     expect(await screen.findByText('Proposed')).toBeInTheDocument()
     expect(screen.getByText('Approved')).toBeInTheDocument()
@@ -208,7 +212,7 @@ describe('CopilotUsageCard', () => {
 
   it('shows a zero-state before data loads', () => {
     hoisted.getCopilotUsageMetricsFn.mockResolvedValue(METRICS)
-    renderWithClient(<CopilotUsageCard showActionsFunnel />)
+    renderWithClient(<CopilotUsageCard showActionsFunnel range={RANGE} />)
 
     // Headline tiles render the placeholder dash while the query is pending.
     expect(screen.getAllByText('—').length).toBeGreaterThan(0)
@@ -221,14 +225,14 @@ describe('CopilotUsageCard', () => {
       perTeammate: [],
       transformsByKind: [],
     })
-    renderWithClient(<CopilotUsageCard showActionsFunnel />)
+    renderWithClient(<CopilotUsageCard showActionsFunnel range={RANGE} />)
 
     expect(await screen.findByText(/no copilot questions/i)).toBeInTheDocument()
   })
 
   it('fetches the last-30-days range', async () => {
     hoisted.getCopilotUsageMetricsFn.mockResolvedValue(METRICS)
-    renderWithClient(<CopilotUsageCard showActionsFunnel />)
+    renderWithClient(<CopilotUsageCard showActionsFunnel range={RANGE} />)
 
     await screen.findByText('42')
     expect(hoisted.getCopilotUsageMetricsFn).toHaveBeenCalledWith(
