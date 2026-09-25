@@ -23,6 +23,7 @@ import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { cn } from '@/lib/shared/utils'
 import { DeferredRichTextEditor } from '@/components/ui/lazy-rich-text-editor'
+import type { EditorDocument } from '@/components/ui/rich-text-editor'
 import { COMMENT_EDITOR_FEATURES } from './comment-editor-features'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { PostId, PostCommentId } from '@quackback/ids'
@@ -107,23 +108,21 @@ export function CommentForm({
   })
 
   // What the editor holds. Typing keeps it here rather than in the form, so a
-  // keystroke never re-renders the form around the editor; the form takes the
-  // markdown when the comment is submitted. After a submit attempt the form
-  // validates on change, so from then on each change also reaches the field
-  // and its validation message follows the text.
-  const editorJsonRef = useRef<TiptapContent | null>(null)
-  const editorMarkdownRef = useRef('')
+  // keystroke never re-renders the form around the editor, and serializes
+  // nothing: the form takes the markdown when the comment is submitted. After
+  // a submit attempt the form validates on change, so from then on each change
+  // also reaches the field and its validation message follows the text.
+  const editorDocumentRef = useRef<EditorDocument | null>(null)
   const submittedRef = useRef(false)
 
-  function recordEditorChange(json: unknown, markdown: string, onFieldChange: (v: string) => void) {
-    editorJsonRef.current = json as TiptapContent
-    editorMarkdownRef.current = markdown
-    if (submittedRef.current) onFieldChange(markdown)
+  function recordEditorChange(document: EditorDocument, onFieldChange: (v: string) => void) {
+    editorDocumentRef.current = document
+    if (submittedRef.current) onFieldChange(document.markdown())
   }
 
   function submit() {
     submittedRef.current = true
-    form.setValue('content', editorMarkdownRef.current)
+    form.setValue('content', editorDocumentRef.current?.markdown() ?? '')
     void form.handleSubmit(onSubmit)()
   }
 
@@ -173,7 +172,7 @@ export function CommentForm({
     createComment.mutate(
       {
         content: data.content.trim(),
-        contentJson: editorJsonRef.current,
+        contentJson: (editorDocumentRef.current?.json() ?? null) as TiptapContent | null,
         parentId: parentId || null,
         postId,
         authorName: effectiveUser?.name || null,
@@ -185,8 +184,7 @@ export function CommentForm({
       {
         onSuccess: () => {
           form.reset()
-          editorJsonRef.current = null
-          editorMarkdownRef.current = ''
+          editorDocumentRef.current = null
           submittedRef.current = false
           setEditorResetKey((k) => k + 1)
           setSelectedStatusId(null)
@@ -260,8 +258,8 @@ export function CommentForm({
                           id: 'portal.commentForm.placeholder',
                           defaultMessage: 'Write a comment...',
                         })}
-                        onChange={(json, _html, markdown) =>
-                          recordEditorChange(json, markdown ?? '', field.onChange)
+                        onDocumentChange={(document) =>
+                          recordEditorChange(document, field.onChange)
                         }
                       />
                     </div>
@@ -506,9 +504,7 @@ export function CommentForm({
                       id: 'portal.commentForm.placeholder',
                       defaultMessage: 'Write a comment...',
                     })}
-                    onChange={(json, _html, markdown) =>
-                      recordEditorChange(json, markdown ?? '', field.onChange)
-                    }
+                    onDocumentChange={(document) => recordEditorChange(document, field.onChange)}
                   />
                 </div>
               </FormControl>
