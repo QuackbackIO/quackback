@@ -1,6 +1,6 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { z } from 'zod'
-import { ChangelogList } from '@/components/admin/changelog'
+import { ChangelogList } from '@/components/admin/changelog/changelog-list'
 import { blankOmittedSearchKeys } from '@/lib/shared/route-search'
 import { getFirstEnabledAdminProductPath, isProductEnabled } from '@/lib/shared/types/settings'
 
