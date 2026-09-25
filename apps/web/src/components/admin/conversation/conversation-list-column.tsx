@@ -223,9 +223,6 @@ export function ConversationListColumn({
   selectedId,
   onSelect,
 }: ConversationListColumnProps) {
-  const intl = useIntl()
-  const { userRole } = useRouteContext({ from: '__root__' })
-  const activationAction = useActivationAction('conversation_empty')
   const queryClient = useQueryClient()
   const prefetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const cancelPrefetch = useCallback(() => {
@@ -283,68 +280,14 @@ export function ConversationListColumn({
         {loading ? (
           <ConversationListSkeleton />
         ) : items.length === 0 ? (
-          (() => {
-            const isMainConversationQueue =
-              nav.kind === 'view' &&
-              (nav.view === 'mine' || nav.view === 'unassigned' || nav.view === 'all')
-            const isFiltered =
-              searchInput.trim().length > 0 ||
-              priorityFilter !== 'all' ||
-              !!channelFilter ||
-              (facet !== 'all' && facet !== 'open')
-            const isAllClear =
-              isMainConversationQueue && facet === 'open' && !isFiltered && !activationAction
-            const emptyMsg = isFiltered
-              ? intl.formatMessage({
-                  id: 'inbox.empty.filtered.title',
-                  defaultMessage: 'No conversations match these filters',
-                })
-              : isAllClear
-                ? intl.formatMessage({
-                    id: 'inbox.empty.allClear.title',
-                    defaultMessage: 'You’re all caught up',
-                  })
-                : emptyStateMessage(nav, facet, scopeLabel)
-            // First-run CTA on the unfiltered main queues (not tickets/labels).
-            const showMessengerCta = isMainConversationQueue && !isFiltered && !isAllClear
-            return (
-              <div className="px-4 py-10 text-center space-y-3">
-                <p className="text-sm font-medium text-foreground">{emptyMsg}</p>
-                {isFiltered && (
-                  <p className="mx-auto max-w-[16rem] text-xs text-muted-foreground">
-                    <FormattedMessage
-                      id="inbox.empty.filtered.description"
-                      defaultMessage="Try changing your search or filters."
-                    />
-                  </p>
-                )}
-                {isAllClear && (
-                  <p className="mx-auto max-w-[16rem] text-xs text-muted-foreground">
-                    <FormattedMessage
-                      id="inbox.empty.allClear.description"
-                      defaultMessage="No open conversations need your attention."
-                    />
-                  </p>
-                )}
-                {showMessengerCta && (
-                  <>
-                    <p className="text-xs text-muted-foreground max-w-[16rem] mx-auto">
-                      When customers message you, conversations show up here.
-                    </p>
-                    {/* Widget settings are admin-only; members get the message
-                        without a button they can't use. */}
-                    {userRole === 'admin' && activationAction && (
-                      <ActivationActionButton
-                        action={activationAction}
-                        surface="conversation_empty"
-                        className="h-11 sm:h-9"
-                      />
-                    )}
-                  </>
-                )}
-              </div>
-            )
-          })()
+          <EmptyList
+            nav={nav}
+            facet={facet}
+            scopeLabel={scopeLabel}
+            searchInput={searchInput}
+            priorityFilter={priorityFilter}
+            channelFilter={channelFilter}
+          />
         ) : (
           items.map((item) => {
             const id = itemId(item)
@@ -629,6 +572,85 @@ const ConversationListHeader = memo(function ConversationListHeader({
 /** One skeleton row — mirrors ConversationRow/TicketRow's fixed anatomy
  *  (avatar circle, name line, preview + time line) at the same `py-3` height
  *  and border so the list doesn't reflow when real rows replace it. */
+/**
+ * An empty list's message. The first-run call to action it may carry needs the
+ * workspace's launch status, which is asked for only once a list is empty.
+ */
+function EmptyList({
+  nav,
+  facet,
+  scopeLabel,
+  searchInput,
+  priorityFilter,
+  channelFilter,
+}: Pick<
+  ConversationListColumnProps,
+  'nav' | 'facet' | 'scopeLabel' | 'searchInput' | 'priorityFilter' | 'channelFilter'
+>) {
+  const intl = useIntl()
+  const userRole = useRouteContext({ from: '__root__', select: (context) => context.userRole })
+  const activationAction = useActivationAction('conversation_empty')
+
+  const isMainConversationQueue =
+    nav.kind === 'view' && (nav.view === 'mine' || nav.view === 'unassigned' || nav.view === 'all')
+  const isFiltered =
+    searchInput.trim().length > 0 ||
+    priorityFilter !== 'all' ||
+    !!channelFilter ||
+    (facet !== 'all' && facet !== 'open')
+  const isAllClear = isMainConversationQueue && facet === 'open' && !isFiltered && !activationAction
+  const emptyMsg = isFiltered
+    ? intl.formatMessage({
+        id: 'inbox.empty.filtered.title',
+        defaultMessage: 'No conversations match these filters',
+      })
+    : isAllClear
+      ? intl.formatMessage({
+          id: 'inbox.empty.allClear.title',
+          defaultMessage: 'You’re all caught up',
+        })
+      : emptyStateMessage(nav, facet, scopeLabel)
+  // First-run CTA on the unfiltered main queues (not tickets/labels).
+  const showMessengerCta = isMainConversationQueue && !isFiltered && !isAllClear
+  return (
+    <div className="px-4 py-10 text-center space-y-3">
+      <p className="text-sm font-medium text-foreground">{emptyMsg}</p>
+      {isFiltered && (
+        <p className="mx-auto max-w-[16rem] text-xs text-muted-foreground">
+          <FormattedMessage
+            id="inbox.empty.filtered.description"
+            defaultMessage="Try changing your search or filters."
+          />
+        </p>
+      )}
+      {isAllClear && (
+        <p className="mx-auto max-w-[16rem] text-xs text-muted-foreground">
+          <FormattedMessage
+            id="inbox.empty.allClear.description"
+            defaultMessage="No open conversations need your attention."
+          />
+        </p>
+      )}
+      {showMessengerCta && (
+        <>
+          <p className="text-xs text-muted-foreground max-w-[16rem] mx-auto">
+            When customers message you, conversations show up here.
+          </p>
+          {/* Widget settings are admin-only; members get the message
+              without a button they can't use. */}
+          {userRole === 'admin' && activationAction && (
+            <ActivationActionButton
+              action={activationAction}
+              surface="conversation_empty"
+              className="h-11 sm:h-9"
+            />
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 function SkeletonRow() {
   return (
     <div className="flex w-full items-start border-b border-border/30">
