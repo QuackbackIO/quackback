@@ -16,11 +16,24 @@ export const Route = createFileRoute('/admin/automation/performance')({
       throw new Error('Access denied: requires analytics.view')
     }
   },
+  // The cards read the last 30 days, and the window is part of each card's
+  // query key: the loader fixes it once, warms the cards with it, and hands it
+  // to them, so the server-rendered page carries their data.
+  loader: async ({ context }) => {
+    // Imported here rather than at the top: route loaders ship in the entry
+    // chunk every page loads.
+    const { last30DaysRange, warmAutomationPerformance } =
+      await import('@/lib/client/queries/automation-performance')
+    const range = last30DaysRange()
+    await warmAutomationPerformance(context.queryClient, range)
+    return { range }
+  },
   component: AutomationPerformancePage,
 })
 
 function AutomationPerformancePage() {
   const intl = useIntl()
+  const { range } = Route.useLoaderData()
 
   return (
     <div className="max-w-5xl space-y-6">
@@ -41,10 +54,10 @@ function AutomationPerformancePage() {
             'Understand how the AI agent and Copilot are helping over the last 30 days.',
         })}
       />
-      <QuinnPerformanceCard />
-      <QuinnToolsCard />
-      <CopilotUsageCard showActionsFunnel />
-      <SupportPerformanceCard />
+      <QuinnPerformanceCard range={range} />
+      <QuinnToolsCard range={range} />
+      <CopilotUsageCard showActionsFunnel range={range} />
+      <SupportPerformanceCard range={range} />
     </div>
   )
 }

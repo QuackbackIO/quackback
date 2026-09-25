@@ -39,6 +39,8 @@ import { QuinnToolsCard } from '../quinn-tools-card'
 
 afterEach(cleanup)
 
+const RANGE = { from: '2026-01-01T00:00:00.000Z', to: '2026-01-31T00:00:00.000Z' }
+
 function renderWithClient(ui: ReactElement) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
@@ -51,12 +53,12 @@ function renderWithClient(ui: ReactElement) {
 describe('QuinnToolsCard', () => {
   it('mounts with no required props', () => {
     hoisted.getQuinnToolMetricsFn.mockResolvedValue([])
-    expect(() => renderWithClient(<QuinnToolsCard />)).not.toThrow()
+    expect(() => renderWithClient(<QuinnToolsCard range={RANGE} />)).not.toThrow()
   })
 
   it('uses customer-facing action labels rather than internal tool names', async () => {
     hoisted.getQuinnToolMetricsFn.mockResolvedValue(TOOL_METRICS)
-    renderWithClient(<QuinnToolsCard />)
+    renderWithClient(<QuinnToolsCard range={RANGE} />)
 
     expect((await screen.findAllByText('Action')).length).toBeGreaterThan(1)
     expect(screen.getByText('Actions')).toBeInTheDocument()
@@ -65,7 +67,7 @@ describe('QuinnToolsCard', () => {
 
   it('shows the denied/duplicate count when nonzero', async () => {
     hoisted.getQuinnToolMetricsFn.mockResolvedValue(TOOL_METRICS)
-    renderWithClient(<QuinnToolsCard />)
+    renderWithClient(<QuinnToolsCard range={RANGE} />)
 
     await screen.findAllByText('Action')
     // refund_charge has 2 denied + 0 duplicate = 2
@@ -74,7 +76,7 @@ describe('QuinnToolsCard', () => {
 
   it('shows a total actions headline tile', async () => {
     hoisted.getQuinnToolMetricsFn.mockResolvedValue(TOOL_METRICS)
-    renderWithClient(<QuinnToolsCard />)
+    renderWithClient(<QuinnToolsCard range={RANGE} />)
 
     await screen.findAllByText('Action')
     // 18 + 5 succeeded across both tools
@@ -83,7 +85,7 @@ describe('QuinnToolsCard', () => {
 
   it('fetches the last-30-days range for tool metrics', async () => {
     hoisted.getQuinnToolMetricsFn.mockResolvedValue(TOOL_METRICS)
-    renderWithClient(<QuinnToolsCard />)
+    renderWithClient(<QuinnToolsCard range={RANGE} />)
 
     await screen.findAllByText('Action')
     expect(hoisted.getQuinnToolMetricsFn).toHaveBeenCalledWith(
