@@ -1,4 +1,4 @@
-import { useMemo, useState, type ComponentType } from 'react'
+import { memo, useMemo, useState, type ComponentType } from 'react'
 import { Link, useRouterState, useRouteContext } from '@tanstack/react-router'
 import {
   Cog6ToothIcon,
@@ -185,7 +185,7 @@ function NavEntries({
       <NavLink
         key={entry.to}
         item={entry}
-        pathname={pathname}
+        isActive={navLinkIsActive(entry, pathname)}
         tabbable={parentOpen}
         refined={refined}
       />
@@ -259,7 +259,7 @@ function NavGroupRows({
       {group.to ? (
         <NavLink
           item={{ label: group.label, to: group.to, icon: group.icon, exact: true }}
-          pathname={pathname}
+          isActive={groupPageActive}
           tabbable={parentOpen}
           refined={refined}
         />
@@ -311,32 +311,46 @@ function pathIsUnder(pathname: string, to: string): boolean {
   return pathname === to || pathname.startsWith(`${to}/`)
 }
 
-function NavLink({
-  item,
-  pathname,
-  tabbable,
-  refined,
-}: {
-  item: NavItem
-  pathname: string
-  tabbable: boolean
-  refined: boolean
-}) {
+function navLinkIsActive(item: NavItem, pathname: string): boolean {
   const targets = item.activeFor ?? [item.to]
-  const isActive = item.exact
+  return item.exact
     ? targets.some((to) => pathname === to)
     : targets.some((to) => pathIsUnder(pathname, to))
-  const Icon = item.icon
-
-  return (
-    <Link
-      to={item.to}
-      tabIndex={tabbable ? undefined : -1}
-      data-active={isActive || undefined}
-      className={settingsRowClass(isActive, refined)}
-    >
-      <Icon className={cn(NAV_ICON_CLASS, isActive && !refined && 'text-primary')} />
-      <span className="truncate flex-1">{item.label}</span>
-    </Link>
-  )
 }
+
+interface NavLinkProps {
+  item: NavItem
+  isActive: boolean
+  tabbable: boolean
+  refined: boolean
+}
+
+/**
+ * One nav row. It takes its active state rather than the pathname and is
+ * memoized on what it shows, so a navigation re-renders the rows it
+ * activates or deactivates instead of every row in the nav.
+ */
+const NavLink = memo(
+  function NavLink({ item, isActive, tabbable, refined }: NavLinkProps) {
+    const Icon = item.icon
+
+    return (
+      <Link
+        to={item.to}
+        tabIndex={tabbable ? undefined : -1}
+        data-active={isActive || undefined}
+        className={settingsRowClass(isActive, refined)}
+      >
+        <Icon className={cn(NAV_ICON_CLASS, isActive && !refined && 'text-primary')} />
+        <span className="truncate flex-1">{item.label}</span>
+      </Link>
+    )
+  },
+  (prev, next) =>
+    prev.isActive === next.isActive &&
+    prev.tabbable === next.tabbable &&
+    prev.refined === next.refined &&
+    prev.item.to === next.item.to &&
+    prev.item.label === next.item.label &&
+    prev.item.icon === next.item.icon
+)
