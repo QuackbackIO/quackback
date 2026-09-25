@@ -422,11 +422,15 @@ export const journeys: Journey[] = [
       await page.getByRole('heading').first().waitFor()
     },
     run: async (page) => {
-      for (const path of ['/admin/settings/portal', '/admin/settings/members']) {
-        await page.locator(`a[href="${path}"]`).first().click()
-        await page.waitForURL(path)
-        await page.getByRole('heading').first().waitFor()
-      }
+      // Each step waits for that page's own data, not just its heading: the
+      // heading renders first, and moving on before the data arrived made the
+      // count depend on timing.
+      await page.locator('a[href="/admin/settings/portal"]').first().click()
+      await page.waitForURL('/admin/settings/portal')
+      await page.getByRole('main').getByRole('switch').first().waitFor()
+      await page.locator('a[href="/admin/settings/members"]').first().click()
+      await page.waitForURL('/admin/settings/members')
+      await page.getByText('demo@example.com').first().waitFor()
     },
   },
 
