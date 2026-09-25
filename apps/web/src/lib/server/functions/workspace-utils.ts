@@ -10,12 +10,12 @@ import { redirect } from '@tanstack/react-router'
 import { z } from 'zod'
 import type { UserId } from '@quackback/ids'
 import { getSession } from '@/lib/server/auth/session'
-import { db, principal, eq } from '@/lib/server/db'
+import { getRequestPermissions, getRequestPrincipal } from '@/lib/server/auth/request-session'
+import { requireSettingsCached } from '@/lib/server/domains/settings/settings.helpers'
 import { isTeamMember } from '@/lib/shared/roles'
 import { logger } from '@/lib/server/logger'
 import { buildSigninRedirect } from '@/lib/shared/auth-prompt'
-import { permissionsForPrincipal } from '@/lib/server/policy/permissions'
-import type { Role } from '@/lib/shared/roles'
+import { NotFoundError } from '@/lib/shared/errors'
 import { ALL_PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 
 const log = logger.child({ component: 'workspace-utils' })
@@ -65,16 +65,20 @@ export const requireWorkspaceRole = createServerFn({ method: 'GET' })
       throw redirect(unauthRedirect)
     }
 
-    const appSettings = await db.query.settings.findFirst()
+    // The settings, principal and permission reads are the request's own
+    // (request-session.ts), shared with the session read above and with every
+    // server function the page runs in the same request.
+    const appSettings = await requireSettingsCached().catch((error: unknown) => {
+      if (error instanceof NotFoundError) return null
+      throw error
+    })
     if (!appSettings) {
       throw redirect({ to: '/' })
     }
 
     // Note: Onboarding check is handled in __root.tsx beforeLoad
 
-    const principalRecord = await db.query.principal.findFirst({
-      where: eq(principal.userId, session.user.id as UserId),
-    })
+    const principalRecord = await getRequestPrincipal(session.user.id as UserId)
     if (!principalRecord) {
       throw redirect(unauthRedirect)
     }
@@ -88,10 +92,7 @@ export const requireWorkspaceRole = createServerFn({ method: 'GET' })
       throw redirect(buildSigninRedirect('/admin', { error: 'not_team_member' }))
     }
 
-    const resolvedPermissions = await permissionsForPrincipal(
-      principalRecord.id,
-      principalRecord.role as Role
-    )
+    const resolvedPermissions = await getRequestPermissions(principalRecord)
 
     if (data.permission && !resolvedPermissions.has(data.permission as PermissionKey)) {
       throw redirect(buildSigninRedirect('/admin', { error: 'not_team_member' }))

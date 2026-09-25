@@ -28,16 +28,19 @@
  * resolution, whose Set-Cookie headers reach the response exactly as before; a
  * repeat lookup in the same request would have found nothing left to do.
  */
-import type { UserId } from '@quackback/ids'
+import type { PrincipalId, UserId } from '@quackback/ids'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import type { auth } from '@/lib/server/auth/index'
-import { db, principal, eq, type Principal } from '@/lib/server/db'
+import { db, principal, eq, type PermissionKey, type Principal } from '@/lib/server/db'
 import { CACHE_KEYS } from '@/lib/server/cache'
+import { permissionsForPrincipal } from '@/lib/server/policy/permissions'
 import {
+  derivedMemoKey,
   forgetPerRequestPrefix,
   memoizePerRequest,
   rememberPerRequest,
 } from '@/lib/server/request-memo'
+import type { Role } from '@/lib/shared/roles'
 
 export type RequestSession = NonNullable<Awaited<ReturnType<typeof auth.api.getSession>>>
 
@@ -70,6 +73,19 @@ export function getRequestPrincipal(userId: UserId): Promise<Principal | null> {
     const record = await db.query.principal.findFirst({ where: eq(principal.userId, userId) })
     return record ?? null
   })
+}
+
+/**
+ * The principal's assignment-derived permission set, resolved once per request.
+ * Derived from the principal's memo entry, so any change that forgets the
+ * principal (every role and assignment mutation deletes its cache key) forgets
+ * its grants with it, custom-role reassignments included.
+ */
+export function getRequestPermissions(record: Principal): Promise<ReadonlySet<PermissionKey>> {
+  const base = CACHE_KEYS.PRINCIPAL_BY_USER(record.userId ?? '')
+  return memoizePerRequest(derivedMemoKey(base, `permissions:${record.id}:${record.role}`), () =>
+    permissionsForPrincipal(record.id as PrincipalId, record.role as Role)
+  )
 }
 
 /** Serve `record` to the rest of the request, e.g. after creating it. */
