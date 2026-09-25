@@ -78,7 +78,6 @@ const SWEEP_PAGES: { path: string; as: Actor }[] = [
     'moderation',
     'notifications',
     'roadmap',
-    'tickets',
     'users?sort=newest',
   ].map((page) => ({ path: `/admin/${page}`, as: 'admin' as const })),
   ...[
