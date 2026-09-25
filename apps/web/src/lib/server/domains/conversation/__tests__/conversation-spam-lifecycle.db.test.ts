@@ -3,15 +3,14 @@
  * every triage list, surfaces only in the Spam view (`spamOnly`), and a
  * restore returns it to the open queue with the spam marker fully cleared.
  */
-import { afterAll, afterEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createId, type ConversationId, type PrincipalId, type UserId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 
-// Vite pins process.env.BASE_URL to the router base ('/'), which the server
-// config's URL validation rejects; the lazy config must validate before the
-// db probe below can run. Real env always wins when present.
-if (!process.env.BASE_URL?.startsWith('http')) process.env.BASE_URL = 'http://localhost:3000'
-process.env.SECRET_KEY ??= 'test-secret-key-with-at-least-32-characters'
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
+  db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
+}))
 
 vi.mock('../conversation.webhooks', () => ({
   emitConversationCreated: vi.fn(),
@@ -37,7 +36,8 @@ vi.mock('../conversation.query', async (importOriginal) => ({
   conversationToDTO: vi.fn(async (row: { id: string }) => ({ id: row.id })),
 }))
 
-import { db, conversations, conversationMessages, principal, user, eq, sql } from '@/lib/server/db'
+import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
+import { conversations, conversationMessages, principal, user, eq } from '@/lib/server/db'
 import {
   endConversation,
   restoreConversationFromSpam,
@@ -45,19 +45,14 @@ import {
 } from '../conversation.service'
 import { listConversationsForAgent } from '../conversation.query'
 
-let available = false
-try {
-  await db.execute(sql`select 1`)
-  available = true
-} catch {
-  // Local/unit-only runs without Postgres skip this integration proof.
-}
+const fixture = await createDbTestFixture({
+  probe: async (db) => {
+    await db.select({ spamReason: conversations.spamReason }).from(conversations).limit(0)
+  },
+})
 
-let conversationId: ConversationId | null = null
 let agentPrincipalId: PrincipalId | null = null
 let visitorPrincipalId: PrincipalId | null = null
-let agentUserId: UserId | null = null
-let visitorUserId: UserId | null = null
 
 function agentActor(): Actor {
   return {
@@ -69,16 +64,16 @@ function agentActor(): Actor {
 }
 
 async function seedConversation(): Promise<ConversationId> {
-  agentUserId = createId('user') as UserId
-  visitorUserId = createId('user') as UserId
+  const agentUserId = createId('user') as UserId
+  const visitorUserId = createId('user') as UserId
   agentPrincipalId = createId('principal') as PrincipalId
   visitorPrincipalId = createId('principal') as PrincipalId
-  conversationId = createId('conversation') as ConversationId
-  await db.insert(user).values([
+  const conversationId = createId('conversation') as ConversationId
+  await testDb.insert(user).values([
     { id: agentUserId, name: 'Agent' },
     { id: visitorUserId, name: 'Visitor' },
   ])
-  await db.insert(principal).values([
+  await testDb.insert(principal).values([
     {
       id: agentPrincipalId,
       userId: agentUserId,
@@ -94,7 +89,7 @@ async function seedConversation(): Promise<ConversationId> {
       createdAt: new Date(),
     },
   ])
-  await db.insert(conversations).values({
+  await testDb.insert(conversations).values({
     id: conversationId,
     visitorPrincipalId,
     channel: 'messenger',
@@ -102,27 +97,12 @@ async function seedConversation(): Promise<ConversationId> {
   return conversationId
 }
 
-afterEach(async () => {
-  if (!available) return
-  if (conversationId) await db.delete(conversations).where(eq(conversations.id, conversationId))
-  if (agentPrincipalId) await db.delete(principal).where(eq(principal.id, agentPrincipalId))
-  if (visitorPrincipalId) await db.delete(principal).where(eq(principal.id, visitorPrincipalId))
-  if (agentUserId) await db.delete(user).where(eq(user.id, agentUserId))
-  if (visitorUserId) await db.delete(user).where(eq(user.id, visitorUserId))
-  conversationId = null
-  agentPrincipalId = null
-  visitorPrincipalId = null
-  agentUserId = null
-  visitorUserId = null
-  vi.clearAllMocks()
-})
+describe.skipIf(!fixture.available)('spam lifecycle', () => {
+  beforeEach(fixture.begin)
+  afterEach(() => vi.clearAllMocks())
+  afterEach(fixture.rollback)
+  afterAll(fixture.close)
 
-afterAll(async () => {
-  const client = (db as unknown as { $client?: { end?: () => Promise<void> } }).$client
-  await client?.end?.()
-})
-
-describe.skipIf(!available)('spam lifecycle', () => {
   it('a spam-ended conversation leaves every triage list and only surfaces in the spam list', async () => {
     const id = await seedConversation()
     await endConversation(id, 'spam', null, agentActor())
@@ -154,7 +134,7 @@ describe.skipIf(!available)('spam lifecycle', () => {
 
     await restoreConversationFromSpam(id, agentActor())
 
-    const stored = await db.query.conversations.findFirst({ where: eq(conversations.id, id) })
+    const stored = await testDb.query.conversations.findFirst({ where: eq(conversations.id, id) })
     expect(stored?.status).toBe('open')
     expect(stored?.endReason).toBeNull()
     expect(stored?.endNote).toBeNull()
@@ -174,7 +154,7 @@ describe.skipIf(!available)('spam lifecycle', () => {
 
   it('delete-forever removes a spam-ended conversation and its cascaded children', async () => {
     const id = await seedConversation()
-    await db.insert(conversationMessages).values({
+    await testDb.insert(conversationMessages).values({
       conversationId: id,
       principalId: visitorPrincipalId,
       senderType: 'visitor',
@@ -184,23 +164,21 @@ describe.skipIf(!available)('spam lifecycle', () => {
 
     await deleteConversationPermanently(id, agentActor())
 
-    const stored = await db.query.conversations.findFirst({ where: eq(conversations.id, id) })
+    const stored = await testDb.query.conversations.findFirst({ where: eq(conversations.id, id) })
     expect(stored).toBeUndefined()
-    const messages = await db
+    const messages = await testDb
       .select({ id: conversationMessages.id })
       .from(conversationMessages)
       .where(eq(conversationMessages.conversationId, id))
     expect(messages).toEqual([])
     const spam = await listConversationsForAgent({ spamOnly: true }, agentActor())
     expect(spam.conversations.map((c) => c.id)).not.toContain(id)
-    // The row is gone, so the afterEach conversation delete is a harmless no-op.
-    conversationId = null
   })
 
   it('delete-forever rejects a conversation that is not marked spam', async () => {
     const id = await seedConversation()
     await expect(deleteConversationPermanently(id, agentActor())).rejects.toThrow()
-    const stored = await db.query.conversations.findFirst({ where: eq(conversations.id, id) })
+    const stored = await testDb.query.conversations.findFirst({ where: eq(conversations.id, id) })
     expect(stored?.status).toBe('open')
   })
 })
