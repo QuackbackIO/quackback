@@ -45,6 +45,9 @@ interface UseSimilarPostsResult {
   error: Error | null
 }
 
+/** One empty list for every render that has found nothing, so it compares equal. */
+const NO_POSTS: SimilarPost[] = []
+
 /**
  * Find posts similar to the user's input title.
  * Debounces input and returns empty array when input is too short.
@@ -69,7 +72,7 @@ export function useSimilarPosts({
   })
 
   return {
-    posts: data ?? [],
+    posts: data ?? NO_POSTS,
     isLoading: shouldSearch && isLoading,
     isFetching: shouldSearch && isFetching,
     error: error as Error | null,
