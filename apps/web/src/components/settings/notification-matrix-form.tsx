@@ -34,11 +34,11 @@ const CHANNEL_LABELS: Record<NotificationChannel, string> = {
  * One notification-type x channel matrix, grouped into per-group tabs.
  *
  * `initialPreferences`: when the caller's own loader already fetched these
- * (the portal preferences page folds this into its document response, since
- * a separate post-hydration request would redo the session/principal lookup
- * that loader already paid for), pass the result here to skip the mount
- * fetch. Admin's settings page doesn't have that loader and omits the prop,
- * so it fetches on mount exactly as before.
+ * (the portal preferences page and the admin notifications page fold this
+ * into their document response, since a separate post-hydration request would
+ * redo the session/principal lookup that loader already paid for), pass the
+ * result here to skip the mount fetch. Without it, or when the loader's read
+ * failed (null), the form fetches on mount.
  */
 export function NotificationMatrixForm({
   surface,
