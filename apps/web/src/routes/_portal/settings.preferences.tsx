@@ -4,13 +4,22 @@ import { Cog6ToothIcon } from '@heroicons/react/24/solid'
 import { PageHeader } from '@/components/shared/page-header'
 import { ThemeSwitcher } from '@/components/theme-switcher'
 import { NotificationMatrixForm } from '@/components/settings/notification-matrix-form'
+import { getNotificationPreferencesFn } from '@/lib/server/functions/user'
 
 export const Route = createFileRoute('/_portal/settings/preferences')({
+  loader: async () => {
+    // The matrix form below would otherwise fetch this itself once mounted,
+    // a separate post-hydration request redoing the session/principal lookup
+    // this document response already resolves for the parent layout.
+    const notificationPreferences = await getNotificationPreferencesFn()
+    return { notificationPreferences }
+  },
   component: PreferencesPage,
 })
 
 function PreferencesPage() {
   const intl = useIntl()
+  const { notificationPreferences } = Route.useLoaderData()
 
   return (
     <div className="space-y-6">
@@ -72,7 +81,7 @@ function PreferencesPage() {
             defaultMessage="Choose what you're notified about and how"
           />
         </p>
-        <NotificationMatrixForm surface="portal" />
+        <NotificationMatrixForm surface="portal" initialPreferences={notificationPreferences} />
       </div>
     </div>
   )
