@@ -19,6 +19,7 @@
     "check:server-fn-manifest": "bun scripts/check-server-fn-manifest.ts",
     "perf:setup": "bun perf/setup-db.ts",
     "perf": "bun perf/bench.ts",
+    "perf:hydration": "bun perf/hydration-check.ts",
     "intl:extract": "formatjs extract 'src/**/*.{ts,tsx}' --out-file src/locales/en.json --id-interpolation-pattern '[sha512:contenthash:base64:6]' --flatten",
     "intl:compile": "formatjs compile src/locales/en.json --out-file src/locales/compiled/en.json"
   },

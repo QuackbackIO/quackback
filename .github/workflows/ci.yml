@@ -247,6 +247,10 @@ jobs:
           fi
       - run: bun run --cwd apps/web perf:setup
       - run: bun run --cwd apps/web perf
+      # Server-rendered pages hydrate cleanly for a visitor in another time
+      # zone and locale (a date or number formatted differently on each side
+      # is a hydration error).
+      - run: bun run --cwd apps/web perf:hydration
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
