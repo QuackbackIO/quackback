@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { lazy, Suspense, useMemo, useState } from 'react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import {
   PlusIcon,
@@ -24,7 +24,6 @@ import {
 import { HelpCenterListItem } from './help-center-list-item'
 import { ArticlePerformanceTable } from './article-performance-table'
 import { SearchTermsTable } from './search-terms-table'
-import { CreateArticleDialog } from './create-article-dialog'
 import type { CategoryActions } from './help-center-category-tree'
 import { helpCenterQueries } from '@/lib/client/queries/help-center'
 import { useRestoreCategory, useRestoreArticle } from '@/lib/client/mutations/help-center'
@@ -35,6 +34,17 @@ import { HelpCenterActiveFiltersBar } from './help-center-active-filters-bar'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { AdminListHeader } from '@/components/admin/admin-list-header'
 import { useDebouncedSearch } from '@/lib/client/hooks/use-debounced-search'
+
+// The create dialog carries the editor and the article form, which outweigh
+// the list; it loads on first open, or ahead of it when the pointer or focus
+// reaches a New button.
+const loadCreateArticleDialog = () => import('./create-article-dialog')
+const CreateArticleDialog = lazy(() =>
+  loadCreateArticleDialog().then((m) => ({ default: m.CreateArticleDialog }))
+)
+function preloadCreateArticleDialog() {
+  void loadCreateArticleDialog().catch(() => {})
+}
 import { TimeAgo } from '@/components/ui/time-ago'
 import type { KbArticleId } from '@quackback/ids'
 
@@ -98,7 +108,13 @@ function LiveHelpCenterFinder({
 }: HelpCenterFinderProps) {
   const { filters, setFilters, clearFilters, hasActiveFilters } = useHelpCenterFilters()
 
-  const [createArticleOpen, setCreateArticleOpen] = useState(false)
+  const [createArticleOpen, setCreateArticleOpenState] = useState(false)
+  // Kept mounted after the first open so closing animates.
+  const [createArticleOpened, setCreateArticleOpened] = useState(false)
+  const setCreateArticleOpen = (open: boolean) => {
+    if (open) setCreateArticleOpened(true)
+    setCreateArticleOpenState(open)
+  }
 
   const { data: allCategories = [] } = useQuery(helpCenterQueries.categories())
 
@@ -235,7 +251,12 @@ function LiveHelpCenterFinder({
                       Clear all filters
                     </Button>
                   ) : (
-                    <Button size="sm" onClick={() => setCreateArticleOpen(true)}>
+                    <Button
+                      size="sm"
+                      onPointerEnter={preloadCreateArticleDialog}
+                      onFocus={preloadCreateArticleDialog}
+                      onClick={() => setCreateArticleOpen(true)}
+                    >
                       <PlusIcon className="h-4 w-4 mr-1" />
                       New article
                     </Button>
@@ -286,7 +307,11 @@ function LiveHelpCenterFinder({
         </div>
       </div>
 
-      <CreateArticleDialog open={createArticleOpen} onOpenChange={setCreateArticleOpen} />
+      {createArticleOpened && (
+        <Suspense fallback={null}>
+          <CreateArticleDialog open={createArticleOpen} onOpenChange={setCreateArticleOpen} />
+        </Suspense>
+      )}
     </div>
   )
 }
@@ -452,7 +477,11 @@ function NewDropdown({ onNewArticle, onNewFolder, folderLabel }: NewDropdownProp
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button size="sm">
+        <Button
+          size="sm"
+          onPointerEnter={preloadCreateArticleDialog}
+          onFocus={preloadCreateArticleDialog}
+        >
           <PlusIcon className="h-4 w-4 mr-1" />
           New
         </Button>
