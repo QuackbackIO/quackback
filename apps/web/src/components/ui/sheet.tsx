@@ -3,10 +3,26 @@ import { Dialog as SheetPrimitive } from '@base-ui/react/dialog'
 import { XMarkIcon } from '@heroicons/react/24/solid'
 
 import { asChildRender, overlayTriggerProps } from '@/components/ui/as-child'
+import {
+  OverlayOpenedContext,
+  useOverlayOpened,
+  useOverlayOpenedRoot,
+} from '@/components/ui/overlay-opened'
 import { cn } from '@/lib/shared/utils'
 
-function Sheet(props: SheetPrimitive.Root.Props) {
-  return <SheetPrimitive.Root data-slot="sheet" {...props} />
+function Sheet({ open, defaultOpen, onOpenChange, ...props }: SheetPrimitive.Root.Props) {
+  const opened = useOverlayOpenedRoot(open, defaultOpen, onOpenChange)
+  return (
+    <OverlayOpenedContext.Provider value={opened.value}>
+      <SheetPrimitive.Root
+        data-slot="sheet"
+        open={open}
+        defaultOpen={defaultOpen}
+        onOpenChange={opened.onOpenChange}
+        {...props}
+      />
+    </OverlayOpenedContext.Provider>
+  )
 }
 
 function SheetTrigger({
@@ -27,10 +43,6 @@ function SheetTrigger({
       {composed.children}
     </SheetPrimitive.Trigger>
   )
-}
-
-function SheetPortal(props: SheetPrimitive.Portal.Props) {
-  return <SheetPrimitive.Portal data-slot="sheet-portal" {...props} />
 }
 
 function SheetOverlay({ className, ...props }: SheetPrimitive.Backdrop.Props) {
@@ -56,8 +68,11 @@ function SheetContent({
 }: SheetPrimitive.Popup.Props & {
   side?: 'top' | 'right' | 'bottom' | 'left'
 }) {
+  // Nothing to portal until the sheet first opens.
+  const opened = useOverlayOpened()
+  if (!opened) return null
   return (
-    <SheetPortal>
+    <SheetPrimitive.Portal data-slot="sheet-portal">
       <SheetOverlay />
       <SheetPrimitive.Popup
         data-slot="sheet-content"
@@ -90,7 +105,7 @@ function SheetContent({
           <span className="sr-only">Close</span>
         </SheetPrimitive.Close>
       </SheetPrimitive.Popup>
-    </SheetPortal>
+    </SheetPrimitive.Portal>
   )
 }
 
