@@ -1,35 +1,28 @@
 /**
- * Shared Ask AI client: capability probe, AG-UI transport, and the answer
+ * Shared Ask AI client: capability probe, answer state, and the answer
  * panel used by the widget Help tab and the /hc hero search.
  *
- * The answer streams over TanStack AI's AG-UI wire (ChatClient +
- * fetchServerSentEvents — NOT ai-react, this is the public /hc bundle). It is
- * rendered through the shared AssistantAnswer component, so its inline [n]
- * citation dots and hover source cards match the messenger assistant exactly.
- * A miss ('no_answer') streams a graceful reply plus related-article
- * suggestions.
+ * The answer streams over TanStack AI's AG-UI wire (ask-ai-run.ts, loaded on
+ * demand so the streaming client downloads only once a visitor starts an Ask
+ * AI interaction). It is rendered through the shared AssistantAnswer
+ * component, so its inline [n] citation dots and hover source cards match the
+ * messenger assistant exactly. A miss ('no_answer') streams a graceful reply
+ * plus related-article suggestions.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { useQuery } from '@tanstack/react-query'
 import { SparklesIcon, XMarkIcon } from '@heroicons/react/24/outline'
-import { ChatClient, fetchServerSentEvents } from '@tanstack/ai-client'
-import { parsePartialJSON, type StreamChunk } from '@tanstack/ai'
-import type {
-  KbAskAnswerKind,
-  KbAskFinalPayload,
-  KbAskSourceMeta,
-  KbAskStateSnapshot,
-} from '@/lib/shared/help-center/kb-ask-contract'
 import { AssistantAnswer } from '@/components/shared/conversation/assistant-turn'
 import type { ConversationMessageCitation } from '@/lib/shared/conversation/types'
-import { aguiFetchClient } from '@/lib/client/utils/agui-fetch'
 import { splitByTerms } from './ask-ai-text'
+import { IDLE_STATE, blankAskAiState, type AskAiSourceMeta, type AskAiState } from './ask-ai-state'
+import type { AskAiRun } from './ask-ai-run'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import { hcArticlePath } from '@/lib/shared/help-center-url'
 
 // Existing importers keep the AskAiSourceMeta name.
-export type AskAiSourceMeta = KbAskSourceMeta
+export type { AskAiSourceMeta } from './ask-ai-state'
 
 // ============================================================================
 // Hooks
@@ -60,29 +53,6 @@ export function useAskAiAvailable(
   return query.data === true
 }
 
-type AskAiStatus = 'idle' | 'loading' | 'streaming' | 'done' | 'no-answer' | 'error'
-
-interface AskAiState {
-  status: AskAiStatus
-  question: string
-  answer: string
-  /** 'grounded' cites sources; 'no_answer' offers related suggestions. */
-  kind: KbAskAnswerKind
-  /** Sources cited by a grounded answer, resolved to display metadata. */
-  citedSources: AskAiSourceMeta[]
-  /** Related near-miss articles suggested on a no_answer. */
-  related: AskAiSourceMeta[]
-}
-
-const IDLE_STATE: AskAiState = {
-  status: 'idle',
-  question: '',
-  answer: '',
-  kind: 'grounded',
-  citedSources: [],
-  related: [],
-}
-
 /** Public help-center article path. */
 function articleHref(source: AskAiSourceMeta): string {
   return hcArticlePath({
@@ -103,18 +73,38 @@ function toCitations(sources: AskAiSourceMeta[]): ConversationMessageCitation[] 
   }))
 }
 
-const KB_ASK_URL = '/api/widget/kb-ask'
+type AskAiRunModule = typeof import('./ask-ai-run')
+
+let askAiRunLoad: Promise<AskAiRunModule> | undefined
+
+/**
+ * Download the Ask AI streaming client. Idempotent: surfaces call it as a
+ * visitor starts an Ask AI interaction (focus, typing), so the first answer
+ * does not wait on the download.
+ */
+export function preloadAskAi(): Promise<AskAiRunModule> {
+  askAiRunLoad ??= import('./ask-ai-run').catch((error: unknown) => {
+    // A failed download is retried by the next call.
+    askAiRunLoad = undefined
+    throw error
+  })
+  return askAiRunLoad
+}
 
 /** Drive one Ask AI question at a time; re-asking aborts the previous run. */
 export function useAskAi(options?: { getHeaders?: () => HeadersInit }) {
   const getHeadersRef = useRef(options?.getHeaders)
   getHeadersRef.current = options?.getHeaders
   const [state, setState] = useState<AskAiState>(IDLE_STATE)
-  const clientRef = useRef<ChatClient | null>(null)
+  const runRef = useRef<AskAiRun | null>(null)
+  // Bumped by every ask and reset: only the latest ask may start a run or
+  // write the state, even while it waits on the streaming client.
+  const generationRef = useRef(0)
 
   const reset = useCallback(() => {
-    clientRef.current?.stop()
-    clientRef.current = null
+    generationRef.current++
+    runRef.current?.stop()
+    runRef.current = null
     setState(IDLE_STATE)
   }, [])
 
@@ -123,136 +113,31 @@ export function useAskAi(options?: { getHeaders?: () => HeadersInit }) {
     if (!q) return
 
     // A fresh single-turn client per ask: re-asking aborts the previous run and
-    // starts a new thread (each question is independent — no history carries).
-    clientRef.current?.stop()
+    // starts a new thread (each question is independent: no history carries).
+    runRef.current?.stop()
+    runRef.current = null
+    const generation = ++generationRef.current
+    const isLatest = () => generation === generationRef.current
 
-    // A result-less state (loading, error, hard no-answer): the answer/source
-    // fields are all empty and unread until a terminal event replaces them.
-    const blank = (status: AskAiStatus): AskAiState => ({
-      status,
-      question: q,
-      answer: '',
-      kind: 'grounded',
-      citedSources: [],
-      related: [],
-    })
+    setState(blankAskAiState(q, 'loading'))
 
-    setState(blank('loading'))
-
-    // Per-run accumulators. `retrieved` is the STATE_SNAPSHOT display join;
-    // `raw`/`emitted` diff the answer prose out of the raw-JSON text deltas;
-    // `terminal` dedupes the final/error so a stream reports its outcome once.
-    let retrieved: AskAiSourceMeta[] = []
-    let raw = ''
-    let emitted = ''
-    let terminal = false
-
-    const applyFinal = (final: KbAskFinalPayload) => {
-      // Hard failure fallback: the model could not be reached at all.
-      if (final.answer === null) {
-        setState(blank('no-answer'))
-        return
-      }
-      // Graceful miss: keep the streamed reply, offer related articles.
-      if (final.kind === 'no_answer') {
-        setState({
-          status: 'done',
-          question: q,
-          answer: final.answer,
-          kind: 'no_answer',
-          citedSources: [],
-          related: final.related ?? [],
-        })
-        return
-      }
-      const byId = new Map(retrieved.map((s) => [s.articleId, s]))
-      const cited = final.sources.flatMap((s) => {
-        const meta = byId.get(s.articleId)
-        return meta ? [meta] : []
-      })
-      setState({
-        status: 'done',
-        question: q,
-        answer: final.answer,
-        kind: 'grounded',
-        citedSources: cited,
-        related: [],
-      })
-    }
-
-    const client = new ChatClient({
-      connection: fetchServerSentEvents(KB_ASK_URL, () => ({
-        // Non-2xx widget envelopes become a synthetic RUN_ERROR SSE frame.
-        fetchClient: aguiFetchClient(() => getHeadersRef.current?.()),
-      })),
-      onChunk: (rawChunk: StreamChunk) => {
-        const chunk = rawChunk as {
-          type: string
-          snapshot?: unknown
-          delta?: unknown
-          result?: unknown
-        }
-        switch (chunk.type) {
-          case 'STATE_SNAPSHOT': {
-            // The pre-synthesis source metadata join (citation-dot display).
-            const sources = (chunk.snapshot as KbAskStateSnapshot | undefined)?.sources
-            if (Array.isArray(sources)) retrieved = sources
-            break
-          }
-          case 'TEXT_MESSAGE_CONTENT': {
-            // Deltas are the raw structured JSON; surface only the growth of the
-            // `answer` field so the panel streams clean prose, not the envelope.
-            if (typeof chunk.delta !== 'string') break
-            raw += chunk.delta
-            const partial = parsePartialJSON(raw) as Record<string, unknown> | undefined
-            const text = typeof partial?.answer === 'string' ? partial.answer : ''
-            if (text.length > emitted.length && text.startsWith(emitted)) {
-              emitted = text
-              setState((prev) => ({ ...prev, status: 'streaming', answer: text }))
-            }
-            break
-          }
-          case 'RUN_FINISHED': {
-            // AG-UI's standard result slot is what "finalized" means; a bare
-            // RUN_FINISHED (no result) does not settle the turn.
-            if (chunk.result === undefined || terminal) break
-            terminal = true
-            applyFinal(chunk.result as KbAskFinalPayload)
-            break
-          }
-          case 'RUN_ERROR': {
-            if (terminal) break
-            terminal = true
-            setState(blank('error'))
-            break
-          }
-        }
-      },
-      onError: (error: Error) => {
-        // Transport failure (HTTP error, dropped stream) with no RUN_ERROR
-        // frame. An abort is the caller's own stop(), not an error.
-        if (terminal || error.name === 'AbortError') return
-        terminal = true
-        setState(blank('error'))
-      },
-    })
-    clientRef.current = client
-
+    let runModule: AskAiRunModule
     try {
-      await client.sendMessage(q)
+      runModule = await preloadAskAi()
     } catch {
-      // onError already mapped the failure to the error state; sendMessage may
-      // additionally reject once the run settles.
+      if (isLatest()) setState(blankAskAiState(q, 'error'))
+      return
     }
+    if (!isLatest()) return
 
-    // A stream that closed without a terminal frame is a failure, not silence.
-    if (!terminal) {
-      setState((prev) =>
-        prev.status === 'loading' || prev.status === 'streaming'
-          ? { ...prev, status: 'error' }
-          : prev
-      )
-    }
+    const run = runModule.startAskAiRun(q, {
+      getHeaders: () => getHeadersRef.current?.(),
+      setState: (update) => {
+        if (isLatest()) setState(update)
+      },
+    })
+    runRef.current = run
+    await run.settled
   }, [])
 
   return { state, ask, reset }
@@ -319,6 +204,16 @@ export function useAskAiSearchController({
     resetAskAi()
     setSelectedIndex(-1)
   }, [sessionVersion, resetAskAi])
+
+  // A visitor typing while Ask AI is offered may ask next: have the client ready.
+  useEffect(() => {
+    if (hasAskRow) preloadAskAi().catch(() => {})
+  }, [hasAskRow])
+
+  /** Download the streaming client ahead of an ask (e.g. on search focus). */
+  const warmAskAi = useCallback(() => {
+    if (askAiAvailable) preloadAskAi().catch(() => {})
+  }, [askAiAvailable])
 
   const triggerAsk = useCallback(() => {
     if (!hasAskRow) return
@@ -392,6 +287,7 @@ export function useAskAiSearchController({
     triggerAsk,
     dismissAnswer,
     handleKeyDown,
+    warmAskAi,
   }
 }
 

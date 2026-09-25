@@ -91,6 +91,7 @@ export function HelpCenterHeroSearch({ askAiEnabled = false, locale }: HelpCente
     triggerAsk,
     dismissAnswer,
     handleKeyDown,
+    warmAskAi,
   } = useAskAiSearchController({
     query,
     askAiAvailable,
@@ -129,7 +130,10 @@ export function HelpCenterHeroSearch({ askAiEnabled = false, locale }: HelpCente
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
-          onFocus={() => (results.length > 0 || (hasAskRow && !answerOpen)) && setShowResults(true)}
+          onFocus={() => {
+            warmAskAi()
+            if (results.length > 0 || (hasAskRow && !answerOpen)) setShowResults(true)
+          }}
           autoComplete="off"
           className="min-w-0 flex-1 bg-transparent py-4 text-base text-foreground outline-none placeholder:text-muted-foreground"
         />
