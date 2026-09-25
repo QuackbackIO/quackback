@@ -47,6 +47,7 @@ vi.mock('@/lib/server/db', () => ({
 
 vi.mock('@/lib/server/domains/settings/settings.helpers', () => ({
   requireSettings: hoisted.requireSettings,
+  requireSettingsPerRequest: hoisted.requireSettings,
   invalidateSettingsCache: hoisted.invalidateSettingsCache,
 }))
 

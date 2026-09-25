@@ -10,6 +10,7 @@ import {
 import { userIdSchema, type UserId } from '@quackback/ids'
 import {
   getPortalConfig,
+  getPortalConfigCached,
   getPublicPortalConfig,
   getPublicAuthConfig,
   updatePortalConfig,
@@ -61,7 +62,7 @@ export const fetchBrandingConfig = createServerFn({ method: 'GET' }).handler(asy
 export const fetchPortalConfig = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch portal config')
   await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
-  const config = await getPortalConfig()
+  const config = await getPortalConfigCached()
   return config ?? DEFAULT_PORTAL_CONFIG
 })
 

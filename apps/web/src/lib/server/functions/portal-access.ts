@@ -136,8 +136,8 @@ async function resolvePortalAccess(): Promise<PortalAccessDecision> {
   //     A private portal must never silently become public on transient errors.
   let portalConfig: PortalConfig
   try {
-    const { getPortalConfig } = await import('@/lib/server/domains/settings/settings.service')
-    portalConfig = await getPortalConfig()
+    const { getPortalConfigCached } = await import('@/lib/server/domains/settings/settings.service')
+    portalConfig = await getPortalConfigCached()
   } catch (err) {
     const { NotFoundError } = await import('@/lib/shared/errors')
     if (err instanceof NotFoundError) {

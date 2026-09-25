@@ -60,11 +60,13 @@ import {
   parseWidgetConfig,
   deepMerge,
   requireSettings,
+  requireSettingsCached,
   wrapDbError,
   invalidateSettingsCache,
   normalizeWelcomeCardInput,
   mergeWelcomeCard,
   publicWelcomeCard,
+  requireSettingsPerRequest,
 } from './settings.helpers'
 import { withCurrentStorageReadTokens } from '@/lib/server/content/storage-read-urls'
 
@@ -170,7 +172,7 @@ export async function getPublicOidcProviders(): Promise<OidcSignInButton[]> {
 
 export async function getAuthConfig(): Promise<AuthConfig> {
   try {
-    const org = await requireSettings()
+    const org = await requireSettingsPerRequest()
     return parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
   } catch (error) {
     log.error({ err: error }, 'get auth config failed')
@@ -621,7 +623,22 @@ export async function listVerifiedDomains(): Promise<VerifiedDomain[]> {
 
 export async function getPortalConfig(): Promise<PortalConfig> {
   try {
-    const org = await requireSettings()
+    const org = await requireSettingsPerRequest()
+    return parsePortalConfig(org.portalConfig)
+  } catch (error) {
+    log.error({ err: error }, 'get portal config failed')
+    wrapDbError('fetch portal config', error)
+  }
+}
+
+/**
+ * {@link getPortalConfig} for read-only paths (the portal-access gate runs on
+ * every page), served from the settings the request already holds. A
+ * read-modify-write keeps {@link getPortalConfig}.
+ */
+export async function getPortalConfigCached(): Promise<PortalConfig> {
+  try {
+    const org = await requireSettingsCached()
     return parsePortalConfig(org.portalConfig)
   } catch (error) {
     log.error({ err: error }, 'get portal config failed')
@@ -657,7 +674,7 @@ export async function updatePortalConfig(input: UpdatePortalConfigInput): Promis
 
 export async function getDeveloperConfig(): Promise<DeveloperConfig> {
   try {
-    const org = await requireSettings()
+    const org = await requireSettingsPerRequest()
     return parseJsonConfig(org.developerConfig, DEFAULT_DEVELOPER_CONFIG)
   } catch (error) {
     log.error({ err: error }, 'get developer config failed')
@@ -718,7 +735,7 @@ export async function updateDeveloperConfig(
 
 export async function getHelpCenterConfig(): Promise<HelpCenterConfig> {
   try {
-    const org = await requireSettings()
+    const org = await requireSettingsPerRequest()
     return parseJsonConfig(org.helpCenterConfig, DEFAULT_HELP_CENTER_CONFIG)
   } catch (error) {
     log.error({ err: error }, 'get help center config failed')
@@ -818,7 +835,7 @@ export async function updateHelpCenterLocaleChrome(input: {
 
 export async function getPublicAuthConfig(): Promise<PublicAuthConfig> {
   try {
-    const org = await requireSettings()
+    const org = await requireSettingsPerRequest()
     const authConfig = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
 
     const [configuredTypes, passthroughKeys] = await Promise.all([
@@ -843,7 +860,7 @@ export async function getPublicAuthConfig(): Promise<PublicAuthConfig> {
 
 export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
   try {
-    const org = await requireSettings()
+    const org = await requireSettingsPerRequest()
     const portalConfig = parsePortalConfig(org.portalConfig)
 
     const oidcProviders = await getPublicOidcProviders()

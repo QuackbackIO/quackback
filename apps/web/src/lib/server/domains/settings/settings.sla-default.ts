@@ -15,7 +15,7 @@ import {
   type DefaultSlaPolicySettings,
   type UpdateDefaultSlaPolicyInput,
 } from '@/lib/shared/sla/default-policy'
-import { requireSettings, wrapDbError, writeMetadataKey } from './settings.helpers'
+import { wrapDbError, writeMetadataKey, requireSettingsPerRequest } from './settings.helpers'
 
 export type { DefaultSlaPolicySettings, UpdateDefaultSlaPolicyInput }
 
@@ -37,7 +37,7 @@ export function resolveDefaultSlaPolicy(metadataJson: string | null): DefaultSla
 
 export async function getDefaultSlaPolicySettings(): Promise<DefaultSlaPolicySettings> {
   try {
-    const org = await requireSettings()
+    const org = await requireSettingsPerRequest()
     return resolveDefaultSlaPolicy(org.metadata)
   } catch (error) {
     log.error({ err: error }, 'get default SLA policy settings failed')
