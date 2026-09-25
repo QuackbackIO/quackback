@@ -30,11 +30,13 @@ vi.mock('@/lib/server/functions/assistant-copilot-analytics', () => ({
 }))
 vi.mock('@/lib/server/functions/support-reporting', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/functions/support-reporting')>()),
-  slaAttainmentFn: stub('slaAttainment', {}),
-  slaAttainmentByPolicyFn: stub('slaByPolicy', []),
-  slaBreachHeatmapFn: stub('slaHeatmap', []),
-  slaTimeAfterMissFn: stub('slaTimeAfterMiss', {}),
-  workflowEffectivenessFn: stub('workflows', []),
+  supportReportingFn: stub('supportReporting', {
+    sla: {},
+    slaByPolicy: [],
+    slaHeatmap: [],
+    slaTimeAfterMiss: {},
+    workflows: [],
+  }),
 }))
 
 const { Route } = await import('@/routes/admin/automation.performance')
@@ -71,17 +73,10 @@ describe('/admin/automation/performance loader', () => {
     const { range } = await loader({ context: { queryClient: client } })
 
     expect(new Date(range.to).getTime() - new Date(range.from).getTime()).toBe(30 * 86_400_000)
+    // One read per card: the support card's SLA and workflow figures come
+    // back in a single request.
     expect([...calls].sort()).toEqual(
-      [
-        'copilotUsage',
-        'quinnPerformance',
-        'quinnTools',
-        'slaAttainment',
-        'slaByPolicy',
-        'slaHeatmap',
-        'slaTimeAfterMiss',
-        'workflows',
-      ].sort()
+      ['copilotUsage', 'quinnPerformance', 'quinnTools', 'supportReporting'].sort()
     )
 
     calls.length = 0
