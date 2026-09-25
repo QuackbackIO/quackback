@@ -16,10 +16,8 @@ import { Label } from '@/components/ui/label'
 import { GitHubIcon } from '@/components/icons/integration-icons'
 import { IntegrationHealthPanel } from '@/components/admin/settings/integrations/integration-health-panel'
 import { GitHubConnectionActions } from '@/integrations/github/ui/github-connection-actions'
-import {
-  getGitHubChannelStatusFn,
-  setGitHubInboxEnabledFn,
-} from '@/integrations/github/server/functions'
+import { setGitHubInboxEnabledFn } from '@/integrations/github/server/functions'
+import { githubChannelStatusQuery } from '@/integrations/github/ui/github-channel-status-query'
 
 export const Route = createFileRoute('/admin/settings/channels_/github')({
   beforeLoad: ({ context }) => {
@@ -28,7 +26,15 @@ export const Route = createFileRoute('/admin/settings/channels_/github')({
     }
   },
   loader: async ({ context }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.CHANNEL_ACCOUNT_MANAGE)
+    const { permissions, queryClient } = context
+    assertRoutePermission(permissions, PERMISSIONS.CHANNEL_ACCOUNT_MANAGE)
+    // The connection status renders the page; warm it into the document when
+    // the viewer holds settings.manage, which its read requires.
+    if (permissions?.includes(PERMISSIONS.SETTINGS_MANAGE)) {
+      const { githubChannelStatusQuery: githubStatus } =
+        await import('@/integrations/github/ui/github-channel-status-query')
+      await queryClient.ensureQueryData(githubStatus()).catch(() => undefined)
+    }
     return {}
   },
   component: GitHubChannelPage,
@@ -36,10 +42,7 @@ export const Route = createFileRoute('/admin/settings/channels_/github')({
 
 function GitHubChannelPage() {
   const queryClient = useQueryClient()
-  const query = useQuery({
-    queryKey: ['settings', 'github-channel-status'],
-    queryFn: () => getGitHubChannelStatusFn(),
-  })
+  const query = useQuery(githubChannelStatusQuery())
   const status = query.data
   const [saving, setSaving] = useState(false)
   const connected = !!status?.connected
