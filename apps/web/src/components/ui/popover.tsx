@@ -2,6 +2,11 @@ import * as React from 'react'
 import { Popover as PopoverPrimitive } from '@base-ui/react/popover'
 
 import { asChildRender, overlayTriggerProps } from '@/components/ui/as-child'
+import {
+  OverlayOpenedContext,
+  useOverlayOpened,
+  useOverlayOpenedRoot,
+} from '@/components/ui/overlay-opened'
 import { cn } from '@/lib/shared/utils'
 
 /**
@@ -19,9 +24,10 @@ const PortalContainerContext = React.createContext<{
   setAnchor: (el: HTMLElement | null) => void
 }>({ containerRef: { current: null }, setTriggerEl: () => {}, anchor: null, setAnchor: () => {} })
 
-function Popover({ ...props }: PopoverPrimitive.Root.Props) {
+function Popover({ open, defaultOpen, onOpenChange, ...props }: PopoverPrimitive.Root.Props) {
   const containerRef = React.useRef<HTMLElement | null>(null)
   const [anchor, setAnchor] = React.useState<HTMLElement | null>(null)
+  const opened = useOverlayOpenedRoot(open, defaultOpen, onOpenChange)
 
   const setTriggerEl = React.useCallback((el: HTMLElement | null) => {
     if (!el) return
@@ -35,7 +41,15 @@ function Popover({ ...props }: PopoverPrimitive.Root.Props) {
 
   return (
     <PortalContainerContext.Provider value={ctx}>
-      <PopoverPrimitive.Root data-slot="popover" {...props} />
+      <OverlayOpenedContext.Provider value={opened.value}>
+        <PopoverPrimitive.Root
+          data-slot="popover"
+          open={open}
+          defaultOpen={defaultOpen}
+          onOpenChange={opened.onOpenChange}
+          {...props}
+        />
+      </OverlayOpenedContext.Provider>
     </PortalContainerContext.Provider>
   )
 }
@@ -122,6 +136,9 @@ function PopoverContent({
   const { containerRef, anchor } = React.useContext(PortalContainerContext)
   const portalContainer = containerProp ?? containerRef
 
+  // Nothing to portal until the popover first opens.
+  const opened = useOverlayOpened()
+  if (!opened) return null
   return (
     <PopoverPrimitive.Portal container={portalContainer}>
       <PopoverPrimitive.Positioner
