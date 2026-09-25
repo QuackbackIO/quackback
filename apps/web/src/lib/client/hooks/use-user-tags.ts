@@ -5,7 +5,7 @@
  * remove invalidate it plus the users lists (a tag edit changes what the
  * People-list tag filter matches) and the per-principal tag query.
  */
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { PrincipalId, UserTagId } from '@quackback/ids'
 import {
   listUserTagsFn,
@@ -20,11 +20,14 @@ export const userTagsKeys = {
   forPrincipal: (principalId: PrincipalId) => [...userTagsKeys.all, principalId] as const,
 }
 
-export function useUserTags() {
-  return useQuery({
+export const userTagsQueryOptions = () =>
+  queryOptions({
     queryKey: userTagsKeys.all,
     queryFn: () => listUserTagsFn(),
   })
+
+export function useUserTags() {
+  return useQuery(userTagsQueryOptions())
 }
 
 export function useUserTagsForPrincipal(principalId: PrincipalId | undefined) {

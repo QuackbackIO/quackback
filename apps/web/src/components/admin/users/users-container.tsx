@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useQuery, useInfiniteQuery, keepPreviousData } from '@tanstack/react-query'
+import { useQuery, useInfiniteQuery } from '@tanstack/react-query'
 import { UsersLayout } from '@/components/admin/users/users-layout'
 import { UsersSegmentNav } from '@/components/admin/users/users-segment-nav'
 import { UsersList } from '@/components/admin/users/users-list'
@@ -34,8 +34,7 @@ import {
   serializeCondition,
   deserializeCondition,
 } from '@/components/admin/segments/segment-utils'
-import { parseCompanyFilterParts } from '@/lib/shared/company-filters'
-import { listCompaniesPageFn, countCompaniesFn } from '@/lib/server/functions/companies'
+import { canReadCompanies, companiesDirectoryQueries } from '@/lib/client/queries/users-page'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import type { PrincipalId, SegmentId } from '@quackback/ids'
 import type { SegmentCondition } from '@/lib/shared/db-types'
@@ -100,17 +99,7 @@ export function UsersContainer({ currentMemberRole }: UsersContainerProps) {
 
   // Companies directory (the Companies lifecycle tab). Fetched only for team
   // roles — the server fn is gated on company.view, which both presets hold.
-  const companyFilterParts = parseCompanyFilterParts(filters.companyAttrs)
-  const companiesEnabled = currentMemberRole === 'admin' || currentMemberRole === 'member'
-  // Keyset-paginated companies list (capped at 5 pages, like the People list),
-  // fetched a page at a time instead of hauling the whole directory at once.
-  const companyFilterData = {
-    search: filters.search,
-    plan: companyFilterParts.plan,
-    mrr: companyFilterParts.mrr,
-    fields: companyFilterParts.fields,
-    attrs: companyFilterParts.attrs,
-  }
+  const companiesEnabled = canReadCompanies(currentMemberRole)
   const {
     data: companyPages,
     isLoading: isLoadingCompanies,
@@ -118,30 +107,13 @@ export function UsersContainer({ currentMemberRole }: UsersContainerProps) {
     hasNextPage: hasMoreCompanies,
     fetchNextPage: fetchMoreCompanies,
   } = useInfiniteQuery({
-    queryKey: [
-      'admin',
-      'companies',
-      { search: filters.search, companyAttrs: filters.companyAttrs },
-    ],
-    queryFn: ({ pageParam }) =>
-      listCompaniesPageFn({
-        data: { ...companyFilterData, cursor: pageParam ?? undefined },
-      }),
-    initialPageParam: null as string | null,
-    getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.nextCursor : undefined),
-    maxPages: 5,
+    ...companiesDirectoryQueries.page(filters.search, filters.companyAttrs),
     enabled: companiesEnabled,
-    staleTime: 30_000,
-    placeholderData: keepPreviousData,
   })
   const companies = companyPages?.pages.flatMap((p) => p.items)
-  // Unfiltered total for the nav badge — a cheap dedicated count query rather
-  // than a second full-list fetch.
   const { data: companyCount } = useQuery({
-    queryKey: ['admin', 'companies', 'count'],
-    queryFn: () => countCompaniesFn(),
+    ...companiesDirectoryQueries.count(),
     enabled: companiesEnabled,
-    staleTime: 60_000,
   })
 
   // Segments data

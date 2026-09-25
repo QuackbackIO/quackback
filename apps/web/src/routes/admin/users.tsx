@@ -1,10 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { adminQueries } from '@/lib/client/queries/admin'
-import {
-  portalUsersInfiniteOptions,
-  defaultUsersFilters,
-} from '@/lib/client/hooks/use-users-queries'
 import { UsersContainer } from '@/components/admin/users/users-container'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
@@ -67,10 +62,10 @@ export const Route = createFileRoute('/admin/users')({
       queryClient: typeof context.queryClient
     }
 
-    await Promise.all([
-      queryClient.ensureInfiniteQueryData(portalUsersInfiniteOptions(defaultUsersFilters)),
-      queryClient.ensureQueryData(adminQueries.segments()),
-    ])
+    // Imported here rather than at the top: route loaders ship in the entry
+    // chunk every page loads.
+    const { warmUsersPage } = await import('@/lib/client/queries/users-page')
+    await warmUsersPage(queryClient, principal.role)
 
     return {
       currentMemberRole: principal.role,
@@ -100,8 +95,8 @@ function UsersErrorComponent({ error, reset }: { error: unknown; reset: () => vo
 function UsersPage() {
   const { currentMemberRole } = Route.useLoaderData()
 
-  // The Users list is read by UsersContainer's own infinite `usePortalUsers`
-  // hook, which shares its query definition with the loader's prefetch (QC-1) —
-  // no separate suspense query here.
+  // Every read UsersContainer makes on load shares its query definition with
+  // the loader's prefetch (QC-1), so none is a separate request after
+  // hydration.
   return <UsersContainer currentMemberRole={currentMemberRole} />
 }
