@@ -8,27 +8,29 @@ import { cn } from '@/lib/shared/utils'
  * When a Popover is inside a Dialog, we portal to the dialog content element
  * instead of document.body. This keeps the popover inside react-remove-scroll's
  * boundary so wheel events work on scrollable content inside the popover.
+ *
+ * The container is a ref, read by the portal when the popover opens: finding
+ * it as state rendered every popover in a dialog a second time on mount.
  */
 const PortalContainerContext = React.createContext<{
-  container: HTMLElement | null
+  containerRef: React.RefObject<HTMLElement | null>
   setTriggerEl: (el: HTMLElement | null) => void
   anchor: HTMLElement | null
   setAnchor: (el: HTMLElement | null) => void
-}>({ container: null, setTriggerEl: () => {}, anchor: null, setAnchor: () => {} })
+}>({ containerRef: { current: null }, setTriggerEl: () => {}, anchor: null, setAnchor: () => {} })
 
 function Popover({ ...props }: PopoverPrimitive.Root.Props) {
-  const [container, setContainer] = React.useState<HTMLElement | null>(null)
+  const containerRef = React.useRef<HTMLElement | null>(null)
   const [anchor, setAnchor] = React.useState<HTMLElement | null>(null)
 
   const setTriggerEl = React.useCallback((el: HTMLElement | null) => {
     if (!el) return
-    const dialog = el.closest<HTMLElement>('[data-slot="dialog-content"]')
-    setContainer(dialog)
+    containerRef.current = el.closest<HTMLElement>('[data-slot="dialog-content"]')
   }, [])
 
   const ctx = React.useMemo(
-    () => ({ container, setTriggerEl, anchor, setAnchor }),
-    [container, setTriggerEl, anchor]
+    () => ({ containerRef, setTriggerEl, anchor, setAnchor }),
+    [setTriggerEl, anchor]
   )
 
   return (
@@ -117,8 +119,8 @@ function PopoverContent({
   Pick<PopoverPrimitive.Positioner.Props, 'align' | 'alignOffset' | 'side' | 'sideOffset'> & {
     container?: HTMLElement | null
   }) {
-  const { container: dialogContainer, anchor } = React.useContext(PortalContainerContext)
-  const portalContainer = containerProp ?? dialogContainer ?? undefined
+  const { containerRef, anchor } = React.useContext(PortalContainerContext)
+  const portalContainer = containerProp ?? containerRef
 
   return (
     <PopoverPrimitive.Portal container={portalContainer}>
