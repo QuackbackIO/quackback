@@ -26,6 +26,7 @@
  * deleteAnonymousIdentity.
  */
 import { toUuid, type PrincipalId } from '@quackback/ids'
+import { forgetRequestSegmentIds } from '@/lib/server/auth/request-session'
 import {
   slackUserLinks,
   postVotes,
@@ -354,6 +355,7 @@ export const REPOINT_STEPS: RepointStep[] = [
         .set({ principalId: to })
         .where(and(eq(userSegments.principalId, from), ne(userSegments.addedBy, 'dynamic')))
       await tx.delete(userSegments).where(eq(userSegments.principalId, from))
+      forgetRequestSegmentIds()
     },
   },
   collisionRepoint(
