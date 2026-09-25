@@ -101,6 +101,7 @@ const mockGetPublicPostDetail = vi.fn()
 const mockListPublicPosts = vi.fn()
 const mockGetPortalPublicRoadmaps = vi.fn()
 const mockGetPortalPublicRoadmapPosts = vi.fn()
+const mockGetPortalPublicRoadmapColumnsPosts = vi.fn()
 const mockGetPostMergeInfo = vi.fn()
 const mockGetMergedPosts = vi.fn()
 
@@ -141,6 +142,7 @@ vi.mock('@/lib/server/domains/roadmaps/roadmap.service', () => ({
 
 vi.mock('@/lib/server/domains/roadmaps/roadmap.query', () => ({
   getPublicRoadmapPosts: (...a: unknown[]) => mockGetPortalPublicRoadmapPosts(...a),
+  getPublicRoadmapColumnsPosts: (...a: unknown[]) => mockGetPortalPublicRoadmapColumnsPosts(...a),
 }))
 
 vi.mock('@/lib/server/domains/subscriptions/subscription.service', () => ({

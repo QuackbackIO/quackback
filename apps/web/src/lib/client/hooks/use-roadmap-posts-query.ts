@@ -197,16 +197,85 @@ export function roadmapPostsByRoadmapOptions({
   })
 }
 
-export function usePublicRoadmapPosts({
+type PublicRoadmapColumnRef = { statusId?: PostStatusId; bucketId?: string }
+
+interface PublicFirstPageBatch {
+  input: ReturnType<typeof publicColumnFilterInput>
+  columns: PublicRoadmapColumnRef[]
+  waiters: { resolve: (page: RoadmapPostsListResult) => void; reject: (error: unknown) => void }[]
+}
+
+/**
+ * First pages asked for in the same tick for the same public roadmap board
+ * and filters (the board opening, a filter change), waiting to go out as one
+ * fetchPublicRoadmapColumns request. Mirrors fetchColumnFirstPage above for
+ * the admin board.
+ */
+const pendingPublicFirstPages = new Map<string, PublicFirstPageBatch>()
+
+function publicColumnFilterInput(roadmapId: RoadmapId, filters: RoadmapFilters | undefined) {
+  return {
+    roadmapId,
+    limit: 20,
+    search: filters?.search,
+    boardIds: filters?.board,
+    tagIds: filters?.tags,
+    segmentIds: filters?.segmentIds,
+    sort: filters?.sort,
+  }
+}
+
+function fetchPublicColumnFirstPage(
+  roadmapId: RoadmapId,
+  column: PublicRoadmapColumnRef,
+  filters: RoadmapFilters | undefined
+): Promise<RoadmapPostsListResult> {
+  const input = publicColumnFilterInput(roadmapId, filters)
+  const key = JSON.stringify(input)
+  let batch = pendingPublicFirstPages.get(key)
+  if (!batch) {
+    const created: PublicFirstPageBatch = { input, columns: [], waiters: [] }
+    pendingPublicFirstPages.set(key, created)
+    queueMicrotask(() => void sendPublicFirstPages(key, created))
+    batch = created
+  }
+  const { columns, waiters } = batch
+  return new Promise((resolve, reject) => {
+    columns.push(column)
+    waiters.push({ resolve, reject })
+  })
+}
+
+async function sendPublicFirstPages(key: string, batch: PublicFirstPageBatch) {
+  pendingPublicFirstPages.delete(key)
+  try {
+    const { fetchPublicRoadmapColumns } = await import('@/lib/server/functions/portal')
+    const pages = (await fetchPublicRoadmapColumns({
+      data: { ...batch.input, columns: batch.columns },
+    })) as RoadmapPostsListResult[]
+    batch.waiters.forEach((waiter, i) => waiter.resolve(pages[i]!))
+  } catch (error) {
+    for (const waiter of batch.waiters) waiter.reject(error)
+  }
+}
+
+/**
+ * One public roadmap column's posts, a page of 20 at a time. First pages
+ * load together with the board's other columns (see fetchPublicColumnFirstPage);
+ * later pages load for their column alone.
+ */
+export function publicRoadmapPostsOptions({
   roadmapId,
   statusId,
   bucketId,
   filters,
-  enabled = true,
-}: UsePublicRoadmapPostsOptions) {
-  return useInfiniteQuery({
+}: Omit<UsePublicRoadmapPostsOptions, 'enabled'>) {
+  return infiniteQueryOptions({
     queryKey: roadmapPostsKeys.portal(roadmapId, statusId, bucketId, filters),
     queryFn: async ({ pageParam = 0 }) => {
+      if (pageParam === 0) {
+        return fetchPublicColumnFirstPage(roadmapId, { statusId, bucketId }, filters)
+      }
       const { fetchPublicRoadmapPosts } = await import('@/lib/server/functions/portal')
       return fetchPublicRoadmapPosts({
         data: {
@@ -231,8 +300,11 @@ export function usePublicRoadmapPosts({
       firstPageParam > 0 ? Math.max(0, firstPageParam - 20) : undefined,
     maxPages: 8,
     placeholderData: keepPreviousData,
-    enabled,
   })
+}
+
+export function usePublicRoadmapPosts({ enabled = true, ...column }: UsePublicRoadmapPostsOptions) {
+  return useInfiniteQuery({ ...publicRoadmapPostsOptions(column), enabled })
 }
 
 // ============================================================================
