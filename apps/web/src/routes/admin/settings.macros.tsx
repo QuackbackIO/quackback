@@ -18,7 +18,15 @@ export const Route = createFileRoute('/admin/settings/macros')({
     const { hasEntitlementFn } = await import('@/lib/server/functions/entitlement-status')
     const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
     const [macrosEntitled] = await Promise.all([
-      hasEntitlementFn({ data: { key: 'aiDrafts' } }),
+      // The library renders only on a plan that includes macros; warm it then
+      // so the page renders complete from the document.
+      hasEntitlementFn({ data: { key: 'aiDrafts' } }).then(async (entitled) => {
+        if (entitled) {
+          const { macrosQuery } = await import('@/lib/client/queries/macros')
+          await context.queryClient.ensureQueryData(macrosQuery()).catch(() => undefined)
+        }
+        return entitled
+      }),
       ensureBillingCatalogue(context.queryClient, context.billingEnabled),
     ])
     return { macrosEntitled }
