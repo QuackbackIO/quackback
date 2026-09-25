@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { Suspense, useState, useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Dialog,
@@ -20,7 +20,11 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { CategoryIcon, ICON_MAP, ALL_ICON_KEYS } from '@/components/help-center/category-icon'
+import {
+  CategoryIcon,
+  loadCategoryIconMap,
+  useCategoryIconMap,
+} from '@/components/help-center/category-icon'
 import { SegmentMultiSelect } from '@/components/admin/segments/segment-multi-select'
 import { cn } from '@/lib/shared/utils'
 import { listSegmentsFn } from '@/lib/server/functions/admin'
@@ -178,6 +182,43 @@ function iconLabel(key: string): string {
     .toLowerCase()
 }
 
+/** The picker's grid over the full icon set (loaded on demand), filtered by the search text. */
+function IconPickerGrid({
+  search,
+  selected,
+  onSelect,
+}: {
+  search: string
+  selected: string
+  onSelect: (key: string) => void
+}) {
+  const iconMap = useCategoryIconMap()
+  const keys = useMemo(() => {
+    const all = Object.keys(iconMap)
+    const q = search.toLowerCase().trim()
+    if (!q) return all
+    return all.filter((k) => iconLabel(k).includes(q))
+  }, [iconMap, search])
+
+  return keys.map((key) => {
+    const Icon = iconMap[key]
+    return (
+      <button
+        key={key}
+        type="button"
+        title={iconLabel(key)}
+        className={cn(
+          'h-8 w-8 rounded-md flex items-center justify-center hover:bg-muted transition-colors',
+          selected === key && 'bg-primary/15 ring-1 ring-inset ring-primary/30'
+        )}
+        onClick={() => onSelect(key)}
+      >
+        <Icon className="w-4 h-4" />
+      </button>
+    )
+  })
+}
+
 interface CategoryFormDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -217,6 +258,8 @@ export function CategoryFormDialog({
 
   useEffect(() => {
     if (open) {
+      // Fetch the picker's icon set now so it is ready when the picker opens.
+      loadCategoryIconMap().catch(() => {})
       setIcon(initialValues?.icon || DEFAULT_ICON)
       setName(initialValues?.name || '')
       setDescription(initialValues?.description || '')
@@ -263,12 +306,6 @@ export function CategoryFormDialog({
       return parentDepth + 1 + subtreeHeight <= MAX_CATEGORY_DEPTH - 1
     })
   }, [allCategories, initialValues?.id])
-
-  const filteredIcons = useMemo(() => {
-    const q = iconSearch.toLowerCase().trim()
-    if (!q) return ALL_ICON_KEYS
-    return ALL_ICON_KEYS.filter((k) => iconLabel(k).includes(q))
-  }, [iconSearch])
 
   const isPending = createCategory.isPending || updateCategory.isPending
 
@@ -339,27 +376,17 @@ export function CategoryFormDialog({
                     className="mb-2 h-8 text-sm"
                   />
                   <div className="grid grid-cols-8 gap-1 max-h-[288px] overflow-y-auto">
-                    {filteredIcons.map((key) => {
-                      const Icon = ICON_MAP[key]
-                      return (
-                        <button
-                          key={key}
-                          type="button"
-                          title={iconLabel(key)}
-                          className={cn(
-                            'h-8 w-8 rounded-md flex items-center justify-center hover:bg-muted transition-colors',
-                            icon === key && 'bg-primary/15 ring-1 ring-inset ring-primary/30'
-                          )}
-                          onClick={() => {
-                            setIcon(key)
-                            setIconPickerOpen(false)
-                            setIconSearch('')
-                          }}
-                        >
-                          <Icon className="w-4 h-4" />
-                        </button>
-                      )
-                    })}
+                    <Suspense fallback={<div className="col-span-8 h-[288px]" />}>
+                      <IconPickerGrid
+                        search={iconSearch}
+                        selected={icon}
+                        onSelect={(key) => {
+                          setIcon(key)
+                          setIconPickerOpen(false)
+                          setIconSearch('')
+                        }}
+                      />
+                    </Suspense>
                   </div>
                 </PopoverContent>
               </Popover>
