@@ -565,6 +565,9 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/portal.ts::fetchPublicRoadmapPosts::isTeamMember': NOT_A_GATE(
     'team may narrow by segment; non-team callers get the public result shape'
   ),
+  'lib/server/functions/portal.ts::fetchPublicRoadmapColumns::isTeamMember': NOT_A_GATE(
+    'the batched form of fetchPublicRoadmapPosts: team may narrow by segment; non-team callers get the public result shape'
+  ),
   'routes/api/v1/principals/$principalId.ts::fetchTeamMemberWithUser::isTeamMember': NOT_A_GATE(
     'route is already key-gated (member.view/manage); this returns 404 for non-team principals'
   ),

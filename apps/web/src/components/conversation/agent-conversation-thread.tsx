@@ -506,7 +506,6 @@ export function AgentConversationThread({
   const [drafts] = useState(createComposerDrafts)
   const [replyKey, setReplyKey] = useState(0)
   const [noteKey, setNoteKey] = useState(0)
-  const scrollRef = useRef<HTMLDivElement>(null)
 
   // The one controlled convert dialog's seed, built at whichever entry point
   // opened it: a per-message "Track as feedback" pick, an AI "Track as post"
