@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
-import { getEmailChannelStatusFn } from '@/lib/server/functions/settings'
+import { channelSettingsQueries } from '@/lib/client/queries/channel-settings'
 
 function EmailStatusRow({ label, value, ok }: { label: string; value: string; ok: boolean }) {
   return (
@@ -21,11 +21,7 @@ function EmailStatusRow({ label, value, ok }: { label: string; value: string; ok
 
 /** Read-only env probe: outbound provider, from-address, inbound domain. */
 export function EmailTransportCard() {
-  const { data } = useQuery({
-    queryKey: ['settings', 'email-channel-status'],
-    queryFn: () => getEmailChannelStatusFn(),
-    staleTime: 60_000,
-  })
+  const { data } = useQuery(channelSettingsQueries.emailStatus())
 
   if (!data) return null
 
