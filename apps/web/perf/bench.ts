@@ -473,6 +473,7 @@ async function measureBrowser(
     }
   } finally {
     await context.close()
+    await journey.teardown?.()
   }
 }
 
