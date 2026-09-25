@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { PostCard } from '@/components/public/post-card'
 import { Square2StackIcon } from '@heroicons/react/24/outline'
 import type { PostListItem, PostStatusEntity } from '@/lib/shared/db-types'
@@ -6,10 +7,20 @@ interface FeedbackRowProps {
   post: PostListItem
   statuses: PostStatusEntity[]
   duplicateCount?: number
-  onClick: () => void
+  /** Opens a post; stable across renders so the row renders only for its own post. */
+  onOpen: (postId: string) => void
 }
 
-export function FeedbackRow({ post, statuses, duplicateCount, onClick }: FeedbackRowProps) {
+/**
+ * Memoized: every prop is stable while the row's post is unchanged, so a
+ * keystroke in the search box or a URL change around the list renders no row.
+ */
+export const FeedbackRow = memo(function FeedbackRow({
+  post,
+  statuses,
+  duplicateCount,
+  onOpen,
+}: FeedbackRowProps) {
   return (
     <div className="group relative flex items-center">
       <div className="relative flex-1 min-w-0">
@@ -27,7 +38,7 @@ export function FeedbackRow({ post, statuses, duplicateCount, onClick }: Feedbac
           boardSlug={post.board.slug}
           tags={post.tags}
           // Admin mode - click to open modal
-          onClick={onClick}
+          onClick={() => onOpen(post.id)}
           // Admin doesn't need avatars in list view
           showAvatar={false}
         />
@@ -40,4 +51,4 @@ export function FeedbackRow({ post, statuses, duplicateCount, onClick }: Feedbac
       </div>
     </div>
   )
-}
+})
