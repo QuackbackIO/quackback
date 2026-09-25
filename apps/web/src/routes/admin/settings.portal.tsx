@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, useTransition } from 'react'
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router'
@@ -13,7 +13,6 @@ import {
   ComputerDesktopIcon,
   DevicePhoneMobileIcon,
   ArrowTopRightOnSquareIcon,
-  ChevronDownIcon,
 } from '@heroicons/react/24/solid'
 import type { JSONContent } from '@tiptap/react'
 import { Button } from '@/components/ui/button'
@@ -35,6 +34,7 @@ import { PageHeader } from '@/components/shared/page-header'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { PreviewToggleButton } from '@/components/admin/settings/preview-toggle'
 import { PortalPreview } from '@/components/admin/settings/branding/portal-preview'
+import { AdvancedCssPanel } from '@/components/admin/settings/branding/advanced-css-panel'
 import {
   PortalNavEditor,
   isValidNavLinkUrl,
@@ -73,26 +73,6 @@ import type {
   PortalWelcomeCard,
 } from '@/lib/shared/types/settings'
 import type { TiptapContent } from '@/lib/shared/db-types'
-
-// @uiw/react-codemirror + @codemirror/lang-css make this the largest route
-// chunk in the app, yet most visits never open the "Advanced CSS" panel —
-// defer it to its own chunk, loaded only when the <details> is expanded.
-const CustomCssEditor = lazy(() =>
-  import('@/components/admin/settings/branding/custom-css-editor').then((m) => ({
-    default: m.CustomCssEditor,
-  }))
-)
-
-// Fixed-height skeleton matching the editor's rendered height (280px) plus
-// its border, so the Advanced CSS panel doesn't jump while the chunk loads.
-function CustomCssEditorFallback() {
-  return (
-    <div
-      className="h-[280px] animate-pulse rounded-md border border-input bg-muted/30"
-      aria-hidden="true"
-    />
-  )
-}
 
 export const Route = createFileRoute('/admin/settings/portal')({
   loader: async ({ context }) => {
@@ -395,28 +375,7 @@ function PortalPage() {
                 </div>
               </div>
 
-              <details className="group rounded-lg border border-border/60 bg-muted/30">
-                <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 text-[13px] font-medium text-muted-foreground group-open:text-foreground [&::-webkit-details-marker]:hidden">
-                  Advanced CSS
-                  <span className="ms-auto flex items-center gap-3">
-                    <a
-                      href="https://tweakcn.com"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs font-medium text-primary hover:underline"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      Design at tweakcn.com
-                    </a>
-                    <ChevronDownIcon className="size-3.5 transition-transform group-open:rotate-180" />
-                  </span>
-                </summary>
-                <div className="px-3 pb-3">
-                  <Suspense fallback={<CustomCssEditorFallback />}>
-                    <CustomCssEditor value={state.cssText} onChange={state.setCssText} />
-                  </Suspense>
-                </div>
-              </details>
+              <AdvancedCssPanel value={state.cssText} onChange={state.setCssText} />
             </div>
           </SettingsCard>
 
