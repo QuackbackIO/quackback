@@ -2015,7 +2015,9 @@ function handleMediaPaste(
 // ============================================================================
 
 interface ToolbarButtonProps {
-  icon: React.ReactNode
+  /** Drawn at size-4. A component rather than an element, so a memoized
+   * button can compare it across renders. */
+  icon: React.ComponentType<{ className?: string }>
   onClick: () => void
   disabled: boolean
   isActive?: boolean
@@ -2026,8 +2028,12 @@ interface ToolbarButtonProps {
   variant?: 'default' | 'quiet'
 }
 
-function ToolbarButton({
-  icon,
+/**
+ * Memoized: a toolbar re-renders when any state it shows changes, and with
+ * stable onClick handlers only the buttons whose own state changed follow it.
+ */
+const ToolbarButton = memo(function ToolbarButton({
+  icon: Icon,
   onClick,
   disabled,
   isActive,
@@ -2054,10 +2060,10 @@ function ToolbarButton({
       title={title}
       aria-label={ariaLabel || title}
     >
-      {icon}
+      <Icon className="size-4" />
     </Button>
   )
-}
+})
 
 function ToolbarDivider() {
   return <div className="w-px h-4 bg-border mx-1" />
@@ -2081,43 +2087,69 @@ const selectBubbleMarks = ({ editor: e }: { editor: Editor }) => ({
   link: e.isActive('link'),
 })
 
+/**
+ * The toolbar and bubble menu commands, created once per editor so the
+ * memoized buttons that run them keep the same onClick across renders.
+ */
+function useToolbarCommands(editor: Editor) {
+  return useMemo(
+    () => ({
+      bold: () => editor.chain().focus().toggleBold().run(),
+      italic: () => editor.chain().focus().toggleItalic().run(),
+      underline: () => editor.chain().focus().toggleUnderline().run(),
+      strike: () => editor.chain().focus().toggleStrike().run(),
+      code: () => editor.chain().focus().toggleCode().run(),
+      heading1: () => editor.chain().focus().toggleHeading({ level: 1 }).run(),
+      heading2: () => editor.chain().focus().toggleHeading({ level: 2 }).run(),
+      heading3: () => editor.chain().focus().toggleHeading({ level: 3 }).run(),
+      bulletList: () => editor.chain().focus().toggleBulletList().run(),
+      orderedList: () => editor.chain().focus().toggleOrderedList().run(),
+      codeBlock: () => editor.chain().focus().toggleCodeBlock().run(),
+      undo: () => editor.chain().focus().undo().run(),
+      redo: () => editor.chain().focus().redo().run(),
+    }),
+    [editor]
+  )
+}
+
 function BubbleMenuContent({ editor, disabled }: BubbleMenuContentProps) {
   // Same subscription as MenuBar: re-renders only when a mark it shows flips.
   const active = useEditorState({ editor, selector: selectBubbleMarks })
+  const commands = useToolbarCommands(editor)
   return (
     <div className="flex items-center gap-0.5 rounded-lg border bg-popover p-1 shadow-md">
       <ToolbarButton
-        icon={<Bold className="size-4" />}
-        onClick={() => editor.chain().focus().toggleBold().run()}
+        icon={Bold}
+        onClick={commands.bold}
         disabled={disabled}
         isActive={active.bold}
         title="Bold (Cmd+B)"
       />
       <ToolbarButton
-        icon={<Italic className="size-4" />}
-        onClick={() => editor.chain().focus().toggleItalic().run()}
+        icon={Italic}
+        onClick={commands.italic}
         disabled={disabled}
         isActive={active.italic}
         title="Italic (Cmd+I)"
       />
       <ToolbarButton
-        icon={<UnderlineIcon className="size-4" />}
-        onClick={() => editor.chain().focus().toggleUnderline().run()}
+        icon={UnderlineIcon}
+        onClick={commands.underline}
         disabled={disabled}
         isActive={active.underline}
         title="Underline (Cmd+U)"
       />
       <ToolbarButton
-        icon={<Strikethrough className="size-4" />}
-        onClick={() => editor.chain().focus().toggleStrike().run()}
+        icon={Strikethrough}
+        onClick={commands.strike}
         disabled={disabled}
         isActive={active.strike}
         title="Strikethrough (Cmd+Shift+S)"
       />
       <ToolbarDivider />
       <ToolbarButton
-        icon={<Code className="size-4" />}
-        onClick={() => editor.chain().focus().toggleCode().run()}
+        icon={Code}
+        onClick={commands.code}
         disabled={disabled}
         isActive={active.code}
         title="Inline Code (Cmd+E)"
@@ -2288,14 +2320,14 @@ function TableToolbar({ editor, disabled }: TableToolbarProps) {
     <div className="flex items-center gap-0.5 rounded-lg border bg-popover p-1 shadow-md">
       {/* Add row above */}
       <ToolbarButton
-        icon={<ArrowUp className="size-4" />}
+        icon={ArrowUp}
         onClick={() => editor.chain().focus().addRowBefore().run()}
         disabled={disabled}
         title="Add row above"
       />
       {/* Add row below */}
       <ToolbarButton
-        icon={<ArrowDown className="size-4" />}
+        icon={ArrowDown}
         onClick={() => editor.chain().focus().addRowAfter().run()}
         disabled={disabled}
         title="Add row below"
@@ -2303,14 +2335,14 @@ function TableToolbar({ editor, disabled }: TableToolbarProps) {
       <ToolbarDivider />
       {/* Add column left */}
       <ToolbarButton
-        icon={<ArrowLeft className="size-4" />}
+        icon={ArrowLeft}
         onClick={() => editor.chain().focus().addColumnBefore().run()}
         disabled={disabled}
         title="Add column left"
       />
       {/* Add column right */}
       <ToolbarButton
-        icon={<ArrowRight className="size-4" />}
+        icon={ArrowRight}
         onClick={() => editor.chain().focus().addColumnAfter().run()}
         disabled={disabled}
         title="Add column right"
@@ -2447,28 +2479,28 @@ function ImageToolbar({ editor, disabled }: ImageToolbarProps) {
       aria-label="Image options"
     >
       <ToolbarButton
-        icon={<Expand className="size-4" />}
+        icon={Expand}
         onClick={viewImage}
         disabled={disabled}
         title="View image"
         aria-label="View image in new tab"
       />
       <ToolbarButton
-        icon={<Download className="size-4" />}
+        icon={Download}
         onClick={downloadImage}
         disabled={disabled}
         title="Download"
         aria-label="Download image"
       />
       <ToolbarButton
-        icon={<Copy className="size-4" />}
+        icon={Copy}
         onClick={copyImage}
         disabled={disabled}
         title="Copy to clipboard"
         aria-label="Copy image to clipboard"
       />
       <ToolbarButton
-        icon={<Link2 className="size-4" />}
+        icon={Link2}
         onClick={copyLink}
         disabled={disabled}
         title="Copy link"
@@ -2476,7 +2508,7 @@ function ImageToolbar({ editor, disabled }: ImageToolbarProps) {
       />
       <ToolbarDivider />
       <ToolbarButton
-        icon={<Trash2 className="size-4" />}
+        icon={Trash2}
         onClick={deleteImage}
         disabled={disabled}
         title="Delete"
@@ -2541,6 +2573,7 @@ function MenuBar({
   // Subscribe to the marks/nodes the toolbar reflects so it re-renders only
   // when one of them changes, never merely because a character was typed.
   const active = useEditorState({ editor, selector: selectToolbarState })
+  const commands = useToolbarCommands(editor)
   const setLink = useCallback(() => {
     const previousUrl = editor.getAttributes('link').href
     let url = window.prompt('URL', previousUrl)
@@ -2630,24 +2663,24 @@ function MenuBar({
         <>
           <ToolbarButton
             variant={btn}
-            icon={<Heading1 className="size-4" />}
-            onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+            icon={Heading1}
+            onClick={commands.heading1}
             disabled={disabled}
             isActive={active.heading1}
             title="Heading 1"
           />
           <ToolbarButton
             variant={btn}
-            icon={<Heading2 className="size-4" />}
-            onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+            icon={Heading2}
+            onClick={commands.heading2}
             disabled={disabled}
             isActive={active.heading2}
             title="Heading 2"
           />
           <ToolbarButton
             variant={btn}
-            icon={<Heading3 className="size-4" />}
-            onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+            icon={Heading3}
+            onClick={commands.heading3}
             disabled={disabled}
             isActive={active.heading3}
             title="Heading 3"
@@ -2659,16 +2692,16 @@ function MenuBar({
       {/* Basic formatting */}
       <ToolbarButton
         variant={btn}
-        icon={<Bold className="size-4" />}
-        onClick={() => editor.chain().focus().toggleBold().run()}
+        icon={Bold}
+        onClick={commands.bold}
         disabled={disabled}
         isActive={active.bold}
         title="Bold"
       />
       <ToolbarButton
         variant={btn}
-        icon={<Italic className="size-4" />}
-        onClick={() => editor.chain().focus().toggleItalic().run()}
+        icon={Italic}
+        onClick={commands.italic}
         disabled={disabled}
         isActive={active.italic}
         title="Italic"
@@ -2678,16 +2711,16 @@ function MenuBar({
       {/* Lists */}
       <ToolbarButton
         variant={btn}
-        icon={<ListBulletIcon className="size-4" />}
-        onClick={() => editor.chain().focus().toggleBulletList().run()}
+        icon={ListBulletIcon}
+        onClick={commands.bulletList}
         disabled={disabled}
         isActive={active.bulletList}
         title="Bullet List"
       />
       <ToolbarButton
         variant={btn}
-        icon={<ListOrdered className="size-4" />}
-        onClick={() => editor.chain().focus().toggleOrderedList().run()}
+        icon={ListOrdered}
+        onClick={commands.orderedList}
         disabled={disabled}
         isActive={active.orderedList}
         title="Ordered List"
@@ -2697,7 +2730,7 @@ function MenuBar({
       {/* Link */}
       <ToolbarButton
         variant={btn}
-        icon={<LinkIcon className="size-4" />}
+        icon={LinkIcon}
         onClick={setLink}
         disabled={disabled}
         isActive={active.link}
@@ -2708,8 +2741,8 @@ function MenuBar({
       {features.codeBlocks && (
         <ToolbarButton
           variant={btn}
-          icon={<Code2 className="size-4" />}
-          onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+          icon={Code2}
+          onClick={commands.codeBlock}
           disabled={disabled}
           isActive={active.codeBlock}
           title="Code Block"
@@ -2720,7 +2753,7 @@ function MenuBar({
       {features.images && onImageUpload && (
         <ToolbarButton
           variant={btn}
-          icon={<ImagePlus className="size-4" />}
+          icon={ImagePlus}
           onClick={insertImage}
           disabled={disabled}
           title="Insert Image"
@@ -2730,7 +2763,7 @@ function MenuBar({
       {features.videos && onVideoUpload && (
         <ToolbarButton
           variant={btn}
-          icon={<VideoIcon className="size-4" />}
+          icon={VideoIcon}
           onClick={insertVideo}
           disabled={disabled}
           title="Insert Video"
@@ -2744,15 +2777,15 @@ function MenuBar({
       {/* Undo/Redo */}
       <ToolbarButton
         variant={btn}
-        icon={<ArrowUturnLeftIcon className="size-4" />}
-        onClick={() => editor.chain().focus().undo().run()}
+        icon={ArrowUturnLeftIcon}
+        onClick={commands.undo}
         disabled={disabled || !active.canUndo}
         title="Undo"
       />
       <ToolbarButton
         variant={btn}
-        icon={<ArrowUturnRightIcon className="size-4" />}
-        onClick={() => editor.chain().focus().redo().run()}
+        icon={ArrowUturnRightIcon}
+        onClick={commands.redo}
         disabled={disabled || !active.canRedo}
         title="Redo"
       />
