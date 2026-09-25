@@ -25,6 +25,13 @@ export const Route = createFileRoute('/admin/settings/changelog')({
     await Promise.all([
       context.queryClient.ensureQueryData(changelogSettingsQueries.get()),
       context.queryClient.ensureQueryData(changelogCategoryQueries.list()),
+      // A segment-gated label shows its segments by name, read under
+      // segment.view; without it the names fall back to ids, as before.
+      context.permissions?.includes(PERMISSIONS.SEGMENT_VIEW)
+        ? context.queryClient
+            .ensureQueryData(changelogCategoryQueries.segments())
+            .catch(() => undefined)
+        : undefined,
     ])
     return {}
   },

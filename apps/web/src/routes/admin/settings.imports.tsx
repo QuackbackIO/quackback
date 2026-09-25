@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { ImportsHubPage } from '@/components/admin/settings/imports/imports-hub-page'
+import { adminQueries } from '@/lib/client/queries/admin'
 
 /**
  * Data > Imports & exports (§I1). Admin-only, no feature flag — importing
@@ -12,7 +13,11 @@ export const Route = createFileRoute('/admin/settings/imports')({
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MANAGE)
     const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
-    await ensureBillingCatalogue(context.queryClient, context.billingEnabled)
+    await Promise.all([
+      ensureBillingCatalogue(context.queryClient, context.billingEnabled),
+      // The CSV import's board picker, warmed so it is in the document.
+      context.queryClient.ensureQueryData(adminQueries.boardsForSettings()).catch(() => undefined),
+    ])
   },
   component: ImportsHubPage,
 })

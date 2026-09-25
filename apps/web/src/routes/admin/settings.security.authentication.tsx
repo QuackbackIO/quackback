@@ -30,10 +30,15 @@ const searchSchema = z.object({
 
 export const Route = createFileRoute('/admin/settings/security/authentication')({
   validateSearch: searchSchema,
-  loader: async ({ context }) => {
+  loader: async ({ context, location }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.AUTH_MANAGE)
 
     const { queryClient } = context
+    // The portal access tab (the default) lists the segments a private portal
+    // can admit, read under segment.view.
+    const tab = (location.search as { tab?: unknown }).tab ?? 'portal-access'
+    const warmSegments =
+      tab === 'portal-access' && !!context.permissions?.includes(PERMISSIONS.SEGMENT_VIEW)
     // Auth + SSO reads are cheap and never 402. The audit feed is an Enterprise
     // entitlement: prefetching it here took down Portal access and Sign-in
     // on every other plan. The audit tab loads that query only when entitled.
@@ -47,6 +52,9 @@ export const Route = createFileRoute('/admin/settings/security/authentication')(
         queryClient.ensureQueryData(adminQueries.authProviderStatus()),
         queryClient.ensureQueryData(settingsQueries.identityProviders()),
         queryClient.ensureQueryData(adminQueries.recoveryCodes()),
+        warmSegments
+          ? queryClient.ensureQueryData(adminQueries.segments()).catch(() => undefined)
+          : undefined,
       ]),
       listEntitlementsFn(),
       ensureBillingCatalogue(queryClient, context.billingEnabled),
