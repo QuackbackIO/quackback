@@ -9,6 +9,7 @@ import { AiBackfillCard } from '@/components/admin/settings/tags/ai-backfill-car
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { isProductEnabled } from '@/lib/shared/types/settings'
+import { settingsReadBatch } from '@/lib/client/queries/settings-batch'
 
 export const Route = createFileRoute('/admin/settings/tags')({
   beforeLoad: ({ context }) => {
@@ -19,10 +20,8 @@ export const Route = createFileRoute('/admin/settings/tags')({
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.TAG_MANAGE)
     const { queryClient } = context
-    await Promise.all([
-      queryClient.ensureQueryData(adminQueries.tags()),
-      queryClient.ensureQueryData(adminQueries.boards()),
-    ])
+    const ensure = settingsReadBatch(queryClient)
+    await Promise.all([ensure(adminQueries.tags()), ensure(adminQueries.boards())])
     return {}
   },
   component: TagsPage,
