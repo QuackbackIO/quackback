@@ -27,6 +27,9 @@ export const Route = createFileRoute('/admin/settings/members')({
     await Promise.all([
       queryClient.ensureQueryData(settingsQueries.teamMembersAndInvitations()),
       queryClient.ensureQueryData(settingsQueries.teams()),
+      // Every row's actions menu lists the custom roles (and the Roles tab
+      // shows them), under the same member.view gate as the roster.
+      queryClient.ensureQueryData(settingsQueries.roles()),
     ])
 
     return {
