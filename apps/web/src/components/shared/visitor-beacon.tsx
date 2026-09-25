@@ -25,19 +25,22 @@ function getOrCreateDeviceId(): string | null {
 }
 
 export function VisitorBeacon() {
-  const href = useRouterState({ select: (s) => s.location.href })
-  // Public visitor-facing surfaces: the portal tree plus the standalone
-  // changelog and help-center trees (the latter also serve the subdomain).
-  const isPublicSurface = useRouterState({
+  // The URL to track, or null off the public visitor-facing surfaces (the
+  // portal tree plus the standalone changelog and help-center trees, the
+  // latter also serving the subdomain), so a navigation elsewhere renders
+  // nothing.
+  const href = useRouterState({
     select: (s) =>
       s.matches.some((m) =>
         ['/_portal', '/changelog', '/hc', '/help'].some((prefix) => m.routeId.startsWith(prefix))
-      ),
+      )
+        ? s.location.href
+        : null,
   })
   const lastTracked = useRef<string | null>(null)
 
   useEffect(() => {
-    if (!isPublicSurface || lastTracked.current === href) return
+    if (!href || lastTracked.current === href) return
     const nav = navigator as Navigator & { globalPrivacyControl?: boolean }
     if (nav.doNotTrack === '1' || nav.globalPrivacyControl === true) return
     lastTracked.current = href
@@ -52,7 +55,7 @@ export function VisitorBeacon() {
     if (!navigator.sendBeacon?.('/api/track', body)) {
       fetch('/api/track', { method: 'POST', body, keepalive: true }).catch(() => {})
     }
-  }, [href, isPublicSurface])
+  }, [href])
 
   return null
 }
