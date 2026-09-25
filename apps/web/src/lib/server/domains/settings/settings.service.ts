@@ -8,7 +8,7 @@ import {
 } from '@/lib/server/db'
 import type { IdentityProviderId } from '@quackback/ids'
 import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/cache'
-import { localCacheGet, localCacheSet } from '@/lib/server/local-cache'
+import { localCacheGet, localCacheSet, settingsLocalTtlMs } from '@/lib/server/local-cache'
 import { memoizePerRequest } from '@/lib/server/request-memo'
 import { ValidationError, NotFoundError } from '@/lib/shared/errors'
 import { httpsUrl } from '@/lib/shared/schemas/auth'
@@ -900,23 +900,6 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
 export async function getWorkspaceSettings(): Promise<WorkspaceSettings | null> {
   const settings = await memoizePerRequest(CACHE_KEYS.WORKSPACE_SETTINGS, loadWorkspaceSettings)
   return settings ? liveWorkspaceSettings(structuredClone(settings)) : null
-}
-
-/**
- * How long this process reuses the settings it read (`localCacheSet`): a write
- * made by another process reaches this one within this window, which bounds
- * how late, for example, a changed auth config takes effect there.
- */
-export const SETTINGS_LOCAL_TTL_MS = 5_000
-
-/**
- * The window in effect: QUACKBACK_SETTINGS_CACHE_MS overrides it (0 turns the
- * copy off). The perf bench pins it long, so its counts measure a warm process
- * rather than whichever side of the window a request happened to land on.
- */
-function settingsLocalTtlMs(): number {
-  const override = Number(process.env.QUACKBACK_SETTINGS_CACHE_MS)
-  return Number.isFinite(override) && override >= 0 ? override : SETTINGS_LOCAL_TTL_MS
 }
 
 async function loadWorkspaceSettings(): Promise<WorkspaceSettings | null> {

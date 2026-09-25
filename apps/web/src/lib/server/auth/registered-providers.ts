@@ -29,6 +29,7 @@ import {
 import { AUTH_CREDENTIAL_PREFIX, getAllAuthProviders } from './auth-providers'
 import { isSignInMethodEnabled } from '@/lib/shared/signin-methods'
 import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/cache'
+import { localCacheGet, localCacheSet, settingsLocalTtlMs } from '@/lib/server/local-cache'
 
 /**
  * TTL for the cached registered-provider list. A generous backstop: every
@@ -85,13 +86,23 @@ export async function getRegisteredOidcProviderIds(
  *
  * Redis outages degrade gracefully: `cacheGet` returns null on failure, so we
  * fall through to a fresh compute, and `cacheSet` swallows its own errors.
+ *
+ * Like the settings it is derived from, the list is also held in this process
+ * for the settings window (`settingsLocalTtlMs`), dropped at once by the same
+ * invalidations, so a busy process skips the cache read on most bootstraps.
  */
 export async function getRegisteredAuthProviders(): Promise<string[]> {
-  const cached = await cacheGet<string[]>(CACHE_KEYS.REGISTERED_AUTH_PROVIDERS)
-  if (cached) return cached
+  const key = CACHE_KEYS.REGISTERED_AUTH_PROVIDERS
+  const local = localCacheGet<string[]>(key)
+  if (local !== undefined) return [...local]
 
-  const ids = await computeRegisteredAuthProviders()
-  await cacheSet(CACHE_KEYS.REGISTERED_AUTH_PROVIDERS, ids, REGISTERED_AUTH_PROVIDERS_TTL_SECONDS)
+  let ids = await cacheGet<string[]>(key)
+  if (!ids) {
+    ids = await computeRegisteredAuthProviders()
+    await cacheSet(key, ids, REGISTERED_AUTH_PROVIDERS_TTL_SECONDS)
+  }
+  const ttlMs = settingsLocalTtlMs()
+  if (ttlMs > 0) localCacheSet(key, [...ids], ttlMs)
   return ids
 }
 
