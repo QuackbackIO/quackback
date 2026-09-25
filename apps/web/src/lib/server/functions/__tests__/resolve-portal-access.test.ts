@@ -72,6 +72,7 @@ const mockGetPortalConfig = vi.fn()
 
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   getPortalConfig: () => mockGetPortalConfig(),
+  getPortalConfigCached: () => mockGetPortalConfig(),
   updatePortalConfig: vi.fn(),
 }))
 
@@ -114,7 +115,7 @@ beforeEach(() => {
 })
 
 describe('resolvePortalAccessForRequest — config-throw contract', () => {
-  it('returns granted/public when getPortalConfig throws NotFoundError (no settings row)', async () => {
+  it('returns granted/public when the portal config read throws NotFoundError (no settings row)', async () => {
     mockGetSession.mockResolvedValue(null)
     mockGetPortalConfig.mockRejectedValue(
       new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
@@ -125,7 +126,7 @@ describe('resolvePortalAccessForRequest — config-throw contract', () => {
     expect(result).toEqual({ granted: true, reason: 'public' })
   })
 
-  it('fails CLOSED for an anonymous caller when getPortalConfig throws a non-NotFoundError', async () => {
+  it('fails CLOSED for an anonymous caller when the portal config read throws a non-NotFoundError', async () => {
     // Regression: a transient DB / cache error during config read must NOT
     // silently render a private portal as public. Anonymous → unauthenticated.
     mockGetSession.mockResolvedValue(null)
@@ -139,7 +140,7 @@ describe('resolvePortalAccessForRequest — config-throw contract', () => {
     }
   })
 
-  it('fails CLOSED for an authenticated caller when getPortalConfig throws a non-NotFoundError', async () => {
+  it('fails CLOSED for an authenticated caller when the portal config read throws a non-NotFoundError', async () => {
     // Same regression for an authenticated user — must NOT default to
     // granted/public. Authenticated callers get the unauthorized screen.
     mockGetSession.mockResolvedValue({

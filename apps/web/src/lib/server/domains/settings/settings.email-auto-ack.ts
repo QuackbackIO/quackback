@@ -3,7 +3,7 @@
  * metadata bag (`emailAutoAck`). Default off.
  */
 import { logger } from '@/lib/server/logger'
-import { requireSettings, wrapDbError, writeMetadataKey } from './settings.helpers'
+import { wrapDbError, writeMetadataKey, requireSettingsPerRequest } from './settings.helpers'
 
 const log = logger.child({ component: 'settings-email-auto-ack' })
 const METADATA_KEY = 'emailAutoAck'
@@ -30,7 +30,7 @@ export function resolveEmailAutoAck(metadataJson: string | null): EmailAutoAckCo
 
 export async function getEmailAutoAck(): Promise<EmailAutoAckConfig> {
   try {
-    const org = await requireSettings()
+    const org = await requireSettingsPerRequest()
     return resolveEmailAutoAck(org.metadata)
   } catch (error) {
     log.error({ err: error }, 'get email auto-ack failed')

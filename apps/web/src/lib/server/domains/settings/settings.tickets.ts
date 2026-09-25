@@ -19,7 +19,7 @@ import { z } from 'zod'
 import { logger } from '@/lib/server/logger'
 import { TICKET_STAGES } from '@/lib/shared/db-types'
 import { DEFAULT_TICKET_STAGE_LABELS, type TicketStageLabels } from '@/lib/shared/tickets'
-import { requireSettings, wrapDbError, writeMetadataKey } from './settings.helpers'
+import { wrapDbError, writeMetadataKey, requireSettingsPerRequest } from './settings.helpers'
 
 export type { TicketStageLabels }
 export { DEFAULT_TICKET_STAGE_LABELS }
@@ -69,7 +69,7 @@ export function resolveStageLabels(metadataJson: string | null): TicketStageLabe
 
 export async function getStageLabels(): Promise<TicketStageLabels> {
   try {
-    const org = await requireSettings()
+    const org = await requireSettingsPerRequest()
     return resolveStageLabels(org.metadata)
   } catch (error) {
     log.error({ err: error }, 'get stage labels failed')

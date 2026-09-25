@@ -13,8 +13,9 @@
  * concurrent settings work. `getWorkflowAbandonedAutoCloseSettings` is called
  * from the run engine's hot park path (every interactive-block park), same as
  * `getOfficeHoursSchedule` is called from every run's condition-context
- * resolution — a single `requireSettings()` read, uncached, matching that
- * precedent rather than the heavier `getWorkspaceSettings()` consolidation.
+ * resolution — a single `requireSettingsPerRequest()` read, never cached
+ * across requests, matching that precedent rather than the heavier
+ * `getWorkspaceSettings()` consolidation.
  */
 import { logger } from '@/lib/server/logger'
 import {
@@ -29,7 +30,7 @@ import {
   type WorkflowCloseSpamSettings,
   type UpdateWorkflowCloseSpamInput,
 } from '@/lib/shared/workflows/close-spam'
-import { requireSettings, wrapDbError, writeMetadataKey } from './settings.helpers'
+import { wrapDbError, writeMetadataKey, requireSettingsPerRequest } from './settings.helpers'
 
 export { DEFAULT_WORKFLOW_ABANDONED_AUTO_CLOSE, DEFAULT_WORKFLOW_CLOSE_SPAM }
 export type {
@@ -64,7 +65,7 @@ export function resolveWorkflowAbandonedAutoClose(
 
 export async function getWorkflowAbandonedAutoCloseSettings(): Promise<WorkflowAbandonedAutoCloseSettings> {
   try {
-    const org = await requireSettings()
+    const org = await requireSettingsPerRequest()
     return resolveWorkflowAbandonedAutoClose(org.metadata)
   } catch (error) {
     log.error({ err: error }, 'get workflow abandoned auto-close settings failed')
@@ -105,7 +106,7 @@ export function resolveWorkflowCloseSpam(metadataJson: string | null): WorkflowC
 
 export async function getWorkflowCloseSpamSettings(): Promise<WorkflowCloseSpamSettings> {
   try {
-    const org = await requireSettings()
+    const org = await requireSettingsPerRequest()
     return resolveWorkflowCloseSpam(org.metadata)
   } catch (error) {
     log.error({ err: error }, 'get workflow close-spam settings failed')

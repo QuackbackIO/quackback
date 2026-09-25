@@ -6,7 +6,7 @@
  * existing installs keep their toggle until an admin saves the hub card.
  */
 import { logger } from '@/lib/server/logger'
-import { requireSettings, wrapDbError, writeMetadataKey } from './settings.helpers'
+import { wrapDbError, writeMetadataKey, requireSettingsPerRequest } from './settings.helpers'
 
 const log = logger.child({ component: 'settings-conversation-routing' })
 
@@ -64,7 +64,7 @@ function readLegacyRouting(widgetConfigJson: string | null): ConversationRouting
 
 export async function getConversationRouting(): Promise<ConversationRoutingConfig> {
   try {
-    const org = await requireSettings()
+    const org = await requireSettingsPerRequest()
     return resolveConversationRouting(org.metadata, org.widgetConfig)
   } catch (error) {
     log.error({ err: error }, 'get conversation routing failed')

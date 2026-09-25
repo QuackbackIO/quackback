@@ -16,7 +16,7 @@ import {
   type UpdateStatusSettingsInput,
 } from '@/lib/shared/status-settings'
 import { logger } from '@/lib/server/logger'
-import { requireSettings, wrapDbError, writeMetadataKey } from './settings.helpers'
+import { wrapDbError, writeMetadataKey, requireSettingsPerRequest } from './settings.helpers'
 
 export { DEFAULT_STATUS_SETTINGS }
 export type { StatusSettings, UpdateStatusSettingsInput }
@@ -40,7 +40,7 @@ export function resolveStatusSettings(metadataJson: string | null): StatusSettin
 
 export async function getStatusSettings(): Promise<StatusSettings> {
   try {
-    const org = await requireSettings()
+    const org = await requireSettingsPerRequest()
     return resolveStatusSettings(org.metadata)
   } catch (error) {
     log.error({ err: error }, 'get status settings failed')
