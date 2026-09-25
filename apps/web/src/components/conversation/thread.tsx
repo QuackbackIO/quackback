@@ -6,7 +6,14 @@
  * supplies its data and capabilities through parameters — auth headers, cache
  * writes, error surfacing — rather than forking the machinery.
  */
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import type { ReactNode, RefObject } from 'react'
 import { useVirtualizer, type Virtualizer } from '@tanstack/react-virtual'
 import type { JSONContent } from '@tiptap/core'
@@ -25,33 +32,93 @@ export function docHasContentNode(doc: JSONContent | null): boolean {
   return walk(doc.content)
 }
 
+/** What the composer holds: the editor's plain text and its TipTap doc. */
+export interface ComposerDocDraft {
+  /** Plain text: gates send, drives typing and help search. */
+  text: string
+  /** The doc, sent as contentJson. */
+  doc: JSONContent | null
+  /** The doc carries an inline image or embed, so it is worth sending without text. */
+  hasContentNode: boolean
+}
+
 /**
- * Composer-doc state: the rich editor's plain text (gates send + drives
- * typing/help-search), the TipTap doc persisted as contentJson (held in a ref —
- * it changes on every keystroke), a reactive "doc carries an inline
- * image/embed" mirror so the send gate enables for a no-text message, and the
- * reset signal that clears the editor after a send.
+ * The composer's draft, held outside React state. The editor writes it on
+ * every keystroke, and a state update there would re-render the whole thread
+ * around the composer. What the thread draws from the draft subscribes to just
+ * that value (useComposerDocValue); everything else reads the latest draft
+ * when it acts.
+ */
+export interface ComposerDocStore {
+  get(): ComposerDocDraft
+  set(text: string, doc: JSONContent | null): void
+  subscribe(onChange: () => void): () => void
+}
+
+function createComposerDocStore(): ComposerDocStore {
+  let draft: ComposerDocDraft = { text: '', doc: null, hasContentNode: false }
+  const listeners = new Set<() => void>()
+  return {
+    get: () => draft,
+    set(text, doc) {
+      draft = { text, doc, hasContentNode: docHasContentNode(doc) }
+      for (const listener of listeners) listener()
+    },
+    subscribe(onChange) {
+      listeners.add(onChange)
+      return () => {
+        listeners.delete(onChange)
+      }
+    },
+  }
+}
+
+/**
+ * The composer's draft store and the reset signal that clears the editor
+ * after a send (it keys the editor, so a bump remounts it empty).
  */
 export function useComposerDoc() {
-  const [text, setText] = useState('')
-  const docRef = useRef<JSONContent | null>(null)
-  const [hasContentNode, setHasContentNode] = useState(false)
+  const [draft] = useState(createComposerDocStore)
   const [resetSignal, setResetSignal] = useState(0)
 
-  const onChange = useCallback((nextText: string, doc: JSONContent | null) => {
-    setText(nextText)
-    docRef.current = doc
-    setHasContentNode(docHasContentNode(doc))
-  }, [])
-
   const clear = useCallback(() => {
-    setText('')
-    docRef.current = null
-    setHasContentNode(false)
+    draft.set('', null)
     setResetSignal((n) => n + 1)
-  }, [])
+  }, [draft])
 
-  return { text, docRef, hasContentNode, resetSignal, onChange, clear }
+  return { draft, resetSignal, clear }
+}
+
+/**
+ * One value drawn from the composer's draft. The component re-renders only
+ * when the value changes (compared with Object.is), so `select` should return
+ * a primitive.
+ */
+export function useComposerDocValue<T>(
+  draft: ComposerDocStore,
+  select: (draft: ComposerDocDraft) => T
+): T {
+  const read = () => select(draft.get())
+  return useSyncExternalStore(draft.subscribe, read, read)
+}
+
+/** The draft's text, updated once its changes have paused for `delayMs`. */
+export function useDebouncedComposerText(draft: ComposerDocStore, delayMs: number): string {
+  const [text, setText] = useState(() => draft.get().text)
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const schedule = () => {
+      clearTimeout(timer)
+      timer = setTimeout(() => setText(draft.get().text), delayMs)
+    }
+    schedule()
+    const unsubscribe = draft.subscribe(schedule)
+    return () => {
+      clearTimeout(timer)
+      unsubscribe()
+    }
+  }, [draft, delayMs])
+  return text
 }
 
 /** Near-end slack for the tail-follow effect below: within ~a row and a half
