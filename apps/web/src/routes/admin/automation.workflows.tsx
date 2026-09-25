@@ -3,6 +3,7 @@ import { useIntl } from 'react-intl'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { BackLink } from '@/components/ui/back-link'
 import { settingsQueries } from '@/lib/client/queries/settings'
+import { workflowsQuery } from '@/lib/client/queries/workflows'
 import { WhoRepliesFirstCard } from '@/components/admin/automation/who-replies-first-card'
 import { AbandonedJourneyAutoCloseCard } from '@/components/admin/automation/abandoned-journey-auto-close-card'
 import { WorkflowsManager } from '@/components/admin/automation/workflows-manager'
@@ -11,13 +12,27 @@ export const Route = createFileRoute('/admin/automation/workflows')({
   loader: async ({ context }) => {
     const { hasEntitlementFn } = await import('@/lib/server/functions/entitlement-status')
     const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
+    const { queryClient } = context
+    const warm = (p: Promise<unknown>) => p.catch(() => undefined)
+    const flags = context.settings?.featureFlags as FeatureFlags | undefined
+    // The workflow list and the close-spam toggle, read on every load;
+    // skipped when the page redirects away instead. The list's run counts
+    // stay with the page: they render through the browser's number format,
+    // which the server cannot match.
+    const pageReads = flags?.supportInbox
+      ? [
+          warm(queryClient.ensureQueryData(workflowsQuery())),
+          warm(queryClient.ensureQueryData(settingsQueries.workflowCloseSpam())),
+        ]
+      : []
     const [, workflowsEntitled] = await Promise.all([
       Promise.all([
-        context.queryClient.ensureQueryData(settingsQueries.widgetConfig()),
-        context.queryClient.ensureQueryData(settingsQueries.workflowAbandonedAutoClose()),
+        queryClient.ensureQueryData(settingsQueries.widgetConfig()),
+        queryClient.ensureQueryData(settingsQueries.workflowAbandonedAutoClose()),
+        ...pageReads,
       ]),
       hasEntitlementFn({ data: { key: 'workflows' } }),
-      ensureBillingCatalogue(context.queryClient, context.billingEnabled),
+      ensureBillingCatalogue(queryClient, context.billingEnabled),
     ])
     return { workflowsEntitled }
   },

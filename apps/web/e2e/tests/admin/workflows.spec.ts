@@ -52,7 +52,13 @@ async function deleteWorkflowsNamed(page: Page, name: string) {
   for (let i = 0; i < 5; i++) {
     const row = workflowRow(page, name)
     if (!(await row.isVisible().catch(() => false))) return
-    await row.getByRole('button', { name: `Actions for ${name}` }).click()
+    // The list is server-rendered, so a row can be visible before React has
+    // hydrated it, and a click on inert HTML does nothing. Retry the trigger
+    // until its menu is open, as openTemplateGallery does.
+    await expect(async () => {
+      await row.getByRole('button', { name: `Actions for ${name}` }).click()
+      await expect(page.getByRole('menuitem', { name: 'Delete' })).toBeVisible({ timeout: 1500 })
+    }).toPass({ timeout: 20000 })
     await page.getByRole('menuitem', { name: 'Delete' }).click()
     await page.getByRole('button', { name: 'Delete workflow' }).click()
     await expect(row).toBeHidden({ timeout: 10000 })
