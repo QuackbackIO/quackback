@@ -173,13 +173,11 @@ vi.mock('@/lib/server/db', () => {
     },
     eq: vi.fn((col: ColumnRef, val: string): Condition => ({ kind: 'eq', col: col.__col, val })),
     and: vi.fn((...conditions: Condition[]): Condition => ({ kind: 'and', conditions })),
-    inArray: vi.fn(
-      (col: ColumnRef, vals: readonly string[]): Condition => ({
-        kind: 'in',
-        col: col.__col,
-        vals,
-      })
-    ),
+    inArray: vi.fn((col: ColumnRef, vals: readonly string[]): Condition => ({
+      kind: 'in',
+      col: col.__col,
+      vals,
+    })),
     sql: Object.assign(
       vi.fn((parts: TemplateStringsArray, ..._values: unknown[]) => ({
         kind: 'sql',
@@ -204,7 +202,10 @@ import {
   segmentIdsForPrincipal,
   type MembershipSource,
 } from '../segment-membership.service'
+import { forgetRequestSegmentIds } from '@/lib/server/auth/request-session'
 import type { PrincipalId, SegmentId } from '@quackback/ids'
+import { db } from '@/lib/server/db'
+import { runWithLogContext } from '@/lib/server/log-context'
 
 const P1 = 'p1' as PrincipalId
 const P2 = 'p2' as PrincipalId
@@ -514,6 +515,67 @@ describe('segmentIdsForPrincipal', () => {
     const ids = await segmentIdsForPrincipal(P1)
     // TypeScript enforces this — but assert the runtime shape too.
     expect(ids instanceof Set).toBe(true)
+  })
+})
+
+// Every policy decision in a request builds its actor from the caller's
+// segments (policyActorFromAuth), and an admin page runs several.
+describe('segmentIdsForPrincipal within a request', () => {
+  let request = 0
+  const inRequest = <T>(fn: () => Promise<T>) =>
+    runWithLogContext({ request_id: `req_segments_${++request}` }, fn)
+  const selects = () => vi.mocked(db.select).mock.calls.length
+
+  it("reads a principal's segments once per request", async () => {
+    state.rows.push({ principalId: P1, segmentId: S1, addedBy: 'manual' })
+    const before = selects()
+
+    const [a, b, other] = await inRequest(async () => {
+      const [a, b] = await Promise.all([segmentIdsForPrincipal(P1), segmentIdsForPrincipal(P1)])
+      return [a, b, await segmentIdsForPrincipal(P2)]
+    })
+
+    expect([...a]).toEqual([S1])
+    expect([...b]).toEqual([S1])
+    expect(other.size).toBe(0)
+    expect(selects() - before).toBe(2)
+  })
+
+  it('never carries segments into another request', async () => {
+    state.rows.push({ principalId: P1, segmentId: S1, addedBy: 'manual' })
+    await inRequest(() => segmentIdsForPrincipal(P1))
+    state.rows.push({ principalId: P1, segmentId: S2, addedBy: 'manual' })
+
+    const later = await inRequest(() => segmentIdsForPrincipal(P1))
+
+    expect([...later].sort()).toEqual([S1, S2])
+  })
+
+  it('reads them afresh after a membership write in the same request', async () => {
+    const seen = await inRequest(async () => {
+      const read = async () => [...(await segmentIdsForPrincipal(P1))]
+      const seen = [await read()]
+      await addMember({ principalId: P1, segmentId: S1, source: 'manual', actor: ACTOR_NULL })
+      seen.push(await read())
+      await removeMember({ principalId: P1, segmentId: S1, actor: ACTOR_NULL })
+      seen.push(await read())
+      await reconcileSsoMemberships({ principalId: P1, desiredSegmentIds: [S2] })
+      seen.push(await read())
+      await reconcileSsoMemberships({ principalId: P1, desiredSegmentIds: [] })
+      seen.push(await read())
+      await reconcileWidgetMemberships({ principalId: P1, desiredSegmentIds: [S3] })
+      seen.push(await read())
+      await reconcileWidgetMemberships({ principalId: P1, desiredSegmentIds: [] })
+      seen.push(await read())
+      // Writers elsewhere (segment deletion, dynamic evaluation, principal
+      // merges) forget them the same way.
+      state.rows.push({ principalId: P1, segmentId: S1, addedBy: 'dynamic' })
+      forgetRequestSegmentIds()
+      seen.push(await read())
+      return seen
+    })
+
+    expect(seen).toEqual([[], [S1], [], [S2], [], [S3], [], [S1]])
   })
 })
 
