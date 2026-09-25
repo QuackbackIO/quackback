@@ -19,7 +19,7 @@ export function CopilotDeploymentCard({ available = true }: { available?: boolea
   const settingsQuery = useQuery(assistantQueries.settings())
   const update = useUpdateAssistantCopilotCapabilities()
   const [confirmingEnabled, setConfirmingEnabled] = useState<boolean | null>(null)
-  const [message, setMessage] = useState('')
+  const [message, setMessage] = useState<{ text: string; isError: boolean } | null>(null)
 
   const capabilities = settingsQuery.data?.config.agents.copilot.capabilities
   const revision = settingsQuery.data?.revision
@@ -34,10 +34,10 @@ export function CopilotDeploymentCard({ available = true }: { available?: boolea
     if (confirmingEnabled === null || revision === undefined) return
     const next = { qa: confirmingEnabled }
     try {
-      setMessage('')
+      setMessage(null)
       await update.mutateAsync({ expectedRevision: revision, capabilities: next })
-      setMessage(
-        confirmingEnabled
+      setMessage({
+        text: confirmingEnabled
           ? intl.formatMessage({
               id: 'automation.copilot.deployment.enabledStatus',
               defaultMessage: 'Copilot is on in the inbox.',
@@ -45,16 +45,18 @@ export function CopilotDeploymentCard({ available = true }: { available?: boolea
           : intl.formatMessage({
               id: 'automation.copilot.deployment.pausedStatus',
               defaultMessage: 'Copilot is off.',
-            })
-      )
+            }),
+        isError: false,
+      })
       setConfirmingEnabled(null)
     } catch {
-      setMessage(
-        intl.formatMessage({
+      setMessage({
+        text: intl.formatMessage({
           id: 'automation.copilot.deployment.error',
           defaultMessage: 'Copilot could not be changed. Try again.',
-        })
-      )
+        }),
+        isError: true,
+      })
     }
   }
 
@@ -129,15 +131,15 @@ export function CopilotDeploymentCard({ available = true }: { available?: boolea
         </div>
         {message && (
           <p
-            role={message.includes('could not') ? 'alert' : 'status'}
+            role={message.isError ? 'alert' : 'status'}
             aria-live="polite"
             className={
-              message.includes('could not')
+              message.isError
                 ? 'mt-3 text-xs text-destructive'
                 : 'mt-3 text-xs text-muted-foreground'
             }
           >
-            {message}
+            {message.text}
           </p>
         )}
       </section>
