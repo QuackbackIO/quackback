@@ -8,7 +8,7 @@ export const Route = createFileRoute('/_portal/hc/$locale/articles/$idSlug')({
 
 function ArticleLayout() {
   const { locale } = Route.useParams()
-  const { settings } = Route.useRouteContext()
+  const settings = Route.useRouteContext({ select: (context) => context.settings })
   const askAiEnabled = !!settings?.featureFlags?.helpCenter
   return (
     <>

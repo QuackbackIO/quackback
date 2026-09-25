@@ -87,7 +87,8 @@ export function AuthCommentsSection({
 }: AuthCommentsSectionProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
-  const { session, settings } = useRouteContext({ from: '__root__' })
+  const session = useRouteContext({ from: '__root__', select: (context) => context.session })
+  const settings = useRouteContext({ from: '__root__', select: (context) => context.settings })
   // Use safe version - returns null in admin context where provider isn't available
   const authPopover = useAuthPopoverSafe()
 

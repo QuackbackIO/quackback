@@ -143,7 +143,7 @@ export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
 
 function PostDetailPage() {
   const { postId, slug } = Route.useLoaderData()
-  const { session } = useRouteContext({ from: '__root__' })
+  const session = useRouteContext({ from: '__root__', select: (context) => context.session })
 
   const intl = useIntl()
   const [isEditingPost, setIsEditingPost] = useState(false)

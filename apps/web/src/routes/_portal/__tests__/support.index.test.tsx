@@ -26,7 +26,8 @@ vi.mock('@tanstack/react-router', () => ({
   createFileRoute:
     () =>
     <T extends object>(options: T) => ({ ...options }),
-  useRouteContext: () => routeCtx,
+  useRouteContext: (opts?: { select?: (context: never) => unknown }) =>
+    opts?.select ? opts.select(routeCtx as never) : routeCtx,
   Navigate: (props: { to: string }) => {
     navigateSpy(props.to)
     return null

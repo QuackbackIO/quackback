@@ -42,7 +42,8 @@ function SupportThreadPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { conversationId } = Route.useParams()
-  const { session, settings } = useRouteContext({ from: '__root__' })
+  const session = useRouteContext({ from: '__root__', select: (context) => context.session })
+  const settings = useRouteContext({ from: '__root__', select: (context) => context.settings })
   const portalLoader = useLoaderData({ from: '/_portal' })
   const portalAvatar =
     portalLoader && 'initialUserData' in portalLoader

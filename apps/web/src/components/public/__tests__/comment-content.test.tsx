@@ -6,12 +6,15 @@ import { render, renderHook, waitFor } from '@testing-library/react'
 // reads branding from the root route context. Stub the hook so the test
 // component tree doesn't need a real router.
 vi.mock('@tanstack/react-router', () => ({
-  useRouteContext: () => ({
-    settings: {
-      brandingData: { logoUrl: null, name: 'Acme' },
-      name: 'Acme',
-    },
-  }),
+  useRouteContext: (opts?: { select?: (context: never) => unknown }) => {
+    const context = {
+      settings: {
+        brandingData: { logoUrl: null, name: 'Acme' },
+        name: 'Acme',
+      },
+    }
+    return opts?.select ? opts.select(context as never) : context
+  },
 }))
 
 import { CommentContent, hasMarkdownTokens, useCommentDoc } from '../comment-content'

@@ -165,7 +165,8 @@ function PortalHero() {
  */
 function PortalFeed() {
   const intl = useIntl()
-  const { session, settings } = useRouteContext({ from: '__root__' })
+  const session = useRouteContext({ from: '__root__', select: (context) => context.session })
+  const settings = useRouteContext({ from: '__root__', select: (context) => context.settings })
   const { showPoweredBy } = Route.useLoaderData()
   const search = Route.useSearch()
 
