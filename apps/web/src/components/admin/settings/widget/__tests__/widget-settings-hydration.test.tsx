@@ -3,17 +3,25 @@
  * The widget settings page holds its live preview back until hydration (the
  * iframe and the admin's resolved theme are client-only). Only the preview may
  * render again when that happens: re-rendering the page for it repaints every
- * settings card on the page for nothing.
+ * settings card on the page for nothing. Nor may a hydration that takes a
+ * moment fetch again the install status the page was delivered with.
  */
 import { act, type ReactNode } from 'react'
+import { render } from '@testing-library/react'
 import { hydrateRoot } from 'react-dom/client'
 import { renderToString } from 'react-dom/server'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-const { cardRenders, previewRenders } = vi.hoisted(() => ({
+const { cardRenders, previewRenders, fetchOnboardingStatus } = vi.hoisted(() => ({
   cardRenders: new Map<string, number>(),
   previewRenders: { count: 0 },
+  fetchOnboardingStatus: vi.fn(async () => ({ hasWidgetInstalled: false })),
+}))
+
+vi.mock('@/lib/server/functions/admin', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/functions/admin')>()),
+  fetchOnboardingStatus,
 }))
 
 vi.mock('@tanstack/react-router', async () => {
@@ -61,7 +69,7 @@ vi.mock('@/components/admin/settings/widget/widget-preview', () => ({
 const { WidgetSettingsGate } =
   await import('@/components/admin/settings/widget/widget-settings-page')
 
-function seededClient() {
+function seededClient(statusAgeMs = 0) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   queryClient.setQueryData(['settings', 'widgetConfig'], {
     enabled: true,
@@ -70,13 +78,18 @@ function seededClient() {
     home: {},
   })
   queryClient.setQueryData(['admin', 'boards'], [])
-  queryClient.setQueryData(['admin', 'onboarding'], { hasWidgetInstalled: false })
+  queryClient.setQueryData(
+    ['admin', 'onboarding'],
+    { hasWidgetInstalled: false },
+    { updatedAt: Date.now() - statusAgeMs }
+  )
   return queryClient
 }
 
 afterEach(() => {
   cardRenders.clear()
   previewRenders.count = 0
+  fetchOnboardingStatus.mockClear()
   document.body.innerHTML = ''
 })
 
@@ -114,5 +127,16 @@ describe('widget settings page hydration', () => {
     for (const [title, renders] of cardRenders) {
       expect({ title, renders }).toEqual({ title, renders: 1 })
     }
+  })
+
+  it('keeps the install status it was delivered with when hydration takes a moment', async () => {
+    // Two seconds between the document's read and the page mounting.
+    render(
+      <QueryClientProvider client={seededClient(2_000)}>
+        <WidgetSettingsGate />
+      </QueryClientProvider>
+    )
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)))
+    expect(fetchOnboardingStatus).not.toHaveBeenCalled()
   })
 })
