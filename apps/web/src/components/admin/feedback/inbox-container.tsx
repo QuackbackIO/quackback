@@ -1,8 +1,6 @@
 import { useCallback, useMemo } from 'react'
-import { useNavigate } from '@tanstack/react-router'
 import { useQueryClient, useQueries } from '@tanstack/react-query'
 import { ChatBubbleLeftIcon } from '@heroicons/react/24/solid'
-import { Route } from '@/routes/admin/feedback'
 import { InboxLayout } from '@/components/admin/feedback/inbox-layout'
 import { InboxFiltersPanel } from '@/components/admin/feedback/inbox-filters'
 import { FeedbackTableView } from '@/components/admin/feedback/table'
@@ -17,7 +15,7 @@ import type { CurrentUser } from '@/lib/shared/types'
 import type { Board, PostTag, PostStatusEntity } from '@/lib/shared/db-types'
 import type { TeamMember } from '@/lib/shared/types'
 import type { PostId } from '@quackback/ids'
-import { saveNavigationContext } from '@/components/admin/feedback/detail/use-navigation-context'
+import { useOpenPost } from '@/components/admin/feedback/use-open-post'
 
 interface InboxContainerProps {
   boards: Board[]
@@ -34,9 +32,7 @@ export function InboxContainer({
   members,
   currentUser,
 }: InboxContainerProps) {
-  const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const search = Route.useSearch()
 
   // URL-based filter state
   const {
@@ -100,26 +96,9 @@ export function InboxContainer({
     }
   }, [hasMore, isLoadingMore, fetchNextPage])
 
-  const handleNavigateToPost = useCallback(
-    (postId: string) => {
-      // Save navigation context for prev/next navigation in modal
-      const backUrl = window.location.pathname + window.location.search
-      saveNavigationContext(
-        posts.map((p) => p.id),
-        backUrl
-      )
-
-      // Open modal by adding post param to URL
-      navigate({
-        to: '/admin/feedback',
-        search: {
-          ...search,
-          post: postId,
-        },
-      })
-    },
-    [navigate, posts, search]
-  )
+  // Opens the modal by adding `post` to the URL and saves the rows for its
+  // prev/next; stable, so the memoized rows ignore URL changes.
+  const handleNavigateToPost = useOpenPost(posts)
 
   const refetchPosts = useCallback(() => {
     queryClient.invalidateQueries({
