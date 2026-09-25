@@ -4,14 +4,13 @@ import { useState } from 'react'
 import { ShieldCheckIcon } from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
 import {
-  listPendingPostsFn,
-  listPendingCommentsFn,
   approvePostFn,
   rejectPostFn,
   approveCommentFn,
   rejectCommentFn,
 } from '@/lib/server/functions/moderation'
 import { adminQueries } from '@/lib/client/queries/admin'
+import { moderationQueueQueries } from '@/lib/client/queries/moderation'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/shared/spinner'
 import { EmptyState } from '@/components/shared/empty-state'
@@ -22,6 +21,19 @@ import type { TiptapContent } from '@/lib/shared/db-types'
 export const Route = createFileRoute('/admin/moderation')({
   // Auth is enforced by the parent `/admin` guard (admin/member wall) plus each
   // moderation server function's own authz — no per-route RPC guard needed.
+  // The queue arrives with the page; a failed read is left to the page's own
+  // query.
+  loader: async ({ context }) => {
+    const { queryClient } = context
+    const warm = (p: Promise<unknown>) => p.catch(() => undefined)
+    // Imported here rather than at the top: route loaders ship in the entry
+    // chunk every page loads.
+    const { moderationQueueQueries } = await import('@/lib/client/queries/moderation')
+    await Promise.all([
+      warm(queryClient.ensureQueryData(moderationQueueQueries.posts())),
+      warm(queryClient.ensureQueryData(moderationQueueQueries.comments())),
+    ])
+  },
   component: ModerationPage,
 })
 
@@ -29,14 +41,8 @@ function ModerationPage() {
   const queryClient = useQueryClient()
   const [pendingId, setPendingId] = useState<string | null>(null)
 
-  const postsQuery = useQuery({
-    queryKey: ['admin', 'moderation', 'pending', 'posts'],
-    queryFn: () => listPendingPostsFn(),
-  })
-  const commentsQuery = useQuery({
-    queryKey: ['admin', 'moderation', 'pending', 'comments'],
-    queryFn: () => listPendingCommentsFn(),
-  })
+  const postsQuery = useQuery(moderationQueueQueries.posts())
+  const commentsQuery = useQuery(moderationQueueQueries.comments())
 
   const invalidateAfterDecision = () => {
     queryClient.invalidateQueries({ queryKey: ['admin', 'moderation'] })
