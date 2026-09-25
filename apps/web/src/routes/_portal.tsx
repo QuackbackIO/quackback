@@ -328,7 +328,15 @@ const PortalAccessGate = lazy(() =>
 
 function PortalLayout() {
   const loaderData = Route.useLoaderData()
-  const { preview } = Route.useSearch()
+  // Selected: the search and the route context are new objects after every
+  // navigation, and the layout (with the header and providers it renders)
+  // needs only these answers from them. The session lives on the root
+  // context (dehydrated once in __root.tsx) rather than in this loader's data.
+  const preview = Route.useSearch({ select: (search) => search.preview })
+  const isAuthenticated = useRouteContext({
+    from: '__root__',
+    select: ({ session }) => !!session?.user && session.user.principalType !== 'anonymous',
+  })
 
   // Access denied: render the in-place sign-in wall (a normal 200 page). The
   // gate is self-contained (it mounts its own PortalIntlProvider).
@@ -370,13 +378,6 @@ function PortalLayout() {
     prompt,
     permissionKeys,
   } = loaderData
-
-  // session + redacted settings live on the root context (dehydrated once in
-  // __root.tsx), so they're read from there rather than re-serialized into this
-  // route's loader data.
-  const { session } = useRouteContext({ from: '__root__' })
-
-  const isAuthenticated = !!session?.user && session.user.principalType !== 'anonymous'
 
   return (
     <PortalIntlProvider locale={locale} messages={messages}>
