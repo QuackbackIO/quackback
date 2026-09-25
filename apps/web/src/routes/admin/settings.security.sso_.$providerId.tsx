@@ -5,6 +5,7 @@ import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { ProviderDetailPage } from '@/components/admin/settings/security/identity-providers/provider-detail-page'
+import { settingsReadBatch } from '@/lib/client/queries/settings-batch'
 
 // The trailing underscore on "sso_" escapes nesting under
 // /admin/settings/security/sso, which is a redirect-only route for stale
@@ -25,10 +26,11 @@ export const Route = createFileRoute('/admin/settings/security/sso_/$providerId'
     // Everything the page suspends on: the provider row itself, the two
     // queries behind the "keep one sign-in method enabled" guard, and the
     // linked-account count the Remove dialog states up front.
+    const ensure = settingsReadBatch(context.queryClient)
     await Promise.all([
-      context.queryClient.ensureQueryData(settingsQueries.identityProviders()),
-      context.queryClient.ensureQueryData(settingsQueries.authConfig()),
-      context.queryClient.ensureQueryData(adminQueries.authProviderStatus()),
+      ensure(settingsQueries.identityProviders()),
+      ensure(settingsQueries.authConfig()),
+      ensure(adminQueries.authProviderStatus()),
       context.queryClient.ensureQueryData(settingsQueries.providerAccountCount(providerId)),
     ])
     return {}

@@ -37,6 +37,13 @@ function gated<T>(name: string, value: T) {
   }
 }
 
+// Server functions run in process, as the server runs the reads the loader
+// batches, so each stand-in below is called once per read either way.
+vi.mock('@tanstack/react-start', async (importOriginal) => {
+  const { withServerFnsInProcess } = await import('@/test/server-fns-in-process')
+  return withServerFnsInProcess(await importOriginal<typeof import('@tanstack/react-start')>())
+})
+
 vi.mock('@/lib/server/functions/settings', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/functions/settings')>()),
   fetchTeamMembersAndInvitations: gated('fetchTeamMembersAndInvitations', {
@@ -64,6 +71,9 @@ vi.mock('@/components/admin/settings/team/roles-tab', () => ({
   RolesTab: () => <p>roles list</p>,
 }))
 
+// The registry the batched reads run from pulls in every query module; paid
+// here, at file load, rather than inside the first test's timed body.
+await import('@/lib/server/settings-read-registry')
 const { Route } = await import('../admin/settings.members')
 
 const SRC_ROOT = join(__dirname, '../..')

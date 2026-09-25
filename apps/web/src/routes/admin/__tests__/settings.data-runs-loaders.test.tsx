@@ -94,6 +94,9 @@ vi.mock('@/lib/server/functions/boards', async (importOriginal) => ({
   fetchBoardsFn: vi.fn(async () => []),
 }))
 
+// The registry the batched reads run from pulls in every query module; paid
+// here, at file load, rather than inside the first test's timed body.
+await import('@/lib/server/settings-read-registry')
 const { ExportHistoryList } =
   await import('@/components/admin/settings/imports/export-history-list')
 const { ExportWorkspaceAction } =
