@@ -14,6 +14,7 @@ import { BackLink } from '@/components/ui/back-link'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { connectorQueries } from '@/lib/client/queries/assistant-connectors'
+import { assistantQueries } from '@/lib/client/queries/assistant'
 import {
   useRefreshConnector,
   useStartConnectorOAuth,
@@ -29,7 +30,14 @@ export const Route = createFileRoute('/admin/automation/connectors')({
     }
   },
   loader: async ({ context }) => {
-    await context.queryClient.ensureQueryData(connectorQueries.list())
+    const { queryClient } = context
+    const warm = (p: Promise<unknown>) => p.catch(() => undefined)
+    // The built-in tools card reads the agent settings and the tool catalogue.
+    await Promise.all([
+      queryClient.ensureQueryData(connectorQueries.list()),
+      warm(queryClient.ensureQueryData(assistantQueries.settings())),
+      warm(queryClient.ensureQueryData(assistantQueries.tools())),
+    ])
   },
   errorComponent: ({ error, reset }) => (
     <DefaultErrorPage error={error} reset={reset} fullPage={false} />
