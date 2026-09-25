@@ -214,9 +214,9 @@ export function NewConversationDialog({
                 <LazyRichTextEditor
                   key={composerKey}
                   value={messageJson ?? ''}
-                  onChange={(json, _html, markdown) => {
-                    setMessageJson(json)
-                    setMessageMarkdown(markdown)
+                  onDocumentChange={(document) => {
+                    setMessageJson(document.json())
+                    setMessageMarkdown(document.markdown())
                   }}
                   features={CONVERSATION_EDITOR_FEATURES}
                   autofocus

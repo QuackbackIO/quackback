@@ -503,9 +503,9 @@ export function CreateTicketDialog({
             <div onPaste={handleComposerPaste} onDrop={handleComposerDrop}>
               <RichTextEditor
                 value={descriptionJson ?? ''}
-                onChange={(json, _html, markdown) => {
-                  setDescriptionJson(json)
-                  setDescriptionMarkdown(markdown)
+                onDocumentChange={(document) => {
+                  setDescriptionJson(document.json())
+                  setDescriptionMarkdown(document.markdown())
                 }}
                 features={CONVERSATION_EDITOR_FEATURES}
                 minHeight="120px"

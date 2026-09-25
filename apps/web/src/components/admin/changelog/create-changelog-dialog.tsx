@@ -15,6 +15,7 @@ import { ChangelogFormFields } from './changelog-form-fields'
 import { ChangelogMetadataSidebar } from './changelog-metadata-sidebar'
 import type { PublishState } from '@/lib/shared/schemas/changelog'
 import type { JSONContent } from '@tiptap/react'
+import type { EditorDocument } from '@/components/ui/rich-text-editor'
 import type { PostId, ChangelogCategoryId, SegmentId } from '@quackback/ids'
 
 // Mobile-only version of the sidebar content for the sheet
@@ -59,9 +60,9 @@ export function CreateChangelogDialog({
   })
 
   const handleContentChange = useCallback(
-    (json: JSONContent, _html: string, markdown: string) => {
-      setContentJson(json)
-      form.setValue('content', markdown, { shouldValidate: false, shouldDirty: true })
+    (document: EditorDocument) => {
+      setContentJson(document.json())
+      form.setValue('content', document.markdown(), { shouldValidate: false, shouldDirty: true })
       // Only drop a *failed* mutation. Resetting while a save is in flight
       // detaches onSuccess, so the dialog would stay open after a successful
       // create and a later Save could duplicate the entry.

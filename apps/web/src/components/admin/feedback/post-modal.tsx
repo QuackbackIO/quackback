@@ -13,7 +13,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { ModalHeader } from '@/components/shared/modal-header'
 import { UrlModalShell } from '@/components/shared/url-modal-shell'
 import { Button } from '@/components/ui/button'
-import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import { RichTextEditor, type EditorDocument } from '@/components/ui/rich-text-editor'
 import { usePostMediaUpload, usePortalMediaUpload } from '@/lib/client/hooks/use-image-upload'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { postOwnerQueries } from '@/lib/client/queries/post-owner'
@@ -297,9 +297,9 @@ const PostModalContent = memo(function PostModalContent({
     }
   }
 
-  const handleContentChange = useCallback((_json: JSONContent, _html: string, markdown: string) => {
-    setContentJson(_json)
-    setContentMarkdown(markdown)
+  const handleContentChange = useCallback((document: EditorDocument) => {
+    setContentJson(document.json())
+    setContentMarkdown(document.markdown())
   }, [])
 
   const handleSubmit = async () => {
@@ -449,7 +449,7 @@ const PostModalContent = memo(function PostModalContent({
               {/* Rich text editor */}
               <RichTextEditor
                 value={contentJson || ''}
-                onChange={handleContentChange}
+                onDocumentChange={handleContentChange}
                 placeholder="Add more details... Type / for commands"
                 minHeight="200px"
                 disabled={updatePost.isPending}

@@ -7,6 +7,7 @@ import { editPostSchema } from '@/lib/shared/schemas/posts'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { useUpdatePost, useUpdatePostTags } from '@/lib/client/mutations/posts'
 import type { JSONContent } from '@tiptap/react'
+import type { EditorDocument } from '@/components/ui/rich-text-editor'
 import type { Board, PostTag, PostStatusEntity } from '@/lib/shared/db-types'
 import type { BoardId, PostId, PostStatusId, PostTagId } from '@quackback/ids'
 import { Form } from '@/components/ui/form'
@@ -103,9 +104,9 @@ export function EditPostDialog({
   }, [open, post, form])
 
   const handleContentChange = useCallback(
-    (json: JSONContent, _html: string, markdown: string) => {
-      setContentJson(json)
-      form.setValue('content', markdown, { shouldValidate: false, shouldDirty: true })
+    (document: EditorDocument) => {
+      setContentJson(document.json())
+      form.setValue('content', document.markdown(), { shouldValidate: false, shouldDirty: true })
     },
     [form]
   )
