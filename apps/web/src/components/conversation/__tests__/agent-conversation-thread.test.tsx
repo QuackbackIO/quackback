@@ -54,7 +54,8 @@ const routeContextState = {
   permissions: ['ticket.view', 'ticket.set_status'] as string[],
 }
 vi.mock('@tanstack/react-router', () => ({
-  useRouteContext: () => routeContextState,
+  useRouteContext: (opts?: { select?: (context: typeof routeContextState) => unknown }) =>
+    opts?.select ? opts.select(routeContextState) : routeContextState,
 }))
 
 // The virtualized viewport + its supporting hooks are replaced with a plain
