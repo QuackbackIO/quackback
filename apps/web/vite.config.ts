@@ -7,6 +7,7 @@ import path from 'path'
 import { execSync } from 'child_process'
 import { readFileSync } from 'fs'
 import { CLIENT_PROTECTED_SPECIFIERS } from './src/lib/server/policy/client-import-protection'
+import { routeChunksImportTheirParent } from './src/lib/build/route-chunk-parents'
 
 /**
  * Replace the server-only structured logger with a no-op stub in the CLIENT
@@ -237,6 +238,9 @@ export default defineConfig(({ mode }) => {
         },
       }),
       viteReact(),
+      // A route's chunks import the chunk of the route they render under, so
+      // what a layout shares with its pages stays in the layout's chunk.
+      routeChunksImportTheirParent(path.resolve(__dirname, 'src/routeTree.gen.ts')),
     ].filter(Boolean) as PluginOption[],
   }
 })
