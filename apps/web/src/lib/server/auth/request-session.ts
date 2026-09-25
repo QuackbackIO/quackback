@@ -93,6 +93,21 @@ export function rememberRequestPrincipal(record: Principal): void {
   if (record.userId) rememberPerRequest(CACHE_KEYS.PRINCIPAL_BY_USER(record.userId), record)
 }
 
+/**
+ * Memo keys for the segment memberships read in this request
+ * (`segmentIdsForPrincipal`, which every policy actor asks). Under the identity
+ * prefix, so forgetting the identity forgets them too.
+ */
+export const SEGMENT_IDS_MEMO_PREFIX = `${IDENTITY_MEMO_PREFIX}segment-ids:`
+
+/**
+ * Forget the segment memberships this request has read. Every write to
+ * `user_segments` calls it, so a later read in the same request sees the write.
+ */
+export function forgetRequestSegmentIds(): void {
+  forgetPerRequestPrefix(SEGMENT_IDS_MEMO_PREFIX)
+}
+
 /** Forget the session, every principal and everything derived from them. */
 export function forgetRequestIdentity(): void {
   forgetPerRequestPrefix(IDENTITY_MEMO_PREFIX)

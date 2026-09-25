@@ -24,6 +24,7 @@ import type { SegmentId, PrincipalId } from '@quackback/ids'
 import { createId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { recordAuditEvent, type AuditActor } from '@/lib/server/audit/log'
+import { forgetRequestSegmentIds } from '@/lib/server/auth/request-session'
 import { slugify } from '@/lib/shared/utils/slugify'
 import type {
   Segment,
@@ -246,6 +247,7 @@ export async function deleteSegment(segmentId: SegmentId): Promise<void> {
     await tx.delete(userSegments).where(eq(userSegments.segmentId, segmentId))
     await tx.update(segments).set({ deletedAt: new Date() }).where(eq(segments.id, segmentId))
   })
+  forgetRequestSegmentIds()
 }
 
 // ============================================
@@ -343,6 +345,7 @@ export async function removeUsersFromSegment(
       and(eq(userSegments.segmentId, segmentId), inArray(userSegments.principalId, principalIds))
     )
     .returning({ principalId: userSegments.principalId })
+  forgetRequestSegmentIds()
 
   if (actor && removedRows.length > 0) {
     for (const row of removedRows) {
