@@ -91,7 +91,37 @@ export const REFINED_DARK_BASE: ThemeColorBase = {
   success: 'oklch(0.696 0.149 163)',
 }
 
+/**
+ * The font an unbranded page renders in: globals.css's --font-sans, led by the
+ * Inter it self-hosts (@fontsource-variable/inter names it "Inter Variable").
+ */
+export const DEFAULT_FONT_SANS = '"Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif'
+
+/** The corner radius globals.css ships; the refined stylesheet ships its own. */
+export const DEFAULT_RADIUS = '0.625rem'
 const REFINED_DEFAULT_RADIUS = '0.5rem'
+
+function basePalette(mode: 'light' | 'dark', baseline: ThemeBaseline): ThemeColorBase {
+  if (baseline === 'refined') return mode === 'light' ? REFINED_LIGHT_BASE : REFINED_DARK_BASE
+  return mode === 'light' ? DEFAULT_LIGHT_BASE : DEFAULT_DARK_BASE
+}
+
+/**
+ * The theme an unbranded workspace renders, as the variables a saved theme
+ * holds: the palette, radius and font a visitor sees before anything is
+ * customised. The branding editor starts from it, so saving a theme nobody
+ * touched stores what visitors already see.
+ */
+export function unbrandedTheme(
+  mode: 'light' | 'dark',
+  baseline: ThemeBaseline = 'legacy'
+): MinimalThemeVariables {
+  return {
+    ...basePalette(mode, baseline),
+    fontSans: DEFAULT_FONT_SANS,
+    radius: baseline === 'refined' ? REFINED_DEFAULT_RADIUS : DEFAULT_RADIUS,
+  }
+}
 
 /** Every variable a theme may carry. Anything else on the object is derived. */
 const MINIMAL_KEYS = [
@@ -126,15 +156,7 @@ function resolveMinimal(
   mode: 'light' | 'dark',
   baseline: ThemeBaseline = 'legacy'
 ): MinimalThemeVariables {
-  const base =
-    baseline === 'refined'
-      ? mode === 'light'
-        ? REFINED_LIGHT_BASE
-        : REFINED_DARK_BASE
-      : mode === 'light'
-        ? DEFAULT_LIGHT_BASE
-        : DEFAULT_DARK_BASE
-  const resolved: MinimalThemeVariables = { ...base }
+  const resolved: MinimalThemeVariables = { ...basePalette(mode, baseline) }
   for (const key of MINIMAL_KEYS) {
     const value = minimal[key]
     if (typeof value === 'string' && value.trim() !== '') resolved[key] = value
