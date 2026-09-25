@@ -6,7 +6,6 @@ import {
   Outlet,
   createRootRouteWithContext,
   HeadContent,
-  Scripts,
   redirect,
   useRouterState,
 } from '@tanstack/react-router'
@@ -25,6 +24,7 @@ import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
 import { ThemeProvider } from '@/components/theme-provider'
 import { resolveDocumentTheme, SYSTEM_THEME_SCRIPT } from '@/lib/shared/theme'
 import { DefaultErrorPage } from '@/components/shared/error-page'
+import { DocumentHead, DocumentScripts } from '@/components/shared/document-head'
 import { OttHandler } from '@/components/shared/ott-handler'
 import { VisitorBeacon } from '@/components/shared/visitor-beacon'
 import { documentLocale, htmlLangDir } from '@/lib/shared/document-locale'
@@ -338,7 +338,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
     >
       <head>
         {!themeClass && <script dangerouslySetInnerHTML={{ __html: SYSTEM_THEME_SCRIPT }} />}
-        <HeadContent />
+        <DocumentHead />
       </head>
       <body className="min-h-screen bg-background font-sans antialiased">
         <VisualThemeSync visualTheme={resolvedVisualTheme} />
@@ -358,7 +358,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
             <Toaster />
           </Suspense>
         </ThemeProvider>
-        <Scripts />
+        <DocumentScripts />
       </body>
     </html>
   )
