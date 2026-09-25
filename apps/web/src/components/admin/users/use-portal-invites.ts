@@ -4,23 +4,14 @@ import {
   sendPortalInviteFn,
   cancelPortalInviteFn,
   resendPortalInviteFn,
-  fetchPortalInvitesFn,
 } from '@/lib/server/functions/portal-invites'
+import {
+  PORTAL_INVITES_QUERY_KEY,
+  portalInvitesQueryOptions,
+  type PortalInvite,
+} from '@/lib/client/queries/portal-invites'
 
-/**
- * One invitation row as returned by `fetchPortalInvitesFn` and rendered by
- * the InviteRow component. Lives in this module so consumers don't have to
- * reach into the server-fn return type.
- */
-export interface PortalInvite {
-  id: string
-  email: string
-  status: string | null
-  createdAt: string
-  lastSentAt: string | null
-}
-
-export const PORTAL_INVITES_QUERY_KEY = ['portal', 'invites'] as const
+export { PORTAL_INVITES_QUERY_KEY, type PortalInvite }
 
 /**
  * Loose-email syntax check used for client-side validation in the send form.
@@ -82,12 +73,7 @@ export function usePortalInvites(options: UsePortalInvitesOptions = {}) {
   const { enabled = true } = options
   const queryClient = useQueryClient()
 
-  const query = useQuery<PortalInvite[]>({
-    queryKey: PORTAL_INVITES_QUERY_KEY,
-    queryFn: () => fetchPortalInvitesFn(),
-    staleTime: 30 * 1000,
-    enabled,
-  })
+  const query = useQuery({ ...portalInvitesQueryOptions(), enabled })
 
   const invites = query.data ?? []
   const pendingCount = invites.filter((i) => i.status === 'pending').length
