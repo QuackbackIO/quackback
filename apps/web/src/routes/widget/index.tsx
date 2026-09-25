@@ -11,7 +11,7 @@ import {
   useRef,
   type ReactNode,
 } from 'react'
-import { motion, useReducedMotion } from 'framer-motion'
+import { LazyMotion, domAnimation, m, useReducedMotion } from 'framer-motion'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { CheckCircleIcon } from '@heroicons/react/24/solid'
 import { ArrowLeftIcon } from '@heroicons/react/24/outline'
@@ -323,10 +323,21 @@ export const Route = createFileRoute('/widget/')({
   component: WidgetRoute,
 })
 
+/**
+ * Loads the "dom" animation engine (fades, slides, transforms), not the
+ * larger "dom-max" build's drag/layout/3d support the widget never uses. `m`
+ * components read it from context; `motion` components would ignore it and
+ * bundle their own copy, which is why every framer-motion usage under this
+ * root uses `m`.
+ */
 function WidgetRoute() {
   const { tabs } = Route.useLoaderData()
   if (contentSurfaceCount(tabs) === 0) return null
-  return <WidgetPage />
+  return (
+    <LazyMotion features={domAnimation}>
+      <WidgetPage />
+    </LazyMotion>
+  )
 }
 
 interface SuccessPost {
@@ -377,7 +388,7 @@ function ViewTransition({
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   return (
-    <motion.div
+    <m.div
       key={id}
       ref={ref}
       tabIndex={-1}
@@ -389,7 +400,7 @@ function ViewTransition({
       className="h-full outline-none"
     >
       <Suspense fallback={fallback}>{children}</Suspense>
-    </motion.div>
+    </m.div>
   )
 }
 
@@ -1098,7 +1109,7 @@ function WidgetPage() {
       >
         {/* Kept mounted, so it can't use the remount-keyed ViewTransition;
             instead the same root entrance replays whenever it becomes visible. */}
-        <motion.div
+        <m.div
           initial={false}
           animate={view === 'feedback' ? { y: 0, opacity: 1 } : { y: 10, opacity: 0 }}
           transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
@@ -1117,7 +1128,7 @@ function WidgetPage() {
             onPostSelect={handlePostSelect}
             onPostCreated={handlePostCreated}
           />
-        </motion.div>
+        </m.div>
       </div>
 
       {view === 'post-detail' && selectedPostId && (
