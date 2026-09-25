@@ -49,10 +49,10 @@ vi.mock('@/lib/server/auth/auth-providers', () => ({
   getAllAuthProviders: vi.fn().mockReturnValue([]),
 }))
 
-const { getWorkspaceSettings, SETTINGS_LOCAL_TTL_MS } = await import('../settings.service')
+const { getWorkspaceSettings } = await import('../settings.service')
 const { invalidateSettingsCache } = await import('../settings.helpers')
 const { runWithLogContext } = await import('@/lib/server/log-context')
-const { forgetCachedKeys } = await import('@/lib/server/local-cache')
+const { forgetCachedKeys, SETTINGS_LOCAL_TTL_MS } = await import('@/lib/server/local-cache')
 
 const COMPLETE_SETUP = JSON.stringify({
   version: 2,

@@ -13,6 +13,24 @@ import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 
 const localCopies = new WorkspaceKeyedCache<{ value: unknown; expiresAt: number }>(1_000)
 
+/**
+ * How long this process reuses the settings it read, and the copies derived
+ * from them: a write made by another process reaches this one within this
+ * window, which bounds how late, for example, a changed auth config takes
+ * effect there.
+ */
+export const SETTINGS_LOCAL_TTL_MS = 5_000
+
+/**
+ * The window in effect: QUACKBACK_SETTINGS_CACHE_MS overrides it (0 turns the
+ * copies off). The perf bench pins it long, so its counts measure a warm process
+ * rather than whichever side of the window a request happened to land on.
+ */
+export function settingsLocalTtlMs(): number {
+  const override = Number(process.env.QUACKBACK_SETTINGS_CACHE_MS)
+  return Number.isFinite(override) && override >= 0 ? override : SETTINGS_LOCAL_TTL_MS
+}
+
 export function localCacheGet<T>(key: string): T | undefined {
   const copy = localCopies.get(key)
   if (!copy) return undefined
