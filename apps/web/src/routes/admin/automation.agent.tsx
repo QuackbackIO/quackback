@@ -65,7 +65,7 @@ function AssistantAgentPage() {
 function AssistantAgentSettings() {
   const intl = useIntl()
   const settingsQuery = useQuery(assistantQueries.settings())
-  const { settings } = Route.useRouteContext()
+  const settings = Route.useRouteContext({ select: (context) => context.settings })
   const { tab: requestedTab = 'basics' } = Route.useSearch()
   const navigate = Route.useNavigate()
   const { dirtyTabs, hasUnsavedChanges } = useAssistantDirtyState()

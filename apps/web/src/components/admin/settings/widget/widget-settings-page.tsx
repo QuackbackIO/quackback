@@ -96,7 +96,7 @@ function WidgetSettingsPage() {
     ...adminQueries.onboardingStatus(),
     staleTime: 5_000,
   })
-  const { settings } = useRouteContext({ from: '__root__' })
+  const settings = useRouteContext({ from: '__root__', select: (context) => context.settings })
 
   const flags = settings?.featureFlags as FeatureFlags | undefined
   const config = widgetConfigQuery.data

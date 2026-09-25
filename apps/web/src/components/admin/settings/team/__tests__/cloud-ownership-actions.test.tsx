@@ -9,7 +9,10 @@ const { mockBillingEnabled, mockOwner } = vi.hoisted(() => ({
 }))
 
 vi.mock('@tanstack/react-router', () => ({
-  useRouteContext: () => ({ billingEnabled: mockBillingEnabled.current }),
+  useRouteContext: (opts?: { select?: (context: never) => unknown }) => {
+    const context = { billingEnabled: mockBillingEnabled.current }
+    return opts?.select ? opts.select(context as never) : context
+  },
 }))
 
 vi.mock('@tanstack/react-query', () => ({

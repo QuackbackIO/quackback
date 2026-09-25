@@ -242,7 +242,7 @@ function MembersSection({ companyId, canManage }: { companyId: CompanyId; canMan
 }
 
 function ActivitySection({ companyId }: { companyId: CompanyId }) {
-  const { settings } = useRouteContext({ from: '__root__' })
+  const settings = useRouteContext({ from: '__root__', select: (context) => context.settings })
   const flags = settings?.featureFlags as FeatureFlags | undefined
   const supportInboxEnabled = flags?.supportInbox ?? false
   const supportTicketsEnabled = flags?.supportTickets ?? false

@@ -18,9 +18,12 @@ import type { PortalUserDetail } from '@/lib/shared/types'
 import type { PrincipalId } from '@quackback/ids'
 
 vi.mock('@tanstack/react-router', () => ({
-  useRouteContext: () => ({
-    settings: { featureFlags: { supportInbox: true } },
-  }),
+  useRouteContext: (opts?: { select?: (context: never) => unknown }) => {
+    const context = {
+      settings: { featureFlags: { supportInbox: true } },
+    }
+    return opts?.select ? opts.select(context as never) : context
+  },
   Link: ({
     children,
     to,

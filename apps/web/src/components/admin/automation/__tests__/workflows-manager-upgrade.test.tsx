@@ -7,7 +7,10 @@ import { IntlProvider } from 'react-intl'
 
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => vi.fn(),
-  useRouteContext: () => ({ settings: { featureFlags: {}, publicWidgetConfig: {} } }),
+  useRouteContext: (opts?: { select?: (context: never) => unknown }) => {
+    const context = { settings: { featureFlags: {}, publicWidgetConfig: {} } }
+    return opts?.select ? opts.select(context as never) : context
+  },
 }))
 
 vi.mock('@/lib/server/functions/workflows', () => ({

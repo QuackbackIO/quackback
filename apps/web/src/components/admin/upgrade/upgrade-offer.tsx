@@ -43,7 +43,10 @@ type UpgradeOfferProps = {
  * context are prefetched in the route loader so the first paint is complete.
  */
 export function UpgradeOffer(props: UpgradeOfferProps) {
-  const { billingEnabled } = useRouteContext({ from: '__root__' })
+  const billingEnabled = useRouteContext({
+    from: '__root__',
+    select: (context) => context.billingEnabled,
+  })
   const canCheckout = usePermission(PERMISSIONS.BILLING_MANAGE)
   if (!billingEnabled) {
     return (

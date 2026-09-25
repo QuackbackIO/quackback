@@ -282,7 +282,7 @@ function UserConversations({
   principalId: PrincipalId
   embedded?: boolean
 }) {
-  const { settings } = useRouteContext({ from: '__root__' })
+  const settings = useRouteContext({ from: '__root__', select: (context) => context.settings })
   // Gated by the experimental supportInbox flag — when off, skip the fetch and
   // render nothing, so the profile shows no support history for a disabled feature.
   const supportInboxEnabled =
@@ -480,7 +480,7 @@ export function UserDetail({
   const [editName, setEditName] = useState('')
   const [editEmail, setEditEmail] = useState('')
   const updateUser = useUpdatePortalUser()
-  const { settings } = useRouteContext({ from: '__root__' })
+  const settings = useRouteContext({ from: '__root__', select: (context) => context.settings })
   const supportInboxEnabled =
     (settings?.featureFlags as FeatureFlags | undefined)?.supportInbox ?? false
   // Check if current user can manage portal users

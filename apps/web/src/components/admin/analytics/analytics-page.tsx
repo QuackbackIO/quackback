@@ -147,7 +147,7 @@ const periods: Array<{ value: AnalyticsPeriod; label: string }> = [
 ]
 
 export function AnalyticsPage() {
-  const { settings } = useRouteContext({ from: '__root__' })
+  const settings = useRouteContext({ from: '__root__', select: (context) => context.settings })
   const flags = settings?.featureFlags as FeatureFlags | undefined
   // Product reports follow product availability. Visitor reporting is always on.
   const sections = SECTION_NAV_ITEMS.filter(
