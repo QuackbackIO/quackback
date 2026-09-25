@@ -1511,10 +1511,21 @@ function RichTextEditorBase({
     [editor]
   )
 
+  // The editor instance the value-sync below last ran for.
+  const syncedEditorRef = useRef<Editor | null>(null)
+
   // Sync external value changes into the editor.
   // Skipped when the value is the exact object/string we just emitted via onUpdate.
   useEffect(() => {
     if (!editor) return
+
+    // A new editor was created from this very value. Applying it again would
+    // only re-normalize the document (the trailing paragraph, attribute
+    // defaults), leave a step to undo and hand the host an update it did not
+    // cause.
+    const firstSync = syncedEditorRef.current !== editor
+    syncedEditorRef.current = editor
+    if (firstSync && value === initialContentRef.current) return
 
     if (value === lastEmittedJsonRef.current) {
       lastEmittedJsonRef.current = null
@@ -1553,10 +1564,11 @@ function RichTextEditorBase({
     }
   }, [value, editor])
 
-  // Update editable state
+  // Update editable state. Editability is not a change to the document, so
+  // it emits no update (which would reach the host as an onChange).
   useEffect(() => {
-    if (editor) {
-      editor.setEditable(!disabled)
+    if (editor && editor.isEditable !== !disabled) {
+      editor.setEditable(!disabled, false)
     }
   }, [disabled, editor])
 
