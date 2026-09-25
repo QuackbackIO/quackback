@@ -62,3 +62,26 @@ it('announces a failed change as an alert in any locale', async () => {
   expect(alert).toHaveTextContent('Wijzigen mislukt. Probeer het opnieuw.')
   expect(alert).toHaveClass('text-destructive')
 })
+
+it('keeps a successful change a polite status line', async () => {
+  vi.mocked(updateWidgetAssistantDeploymentFn).mockResolvedValueOnce(undefined as never)
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(
+    <IntlProvider locale="en" messages={{}} onError={() => {}}>
+      <QueryClientProvider client={queryClient}>
+        <AssistantDeploymentCard
+          deployment={{ enabled: true, respond: false }}
+          onChange={() => {}}
+        />
+      </QueryClientProvider>
+    </IntlProvider>
+  )
+
+  fireEvent.click(screen.getByRole('button', { name: 'Enable automatic replies' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Enable replies' }))
+
+  const status = await screen.findByRole('status')
+  expect(status).toHaveTextContent('Automatic replies are enabled in Messenger.')
+  expect(status).toHaveClass('text-muted-foreground')
+  expect(screen.queryByRole('alert', { hidden: true })).not.toBeInTheDocument()
+})
