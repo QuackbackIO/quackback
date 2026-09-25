@@ -21,6 +21,8 @@ import { cn } from '@/lib/shared/utils'
 import { NAV_ICON_CLASS, NAV_ITEM_CLASS, NAV_SECTION_CLASS } from '@/components/shared/nav-tokens'
 import { FilterSection } from '@/components/shared/filter-section'
 import { useRefinedTheme } from '@/lib/client/hooks/use-visual-theme'
+import { usePermissions } from '@/lib/client/use-permissions'
+import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { isProductEnabled, type FeatureFlags } from '@/lib/shared/types'
 import {
   buildSettingsModules,
@@ -36,6 +38,8 @@ interface NavItem {
   exact?: boolean
   /** Extra prefixes that also count as active (a module covering several pages). */
   activeFor?: string[]
+  /** The permission the page checks when it opens; the nav offers it only to holders. */
+  permission?: PermissionKey
 }
 
 /** Nested nav group. Modules no longer use this; kept for other sections. */
@@ -86,45 +90,135 @@ export function buildNavSections(
     {
       label: 'Workspace',
       items: [
-        { label: 'General', to: '/admin/settings/general', icon: Cog6ToothIcon },
+        {
+          label: 'General',
+          to: '/admin/settings/general',
+          icon: Cog6ToothIcon,
+          permission: PERMISSIONS.SETTINGS_MANAGE,
+        },
         ...(cloudEnabled
-          ? [{ label: 'Domains', to: '/admin/settings/domains', icon: GlobeAltIcon }]
+          ? [
+              {
+                label: 'Domains',
+                to: '/admin/settings/domains',
+                icon: GlobeAltIcon,
+                permission: PERMISSIONS.SETTINGS_CUSTOM_DOMAIN,
+              },
+            ]
           : []),
         { label: 'Notifications', to: '/admin/settings/notifications', icon: BellIcon },
-        { label: 'Portal', to: '/admin/settings/portal', icon: GlobeAltIcon },
-        { label: 'Widget', to: '/admin/settings/widget', icon: ChatBubbleLeftRightIcon },
-        { label: 'Members & Teams', to: '/admin/settings/members', icon: UsersIcon },
+        {
+          label: 'Portal',
+          to: '/admin/settings/portal',
+          icon: GlobeAltIcon,
+          permission: PERMISSIONS.SETTINGS_BRANDING,
+        },
+        {
+          label: 'Widget',
+          to: '/admin/settings/widget',
+          icon: ChatBubbleLeftRightIcon,
+          permission: PERMISSIONS.SETTINGS_MANAGE,
+        },
+        {
+          label: 'Members & Teams',
+          to: '/admin/settings/members',
+          icon: UsersIcon,
+          permission: PERMISSIONS.MEMBER_VIEW,
+        },
         {
           label: 'Access & Security',
           to: '/admin/settings/security/authentication',
           icon: ShieldCheckIcon,
+          permission: PERMISSIONS.AUTH_MANAGE,
         },
-        { label: 'Developers', to: '/admin/settings/developers', icon: CommandLineIcon },
-        { label: 'Labs', to: '/admin/settings/labs', icon: BeakerIcon },
-        { label: 'Integrations', to: '/admin/settings/integrations', icon: PuzzlePieceIcon },
+        {
+          label: 'Developers',
+          to: '/admin/settings/developers',
+          icon: CommandLineIcon,
+          permission: PERMISSIONS.API_KEY_MANAGE,
+        },
+        {
+          label: 'Labs',
+          to: '/admin/settings/labs',
+          icon: BeakerIcon,
+          permission: PERMISSIONS.SETTINGS_MANAGE,
+        },
+        {
+          label: 'Integrations',
+          to: '/admin/settings/integrations',
+          icon: PuzzlePieceIcon,
+          permission: PERMISSIONS.INTEGRATION_VIEW,
+        },
         ...(billingEnabled
-          ? [{ label: 'Plan & billing', to: '/admin/settings/billing', icon: CreditCardIcon }]
+          ? [
+              {
+                label: 'Plan & billing',
+                to: '/admin/settings/billing',
+                icon: CreditCardIcon,
+                permission: PERMISSIONS.BILLING_MANAGE,
+              },
+            ]
           : []),
       ],
     },
     {
       label: 'Data',
       items: [
-        { label: 'People', to: '/admin/settings/people', icon: UserGroupIcon },
-        { label: 'Companies', to: '/admin/settings/companies', icon: BuildingOfficeIcon },
+        {
+          label: 'People',
+          to: '/admin/settings/people',
+          icon: UserGroupIcon,
+          permission: PERMISSIONS.USER_ATTRIBUTE_VIEW,
+        },
+        {
+          label: 'Companies',
+          to: '/admin/settings/companies',
+          icon: BuildingOfficeIcon,
+          permission: PERMISSIONS.COMPANY_VIEW,
+        },
         ...(isProductEnabled(flags, 'support')
           ? [
               {
                 label: 'Conversations',
                 to: '/admin/settings/conversation-data',
                 icon: ChatBubbleLeftIcon,
+                permission: PERMISSIONS.CONVERSATION_MANAGE,
               },
             ]
           : []),
-        { label: 'Imports & exports', to: '/admin/settings/imports', icon: ArrowDownTrayIcon },
+        {
+          label: 'Imports & exports',
+          to: '/admin/settings/imports',
+          icon: ArrowDownTrayIcon,
+          permission: PERMISSIONS.SETTINGS_MANAGE,
+        },
       ],
     },
   ]
+}
+
+/**
+ * The sections as a viewer with these permissions sees them: a page whose
+ * route would answer Access denied is left out, and a section left with no
+ * pages goes with it.
+ */
+export function navSectionsFor(
+  sections: NavSection[],
+  permissions: ReadonlySet<PermissionKey>
+): NavSection[] {
+  const visible = (entry: NavEntry): NavEntry | null => {
+    if (!isNavGroup(entry)) {
+      return !entry.permission || permissions.has(entry.permission) ? entry : null
+    }
+    const kids = entry.kids.map(visible).filter((kid): kid is NavEntry => kid !== null)
+    return entry.to || kids.length > 0 ? { ...entry, kids } : null
+  }
+  return sections
+    .map((section) => ({
+      ...section,
+      items: section.items.map(visible).filter((entry): entry is NavEntry => entry !== null),
+    }))
+    .filter((section) => section.items.length > 0)
 }
 
 function settingsRowClass(active: boolean, refined: boolean) {
@@ -157,11 +251,12 @@ export function SettingsNav() {
     select: (context) => context.cloudEnabled,
   })
   const flags = settings?.featureFlags as FeatureFlags | undefined
+  const permissions = usePermissions()
   const refined = useRefinedTheme()
 
   const navSections = useMemo(
-    () => buildNavSections(flags, billingEnabled, cloudEnabled),
-    [flags, billingEnabled, cloudEnabled]
+    () => navSectionsFor(buildNavSections(flags, billingEnabled, cloudEnabled), permissions),
+    [flags, billingEnabled, cloudEnabled, permissions]
   )
 
   return (
