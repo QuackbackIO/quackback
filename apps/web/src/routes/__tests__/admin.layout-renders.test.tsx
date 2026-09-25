@@ -8,6 +8,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, render, screen } from '@testing-library/react'
+import { QueryClient } from '@tanstack/react-query'
 import {
   Outlet,
   RouterProvider,
@@ -60,6 +61,11 @@ vi.mock('@/lib/server/functions/version', () => ({
 }))
 vi.mock('@/lib/server/functions/plan-notice', () => ({ getPlanNotice: async () => null }))
 
+vi.mock('@/lib/server/functions/notifications', () => ({
+  getUnreadCountFn: async () => ({ count: 0 }),
+  getNotificationsFn: async () => ({ notifications: [], total: 0, unreadCount: 0 }),
+}))
+
 const { Route: AdminRouteImport } = await import('../admin')
 const { expireRouteContext } = await import('@/lib/client/route-context-memo')
 
@@ -106,7 +112,7 @@ function buildRouter() {
   return createRouter({
     routeTree: rootRoute.addChildren([adminRoute.addChildren([inbox, roadmap])]),
     history: createMemoryHistory({ initialEntries: ['/admin/inbox'] }),
-    context: {},
+    context: { queryClient: new QueryClient() },
   })
 }
 

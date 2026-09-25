@@ -11,6 +11,7 @@ import { IntlProvider } from 'react-intl'
 import { useAdminPresence } from '@/lib/client/hooks/use-admin-presence'
 import { DEFAULT_LOCALE, loadMessages } from '@/lib/shared/i18n'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
+import { unreadCountQuery } from '@/lib/client/hooks/use-notifications-queries'
 import { getLatestVersion, isNewerVersion } from '@/lib/server/functions/version'
 import { AdminSidebar } from '@/components/admin/admin-sidebar'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
@@ -137,6 +138,9 @@ export const Route = createFileRoute('/admin')({
       getLatestVersion(),
       getPlanNotice(),
       loadMessages(locale),
+      // The rail's unread badge rides the document rather than a request of
+      // its own after hydration. Unreadable now, it is left to the bell.
+      context.queryClient.ensureQueryData(unreadCountQuery()).catch(() => null),
     ])
 
     const latestVersion =
