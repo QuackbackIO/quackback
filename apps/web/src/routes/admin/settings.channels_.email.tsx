@@ -6,6 +6,7 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { settingsQueries } from '@/lib/client/queries/settings'
+import { channelSettingsQueries } from '@/lib/client/queries/channel-settings'
 import { useUpdateSpamFilterConfig } from '@/lib/client/mutations/settings'
 import { ChannelSettingsCrumb } from '@/components/admin/settings/channel-settings-crumb'
 import { PageHeader } from '@/components/shared/page-header'
@@ -16,8 +17,7 @@ import { Label } from '@/components/ui/label'
 import { TrustedSendersCard } from '@/components/admin/settings/trusted-senders-card'
 import { EmailChannelSettings } from '@/components/admin/channels/email-channel-settings'
 import { EmailTransportCard } from '@/components/admin/channels/email-transport-card'
-import { fetchEmailAutoAckFn, updateEmailAutoAckFn } from '@/lib/server/functions/settings'
-import { listRecentEmailLogFn } from '@/lib/server/functions/channel-accounts'
+import { updateEmailAutoAckFn } from '@/lib/server/functions/settings'
 
 export const Route = createFileRoute('/admin/settings/channels_/email')({
   beforeLoad: ({ context }) => {
@@ -26,8 +26,25 @@ export const Route = createFileRoute('/admin/settings/channels_/email')({
     }
   },
   loader: async ({ context }) => {
-    assertRoutePermission(context.permissions, PERMISSIONS.CHANNEL_ACCOUNT_MANAGE)
-    await context.queryClient.ensureQueryData(settingsQueries.spamFilterConfig())
+    const { permissions, queryClient } = context
+    assertRoutePermission(permissions, PERMISSIONS.CHANNEL_ACCOUNT_MANAGE)
+    const [{ channelSettingsQueries: channels }, { emailChannelConfigQuery }] = await Promise.all([
+      import('@/lib/client/queries/channel-settings'),
+      import('@/lib/client/queries/channel-accounts'),
+    ])
+    // Every card's read is warmed with the page so it renders complete from
+    // the document. A miss leaves a card to its own fetch, as before; the
+    // transport card's read needs settings.manage, which this page does not.
+    const warm = (p: Promise<unknown>) => p.catch(() => undefined)
+    await Promise.all([
+      queryClient.ensureQueryData(settingsQueries.spamFilterConfig()),
+      permissions?.includes(PERMISSIONS.SETTINGS_MANAGE)
+        ? warm(queryClient.ensureQueryData(channels.emailStatus()))
+        : undefined,
+      warm(queryClient.ensureQueryData(emailChannelConfigQuery())),
+      warm(queryClient.ensureQueryData(channels.emailAutoAck())),
+      warm(queryClient.ensureQueryData(channels.emailActivity())),
+    ])
     return {}
   },
   component: EmailChannelPage,
@@ -64,10 +81,7 @@ function EmailChannelPage() {
 }
 
 function AutoAckCard() {
-  const query = useQuery({
-    queryKey: ['email-auto-ack'],
-    queryFn: () => fetchEmailAutoAckFn(),
-  })
+  const query = useQuery(channelSettingsQueries.emailAutoAck())
   const [override, setOverride] = useState<boolean | null>(null)
   const [saving, setSaving] = useState(false)
   const enabled = override ?? query.data?.enabled ?? false
@@ -107,10 +121,7 @@ function AutoAckCard() {
 }
 
 function EmailActivityCard() {
-  const query = useQuery({
-    queryKey: ['email-activity'],
-    queryFn: () => listRecentEmailLogFn(),
-  })
+  const query = useQuery(channelSettingsQueries.emailActivity())
   const rows = query.data ?? []
   return (
     <SettingsCard
