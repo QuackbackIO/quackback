@@ -8,19 +8,18 @@ import type { UserId, PrincipalId, WorkspaceId } from '@quackback/ids'
 import type { Role } from '@/lib/server/auth'
 import { toSessionScope, sessionRole, type SessionScope } from '@/lib/shared/roles'
 import { getRequestHeaders } from '@tanstack/react-start/server'
-import type { PermissionKey, Principal } from '@/lib/server/db'
+import type { PermissionKey } from '@/lib/server/db'
 import { ensurePrincipalForUser } from '@/lib/server/domains/principals/principal.factory'
-import { permissionsForPrincipal } from '@/lib/server/policy/permissions'
 import { requireSettingsCached } from '@/lib/server/domains/settings/settings.helpers'
 import {
+  getRequestPermissions,
   getRequestPrincipal,
   getRequestSession,
   IDENTITY_MEMO_PREFIX,
   rememberRequestPrincipal,
   type RequestSession,
 } from '@/lib/server/auth/request-session'
-import { derivedMemoKey, memoizePerRequest } from '@/lib/server/request-memo'
-import { CACHE_KEYS } from '@/lib/server/cache'
+import { memoizePerRequest } from '@/lib/server/request-memo'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'auth-helpers' })
@@ -83,19 +82,6 @@ async function getAuthSettings() {
   }
 }
 
-/**
- * The principal's assignment-derived permission set, resolved once per request.
- * Derived from the principal's memo entry, so any change that forgets the
- * principal (every role and assignment mutation deletes its cache key) forgets
- * its grants with it, custom-role reassignments included.
- */
-function requestPermissions(record: Principal): Promise<ReadonlySet<PermissionKey>> {
-  const base = CACHE_KEYS.PRINCIPAL_BY_USER(record.userId ?? '')
-  return memoizePerRequest(derivedMemoKey(base, `permissions:${record.id}:${record.role}`), () =>
-    permissionsForPrincipal(record.id as PrincipalId, record.role as Role)
-  )
-}
-
 export type { Role }
 
 export interface AuthContext {
@@ -155,7 +141,7 @@ export async function requireAuth(options?: RequireAuthOptions): Promise<AuthCon
   if (!principalRecord) {
     throw new Error('Access denied: Not a team member')
   }
-  const resolvedPermissions = await requestPermissions(principalRecord)
+  const resolvedPermissions = await getRequestPermissions(principalRecord)
 
   const role: Role = sessionRole(principalRecord.role as Role, scope)
   // Non-dashboard audiences never carry team authority downstream.
@@ -280,7 +266,7 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
   const resolvedPermissions: ReadonlySet<PermissionKey> =
     principalRecord.role === 'user'
       ? new Set<PermissionKey>()
-      : await requestPermissions(principalRecord)
+      : await getRequestPermissions(principalRecord)
 
   const role: Role = sessionRole(principalRecord.role as Role, scope)
   // Non-dashboard audiences never carry team authority downstream.
