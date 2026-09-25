@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { lazy, Suspense, useState, useEffect, useRef } from 'react'
 import { Link } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { useIntl, FormattedMessage } from 'react-intl'
@@ -39,9 +39,15 @@ import { signinErrorLanding } from '@/lib/shared/auth-prompt'
 import { lookupAuthMethodsFn, type LookupAuthMethodsResult } from '@/lib/server/functions/auth'
 import { OtpCodeStep } from './otp-code-step'
 import { useEmailSignin } from './use-email-signin'
-import { TwoFactorEnrollSteps } from './two-factor-enroll-steps'
+import { Spinner } from '@/components/shared/spinner'
 import { TwoFactorChallengeStep } from './two-factor-challenge-step'
 import type { AuthFormStep } from './email-signin-types'
+
+// Enrollment carries the QR code library and is reached only by a password
+// sign-in to a workspace that requires two-factor, so it loads when reached.
+const TwoFactorEnrollSteps = lazy(() =>
+  import('./two-factor-enroll-steps').then((m) => ({ default: m.TwoFactorEnrollSteps }))
+)
 
 interface OrgAuthConfig {
   found: boolean
@@ -1183,18 +1189,26 @@ export function PortalAuthFormInline({
   // ============================================================
   if (view.stage === 'two-factor-enroll') {
     return (
-      <TwoFactorEnrollSteps
-        password={password}
-        onComplete={postAuthSuccess}
-        onCancel={async () => {
-          try {
-            await authClient.signOut()
-          } finally {
-            setError('')
-            setView({ stage: 'methods-step', step: methodsDefaultStep })
-          }
-        }}
-      />
+      <Suspense
+        fallback={
+          <div className="flex justify-center py-10">
+            <Spinner />
+          </div>
+        }
+      >
+        <TwoFactorEnrollSteps
+          password={password}
+          onComplete={postAuthSuccess}
+          onCancel={async () => {
+            try {
+              await authClient.signOut()
+            } finally {
+              setError('')
+              setView({ stage: 'methods-step', step: methodsDefaultStep })
+            }
+          }}
+        />
+      </Suspense>
     )
   }
 
