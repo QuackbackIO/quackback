@@ -43,11 +43,18 @@ export function ConfirmDialog({
   const startedRef = useRef(false)
   const [started, setStarted] = useState(false)
   const busy = Boolean(isPending) || started
+  // Mounted from the first open on (it has no trigger of its own), so the
+  // confirm dialogs a list keeps per row cost nothing until one is asked for.
+  const [opened, setOpened] = useState(open)
+  if (open && !opened) setOpened(true)
+  const mounted = opened || open
 
   function resetStarted() {
     startedRef.current = false
     setStarted(false)
   }
+
+  if (!mounted) return null
 
   return (
     <AlertDialog
