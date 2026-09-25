@@ -8,8 +8,9 @@
  * checks that with --repeat.
  */
 import type { APIRequestContext, Locator, Page } from '@playwright/test'
+import postgres from 'postgres'
 import { buildWidgetInstallSnippet } from '../src/lib/shared/widget/install-prompt'
-import { BENCH_PORT } from './config'
+import { BENCH_DATABASE_URL, BENCH_PORT } from './config'
 
 export type Actor = 'anon' | 'admin'
 
@@ -31,6 +32,8 @@ export interface BrowserJourney {
   setup?: (page: Page) => Promise<void>
   /** The measured interaction. Resolves once its result is on screen. */
   run: (page: Page) => Promise<void>
+  /** Puts back what the journey wrote, so every journey measures the seeded data. */
+  teardown?: () => Promise<void>
   /** Part of the breadth sweep over every page (skipped by --core). */
   sweep?: boolean
 }
@@ -38,6 +41,52 @@ export interface BrowserJourney {
 export type Journey = DocumentJourney | BrowserJourney
 
 const firstPortalPost = (page: Page) => page.locator('a[href*="/posts/post_"]').first()
+
+let benchDb: postgres.Sql | undefined
+const db = () => (benchDb ??= postgres(BENCH_DATABASE_URL, { max: 1, onnotice: () => {} }))
+
+/**
+ * A seeded conversation a journey writes to, saved before the write and put
+ * back after it: the row as it was, only the messages it had, and none of the
+ * events (or the jobs that dispatch them) the write recorded.
+ */
+function seededConversation(subject: string) {
+  let saved: { id: string; row: string; messages: string[]; event: string; job: string } | null =
+    null
+  return {
+    async save() {
+      const [conversation] = await db()<{ id: string; row: string }[]>`
+        SELECT id, row_to_json(conversations)::text AS row FROM conversations
+        WHERE subject = ${subject}`
+      if (!conversation) throw new Error(`no seeded conversation "${subject}"`)
+      const messages = await db()<{ id: string }[]>`
+        SELECT id FROM conversation_messages WHERE conversation_id = ${conversation.id}`
+      const [marks] = await db()<{ event: string; job: string }[]>`
+        SELECT (SELECT coalesce(max(id), 0) FROM events)::text AS event,
+               (SELECT coalesce(max(id), 0) FROM job_queue)::text AS job`
+      saved = { ...conversation, messages: messages.map((m) => m.id), ...marks! }
+    },
+    async restore() {
+      if (!saved) return
+      const { id, row, messages, event, job } = saved
+      saved = null
+      const columns = Object.keys(JSON.parse(row)).filter((column) => column !== 'id')
+      await db().begin(async (tx) => {
+        await tx`DELETE FROM conversation_messages
+          WHERE conversation_id = ${id} AND id <> ALL(${messages}::uuid[])`
+        await tx`UPDATE conversations SET (${tx(columns)}) = (
+          SELECT ${tx(columns)} FROM json_populate_record(NULL::conversations, ${row}::text::json))
+          WHERE id = ${id}`
+        await tx`DELETE FROM job_queue WHERE id > ${job}`
+        await tx`DELETE FROM events WHERE id > ${event}`
+      })
+    },
+  }
+}
+
+/** The reply the send-reply journey posts, to a conversation put back afterwards. */
+const REPLY = 'Measuring what a reply costs.'
+const replyConversation = seededConversation('Bench conversation 2')
 
 /** How long a hover-then-click journey rests the pointer on a link before pressing it. */
 const HOVER_MS = 250
@@ -440,6 +489,28 @@ export const journeys: Journey[] = [
     run: async (page) => {
       await page.keyboard.type('Measuring what a keystroke costs.', { delay: 30 })
     },
+  },
+  {
+    // Sending a reply: the message lands in the thread and the inbox catches
+    // its lists up. The teardown puts the conversation back as seeded, so no
+    // journey after it (nor this one, repeated) sees the reply.
+    kind: 'browser',
+    name: 'ui:admin-inbox-send-reply',
+    as: 'admin',
+    setup: async (page) => {
+      await replyConversation.save()
+      await page.goto('/admin/inbox')
+      const composer = page.locator('[contenteditable="true"]').first()
+      await clickUntil(page.getByText('Bench conversation 2').first(), composer)
+      await page.getByText('Bench conversation 2 - visitor message one').first().waitFor()
+      await composer.click()
+      await page.keyboard.type(REPLY)
+    },
+    run: async (page) => {
+      await page.keyboard.press('Enter')
+      await page.locator('[data-message-id]', { hasText: REPLY }).waitFor()
+    },
+    teardown: () => replyConversation.restore(),
   },
   {
     kind: 'browser',
