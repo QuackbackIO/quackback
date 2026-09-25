@@ -13,27 +13,10 @@ import {
 import { EmptyState } from '@/components/shared/empty-state'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { ArchiveBoxIcon } from '@heroicons/react/24/solid'
-
-export interface ExportRunListItem {
-  id: string
-  status: 'pending' | 'running' | 'completed' | 'failed'
-  fileName: string
-  sizeBytes: number | null
-  entityCounts: Record<string, number> | null
-  error: string | null
-  createdAt: string
-  finishedAt: string | null
-  expiresAt: string | null
-}
+import { settingsQueries } from '@/lib/client/queries/settings'
+import type { ExportRunListItem } from '@/lib/server/functions/data-runs'
 
 const IN_FLIGHT_STATUSES = new Set<ExportRunListItem['status']>(['pending', 'running'])
-
-export async function fetchExportRuns(): Promise<ExportRunListItem[]> {
-  const res = await fetch('/api/export/runs')
-  if (!res.ok) throw new Error('Failed to load export history')
-  const body = (await res.json()) as { runs: ExportRunListItem[] }
-  return body.runs
-}
 
 const STATUS_LABEL: Record<ExportRunListItem['status'], string> = {
   pending: 'Queued',
@@ -75,8 +58,7 @@ function isExpired(run: ExportRunListItem): boolean {
 
 export function ExportHistoryList() {
   const { data: runs, isLoading } = useQuery({
-    queryKey: ['export-runs'],
-    queryFn: fetchExportRuns,
+    ...settingsQueries.exportRuns(),
     refetchInterval: (query) => {
       const rows = query.state.data
       return rows?.some((r) => IN_FLIGHT_STATUSES.has(r.status)) ? 2000 : false

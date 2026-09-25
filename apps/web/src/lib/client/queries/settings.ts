@@ -32,6 +32,7 @@ import {
   listIdentityProvidersFn,
 } from '@/lib/server/functions/sso'
 import { listRolesFn } from '@/lib/server/functions/roles'
+import { listExportRunsFn, listImportRunsFn } from '@/lib/server/functions/data-runs'
 import {
   fetchSettingsLogoData,
   fetchSettingsHeaderLogoData,
@@ -238,6 +239,21 @@ export const settingsQueries = {
     queryOptions({
       queryKey: ['settings', 'labs'],
       queryFn: listVisibleLabsExperimentsFn,
+      staleTime: STALE_TIME_SHORT,
+    }),
+
+  /** Workspace export history, shared by the export action and the history list. */
+  exportRuns: () =>
+    queryOptions({
+      queryKey: ['export-runs'],
+      queryFn: () => listExportRunsFn(),
+      staleTime: STALE_TIME_SHORT,
+    }),
+
+  importRuns: () =>
+    queryOptions({
+      queryKey: ['import-runs'],
+      queryFn: () => listImportRunsFn(),
       staleTime: STALE_TIME_SHORT,
     }),
 }

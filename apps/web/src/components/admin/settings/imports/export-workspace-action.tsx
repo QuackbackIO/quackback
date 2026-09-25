@@ -6,7 +6,7 @@ import { TimeAgo } from '@/components/ui/time-ago'
 import { toast } from 'sonner'
 import { UpgradeModal } from '@/components/admin/upgrade'
 import { describePlanUpgrade } from '@/lib/shared/describe-upgrade'
-import { fetchExportRuns } from './export-history-list'
+import { settingsQueries } from '@/lib/client/queries/settings'
 
 const IN_FLIGHT_STATUSES = new Set(['pending', 'running'])
 
@@ -21,8 +21,7 @@ export function ExportWorkspaceAction() {
   const [upgradeOpen, setUpgradeOpen] = useState(false)
 
   const { data: runs } = useQuery({
-    queryKey: ['export-runs'],
-    queryFn: fetchExportRuns,
+    ...settingsQueries.exportRuns(),
     refetchInterval: (query) =>
       query.state.data?.some((r) => IN_FLIGHT_STATUSES.has(r.status)) ? 2000 : false,
   })
