@@ -28,7 +28,7 @@ import { signOut } from '@/lib/client/auth-client'
 import { removeViewerScopedPortalQueries } from '@/lib/client/queries/portal'
 import { resolveSubmitState } from '@/components/public/feedback/submit-permission'
 import { PUBLIC_FEEDBACK_EDITOR_FEATURES } from '@/components/public/feedback/feedback-editor-features'
-import type { JSONContent } from '@tiptap/react'
+import type { EditorDocument } from '@/components/ui/rich-text-editor'
 
 interface BoardOption {
   id: string
@@ -119,8 +119,6 @@ export function FeedbackHeaderAnimated({
   const canUploadMedia = richMediaEnabled && (!!session?.user || canPostAnonymously)
 
   const [title, setTitle] = useState('')
-  const [contentJson, setContentJson] = useState<JSONContent | null>(null)
-  const [contentMarkdown, setContentMarkdown] = useState('')
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, unknown>>({})
   const titleInputRef = useRef<HTMLInputElement>(null)
 
@@ -145,13 +143,16 @@ export function FeedbackHeaderAnimated({
     enabled: expanded,
   })
 
-  const handleContentChange = useCallback(function (
-    json: JSONContent,
-    _html: string,
-    markdown: string
-  ): void {
-    setContentJson(json)
-    setContentMarkdown(markdown)
+  // The details as written. Typing keeps them here rather than in state, so a
+  // keystroke never re-renders the header around the editor; the post reads
+  // them (serialized once) when it is submitted. Only the open composer's
+  // editor writes them: a closing one is still on screen while it animates
+  // out, and the next one opens empty.
+  const detailsRef = useRef<EditorDocument | null>(null)
+  const expandedRef = useRef(expanded)
+  expandedRef.current = expanded
+  const handleContentChange = useCallback((document: EditorDocument) => {
+    if (expandedRef.current) detailsRef.current = document
   }, [])
 
   async function handleSubmit() {
@@ -214,11 +215,12 @@ export function FeedbackHeaderAnimated({
         }
       }
 
+      const details = detailsRef.current
       const result = await createPost.mutateAsync({
         boardId: selectedBoardId as BoardId,
         title: title.trim(),
-        content: contentMarkdown,
-        contentJson,
+        content: details?.markdown() ?? '',
+        contentJson: details?.json() ?? null,
         ...(boardCustomFields.length > 0 ? { customFields: customFieldValues } : {}),
       })
 
@@ -256,8 +258,7 @@ export function FeedbackHeaderAnimated({
   function resetForm() {
     setSelectedBoardId(defaultBoardId || '')
     setTitle('')
-    setContentJson(null)
-    setContentMarkdown('')
+    detailsRef.current = null
     setCustomFieldValues({})
     setError('')
   }
@@ -388,8 +389,8 @@ export function FeedbackHeaderAnimated({
             >
               <Suspense fallback={<RichTextEditorPlaceholder minHeight="150px" />}>
                 <LazyRichTextEditor
-                  value={contentJson || ''}
-                  onChange={handleContentChange}
+                  value=""
+                  onDocumentChange={handleContentChange}
                   placeholder={intl.formatMessage({
                     id: 'portal.feedback.header.detailsPlaceholder',
                     defaultMessage: 'Add more details... Type / for commands',
