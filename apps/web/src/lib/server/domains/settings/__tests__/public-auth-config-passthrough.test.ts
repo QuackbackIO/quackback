@@ -39,6 +39,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
     },
     select: () => ({
       from: () => ({
+        where: () => Promise.resolve([]),
         limit: () => Promise.resolve([]),
         orderBy: () => Promise.resolve([]),
       }),
@@ -101,7 +102,7 @@ describe('getPublicAuthConfig — magicLink passthrough', () => {
   })
 
   it('drops magicLink when email is NOT configured (no point surfacing a button that would silently fail)', async () => {
-    mockIsEmailConfigured.mockReturnValueOnce(false)
+    mockIsEmailConfigured.mockReturnValue(false)
     const result = await getPublicAuthConfig()
     // Without email transport, magicLink should not be in the
     // passthrough list and thus gets the credential-gate treatment,
@@ -121,7 +122,7 @@ describe('getPublicAuthConfig — magicLink passthrough', () => {
   })
 
   it('keeps OAuth providers when their credential IS configured', async () => {
-    mockGetConfiguredIntegrationTypes.mockResolvedValueOnce(new Set(['auth_google']))
+    mockGetConfiguredIntegrationTypes.mockResolvedValue(new Set(['auth_google']))
     const result = await getPublicAuthConfig()
     expect(result?.oauth.google).toBe(true)
     expect(result?.oauth.github).toBeFalsy() // no auth_github credential

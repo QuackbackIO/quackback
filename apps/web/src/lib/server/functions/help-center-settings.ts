@@ -44,10 +44,7 @@ export const updateHelpCenterSeoFn = createServerFn({ method: 'POST' })
   .validator(updateHelpCenterSeoSchema)
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
-    const current = await getHelpCenterConfig()
-    return updateHelpCenterConfig({
-      seo: { ...current.seo, ...data },
-    })
+    return updateHelpCenterConfig({ seo: data })
   })
 
 // ============================================================================
@@ -83,8 +80,5 @@ export const updateHelpCenterAutoTranslateFn = createServerFn({ method: 'POST' }
   .validator(updateHelpCenterAutoTranslateSchema)
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
-    const current = await getHelpCenterConfig()
-    return updateHelpCenterConfig({
-      autoTranslate: { ...current.autoTranslate, ...data },
-    })
+    return updateHelpCenterConfig({ autoTranslate: data })
   })

@@ -4,7 +4,6 @@
  */
 import { db, eq, settings } from '@/lib/server/db'
 import { cacheDel, CACHE_KEYS } from '@/lib/server/cache'
-import { derivedMemoKey, memoizePerRequest } from '@/lib/server/request-memo'
 import { DomainException, InternalError, NotFoundError } from '@/lib/shared/errors'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
@@ -98,6 +97,22 @@ export function deepMerge<T extends object>(target: T, source: Partial<T>): T {
   return result
 }
 
+/*
+ * The settings row is read through one of two tiers.
+ *
+ * - requireSettings(): the row, read fresh from the database. Every
+ *   read-modify-write starts here (writeMetadataKey does), so a write is never
+ *   based on a copy.
+ * - requireSettingsCached() / findSettingsCached(): the row inside the workspace
+ *   settings (getWorkspaceSettings), for every read-only path. A request reads
+ *   it at most once whichever of the two it asks through, this process reuses
+ *   it for a few seconds (local-cache.ts) and the kv cache for longer.
+ *   invalidateSettingsCache(), which every settings write calls, forgets all
+ *   three, so the writing request and the next one see the write; another
+ *   process sees it once its local copy expires. Date columns arrive as ISO
+ *   strings after the kv round trip.
+ */
+
 /** @internal */
 export async function requireSettings(): Promise<SettingsRecord> {
   const org = await db.query.settings.findFirst()
@@ -105,39 +120,7 @@ export async function requireSettings(): Promise<SettingsRecord> {
   return org
 }
 
-const SETTINGS_ROW_MEMO_KEY = derivedMemoKey(CACHE_KEYS.WORKSPACE_SETTINGS, 'row')
-
-/**
- * The settings row for the READ-ONLY getters (office hours, stage labels, the
- * assistant settings, ...), read once per request and shared by all of them: a
- * page asks for several. Unlike {@link requireSettingsCached} it is never older
- * than the request; `invalidateSettingsCache()` forgets it with the rest of
- * the settings, and outside a request it is read every time.
- *
- * A read-modify-write keeps {@link requireSettings}.
- *
- * @internal
- */
-export async function requireSettingsPerRequest(): Promise<SettingsRecord> {
-  const org = await memoizePerRequest(SETTINGS_ROW_MEMO_KEY, () => db.query.settings.findFirst())
-  if (!org) throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
-  // Every caller gets a copy, so one parsing its slice cannot change another's.
-  // Shallow is enough: callers parse the row's text columns, never mutate them.
-  return { ...org }
-}
-
-/**
- * The raw settings row for READ-ONLY paths, served through the Redis-cached
- * workspace-settings blob (a single Redis GET when warm; the miss path is the
- * same DB read as {@link requireSettings}). Every settings mutation calls
- * invalidateSettingsCache(), so reads here are effectively fresh.
- *
- * Two caveats: date columns arrive as ISO strings after the JSON round trip,
- * and read-modify-write paths MUST keep using {@link requireSettings} so a
- * write is never based on a cached row.
- *
- * @internal
- */
+/** @internal */
 export async function requireSettingsCached(): Promise<SettingsRecord> {
   const org = await findSettingsCached()
   if (!org) throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
@@ -153,9 +136,8 @@ export async function requireSettingsCached(): Promise<SettingsRecord> {
 export async function findSettingsCached(): Promise<SettingsRecord | null> {
   // Dynamic import: settings.service imports these helpers at module scope,
   // so a static import here would be a load-time cycle.
-  const { getWorkspaceSettings } = await import('./settings.service')
-  const workspace = await getWorkspaceSettings()
-  return (workspace?.settings as SettingsRecord | undefined) ?? null
+  const { getWorkspaceSettingsRow } = await import('./settings.service')
+  return getWorkspaceSettingsRow()
 }
 
 /** @internal */
@@ -182,17 +164,29 @@ export async function invalidateSettingsCache(): Promise<void> {
  * acceptable for the admin-driven settings families (office hours, tickets) that
  * ride in this generic bag rather than a dedicated column.
  *
+ * `value` may be a function of the freshly read bag, for a partial update
+ * that merges over what is stored: the merge then starts from the fresh row,
+ * never from a cached read. Returns the value written.
+ *
  * @internal
  */
-export async function writeMetadataKey(key: string, value: unknown): Promise<void> {
+export async function writeMetadataKey<T>(
+  key: string,
+  value: T | ((storedMetadata: string | null) => T)
+): Promise<T> {
   const org = await requireSettings()
+  const next =
+    typeof value === 'function'
+      ? (value as (storedMetadata: string | null) => T)(org.metadata)
+      : value
   const meta = parseJsonOrNull<Record<string, unknown>>(org.metadata) ?? {}
-  meta[key] = value
+  meta[key] = next
   await db
     .update(settings)
     .set({ metadata: JSON.stringify(meta) })
     .where(eq(settings.id, org.id))
   await invalidateSettingsCache()
+  return next
 }
 
 /**
