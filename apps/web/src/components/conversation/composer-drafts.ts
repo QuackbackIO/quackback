@@ -1,4 +1,10 @@
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useMemo } from 'react'
+import {
+  createValueStore,
+  useDebouncedStoreValue,
+  useStoreValue,
+  type ReadableStore,
+} from '@/lib/client/value-store'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 import { EMPTY_DRAFT, type ComposerDraft } from './composer-draft'
 import type { ComposerMode } from './composer-ai-actions'
@@ -17,24 +23,31 @@ export interface ComposerDrafts {
 }
 
 export function createComposerDrafts(): ComposerDrafts {
-  const drafts: Record<ComposerMode, ComposerDraft> = { reply: EMPTY_DRAFT, note: EMPTY_DRAFT }
-  const listeners = new Set<() => void>()
+  const store = createValueStore<Record<ComposerMode, ComposerDraft>>({
+    reply: EMPTY_DRAFT,
+    note: EMPTY_DRAFT,
+  })
   return {
-    get: (mode) => drafts[mode],
+    get: (mode) => store.get()[mode],
     set(mode, next) {
+      const drafts = store.get()
       const value = typeof next === 'function' ? next(drafts[mode]) : next
       if (value === drafts[mode]) return
-      drafts[mode] = value
-      for (const listener of listeners) listener()
+      store.set({ ...drafts, [mode]: value })
     },
-    subscribe(onChange) {
-      listeners.add(onChange)
-      return () => {
-        listeners.delete(onChange)
-      }
-    },
+    subscribe: store.subscribe,
   }
 }
+
+/** One mode's draft as a store of its own, stable while `drafts` and `mode` are. */
+function useDraftStore(drafts: ComposerDrafts, mode: ComposerMode): ReadableStore<ComposerDraft> {
+  return useMemo(
+    () => ({ get: () => drafts.get(mode), subscribe: drafts.subscribe }),
+    [drafts, mode]
+  )
+}
+
+const selectMarkdown = (draft: ComposerDraft) => draft.markdown
 
 export const isEmptyDraft = (draft: ComposerDraft) => isEmptyTiptapDoc(draft.json ?? undefined)
 
@@ -47,8 +60,7 @@ export function useComposerDraftValue<T>(
   mode: ComposerMode,
   select: (draft: ComposerDraft) => T
 ): T {
-  const read = () => select(drafts.get(mode))
-  return useSyncExternalStore(drafts.subscribe, read, read)
+  return useStoreValue(useDraftStore(drafts, mode), select)
 }
 
 /** A draft's markdown, updated once its changes have paused for `delayMs`. */
@@ -57,19 +69,5 @@ export function useDebouncedDraftText(
   mode: ComposerMode,
   delayMs: number
 ): string {
-  const [text, setText] = useState(() => drafts.get(mode).markdown)
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const schedule = () => {
-      clearTimeout(timer)
-      timer = setTimeout(() => setText(drafts.get(mode).markdown), delayMs)
-    }
-    schedule()
-    const unsubscribe = drafts.subscribe(schedule)
-    return () => {
-      clearTimeout(timer)
-      unsubscribe()
-    }
-  }, [drafts, mode, delayMs])
-  return text
+  return useDebouncedStoreValue(useDraftStore(drafts, mode), selectMarkdown, delayMs)
 }

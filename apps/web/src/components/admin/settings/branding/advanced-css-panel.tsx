@@ -1,14 +1,15 @@
-import { lazy, Suspense, useState } from 'react'
+import { Suspense, useState } from 'react'
 import { ChevronDownIcon } from '@heroicons/react/24/solid'
+import { useOpenedOnce } from '@/lib/client/hooks/use-opened-once'
+import { lazyWithPreload } from '@/lib/client/lazy-with-preload'
 
 // @uiw/react-codemirror + @codemirror/lang-css make this the largest route
 // chunk in the app, yet most visits never open the "Advanced CSS" panel, so
 // it is its own chunk, fetched when the pointer or focus reaches the panel's
 // summary and rendered once the panel first opens.
-const loadCustomCssEditor = () => import('@/components/admin/settings/branding/custom-css-editor')
-
-const CustomCssEditor = lazy(() =>
-  loadCustomCssEditor().then((m) => ({ default: m.CustomCssEditor }))
+const { Component: CustomCssEditor, preload } = lazyWithPreload(
+  () => import('@/components/admin/settings/branding/custom-css-editor'),
+  'CustomCssEditor'
 )
 
 // Fixed-height skeleton matching the editor's rendered height (280px) plus
@@ -35,14 +36,14 @@ export function AdvancedCssPanel({
   value: string
   onChange: (css: string) => void
 }) {
-  const [opened, setOpened] = useState(false)
-  const preload = () => void loadCustomCssEditor()
+  const [open, setOpen] = useState(false)
+  const opened = useOpenedOnce(open)
 
   return (
     <details
       className="group rounded-lg border border-border/60 bg-muted/30"
       onToggle={(e) => {
-        if (e.currentTarget.open) setOpened(true)
+        setOpen(e.currentTarget.open)
       }}
     >
       <summary

@@ -6,9 +6,9 @@ import {
   memo,
   useRef,
   useState,
-  useSyncExternalStore,
   type RefObject,
 } from 'react'
+import { createValueStore, useStoreValue, type ValueStore } from '@/lib/client/value-store'
 import { usePillsScroll } from '@/lib/client/hooks/use-pills-scroll'
 import { Squares2X2Icon, PencilIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/solid'
 import {
@@ -274,42 +274,10 @@ const WidgetPostRow = memo(
  * The title as typed, held outside React state: the field and the similar-ideas
  * search read it as it changes, and the composer reads it when it acts on
  * it, so a keystroke renders the field and the search, not the composer.
- * It is kept here rather than shared with the portal's composer: a module
- * the two alone import would be a chunk, and a request, of its own.
  */
-interface TitleStore {
-  get(): string
-  set(next: string): void
-  subscribe(onChange: () => void): () => void
-}
+type TitleStore = ValueStore<string>
 
-function createTitleStore(): TitleStore {
-  let value = ''
-  const listeners = new Set<() => void>()
-  return {
-    get: () => value,
-    set(next) {
-      if (next === value) return
-      value = next
-      for (const listener of listeners) listener()
-    },
-    subscribe(onChange) {
-      listeners.add(onChange)
-      return () => {
-        listeners.delete(onChange)
-      }
-    },
-  }
-}
-
-/** What a component reads from the title; it renders again only when that changes. */
-function useTitle<T = string>(
-  title: TitleStore,
-  select: (value: string) => T = (value) => value as T
-): T {
-  const read = () => select(title.get())
-  return useSyncExternalStore(title.subscribe, read, read)
-}
+const createTitleStore = (): TitleStore => createValueStore('')
 
 function TitleInput({
   title,
@@ -325,7 +293,7 @@ function TitleInput({
   onFocus: () => void
 }) {
   const intl = useIntl()
-  const value = useTitle(title)
+  const value = useStoreValue(title)
   return (
     <m.input
       ref={inputRef}
@@ -378,7 +346,7 @@ function SimilarIdeas({
   onAuthRequired: (postId: string) => void
   onPostSelect?: (postId: string) => void
 }) {
-  const value = useTitle(title)
+  const value = useStoreValue(title)
   const [similarPostResults, setSimilarPostResults] = useState<SearchResult | null>(null)
   const [isSimilarSearching, setIsSimilarSearching] = useState(false)
   const similarDebounceRef = useRef<ReturnType<typeof setTimeout>>(null)
@@ -499,7 +467,7 @@ export function WidgetHomeAnimated({
   const [title] = useState(createTitleStore)
   // Submit waits for a title; this changes when the first character arrives
   // or the last one goes, not with every keystroke.
-  const hasTitle = useTitle(title, (value) => value.trim() !== '')
+  const hasTitle = useStoreValue(title, (value) => value.trim() !== '')
   const [expanded, setExpanded] = useState(false)
   const [selectedBoardId, setSelectedBoardId] = useState(() =>
     resolveComposeBoardId(boards, undefined, defaultBoard)

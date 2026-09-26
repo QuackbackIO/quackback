@@ -1,6 +1,5 @@
 import {
   Suspense,
-  lazy,
   useEffect,
   useRef,
   useState,
@@ -9,6 +8,7 @@ import {
   type CSSProperties,
   type Key,
 } from 'react'
+import { lazyWithPreload } from '@/lib/client/lazy-with-preload'
 import { cn } from '@/lib/shared/utils'
 
 /**
@@ -18,16 +18,12 @@ import { cn } from '@/lib/shared/utils'
  * content a visitor came for, load it as its own chunk. Render it inside
  * <Suspense>, with RichTextEditorPlaceholder as the fallback.
  */
-const loadRichTextEditor = () => import('./rich-text-editor')
+const richTextEditor = lazyWithPreload(() => import('./rich-text-editor'), 'RichTextEditor')
 
-export const LazyRichTextEditor = lazy(() =>
-  loadRichTextEditor().then((m) => ({ default: m.RichTextEditor }))
-)
+export const LazyRichTextEditor = richTextEditor.Component
 
 /** Start fetching the editor ahead of the first render that needs it. */
-export function preloadRichTextEditor(): void {
-  void loadRichTextEditor().catch(() => {})
-}
+export const preloadRichTextEditor = richTextEditor.preload
 
 /** Holds the editor's height while its chunk loads, so the layout stays put. */
 export function RichTextEditorPlaceholder({ minHeight }: { minHeight: string }) {

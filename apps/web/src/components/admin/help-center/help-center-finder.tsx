@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState } from 'react'
+import { Suspense, useMemo, useState } from 'react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import {
   PlusIcon,
@@ -34,17 +34,16 @@ import { HelpCenterActiveFiltersBar } from './help-center-active-filters-bar'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { AdminListHeader } from '@/components/admin/admin-list-header'
 import { useDebouncedSearch } from '@/lib/client/hooks/use-debounced-search'
+import { useOpenedOnce } from '@/lib/client/hooks/use-opened-once'
+import { lazyWithPreload } from '@/lib/client/lazy-with-preload'
 
 // The create dialog carries the editor and the article form, which outweigh
 // the list; it loads on first open, or ahead of it when the pointer or focus
 // reaches a New button.
-const loadCreateArticleDialog = () => import('./create-article-dialog')
-const CreateArticleDialog = lazy(() =>
-  loadCreateArticleDialog().then((m) => ({ default: m.CreateArticleDialog }))
+const { Component: CreateArticleDialog, preload: preloadCreateArticleDialog } = lazyWithPreload(
+  () => import('./create-article-dialog'),
+  'CreateArticleDialog'
 )
-function preloadCreateArticleDialog() {
-  void loadCreateArticleDialog().catch(() => {})
-}
 import { TimeAgo } from '@/components/ui/time-ago'
 import type { KbArticleId } from '@quackback/ids'
 
@@ -108,13 +107,9 @@ function LiveHelpCenterFinder({
 }: HelpCenterFinderProps) {
   const { filters, setFilters, clearFilters, hasActiveFilters } = useHelpCenterFilters()
 
-  const [createArticleOpen, setCreateArticleOpenState] = useState(false)
+  const [createArticleOpen, setCreateArticleOpen] = useState(false)
   // Kept mounted after the first open so closing animates.
-  const [createArticleOpened, setCreateArticleOpened] = useState(false)
-  const setCreateArticleOpen = (open: boolean) => {
-    if (open) setCreateArticleOpened(true)
-    setCreateArticleOpenState(open)
-  }
+  const createArticleOpened = useOpenedOnce(createArticleOpen)
 
   const { data: allCategories = [] } = useQuery(helpCenterQueries.categories())
 

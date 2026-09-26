@@ -16,7 +16,7 @@ import { usePostMediaUpload, usePortalMediaUpload } from '@/lib/client/hooks/use
 import { adminQueries } from '@/lib/client/queries/admin'
 import { postOwnerQueries } from '@/lib/client/queries/post-owner'
 import { mergeSuggestionQueries } from '@/lib/client/queries/signals'
-import { permissionFromRouteContext } from '@/lib/client/hooks/use-permission'
+import { usePermission } from '@/lib/client/hooks/use-permission'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
 import {
@@ -56,7 +56,6 @@ import {
 import { usePostExternalLinks } from '@/lib/client/hooks/use-post-external-links-query'
 import { usePostDetailKeyboard } from '@/lib/client/hooks/use-post-detail-keyboard'
 import { retryPostIntegrationSyncFn, setPostEtaFn } from '@/lib/server/functions/posts'
-import { useRouteContext } from '@tanstack/react-router'
 import {
   type PostId,
   type PostStatusId,
@@ -104,20 +103,9 @@ export const PostModalContent = memo(function PostModalContent({
   // Owner (assignee) control — gated on post.set_owner. The roster is fetched
   // via the same post.set_owner-gated fn the portal uses; the current owner is
   // resolved from it against the post's ownerPrincipalId (already in payload).
-  // Each answer is selected (not the whole context), so the fresh context
-  // each navigation brings does not re-render the modal.
-  const canSetOwner = useRouteContext({
-    from: '/admin',
-    select: (context) => permissionFromRouteContext(context, PERMISSIONS.POST_SET_OWNER),
-  })
-  const canModerate = useRouteContext({
-    from: '/admin',
-    select: (context) => permissionFromRouteContext(context, PERMISSIONS.POST_APPROVE),
-  })
-  const canManageIntegrations = useRouteContext({
-    from: '/admin',
-    select: (context) => permissionFromRouteContext(context, PERMISSIONS.INTEGRATION_MANAGE),
-  })
+  const canSetOwner = usePermission(PERMISSIONS.POST_SET_OWNER)
+  const canModerate = usePermission(PERMISSIONS.POST_APPROVE)
+  const canManageIntegrations = usePermission(PERMISSIONS.INTEGRATION_MANAGE)
   const approvePost = useApprovePost(postId)
   const rejectPost = useRejectPost(postId)
   const { data: ownerCandidates } = useQuery({

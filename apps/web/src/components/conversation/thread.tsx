@@ -6,20 +6,19 @@
  * supplies its data and capabilities through parameters — auth headers, cache
  * writes, error surfacing — rather than forking the machinery.
  */
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode, RefObject } from 'react'
 import { useVirtualizer, type Virtualizer } from '@tanstack/react-virtual'
 import type { JSONContent } from '@tiptap/core'
 import type { ConversationId } from '@quackback/ids'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useVisitorSurfaceRpc, type VisitorSurfaceRpc } from '@/lib/client/visitor-surface-rpc'
+import {
+  createValueStore,
+  useDebouncedStoreValue,
+  useStoreValue,
+  type ReadableStore,
+} from '@/lib/client/value-store'
 import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
 
 /** True when the composer doc carries an inline image or post embed, which makes
@@ -49,27 +48,15 @@ export interface ComposerDocDraft {
  * that value (useComposerDocValue); everything else reads the latest draft
  * when it acts.
  */
-export interface ComposerDocStore {
-  get(): ComposerDocDraft
+export interface ComposerDocStore extends ReadableStore<ComposerDocDraft> {
   set(text: string, doc: JSONContent | null): void
-  subscribe(onChange: () => void): () => void
 }
 
 function createComposerDocStore(): ComposerDocStore {
-  let draft: ComposerDocDraft = { text: '', doc: null, hasContentNode: false }
-  const listeners = new Set<() => void>()
+  const store = createValueStore<ComposerDocDraft>({ text: '', doc: null, hasContentNode: false })
   return {
-    get: () => draft,
-    set(text, doc) {
-      draft = { text, doc, hasContentNode: docHasContentNode(doc) }
-      for (const listener of listeners) listener()
-    },
-    subscribe(onChange) {
-      listeners.add(onChange)
-      return () => {
-        listeners.delete(onChange)
-      }
-    },
+    ...store,
+    set: (text, doc) => store.set({ text, doc, hasContentNode: docHasContentNode(doc) }),
   }
 }
 
@@ -98,27 +85,14 @@ export function useComposerDocValue<T>(
   draft: ComposerDocStore,
   select: (draft: ComposerDocDraft) => T
 ): T {
-  const read = () => select(draft.get())
-  return useSyncExternalStore(draft.subscribe, read, read)
+  return useStoreValue(draft, select)
 }
+
+const selectText = (draft: ComposerDocDraft) => draft.text
 
 /** The draft's text, updated once its changes have paused for `delayMs`. */
 export function useDebouncedComposerText(draft: ComposerDocStore, delayMs: number): string {
-  const [text, setText] = useState(() => draft.get().text)
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const schedule = () => {
-      clearTimeout(timer)
-      timer = setTimeout(() => setText(draft.get().text), delayMs)
-    }
-    schedule()
-    const unsubscribe = draft.subscribe(schedule)
-    return () => {
-      clearTimeout(timer)
-      unsubscribe()
-    }
-  }, [draft, delayMs])
-  return text
+  return useDebouncedStoreValue(draft, selectText, delayMs)
 }
 
 /** Near-end slack for the tail-follow effect below: within ~a row and a half
