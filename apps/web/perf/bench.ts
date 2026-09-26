@@ -44,7 +44,7 @@ import {
 import { parseArgs } from 'node:util'
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { journeys, type Actor, type BrowserJourney, type DocumentJourney } from './journeys'
-import { ADMIN, BENCH_DATABASE_URL, BENCH_PORT } from './config'
+import { BENCH_URL, signedInContext, startBenchServer } from './config'
 
 const { values: args } = parseArgs({
   options: {
@@ -66,7 +66,7 @@ const { values: args } = parseArgs({
 const appDir = process.env.PERF_APP_DIR ?? new URL('..', import.meta.url).pathname
 const perfDir = new URL('.', import.meta.url).pathname
 const budgetsPath = `${perfDir}budgets.json`
-const baseURL = `http://localhost:${BENCH_PORT}`
+const baseURL = BENCH_URL
 
 type Metrics = Record<string, number>
 
@@ -87,69 +87,27 @@ interface ServerLine {
 const finished = new Map<string, ServerLine[]>()
 const statements = new Map<string, { sql: string; route?: string }[]>()
 
-async function startServer() {
-  const server = Bun.spawn(['bun', '.output/server/index.mjs'], {
-    cwd: appDir,
-    env: {
-      PATH: process.env.PATH ?? '',
-      HOME: process.env.HOME ?? '',
-      NODE_ENV: 'production',
-      PORT: String(BENCH_PORT),
-      BASE_URL: baseURL,
-      DATABASE_URL: BENCH_DATABASE_URL,
-      SECRET_KEY: process.env.PERF_SECRET_KEY ?? 'perf-bench-secret-key-local-and-ci-only-0000',
-      QUACKBACK_ROLE: 'web',
-      QUACKBACK_SERVER_TIMING: '1',
-      // The settings copy a process keeps for a few seconds would make a count
-      // depend on timing; held for the whole run, counts measure a warm process.
-      QUACKBACK_SETTINGS_CACHE_MS: String(60 * 60 * 1000),
-      LOG_LEVEL: args.trace ? 'debug' : 'info',
-    },
-    stdout: 'pipe',
-    stderr: 'pipe',
-  })
-
-  void (async () => {
-    const decoder = new TextDecoder()
-    let buffered = ''
-    for await (const chunk of server.stdout) {
-      buffered += decoder.decode(chunk, { stream: true })
-      let newline: number
-      while ((newline = buffered.indexOf('\n')) >= 0) {
-        const line = buffered.slice(0, newline)
-        buffered = buffered.slice(newline + 1)
-        if (!line.startsWith('{')) continue
-        let record: ServerLine
-        try {
-          record = JSON.parse(line)
-        } catch {
-          continue
-        }
-        const id = record.request_id
-        if (!id) continue
-        if (record.msg === 'request finished') {
-          finished.set(id, [...(finished.get(id) ?? []), record])
-        } else if (record.msg === 'db query' && record.sql) {
-          statements.set(id, [
-            ...(statements.get(id) ?? []),
-            { sql: record.sql, route: record.route },
-          ])
-        }
-      }
-    }
-  })()
-
-  for (let attempt = 0; attempt < 60; attempt++) {
-    const ready = await fetch(`${baseURL}/api/health/ready`).catch(() => null)
-    if (ready?.ok) return server
-    if (server.exitCode !== null) break
-    await Bun.sleep(500)
+function readServerLine(line: string) {
+  if (!line.startsWith('{')) return
+  let record: ServerLine
+  try {
+    record = JSON.parse(line)
+  } catch {
+    return
   }
-  server.kill()
-  throw new Error(
-    `Server did not become ready on ${baseURL}. Run \`bun run build\` and \`bun perf/setup-db.ts\` first.\n` +
-      (await new Response(server.stderr).text()).slice(-2000)
-  )
+  const id = record.request_id
+  if (!id) return
+  if (record.msg === 'request finished') {
+    append(finished, id, record)
+  } else if (record.msg === 'db query' && record.sql) {
+    append(statements, id, { sql: record.sql, route: record.route })
+  }
+}
+
+function append<T>(map: Map<string, T[]>, key: string, value: T) {
+  const list = map.get(key)
+  if (list) list.push(value)
+  else map.set(key, [value])
 }
 
 async function serverWork(requestId: string, expected?: number) {
@@ -594,7 +552,7 @@ function printTrace(id: string) {
   if (requests.length === 0) return
   console.log(`\n    by server request:`)
   const byRoute = new Map<string, { sql: string }[]>()
-  for (const s of list) byRoute.set(s.route ?? '', [...(byRoute.get(s.route ?? '') ?? []), s])
+  for (const s of list) append(byRoute, s.route ?? '', s)
   const printed = new Set<string>()
   for (const r of requests) {
     console.log(
@@ -620,17 +578,15 @@ async function main() {
   )
   const repeat = Math.max(1, Number(args.repeat))
   const timingRuns = Math.max(0, Number(args.timing))
-  const server = await startServer()
+  const server = await startBenchServer(appDir, {
+    env: { LOG_LEVEL: args.trace ? 'debug' : 'info' },
+    onLine: readServerLine,
+  })
   const browser = await chromium.launch({ headless: !args.headed })
   let failed = false
 
   try {
-    const adminContext = await browser.newContext({ baseURL })
-    const signIn = await adminContext.request.post('/api/auth/sign-in/email', {
-      data: ADMIN,
-      headers: { origin: baseURL },
-    })
-    if (!signIn.ok()) throw new Error(`admin sign-in failed: ${signIn.status()}`)
+    const adminContext = await signedInContext(browser, baseURL)
     const adminState = `${perfDir}.results/admin-state.json`
     mkdirSync(`${perfDir}.results`, { recursive: true })
     await adminContext.storageState({ path: adminState })
