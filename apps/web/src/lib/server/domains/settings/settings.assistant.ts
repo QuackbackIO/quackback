@@ -26,7 +26,7 @@ import {
 } from '@/lib/shared/assistant/config'
 import { ConflictError, ForbiddenError, InternalError, NotFoundError } from '@/lib/shared/errors'
 import { z } from 'zod'
-import { invalidateSettingsCache, requireSettingsPerRequest } from './settings.helpers'
+import { invalidateSettingsCache, requireSettingsCached } from './settings.helpers'
 
 const log = logger.child({ component: 'settings-assistant' })
 
@@ -81,7 +81,7 @@ export type AssistantConfigAuditActor = AuditActor & { headers?: Headers }
 
 /** Strict settings-page read. Invalid persisted JSON is a load failure, never an invented UI default. */
 export async function getAssistantConfig(): Promise<AssistantConfigState> {
-  const row = await requireSettingsPerRequest()
+  const row = await requireSettingsCached()
   const parsed = assistantConfigSchema.safeParse(migrateAssistantConfig(row.assistantConfig))
   if (!parsed.success) {
     log.error({ issues: parsed.error.issues }, 'stored assistant config is invalid')
@@ -91,7 +91,7 @@ export async function getAssistantConfig(): Promise<AssistantConfigState> {
 }
 
 export async function getAssistantSettings(): Promise<AssistantSettingsState> {
-  const row = await requireSettingsPerRequest()
+  const row = await requireSettingsCached()
   const parsed = assistantConfigSchema.safeParse(migrateAssistantConfig(row.assistantConfig))
   if (!parsed.success) {
     log.error({ issues: parsed.error.issues }, 'stored assistant config is invalid')
@@ -106,7 +106,7 @@ export async function getAssistantSettings(): Promise<AssistantSettingsState> {
 
 /** Runtime read posture: invalid behavior JSON falls back without reintroducing a V1 reader. */
 export async function getAssistantRuntimeConfig(): Promise<AssistantRuntimeConfigState> {
-  const row = await requireSettingsPerRequest()
+  const row = await requireSettingsCached()
   const parsed = assistantConfigSchema.safeParse(migrateAssistantConfig(row.assistantConfig))
   const runtimeFields = {
     revision: row.assistantConfigRevision,

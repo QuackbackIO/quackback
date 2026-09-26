@@ -9,11 +9,7 @@
 import { db, eq, settings } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 import { MAX_TRUSTED_SENDERS, normalizeTrustedSenderEntry } from '@/lib/shared/trusted-senders'
-import {
-  invalidateSettingsCache,
-  requireSettings,
-  requireSettingsPerRequest,
-} from './settings.helpers'
+import { invalidateSettingsCache, requireSettings, requireSettingsCached } from './settings.helpers'
 
 export { MAX_TRUSTED_SENDERS }
 
@@ -66,7 +62,7 @@ export function isTrustedSender(email: string | null, trustedSenders: readonly s
 
 /** Read the workspace spam-filter config (empty trust list when unset). */
 export async function getSpamFilterConfig(): Promise<SpamFilterConfig> {
-  const org = await requireSettingsPerRequest()
+  const org = await requireSettingsCached()
   return parseSpamFilterConfig(org.spamFilterConfig)
 }
 
