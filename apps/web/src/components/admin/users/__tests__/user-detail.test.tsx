@@ -199,4 +199,43 @@ describe('UserDetail', () => {
     fireEvent.click(screen.getByLabelText('More actions'))
     expect(await screen.findByRole('menuitem', { name: 'Merge' })).toBeInTheDocument()
   })
+
+  describe('Escape', () => {
+    function renderWithClose() {
+      const onClose = vi.fn()
+      renderDetail(
+        <UserDetail
+          user={BASE_USER}
+          isLoading={false}
+          onClose={onClose}
+          onRemoveUser={vi.fn()}
+          isRemovePending={false}
+          currentMemberRole="admin"
+        />
+      )
+      return onClose
+    }
+
+    it('closes the profile', () => {
+      const onClose = renderWithClose()
+      fireEvent.keyDown(document.body, { key: 'Escape' })
+      expect(onClose).toHaveBeenCalledTimes(1)
+    })
+
+    it('leaves the profile open when pressed in a field', () => {
+      const onClose = renderWithClose()
+      const field = document.createElement('input')
+      document.body.appendChild(field)
+      fireEvent.keyDown(field, { key: 'Escape' })
+      field.remove()
+      expect(onClose).not.toHaveBeenCalled()
+    })
+
+    it('leaves the profile open while editing the name', () => {
+      const onClose = renderWithClose()
+      fireEvent.click(screen.getByTitle('Edit user details'))
+      fireEvent.keyDown(document.body, { key: 'Escape' })
+      expect(onClose).not.toHaveBeenCalled()
+    })
+  })
 })

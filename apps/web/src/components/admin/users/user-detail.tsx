@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import {
@@ -501,6 +501,27 @@ export function UserDetail({
     getNextPageParam: (last) => (last.hasMore ? (last.nextCursor ?? undefined) : undefined),
   })
   const conversationCount = conversationsQuery.data?.pages.flatMap((p) => p.conversations).length
+
+  // Escape goes back to the list, as it deselects there. Not while one of the
+  // profile's dialogs or the inline name edit is open, which Escape closes
+  // instead, nor from a field (menus keep their Escape to themselves).
+  const overlayOpen = removeDialogOpen || blockConfirmOpen || mergeOpen || composeOpen || isEditing
+  useEffect(() => {
+    if (overlayOpen) return
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key !== 'Escape' || e.defaultPrevented) return
+      const target = e.target
+      if (
+        target instanceof Element &&
+        target.closest('input, textarea, select, [contenteditable="true"]')
+      ) {
+        return
+      }
+      onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [overlayOpen, onClose])
 
   const startEditing = () => {
     if (!user) return
