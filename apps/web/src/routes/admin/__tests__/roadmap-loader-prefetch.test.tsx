@@ -31,6 +31,11 @@ const ROADMAPS = [
 ]
 const page = (n: number) => ({ items: [{ id: `post_${n}` }], total: 1, hasMore: false })
 
+// Server functions run in process, as the server runs the reads the loader batches.
+vi.mock('@tanstack/react-start', async (importOriginal) => {
+  const { withServerFnsInProcess } = await import('@/test/server-fns-in-process')
+  return withServerFnsInProcess(await importOriginal<typeof import('@tanstack/react-start')>())
+})
 vi.mock('@/lib/server/functions/roadmaps', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/functions/roadmaps')>()),
   fetchRoadmaps: stub('roadmaps', ROADMAPS),
