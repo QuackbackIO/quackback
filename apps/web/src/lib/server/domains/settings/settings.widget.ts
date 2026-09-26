@@ -168,16 +168,20 @@ export function publicMessengerConfig(
 import {
   requireSettings,
   requireSettingsCached,
+  readSettingsRow,
+  type SettingsFreshness,
   wrapDbError,
   parseWidgetConfig,
   deepMerge,
   invalidateSettingsCache,
 } from './settings.helpers'
 
-export async function getWidgetConfig(): Promise<WidgetConfig> {
+export async function getWidgetConfig(
+  freshness: SettingsFreshness = 'cached'
+): Promise<WidgetConfig> {
   try {
-    // Read-only + on public hot paths (sdk.js, identify): cached row.
-    const org = await requireSettingsCached()
+    // Public hot paths (sdk.js, identify) read the cached row.
+    const org = await readSettingsRow(freshness)
     return parseWidgetConfig(org.widgetConfig)
   } catch (error) {
     log.error({ err: error }, 'get widget config failed')
@@ -381,7 +385,7 @@ export async function isMessengerEnabled(): Promise<boolean> {
 export async function saveWidgetHeroImageKey(key: string): Promise<void> {
   log.info('save widget hero image key')
   try {
-    const config = await getWidgetConfig()
+    const config = await getWidgetConfig('fresh')
     const oldKey = config.home?.heroImageKey
     if (oldKey && oldKey !== key) {
       try {
@@ -401,7 +405,7 @@ export async function saveWidgetHeroImageKey(key: string): Promise<void> {
 export async function deleteWidgetHeroImage(): Promise<void> {
   log.info('delete widget hero image')
   try {
-    const config = await getWidgetConfig()
+    const config = await getWidgetConfig('fresh')
     const oldKey = config.home?.heroImageKey
     if (oldKey) {
       try {

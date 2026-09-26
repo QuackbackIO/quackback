@@ -393,7 +393,7 @@ export const updatePortalAccessFn = createServerFn({ method: 'POST' })
 
     const { getPortalConfig, updatePortalConfig } =
       await import('@/lib/server/domains/settings/settings.service')
-    const before = await getPortalConfig()
+    const before = await getPortalConfig('fresh')
 
     const normalizedDomains =
       data.allowedDomains !== undefined

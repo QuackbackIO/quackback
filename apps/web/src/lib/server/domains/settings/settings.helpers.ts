@@ -111,6 +111,9 @@ export function deepMerge<T extends object>(target: T, source: Partial<T>): T {
  *   three, so the writing request and the next one see the write; another
  *   process sees it once its local copy expires. Date columns arrive as ISO
  *   strings after the kv round trip.
+ *
+ * A getter whose value can feed a write takes a SettingsFreshness argument:
+ * 'fresh' when the caller derives what it writes (or deletes) from the value.
  */
 
 /** @internal */
@@ -118,6 +121,14 @@ export async function requireSettings(): Promise<SettingsRecord> {
   const org = await db.query.settings.findFirst()
   if (!org) throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
   return org
+}
+
+/** Which tier a getter reads: 'fresh' when its value feeds a write. */
+export type SettingsFreshness = 'cached' | 'fresh'
+
+/** @internal */
+export function readSettingsRow(freshness: SettingsFreshness = 'cached'): Promise<SettingsRecord> {
+  return freshness === 'fresh' ? requireSettings() : requireSettingsCached()
 }
 
 /** @internal */

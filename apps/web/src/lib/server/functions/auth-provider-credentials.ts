@@ -125,7 +125,7 @@ export const deleteAuthProviderCredentialsFn = createServerFn({ method: 'POST' }
     // enabled method (disabling an already-off provider can't cause a lockout).
     const { getAuthConfig, updateAuthConfig } =
       await import('@/lib/server/domains/settings/settings.service')
-    const authConfig = await getAuthConfig()
+    const authConfig = await getAuthConfig('fresh')
     const oauthConfig = (authConfig.oauth ?? {}) as Record<string, boolean | undefined>
     if (oauthConfig[provider.id]) {
       const { wouldLeaveNoWorkingSignInMethod } =

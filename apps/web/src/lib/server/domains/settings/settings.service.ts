@@ -66,6 +66,8 @@ import {
   normalizeWelcomeCardInput,
   mergeWelcomeCard,
   publicWelcomeCard,
+  readSettingsRow,
+  type SettingsFreshness,
   type SettingsRecord,
 } from './settings.helpers'
 import { withCurrentStorageReadTokens } from '@/lib/server/content/storage-read-urls'
@@ -170,9 +172,9 @@ export async function getPublicOidcProviders(): Promise<OidcSignInButton[]> {
     .map((p) => ({ id: p.registrationId, name: p.label, logoUrl: p.logoUrl }))
 }
 
-export async function getAuthConfig(): Promise<AuthConfig> {
+export async function getAuthConfig(freshness: SettingsFreshness = 'cached'): Promise<AuthConfig> {
   try {
-    const org = await requireSettingsCached()
+    const org = await readSettingsRow(freshness)
     return parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
   } catch (error) {
     log.error({ err: error }, 'get auth config failed')
@@ -621,9 +623,11 @@ export async function listVerifiedDomains(): Promise<VerifiedDomain[]> {
   }
 }
 
-export async function getPortalConfig(): Promise<PortalConfig> {
+export async function getPortalConfig(
+  freshness: SettingsFreshness = 'cached'
+): Promise<PortalConfig> {
   try {
-    const org = await requireSettingsCached()
+    const org = await readSettingsRow(freshness)
     return parsePortalConfig(org.portalConfig)
   } catch (error) {
     log.error({ err: error }, 'get portal config failed')
@@ -718,20 +722,16 @@ export async function updateDeveloperConfig(
   }
 }
 
-export async function getHelpCenterConfig(): Promise<HelpCenterConfig> {
+export async function getHelpCenterConfig(
+  freshness: SettingsFreshness = 'cached'
+): Promise<HelpCenterConfig> {
   try {
-    const org = await requireSettingsCached()
+    const org = await readSettingsRow(freshness)
     return parseJsonConfig(org.helpCenterConfig, DEFAULT_HELP_CENTER_CONFIG)
   } catch (error) {
     log.error({ err: error }, 'get help center config failed')
     wrapDbError('fetch help center config', error)
   }
-}
-
-/** The stored help-center config for a writer to build on: a fresh read. */
-async function helpCenterConfigForWrite(): Promise<HelpCenterConfig> {
-  const org = await requireSettings()
-  return parseJsonConfig(org.helpCenterConfig, DEFAULT_HELP_CENTER_CONFIG)
 }
 
 /**
@@ -779,7 +779,7 @@ export async function enableHelpCenterLocale(input: {
       'Enabling a locale requires a homepage title'
     )
   }
-  const current = await helpCenterConfigForWrite()
+  const current = await getHelpCenterConfig('fresh')
   if (input.locale === current.locales.default) {
     throw new ValidationError('HC_LOCALE_IS_DEFAULT', 'The default locale is always enabled')
   }
@@ -798,7 +798,7 @@ export async function enableHelpCenterLocale(input: {
 
 /** Disabling a locale keeps its translation rows (re-enabling picks them back up). */
 export async function disableHelpCenterLocale(locale: string): Promise<HelpCenterLocalesConfig> {
-  const current = await helpCenterConfigForWrite()
+  const current = await getHelpCenterConfig('fresh')
   const updated = await updateHelpCenterConfig({
     locales: {
       ...current.locales,
@@ -812,7 +812,7 @@ export async function updateHelpCenterLocaleChrome(input: {
   locale: string
   chrome: Partial<HelpCenterLocaleChromeStrings>
 }): Promise<HelpCenterLocalesConfig> {
-  const current = await helpCenterConfigForWrite()
+  const current = await getHelpCenterConfig('fresh')
   if (!current.locales.additional.includes(input.locale)) {
     throw new NotFoundError('HC_LOCALE_NOT_ENABLED', 'That locale is not enabled')
   }
