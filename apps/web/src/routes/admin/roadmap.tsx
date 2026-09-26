@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { QueryClient } from '@tanstack/react-query'
 import type { RoadmapId } from '@quackback/ids'
 import { adminQueries } from '@/lib/client/queries/admin'
+import { readBatch } from '@/lib/client/queries/read-batch'
 import { RoadmapAdmin } from '@/components/admin/roadmap-admin'
 import { RoadmapModal } from '@/components/admin/roadmap-modal'
 import { blankOmittedSearchKeys } from '@/lib/shared/route-search'
@@ -58,11 +59,13 @@ export const Route = createFileRoute('/admin/roadmap')({
       queryClient: typeof context.queryClient
     }
 
+    // The lists the columns, filters and cards read, in one request.
+    const ensure = readBatch(queryClient)
     await Promise.all([
-      queryClient.ensureQueryData(adminQueries.statuses()),
-      queryClient.ensureQueryData(adminQueries.boards()),
-      queryClient.ensureQueryData(adminQueries.tags()),
-      queryClient.ensureQueryData(adminQueries.segments()),
+      ensure(adminQueries.statuses()),
+      ensure(adminQueries.boards()),
+      ensure(adminQueries.tags()),
+      ensure(adminQueries.segments()),
       warmRoadmapBoard(queryClient, location.search as Record<string, unknown>).catch(
         () => undefined
       ),

@@ -46,6 +46,7 @@ export const BATCHED_READS: readonly BatchedRead[] = [
   adminQueries.recoveryCodes,
   // Also the key changelogCategoryQueries.segments reads, with the same function.
   adminQueries.segments,
+  adminQueries.statuses,
   adminQueries.tags,
   adminQueries.webhooks,
   changelogCategoryQueries.list,
