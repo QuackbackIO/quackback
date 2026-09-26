@@ -34,7 +34,7 @@ export function BlockBodyField({
         <div className="rounded-md border">
           <RichTextEditor
             value={body as unknown as JSONContent}
-            onChange={(json) => onChange(json as unknown as BlockBody)}
+            onDocumentChange={(document) => onChange(document.json() as unknown as BlockBody)}
             placeholder={placeholder}
             minHeight="72px"
             borderless
