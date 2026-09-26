@@ -147,7 +147,7 @@ export function AssistantDeploymentCard({
         {message && (
           <p
             role={message.isError ? 'alert' : 'status'}
-            aria-live="polite"
+            aria-live={message.isError ? 'assertive' : 'polite'}
             className={
               message.isError
                 ? 'mt-3 text-xs text-destructive'

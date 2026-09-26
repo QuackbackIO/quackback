@@ -61,6 +61,7 @@ it('announces a failed change as an alert in any locale', async () => {
   const alert = await screen.findByRole('alert', { hidden: true })
   expect(alert).toHaveTextContent('Wijzigen mislukt. Probeer het opnieuw.')
   expect(alert).toHaveClass('text-destructive')
+  expect(alert).toHaveAttribute('aria-live', 'assertive')
 })
 
 it('keeps a successful change a polite status line', async () => {
@@ -83,5 +84,6 @@ it('keeps a successful change a polite status line', async () => {
   const status = await screen.findByRole('status')
   expect(status).toHaveTextContent('Automatic replies are enabled in Messenger.')
   expect(status).toHaveClass('text-muted-foreground')
+  expect(status).toHaveAttribute('aria-live', 'polite')
   expect(screen.queryByRole('alert', { hidden: true })).not.toBeInTheDocument()
 })

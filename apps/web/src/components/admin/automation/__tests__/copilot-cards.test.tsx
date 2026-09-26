@@ -151,6 +151,7 @@ describe('CopilotDeploymentCard', () => {
     const alert = await screen.findByRole('alert', { hidden: true })
     expect(alert).toHaveTextContent('Wijzigen mislukt. Probeer het opnieuw.')
     expect(alert).toHaveClass('text-destructive')
+    expect(alert).toHaveAttribute('aria-live', 'assertive')
   })
 
   it('shows Unavailable when no AI model is configured', async () => {
