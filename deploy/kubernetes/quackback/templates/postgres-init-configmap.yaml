@@ -1,0 +1,19 @@
+{{- if .Values.postgres.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "quackback.fullname" . }}-postgres-init
+  labels:
+    {{- include "quackback.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+data:
+  01-create-extensions.sql: |
+    -- pgvector is pre-installed in the pgvector/pgvector image.
+    CREATE EXTENSION IF NOT EXISTS vector;
+    -- pg_cron needs shared_preload_libraries, which the stock pgvector image
+    -- doesn't set — the bundled Postgres here is meant for evaluation, not
+    -- production. For the scheduled jobs pg_cron normally drives (SLA
+    -- escalation, webhook-delivery purge), either point postgres.enabled=false
+    -- at a Postgres built from docker/postgres/Dockerfile (which enables
+    -- pg_cron), or use slaTickCronJob.enabled below for the SLA tick.
+{{- end }}
