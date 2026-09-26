@@ -105,3 +105,44 @@ async function fill(queryClient: QueryClient, reads: AnyRead[]): Promise<void> {
     queryClient.setQueryData(read.queryKey, result.data)
   })
 }
+
+/** A read's cache entry: where it lives and how long it stays fresh. */
+export type ReadEntry = { queryKey: readonly unknown[]; staleTime?: unknown }
+
+/** A read is worth loading unless its entry is fresh or already refetching. */
+export function readNeedsLoad(client: QueryClient, entry: ReadEntry): boolean {
+  const query = client.getQueryCache().find({ queryKey: entry.queryKey, exact: true })
+  if (!query || query.state.data === undefined) return true
+  const staleTime = typeof entry.staleTime === 'number' ? entry.staleTime : 0
+  return query.state.fetchStatus === 'idle' && query.isStaleByTime(staleTime)
+}
+
+/**
+ * The reads to load with a request that can carry them (a post, or a thread,
+ * that loads the panels beside it), given each read's entry: null when it
+ * depends on something not yet known, which means "ask", or 'skip' for a read
+ * not wanted.
+ */
+export function readsToLoad<N extends string>(
+  client: QueryClient,
+  entries: Record<N, ReadEntry | null | 'skip'>
+): N[] {
+  return (Object.keys(entries) as N[]).filter((name) => {
+    const entry = entries[name]
+    return entry !== 'skip' && (!entry || readNeedsLoad(client, entry))
+  })
+}
+
+/** Fill each read's entry from what the carrying request loaded (null is an answer). */
+export function seedReads<N extends string>(
+  client: QueryClient,
+  entries: Record<N, ReadEntry | null | 'skip'>,
+  loaded: Partial<Record<N, unknown>>
+): void {
+  for (const name of Object.keys(entries) as N[]) {
+    const entry = entries[name]
+    if (entry && entry !== 'skip' && loaded[name] !== undefined) {
+      client.setQueryData(entry.queryKey, loaded[name])
+    }
+  }
+}
