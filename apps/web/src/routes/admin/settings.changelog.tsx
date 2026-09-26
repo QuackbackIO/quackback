@@ -13,7 +13,7 @@ import { updateChangelogSettingsFn } from '@/lib/server/functions/settings'
 import { changelogCategoryQueries, changelogSettingsQueries } from '@/lib/client/queries/changelog'
 import { DEFAULT_CHANGELOG_SETTINGS, type ChangelogSettings } from '@/lib/shared/changelog-settings'
 import { isProductEnabled } from '@/lib/shared/types/settings'
-import { settingsReadBatch } from '@/lib/client/queries/settings-batch'
+import { readBatch } from '@/lib/client/queries/read-batch'
 import { warmQuery } from '@/lib/client/queries/warm-query'
 
 export const Route = createFileRoute('/admin/settings/changelog')({
@@ -24,7 +24,7 @@ export const Route = createFileRoute('/admin/settings/changelog')({
   },
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.CHANGELOG_MANAGE)
-    const ensure = settingsReadBatch(context.queryClient)
+    const ensure = readBatch(context.queryClient)
     await Promise.all([
       ensure(changelogSettingsQueries.get()),
       ensure(changelogCategoryQueries.list()),

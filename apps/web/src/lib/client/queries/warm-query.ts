@@ -5,7 +5,7 @@ import type {
   QueryKey,
 } from '@tanstack/react-query'
 
-/** An `ensureQueryData` of another shape, such as a `settingsReadBatch` loader's. */
+/** An `ensureQueryData` of another shape, such as a `readBatch` loader's. */
 type Ensure = <TQueryFnData, TError, TData, TQueryKey extends QueryKey>(
   options: EnsureQueryDataOptions<TQueryFnData, TError, TData, TQueryKey>
 ) => Promise<TData>
@@ -14,7 +14,7 @@ type Ensure = <TQueryFnData, TError, TData, TQueryKey extends QueryKey>(
  * Best-effort `ensureQueryData` for a route loader: the read is warmed into
  * the cache when it can be, and a failure is left to the page's own query
  * rather than failing the loader. `via` is the query client, or the ensure
- * function of a `settingsReadBatch` so the read joins that batch.
+ * function of a `readBatch` so the read joins that batch.
  */
 export function warmQuery<
   TQueryFnData,

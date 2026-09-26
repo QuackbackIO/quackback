@@ -10,7 +10,6 @@ import {
   fetchPublicRoadmaps,
   fetchPublicRoadmapPosts,
   fetchPortalData,
-  fetchRoadmapPageData,
 } from '@/lib/server/functions/portal'
 
 /**
@@ -19,18 +18,19 @@ import {
  * (`publicPostsKeys`, see use-portal-posts-query), post lists and post detail
  * embed that filtered catalog; public roadmap results honour the same guard
  * for caller-supplied tag filters; and the roadmap catalog's `baseFilter` has
- * internal tag ids redacted for non-team viewers. Notifications belong to the
+ * internal tag ids redacted for non-team viewers. The board list holds only
+ * the boards the viewer's segments and role can see. Notifications belong to the
  * signed-in viewer outright, and the portal loader reads the bell's unread
  * count back through `ensureQueryData`.
  */
 export const VIEWER_SCOPED_PORTAL_QUERY_KEYS: readonly (readonly string[])[] = [
   ['portal', 'tags'],
+  ['portal', 'boards'],
   ['portal', 'data'],
   ['portal', 'posts'],
   ['portal', 'post'],
   ['portal', 'roadmaps'],
   ['portal', 'roadmapPosts'],
-  ['portal', 'roadmapPage'],
   ['publicPosts'],
   ['notifications'],
 ]
@@ -172,26 +172,6 @@ export const portalQueries = {
       queryFn: () => fetchPublicRoadmaps(),
       // Roadmaps don't change often
       staleTime: 2 * 60 * 1000, // 2 minutes
-    }),
-
-  /**
-   * Combined fetch for the roadmap page shell: the roadmap list plus the
-   * statuses, boards and tags its columns and filters need, in one request.
-   * Seeds the four cache entries those components read individually
-   * (roadmaps/statuses/boards/tags), so none of them needs a request of its
-   * own.
-   */
-  roadmapPageData: () =>
-    queryOptions({
-      queryKey: ['portal', 'roadmapPage'],
-      queryFn: async ({ client }) => {
-        const data = await fetchRoadmapPageData()
-        client.setQueryData(['portal', 'roadmaps'], data.roadmaps)
-        client.setQueryData(['portal', 'statuses'], data.statuses)
-        client.setQueryData(['portal', 'boards'], data.boards)
-        client.setQueryData(['portal', 'tags'], data.tags)
-        return data
-      },
     }),
 
   /**

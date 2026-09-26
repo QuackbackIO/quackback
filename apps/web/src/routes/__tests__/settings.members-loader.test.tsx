@@ -73,7 +73,7 @@ vi.mock('@/components/admin/settings/team/roles-tab', () => ({
 
 // The registry the batched reads run from pulls in every query module; paid
 // here, at file load, rather than inside the first test's timed body.
-await import('@/lib/server/settings-read-registry')
+await import('@/lib/server/read-registry')
 const { Route } = await import('../admin/settings.members')
 
 const SRC_ROOT = join(__dirname, '../..')

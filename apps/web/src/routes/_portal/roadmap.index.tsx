@@ -4,6 +4,7 @@ import { FormattedMessage } from 'react-intl'
 import { z } from 'zod'
 import { RoadmapBoard } from '@/components/public/roadmap-board'
 import { portalQueries } from '@/lib/client/queries/portal'
+import { readBatch } from '@/lib/client/queries/read-batch'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 
 const searchSchema = z.object({
@@ -21,7 +22,14 @@ export const Route = createFileRoute('/_portal/roadmap/')({
     const { queryClient, settings, baseUrl, userRole } = context
     if (!isProductEnabled(settings?.featureFlags, 'feedback')) throw notFound()
 
-    const { roadmaps } = await queryClient.ensureQueryData(portalQueries.roadmapPageData())
+    // The shell's lists in one request; the columns ask for their posts once it renders.
+    const ensure = readBatch(queryClient)
+    const [roadmaps] = await Promise.all([
+      ensure(portalQueries.roadmaps()),
+      ensure(portalQueries.statuses()),
+      ensure(portalQueries.boards()),
+      ensure(portalQueries.tags()),
+    ])
 
     return {
       firstRoadmapId: roadmaps[0]?.id ?? null,

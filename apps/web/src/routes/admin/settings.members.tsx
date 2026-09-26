@@ -5,7 +5,7 @@ import type { UserId, PrincipalId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { settingsQueries } from '@/lib/client/queries/settings'
-import { settingsReadBatch } from '@/lib/client/queries/settings-batch'
+import { readBatch } from '@/lib/client/queries/read-batch'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -28,7 +28,7 @@ export const Route = createFileRoute('/admin/settings/members')({
     // The Teams tab lists teams, a read gated on team.manage rather than the
     // page's member.view, so only a viewer who may read them is shown the tab.
     const canManageTeams = !!context.permissions?.includes(PERMISSIONS.TEAM_MANAGE)
-    const ensure = settingsReadBatch(queryClient)
+    const ensure = readBatch(queryClient)
     await Promise.all([
       ensure(settingsQueries.teamMembersAndInvitations()),
       canManageTeams ? ensure(settingsQueries.teams()) : undefined,

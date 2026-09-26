@@ -9,7 +9,7 @@ import { ShieldCheckIcon } from '@heroicons/react/24/solid'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { AuthSettings, type AuthTab } from '@/components/admin/settings/security/auth-settings'
-import { settingsReadBatch } from '@/lib/client/queries/settings-batch'
+import { readBatch } from '@/lib/client/queries/read-batch'
 import { warmQuery } from '@/lib/client/queries/warm-query'
 
 const searchSchema = z.object({
@@ -46,7 +46,7 @@ export const Route = createFileRoute('/admin/settings/security/authentication')(
     // on every other plan. The audit tab loads that query only when entitled.
     const { listEntitlementsFn } = await import('@/lib/server/functions/entitlement-status')
     const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
-    const ensure = settingsReadBatch(queryClient)
+    const ensure = readBatch(queryClient)
     const [, entitlements] = await Promise.all([
       Promise.all([
         ensure(settingsQueries.authConfig()),

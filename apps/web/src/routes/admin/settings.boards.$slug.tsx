@@ -26,7 +26,7 @@ import { DeleteBoardForm } from '@/components/admin/settings/boards/delete-board
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { isProductEnabled } from '@/lib/shared/types/settings'
-import { settingsReadBatch } from '@/lib/client/queries/settings-batch'
+import { readBatch } from '@/lib/client/queries/read-batch'
 
 const BOARD_TABS = ['general', 'access', 'moderation', 'import', 'export'] as const
 export type BoardTab = (typeof BOARD_TABS)[number]
@@ -49,7 +49,7 @@ export const Route = createFileRoute('/admin/settings/boards/$slug')({
     // on first paint (no flash). portalConfig backs the Moderation tab's
     // inherit-from-workspace pills and the Access tab's workspace ceiling;
     // without prefetch the moderation pills flicker Off -> the real default.
-    const ensure = settingsReadBatch(queryClient)
+    const ensure = readBatch(queryClient)
     const [cachedBoards] = await Promise.all([
       ensure(adminQueries.boardsForSettings()),
       ensure(settingsQueries.portalConfig()),
