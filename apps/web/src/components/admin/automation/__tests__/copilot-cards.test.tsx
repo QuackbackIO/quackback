@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
 
@@ -119,6 +119,39 @@ describe('CopilotDeploymentCard', () => {
     renderWithProviders(<CopilotDeploymentCard available />)
     expect(await screen.findByText('On')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Turn off Copilot' })).toBeInTheDocument()
+  })
+
+  // The error styling used to be chosen by searching the message for the
+  // English words "could not", so a translated error rendered as a neutral
+  // status line.
+  it('announces a failed change as an alert in any locale', async () => {
+    updateCopilotCapabilities.mockImplementationOnce(() => {
+      throw new Error('boom')
+    })
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <IntlProvider
+        locale="nl"
+        messages={{
+          'automation.copilot.deployment.error': 'Wijzigen mislukt. Probeer het opnieuw.',
+        }}
+        onError={() => {}}
+      >
+        <QueryClientProvider client={queryClient}>
+          <CopilotDeploymentCard available />
+        </QueryClientProvider>
+      </IntlProvider>
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Turn off Copilot' }))
+    const dialog = await screen.findByRole('alertdialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Turn off Copilot' }))
+
+    // The confirm dialog stays open on failure, so the card behind it is aria-hidden.
+    const alert = await screen.findByRole('alert', { hidden: true })
+    expect(alert).toHaveTextContent('Wijzigen mislukt. Probeer het opnieuw.')
+    expect(alert).toHaveClass('text-destructive')
+    expect(alert).toHaveAttribute('aria-live', 'assertive')
   })
 
   it('shows Unavailable when no AI model is configured', async () => {

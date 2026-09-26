@@ -39,6 +39,7 @@ const LOCALE_LABELS: Record<string, string> = {
   'pt-br': 'Português (Brasil)',
   'zh-cn': '简体中文',
   'zh-tw': '繁體中文',
+  nl: 'Nederlands',
 }
 
 const STATUS_LABELS: Record<string, string> = {

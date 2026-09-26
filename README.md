@@ -56,7 +56,7 @@ Most support-and-feedback suites are expensive, closed-source, and lock you in. 
 - **Roadmap & changelog.** Show users what's planned, in progress, and shipped. Publish updates and schedule posts for later.
 - **Integrations.** [25 integrations](#integrations) including Slack, Linear, Jira, GitHub, Intercom, Zendesk, and two-way issue tracker sync.
 - **API, webhooks & MCP.** Automate workflows with the REST API, outbound webhooks, and an [MCP server](https://quackback.io/docs/mcp) for AI agents.
-- **Internationalization.** Portal and widget available in English, French, German, Spanish, and Arabic with full RTL support. Auto-detects browser language.
+- **Internationalization.** Portal and widget available in English, French, German, Spanish, Arabic (with full RTL support), Russian, Brazilian Portuguese, Simplified and Traditional Chinese, and Dutch. Auto-detects browser language.
 - **Flexible auth.** Password, email OTP, Google, GitHub, and SSO with providers like Okta and Auth0.
 - **SEO-ready.** Auto-generated sitemap and social sharing previews on every portal page.
 

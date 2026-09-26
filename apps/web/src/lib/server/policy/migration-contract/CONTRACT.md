@@ -6,11 +6,11 @@ Regenerate with `bunx vitest run apps/web/src/lib/server/policy/migration-contra
 
 ## Summary
 
-Migrations scanned: 265. Migrations with destructive DDL: 36.
+Migrations scanned: 266. Migrations with destructive DDL: 37.
 
 | Kind | Occurrences |
 | --- | --- |
-| DROP COLUMN | 22 |
+| DROP COLUMN | 23 |
 | DROP TABLE | 21 |
 | DROP CONSTRAINT | 14 |
 | RENAME COLUMN | 15 |
@@ -59,6 +59,7 @@ Migrations scanned: 265. Migrations with destructive DDL: 36.
 | 0274_slack_agent_gateway.sql | DROP CONSTRAINT assistant_pending_actions.assistant_pending_actions_parent_check; DROP CONSTRAINT assistant_guidance_rules.assistant_guidance_rules_agent_check | annotated (safe-after 0.13.2) |
 | 0279_better_auth_17.sql | DROP CONSTRAINT oauth_client_resource.oauth_client_resource_resource_id_oauth_resource_id_fk | annotated (safe-after 0.13.2) |
 | 0285_integration_link_scope.sql | DROP CONSTRAINT post_external_links.post_external_links_type_external_post_unique; DROP CONSTRAINT ticket_external_links.ticket_external_links_type_external_ticket_unique | annotated (safe-after 0.13.3) |
+| 0288_kb_translations_dutch_search.sql | DROP COLUMN kb_article_translations.search_vector | annotated (safe-after 0.13.2) |
 
 ## Grandfathered (29)
 
