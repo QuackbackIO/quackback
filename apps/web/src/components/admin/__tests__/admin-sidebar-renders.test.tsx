@@ -3,8 +3,8 @@
  * Every admin navigation, a search-only one included (opening a post or a
  * conversation), hands the tree a fresh route context and location. The rail
  * shows none of that except which item is active, so a search-only
- * navigation renders none of it, and a navigation between pages renders only
- * the two items whose highlight moved.
+ * navigation renders none of it, and a navigation between pages moves the
+ * highlight without rendering any item's contents again.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Profiler, type ComponentType } from 'react'
@@ -156,7 +156,7 @@ describe('AdminSidebar renders', () => {
     expect(activeHrefs(container)).toEqual(['/admin/feedback'])
   })
 
-  it('renders only the items whose highlight moved for a navigation between pages', async () => {
+  it('moves the highlight between pages without rendering the items again', async () => {
     adminAnswer = {
       principal: { role: 'admin' },
       permissions: [PERMISSIONS.ASSISTANT_MANAGE, PERMISSIONS.WORKFLOW_MANAGE],
@@ -169,11 +169,9 @@ describe('AdminSidebar renders', () => {
     await screen.findByText('roadmap page')
 
     expect(activeHrefs(container)).toEqual(['/admin/roadmap'])
-    // Feedback lost the highlight and Roadmap gained it; nothing else moved.
-    expect(iconRenders.ChatBubbleLeftIcon).toBe(before.ChatBubbleLeftIcon! + 1)
-    expect(iconRenders.MapIcon).toBe(before.MapIcon! + 1)
-    expect(iconRenders.UsersIcon).toBe(before.UsersIcon)
-    expect(iconRenders.ChartBarIcon).toBe(before.ChartBarIcon)
+    // Feedback lost the highlight and Roadmap gained it: their links changed
+    // state, and no item rendered its contents again.
+    expect(iconRenders).toEqual(before)
     expect(bellRenders).toBe(bell)
   })
 

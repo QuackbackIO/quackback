@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Link, useRouter, useRouterState } from '@tanstack/react-router'
+import { Link, useRouter } from '@tanstack/react-router'
 import {
   ChatBubbleLeftIcon,
   MapIcon,
@@ -109,10 +109,6 @@ const navItems: Array<{
   { label: 'Users', href: '/admin/users', icon: UsersIcon },
 ]
 
-function isNavActive(pathname: string, href: string) {
-  return pathname === href || pathname.startsWith(href + '/')
-}
-
 function navItemIcon(
   item: (typeof navItems)[number],
   refined: boolean
@@ -133,13 +129,21 @@ function railControlClass(labeled: boolean, isActive = false) {
 }
 
 /**
- * Whether the rail item for `href` is the current page. Each item follows the
- * location on its own, so a navigation renders only the items it highlights or
- * clears, and a search-only one (opening a post or a conversation) none.
+ * A rail item is active on its page and every page under it, whatever the
+ * search. The Link works that out itself and renders again only when it
+ * changes, so a navigation renders the items it highlights or clears, and a
+ * search-only one (opening a post or a conversation) none.
  */
-function useIsNavActive(href: string): boolean {
-  return useRouterState({ select: (s) => isNavActive(s.location.pathname, href) })
-}
+const NAV_ACTIVE_OPTIONS = { includeSearch: false }
+
+const railLinkProps = (labeled: boolean) => ({
+  activeOptions: NAV_ACTIVE_OPTIONS,
+  activeProps: { className: railControlClass(labeled, true), 'data-active': 'true' },
+  inactiveProps: { className: railControlClass(labeled) },
+})
+
+const MOBILE_LINK_CLASS =
+  'flex items-center gap-3 px-4 py-3 rounded-lg text-sm transition-colors text-muted-foreground/80 hover:text-foreground hover:bg-muted/50'
 
 function NavItem({
   href,
@@ -161,15 +165,13 @@ function NavItem({
   /** Icon + visible label. Legacy stays icon-only with a tooltip. */
   labeled?: boolean
 }) {
-  const isActive = useIsNavActive(href)
   const link = (
     <Link
       to={href}
       onClick={onClick}
       data-admin-rail-item=""
       data-labeled={labeled ? '' : undefined}
-      data-active={isActive || undefined}
-      className={railControlClass(labeled, isActive)}
+      {...railLinkProps(labeled)}
     >
       <Icon className="size-5 shrink-0" />
       {labeled ? (
@@ -225,16 +227,13 @@ function MobileNavLink({
   label: string
   onClick: () => void
 }) {
-  const isActive = useIsNavActive(href)
   return (
     <Link
       to={href}
       onClick={onClick}
-      className={cn(
-        'flex items-center gap-3 px-4 py-3 rounded-lg text-sm transition-colors',
-        'text-muted-foreground/80 hover:text-foreground hover:bg-muted/50',
-        isActive && 'bg-muted/80 text-foreground font-medium'
-      )}
+      activeOptions={NAV_ACTIVE_OPTIONS}
+      activeProps={{ className: cn(MOBILE_LINK_CLASS, 'bg-muted/80 text-foreground font-medium') }}
+      inactiveProps={{ className: MOBILE_LINK_CLASS }}
     >
       <Icon className="h-5 w-5" />
       {label}
