@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { Link, useRouteContext } from '@tanstack/react-router'
+import { Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { HomeIcon } from '@heroicons/react/24/solid'
 import { adminOverviewQueries } from '@/lib/client/queries/admin-overview'
@@ -23,9 +23,10 @@ import { Avatar } from '@/components/ui/avatar'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 export function useWorkspaceHomeTitle(): string {
-  const settings = useRouteContext({ from: '__root__', select: (context) => context.settings })
+  const settings = useWorkspaceSettings()
   const branding = (settings as { brandingData?: { name?: string } } | undefined)?.brandingData
   return branding?.name ?? settings?.name ?? 'Home'
 }

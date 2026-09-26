@@ -1,12 +1,11 @@
 import { forwardRef, useImperativeHandle, useState, useEffect, useRef } from 'react'
-import { useRouteContext } from '@tanstack/react-router'
 import { CheckBadgeIcon } from '@heroicons/react/24/solid'
-import type { SettingsBrandingData } from '@/lib/server/domains/settings/settings.types'
 import { isTeamMember, type Role } from '@/lib/shared/roles'
 import { Avatar } from './avatar'
 import { ScrollArea } from './scroll-area'
 import { applySuggestionListKey } from './suggestion-list-keys'
 import { HighlightQuery } from './highlight-query'
+import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 export interface MentionItem {
   principalId: string
@@ -37,12 +36,7 @@ export const MentionPicker = forwardRef<MentionPickerHandle, MentionPickerProps>
     const commandRef = useRef(command)
     itemsRef.current = items
     commandRef.current = command
-    const settings = useRouteContext({
-      from: '__root__',
-      select: (context) =>
-        (context as { settings?: { brandingData?: SettingsBrandingData; name?: string | null } })
-          .settings,
-    })
+    const settings = useWorkspaceSettings()
     const branding = settings?.brandingData
     const teamBadgeLogoUrl = branding?.logoUrl ?? null
     const teamBadgeLabel = branding?.name ?? settings?.name ?? 'Team'

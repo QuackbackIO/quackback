@@ -21,7 +21,6 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type Ref,
 } from 'react'
-import { useRouteContext } from '@tanstack/react-router'
 import {
   ArrowPathIcon,
   BoltIcon,
@@ -90,6 +89,7 @@ import {
 } from '@/lib/client/copilot-events'
 import type { AssistantActivityStatus } from '@/lib/shared/conversation/types'
 import type { InboxItemRef } from '@/lib/shared/inbox/items'
+import { usePrincipalId } from '@/lib/client/hooks/use-root-context'
 
 const MAX_QUESTION_CHARS = 4000
 
@@ -298,10 +298,7 @@ export function CopilotPanel({
    *  (e.g. an inbox keyboard shortcut). */
   askInputRef?: Ref<HTMLTextAreaElement>
 }) {
-  const principalId = useRouteContext({
-    from: '/admin',
-    select: (context) => (context as { principal?: { id: string } | null }).principal?.id,
-  })
+  const principalId = usePrincipalId()
   const assistantName = 'Copilot'
   const headerLabel = 'Copilot'
 

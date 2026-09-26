@@ -8,6 +8,7 @@ import { WhoRepliesFirstCard } from '@/components/admin/automation/who-replies-f
 import { AbandonedJourneyAutoCloseCard } from '@/components/admin/automation/abandoned-journey-auto-close-card'
 import { WorkflowsManager } from '@/components/admin/automation/workflows-manager'
 import { warmQuery } from '@/lib/client/queries/warm-query'
+import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 export const Route = createFileRoute('/admin/automation/workflows')({
   loader: async ({ context }) => {
@@ -41,7 +42,7 @@ export const Route = createFileRoute('/admin/automation/workflows')({
 
 /** Gate behind the `supportInbox` flag, mirroring the messenger settings page. */
 function WorkflowsPageRoute() {
-  const settings = Route.useRouteContext({ select: (context) => context.settings })
+  const settings = useWorkspaceSettings()
   const flags = settings?.featureFlags as FeatureFlags | undefined
   if (!flags?.supportInbox) {
     return <Navigate to="/admin/automation/agent" />

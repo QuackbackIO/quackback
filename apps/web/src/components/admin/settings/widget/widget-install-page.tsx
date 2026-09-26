@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link, useRouteContext } from '@tanstack/react-router'
+import { Link } from '@tanstack/react-router'
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import {
   ArrowLeftIcon,
@@ -33,9 +33,10 @@ import {
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { useMintWidgetInstallCode, useUpdateWidgetConfig } from '@/lib/client/mutations/settings'
+import { useBaseUrl } from '@/lib/client/hooks/use-root-context'
 
 export function WidgetInstallPage() {
-  const baseUrl = useRouteContext({ from: '__root__', select: (context) => context.baseUrl })
+  const baseUrl = useBaseUrl()
   const secretQuery = useSuspenseQuery(settingsQueries.widgetSecret())
   const widgetConfigQuery = useSuspenseQuery(settingsQueries.widgetConfig())
   const updateWidgetConfig = useUpdateWidgetConfig()

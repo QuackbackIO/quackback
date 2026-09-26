@@ -1,11 +1,5 @@
 import { useEffect, type ComponentProps } from 'react'
-import {
-  createFileRoute,
-  Outlet,
-  redirect,
-  useRouterState,
-  useRouteContext,
-} from '@tanstack/react-router'
+import { createFileRoute, Outlet, redirect, useRouterState } from '@tanstack/react-router'
 import { IntlProvider } from 'react-intl'
 import { useAdminPresence } from '@/lib/client/hooks/use-admin-presence'
 import { DEFAULT_LOCALE, loadMessages } from '@/lib/shared/i18n'
@@ -18,13 +12,13 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { UpdateBanner } from '@/components/admin/update-banner'
 import { PlanNoticeBanner } from '@/components/admin/plan-notice-banner'
 import { getPlanNotice } from '@/lib/server/functions/plan-notice'
-import { isProductEnabled, type ProductId } from '@/lib/shared/types/settings'
 import { CloudQuackbackWidget } from '@/components/shared/cloud-quackback-widget'
 import { useHasPermission } from '@/lib/client/use-permissions'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { createRouteContextMemo } from '@/lib/client/route-context-memo'
 import { isAdminPathAllowedDuringDowngradeLock } from '@/lib/shared/billing/plan-downgrade-lock'
 import type { requireWorkspaceRole } from '@/lib/server/functions/workspace-utils'
+import { useFeatureFlag, useProductEnabled } from '@/lib/client/hooks/use-root-context'
 
 /** What the admin pages read from the role guard's answer. */
 type AdminGuard = Pick<
@@ -170,13 +164,6 @@ function useEntityIdFromUrl(key: 'post' | 'entry' | 'article'): string | undefin
   })
 }
 
-function useProductEnabled(product: ProductId): boolean {
-  return useRouteContext({
-    from: '__root__',
-    select: (context) => isProductEnabled(context.settings?.featureFlags, product),
-  })
-}
-
 /**
  * The post, changelog entry and article modals any admin page opens from the
  * URL. They read the location and permissions themselves, so opening one (a
@@ -244,12 +231,7 @@ function AdminLayout() {
 
   // Mark team members online for conversation routing across the whole admin (not just
   // the inbox), but only when the support inbox feature is on.
-  const conversationsEnabled = useRouteContext({
-    from: '__root__',
-    select: (context) =>
-      (context.settings?.featureFlags as { supportInbox?: boolean } | undefined)?.supportInbox ??
-      false,
-  })
+  const conversationsEnabled = useFeatureFlag('supportInbox')
   useAdminPresence(Boolean(initialUserData) && conversationsEnabled)
 
   // For public routes (login, signup), render just the outlet without the admin layout

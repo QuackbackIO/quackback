@@ -12,9 +12,13 @@ import { renderToString } from 'react-dom/server'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-const { cardRenders, previewRenders } = vi.hoisted(() => ({
+const { cardRenders, previewRenders, rootContext } = vi.hoisted(() => ({
   cardRenders: new Map<string, number>(),
   previewRenders: { count: 0 },
+  rootContext: {
+    settings: { name: 'Acme', featureFlags: { feedback: true, changelog: true } },
+    session: null,
+  },
 }))
 
 vi.mock('@tanstack/react-router', async () => {
@@ -22,13 +26,9 @@ vi.mock('@tanstack/react-router', async () => {
     await vi.importActual<typeof import('@tanstack/react-router')>('@tanstack/react-router')
   return {
     ...actual,
-    createFileRoute: () => (options: Record<string, unknown>) => ({
-      options,
-      useRouteContext: () => ({
-        settings: { name: 'Acme', featureFlags: { feedback: true, changelog: true } },
-        session: null,
-      }),
-    }),
+    createFileRoute: () => (options: Record<string, unknown>) => ({ options }),
+    useRouteContext: ({ select }: { select: (context: typeof rootContext) => unknown }) =>
+      select(rootContext),
     useRouter: () => ({ invalidate: vi.fn() }),
     useBlocker: () => undefined,
     Link: ({ children }: { children: ReactNode }) => <a>{children}</a>,

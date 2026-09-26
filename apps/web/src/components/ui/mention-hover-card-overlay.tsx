@@ -21,12 +21,11 @@
  *     instead of relying on react-query.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { useRouteContext } from '@tanstack/react-router'
 import { CheckBadgeIcon } from '@heroicons/react/24/solid'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { Avatar } from '@/components/ui/avatar'
 import { isTeamMember, type Role } from '@/lib/shared/roles'
-import type { SettingsBrandingData } from '@/lib/server/domains/settings/settings.types'
+import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 interface PrincipalCard {
   principalId: string
@@ -104,12 +103,7 @@ interface MentionHoverCardOverlayProps {
 export function MentionHoverCardOverlay({ children, className }: MentionHoverCardOverlayProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [anchor, setAnchor] = useState<{ rect: DOMRect; principalId: string } | null>(null)
-  const settings = useRouteContext({
-    from: '__root__',
-    select: (context) =>
-      (context as { settings?: { brandingData?: SettingsBrandingData; name?: string | null } })
-        .settings,
-  })
+  const settings = useWorkspaceSettings()
   const branding = settings?.brandingData
   const teamBadgeLogoUrl = branding?.logoUrl ?? null
   const teamBadgeLabel = branding?.name ?? settings?.name ?? 'Team'

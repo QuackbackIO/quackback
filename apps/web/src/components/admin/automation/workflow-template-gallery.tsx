@@ -4,7 +4,6 @@
  */
 import { useState } from 'react'
 import { useIntl } from 'react-intl'
-import { useRouteContext } from '@tanstack/react-router'
 import {
   Dialog,
   DialogContent,
@@ -23,6 +22,7 @@ import {
   type WorkflowTemplate,
   type WorkflowTemplateCategory,
 } from './workflow-templates'
+import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 interface WorkflowTemplateGalleryProps {
   open: boolean
@@ -38,7 +38,7 @@ export function WorkflowTemplateGallery({
   const intl = useIntl()
   const [category, setCategory] = useState<WorkflowTemplateCategory>('popular')
   const templates = workflowTemplatesByCategory(category)
-  const settings = useRouteContext({ from: '__root__', select: (context) => context.settings })
+  const settings = useWorkspaceSettings()
   const assistant = settings?.publicWidgetConfig?.messenger?.assistant
   const quinnOn = Boolean(assistant?.enabled && assistant?.respond)
 

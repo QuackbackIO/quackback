@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { useMutation } from '@tanstack/react-query'
-import { createFileRoute, useRouteContext, useRouter } from '@tanstack/react-router'
+import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { GlobeAltIcon } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
 import { BackLink } from '@/components/ui/back-link'
@@ -18,6 +18,7 @@ import {
 import type { CustomDomainInstruction } from '@/lib/server/control-plane/client'
 import { platformUrlSuffix } from '@/lib/shared/platform-label'
 import { DomainsCard, QuackbackUrlCard } from '@/components/admin/settings/domains-cards'
+import { useCloudEnabled } from '@/lib/client/hooks/use-root-context'
 
 export const Route = createFileRoute('/admin/settings/domains')({
   loader: async ({ context }) => {
@@ -43,7 +44,7 @@ export const Route = createFileRoute('/admin/settings/domains')({
 })
 
 function DomainsSettingsPage() {
-  const { cloudEnabled } = useRouteContext({ from: '__root__' })
+  const cloudEnabled = useCloudEnabled()
   const {
     allowed,
     entitled,

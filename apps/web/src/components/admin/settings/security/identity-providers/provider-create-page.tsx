@@ -15,7 +15,7 @@
  * offers Enable sign-in there, so setup has a clear completion point.
  */
 import { useState } from 'react'
-import { Link, useNavigate, useRouteContext } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -39,6 +39,7 @@ import {
   reportMissingIdpFields,
   SIGN_IN_TAB,
 } from './provider-shared'
+import { useBaseUrl } from '@/lib/client/hooks/use-root-context'
 
 export function ProviderCreatePage({
   registrationId: initialRegistrationId,
@@ -51,7 +52,7 @@ export function ProviderCreatePage({
   const queryClient = useQueryClient()
   const upsert = useServerFn(upsertIdentityProviderFn)
   const setCreds = useServerFn(setProviderCredentialsFn)
-  const baseUrl = useRouteContext({ from: '__root__', select: (context) => context.baseUrl })
+  const baseUrl = useBaseUrl()
 
   // Fixed for the life of the form so the redirect URI shown below is the
   // exact value that gets saved (and registered at the IdP), even if the

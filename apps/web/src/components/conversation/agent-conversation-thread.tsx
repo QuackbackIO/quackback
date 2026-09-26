@@ -248,7 +248,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn, tomorrowAt, inHours, nextMondayAt } from '@/lib/shared/utils'
-import type { FeatureFlags } from '@/lib/shared/types/settings'
+import { useFeatureFlag, usePrincipalId } from '@/lib/client/hooks/use-root-context'
 
 // "Jump to message" tuning: how long the flash plays (must match the
 // flash-highlight keyframe duration) and how many older pages we'll auto-pull
@@ -476,20 +476,9 @@ export function AgentConversationThread({
     from: '__root__',
     select: (context) => context.session?.user?.name ?? 'You',
   })
-  const myPrincipalId = useRouteContext({
-    from: '/admin',
-    select: (context) => (context as { principal?: { id?: string } }).principal?.id,
-  })
-  const showTickets = useRouteContext({
-    from: '__root__',
-    select: (context) =>
-      (context.settings?.featureFlags as FeatureFlags | undefined)?.supportTickets ?? false,
-  })
-  const supportInbox = useRouteContext({
-    from: '__root__',
-    select: (context) =>
-      (context.settings?.featureFlags as FeatureFlags | undefined)?.supportInbox ?? false,
-  })
+  const myPrincipalId = usePrincipalId()
+  const showTickets = useFeatureFlag('supportTickets')
+  const supportInbox = useFeatureFlag('supportInbox')
   // B24: the linked-ticket affordances (the header's ticket-status pill, the
   // linked-ticket detail fetch) gate on the resolved ticket permissions, not
   // just the feature flag. `ticket.view` decides whether the ticket is fetched

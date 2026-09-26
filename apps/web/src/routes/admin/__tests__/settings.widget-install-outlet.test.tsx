@@ -11,7 +11,8 @@ vi.mock('@tanstack/react-router', async () => {
     ...actual,
     useChildMatches,
     Outlet: () => <div>install-outlet</div>,
-    useRouteContext: () => ({ settings: {} }),
+    useRouteContext: ({ select }: { select: (context: unknown) => unknown }) =>
+      select({ settings: {} }),
     Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
   }
 })

@@ -12,6 +12,7 @@ import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { assistantQueries } from '@/lib/client/queries/assistant'
 import { warmQuery } from '@/lib/client/queries/warm-query'
+import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 export const Route = createFileRoute('/admin/automation/')({
   // On a desktop the page moves straight on to the AI agent settings when the
@@ -39,7 +40,7 @@ function AutomationIndexPage() {
   const canManageAssistant = usePermission(PERMISSIONS.ASSISTANT_MANAGE)
   const canManageWorkflows = usePermission(PERMISSIONS.WORKFLOW_MANAGE)
   const canViewAnalytics = usePermission(PERMISSIONS.ANALYTICS_VIEW)
-  const settings = Route.useRouteContext({ select: (context) => context.settings })
+  const settings = useWorkspaceSettings()
   const flags = settings?.featureFlags as FeatureFlags | undefined
 
   useEffect(() => {

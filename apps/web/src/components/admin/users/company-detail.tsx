@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useRouteContext } from '@tanstack/react-router'
+import { Link } from '@tanstack/react-router'
 import {
   ArrowLeftIcon,
   BuildingOffice2Icon,
@@ -44,6 +44,7 @@ import {
 } from '@/lib/server/functions/companies'
 import { formatMonthlySpend, SourceBadge } from '@/components/admin/users/companies-view'
 import { useCompanyAttributes } from '@/lib/client/hooks/use-company-attributes-queries'
+import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 function companyKeys(companyId: string) {
   return {
@@ -242,7 +243,7 @@ function MembersSection({ companyId, canManage }: { companyId: CompanyId; canMan
 }
 
 function ActivitySection({ companyId }: { companyId: CompanyId }) {
-  const settings = useRouteContext({ from: '__root__', select: (context) => context.settings })
+  const settings = useWorkspaceSettings()
   const flags = settings?.featureFlags as FeatureFlags | undefined
   const supportInboxEnabled = flags?.supportInbox ?? false
   const supportTicketsEnabled = flags?.supportTickets ?? false

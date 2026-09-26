@@ -29,6 +29,7 @@ import { WorkspaceDangerCard } from '@/components/admin/settings/workspace-dange
 import { WorkspaceIdentityCard } from '@/components/admin/settings/workspace-identity-card'
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { warmQuery } from '@/lib/client/queries/warm-query'
+import { useManagedFieldPaths, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 export const Route = createFileRoute('/admin/settings/general')({
   loader: async ({ context }) => {
@@ -46,7 +47,8 @@ export const Route = createFileRoute('/admin/settings/general')({
 })
 
 function GeneralSettingsPage() {
-  const { settings, managedFieldPaths } = Route.useRouteContext()
+  const settings = useWorkspaceSettings()
+  const managedFieldPaths = useManagedFieldPaths()
   const { cloudIdentity } = Route.useLoaderData()
   const workspaceNameManaged = isPathManagedFromBootstrap(
     MANAGED_PATHS.WORKSPACE_NAME,

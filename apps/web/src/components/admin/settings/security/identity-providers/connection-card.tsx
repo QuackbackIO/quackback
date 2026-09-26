@@ -13,7 +13,6 @@
  * reason.
  */
 import { useState } from 'react'
-import { useRouteContext } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { toast } from 'sonner'
 import { CheckCircleIcon, ClockIcon, ExclamationTriangleIcon } from '@heroicons/react/24/solid'
@@ -40,6 +39,7 @@ import {
 } from './provider-shared'
 import { useConnectionTest, useProviderCapture } from './use-connection-test'
 import { useProviderSave } from './use-provider-save'
+import { useBaseUrl } from '@/lib/client/hooks/use-root-context'
 
 export function ConnectionCard({ provider }: { provider: IdentityProvider }) {
   // A provider with no saved secret cannot be tested, so there is nothing to
@@ -199,7 +199,7 @@ function ConnectionEditor({
   provider: IdentityProvider
   onDone: () => void
 }) {
-  const baseUrl = useRouteContext({ from: '__root__', select: (context) => context.baseUrl })
+  const baseUrl = useBaseUrl()
   const setCreds = useServerFn(setProviderCredentialsFn)
   const { saving, save } = useProviderSave(provider)
   const { openTest } = useConnectionTest(provider)

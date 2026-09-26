@@ -19,7 +19,7 @@ import { StatusBadge } from '@/components/ui/status-badge'
 import { CheckIcon, LockClosedIcon } from '@heroicons/react/24/solid'
 import { signOut } from '@/lib/client/auth-client'
 import { removeViewerScopedPortalQueries } from '@/lib/client/queries/portal'
-import { useRouter, useRouteContext } from '@tanstack/react-router'
+import { useRouter } from '@tanstack/react-router'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { cn } from '@/lib/shared/utils'
 import { DeferredRichTextEditor } from '@/components/ui/lazy-rich-text-editor'
@@ -27,6 +27,7 @@ import type { EditorDocument } from '@/components/ui/rich-text-editor'
 import { COMMENT_EDITOR_FEATURES } from './comment-editor-features'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { PostId, PostCommentId } from '@quackback/ids'
+import { useSessionContext } from '@/lib/client/hooks/use-root-context'
 
 export type CreateCommentMutation = UseMutationResult<
   unknown,
@@ -80,7 +81,7 @@ export function CommentForm({
   const intl = useIntl()
   const router = useRouter()
   const queryClient = useQueryClient()
-  const session = useRouteContext({ from: '__root__', select: (context) => context.session })
+  const session = useSessionContext()
   const [error, setError] = useState<string | null>(null)
   const [selectedStatusId, setSelectedStatusId] = useState<string | null>(null)
   const [statusPopoverOpen, setStatusPopoverOpen] = useState(false)

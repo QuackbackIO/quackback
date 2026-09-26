@@ -26,6 +26,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { assistantQueries } from '@/lib/client/queries/assistant'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
+import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 const AGENT_TABS = ['basics', 'knowledge', 'guidance'] as const
 type AgentTab = (typeof AGENT_TABS)[number]
@@ -65,7 +66,7 @@ function AssistantAgentPage() {
 function AssistantAgentSettings() {
   const intl = useIntl()
   const settingsQuery = useQuery(assistantQueries.settings())
-  const settings = Route.useRouteContext({ select: (context) => context.settings })
+  const settings = useWorkspaceSettings()
   const { tab: requestedTab = 'basics' } = Route.useSearch()
   const navigate = Route.useNavigate()
   const { dirtyTabs, hasUnsavedChanges } = useAssistantDirtyState()

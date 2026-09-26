@@ -128,6 +128,7 @@ import {
   isProductEnabled,
   type FeatureFlags,
 } from '@/lib/shared/types/settings'
+import { useFeatureFlag, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 /** Quinn-view outcome sub-filter. */
 const QUINN_BUCKETS: {
@@ -390,7 +391,7 @@ export const Route = createFileRoute('/admin/inbox')({
  * flag check above the inbox's hooks so they aren't conditionally called.
  */
 function InboxRoute() {
-  const { settings } = Route.useRouteContext()
+  const settings = useWorkspaceSettings()
   const flags = settings?.featureFlags as FeatureFlags | undefined
   if (!flags?.supportInbox && !flags?.supportTickets) {
     return <Navigate to={getFirstEnabledAdminProductPath(flags)} />
@@ -848,9 +849,7 @@ function InboxPage() {
   // closed-category status for a ticket target (§3.4). Gated on the same flag
   // as the Tickets nav section — mirrors TicketDetail's existing assumption
   // that any agent who can reach a ticket item holds ticket.view.
-  const { settings: routeSettings } = Route.useRouteContext()
-  const showTickets =
-    (routeSettings?.featureFlags as FeatureFlags | undefined)?.supportTickets ?? false
+  const showTickets = useFeatureFlag('supportTickets')
   const { data: ticketStatusList } = useQuery({
     ...ticketQueries.statuses(),
     enabled: showTickets,

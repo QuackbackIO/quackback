@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { createFileRoute, useRouteContext } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { CreditCardIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
@@ -11,6 +11,7 @@ import { BillingSettings } from '@/components/admin/settings/billing/billing-set
 import { billingQueries } from '@/lib/client/queries/billing'
 import { checkoutSuccessCopy } from '@/lib/shared/billing/checkout-flash'
 import { cn } from '@/lib/shared/utils'
+import { useBillingEnabled } from '@/lib/client/hooks/use-root-context'
 
 const BILLING_ERROR_COPY: Record<string, string> = {
   seats_below_usage: 'Pick at least as many seats as people you already have.',
@@ -66,7 +67,7 @@ function clearBillingFlash() {
 }
 
 function BillingPage() {
-  const { billingEnabled } = useRouteContext({ from: '__root__' })
+  const billingEnabled = useBillingEnabled()
   const search = Route.useSearch()
   const navigate = Route.useNavigate()
 

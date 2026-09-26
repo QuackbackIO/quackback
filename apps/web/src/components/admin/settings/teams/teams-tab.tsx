@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { useRouteContext } from '@tanstack/react-router'
 import { useSuspenseQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { UserGroupIcon, PencilSquareIcon, TrashIcon, PlusIcon } from '@heroicons/react/24/solid'
@@ -11,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { TeamDialog } from '@/components/admin/settings/teams/team-dialog'
 import type { FeatureFlags } from '@/lib/shared/types'
+import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 const METHOD_LABELS: Record<string, string> = {
   manual: 'Manual',
@@ -23,7 +23,7 @@ const METHOD_LABELS: Record<string, string> = {
  *  shows when the support inbox is enabled. */
 export function TeamsTab() {
   const queryClient = useQueryClient()
-  const settings = useRouteContext({ from: '__root__', select: (context) => context.settings })
+  const settings = useWorkspaceSettings()
   const flags = settings?.featureFlags as FeatureFlags | undefined
   const showAssignmentMethod = !!flags?.supportInbox
 

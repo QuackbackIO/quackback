@@ -1,5 +1,4 @@
 import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { useRouteContext } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { conversationInboxQueries } from '@/lib/client/queries/conversation-inbox'
 import { inboxQueries } from '@/lib/client/queries/inbox'
@@ -49,6 +48,7 @@ import { cn } from '@/lib/shared/utils'
 import { useActivationAction } from '@/lib/client/hooks/use-activation-action'
 import { ActivationActionButton } from '@/components/admin/activation-action-button'
 import { FormattedMessage, useIntl } from 'react-intl'
+import { useUserRole } from '@/lib/client/hooks/use-root-context'
 
 const TRIAGE_FACETS: readonly InboxTriageFacet[] = ['open', 'waiting', 'closed']
 
@@ -588,7 +588,7 @@ function EmptyList({
   'nav' | 'facet' | 'scopeLabel' | 'searchInput' | 'priorityFilter' | 'channelFilter'
 >) {
   const intl = useIntl()
-  const userRole = useRouteContext({ from: '__root__', select: (context) => context.userRole })
+  const userRole = useUserRole()
   const activationAction = useActivationAction('conversation_empty')
 
   const isMainConversationQueue =

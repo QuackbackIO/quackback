@@ -72,7 +72,8 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 
 // Only the nav itself asks for the theme, so this counts the nav's renders.
-vi.mock('@/lib/client/hooks/use-visual-theme', () => ({
+vi.mock('@/lib/client/hooks/use-root-context', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/client/hooks/use-root-context')>()),
   useRefinedTheme: () => {
     navRenders.count++
     return false

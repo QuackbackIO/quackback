@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/react-router'
+import { Link, useRouter, useRouterState } from '@tanstack/react-router'
 import {
   ChatBubbleLeftIcon,
   MapIcon,
@@ -16,7 +16,6 @@ import {
 } from '@heroicons/react/24/solid'
 import { SignalIcon as SignalIconOutline } from '@heroicons/react/24/outline'
 import { SignalIcon as SignalIconSolid } from '@heroicons/react/24/solid'
-import { useRefinedTheme } from '@/lib/client/hooks/use-visual-theme'
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
 import {
@@ -45,6 +44,13 @@ import { usePermission } from '@/lib/client/hooks/use-permission'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { isProductEnabled, type FeatureFlags, type ProductId } from '@/lib/shared/types/settings'
 import { ENTITY_ICONS } from '@/components/admin/entity-icon'
+import {
+  useBillingEnabled,
+  useRefinedTheme,
+  useSessionContext,
+  useUserRole,
+  useWorkspaceSettings,
+} from '@/lib/client/hooks/use-root-context'
 
 /** Availability toggle for the account menu (conversation routing). The label shows the
  *  state you'll switch to; the avatar dot shows the current one. */
@@ -241,13 +247,10 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
   const router = useRouter()
   // Each part is selected: the route context is a new object after every
   // navigation, while these stay the same until the viewer or workspace changes.
-  const session = useRouteContext({ from: '__root__', select: (context) => context.session })
-  const settings = useRouteContext({ from: '__root__', select: (context) => context.settings })
-  const userRole = useRouteContext({ from: '__root__', select: (context) => context.userRole })
-  const billingEnabled = useRouteContext({
-    from: '__root__',
-    select: (context) => context.billingEnabled,
-  })
+  const session = useSessionContext()
+  const settings = useWorkspaceSettings()
+  const userRole = useUserRole()
+  const billingEnabled = useBillingEnabled()
   // The settings area is admin-only (every tab gates on requireAuth(['admin'])).
   // Members would only ever land on the access-denied page, so hide the cog.
   const isAdmin = userRole === 'admin'

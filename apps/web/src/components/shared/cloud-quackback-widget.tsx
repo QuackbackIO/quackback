@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import { useRouteContext } from '@tanstack/react-router'
 import { isSyntheticAnonEmail } from '@/lib/shared/anonymous-email'
+import { useCloudEnabled, useSessionContext } from '@/lib/client/hooks/use-root-context'
 
 const INSTANCE_URL = 'https://feedback.quackback.io'
 const SDK_URL = `${INSTANCE_URL}/api/widget/sdk.js`
@@ -30,8 +30,8 @@ function loadSdk() {
  * widget surfaces stay clean so customer end-users never see it.
  */
 export function CloudQuackbackWidget() {
-  const cloudEnabled = useRouteContext({ from: '__root__', select: (c) => c.cloudEnabled })
-  const session = useRouteContext({ from: '__root__', select: (c) => c.session })
+  const cloudEnabled = useCloudEnabled()
+  const session = useSessionContext()
   const booted = useRef(false)
 
   const userId = session?.user?.id
