@@ -11,6 +11,7 @@ import { usePermission } from '@/lib/client/hooks/use-permission'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { assistantQueries } from '@/lib/client/queries/assistant'
+import { warmQuery } from '@/lib/client/queries/warm-query'
 
 export const Route = createFileRoute('/admin/automation/')({
   // On a desktop the page moves straight on to the AI agent settings when the
@@ -22,11 +23,10 @@ export const Route = createFileRoute('/admin/automation/')({
     const permissions = (context as { permissions?: PermissionKey[] }).permissions ?? []
     if (!permissions.includes(PERMISSIONS.ASSISTANT_MANAGE)) return
     const { queryClient } = context
-    const warm = (p: Promise<unknown>) => p.catch(() => undefined)
     await Promise.all([
-      warm(queryClient.ensureQueryData(assistantQueries.settings())),
-      warm(queryClient.ensureQueryData(assistantQueries.guidanceRules())),
-      warm(queryClient.ensureQueryData(assistantQueries.guidanceRuleStats())),
+      warmQuery(queryClient, assistantQueries.settings()),
+      warmQuery(queryClient, assistantQueries.guidanceRules()),
+      warmQuery(queryClient, assistantQueries.guidanceRuleStats()),
     ])
   },
   component: AutomationIndexPage,

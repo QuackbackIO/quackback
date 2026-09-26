@@ -19,6 +19,7 @@ import { EmailChannelSettings } from '@/components/admin/channels/email-channel-
 import { EmailTransportCard } from '@/components/admin/channels/email-transport-card'
 import { updateEmailAutoAckFn } from '@/lib/server/functions/settings'
 import { settingsReadBatch } from '@/lib/client/queries/settings-batch'
+import { warmQuery } from '@/lib/client/queries/warm-query'
 
 export const Route = createFileRoute('/admin/settings/channels_/email')({
   beforeLoad: ({ context }) => {
@@ -36,16 +37,15 @@ export const Route = createFileRoute('/admin/settings/channels_/email')({
     // Every card's read is warmed with the page so it renders complete from
     // the document. A miss leaves a card to its own fetch, as before; the
     // transport card's read needs settings.manage, which this page does not.
-    const warm = (p: Promise<unknown>) => p.catch(() => undefined)
     const ensure = settingsReadBatch(queryClient)
     await Promise.all([
       ensure(settingsQueries.spamFilterConfig()),
       permissions?.includes(PERMISSIONS.SETTINGS_MANAGE)
-        ? warm(ensure(channels.emailStatus()))
+        ? warmQuery(ensure, channels.emailStatus())
         : undefined,
-      warm(ensure(emailChannelConfigQuery())),
-      warm(ensure(channels.emailAutoAck())),
-      warm(ensure(channels.emailActivity())),
+      warmQuery(ensure, emailChannelConfigQuery()),
+      warmQuery(ensure, channels.emailAutoAck()),
+      warmQuery(ensure, channels.emailActivity()),
     ])
     return {}
   },

@@ -145,13 +145,8 @@ export async function loadAgentConversationPanels(
     },
     assistantActivity: () => loadConversationAssistantActivity(conversation.id),
     languagePreference: async () => {
-      // As getMyLanguagePreferenceFn reads it.
-      const { db, eq, user } = await import('@/lib/server/db')
-      const record = await db.query.user.findFirst({
-        where: eq(user.id, caller.userId),
-        columns: { preferredLanguage: true },
-      })
-      return record?.preferredLanguage ?? null
+      const { readPreferredLanguage } = await import('./teammate-preferences')
+      return readPreferredLanguage(caller.userId)
     },
     macros: async () => {
       const { listMacros } = await import('@/lib/server/domains/macros/macro.service')

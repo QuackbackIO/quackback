@@ -54,8 +54,9 @@ export type PortalAccessDecision =
  *
  * The decision is resolved once per request (every portal loader asks) and is
  * forgotten with the rest of the request's identity when the session changes.
- * The config it reads is the uncached settings row, so a visibility change is
- * honoured on the very next request.
+ * The config comes from getPortalConfigCached(), whose cache every settings
+ * write invalidates, so a visibility change is honoured on the very next
+ * request.
  *
  * Never-throw contract: this function never throws. Two distinct failure modes:
  *

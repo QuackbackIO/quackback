@@ -194,19 +194,20 @@ export const EmojiNode = Node.create<EmojiNodeOptions>({
       }),
     ]
     if (this.options.enableEmoticons) {
+      // The emoji the handler matched, read back by getAttributes as it inserts.
+      let matched: EmojiItem | undefined
       const emoticon = nodeInputRule({
         find: emoticonInputRegex,
         type: this.type,
-        getAttributes: (match) => {
-          const item = emojiData?.emojiForEmoticon(match[1])
-          return { name: item?.name ?? null, emoji: item?.emoji ?? null }
-        },
+        getAttributes: () => ({ name: matched?.name ?? null, emoji: matched?.emoji ?? null }),
       })
       rules.push(
         new InputRule({
           find: emoticonInputRegex,
-          handler: (props) =>
-            emojiData?.emojiForEmoticon(props.match[1]) ? emoticon.handler(props) : null,
+          handler: (props) => {
+            matched = emojiData?.emojiForEmoticon(props.match[1])
+            return matched ? emoticon.handler(props) : null
+          },
         })
       )
     }

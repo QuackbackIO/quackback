@@ -6,6 +6,7 @@ import { isProductEnabled } from '@/lib/shared/types/settings'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { MacrosSettingsBody } from '@/components/admin/settings/macros-settings-body'
+import { warmQuery } from '@/lib/client/queries/warm-query'
 
 export const Route = createFileRoute('/admin/settings/macros')({
   beforeLoad: ({ context }) => {
@@ -23,7 +24,7 @@ export const Route = createFileRoute('/admin/settings/macros')({
       hasEntitlementFn({ data: { key: 'aiDrafts' } }).then(async (entitled) => {
         if (entitled) {
           const { macrosQuery } = await import('@/lib/client/queries/macros')
-          await context.queryClient.ensureQueryData(macrosQuery()).catch(() => undefined)
+          await warmQuery(context.queryClient, macrosQuery())
         }
         return entitled
       }),

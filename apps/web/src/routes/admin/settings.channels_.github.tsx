@@ -18,6 +18,7 @@ import { IntegrationHealthPanel } from '@/components/admin/settings/integrations
 import { GitHubConnectionActions } from '@/integrations/github/ui/github-connection-actions'
 import { setGitHubInboxEnabledFn } from '@/integrations/github/server/functions'
 import { githubChannelStatusQuery } from '@/integrations/github/ui/github-channel-status-query'
+import { warmQuery } from '@/lib/client/queries/warm-query'
 
 export const Route = createFileRoute('/admin/settings/channels_/github')({
   beforeLoad: ({ context }) => {
@@ -33,7 +34,7 @@ export const Route = createFileRoute('/admin/settings/channels_/github')({
     if (permissions?.includes(PERMISSIONS.SETTINGS_MANAGE)) {
       const { githubChannelStatusQuery: githubStatus } =
         await import('@/integrations/github/ui/github-channel-status-query')
-      await queryClient.ensureQueryData(githubStatus()).catch(() => undefined)
+      await warmQuery(queryClient, githubStatus())
     }
     return {}
   },

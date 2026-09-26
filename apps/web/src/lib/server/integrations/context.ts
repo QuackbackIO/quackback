@@ -1,4 +1,4 @@
-import { db, integrations, eq } from '@/lib/server/db'
+import { db, integrations, eq, sql } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 import { getIntegration } from './index'
 import { withIntegrationReadAuth } from './token-refresh'
@@ -15,7 +15,18 @@ async function contextProviders() {
 
 /** Whether any connected integration could answer a lookup, without calling out to it. */
 export async function hasCustomerContextProvider(): Promise<boolean> {
-  return (await contextProviders()).length > 0
+  // The same test as contextProviders, reading two columns rather than whole rows.
+  const active = await db
+    .select({
+      integrationType: integrations.integrationType,
+      hasSecrets: sql<boolean>`coalesce(${integrations.secrets}, '') <> ''`,
+    })
+    .from(integrations)
+    .where(eq(integrations.status, 'active'))
+  return active.some(
+    (integration) =>
+      integration.hasSecrets && !!getIntegration(integration.integrationType)?.context
+  )
 }
 
 /** Read-only lookups share credentials and a normalized card, not an event queue. */

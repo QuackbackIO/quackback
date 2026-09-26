@@ -17,6 +17,7 @@ import { EmptyState } from '@/components/shared/empty-state'
 import { PageHeader } from '@/components/shared/page-header'
 import { CommentContent } from '@/components/public/comment-content'
 import type { TiptapContent } from '@/lib/shared/db-types'
+import { warmQuery } from '@/lib/client/queries/warm-query'
 
 export const Route = createFileRoute('/admin/moderation')({
   // Auth is enforced by the parent `/admin` guard (admin/member wall) plus each
@@ -25,13 +26,12 @@ export const Route = createFileRoute('/admin/moderation')({
   // query.
   loader: async ({ context }) => {
     const { queryClient } = context
-    const warm = (p: Promise<unknown>) => p.catch(() => undefined)
     // Imported here rather than at the top: route loaders ship in the entry
     // chunk every page loads.
     const { moderationQueueQueries } = await import('@/lib/client/queries/moderation')
     await Promise.all([
-      warm(queryClient.ensureQueryData(moderationQueueQueries.posts())),
-      warm(queryClient.ensureQueryData(moderationQueueQueries.comments())),
+      warmQuery(queryClient, moderationQueueQueries.posts()),
+      warmQuery(queryClient, moderationQueueQueries.comments()),
     ])
   },
   component: ModerationPage,

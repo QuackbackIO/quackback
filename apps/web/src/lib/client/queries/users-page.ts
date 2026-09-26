@@ -14,6 +14,7 @@ import { userTagsQueryOptions } from '@/lib/client/hooks/use-user-tags'
 import { portalInvitesQueryOptions } from '@/lib/client/queries/portal-invites'
 import { parseCompanyFilterParts } from '@/lib/shared/company-filters'
 import { countCompaniesFn, listCompaniesPageFn } from '@/lib/server/functions/companies'
+import { warmQuery } from '@/lib/client/queries/warm-query'
 
 /** The companies directory (the people page's Companies tab). */
 export const companiesDirectoryQueries = {
@@ -63,22 +64,21 @@ export function canReadCompanies(role: string) {
  * best-effort: a failed read is left to the page's own query.
  */
 export function warmUsersPage(queryClient: QueryClient, role: string) {
-  const warm = (p: Promise<unknown>) => p.catch(() => undefined)
   const companies = canReadCompanies(role)
   return Promise.all([
     queryClient.ensureInfiniteQueryData(portalUsersInfiniteOptions(defaultUsersFilters)),
     queryClient.ensureQueryData(adminQueries.segments()),
-    warm(queryClient.ensureQueryData(totalUserCountOptions('users'))),
-    warm(queryClient.ensureQueryData(totalUserCountOptions('leads'))),
-    warm(queryClient.ensureQueryData(adminQueries.userAttributes())),
-    warm(queryClient.ensureQueryData(adminQueries.companyAttributes())),
-    warm(queryClient.ensureQueryData(userTagsQueryOptions())),
-    role === 'admin' ? warm(queryClient.ensureQueryData(portalInvitesQueryOptions())) : undefined,
-    companies ? warm(queryClient.ensureQueryData(companiesDirectoryQueries.count())) : undefined,
+    warmQuery(queryClient, totalUserCountOptions('users')),
+    warmQuery(queryClient, totalUserCountOptions('leads')),
+    warmQuery(queryClient, adminQueries.userAttributes()),
+    warmQuery(queryClient, adminQueries.companyAttributes()),
+    warmQuery(queryClient, userTagsQueryOptions()),
+    role === 'admin' ? warmQuery(queryClient, portalInvitesQueryOptions()) : undefined,
+    companies ? warmQuery(queryClient, companiesDirectoryQueries.count()) : undefined,
     companies
-      ? warm(
-          queryClient.ensureInfiniteQueryData(companiesDirectoryQueries.page(undefined, undefined))
-        )
+      ? queryClient
+          .ensureInfiniteQueryData(companiesDirectoryQueries.page(undefined, undefined))
+          .catch(() => undefined)
       : undefined,
   ])
 }

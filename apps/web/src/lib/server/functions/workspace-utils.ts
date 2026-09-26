@@ -11,11 +11,10 @@ import { z } from 'zod'
 import type { UserId } from '@quackback/ids'
 import { getSession } from '@/lib/server/auth/session'
 import { getRequestPermissions, getRequestPrincipal } from '@/lib/server/auth/request-session'
-import { requireSettingsCached } from '@/lib/server/domains/settings/settings.helpers'
+import { findSettingsCached } from '@/lib/server/domains/settings/settings.helpers'
 import { isTeamMember } from '@/lib/shared/roles'
 import { logger } from '@/lib/server/logger'
 import { buildSigninRedirect } from '@/lib/shared/auth-prompt'
-import { NotFoundError } from '@/lib/shared/errors'
 import { ALL_PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 
 const log = logger.child({ component: 'workspace-utils' })
@@ -68,10 +67,7 @@ export const requireWorkspaceRole = createServerFn({ method: 'GET' })
     // The settings, principal and permission reads are the request's own
     // (request-session.ts), shared with the session read above and with every
     // server function the page runs in the same request.
-    const appSettings = await requireSettingsCached().catch((error: unknown) => {
-      if (error instanceof NotFoundError) return null
-      throw error
-    })
+    const appSettings = await findSettingsCached()
     if (!appSettings) {
       throw redirect({ to: '/' })
     }

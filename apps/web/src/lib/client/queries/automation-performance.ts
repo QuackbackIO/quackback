@@ -3,6 +3,7 @@ import { quinnPerformanceQuery } from '@/lib/client/queries/assistant-analytics'
 import { quinnToolMetricsQuery } from '@/lib/client/queries/assistant-tools-analytics'
 import { copilotUsageMetricsQuery } from '@/lib/client/queries/assistant-copilot-analytics'
 import { supportReportingQuery } from '@/lib/client/queries/support-reporting'
+import { warmQuery } from '@/lib/client/queries/warm-query'
 
 export interface DateRange {
   from: string
@@ -22,11 +23,10 @@ export function last30DaysRange(now: Date = new Date()): DateRange {
  * left to its card's own query.
  */
 export function warmAutomationPerformance(queryClient: QueryClient, range: DateRange) {
-  const warm = (p: Promise<unknown>) => p.catch(() => undefined)
   return Promise.all([
-    warm(queryClient.ensureQueryData(quinnPerformanceQuery(range.from, range.to))),
-    warm(queryClient.ensureQueryData(quinnToolMetricsQuery(range.from, range.to))),
-    warm(queryClient.ensureQueryData(copilotUsageMetricsQuery(range.from, range.to))),
-    warm(queryClient.ensureQueryData(supportReportingQuery(range.from, range.to))),
+    warmQuery(queryClient, quinnPerformanceQuery(range.from, range.to)),
+    warmQuery(queryClient, quinnToolMetricsQuery(range.from, range.to)),
+    warmQuery(queryClient, copilotUsageMetricsQuery(range.from, range.to)),
+    warmQuery(queryClient, supportReportingQuery(range.from, range.to)),
   ])
 }

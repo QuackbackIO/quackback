@@ -14,6 +14,7 @@ import { changelogCategoryQueries, changelogSettingsQueries } from '@/lib/client
 import { DEFAULT_CHANGELOG_SETTINGS, type ChangelogSettings } from '@/lib/shared/changelog-settings'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { settingsReadBatch } from '@/lib/client/queries/settings-batch'
+import { warmQuery } from '@/lib/client/queries/warm-query'
 
 export const Route = createFileRoute('/admin/settings/changelog')({
   beforeLoad: ({ context }) => {
@@ -30,7 +31,7 @@ export const Route = createFileRoute('/admin/settings/changelog')({
       // A segment-gated label shows its segments by name, read under
       // segment.view; without it the names fall back to ids, as before.
       context.permissions?.includes(PERMISSIONS.SEGMENT_VIEW)
-        ? ensure(changelogCategoryQueries.segments()).catch(() => undefined)
+        ? warmQuery(ensure, changelogCategoryQueries.segments())
         : undefined,
     ])
     return {}

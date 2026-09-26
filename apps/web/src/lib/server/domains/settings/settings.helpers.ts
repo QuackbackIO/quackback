@@ -122,7 +122,8 @@ export async function requireSettingsPerRequest(): Promise<SettingsRecord> {
   const org = await memoizePerRequest(SETTINGS_ROW_MEMO_KEY, () => db.query.settings.findFirst())
   if (!org) throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
   // Every caller gets a copy, so one parsing its slice cannot change another's.
-  return structuredClone(org)
+  // Shallow is enough: callers parse the row's text columns, never mutate them.
+  return { ...org }
 }
 
 /**

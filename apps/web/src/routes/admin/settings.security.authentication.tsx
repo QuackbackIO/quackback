@@ -10,6 +10,7 @@ import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { AuthSettings, type AuthTab } from '@/components/admin/settings/security/auth-settings'
 import { settingsReadBatch } from '@/lib/client/queries/settings-batch'
+import { warmQuery } from '@/lib/client/queries/warm-query'
 
 const searchSchema = z.object({
   // The Access & Security page splits by CONCERN, not by surface:
@@ -54,7 +55,7 @@ export const Route = createFileRoute('/admin/settings/security/authentication')(
         ensure(adminQueries.authProviderStatus()),
         ensure(settingsQueries.identityProviders()),
         ensure(adminQueries.recoveryCodes()),
-        warmSegments ? ensure(adminQueries.segments()).catch(() => undefined) : undefined,
+        warmSegments ? warmQuery(ensure, adminQueries.segments()) : undefined,
       ]),
       listEntitlementsFn(),
       ensureBillingCatalogue(queryClient, context.billingEnabled),

@@ -7,13 +7,13 @@ import { workflowsQuery } from '@/lib/client/queries/workflows'
 import { WhoRepliesFirstCard } from '@/components/admin/automation/who-replies-first-card'
 import { AbandonedJourneyAutoCloseCard } from '@/components/admin/automation/abandoned-journey-auto-close-card'
 import { WorkflowsManager } from '@/components/admin/automation/workflows-manager'
+import { warmQuery } from '@/lib/client/queries/warm-query'
 
 export const Route = createFileRoute('/admin/automation/workflows')({
   loader: async ({ context }) => {
     const { hasEntitlementFn } = await import('@/lib/server/functions/entitlement-status')
     const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
     const { queryClient } = context
-    const warm = (p: Promise<unknown>) => p.catch(() => undefined)
     const flags = context.settings?.featureFlags as FeatureFlags | undefined
     // The workflow list and the close-spam toggle, read on every load;
     // skipped when the page redirects away instead. The list's run counts
@@ -21,8 +21,8 @@ export const Route = createFileRoute('/admin/automation/workflows')({
     // which the server cannot match.
     const pageReads = flags?.supportInbox
       ? [
-          warm(queryClient.ensureQueryData(workflowsQuery())),
-          warm(queryClient.ensureQueryData(settingsQueries.workflowCloseSpam())),
+          warmQuery(queryClient, workflowsQuery()),
+          warmQuery(queryClient, settingsQueries.workflowCloseSpam()),
         ]
       : []
     const [, workflowsEntitled] = await Promise.all([

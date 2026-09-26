@@ -23,7 +23,7 @@ export type { EmojiItem }
 /**
  * Resolve a bundled emoji by canonical name or any shortcode (e.g. `smile`,
  * `crossed_fingers`, `fingers_crossed`). Matches TipTap's `shortcodeToEmoji`
- * so a name-only node whose `name` is not itself a shortcode still resolves —
+ * so a name-only node whose `name` is not itself a shortcode still resolves:
  * 284 of the bundled items are in that shape, including `crossed_fingers`.
  */
 export function lookupEmoji(shortcode: string): EmojiItem | undefined {
@@ -34,13 +34,27 @@ export function lookupEmoji(shortcode: string): EmojiItem | undefined {
 
 const withoutVariationSelectors = (value: string) => value.replace(/[︎️]/g, '')
 
+/** Keyed lookups built on first use; each key keeps the first item the dataset lists for it. */
+let byChar: Map<string, EmojiItem> | undefined
+let byEmoticon: Map<string, EmojiItem> | undefined
+
+function firstByKey(keysOf: (item: EmojiItem) => readonly string[]): Map<string, EmojiItem> {
+  const map = new Map<string, EmojiItem>()
+  for (const item of defaultEmojis) {
+    if (!item.emoji) continue
+    for (const key of keysOf(item)) if (!map.has(key)) map.set(key, item)
+  }
+  return map
+}
+
 /** The bundled emoji for a character sequence as typed or pasted, variation selectors aside. */
 export function emojiForChar(char: string): EmojiItem | undefined {
-  const typed = withoutVariationSelectors(char)
-  return defaultEmojis.find((e) => e.emoji && withoutVariationSelectors(e.emoji) === typed)
+  byChar ??= firstByKey((item) => [withoutVariationSelectors(item.emoji!)])
+  return byChar.get(withoutVariationSelectors(char))
 }
 
 /** The bundled emoji an emoticon such as `:)` or `<3` stands for. */
 export function emojiForEmoticon(emoticon: string): EmojiItem | undefined {
-  return defaultEmojis.find((e) => e.emoji && e.emoticons?.includes(emoticon))
+  byEmoticon ??= firstByKey((item) => item.emoticons ?? [])
+  return byEmoticon.get(emoticon)
 }
