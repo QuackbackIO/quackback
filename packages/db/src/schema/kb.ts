@@ -47,6 +47,7 @@ export const LOCALE_TO_REGCONFIG: Record<string, string> = {
   es: 'spanish',
   ar: 'arabic',
   ru: 'russian',
+  nl: 'dutch',
   'pt-br': 'portuguese',
   'zh-cn': 'simple',
   'zh-tw': 'simple',

@@ -290,6 +290,8 @@ describe('the real corpus', () => {
     // 0285 replaces only the old three-column link constraint and adds its
     // scoped replacement only when absent. Real PostgreSQL replay is covered
     // by lineage-double-apply and migrator-gap-heal.
+    // 0288 rebuilds kb_article_translations.search_vector only while its
+    // expression lacks the Dutch config, so a second run changes nothing.
     const vouching = files.filter(
       (f) => assessReplaySafety(f, readFileSync(join(MIGRATIONS_DIR, f), 'utf8')).vouched.length > 0
     )
@@ -307,6 +309,7 @@ describe('the real corpus', () => {
       '0283_refined_visual_theme_default_on.sql',
       '0284_integration_sync.sql',
       '0285_integration_link_scope.sql',
+      '0288_kb_translations_dutch_search.sql',
     ])
   })
 
