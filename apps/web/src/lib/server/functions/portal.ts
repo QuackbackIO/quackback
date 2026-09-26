@@ -607,74 +607,97 @@ export const fetchPublicRoadmaps = createServerFn({ method: 'GET' }).handler(asy
   return roadmaps.map(serializePublicRoadmap)
 })
 
+const getPublicRoadmapPostsSchema = z.object({
+  roadmapId: roadmapIdSchema,
+  statusId: postStatusIdSchema.optional(),
+  bucketId: z.string().max(20).optional(),
+  limit: PageLimitMinOneSchema,
+  offset: z.number().int().min(0).optional(),
+  search: z.string().optional(),
+  boardIds: z.array(boardIdInputSchema).optional(),
+  tagIds: z.array(tagIdInputSchema).optional(),
+  segmentIds: z.array(segmentIdInputSchema).optional(),
+  sort: z.enum(['votes', 'newest', 'oldest']).optional(),
+})
+
+type PublicRoadmapFilterInput = Omit<
+  z.infer<typeof getPublicRoadmapPostsSchema>,
+  'statusId' | 'bucketId' | 'offset'
+>
+
+/**
+ * The actor and filters a public roadmap post list runs under, or null when
+ * the portal is private and the caller unauthorized. Auth is resolved once,
+ * for both the segment-filter gate and the per-board audience filter.
+ */
+async function resolvePublicRoadmapQuery(data: PublicRoadmapFilterInput) {
+  // Outer gate: private portal + unauthorized caller → no roadmap posts.
+  const access = await resolvePortalAccessForRequest()
+  if (!access.granted) {
+    log.debug('portal access denied, returning empty')
+    return null
+  }
+
+  const auth = hasAuthCredentials() ? await getOptionalAuth() : null
+
+  // Segment filtering requires admin/member role; non-team callers silently
+  // ignore segmentIds.
+  let segmentIds: SegmentId[] | undefined
+  if (data.segmentIds?.length && auth && isTeamMember(auth.principal.role)) {
+    segmentIds = data.segmentIds as SegmentId[]
+  }
+
+  const actor = await policyActorFromAuth(auth)
+  const filters = {
+    limit: data.limit ?? 20,
+    search: data.search,
+    boardIds: data.boardIds as BoardId[] | undefined,
+    tagIds: data.tagIds as PostTagId[] | undefined,
+    segmentIds,
+    sort: data.sort,
+  }
+  return { actor, filters }
+}
+
+/** Shared by fetchPublicRoadmapPosts and fetchPublicRoadmapColumns so both serialize a page the same way. */
+function serializePublicRoadmapPostsPage(
+  result: Awaited<ReturnType<typeof getPublicRoadmapPosts>>
+) {
+  return {
+    ...result,
+    items: result.items.map((item) => ({
+      id: String(item.id),
+      title: item.title,
+      voteCount: item.voteCount,
+      commentCount: item.commentCount,
+      statusId: item.statusId ? String(item.statusId) : null,
+      eta: toIsoStringOrNull(item.eta),
+      board: { id: String(item.board.id), name: item.board.name, slug: item.board.slug },
+    })),
+  }
+}
+
 export const fetchPublicRoadmapPosts = createServerFn({ method: 'GET' })
-  .validator(
-    z.object({
-      roadmapId: roadmapIdSchema,
-      statusId: postStatusIdSchema.optional(),
-      bucketId: z.string().max(20).optional(),
-      limit: PageLimitMinOneSchema,
-      offset: z.number().int().min(0).optional(),
-      search: z.string().optional(),
-      boardIds: z.array(boardIdInputSchema).optional(),
-      tagIds: z.array(tagIdInputSchema).optional(),
-      segmentIds: z.array(segmentIdInputSchema).optional(),
-      sort: z.enum(['votes', 'newest', 'oldest']).optional(),
-    })
-  )
+  .validator(getPublicRoadmapPostsSchema)
   .handler(async ({ data }) => {
     log.debug(
       { roadmap_id: data.roadmapId, limit: data.limit, offset: data.offset },
       'fetch public roadmap posts'
     )
-    // Outer gate: private portal + unauthorized caller → no roadmap posts.
-    const access = await resolvePortalAccessForRequest()
-    if (!access.granted) {
-      log.debug('portal access denied, returning empty')
-      return { items: [], hasMore: false, total: 0 }
-    }
-
-    // Resolve auth once — used for both the segment-filter gate and
-    // the per-board audience filter on getPublicRoadmapPosts.
-    const auth = hasAuthCredentials() ? await getOptionalAuth() : null
-
-    // Segment filtering requires admin/member role
-    let segmentIds: SegmentId[] | undefined
-    if (data.segmentIds?.length && auth && isTeamMember(auth.principal.role)) {
-      segmentIds = data.segmentIds as SegmentId[]
-      // Non-team callers silently ignore segmentIds
-    }
-
-    const actor = await policyActorFromAuth(auth)
+    const query = await resolvePublicRoadmapQuery(data)
+    if (!query) return { items: [], hasMore: false, total: 0 }
 
     const result = await getPublicRoadmapPosts(
       data.roadmapId as RoadmapId,
       {
+        ...query.filters,
         statusId: data.statusId as PostStatusId | undefined,
         bucketId: data.bucketId,
-        limit: data.limit ?? 20,
         offset: data.offset ?? 0,
-        search: data.search,
-        boardIds: data.boardIds as BoardId[] | undefined,
-        tagIds: data.tagIds as PostTagId[] | undefined,
-        segmentIds,
-        sort: data.sort,
       },
-      actor
+      query.actor
     )
-
-    return {
-      ...result,
-      items: result.items.map((item) => ({
-        id: String(item.id),
-        title: item.title,
-        voteCount: item.voteCount,
-        commentCount: item.commentCount,
-        statusId: item.statusId ? String(item.statusId) : null,
-        eta: toIsoStringOrNull(item.eta),
-        board: { id: String(item.board.id), name: item.board.name, slug: item.board.slug },
-      })),
-    }
+    return serializePublicRoadmapPostsPage(result)
   })
 
 export const fetchPublicRoadmapDateBuckets = createServerFn({ method: 'GET' })
@@ -837,24 +860,20 @@ export const fetchRoadmapPageData = createServerFn({ method: 'GET' }).handler(as
   }
 })
 
-const getPublicRoadmapColumnsSchema = z.object({
-  roadmapId: roadmapIdSchema,
-  limit: PageLimitMinOneSchema,
-  search: z.string().optional(),
-  boardIds: z.array(boardIdInputSchema).optional(),
-  tagIds: z.array(tagIdInputSchema).optional(),
-  segmentIds: z.array(segmentIdInputSchema).optional(),
-  sort: z.enum(['votes', 'newest', 'oldest']).optional(),
-  columns: z
-    .array(
-      z.object({
-        statusId: postStatusIdSchema.optional(),
-        bucketId: z.string().max(20).optional(),
-      })
-    )
-    .min(1)
-    .max(50),
-})
+// The first page of several columns of one board, under the same filters.
+const getPublicRoadmapColumnsSchema = getPublicRoadmapPostsSchema
+  .omit({ statusId: true, bucketId: true, offset: true })
+  .extend({
+    columns: z
+      .array(
+        z.object({
+          statusId: postStatusIdSchema.optional(),
+          bucketId: z.string().max(20).optional(),
+        })
+      )
+      .min(1)
+      .max(50),
+  })
 
 /**
  * The first page of every column of one public roadmap board, under the same
@@ -871,23 +890,8 @@ export const fetchPublicRoadmapColumns = createServerFn({ method: 'GET' })
       { roadmap_id: data.roadmapId, columns: data.columns.length },
       'fetch public roadmap columns'
     )
-    // Outer gate: private portal + unauthorized caller -> every column empty.
-    const access = await resolvePortalAccessForRequest()
-    if (!access.granted) {
-      log.debug('portal access denied, returning empty')
-      return data.columns.map(() => ({ items: [], hasMore: false, total: 0 }))
-    }
-
-    const auth = hasAuthCredentials() ? await getOptionalAuth() : null
-
-    // Segment filtering requires admin/member role, same gate as
-    // fetchPublicRoadmapPosts.
-    let segmentIds: SegmentId[] | undefined
-    if (data.segmentIds?.length && auth && isTeamMember(auth.principal.role)) {
-      segmentIds = data.segmentIds as SegmentId[]
-    }
-
-    const actor = await policyActorFromAuth(auth)
+    const query = await resolvePublicRoadmapQuery(data)
+    if (!query) return data.columns.map(() => ({ items: [], hasMore: false, total: 0 }))
 
     const results = await getPublicRoadmapColumnsPosts(
       data.roadmapId as RoadmapId,
@@ -895,27 +899,8 @@ export const fetchPublicRoadmapColumns = createServerFn({ method: 'GET' })
         statusId: column.statusId as PostStatusId | undefined,
         bucketId: column.bucketId,
       })),
-      {
-        limit: data.limit ?? 20,
-        search: data.search,
-        boardIds: data.boardIds as BoardId[] | undefined,
-        tagIds: data.tagIds as PostTagId[] | undefined,
-        segmentIds,
-        sort: data.sort,
-      },
-      actor
+      query.filters,
+      query.actor
     )
-
-    return results.map((result) => ({
-      ...result,
-      items: result.items.map((item) => ({
-        id: String(item.id),
-        title: item.title,
-        voteCount: item.voteCount,
-        commentCount: item.commentCount,
-        statusId: item.statusId ? String(item.statusId) : null,
-        eta: toIsoStringOrNull(item.eta),
-        board: { id: String(item.board.id), name: item.board.name, slug: item.board.slug },
-      })),
-    }))
+    return results.map(serializePublicRoadmapPostsPage)
   })

@@ -17,6 +17,11 @@ import { z } from 'zod'
 /** A read's data (any query's, so only known not to be undefined), or that it was not read. */
 export type SettingsReadResult = { ok: true; data: {} | null } | { ok: false }
 
+type SettingsRead = (typeof import('@/lib/server/settings-read-registry'))['SETTINGS_READS'][number]
+
+/** The registered reads by the hash of their query key, built on the first request. */
+let registeredReads: Map<string, SettingsRead> | undefined
+
 export const readSettingsTogetherFn = createServerFn({ method: 'GET' })
   .validator(
     z.object({
@@ -29,7 +34,9 @@ export const readSettingsTogetherFn = createServerFn({ method: 'GET' })
   )
   .handler(async ({ data }): Promise<SettingsReadResult[]> => {
     const { SETTINGS_READS } = await import('@/lib/server/settings-read-registry')
-    const registered = new Map(SETTINGS_READS.map((read) => [hashKey(read().queryKey), read]))
+    const registered = (registeredReads ??= new Map(
+      SETTINGS_READS.map((read) => [hashKey(read().queryKey), read])
+    ))
     // A client of its own, so no read is cached beyond this request.
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     const settled = await Promise.allSettled(

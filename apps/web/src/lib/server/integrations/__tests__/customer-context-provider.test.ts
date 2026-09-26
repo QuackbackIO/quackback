@@ -11,6 +11,7 @@ vi.mock('@/lib/server/db', () => ({
   db: { select: () => ({ from: () => ({ where: () => activeRows() }) }) },
   integrations: { status: 'status' },
   eq: vi.fn(),
+  sql: vi.fn(),
 }))
 
 const context = vi.fn()
@@ -36,19 +37,19 @@ describe('hasCustomerContextProvider', () => {
   })
 
   it('is false when no active integration provides context', async () => {
-    activeRows.mockResolvedValueOnce([{ integrationType: 'linear', secrets: 'sealed' }])
+    activeRows.mockResolvedValueOnce([{ integrationType: 'linear', hasSecrets: true }])
     await expect(hasCustomerContextProvider()).resolves.toBe(false)
   })
 
   it('is false when the context provider holds no credentials', async () => {
-    activeRows.mockResolvedValueOnce([{ integrationType: 'hubspot', secrets: null }])
+    activeRows.mockResolvedValueOnce([{ integrationType: 'hubspot', hasSecrets: false }])
     await expect(hasCustomerContextProvider()).resolves.toBe(false)
   })
 
   it('is true when an active, connected integration provides context', async () => {
     activeRows.mockResolvedValueOnce([
-      { integrationType: 'linear', secrets: 'sealed' },
-      { integrationType: 'zendesk', secrets: 'sealed' },
+      { integrationType: 'linear', hasSecrets: true },
+      { integrationType: 'zendesk', hasSecrets: true },
     ])
     await expect(hasCustomerContextProvider()).resolves.toBe(true)
     expect(context).not.toHaveBeenCalled()

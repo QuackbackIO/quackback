@@ -8,6 +8,7 @@ import { createServerFn } from '@tanstack/react-start'
 import type { ExportRunEntityCounts, ImportRunErrorEntry, ImportRunTotals } from '@/lib/server/db'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { isAdmin } from '@/lib/shared/roles'
+import { toIsoStringOrNull } from '@/lib/shared/utils/date'
 import { requireAuth } from './auth-helpers'
 
 export interface ExportRunListItem {
@@ -33,8 +34,6 @@ export interface ImportRunListItem {
   finishedAt: string | null
 }
 
-const iso = (date: Date | null) => (date ? date.toISOString() : null)
-
 /** Workspace export runs, newest first. */
 export const listExportRunsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<ExportRunListItem[]> => {
@@ -48,8 +47,8 @@ export const listExportRunsFn = createServerFn({ method: 'GET' }).handler(
       entityCounts: run.entityCounts,
       error: run.error,
       createdAt: run.createdAt.toISOString(),
-      finishedAt: iso(run.finishedAt),
-      expiresAt: iso(run.expiresAt),
+      finishedAt: toIsoStringOrNull(run.finishedAt),
+      expiresAt: toIsoStringOrNull(run.expiresAt),
     }))
   }
 )
@@ -70,7 +69,7 @@ export const listImportRunsFn = createServerFn({ method: 'GET' }).handler(
       totals: run.totals,
       errorReport: run.errorReport,
       createdAt: run.createdAt.toISOString(),
-      finishedAt: iso(run.finishedAt),
+      finishedAt: toIsoStringOrNull(run.finishedAt),
     }))
   }
 )

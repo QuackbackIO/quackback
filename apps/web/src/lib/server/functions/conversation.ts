@@ -1693,17 +1693,12 @@ export const translateConversationMessagesFn = createServerFn({ method: 'GET' })
 
     const {
       db: appDb,
-      user: userTable,
       conversationMessages: messagesTable,
-      eq: eqOp,
       inArray: inArrayOp,
     } = await import('@/lib/server/db')
 
-    const teammate = await appDb.query.user.findFirst({
-      where: eqOp(userTable.id, ctx.user.id),
-      columns: { preferredLanguage: true },
-    })
-    const targetLocale = teammate?.preferredLanguage ?? 'en'
+    const { readPreferredLanguage } = await import('./teammate-preferences')
+    const targetLocale = (await readPreferredLanguage(ctx.user.id)) ?? 'en'
 
     const messages = await appDb
       .select({

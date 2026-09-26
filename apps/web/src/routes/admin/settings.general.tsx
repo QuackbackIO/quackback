@@ -28,6 +28,7 @@ import { Switch } from '@/components/ui/switch'
 import { WorkspaceDangerCard } from '@/components/admin/settings/workspace-danger-card'
 import { WorkspaceIdentityCard } from '@/components/admin/settings/workspace-identity-card'
 import { settingsReadBatch } from '@/lib/client/queries/settings-batch'
+import { warmQuery } from '@/lib/client/queries/warm-query'
 
 export const Route = createFileRoute('/admin/settings/general')({
   loader: async ({ context }) => {
@@ -37,7 +38,7 @@ export const Route = createFileRoute('/admin/settings/general')({
       getCloudIdentityFn(),
       ensure(settingsQueries.logo()),
       // The export action shows a run in flight.
-      ensure(settingsQueries.exportRuns()).catch(() => undefined),
+      warmQuery(ensure, settingsQueries.exportRuns()),
     ])
     return { cloudIdentity }
   },
