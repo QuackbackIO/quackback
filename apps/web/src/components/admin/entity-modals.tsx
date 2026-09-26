@@ -4,8 +4,7 @@
  * once; each modal's content (editors, sidebars and their reads) loads inside
  * its frame, behind the frame's spinner. Opening one mounts one dialog.
  */
-import { lazy, useCallback, useLayoutEffect, useRef } from 'react'
-import { useRouterState } from '@tanstack/react-router'
+import { lazy } from 'react'
 import type { ArticleId, ChangelogId, PostId } from '@quackback/ids'
 import { useUrlModal } from '@/lib/client/hooks/use-url-modal'
 import { UrlModalShell } from '@/components/shared/url-modal-shell'
@@ -32,23 +31,11 @@ export function PostModal({
   postId: string | undefined
   currentUser: CurrentUser
 }) {
-  const { pathname, search } = useRouterState({ select: (s) => s.location })
   const { open, validatedId, close, navigateTo } = useUrlModal<PostId>({
     urlId: urlPostId,
     idPrefix: 'post',
     searchParam: 'post',
-    route: pathname,
-    search: search as Record<string, unknown>,
   })
-
-  // useUrlModal's callbacks change with every location; the content gets
-  // stable ones that call the latest.
-  const latest = useRef({ close, navigateTo })
-  useLayoutEffect(() => {
-    latest.current = { close, navigateTo }
-  })
-  const onClose = useCallback(() => latest.current.close(), [])
-  const onNavigateToPost = useCallback((id: string) => latest.current.navigateTo(id), [])
 
   return (
     <UrlModalShell
@@ -61,8 +48,8 @@ export function PostModal({
         <PostModalContent
           postId={validatedId}
           currentUser={currentUser}
-          onNavigateToPost={onNavigateToPost}
-          onClose={onClose}
+          onNavigateToPost={navigateTo}
+          onClose={close}
         />
       )}
     </UrlModalShell>
@@ -70,13 +57,10 @@ export function PostModal({
 }
 
 export function ChangelogModal({ entryId: urlEntryId }: { entryId: string | undefined }) {
-  const { pathname, search } = useRouterState({ select: (s) => s.location })
   const { open, validatedId, close } = useUrlModal<ChangelogId>({
     urlId: urlEntryId,
     idPrefix: 'changelog',
     searchParam: 'entry',
-    route: pathname,
-    search: search as Record<string, unknown>,
   })
 
   return (
@@ -92,13 +76,10 @@ export function ChangelogModal({ entryId: urlEntryId }: { entryId: string | unde
 }
 
 export function ArticleModal({ articleId: urlArticleId }: { articleId: string | undefined }) {
-  const { pathname, search } = useRouterState({ select: (s) => s.location })
   const { open, validatedId, close } = useUrlModal<ArticleId>({
     urlId: urlArticleId,
     idPrefix: 'article',
     searchParam: 'article',
-    route: pathname,
-    search: search as Record<string, unknown>,
   })
 
   return (

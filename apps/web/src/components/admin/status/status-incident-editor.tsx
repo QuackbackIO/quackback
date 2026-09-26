@@ -29,7 +29,6 @@ import { useUrlModal } from '@/lib/client/hooks/use-url-modal'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { useDebouncedSave } from '@/lib/client/hooks/use-debounced-save'
 import { SidebarContainer, StatusSelect } from '@/components/shared/sidebar-primitives'
-import { Route } from '@/routes/admin/status'
 import { statusIncidentQueries, type StatusIncidentAdminDetail } from '@/lib/client/queries/status'
 import { useUpdateStatusIncident, usePostStatusIncidentUpdate } from '@/lib/client/mutations/status'
 import {
@@ -587,13 +586,10 @@ export function StatusIncidentModal({
 }: {
   incidentId: string | undefined
 }) {
-  const search = Route.useSearch()
   const { open, validatedId, close } = useUrlModal<StatusIncidentId>({
     urlId: urlIncidentId,
     idPrefix: 'status_incident',
     searchParam: 'incident',
-    route: '/admin/status',
-    search,
   })
 
   return (
