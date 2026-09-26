@@ -278,8 +278,9 @@ test.describe('Admin Users Segments', () => {
     // Confirm deletion
     await confirmDialog.getByRole('button', { name: /^delete$/i }).click()
 
-    // Segment should no longer appear
-    await expect(page.getByText(segmentName)).toBeHidden({ timeout: 10000 })
+    // The dialog closes (its title also names the segment), then the segment's row goes
+    await expect(confirmDialog).toBeHidden({ timeout: 10000 })
+    await expect(segButton).toBeHidden({ timeout: 10000 })
   })
 
   test('delete confirmation can be cancelled', async ({ page }) => {
