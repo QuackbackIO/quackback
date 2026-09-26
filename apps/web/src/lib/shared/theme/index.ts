@@ -114,6 +114,8 @@ export type { MinimalThemeVariables, MinimalThemeConfig, ThemeBaseline } from '.
 export {
   expandTheme,
   extractMinimal,
+  unbrandedTheme,
+  DEFAULT_FONT_SANS,
   REFINED_DARK_BASE,
   REFINED_LIGHT_BASE,
   parseOklch,

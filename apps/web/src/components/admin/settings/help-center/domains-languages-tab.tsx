@@ -50,7 +50,10 @@ interface DomainsLanguagesTabProps {
 }
 
 export function DomainsLanguagesTab({ config }: DomainsLanguagesTabProps) {
-  const { billingEnabled } = useRouteContext({ from: '__root__' })
+  const billingEnabled = useRouteContext({
+    from: '__root__',
+    select: (context) => context.billingEnabled,
+  })
   return (
     <div className="space-y-6">
       {billingEnabled ? null : <DomainCard domain={config.domain} />}

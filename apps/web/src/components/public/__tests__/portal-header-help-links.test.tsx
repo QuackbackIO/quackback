@@ -9,10 +9,15 @@ const { mockPathname, mockGetRouteContext } = vi.hoisted(() => ({
 }))
 
 vi.mock('@tanstack/react-router', () => ({
-  useRouter: () => ({ invalidate: vi.fn(), navigate: vi.fn() }),
+  useRouter: () => ({
+    invalidate: vi.fn(),
+    navigate: vi.fn(),
+    state: { location: { pathname: mockPathname.value } },
+  }),
   useRouterState: ({ select }: { select: (s: unknown) => unknown }) =>
     select({ location: { pathname: mockPathname.value } }),
-  useRouteContext: () => mockGetRouteContext(),
+  useRouteContext: (opts?: { select?: (context: unknown) => unknown }) =>
+    opts?.select ? opts.select(mockGetRouteContext()) : mockGetRouteContext(),
   Link: ({
     to,
     children,

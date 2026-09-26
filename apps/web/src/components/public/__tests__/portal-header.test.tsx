@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, cleanup } from '@testing-library/react'
+import { useState, type ReactNode } from 'react'
+import { act, render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 
 // vi.hoisted ensures these mocks are available when the vi.mock factory runs
@@ -15,6 +16,7 @@ const {
   mockInvalidateQueries,
   mockRemoveQueries,
   mockSignOut,
+  linkRenders,
 } = vi.hoisted(() => ({
   mockGetRouteContext: vi.fn(),
   mockOpenAuthPopover: vi.fn(),
@@ -25,13 +27,20 @@ const {
   mockInvalidateQueries: vi.fn(() => Promise.resolve()),
   mockRemoveQueries: vi.fn(() => Promise.resolve()),
   mockSignOut: vi.fn(() => Promise.resolve()),
+  // The label (or target) of each Link render, to tell which tabs rendered.
+  linkRenders: [] as string[],
 }))
 
 vi.mock('@tanstack/react-router', () => ({
-  useRouter: () => ({ invalidate: vi.fn(), navigate: vi.fn() }),
+  useRouter: () => ({
+    invalidate: vi.fn(),
+    navigate: vi.fn(),
+    state: { location: { pathname: '/' } },
+  }),
   useRouterState: ({ select }: { select: (s: unknown) => unknown }) =>
     select({ location: { pathname: '/' } }),
-  useRouteContext: () => mockGetRouteContext(),
+  useRouteContext: (opts?: { select?: (context: unknown) => unknown }) =>
+    opts?.select ? opts.select(mockGetRouteContext()) : mockGetRouteContext(),
   Link: ({
     to,
     children,
@@ -42,11 +51,18 @@ vi.mock('@tanstack/react-router', () => ({
     children: React.ReactNode
     className?: string
     [key: string]: unknown
-  }) => (
-    <a href={to} className={className} {...(rest as React.HTMLAttributes<HTMLAnchorElement>)}>
-      {children}
-    </a>
-  ),
+  }) => {
+    const text = [children]
+      .flat()
+      .filter((part) => typeof part === 'string')
+      .join('')
+    linkRenders.push(text || to)
+    return (
+      <a href={to} className={className} {...(rest as React.HTMLAttributes<HTMLAnchorElement>)}>
+        {children}
+      </a>
+    )
+  },
 }))
 
 vi.mock('next-themes', () => ({
@@ -93,7 +109,9 @@ vi.mock('@/components/shared/user-stats', () => ({
 }))
 
 import { PortalHeader } from '../portal-header'
+import { PreviewDraftProvider, type PortalPreviewDraft } from '../preview-draft-context'
 import { VIEWER_SCOPED_PORTAL_QUERY_KEYS } from '@/lib/client/queries/portal'
+import { DEFAULT_FEATURE_FLAGS, getProductFlagUpdate } from '@/lib/shared/types/settings'
 
 const loggedInSession = {
   user: {
@@ -233,5 +251,73 @@ describe('PortalHeader — Sign up button visibility', () => {
     renderHeader({ userRole: null, isLoggedIn: false })
     expect(screen.getByRole('button', { name: /log in/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /sign up/i })).toBeNull()
+  })
+})
+
+describe('PortalHeader branding preview drafts', () => {
+  afterEach(() => cleanup())
+
+  // The admin's branding preview streams unsaved drafts into the portal. The
+  // header shows only the navigation draft, so a stylesheet or welcome-card
+  // edit renders none of it. The header asks which sign-in methods exist once
+  // per render, which counts its renders.
+  it('renders again for a navigation draft only, and then only the tab it changed', () => {
+    mockGetRouteContext.mockReturnValue({
+      session: null,
+      settings: {
+        featureFlags: { ...DEFAULT_FEATURE_FLAGS, ...getProductFlagUpdate('feedback', true) },
+      },
+      registeredAuthProviders: [],
+    })
+    const drafts: {
+      setDraft?: (draft: Omit<PortalPreviewDraft, 'css'>) => void
+      setCss?: (css: string) => void
+    } = {}
+    function Preview({ children }: { children: ReactNode }) {
+      const [draft, setDraft] = useState<Omit<PortalPreviewDraft, 'css'>>({})
+      const [css, setCss] = useState('')
+      drafts.setDraft = setDraft
+      drafts.setCss = setCss
+      return (
+        <PreviewDraftProvider draft={draft} css={css}>
+          {children}
+        </PreviewDraftProvider>
+      )
+    }
+    render(
+      <IntlProvider locale="en" defaultLocale="en">
+        <Preview>
+          <PortalHeader orgName="Acme" showThemeToggle={false} />
+        </Preview>
+      </IntlProvider>
+    )
+    const renders = () => mockHasAny.mock.calls.length
+    const settled = renders()
+    expect(screen.getByRole('link', { name: 'Roadmap' })).toBeInTheDocument()
+
+    act(() => drafts.setCss!(':root { --font-sans: Inter; }'))
+    act(() =>
+      drafts.setDraft!({
+        welcomeCard: { body: { type: 'doc', content: [{ type: 'paragraph' }] } },
+      })
+    )
+    expect(renders()).toBe(settled)
+
+    linkRenders.length = 0
+    act(() =>
+      drafts.setDraft!({
+        nav: {
+          items: [
+            { id: 'feedback', type: 'feedback' },
+            { id: 'roadmap', type: 'roadmap', label: 'Plans' },
+          ],
+        },
+      })
+    )
+    expect(renders()).toBe(settled + 1)
+    expect(screen.getByRole('link', { name: 'Plans' })).toBeInTheDocument()
+    expect(linkRenders).toContain('Plans')
+    expect(linkRenders).not.toContain('Feedback')
+    expect(linkRenders).not.toContain('Changelog')
   })
 })

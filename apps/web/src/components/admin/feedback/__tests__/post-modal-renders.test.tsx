@@ -70,7 +70,10 @@ vi.mock('@/components/shared/modal-header', () => ({
 }))
 vi.mock('@/components/shared/modal-footer', () => ({ ModalFooter: () => null }))
 
-const { PostModal } = await import('../post-modal')
+const { PostModal } = await import('@/components/admin/entity-modals')
+// The content chunk the modal loads on open, imported ahead so opening does
+// not wait on its transform.
+await import('../post-modal')
 const { adminQueries } = await import('@/lib/client/queries/admin')
 const { postOwnerQueries } = await import('@/lib/client/queries/post-owner')
 const { mergeSuggestionQueries } = await import('@/lib/client/queries/signals')

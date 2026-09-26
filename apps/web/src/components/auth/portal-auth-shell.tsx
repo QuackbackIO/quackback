@@ -27,19 +27,31 @@ interface PortalAuthShellProps {
  * (Linear, Stripe, Vercel): brand mark anchored at top, headline +
  * optional subheading, the form, then a footer for the cross-link.
  */
-export function PortalAuthShell({ heading, subheading, children, footer }: PortalAuthShellProps) {
-  const ctx = useRouteContext({ from: '__root__' }) as {
-    settings?: {
-      brandingConfig?: BrandingConfig
-      customCss?: string
-      visualTheme?: 'legacy' | 'refined'
-    }
+interface AuthShellRootContext {
+  settings?: {
+    brandingConfig?: BrandingConfig
+    customCss?: string
     visualTheme?: 'legacy' | 'refined'
   }
-  const brandingConfig = ctx.settings?.brandingConfig
-  const customCss = ctx.settings?.customCss ?? ''
-  const visualTheme =
-    ctx.visualTheme === 'refined' || ctx.settings?.visualTheme === 'refined' ? 'refined' : 'legacy'
+  visualTheme?: 'legacy' | 'refined'
+}
+
+export function PortalAuthShell({ heading, subheading, children, footer }: PortalAuthShellProps) {
+  const settings = useRouteContext({
+    from: '__root__',
+    select: (context) => (context as AuthShellRootContext).settings,
+  })
+  const visualTheme = useRouteContext({
+    from: '__root__',
+    select: (context) => {
+      const ctx = context as AuthShellRootContext
+      return ctx.visualTheme === 'refined' || ctx.settings?.visualTheme === 'refined'
+        ? 'refined'
+        : 'legacy'
+    },
+  })
+  const brandingConfig = settings?.brandingConfig
+  const customCss = settings?.customCss ?? ''
 
   const themeStyles = useMemo(
     () => generateWorkspaceThemeCSS(brandingConfig, visualTheme),

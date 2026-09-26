@@ -21,6 +21,8 @@ import path from 'node:path'
 const SRC = path.resolve(__dirname, '../../..')
 
 const LIST_PAGES = [
+  // The layout around every admin page, which opens the entity modals.
+  'routes/admin.tsx',
   'routes/admin/changelog.tsx',
   'routes/admin/help-center.tsx',
   'routes/admin/help-center.index.tsx',
@@ -31,6 +33,7 @@ const HEAVY_MODULES: Record<string, string> = {
   'components/ui/datetime-picker.tsx': 'the date-time picker',
   'components/admin/changelog/changelog-modal.tsx': 'the changelog entry modal',
   'components/admin/help-center/article-modal.tsx': 'the article modal',
+  'components/admin/feedback/post-modal.tsx': 'the post modal',
 }
 
 const HEAVY_PACKAGES: { pattern: RegExp; what: string }[] = [

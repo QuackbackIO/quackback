@@ -5,7 +5,7 @@
  * replied later is not the starter, and one teammate's view never lists
  * another's threads.
  */
-import { afterAll, afterEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createId,
   type ConversationId,
@@ -15,33 +15,26 @@ import {
 } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 
-if (!process.env.BASE_URL?.startsWith('http')) process.env.BASE_URL = 'http://localhost:3000'
-process.env.SECRET_KEY ??= 'test-secret-key-with-at-least-32-characters'
+import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
+import { conversations, conversationMessages, principal, user } from '@/lib/server/db'
 
-import {
-  db,
-  conversations,
-  conversationMessages,
-  principal,
-  user,
-  inArray,
-  sql,
-} from '@/lib/server/db'
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
+  db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
+}))
+
 import { listConversationsForAgent } from '../conversation.query'
 
-let available = false
-try {
-  await db.execute(sql`select 1`)
-  available = true
-} catch {
-  // Local/unit-only runs without Postgres skip this integration proof.
-}
+const fixture = await createDbTestFixture({
+  probe: async (db) => {
+    await db.select({ id: conversations.id }).from(conversations).limit(0)
+    await db.select({ id: conversationMessages.id }).from(conversationMessages).limit(0)
+  },
+})
 
 let agentA: PrincipalId | null = null
 let agentB: PrincipalId | null = null
 let visitorId: PrincipalId | null = null
-let userIds: UserId[] = []
-let seededIds: ConversationId[] = []
 
 function agentActor(id: PrincipalId | null): Actor {
   return {
@@ -58,7 +51,7 @@ async function seedMessage(
   senderType: 'agent' | 'visitor',
   createdAt: Date
 ) {
-  await db.insert(conversationMessages).values({
+  await testDb.insert(conversationMessages).values({
     id: createId('conversation_message') as ConversationMessageId,
     conversationId,
     principalId: authorId,
@@ -75,16 +68,15 @@ async function seedFixtures() {
   const ua = createId('user') as UserId
   const ub = createId('user') as UserId
   const uv = createId('user') as UserId
-  userIds = [ua, ub, uv]
   agentA = createId('principal') as PrincipalId
   agentB = createId('principal') as PrincipalId
   visitorId = createId('principal') as PrincipalId
-  await db.insert(user).values([
+  await testDb.insert(user).values([
     { id: ua, name: 'Agent A' },
     { id: ub, name: 'Agent B' },
     { id: uv, name: 'Visitor' },
   ])
-  await db.insert(principal).values([
+  await testDb.insert(principal).values([
     { id: agentA, userId: ua, role: 'admin', type: 'user', createdAt: new Date() },
     { id: agentB, userId: ub, role: 'admin', type: 'user', createdAt: new Date() },
     { id: visitorId, userId: uv, role: 'user', type: 'user', createdAt: new Date() },
@@ -96,8 +88,7 @@ async function seedFixtures() {
   const convVisitorStarted = createId('conversation') as ConversationId
   // Started by agent B — invisible to A's "Created by me".
   const convStartedByB = createId('conversation') as ConversationId
-  seededIds = [convStartedByA, convVisitorStarted, convStartedByB]
-  await db.insert(conversations).values([
+  await testDb.insert(conversations).values([
     { id: convStartedByA, visitorPrincipalId: visitorId, channel: 'messenger' },
     { id: convVisitorStarted, visitorPrincipalId: visitorId, channel: 'messenger' },
     { id: convStartedByB, visitorPrincipalId: visitorId, channel: 'messenger' },
@@ -112,24 +103,11 @@ async function seedFixtures() {
   return { convStartedByA, convVisitorStarted, convStartedByB }
 }
 
-afterEach(async () => {
-  if (!available) return
-  if (seededIds.length > 0)
-    await db.delete(conversations).where(inArray(conversations.id, seededIds))
-  const principals = [agentA, agentB, visitorId].filter((p): p is PrincipalId => !!p)
-  if (principals.length > 0) await db.delete(principal).where(inArray(principal.id, principals))
-  if (userIds.length > 0) await db.delete(user).where(inArray(user.id, userIds))
-  agentA = agentB = visitorId = null
-  userIds = []
-  seededIds = []
-})
+describe.skipIf(!fixture.available)('created-by-me inbox filter', () => {
+  beforeEach(fixture.begin)
+  afterEach(fixture.rollback)
+  afterAll(fixture.close)
 
-afterAll(async () => {
-  const client = (db as unknown as { $client?: { end?: () => Promise<void> } }).$client
-  await client?.end?.()
-})
-
-describe.skipIf(!available)('created-by-me inbox filter', () => {
   it('lists exactly the conversations whose first message the agent authored', async () => {
     const { convStartedByA, convVisitorStarted, convStartedByB } = await seedFixtures()
 

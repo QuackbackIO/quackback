@@ -3,6 +3,8 @@ import {
   themePresets,
   primaryPresetIds,
   extractMinimal,
+  unbrandedTheme,
+  DEFAULT_FONT_SANS,
   extractCssVariables,
   generateReadableCSS,
   isGeneratedThemeCss,
@@ -14,6 +16,7 @@ import {
   type MinimalThemeVariables,
   type ThemeMode,
   type ParsedCssVariables,
+  type ThemeBaseline,
 } from '@/lib/shared/theme'
 import { useSaveBrandingTheme } from '@/lib/client/mutations/settings'
 
@@ -23,7 +26,7 @@ export const FONT_OPTIONS = [
   {
     id: 'inter',
     name: 'Inter',
-    value: '"Inter", ui-sans-serif, system-ui, sans-serif',
+    value: DEFAULT_FONT_SANS,
     category: 'Sans Serif',
   },
   {
@@ -119,9 +122,6 @@ export const FONT_OPTIONS = [
   },
 ] as const
 
-const DEFAULT_FONT = '"Inter", ui-sans-serif, system-ui, sans-serif'
-const DEFAULT_RADIUS = 0.625
-
 /** The 9 core color keys used for preset matching */
 const CORE_COLOR_KEYS = [
   'primary',
@@ -139,6 +139,8 @@ interface UseBrandingStateOptions {
   initialLogoUrl: string | null
   initialThemeConfig: ThemeConfig
   initialCustomCss: string
+  /** The workspace's visual theme, which decides what an unbranded portal looks like. */
+  baseline?: ThemeBaseline
 }
 
 export interface BrandingState {
@@ -165,18 +167,36 @@ export interface BrandingState {
   saveSuccess: boolean
 }
 
-function buildInitialCss(initialCustomCss: string, initialThemeConfig: ThemeConfig): string {
-  const defaultPreset = themePresets.default
+/**
+ * A preset's variables for one mode. "Default" is whatever this workspace
+ * renders unbranded, so picking it (or never picking anything) matches the
+ * portal visitors already see.
+ */
+function presetMinimal(
+  presetId: string,
+  mode: 'light' | 'dark',
+  baseline: ThemeBaseline
+): Partial<MinimalThemeVariables> | null {
+  if (presetId === 'default') return unbrandedTheme(mode, baseline)
+  const preset = themePresets[presetId]
+  return preset ? extractMinimal(preset[mode]) : null
+}
+
+function buildInitialCss(
+  initialCustomCss: string,
+  initialThemeConfig: ThemeConfig,
+  baseline: ThemeBaseline
+): string {
   const parsed = extractCssVariables(initialCustomCss)
   // Structured brandingConfig wins; CSS-parsed values fill gaps so a
   // CSS-only palette (empty/partial config) is not replaced by defaults.
   const lightMinimal: Partial<MinimalThemeVariables> = {
-    ...extractMinimal(defaultPreset.light),
+    ...unbrandedTheme('light', baseline),
     ...parseCssToMinimal(parsed.light),
     ...(initialThemeConfig.light ?? {}),
   }
   const darkMinimal: Partial<MinimalThemeVariables> = {
-    ...extractMinimal(defaultPreset.dark),
+    ...unbrandedTheme('dark', baseline),
     ...parseCssToMinimal(parsed.dark),
     ...(initialThemeConfig.dark ?? {}),
   }
@@ -191,7 +211,7 @@ function buildInitialCss(initialCustomCss: string, initialThemeConfig: ThemeConf
 }
 
 export function useBrandingState(options: UseBrandingStateOptions): BrandingState {
-  const { initialLogoUrl, initialThemeConfig, initialCustomCss } = options
+  const { initialLogoUrl, initialThemeConfig, initialCustomCss, baseline = 'legacy' } = options
   const { mutateAsync: saveBrandingTheme } = useSaveBrandingTheme()
 
   // ============================================
@@ -212,7 +232,7 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
     else if (mode === 'light') setPreviewMode('light')
   }, [])
   const [cssText, setCssText] = useState(() =>
-    buildInitialCss(initialCustomCss, initialThemeConfig)
+    buildInitialCss(initialCustomCss, initialThemeConfig, baseline)
   )
 
   const [isSaving, setIsSaving] = useState(false)
@@ -229,15 +249,14 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
   const previewModeDisabled: 'light' | 'dark' | null =
     themeMode === 'dark' ? 'light' : themeMode === 'light' ? 'dark' : null
 
-  const defaultPreset = themePresets.default
-  const defaultLightMinimal = useMemo(() => extractMinimal(defaultPreset.light), [defaultPreset])
-  const defaultDarkMinimal = useMemo(() => extractMinimal(defaultPreset.dark), [defaultPreset])
+  const unbrandedLight = useMemo(() => unbrandedTheme('light', baseline), [baseline])
+  const unbrandedDark = useMemo(() => unbrandedTheme('dark', baseline), [baseline])
 
   const font = useMemo(() => {
     const light = parsedCssVariables.light['--font-sans']
     const dark = parsedCssVariables.dark['--font-sans']
-    if (themeMode === 'dark') return dark || light || DEFAULT_FONT
-    return light || dark || DEFAULT_FONT
+    if (themeMode === 'dark') return dark || light || DEFAULT_FONT_SANS
+    return light || dark || DEFAULT_FONT_SANS
   }, [parsedCssVariables, themeMode])
 
   const currentFontId = useMemo(
@@ -249,35 +268,34 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
     const light = parsedCssVariables.light['--radius']
     const dark = parsedCssVariables.dark['--radius']
     const raw = themeMode === 'dark' ? dark || light : light || dark
-    if (!raw) return DEFAULT_RADIUS
+    const defaultRadius = parseFloat(unbrandedLight.radius ?? '')
+    if (!raw) return defaultRadius
     const match = raw.match(/^([\d.]+)rem$/)
-    return match ? parseFloat(match[1]) : DEFAULT_RADIUS
-  }, [parsedCssVariables, themeMode])
+    return match ? parseFloat(match[1]) : defaultRadius
+  }, [parsedCssVariables, themeMode, unbrandedLight])
 
   const activePresetId = useMemo(() => {
     const parsedLight = parseCssToMinimal(parsedCssVariables.light)
     for (const id of primaryPresetIds) {
-      const preset = themePresets[id]
-      if (!preset) continue
-      const presetLight = extractMinimal(preset.light)
+      const presetLight = presetMinimal(id, 'light', baseline)
+      if (!presetLight) continue
       const match = CORE_COLOR_KEYS.every((key) => parsedLight[key] === presetLight[key])
       if (match) return id
     }
     return null
-  }, [parsedCssVariables])
+  }, [parsedCssVariables, baseline])
 
   // ============================================
   // Actions — all modify cssText
   // ============================================
   const setPreset = useCallback(
     (presetId: string) => {
-      const preset = themePresets[presetId]
-      if (!preset) return
-      const lightMinimal = extractMinimal(preset.light)
-      const darkMinimal = extractMinimal(preset.dark)
+      const lightMinimal = presetMinimal(presetId, 'light', baseline)
+      const darkMinimal = presetMinimal(presetId, 'dark', baseline)
+      if (!lightMinimal || !darkMinimal) return
       setCssText(generateReadableCSS(lightMinimal, darkMinimal, themeMode))
     },
-    [themeMode]
+    [themeMode, baseline]
   )
 
   const setFont = useCallback((fontValue: string) => {
@@ -301,11 +319,8 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
       const lightParsed = parseCssToMinimal(parsed.light)
       const darkParsed = parseCssToMinimal(parsed.dark)
 
-      const lightMinimal: Partial<MinimalThemeVariables> = {
-        ...defaultLightMinimal,
-        ...lightParsed,
-      }
-      const darkMinimal: Partial<MinimalThemeVariables> = { ...defaultDarkMinimal, ...darkParsed }
+      const lightMinimal: Partial<MinimalThemeVariables> = { ...unbrandedLight, ...lightParsed }
+      const darkMinimal: Partial<MinimalThemeVariables> = { ...unbrandedDark, ...darkParsed }
 
       const themeConfig: ThemeConfig = {
         themeMode,
@@ -345,8 +360,8 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
     themeMode,
     font,
     radius,
-    defaultLightMinimal,
-    defaultDarkMinimal,
+    unbrandedLight,
+    unbrandedDark,
     saveBrandingTheme,
     initialCustomCss,
   ])

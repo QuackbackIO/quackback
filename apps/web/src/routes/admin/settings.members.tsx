@@ -5,6 +5,7 @@ import type { UserId, PrincipalId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { settingsQueries } from '@/lib/client/queries/settings'
+import { settingsReadBatch } from '@/lib/client/queries/settings-batch'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -24,25 +25,31 @@ export const Route = createFileRoute('/admin/settings/members')({
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.MEMBER_VIEW)
     const { settings, queryClient, principal } = context
+    // The Teams tab lists teams, a read gated on team.manage rather than the
+    // page's member.view, so only a viewer who may read them is shown the tab.
+    const canManageTeams = !!context.permissions?.includes(PERMISSIONS.TEAM_MANAGE)
+    const ensure = settingsReadBatch(queryClient)
     await Promise.all([
-      queryClient.ensureQueryData(settingsQueries.teamMembersAndInvitations()),
-      queryClient.ensureQueryData(settingsQueries.teams()),
+      ensure(settingsQueries.teamMembersAndInvitations()),
+      canManageTeams ? ensure(settingsQueries.teams()) : undefined,
       // Every row's actions menu lists the custom roles (and the Roles tab
       // shows them), under the same member.view gate as the roster.
-      queryClient.ensureQueryData(settingsQueries.roles()),
+      ensure(settingsQueries.roles()),
     ])
 
     return {
       settings,
       currentMember: principal as { id: PrincipalId; role: 'admin' | 'member'; userId: UserId },
+      canManageTeams,
     }
   },
   component: MembersPage,
 })
 
 function MembersPage() {
-  const { settings, currentMember } = Route.useLoaderData()
-  const { tab = 'members' } = Route.useSearch()
+  const { settings, currentMember, canManageTeams } = Route.useLoaderData()
+  const { tab: requested = 'members' } = Route.useSearch()
+  const tab = requested === 'teams' && !canManageTeams ? 'members' : requested
   const navigate = Route.useNavigate()
 
   const setTab = (value: string) => {
@@ -65,15 +72,17 @@ function MembersPage() {
       <Tabs value={tab} onValueChange={setTab} variant="line">
         <TabsList>
           <TabsTrigger value="members">Members</TabsTrigger>
-          <TabsTrigger value="teams">Teams</TabsTrigger>
+          {canManageTeams && <TabsTrigger value="teams">Teams</TabsTrigger>}
           <TabsTrigger value="roles">Roles</TabsTrigger>
         </TabsList>
         <TabsContent value="members">
           <MembersTab workspaceName={settings!.name} currentMember={currentMember} />
         </TabsContent>
-        <TabsContent value="teams">
-          <TeamsTab />
-        </TabsContent>
+        {canManageTeams && (
+          <TabsContent value="teams">
+            <TeamsTab />
+          </TabsContent>
+        )}
         <TabsContent value="roles">
           <RolesTab />
         </TabsContent>

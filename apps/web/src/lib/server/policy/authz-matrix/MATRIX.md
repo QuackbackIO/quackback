@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 711 surfaces
+### Server functions (`requireAuth`) — 714 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -411,6 +411,9 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/conversation.ts`::setInboxTranslationEnabledFn | conversation.manage |
 | `lib/server/functions/conversation.ts`::dismissInboxTranslationSuggestionFn | conversation.manage |
 | `lib/server/functions/customer-context.ts`::fetchCustomerContextFn | integration.view |
+| `lib/server/functions/data-runs.ts`::listExportRunsFn | settings.manage |
+| `lib/server/functions/data-runs.ts`::listImportRunsFn | settings.manage |
+| `lib/server/functions/data-runs.ts`::listImportRunsFn | ADMIN-ONLY |
 | `lib/server/functions/external-item-search.ts`::searchExternalItemsFn | integration.manage |
 | `lib/server/functions/external-statuses.ts`::fetchExternalStatusesFn | integration.manage |
 | `lib/server/functions/feature-flags.ts`::updateFeatureFlagsFn | settings.manage |
@@ -1022,7 +1025,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-219 of 1041 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+220 of 1044 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -1111,6 +1114,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/public-posts.ts`::listPublicRoadmapsFn | server-fn |
 | `lib/server/functions/public-profile.ts`::getPublicUserProfileFn | server-fn |
 | `lib/server/functions/recovery-codes-consume.ts`::consumeRecoveryCodeFn | server-fn |
+| `lib/server/functions/settings-reads.ts`::readSettingsTogetherFn | server-fn |
 | `lib/server/functions/settings-utils.ts`::fetchSettingsHeaderLogoData | server-fn |
 | `lib/server/functions/settings-utils.ts`::fetchSettingsLogoData | server-fn |
 | `lib/server/functions/settings.ts`::fetchBrandingConfig | server-fn |

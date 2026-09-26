@@ -197,3 +197,16 @@ describe('sendAgentMessage — translatedFrom propagation (P2-D.1)', () => {
     expect(publishAgentConversationEvent).not.toHaveBeenCalled()
   })
 })
+
+describe('sendAgentMessage: the inbox list signal', () => {
+  // A reply writes the message and the conversation row together, and sends
+  // the row as its own event; the inbox list refreshes on that one, so the
+  // message event says it need not.
+  it('marks the message event as sent alongside the conversation update', async () => {
+    await sendAgentMessage(conversationId, 'Hi', agent, agentActor)
+
+    expect(publishConversationUpdate).toHaveBeenCalledTimes(1)
+    expect(publishConversationMessage).toHaveBeenCalledTimes(1)
+    expect(publishConversationMessage.mock.calls[0]![2]).toEqual({ conversationUpdated: true })
+  })
+})

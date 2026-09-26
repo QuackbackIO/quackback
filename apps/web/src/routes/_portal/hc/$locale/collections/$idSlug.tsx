@@ -115,7 +115,8 @@ function CollectionPage() {
   const { locale } = Route.useParams()
   const { category, articles, allCategories, subcategories } = Route.useLoaderData()
   const { helpCenterConfig } = helpCenterApi.useLoaderData()
-  const { baseUrl, settings } = Route.useRouteContext()
+  const baseUrl = Route.useRouteContext({ select: (context) => context.baseUrl })
+  const settings = Route.useRouteContext({ select: (context) => context.settings })
   const askAiEnabled = !!settings?.featureFlags?.helpCenter
 
   const breadcrumbs = buildCategoryBreadcrumbs({

@@ -7,7 +7,7 @@ import { ChatBubbleOvalLeftEllipsisIcon } from '@heroicons/react/24/outline'
 import { EmptyState } from '@/components/shared/empty-state'
 import { FeedbackContainer } from '@/components/public/feedback/feedback-container'
 import { PortalWelcomeCard } from '@/components/public/feedback/portal-welcome-card'
-import { usePreviewDraft } from '@/components/public/preview-draft-context'
+import { usePreviewWelcomeCard } from '@/components/public/preview-draft-context'
 import { portalQueries, useSeedPortalStatusesCache } from '@/lib/client/queries/portal'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { isStatusPagePublished } from '@/lib/shared/status-settings'
@@ -131,22 +131,30 @@ export const Route = createFileRoute('/_portal/')({
 })
 
 function PublicPortalPage() {
-  const { settings } = useRouteContext({ from: '__root__' })
-  // Admin branding preview: unsaved welcome-card drafts win over the saved
-  // config. Null outside the preview iframe.
-  const previewDraft = usePreviewDraft()
-  const welcomeCard = previewDraft?.welcomeCard ?? settings?.publicPortalConfig?.welcomeCard
-
   return (
     <div className="mx-auto max-w-6xl w-full px-4 sm:px-6 py-6">
       {/* Hero renders immediately (context-only, no feed dependency). */}
-      <PortalWelcomeCard welcomeCard={welcomeCard} />
+      <PortalHero />
       {/* Only the feed region suspends on the streamed portalData query. */}
       <Suspense fallback={<PortalFeedSkeleton />}>
         <PortalFeed />
       </Suspense>
     </div>
   )
+}
+
+/**
+ * The welcome card. In the admin branding preview an unsaved welcome-card
+ * draft wins over the saved config; read here rather than by the page, a
+ * draft edit re-renders the card and not the feed beside it.
+ */
+function PortalHero() {
+  const draftWelcomeCard = usePreviewWelcomeCard()
+  const savedWelcomeCard = useRouteContext({
+    from: '__root__',
+    select: (context) => context.settings?.publicPortalConfig?.welcomeCard,
+  })
+  return <PortalWelcomeCard welcomeCard={draftWelcomeCard ?? savedWelcomeCard} />
 }
 
 /**
@@ -157,7 +165,8 @@ function PublicPortalPage() {
  */
 function PortalFeed() {
   const intl = useIntl()
-  const { session, settings } = useRouteContext({ from: '__root__' })
+  const session = useRouteContext({ from: '__root__', select: (context) => context.session })
+  const settings = useRouteContext({ from: '__root__', select: (context) => context.settings })
   const { showPoweredBy } = Route.useLoaderData()
   const search = Route.useSearch()
 

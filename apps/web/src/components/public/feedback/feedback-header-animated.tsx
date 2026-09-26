@@ -1,5 +1,13 @@
 import type { BoardId } from '@quackback/ids'
-import { Suspense, useState, useCallback, useEffect, useRef } from 'react'
+import {
+  Suspense,
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  useSyncExternalStore,
+  type RefObject,
+} from 'react'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { useRouter, useRouteContext } from '@tanstack/react-router'
@@ -68,7 +76,7 @@ export function FeedbackHeaderAnimated({
   const intl = useIntl()
   const router = useRouter()
   const queryClient = useQueryClient()
-  const { session } = useRouteContext({ from: '__root__' })
+  const session = useRouteContext({ from: '__root__', select: (context) => context.session })
   const [expanded, setExpanded] = useState(false)
   const [error, setError] = useState('')
   const { openAuthPopover } = useAuthPopover()
@@ -118,7 +126,7 @@ export function FeedbackHeaderAnimated({
   const { canSubmit, canPostAnonymously, noAccess } = resolveSubmitState(boardCanSubmit, session)
   const canUploadMedia = richMediaEnabled && (!!session?.user || canPostAnonymously)
 
-  const [title, setTitle] = useState('')
+  const [title] = useState(createTitleStore)
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, unknown>>({})
   const titleInputRef = useRef<HTMLInputElement>(null)
 
@@ -136,13 +144,6 @@ export function FeedbackHeaderAnimated({
     }
   }, [expanded])
 
-  // Find similar posts as user types (for duplicate detection)
-  // Searches across ALL boards to find potential duplicates
-  const { posts: similarPosts } = useSimilarPosts({
-    title,
-    enabled: expanded,
-  })
-
   // The details as written. Typing keeps them here rather than in state, so a
   // keystroke never re-renders the header around the editor; the post reads
   // them (serialized once) when it is submitted. Only the open composer's
@@ -157,6 +158,7 @@ export function FeedbackHeaderAnimated({
 
   async function handleSubmit() {
     setError('')
+    const typedTitle = title.get()
 
     if (!selectedBoardId) {
       setError(
@@ -168,7 +170,7 @@ export function FeedbackHeaderAnimated({
       return
     }
 
-    if (!title.trim()) {
+    if (!typedTitle.trim()) {
       setError(
         intl.formatMessage({
           id: 'portal.feedback.header.errorAddTitle',
@@ -218,7 +220,7 @@ export function FeedbackHeaderAnimated({
       const details = detailsRef.current
       const result = await createPost.mutateAsync({
         boardId: selectedBoardId as BoardId,
-        title: title.trim(),
+        title: typedTitle.trim(),
         content: details?.markdown() ?? '',
         contentJson: details?.json() ?? null,
         ...(boardCustomFields.length > 0 ? { customFields: customFieldValues } : {}),
@@ -257,7 +259,7 @@ export function FeedbackHeaderAnimated({
 
   function resetForm() {
     setSelectedBoardId(defaultBoardId || '')
-    setTitle('')
+    title.set('')
     detailsRef.current = null
     setCustomFieldValues({})
     setError('')
@@ -327,30 +329,11 @@ export function FeedbackHeaderAnimated({
         </AnimatePresence>
 
         {/* Title input - always visible, grows when expanded */}
-        <motion.input
-          ref={titleInputRef}
-          type="text"
-          placeholder={intl.formatMessage({
-            id: 'portal.feedback.header.titlePlaceholder',
-            defaultMessage: "What's your idea?",
-          })}
-          value={title}
-          aria-label={intl.formatMessage({
-            id: 'portal.feedback.header.titleLabel',
-            defaultMessage: 'Feedback title',
-          })}
-          onChange={(e) => {
-            setTitle(e.target.value)
-            if (!expanded) setExpanded(true)
-          }}
-          onFocus={() => !expanded && setExpanded(true)}
-          className="flex-1 bg-transparent border-0 outline-none text-foreground font-semibold placeholder:text-muted-foreground/60 placeholder:font-normal caret-primary focus-visible:ring-2 focus-visible:ring-ring/50"
-          initial={false}
-          animate={{
-            fontSize: expanded ? '1.25rem' : '1rem',
-            lineHeight: expanded ? '1.75rem' : '1.5rem',
-          }}
-          transition={{ duration: 0.2 }}
+        <TitleInput
+          title={title}
+          inputRef={titleInputRef}
+          expanded={expanded}
+          onExpand={() => setExpanded(true)}
         />
       </div>
 
@@ -428,11 +411,7 @@ export function FeedbackHeaderAnimated({
             )}
 
             {/* Similar posts card - shown above footer as pre-submit prompt */}
-            <SimilarPostsCard
-              posts={similarPosts}
-              show={title.length >= 5}
-              className="px-4 sm:px-5 pb-3"
-            />
+            <SimilarPostsPrompt title={title} enabled={expanded} />
 
             {/* Footer with auth and actions */}
             <motion.div
@@ -538,4 +517,97 @@ export function FeedbackHeaderAnimated({
       </AnimatePresence>
     </motion.div>
   )
+}
+
+/**
+ * The title as typed, held outside React state: the field and the similar-posts
+ * search read it as it changes, and the composer reads it when it acts on
+ * it, so a keystroke renders the field and the search, not the composer.
+ * It is kept here rather than shared with the widget's composer: a module
+ * the two alone import would be a chunk, and a request, of its own.
+ */
+interface TitleStore {
+  get(): string
+  set(next: string): void
+  subscribe(onChange: () => void): () => void
+}
+
+function createTitleStore(): TitleStore {
+  let value = ''
+  const listeners = new Set<() => void>()
+  return {
+    get: () => value,
+    set(next) {
+      if (next === value) return
+      value = next
+      for (const listener of listeners) listener()
+    },
+    subscribe(onChange) {
+      listeners.add(onChange)
+      return () => {
+        listeners.delete(onChange)
+      }
+    },
+  }
+}
+
+/** What a component reads from the title; it renders again only when that changes. */
+function useTitle<T = string>(
+  title: TitleStore,
+  select: (value: string) => T = (value) => value as T
+): T {
+  const read = () => select(title.get())
+  return useSyncExternalStore(title.subscribe, read, read)
+}
+
+function TitleInput({
+  title,
+  inputRef,
+  expanded,
+  onExpand,
+}: {
+  title: TitleStore
+  inputRef: RefObject<HTMLInputElement | null>
+  expanded: boolean
+  onExpand: () => void
+}) {
+  const intl = useIntl()
+  const value = useTitle(title)
+  return (
+    <motion.input
+      ref={inputRef}
+      type="text"
+      placeholder={intl.formatMessage({
+        id: 'portal.feedback.header.titlePlaceholder',
+        defaultMessage: "What's your idea?",
+      })}
+      value={value}
+      aria-label={intl.formatMessage({
+        id: 'portal.feedback.header.titleLabel',
+        defaultMessage: 'Feedback title',
+      })}
+      onChange={(e) => {
+        title.set(e.target.value)
+        if (!expanded) onExpand()
+      }}
+      onFocus={() => !expanded && onExpand()}
+      className="flex-1 bg-transparent border-0 outline-none text-foreground font-semibold placeholder:text-muted-foreground/60 placeholder:font-normal caret-primary focus-visible:ring-2 focus-visible:ring-ring/50"
+      initial={false}
+      animate={{
+        fontSize: expanded ? '1.25rem' : '1rem',
+        lineHeight: expanded ? '1.75rem' : '1.5rem',
+      }}
+      transition={{ duration: 0.2 }}
+    />
+  )
+}
+
+/**
+ * Posts like the one being written (duplicate detection), searched across all
+ * boards as the title is typed.
+ */
+function SimilarPostsPrompt({ title, enabled }: { title: TitleStore; enabled: boolean }) {
+  const value = useTitle(title)
+  const { posts } = useSimilarPosts({ title: value, enabled })
+  return <SimilarPostsCard posts={posts} show={value.length >= 5} className="px-4 sm:px-5 pb-3" />
 }

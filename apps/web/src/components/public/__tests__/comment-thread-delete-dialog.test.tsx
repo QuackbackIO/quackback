@@ -25,10 +25,13 @@ vi.mock('@tanstack/react-router', () => ({
   Link: ({ children }: { children: unknown }) => children,
   useNavigate: () => vi.fn(),
   useRouter: () => ({ invalidate: vi.fn() }),
-  useRouteContext: () => ({
-    settings: { name: 'Acme', brandingData: { logoUrl: null, name: 'Acme' } },
-    session: null,
-  }),
+  useRouteContext: (opts?: { select?: (context: never) => unknown }) => {
+    const context = {
+      settings: { name: 'Acme', brandingData: { logoUrl: null, name: 'Acme' } },
+      session: null,
+    }
+    return opts?.select ? opts.select(context as never) : context
+  },
 }))
 
 vi.mock('../comment-form', () => ({ CommentForm: () => null }))

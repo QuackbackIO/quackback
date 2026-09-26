@@ -61,11 +61,14 @@ export function AuthorHoverCard({
 }: AuthorHoverCardProps) {
   const intl = useIntl()
   const navigate = useNavigate()
-  const ctx = useRouteContext({ from: '__root__' }) as PortalRootContext
-  const teamBadgeLogoUrl = ctx.settings?.brandingData?.logoUrl ?? null
+  const settings = useRouteContext({
+    from: '__root__',
+    select: (context) => (context as PortalRootContext).settings,
+  })
+  const teamBadgeLogoUrl = settings?.brandingData?.logoUrl ?? null
   const teamBadgeLabel =
-    ctx.settings?.brandingData?.name ??
-    ctx.settings?.name ??
+    settings?.brandingData?.name ??
+    settings?.name ??
     intl.formatMessage({ id: 'portal.profile.teamBadge', defaultMessage: 'Team' })
 
   const [open, setOpen] = useState(false)

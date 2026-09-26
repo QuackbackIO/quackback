@@ -6,12 +6,15 @@ import { MentionPicker } from '../mention-picker'
 import type { MentionItem, MentionPickerHandle } from '../mention-picker'
 
 vi.mock('@tanstack/react-router', () => ({
-  useRouteContext: () => ({
-    settings: {
-      brandingData: { logoUrl: 'https://cdn.example.com/logo.png', name: 'Acme' },
-      name: 'Acme',
-    },
-  }),
+  useRouteContext: (opts?: { select?: (context: never) => unknown }) => {
+    const context = {
+      settings: {
+        brandingData: { logoUrl: 'https://cdn.example.com/logo.png', name: 'Acme' },
+        name: 'Acme',
+      },
+    }
+    return opts?.select ? opts.select(context as never) : context
+  },
 }))
 
 const items: MentionItem[] = [
