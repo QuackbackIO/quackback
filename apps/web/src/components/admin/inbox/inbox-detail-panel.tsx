@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { FormattedMessage } from 'react-intl'
 import { useQuery } from '@tanstack/react-query'
-import { Link, useRouteContext } from '@tanstack/react-router'
+import { Link } from '@tanstack/react-router'
 import {
   ArrowTopRightOnSquareIcon,
   BellIcon,
@@ -31,7 +31,6 @@ import type { TicketDTO } from '@/lib/server/domains/tickets'
 import { conversationPanelQueries } from '@/lib/client/queries/conversation-panels'
 
 import { useCopilotTabGate } from '@/lib/client/hooks/use-copilot-tab-gate'
-import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { formatSlaCountdown, dueCountdownTone } from '@/lib/shared/conversation/sla'
 import { PriorityControl } from '@/components/admin/conversation/priority-control'
 import { AssigneeControl } from '@/components/admin/conversation/assignee-control'
@@ -66,6 +65,7 @@ import { MENU_LABEL } from '@/components/ui/menu'
 import { DetailRow as Row, formatDate } from '@/components/shared/detail-row'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
+import { useFeatureFlags } from '@/lib/client/hooks/use-root-context'
 
 const RESOLVED_META = {
   label: 'Resolved',
@@ -232,11 +232,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
   issuePeople,
   visible: isVisible,
 }: InboxDetailPanelProps) {
-  const flags = useRouteContext({
-    from: '/admin',
-    select: (context) =>
-      (context as { settings?: { featureFlags?: FeatureFlags } | null }).settings?.featureFlags,
-  })
+  const flags = useFeatureFlags()
   // The flag + copilot.use gate, shared with the inbox route's
   // `copilotAvailable` so the Ask Copilot affordances can never disagree
   // with the tab actually existing.

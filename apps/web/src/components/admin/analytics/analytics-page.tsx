@@ -1,5 +1,4 @@
 import { lazy, Suspense, useState, type ReactNode } from 'react'
-import { useRouteContext } from '@tanstack/react-router'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { isProductEnabled, type FeatureFlags } from '@/lib/shared/types/settings'
 import { analyticsQueries, type AnalyticsPeriod } from '@/lib/client/queries/analytics'
@@ -37,6 +36,7 @@ import { AnalyticsCsatDistribution } from './analytics-csat-card'
 import { AnalyticsResponseDistribution } from './analytics-response-distribution'
 import { AnalyticsTeammatePerformance } from './analytics-teammate-performance'
 import { ChartSkeleton, StatusChartSkeleton, SectionSkeleton } from './analytics-skeletons'
+import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 // Defer recharts (~580KB minified, including victory-vendor) and the chart
 // primitives that wrap it. Analytics is admin-gated and rarely the first
@@ -147,7 +147,7 @@ const periods: Array<{ value: AnalyticsPeriod; label: string }> = [
 ]
 
 export function AnalyticsPage() {
-  const settings = useRouteContext({ from: '__root__', select: (context) => context.settings })
+  const settings = useWorkspaceSettings()
   const flags = settings?.featureFlags as FeatureFlags | undefined
   // Product reports follow product availability. Visitor reporting is always on.
   const sections = SECTION_NAV_ITEMS.filter(

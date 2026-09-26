@@ -4,6 +4,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { workflowDetailQuery } from '@/lib/client/queries/workflows'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
+import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 const WorkflowBuilder = lazy(() =>
   import('@/components/admin/automation/workflow-builder/workflow-builder').then((m) => ({
@@ -29,7 +30,7 @@ export const Route = createFileRoute('/admin/automation_/workflows/$workflowId')
 /** Gate behind the `supportInbox` flag, mirroring the workflows list route. */
 function WorkflowBuilderPage() {
   const { workflowId } = Route.useParams()
-  const { settings } = Route.useRouteContext()
+  const settings = useWorkspaceSettings()
   const flags = settings?.featureFlags as FeatureFlags | undefined
   if (!flags?.supportInbox) {
     return <Navigate to="/admin/automation/agent" />

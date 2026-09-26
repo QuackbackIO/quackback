@@ -1,10 +1,4 @@
-import {
-  createFileRoute,
-  Navigate,
-  useNavigate,
-  useRouteContext,
-  useLoaderData,
-} from '@tanstack/react-router'
+import { createFileRoute, Navigate, useNavigate, useLoaderData } from '@tanstack/react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
 import { FormattedMessage, useIntl } from 'react-intl'
@@ -26,6 +20,7 @@ import {
   PORTAL_MY_CONVERSATIONS_QUERY_KEY,
 } from '@/lib/client/queries/portal-support'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
+import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 export const Route = createFileRoute('/_portal/support/$conversationId')({
   component: SupportThreadPage,
@@ -42,8 +37,8 @@ function SupportThreadPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { conversationId } = Route.useParams()
-  const session = useRouteContext({ from: '__root__', select: (context) => context.session })
-  const settings = useRouteContext({ from: '__root__', select: (context) => context.settings })
+  const session = useSessionContext()
+  const settings = useWorkspaceSettings()
   const portalLoader = useLoaderData({ from: '/_portal' })
   const portalAvatar =
     portalLoader && 'initialUserData' in portalLoader

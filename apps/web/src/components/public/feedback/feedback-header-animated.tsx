@@ -3,7 +3,7 @@ import { Suspense, useState, useCallback, useEffect, useRef, type RefObject } fr
 import { createValueStore, useStoreValue, type ValueStore } from '@/lib/client/value-store'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
-import { useRouter, useRouteContext } from '@tanstack/react-router'
+import { useRouter } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -30,6 +30,7 @@ import { removeViewerScopedPortalQueries } from '@/lib/client/queries/portal'
 import { resolveSubmitState } from '@/components/public/feedback/submit-permission'
 import { PUBLIC_FEEDBACK_EDITOR_FEATURES } from '@/components/public/feedback/feedback-editor-features'
 import type { EditorDocument } from '@/components/ui/rich-text-editor'
+import { useSessionContext } from '@/lib/client/hooks/use-root-context'
 
 interface BoardOption {
   id: string
@@ -69,7 +70,7 @@ export function FeedbackHeaderAnimated({
   const intl = useIntl()
   const router = useRouter()
   const queryClient = useQueryClient()
-  const session = useRouteContext({ from: '__root__', select: (context) => context.session })
+  const session = useSessionContext()
   const [expanded, setExpanded] = useState(false)
   const [error, setError] = useState('')
   const { openAuthPopover } = useAuthPopover()

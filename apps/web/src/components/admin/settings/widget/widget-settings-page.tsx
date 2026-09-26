@@ -1,11 +1,4 @@
-import {
-  useRouter,
-  useRouteContext,
-  useHydrated,
-  Link,
-  Outlet,
-  useChildMatches,
-} from '@tanstack/react-router'
+import { useRouter, useHydrated, Link, Outlet, useChildMatches } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { useState, useTransition, useMemo, type ReactNode } from 'react'
 import { useTheme } from 'next-themes'
@@ -80,6 +73,7 @@ import { DEFAULT_WIDGET_HOME_CARDS } from '@/lib/shared/types/settings'
 import { WIDGET_HERO_PATTERNS, heroBackdropStyle } from '@/lib/shared/widget/hero-style'
 import { ColorPickerGrid, ColorHexInput } from '@/components/shared/color-picker'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 export function WidgetSettingsGate() {
   const childMatches = useChildMatches()
@@ -96,7 +90,7 @@ function WidgetSettingsPage() {
     ...adminQueries.onboardingStatus(),
     staleTime: 5_000,
   })
-  const settings = useRouteContext({ from: '__root__', select: (context) => context.settings })
+  const settings = useWorkspaceSettings()
 
   const flags = settings?.featureFlags as FeatureFlags | undefined
   const config = widgetConfigQuery.data

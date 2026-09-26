@@ -44,6 +44,7 @@ import { PORTAL_MY_CONVERSATIONS_QUERY_KEY } from '@/lib/client/queries/portal-s
 import { removeViewerScopedPortalQueries } from '@/lib/client/queries/portal'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { NotificationBell } from '@/components/notifications'
+import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 interface PortalHeaderProps {
   orgName: string
@@ -73,8 +74,8 @@ export function PortalHeader({
   // Each part is selected: the route context is a new object after every
   // navigation, while these stay the same until the viewer or workspace
   // changes. The location is read by the tabs that highlight it.
-  const session = useRouteContext({ from: '__root__', select: (context) => context.session })
-  const settings = useRouteContext({ from: '__root__', select: (context) => context.settings })
+  const session = useSessionContext()
+  const settings = useWorkspaceSettings()
   const registeredAuthProviders = useRouteContext({
     from: '__root__',
     select: (context) => context.registeredAuthProviders,

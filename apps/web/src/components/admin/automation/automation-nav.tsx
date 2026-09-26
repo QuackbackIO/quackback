@@ -1,4 +1,4 @@
-import { Link, useRouteContext, useRouterState } from '@tanstack/react-router'
+import { Link, useRouterState } from '@tanstack/react-router'
 import { useIntl } from 'react-intl'
 import {
   BoltIcon,
@@ -13,6 +13,7 @@ import { usePermission } from '@/lib/client/hooks/use-permission'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { cn } from '@/lib/shared/utils'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
+import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 interface NavItem {
   labelId: string
@@ -109,7 +110,7 @@ export function buildAutomationNavSections(
 export function AutomationNav() {
   const intl = useIntl()
   const pathname = useRouterState({ select: (state) => state.location.pathname })
-  const settings = useRouteContext({ from: '__root__', select: (context) => context.settings })
+  const settings = useWorkspaceSettings()
   const flags = settings?.featureFlags as FeatureFlags | undefined
   const permissions: AutomationNavPermissions = {
     assistant: usePermission(PERMISSIONS.ASSISTANT_MANAGE),

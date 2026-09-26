@@ -1,7 +1,7 @@
 import { Suspense, useState } from 'react'
 import { ArrowTopRightOnSquareIcon, CheckIcon, LockClosedIcon } from '@heroicons/react/24/solid'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { useLocation, useRouteContext } from '@tanstack/react-router'
+import { useLocation } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { billingQueries } from '@/lib/client/queries/billing'
 import { usePermission } from '@/lib/client/hooks/use-permission'
@@ -22,6 +22,7 @@ import {
 import { cn } from '@/lib/shared/utils'
 import type { BillingCatalogue } from '@/lib/server/control-plane/client'
 import type { UpgradeContext } from '@/lib/server/domains/settings/cloud/upgrade-context'
+import { useBillingEnabled } from '@/lib/client/hooks/use-root-context'
 
 type BillingPeriod = 'monthly' | 'annual'
 
@@ -43,10 +44,7 @@ type UpgradeOfferProps = {
  * context are prefetched in the route loader so the first paint is complete.
  */
 export function UpgradeOffer(props: UpgradeOfferProps) {
-  const billingEnabled = useRouteContext({
-    from: '__root__',
-    select: (context) => context.billingEnabled,
-  })
+  const billingEnabled = useBillingEnabled()
   const canCheckout = usePermission(PERMISSIONS.BILLING_MANAGE)
   if (!billingEnabled) {
     return (

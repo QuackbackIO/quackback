@@ -73,6 +73,7 @@ import type {
 } from '@/lib/shared/types/settings'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import { readBatch } from '@/lib/client/queries/read-batch'
+import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 export const Route = createFileRoute('/admin/settings/portal')({
   loader: async ({ context }) => {
@@ -96,7 +97,8 @@ export const Route = createFileRoute('/admin/settings/portal')({
 
 function PortalPage() {
   const router = useRouter()
-  const { settings, session } = Route.useRouteContext()
+  const settings = useWorkspaceSettings()
+  const session = useSessionContext()
   const [, startTransition] = useTransition()
   // Display-only: the name is edited on Workspace > General.
   const workspaceName = settings?.name || ''

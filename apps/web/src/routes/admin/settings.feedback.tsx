@@ -3,6 +3,7 @@ import { ChatBubbleLeftIcon } from '@heroicons/react/24/solid'
 import { SettingsModuleHub } from '@/components/admin/settings/settings-module-hub'
 import { buildSettingsModules } from '@/components/admin/settings/settings-modules'
 import { isProductEnabled, type FeatureFlags } from '@/lib/shared/types/settings'
+import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 export const Route = createFileRoute('/admin/settings/feedback')({
   beforeLoad: ({ context }) => {
@@ -14,7 +15,7 @@ export const Route = createFileRoute('/admin/settings/feedback')({
 })
 
 function FeedbackSettingsHub() {
-  const { settings } = Route.useRouteContext()
+  const settings = useWorkspaceSettings()
   const flags = settings?.featureFlags as FeatureFlags | undefined
   const module = buildSettingsModules(flags).find((item) => item.id === 'feedback')
   if (!module) return null

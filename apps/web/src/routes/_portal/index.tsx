@@ -13,6 +13,7 @@ import { isProductEnabled } from '@/lib/shared/types/settings'
 import { isStatusPagePublished } from '@/lib/shared/status-settings'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 import { getShowPoweredByFn } from '@/lib/server/functions/powered-by'
+import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 const searchSchema = z.object({
   board: z.string().optional(),
@@ -165,8 +166,8 @@ function PortalHero() {
  */
 function PortalFeed() {
   const intl = useIntl()
-  const session = useRouteContext({ from: '__root__', select: (context) => context.session })
-  const settings = useRouteContext({ from: '__root__', select: (context) => context.settings })
+  const session = useSessionContext()
+  const settings = useWorkspaceSettings()
   const { showPoweredBy } = Route.useLoaderData()
   const search = Route.useSearch()
 

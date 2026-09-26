@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useRouteContext } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { signOut } from '@/lib/client/auth-client'
@@ -10,6 +9,7 @@ import {
   transferWorkspaceOwnershipFn,
 } from '@/lib/server/functions/ownership'
 import { cloudMembershipActions } from './workspace-ownership'
+import { useBillingEnabled } from '@/lib/client/hooks/use-root-context'
 
 export function CloudOwnershipActions({
   memberEmails,
@@ -18,10 +18,7 @@ export function CloudOwnershipActions({
   memberEmails: string[]
   sessionEmail: string | null
 }) {
-  const billingEnabled = useRouteContext({
-    from: '__root__',
-    select: (context) => context.billingEnabled,
-  })
+  const billingEnabled = useBillingEnabled()
   const ownerQuery = useQuery({
     queryKey: ['admin', 'cloud-owner'],
     queryFn: () => getCloudOwnerEmailFn(),

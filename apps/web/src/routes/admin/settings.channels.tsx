@@ -25,6 +25,7 @@ import {
 } from '@/lib/shared/support-surfaces'
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { warmQuery } from '@/lib/client/queries/warm-query'
+import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 // The hub's GitHub row may be up to a minute old, like its email row.
 const HUB_STATUS_STALE_MS = 60_000
@@ -60,7 +61,7 @@ export const Route = createFileRoute('/admin/settings/channels')({
 })
 
 function ChannelsHubPage() {
-  const { settings } = Route.useRouteContext()
+  const settings = useWorkspaceSettings()
   const flags = settings?.featureFlags as FeatureFlags | undefined
   const widget = useSuspenseQuery(settingsQueries.widgetConfig())
   const portal = useSuspenseQuery(settingsQueries.portalConfig())

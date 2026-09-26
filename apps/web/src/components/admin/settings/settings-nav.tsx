@@ -1,5 +1,5 @@
 import { memo, useMemo, useState, type ComponentType } from 'react'
-import { Link, useRouterState, useRouteContext } from '@tanstack/react-router'
+import { Link, useRouterState } from '@tanstack/react-router'
 import {
   Cog6ToothIcon,
   UsersIcon,
@@ -20,7 +20,6 @@ import {
 import { cn } from '@/lib/shared/utils'
 import { NAV_ICON_CLASS, NAV_ITEM_CLASS, NAV_SECTION_CLASS } from '@/components/shared/nav-tokens'
 import { FilterSection } from '@/components/shared/filter-section'
-import { useRefinedTheme } from '@/lib/client/hooks/use-visual-theme'
 import { usePermissions } from '@/lib/client/use-permissions'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { isProductEnabled, type FeatureFlags } from '@/lib/shared/types'
@@ -29,6 +28,12 @@ import {
   settingsModuleActivePaths,
   settingsModuleLandingPath,
 } from './settings-modules'
+import {
+  useBillingEnabled,
+  useCloudEnabled,
+  useRefinedTheme,
+  useWorkspaceSettings,
+} from '@/lib/client/hooks/use-root-context'
 
 interface NavItem {
   label: string
@@ -241,15 +246,9 @@ function settingsRowClass(active: boolean, refined: boolean) {
  * so a navigation renders only the rows whose highlight moved.
  */
 export function SettingsNav() {
-  const settings = useRouteContext({ from: '__root__', select: (context) => context.settings })
-  const billingEnabled = useRouteContext({
-    from: '__root__',
-    select: (context) => context.billingEnabled,
-  })
-  const cloudEnabled = useRouteContext({
-    from: '__root__',
-    select: (context) => context.cloudEnabled,
-  })
+  const settings = useWorkspaceSettings()
+  const billingEnabled = useBillingEnabled()
+  const cloudEnabled = useCloudEnabled()
   const flags = settings?.featureFlags as FeatureFlags | undefined
   const permissions = usePermissions()
   const refined = useRefinedTheme()
