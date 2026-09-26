@@ -133,24 +133,28 @@ export function agentEventChangesInboxList(evt: ConversationStreamEvent): boolea
  *  leaves the list refresh to that companion (agentEventChangesInboxList). The
  *  two are published separately and a lost event is never replayed, so the
  *  returned handler, given every inbox event, refreshes the list anyway once
- *  `waitMs` passes without the companion. A companion that lands first, or
- *  within the wait, stays the list's one refresh. */
+ *  `waitMs` passes without the companion. The write publishes the companion
+ *  first and stamps its `lastMessageAt` with the message's `createdAt`, so an
+ *  earlier event counts only when it carries that stamp: another update just
+ *  before the message may have refreshed the list before the message was
+ *  written. Any update after the message refreshes a list that has it. */
 export function companionRefreshFallback(refresh: () => void, waitMs = 1500) {
   const waiting = new Map<string, ReturnType<typeof setTimeout>>()
-  const companionAt = new Map<string, number>()
+  const companions = new Map<string, { at: number; lastMessageAt: string }>()
   return (evt: ConversationStreamEvent): void => {
     const now = Date.now()
-    for (const [id, at] of companionAt) if (now - at >= waitMs) companionAt.delete(id)
+    for (const [id, seen] of companions) if (now - seen.at >= waitMs) companions.delete(id)
     if (evt.kind === 'conversation') {
       const id = evt.conversation.id
       clearTimeout(waiting.get(id))
       waiting.delete(id)
-      companionAt.set(id, now)
+      companions.set(id, { at: now, lastMessageAt: evt.conversation.lastMessageAt })
       return
     }
     if (evt.kind !== 'message' || !evt.conversationUpdated) return
     const id = evt.conversationId
-    if (companionAt.has(id) || waiting.has(id)) return
+    if (waiting.has(id)) return
+    if (companions.get(id)?.lastMessageAt === evt.message.createdAt) return
     waiting.set(
       id,
       setTimeout(() => {
