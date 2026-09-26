@@ -41,6 +41,9 @@ const requireWorkspaceRoleSchema = z.object({
  * sign-in dialog with `callbackUrl=/admin`. Callers on routes that also
  * allow role='user' (public portal) fall back to '/'.
  *
+ * Returns only the caller's own identity. The browser picks `allowedRoles`,
+ * so any signed-in visitor can reach the return statement.
+ *
  * Use in route beforeLoad:
  * @example
  * beforeLoad: async () => {
@@ -95,7 +98,6 @@ export const requireWorkspaceRole = createServerFn({ method: 'GET' })
     }
 
     return {
-      settings: appSettings,
       principal: principalRecord,
       user: session.user,
       permissions: [...resolvedPermissions],

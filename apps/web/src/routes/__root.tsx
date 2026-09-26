@@ -11,18 +11,12 @@ import {
   useRouter,
   useRouterState,
 } from '@tanstack/react-router'
-import {
-  getSetupState,
-  isOnboardingComplete,
-  needsCloudOnboardingWizard,
-} from '@/lib/shared/db-types'
 import { isAdmin } from '@/lib/shared/roles'
 import appCss from '../globals.css?url'
 import refinedThemeCss from '../styles/labs/refined-theme.css?url'
 import { getBootstrapData, type BootstrapData } from '@/lib/server/functions/bootstrap'
 import { createRouteContextMemo } from '@/lib/client/route-context-memo'
 import type { WorkspaceSettings } from '@/lib/shared/types/settings'
-import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
 import { ThemeProvider } from '@/components/theme-provider'
 import { resolveDocumentTheme, SYSTEM_THEME_SCRIPT } from '@/lib/shared/theme'
 import { DefaultErrorPage } from '@/components/shared/error-page'
@@ -79,42 +73,12 @@ export function isOnboardingExempt(pathname: string): boolean {
   return ONBOARDING_EXEMPT_PATHS.some((path) => pathname.startsWith(path))
 }
 
+// The settings arrive already redacted: getBootstrapData scrubs them on the
+// server, since its response also answers client-side navigations.
 async function loadRootContext() {
   const { settings, ...bootstrap } = await getBootstrapData()
   const visualTheme: VisualTheme = settings?.visualTheme === 'refined' ? 'refined' : 'legacy'
-  // Onboarding progress reads the setup state, one of the columns redaction
-  // removes, so it is decided first.
-  const setupState = getSetupState(settings?.settings?.setupState ?? null)
-  const onboarding = {
-    complete: isOnboardingComplete(setupState),
-    needsSetupWizard: needsCloudOnboardingWizard(setupState),
-  }
-
-  // Redact server-only material from the settings placed into the router
-  // context: everything returned here is dehydrated into the SSR HTML.
-  // redactSettingsForClient strips the widgetSecret/tier/setup columns from
-  // the raw row, the access policy fields (allowedDomains, widgetSignIn,
-  // allowedSegmentIds) from portalConfig, and non-public statusConfig fields
-  // (segment ids, email kill-switch), recursively covering both the
-  // parsed WorkspaceSettings shape and the raw DB row riding on `.settings`.
-  // Nothing on the client legitimately reads any of it: the admin
-  // Security > Portal tab fetches the full config via its own
-  // settingsQueries.portalConfig() query, which is unaffected, and the
-  // domain gate runs server-side via evaluateMyPortalAccessFn.
-  const redactedSettings: WorkspaceSettings | null = settings
-    ? (redactSettingsForClient(settings) as WorkspaceSettings)
-    : settings
-
-  // Drop the raw DB row entirely from the client-bound context. Redaction
-  // already stripped its secrets, but the row is a full duplicate of the
-  // parsed WorkspaceSettings fields that no client code reads; every consumer
-  // reads the parsed top-level fields instead. Emptying it removes one whole
-  // settings copy per SSR document.
-  if (redactedSettings) {
-    redactedSettings.settings = {}
-  }
-
-  return { ...bootstrap, settings: redactedSettings, visualTheme, onboarding }
+  return { ...bootstrap, settings, visualTheme }
 }
 
 type RootContext = Awaited<ReturnType<typeof loadRootContext>>

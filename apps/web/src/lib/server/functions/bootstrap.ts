@@ -9,6 +9,12 @@ import {
 } from '@/lib/shared/theme'
 import { getUpdateBannerDismissedVersionCookie } from '@/lib/shared/update-banner-cookie'
 import { resolveLocale, type SupportedLocale } from '@/lib/shared/i18n'
+import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
+import {
+  getSetupState,
+  isOnboardingComplete,
+  needsCloudOnboardingWizard,
+} from '@/lib/shared/db-types'
 import type { Session, PrincipalType } from '@/lib/server/auth/session'
 import type { WorkspaceSettings } from '@/lib/server/domains/settings'
 import type { SessionId, UserId } from '@quackback/ids'
@@ -23,7 +29,14 @@ const log = logger.child({ component: 'bootstrap' })
 export interface BootstrapData {
   baseUrl: string
   session: Session | null
+  /**
+   * The workspace settings as a browser may see them: redacted by
+   * `redactSettingsForClient`, and with the raw settings row emptied (every
+   * client reader uses the parsed fields beside it).
+   */
   settings: WorkspaceSettings | null
+  /** Onboarding progress, decided here so the raw setup state never leaves the server. */
+  onboarding: { complete: boolean; needsSetupWizard: boolean }
   userRole: Role | null
   themeCookie: Theme
   /** OS color-scheme preference from the `Sec-CH-Prefers-Color-Scheme` client
@@ -132,6 +145,17 @@ async function getSessionAndRole(): Promise<{
   }
 }
 
+/**
+ * What of the workspace settings may leave the server. This function's
+ * response goes to any browser that asks, signed in or not, on every
+ * client-side navigation as well as into the SSR document, so it is scrubbed
+ * here rather than by the route that asked.
+ */
+function clientSafeSettings(settings: WorkspaceSettings): WorkspaceSettings {
+  const redacted = redactSettingsForClient(settings)
+  return { ...redacted, settings: {} as WorkspaceSettings['settings'] }
+}
+
 let _initialized = false
 
 const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapData> => {
@@ -238,11 +262,16 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
   const cloud = resolveCloudConfig(
     (settings?.settings as { cloud?: StoredCloudConfig | null } | undefined)?.cloud
   )
+  const setupState = getSetupState(settings?.settings?.setupState ?? null)
 
   return {
     baseUrl,
     session,
-    settings,
+    settings: settings ? clientSafeSettings(settings) : null,
+    onboarding: {
+      complete: isOnboardingComplete(setupState),
+      needsSetupWizard: needsCloudOnboardingWizard(setupState),
+    },
     userRole,
     themeCookie,
     prefersColorScheme,

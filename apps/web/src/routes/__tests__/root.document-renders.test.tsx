@@ -48,27 +48,12 @@ afterEach(() => {
   expireRouteContext()
 })
 
-// A workspace past onboarding, so the root route renders its pages.
-const COMPLETE_SETUP = JSON.stringify({
-  version: 2,
-  steps: {
-    core: true,
-    workspace: true,
-    startingPoint: {
-      outcome: 'product_feedback',
-      resourceType: 'none',
-      source: 'managed',
-      resolution: 'configured',
-      completedAt: '2026-08-13T00:00:00.000Z',
-    },
-  },
-})
-
 function bootstrap(themeCookie: 'light' | 'dark') {
   doc.bootstrap = {
     baseUrl: 'http://localhost',
     session: null,
-    settings: { featureFlags: {}, settings: { setupState: COMPLETE_SETUP } },
+    settings: { featureFlags: {} },
+    onboarding: { complete: true, needsSetupWizard: false },
     userRole: 'admin',
     themeCookie,
     prefersColorScheme: null,
