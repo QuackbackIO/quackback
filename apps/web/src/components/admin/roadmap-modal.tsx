@@ -24,7 +24,6 @@ import {
   useUnpinComment,
   useSetPostEta,
 } from '@/lib/client/mutations'
-import { Route } from '@/routes/admin/roadmap'
 import { type PostId, type PostStatusId, type PostTagId } from '@quackback/ids'
 import type { PostDetails, CurrentUser } from '@/lib/shared/types'
 import type { PublicPostDetailView } from '@/lib/client/queries/portal-detail'
@@ -182,13 +181,10 @@ function RoadmapModalContent({ postId, currentUser, onClose }: RoadmapModalConte
 }
 
 export function RoadmapModal({ postId: urlPostId, currentUser }: RoadmapModalProps) {
-  const search = Route.useSearch()
   const { open, validatedId, close } = useUrlModal<PostId>({
     urlId: urlPostId,
     idPrefix: 'post',
     searchParam: 'post',
-    route: '/admin/roadmap',
-    search,
   })
 
   return (
