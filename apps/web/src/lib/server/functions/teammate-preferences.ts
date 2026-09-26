@@ -11,7 +11,8 @@
  * is no path from the request body to a different user's row.
  */
 import { z } from 'zod'
-import { createServerFn } from '@tanstack/react-start'
+import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
+import type { UserId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
 
 import { db, user, eq } from '@/lib/server/db'
@@ -51,6 +52,20 @@ export interface MyLanguagePreference {
 // ============================================
 
 /**
+ * A teammate's preferred language, or null when they have not set one. The
+ * caller decides whose row it may read.
+ */
+export const readPreferredLanguage = createServerOnlyFn(async function readPreferredLanguage(
+  userId: UserId
+): Promise<string | null> {
+  const record = await db.query.user.findFirst({
+    where: eq(user.id, userId),
+    columns: { preferredLanguage: true },
+  })
+  return record?.preferredLanguage ?? null
+})
+
+/**
  * Get the current teammate's language preference. Self-scoped: reads only
  * the caller's own `user` row.
  */
@@ -59,12 +74,7 @@ export const getMyLanguagePreferenceFn = createServerFn({ method: 'GET' }).handl
     log.debug('get my language preference')
     const auth = await requireAuth()
 
-    const record = await db.query.user.findFirst({
-      where: eq(user.id, auth.user.id),
-      columns: { preferredLanguage: true },
-    })
-
-    return { language: record?.preferredLanguage ?? null }
+    return { language: await readPreferredLanguage(auth.user.id) }
   }
 )
 

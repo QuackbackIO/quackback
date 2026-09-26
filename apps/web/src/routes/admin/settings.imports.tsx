@@ -6,6 +6,7 @@ import { ImportsHubPage } from '@/components/admin/settings/imports/imports-hub-
 import { adminQueries } from '@/lib/client/queries/admin'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { settingsReadBatch } from '@/lib/client/queries/settings-batch'
+import { warmQuery } from '@/lib/client/queries/warm-query'
 
 /**
  * Data > Imports & exports (§I1). Admin-only, no feature flag — importing
@@ -20,12 +21,12 @@ export const Route = createFileRoute('/admin/settings/imports')({
     await Promise.all([
       ensureBillingCatalogue(context.queryClient, context.billingEnabled),
       // The CSV import's board picker, warmed so it is in the document.
-      ensure(adminQueries.boardsForSettings()).catch(() => undefined),
+      warmQuery(ensure, adminQueries.boardsForSettings()),
       // Both histories, so they are in the document too. Import history is
       // read by admins only.
-      ensure(settingsQueries.exportRuns()).catch(() => undefined),
+      warmQuery(ensure, settingsQueries.exportRuns()),
       isAdmin(context.principal?.role)
-        ? ensure(settingsQueries.importRuns()).catch(() => undefined)
+        ? warmQuery(ensure, settingsQueries.importRuns())
         : undefined,
     ])
   },

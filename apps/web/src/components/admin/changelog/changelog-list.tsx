@@ -1,6 +1,6 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { useState, useCallback, useEffect, useMemo, startTransition, lazy, Suspense } from 'react'
+import { useState, useCallback, useEffect, useMemo, startTransition, Suspense } from 'react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/shared/spinner'
@@ -10,6 +10,8 @@ import { InboxLayout } from '@/components/admin/feedback/inbox-layout'
 import { AdminListHeader } from '@/components/admin/admin-list-header'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { useDebouncedSearch } from '@/lib/client/hooks/use-debounced-search'
+import { useOpenedOnce } from '@/lib/client/hooks/use-opened-once'
+import { lazyWithPreload } from '@/lib/client/lazy-with-preload'
 import { ChangelogFiltersPanel } from './changelog-filters'
 import { useChangelogFilters } from './use-changelog-filters'
 import { ChangelogListItem } from './changelog-list-item'
@@ -23,19 +25,16 @@ import { DocumentTextIcon, PlusIcon } from '@heroicons/react/24/solid'
 // The create dialog carries the editor and the entry form, which outweigh the
 // list; it loads on first open, or ahead of it when the pointer or focus
 // reaches the New Entry button.
-const loadCreateChangelogDialog = () => import('./create-changelog-dialog')
-const CreateChangelogDialog = lazy(() =>
-  loadCreateChangelogDialog().then((m) => ({ default: m.CreateChangelogDialog }))
+const { Component: CreateChangelogDialog, preload: preloadCreateChangelogDialog } = lazyWithPreload(
+  () => import('./create-changelog-dialog'),
+  'CreateChangelogDialog'
 )
-function preloadCreateChangelogDialog() {
-  void loadCreateChangelogDialog().catch(() => {})
-}
 
 /** The New Entry button and the create dialog it opens. */
 function NewChangelogEntryButton() {
   const [open, setOpen] = useState(false)
   // Kept mounted after the first open so closing animates.
-  const [opened, setOpened] = useState(false)
+  const opened = useOpenedOnce(open)
   return (
     <>
       <Button
@@ -43,10 +42,7 @@ function NewChangelogEntryButton() {
         aria-haspopup="dialog"
         onPointerEnter={preloadCreateChangelogDialog}
         onFocus={preloadCreateChangelogDialog}
-        onClick={() => {
-          setOpened(true)
-          setOpen(true)
-        }}
+        onClick={() => setOpen(true)}
       >
         <PlusIcon className="h-4 w-4 mr-1.5" />
         New Entry

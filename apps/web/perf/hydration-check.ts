@@ -11,10 +11,10 @@
  *   bun perf/hydration-check.ts
  */
 import { chromium, type BrowserContext } from '@playwright/test'
-import { ADMIN, BENCH_DATABASE_URL, BENCH_PORT } from './config'
+import { BENCH_URL, signedInContext, startBenchServer } from './config'
 
 const appDir = process.env.PERF_APP_DIR ?? new URL('..', import.meta.url).pathname
-const baseURL = `http://localhost:${BENCH_PORT}`
+const baseURL = BENCH_URL
 
 const PAGES: { path: string; as: 'anon' | 'admin' }[] = [
   { path: '/?sort=trending', as: 'anon' },
@@ -43,47 +43,16 @@ const PAGES: { path: string; as: 'anon' | 'admin' }[] = [
 // development wording.
 const HYDRATION = /Minified React error #(418|423|425)|hydrat/i
 
-const server = Bun.spawn(['bun', '.output/server/index.mjs'], {
-  cwd: appDir,
-  env: {
-    PATH: process.env.PATH ?? '',
-    HOME: process.env.HOME ?? '',
-    NODE_ENV: 'production',
-    TZ: 'UTC',
-    PORT: String(BENCH_PORT),
-    BASE_URL: baseURL,
-    DATABASE_URL: BENCH_DATABASE_URL,
-    SECRET_KEY: process.env.PERF_SECRET_KEY ?? 'perf-bench-secret-key-local-and-ci-only-0000',
-    QUACKBACK_ROLE: 'web',
-    LOG_LEVEL: 'warn',
-  },
-  stdout: 'ignore',
-  stderr: 'ignore',
-})
+const server = await startBenchServer(appDir, { env: { TZ: 'UTC', LOG_LEVEL: 'warn' } })
 
 let failures = 0
 try {
-  for (let i = 0; i < 60; i++) {
-    if ((await fetch(`${baseURL}/api/health/ready`).catch(() => null))?.ok) break
-    await Bun.sleep(500)
-  }
   const browser = await chromium.launch()
-  const contextFor = async (as: 'anon' | 'admin'): Promise<BrowserContext> => {
-    const context = await browser.newContext({
-      baseURL,
-      timezoneId: 'Pacific/Kiritimati',
-      locale: 'de-DE',
-    })
-    if (as === 'admin') {
-      const res = await context.request.post('/api/auth/sign-in/email', {
-        data: ADMIN,
-        headers: { origin: baseURL },
-      })
-      if (!res.ok()) throw new Error(`admin sign-in failed: ${res.status()}`)
-    }
-    return context
+  const visitor = { timezoneId: 'Pacific/Kiritimati', locale: 'de-DE' }
+  const contexts = {
+    anon: await browser.newContext({ ...visitor, baseURL }),
+    admin: await signedInContext(browser, baseURL, visitor),
   }
-  const contexts = { anon: await contextFor('anon'), admin: await contextFor('admin') }
 
   const problemsLoading = async (context: BrowserContext, path: string, corrupt = false) => {
     const page = await context.newPage()

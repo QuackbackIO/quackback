@@ -21,6 +21,7 @@ import {
 } from '@/lib/client/mutations/assistant-connectors'
 import { toast } from 'sonner'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
+import { warmQuery } from '@/lib/client/queries/warm-query'
 
 export const Route = createFileRoute('/admin/automation/connectors')({
   beforeLoad: ({ context }) => {
@@ -31,12 +32,11 @@ export const Route = createFileRoute('/admin/automation/connectors')({
   },
   loader: async ({ context }) => {
     const { queryClient } = context
-    const warm = (p: Promise<unknown>) => p.catch(() => undefined)
     // The built-in tools card reads the agent settings and the tool catalogue.
     await Promise.all([
       queryClient.ensureQueryData(connectorQueries.list()),
-      warm(queryClient.ensureQueryData(assistantQueries.settings())),
-      warm(queryClient.ensureQueryData(assistantQueries.tools())),
+      warmQuery(queryClient, assistantQueries.settings()),
+      warmQuery(queryClient, assistantQueries.tools()),
     ])
   },
   errorComponent: ({ error, reset }) => (

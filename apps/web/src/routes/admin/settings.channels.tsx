@@ -24,6 +24,7 @@ import {
   isWidgetMessengerEnabled,
 } from '@/lib/shared/support-surfaces'
 import { settingsReadBatch } from '@/lib/client/queries/settings-batch'
+import { warmQuery } from '@/lib/client/queries/warm-query'
 
 // The hub's GitHub row may be up to a minute old, like its email row.
 const HUB_STATUS_STALE_MS = 60_000
@@ -45,14 +46,13 @@ export const Route = createFileRoute('/admin/settings/channels')({
     // The status rows and the routing switch are warmed with the configs so
     // the hub renders complete from the document. A miss leaves a row to its
     // own fetch and its defaults, as before.
-    const warm = (p: Promise<unknown>) => p.catch(() => undefined)
     const ensure = settingsReadBatch(queryClient)
     await Promise.all([
       ensure(settingsQueries.widgetConfig()),
       ensure(settingsQueries.portalConfig()),
-      warm(ensure(channels.emailStatus())),
-      warm(ensure(githubStatus())),
-      warm(ensure(channels.routing())),
+      warmQuery(ensure, channels.emailStatus()),
+      warmQuery(ensure, githubStatus()),
+      warmQuery(ensure, channels.routing()),
     ])
     return {}
   },

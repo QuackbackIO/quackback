@@ -94,13 +94,10 @@ vi.mock('@/lib/server/db', () => ({
 
 // --- Collaborators outside identity ----------------------------------------
 
+const workspaceRow = { id: 'workspace_1', slug: 'main', name: 'Main', logoKey: null }
 vi.mock('@/lib/server/domains/settings/settings.helpers', () => ({
-  requireSettingsCached: vi.fn(async () => ({
-    id: 'workspace_1',
-    slug: 'main',
-    name: 'Main',
-    logoKey: null,
-  })),
+  requireSettingsCached: vi.fn(async () => workspaceRow),
+  findSettingsCached: vi.fn(async () => workspaceRow),
 }))
 
 const mockPermissionsForPrincipal = vi.fn(

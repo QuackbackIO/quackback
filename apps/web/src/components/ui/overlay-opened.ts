@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { createValueStore, useStoreValue, type ValueStore } from '@/lib/client/value-store'
 
 /**
  * Whether an overlay (menu, dialog, popover, tooltip) has opened yet.
@@ -14,33 +15,9 @@ import * as React from 'react'
  * or a hover timer opened it. A controlled `open` reaches the content through
  * context in the render that passes it.
  */
-interface OpenedStore {
-  subscribe: (listener: () => void) => () => void
-  get: () => boolean
-  open: () => void
-}
-
-function createOpenedStore(initial: boolean): OpenedStore {
-  let opened = initial
-  const listeners = new Set<() => void>()
-  return {
-    subscribe(listener) {
-      listeners.add(listener)
-      return () => {
-        listeners.delete(listener)
-      }
-    },
-    get: () => opened,
-    open() {
-      if (opened) return
-      opened = true
-      for (const listener of listeners) listener()
-    },
-  }
-}
-
 interface OverlayOpened {
-  store: OpenedStore
+  /** Whether the overlay has opened yet; it only ever turns true. */
+  store: ValueStore<boolean>
   /** The root's controlled `open`, when it has one. */
   open: boolean
 }
@@ -56,26 +33,25 @@ function useOverlayOpenedRoot<Details extends { isCanceled: boolean }>(
   defaultOpen: boolean | undefined,
   onOpenChange: ((open: boolean, details: Details) => void) | undefined
 ) {
-  const [store] = React.useState(() => createOpenedStore(Boolean(open || defaultOpen)))
+  const [store] = React.useState(() => createValueStore(Boolean(open || defaultOpen)))
 
   // A controlled open is read from context below; record it so the content
   // stays rendered, and can animate out, once the prop turns false.
   React.useEffect(() => {
-    if (open) store.open()
+    if (open) store.set(true)
   }, [store, open])
 
   const value = React.useMemo<OverlayOpened>(() => ({ store, open: Boolean(open) }), [store, open])
 
   const handleOpenChange = (next: boolean, details: Details) => {
     onOpenChange?.(next, details)
-    if (next && !details.isCanceled) store.open()
+    if (next && !details.isCanceled) store.set(true)
   }
 
   return { value, onOpenChange: handleOpenChange }
 }
 
-const alwaysOpened = () => true
-const noSubscription = () => () => {}
+const ALWAYS_OPENED = createValueStore(true)
 
 /**
  * For an overlay's content part: false until its overlay first opens. Content
@@ -83,11 +59,7 @@ const noSubscription = () => () => {}
  */
 function useOverlayOpened(): boolean {
   const context = React.useContext(OverlayOpenedContext)
-  const opened = React.useSyncExternalStore(
-    context?.store.subscribe ?? noSubscription,
-    context?.store.get ?? alwaysOpened,
-    context?.store.get ?? alwaysOpened
-  )
+  const opened = useStoreValue(context?.store ?? ALWAYS_OPENED)
   return context === null || context.open || opened
 }
 

@@ -66,6 +66,27 @@ export interface LedgerEntry {
 
 export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
   {
+    file: 'apps/web/src/lib/server/functions/settings-reads.ts',
+    name: 'registeredReads',
+    category: 'fleet-wide',
+    reason:
+      'Maps each registered settings query key to its query factory, built once from the static SETTINGS_READS list. It holds code, not data: every workspace resolves the same keys to the same factories, and each factory runs its own gated server function for the calling workspace.',
+  },
+  {
+    file: 'apps/web/src/lib/shared/content-emoji.ts',
+    name: 'byChar',
+    category: 'fleet-wide',
+    reason:
+      'Indexes the bundled emoji dataset by character, built once on first lookup. The dataset ships with the app and is the same for every workspace, so a cross-workspace hit returns the emoji any workspace would look up.',
+  },
+  {
+    file: 'apps/web/src/lib/shared/content-emoji.ts',
+    name: 'byEmoticon',
+    category: 'fleet-wide',
+    reason:
+      'Indexes the bundled emoji dataset by emoticon, built once on first lookup. The dataset ships with the app and is the same for every workspace, so a cross-workspace hit returns the emoji any workspace would look up.',
+  },
+  {
     file: 'apps/web/src/lib/server/integrations/sync/transport.ts',
     name: 'evidence',
     category: 'process-lifetime',

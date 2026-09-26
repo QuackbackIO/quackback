@@ -20,14 +20,7 @@ export interface AskAiState {
   related: AskAiSourceMeta[]
 }
 
-export const IDLE_STATE: AskAiState = {
-  status: 'idle',
-  question: '',
-  answer: '',
-  kind: 'grounded',
-  citedSources: [],
-  related: [],
-}
+export const IDLE_STATE: AskAiState = blankAskAiState('', 'idle')
 
 /**
  * A result-less state (loading, error, hard no-answer): the answer/source
