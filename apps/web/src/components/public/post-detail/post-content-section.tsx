@@ -6,7 +6,7 @@ import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import type { JSONContent } from '@tiptap/react'
 import { PostContent } from '@/components/public/post-content'
 import { Button } from '@/components/ui/button'
-import type { EditorFeatures } from '@/components/ui/rich-text-editor'
+import type { EditorDocument, EditorFeatures } from '@/components/ui/rich-text-editor'
 import { Skeleton } from '@/components/ui/skeleton'
 
 // The full rich-text editor drags in a heavy chunk (ProseMirror + lowlight
@@ -147,9 +147,9 @@ export function PostContentSection({
 
   const showActionsMenu = (canEdit || canDelete) && onEditStart && onDelete && !isEditing
 
-  const handleContentChange = useCallback((_json: JSONContent, _html: string, markdown: string) => {
-    setEditContentJson(_json)
-    setEditMarkdown(markdown)
+  const handleContentChange = useCallback((document: EditorDocument) => {
+    setEditContentJson(document.json())
+    setEditMarkdown(document.markdown())
   }, [])
 
   function handleSave(): void {
@@ -205,7 +205,7 @@ export function PostContentSection({
           <Suspense fallback={<EditorPlaceholder />}>
             <LazyRichTextEditor
               value={editContentJson || ''}
-              onChange={handleContentChange}
+              onDocumentChange={handleContentChange}
               placeholder={intl.formatMessage({
                 id: 'portal.postDetail.edit.detailsPlaceholder',
                 defaultMessage: 'Add more details... Type / for commands',

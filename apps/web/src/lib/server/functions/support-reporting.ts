@@ -17,46 +17,38 @@ import { workflowEffectiveness } from '@/lib/server/domains/workflows/workflow-r
 import { attributeValueBreakdown } from '@/lib/server/domains/conversation-attributes/attribute-reporting'
 import { dateRangeSchema } from '@/lib/shared/schemas'
 
-export const slaAttainmentFn = createServerFn({ method: 'GET' })
+/**
+ * The support card's figures for one date range: SLA attainment (overall, per
+ * policy, breach heatmap, time after a miss) and workflow effectiveness, read
+ * together so the card costs one request and one session resolution.
+ */
+export const supportReportingFn = createServerFn({ method: 'GET' })
   .validator(dateRangeSchema)
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.ANALYTICS_VIEW })
-    return slaAttainment(new Date(data.from), new Date(data.to))
-  })
-
-export const slaAttainmentByPolicyFn = createServerFn({ method: 'GET' })
-  .validator(dateRangeSchema)
-  .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.ANALYTICS_VIEW })
-    return slaAttainmentByPolicy(new Date(data.from), new Date(data.to))
-  })
-
-export const slaBreachHeatmapFn = createServerFn({ method: 'GET' })
-  .validator(dateRangeSchema)
-  .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.ANALYTICS_VIEW })
-    return slaBreachHeatmap(new Date(data.from), new Date(data.to))
-  })
-
-export const slaTimeAfterMissFn = createServerFn({ method: 'GET' })
-  .validator(dateRangeSchema)
-  .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.ANALYTICS_VIEW })
-    return slaTimeAfterMiss(new Date(data.from), new Date(data.to))
-  })
-
-export const workflowEffectivenessFn = createServerFn({ method: 'GET' })
-  .validator(dateRangeSchema)
-  .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.ANALYTICS_VIEW })
-    // workflowId is a plain string over the wire (JSON-safe).
-    return (await workflowEffectiveness(new Date(data.from), new Date(data.to))).map((w) => ({
-      workflowId: w.workflowId as string,
-      started: w.started,
-      completed: w.completed,
-      interrupted: w.interrupted,
-      waiting: w.waiting,
-    }))
+    const from = new Date(data.from)
+    const to = new Date(data.to)
+    const [sla, slaByPolicy, slaHeatmap, slaTimeAfterMissResult, workflows] = await Promise.all([
+      slaAttainment(from, to),
+      slaAttainmentByPolicy(from, to),
+      slaBreachHeatmap(from, to),
+      slaTimeAfterMiss(from, to),
+      workflowEffectiveness(from, to),
+    ])
+    return {
+      sla,
+      slaByPolicy,
+      slaHeatmap,
+      slaTimeAfterMiss: slaTimeAfterMissResult,
+      // workflowId is a plain string over the wire (JSON-safe).
+      workflows: workflows.map((w) => ({
+        workflowId: w.workflowId as string,
+        started: w.started,
+        completed: w.completed,
+        interrupted: w.interrupted,
+        waiting: w.waiting,
+      })),
+    }
   })
 
 const attributeBreakdownSchema = dateRangeSchema.extend({

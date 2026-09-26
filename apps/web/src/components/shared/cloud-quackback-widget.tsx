@@ -30,17 +30,18 @@ function loadSdk() {
  * widget surfaces stay clean so customer end-users never see it.
  */
 export function CloudQuackbackWidget() {
-  const { cloudEnabled, session } = useRouteContext({ from: '__root__' })
+  const cloudEnabled = useRouteContext({ from: '__root__', select: (c) => c.cloudEnabled })
+  const session = useRouteContext({ from: '__root__', select: (c) => c.session })
   const booted = useRef(false)
 
   const userId = session?.user?.id
   const email = session?.user?.email
   const canIdentify = Boolean(
     session?.session.scope === 'dashboard' &&
-      userId &&
-      email &&
-      session.user.principalType !== 'anonymous' &&
-      !isSyntheticAnonEmail(email)
+    userId &&
+    email &&
+    session.user.principalType !== 'anonymous' &&
+    !isSyntheticAnonEmail(email)
   )
 
   useEffect(() => {

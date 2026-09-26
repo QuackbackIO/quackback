@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { MetricTile, useLast30DaysRange } from './metric-tile'
+import { MetricTile, type DateRange } from './metric-tile'
 import { quinnToolMetricsQuery } from '@/lib/client/queries/assistant-tools-analytics'
 
 function ActionLabel({ toolName }: { toolName: string }) {
@@ -49,9 +49,8 @@ function ActionLabel({ toolName }: { toolName: string }) {
   )
 }
 
-export function QuinnToolsCard() {
+export function QuinnToolsCard({ range }: { range: DateRange }) {
   const intl = useIntl()
-  const range = useLast30DaysRange()
   const toolsQuery = useQuery(quinnToolMetricsQuery(range.from, range.to))
   const toolList = toolsQuery.data ?? []
   const totals = toolList.reduce(

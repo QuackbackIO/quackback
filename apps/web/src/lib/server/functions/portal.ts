@@ -47,8 +47,11 @@ import { listPublicStatuses } from '@/lib/server/domains/statuses/status.service
 import { listPublicPostTags } from '@/lib/server/domains/post-tags/post-tag.service'
 import { getSubscriptionStatus } from '@/lib/server/domains/subscriptions/subscription.service'
 import { listPublicRoadmaps } from '@/lib/server/domains/roadmaps/roadmap.service'
-import { getPublicRoadmapPosts } from '@/lib/server/domains/roadmaps/roadmap.query'
-import { getPublicRoadmapDateBuckets } from '@/lib/server/domains/roadmaps/roadmap.query'
+import {
+  getPublicRoadmapPosts,
+  getPublicRoadmapColumnsPosts,
+  getPublicRoadmapDateBuckets,
+} from '@/lib/server/domains/roadmaps/roadmap.query'
 import { roadmapIdSchema, postStatusIdSchema } from '@quackback/ids/zod'
 import {
   boardIdInputSchema,
@@ -121,9 +124,9 @@ async function buildBoardPermissions(
  * migration 0084.
  */
 async function loadAllowAnonymous(): Promise<boolean> {
-  const { getSettings } = await import('./workspace')
+  const { getSettingsCached } = await import('./workspace')
   const { workspaceAllowsAnonymous } = await import('@/lib/server/domains/settings/settings.types')
-  const settings = await getSettings()
+  const settings = await getSettingsCached()
   return workspaceAllowsAnonymous(settings?.portalConfig)
 }
 
@@ -800,8 +803,9 @@ export type WidgetVisibleBoard = { id: string; name: string; slug: string }
  * statuses, boards and tags its columns and filters need, in one request
  * that resolves portal access and auth once rather than once per list.
  * Mirrors fetchPortalData's combined fetch for the feed. Column post lists
- * stay a separate per-column fetch (fetchPublicRoadmapPosts): the shell
- * renders before any column's posts are needed.
+ * are asked for separately once the shell has rendered (fetchPublicRoadmapColumns
+ * for the columns' first pages, fetchPublicRoadmapPosts as each column loads
+ * more): the shell renders before any column's posts are needed.
  *
  * Declared at the end of the module on purpose: the gate test maps portal
  * handlers by declaration order, so new server fns append here to avoid
@@ -832,3 +836,86 @@ export const fetchRoadmapPageData = createServerFn({ method: 'GET' }).handler(as
     tags,
   }
 })
+
+const getPublicRoadmapColumnsSchema = z.object({
+  roadmapId: roadmapIdSchema,
+  limit: PageLimitMinOneSchema,
+  search: z.string().optional(),
+  boardIds: z.array(boardIdInputSchema).optional(),
+  tagIds: z.array(tagIdInputSchema).optional(),
+  segmentIds: z.array(segmentIdInputSchema).optional(),
+  sort: z.enum(['votes', 'newest', 'oldest']).optional(),
+  columns: z
+    .array(
+      z.object({
+        statusId: postStatusIdSchema.optional(),
+        bucketId: z.string().max(20).optional(),
+      })
+    )
+    .min(1)
+    .max(50),
+})
+
+/**
+ * The first page of every column of one public roadmap board, under the same
+ * filters, in one request rather than one per column: what the board asks
+ * for on open or after a filter change. A column loading a later page still
+ * calls fetchPublicRoadmapPosts for itself alone.
+ *
+ * Declared at the end of the module on purpose: see fetchRoadmapPageData above.
+ */
+export const fetchPublicRoadmapColumns = createServerFn({ method: 'GET' })
+  .validator(getPublicRoadmapColumnsSchema)
+  .handler(async ({ data }) => {
+    log.debug(
+      { roadmap_id: data.roadmapId, columns: data.columns.length },
+      'fetch public roadmap columns'
+    )
+    // Outer gate: private portal + unauthorized caller -> every column empty.
+    const access = await resolvePortalAccessForRequest()
+    if (!access.granted) {
+      log.debug('portal access denied, returning empty')
+      return data.columns.map(() => ({ items: [], hasMore: false, total: 0 }))
+    }
+
+    const auth = hasAuthCredentials() ? await getOptionalAuth() : null
+
+    // Segment filtering requires admin/member role, same gate as
+    // fetchPublicRoadmapPosts.
+    let segmentIds: SegmentId[] | undefined
+    if (data.segmentIds?.length && auth && isTeamMember(auth.principal.role)) {
+      segmentIds = data.segmentIds as SegmentId[]
+    }
+
+    const actor = await policyActorFromAuth(auth)
+
+    const results = await getPublicRoadmapColumnsPosts(
+      data.roadmapId as RoadmapId,
+      data.columns.map((column) => ({
+        statusId: column.statusId as PostStatusId | undefined,
+        bucketId: column.bucketId,
+      })),
+      {
+        limit: data.limit ?? 20,
+        search: data.search,
+        boardIds: data.boardIds as BoardId[] | undefined,
+        tagIds: data.tagIds as PostTagId[] | undefined,
+        segmentIds,
+        sort: data.sort,
+      },
+      actor
+    )
+
+    return results.map((result) => ({
+      ...result,
+      items: result.items.map((item) => ({
+        id: String(item.id),
+        title: item.title,
+        voteCount: item.voteCount,
+        commentCount: item.commentCount,
+        statusId: item.statusId ? String(item.statusId) : null,
+        eta: toIsoStringOrNull(item.eta),
+        board: { id: String(item.board.id), name: item.board.name, slug: item.board.slug },
+      })),
+    }))
+  })

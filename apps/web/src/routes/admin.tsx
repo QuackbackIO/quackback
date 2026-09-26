@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect } from 'react'
+import { Suspense, lazy, useEffect, type ComponentProps } from 'react'
 import {
   createFileRoute,
   Outlet,
@@ -11,6 +11,7 @@ import { IntlProvider } from 'react-intl'
 import { useAdminPresence } from '@/lib/client/hooks/use-admin-presence'
 import { DEFAULT_LOCALE, loadMessages } from '@/lib/shared/i18n'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
+import { unreadCountQuery } from '@/lib/client/hooks/use-notifications-queries'
 import { getLatestVersion, isNewerVersion } from '@/lib/server/functions/version'
 import { AdminSidebar } from '@/components/admin/admin-sidebar'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
@@ -19,7 +20,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { UpdateBanner } from '@/components/admin/update-banner'
 import { PlanNoticeBanner } from '@/components/admin/plan-notice-banner'
 import { getPlanNotice } from '@/lib/server/functions/plan-notice'
-import { isProductEnabled } from '@/lib/shared/types/settings'
+import { isProductEnabled, type ProductId } from '@/lib/shared/types/settings'
 import { CloudQuackbackWidget } from '@/components/shared/cloud-quackback-widget'
 import { useHasPermission } from '@/lib/client/use-permissions'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -137,6 +138,9 @@ export const Route = createFileRoute('/admin')({
       getLatestVersion(),
       getPlanNotice(),
       loadMessages(locale),
+      // The rail's unread badge rides the document rather than a request of
+      // its own after hydration. Unreadable now, it is left to the bell.
+      context.queryClient.ensureQueryData(unreadCountQuery()).catch(() => null),
     ])
 
     const latestVersion =
@@ -207,6 +211,75 @@ function useEntityIdFromUrl(key: 'post' | 'entry' | 'article'): string | undefin
   })
 }
 
+function useProductEnabled(product: ProductId): boolean {
+  return useRouteContext({
+    from: '__root__',
+    select: (context) => isProductEnabled(context.settings?.featureFlags, product),
+  })
+}
+
+/**
+ * The post, changelog entry and article modals any admin page opens from the
+ * URL. They read the location and permissions themselves, so opening one (a
+ * search-only navigation) renders them and not the layout around them.
+ */
+function EntityModals({
+  currentUser,
+}: {
+  currentUser: ComponentProps<typeof PostModal>['currentUser'] | null
+}) {
+  const postId = useEntityIdFromUrl('post')
+  const entryId = useEntityIdFromUrl('entry')
+  const articleId = useEntityIdFromUrl('article')
+  const onRoadmap = useRouterState({
+    select: (s) =>
+      s.location.pathname === '/admin/roadmap' || s.location.pathname.startsWith('/admin/roadmap/'),
+  })
+  const canViewChangelogDrafts = useHasPermission(PERMISSIONS.CHANGELOG_VIEW_DRAFT)
+  const canManageHelpCenter = useHasPermission(PERMISSIONS.HELP_CENTER_MANAGE)
+  const feedbackEnabled = useProductEnabled('feedback')
+  const changelogEnabled = useProductEnabled('changelog')
+  const helpCenterEnabled = useProductEnabled('helpCenter')
+
+  return (
+    <>
+      {currentUser && feedbackEnabled && postId && !onRoadmap && (
+        <Suspense fallback={<EntityModalChunkFallback searchParam="post" title="Edit post" />}>
+          <PostModal postId={postId} currentUser={currentUser} />
+        </Suspense>
+      )}
+      {changelogEnabled && canViewChangelogDrafts && entryId && (
+        <Suspense
+          fallback={<EntityModalChunkFallback searchParam="entry" title="Edit changelog entry" />}
+        >
+          <ChangelogModal entryId={entryId} />
+        </Suspense>
+      )}
+      {helpCenterEnabled && canManageHelpCenter && articleId && (
+        <Suspense
+          fallback={<EntityModalChunkFallback searchParam="article" title="Edit article" />}
+        >
+          <ArticleModal articleId={articleId} />
+        </Suspense>
+      )}
+    </>
+  )
+}
+
+/**
+ * The first navigation after hydration reuses the guard this document was
+ * rendered with instead of asking the server again. Each part is selected:
+ * the route context is a new object after every navigation, the parts are not.
+ */
+function useSeedAdminGuard() {
+  const user = Route.useRouteContext({ select: (context) => context.user })
+  const principal = Route.useRouteContext({ select: (context) => context.principal })
+  const permissions = Route.useRouteContext({ select: (context) => context.permissions })
+  useEffect(() => {
+    if (user && principal && permissions) adminGuard.seed({ user, principal, permissions })
+  }, [user, principal, permissions])
+}
+
 function AdminLayout() {
   const {
     initialUserData,
@@ -217,28 +290,16 @@ function AdminLayout() {
     locale,
     messages,
   } = Route.useLoaderData()
-  // The first navigation after hydration reuses the guard this document was
-  // rendered with instead of asking the server again.
-  const { user, principal, permissions } = Route.useRouteContext()
-  useEffect(() => {
-    if (user && principal && permissions) adminGuard.seed({ user, principal, permissions })
-  }, [user, principal, permissions])
-  const postId = useEntityIdFromUrl('post')
-  const entryId = useEntityIdFromUrl('entry')
-  const articleId = useEntityIdFromUrl('article')
-  const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const onRoadmap = pathname === '/admin/roadmap' || pathname.startsWith('/admin/roadmap/')
-  const canViewChangelogDrafts = useHasPermission(PERMISSIONS.CHANGELOG_VIEW_DRAFT)
-  const canManageHelpCenter = useHasPermission(PERMISSIONS.HELP_CENTER_MANAGE)
+  useSeedAdminGuard()
 
   // Mark team members online for conversation routing across the whole admin (not just
   // the inbox), but only when the support inbox feature is on.
-  const { settings } = useRouteContext({ from: '__root__' })
-  const conversationsEnabled =
-    (settings?.featureFlags as { supportInbox?: boolean } | undefined)?.supportInbox ?? false
-  const feedbackEnabled = isProductEnabled(settings?.featureFlags, 'feedback')
-  const changelogEnabled = isProductEnabled(settings?.featureFlags, 'changelog')
-  const helpCenterEnabled = isProductEnabled(settings?.featureFlags, 'helpCenter')
+  const conversationsEnabled = useRouteContext({
+    from: '__root__',
+    select: (context) =>
+      (context.settings?.featureFlags as { supportInbox?: boolean } | undefined)?.supportInbox ??
+      false,
+  })
   useAdminPresence(Boolean(initialUserData) && conversationsEnabled)
 
   // For public routes (login, signup), render just the outlet without the admin layout
@@ -271,27 +332,7 @@ function AdminLayout() {
               </div>
             </div>
           </main>
-          {currentUser && feedbackEnabled && postId && !onRoadmap && (
-            <Suspense fallback={<EntityModalChunkFallback searchParam="post" title="Edit post" />}>
-              <PostModal postId={postId} currentUser={currentUser} />
-            </Suspense>
-          )}
-          {changelogEnabled && canViewChangelogDrafts && entryId && (
-            <Suspense
-              fallback={
-                <EntityModalChunkFallback searchParam="entry" title="Edit changelog entry" />
-              }
-            >
-              <ChangelogModal entryId={entryId} />
-            </Suspense>
-          )}
-          {helpCenterEnabled && canManageHelpCenter && articleId && (
-            <Suspense
-              fallback={<EntityModalChunkFallback searchParam="article" title="Edit article" />}
-            >
-              <ArticleModal articleId={articleId} />
-            </Suspense>
-          )}
+          <EntityModals currentUser={currentUser} />
         </div>
       </TooltipProvider>
     </IntlProvider>

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { FormattedMessage, useIntl } from 'react-intl'
-import { motion, useReducedMotion } from 'framer-motion'
+import { m, useReducedMotion } from 'framer-motion'
 import { ChatBubbleOvalLeftEllipsisIcon } from '@heroicons/react/24/solid'
 import type { ConversationId } from '@quackback/ids'
 import { widgetGetMyConversationsFn } from '@/lib/server/functions/widget/conversation'
@@ -182,7 +182,7 @@ export function WidgetMessages({
           workspaces list threads here but don't start chats). */}
       {canStartConversation && (
         <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center">
-          <motion.button
+          <m.button
             type="button"
             onClick={() => onOpenMessenger('new')}
             initial={reduceMotion ? false : { opacity: 0, y: 10, scale: 0.92 }}
@@ -192,7 +192,7 @@ export function WidgetMessages({
           >
             <FormattedMessage id="widget.messages.ask" defaultMessage="Ask a question" />
             <ChatBubbleOvalLeftEllipsisIcon className="w-4 h-4" />
-          </motion.button>
+          </m.button>
         </div>
       )}
     </div>

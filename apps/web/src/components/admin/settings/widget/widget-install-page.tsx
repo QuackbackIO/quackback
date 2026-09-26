@@ -43,6 +43,9 @@ export function WidgetInstallPage() {
   const [enabled, setEnabled] = useState(Boolean(widgetConfigQuery.data.enabled))
   const statusQuery = useQuery({
     ...adminQueries.onboardingStatus(),
+    // Fresh for one poll: the status the page was just delivered with is not
+    // fetched again on mount, while one cached by an earlier visit is.
+    staleTime: 5_000,
     refetchInterval: (query) => {
       const data = query.state.data
       if (!data?.hasWidgetInstalled) return 5_000

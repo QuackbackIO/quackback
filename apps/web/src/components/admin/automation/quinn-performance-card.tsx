@@ -11,7 +11,7 @@ import { AreaChart, Area, XAxis } from 'recharts'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { Button } from '@/components/ui/button'
 import { ChartContainer, type ChartConfig } from '@/components/ui/chart'
-import { MetricTile, useLast30DaysRange, pct, asRate } from './metric-tile'
+import { MetricTile, pct, asRate, type DateRange } from './metric-tile'
 import { quinnPerformanceQuery } from '@/lib/client/queries/assistant-analytics'
 
 const TREND_CHART_CONFIG: ChartConfig = {
@@ -52,9 +52,8 @@ function TrendSparkline({ data }: { data: Array<{ date: string; involvements: nu
   )
 }
 
-export function QuinnPerformanceCard() {
+export function QuinnPerformanceCard({ range }: { range: DateRange }) {
   const intl = useIntl()
-  const range = useLast30DaysRange()
   const performanceQuery = useQuery(quinnPerformanceQuery(range.from, range.to))
   const { data } = performanceQuery
 

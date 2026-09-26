@@ -15,7 +15,7 @@ import {
   type UpdateChangelogSettingsInput,
 } from '@/lib/shared/changelog-settings'
 import { logger } from '@/lib/server/logger'
-import { requireSettings, wrapDbError, writeMetadataKey } from './settings.helpers'
+import { wrapDbError, writeMetadataKey, requireSettingsPerRequest } from './settings.helpers'
 
 export { DEFAULT_CHANGELOG_SETTINGS }
 export type { ChangelogSettings, UpdateChangelogSettingsInput }
@@ -39,7 +39,7 @@ export function resolveChangelogSettings(metadataJson: string | null): Changelog
 
 export async function getChangelogSettings(): Promise<ChangelogSettings> {
   try {
-    const org = await requireSettings()
+    const org = await requireSettingsPerRequest()
     return resolveChangelogSettings(org.metadata)
   } catch (error) {
     log.error({ err: error }, 'get changelog settings failed')

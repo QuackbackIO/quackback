@@ -8,6 +8,7 @@ import {
 } from '@/lib/server/db'
 import type { IdentityProviderId } from '@quackback/ids'
 import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/cache'
+import { localCacheGet, localCacheSet } from '@/lib/server/local-cache'
 import { memoizePerRequest } from '@/lib/server/request-memo'
 import { ValidationError, NotFoundError } from '@/lib/shared/errors'
 import { httpsUrl } from '@/lib/shared/schemas/auth'
@@ -59,11 +60,13 @@ import {
   parseWidgetConfig,
   deepMerge,
   requireSettings,
+  requireSettingsCached,
   wrapDbError,
   invalidateSettingsCache,
   normalizeWelcomeCardInput,
   mergeWelcomeCard,
   publicWelcomeCard,
+  requireSettingsPerRequest,
 } from './settings.helpers'
 import { withCurrentStorageReadTokens } from '@/lib/server/content/storage-read-urls'
 
@@ -169,7 +172,7 @@ export async function getPublicOidcProviders(): Promise<OidcSignInButton[]> {
 
 export async function getAuthConfig(): Promise<AuthConfig> {
   try {
-    const org = await requireSettings()
+    const org = await requireSettingsPerRequest()
     return parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
   } catch (error) {
     log.error({ err: error }, 'get auth config failed')
@@ -620,7 +623,22 @@ export async function listVerifiedDomains(): Promise<VerifiedDomain[]> {
 
 export async function getPortalConfig(): Promise<PortalConfig> {
   try {
-    const org = await requireSettings()
+    const org = await requireSettingsPerRequest()
+    return parsePortalConfig(org.portalConfig)
+  } catch (error) {
+    log.error({ err: error }, 'get portal config failed')
+    wrapDbError('fetch portal config', error)
+  }
+}
+
+/**
+ * {@link getPortalConfig} for read-only paths (the portal-access gate runs on
+ * every page), served from the settings the request already holds. A
+ * read-modify-write keeps {@link getPortalConfig}.
+ */
+export async function getPortalConfigCached(): Promise<PortalConfig> {
+  try {
+    const org = await requireSettingsCached()
     return parsePortalConfig(org.portalConfig)
   } catch (error) {
     log.error({ err: error }, 'get portal config failed')
@@ -656,7 +674,7 @@ export async function updatePortalConfig(input: UpdatePortalConfigInput): Promis
 
 export async function getDeveloperConfig(): Promise<DeveloperConfig> {
   try {
-    const org = await requireSettings()
+    const org = await requireSettingsPerRequest()
     return parseJsonConfig(org.developerConfig, DEFAULT_DEVELOPER_CONFIG)
   } catch (error) {
     log.error({ err: error }, 'get developer config failed')
@@ -717,7 +735,7 @@ export async function updateDeveloperConfig(
 
 export async function getHelpCenterConfig(): Promise<HelpCenterConfig> {
   try {
-    const org = await requireSettings()
+    const org = await requireSettingsPerRequest()
     return parseJsonConfig(org.helpCenterConfig, DEFAULT_HELP_CENTER_CONFIG)
   } catch (error) {
     log.error({ err: error }, 'get help center config failed')
@@ -817,7 +835,7 @@ export async function updateHelpCenterLocaleChrome(input: {
 
 export async function getPublicAuthConfig(): Promise<PublicAuthConfig> {
   try {
-    const org = await requireSettings()
+    const org = await requireSettingsPerRequest()
     const authConfig = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
 
     const [configuredTypes, passthroughKeys] = await Promise.all([
@@ -842,7 +860,7 @@ export async function getPublicAuthConfig(): Promise<PublicAuthConfig> {
 
 export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
   try {
-    const org = await requireSettings()
+    const org = await requireSettingsPerRequest()
     const portalConfig = parsePortalConfig(org.portalConfig)
 
     const oidcProviders = await getPublicOidcProviders()
@@ -884,7 +902,33 @@ export async function getWorkspaceSettings(): Promise<WorkspaceSettings | null> 
   return settings ? liveWorkspaceSettings(structuredClone(settings)) : null
 }
 
+/**
+ * How long this process reuses the settings it read (`localCacheSet`): a write
+ * made by another process reaches this one within this window, which bounds
+ * how late, for example, a changed auth config takes effect there.
+ */
+export const SETTINGS_LOCAL_TTL_MS = 5_000
+
+/**
+ * The window in effect: QUACKBACK_SETTINGS_CACHE_MS overrides it (0 turns the
+ * copy off). The perf bench pins it long, so its counts measure a warm process
+ * rather than whichever side of the window a request happened to land on.
+ */
+function settingsLocalTtlMs(): number {
+  const override = Number(process.env.QUACKBACK_SETTINGS_CACHE_MS)
+  return Number.isFinite(override) && override >= 0 ? override : SETTINGS_LOCAL_TTL_MS
+}
+
 async function loadWorkspaceSettings(): Promise<WorkspaceSettings | null> {
+  const local = localCacheGet<WorkspaceSettings>(CACHE_KEYS.WORKSPACE_SETTINGS)
+  if (local) return local
+  const settings = await readWorkspaceSettings()
+  const ttlMs = settingsLocalTtlMs()
+  if (settings && ttlMs > 0) localCacheSet(CACHE_KEYS.WORKSPACE_SETTINGS, settings, ttlMs)
+  return settings
+}
+
+async function readWorkspaceSettings(): Promise<WorkspaceSettings | null> {
   try {
     const cached = await cacheGet<WorkspaceSettings>(CACHE_KEYS.WORKSPACE_SETTINGS)
     if (cached) {

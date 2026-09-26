@@ -30,14 +30,32 @@ const CHANNEL_LABELS: Record<NotificationChannel, string> = {
   push: 'Push',
 }
 
-/** One notification-type × channel matrix, grouped into per-group tabs. */
-export function NotificationMatrixForm({ surface }: { surface: 'admin' | 'portal' }) {
-  const [preferences, setPreferences] = useState<NotificationPreferences | null>(null)
-  const [loading, setLoading] = useState(true)
+/**
+ * One notification-type x channel matrix, grouped into per-group tabs.
+ *
+ * `initialPreferences`: when the caller's own loader already fetched these
+ * (the portal preferences page and the admin notifications page fold this
+ * into their document response, since a separate post-hydration request would
+ * redo the session/principal lookup that loader already paid for), pass the
+ * result here to skip the mount fetch. Without it, or when the loader's read
+ * failed (null), the form fetches on mount.
+ */
+export function NotificationMatrixForm({
+  surface,
+  initialPreferences,
+}: {
+  surface: 'admin' | 'portal'
+  initialPreferences?: NotificationPreferences | null
+}) {
+  const [preferences, setPreferences] = useState<NotificationPreferences | null>(
+    initialPreferences ?? null
+  )
+  const [loading, setLoading] = useState(!initialPreferences)
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (initialPreferences) return
     let cancelled = false
     async function fetchPreferences() {
       try {
@@ -55,6 +73,10 @@ export function NotificationMatrixForm({ surface }: { surface: 'admin' | 'portal
     return () => {
       cancelled = true
     }
+    // initialPreferences is a loader-time snapshot: intentionally excluded so a
+    // later prop identity change (there isn't one across this form's lifetime)
+    // never re-triggers the mount fetch it was meant to replace.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const groups = useMemo(() => {

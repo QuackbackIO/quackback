@@ -118,6 +118,47 @@ describe('createRouteContextMemo', () => {
   })
 })
 
+describe('parts of a new answer', () => {
+  type Context = { settings: { name: string }; session: { user: string }; flags: string[] }
+
+  it("are the previous answer's where they did not change", async () => {
+    const context = memo.createRouteContextMemo<Context>()
+    const first = await context.get(async () => ({
+      settings: { name: 'Acme' },
+      session: { user: 'ada' },
+      flags: ['a', 'b'],
+    }))
+    memo.expireRouteContext()
+    const second = await context.get(async () => ({
+      settings: { name: 'Acme' },
+      session: { user: 'bob' },
+      flags: ['a', 'b'],
+    }))
+
+    expect(second.settings).toBe(first.settings)
+    expect(second.flags).toBe(first.flags)
+    expect(second.session).not.toBe(first.session)
+    expect(second.session).toEqual({ user: 'bob' })
+  })
+
+  it("are the rendered answer's where the first fetch after it did not change them", async () => {
+    const context = memo.createRouteContextMemo<Context>()
+    const rendered = { settings: { name: 'Acme' }, session: { user: 'ada' }, flags: ['a'] }
+    context.seed(rendered)
+    memo.expireRouteContext()
+
+    const fetched = await context.get(async () => ({
+      settings: { name: 'Acme' },
+      session: { user: 'ada' },
+      flags: ['a', 'c'],
+    }))
+
+    expect(fetched.settings).toBe(rendered.settings)
+    expect(fetched.session).toBe(rendered.session)
+    expect(fetched.flags).toEqual(['a', 'c'])
+  })
+})
+
 describe('seed', () => {
   it('serves the server-rendered context to the first navigation', async () => {
     const context = memo.createRouteContextMemo<string>()

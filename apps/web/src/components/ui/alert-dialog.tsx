@@ -2,19 +2,40 @@ import * as React from 'react'
 import { AlertDialog as AlertDialogPrimitive } from '@base-ui/react/alert-dialog'
 
 import { asChildRender, overlayTriggerProps } from '@/components/ui/as-child'
+import {
+  OverlayOpenedContext,
+  useOverlayOpened,
+  useOverlayOpenedRoot,
+} from '@/components/ui/overlay-opened'
 import { cn } from '@/lib/shared/utils'
 import { buttonVariants } from '@/components/ui/button'
 
 const AlertDialogActionsContext =
   React.createContext<React.RefObject<AlertDialogPrimitive.Root.Actions | null> | null>(null)
 
-function AlertDialog({ actionsRef: actionsRefProp, ...props }: AlertDialogPrimitive.Root.Props) {
+function AlertDialog({
+  actionsRef: actionsRefProp,
+  open,
+  defaultOpen,
+  onOpenChange,
+  ...props
+}: AlertDialogPrimitive.Root.Props) {
   const fallbackActionsRef = React.useRef<AlertDialogPrimitive.Root.Actions | null>(null)
   const actionsRef = actionsRefProp ?? fallbackActionsRef
+  const opened = useOverlayOpenedRoot(open, defaultOpen, onOpenChange)
 
   return (
     <AlertDialogActionsContext.Provider value={actionsRef}>
-      <AlertDialogPrimitive.Root data-slot="alert-dialog" actionsRef={actionsRef} {...props} />
+      <OverlayOpenedContext.Provider value={opened.value}>
+        <AlertDialogPrimitive.Root
+          data-slot="alert-dialog"
+          actionsRef={actionsRef}
+          open={open}
+          defaultOpen={defaultOpen}
+          onOpenChange={opened.onOpenChange}
+          {...props}
+        />
+      </OverlayOpenedContext.Provider>
     </AlertDialogActionsContext.Provider>
   )
 }
@@ -57,8 +78,11 @@ function AlertDialogOverlay({ className, ...props }: AlertDialogPrimitive.Backdr
 }
 
 function AlertDialogContent({ className, ...props }: AlertDialogPrimitive.Popup.Props) {
+  // Nothing to portal until the dialog first opens.
+  const opened = useOverlayOpened()
+  if (!opened) return null
   return (
-    <AlertDialogPortal>
+    <AlertDialogPrimitive.Portal data-slot="alert-dialog-portal">
       <AlertDialogOverlay />
       <AlertDialogPrimitive.Popup
         data-slot="alert-dialog-content"
@@ -68,7 +92,7 @@ function AlertDialogContent({ className, ...props }: AlertDialogPrimitive.Popup.
         )}
         {...props}
       />
-    </AlertDialogPortal>
+    </AlertDialogPrimitive.Portal>
   )
 }
 

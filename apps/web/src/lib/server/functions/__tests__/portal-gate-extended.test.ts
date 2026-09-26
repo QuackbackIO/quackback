@@ -101,6 +101,7 @@ const mockGetPublicPostDetail = vi.fn()
 const mockListPublicPosts = vi.fn()
 const mockGetPortalPublicRoadmaps = vi.fn()
 const mockGetPortalPublicRoadmapPosts = vi.fn()
+const mockGetPortalPublicRoadmapColumnsPosts = vi.fn()
 const mockGetPostMergeInfo = vi.fn()
 const mockGetMergedPosts = vi.fn()
 
@@ -141,6 +142,7 @@ vi.mock('@/lib/server/domains/roadmaps/roadmap.service', () => ({
 
 vi.mock('@/lib/server/domains/roadmaps/roadmap.query', () => ({
   getPublicRoadmapPosts: (...a: unknown[]) => mockGetPortalPublicRoadmapPosts(...a),
+  getPublicRoadmapColumnsPosts: (...a: unknown[]) => mockGetPortalPublicRoadmapColumnsPosts(...a),
 }))
 
 vi.mock('@/lib/server/domains/subscriptions/subscription.service', () => ({
@@ -177,10 +179,14 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 vi.mock('@/lib/shared/roles', () => ({ isTeamMember: vi.fn().mockReturnValue(false) }))
 
 // The capability gates read the workspace anonymous switch fail-closed from the
-// RAW settings (workspaceAllowsAnonymous), so drive it via getSettings here.
+// RAW settings (workspaceAllowsAnonymous), so drive it via getSettings (and the
+// cached read of the same row) here.
 // getPortalConfig is still mocked for any merged-config consumers.
 vi.mock('@/lib/server/functions/workspace', () => ({
   getSettings: vi.fn().mockResolvedValue({ portalConfig: { features: { allowAnonymous: true } } }),
+  getSettingsCached: vi.fn().mockResolvedValue({
+    portalConfig: { features: { allowAnonymous: true } },
+  }),
 }))
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   getPortalConfig: vi.fn().mockResolvedValue({ features: { allowAnonymous: true } }),

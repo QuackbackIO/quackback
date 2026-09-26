@@ -17,7 +17,7 @@ import {
   setInboxTranslationEnabledFn,
   dismissInboxTranslationSuggestionFn,
 } from '@/lib/server/functions/conversation'
-import { getMyLanguagePreferenceFn } from '@/lib/server/functions/teammate-preferences'
+import { conversationPanelQueries } from '@/lib/client/queries/conversation-panels'
 import type {
   AgentConversationMessageDTO,
   ConversationTranslationStateDTO,
@@ -85,10 +85,8 @@ export function useInboxTranslation({
   const [showOriginalIds, setShowOriginalIds] = useState<ReadonlySet<string>>(() => new Set())
 
   const { data: myLanguagePreference } = useQuery({
-    queryKey: ['teammate', 'language-preference'],
-    queryFn: () => getMyLanguagePreferenceFn().then((r) => r.language),
+    ...conversationPanelQueries.languagePreference(),
     enabled: enabledFlag,
-    staleTime: 5 * 60_000,
   })
   // An explicit translation preference wins. Without one, compare against the
   // admin's effective locale, which is resolved from the browser's

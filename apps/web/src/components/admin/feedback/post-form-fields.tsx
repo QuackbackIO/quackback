@@ -7,7 +7,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import { RichTextEditor, type EditorDocument } from '@/components/ui/rich-text-editor'
 import { FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form'
 import { FormError } from '@/components/shared/form-error'
 import { TitleInput } from '@/components/shared/title-input'
@@ -22,7 +22,7 @@ interface PostFormFieldsProps {
   statuses: PostStatusEntity[]
   tags: PostTag[]
   contentJson: JSONContent | null
-  onContentChange: (json: JSONContent, html: string, markdown: string) => void
+  onContentChange: (document: EditorDocument) => void
   error?: string
   richMediaEnabled?: boolean
   videoEmbedsEnabled?: boolean
@@ -135,7 +135,7 @@ export function PostFormFields({
               <FormControl>
                 <RichTextEditor
                   value={contentJson || ''}
-                  onChange={onContentChange}
+                  onDocumentChange={onContentChange}
                   placeholder="Add more details... Type / for commands"
                   minHeight="200px"
                   borderless

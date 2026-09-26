@@ -37,6 +37,8 @@ import { QuinnPerformanceCard } from '../quinn-performance-card'
 
 afterEach(cleanup)
 
+const RANGE = { from: '2026-01-01T00:00:00.000Z', to: '2026-01-31T00:00:00.000Z' }
+
 function renderWithClient(ui: ReactElement) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
@@ -48,28 +50,28 @@ function renderWithClient(ui: ReactElement) {
 
 describe('QuinnPerformanceCard', () => {
   it('mounts with no required props', () => {
-    expect(() => renderWithClient(<QuinnPerformanceCard />)).not.toThrow()
+    expect(() => renderWithClient(<QuinnPerformanceCard range={RANGE} />)).not.toThrow()
   })
 
   it('renders the involvement, resolution, and escalation rates', async () => {
-    renderWithClient(<QuinnPerformanceCard />)
+    renderWithClient(<QuinnPerformanceCard range={RANGE} />)
     expect(await screen.findByText('40%')).toBeInTheDocument()
     expect(await screen.findByText('50%')).toBeInTheDocument()
     expect(await screen.findByText('25%')).toBeInTheDocument()
   })
 
   it('shows the confirmed vs assumed resolution split', async () => {
-    renderWithClient(<QuinnPerformanceCard />)
+    renderWithClient(<QuinnPerformanceCard range={RANGE} />)
     expect(await screen.findByText(/1 confirmed.*1 assumed/)).toBeInTheDocument()
   })
 
   it('shows actions taken', async () => {
-    renderWithClient(<QuinnPerformanceCard />)
+    renderWithClient(<QuinnPerformanceCard range={RANGE} />)
     expect(await screen.findByText('3')).toBeInTheDocument()
   })
 
   it('renders all five KPI tiles', async () => {
-    renderWithClient(<QuinnPerformanceCard />)
+    renderWithClient(<QuinnPerformanceCard range={RANGE} />)
     expect(await screen.findByText('Involvement rate')).toBeInTheDocument()
     expect(screen.getByText('Resolution rate')).toBeInTheDocument()
     expect(screen.getByText('Escalation rate')).toBeInTheDocument()
@@ -78,18 +80,18 @@ describe('QuinnPerformanceCard', () => {
   })
 
   it('shows the customer satisfaction average and rating count', async () => {
-    renderWithClient(<QuinnPerformanceCard />)
+    renderWithClient(<QuinnPerformanceCard range={RANGE} />)
     expect(await screen.findByText('4.50 / 5')).toBeInTheDocument()
     expect(screen.getByText('2 ratings')).toBeInTheDocument()
   })
 
   it('shows a loading placeholder before data arrives', () => {
-    renderWithClient(<QuinnPerformanceCard />)
+    renderWithClient(<QuinnPerformanceCard range={RANGE} />)
     expect(screen.getAllByText('—').length).toBeGreaterThan(0)
   })
 
   it('fetches the last-30-days range', async () => {
-    renderWithClient(<QuinnPerformanceCard />)
+    renderWithClient(<QuinnPerformanceCard range={RANGE} />)
     await screen.findByText('40%')
     expect(getQuinnPerformanceFn).toHaveBeenCalledWith(
       expect.objectContaining({

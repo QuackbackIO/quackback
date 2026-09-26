@@ -43,7 +43,7 @@ import {
 import { BulkActionBar, type BulkMenuId } from '@/components/admin/conversation/bulk-action-bar'
 import { InboxCommandBar } from '@/components/admin/conversation/inbox-command-bar'
 import { ShortcutHelpPanel } from '@/components/admin/conversation/shortcut-help-panel'
-import { DETAIL_PANEL_MEDIA_QUERY } from '@/components/admin/inbox/inbox-detail-panel'
+import { DETAIL_PANEL_MEDIA_QUERY } from '@/lib/client/conversation/detail-panel'
 import { useInboxKeyboard } from '@/components/admin/conversation/use-inbox-keyboard'
 import {
   useBulkConversationUpdate,
@@ -97,6 +97,7 @@ import {
   type InboxSearch,
 } from '@/lib/client/conversation/inbox-scope'
 import { reconcileCachedThread } from '@/lib/client/conversation/reconcile-cached-thread'
+import { applyConversationReadToLists } from '@/lib/client/conversation/inbox-read'
 import type { Channel } from '@/lib/shared/channels'
 import { conversationInboxQueries } from '@/lib/client/queries/conversation-inbox'
 import { inboxQueries, inboxKeys, ticketQueries, ticketKeys } from '@/lib/client/queries/inbox'
@@ -746,6 +747,11 @@ function InboxPage() {
           () => evt.ticket
         )
         patchTicketInInboxLists(queryClient, evt.ticket)
+      } else if (evt.kind === 'read' && evt.side === 'agent') {
+        // An agent-side read moves only the row's unread badge, so the row is
+        // patched in each cached list; a list the patch cannot be sure of
+        // (a watermark moved back, or a fetch in flight) is refetched.
+        applyConversationReadToLists(queryClient, evt.conversationId, evt.at)
       } else if (agentEventChangesInboxList(evt)) {
         // Every membership/order/preview-changing event (a new message, a
         // conversation's status/assignee/tags, an agent-side read move) —
@@ -1486,6 +1492,28 @@ function InboxPage() {
     onOpenHelp: () => setHelpOpen(true),
   })
 
+  // The list header's slot. Quinn view: the outcome sub-filter chips
+  // (Resolved/Escalated/Pending). Otherwise the company picker, shown only when
+  // the workspace has companies to filter by. Memoized so opening an item
+  // leaves the (memoized) list header as it was.
+  const listHeaderSlot = useMemo(
+    () =>
+      isQuinnView ? (
+        <QuinnBucketChips
+          value={urlAi}
+          counts={assistantCounts}
+          onChange={(ai) => updateSearch({ ai, i: undefined, m: undefined })}
+        />
+      ) : companies && companies.length > 0 ? (
+        <CompanyInboxFilter
+          companies={companies}
+          value={urlCompany}
+          onChange={(id) => updateSearch({ company: id, i: undefined, m: undefined })}
+        />
+      ) : undefined,
+    [isQuinnView, urlAi, assistantCounts, companies, urlCompany, updateSearch]
+  )
+
   // The floating bar shows for a real multi-selection, or when a value menu was
   // popped for the single open item.
   const bulkBarVisible = hasSelection || (bulkMenu !== null && hasActiveConversation)
@@ -1524,24 +1552,7 @@ function InboxPage() {
           onSelectNav={setNav}
           scopeLabel={scopeLabel}
           showRefinements={showRefinements}
-          // Quinn view: the outcome sub-filter chips (Resolved/Escalated/
-          // Pending). Otherwise the company picker, shown only when the workspace
-          // has companies to filter by.
-          headerSlot={
-            isQuinnView ? (
-              <QuinnBucketChips
-                value={urlAi}
-                counts={assistantCounts}
-                onChange={(ai) => updateSearch({ ai, i: undefined, m: undefined })}
-              />
-            ) : companies && companies.length > 0 ? (
-              <CompanyInboxFilter
-                companies={companies}
-                value={urlCompany}
-                onChange={(id) => updateSearch({ company: id, i: undefined, m: undefined })}
-              />
-            ) : undefined
-          }
+          headerSlot={listHeaderSlot}
           searchInput={searchInput}
           onSearchInput={setSearchInput}
           facet={facet}
@@ -1578,6 +1589,7 @@ function InboxPage() {
             isOtherAgentTyping={false}
             openCopilotToken={openCopilotToken}
             composerRef={composerHandleRef}
+            detailPanelShown={isDetailPanelViewport}
           />
         ) : selectedRef?.kind === 'conversation' ? (
           <AgentConversationThread
@@ -1593,6 +1605,7 @@ function InboxPage() {
             createTicketToken={createTicketToken}
             openCopilotToken={openCopilotToken}
             composerRef={composerHandleRef}
+            detailPanelShown={isDetailPanelViewport}
           />
         ) : (
           <div className="hidden h-full items-center justify-center md:flex">

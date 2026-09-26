@@ -133,6 +133,7 @@ let portalVisibility: 'public' | 'private' = 'private'
 const mockGetPortalConfig = vi.fn(async () => ({ access: { visibility: portalVisibility } }))
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   getPortalConfig: () => mockGetPortalConfig(),
+  getPortalConfigCached: () => mockGetPortalConfig(),
 }))
 
 const { runWithLogContext } = await import('@/lib/server/log-context')
@@ -140,6 +141,12 @@ const { getSession } = await import('../session')
 const { requireAuth, getOptionalAuth } = await import('@/lib/server/functions/auth-helpers')
 const { resolvePortalAccessForRequest } = await import('@/lib/server/functions/portal-access')
 const { getCurrentUserRole } = await import('@/lib/server/functions/workspace')
+const { requireWorkspaceRole } =
+  (await import('@/lib/server/functions/workspace-utils')) as unknown as {
+    requireWorkspaceRole: (input: {
+      data: { allowedRoles: string[] }
+    }) => Promise<{ principal: { id: string }; permissions: string[] }>
+  }
 const { getRequestSession, getRequestPrincipal, forgetRequestIdentity } =
   await import('../request-session')
 const { cacheDel, CACHE_KEYS } = await import('@/lib/server/cache')
@@ -215,6 +222,23 @@ describe('one identity read per request', () => {
     expect(mockGetSession).toHaveBeenCalledTimes(1)
     expect(mockPrincipalFindFirst).toHaveBeenCalledTimes(1)
     expect(mockPermissionsForPrincipal).toHaveBeenCalledTimes(1)
+  })
+
+  it('shares them with the admin route guard', async () => {
+    // An admin document: the layout's guard, then the page's server functions.
+    const guard = await inRequest('tok_ada', async () => {
+      const guard = await requireWorkspaceRole({ data: { allowedRoles: ['admin', 'member'] } })
+      await Promise.all([requireAuth(), requireAuth({ permission: 'settings.manage' as never })])
+      return guard
+    })
+
+    expect(guard.principal.id).toBe('principal_user_ada')
+    expect(guard.permissions).toEqual(['settings.manage'])
+    expect(mockGetSession).toHaveBeenCalledTimes(1)
+    expect(mockPrincipalFindFirst).toHaveBeenCalledTimes(1)
+    expect(mockPermissionsForPrincipal).toHaveBeenCalledTimes(1)
+    // The guard's workspace check reads the settings the request already holds.
+    expect(mockSettingsFindFirst).not.toHaveBeenCalled()
   })
 
   it('never carries an identity into another request', async () => {

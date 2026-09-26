@@ -6,7 +6,8 @@ import {
   type Editor,
   type JSONContent,
 } from '@tiptap/react'
-import { BubbleMenu } from '@tiptap/react/menus'
+import { BubbleMenu, type BubbleMenuProps } from '@tiptap/react/menus'
+import { redoDepth, undoDepth } from '@tiptap/pm/history'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Link from '@tiptap/extension-link'
@@ -29,7 +30,7 @@ import { QuackbackEmbed } from './quackback-embed-extension'
 import { ConversationImage } from './conversation-image-node'
 import { UploadedVideo } from './uploaded-video-node'
 import { Markdown } from '@tiptap/markdown'
-import { Extension } from '@tiptap/core'
+import { Extension, getHTMLFromFragment } from '@tiptap/core'
 import type { Range } from '@tiptap/core'
 import Suggestion, { type SuggestionOptions, type SuggestionProps } from '@tiptap/suggestion'
 import { createLowlight } from 'lowlight'
@@ -484,6 +485,66 @@ export function plaintextFromTiptapJson(doc: unknown): string {
   }
   walk(doc as { type?: string; content?: unknown[] })
   return blocks.join('\n')
+}
+
+/**
+ * The document after an edit, serialized on demand. Nothing is serialized
+ * until a format is read, and each format at most once, so a host can keep the
+ * latest document while it is written and serialize it once, when it is sent.
+ * A later read still returns the document as it was at this edit.
+ */
+export interface EditorDocument {
+  json(): JSONContent
+  html(): string
+  /** Markdown, with markdownFromEditor's fallbacks when the serializer throws. */
+  markdown(): string
+}
+
+/**
+ * An EditorDocument for the editor's current document. `markdownFallback` is
+ * what markdownFromEditor falls back on; `onSerialize` hears the JSON and the
+ * markdown the first time each is serialized.
+ */
+function editorDocument(
+  editor: Pick<Editor, 'state' | 'schema' | 'markdown'>,
+  {
+    markdownFallback = () => '',
+    onSerialize,
+  }: {
+    markdownFallback?: () => string
+    onSerialize?: (format: 'json' | 'markdown', value: JSONContent | string) => void
+  } = {}
+): EditorDocument {
+  // A ProseMirror document is immutable, so this one stays the edit's own.
+  const { doc } = editor.state
+  const { schema, markdown: markdownManager } = editor
+  let json: JSONContent | undefined
+  let html: string | undefined
+  let markdown: string | undefined
+  const snapshot: EditorDocument = {
+    json() {
+      if (json === undefined) {
+        json = doc.toJSON() as JSONContent
+        onSerialize?.('json', json)
+      }
+      return json
+    },
+    html() {
+      html ??= getHTMLFromFragment(doc.content, schema)
+      return html
+    },
+    markdown() {
+      if (markdown === undefined) {
+        const serializer = markdownManager
+          ? { getMarkdown: () => markdownManager.serialize(snapshot.json()) }
+          : {}
+        markdown = markdownFromEditor(serializer, 3, markdownFallback(), snapshot.json())
+        onSerialize?.('markdown', markdown)
+      }
+      return markdown
+    },
+  }
+  return snapshot
 }
 
 export function seedMarkdownFallback(
@@ -1317,7 +1378,15 @@ export interface RichTextEditorHandle {
 
 interface RichTextEditorProps {
   value?: string | JSONContent
+  /**
+   * Called after every edit with the document serialized up front: always
+   * the JSON, the HTML when the callback declares a 2nd parameter and the
+   * markdown when it declares a 3rd. A host that needs the document only
+   * when it is sent should take onDocumentChange instead.
+   */
   onChange?: (json: JSONContent, html: string, markdown: string) => void
+  /** Called after every edit with the document, serialized only when read. */
+  onDocumentChange?: (document: EditorDocument) => void
   placeholder?: string
   className?: string
   disabled?: boolean
@@ -1361,6 +1430,7 @@ interface RichTextEditorProps {
 function RichTextEditorBase({
   value,
   onChange,
+  onDocumentChange,
   placeholder = 'Write something...',
   className,
   disabled = false,
@@ -1456,6 +1526,10 @@ function RichTextEditorBase({
   // above, which is cleared after a controlled-value round trip; comment
   // composers need this if a later getMarkdown() throw would otherwise emit ''.
   const lastSuccessfulMarkdownRef = useRef(seedMarkdownFallback(value))
+  // The latest edit's document. Only its reads count as what the editor
+  // emitted, for the guards above; a host reading an older document later (on
+  // send) changes nothing.
+  const latestDocumentRef = useRef<EditorDocument | null>(null)
 
   // Stable initial content reference — passed once to useEditor so TipTap v3's
   // compareOptions never sees a reference change on `content` and never calls
@@ -1477,21 +1551,30 @@ function RichTextEditorBase({
       lastSuccessfulMarkdownRef.current = seedMarkdownFallback(initialContentRef.current, editor)
     },
     onUpdate: ({ editor }) => {
+      if (!onChange && !onDocumentChange) return
+      const edited = editorDocument(editor, {
+        markdownFallback: () => lastSuccessfulMarkdownRef.current,
+        onSerialize: (format, serialized) => {
+          if (latestDocumentRef.current !== edited) return
+          if (format === 'json') {
+            lastEmittedJsonRef.current = serialized
+          } else {
+            lastEmittedMarkdownRef.current = serialized as string
+            lastSuccessfulMarkdownRef.current = serialized as string
+          }
+        },
+      })
+      latestDocumentRef.current = edited
+      lastEmittedJsonRef.current = null
+      lastEmittedMarkdownRef.current = null
+      onDocumentChange?.(edited)
       if (!onChange) return
-      const json = editor.getJSON()
-      lastEmittedJsonRef.current = json
-      const html = editor.getHTML()
-      // Only serialize to markdown when the caller declares a 3rd parameter.
-      // Callers that only need json+html (widget, portal) skip the expensive
-      // recursive tree-walk that @tiptap/markdown does on every keystroke.
-      const markdown = markdownFromEditor(
-        editor,
-        onChange.length,
-        lastSuccessfulMarkdownRef.current,
-        json
-      )
+      // Serialize only the formats the callback declares a parameter for:
+      // the HTML and the markdown each walk the whole document.
+      const json = edited.json()
+      const html = onChange.length >= 2 ? edited.html() : ''
+      const markdown = onChange.length >= 3 ? edited.markdown() : ''
       lastEmittedMarkdownRef.current = markdown
-      if (onChange.length >= 3) lastSuccessfulMarkdownRef.current = markdown
       onChange(json, html, markdown)
     },
     editorProps,
@@ -1510,10 +1593,21 @@ function RichTextEditorBase({
     [editor]
   )
 
+  // The editor instance the value-sync below last ran for.
+  const syncedEditorRef = useRef<Editor | null>(null)
+
   // Sync external value changes into the editor.
   // Skipped when the value is the exact object/string we just emitted via onUpdate.
   useEffect(() => {
     if (!editor) return
+
+    // A new editor was created from this very value. Applying it again would
+    // only re-normalize the document (the trailing paragraph, attribute
+    // defaults), leave a step to undo and hand the host an update it did not
+    // cause.
+    const firstSync = syncedEditorRef.current !== editor
+    syncedEditorRef.current = editor
+    if (firstSync && value === initialContentRef.current) return
 
     if (value === lastEmittedJsonRef.current) {
       lastEmittedJsonRef.current = null
@@ -1552,20 +1646,102 @@ function RichTextEditorBase({
     }
   }, [value, editor])
 
-  // Update editable state
+  // Update editable state. Editability is not a change to the document, so
+  // it emits no update (which would reach the host as an onChange).
   useEffect(() => {
-    if (editor) {
-      editor.setEditable(!disabled)
+    if (editor && editor.isEditable !== !disabled) {
+      editor.setEditable(!disabled, false)
     }
   }, [disabled, editor])
 
+  if (!editor) {
+    // Reserve the editor's eventual size, toolbar row included, so the
+    // surrounding layout doesn't jump when TipTap finishes mounting. Keeping
+    // immediatelyRender=false preserves SSR safety.
+    return (
+      <RichTextEditorEmptyState
+        placeholder={placeholder}
+        className={className}
+        disabled={disabled}
+        minHeight={minHeight}
+        fill={fill}
+        borderless={borderless}
+        toolbarPosition={toolbarPosition}
+        aria-hidden="true"
+      />
+    )
+  }
+
+  return (
+    <EditorChrome
+      editor={editor}
+      className={className}
+      disabled={disabled}
+      fill={fill}
+      borderless={borderless}
+      toolbarPosition={toolbarPosition}
+      features={features}
+      onImageUpload={onImageUpload}
+      onVideoUpload={onVideoUpload}
+    />
+  )
+}
+
+// Held at module scope: TipTap's BubbleMenu dispatches a transaction to update
+// its plugin whenever `options` or `shouldShow` changes identity.
+const BUBBLE_MENU_OPTIONS = { strategy: 'fixed', placement: 'top' } as const
+
+const showFormattingBubble: BubbleMenuProps['shouldShow'] = ({ editor, state }) => {
+  // Don't show in code blocks or tables
+  if (editor.isActive('codeBlock')) return false
+  if (editor.isActive('table')) return false
+  // Only show when text is selected
+  const { from, to } = state.selection
+  return from !== to
+}
+
+const showTableBubble: BubbleMenuProps['shouldShow'] = ({ editor }) => editor.isActive('table')
+
+const showImageBubble: BubbleMenuProps['shouldShow'] = ({ editor }) =>
+  editor.isActive('resizableImage')
+
+interface EditorChromeProps {
+  editor: Editor
+  className?: string
+  disabled: boolean
+  fill: boolean
+  borderless: boolean
+  toolbarPosition: 'top' | 'none' | 'bottom'
+  features: EditorFeatures
+  onImageUpload?: (file: File) => Promise<string>
+  onVideoUpload?: (file: File) => Promise<string>
+}
+
+/**
+ * The writing surface and everything around it: the toolbar, the bubble menus
+ * and the image context menu. None of it takes the document as a prop, so a
+ * controlled host that re-renders on every keystroke (a new value and often a
+ * new onChange) stops at RichTextEditorBase. The toolbar and menus follow the
+ * selection through their own useEditorState subscriptions instead.
+ */
+const EditorChrome = memo(function EditorChrome({
+  editor,
+  className,
+  disabled,
+  fill,
+  borderless,
+  toolbarPosition,
+  features,
+  onImageUpload,
+  onVideoUpload,
+}: EditorChromeProps) {
   // Image context menu state - stores the src of the right-clicked image
   const [contextMenuImageSrc, setContextMenuImageSrc] = useState<string | null>(null)
 
   // Handle right-click - check if it's on an image and store the src
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
-      if (!editor || !features.images) {
+      if (!features.images) {
         setContextMenuImageSrc(null)
         return
       }
@@ -1582,7 +1758,7 @@ function RichTextEditorBase({
         setContextMenuImageSrc(null)
       }
     },
-    [editor, features.images]
+    [features.images]
   )
 
   // Use shared image actions hook for context menu
@@ -1605,24 +1781,6 @@ function RichTextEditorBase({
       el.style.overflow = 'visible'
     }
   }, [])
-
-  if (!editor) {
-    // Reserve the editor's eventual size, toolbar row included, so the
-    // surrounding layout doesn't jump when TipTap finishes mounting. Keeping
-    // immediatelyRender=false preserves SSR safety.
-    return (
-      <RichTextEditorEmptyState
-        placeholder={placeholder}
-        className={className}
-        disabled={disabled}
-        minHeight={minHeight}
-        fill={fill}
-        borderless={borderless}
-        toolbarPosition={toolbarPosition}
-        aria-hidden="true"
-      />
-    )
-  }
 
   return (
     <ContextMenu>
@@ -1702,18 +1860,8 @@ function RichTextEditorBase({
           editor={editor}
           appendTo={getBubbleMenuContainer}
           ref={bubbleMenuRef}
-          options={{
-            strategy: 'fixed',
-            placement: 'top',
-          }}
-          shouldShow={({ editor, state }) => {
-            // Don't show in code blocks or tables
-            if (editor.isActive('codeBlock')) return false
-            if (editor.isActive('table')) return false
-            // Only show when text is selected
-            const { from, to } = state.selection
-            return from !== to
-          }}
+          options={BUBBLE_MENU_OPTIONS}
+          shouldShow={showFormattingBubble}
         >
           <BubbleMenuContent editor={editor} disabled={disabled} />
         </BubbleMenu>
@@ -1724,13 +1872,8 @@ function RichTextEditorBase({
           editor={editor}
           appendTo={getBubbleMenuContainer}
           ref={bubbleMenuRef}
-          options={{
-            strategy: 'fixed',
-            placement: 'top',
-          }}
-          shouldShow={({ editor }) => {
-            return editor.isActive('table')
-          }}
+          options={BUBBLE_MENU_OPTIONS}
+          shouldShow={showTableBubble}
         >
           <TableToolbar editor={editor} disabled={disabled} />
         </BubbleMenu>
@@ -1741,19 +1884,53 @@ function RichTextEditorBase({
           editor={editor}
           appendTo={getBubbleMenuContainer}
           ref={bubbleMenuRef}
-          options={{
-            strategy: 'fixed',
-            placement: 'top',
-          }}
-          shouldShow={({ editor }) => {
-            return editor.isActive('resizableImage')
-          }}
+          options={BUBBLE_MENU_OPTIONS}
+          shouldShow={showImageBubble}
         >
           <ImageToolbar editor={editor} disabled={disabled} />
         </BubbleMenu>
       )}
     </ContextMenu>
   )
+}, sameChromeProps)
+
+function sameChromeProps(prev: EditorChromeProps, next: EditorChromeProps): boolean {
+  return (
+    prev.editor === next.editor &&
+    prev.className === next.className &&
+    prev.disabled === next.disabled &&
+    prev.fill === next.fill &&
+    prev.borderless === next.borderless &&
+    prev.toolbarPosition === next.toolbarPosition &&
+    prev.onImageUpload === next.onImageUpload &&
+    prev.onVideoUpload === next.onVideoUpload &&
+    sameFeatures(prev.features, next.features)
+  )
+}
+
+// Every feature flag, so a comparison can never miss one added later.
+const FEATURE_FLAGS: Record<keyof EditorFeatures, true> = {
+  headings: true,
+  images: true,
+  videos: true,
+  codeBlocks: true,
+  bubbleMenu: true,
+  slashMenu: true,
+  taskLists: true,
+  blockquotes: true,
+  tables: true,
+  dividers: true,
+  embeds: true,
+  quackbackEmbeds: true,
+  emojiPicker: true,
+  enterAsHardBreak: true,
+  mentions: true,
+}
+const FEATURE_KEYS = Object.keys(FEATURE_FLAGS) as (keyof EditorFeatures)[]
+
+/** Feature sets compared flag by flag, so callers may pass inline objects. */
+function sameFeatures(prev: EditorFeatures = {}, next: EditorFeatures = {}): boolean {
+  return FEATURE_KEYS.every((key) => prev[key] === next[key])
 }
 
 // Skip re-render when individual feature flags and all other props are unchanged.
@@ -1763,6 +1940,7 @@ export const RichTextEditor = memo(RichTextEditorBase, (prev, next) => {
   if (
     prev.value !== next.value ||
     prev.onChange !== next.onChange ||
+    prev.onDocumentChange !== next.onDocumentChange ||
     prev.onImageUpload !== next.onImageUpload ||
     prev.onVideoUpload !== next.onVideoUpload ||
     prev.onSubmit !== next.onSubmit ||
@@ -1776,25 +1954,7 @@ export const RichTextEditor = memo(RichTextEditorBase, (prev, next) => {
     prev.editorRef !== next.editorRef
   )
     return false
-  const pf = prev.features ?? {}
-  const nf = next.features ?? {}
-  return (
-    pf.headings === nf.headings &&
-    pf.codeBlocks === nf.codeBlocks &&
-    pf.blockquotes === nf.blockquotes &&
-    pf.dividers === nf.dividers &&
-    pf.images === nf.images &&
-    pf.videos === nf.videos &&
-    pf.taskLists === nf.taskLists &&
-    pf.tables === nf.tables &&
-    pf.embeds === nf.embeds &&
-    pf.quackbackEmbeds === nf.quackbackEmbeds &&
-    pf.slashMenu === nf.slashMenu &&
-    pf.emojiPicker === nf.emojiPicker &&
-    pf.enterAsHardBreak === nf.enterAsHardBreak &&
-    pf.mentions === nf.mentions &&
-    pf.bubbleMenu === nf.bubbleMenu
-  )
+  return sameFeatures(prev.features, next.features)
 })
 
 // ============================================================================
@@ -1950,7 +2110,9 @@ function handleMediaPaste(
 // ============================================================================
 
 interface ToolbarButtonProps {
-  icon: React.ReactNode
+  /** Drawn at size-4. A component rather than an element, so a memoized
+   * button can compare it across renders. */
+  icon: React.ComponentType<{ className?: string }>
   onClick: () => void
   disabled: boolean
   isActive?: boolean
@@ -1961,8 +2123,12 @@ interface ToolbarButtonProps {
   variant?: 'default' | 'quiet'
 }
 
-function ToolbarButton({
-  icon,
+/**
+ * Memoized: a toolbar re-renders when any state it shows changes, and with
+ * stable onClick handlers only the buttons whose own state changed follow it.
+ */
+const ToolbarButton = memo(function ToolbarButton({
+  icon: Icon,
   onClick,
   disabled,
   isActive,
@@ -1989,10 +2155,10 @@ function ToolbarButton({
       title={title}
       aria-label={ariaLabel || title}
     >
-      {icon}
+      <Icon className="size-4" />
     </Button>
   )
-}
+})
 
 function ToolbarDivider() {
   return <div className="w-px h-4 bg-border mx-1" />
@@ -2007,70 +2173,100 @@ interface BubbleMenuContentProps {
   disabled: boolean
 }
 
-function BubbleMenuContent({ editor, disabled }: BubbleMenuContentProps) {
-  // Same subscription trick as MenuBar: active-state without full re-renders.
-  const active = useEditorState({
-    editor,
-    selector: ({ editor: e }) => ({
-      bold: e.isActive('bold'),
-      italic: e.isActive('italic'),
-      underline: e.isActive('underline'),
-      strike: e.isActive('strike'),
-      code: e.isActive('code'),
-      link: e.isActive('link'),
+const selectBubbleMarks = ({ editor: e }: { editor: Editor }) => ({
+  bold: e.isActive('bold'),
+  italic: e.isActive('italic'),
+  underline: e.isActive('underline'),
+  strike: e.isActive('strike'),
+  code: e.isActive('code'),
+  link: e.isActive('link'),
+})
+
+/**
+ * The toolbar and bubble menu commands, created once per editor so the
+ * memoized buttons that run them keep the same onClick across renders.
+ */
+function useToolbarCommands(editor: Editor) {
+  return useMemo(
+    () => ({
+      bold: () => editor.chain().focus().toggleBold().run(),
+      italic: () => editor.chain().focus().toggleItalic().run(),
+      underline: () => editor.chain().focus().toggleUnderline().run(),
+      strike: () => editor.chain().focus().toggleStrike().run(),
+      code: () => editor.chain().focus().toggleCode().run(),
+      heading1: () => editor.chain().focus().toggleHeading({ level: 1 }).run(),
+      heading2: () => editor.chain().focus().toggleHeading({ level: 2 }).run(),
+      heading3: () => editor.chain().focus().toggleHeading({ level: 3 }).run(),
+      bulletList: () => editor.chain().focus().toggleBulletList().run(),
+      orderedList: () => editor.chain().focus().toggleOrderedList().run(),
+      codeBlock: () => editor.chain().focus().toggleCodeBlock().run(),
+      undo: () => editor.chain().focus().undo().run(),
+      redo: () => editor.chain().focus().redo().run(),
     }),
-  })
+    [editor]
+  )
+}
+
+function BubbleMenuContent({ editor, disabled }: BubbleMenuContentProps) {
+  // Same subscription as MenuBar: re-renders only when a mark it shows flips.
+  const active = useEditorState({ editor, selector: selectBubbleMarks })
+  const commands = useToolbarCommands(editor)
   return (
     <div className="flex items-center gap-0.5 rounded-lg border bg-popover p-1 shadow-md">
       <ToolbarButton
-        icon={<Bold className="size-4" />}
-        onClick={() => editor.chain().focus().toggleBold().run()}
+        icon={Bold}
+        onClick={commands.bold}
         disabled={disabled}
         isActive={active.bold}
         title="Bold (Cmd+B)"
       />
       <ToolbarButton
-        icon={<Italic className="size-4" />}
-        onClick={() => editor.chain().focus().toggleItalic().run()}
+        icon={Italic}
+        onClick={commands.italic}
         disabled={disabled}
         isActive={active.italic}
         title="Italic (Cmd+I)"
       />
       <ToolbarButton
-        icon={<UnderlineIcon className="size-4" />}
-        onClick={() => editor.chain().focus().toggleUnderline().run()}
+        icon={UnderlineIcon}
+        onClick={commands.underline}
         disabled={disabled}
         isActive={active.underline}
         title="Underline (Cmd+U)"
       />
       <ToolbarButton
-        icon={<Strikethrough className="size-4" />}
-        onClick={() => editor.chain().focus().toggleStrike().run()}
+        icon={Strikethrough}
+        onClick={commands.strike}
         disabled={disabled}
         isActive={active.strike}
         title="Strikethrough (Cmd+Shift+S)"
       />
       <ToolbarDivider />
       <ToolbarButton
-        icon={<Code className="size-4" />}
-        onClick={() => editor.chain().focus().toggleCode().run()}
+        icon={Code}
+        onClick={commands.code}
         disabled={disabled}
         isActive={active.code}
         title="Inline Code (Cmd+E)"
       />
-      <LinkButton editor={editor} disabled={disabled} />
+      <LinkButton editor={editor} disabled={disabled} isActive={active.link} />
       <ToolbarDivider />
       <HeadingDropdown editor={editor} disabled={disabled} />
     </div>
   )
 }
 
-function LinkButton({ editor, disabled }: { editor: Editor; disabled: boolean }) {
+function LinkButton({
+  editor,
+  disabled,
+  isActive,
+}: {
+  editor: Editor
+  disabled: boolean
+  isActive: boolean
+}) {
   const [isOpen, setIsOpen] = useState(false)
   const [url, setUrl] = useState('')
-
-  const currentUrl = editor.getAttributes('link').href as string | undefined
-  const isActive = editor.isActive('link')
 
   const applyLink = () => {
     if (!url.trim()) {
@@ -2092,7 +2288,7 @@ function LinkButton({ editor, disabled }: { editor: Editor; disabled: boolean })
           className={cn('h-7 w-7 p-0', isActive && 'bg-muted')}
           disabled={disabled}
           onClick={() => {
-            setUrl(currentUrl || '')
+            setUrl((editor.getAttributes('link').href as string | undefined) || '')
             setIsOpen(true)
           }}
           title="Insert Link"
@@ -2138,16 +2334,16 @@ function LinkButton({ editor, disabled }: { editor: Editor; disabled: boolean })
   )
 }
 
-function HeadingDropdown({ editor, disabled }: { editor: Editor; disabled: boolean }) {
-  // Determine current block type
-  const getCurrentBlockType = () => {
-    if (editor.isActive('heading', { level: 1 })) return 'H1'
-    if (editor.isActive('heading', { level: 2 })) return 'H2'
-    if (editor.isActive('heading', { level: 3 })) return 'H3'
-    return 'Text'
-  }
+/** The block type under the selection, as the bubble menu names it. */
+const selectBlockType = ({ editor: e }: { editor: Editor }) => {
+  if (e.isActive('heading', { level: 1 })) return 'H1'
+  if (e.isActive('heading', { level: 2 })) return 'H2'
+  if (e.isActive('heading', { level: 3 })) return 'H3'
+  return 'Text'
+}
 
-  const currentType = getCurrentBlockType()
+function HeadingDropdown({ editor, disabled }: { editor: Editor; disabled: boolean }) {
+  const currentType = useEditorState({ editor, selector: selectBlockType })
 
   const blockTypes = [
     { label: 'Text', value: 'paragraph', icon: <Type className="size-4" /> },
@@ -2219,14 +2415,14 @@ function TableToolbar({ editor, disabled }: TableToolbarProps) {
     <div className="flex items-center gap-0.5 rounded-lg border bg-popover p-1 shadow-md">
       {/* Add row above */}
       <ToolbarButton
-        icon={<ArrowUp className="size-4" />}
+        icon={ArrowUp}
         onClick={() => editor.chain().focus().addRowBefore().run()}
         disabled={disabled}
         title="Add row above"
       />
       {/* Add row below */}
       <ToolbarButton
-        icon={<ArrowDown className="size-4" />}
+        icon={ArrowDown}
         onClick={() => editor.chain().focus().addRowAfter().run()}
         disabled={disabled}
         title="Add row below"
@@ -2234,14 +2430,14 @@ function TableToolbar({ editor, disabled }: TableToolbarProps) {
       <ToolbarDivider />
       {/* Add column left */}
       <ToolbarButton
-        icon={<ArrowLeft className="size-4" />}
+        icon={ArrowLeft}
         onClick={() => editor.chain().focus().addColumnBefore().run()}
         disabled={disabled}
         title="Add column left"
       />
       {/* Add column right */}
       <ToolbarButton
-        icon={<ArrowRight className="size-4" />}
+        icon={ArrowRight}
         onClick={() => editor.chain().focus().addColumnAfter().run()}
         disabled={disabled}
         title="Add column right"
@@ -2360,9 +2556,11 @@ interface ImageToolbarProps {
   disabled: boolean
 }
 
+const selectImageSrc = ({ editor: e }: { editor: Editor }) =>
+  e.getAttributes('resizableImage').src as string | undefined
+
 function ImageToolbar({ editor, disabled }: ImageToolbarProps) {
-  const attrs = editor.getAttributes('resizableImage')
-  const src = attrs.src as string | undefined
+  const src = useEditorState({ editor, selector: selectImageSrc })
 
   const { viewImage, downloadImage, copyImage, copyLink, deleteImage } = useImageActions({
     src,
@@ -2376,28 +2574,28 @@ function ImageToolbar({ editor, disabled }: ImageToolbarProps) {
       aria-label="Image options"
     >
       <ToolbarButton
-        icon={<Expand className="size-4" />}
+        icon={Expand}
         onClick={viewImage}
         disabled={disabled}
         title="View image"
         aria-label="View image in new tab"
       />
       <ToolbarButton
-        icon={<Download className="size-4" />}
+        icon={Download}
         onClick={downloadImage}
         disabled={disabled}
         title="Download"
         aria-label="Download image"
       />
       <ToolbarButton
-        icon={<Copy className="size-4" />}
+        icon={Copy}
         onClick={copyImage}
         disabled={disabled}
         title="Copy to clipboard"
         aria-label="Copy image to clipboard"
       />
       <ToolbarButton
-        icon={<Link2 className="size-4" />}
+        icon={Link2}
         onClick={copyLink}
         disabled={disabled}
         title="Copy link"
@@ -2405,7 +2603,7 @@ function ImageToolbar({ editor, disabled }: ImageToolbarProps) {
       />
       <ToolbarDivider />
       <ToolbarButton
-        icon={<Trash2 className="size-4" />}
+        icon={Trash2}
         onClick={deleteImage}
         disabled={disabled}
         title="Delete"
@@ -2435,6 +2633,26 @@ interface MenuBarProps {
   borderless?: boolean
 }
 
+/**
+ * What the fixed toolbar shows: the active marks and blocks, and whether there
+ * is anything to undo or redo. The history depth answers the same question as
+ * `editor.can().undo()` without building the full command chain, which this
+ * selector would otherwise do on every transaction.
+ */
+const selectToolbarState = ({ editor: e }: { editor: Editor }) => ({
+  bold: e.isActive('bold'),
+  italic: e.isActive('italic'),
+  link: e.isActive('link'),
+  bulletList: e.isActive('bulletList'),
+  orderedList: e.isActive('orderedList'),
+  codeBlock: e.isActive('codeBlock'),
+  heading1: e.isActive('heading', { level: 1 }),
+  heading2: e.isActive('heading', { level: 2 }),
+  heading3: e.isActive('heading', { level: 3 }),
+  canUndo: undoDepth(e.state) > 0,
+  canRedo: redoDepth(e.state) > 0,
+})
+
 function MenuBar({
   editor,
   disabled,
@@ -2447,30 +2665,10 @@ function MenuBar({
   const isBottom = variant === 'bottom'
   // Muted ghost buttons on the transparent bottom row; filled active-state on top.
   const btn = isBottom ? ('quiet' as const) : ('default' as const)
-  // Subscribe to the marks/nodes the toolbar reflects so active-state stays
-  // current without re-rendering the whole editor on every keystroke
-  // (useEditor's default re-renders all children per transaction).
-  const active = useEditorState({
-    editor,
-    selector: ({ editor: e }) => ({
-      bold: e.isActive('bold'),
-      italic: e.isActive('italic'),
-      link: e.isActive('link'),
-      bulletList: e.isActive('bulletList'),
-      orderedList: e.isActive('orderedList'),
-      codeBlock: e.isActive('codeBlock'),
-      heading1: e.isActive('heading', { level: 1 }),
-      heading2: e.isActive('heading', { level: 2 }),
-      heading3: e.isActive('heading', { level: 3 }),
-    }),
-  })
-  const canUndoRedo = useEditorState({
-    editor,
-    selector: ({ editor: e }) => ({
-      undo: e.can().undo(),
-      redo: e.can().redo(),
-    }),
-  })
+  // Subscribe to the marks/nodes the toolbar reflects so it re-renders only
+  // when one of them changes, never merely because a character was typed.
+  const active = useEditorState({ editor, selector: selectToolbarState })
+  const commands = useToolbarCommands(editor)
   const setLink = useCallback(() => {
     const previousUrl = editor.getAttributes('link').href
     let url = window.prompt('URL', previousUrl)
@@ -2543,9 +2741,6 @@ function MenuBar({
     input.click()
   }, [editor, onVideoUpload])
 
-  const canUndo = canUndoRedo.undo
-  const canRedo = canUndoRedo.redo
-
   return (
     <div
       className={cn(
@@ -2563,24 +2758,24 @@ function MenuBar({
         <>
           <ToolbarButton
             variant={btn}
-            icon={<Heading1 className="size-4" />}
-            onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+            icon={Heading1}
+            onClick={commands.heading1}
             disabled={disabled}
             isActive={active.heading1}
             title="Heading 1"
           />
           <ToolbarButton
             variant={btn}
-            icon={<Heading2 className="size-4" />}
-            onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+            icon={Heading2}
+            onClick={commands.heading2}
             disabled={disabled}
             isActive={active.heading2}
             title="Heading 2"
           />
           <ToolbarButton
             variant={btn}
-            icon={<Heading3 className="size-4" />}
-            onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+            icon={Heading3}
+            onClick={commands.heading3}
             disabled={disabled}
             isActive={active.heading3}
             title="Heading 3"
@@ -2592,16 +2787,16 @@ function MenuBar({
       {/* Basic formatting */}
       <ToolbarButton
         variant={btn}
-        icon={<Bold className="size-4" />}
-        onClick={() => editor.chain().focus().toggleBold().run()}
+        icon={Bold}
+        onClick={commands.bold}
         disabled={disabled}
         isActive={active.bold}
         title="Bold"
       />
       <ToolbarButton
         variant={btn}
-        icon={<Italic className="size-4" />}
-        onClick={() => editor.chain().focus().toggleItalic().run()}
+        icon={Italic}
+        onClick={commands.italic}
         disabled={disabled}
         isActive={active.italic}
         title="Italic"
@@ -2611,16 +2806,16 @@ function MenuBar({
       {/* Lists */}
       <ToolbarButton
         variant={btn}
-        icon={<ListBulletIcon className="size-4" />}
-        onClick={() => editor.chain().focus().toggleBulletList().run()}
+        icon={ListBulletIcon}
+        onClick={commands.bulletList}
         disabled={disabled}
         isActive={active.bulletList}
         title="Bullet List"
       />
       <ToolbarButton
         variant={btn}
-        icon={<ListOrdered className="size-4" />}
-        onClick={() => editor.chain().focus().toggleOrderedList().run()}
+        icon={ListOrdered}
+        onClick={commands.orderedList}
         disabled={disabled}
         isActive={active.orderedList}
         title="Ordered List"
@@ -2630,7 +2825,7 @@ function MenuBar({
       {/* Link */}
       <ToolbarButton
         variant={btn}
-        icon={<LinkIcon className="size-4" />}
+        icon={LinkIcon}
         onClick={setLink}
         disabled={disabled}
         isActive={active.link}
@@ -2641,8 +2836,8 @@ function MenuBar({
       {features.codeBlocks && (
         <ToolbarButton
           variant={btn}
-          icon={<Code2 className="size-4" />}
-          onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+          icon={Code2}
+          onClick={commands.codeBlock}
           disabled={disabled}
           isActive={active.codeBlock}
           title="Code Block"
@@ -2653,7 +2848,7 @@ function MenuBar({
       {features.images && onImageUpload && (
         <ToolbarButton
           variant={btn}
-          icon={<ImagePlus className="size-4" />}
+          icon={ImagePlus}
           onClick={insertImage}
           disabled={disabled}
           title="Insert Image"
@@ -2663,7 +2858,7 @@ function MenuBar({
       {features.videos && onVideoUpload && (
         <ToolbarButton
           variant={btn}
-          icon={<VideoIcon className="size-4" />}
+          icon={VideoIcon}
           onClick={insertVideo}
           disabled={disabled}
           title="Insert Video"
@@ -2677,16 +2872,16 @@ function MenuBar({
       {/* Undo/Redo */}
       <ToolbarButton
         variant={btn}
-        icon={<ArrowUturnLeftIcon className="size-4" />}
-        onClick={() => editor.chain().focus().undo().run()}
-        disabled={disabled || !canUndo}
+        icon={ArrowUturnLeftIcon}
+        onClick={commands.undo}
+        disabled={disabled || !active.canUndo}
         title="Undo"
       />
       <ToolbarButton
         variant={btn}
-        icon={<ArrowUturnRightIcon className="size-4" />}
-        onClick={() => editor.chain().focus().redo().run()}
-        disabled={disabled || !canRedo}
+        icon={ArrowUturnRightIcon}
+        onClick={commands.redo}
+        disabled={disabled || !active.canRedo}
         title="Redo"
       />
     </div>

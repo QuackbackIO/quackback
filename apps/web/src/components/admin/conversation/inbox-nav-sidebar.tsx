@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRouteContext } from '@tanstack/react-router'
 import {
@@ -96,9 +97,13 @@ export const TICKET_INBOX_VIEWS = [
 
 /** Shared (deduped) source of `supportTickets` — gates the Tickets nav section. */
 export function useSupportTicketsEnabled(): boolean {
-  const { settings } = useRouteContext({ from: '__root__' })
-  const flags = settings?.featureFlags as FeatureFlags | undefined
-  return flags?.supportTickets ?? false
+  // Selects the one flag: the root context is a new object after every
+  // navigation, and reading all of it would re-render every reader each time.
+  return useRouteContext({
+    from: '__root__',
+    select: (context) =>
+      (context.settings?.featureFlags as FeatureFlags | undefined)?.supportTickets ?? false,
+  })
 }
 
 /** Shared (deduped) source of the inbox nav-badge counts (mine/unassigned/
@@ -489,9 +494,10 @@ function countForTicketView(
  * Grouped inbox navigation: broad queues first, followed by personal feeds,
  * ticket scopes, AI activity, and workspace-defined views/taxonomy.
  * All scopes are mutually exclusive. Desktop-only (lg+); the mobile equivalent
- * is InboxScopeMenu in the list header.
+ * is InboxScopeMenu in the list header. Memoized: the route re-renders on every
+ * URL change, including opening an item, which leaves these props unchanged.
  */
-export function InboxNavSidebar({
+export const InboxNavSidebar = memo(function InboxNavSidebar({
   nav,
   onSelect,
   search,
@@ -633,7 +639,7 @@ export function InboxNavSidebar({
       </ScrollArea>
     </nav>
   )
-}
+})
 
 /**
  * Mobile scope switcher (lg:hidden) shown in the list header, since the nav

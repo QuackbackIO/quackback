@@ -230,6 +230,27 @@ export async function getPublicRoadmapPosts(
   return queryRoadmapPosts(roadmap, options, actor)
 }
 
+/**
+ * The first page of every column of one public roadmap board, under the same
+ * filters, in one request rather than one per column. Loads and authorizes
+ * the roadmap once and reuses it for every column, instead of the roundtrip
+ * per column `getPublicRoadmapPosts` would repeat.
+ */
+export async function getPublicRoadmapColumnsPosts(
+  roadmapId: RoadmapId,
+  columns: Pick<RoadmapPostsQueryOptions, 'statusId' | 'bucketId'>[],
+  shared: Omit<RoadmapPostsQueryOptions, 'statusId' | 'bucketId' | 'offset'>,
+  actor: Actor = ANONYMOUS_ACTOR
+): Promise<RoadmapPostsListResult[]> {
+  const roadmap = await loadRoadmap(roadmapId)
+  if (!canViewRoadmap(actor, roadmap).allowed) {
+    throw new NotFoundError('ROADMAP_NOT_FOUND', `Roadmap with ID ${roadmapId} not found`)
+  }
+  return Promise.all(
+    columns.map((column) => queryRoadmapPosts(roadmap, { ...shared, ...column, offset: 0 }, actor))
+  )
+}
+
 async function dateBucketsFor(roadmapId: RoadmapId, actor?: Actor): Promise<RoadmapDateBucket[]> {
   const roadmap = await loadRoadmap(roadmapId)
   if (roadmap.type !== 'date') return []

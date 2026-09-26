@@ -402,9 +402,9 @@ function WidgetCommentItem({
                     },
                     { name: authorName }
                   )}
-                  onChange={(json, _html, markdown) => {
-                    replyJsonRef.current = json as TiptapContent
-                    setReplyText(markdown ?? '')
+                  onDocumentChange={(document) => {
+                    replyJsonRef.current = document.json() as TiptapContent
+                    setReplyText(document.markdown())
                   }}
                 />
               </div>

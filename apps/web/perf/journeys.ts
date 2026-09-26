@@ -7,7 +7,7 @@
  * worth keeping if its counts come out identical on every run; the bench
  * checks that with --repeat.
  */
-import type { APIRequestContext, Page } from '@playwright/test'
+import type { APIRequestContext, Locator, Page } from '@playwright/test'
 import { buildWidgetInstallSnippet } from '../src/lib/shared/widget/install-prompt'
 import { BENCH_PORT } from './config'
 
@@ -19,6 +19,8 @@ export interface DocumentJourney {
   as: Actor
   /** A fixed path, or one resolved at run time (seeded ids differ per database). */
   path: string | ((request: APIRequestContext) => Promise<string>)
+  /** Part of the breadth sweep over every page (skipped by --core). */
+  sweep?: boolean
 }
 
 export interface BrowserJourney {
@@ -29,6 +31,8 @@ export interface BrowserJourney {
   setup?: (page: Page) => Promise<void>
   /** The measured interaction. Resolves once its result is on screen. */
   run: (page: Page) => Promise<void>
+  /** Part of the breadth sweep over every page (skipped by --core). */
+  sweep?: boolean
 }
 
 export type Journey = DocumentJourney | BrowserJourney
@@ -37,6 +41,22 @@ const firstPortalPost = (page: Page) => page.locator('a[href*="/posts/post_"]').
 
 /** How long a hover-then-click journey rests the pointer on a link before pressing it. */
 const HOVER_MS = 250
+
+/**
+ * Click until `ready` shows. A setup step that clicks right after a page load
+ * can land before hydration, and that click is lost.
+ */
+async function clickUntil(target: Locator, ready: Locator) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    await target.click()
+    const shown = await ready
+      .waitFor({ timeout: 1000 })
+      .then(() => true)
+      .catch(() => false)
+    if (shown) return
+  }
+  await ready.waitFor()
+}
 
 /** The first post linked from the portal home, for loading a post page directly. */
 async function firstPostPath(request: APIRequestContext): Promise<string> {
@@ -51,6 +71,92 @@ const HOST_PAGE = 'https://customer.example/'
 const hostPageHtml = () =>
   `<!doctype html><html><head><title>Customer site</title></head><body><h1>Customer site</h1>` +
   `${buildWidgetInstallSnippet(`http://localhost:${BENCH_PORT}`)}</body></html>`
+
+/**
+ * Every page reachable without an id that answers 200 on the bench data, loaded
+ * both as a document and in a browser. Pages behind a feature the bench data
+ * leaves off redirect, and are left out rather than measured as redirects.
+ */
+const SWEEP_PAGES: { path: string; as: Actor }[] = [
+  ...[
+    'analytics',
+    'automation',
+    'automation/agent',
+    'automation/connectors',
+    'automation/copilot',
+    'automation/performance',
+    'automation/skills',
+    'automation/workflows',
+    'changelog',
+    'feedback',
+    'help-center',
+    'inbox',
+    'moderation',
+    'notifications',
+    'roadmap',
+    'users?sort=newest',
+  ].map((page) => ({ path: `/admin/${page}`, as: 'admin' as const })),
+  ...[
+    'billing',
+    'boards',
+    'changelog',
+    'channels',
+    'channels/email',
+    'channels/github',
+    'channels/messenger',
+    'companies',
+    'conversation-data',
+    'developers',
+    'domains',
+    'feedback',
+    'general',
+    'help-center',
+    'imports',
+    'integrations',
+    'labs',
+    'macros',
+    'members',
+    'members/roles/new',
+    'moderation',
+    'notifications',
+    'office-hours',
+    'people',
+    'portal',
+    'security/authentication',
+    'security/sso/new',
+    'sla',
+    'statuses',
+    'support',
+    'tags',
+    'ticket-statuses',
+    'ticket-types',
+    'widget',
+    'widget/install',
+  ].map((page) => ({ path: `/admin/settings/${page}`, as: 'admin' as const })),
+  ...['/roadmap', '/changelog', '/hc', '/support', '/notifications'].map((path) => ({
+    path,
+    as: 'anon' as const,
+  })),
+  ...['/settings/profile', '/settings/preferences', '/notifications', '/support'].map((path) => ({
+    path,
+    as: 'admin' as const,
+  })),
+]
+
+function sweepJourneys(): Journey[] {
+  return SWEEP_PAGES.flatMap(({ path, as }): Journey[] => [
+    { kind: 'document', name: `sweep:doc:${as}:${path}`, as, path, sweep: true },
+    {
+      kind: 'browser',
+      name: `sweep:ui:${as}:${path}`,
+      as,
+      sweep: true,
+      run: async (page) => {
+        await page.goto(path, { waitUntil: 'load' })
+      },
+    },
+  ])
+}
 
 export const journeys: Journey[] = [
   // Server-rendered documents, anonymous visitor.
@@ -254,4 +360,184 @@ export const journeys: Journey[] = [
       await page.getByRole('heading').first().waitFor()
     },
   },
+
+  // Interactions, where re-rendering shows: typing, opening, switching.
+  {
+    kind: 'browser',
+    name: 'ui:admin-feedback-type-search',
+    as: 'admin',
+    setup: async (page) => {
+      await page.goto('/admin/feedback')
+      await page.locator('[data-post-id]').first().waitFor()
+    },
+    run: async (page) => {
+      const search = page
+        .getByRole('searchbox')
+        .or(page.getByPlaceholder(/search/i))
+        .first()
+      await search.click()
+      await search.pressSequentially('export', { delay: 60 })
+      await page.waitForURL(/search=export|q=export/).catch(() => {})
+    },
+  },
+  {
+    kind: 'browser',
+    name: 'ui:admin-inbox-open-conversation',
+    as: 'admin',
+    setup: async (page) => {
+      await page.goto('/admin/inbox')
+      await page.getByText('Bench conversation 1').first().waitFor()
+    },
+    run: async (page) => {
+      await page.getByText('Bench conversation 1').first().click()
+      await page.getByText('Bench conversation 1 - visitor message one').first().waitFor()
+    },
+  },
+  {
+    kind: 'browser',
+    name: 'ui:portal-post-type-comment',
+    as: 'admin',
+    setup: async (page) => {
+      await page.goto(await firstPostPath(page.request))
+      await page.getByRole('heading', { level: 1 }).first().waitFor()
+    },
+    run: async (page) => {
+      const composer = page.getByRole('textbox', { name: /comment/i }).first()
+      await composer.click()
+      await page.locator('[contenteditable="true"]').first().waitFor()
+      await page.keyboard.type('Measuring what a keystroke costs.', { delay: 30 })
+    },
+  },
+  // Typing alone: the editor is mounted and focused before the measured part.
+  {
+    kind: 'browser',
+    name: 'ui:admin-post-modal-type-comment',
+    as: 'admin',
+    setup: async (page) => {
+      const html = await (await page.request.get('/admin/feedback')).text()
+      const postId = html.match(/data-post-id="(post_[a-z0-9]+)"/)?.[1]
+      if (!postId) throw new Error('no post on the admin feedback page')
+      await page.goto(`/admin/feedback?post=${postId}`)
+      const composer = page.locator('[data-testid="comment-form-editor"] [contenteditable="true"]')
+      await clickUntil(page.getByRole('textbox', { name: 'Write a comment...' }), composer)
+      await composer.click()
+    },
+    run: async (page) => {
+      await page.keyboard.type('Measuring what a keystroke costs.', { delay: 30 })
+    },
+  },
+  {
+    kind: 'browser',
+    name: 'ui:admin-inbox-type-reply',
+    as: 'admin',
+    setup: async (page) => {
+      await page.goto('/admin/inbox')
+      const composer = page.locator('[contenteditable="true"]').first()
+      await clickUntil(page.getByText('Bench conversation 1').first(), composer)
+      await page.getByText('Bench conversation 1 - visitor message one').first().waitFor()
+      await composer.click()
+    },
+    run: async (page) => {
+      await page.keyboard.type('Measuring what a keystroke costs.', { delay: 30 })
+    },
+  },
+  {
+    kind: 'browser',
+    name: 'ui:widget-type-message',
+    as: 'anon',
+    setup: async (page) => {
+      await page.goto('/widget')
+      await page.getByRole('button', { name: 'Home', exact: true }).waitFor()
+      const ask = page.getByRole('button', { name: 'Ask a question' })
+      await clickUntil(page.getByRole('button', { name: 'Messages', exact: true }), ask)
+      const composer = page.locator('[contenteditable="true"]').first()
+      await clickUntil(ask, composer)
+      await composer.click()
+    },
+    run: async (page) => {
+      await page.keyboard.type('Measuring what a keystroke costs.', { delay: 30 })
+    },
+  },
+  // The "new post" composers: the title is typed before the measured part.
+  {
+    kind: 'browser',
+    name: 'ui:portal-type-new-post',
+    as: 'admin',
+    setup: async (page) => {
+      await page.goto('/?sort=trending')
+      await firstPortalPost(page).waitFor()
+      const composer = page.locator('[contenteditable="true"]').first()
+      await clickUntil(page.getByRole('textbox', { name: 'Feedback title' }), composer)
+      await page.keyboard.type('A keystroke budget')
+      await composer.click()
+    },
+    run: async (page) => {
+      await page.keyboard.type('Measuring what a keystroke costs.', { delay: 30 })
+    },
+  },
+  {
+    kind: 'browser',
+    name: 'ui:widget-type-new-post',
+    as: 'anon',
+    setup: async (page) => {
+      await page.goto('/widget')
+      await page.getByRole('button', { name: 'Home', exact: true }).waitFor()
+      const title = page.getByRole('textbox', { name: 'Feedback title' })
+      await clickUntil(page.getByRole('button', { name: 'Feedback', exact: true }), title)
+      await title.click()
+      await page.keyboard.type('A keystroke budget')
+      const composer = page.locator('[contenteditable="true"]').first()
+      await composer.click()
+    },
+    run: async (page) => {
+      await page.keyboard.type('Measuring what a keystroke costs.', { delay: 30 })
+    },
+  },
+  {
+    kind: 'browser',
+    name: 'ui:widget-switch-tabs',
+    as: 'anon',
+    setup: async (page) => {
+      await page.goto('/widget')
+      await page.getByRole('button', { name: 'Home', exact: true }).waitFor()
+    },
+    run: async (page) => {
+      await page.getByRole('button', { name: 'Help', exact: true }).click()
+      await page.getByRole('textbox', { name: 'Search help articles' }).waitFor()
+      await page.getByRole('button', { name: 'Changelog', exact: true }).click()
+      await page
+        .getByRole('heading', { name: 'Latest' })
+        .or(page.getByText('No updates yet'))
+        .first()
+        .waitFor()
+      await page.getByRole('button', { name: 'Home', exact: true }).click()
+    },
+  },
+  {
+    kind: 'browser',
+    name: 'ui:admin-settings-click-through',
+    as: 'admin',
+    setup: async (page) => {
+      await page.goto('/admin/settings/general')
+      await page.getByRole('heading').first().waitFor()
+    },
+    run: async (page) => {
+      // Each step waits for that page's own data, not just its heading: the
+      // heading renders first, and moving on before the data arrived made the
+      // count depend on timing.
+      await page.locator('a[href="/admin/settings/portal"]').first().click()
+      await page.waitForURL('/admin/settings/portal')
+      await page.getByRole('main').getByRole('switch').first().waitFor()
+      // The portal preview is a whole portal in a frame, with reads of its
+      // own after it hydrates; leaving before they finish made the count a race.
+      const preview = await page.locator('iframe[title="Portal preview"]').elementHandle()
+      const frame = await preview?.contentFrame()
+      await frame?.waitForLoadState('networkidle')
+      await page.locator('a[href="/admin/settings/members"]').first().click()
+      await page.waitForURL('/admin/settings/members')
+      await page.getByText('demo@example.com').first().waitFor()
+    },
+  },
+
+  ...sweepJourneys(),
 ]

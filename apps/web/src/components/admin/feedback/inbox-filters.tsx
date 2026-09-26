@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { FilterList, StatusFilterList, BoardFilterList } from './single-select-filter-list'
 import { toggleItem } from '@/components/shared/filter-utils'
 import { FilterSection } from '@/components/shared/filter-section'
@@ -23,7 +24,12 @@ function countFor(counts: Record<string, number> | undefined, id: string): numbe
   return counts[id] ?? 0
 }
 
-export function InboxFiltersPanel({
+/**
+ * Memoized: the panel shows the filters and their counts, so the list's own
+ * updates (a page loading, the results of a search arriving) render it only
+ * when the filters or the reference data it lists change.
+ */
+export const InboxFiltersPanel = memo(function InboxFiltersPanel({
   filters,
   onFiltersChange,
   boards,
@@ -191,7 +197,7 @@ export function InboxFiltersPanel({
       </FilterSection>
     </div>
   )
-}
+})
 
 function respondedCountMap(
   counts: InboxFilterCounts | undefined

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from '@tanstack/react-router'
 import { useSuspenseQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query'
@@ -29,6 +29,17 @@ import { roadmapPostsKeys } from '@/lib/client/hooks/use-roadmap-posts-query'
 import { Route } from '@/routes/admin/roadmap'
 import type { RoadmapViewPost, RoadmapPostsListResult } from '@/lib/shared/types'
 import type { PostStatusId, PostId, RoadmapId } from '@quackback/ids'
+
+/**
+ * Renders into document.body once mounted. The board renders on the server
+ * when its roadmaps arrive with the page, and there is no body to portal into
+ * there; the drag overlay only matters once someone drags.
+ */
+function BodyPortal({ children }: { children: ReactNode }) {
+  const [body, setBody] = useState<HTMLElement | null>(null)
+  useEffect(() => setBody(document.body), [])
+  return body ? createPortal(children, body) : null
+}
 
 export function RoadmapAdmin() {
   const navigate = useNavigate({ from: Route.fullPath })
@@ -240,12 +251,11 @@ export function RoadmapAdmin() {
                 </div>
               </div>
 
-              {createPortal(
+              <BodyPortal>
                 <DragOverlay dropAnimation={null}>
                   {activePost && <RoadmapCardOverlay post={activePost} />}
-                </DragOverlay>,
-                document.body
-              )}
+                </DragOverlay>
+              </BodyPortal>
             </DndContext>
           </>
         ) : (
