@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 /**
  * An admin roadmap board loads one query per column. The columns' first
  * pages, asked for together (the board opening, a filter change, a drag

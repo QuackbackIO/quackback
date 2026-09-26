@@ -1,4 +1,5 @@
 import {
+  isServer,
   useInfiniteQuery,
   infiniteQueryOptions,
   keepPreviousData,
@@ -145,6 +146,12 @@ function createFirstPageBatcher(fetchColumns: FetchColumns) {
     filters: RoadmapFilters | undefined
   ): Promise<RoadmapPostsListResult> {
     const input = columnFilterInput(roadmapId, filters)
+    // On a server the pending batches would be shared by every request it
+    // serves, and a batch runs as the request that opened it; there each
+    // column goes out alone.
+    if (isServer) {
+      return fetchColumns({ ...input, columns: [column] }).then((pages) => pages[0]!)
+    }
     const key = JSON.stringify(input)
     let batch = pending.get(key)
     if (!batch) {
