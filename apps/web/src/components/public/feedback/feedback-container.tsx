@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { Spinner } from '@/components/shared/spinner'
-import { useRouter, useRouteContext } from '@tanstack/react-router'
+import { useRouter } from '@tanstack/react-router'
 import { FeedbackHeader } from '@/components/public/feedback/feedback-header'
 import { FeedbackSidebar } from '@/components/public/feedback/feedback-sidebar'
 import { FeedbackToolbar } from '@/components/public/feedback/feedback-toolbar'
@@ -31,6 +31,7 @@ import { useApprovePost, useRejectPost } from '@/lib/client/mutations/moderation
 import type { PublicPostListItem } from '@/lib/shared/types'
 import { cn } from '@/lib/shared/utils'
 import type { PostId, PostStatusId } from '@quackback/ids'
+import { useSessionContext } from '@/lib/client/hooks/use-root-context'
 
 interface FeedbackContainerProps {
   workspaceName: string
@@ -75,7 +76,7 @@ export function FeedbackContainer({
 }: FeedbackContainerProps): React.ReactElement {
   const intl = useIntl()
   const router = useRouter()
-  const session = useRouteContext({ from: '__root__', select: (context) => context.session })
+  const session = useSessionContext()
   const { filters, setFilters, clearFilters, activeFilterCount } = usePublicFilters()
   const queryClient = useQueryClient()
   const { can } = usePortalPermissions()

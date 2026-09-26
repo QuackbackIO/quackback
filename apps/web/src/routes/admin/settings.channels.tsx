@@ -23,8 +23,9 @@ import {
   isPortalSupportSurfaceEnabled,
   isWidgetMessengerEnabled,
 } from '@/lib/shared/support-surfaces'
-import { settingsReadBatch } from '@/lib/client/queries/settings-batch'
+import { readBatch } from '@/lib/client/queries/read-batch'
 import { warmQuery } from '@/lib/client/queries/warm-query'
+import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 // The hub's GitHub row may be up to a minute old, like its email row.
 const HUB_STATUS_STALE_MS = 60_000
@@ -46,7 +47,7 @@ export const Route = createFileRoute('/admin/settings/channels')({
     // The status rows and the routing switch are warmed with the configs so
     // the hub renders complete from the document. A miss leaves a row to its
     // own fetch and its defaults, as before.
-    const ensure = settingsReadBatch(queryClient)
+    const ensure = readBatch(queryClient)
     await Promise.all([
       ensure(settingsQueries.widgetConfig()),
       ensure(settingsQueries.portalConfig()),
@@ -60,7 +61,7 @@ export const Route = createFileRoute('/admin/settings/channels')({
 })
 
 function ChannelsHubPage() {
-  const { settings } = Route.useRouteContext()
+  const settings = useWorkspaceSettings()
   const flags = settings?.featureFlags as FeatureFlags | undefined
   const widget = useSuspenseQuery(settingsQueries.widgetConfig())
   const portal = useSuspenseQuery(settingsQueries.portalConfig())

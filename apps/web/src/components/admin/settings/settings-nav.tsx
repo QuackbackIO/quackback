@@ -1,5 +1,5 @@
 import { memo, useMemo, useState, type ComponentType } from 'react'
-import { Link, useRouterState, useRouteContext } from '@tanstack/react-router'
+import { Link, useRouterState } from '@tanstack/react-router'
 import {
   Cog6ToothIcon,
   UsersIcon,
@@ -20,7 +20,6 @@ import {
 import { cn } from '@/lib/shared/utils'
 import { NAV_ICON_CLASS, NAV_ITEM_CLASS, NAV_SECTION_CLASS } from '@/components/shared/nav-tokens'
 import { FilterSection } from '@/components/shared/filter-section'
-import { useRefinedTheme } from '@/lib/client/hooks/use-visual-theme'
 import { usePermissions } from '@/lib/client/use-permissions'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { isProductEnabled, type FeatureFlags } from '@/lib/shared/types'
@@ -29,6 +28,12 @@ import {
   settingsModuleActivePaths,
   settingsModuleLandingPath,
 } from './settings-modules'
+import {
+  useBillingEnabled,
+  useCloudEnabled,
+  useFeatureFlags,
+  useRefinedTheme,
+} from '@/lib/client/hooks/use-root-context'
 
 interface NavItem {
   label: string
@@ -241,16 +246,9 @@ function settingsRowClass(active: boolean, refined: boolean) {
  * so a navigation renders only the rows whose highlight moved.
  */
 export function SettingsNav() {
-  const settings = useRouteContext({ from: '__root__', select: (context) => context.settings })
-  const billingEnabled = useRouteContext({
-    from: '__root__',
-    select: (context) => context.billingEnabled,
-  })
-  const cloudEnabled = useRouteContext({
-    from: '__root__',
-    select: (context) => context.cloudEnabled,
-  })
-  const flags = settings?.featureFlags as FeatureFlags | undefined
+  const flags = useFeatureFlags()
+  const billingEnabled = useBillingEnabled()
+  const cloudEnabled = useCloudEnabled()
   const permissions = usePermissions()
   const refined = useRefinedTheme()
 
@@ -277,13 +275,15 @@ function NavEntries({
   refined: boolean
   parentOpen?: boolean
 }) {
-  return entries.map((entry) =>
-    isNavGroup(entry) ? (
-      <NavGroupRows key={entry.label} group={entry} parentOpen={parentOpen} refined={refined} />
-    ) : (
-      <NavLink key={entry.to} item={entry} tabbable={parentOpen} refined={refined} />
-    )
-  )
+  return entries.map((entry) => {
+    if (isNavGroup(entry)) {
+      return (
+        <NavGroupRows key={entry.label} group={entry} parentOpen={parentOpen} refined={refined} />
+      )
+    }
+    const Row = entry.activeFor ? ModuleNavLink : NavLink
+    return <Row key={entry.to} item={entry} tabbable={parentOpen} refined={refined} />
+  })
 }
 
 function NavCard({ section, refined }: { section: NavSection; refined: boolean }) {
@@ -392,13 +392,6 @@ function pathIsUnder(pathname: string, to: string): boolean {
   return pathname === to || pathname.startsWith(`${to}/`)
 }
 
-function navLinkIsActive(item: NavItem, pathname: string): boolean {
-  const targets = item.activeFor ?? [item.to]
-  return item.exact
-    ? targets.some((to) => pathname === to)
-    : targets.some((to) => pathIsUnder(pathname, to))
-}
-
 interface NavLinkProps {
   item: NavItem
   tabbable: boolean
@@ -408,34 +401,75 @@ interface NavLinkProps {
 const sameTargets = (a: string[] | undefined, b: string[] | undefined) =>
   a === b || (!!a && !!b && a.length === b.length && a.every((to, i) => to === b[i]))
 
-/**
- * One nav row. It follows the location itself, selecting only whether it is
- * active, and is memoized on what it shows, so a navigation re-renders the
- * rows it activates or deactivates instead of every row in the nav.
- */
-const NavLink = memo(
-  function NavLink({ item, tabbable, refined }: NavLinkProps) {
-    const isActive = useRouterState({ select: (s) => navLinkIsActive(item, s.location.pathname) })
-    const Icon = item.icon
+const PREFIX_ACTIVE = { includeSearch: false }
+const EXACT_ACTIVE = { exact: true, includeSearch: false }
 
-    return (
-      <Link
-        to={item.to}
-        tabIndex={tabbable ? undefined : -1}
-        data-active={isActive || undefined}
-        className={settingsRowClass(isActive, refined)}
-      >
-        <Icon className={cn(NAV_ICON_CLASS, isActive && !refined && 'text-primary')} />
-        <span className="truncate flex-1">{item.label}</span>
-      </Link>
-    )
-  },
-  (prev, next) =>
-    prev.tabbable === next.tabbable &&
-    prev.refined === next.refined &&
-    prev.item.to === next.item.to &&
-    prev.item.label === next.item.label &&
-    prev.item.icon === next.item.icon &&
-    prev.item.exact === next.item.exact &&
-    sameTargets(prev.item.activeFor, next.item.activeFor)
-)
+const rowStateProps = (refined: boolean) => ({
+  activeProps: { className: settingsRowClass(true, refined), 'data-active': 'true' },
+  inactiveProps: { className: settingsRowClass(false, refined) },
+})
+
+function rowContent(item: NavItem, refined: boolean, isActive: boolean) {
+  const Icon = item.icon
+  return (
+    <>
+      <Icon className={cn(NAV_ICON_CLASS, isActive && !refined && 'text-primary')} />
+      <span className="truncate flex-1">{item.label}</span>
+    </>
+  )
+}
+
+/** Rows are memoized on what they show. */
+const sameRow = (prev: NavLinkProps, next: NavLinkProps) =>
+  prev.tabbable === next.tabbable &&
+  prev.refined === next.refined &&
+  prev.item.to === next.item.to &&
+  prev.item.label === next.item.label &&
+  prev.item.icon === next.item.icon &&
+  prev.item.exact === next.item.exact &&
+  sameTargets(prev.item.activeFor, next.item.activeFor)
+
+/**
+ * One nav row. The Link tracks whether its page is the current one and renders
+ * again only when that changes, and then only itself. Its contents for either
+ * state are made once, so a render of the Link that leaves the state alone
+ * (hydration) reuses them, and a navigation renders the contents of only the
+ * rows it activates or deactivates.
+ */
+const NavLink = memo(function NavLink({ item, tabbable, refined }: NavLinkProps) {
+  const content = useMemo(
+    () => [rowContent(item, refined, false), rowContent(item, refined, true)] as const,
+    [item, refined]
+  )
+  return (
+    <Link
+      to={item.to}
+      tabIndex={tabbable ? undefined : -1}
+      activeOptions={item.exact ? EXACT_ACTIVE : PREFIX_ACTIVE}
+      {...rowStateProps(refined)}
+    >
+      {({ isActive }) => content[isActive ? 1 : 0]}
+    </Link>
+  )
+}, sameRow)
+
+/**
+ * A module's row stays active on every page of the module, which spans
+ * several prefixes (activeFor), so it selects that answer from the location
+ * itself.
+ */
+const ModuleNavLink = memo(function ModuleNavLink({ item, tabbable, refined }: NavLinkProps) {
+  const isActive = useRouterState({
+    select: (s) => !!item.activeFor?.some((to) => pathIsUnder(s.location.pathname, to)),
+  })
+  return (
+    <Link
+      to={item.to}
+      tabIndex={tabbable ? undefined : -1}
+      data-active={isActive || undefined}
+      className={settingsRowClass(isActive, refined)}
+    >
+      {rowContent(item, refined, isActive)}
+    </Link>
+  )
+}, sameRow)

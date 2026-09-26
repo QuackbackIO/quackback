@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate, useRouteContext } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { useSuspenseQuery } from '@tanstack/react-query'
@@ -16,7 +16,8 @@ import { McpServerSettings } from '@/components/admin/settings/mcp/mcp-server-se
 import { McpSetupGuide } from '@/components/admin/settings/mcp/mcp-setup-guide'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { settingsQueries } from '@/lib/client/queries/settings'
-import { settingsReadBatch } from '@/lib/client/queries/settings-batch'
+import { readBatch } from '@/lib/client/queries/read-batch'
+import { useBaseUrl } from '@/lib/client/hooks/use-root-context'
 
 const searchSchema = z.object({
   tab: z.enum(['keys', 'webhooks', 'mcp']).optional(),
@@ -34,7 +35,7 @@ export const Route = createFileRoute('/admin/settings/developers')({
     // for data — every payload is small and admin-only.
     const { listEntitlementsFn } = await import('@/lib/server/functions/entitlement-status')
     const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
-    const ensure = settingsReadBatch(queryClient)
+    const ensure = readBatch(queryClient)
     const [, entitlements] = await Promise.all([
       Promise.all([
         ensure(adminQueries.apiKeys()),
@@ -59,7 +60,7 @@ function ApiPage() {
   const webhooksQuery = useSuspenseQuery(adminQueries.webhooks())
   const developerConfigQuery = useSuspenseQuery(settingsQueries.developerConfig())
 
-  const { baseUrl } = useRouteContext({ from: '__root__' })
+  const baseUrl = useBaseUrl()
   const { webhooksEntitled, mcpEntitled } = Route.useLoaderData()
   const apiBaseUrl = baseUrl ? `${baseUrl}/api/v1` : '/api/v1'
   const mcpEndpointUrl = baseUrl ? `${baseUrl}/api/mcp` : '/api/mcp'

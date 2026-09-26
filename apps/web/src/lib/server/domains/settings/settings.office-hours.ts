@@ -20,7 +20,7 @@ import {
   officeHoursScheduleFromLegacyDays,
 } from '@/lib/shared/office-hours'
 import type { OfficeHoursSchedule, OfficeHoursScheduleInput } from '@/lib/shared/office-hours'
-import { wrapDbError, writeMetadataKey, requireSettingsPerRequest } from './settings.helpers'
+import { wrapDbError, writeMetadataKey, requireSettingsCached } from './settings.helpers'
 
 export { DEFAULT_OFFICE_HOURS_SCHEDULE, officeHoursIntervalSchema, officeHoursScheduleSchema }
 export type { OfficeHoursSchedule, OfficeHoursScheduleInput }
@@ -80,7 +80,7 @@ function readLegacyOfficeHours(
 
 export async function getOfficeHoursSchedule(): Promise<OfficeHoursSchedule> {
   try {
-    const org = await requireSettingsPerRequest()
+    const org = await requireSettingsCached()
     return resolveOfficeHoursSchedule(org.metadata, org.widgetConfig)
   } catch (error) {
     log.error({ err: error }, 'get office hours failed')

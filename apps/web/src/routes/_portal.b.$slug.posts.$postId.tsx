@@ -1,6 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import { useIntl } from 'react-intl'
-import { createFileRoute, notFound, useRouteContext } from '@tanstack/react-router'
+import { createFileRoute, notFound } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { BackLink } from '@/components/ui/back-link'
 import { portalDetailQueries, type PublicPostDetailView } from '@/lib/client/queries/portal-detail'
@@ -40,6 +40,7 @@ import { isProductEnabled } from '@/lib/shared/types/settings'
 import { usePortalPermissions } from '@/lib/client/hooks/use-portal-permissions'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { useApprovePost, useRejectPost } from '@/lib/client/mutations/moderation'
+import { useSessionContext } from '@/lib/client/hooks/use-root-context'
 
 // Dialogs the post's author or the team open from its menu; they load on first use.
 const DeletePostDialog = lazy(() =>
@@ -143,7 +144,7 @@ export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
 
 function PostDetailPage() {
   const { postId, slug } = Route.useLoaderData()
-  const session = useRouteContext({ from: '__root__', select: (context) => context.session })
+  const session = useSessionContext()
 
   const intl = useIntl()
   const [isEditingPost, setIsEditingPost] = useState(false)

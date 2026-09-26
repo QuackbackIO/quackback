@@ -1,9 +1,9 @@
-import { useRouteContext } from '@tanstack/react-router'
 import { MagnifyingGlassIcon, DocumentIcon, SparklesIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/shared/empty-state'
 import { useActivationAction } from '@/lib/client/hooks/use-activation-action'
 import { ActivationActionButton } from '@/components/admin/activation-action-button'
+import { useUserRole } from '@/lib/client/hooks/use-root-context'
 
 interface InboxEmptyStateProps {
   type: 'no-posts' | 'no-results' | 'no-selection'
@@ -11,7 +11,7 @@ interface InboxEmptyStateProps {
 }
 
 export function InboxEmptyState({ type, onClearFilters }: InboxEmptyStateProps) {
-  const userRole = useRouteContext({ from: '__root__', select: (context) => context.userRole })
+  const userRole = useUserRole()
   const activationAction = useActivationAction('feedback_empty')
   const isAdmin = userRole === 'admin'
 

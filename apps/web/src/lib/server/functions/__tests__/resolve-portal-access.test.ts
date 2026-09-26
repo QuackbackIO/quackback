@@ -72,7 +72,6 @@ const mockGetPortalConfig = vi.fn()
 
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   getPortalConfig: () => mockGetPortalConfig(),
-  getPortalConfigCached: () => mockGetPortalConfig(),
   updatePortalConfig: vi.fn(),
 }))
 

@@ -1,20 +1,20 @@
 /**
- * One request for a settings page's reads.
+ * One request for a route loader's reads.
  *
- * Moving between settings pages runs the next page's loader in the browser,
- * and every read it warmed was a request of its own, each resolving the
- * caller's session and permissions again. A loader that warms its reads
- * through `settingsReadBatch` instead sends the ones not yet cached as one
- * request (`readSettingsTogetherFn`), which runs each read's own query
+ * A route loader running in the browser (moving between settings pages, or
+ * onto the public roadmap) sent each read it warmed as a request of its own,
+ * each resolving the caller's session and permissions again. A loader that
+ * warms its reads through `readBatch` instead sends the ones not yet cached
+ * as one request (`readTogetherFn`), which runs each read's own query
  * function. Each result then fills that read's cache entry under its own key
  * and options, as fetching it alone would have.
  *
  * Nothing about a read's outcome changes. A read the batch could not answer
  * (a permission the caller lacks, an error, a read missing from
- * `lib/server/settings-read-registry.ts`) is fetched on its own, so its error
- * reaches the loader exactly as before; the batch failing as a whole leaves
- * every read to its own fetch. In a document request the reads run in
- * process, as they always did, so there is nothing to batch.
+ * `lib/server/read-registry.ts`) is fetched on its own, so its error reaches
+ * the loader exactly as before; the batch failing as a whole leaves every
+ * read to its own fetch. In a document request the reads run in process, as
+ * they always did, so there is nothing to batch.
  */
 import {
   hashKey,
@@ -24,7 +24,7 @@ import {
   type QueryClient,
   type QueryKey,
 } from '@tanstack/react-query'
-import { readSettingsTogetherFn } from '@/lib/server/functions/settings-reads'
+import { readTogetherFn } from '@/lib/server/functions/read-batch'
 
 type AnyRead = EnsureQueryDataOptions<unknown, DefaultError, unknown, QueryKey>
 
@@ -40,7 +40,7 @@ const inBatch = new WeakMap<QueryClient, Map<string, Promise<void>>>()
  * `Promise.all`) share one request. Each call resolves or rejects as
  * `queryClient.ensureQueryData` would for that read.
  */
-export function settingsReadBatch(queryClient: QueryClient) {
+export function readBatch(queryClient: QueryClient) {
   let collecting: AnyRead[] | null = null
   let sent: Promise<void> = Promise.resolve()
   const reads = inBatch.get(queryClient) ?? new Map<string, Promise<void>>()
@@ -89,9 +89,9 @@ async function fill(queryClient: QueryClient, reads: AnyRead[]): Promise<void> {
   // A lone read gains nothing from the batch.
   if (unique.length < 2) return
 
-  let results: Awaited<ReturnType<typeof readSettingsTogetherFn>>
+  let results: Awaited<ReturnType<typeof readTogetherFn>>
   try {
-    results = await readSettingsTogetherFn({
+    results = await readTogetherFn({
       data: { reads: unique.map((read) => read.queryKey) },
     })
   } catch {
@@ -104,4 +104,45 @@ async function fill(queryClient: QueryClient, reads: AnyRead[]): Promise<void> {
     queryClient.getQueryCache().build(queryClient, queryClient.defaultQueryOptions(read))
     queryClient.setQueryData(read.queryKey, result.data)
   })
+}
+
+/** A read's cache entry: where it lives and how long it stays fresh. */
+export type ReadEntry = { queryKey: readonly unknown[]; staleTime?: unknown }
+
+/** A read is worth loading unless its entry is fresh or already refetching. */
+export function readNeedsLoad(client: QueryClient, entry: ReadEntry): boolean {
+  const query = client.getQueryCache().find({ queryKey: entry.queryKey, exact: true })
+  if (!query || query.state.data === undefined) return true
+  const staleTime = typeof entry.staleTime === 'number' ? entry.staleTime : 0
+  return query.state.fetchStatus === 'idle' && query.isStaleByTime(staleTime)
+}
+
+/**
+ * The reads to load with a request that can carry them (a post, or a thread,
+ * that loads the panels beside it), given each read's entry: null when it
+ * depends on something not yet known, which means "ask", or 'skip' for a read
+ * not wanted.
+ */
+export function readsToLoad<N extends string>(
+  client: QueryClient,
+  entries: Record<N, ReadEntry | null | 'skip'>
+): N[] {
+  return (Object.keys(entries) as N[]).filter((name) => {
+    const entry = entries[name]
+    return entry !== 'skip' && (!entry || readNeedsLoad(client, entry))
+  })
+}
+
+/** Fill each read's entry from what the carrying request loaded (null is an answer). */
+export function seedReads<N extends string>(
+  client: QueryClient,
+  entries: Record<N, ReadEntry | null | 'skip'>,
+  loaded: Partial<Record<N, unknown>>
+): void {
+  for (const name of Object.keys(entries) as N[]) {
+    const entry = entries[name]
+    if (entry && entry !== 'skip' && loaded[name] !== undefined) {
+      client.setQueryData(entry.queryKey, loaded[name])
+    }
+  }
 }

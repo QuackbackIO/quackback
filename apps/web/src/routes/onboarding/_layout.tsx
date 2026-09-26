@@ -6,6 +6,7 @@ import {
 } from '@/lib/shared/db-types'
 import { mayForwardCompletedSetup } from './-onboarding-step'
 import { SignOutButton } from './-sign-out-button'
+import { useSessionContext } from '@/lib/client/hooks/use-root-context'
 
 /**
  * Shared layout for all onboarding steps.
@@ -45,7 +46,7 @@ function OnboardingLayout() {
   // as, so every signed-in step carries the one control that changes that
   // answer. Without it a visitor signed in as the wrong account has nothing to
   // press anywhere in the flow.
-  const { session } = Route.useRouteContext()
+  const session = useSessionContext()
 
   return (
     <div className="min-h-screen bg-background">

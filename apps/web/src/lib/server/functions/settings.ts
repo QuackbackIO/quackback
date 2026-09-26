@@ -10,7 +10,6 @@ import {
 import { userIdSchema, type UserId } from '@quackback/ids'
 import {
   getPortalConfig,
-  getPortalConfigCached,
   getPublicPortalConfig,
   getPublicAuthConfig,
   updatePortalConfig,
@@ -62,7 +61,7 @@ export const fetchBrandingConfig = createServerFn({ method: 'GET' }).handler(asy
 export const fetchPortalConfig = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch portal config')
   await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
-  const config = await getPortalConfigCached()
+  const config = await getPortalConfig()
   return config ?? DEFAULT_PORTAL_CONFIG
 })
 
@@ -500,7 +499,7 @@ export const updateAuthConfigFn = createServerFn({ method: 'POST' })
       data.oauth && AUDIT_TRACKED_OAUTH_KEYS.some(({ key }) => key in (data.oauth ?? {}))
     )
     const tracksSso = Boolean(data.ssoOidc)
-    const before = tracksAnyToggle || tracksSso ? await getAuthConfig() : null
+    const before = tracksAnyToggle || tracksSso ? await getAuthConfig('fresh') : null
 
     try {
       // Backstop the unified "keep ≥1 working sign-in method" invariant — a
@@ -508,7 +507,7 @@ export const updateAuthConfigFn = createServerFn({ method: 'POST' })
       // in (the client `isLastMethod` guard covers only the UI). A blocked
       // attempt falls through to the failure audit + re-throw below.
       if (data.oauth) {
-        const current = before ?? (await getAuthConfig())
+        const current = before ?? (await getAuthConfig('fresh'))
         const proposedOauth = {
           ...((current?.oauth ?? {}) as Record<string, boolean | undefined>),
           ...data.oauth,
@@ -1132,7 +1131,7 @@ export const updateModerationDefaultFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ require_approval: data.requireApproval }, 'update moderation default')
     const auth = await requireAuth({ permission: PERMISSIONS.SETTINGS_MODERATION })
-    const before = await getPortalConfig()
+    const before = await getPortalConfig('fresh')
     const updated = await updatePortalConfig({ moderationDefault: data })
     await recordAuditEvent({
       event: 'moderation.default.changed',

@@ -19,8 +19,12 @@ import type { LinkedTicketSummary } from '@/lib/shared/inbox/items'
 import { conversationKeys } from '@/lib/client/queries/conversation-keys'
 import { inboxQueries, ticketQueries } from '@/lib/client/queries/inbox'
 import { isDetailPanelShown } from '@/lib/client/conversation/detail-panel'
-
-type CacheEntry = { queryKey: readonly unknown[]; staleTime?: unknown }
+import {
+  readNeedsLoad,
+  readsToLoad,
+  seedReads,
+  type ReadEntry,
+} from '@/lib/client/queries/read-batch'
 
 export const conversationPanelEntries = {
   ticketLink: (conversationId: ConversationId) =>
@@ -65,7 +69,7 @@ export const conversationPanelEntries = {
 function panelEntries(
   client: QueryClient,
   conversationId: ConversationId
-): Record<AgentConversationPanel, CacheEntry | null | 'skip'> {
+): Record<AgentConversationPanel, ReadEntry | null | 'skip'> {
   const e = conversationPanelEntries
   const cached = client.getQueryData<{ conversation: { visitor: { principalId: PrincipalId } } }>(
     conversationKeys.agentThread(conversationId)
@@ -75,10 +79,10 @@ function panelEntries(
   const link = client.getQueryData<LinkedTicketSummary | null>(linkEntry.queryKey)
   // The panel's own reads are only worth loading where the panel shows.
   const shown = isDetailPanelShown()
-  const forVisitor = (make: (principalId: PrincipalId) => CacheEntry) =>
+  const forVisitor = (make: (principalId: PrincipalId) => ReadEntry) =>
     visitor ? make(visitor) : null
   // A conversation fresh-known to have no linked ticket needs no ticket reads.
-  const noTicket = link === null && !needsLoad(client, linkEntry)
+  const noTicket = link === null && !readNeedsLoad(client, linkEntry)
   return {
     ticketLink: linkEntry,
     linkedTicket: noTicket ? 'skip' : link ? e.linkedTicket(link.id) : null,
@@ -95,25 +99,12 @@ function panelEntries(
   }
 }
 
-/** A read is loaded with the thread unless its entry is fresh or already refetching. */
-function needsLoad(client: QueryClient, entry: CacheEntry): boolean {
-  const query = client.getQueryCache().find({ queryKey: entry.queryKey, exact: true })
-  if (!query || query.state.data === undefined) return true
-  const staleTime = typeof entry.staleTime === 'number' ? entry.staleTime : 0
-  return query.state.fetchStatus === 'idle' && query.isStaleByTime(staleTime)
-}
-
 /** The reads the thread request should load for this conversation. */
 export function conversationPanelsToLoad(
   client: QueryClient,
   conversationId: ConversationId
 ): AgentConversationPanel[] {
-  const entries = panelEntries(client, conversationId)
-  return (Object.keys(entries) as AgentConversationPanel[]).filter((panel) => {
-    const entry = entries[panel]
-    if (entry === 'skip') return false
-    return entry === null || needsLoad(client, entry)
-  })
+  return readsToLoad(client, panelEntries(client, conversationId))
 }
 
 /** Seed each loaded read's cache entry from the thread answer. */
@@ -124,19 +115,22 @@ export function seedConversationPanels(
   loaded: AgentConversationPanels
 ): void {
   const e = conversationPanelEntries
-  const seed = (entry: CacheEntry, value: unknown) => {
-    if (value !== undefined) client.setQueryData(entry.queryKey, value)
-  }
-  seed(e.ticketLink(conversationId), loaded.ticketLink)
-  if (loaded.linkedTicket) seed(e.linkedTicket(loaded.linkedTicket.id), loaded.linkedTicket)
-  seed(e.ticketStageLabels(), loaded.ticketStageLabels)
-  seed(e.blockStatus(visitor), loaded.blockStatus)
-  seed(e.contact(visitor), loaded.contact)
-  seed(e.history(visitor), loaded.history)
-  seed(e.company(visitor), loaded.company)
-  seed(e.assistantActivity(conversationId), loaded.assistantActivity)
-  seed(e.languagePreference(), loaded.languagePreference)
-  seed(e.macros(), loaded.macros)
-  seed(e.runnableWorkflows(), loaded.runnableWorkflows)
-  seed(e.teamMembers(), loaded.teamMembers)
+  seedReads<AgentConversationPanel>(
+    client,
+    {
+      ticketLink: e.ticketLink(conversationId),
+      linkedTicket: loaded.linkedTicket ? e.linkedTicket(loaded.linkedTicket.id) : null,
+      ticketStageLabels: e.ticketStageLabels(),
+      blockStatus: e.blockStatus(visitor),
+      contact: e.contact(visitor),
+      history: e.history(visitor),
+      company: e.company(visitor),
+      assistantActivity: e.assistantActivity(conversationId),
+      languagePreference: e.languagePreference(),
+      macros: e.macros(),
+      runnableWorkflows: e.runnableWorkflows(),
+      teamMembers: e.teamMembers(),
+    },
+    loaded
+  )
 }

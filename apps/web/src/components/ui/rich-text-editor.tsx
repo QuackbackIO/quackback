@@ -431,8 +431,7 @@ export function withLiveEditor(editor: Editor | null, run: (editor: Editor) => v
 }
 
 /**
- * Markdown for onChange's 3rd argument. Skip the serializer when the caller
- * only declared json+html (arity < 3). Catch serializer failures so a custom
+ * Markdown for an edited document. Catch serializer failures so a custom
  * node can't prevent JSON from reaching the form — otherwise changelog create
  * submits an empty `content` string and the server rejects with
  * "Content is required" while the editor still shows a body.
@@ -443,11 +442,9 @@ export function withLiveEditor(editor: Editor | null, run: (editor: Editor) => v
  */
 export function markdownFromEditor(
   editor: { getMarkdown?: () => string },
-  onChangeArity: number,
   fallback = '',
   json?: unknown
 ): string {
-  if (onChangeArity < 3) return ''
   try {
     return editor.getMarkdown?.() ?? ''
   } catch {
@@ -538,7 +535,7 @@ function editorDocument(
         const serializer = markdownManager
           ? { getMarkdown: () => markdownManager.serialize(snapshot.json()) }
           : {}
-        markdown = markdownFromEditor(serializer, 3, markdownFallback(), snapshot.json())
+        markdown = markdownFromEditor(serializer, markdownFallback(), snapshot.json())
         onSerialize?.('markdown', markdown)
       }
       return markdown
@@ -1379,13 +1376,10 @@ export interface RichTextEditorHandle {
 interface RichTextEditorProps {
   value?: string | JSONContent
   /**
-   * Called after every edit with the document serialized up front: always
-   * the JSON, the HTML when the callback declares a 2nd parameter and the
-   * markdown when it declares a 3rd. A host that needs the document only
-   * when it is sent should take onDocumentChange instead.
+   * Called after every edit with the document, serialized only when read, so
+   * a host pays for a format when it reads it: on send, after a pause, or for
+   * a value it shows.
    */
-  onChange?: (json: JSONContent, html: string, markdown: string) => void
-  /** Called after every edit with the document, serialized only when read. */
   onDocumentChange?: (document: EditorDocument) => void
   placeholder?: string
   className?: string
@@ -1429,7 +1423,6 @@ interface RichTextEditorProps {
 
 function RichTextEditorBase({
   value,
-  onChange,
   onDocumentChange,
   placeholder = 'Write something...',
   className,
@@ -1551,7 +1544,7 @@ function RichTextEditorBase({
       lastSuccessfulMarkdownRef.current = seedMarkdownFallback(initialContentRef.current, editor)
     },
     onUpdate: ({ editor }) => {
-      if (!onChange && !onDocumentChange) return
+      if (!onDocumentChange) return
       const edited = editorDocument(editor, {
         markdownFallback: () => lastSuccessfulMarkdownRef.current,
         onSerialize: (format, serialized) => {
@@ -1567,15 +1560,7 @@ function RichTextEditorBase({
       latestDocumentRef.current = edited
       lastEmittedJsonRef.current = null
       lastEmittedMarkdownRef.current = null
-      onDocumentChange?.(edited)
-      if (!onChange) return
-      // Serialize only the formats the callback declares a parameter for:
-      // the HTML and the markdown each walk the whole document.
-      const json = edited.json()
-      const html = onChange.length >= 2 ? edited.html() : ''
-      const markdown = onChange.length >= 3 ? edited.markdown() : ''
-      lastEmittedMarkdownRef.current = markdown
-      onChange(json, html, markdown)
+      onDocumentChange(edited)
     },
     editorProps,
   })
@@ -1647,7 +1632,7 @@ function RichTextEditorBase({
   }, [value, editor])
 
   // Update editable state. Editability is not a change to the document, so
-  // it emits no update (which would reach the host as an onChange).
+  // it emits no update (which would reach the host as an onDocumentChange).
   useEffect(() => {
     if (editor && editor.isEditable !== !disabled) {
       editor.setEditable(!disabled, false)
@@ -1721,7 +1706,7 @@ interface EditorChromeProps {
  * The writing surface and everything around it: the toolbar, the bubble menus
  * and the image context menu. None of it takes the document as a prop, so a
  * controlled host that re-renders on every keystroke (a new value and often a
- * new onChange) stops at RichTextEditorBase. The toolbar and menus follow the
+ * new onDocumentChange) stops at RichTextEditorBase. The toolbar and menus follow the
  * selection through their own useEditorState subscriptions instead.
  */
 const EditorChrome = memo(function EditorChrome({
@@ -1939,7 +1924,6 @@ function sameFeatures(prev: EditorFeatures = {}, next: EditorFeatures = {}): boo
 export const RichTextEditor = memo(RichTextEditorBase, (prev, next) => {
   if (
     prev.value !== next.value ||
-    prev.onChange !== next.onChange ||
     prev.onDocumentChange !== next.onDocumentChange ||
     prev.onImageUpload !== next.onImageUpload ||
     prev.onVideoUpload !== next.onVideoUpload ||

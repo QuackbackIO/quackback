@@ -66,7 +66,9 @@ import {
   normalizeWelcomeCardInput,
   mergeWelcomeCard,
   publicWelcomeCard,
-  requireSettingsPerRequest,
+  readSettingsRow,
+  type SettingsFreshness,
+  type SettingsRecord,
 } from './settings.helpers'
 import { withCurrentStorageReadTokens } from '@/lib/server/content/storage-read-urls'
 
@@ -170,9 +172,9 @@ export async function getPublicOidcProviders(): Promise<OidcSignInButton[]> {
     .map((p) => ({ id: p.registrationId, name: p.label, logoUrl: p.logoUrl }))
 }
 
-export async function getAuthConfig(): Promise<AuthConfig> {
+export async function getAuthConfig(freshness: SettingsFreshness = 'cached'): Promise<AuthConfig> {
   try {
-    const org = await requireSettingsPerRequest()
+    const org = await readSettingsRow(freshness)
     return parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
   } catch (error) {
     log.error({ err: error }, 'get auth config failed')
@@ -621,24 +623,11 @@ export async function listVerifiedDomains(): Promise<VerifiedDomain[]> {
   }
 }
 
-export async function getPortalConfig(): Promise<PortalConfig> {
+export async function getPortalConfig(
+  freshness: SettingsFreshness = 'cached'
+): Promise<PortalConfig> {
   try {
-    const org = await requireSettingsPerRequest()
-    return parsePortalConfig(org.portalConfig)
-  } catch (error) {
-    log.error({ err: error }, 'get portal config failed')
-    wrapDbError('fetch portal config', error)
-  }
-}
-
-/**
- * {@link getPortalConfig} for read-only paths (the portal-access gate runs on
- * every page), served from the settings the request already holds. A
- * read-modify-write keeps {@link getPortalConfig}.
- */
-export async function getPortalConfigCached(): Promise<PortalConfig> {
-  try {
-    const org = await requireSettingsCached()
+    const org = await readSettingsRow(freshness)
     return parsePortalConfig(org.portalConfig)
   } catch (error) {
     log.error({ err: error }, 'get portal config failed')
@@ -674,7 +663,7 @@ export async function updatePortalConfig(input: UpdatePortalConfigInput): Promis
 
 export async function getDeveloperConfig(): Promise<DeveloperConfig> {
   try {
-    const org = await requireSettingsPerRequest()
+    const org = await requireSettingsCached()
     return parseJsonConfig(org.developerConfig, DEFAULT_DEVELOPER_CONFIG)
   } catch (error) {
     log.error({ err: error }, 'get developer config failed')
@@ -733,9 +722,11 @@ export async function updateDeveloperConfig(
   }
 }
 
-export async function getHelpCenterConfig(): Promise<HelpCenterConfig> {
+export async function getHelpCenterConfig(
+  freshness: SettingsFreshness = 'cached'
+): Promise<HelpCenterConfig> {
   try {
-    const org = await requireSettingsPerRequest()
+    const org = await readSettingsRow(freshness)
     return parseJsonConfig(org.helpCenterConfig, DEFAULT_HELP_CENTER_CONFIG)
   } catch (error) {
     log.error({ err: error }, 'get help center config failed')
@@ -743,14 +734,23 @@ export async function getHelpCenterConfig(): Promise<HelpCenterConfig> {
   }
 }
 
+/**
+ * A help-center update. `seo` and `autoTranslate` may be partial: they are
+ * merged over the stored section, so a caller never sends back a copy it read.
+ */
+export type HelpCenterConfigUpdate = Omit<Partial<HelpCenterConfig>, 'seo' | 'autoTranslate'> & {
+  seo?: Partial<HelpCenterConfig['seo']>
+  autoTranslate?: Partial<HelpCenterConfig['autoTranslate']>
+}
+
 export async function updateHelpCenterConfig(
-  input: Partial<HelpCenterConfig>
+  input: HelpCenterConfigUpdate
 ): Promise<HelpCenterConfig> {
   log.info('update help center config')
   try {
     const org = await requireSettings()
     const existing = parseJsonConfig(org.helpCenterConfig, DEFAULT_HELP_CENTER_CONFIG)
-    const updated = deepMerge(existing, input)
+    const updated = deepMerge(existing, input as Partial<HelpCenterConfig>)
     await db
       .update(settings)
       .set({ helpCenterConfig: JSON.stringify(updated) })
@@ -779,7 +779,7 @@ export async function enableHelpCenterLocale(input: {
       'Enabling a locale requires a homepage title'
     )
   }
-  const current = await getHelpCenterConfig()
+  const current = await getHelpCenterConfig('fresh')
   if (input.locale === current.locales.default) {
     throw new ValidationError('HC_LOCALE_IS_DEFAULT', 'The default locale is always enabled')
   }
@@ -798,7 +798,7 @@ export async function enableHelpCenterLocale(input: {
 
 /** Disabling a locale keeps its translation rows (re-enabling picks them back up). */
 export async function disableHelpCenterLocale(locale: string): Promise<HelpCenterLocalesConfig> {
-  const current = await getHelpCenterConfig()
+  const current = await getHelpCenterConfig('fresh')
   const updated = await updateHelpCenterConfig({
     locales: {
       ...current.locales,
@@ -812,7 +812,7 @@ export async function updateHelpCenterLocaleChrome(input: {
   locale: string
   chrome: Partial<HelpCenterLocaleChromeStrings>
 }): Promise<HelpCenterLocalesConfig> {
-  const current = await getHelpCenterConfig()
+  const current = await getHelpCenterConfig('fresh')
   if (!current.locales.additional.includes(input.locale)) {
     throw new NotFoundError('HC_LOCALE_NOT_ENABLED', 'That locale is not enabled')
   }
@@ -835,7 +835,7 @@ export async function updateHelpCenterLocaleChrome(input: {
 
 export async function getPublicAuthConfig(): Promise<PublicAuthConfig> {
   try {
-    const org = await requireSettingsPerRequest()
+    const org = await requireSettingsCached()
     const authConfig = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
 
     const [configuredTypes, passthroughKeys] = await Promise.all([
@@ -860,7 +860,7 @@ export async function getPublicAuthConfig(): Promise<PublicAuthConfig> {
 
 export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
   try {
-    const org = await requireSettingsPerRequest()
+    const org = await requireSettingsCached()
     const portalConfig = parsePortalConfig(org.portalConfig)
 
     const oidcProviders = await getPublicOidcProviders()
@@ -900,6 +900,19 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
 export async function getWorkspaceSettings(): Promise<WorkspaceSettings | null> {
   const settings = await memoizePerRequest(CACHE_KEYS.WORKSPACE_SETTINGS, loadWorkspaceSettings)
   return settings ? liveWorkspaceSettings(structuredClone(settings)) : null
+}
+
+/**
+ * The raw row inside {@link getWorkspaceSettings}, from the same read: the
+ * cached tier of the settings row (see settings.helpers.ts). Copied alone, so
+ * a caller that wants one column does not pay to copy every parsed config.
+ *
+ * @internal
+ */
+export async function getWorkspaceSettingsRow(): Promise<SettingsRecord | null> {
+  const settings = await memoizePerRequest(CACHE_KEYS.WORKSPACE_SETTINGS, loadWorkspaceSettings)
+  const row = settings?.settings as SettingsRecord | undefined
+  return row ? structuredClone(row) : null
 }
 
 async function loadWorkspaceSettings(): Promise<WorkspaceSettings | null> {

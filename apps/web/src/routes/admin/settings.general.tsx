@@ -27,13 +27,14 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { WorkspaceDangerCard } from '@/components/admin/settings/workspace-danger-card'
 import { WorkspaceIdentityCard } from '@/components/admin/settings/workspace-identity-card'
-import { settingsReadBatch } from '@/lib/client/queries/settings-batch'
+import { readBatch } from '@/lib/client/queries/read-batch'
 import { warmQuery } from '@/lib/client/queries/warm-query'
+import { useManagedFieldPaths, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 export const Route = createFileRoute('/admin/settings/general')({
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MANAGE)
-    const ensure = settingsReadBatch(context.queryClient)
+    const ensure = readBatch(context.queryClient)
     const [cloudIdentity] = await Promise.all([
       getCloudIdentityFn(),
       ensure(settingsQueries.logo()),
@@ -46,7 +47,8 @@ export const Route = createFileRoute('/admin/settings/general')({
 })
 
 function GeneralSettingsPage() {
-  const { settings, managedFieldPaths } = Route.useRouteContext()
+  const settings = useWorkspaceSettings()
+  const managedFieldPaths = useManagedFieldPaths()
   const { cloudIdentity } = Route.useLoaderData()
   const workspaceNameManaged = isPathManagedFromBootstrap(
     MANAGED_PATHS.WORKSPACE_NAME,

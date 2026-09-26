@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query'
-import { Link, useRouteContext } from '@tanstack/react-router'
+import { Link } from '@tanstack/react-router'
 import {
   ArrowLeftIcon,
   ArrowTopRightOnSquareIcon,
@@ -60,6 +60,7 @@ import { MergeLeadControl } from '@/components/admin/users/merge-lead-control'
 import { useUpdatePortalUser } from '@/lib/client/mutations'
 import { listConversationsForUserFn, getConversationFn } from '@/lib/server/functions/conversation'
 import type { PrincipalId } from '@quackback/ids'
+import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 const EXTERNAL_ID_KEY = '_externalUserId'
 const EM_DASH = '—'
@@ -282,7 +283,7 @@ function UserConversations({
   principalId: PrincipalId
   embedded?: boolean
 }) {
-  const settings = useRouteContext({ from: '__root__', select: (context) => context.settings })
+  const settings = useWorkspaceSettings()
   // Gated by the experimental supportInbox flag — when off, skip the fetch and
   // render nothing, so the profile shows no support history for a disabled feature.
   const supportInboxEnabled =
@@ -480,7 +481,7 @@ export function UserDetail({
   const [editName, setEditName] = useState('')
   const [editEmail, setEditEmail] = useState('')
   const updateUser = useUpdatePortalUser()
-  const settings = useRouteContext({ from: '__root__', select: (context) => context.settings })
+  const settings = useWorkspaceSettings()
   const supportInboxEnabled =
     (settings?.featureFlags as FeatureFlags | undefined)?.supportInbox ?? false
   // Check if current user can manage portal users

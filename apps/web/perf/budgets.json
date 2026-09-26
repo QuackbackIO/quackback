@@ -1097,6 +1097,15 @@
       "jsKB": 135.5,
       "htmlTransferKB": 0,
       "componentRenders": 977
+    },
+    "ui:admin-nav-inbox-to-roadmap": {
+      "dbQueries": 26,
+      "serverRequests": 3,
+      "requests": 45,
+      "jsRequests": 42,
+      "jsKB": 80.5,
+      "htmlTransferKB": 0,
+      "componentRenders": 448
     }
   },
   "$comment": "Ceilings for bun perf/bench.ts. Lowered with --update whenever a journey comes in under; raised only with --update --allow-increase, which a reviewer should question."

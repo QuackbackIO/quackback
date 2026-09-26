@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useRouteContext } from '@tanstack/react-router'
 import { TrashIcon, XCircleIcon } from '@heroicons/react/24/solid'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { InlineSpinner } from '@/components/admin/settings/inline-spinner'
@@ -32,6 +31,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { listArticlesFn } from '@/lib/server/functions/help-center'
 import { SUPPORTED_LOCALES, type SupportedLocale } from '@/lib/shared/i18n'
 import type { HelpCenterConfig } from '@/lib/shared/types/settings'
+import { useBillingEnabled } from '@/lib/client/hooks/use-root-context'
 
 const LOCALE_LABELS: Record<string, string> = {
   en: 'English',
@@ -50,10 +50,7 @@ interface DomainsLanguagesTabProps {
 }
 
 export function DomainsLanguagesTab({ config }: DomainsLanguagesTabProps) {
-  const billingEnabled = useRouteContext({
-    from: '__root__',
-    select: (context) => context.billingEnabled,
-  })
+  const billingEnabled = useBillingEnabled()
   return (
     <div className="space-y-6">
       {billingEnabled ? null : <DomainCard domain={config.domain} />}

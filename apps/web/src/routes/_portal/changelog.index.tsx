@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/shared/page-header'
 import { ChangelogListPublic, ChangelogSubscribeButton } from '@/components/portal/changelog'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { setPublicDocumentCacheHeaders } from '@/lib/server/functions/public-cache'
+import { useSessionContext } from '@/lib/client/hooks/use-root-context'
 
 export const Route = createFileRoute('/_portal/changelog/')({
   loader: async ({ context }) => {
@@ -40,7 +41,7 @@ export const Route = createFileRoute('/_portal/changelog/')({
 
 function ChangelogPage() {
   const intl = useIntl()
-  const session = Route.useRouteContext({ select: (context) => context.session })
+  const session = useSessionContext()
   const isIdentified = !!session?.user && session.user.principalType !== 'anonymous'
 
   return (

@@ -20,7 +20,7 @@ import {
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { usePermission } from '../hooks/use-permission'
 import { useHasPermission, usePermissions } from '../use-permissions'
-import { useRefinedTheme } from '../hooks/use-visual-theme'
+import { useRefinedTheme } from '../hooks/use-root-context'
 
 afterEach(cleanup)
 

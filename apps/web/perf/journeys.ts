@@ -422,6 +422,22 @@ export const journeys: Journey[] = [
       await page.getByRole('heading').first().waitFor()
     },
   },
+  {
+    // From a page that has not read the roadmap's lists (statuses, boards,
+    // tags, segments), so the loader fetches every one of them.
+    kind: 'browser',
+    name: 'ui:admin-nav-inbox-to-roadmap',
+    as: 'admin',
+    setup: async (page) => {
+      await page.goto('/admin/inbox')
+      await page.getByText('Bench conversation').first().waitFor()
+    },
+    run: async (page) => {
+      await page.locator('a[href="/admin/roadmap"]').first().click()
+      await page.waitForURL(/\/admin\/roadmap/)
+      await page.getByRole('heading').first().waitFor()
+    },
+  },
 
   // The same click-throughs the way a person makes them: the pointer rests on
   // the link long enough for the router's intent preload to start before the

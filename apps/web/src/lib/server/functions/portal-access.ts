@@ -54,7 +54,7 @@ export type PortalAccessDecision =
  *
  * The decision is resolved once per request (every portal loader asks) and is
  * forgotten with the rest of the request's identity when the session changes.
- * The config comes from getPortalConfigCached(), whose cache every settings
+ * The config comes from getPortalConfig(), whose cache every settings
  * write invalidates, so a visibility change is honoured on the very next
  * request.
  *
@@ -137,8 +137,8 @@ async function resolvePortalAccess(): Promise<PortalAccessDecision> {
   //     A private portal must never silently become public on transient errors.
   let portalConfig: PortalConfig
   try {
-    const { getPortalConfigCached } = await import('@/lib/server/domains/settings/settings.service')
-    portalConfig = await getPortalConfigCached()
+    const { getPortalConfig } = await import('@/lib/server/domains/settings/settings.service')
+    portalConfig = await getPortalConfig()
   } catch (err) {
     const { NotFoundError } = await import('@/lib/shared/errors')
     if (err instanceof NotFoundError) {
@@ -393,7 +393,7 @@ export const updatePortalAccessFn = createServerFn({ method: 'POST' })
 
     const { getPortalConfig, updatePortalConfig } =
       await import('@/lib/server/domains/settings/settings.service')
-    const before = await getPortalConfig()
+    const before = await getPortalConfig('fresh')
 
     const normalizedDomains =
       data.allowedDomains !== undefined

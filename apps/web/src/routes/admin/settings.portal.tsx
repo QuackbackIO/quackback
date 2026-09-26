@@ -14,7 +14,6 @@ import {
   DevicePhoneMobileIcon,
   ArrowTopRightOnSquareIcon,
 } from '@heroicons/react/24/solid'
-import type { JSONContent } from '@tiptap/react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
@@ -27,7 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import { RichTextEditor, type EditorDocument } from '@/components/ui/rich-text-editor'
 import { cn } from '@/lib/shared/utils'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
@@ -73,7 +72,8 @@ import type {
   PortalWelcomeCard,
 } from '@/lib/shared/types/settings'
 import type { TiptapContent } from '@/lib/shared/db-types'
-import { settingsReadBatch } from '@/lib/client/queries/settings-batch'
+import { readBatch } from '@/lib/client/queries/read-batch'
+import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 export const Route = createFileRoute('/admin/settings/portal')({
   loader: async ({ context }) => {
@@ -83,7 +83,7 @@ export const Route = createFileRoute('/admin/settings/portal')({
     assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_BRANDING)
 
     const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
-    const ensure = settingsReadBatch(context.queryClient)
+    const ensure = readBatch(context.queryClient)
     await Promise.all([
       ensure(settingsQueries.branding()),
       ensure(settingsQueries.logo()),
@@ -97,7 +97,8 @@ export const Route = createFileRoute('/admin/settings/portal')({
 
 function PortalPage() {
   const router = useRouter()
-  const { settings, session } = Route.useRouteContext()
+  const settings = useWorkspaceSettings()
+  const session = useSessionContext()
   const [, startTransition] = useTransition()
   // Display-only: the name is edited on Workspace > General.
   const workspaceName = settings?.name || ''
@@ -525,8 +526,10 @@ function WelcomeBodyEditor({
   const { upload: uploadImage } = useImageUpload({ prefix: 'portal-welcome' })
   // The editor reports its document once it mounts. The same document again
   // is not an edit, and adopting that copy would re-render the whole page.
+  // The live preview and the dirty check read the JSON, so each edit takes it.
   const handleChange = useCallback(
-    (json: JSONContent) => {
+    (document: EditorDocument) => {
+      const json = document.json()
       if (JSON.stringify(json) === JSON.stringify(value)) return
       onChange(json as TiptapContent)
     },
@@ -535,7 +538,7 @@ function WelcomeBodyEditor({
   return (
     <RichTextEditor
       value={value}
-      onChange={handleChange}
+      onDocumentChange={handleChange}
       placeholder="Tell visitors what kind of feedback you'd love to hear…"
       minHeight="160px"
       features={{

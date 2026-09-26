@@ -10,7 +10,6 @@ import {
   useTable,
 } from '@tanstack/react-table'
 import { useSuspenseQuery, useQueryClient } from '@tanstack/react-query'
-import { useRouteContext } from '@tanstack/react-router'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { EnvelopeIcon, PlusIcon } from '@heroicons/react/24/solid'
 import { Avatar } from '@/components/ui/avatar'
@@ -43,6 +42,7 @@ import { seatInviteBlocked } from '@/components/admin/settings/team/seat-usage'
 import { CUSTOM_ROLE_BADGE } from '@/components/admin/settings/team/role-ui'
 import type { UserId, PrincipalId } from '@quackback/ids'
 import { isAdmin } from '@/lib/shared/roles'
+import { useSessionContext } from '@/lib/client/hooks/use-root-context'
 
 // Discriminated union: each row is either a member or an invitation
 type TeamRow =
@@ -125,7 +125,7 @@ interface MembersTabProps {
 
 /** The teammate roster + pending invitations (the Members tab of Members & Teams). */
 export function MembersTab({ workspaceName, currentMember }: MembersTabProps) {
-  const session = useRouteContext({ from: '__root__', select: (context) => context.session })
+  const session = useSessionContext()
   const teamDataQuery = useSuspenseQuery(settingsQueries.teamMembersAndInvitations())
   const { members, avatarMap, formattedInvitations, seatUsage } = teamDataQuery.data
 

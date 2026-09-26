@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react'
-import { Link, useRouteContext, useRouterState } from '@tanstack/react-router'
+import { Link, useRouterState } from '@tanstack/react-router'
 import { useIntl } from 'react-intl'
 import { SparklesIcon } from '@heroicons/react/24/outline'
 import { usePermission } from '@/lib/client/hooks/use-permission'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { WHO_REPLIES_FIRST } from '@/lib/shared/assistant/who-replies-first'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
+import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 /**
  * The rule the server now enforces: the agent answers first, and a live
@@ -18,7 +19,7 @@ export function WhoRepliesFirstCard() {
   const canAgent = usePermission(PERMISSIONS.ASSISTANT_MANAGE)
   const canWorkflows = usePermission(PERMISSIONS.WORKFLOW_MANAGE)
   const canOfficeHours = usePermission(PERMISSIONS.OFFICE_HOURS_MANAGE)
-  const settings = useRouteContext({ from: '__root__', select: (context) => context.settings })
+  const settings = useWorkspaceSettings()
   const flags = settings?.featureFlags as FeatureFlags | undefined
   const onAgentPage = pathname === '/admin/automation/agent'
   const onWorkflowsPage =

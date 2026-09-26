@@ -35,16 +35,6 @@ export async function getSettings() {
 }
 
 /**
- * {@link getSettings} for read-only paths: the same raw row, from the
- * settings the request already holds instead of a fresh read. A
- * read-modify-write keeps {@link getSettings}.
- */
-export async function getSettingsCached() {
-  const { findSettingsCached } = await import('@/lib/server/domains/settings/settings.helpers')
-  return findSettingsCached()
-}
-
-/**
  * Get current user's role if logged in
  */
 export async function getCurrentUserRole(): Promise<Role | null> {

@@ -1,4 +1,4 @@
-import { createFileRoute, Link, Navigate, useRouteContext } from '@tanstack/react-router'
+import { createFileRoute, Link, Navigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { ChatBubbleLeftRightIcon, ChevronRightIcon, PlusIcon } from '@heroicons/react/24/outline'
@@ -14,6 +14,7 @@ import {
   isPortalChatStartEnabled,
   isPortalSupportSurfaceEnabled,
 } from '@/lib/shared/support-surfaces'
+import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 export const Route = createFileRoute('/_portal/support/')({
   component: SupportListPage,
@@ -66,8 +67,8 @@ function ConversationListSkeleton() {
  */
 function SupportListPage() {
   const intl = useIntl()
-  const session = useRouteContext({ from: '__root__', select: (context) => context.session })
-  const settings = useRouteContext({ from: '__root__', select: (context) => context.settings })
+  const session = useSessionContext()
+  const settings = useWorkspaceSettings()
   const authPopover = useAuthPopoverSafe()
 
   const messengerEnabled = isPortalChatStartEnabled(settings?.featureFlags, settings?.portalConfig)

@@ -18,7 +18,7 @@ import { TrustedSendersCard } from '@/components/admin/settings/trusted-senders-
 import { EmailChannelSettings } from '@/components/admin/channels/email-channel-settings'
 import { EmailTransportCard } from '@/components/admin/channels/email-transport-card'
 import { updateEmailAutoAckFn } from '@/lib/server/functions/settings'
-import { settingsReadBatch } from '@/lib/client/queries/settings-batch'
+import { readBatch } from '@/lib/client/queries/read-batch'
 import { warmQuery } from '@/lib/client/queries/warm-query'
 
 export const Route = createFileRoute('/admin/settings/channels_/email')({
@@ -37,7 +37,7 @@ export const Route = createFileRoute('/admin/settings/channels_/email')({
     // Every card's read is warmed with the page so it renders complete from
     // the document. A miss leaves a card to its own fetch, as before; the
     // transport card's read needs settings.manage, which this page does not.
-    const ensure = settingsReadBatch(queryClient)
+    const ensure = readBatch(queryClient)
     await Promise.all([
       ensure(settingsQueries.spamFilterConfig()),
       permissions?.includes(PERMISSIONS.SETTINGS_MANAGE)

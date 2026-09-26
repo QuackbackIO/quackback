@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } fro
 import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FormattedMessage, useIntl } from 'react-intl'
 import type { JSONContent } from '@tiptap/core'
+import type { EditorDocument } from '@/components/ui/rich-text-editor'
 import {
   buildConversationRows,
   computeBlockStates,
@@ -86,10 +87,9 @@ const LazyRichTextEditor = lazy(() =>
 
 // Cheap plain-text extraction from a TipTap JSON doc — drives the send-gate,
 // the typing indicator, the help-search query, and the link-preview scanner.
-// Deliberately NOT a markdown serialization: RichTextEditor only pays for the
-// expensive recursive @tiptap/markdown walk when the caller's onChange
-// declares a 3rd (markdown) parameter, which would redo that walk on every
-// keystroke — overkill for what's ultimately just an emptiness/substring check.
+// Deliberately NOT a markdown serialization: reading the editor's markdown
+// would run the recursive @tiptap/markdown walk on every keystroke, overkill
+// for what's ultimately just an emptiness/substring check.
 function tiptapPlainText(doc: JSONContent | null | undefined): string {
   if (!doc?.content) return ''
   const parts: string[] = []
@@ -332,11 +332,12 @@ export function VisitorConversationThread({
     defaultMessage: 'Type your message…',
   })
 
-  // RichTextEditor's onChange fires (json, html, markdown) — only the JSON is
-  // needed here (see tiptapPlainText above for why we skip the markdown arg).
-  // Also drives the typing indicator, same as onLocalInput did for the old composer.
+  // Only the JSON is read: the send gate needs its text on every edit (see
+  // tiptapPlainText above for why not the markdown). Also drives the typing
+  // indicator, same as onLocalInput did for the old composer.
   const handleEditorChange = useCallback(
-    (json: JSONContent) => {
+    (document: EditorDocument) => {
+      const json = document.json()
       composer.draft.set(tiptapPlainText(json).trim(), json)
       onLocalInput()
     },
@@ -1391,7 +1392,7 @@ export function VisitorConversationThread({
                   placeholder={composerPlaceholder}
                   features={VISITOR_CONVERSATION_FEATURES}
                   autofocus={composer.resetSignal > 0 || autofocusComposer ? 'end' : false}
-                  onChange={handleEditorChange}
+                  onDocumentChange={handleEditorChange}
                   onSubmit={onComposerSubmit}
                 />
               </Suspense>

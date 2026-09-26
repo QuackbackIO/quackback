@@ -1,6 +1,5 @@
 import { memo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useRouteContext } from '@tanstack/react-router'
 import {
   ChatBubbleLeftRightIcon,
   InboxIcon,
@@ -34,7 +33,6 @@ import {
 import { conversationKeys } from '@/lib/client/queries/conversation-keys'
 import { inboxQueries } from '@/lib/client/queries/inbox'
 import type { ConversationViewDTO } from '@/lib/shared/conversation/views'
-import type { FeatureFlags } from '@/lib/shared/types/settings'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -67,6 +65,7 @@ import {
   type InboxNavItem,
 } from '@/lib/client/conversation/inbox-scope'
 import { inboxTeamsQueryOptions, type InboxTeam } from '@/lib/client/queries/inbox-teams'
+import { useFeatureFlag } from '@/lib/client/hooks/use-root-context'
 
 // Start with the broad conversation queue, then progressively narrow to the
 // teammate's own work and secondary personal feeds.
@@ -97,13 +96,7 @@ export const TICKET_INBOX_VIEWS = [
 
 /** Shared (deduped) source of `supportTickets` — gates the Tickets nav section. */
 export function useSupportTicketsEnabled(): boolean {
-  // Selects the one flag: the root context is a new object after every
-  // navigation, and reading all of it would re-render every reader each time.
-  return useRouteContext({
-    from: '__root__',
-    select: (context) =>
-      (context.settings?.featureFlags as FeatureFlags | undefined)?.supportTickets ?? false,
-  })
+  return useFeatureFlag('supportTickets')
 }
 
 /** Shared (deduped) source of the inbox nav-badge counts (mine/unassigned/

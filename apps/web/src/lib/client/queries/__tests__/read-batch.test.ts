@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 /**
- * A settings loader's reads, asked for together, cost one request, and each
+ * A loader's reads, asked for together, cost one request, and each
  * lands in the cache as if it had been fetched alone: under its own key and
  * options, shaped by its own query function. Nothing about a read's outcome
  * changes: a read the caller may not make fails with the error it fails with
@@ -54,19 +54,19 @@ vi.mock('@/lib/server/functions/api-keys', async (importOriginal) => ({
     },
   ]),
 }))
-vi.mock('@/lib/server/functions/settings-reads', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/server/functions/settings-reads')>()
-  return { ...actual, readSettingsTogetherFn: vi.fn(actual.readSettingsTogetherFn) }
+vi.mock('@/lib/server/functions/read-batch', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/server/functions/read-batch')>()
+  return { ...actual, readTogetherFn: vi.fn(actual.readTogetherFn) }
 })
 
 // The registry the batched reads run from pulls in every query module; paid
 // here, at file load, rather than inside the first test's timed body.
-await import('@/lib/server/settings-read-registry')
-const { settingsReadBatch } = await import('../settings-batch')
+await import('@/lib/server/read-registry')
+const { readBatch } = await import('../read-batch')
 const { settingsQueries } = await import('../settings')
 const { adminQueries } = await import('../admin')
-const { readSettingsTogetherFn } = await import('@/lib/server/functions/settings-reads')
-const batches = vi.mocked(readSettingsTogetherFn)
+const { readTogetherFn } = await import('@/lib/server/functions/read-batch')
+const batches = vi.mocked(readTogetherFn)
 
 const EVERYTHING = [PERMISSIONS.MEMBER_VIEW, PERMISSIONS.TEAM_MANAGE, PERMISSIONS.API_KEY_MANAGE]
 // A default unlike any read's own staleTime, so a read held under the
@@ -82,9 +82,9 @@ beforeEach(() => {
   client = newClient()
 })
 
-describe('settingsReadBatch', () => {
+describe('readBatch', () => {
   it('fetches the reads a loader asks for together in one request, each once', async () => {
-    const ensure = settingsReadBatch(client)
+    const ensure = readBatch(client)
     await Promise.all([
       ensure(settingsQueries.roles()),
       ensure(settingsQueries.teams()),
@@ -95,7 +95,7 @@ describe('settingsReadBatch', () => {
   })
 
   it('fills each read as fetching it alone would: same data, key and options', async () => {
-    const ensure = settingsReadBatch(client)
+    const ensure = readBatch(client)
     const [, keys] = await Promise.all([
       ensure(settingsQueries.roles()),
       ensure(adminQueries.apiKeys()),
@@ -121,7 +121,7 @@ describe('settingsReadBatch', () => {
       .ensureQueryData(settingsQueries.teams())
       .catch((error: Error) => error.message)
 
-    const ensure = settingsReadBatch(client)
+    const ensure = readBatch(client)
     const [roles, teams] = await Promise.allSettled([
       ensure(settingsQueries.roles()),
       ensure(settingsQueries.teams()),
@@ -136,7 +136,7 @@ describe('settingsReadBatch', () => {
   it('reads nothing already cached, and sends a lone read on its own', async () => {
     await client.ensureQueryData(settingsQueries.roles())
     ran.length = 0
-    const ensure = settingsReadBatch(client)
+    const ensure = readBatch(client)
     await Promise.all([ensure(settingsQueries.roles()), ensure(settingsQueries.teams())])
     expect(batches).not.toHaveBeenCalled()
     expect(ran).toEqual(['teams'])
@@ -144,8 +144,8 @@ describe('settingsReadBatch', () => {
 
   it('joins a read already on its way in another batch rather than sending it again', async () => {
     // A hover's preload and the click after it run the same loader twice.
-    const preload = settingsReadBatch(client)
-    const navigation = settingsReadBatch(client)
+    const preload = readBatch(client)
+    const navigation = readBatch(client)
     await Promise.all([
       preload(settingsQueries.roles()),
       preload(settingsQueries.teams()),
@@ -161,7 +161,7 @@ describe('settingsReadBatch', () => {
       queryKey: ['settings', 'not-a-batched-read'],
       queryFn: gated('member.view', 'unregistered', { value: 1 }),
     }
-    const ensure = settingsReadBatch(client)
+    const ensure = readBatch(client)
     const [, value] = await Promise.all([ensure(settingsQueries.roles()), ensure(unregistered)])
     expect(value).toEqual({ value: 1 })
     expect(batches).toHaveBeenCalledTimes(1)
@@ -169,10 +169,10 @@ describe('settingsReadBatch', () => {
   })
 })
 
-describe('readSettingsTogetherFn', () => {
+describe('readTogetherFn', () => {
   it('answers each read behind its own gate, and nothing it does not know', async () => {
     held.permissions = new Set([PERMISSIONS.MEMBER_VIEW])
-    const results = await readSettingsTogetherFn({
+    const results = await readTogetherFn({
       data: {
         reads: [
           [...settingsQueries.roles().queryKey],
@@ -190,8 +190,8 @@ describe('readSettingsTogetherFn', () => {
 
   it('keeps nothing between requests', async () => {
     const reads = [[...settingsQueries.roles().queryKey]]
-    await readSettingsTogetherFn({ data: { reads } })
-    await readSettingsTogetherFn({ data: { reads } })
+    await readTogetherFn({ data: { reads } })
+    await readTogetherFn({ data: { reads } })
     expect(ran).toEqual(['roles', 'roles'])
   })
 })

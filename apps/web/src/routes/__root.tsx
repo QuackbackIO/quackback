@@ -36,6 +36,7 @@ import {
   visualThemeAttribute,
   type VisualTheme,
 } from '@/lib/shared/labs'
+import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 // The toast renderer is its own chunk: the root module ships with every
 // document (the embedded widget included), and a toast fired before it mounts
@@ -275,7 +276,7 @@ function useSeedRootContext() {
 function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   // Every read below is selected: the context and the location are new after
   // every navigation, and the document changes only when what it shows does.
-  const settings = Route.useRouteContext({ select: (context) => context.settings })
+  const settings = useWorkspaceSettings()
   const themeCookie = Route.useRouteContext({ select: (context) => context.themeCookie })
   const prefersColorScheme = Route.useRouteContext({
     select: (context) => context.prefersColorScheme,

@@ -13,7 +13,6 @@ vi.mock('@/lib/server/functions/portal', () => ({
   fetchPublicRoadmaps: vi.fn(),
   fetchPublicRoadmapPosts: vi.fn(),
   fetchPortalData: vi.fn(),
-  fetchRoadmapPageData: vi.fn(),
 }))
 
 import { fetchPublicStatuses } from '@/lib/server/functions/portal'

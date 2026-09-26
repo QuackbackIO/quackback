@@ -4,6 +4,7 @@ import { getCloudIdentityFn } from '@/lib/server/functions/cloud-identity'
 import { checkOnboardingState } from '@/lib/server/functions/admin'
 import { pickOnboardingStep } from './-onboarding-step'
 import { WorkspaceStep } from './-workspace-step'
+import { useManagedFieldPaths } from '@/lib/client/hooks/use-root-context'
 
 export const Route = createFileRoute('/onboarding/_layout/workspace')({
   loader: async ({ context }) => {
@@ -34,6 +35,6 @@ export const Route = createFileRoute('/onboarding/_layout/workspace')({
 
 function WorkspaceStepRoute() {
   const data = Route.useLoaderData()
-  const { managedFieldPaths } = Route.useRouteContext()
+  const managedFieldPaths = useManagedFieldPaths()
   return <WorkspaceStep {...data} managedFieldPaths={managedFieldPaths ?? []} />
 }
