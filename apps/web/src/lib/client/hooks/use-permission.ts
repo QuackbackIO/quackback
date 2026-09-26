@@ -41,7 +41,7 @@ export function usePermission(key: PermissionKey): boolean {
  * navigation, and selecting the answer keeps a component from re-rendering
  * when it has not changed.
  */
-export function permissionFromRouteContext(context: unknown, key: PermissionKey): boolean {
+function permissionFromRouteContext(context: unknown, key: PermissionKey): boolean {
   const { principal, permissions } = (context ?? {}) as {
     principal?: { role: string } | null
     permissions?: PermissionKey[]

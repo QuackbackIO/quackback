@@ -1,13 +1,6 @@
 import type { BoardId } from '@quackback/ids'
-import {
-  Suspense,
-  useState,
-  useCallback,
-  useEffect,
-  useRef,
-  useSyncExternalStore,
-  type RefObject,
-} from 'react'
+import { Suspense, useState, useCallback, useEffect, useRef, type RefObject } from 'react'
+import { createValueStore, useStoreValue, type ValueStore } from '@/lib/client/value-store'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { useRouter, useRouteContext } from '@tanstack/react-router'
@@ -523,42 +516,10 @@ export function FeedbackHeaderAnimated({
  * The title as typed, held outside React state: the field and the similar-posts
  * search read it as it changes, and the composer reads it when it acts on
  * it, so a keystroke renders the field and the search, not the composer.
- * It is kept here rather than shared with the widget's composer: a module
- * the two alone import would be a chunk, and a request, of its own.
  */
-interface TitleStore {
-  get(): string
-  set(next: string): void
-  subscribe(onChange: () => void): () => void
-}
+type TitleStore = ValueStore<string>
 
-function createTitleStore(): TitleStore {
-  let value = ''
-  const listeners = new Set<() => void>()
-  return {
-    get: () => value,
-    set(next) {
-      if (next === value) return
-      value = next
-      for (const listener of listeners) listener()
-    },
-    subscribe(onChange) {
-      listeners.add(onChange)
-      return () => {
-        listeners.delete(onChange)
-      }
-    },
-  }
-}
-
-/** What a component reads from the title; it renders again only when that changes. */
-function useTitle<T = string>(
-  title: TitleStore,
-  select: (value: string) => T = (value) => value as T
-): T {
-  const read = () => select(title.get())
-  return useSyncExternalStore(title.subscribe, read, read)
-}
+const createTitleStore = (): TitleStore => createValueStore('')
 
 function TitleInput({
   title,
@@ -572,7 +533,7 @@ function TitleInput({
   onExpand: () => void
 }) {
   const intl = useIntl()
-  const value = useTitle(title)
+  const value = useStoreValue(title)
   return (
     <motion.input
       ref={inputRef}
@@ -607,7 +568,7 @@ function TitleInput({
  * boards as the title is typed.
  */
 function SimilarPostsPrompt({ title, enabled }: { title: TitleStore; enabled: boolean }) {
-  const value = useTitle(title)
+  const value = useStoreValue(title)
   const { posts } = useSimilarPosts({ title: value, enabled })
   return <SimilarPostsCard posts={posts} show={value.length >= 5} className="px-4 sm:px-5 pb-3" />
 }

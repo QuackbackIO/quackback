@@ -10,6 +10,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { buttonVariants } from '@/components/ui/button'
+import { useOpenedOnce } from '@/lib/client/hooks/use-opened-once'
 import { cn } from '@/lib/shared/utils'
 import { WarningBox } from './warning-box'
 
@@ -45,9 +46,7 @@ export function ConfirmDialog({
   const busy = Boolean(isPending) || started
   // Mounted from the first open on (it has no trigger of its own), so the
   // confirm dialogs a list keeps per row cost nothing until one is asked for.
-  const [opened, setOpened] = useState(open)
-  if (open && !opened) setOpened(true)
-  const mounted = opened || open
+  const mounted = useOpenedOnce(open)
 
   function resetStarted() {
     startedRef.current = false

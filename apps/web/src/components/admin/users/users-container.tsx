@@ -34,6 +34,7 @@ import {
 } from '@/components/admin/segments/segment-utils'
 import { canReadCompanies, companiesDirectoryQueries } from '@/lib/client/queries/users-page'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
+import { useOpenedOnce } from '@/lib/client/hooks/use-opened-once'
 import type { PrincipalId, SegmentId } from '@quackback/ids'
 import type { SegmentCondition } from '@/lib/shared/db-types'
 
@@ -148,10 +149,8 @@ export function UsersContainer({ currentMemberRole }: UsersContainerProps) {
   const [editTarget, setEditTarget] = useState<SegmentListItem | null>(null)
   // Each dialog mounts on its first open and stays mounted, so closing it
   // still animates.
-  const [newPersonOpened, setNewPersonOpened] = useState(false)
-  const [segmentFormOpened, setSegmentFormOpened] = useState(false)
-  if (newPersonOpen && !newPersonOpened) setNewPersonOpened(true)
-  if ((createOpen || editTarget) && !segmentFormOpened) setSegmentFormOpened(true)
+  const newPersonOpened = useOpenedOnce(newPersonOpen)
+  const segmentFormOpened = useOpenedOnce(createOpen || !!editTarget)
   const [deleteTarget, setDeleteTarget] = useState<SegmentListItem | null>(null)
   const [evaluatingId, setEvaluatingId] = useState<string | null>(null)
 
