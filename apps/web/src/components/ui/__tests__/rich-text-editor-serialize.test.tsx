@@ -1,8 +1,7 @@
 // @vitest-environment happy-dom
 /**
  * A keystroke serializes only what its host reads. onDocumentChange hands a
- * document that serializes on read, each format once; onChange serializes the
- * formats its callback declares parameters for, the JSON once. Serializations
+ * document that serializes on read, each format once. Serializations
  * are counted where they happen: the document's toJSON, the DOM serializer
  * behind HTML and the markdown manager.
  */
@@ -144,37 +143,5 @@ describe('RichTextEditor onDocumentChange', () => {
 
     expect(editor.getText()).toBe('hello')
     expect(counts().json).toBe(5)
-  })
-})
-
-describe('RichTextEditor onChange', () => {
-  it('builds no HTML or markdown for a callback that takes only the JSON', async () => {
-    const received: JSONContent[] = []
-    const { container } = render(<RichTextEditor onChange={(json) => received.push(json)} />)
-    const { dom, editor } = await mountedEditor(container)
-    const user = userEvent.setup()
-    await user.click(dom)
-    const counts = countSerializations(editor)
-
-    await user.type(dom, 'hello')
-
-    expect(received.at(-1)).toEqual(paragraph('hello'))
-    expect(counts()).toEqual({ json: 5, html: 0, markdown: 0 })
-  })
-
-  it('serializes each declared format once per keystroke', async () => {
-    const received: [JSONContent, string, string][] = []
-    const { container } = render(
-      <RichTextEditor onChange={(json, html, markdown) => received.push([json, html, markdown])} />
-    )
-    const { dom, editor } = await mountedEditor(container)
-    const user = userEvent.setup()
-    await user.click(dom)
-    const counts = countSerializations(editor)
-
-    await user.type(dom, 'hello')
-
-    expect(received.at(-1)).toEqual([paragraph('hello'), '<p>hello</p>', 'hello'])
-    expect(counts()).toEqual({ json: 5, html: 5, markdown: 5 })
   })
 })

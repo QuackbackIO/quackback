@@ -4,7 +4,8 @@
  * the visitor thread around the composer. The composer still sends exactly
  * what was typed, empties after a send, signals typing to the team and looks
  * up help articles for a first message. The editor is a stub that hands the
- * test its onChange; the thread viewport stub counts the thread's renders.
+ * test its onDocumentChange; the thread viewport stub counts the thread's
+ * renders.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -12,10 +13,16 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
 import type { ConversationId } from '@quackback/ids'
 
+interface EditorDocumentStub {
+  json(): unknown
+  html(): string
+  markdown(): string
+}
+
 const probe = vi.hoisted(() => ({
   threadRenders: 0,
   editorMounts: 0,
-  onChange: null as ((json: unknown) => void) | null,
+  onDocumentChange: null as ((document: EditorDocumentStub) => void) | null,
   onSubmit: null as (() => void) | null,
   previewed: [] as string[],
 }))
@@ -24,13 +31,13 @@ vi.mock('@/components/ui/rich-text-editor', async () => {
   const { useEffect } = await import('react')
   return {
     RichTextEditor: ({
-      onChange,
+      onDocumentChange,
       onSubmit,
     }: {
-      onChange?: (json: unknown) => void
+      onDocumentChange?: (document: EditorDocumentStub) => void
       onSubmit?: () => void
     }) => {
-      probe.onChange = onChange ?? null
+      probe.onDocumentChange = onDocumentChange ?? null
       probe.onSubmit = onSubmit ?? null
       useEffect(() => {
         probe.editorMounts++
@@ -91,7 +98,7 @@ afterEach(() => {
   cleanup()
   probe.threadRenders = 0
   probe.editorMounts = 0
-  probe.onChange = null
+  probe.onDocumentChange = null
   probe.previewed = []
 })
 
@@ -101,10 +108,19 @@ function doc(text: string) {
   return { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] }
 }
 
+/** An edited document whose composer reads only the JSON; the other formats
+ *  walk the whole document, which a keystroke here must not pay for. */
+function edited(text: string): EditorDocumentStub {
+  const unread = () => {
+    throw new Error('the composer reads only the JSON')
+  }
+  return { json: () => doc(text), html: unread, markdown: unread }
+}
+
 /** Feed the composer one character at a time, as the editor does. */
 function type(from: string, to: string) {
   for (let i = from.length + 1; i <= to.length; i++) {
-    act(() => probe.onChange!(doc(to.slice(0, i))))
+    act(() => probe.onDocumentChange!(edited(to.slice(0, i))))
   }
 }
 

@@ -2,7 +2,7 @@
 /**
  * Typing in a composer costs the keystroke, not the editor's chrome. A
  * controlled host (the comment form's shape: the value held in state and an
- * inline onChange) re-renders on every keystroke; the toolbar, bubble menus
+ * inline onDocumentChange reading the markdown back) re-renders on every keystroke; the toolbar, bubble menus
  * and context menu around the writing surface must not follow it, and the
  * editor must not run a transaction per keystroke on their behalf. The
  * toolbar still tracks the selection on its own. Mounting the editor hands
@@ -59,7 +59,8 @@ function ControlledHost({ onValue }: { onValue?: (markdown: string) => void }) {
       features={{ ...FEATURES }}
       onImageUpload={upload}
       onVideoUpload={upload}
-      onChange={(_json, _html, markdown) => {
+      onDocumentChange={(document) => {
+        const markdown = document.markdown()
         setValue(markdown)
         onValue?.(markdown)
       }}
@@ -94,38 +95,42 @@ describe('RichTextEditor mount', () => {
       type: 'doc',
       content: [...doc('Hello').content, { type: 'paragraph', content: [] }],
     }
-    const onChange = vi.fn()
-    const { container } = render(<RichTextEditor value={value} onChange={onChange} />)
+    const onDocumentChange = vi.fn()
+    const { container } = render(
+      <RichTextEditor value={value} onDocumentChange={onDocumentChange} />
+    )
     const { dom } = await mountedEditor(container)
     await act(() => new Promise((resolve) => setTimeout(resolve, 20)))
 
     expect(dom.textContent).toBe('Hello')
     // Nothing was done to the document, so there is nothing to undo.
     expect(toolbarButton('Undo').disabled).toBe(true)
-    expect(onChange).not.toHaveBeenCalled()
+    expect(onDocumentChange).not.toHaveBeenCalled()
   })
 
   it('does not report a change of editability as an edit', async () => {
-    const onChange = vi.fn()
+    const onDocumentChange = vi.fn()
     const value = doc('Hello')
-    const { container, rerender } = render(<RichTextEditor value={value} onChange={onChange} />)
+    const { container, rerender } = render(
+      <RichTextEditor value={value} onDocumentChange={onDocumentChange} />
+    )
     const { editor } = await mountedEditor(container)
 
-    rerender(<RichTextEditor value={value} onChange={onChange} disabled />)
+    rerender(<RichTextEditor value={value} onDocumentChange={onDocumentChange} disabled />)
     await waitFor(() => expect(editor.isEditable).toBe(false))
-    rerender(<RichTextEditor value={value} onChange={onChange} />)
+    rerender(<RichTextEditor value={value} onDocumentChange={onDocumentChange} />)
     await waitFor(() => expect(editor.isEditable).toBe(true))
-    expect(onChange).not.toHaveBeenCalled()
+    expect(onDocumentChange).not.toHaveBeenCalled()
   })
 
   it('still takes a new value from the host', async () => {
-    const onChange = vi.fn()
+    const onDocumentChange = vi.fn()
     const { container, rerender } = render(
-      <RichTextEditor value={doc('Hello')} onChange={onChange} />
+      <RichTextEditor value={doc('Hello')} onDocumentChange={onDocumentChange} />
     )
     const { dom } = await mountedEditor(container)
 
-    rerender(<RichTextEditor value={doc('Replaced')} onChange={onChange} />)
+    rerender(<RichTextEditor value={doc('Replaced')} onDocumentChange={onDocumentChange} />)
     await waitFor(() => expect(dom.textContent).toBe('Replaced'))
   })
 })

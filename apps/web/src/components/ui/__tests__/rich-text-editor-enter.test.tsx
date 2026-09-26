@@ -7,11 +7,11 @@ import { RichTextEditor } from '../rich-text-editor'
 
 describe('RichTextEditor Enter behavior', () => {
   it('starts a new paragraph in a feedback-shaped editor', async () => {
-    const onChange = vi.fn()
+    const onDocumentChange = vi.fn()
     const { container } = render(
       <RichTextEditor
         value=""
-        onChange={onChange}
+        onDocumentChange={onDocumentChange}
         borderless
         toolbarPosition="bottom"
         features={{ images: true, quackbackEmbeds: true }}
