@@ -21,7 +21,6 @@ import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
 import Youtube from '@tiptap/extension-youtube'
-import { Emoji, inputRegex } from '@tiptap/extension-emoji'
 import { MentionExtension } from './mention-extension'
 import { createSuggestionPopup, createSuggestionPositioner } from './suggestion-popup'
 import { applySuggestionListKey } from './suggestion-list-keys'
@@ -30,7 +29,7 @@ import { QuackbackEmbed } from './quackback-embed-extension'
 import { ConversationImage } from './conversation-image-node'
 import { UploadedVideo } from './uploaded-video-node'
 import { Markdown } from '@tiptap/markdown'
-import { Extension, InputRule } from '@tiptap/core'
+import { Extension } from '@tiptap/core'
 import type { Range } from '@tiptap/core'
 import Suggestion, { type SuggestionOptions, type SuggestionProps } from '@tiptap/suggestion'
 import { createLowlight } from 'lowlight'
@@ -69,10 +68,10 @@ import { resizableImageInsertAttrs } from '@/lib/client/resizable-image-insert-a
 // so server-side consumers (e.g. outbound conversation email) can import it
 // without pulling in React/tiptap-react. Re-exported below for existing callers.
 import { generateContentHTML } from '@/lib/shared/content-html'
-// The emoji dataset + shortcode lookup live in their own module so read-only
-// surfaces don't statically bundle it; the editor's `:` picker is fine to pay
-// the cost since the editor chunk is already lazy-loaded on compose surfaces.
-import { defaultEmojis, lookupEmoji, type EmojiItem } from '@/lib/shared/content-emoji'
+// The emoji dataset + shortcode lookup live in their own module, which the
+// emoji node loads when an editor first needs it (see ./emoji-node).
+import type { EmojiItem } from '@/lib/shared/content-emoji'
+import { EmojiNode, loadEmojiData } from './emoji-node'
 import {
   MAX_EMOJI_SUGGESTIONS,
   POPULAR_EMOJI_SHORTCODES,
@@ -84,6 +83,7 @@ import {
 // module with only light deps. Re-exported below for backward compatibility;
 // read-only consumers should import from '@/components/ui/rich-text-content'.
 import { RichTextContent, isRichTextContent } from './rich-text-content'
+import { RichTextEditorEmptyState } from './lazy-rich-text-editor'
 import {
   Bold,
   Italic,
@@ -1096,7 +1096,10 @@ interface EmojiSuggestionListProps {
   query?: string
 }
 
-function filterEmojiItems(query: string): EmojiItem[] {
+function filterEmojiItems(
+  query: string,
+  { lookupEmoji, defaultEmojis }: Awaited<ReturnType<typeof loadEmojiData>>
+): EmojiItem[] {
   return recommendEmojiItems(query, {
     recents: readRecentEmojis(),
     popularShortcodes: POPULAR_EMOJI_SHORTCODES,
@@ -1231,44 +1234,10 @@ EmojiSuggestionList.displayName = 'EmojiSuggestionList'
 /** The `:`-triggered inline emoji picker, shared with the conversation composers so
  *  reply + note get the same emoji UX as posts. */
 export function createEmojiExtension() {
-  return Emoji.extend({
-    addAttributes() {
-      return {
-        ...this.parent?.(),
-        // Persist the Unicode char at write time so read-only HTML/email hit
-        // generateContentHTML's attrs.emoji fast path without loading the
-        // dataset. Legacy name-only nodes still upgrade via lookupEmoji.
-        emoji: { default: null },
-      }
-    },
-    addInputRules() {
-      const parent = this.parent?.() ?? []
-      const shortcodeRule = new InputRule({
-        find: inputRegex,
-        handler: ({ range, match, chain }) => {
-          const typed = match[1]
-          const item = lookupEmoji(typed)
-          if (!item?.emoji) return
-          recordRecentEmoji(item.emoji)
-          chain()
-            .insertContentAt(range, {
-              type: this.name,
-              attrs: { name: item.name, emoji: item.emoji },
-            })
-            .command(({ tr, state }) => {
-              tr.setStoredMarks(state.doc.resolve(state.selection.to - 1).marks())
-              return true
-            })
-            .run()
-        },
-      })
-      const withoutDefaultShortcode = parent.filter((rule) => rule.find !== inputRegex)
-      return [shortcodeRule, ...withoutDefaultShortcode]
-    },
-  }).configure({
+  return EmojiNode.configure({
     enableEmoticons: true,
     suggestion: {
-      items: ({ query }) => filterEmojiItems(query),
+      items: async ({ query }) => filterEmojiItems(query, await loadEmojiData()),
       allow: ({ editor }) => !editor.isActive('codeBlock'),
       render: () => {
         let component: ReactRenderer<EmojiSuggestionListRef> | null = null
@@ -1638,32 +1607,20 @@ function RichTextEditorBase({
   }, [])
 
   if (!editor) {
-    // Reserve the editor's eventual height + placeholder so the surrounding
-    // layout (toolbar footer, card border) doesn't jump when TipTap finishes
-    // mounting. Keeping immediatelyRender=false preserves SSR safety.
+    // Reserve the editor's eventual size, toolbar row included, so the
+    // surrounding layout doesn't jump when TipTap finishes mounting. Keeping
+    // immediatelyRender=false preserves SSR safety.
     return (
-      <div
-        className={cn(
-          !borderless && 'overflow-hidden rounded-md border border-input bg-background',
-          disabled && 'opacity-50 cursor-not-allowed',
-          fill && 'flex h-full min-h-0 flex-col',
-          className
-        )}
+      <RichTextEditorEmptyState
+        placeholder={placeholder}
+        className={className}
+        disabled={disabled}
+        minHeight={minHeight}
+        fill={fill}
+        borderless={borderless}
+        toolbarPosition={toolbarPosition}
         aria-hidden="true"
-      >
-        <div
-          className={cn(
-            'prose prose-sm prose-neutral dark:prose-invert max-w-none',
-            'min-h-[var(--editor-min-height)]',
-            borderless ? 'py-0' : 'px-3 py-2',
-            'text-muted-foreground',
-            fill && 'min-h-0 flex-1'
-          )}
-          style={{ '--editor-min-height': minHeight } as React.CSSProperties}
-        >
-          {placeholder ?? ' '}
-        </div>
-      </div>
+      />
     )
   }
 

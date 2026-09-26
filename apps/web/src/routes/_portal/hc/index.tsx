@@ -10,8 +10,7 @@ import {
   listPublicCategoriesFn,
   listPopularPublicArticlesFn,
 } from '@/lib/server/functions/help-center'
-import { resolveHcLandingLocale } from '@/lib/shared/help-center-url'
-import { HC_LOCALE_COOKIE } from '@/components/help-center/help-center-locale-switcher'
+import { HC_LOCALE_COOKIE, resolveHcLandingLocale } from '@/lib/shared/help-center-url'
 import type { HelpCenterConfig } from '@/lib/shared/types/settings'
 import { resolvePortalOgImageUrl } from '@/lib/shared/portal-og-image'
 

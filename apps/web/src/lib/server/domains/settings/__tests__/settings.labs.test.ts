@@ -222,6 +222,26 @@ describe('setWorkspaceExperimentEnabled', () => {
     expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
   })
 
+  it('forgets settings the request already read, so its later reads see the change', async () => {
+    mockSelectLimit.mockResolvedValue([{ visible: true, enabled: false }])
+    mockUpdateReturning.mockResolvedValue([{ visible: true, enabled: true }])
+    const { runWithLogContext } = await import('@/lib/server/log-context')
+    const { memoizePerRequest } = await import('@/lib/server/request-memo')
+
+    const reads = await runWithLogContext({ request_id: 'r1' }, async () => {
+      const before = await memoizePerRequest('settings:workspace', async () => 'legacy')
+      await setWorkspaceExperimentEnabled({
+        experimentId: 'refined-visual-theme',
+        enabled: true,
+        actor: { email: 'admin@example.com', type: 'user' },
+      })
+      const after = await memoizePerRequest('settings:workspace', async () => 'refined')
+      return [before, after]
+    })
+
+    expect(reads).toEqual(['legacy', 'refined'])
+  })
+
   it('does not report success when cache invalidation fails', async () => {
     mockSelectLimit.mockResolvedValue([{ visible: true, enabled: false }])
     mockUpdateReturning.mockResolvedValue([{ visible: true, enabled: true }])

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { resolveDocumentTheme, parsePrefersColorScheme } from '../index'
+import { colorSchemeHintHeaders, resolveDocumentTheme, parsePrefersColorScheme } from '../index'
 
 // resolveDocumentTheme decides what `class` and `color-scheme` the server puts
 // on <html> so the very first paint already matches the chosen theme. Without
@@ -70,5 +70,14 @@ describe('parsePrefersColorScheme', () => {
     expect(parsePrefersColorScheme(undefined)).toBeNull()
     expect(parsePrefersColorScheme('')).toBeNull()
     expect(parsePrefersColorScheme('no-preference')).toBeNull()
+  })
+})
+
+describe('colorSchemeHintHeaders', () => {
+  it('asks for the hint without insisting on it', () => {
+    // Critical-CH would make Chromium discard every first visit's response
+    // and render the page a second time; the <head> theme script resolves
+    // `system` for a document rendered without the hint instead.
+    expect(colorSchemeHintHeaders()).toEqual({ 'Accept-CH': 'Sec-CH-Prefers-Color-Scheme' })
   })
 })

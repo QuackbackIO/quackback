@@ -44,7 +44,7 @@ vi.mock('@/lib/client/mutations/settings', () => ({
   useUpdatePortalConfig: () => ({ mutateAsync: vi.fn() }),
 }))
 
-const { MessengerChannelPage } = await import('../settings.channels_.messenger')
+const { MessengerChannelPage } = await import('@/components/admin/settings/messenger-channel-page')
 
 describe('Messenger Surfaces', () => {
   it('owns Widget and Portal chats switches', () => {

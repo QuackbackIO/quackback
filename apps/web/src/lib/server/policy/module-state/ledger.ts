@@ -90,6 +90,15 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
   },
   {
     file: 'apps/web/src/lib/server/auth/index.ts',
+    name: 'authBuilds',
+    category: 'workspace-keyed',
+    reason:
+      'The auth instance build in flight, shared by concurrent cold requests. It resolves to an ' +
+      "instance closed over one workspace's database adapter and providers (see authInstances), so " +
+      'a caller joining another workspace build would authenticate against the wrong workspace.',
+  },
+  {
+    file: 'apps/web/src/lib/server/auth/index.ts',
     name: 'authInstances',
     category: 'workspace-keyed',
     reason:
@@ -265,6 +274,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'request scope that named the workspace is still open — an SSE stream outlives that scope by ' +
       "minutes. Keyed by the logical channel alone it would hand one workspace's inbox stream " +
       "another workspace's messages on a bus with no authorization layer of its own.",
+  },
+  {
+    file: 'apps/web/src/lib/server/response-hooks.ts',
+    name: 'bodyEndHooks',
+    category: 'workspace-scoped-key',
+    keyedBy: 'response.body',
+    reason:
+      "Keyed by one response's body stream, an object that exists only for the request that produced " +
+      'it, so a lookup can only ever find its own request. It is a WeakMap and the entry is removed ' +
+      'when taken, so nothing outlives the response.',
   },
   {
     file: 'apps/web/src/lib/server/workspaces/pool-cache.ts',

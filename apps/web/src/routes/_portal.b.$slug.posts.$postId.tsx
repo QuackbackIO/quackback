@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import { useIntl } from 'react-intl'
 import { createFileRoute, notFound, useRouteContext } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
@@ -16,12 +16,11 @@ import {
   CommentsSection,
   CommentsSectionSkeleton,
 } from '@/components/public/post-detail/comments-section'
-import { DeletePostDialog } from '@/components/public/post-detail/delete-post-dialog'
 import { usePostPermissions, postPermissionsKeys } from '@/lib/client/hooks/use-portal-posts-query'
 import { getPostPermissionsFn } from '@/lib/server/functions/public-posts'
-import { usePostActions } from '@/lib/client/mutations'
+import { usePostActions } from '@/lib/client/mutations/portal-post-actions'
 import { usePortalTeamPostActions } from '@/lib/client/mutations/portal-team-post-actions'
-import { MergeIntoDialog, MergeOthersDialog } from '@/components/admin/feedback/merge-section'
+import { useOpenedOnce } from '@/lib/client/hooks/use-opened-once'
 import { usePortalMediaUpload } from '@/lib/client/hooks/use-image-upload'
 import { useEnsureAnonSession } from '@/lib/client/hooks/use-ensure-anon-session'
 import {
@@ -41,6 +40,23 @@ import { isProductEnabled } from '@/lib/shared/types/settings'
 import { usePortalPermissions } from '@/lib/client/hooks/use-portal-permissions'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { useApprovePost, useRejectPost } from '@/lib/client/mutations/moderation'
+
+// Dialogs the post's author or the team open from its menu; they load on first use.
+const DeletePostDialog = lazy(() =>
+  import('@/components/public/post-detail/delete-post-dialog').then((m) => ({
+    default: m.DeletePostDialog,
+  }))
+)
+const MergeIntoDialog = lazy(() =>
+  import('@/components/admin/feedback/merge-section').then((m) => ({
+    default: m.MergeIntoDialog,
+  }))
+)
+const MergeOthersDialog = lazy(() =>
+  import('@/components/admin/feedback/merge-section').then((m) => ({
+    default: m.MergeOthersDialog,
+  }))
+)
 
 export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
   loader: async ({ params, context }) => {
@@ -134,6 +150,9 @@ function PostDetailPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [mergeIntoDialogOpen, setMergeIntoDialogOpen] = useState(false)
   const [mergeOthersDialogOpen, setMergeOthersDialogOpen] = useState(false)
+  const deleteDialogMounted = useOpenedOnce(deleteDialogOpen)
+  const mergeIntoDialogMounted = useOpenedOnce(mergeIntoDialogOpen)
+  const mergeOthersDialogMounted = useOpenedOnce(mergeOthersDialogOpen)
 
   // Post detail already includes board data (JOINed in query)
   const postQuery = useSuspenseQuery(portalDetailQueries.postDetail(postId))
@@ -410,24 +429,26 @@ function PostDetailPage() {
         </Suspense>
       </div>
 
-      <DeletePostDialog
-        open={deleteDialogOpen}
-        onOpenChange={setDeleteDialogOpen}
-        postTitle={post.title}
-        onConfirm={() => {
-          if (canDelete) {
-            deletePost()
-          } else {
-            void team.deletePostAsTeam?.()
-          }
-        }}
-        isPending={isDeleting || team.isTeamDeleting}
-      />
+      <Suspense fallback={null}>
+        {deleteDialogMounted && (
+          <DeletePostDialog
+            open={deleteDialogOpen}
+            onOpenChange={setDeleteDialogOpen}
+            postTitle={post.title}
+            onConfirm={() => {
+              if (canDelete) {
+                deletePost()
+              } else {
+                void team.deletePostAsTeam?.()
+              }
+            }}
+            isPending={isDeleting || team.isTeamDeleting}
+          />
+        )}
 
-      {/* Merge dialogs — team members holding post.merge only. Invalidate on
-          close so a completed merge is reflected on the portal page. */}
-      {team.canMerge && (
-        <>
+        {/* Merge dialogs, for team members holding post.merge only. Invalidate
+            on close so a completed merge is reflected on the portal page. */}
+        {team.canMerge && mergeIntoDialogMounted && (
           <MergeIntoDialog
             postId={postId}
             postTitle={post.title}
@@ -437,6 +458,8 @@ function PostDetailPage() {
               if (!open) team.invalidatePortal()
             }}
           />
+        )}
+        {team.canMerge && mergeOthersDialogMounted && (
           <MergeOthersDialog
             postId={postId}
             postTitle={post.title}
@@ -446,8 +469,8 @@ function PostDetailPage() {
               if (!open) team.invalidatePortal()
             }}
           />
-        </>
-      )}
+        )}
+      </Suspense>
     </div>
   )
 }

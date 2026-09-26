@@ -22,7 +22,7 @@ import { removeViewerScopedPortalQueries } from '@/lib/client/queries/portal'
 import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { cn } from '@/lib/shared/utils'
-import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import { DeferredRichTextEditor } from '@/components/ui/lazy-rich-text-editor'
 import { COMMENT_EDITOR_FEATURES } from './comment-editor-features'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { PostId, PostCommentId } from '@quackback/ids'
@@ -219,8 +219,8 @@ export function CommentForm({
                         }
                       }}
                     >
-                      <RichTextEditor
-                        key={editorResetKey}
+                      <DeferredRichTextEditor
+                        editorKey={editorResetKey}
                         value={field.value}
                         borderless
                         toolbarPosition="bottom"
@@ -462,8 +462,8 @@ export function CommentForm({
                     }
                   }}
                 >
-                  <RichTextEditor
-                    key={editorResetKey}
+                  <DeferredRichTextEditor
+                    editorKey={editorResetKey}
                     value={field.value}
                     minHeight="80px"
                     disabled={isSubmitting}

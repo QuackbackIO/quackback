@@ -68,7 +68,6 @@ import {
 } from '@/lib/client/mutations/inbox'
 import {
   InboxNavSidebar,
-  isInboxView,
   isTicketInboxView as isTicketNavView,
   scopeLabelFor,
   useConversationTagsWithCounts,
@@ -76,13 +75,16 @@ import {
   useInboxTeams,
   useConversationViews,
 } from '@/components/admin/conversation/inbox-nav-sidebar'
+import { conversationAttributeQueries } from '@/lib/client/queries/conversation-attributes'
 import { ConversationViewDialog } from '@/components/admin/conversation/conversation-view-dialog'
 import { RequiredAttributesDialog } from '@/components/admin/conversation/required-attributes-dialog'
 import { CreateTicketDialog } from '@/components/admin/inbox/create-ticket-dialog'
 import { isMissingRequiredAttributesMessage } from '@/lib/shared/conversation/attribute-values'
 import { resolveDefaultClosedStatusId } from '@/lib/shared/tickets'
+import { inboxTeamsQueryOptions } from '@/lib/client/queries/inbox-teams'
 import {
   inboxNavKey,
+  isInboxView,
   navFromSearch,
   normalizeTriageFacet,
   normalizeInboxChannel,
@@ -340,11 +342,34 @@ export const Route = createFileRoute('/admin/inbox')({
         )
       )
     }
+    // Nav badges, the company and ticket-type pickers, the team roster and
+    // the attribute definitions are read on every load whatever is selected.
+    // Prefetched here, they arrive with the document rather than as one
+    // client round trip (and one more session resolution) each.
+    const showTickets = !!flags?.supportTickets
     await Promise.all([
       listPrefetch,
       warm(queryClient.ensureQueryData(conversationInboxQueries.tagCounts())),
       warm(queryClient.ensureQueryData(conversationInboxQueries.segmentCounts())),
       warm(queryClient.ensureQueryData(conversationInboxQueries.views())),
+      warm(queryClient.ensureQueryData(inboxQueries.counts())),
+      warm(queryClient.ensureQueryData(inboxTeamsQueryOptions())),
+      warm(
+        queryClient.ensureQueryData({
+          queryKey: ['admin', 'companies'],
+          queryFn: () => listCompaniesFn(),
+        })
+      ),
+      warm(queryClient.ensureQueryData(conversationAttributeQueries.live())),
+      // The status catalogue backs every ticket-kind row's badge, not just a
+      // tickets-scoped view, so it's warmed whenever tickets are on at all.
+      showTickets ? warm(queryClient.ensureQueryData(ticketQueries.statuses())) : undefined,
+      // The type registry looks scoped to the tickets filter dropdown, but the
+      // standalone create-ticket dialog (mounted the whole time the page is,
+      // just hidden) reads it unconditionally too. Match that, not the
+      // dropdown's narrower gate, or the dialog's own fetch keeps this a
+      // separate round trip.
+      showTickets ? warm(queryClient.ensureQueryData(ticketQueries.types())) : undefined,
       // Ticket thread prefetch arrives with M3 (ticket SSE); the loader only
       // warms the conversation thread cache for now.
       ref?.kind === 'conversation'

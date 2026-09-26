@@ -8,6 +8,7 @@ import {
 } from '@/lib/server/db'
 import type { IdentityProviderId } from '@quackback/ids'
 import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/cache'
+import { memoizePerRequest } from '@/lib/server/request-memo'
 import { ValidationError, NotFoundError } from '@/lib/shared/errors'
 import { httpsUrl } from '@/lib/shared/schemas/auth'
 import {
@@ -871,7 +872,19 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
 // WorkspaceSettings and SettingsBrandingData are defined in settings.types.ts
 // to prevent client-side barrel imports from pulling in this server-only module.
 
+/**
+ * The workspace settings with every config parsed, read at most once per
+ * request: the auth instance's version check, its hooks, the bootstrap payload
+ * and the auth helpers all ask for them. The request memo is keyed by the
+ * cache key, so `invalidateSettingsCache()` drops it along with the cached row.
+ * Each caller gets its own copy, as it did when every call parsed its own read.
+ */
 export async function getWorkspaceSettings(): Promise<WorkspaceSettings | null> {
+  const settings = await memoizePerRequest(CACHE_KEYS.WORKSPACE_SETTINGS, loadWorkspaceSettings)
+  return settings ? liveWorkspaceSettings(structuredClone(settings)) : null
+}
+
+async function loadWorkspaceSettings(): Promise<WorkspaceSettings | null> {
   try {
     const cached = await cacheGet<WorkspaceSettings>(CACHE_KEYS.WORKSPACE_SETTINGS)
     if (cached) {
@@ -889,7 +902,7 @@ export async function getWorkspaceSettings(): Promise<WorkspaceSettings | null> 
         // the portal dark for the hour the entry has left to live.
         if (cached.featureFlags) cached.featureFlags.feedback = true
         await repairLabsProjection(cached)
-        return liveWorkspaceSettings(cached)
+        return cached
       }
     }
 
@@ -979,7 +992,7 @@ export async function getWorkspaceSettings(): Promise<WorkspaceSettings | null> 
     // calls invalidateSettingsCache(), so a long TTL is safe and keeps
     // the per-request cost of getWorkspaceSettings to a single Redis GET.
     await cacheSet(CACHE_KEYS.WORKSPACE_SETTINGS, result, 3600)
-    return liveWorkspaceSettings(result)
+    return result
   } catch (error) {
     log.error({ err: error }, 'get workspace settings failed')
     wrapDbError('fetch settings with all configs', error)

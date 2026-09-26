@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useSyncExternalStore } from 'react'
 
 const NAV_CONTEXT_KEY = 'feedback-nav-context'
 const DEFAULT_BACK_URL = '/admin/feedback'
@@ -62,16 +62,30 @@ function buildNavigationContext(
   }
 }
 
+// The last parse, keyed by the raw stored string, so a render reads the same
+// object until the list saves a new context.
+let parsedStored: { raw: string | null; value: StoredContext | null } = { raw: null, value: null }
+
+function readStoredContext(): StoredContext | null {
+  let raw: string | null = null
+  try {
+    raw = sessionStorage.getItem(NAV_CONTEXT_KEY)
+  } catch {
+    return null
+  }
+  if (raw !== parsedStored.raw) parsedStored = { raw, value: getStoredContext() }
+  return parsedStored.value
+}
+
+const noSubscription = () => () => {}
+
 /**
  * Hook to get navigation context for prev/next navigation on detail page.
- * Reads from sessionStorage after mount (client-side only).
+ * Reads sessionStorage on the client (nothing on the server, so a
+ * server-rendered modal hydrates without it and then picks it up) as the
+ * modal renders, rather than in an effect that renders the modal again.
  */
 export function useNavigationContext(currentPostId: string): NavigationContext {
-  const [stored, setStored] = useState<StoredContext | null>(null)
-
-  useEffect(() => {
-    setStored(getStoredContext())
-  }, [])
-
+  const stored = useSyncExternalStore(noSubscription, readStoredContext, () => null)
   return buildNavigationContext(currentPostId, stored)
 }

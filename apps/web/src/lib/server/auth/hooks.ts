@@ -20,6 +20,7 @@
  */
 
 import { APIError, createAuthMiddleware } from 'better-auth/api'
+import { getJwtToken } from 'better-auth/plugins'
 import type { UserId } from '@quackback/ids'
 import { toSessionScope, type Role } from '@/lib/shared/roles'
 import {
@@ -58,6 +59,7 @@ import { applyClaimAttributesAfter } from './apply-claim-attributes'
 import { decodeSsoClaims } from './sso-claims-decode'
 import { peekResolvedClaims } from './resolved-claims-stash'
 import { pickAvatarUrl } from './resolve-identity'
+import { forgetRequestIdentity } from './request-session'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'auth-hooks' })
@@ -445,6 +447,10 @@ function sessionTokenFromAuthHeaders(headers: HeaderBag | undefined): string | n
  * Widget-scoped sessions may only hit the Better Auth allowlist. Portal and
  * dashboard sessions still pass; missing sessions are left to the endpoint's
  * own auth middleware.
+ *
+ * An allowlisted path passes whatever the session is, so it returns before the
+ * lookup: `/get-session` backs every authenticated request, and resolving the
+ * session here as well would double its cost.
  */
 export async function handleWidgetAccountMutationGate(ctx: {
   path?: string
@@ -456,6 +462,7 @@ export async function handleWidgetAccountMutationGate(ctx: {
     }
   }
 }): Promise<void> {
+  if (WIDGET_AUTH_ALLOWLIST.has(ctx.path ?? '')) return
   const headers = ctx.headers ?? ctx.request?.headers
   const token = sessionTokenFromAuthHeaders(headers)
   if (!token) return
@@ -468,7 +475,6 @@ export async function handleWidgetAccountMutationGate(ctx: {
       : undefined
   if (!session) return
   if (toSessionScope(session.scope) !== 'widget') return
-  if (WIDGET_AUTH_ALLOWLIST.has(ctx.path ?? '')) return
   throw new APIError('FORBIDDEN', {
     message: 'Widget sessions cannot access this endpoint',
   })
@@ -1556,11 +1562,54 @@ export async function handleCountryCapture(ctx: {
  *     first recorded device is seeded silently. Alerts cannot be
  *     disabled. Bowser labels the email; it is not the claim key.
  */
+/**
+ * The jwt plugin's `set-auth-jwt` header on `/get-session`, for HTTP callers
+ * only.
+ *
+ * A client reads the session's signed JWT from this header. The plugin's own
+ * hook (disabled in `auth/index.ts`) also signed one for every in-process
+ * `auth.api.getSession`, where the header is discarded, at the cost of a JWKS
+ * read and a signature on every session resolution. An in-process call carries
+ * no `request`; a routed one always does. Mirrors the plugin's hook otherwise.
+ */
+export async function handleSessionJwtHeader(ctx: {
+  path?: string
+  request?: unknown
+  context?: {
+    session?: { session?: unknown } | null
+    newSession?: { session?: unknown } | null
+    responseHeaders?: Headers
+  }
+  setHeader?: (name: string, value: string) => void
+}): Promise<void> {
+  if (ctx.path !== '/get-session' || !ctx.request || !ctx.setHeader) return
+  const session = ctx.context?.session || ctx.context?.newSession
+  if (!session?.session) return
+  const jwt = await getJwtToken(ctx as Parameters<typeof getJwtToken>[0])
+  const exposed = ctx.context?.responseHeaders?.get('access-control-expose-headers') || ''
+  const headers = new Set(
+    exposed
+      .split(',')
+      .map((header) => header.trim())
+      .filter(Boolean)
+  )
+  headers.add('set-auth-jwt')
+  ctx.setHeader('set-auth-jwt', jwt)
+  ctx.setHeader('Access-Control-Expose-Headers', Array.from(headers).join(', '))
+}
+
 export const hooksAfter = createAuthMiddleware(async (ctx) => {
   if (process.env.AUTH_HOOKS_DEBUG === '1') {
     const provider = inferProvider(ctx as Parameters<typeof inferProvider>[0])
     log.debug({ path: ctx.path, provider: provider ?? null }, 'after-hook')
   }
+
+  // Any endpoint but a session read may have changed who the request is
+  // (sign-in, sign-out, a revoked session, a changed email or password). An
+  // in-process call is followed by the rest of its request, which must read
+  // the identity afresh rather than the memoized one.
+  if (ctx.path !== '/get-session') forgetRequestIdentity()
+  await handleSessionJwtHeader(ctx as Parameters<typeof handleSessionJwtHeader>[0])
 
   // The provider registry is only consulted by the OAuth-callback after-hooks
   // (bootstrap promotion, auto-provision, policy cleanup, claim attributes).

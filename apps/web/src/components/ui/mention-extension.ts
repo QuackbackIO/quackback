@@ -5,7 +5,7 @@ import { ReactRenderer } from '@tiptap/react'
 import tippy, { type Instance } from 'tippy.js'
 import 'tippy.js/dist/tippy.css'
 import { MentionPicker, type MentionItem, type MentionPickerHandle } from './mention-picker'
-import { markSuggestionPopup } from './suggestion-popup'
+import { markSuggestionPopup } from './suggestion-popup-marker'
 
 const DEBOUNCE_MS = 200
 

@@ -182,6 +182,26 @@ export default defineConfig(({ mode }) => {
         // scripts/check-widget-bundle.ts guards the widget's eager graph in CI.
       },
     },
+    environments: {
+      client: {
+        build: {
+          rolldownOptions: {
+            output: {
+              codeSplitting: {
+                // Merge the client entry's static import closure into the
+                // entry chunk. Every document loads all of it before it can
+                // hydrate, so this moves no code across a lazy boundary; it
+                // only stops usage-based splitting from cutting that eager
+                // set into ~200 tiny chunks, each a request on every first
+                // load. `$initial` is rolldown's tag for exactly that set, so
+                // unlike directory pinning it cannot pull a lazy module in.
+                groups: [{ name: 'entry', tags: ['$initial'] }],
+              },
+            },
+          },
+        },
+      },
+    },
     resolve: {
       tsconfigPaths: true,
     },
@@ -192,6 +212,15 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       nitro({
         preset: 'bun',
+        // The bare Bun preset has no reverse proxy in front of it, so
+        // without this every static asset ships uncompressed: gzip and
+        // brotli siblings are written next to each build asset over 1 KB
+        // (nitro/dist/_build/common.mjs compressPublicAssets) and the
+        // static handler picks whichever the client's Accept-Encoding
+        // allows, setting Content-Encoding and Vary itself. Dynamic
+        // responses (SSR documents, server-function JSON) are unaffected;
+        // see compression.ts for those.
+        compressPublicAssets: { gzip: true, brotli: true },
       }),
       tanstackStart({
         srcDirectory: 'src',

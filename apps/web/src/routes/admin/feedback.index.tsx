@@ -1,12 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery, useQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
-import {
-  inboxPostsInfiniteOptions,
-  inboxFacetCountsOptions,
-  defaultInboxFilters,
-} from '@/lib/client/hooks/use-inbox-query'
-import { mergeSuggestionQueries } from '@/lib/client/queries/signals'
+import { warmFeedbackPage } from '@/lib/client/queries/feedback-page'
 import { InboxContainer } from '@/components/admin/feedback/inbox-container'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
@@ -25,29 +20,18 @@ export const Route = createFileRoute('/admin/feedback/')({
     const {
       user: currentUser,
       principal,
+      permissions,
       queryClient,
     } = context as {
       user: NonNullable<typeof context.user>
       principal: NonNullable<typeof context.principal>
+      permissions: NonNullable<typeof context.permissions>
       queryClient: typeof context.queryClient
     }
 
-    // The posts query only ever prefetches the default/initial (unfiltered)
-    // dataset — a filtered URL on first load falls through to InboxContainer's
-    // own client fetch, same as the portal feed. Awaited so the document
-    // hydrates instead of racing a fire-and-forget prefetch.
-    await Promise.all([
-      queryClient.ensureInfiniteQueryData(inboxPostsInfiniteOptions(defaultInboxFilters)),
-      queryClient.ensureQueryData(inboxFacetCountsOptions(defaultInboxFilters)),
-      queryClient.ensureQueryData(adminQueries.boards()),
-      queryClient.ensureQueryData(adminQueries.tags()),
-      queryClient.ensureQueryData(adminQueries.statuses()),
-      queryClient.ensureQueryData(adminQueries.teamMembers()),
-      queryClient.ensureQueryData(mergeSuggestionQueries.summary()),
-      // Warm the moderation count so the pending-moderation banner renders on
-      // first paint instead of popping in once the query resolves.
-      queryClient.ensureQueryData(adminQueries.moderationStatus()),
-    ])
+    // Awaited so the document hydrates instead of racing a fire-and-forget
+    // prefetch.
+    await warmFeedbackPage(queryClient, permissions)
 
     return {
       currentUser: {

@@ -30,7 +30,7 @@
  *
  * It does not make a cache *correct*; it makes it *separated*. A cache holding
  * something that must not outlive a request still needs a request-scoped home
- * (`functions/auth-request-cache.ts`), and a cache holding a secret still needs
+ * (`request-memo.ts`), and a cache holding a secret still needs
  * the secret resolved per workspace. Prefixing a key that was already wrong just
  * makes it wrong per workspace.
  */

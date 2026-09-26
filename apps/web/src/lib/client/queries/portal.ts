@@ -1,4 +1,4 @@
-import { queryOptions, type QueryClient } from '@tanstack/react-query'
+import { queryOptions, useQuery, type QueryClient } from '@tanstack/react-query'
 import type { PrincipalId, RoadmapId, PostStatusId, BoardId } from '@quackback/ids'
 import type { RespondedFilter } from '@/lib/shared/types/filters'
 import {
@@ -10,6 +10,7 @@ import {
   fetchPublicRoadmaps,
   fetchPublicRoadmapPosts,
   fetchPortalData,
+  fetchRoadmapPageData,
 } from '@/lib/server/functions/portal'
 
 /**
@@ -27,6 +28,7 @@ export const VIEWER_SCOPED_PORTAL_QUERY_KEYS: readonly (readonly string[])[] = [
   ['portal', 'post'],
   ['portal', 'roadmaps'],
   ['portal', 'roadmapPosts'],
+  ['portal', 'roadmapPage'],
   ['publicPosts'],
 ]
 
@@ -170,6 +172,26 @@ export const portalQueries = {
     }),
 
   /**
+   * Combined fetch for the roadmap page shell: the roadmap list plus the
+   * statuses, boards and tags its columns and filters need, in one request.
+   * Seeds the four cache entries those components read individually
+   * (roadmaps/statuses/boards/tags), so none of them needs a request of its
+   * own.
+   */
+  roadmapPageData: () =>
+    queryOptions({
+      queryKey: ['portal', 'roadmapPage'],
+      queryFn: async ({ client }) => {
+        const data = await fetchRoadmapPageData()
+        client.setQueryData(['portal', 'roadmaps'], data.roadmaps)
+        client.setQueryData(['portal', 'statuses'], data.statuses)
+        client.setQueryData(['portal', 'boards'], data.boards)
+        client.setQueryData(['portal', 'tags'], data.tags)
+        return data
+      },
+    }),
+
+  /**
    * List posts for a roadmap column (roadmap + status combination)
    */
   roadmapPosts: (params: {
@@ -185,3 +207,28 @@ export const portalQueries = {
       staleTime: 60 * 1000, // 1 minute
     }),
 }
+
+/**
+ * Seeds the shared status-list cache from data the feed already fetched, so
+ * a post-detail navigation right after reuses it (ensureQueryData resolves
+ * from cache) instead of a second round trip for the same statuses. Mirrors
+ * useVotedPosts, which seeds the voted-post-ids cache from
+ * portalData.votedPostIds the same way.
+ *
+ * This has to be an initialData-seeded query read during render, not a
+ * queryFn side effect (e.g. calling setQueryData inside portalData's own
+ * queryFn): the portal home loader fires portalData as a fire-and-forget
+ * prefetch so the first byte flushes immediately, and the SSR response can
+ * dehydrate before that prefetch's promise resolves. A query written by
+ * setQueryData never gets its own promise, so the dehydration stream (which
+ * only forwards queries it sees resolve) drops it, and the client then finds no
+ * cached statuses and fetches them again anyway. Reading it through a
+ * component with initialData works because the component itself, and thus
+ * this hook, re-runs during client hydration with the already-dehydrated
+ * portalData in hand.
+ */
+export function useSeedPortalStatusesCache(statuses: PortalStatuses): void {
+  useQuery({ ...portalQueries.statuses(), initialData: statuses })
+}
+
+type PortalStatuses = Awaited<ReturnType<typeof fetchPublicStatuses>>

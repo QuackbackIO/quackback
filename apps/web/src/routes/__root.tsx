@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { Component, useLayoutEffect, type ReactNode } from 'react'
+import { Component, lazy, Suspense, useEffect, useLayoutEffect, type ReactNode } from 'react'
 import type { Role } from '@/lib/shared/roles'
 import type { QueryClient } from '@tanstack/react-query'
 import {
@@ -19,11 +19,11 @@ import { isAdmin } from '@/lib/shared/roles'
 import appCss from '../globals.css?url'
 import refinedThemeCss from '../styles/labs/refined-theme.css?url'
 import { getBootstrapData, type BootstrapData } from '@/lib/server/functions/bootstrap'
+import { createRouteContextMemo } from '@/lib/client/route-context-memo'
 import type { WorkspaceSettings } from '@/lib/shared/types/settings'
 import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
 import { ThemeProvider } from '@/components/theme-provider'
-import { resolveDocumentTheme } from '@/lib/shared/theme'
-import { Toaster } from '@/components/ui/sonner'
+import { resolveDocumentTheme, SYSTEM_THEME_SCRIPT } from '@/lib/shared/theme'
 import { DefaultErrorPage } from '@/components/shared/error-page'
 import { OttHandler } from '@/components/shared/ott-handler'
 import { VisitorBeacon } from '@/components/shared/visitor-beacon'
@@ -34,6 +34,11 @@ import {
   visualThemeAttribute,
   type VisualTheme,
 } from '@/lib/shared/labs'
+
+// The toast renderer is its own chunk: the root module ships with every
+// document (the embedded widget included), and a toast fired before it mounts
+// is replayed to it once it subscribes.
+const Toaster = lazy(() => import('@/components/ui/sonner').then((m) => ({ default: m.Toaster })))
 
 export interface RouterContext {
   queryClient: QueryClient
@@ -71,80 +76,71 @@ export function isOnboardingExempt(pathname: string): boolean {
   return ONBOARDING_EXEMPT_PATHS.some((path) => pathname.startsWith(path))
 }
 
+async function loadRootContext() {
+  const { settings, ...bootstrap } = await getBootstrapData()
+  const visualTheme: VisualTheme = settings?.visualTheme === 'refined' ? 'refined' : 'legacy'
+  // Onboarding progress reads the setup state, one of the columns redaction
+  // removes, so it is decided first.
+  const setupState = getSetupState(settings?.settings?.setupState ?? null)
+  const onboarding = {
+    complete: isOnboardingComplete(setupState),
+    needsSetupWizard: needsCloudOnboardingWizard(setupState),
+  }
+
+  // Redact server-only material from the settings placed into the router
+  // context: everything returned here is dehydrated into the SSR HTML.
+  // redactSettingsForClient strips the widgetSecret/tier/setup columns from
+  // the raw row, the access policy fields (allowedDomains, widgetSignIn,
+  // allowedSegmentIds) from portalConfig, and non-public statusConfig fields
+  // (segment ids, email kill-switch), recursively covering both the
+  // parsed WorkspaceSettings shape and the raw DB row riding on `.settings`.
+  // Nothing on the client legitimately reads any of it: the admin
+  // Security > Portal tab fetches the full config via its own
+  // settingsQueries.portalConfig() query, which is unaffected, and the
+  // domain gate runs server-side via evaluateMyPortalAccessFn.
+  const redactedSettings: WorkspaceSettings | null = settings
+    ? (redactSettingsForClient(settings) as WorkspaceSettings)
+    : settings
+
+  // Drop the raw DB row entirely from the client-bound context. Redaction
+  // already stripped its secrets, but the row is a full duplicate of the
+  // parsed WorkspaceSettings fields that no client code reads; every consumer
+  // reads the parsed top-level fields instead. Emptying it removes one whole
+  // settings copy per SSR document.
+  if (redactedSettings) {
+    redactedSettings.settings = {}
+  }
+
+  return { ...bootstrap, settings: redactedSettings, visualTheme, onboarding }
+}
+
+type RootContext = Awaited<ReturnType<typeof loadRootContext>>
+
+/**
+ * The root context is the same for every page until the viewer or the
+ * workspace changes, so navigations and preloads share one bootstrap call
+ * (see route-context-memo.ts for what expires it).
+ */
+const rootContext = createRouteContextMemo<RootContext>()
+
 export const Route = createRootRouteWithContext<RouterContext>()({
   beforeLoad: async ({ location }) => {
-    const {
-      baseUrl,
-      session,
-      settings,
-      userRole,
-      themeCookie,
-      prefersColorScheme,
-      managedFieldPaths,
-      registeredAuthProviders,
-      acceptLanguageLocale,
-      updateBannerDismissedVersion,
-      billingEnabled,
-      cloudEnabled,
-    } = await getBootstrapData()
-    const visualTheme: VisualTheme = settings?.visualTheme === 'refined' ? 'refined' : 'legacy'
+    const context = await rootContext.get(loadRootContext)
+    const { session, userRole, onboarding } = context
 
     if (!isOnboardingExempt(location.pathname)) {
-      const setupState = getSetupState(settings?.settings?.setupState ?? null)
-      if (!isOnboardingComplete(setupState)) {
+      if (!onboarding.complete) {
         throw redirect({ to: '/onboarding' })
       }
       // A provisioned workspace can look complete while the owner has not
       // chosen a name, URL, or goal. Visitors stay on the portal; only a
       // signed-in admin is sent into the wizard.
-      if (session?.user && isAdmin(userRole) && needsCloudOnboardingWizard(setupState)) {
+      if (session?.user && isAdmin(userRole) && onboarding.needsSetupWizard) {
         throw redirect({ to: '/onboarding' })
       }
     }
 
-    // Redact server-only material from the settings placed into the router
-    // context — everything returned here is dehydrated into the SSR HTML.
-    // redactSettingsForClient strips the widgetSecret/tier/setup columns from
-    // the raw row, the access policy fields (allowedDomains, widgetSignIn,
-    // allowedSegmentIds) from portalConfig, and non-public statusConfig fields
-    // (segment ids, email kill-switch), recursively covering both the
-    // parsed WorkspaceSettings shape and the raw DB row riding on `.settings`.
-    // Nothing on the client legitimately reads any of it — the admin
-    // Security → Portal tab fetches the full config via its own
-    // settingsQueries.portalConfig() query, which is unaffected, and the
-    // domain gate runs server-side via evaluateMyPortalAccessFn.
-    const redactedSettings: WorkspaceSettings | null = settings
-      ? (redactSettingsForClient(settings) as WorkspaceSettings)
-      : settings
-
-    // Drop the raw DB row entirely from the client-bound context. Redaction
-    // already stripped its secrets, but the row is a full duplicate of the
-    // parsed WorkspaceSettings fields (name, slug, portalConfig, brandingConfig,
-    // …) that no client code reads — every consumer reads the parsed top-level
-    // fields instead. Emptying it removes one whole settings copy per SSR
-    // document. The only server-side readers of `settings.settings.*` are the
-    // onboarding routes (name/slug), which now read the parsed top-level
-    // `settings.name`/`settings.slug`, and the pre-redaction setupState read at
-    // line 72 above, which runs on the un-emptied `settings` and is unaffected.
-    if (redactedSettings) {
-      redactedSettings.settings = {}
-    }
-
-    return {
-      baseUrl,
-      session,
-      settings: redactedSettings,
-      userRole,
-      themeCookie,
-      prefersColorScheme,
-      managedFieldPaths,
-      registeredAuthProviders,
-      acceptLanguageLocale,
-      updateBannerDismissedVersion,
-      billingEnabled,
-      cloudEnabled,
-      visualTheme,
-    }
+    return context
   },
   head: () => ({
     meta: [
@@ -218,6 +214,7 @@ function MinimalDocument({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <html lang="en" style={{ colorScheme }} suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: SYSTEM_THEME_SCRIPT }} />
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Quackback</title>
@@ -257,8 +254,15 @@ function VisualThemeSync({ visualTheme }: { visualTheme: VisualTheme }) {
 }
 
 function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
-  const { settings, themeCookie, prefersColorScheme, acceptLanguageLocale, visualTheme } =
-    Route.useRouteContext()
+  const context = Route.useRouteContext()
+  const { settings, themeCookie, prefersColorScheme, acceptLanguageLocale, visualTheme } = context
+  // The first navigation after hydration reuses the context this document
+  // was rendered with instead of asking the server again. An error page
+  // rendered because the bootstrap failed has none to reuse.
+  useEffect(() => {
+    const { queryClient: _queryClient, ...rendered } = context
+    if (rendered.onboarding) rootContext.seed(rendered)
+  }, [context])
   const resolvedVisualTheme: VisualTheme =
     visualTheme === 'refined' || settings?.visualTheme === 'refined' ? 'refined' : 'legacy'
   const pathname = useRouterState({ select: (s) => s.location.pathname })
@@ -297,11 +301,12 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   // We pass the resolved default so the script knows what to apply.
   const defaultTheme = forcedTheme ?? themeCookie ?? 'system'
 
-  // ...but the script can't color the very first canvas the browser paints
-  // during load, so when the theme is known we also commit the class and
-  // color-scheme on the SSR <html> — otherwise dark users get a white flash.
-  // `system` is resolved from the Sec-CH-Prefers-Color-Scheme hint when the
-  // browser sent it, so even system users get a fully server-rendered theme.
+  // ...but that script sits in <body>, after content that may paint first, so
+  // when the theme is known we also commit the class and color-scheme on the
+  // SSR <html>, or dark users get a white flash. `system` is resolved
+  // from the Sec-CH-Prefers-Color-Scheme hint when the browser sent it; when
+  // it did not, SYSTEM_THEME_SCRIPT resolves it at the top of <head>, before
+  // any of the body can paint.
   const { className: themeClass, colorScheme } = resolveDocumentTheme(
     defaultTheme,
     prefersColorScheme
@@ -317,11 +322,11 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   const resolvedLocale = widgetOverride ?? acceptLanguageLocale ?? DEFAULT_LOCALE
   const { lang, dir } = htmlLangDir(documentLocale(routeIds, resolvedLocale))
 
-  // suppressHydrationWarning stays: next-themes' inline script sets the theme
-  // class on <html> before React hydrates, and for `system` without the client
-  // hint (Firefox/Safari) the server can't know the OS preference, so the SSR
-  // markup and the hydrated DOM differ by design. This silences that one
-  // expected mismatch (one element, one level).
+  // suppressHydrationWarning stays: the inline theme scripts set the class on
+  // <html> before React hydrates, and for `system` without the client hint
+  // (a first visit, Firefox/Safari) the server can't know the OS preference,
+  // so the SSR markup and the hydrated DOM differ by design. This silences
+  // that one expected mismatch (one element, one level).
   return (
     <html
       lang={lang}
@@ -332,6 +337,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
       suppressHydrationWarning
     >
       <head>
+        {!themeClass && <script dangerouslySetInnerHTML={{ __html: SYSTEM_THEME_SCRIPT }} />}
         <HeadContent />
       </head>
       <body className="min-h-screen bg-background font-sans antialiased">
@@ -348,7 +354,9 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
           syncCookie={!routeIds.includes('/widget') && !searchForcedTheme}
         >
           {children}
-          <Toaster />
+          <Suspense fallback={null}>
+            <Toaster />
+          </Suspense>
         </ThemeProvider>
         <Scripts />
       </body>

@@ -8,7 +8,9 @@
  *     else a fresh UUID) and echoes it back on the response for correlation,
  *   - opens the AsyncLocalStorage log context so every `logger.*` call within
  *     the request automatically carries request_id + route,
- *   - logs request completion with status + duration, or failure on throw.
+ *   - logs request completion with status, duration and query count, or
+ *     failure on throw; with QUACKBACK_SERVER_TIMING=1 the same numbers go out
+ *     as a Server-Timing header for the browser's network panel.
  *
  * Downstream code enriches the context with workspace_key / user_id via
  * setLogContext() once auth resolves.
@@ -17,6 +19,8 @@ import type { AppLogger } from '@quackback/logger'
 import { createMiddleware } from '@tanstack/react-start'
 import { logger } from '@/lib/server/logger'
 import { runWithLogContext } from '@/lib/server/log-context'
+import { formatServerTiming, openRequestMetrics } from '@/lib/server/request-metrics'
+import { onResponseBodyEnd } from '@/lib/server/response-hooks'
 
 /**
  * Health probe path. Hit every few seconds by the platform's healthcheck,
@@ -54,10 +58,12 @@ export async function handleRequestWithContext<T extends NextResult>({
   request,
   next,
   log = logger,
+  serverTiming = process.env.QUACKBACK_SERVER_TIMING === '1',
 }: {
   request: Request
   next: () => Promise<T>
   log?: AppLogger
+  serverTiming?: boolean
 }): Promise<T> {
   const requestId = deriveRequestId(request)
   const pathname = new URL(request.url).pathname
@@ -65,6 +71,7 @@ export async function handleRequestWithContext<T extends NextResult>({
   const start = performance.now()
 
   return runWithLogContext({ request_id: requestId, route }, async () => {
+    const metrics = openRequestMetrics()!
     try {
       const result = await next()
       const durationMs = Math.round(performance.now() - start)
@@ -79,6 +86,9 @@ export async function handleRequestWithContext<T extends NextResult>({
       // Echo the id back so clients/proxies can correlate.
       try {
         response?.headers.set('x-request-id', requestId)
+        if (serverTiming) {
+          response?.headers.set('server-timing', formatServerTiming(metrics, durationMs))
+        }
       } catch {
         // Some responses have immutable headers; correlation still works
         // via the logged request_id.
@@ -86,15 +96,39 @@ export async function handleRequestWithContext<T extends NextResult>({
       const status = response?.status
       // Suppress the completion line for successful health probes. Everything
       // else — and unhealthy probes — still logs.
-      if (!(isHealthPath(pathname) && status !== undefined && status < 400)) {
-        log.info({ status, duration_ms: durationMs }, 'request completed')
+      const quiet = isHealthPath(pathname) && status !== undefined && status < 400
+      if (!quiet) {
+        log.info(
+          { status, duration_ms: durationMs, db_queries: metrics.dbQueries },
+          'request completed'
+        )
+      }
+      // A document streams: queries can still run after the headers left, so
+      // the count above can be short. With Server-Timing on, log the final
+      // count once the body has been fully written (one line per request).
+      if (serverTiming && !quiet) {
+        const finish = () =>
+          log.info(
+            {
+              request_id: requestId,
+              route,
+              status,
+              duration_ms: Math.round(performance.now() - start),
+              db_queries: metrics.dbQueries,
+            },
+            'request finished'
+          )
+        // Never swap the response here: the server entry runs the hook
+        // (see response-hooks.ts for why).
+        if (response?.body) onResponseBodyEnd(response, finish)
+        else finish()
       }
       return result
     } catch (err) {
       const durationMs = Math.round(performance.now() - start)
       // Log once here at the boundary, then rethrow unchanged so the
       // framework's error handling still runs (no double logging upstream).
-      log.error({ err, duration_ms: durationMs }, 'request failed')
+      log.error({ err, duration_ms: durationMs, db_queries: metrics.dbQueries }, 'request failed')
       throw err
     }
   })

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
+import { getRequestHeaders } from '@tanstack/react-start/server'
 import {
   type PostId,
   type PrincipalId,
@@ -30,6 +31,7 @@ import {
 import { db, principal as principalTable, user as userTable, eq, inArray } from '@/lib/server/db'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
+import { getRequestSession } from '@/lib/server/auth/request-session'
 import {
   listPublicBoardsWithStats,
   getPublicBoardBySlug,
@@ -248,14 +250,7 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
     }
 
     return {
-      // Strip the internal access matrix (segment ids, per-action tiers,
-      // moderation rules) from the client payload — the UI gates via
-      // boardPermissions / boardCapabilitiesForActor and never reads
-      // board.access, so shipping it would leak segmentation structure (#191).
-      boards: boardsRaw.map(({ access: _access, ...b }) => ({
-        ...b,
-        settings: (b.settings ?? {}) as BoardSettings,
-      })),
+      boards: boardsRaw.map(serializePublicBoard),
       posts,
       statuses,
       tags,
@@ -277,12 +272,7 @@ export const fetchPublicBoards = createServerFn({ method: 'GET' }).handler(async
   const auth = await getOptionalAuth()
   const actor = await policyActorFromAuth(auth)
   const boards = await listPublicBoardsWithStats(actor)
-  // Strip the internal access matrix (see fetchPortalData) — clients never
-  // read board.access, so it must not reach the public payload (#191).
-  return boards.map(({ access: _access, ...b }) => ({
-    ...b,
-    settings: (b.settings ?? {}) as BoardSettings,
-  }))
+  return boards.map(serializePublicBoard)
 })
 
 export const fetchPublicBoardBySlug = createServerFn({ method: 'GET' })
@@ -305,9 +295,7 @@ export const fetchPublicBoardBySlug = createServerFn({ method: 'GET' })
     const actor = await policyActorFromAuth(auth)
     const board = await getPublicBoardBySlug(data.slug, actor)
     if (!board) return null
-    // Strip the internal access matrix (see fetchPortalData) before serializing.
-    const { access: _access, ...rest } = board
-    return { ...rest, settings: (rest.settings ?? {}) as BoardSettings }
+    return serializePublicBoard(board)
   })
 
 export const runFetchPublicPostDetail = createServerOnlyFn(async function runFetchPublicPostDetail(
@@ -457,14 +445,32 @@ export const fetchPublicTags = createServerFn({ method: 'GET' }).handler(async (
   return await listPublicPostTags(actor)
 })
 
+/**
+ * The signed-in viewer's own image columns, when this request has already
+ * read them. A document render has: the root bootstrap resolved the session,
+ * user row included, before any loader asks for an avatar. A server-function
+ * call from the browser has resolved nothing yet, and a session lookup costs
+ * two reads where the row costs one, so it gets null and reads the row.
+ */
+async function resolvedViewerImage(
+  userId: string
+): Promise<{ image: string | null; imageKey: string | null } | null> {
+  if (getRequestHeaders().get('x-tsr-serverFn')) return null
+  const session = await getRequestSession().catch(() => null)
+  if (session?.user.id !== userId) return null
+  return { image: session.user.image ?? null, imageKey: session.user.imageKey ?? null }
+}
+
 export const fetchUserAvatar = createServerFn({ method: 'GET' })
   .validator(z.object({ userId: z.string(), fallbackImageUrl: z.string().nullable().optional() }))
   .handler(async ({ data }) => {
     log.debug({ user_id: data.userId }, 'fetch user avatar')
-    const user = await db.query.user.findFirst({
-      where: eq(userTable.id, data.userId as UserId),
-      columns: { imageKey: true, image: true },
-    })
+    const user =
+      (await resolvedViewerImage(data.userId)) ??
+      (await db.query.user.findFirst({
+        where: eq(userTable.id, data.userId as UserId),
+        columns: { imageKey: true, image: true },
+      }))
 
     if (!user) return { avatarUrl: data.fallbackImageUrl ?? null, hasCustomAvatar: false }
 
@@ -542,19 +548,22 @@ export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
     return await getSubscriptionStatus(requestedPrincipalId, data.postId as PostId)
   })
 
-export const fetchPublicRoadmaps = createServerFn({ method: 'GET' }).handler(async () => {
-  log.debug('fetch public roadmaps')
-  // Outer gate: private portal + unauthorized caller → no roadmaps.
-  const access = await resolvePortalAccessForRequest()
-  if (!access.granted) {
-    log.debug('portal access denied, returning empty')
-    return []
-  }
+/**
+ * A board as every public payload carries it. The internal access matrix
+ * (segment ids, per-action tiers, moderation rules) is stripped: the UI gates through
+ * boardPermissions / boardCapabilitiesForActor and never reads board.access,
+ * so shipping it would leak segmentation structure (#191).
+ */
+function serializePublicBoard<B extends { access: unknown; settings: unknown }>({
+  access: _access,
+  ...board
+}: B) {
+  return { ...board, settings: (board.settings ?? {}) as BoardSettings }
+}
 
-  const auth = hasAuthCredentials() ? await getOptionalAuth() : null
-  const actor = await policyActorFromAuth(auth)
-  const roadmaps = await listPublicRoadmaps(actor)
-  return roadmaps.map((r) => ({
+/** Shared by fetchPublicRoadmaps and fetchRoadmapPageData so both serialize a roadmap the same way. */
+function serializePublicRoadmap(r: Awaited<ReturnType<typeof listPublicRoadmaps>>[number]) {
+  return {
     id: r.id,
     name: r.name,
     slug: r.slug,
@@ -577,7 +586,22 @@ export const fetchPublicRoadmaps = createServerFn({ method: 'GET' }).handler(asy
     })),
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
-  }))
+  }
+}
+
+export const fetchPublicRoadmaps = createServerFn({ method: 'GET' }).handler(async () => {
+  log.debug('fetch public roadmaps')
+  // Outer gate: private portal + unauthorized caller → no roadmaps.
+  const access = await resolvePortalAccessForRequest()
+  if (!access.granted) {
+    log.debug('portal access denied, returning empty')
+    return []
+  }
+
+  const auth = hasAuthCredentials() ? await getOptionalAuth() : null
+  const actor = await policyActorFromAuth(auth)
+  const roadmaps = await listPublicRoadmaps(actor)
+  return roadmaps.map(serializePublicRoadmap)
 })
 
 export const fetchPublicRoadmapPosts = createServerFn({ method: 'GET' })
@@ -770,3 +794,41 @@ export const fetchBoardCapabilitiesFn = createServerFn({ method: 'GET' }).handle
 })
 
 export type WidgetVisibleBoard = { id: string; name: string; slug: string }
+
+/**
+ * Combined fetch for the roadmap page's shell: the roadmap list plus the
+ * statuses, boards and tags its columns and filters need, in one request
+ * that resolves portal access and auth once rather than once per list.
+ * Mirrors fetchPortalData's combined fetch for the feed. Column post lists
+ * stay a separate per-column fetch (fetchPublicRoadmapPosts): the shell
+ * renders before any column's posts are needed.
+ *
+ * Declared at the end of the module on purpose: the gate test maps portal
+ * handlers by declaration order, so new server fns append here to avoid
+ * shifting existing indices.
+ */
+export const fetchRoadmapPageData = createServerFn({ method: 'GET' }).handler(async () => {
+  log.debug('fetch roadmap page data')
+  const access = await resolvePortalAccessForRequest()
+  if (!access.granted) {
+    log.debug('portal access denied, returning empty')
+    return { roadmaps: [], statuses: [], boards: [], tags: [] }
+  }
+
+  const auth = hasAuthCredentials() ? await getOptionalAuth() : null
+  const actor = await policyActorFromAuth(auth)
+
+  const [roadmapsRaw, statuses, boardsRaw, tags] = await Promise.all([
+    listPublicRoadmaps(actor),
+    listPublicStatuses(),
+    listPublicBoardsWithStats(actor),
+    listPublicPostTags(actor),
+  ])
+
+  return {
+    roadmaps: roadmapsRaw.map(serializePublicRoadmap),
+    statuses,
+    boards: boardsRaw.map(serializePublicBoard),
+    tags,
+  }
+})

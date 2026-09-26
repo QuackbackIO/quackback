@@ -7,7 +7,10 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { NotificationItem } from './notification-item'
 import { useNotifications } from '@/lib/client/hooks/use-notifications-queries'
-import { useMarkNotificationAsRead, useMarkAllNotificationsAsRead } from '@/lib/client/mutations'
+import {
+  useMarkNotificationAsRead,
+  useMarkAllNotificationsAsRead,
+} from '@/lib/client/mutations/notifications'
 
 interface NotificationDropdownProps {
   onClose?: () => void

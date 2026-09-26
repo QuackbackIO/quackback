@@ -94,6 +94,21 @@ const getRoadmapPostsSchema = z.object({
   sort: z.enum(['votes', 'newest', 'oldest']).optional(),
 })
 
+// The first page of several columns of one board, under the same filters.
+const getRoadmapColumnsSchema = getRoadmapPostsSchema
+  .omit({ statusId: true, bucketId: true, offset: true })
+  .extend({
+    columns: z
+      .array(
+        z.object({
+          statusId: postStatusIdSchema.optional(),
+          bucketId: z.string().max(20).optional(),
+        })
+      )
+      .min(1)
+      .max(50),
+  })
+
 const roadmapDateBucketsSchema = z.object({ roadmapId: roadmapIdSchema })
 
 const createRoadmapColumnSchema = z.object({
@@ -242,32 +257,52 @@ export const reorderRoadmapsFn = createServerFn({ method: 'POST' })
     return { success: true }
   })
 
+/** One page of one admin roadmap column. */
+async function loadRoadmapPostsPage(data: GetRoadmapPostsInput) {
+  const result = await getRoadmapPosts(data.roadmapId as RoadmapId, {
+    statusId: data.statusId as PostStatusId | undefined,
+    bucketId: data.bucketId,
+    limit: data.limit,
+    offset: data.offset,
+    search: data.search,
+    boardIds: data.boardIds as BoardId[] | undefined,
+    tagIds: data.tagIds as PostTagId[] | undefined,
+    segmentIds: data.segmentIds as SegmentId[] | undefined,
+    sort: data.sort,
+  })
+  return {
+    ...result,
+    items: result.items.map((item) => ({
+      id: String(item.id),
+      title: item.title,
+      voteCount: item.voteCount,
+      statusId: item.statusId ? String(item.statusId) : null,
+      eta: toIsoStringOrNull(item.eta),
+      board: { id: String(item.board.id), name: item.board.name, slug: item.board.slug },
+    })),
+  }
+}
+
 export const getRoadmapPostsFn = createServerFn({ method: 'GET' })
   .validator(getRoadmapPostsSchema)
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.ROADMAP_MANAGE })
-    const result = await getRoadmapPosts(data.roadmapId as RoadmapId, {
-      statusId: data.statusId as PostStatusId | undefined,
-      bucketId: data.bucketId,
-      limit: data.limit,
-      offset: data.offset,
-      search: data.search,
-      boardIds: data.boardIds as BoardId[] | undefined,
-      tagIds: data.tagIds as PostTagId[] | undefined,
-      segmentIds: data.segmentIds as SegmentId[] | undefined,
-      sort: data.sort,
-    })
-    return {
-      ...result,
-      items: result.items.map((item) => ({
-        id: String(item.id),
-        title: item.title,
-        voteCount: item.voteCount,
-        statusId: item.statusId ? String(item.statusId) : null,
-        eta: toIsoStringOrNull(item.eta),
-        board: { id: String(item.board.id), name: item.board.name, slug: item.board.slug },
-      })),
-    }
+    return loadRoadmapPostsPage(data)
+  })
+
+/**
+ * The first page of several columns of one admin roadmap board, in the order
+ * asked: what a board needs on open or after a filter change, in one request
+ * rather than one per column.
+ */
+export const getRoadmapColumnsFn = createServerFn({ method: 'GET' })
+  .validator(getRoadmapColumnsSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.ROADMAP_MANAGE })
+    const { columns, ...shared } = data
+    return Promise.all(
+      columns.map((column) => loadRoadmapPostsPage({ ...shared, ...column, offset: 0 }))
+    )
   })
 
 export const getRoadmapDateBucketsFn = createServerFn({ method: 'GET' })

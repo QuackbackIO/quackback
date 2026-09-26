@@ -1,7 +1,5 @@
-import { getRequestHeaders } from '@tanstack/react-start/server'
 import type { UserId, SessionId } from '@quackback/ids'
-import { auth } from '@/lib/server/auth/index'
-import { db, principal as principalTable, eq } from '@/lib/server/db'
+import { getRequestPrincipal, getRequestSession } from '@/lib/server/auth/request-session'
 import { logger } from '@/lib/server/logger'
 import type { PrincipalType, SessionScope } from '@/lib/shared/roles'
 import { toSessionScope } from '@/lib/shared/roles'
@@ -37,12 +35,11 @@ export interface Session {
   user: SessionUser
 }
 
+/** The request's session with its principal type; both reads are shared with the rest of the request. */
 export async function getSession(): Promise<Session | null> {
   log.debug('get session')
   try {
-    const session = await auth.api.getSession({
-      headers: getRequestHeaders(),
-    })
+    const session = await getRequestSession()
 
     if (!session?.user) {
       return null
@@ -50,10 +47,7 @@ export async function getSession(): Promise<Session | null> {
 
     const userId = session.user.id as UserId
 
-    const principalRecord = await db.query.principal.findFirst({
-      where: eq(principalTable.userId, userId),
-      columns: { type: true },
-    })
+    const principalRecord = await getRequestPrincipal(userId)
 
     return {
       session: {

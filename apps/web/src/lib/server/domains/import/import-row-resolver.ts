@@ -12,7 +12,7 @@
  */
 import { z } from 'zod'
 import { db, postStatuses, eq } from '@/lib/server/db'
-import { slugify } from '@/lib/shared/utils'
+import { slugify } from '@/lib/shared/utils/slugify'
 import type { BoardId, PrincipalId, PostTagId, PostStatusId } from '@quackback/ids'
 import type { ImportRowError } from './types'
 import type { ImportUserResolver } from './user-resolver'

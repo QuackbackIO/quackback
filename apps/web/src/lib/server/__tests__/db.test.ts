@@ -51,6 +51,8 @@ describe('db module', () => {
       setupMinimalConfig()
 
       const { db } = await import('../db')
+      // Same module registry as db.ts after resetModules, so the same logger.
+      const { countingQueryLogger } = await import('../request-metrics')
 
       // Access db to trigger initialization
       const query = db.query
@@ -59,6 +61,7 @@ describe('db module', () => {
       expect(mockCreateDb).toHaveBeenCalledWith('postgres://localhost/quackback', {
         max: 10,
         idleTimeout: 20,
+        logger: countingQueryLogger,
       })
       expect(query).toBeDefined()
     })

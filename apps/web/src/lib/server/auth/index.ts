@@ -123,6 +123,10 @@ const authInstances = new WorkspaceKeyedCache<AuthInstance>(256)
 // round-trip). Mismatch → rebuild, other pods' writes propagate.
 const authConfigVersions = new WorkspaceKeyedCache<number>(256)
 const AUTH_CACHE_KEY = 'instance'
+// The build in flight, per workspace. A cold page fans out into several
+// concurrent server-function requests; they share one build rather than each
+// loading every provider's credentials and registering the plugins again.
+const authBuilds = new WorkspaceKeyedCache<Promise<AuthInstance>>(256)
 
 type RateLimitCounter = { count: number; lastRequest: number }
 
@@ -461,14 +465,17 @@ async function createAuth() {
 
     // Tell Better-Auth about non-standard columns on `user` so the
     // OAuth `mapProfileToUser` return shape is allowed through and
-    // written by drizzleAdapter. We only register `locale` here —
-    // existing custom columns (metadata, isAnonymous, twoFactorEnabled,
-    // imageKey) are written by other code paths (anonymous plugin /
-    // databaseHooks / direct queries) and don't need to round-trip
-    // through Better-Auth's signup validators.
+    // written by drizzleAdapter. `imageKey` (the uploaded avatar) is
+    // registered so the session's user carries it and the viewer's avatar
+    // needs no read of its own; `input: false` keeps it out of what sign-up
+    // and update-user accept, since only the avatar upload writes it. The
+    // other custom columns (metadata, isAnonymous, twoFactorEnabled) are
+    // written by other code paths (anonymous plugin / databaseHooks / direct
+    // queries) and don't need to round-trip through Better-Auth's validators.
     user: {
       additionalFields: {
         locale: { type: 'string', required: false, input: false },
+        imageKey: { type: 'string', required: false, input: false },
       },
     },
 
@@ -713,8 +720,11 @@ async function createAuth() {
         expiresIn: 10,
       }),
 
-      // JWT plugin — signs access tokens, exposes /api/auth/jwks for verification
-      jwt(),
+      // JWT plugin: signs access tokens, exposes /api/auth/jwks for verification.
+      // Its `set-auth-jwt` header on `/get-session` is set by `hooksAfter`
+      // instead, and only for a request that came over the wire: the plugin's
+      // own hook signed one for every in-process session read too.
+      jwt({ disableSettingJwtHeader: true }),
 
       // MCP authorization server (`mcp()` replaces `oauthProvider()` — do not
       // register both). Tokens are audience-bound to `/api/mcp`.
@@ -863,7 +873,7 @@ async function createAuth() {
  * auth-instance-affecting write path.
  */
 export async function getAuth(): Promise<AuthInstance> {
-  let instance = authInstances.get(AUTH_CACHE_KEY)
+  const instance = authInstances.get(AUTH_CACHE_KEY)
   const builtVersion = authConfigVersions.get(AUTH_CACHE_KEY)
   // Skip the version check when no instance is cached yet — the build
   // path below records the version after creation.
@@ -872,17 +882,40 @@ export async function getAuth(): Promise<AuthInstance> {
     const t = await getWorkspaceSettings()
     const current = t?.settings?.authConfigVersion
     if (typeof current === 'number' && current !== builtVersion) {
-      resetAuth()
-      instance = undefined
+      // Concurrent callers all see the same stale instance; only the first
+      // drops it and rebuilds. The rest take what that rebuild installed, or
+      // join it while it is still in flight, rather than starting another.
+      if (authInstances.get(AUTH_CACHE_KEY) === instance) {
+        resetAuth()
+        return buildAuth()
+      }
+      return authInstances.get(AUTH_CACHE_KEY) ?? buildAuth()
     }
+    return instance
   }
-  if (!instance) {
-    const built = await createAuth()
-    instance = built.instance
-    authInstances.set(AUTH_CACHE_KEY, instance)
-    authConfigVersions.set(AUTH_CACHE_KEY, built.authConfigVersion)
-  }
-  return instance
+  return instance ?? buildAuth()
+}
+
+/** Join the workspace's build in flight, or start one. */
+function buildAuth(): Promise<AuthInstance> {
+  const inFlight = authBuilds.get(AUTH_CACHE_KEY)
+  if (inFlight) return inFlight
+  const build: Promise<AuthInstance> = createAuth()
+    .then((built) => {
+      // A reset while this was building means it was built from a config that
+      // has since changed: serve it to the callers already waiting on it, but
+      // do not install it.
+      if (authBuilds.get(AUTH_CACHE_KEY) === build) {
+        authInstances.set(AUTH_CACHE_KEY, built.instance)
+        authConfigVersions.set(AUTH_CACHE_KEY, built.authConfigVersion)
+      }
+      return built.instance
+    })
+    .finally(() => {
+      if (authBuilds.get(AUTH_CACHE_KEY) === build) authBuilds.delete(AUTH_CACHE_KEY)
+    })
+  authBuilds.set(AUTH_CACHE_KEY, build)
+  return build
 }
 
 /**
@@ -892,6 +925,7 @@ export async function getAuth(): Promise<AuthInstance> {
 export function resetAuth(): void {
   authInstances.delete(AUTH_CACHE_KEY)
   authConfigVersions.delete(AUTH_CACHE_KEY)
+  authBuilds.delete(AUTH_CACHE_KEY)
 }
 
 // Export a proxy object that lazily initializes auth on first access
