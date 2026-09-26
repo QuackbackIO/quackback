@@ -112,6 +112,7 @@ describe('removeViewerScopedPortalQueries', () => {
     expect(VIEWER_SCOPED_PORTAL_QUERY_KEYS).toEqual(
       expect.arrayContaining([
         ['portal', 'tags'],
+        ['portal', 'boards'],
         ['portal', 'data'],
         ['portal', 'posts'],
         ['portal', 'post'],

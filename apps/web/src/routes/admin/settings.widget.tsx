@@ -4,14 +4,14 @@ import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { WidgetSettingsGate } from '@/components/admin/settings/widget/widget-settings-page'
-import { settingsReadBatch } from '@/lib/client/queries/settings-batch'
+import { readBatch } from '@/lib/client/queries/read-batch'
 
 export const Route = createFileRoute('/admin/settings/widget')({
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MANAGE)
 
     const { queryClient } = context
-    const ensure = settingsReadBatch(queryClient)
+    const ensure = readBatch(queryClient)
     await Promise.all([
       ensure(settingsQueries.widgetConfig()),
       ensure(adminQueries.boards()),

@@ -27,13 +27,13 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { WorkspaceDangerCard } from '@/components/admin/settings/workspace-danger-card'
 import { WorkspaceIdentityCard } from '@/components/admin/settings/workspace-identity-card'
-import { settingsReadBatch } from '@/lib/client/queries/settings-batch'
+import { readBatch } from '@/lib/client/queries/read-batch'
 import { warmQuery } from '@/lib/client/queries/warm-query'
 
 export const Route = createFileRoute('/admin/settings/general')({
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MANAGE)
-    const ensure = settingsReadBatch(context.queryClient)
+    const ensure = readBatch(context.queryClient)
     const [cloudIdentity] = await Promise.all([
       getCloudIdentityFn(),
       ensure(settingsQueries.logo()),

@@ -66,11 +66,11 @@ export interface LedgerEntry {
 
 export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
   {
-    file: 'apps/web/src/lib/server/functions/settings-reads.ts',
+    file: 'apps/web/src/lib/server/functions/read-batch.ts',
     name: 'registeredReads',
     category: 'fleet-wide',
     reason:
-      'Maps each registered settings query key to its query factory, built once from the static SETTINGS_READS list. It holds code, not data: every workspace resolves the same keys to the same factories, and each factory runs its own gated server function for the calling workspace.',
+      'Maps the query key of each registered read to its query factory, built once from the static BATCHED_READS list. It holds code, not data: every workspace resolves the same keys to the same factories, and each factory runs its own gated server function for the calling workspace.',
   },
   {
     file: 'apps/web/src/lib/shared/content-emoji.ts',

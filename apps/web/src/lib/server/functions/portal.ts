@@ -564,7 +564,6 @@ function serializePublicBoard<B extends { access: unknown; settings: unknown }>(
   return { ...board, settings: (board.settings ?? {}) as BoardSettings }
 }
 
-/** Shared by fetchPublicRoadmaps and fetchRoadmapPageData so both serialize a roadmap the same way. */
 function serializePublicRoadmap(r: Awaited<ReturnType<typeof listPublicRoadmaps>>[number]) {
   return {
     id: r.id,
@@ -821,45 +820,6 @@ export const fetchBoardCapabilitiesFn = createServerFn({ method: 'GET' }).handle
 
 export type WidgetVisibleBoard = { id: string; name: string; slug: string }
 
-/**
- * Combined fetch for the roadmap page's shell: the roadmap list plus the
- * statuses, boards and tags its columns and filters need, in one request
- * that resolves portal access and auth once rather than once per list.
- * Mirrors fetchPortalData's combined fetch for the feed. Column post lists
- * are asked for separately once the shell has rendered (fetchPublicRoadmapColumns
- * for the columns' first pages, fetchPublicRoadmapPosts as each column loads
- * more): the shell renders before any column's posts are needed.
- *
- * Declared at the end of the module on purpose: the gate test maps portal
- * handlers by declaration order, so new server fns append here to avoid
- * shifting existing indices.
- */
-export const fetchRoadmapPageData = createServerFn({ method: 'GET' }).handler(async () => {
-  log.debug('fetch roadmap page data')
-  const access = await resolvePortalAccessForRequest()
-  if (!access.granted) {
-    log.debug('portal access denied, returning empty')
-    return { roadmaps: [], statuses: [], boards: [], tags: [] }
-  }
-
-  const auth = hasAuthCredentials() ? await getOptionalAuth() : null
-  const actor = await policyActorFromAuth(auth)
-
-  const [roadmapsRaw, statuses, boardsRaw, tags] = await Promise.all([
-    listPublicRoadmaps(actor),
-    listPublicStatuses(),
-    listPublicBoardsWithStats(actor),
-    listPublicPostTags(actor),
-  ])
-
-  return {
-    roadmaps: roadmapsRaw.map(serializePublicRoadmap),
-    statuses,
-    boards: boardsRaw.map(serializePublicBoard),
-    tags,
-  }
-})
-
 // The first page of several columns of one board, under the same filters.
 const getPublicRoadmapColumnsSchema = getPublicRoadmapPostsSchema
   .omit({ statusId: true, bucketId: true, offset: true })
@@ -881,7 +841,9 @@ const getPublicRoadmapColumnsSchema = getPublicRoadmapPostsSchema
  * for on open or after a filter change. A column loading a later page still
  * calls fetchPublicRoadmapPosts for itself alone.
  *
- * Declared at the end of the module on purpose: see fetchRoadmapPageData above.
+ * Declared at the end of the module on purpose: the gate test maps portal
+ * handlers by declaration order, so new server fns append here to avoid
+ * shifting existing indices.
  */
 export const fetchPublicRoadmapColumns = createServerFn({ method: 'GET' })
   .validator(getPublicRoadmapColumnsSchema)

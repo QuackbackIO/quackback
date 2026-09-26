@@ -16,7 +16,7 @@ import { McpServerSettings } from '@/components/admin/settings/mcp/mcp-server-se
 import { McpSetupGuide } from '@/components/admin/settings/mcp/mcp-setup-guide'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { settingsQueries } from '@/lib/client/queries/settings'
-import { settingsReadBatch } from '@/lib/client/queries/settings-batch'
+import { readBatch } from '@/lib/client/queries/read-batch'
 
 const searchSchema = z.object({
   tab: z.enum(['keys', 'webhooks', 'mcp']).optional(),
@@ -34,7 +34,7 @@ export const Route = createFileRoute('/admin/settings/developers')({
     // for data — every payload is small and admin-only.
     const { listEntitlementsFn } = await import('@/lib/server/functions/entitlement-status')
     const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
-    const ensure = settingsReadBatch(queryClient)
+    const ensure = readBatch(queryClient)
     const [, entitlements] = await Promise.all([
       Promise.all([
         ensure(adminQueries.apiKeys()),

@@ -7,7 +7,7 @@ import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { IntegrationsSettingsBody } from '@/components/admin/settings/integrations/integrations-settings-body'
-import { settingsReadBatch } from '@/lib/client/queries/settings-batch'
+import { readBatch } from '@/lib/client/queries/read-batch'
 
 export const Route = createFileRoute('/admin/settings/integrations/')({
   loader: async ({ context }) => {
@@ -15,7 +15,7 @@ export const Route = createFileRoute('/admin/settings/integrations/')({
     const { queryClient } = context
     const { hasTierFeatureFn } = await import('@/lib/server/functions/entitlement-status')
     const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
-    const ensure = settingsReadBatch(queryClient)
+    const ensure = readBatch(queryClient)
     const [integrationsEnabled] = await Promise.all([
       hasTierFeatureFn({ data: { feature: 'integrations' } }),
       ensure(adminQueries.integrationCatalog()),
