@@ -44,6 +44,11 @@ import {
   resetDormancyMarks,
 } from '@/lib/server/workspaces/activity'
 import { earliestWorkspaceDeadline } from './deadlines'
+import { catchUpDormantUsageReports } from './dormant-usage-report'
+import {
+  enqueueUsageReport,
+  isHostedBillingConfigured,
+} from '@/lib/server/domains/billing/usage-report'
 import { earliestPendingJobAt, isMissingJobQueue } from './job-queue'
 import {
   awaitPool,
@@ -517,6 +522,18 @@ async function refreshWorkspaceLoops(cfg: RunnerConfig): Promise<void> {
   }
 
   reportQuarantine()
+
+  // A parked workspace has no loop to enqueue its monthly usage report; queue
+  // it for any that have not sent last month's (`dormant-usage-report.ts`).
+  await catchUpDormantUsageReports({
+    hosted: isHostedBillingConfigured,
+    now: () => new Date(),
+    dormant: listDormantWorkspaces,
+    enqueueIn: (workspaceKey, month) =>
+      withWorkspaceScopeById(workspaceKey, 'queue', () => enqueueUsageReport({ month })),
+    wake: (workspaceKey) => wakeWorkspace(workspaceKey, []),
+    warn: (fields, message) => log.warn(fields, message),
+  }).catch((err) => log.warn({ err }, 'dormant usage report catch-up failed'))
 }
 
 function scheduleWorkspaceRefresh(cfg: RunnerConfig): void {

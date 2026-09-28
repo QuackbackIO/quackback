@@ -8,6 +8,12 @@
 import { cancelJob, enqueueJob, type JobSqlExecutor } from '@/lib/server/jobs/job-queue'
 
 export const USAGE_REPORT_QUEUE = 'usage-report'
+
+/** Hosted billing is configured; self-host has no control plane to report to. */
+export function isHostedBillingConfigured(): boolean {
+  const raw = process.env.QUACKBACK_CONTROL_PLANE_URL
+  return typeof raw === 'string' && raw.length > 0
+}
 export const USAGE_REPORT_MAX_ATTEMPTS = 10
 export const USAGE_REPORT_RETRY_BACKOFF_MS = 15 * 60_000
 
