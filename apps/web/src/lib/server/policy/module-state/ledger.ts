@@ -927,6 +927,18 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'a second .exec() site, or an await inside that loop, is a visible diff.',
   },
   {
+    file: 'apps/web/src/lib/server/jobs/dormant-usage-report.ts',
+    name: 'checked',
+    category: 'workspace-scoped-key',
+    keyedBy: 'workspaceKey',
+    reason:
+      'Which month this worker process last asked a parked workspace to queue its usage report, ' +
+      'keyed by workspaceKey, so each parked workspace is asked once a month rather than every ' +
+      'refresh. Written only by the worker\u2019s refresh; the ask itself runs inside that ' +
+      'workspace\u2019s own scope. A wrong entry would skip or repeat one workspace\u2019s ask, and ' +
+      'repeating is harmless because the report\u2019s dedupe key coalesces it.',
+  },
+  {
     file: 'apps/web/src/lib/server/jobs/worker.ts',
     name: 'loops',
     category: 'workspace-scoped-key',
