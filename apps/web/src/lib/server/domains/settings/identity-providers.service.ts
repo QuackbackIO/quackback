@@ -26,7 +26,7 @@ import {
   ssoVerifiedDomain,
   type IdentityProviderClaimMapping,
 } from '@/lib/server/db'
-import type { IdentityProviderId } from '@quackback/ids'
+import type { IdentityProviderId, UserId } from '@quackback/ids'
 import { parseSsoTestCapture, type SsoTestCapture } from '@/lib/shared/sso-test-capture'
 import {
   applyClaimMappingEdits,
@@ -669,6 +669,8 @@ export async function persistTestResult(
     /** What the test saw of the nonce. Written only with a passing result, and
      *  without restamping `detailsChangedAt`, which would void this very pass. */
     idTokenNonce?: 'check' | 'off'
+    /** The admin who ran the test; a nonce change it makes is audited as theirs. */
+    auditActorUserId?: UserId
   }
 ): Promise<'stamped' | 'stale'> {
   const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
@@ -681,21 +683,42 @@ export async function persistTestResult(
         ? isNull(identityProvider.detailsChangedAt)
         : eq(identityProvider.detailsChangedAt, new Date(args.expectedDetailsChangedAt))
 
+    const writesNonce = args.outcome === 'success' && args.idTokenNonce !== undefined
+    const nextNonce = args.idTokenNonce === 'off' ? 'off' : null
+
     const result = await db.transaction(async (tx) => {
+      // Read under the row lock the update takes anyway, so the audited
+      // "before" is the value this write replaces even when tests overlap.
+      const [prior] = writesNonce
+        ? await tx
+            .select({ idTokenNonce: identityProvider.idTokenNonce })
+            .from(identityProvider)
+            .where(eq(identityProvider.id, id))
+            .for('update')
+        : []
       const [row] = await tx
         .update(identityProvider)
         .set({
           lastTestCapture: args.capture,
           ...(args.outcome === 'success' ? { lastSuccessfulTestAt: new Date() } : {}),
-          ...(args.outcome === 'success' && args.idTokenNonce
-            ? { idTokenNonce: args.idTokenNonce === 'off' ? 'off' : null }
-            : {}),
+          ...(writesNonce ? { idTokenNonce: nextNonce } : {}),
         })
         .where(and(eq(identityProvider.id, id), detailsMatch))
         .returning({ id: identityProvider.id })
       if (!row) return 'stale' as const
       if (args.outcome === 'success') {
         await bumpAuthConfigVersionInTx(tx)
+      }
+      if (writesNonce && prior && (prior.idTokenNonce ?? null) !== nextNonce) {
+        const { recordAuditEventInTransaction } = await import('@/lib/server/audit/log')
+        await recordAuditEventInTransaction(tx, {
+          event: 'idp.updated',
+          actor: { userId: args.auditActorUserId ?? null },
+          target: { type: 'identity_provider', id },
+          before: { idTokenNonce: prior.idTokenNonce ?? null },
+          after: { idTokenNonce: nextNonce },
+          metadata: { source: 'connection_test' },
+        })
       }
       return 'stamped' as const
     })

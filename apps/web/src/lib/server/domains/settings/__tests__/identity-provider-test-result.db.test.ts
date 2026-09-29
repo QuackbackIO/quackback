@@ -7,12 +7,16 @@
  * started from, and without restamping `details_changed_at`: restamping would
  * cancel the very pass that produced the finding.
  *
- * Runs against copies of `identity_provider` and `settings` in a schema of this
- * suite's own, so nothing it writes is visible to any other suite.
+ * A change is audited in the same transaction, against the value the row held
+ * under that transaction's lock, and bumps the auth config version so every
+ * process rebuilds sign-in from it.
+ *
+ * Runs against copies of `identity_provider`, `settings` and `audit_log` in a
+ * schema of this suite's own, so nothing it writes is visible to any other suite.
  */
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import postgres from 'postgres'
-import type { IdentityProviderId } from '@quackback/ids'
+import { fromUuid, type IdentityProviderId } from '@quackback/ids'
 
 const suite = vi.hoisted(() => ({
   schema: `idp_test_result_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
@@ -45,7 +49,7 @@ vi.mock('../settings.helpers', async (importOriginal) => ({
 // builds its own connection rather than going through the global `db`.
 // oxlint-disable-next-line no-restricted-imports
 import { createDbFromSql } from '@quackback/db/client'
-import { db, eq, identityProvider } from '@/lib/server/db'
+import { auditLog, db, eq, identityProvider, settings } from '@/lib/server/db'
 import type { SsoTestCapture } from '@/lib/shared/sso-test-capture'
 import { persistTestResult } from '../identity-providers.service'
 
@@ -57,7 +61,7 @@ try {
   if (!url) throw new Error('no test database')
   admin = postgres(url, { max: 1, onnotice: () => {} })
   await admin.unsafe(`create schema ${suite.schema}`)
-  for (const table of ['identity_provider', 'settings']) {
+  for (const table of ['identity_provider', 'settings', 'audit_log']) {
     await admin.unsafe(`create table ${suite.schema}.${table} (like public.${table} including all)`)
   }
   pool = postgres(url, {
@@ -83,11 +87,16 @@ afterAll(async () => {
 const detailsChangedAt = new Date('2026-01-01T00:00:00.000Z')
 const capture = { version: 2 } as unknown as SsoTestCapture
 
+const adminUserId = fromUuid('user', crypto.randomUUID())
+
 let providerId: IdentityProviderId
 
 beforeEach(async () => {
   if (!available) return
   await db.delete(identityProvider)
+  await db.delete(auditLog)
+  await db.delete(settings)
+  await db.insert(settings).values({ name: 'Suite', slug: 'suite', createdAt: new Date() })
   const [row] = await db
     .insert(identityProvider)
     .values({
@@ -112,6 +121,22 @@ async function stored() {
   return row!
 }
 
+async function authConfigVersion() {
+  const [row] = await db.select({ v: settings.authConfigVersion }).from(settings)
+  return row!.v
+}
+
+const nonceAudits = () =>
+  db
+    .select({
+      eventType: auditLog.eventType,
+      actorUserId: auditLog.actorUserId,
+      targetId: auditLog.targetId,
+      beforeValue: auditLog.beforeValue,
+      afterValue: auditLog.afterValue,
+    })
+    .from(auditLog)
+
 const persist = (args: {
   outcome: 'success' | 'mapping_failed'
   idTokenNonce?: 'check' | 'off'
@@ -122,15 +147,46 @@ const persist = (args: {
     outcome: args.outcome,
     capture,
     ...(args.idTokenNonce ? { idTokenNonce: args.idTokenNonce } : {}),
+    auditActorUserId: adminUserId,
   })
 
 describe.skipIf(!available)('persistTestResult: ID token nonce', () => {
   it('stores off with a passing result, without restamping the connection', async () => {
+    const before = await authConfigVersion()
     expect(await persist({ outcome: 'success', idTokenNonce: 'off' })).toBe('stamped')
     const row = await stored()
     expect(row.idTokenNonce).toBe('off')
     expect(row.lastSuccessfulTestAt).not.toBeNull()
     expect(row.detailsChangedAt?.toISOString()).toBe(detailsChangedAt.toISOString())
+    expect(await authConfigVersion()).toBe(before + 1)
+  })
+
+  it('audits the change against the admin who ran the test', async () => {
+    await persist({ outcome: 'success', idTokenNonce: 'off' })
+    expect(await nonceAudits()).toEqual([
+      {
+        eventType: 'idp.updated',
+        actorUserId: adminUserId,
+        targetId: providerId,
+        beforeValue: { idTokenNonce: null },
+        afterValue: { idTokenNonce: 'off' },
+      },
+    ])
+  })
+
+  it('audits nothing when the finding matches what is stored', async () => {
+    await persist({ outcome: 'success', idTokenNonce: 'off' })
+    await persist({ outcome: 'success', idTokenNonce: 'off' })
+    expect(await nonceAudits()).toHaveLength(1)
+  })
+
+  it('audits nothing when the result is not saved', async () => {
+    await persist({
+      outcome: 'success',
+      idTokenNonce: 'off',
+      expectedDetailsChangedAt: '2025-06-01T00:00:00.000Z',
+    })
+    expect(await nonceAudits()).toHaveLength(0)
   })
 
   it('stores the default back when a later test finds the nonce echoed', async () => {

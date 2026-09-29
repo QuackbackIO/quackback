@@ -17,8 +17,10 @@ import { runHandshake } from '@/lib/server/auth/sso-test-handshake'
 import {
   ssoTestSessionKey,
   ssoTestResultKey,
+  SSO_TEST_NONCE_NOT_RETURNED_LABEL,
   SSO_TEST_POSTMESSAGE_SOURCE,
 } from '@/lib/shared/sso-test-keys'
+import type { UserId } from '@quackback/ids'
 import { escapeHtmlAttr } from '@/lib/shared/utils/sanitize'
 import { logger } from '@/lib/server/logger'
 import type { SsoTestDiagnostic, TestSession } from '@/lib/server/functions/sso-test'
@@ -138,21 +140,18 @@ export async function handleSsoTestCallback(
         outcome: result.ok ? 'success' : 'mapping_failed',
         capture,
         ...(idTokenNonce ? { idTokenNonce } : {}),
+        auditActorUserId: session.adminUserId as UserId,
       })
       stamped = persist === 'stamped' && result.ok
-      // The test, not an admin, changed how sign-in treats the nonce, so the
-      // change is attributed to the admin who ran it and left in the trail.
-      const storedNonce = idTokenNonce === 'off' ? 'off' : null
-      if (stamped && idTokenNonce && (provider.idTokenNonce ?? null) !== storedNonce) {
-        const { recordAuditEvent } = await import('@/lib/server/audit/log')
-        await recordAuditEvent({
-          event: 'idp.updated',
-          actor: { userId: session.adminUserId as `user_${string}` },
-          target: { type: 'identity_provider', id: provider.id },
-          before: { idTokenNonce: provider.idTokenNonce ?? null },
-          after: { idTokenNonce: storedNonce },
-          metadata: { source: 'connection_test' },
-        })
+      // A refused write must not leave the result promising that sign-in
+      // stops sending a nonce.
+      if (result.ok && idTokenNonce === 'off' && !stamped) {
+        for (const step of result.steps) {
+          if (step.label === SSO_TEST_NONCE_NOT_RETURNED_LABEL) {
+            step.detail =
+              'Not saved, because this provider changed during the test. Test again to apply it.'
+          }
+        }
       }
       if (stamped && session.registrationId === 'sso') {
         const { markSsoTestSucceeded } =

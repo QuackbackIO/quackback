@@ -46,3 +46,10 @@ export function isSsoTestCallbackPath(pathname: string): boolean {
     pathname.startsWith(SSO_SOCIAL_CALLBACK_PREFIX)
   )
 }
+
+/**
+ * Label of the Test sign-in step reporting a provider that leaves the nonce
+ * out. The callback rewrites that step's detail when the finding could not be
+ * saved, so both sides name it here.
+ */
+export const SSO_TEST_NONCE_NOT_RETURNED_LABEL = 'Provider does not return the nonce'

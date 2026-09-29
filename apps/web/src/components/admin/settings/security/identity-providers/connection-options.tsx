@@ -253,7 +253,9 @@ export function ConnectionOptions({
               ))}
             </SelectContent>
           </Select>
-          <p className="text-sm text-muted-foreground">Set for you by the connection test.</p>
+          <p className="text-sm text-muted-foreground">
+            The connection test sets this when it can verify the ID token.
+          </p>
         </div>
 
         {kind === 'other' && (

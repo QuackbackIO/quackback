@@ -15,6 +15,7 @@ import { jwtVerify, createLocalJWKSet, decodeProtectedHeader, decodeJwt } from '
 import type { JsonValue } from '@/lib/server/audit/log'
 import { explainAuthorizeError, explainTokenError } from './oidc-error-explain'
 import type { IdTokenNonceChoice } from '@/lib/shared/oidc-request'
+import { SSO_TEST_NONCE_NOT_RETURNED_LABEL } from '@/lib/shared/sso-test-keys'
 import {
   DEFAULT_IDENTITY_SOURCES,
   claimMappingFor,
@@ -432,7 +433,7 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
       steps.push({
         ok: true,
         stage: 'claim-check',
-        label: 'Provider does not return the nonce',
+        label: SSO_TEST_NONCE_NOT_RETURNED_LABEL,
         detail: "Sign-in won't send one. The signature, issuer and audience are still checked.",
         severity: 'info',
       })

@@ -586,9 +586,16 @@ describe('handleSsoTestCallback', () => {
   })
 
   describe('ID token nonce finding', () => {
+    const nonceStep = {
+      ok: true,
+      stage: 'claim-check',
+      label: 'Provider does not return the nonce',
+      detail: "Sign-in won't send one. The signature, issuer and audience are still checked.",
+      severity: 'info',
+    }
     const passingWith = (idTokenNonce: 'check' | 'off' | undefined) => ({
       ok: true,
-      steps: [],
+      steps: idTokenNonce === 'off' ? [{ ...nonceStep }] : [],
       claims: { iss: 'https://idp', sub: 'u2', aud: 'cid' },
       tokenInfo: { idTokenAlg: 'RS256', hasAccessToken: true, hasRefreshToken: false },
       capture: v2Capture({ registrationId: 'oidc_custom', identity: { id: 'u2', sources: {} } }),
@@ -604,69 +611,58 @@ describe('handleSsoTestCallback', () => {
 
     beforeEach(() => {
       hoisted.cacheGet.mockResolvedValueOnce(customProviderSession)
+      hoisted.listIdentityProviders.mockResolvedValueOnce([
+        { id: 'idp_custom', registrationId: 'oidc_custom', domains: [] },
+      ])
     })
 
-    it('saves what the test found with the passing result and audits the change', async () => {
-      hoisted.listIdentityProviders.mockResolvedValueOnce([
-        { id: 'idp_custom', registrationId: 'oidc_custom', idTokenNonce: null, domains: [] },
-      ])
+    it('saves what the test found with the passing result, on behalf of the admin', async () => {
       hoisted.runHandshake.mockResolvedValueOnce(passingWith('off'))
 
       await run()
 
+      // The service audits the change inside the same transaction, so the
+      // callback hands it the admin rather than writing an audit row itself.
       expect(hoisted.persistTestResult).toHaveBeenCalledWith(
         'idp_custom',
-        expect.objectContaining({ outcome: 'success', idTokenNonce: 'off' })
-      )
-      expect(hoisted.recordAuditEvent).toHaveBeenCalledWith(
         expect.objectContaining({
-          event: 'idp.updated',
-          actor: expect.objectContaining({ userId: 'user_admin' }),
-          target: { type: 'identity_provider', id: 'idp_custom' },
-          before: { idTokenNonce: null },
-          after: { idTokenNonce: 'off' },
+          outcome: 'success',
+          idTokenNonce: 'off',
+          auditActorUserId: 'user_admin',
         })
       )
-    })
-
-    it('records no audit entry when the finding matches what is stored', async () => {
-      hoisted.listIdentityProviders.mockResolvedValueOnce([
-        { id: 'idp_custom', registrationId: 'oidc_custom', idTokenNonce: 'off', domains: [] },
-      ])
-      hoisted.runHandshake.mockResolvedValueOnce(passingWith('off'))
-
-      await run()
-
-      expect(hoisted.persistTestResult).toHaveBeenCalledWith(
-        'idp_custom',
-        expect.objectContaining({ idTokenNonce: 'off' })
-      )
-      expect(hoisted.recordAuditEvent).not.toHaveBeenCalled()
-    })
-
-    it('records no audit entry when a mid-test edit leaves the result unsaved', async () => {
-      hoisted.listIdentityProviders.mockResolvedValueOnce([
-        { id: 'idp_custom', registrationId: 'oidc_custom', idTokenNonce: null, domains: [] },
-      ])
-      hoisted.persistTestResult.mockResolvedValueOnce('stale')
-      hoisted.runHandshake.mockResolvedValueOnce(passingWith('off'))
-
-      await run()
-
       expect(hoisted.recordAuditEvent).not.toHaveBeenCalled()
     })
 
     it('leaves the setting alone when the test learned nothing about the nonce', async () => {
-      hoisted.listIdentityProviders.mockResolvedValueOnce([
-        { id: 'idp_custom', registrationId: 'oidc_custom', idTokenNonce: 'off', domains: [] },
-      ])
       hoisted.runHandshake.mockResolvedValueOnce(passingWith(undefined))
 
       await run()
 
       const persist = hoisted.persistTestResult.mock.calls[0]![1] as Record<string, unknown>
       expect(persist.idTokenNonce).toBeUndefined()
-      expect(hoisted.recordAuditEvent).not.toHaveBeenCalled()
+    })
+
+    it('says the finding was not saved when the provider changed mid-test', async () => {
+      // A passing result must not claim sign-in will stop sending a nonce when
+      // the guarded write was refused.
+      hoisted.persistTestResult.mockResolvedValueOnce('stale')
+      hoisted.runHandshake.mockResolvedValueOnce(passingWith('off'))
+
+      const handled = await run()
+
+      const step = handled?.result.steps.find((s) => s.stage === 'claim-check')
+      expect(step?.detail).toMatch(/not saved/i)
+      expect(step?.detail).toMatch(/test again/i)
+    })
+
+    it('keeps the saved finding as reported when the write lands', async () => {
+      hoisted.runHandshake.mockResolvedValueOnce(passingWith('off'))
+
+      const handled = await run()
+
+      const step = handled?.result.steps.find((s) => s.stage === 'claim-check')
+      expect(step?.detail).toMatch(/won't send one/i)
     })
   })
 
