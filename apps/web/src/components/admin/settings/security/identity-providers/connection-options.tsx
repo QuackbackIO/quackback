@@ -253,9 +253,7 @@ export function ConnectionOptions({
               ))}
             </SelectContent>
           </Select>
-          <p className="text-sm text-muted-foreground">
-            Change this only if your provider&apos;s ID tokens never include the nonce.
-          </p>
+          <p className="text-sm text-muted-foreground">Set for you by the connection test.</p>
         </div>
 
         {kind === 'other' && (

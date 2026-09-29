@@ -176,14 +176,13 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
     // The SAME builder production reads. Assembling a different request here is
     // exactly how a passing test came to vouch for a sign-in that fails.
     const request = authorizeRequestFor(provider)
-    // Sign-in binds a nonce only for a discovery provider whose document names
-    // the key set and issuer to verify the ID token with, and only while the
-    // setting is on. Sending one in any other case would test a request that
-    // sign-in never makes.
-    const bindsNonce =
-      request.idTokenNonce === 'check' &&
-      Boolean(provider.discoveryUrl && endpoints.jwksUri && endpoints.issuer)
-    const nonce = bindsNonce ? randomBytes(32).toString('base64url') : undefined
+    // Sign-in can bind a nonce only for a discovery provider whose document
+    // names the key set and issuer to verify the ID token with, so only then is
+    // there anything to learn. It is sent even when the setting is off: the
+    // test decides the setting, and has to see an echo that sign-in, having
+    // stopped sending a nonce, never would.
+    const canBindNonce = Boolean(provider.discoveryUrl && endpoints.jwksUri && endpoints.issuer)
+    const nonce = canBindNonce ? randomBytes(32).toString('base64url') : undefined
     const requestedScopes = request.scopes
     const codeChallenge = createHash('sha256').update(codeVerifier).digest('base64url')
 

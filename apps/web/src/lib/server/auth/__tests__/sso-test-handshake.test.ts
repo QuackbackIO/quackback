@@ -728,28 +728,36 @@ describe('runHandshake: ID token nonce', () => {
     return runHandshake({ ...baseInput, expectedNonce: opts.expectedNonce })
   }
 
-  it('names the setting when a valid ID token leaves out the nonce that was sent', async () => {
+  it('passes and records that a provider which leaves out the nonce should not be sent one', async () => {
     // Signature, issuer and audience all verify; only the echo is missing. That
-    // is a provider that never returns a nonce, which has a setting, not a
-    // replay attempt.
+    // is a provider that never returns a nonce, so the test records it and
+    // sign-in stops sending one.
     const result = await exchange({ expectedNonce: 'nonce789' })
-    if (result.ok) throw new Error('expected failure')
-    expect(result.stage).toBe('claim-check')
-    expect(result.hint).toMatch(/did not return the nonce/i)
-    expect(result.hint).toContain("Don't use a nonce")
+    if (!result.ok) throw new Error(`expected success, got ${result.stage}: ${result.hint}`)
+    expect(result.idTokenNonce).toBe('off')
+    const step = result.steps.find((s) => s.stage === 'claim-check')
+    expect(step?.severity).toBe('info')
+    expect(step?.label).toMatch(/does not return the nonce/i)
   })
 
-  it('still fails a nonce that does not match, without offering the setting', async () => {
+  it('records the nonce check as working when the provider echoes it', async () => {
+    const result = await exchange({ tokenNonce: 'nonce789', expectedNonce: 'nonce789' })
+    if (!result.ok) throw new Error(`expected success, got ${result.stage}: ${result.hint}`)
+    expect(result.idTokenNonce).toBe('check')
+  })
+
+  it('still fails a nonce that does not match', async () => {
     const result = await exchange({ tokenNonce: 'someone-elses', expectedNonce: 'nonce789' })
     if (result.ok) throw new Error('expected failure')
     expect(result.stage).toBe('claim-check')
     expect(result.hint).toMatch(/mismatch/i)
-    expect(result.hint).not.toContain("Don't use a nonce")
   })
 
-  it('passes and says so when the provider is set to not use a nonce', async () => {
+  it('records nothing about the nonce when none was sent', async () => {
+    // Sign-in never binds a nonce for this provider, so there is nothing to learn.
     const result = await exchange({ expectedNonce: undefined })
     if (!result.ok) throw new Error(`expected success, got ${result.stage}: ${result.hint}`)
+    expect(result.idTokenNonce).toBeUndefined()
     expect(result.steps.some((s) => s.stage === 'claim-check' && /not used/i.test(s.label))).toBe(
       true
     )

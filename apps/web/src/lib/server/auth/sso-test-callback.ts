@@ -132,12 +132,28 @@ export async function handleSsoTestCallback(
     const provider = providers.find((p) => p.registrationId === session.registrationId)
     let stamped = false
     if (provider && capture) {
+      const idTokenNonce = result.ok ? result.idTokenNonce : undefined
       const persist = await persistTestResult(provider.id, {
         expectedDetailsChangedAt: session.detailsChangedAt ?? null,
         outcome: result.ok ? 'success' : 'mapping_failed',
         capture,
+        ...(idTokenNonce ? { idTokenNonce } : {}),
       })
       stamped = persist === 'stamped' && result.ok
+      // The test, not an admin, changed how sign-in treats the nonce, so the
+      // change is attributed to the admin who ran it and left in the trail.
+      const storedNonce = idTokenNonce === 'off' ? 'off' : null
+      if (stamped && idTokenNonce && (provider.idTokenNonce ?? null) !== storedNonce) {
+        const { recordAuditEvent } = await import('@/lib/server/audit/log')
+        await recordAuditEvent({
+          event: 'idp.updated',
+          actor: { userId: session.adminUserId as `user_${string}` },
+          target: { type: 'identity_provider', id: provider.id },
+          before: { idTokenNonce: provider.idTokenNonce ?? null },
+          after: { idTokenNonce: storedNonce },
+          metadata: { source: 'connection_test' },
+        })
+      }
       if (stamped && session.registrationId === 'sso') {
         const { markSsoTestSucceeded } =
           await import('@/lib/server/domains/settings/settings.service')

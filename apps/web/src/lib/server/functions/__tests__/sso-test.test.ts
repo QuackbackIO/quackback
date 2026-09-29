@@ -231,11 +231,12 @@ describe('startSsoTestFn', () => {
       expect(session.nonce).toBe(params.get('nonce'))
     })
 
-    it('sends no nonce, and expects none, for a provider set to not use one', async () => {
-      // Mirrors production, which neither sends nor checks one for this setting.
+    it('still sends a nonce for a provider set to not use one, to notice when it starts returning it', async () => {
+      // The test decides the setting, so it must be able to see an echo that
+      // sign-in, having stopped sending a nonce, never would.
       const { params, session } = await startWith({ ...ssoProvider, idTokenNonce: 'off' })
-      expect(params.has('nonce')).toBe(false)
-      expect(session.nonce).toBeUndefined()
+      expect(params.get('nonce')).toBeTruthy()
+      expect(session.nonce).toBe(params.get('nonce'))
     })
 
     it('sends no nonce for a manual-endpoint provider, which sign-in never binds', async () => {

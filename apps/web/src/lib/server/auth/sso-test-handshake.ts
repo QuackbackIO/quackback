@@ -14,6 +14,7 @@
 import { jwtVerify, createLocalJWKSet, decodeProtectedHeader, decodeJwt } from 'jose'
 import type { JsonValue } from '@/lib/server/audit/log'
 import { explainAuthorizeError, explainTokenError } from './oidc-error-explain'
+import type { IdTokenNonceChoice } from '@/lib/shared/oidc-request'
 import {
   DEFAULT_IDENTITY_SOURCES,
   claimMappingFor,
@@ -135,6 +136,10 @@ export type HandshakeResult =
       }
       mappingOutcome?: ProfileOutcome
       capture?: SsoTestCaptureV2
+      /** Whether the provider echoed the nonce ('check') or signed a valid ID
+       *  token without it ('off'). Saved with a passing result so sign-in
+       *  follows what the test saw. Undefined when no nonce was sent. */
+      idTokenNonce?: IdTokenNonceChoice
     }
   | {
       ok: false
@@ -347,6 +352,8 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
 
   let header: ReturnType<typeof decodeProtectedHeader> | undefined
   let verifiedPayload: ReturnType<typeof decodeJwt> | undefined
+  /** What this exchange showed about the nonce; undefined when none was sent. */
+  let idTokenNonce: IdTokenNonceChoice | undefined
 
   if (hasIdToken) {
     try {
@@ -418,14 +425,17 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
       steps.push({ ok: true, stage: 'claim-check', label: 'Nonce not used for this provider' })
     } else if (verifiedPayload.nonce === undefined) {
       // Signature, issuer and audience verified, so this is a provider that
-      // does not echo the nonce rather than a replayed token. It has a
-      // setting; a token carrying a different nonce does not.
-      return {
-        ok: false,
+      // does not echo the nonce rather than a replayed token. Recording it
+      // stops sign-in sending one; a token carrying a different nonce is a
+      // failure instead.
+      idTokenNonce = 'off'
+      steps.push({
+        ok: true,
         stage: 'claim-check',
-        hint: 'The provider signed a valid ID token but did not return the nonce this request sent. If it never returns one, set ID token nonce to "Don\'t use a nonce" in this provider\'s connection options.',
-        steps,
-      }
+        label: 'Provider does not return the nonce',
+        detail: "Sign-in won't send one. The signature, issuer and audience are still checked.",
+        severity: 'info',
+      })
     } else if (verifiedPayload.nonce !== input.expectedNonce) {
       return {
         ok: false,
@@ -434,6 +444,7 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
         steps,
       }
     } else {
+      idTokenNonce = 'check'
       steps.push({ ok: true, stage: 'claim-check', label: 'Nonce matched' })
     }
   }
@@ -644,6 +655,7 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
       : undefined,
     mappingOutcome,
     capture,
+    ...(idTokenNonce ? { idTokenNonce } : {}),
   }
 }
 

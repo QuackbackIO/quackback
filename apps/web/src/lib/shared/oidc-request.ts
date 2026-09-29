@@ -56,10 +56,12 @@ export const TOKEN_AUTH_CHOICES = [
 
 /**
  * `off` exists for providers that sign a valid ID token but never echo the
- * nonce, which fails every sign-in when the check is on. It drops the echo
- * check only: the signature, issuer and audience are still verified, and PKCE
- * still binds the authorization code to the attempt, so the ID token cannot be
- * swapped for one from another sign-in.
+ * nonce, which fails every sign-in when the check is on. The connection test
+ * sets it from what the provider actually returns; an admin can still change
+ * it, and the next test checks again. It drops the echo check only: the
+ * signature, issuer and audience are still verified, and PKCE still binds the
+ * authorization code to the attempt, so the ID token cannot be swapped for one
+ * from another sign-in.
  */
 export const ID_TOKEN_NONCE_CHOICES = [
   { value: 'check', label: 'Send a nonce and check it' },

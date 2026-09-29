@@ -666,6 +666,9 @@ export async function persistTestResult(
     expectedDetailsChangedAt: string | null
     outcome: 'success' | 'mapping_failed'
     capture: SsoTestCapture
+    /** What the test saw of the nonce. Written only with a passing result, and
+     *  without restamping `detailsChangedAt`, which would void this very pass. */
+    idTokenNonce?: 'check' | 'off'
   }
 ): Promise<'stamped' | 'stale'> {
   const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
@@ -684,6 +687,9 @@ export async function persistTestResult(
         .set({
           lastTestCapture: args.capture,
           ...(args.outcome === 'success' ? { lastSuccessfulTestAt: new Date() } : {}),
+          ...(args.outcome === 'success' && args.idTokenNonce
+            ? { idTokenNonce: args.idTokenNonce === 'off' ? 'off' : null }
+            : {}),
         })
         .where(and(eq(identityProvider.id, id), detailsMatch))
         .returning({ id: identityProvider.id })

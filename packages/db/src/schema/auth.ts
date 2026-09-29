@@ -718,8 +718,8 @@ export const identityProvider = pgTable(
      *  'post' when null. Some providers accept only one of the two. */
     tokenEndpointAuthMethod: text('token_endpoint_auth_method'),
     /** Whether sign-in sends a `nonce` and requires the ID token to echo it
-     *  ('check' | 'off'); 'check' when null. 'off' is for providers that never
-     *  echo it. See lib/shared/oidc-request.ts. */
+     *  ('check' | 'off'); 'check' when null. The connection test sets 'off' for
+     *  a provider that never echoes it. See lib/shared/oidc-request.ts. */
     idTokenNonce: text('id_token_nonce'),
     enabled: boolean('enabled').notNull().default(false),
     /** JIT signup toggle — preserves the legacy auto-provision opt-out. */

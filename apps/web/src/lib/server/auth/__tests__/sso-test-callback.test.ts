@@ -19,6 +19,7 @@ const hoisted = vi.hoisted(() => ({
   markSsoTestSucceeded: vi.fn(),
   listIdentityProviders: vi.fn(),
   persistTestResult: vi.fn(),
+  recordAuditEvent: vi.fn(),
 }))
 
 vi.mock('@/lib/server/cache', () => ({
@@ -54,6 +55,10 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
 vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
   listIdentityProviders: hoisted.listIdentityProviders,
   persistTestResult: hoisted.persistTestResult,
+}))
+
+vi.mock('@/lib/server/audit/log', () => ({
+  recordAuditEvent: hoisted.recordAuditEvent,
 }))
 
 import { handleSsoTestCallback, renderSsoTestCallbackHtml } from '../sso-test-callback'
@@ -578,6 +583,91 @@ describe('handleSsoTestCallback', () => {
       expect.objectContaining({ outcome: 'mapping_failed', capture: failedCapture })
     )
     expect(hoisted.markSsoTestSucceeded).not.toHaveBeenCalled()
+  })
+
+  describe('ID token nonce finding', () => {
+    const passingWith = (idTokenNonce: 'check' | 'off' | undefined) => ({
+      ok: true,
+      steps: [],
+      claims: { iss: 'https://idp', sub: 'u2', aud: 'cid' },
+      tokenInfo: { idTokenAlg: 'RS256', hasAccessToken: true, hasRefreshToken: false },
+      capture: v2Capture({ registrationId: 'oidc_custom', identity: { id: 'u2', sources: {} } }),
+      ...(idTokenNonce ? { idTokenNonce } : {}),
+    })
+    const run = () =>
+      handleSsoTestCallback({
+        state: 'state-xyz',
+        code: 'authcode',
+        error: null,
+        errorDescription: null,
+      })
+
+    beforeEach(() => {
+      hoisted.cacheGet.mockResolvedValueOnce(customProviderSession)
+    })
+
+    it('saves what the test found with the passing result and audits the change', async () => {
+      hoisted.listIdentityProviders.mockResolvedValueOnce([
+        { id: 'idp_custom', registrationId: 'oidc_custom', idTokenNonce: null, domains: [] },
+      ])
+      hoisted.runHandshake.mockResolvedValueOnce(passingWith('off'))
+
+      await run()
+
+      expect(hoisted.persistTestResult).toHaveBeenCalledWith(
+        'idp_custom',
+        expect.objectContaining({ outcome: 'success', idTokenNonce: 'off' })
+      )
+      expect(hoisted.recordAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: 'idp.updated',
+          actor: expect.objectContaining({ userId: 'user_admin' }),
+          target: { type: 'identity_provider', id: 'idp_custom' },
+          before: { idTokenNonce: null },
+          after: { idTokenNonce: 'off' },
+        })
+      )
+    })
+
+    it('records no audit entry when the finding matches what is stored', async () => {
+      hoisted.listIdentityProviders.mockResolvedValueOnce([
+        { id: 'idp_custom', registrationId: 'oidc_custom', idTokenNonce: 'off', domains: [] },
+      ])
+      hoisted.runHandshake.mockResolvedValueOnce(passingWith('off'))
+
+      await run()
+
+      expect(hoisted.persistTestResult).toHaveBeenCalledWith(
+        'idp_custom',
+        expect.objectContaining({ idTokenNonce: 'off' })
+      )
+      expect(hoisted.recordAuditEvent).not.toHaveBeenCalled()
+    })
+
+    it('records no audit entry when a mid-test edit leaves the result unsaved', async () => {
+      hoisted.listIdentityProviders.mockResolvedValueOnce([
+        { id: 'idp_custom', registrationId: 'oidc_custom', idTokenNonce: null, domains: [] },
+      ])
+      hoisted.persistTestResult.mockResolvedValueOnce('stale')
+      hoisted.runHandshake.mockResolvedValueOnce(passingWith('off'))
+
+      await run()
+
+      expect(hoisted.recordAuditEvent).not.toHaveBeenCalled()
+    })
+
+    it('leaves the setting alone when the test learned nothing about the nonce', async () => {
+      hoisted.listIdentityProviders.mockResolvedValueOnce([
+        { id: 'idp_custom', registrationId: 'oidc_custom', idTokenNonce: 'off', domains: [] },
+      ])
+      hoisted.runHandshake.mockResolvedValueOnce(passingWith(undefined))
+
+      await run()
+
+      const persist = hoisted.persistTestResult.mock.calls[0]![1] as Record<string, unknown>
+      expect(persist.idTokenNonce).toBeUndefined()
+      expect(hoisted.recordAuditEvent).not.toHaveBeenCalled()
+    })
   })
 
   it('forwards IdP-side error params to the handshake', async () => {
