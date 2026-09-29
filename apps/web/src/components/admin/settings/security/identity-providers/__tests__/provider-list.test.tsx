@@ -111,6 +111,7 @@ function makeProvider(over: Partial<IdentityProvider>): IdentityProvider {
     scopes: null,
     prompt: null,
     tokenEndpointAuthMethod: null,
+    idTokenNonce: null,
     enabled: true,
     autoCreateUsers: true,
     autoProvisionRole: 'user',

@@ -34,6 +34,16 @@ describe('diffProviderAudit — create', () => {
 })
 
 describe('diffProviderAudit — update', () => {
+  it('records a change to the ID token nonce setting', () => {
+    // Switching the nonce off removes a replay check, so it belongs in the trail.
+    const { before, after } = diffProviderAudit(
+      { ...prior, idTokenNonce: null },
+      { ...next, idTokenNonce: 'off' }
+    )
+    expect(before).toEqual({ idTokenNonce: null })
+    expect(after).toEqual({ idTokenNonce: 'off' })
+  })
+
   it('records only the fields that changed, on both sides', () => {
     const { before, after } = diffProviderAudit(prior, { ...next, label: 'Renamed' })
     expect(before).toEqual({ label: 'Acme SSO' })

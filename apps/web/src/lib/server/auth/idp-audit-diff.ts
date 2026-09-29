@@ -35,6 +35,7 @@ const AUDITED_FIELDS = [
   'scopes',
   'prompt',
   'tokenEndpointAuthMethod',
+  'idTokenNonce',
   'enabled',
   'autoCreateUsers',
   'autoProvisionRole',

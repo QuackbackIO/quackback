@@ -47,7 +47,8 @@ export interface HandshakeInput {
   state: string | null
   code: string | null
   expectedState: string
-  expectedNonce: string
+  /** Undefined when the provider is set to not use a nonce, so none was sent. */
+  expectedNonce?: string
   /** Present for discovery providers (endpoints fetched from the doc). Absent
    *  for manual-endpoint providers, which pass the resolved endpoints below. */
   discoveryUrl?: string
@@ -413,15 +414,28 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
     }
     steps.push({ ok: true, stage: 'signature-verify', label: 'Signature verified against JWKS' })
 
-    if (verifiedPayload.nonce !== input.expectedNonce) {
+    if (input.expectedNonce === undefined) {
+      steps.push({ ok: true, stage: 'claim-check', label: 'Nonce not used for this provider' })
+    } else if (verifiedPayload.nonce === undefined) {
+      // Signature, issuer and audience verified, so this is a provider that
+      // does not echo the nonce rather than a replayed token. It has a
+      // setting; a token carrying a different nonce does not.
+      return {
+        ok: false,
+        stage: 'claim-check',
+        hint: 'The provider signed a valid ID token but did not return the nonce this request sent. If it never returns one, set ID token nonce to "Don\'t use a nonce" in this provider\'s connection options.',
+        steps,
+      }
+    } else if (verifiedPayload.nonce !== input.expectedNonce) {
       return {
         ok: false,
         stage: 'claim-check',
         hint: 'Nonce mismatch in ID token. Possible replay attack or IdP not honoring nonce.',
         steps,
       }
+    } else {
+      steps.push({ ok: true, stage: 'claim-check', label: 'Nonce matched' })
     }
-    steps.push({ ok: true, stage: 'claim-check', label: 'Nonce matched' })
   }
 
   const identityMapping = input.identityMapping

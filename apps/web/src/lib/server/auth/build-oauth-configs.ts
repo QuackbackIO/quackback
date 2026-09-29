@@ -19,6 +19,7 @@
  * `getIdentityProviderCredentials`.
  */
 
+import type { GenericOAuthConfig as LibraryGenericOAuthConfig } from 'better-auth/plugins'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import { authorizeRequestFor, supportsPrompt } from '@/lib/shared/oidc-request'
 import { resolveIdentity, pickAvatarUrl } from './resolve-identity'
@@ -99,6 +100,12 @@ export interface GenericOAuthConfig {
     | 'select_account'
     | 'select_account consent'
     | 'login consent'
+  /**
+   * Stop sending a `nonce` and stop requiring the ID token to echo it, for a
+   * provider that never does. Typed from the library's own config so a rename
+   * there fails the typecheck instead of silently turning this into a no-op.
+   */
+  disableIdTokenNonceBinding?: LibraryGenericOAuthConfig['disableIdTokenNonceBinding']
   /**
    * 1.7 keys OIDC accounts on profile `sub` by default. We keep the
    * identity-resolution `id` so claim-mapped subjects stay stable.
@@ -337,6 +344,7 @@ export async function buildGenericOAuthConfigs({
       pkce: true,
       disableProviderLogout: true,
       ...(prompt ? { prompt } : {}),
+      ...(request.idTokenNonce === 'off' ? { disableIdTokenNonceBinding: true } : {}),
       authentication: request.tokenAuth,
       // Better-Auth's JIT block. When false, the OAuth callback aborts in
       // handleOAuthUserInfo before any user/session is created. Existing

@@ -123,6 +123,16 @@ describe('buildGenericOAuthConfigs', () => {
     expect(cfgs[0].prompt).toBe('login')
   })
 
+  it('keeps ID token nonce binding on for a provider that has not opted out', async () => {
+    const cfg = await buildOne()
+    expect(cfg.disableIdTokenNonceBinding).toBeUndefined()
+  })
+
+  it('turns nonce binding off for a provider set to not use a nonce', async () => {
+    const cfg = await buildOne({ idTokenNonce: 'off' })
+    expect(cfg.disableIdTokenNonceBinding).toBe(true)
+  })
+
   it('skips disabled providers and providers without credentials', async () => {
     const cfgs = await buildConfigs(
       [

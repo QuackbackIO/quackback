@@ -46,7 +46,9 @@ const TTL_SECONDS = 600
 type TestSession = {
   testId: string
   state: string
-  nonce: string
+  /** Absent when the provider is set to not use a nonce: none is sent, so
+   *  none is expected back. */
+  nonce?: string
   /** The provider registrationId that initiated this test. */
   registrationId: string
   /** Mirrors the provider's placeholder-address setting so the callback can
@@ -167,7 +169,6 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
     const redirectUri = `${config.baseUrl.replace(/\/$/, '')}${authProviderCallbackPath(data.registrationId)}`
     const testId = `ssotest_${randomBytes(15).toString('base64url')}`
     const state = randomBytes(32).toString('base64url')
-    const nonce = randomBytes(32).toString('base64url')
     // PKCE (RFC 7636, S256) — mirrors production now that genericOAuth
     // runs with pkce: true. OAuth 2.1 IdPs reject authorize requests
     // without a code_challenge; IdPs without PKCE support ignore it.
@@ -175,6 +176,14 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
     // The SAME builder production reads. Assembling a different request here is
     // exactly how a passing test came to vouch for a sign-in that fails.
     const request = authorizeRequestFor(provider)
+    // Sign-in binds a nonce only for a discovery provider whose document names
+    // the key set and issuer to verify the ID token with, and only while the
+    // setting is on. Sending one in any other case would test a request that
+    // sign-in never makes.
+    const bindsNonce =
+      request.idTokenNonce === 'check' &&
+      Boolean(provider.discoveryUrl && endpoints.jwksUri && endpoints.issuer)
+    const nonce = bindsNonce ? randomBytes(32).toString('base64url') : undefined
     const requestedScopes = request.scopes
     const codeChallenge = createHash('sha256').update(codeVerifier).digest('base64url')
 
@@ -221,7 +230,7 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
       scope: requestedScopes.join(' '),
       ...(request.prompt ? { prompt: request.prompt } : {}),
       state,
-      nonce,
+      ...(nonce ? { nonce } : {}),
       code_challenge: codeChallenge,
       code_challenge_method: 'S256',
     })

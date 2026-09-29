@@ -112,6 +112,7 @@ function makeProvider(over: Partial<IdentityProvider> = {}): IdentityProvider {
     scopes: null,
     prompt: null,
     tokenEndpointAuthMethod: null,
+    idTokenNonce: null,
     enabled: true,
     autoCreateUsers: true,
     autoProvisionRole: 'user',
@@ -382,6 +383,7 @@ describe('UserDetailsCard save coordination', () => {
           scopes: null,
           prompt: null,
           tokenEndpointAuthMethod: null,
+          idTokenNonce: null,
           claimMapping: null,
         }
       )

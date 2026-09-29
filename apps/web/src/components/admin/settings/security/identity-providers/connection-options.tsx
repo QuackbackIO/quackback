@@ -1,7 +1,8 @@
 /**
  * Connection options — everything about the OIDC request that standard
  * providers never need touched: scopes, the sign-in prompt, client
- * authentication, and (for custom providers only) manual endpoints.
+ * authentication, the ID token nonce, and (for custom providers only) manual
+ * endpoints.
  *
  * Collapsed by default so setup reads as connect → test → enable. It opens
  * itself when any value is off its default, because a non-standard
@@ -35,8 +36,10 @@ import {
   unsupportedScopes,
 } from '@/lib/shared/oidc-scopes'
 import {
+  ID_TOKEN_NONCE_CHOICES,
   PROMPT_CHOICES,
   TOKEN_AUTH_CHOICES,
+  normalizeIdTokenNonceInput,
   normalizePromptInput,
   normalizeTokenAuthInput,
 } from '@/lib/shared/oidc-request'
@@ -50,12 +53,14 @@ export function ConnectionOptions({
   scopes,
   prompt,
   tokenAuth,
+  idTokenNonce,
   discoveryUrl,
   manual,
   disabled,
   onScopesChange,
   onPromptChange,
   onTokenAuthChange,
+  onIdTokenNonceChange,
   onManualChange,
   children,
 }: {
@@ -63,12 +68,14 @@ export function ConnectionOptions({
   scopes: string[]
   prompt: string
   tokenAuth: string
+  idTokenNonce: string
   discoveryUrl: string
   manual: ManualEndpoints
   disabled: boolean
   onScopesChange: (next: string[]) => void
   onPromptChange: (next: string) => void
   onTokenAuthChange: (next: string) => void
+  onIdTokenNonceChange: (next: string) => void
   onManualChange: (patch: Partial<ManualEndpoints>) => void
   /** Extra fields a caller wants in the same disclosure (the create page
    *  puts the display name here so the main flow stays short). */
@@ -80,6 +87,7 @@ export function ConnectionOptions({
       normalizeScopesInput(scopes) !== null ||
       normalizePromptInput(prompt) !== null ||
       normalizeTokenAuthInput(tokenAuth) !== null ||
+      normalizeIdTokenNonceInput(idTokenNonce) !== null ||
       hasManual
   )
   const [draft, setDraft] = useState('')
@@ -228,6 +236,25 @@ export function ConnectionOptions({
           </Select>
           <p className="text-sm text-muted-foreground">
             Change this only if your provider rejects the token request.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="idp-id-token-nonce">ID token nonce</Label>
+          <Select value={idTokenNonce} onValueChange={onIdTokenNonceChange} disabled={disabled}>
+            <SelectTrigger id="idp-id-token-nonce" size="sm" aria-label="ID token nonce">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {ID_TOKEN_NONCE_CHOICES.map((c) => (
+                <SelectItem key={c.value} value={c.value}>
+                  {c.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-sm text-muted-foreground">
+            Change this only if your provider&apos;s ID tokens never include the nonce.
           </p>
         </div>
 

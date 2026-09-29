@@ -49,6 +49,7 @@ const { upsertSpy, mappingSpy, deleteSpy, credentialsSpy } = vi.hoisted(() => ({
         scopes?: string | null
         prompt?: string | null
         tokenEndpointAuthMethod?: string | null
+        idTokenNonce?: string | null
         showButton?: boolean
         autoCreateUsers?: boolean
         autoProvisionRole?: string | null
@@ -231,6 +232,7 @@ function makeProvider(over: Partial<IdentityProvider>): IdentityProvider {
     scopes: null,
     prompt: null,
     tokenEndpointAuthMethod: null,
+    idTokenNonce: null,
     enabled: true,
     autoCreateUsers: true,
     autoProvisionRole: 'user',
@@ -604,6 +606,15 @@ describe('<ProviderDetailPage> connection options', () => {
     )
   })
 
+  it('auto-expands when the ID token nonce is off', () => {
+    renderPage(makeProvider({ idTokenNonce: 'off' }))
+    editConnection()
+    expect(screen.getByRole('button', { name: /Connection options/ })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    )
+  })
+
   it('prefills the effective scopes and does not offer to remove openid', () => {
     renderPage(makeProvider({ scopes: null }))
     editConnection()
@@ -623,6 +634,15 @@ describe('<ProviderDetailPage> connection options', () => {
     expect(lastUpsert().scopes).toBeNull()
     expect(lastUpsert().prompt).toBeNull()
     expect(lastUpsert().tokenEndpointAuthMethod).toBeNull()
+    expect(lastUpsert().idTokenNonce).toBeNull()
+  })
+
+  it('round-trips an ID token nonce set to off', async () => {
+    renderPage(makeProvider({ idTokenNonce: 'off' }))
+    editConnection()
+    saveConnection()
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    expect(lastUpsert().idTokenNonce).toBe('off')
   })
 
   it('saves the reduced set after removing scopes', async () => {
@@ -686,6 +706,7 @@ describe('<ProviderDetailPage> connection options', () => {
     editConnection()
     openConnectionOptions()
     expect(screen.getByLabelText('Client authentication')).toBeInTheDocument()
+    expect(screen.getByLabelText('ID token nonce')).toBeInTheDocument()
     fireEvent.click(screen.getByLabelText('Sign-in prompt'))
     await waitFor(() => expect(screen.getByTestId('prompt-choice-omit')).toBeInTheDocument())
     expect(screen.getByTestId('prompt-choice-none')).toBeInTheDocument()

@@ -202,6 +202,79 @@ describe('startSsoTestFn', () => {
     expect(result.authorizeUrl).toMatch(/scope=openid\+email\+profile(&|$)/)
   })
 
+  describe('ID token nonce', () => {
+    async function startWith(provider: Record<string, unknown>) {
+      hoisted.listIdentityProviders.mockResolvedValue([provider])
+      hoisted.getIdentityProviderCredentials.mockResolvedValue({ clientSecret: 'secret' })
+      hoisted.safeFetch.mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            issuer: 'https://idp',
+            authorization_endpoint: 'https://idp/auth',
+            token_endpoint: 'https://idp/token',
+            jwks_uri: 'https://idp/jwks',
+          }),
+          { status: 200 }
+        )
+      )
+      hoisted.cacheSet.mockResolvedValue(undefined)
+      const result = (await startSsoTest({ data: { registrationId: 'sso' } })) as {
+        authorizeUrl: string
+      }
+      const [, session] = hoisted.cacheSet.mock.calls[0] as [string, { nonce?: string }]
+      return { params: new URL(result.authorizeUrl).searchParams, session }
+    }
+
+    it('sends a nonce and keeps it to check by default', async () => {
+      const { params, session } = await startWith(ssoProvider)
+      expect(params.get('nonce')).toBeTruthy()
+      expect(session.nonce).toBe(params.get('nonce'))
+    })
+
+    it('sends no nonce, and expects none, for a provider set to not use one', async () => {
+      // Mirrors production, which neither sends nor checks one for this setting.
+      const { params, session } = await startWith({ ...ssoProvider, idTokenNonce: 'off' })
+      expect(params.has('nonce')).toBe(false)
+      expect(session.nonce).toBeUndefined()
+    })
+
+    it('sends no nonce for a manual-endpoint provider, which sign-in never binds', async () => {
+      // Sign-in binds a nonce only when a discovery document supplies the key
+      // set and issuer to verify the ID token. Requiring one here would fail a
+      // test for a provider that signs in fine.
+      const { params, session } = await startWith({
+        ...ssoProvider,
+        discoveryUrl: null,
+        authorizationUrl: 'https://idp/auth',
+        tokenUrl: 'https://idp/token',
+        jwksUri: 'https://idp/jwks',
+        issuer: 'https://idp',
+      })
+      expect(params.has('nonce')).toBe(false)
+      expect(session.nonce).toBeUndefined()
+    })
+
+    it('sends no nonce when the discovery document has no key set to verify with', async () => {
+      hoisted.listIdentityProviders.mockResolvedValue([ssoProvider])
+      hoisted.getIdentityProviderCredentials.mockResolvedValue({ clientSecret: 'secret' })
+      hoisted.safeFetch.mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            issuer: 'https://idp',
+            authorization_endpoint: 'https://idp/auth',
+            token_endpoint: 'https://idp/token',
+          }),
+          { status: 200 }
+        )
+      )
+      hoisted.cacheSet.mockResolvedValue(undefined)
+      const result = (await startSsoTest({ data: { registrationId: 'sso' } })) as {
+        authorizeUrl: string
+      }
+      expect(new URL(result.authorizeUrl).searchParams.has('nonce')).toBe(false)
+    })
+  })
+
   it('tests a manual-endpoint provider (no discovery doc) using its stored endpoints', async () => {
     const manualProvider = {
       id: 'idp_manual',

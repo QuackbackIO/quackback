@@ -677,3 +677,81 @@ describe('runHandshake — capture and production replay', () => {
     expect(result.mappingOutcome?.warnings).toContain('subject_mismatch')
   })
 })
+
+describe('runHandshake: ID token nonce', () => {
+  /** A signed exchange whose ID token carries `tokenNonce`, or no nonce at all. */
+  async function exchange(opts: { tokenNonce?: string; expectedNonce?: string }) {
+    const { publicKey, privateKey } = await generateKeyPair('RS256', { extractable: true })
+    const publicJwk = await exportJWK(publicKey)
+    publicJwk.kid = 'nonce-key'
+    publicJwk.alg = 'RS256'
+
+    const issuer = 'https://idp.example'
+    const idToken = await new SignJWT({
+      email: 'you@example.com',
+      ...(opts.tokenNonce ? { nonce: opts.tokenNonce } : {}),
+    })
+      .setProtectedHeader({ alg: 'RS256', kid: 'nonce-key' })
+      .setIssuer(issuer)
+      .setAudience('cid')
+      .setSubject('user-1')
+      .setIssuedAt()
+      .setExpirationTime('5m')
+      .sign(privateKey)
+
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          issuer,
+          token_endpoint: `${issuer}/token`,
+          jwks_uri: `${issuer}/jwks`,
+          userinfo_endpoint: `${issuer}/userinfo`,
+        }),
+        { status: 200 }
+      )
+    )
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ id_token: idToken, access_token: 'at', token_type: 'Bearer' }),
+        {
+          status: 200,
+        }
+      )
+    )
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ keys: [publicJwk] }), { status: 200 })
+    )
+    safeFetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ sub: 'user-1' }), { status: 200 })
+    )
+
+    return runHandshake({ ...baseInput, expectedNonce: opts.expectedNonce })
+  }
+
+  it('names the setting when a valid ID token leaves out the nonce that was sent', async () => {
+    // Signature, issuer and audience all verify; only the echo is missing. That
+    // is a provider that never returns a nonce, which has a setting, not a
+    // replay attempt.
+    const result = await exchange({ expectedNonce: 'nonce789' })
+    if (result.ok) throw new Error('expected failure')
+    expect(result.stage).toBe('claim-check')
+    expect(result.hint).toMatch(/did not return the nonce/i)
+    expect(result.hint).toContain("Don't use a nonce")
+  })
+
+  it('still fails a nonce that does not match, without offering the setting', async () => {
+    const result = await exchange({ tokenNonce: 'someone-elses', expectedNonce: 'nonce789' })
+    if (result.ok) throw new Error('expected failure')
+    expect(result.stage).toBe('claim-check')
+    expect(result.hint).toMatch(/mismatch/i)
+    expect(result.hint).not.toContain("Don't use a nonce")
+  })
+
+  it('passes and says so when the provider is set to not use a nonce', async () => {
+    const result = await exchange({ expectedNonce: undefined })
+    if (!result.ok) throw new Error(`expected success, got ${result.stage}: ${result.hint}`)
+    expect(result.steps.some((s) => s.stage === 'claim-check' && /not used/i.test(s.label))).toBe(
+      true
+    )
+  })
+})
