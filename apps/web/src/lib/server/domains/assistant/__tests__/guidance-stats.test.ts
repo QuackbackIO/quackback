@@ -46,8 +46,9 @@ describe.skipIf(!fixture.available)('getGuidanceRuleStats (real DB)', () => {
   afterAll(fixture.close)
 
   it('returns Applied count and lastAppliedAt only', async () => {
-    const first = new Date('2026-07-01T00:00:00.000Z')
-    const second = new Date('2026-07-02T00:00:00.000Z')
+    // Relative to now: the query only counts rows inside the usage-retention window.
+    const second = new Date(Date.now() - 24 * 60 * 60 * 1_000)
+    const first = new Date(second.getTime() - 24 * 60 * 60 * 1_000)
     await seedTurn(['assistant_guidance_a'], { createdAt: first })
     await seedTurn(['assistant_guidance_a'], { createdAt: second })
 
