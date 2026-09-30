@@ -30,7 +30,7 @@ cd quackback
 cp .env.prod.example .env
 # Edit .env — fill in every value (generate secrets with: openssl rand -base64 32)
 
-# Start the application (app + Postgres + MinIO)
+# Start the application (app + Postgres + Silo object storage)
 docker compose -f docker-compose.prod.yml up -d
 
 # View logs
@@ -288,7 +288,7 @@ Run at least one `worker` replica (or use `all`) at all times, or background job
 
 ### Docker Compose Example
 
-The datastores (Postgres, MinIO) are the same as in `docker-compose.prod.yml`. The app splits into a scaled `web` service and a `worker` service running the same image. Web replicas cannot each publish port 3000 on the host, so run a reverse proxy or load balancer (see [Reverse Proxy](#reverse-proxy)) in front of the `web` service and let Compose's internal DNS balance across replicas.
+The datastores (Postgres, Silo) are the same as in `docker-compose.prod.yml`. The app splits into a scaled `web` service and a `worker` service running the same image. Web replicas cannot each publish port 3000 on the host, so run a reverse proxy or load balancer (see [Reverse Proxy](#reverse-proxy)) in front of the `web` service and let Compose's internal DNS balance across replicas.
 
 ```yaml
 services:

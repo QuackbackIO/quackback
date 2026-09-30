@@ -1,5 +1,5 @@
 # ============================================================================
-# DEVELOPMENT infrastructure only — Postgres, MinIO, Mailpit.
+# DEVELOPMENT infrastructure only — Postgres, Silo (S3), Mailpit.
 # Started by `bun run setup` / `bun run dev`; the app itself runs on the host
 # via `bun run dev`, so there is NO app service here.
 #
@@ -34,8 +34,12 @@ services:
       timeout: 5s
       retries: 5
 
+  # Object storage: PGSTY Silo, the maintained community fork of MinIO.
+  # MinIO no longer publishes images; Silo keeps the S3 API, the `MINIO_*`
+  # variables and the on-disk format. The service keeps its `minio` name so
+  # existing volumes, scripts and S3_ENDPOINT values keep working.
   minio:
-    image: minio/minio:latest
+    image: pgsty/silo:RELEASE.2026-09-16T00-00-00Z
     container_name: quackback-minio
     restart: unless-stopped
     environment:
@@ -48,7 +52,7 @@ services:
       - minio_data:/data
     command: server /data --console-address ":9001"
     healthcheck:
-      test: ['CMD', 'mc', 'ready', 'local']
+      test: ['CMD', 'silo', 'healthcheck', 'ready']
       interval: 5s
       timeout: 5s
       retries: 5
@@ -66,9 +70,9 @@ services:
       timeout: 5s
       retries: 5
 
-  # Creates MinIO bucket and sets public download policy on startup
+  # Creates the bucket and sets a public download policy on startup
   minio-init:
-    image: minio/mc:latest
+    image: pgsty/mc:RELEASE.2026-09-16T00-00-00Z
     container_name: quackback-minio-init
     depends_on:
       minio:

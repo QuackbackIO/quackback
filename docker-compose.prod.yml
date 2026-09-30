@@ -2,8 +2,8 @@
 # Quackback — production stack (self-hosting)
 # ============================================================================
 # A self-contained, single-host deployment: the Quackback app plus its
-# datastores (PostgreSQL + MinIO). Unlike the dev docker-compose.yml,
-# this file is safe to run on a server:
+# datastores (PostgreSQL + Silo, an S3-compatible object store). Unlike the
+# dev docker-compose.yml, this file is safe to run on a server:
 #   - the app is the ONLY service with a published host port
 #   - datastores are reachable only on the internal compose network
 #   - every secret is required via ${VAR:?...} — the stack refuses to start
@@ -92,8 +92,12 @@ services:
       timeout: 5s
       retries: 5
 
+  # Object storage: PGSTY Silo, the maintained community fork of MinIO.
+  # MinIO no longer publishes images; Silo keeps the S3 API, the `MINIO_*`
+  # variables and the on-disk format, so an existing `minio_data` volume
+  # carries over. The service keeps its `minio` name for compatibility.
   minio:
-    image: minio/minio:${MINIO_IMAGE_TAG:-RELEASE.2025-04-22T22-12-26Z}
+    image: pgsty/silo:${MINIO_IMAGE_TAG:-RELEASE.2026-09-16T00-00-00Z}
     container_name: quackback-minio
     restart: unless-stopped
     environment:
@@ -104,7 +108,7 @@ services:
     volumes:
       - minio_data:/data
     healthcheck:
-      test: ['CMD', 'mc', 'ready', 'local']
+      test: ['CMD', 'silo', 'healthcheck', 'ready']
       interval: 5s
       timeout: 5s
       retries: 5
@@ -113,7 +117,7 @@ services:
   # set a public download policy — the bucket stays private and is served
   # through the app's /api/storage proxy (S3_PROXY=true above).
   minio-init:
-    image: minio/mc:${MC_IMAGE_TAG:-RELEASE.2025-04-16T18-13-26Z}
+    image: pgsty/mc:${MC_IMAGE_TAG:-RELEASE.2026-09-16T00-00-00Z}
     container_name: quackback-minio-init
     depends_on:
       minio:
